@@ -97,6 +97,8 @@ _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         "properties": {
             "success": {"type": "boolean"},
             "message": {"type": "string"},
+            "record_id": {"type": "integer"},
+            "updated": {"type": "integer"},
             "data": {"type": "object"},
             "error": {"type": "string"},
         },
@@ -107,6 +109,8 @@ _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         "properties": {
             "success": {"type": "boolean"},
             "message": {"type": "string"},
+            "record_id": {"type": "integer"},
+            "deleted": {"type": "integer"},
             "data": {"type": "object"},
             "error": {"type": "string"},
         },
@@ -378,7 +382,7 @@ _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         "properties": {
             "success": {"type": "boolean"},
             "message": {"type": "string"},
-            "data": {"type": "array"},
+            "data": {"type": "object"},
         },
     },
     ("employee", "execute"): {
@@ -661,6 +665,11 @@ _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "printer_name": {"type": "string"},
             "status": {"type": "string"},
             "job_id": {"type": "string"},
+            "print_completed": {"type": "boolean"},
+            "print_state": {"type": "string"},
+            "print_job_token": {"type": "string"},
+            "print_tracking_available": {"type": "boolean"},
+            "post_print_receipt": {"type": "string"},
             "error_code": {"type": "string"},
             "error": {"type": "string"},
         },

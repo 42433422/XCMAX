@@ -1,8 +1,8 @@
 /**
  * DesktopAutonomyAdapter：桌面端 AutonomyAdapter 实现
  *
- * Phase 0：collectTruth / subscribeSignals / audit 已实现；
- *          executeAction 返回 not-implemented（Phase 1 落地 4 个 action）。
+ * 只执行可逆、明确 allowlist 的本机动作；每个成功结果均在适配器内完成
+ * 最小后验校验，避免把“已发起”误记为“已修复”。
  *
  * 与 main.ts 共存：
  * - backendProcessRef / restartCountRef 由 main.ts 注入（闭包引用）
@@ -26,6 +26,7 @@ import {
   computeRuntimeTruth,
   appendTruthLog,
   computeConfigFingerprint,
+  diskFreeMegabytes,
 } from './runtime-truth.js'
 
 /** 桌面端适配器上下文（由 main.ts 注入） */
@@ -40,14 +41,14 @@ export interface DesktopAdapterContext {
   appVersion: string
   /** 构建 SHA */
   buildSha: string
-  /** 配置文件路径（null 表示不跟踪配置指纹） */
+  /** 配置文件路径（桌面端默认 userData/config/database.json） */
   configPath: string | null
   /** 已知良好配置指纹（null 表示尚未快照） */
   knownGoodFingerprint?: string | null
   /** Phase 1 新增：触发 backend 重启（main.ts 注入；调用前 backendProcess 应已为 null） */
-  restartBackend?: () => Promise<void>
+  restartBackend?: () => Promise<boolean | void>
   /** Phase 1 新增：触发版本回滚（main.ts 注入；写入 rollback marker） */
-  triggerRollback?: () => Promise<void>
+  triggerRollback?: () => Promise<boolean | void>
   /** Phase 1 新增：已知良好配置内容（用于 repair_config 恢复；null 表示无配置可恢复） */
   knownGoodConfigContent?: string | null
 }
@@ -57,6 +58,7 @@ export class DesktopAutonomyAdapter implements AutonomyAdapter {
   private userDataDir: string
   private auditPath: string
   private knownGoodFingerprint: string | null
+  private knownGoodConfigContent: string | null
 
   constructor(ctx: DesktopAdapterContext) {
     this.ctx = ctx
@@ -65,6 +67,7 @@ export class DesktopAutonomyAdapter implements AutonomyAdapter {
     fs.mkdirSync(autonomyDir, { recursive: true })
     this.auditPath = path.join(autonomyDir, 'audit.jsonl')
     this.knownGoodFingerprint = ctx.knownGoodFingerprint ?? null
+    this.knownGoodConfigContent = ctx.knownGoodConfigContent ?? null
   }
 
   /** 测试用：注入自定义 userDataDir */
@@ -76,6 +79,7 @@ export class DesktopAutonomyAdapter implements AutonomyAdapter {
     fs.mkdirSync(autonomyDir, { recursive: true })
     inst.auditPath = path.join(autonomyDir, 'audit.jsonl')
     inst.knownGoodFingerprint = ctx.knownGoodFingerprint ?? null
+    inst.knownGoodConfigContent = ctx.knownGoodConfigContent ?? null
     return inst
   }
 
@@ -83,13 +87,27 @@ export class DesktopAutonomyAdapter implements AutonomyAdapter {
     const backendInfo = this.ctx.backendProcessRef() ?? { pid: null, running: false, startedAt: null }
     // 端口检测：尝试连接本地端口
     const portInUse = await isPortInUse(this.ctx.port)
-    // 拉取后端 /api/desktop/status（如可用）
+    // 拉取后端状态与 NeuroBus 健康。总线状态不能假定已被 desktop/status 透传。
     let desktopStatus: unknown = undefined
     try {
-      const resp = await fetch(`http://127.0.0.1:${this.ctx.port}/api/desktop/status`, {
-        signal: AbortSignal.timeout(2000),
-      })
-      if (resp.ok) desktopStatus = await resp.json()
+      const [desktopResponse, neurobusResponse] = await Promise.all([
+        fetch(`http://127.0.0.1:${this.ctx.port}/api/desktop/status`, {
+          signal: AbortSignal.timeout(2000),
+        }),
+        fetch(`http://127.0.0.1:${this.ctx.port}/api/neurobus/health`, {
+          signal: AbortSignal.timeout(2000),
+        }),
+      ])
+      const desktopPayload = desktopResponse.ok ? await desktopResponse.json() : undefined
+      const neurobusPayload = neurobusResponse.ok ? await neurobusResponse.json() : undefined
+      if (desktopPayload && typeof desktopPayload === 'object') {
+        desktopStatus = {
+          ...(desktopPayload as Record<string, unknown>),
+          neurobus: neurobusPayload,
+        }
+      } else {
+        desktopStatus = neurobusPayload
+      }
     } catch {
       // 后端未就绪时正常情况
     }
@@ -102,10 +120,17 @@ export class DesktopAutonomyAdapter implements AutonomyAdapter {
       appVersion: this.ctx.appVersion,
       buildSha: this.ctx.buildSha,
       restartCount: this.ctx.restartCountRef(),
-      desktopStatus,
+      desktopStatus: this.resolveNeurobusStatus(desktopStatus),
+      diskFreeMb: diskFreeMegabytes(this.userDataDir),
     })
     appendTruthLog(this.userDataDir, truth)
     return truth
+  }
+
+  private resolveNeurobusStatus(status: unknown): unknown {
+    if (!status || typeof status !== 'object') return status
+    const payload = status as Record<string, unknown>
+    return payload.neurobus ?? payload
   }
 
   subscribeSignals(_emit: (signal: Signal) => void): void {
@@ -120,17 +145,20 @@ export class DesktopAutonomyAdapter implements AutonomyAdapter {
           if (!this.ctx.restartBackend) {
             return { action, ok: false, detail: 'restartBackend callback not injected', ts }
           }
-          await this.ctx.restartBackend()
+          const started = await this.ctx.restartBackend()
+          if (started === false) {
+            return { action, ok: false, detail: 'backend restart was not confirmed', ts }
+          }
           return { action, ok: true, detail: 'backend restart triggered', ts }
         }
         case 'rollback_version': {
           if (!this.ctx.triggerRollback) {
             return { action, ok: false, detail: 'triggerRollback callback not injected', ts }
           }
-          if (this.knownGoodFingerprint === null) {
-            return { action, ok: false, detail: 'no known-good fingerprint, refuse rollback', ts }
+          const scheduled = await this.ctx.triggerRollback()
+          if (scheduled === false) {
+            return { action, ok: false, detail: 'rollback was not scheduled (no eligible rollback marker)', ts }
           }
-          await this.ctx.triggerRollback()
           return { action, ok: true, detail: 'rollback triggered', ts }
         }
         case 'clear_cache': {
@@ -140,6 +168,9 @@ export class DesktopAutonomyAdapter implements AutonomyAdapter {
           for (const d of [cacheDir, neurobusDir]) {
             if (fs.existsSync(d)) {
               fs.rmSync(d, { recursive: true, force: true })
+              if (fs.existsSync(d)) {
+                return { action, ok: false, detail: `cache cleanup verification failed: ${d}`, ts }
+              }
               cleared += 1
             }
           }
@@ -149,12 +180,18 @@ export class DesktopAutonomyAdapter implements AutonomyAdapter {
           if (!this.ctx.configPath) {
             return { action, ok: false, detail: 'no configPath configured', ts }
           }
-          if (!this.ctx.knownGoodConfigContent) {
+          if (!this.knownGoodConfigContent) {
             return { action, ok: false, detail: 'no known-good config content to restore', ts }
+          }
+          if (!fs.existsSync(this.ctx.configPath)) {
+            return { action, ok: false, detail: 'configured file no longer exists', ts }
           }
           const backupPath = `${this.ctx.configPath}.autonomy-bak-${Date.now()}`
           fs.copyFileSync(this.ctx.configPath, backupPath)
-          fs.writeFileSync(this.ctx.configPath, this.ctx.knownGoodConfigContent, 'utf8')
+          fs.writeFileSync(this.ctx.configPath, this.knownGoodConfigContent, 'utf8')
+          if (fs.readFileSync(this.ctx.configPath, 'utf8') !== this.knownGoodConfigContent) {
+            return { action, ok: false, detail: 'config restore verification failed', ts }
+          }
           return { action, ok: true, detail: `config restored (backup: ${backupPath})`, ts }
         }
         case 'escalate':
@@ -185,6 +222,29 @@ export class DesktopAutonomyAdapter implements AutonomyAdapter {
   /** 设置已知良好配置指纹（首次启动后由 main.ts 调用） */
   setKnownGoodFingerprint(fp: string): void {
     this.knownGoodFingerprint = fp
+  }
+
+  /**
+   * Capture the actual desktop database profile only after a healthy backend
+   * has started.  The snapshot stays in memory; secrets are never written to
+   * the autonomy audit log.  Oversized files are deliberately not restored.
+   */
+  captureKnownGoodConfigSnapshot(): string | null {
+    if (!this.ctx.configPath || !fs.existsSync(this.ctx.configPath)) return null
+    try {
+      const stat = fs.statSync(this.ctx.configPath)
+      if (!stat.isFile() || stat.size > 64 * 1024) return null
+      const content = fs.readFileSync(this.ctx.configPath, 'utf8')
+      if (!content.trim()) return null
+      JSON.parse(content)
+      const fingerprint = computeConfigFingerprint(this.ctx.configPath)
+      if (!fingerprint) return null
+      this.knownGoodConfigContent = content
+      this.knownGoodFingerprint = fingerprint
+      return fingerprint
+    } catch {
+      return null
+    }
   }
 
   /** 计算当前配置指纹（供 main.ts 启动时快照） */

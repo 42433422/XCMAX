@@ -1,7 +1,8 @@
 """传统模式文件浏览与 AI 托管目录能力。
 
-该模块只允许访问一个开放托管根目录，默认仍是仓库下的 ``bang``，可通过
-``TRADITIONAL_MODE_ROOT`` 指向任意本机文件夹。前端契约保持不变。
+该模块只允许访问一个开放托管根目录，默认是桌面 ``userData`` 下的
+``traditional_workspace``，可通过 ``TRADITIONAL_MODE_ROOT`` 指向经批准的
+本机文件夹。前端契约保持不变。
 """
 
 from __future__ import annotations
@@ -12,31 +13,103 @@ import logging
 import os
 import queue
 import shutil
+import sys
 import threading
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import get_base_dir
+from app.utils.path_utils import get_base_dir, get_desktop_state_dir
 
 logger = logging.getLogger(__name__)
 
 
+def _normalized_root(value: str) -> str:
+    return os.path.realpath(
+        os.path.abspath(os.path.expanduser(os.path.expandvars(value)))
+    )
+
+
+def _validated_desktop_state_dir() -> str:
+    """Return userData only after rejecting a relative explicit data root.
+
+    ``get_desktop_state_dir`` performs ``mkdir`` itself. Validate both
+    environment values before it is called, otherwise a relative value could
+    create a writable directory under the packaged backend's current directory.
+    """
+
+    for env_name in ("XCAGI_DESKTOP_DATA_DIR", "XCAGI_DATA_DIR"):
+        explicit = os.environ.get(env_name) or ""
+        if explicit and not Path(explicit).expanduser().is_absolute():
+            raise OSError("desktop user-data directory must be absolute")
+    root = Path(get_desktop_state_dir()).expanduser()
+    if not root.is_absolute():
+        raise OSError("desktop user-data directory must be absolute")
+    return str(root.resolve())
+
+
+def _default_root_dir() -> str:
+    return _normalized_root(os.path.join(_validated_desktop_state_dir(), "traditional_workspace"))
+
+
+def _is_packaged_resource_path(path: str) -> bool:
+    """Reject an explicit override that would mutate packaged app resources."""
+
+    roots: list[str] = []
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle:
+        roots.append(_normalized_root(str(bundle)))
+
+    # Electron's packaged backend normally receives XCAGI_DESKTOP_MODE and may
+    # execute directly from ``XCAGI.app/Contents/Resources/backend`` instead of
+    # a PyInstaller extraction directory.  Its base directory is equally
+    # immutable after signing, so an override below it must be refused too.
+    desktop_mode = (os.environ.get("XCAGI_DESKTOP_MODE") or "").strip().lower()
+    if desktop_mode in {"1", "true", "yes", "on"}:
+        roots.append(_normalized_root(get_base_dir()))
+
+    try:
+        return any(os.path.commonpath([root, path]) == root for root in roots)
+    except ValueError:
+        return False
+
+
 def _resolve_root_dir() -> str:
     raw = (os.environ.get("TRADITIONAL_MODE_ROOT") or "").strip()
-    root = raw if raw else os.path.join(get_base_dir(), "bang")
-    root = os.path.abspath(os.path.expanduser(os.path.expandvars(root)))
+    default_root = _default_root_dir()
+    root = _normalized_root(raw) if raw else default_root
+    if raw and _is_packaged_resource_path(root):
+        logger.warning("Ignoring TRADITIONAL_MODE_ROOT inside packaged resources: %s", root)
+        root = default_root
     try:
         os.makedirs(root, exist_ok=True)
-    except PermissionError:
-        fallback_base = os.environ.get("TMPDIR") or "/tmp"
-        root = os.path.abspath(os.path.join(fallback_base, os.path.basename(root)))
+    except OSError as exc:
+        if root == default_root:
+            raise
+        logger.warning("TRADITIONAL_MODE_ROOT is unavailable (%s); using userData default", exc)
+        root = default_root
         os.makedirs(root, exist_ok=True)
     return root
 
 
-ROOT_DIR = _resolve_root_dir()
+def _initial_root_dir() -> str:
+    """Resolve the deterministic root without substituting an unsafe fallback.
+
+    Importing a route module must not redirect writes merely because a restricted
+    process cannot create userData yet.  The first real operation will still
+    target the same userData location and surface a normal filesystem error.
+    """
+
+    try:
+        return _resolve_root_dir()
+    except OSError as exc:
+        logger.warning("traditional workspace initialization deferred: %s", exc)
+        return _default_root_dir()
+
+
+ROOT_DIR = _initial_root_dir()
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico", ".tiff", ".svg"}
 EXCEL_EXTENSIONS = {".xlsx", ".xls"}

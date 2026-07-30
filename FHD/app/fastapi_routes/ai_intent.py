@@ -40,6 +40,20 @@ _INTENT_PACKAGES_STATE: dict[str, bool] = {
 }
 
 
+def _authenticated_owner_user_id(request: Request) -> int | None:
+    """Return a private-ETL owner only from authenticated request state.
+
+    ``body.user_id`` remains a chat/session identifier for this legacy alias;
+    accepting it here would let one client select another user's ETL preview.
+    """
+
+    try:
+        owner = int(getattr(request.state, "user_id", None))
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return owner if owner > 0 else None
+
+
 def _attach_unified_chat_run(
     payload: dict[str, Any],
     *,
@@ -128,6 +142,7 @@ def ai_chat_unified_alias(request: Request, body: dict = Body(default_factory=di
         (body.get("source") or "").strip().lower(),
         body.get("mode"),
         body.get("context") or {},
+        authenticated_owner_user_id=_authenticated_owner_user_id(request),
     )
     status = int(payload.pop("_http_status", 200))
     payload = _attach_unified_chat_run(
@@ -161,6 +176,7 @@ def ai_chat_unified_batch_alias(request: Request, body: dict = Body(default_fact
             (body.get("source") or "").strip().lower(),
             body.get("mode"),
             body.get("context") or {},
+            authenticated_owner_user_id=_authenticated_owner_user_id(request),
         )
         status = int(payload.pop("_http_status", 200))
         if status >= 400:

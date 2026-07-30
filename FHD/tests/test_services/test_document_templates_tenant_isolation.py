@@ -133,6 +133,43 @@ class TestDbTemplatesIsolation:
             names = {t["name"] for t in store._db_templates()}
         assert names == {"tenant1-tpl", "legacy-null"}
 
+    def test_db_template_id_cannot_cross_tenant(self, templates_db, tmp_path):
+        own = tmp_path / "tenant1.xlsx"
+        foreign = tmp_path / "tenant2.xlsx"
+        own.write_bytes(b"xlsx")
+        foreign.write_bytes(b"xlsx")
+        with templates_db.begin() as conn:
+            conn.execute(
+                text("UPDATE templates SET original_file_path = :path WHERE id = 1"),
+                {"path": str(own)},
+            )
+            conn.execute(
+                text("UPDATE templates SET original_file_path = :path WHERE id = 2"),
+                {"path": str(foreign)},
+            )
+        store = FileSystemTemplateStore(str(tmp_path))
+        with tenant_scope(1):
+            assert store.resolve_template_file("db:1") == str(own)
+            assert store.resolve_template_file("db:2") is None
+
+    def test_legacy_etl_promotion_is_hidden_fail_closed(self, templates_db, tmp_path):
+        private = tmp_path / "old-private-layout.xlsx"
+        private.write_bytes(b"xlsx")
+        with templates_db.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE templates SET original_file_path = :path, analyzed_data = :data WHERE id = 1"
+                ),
+                {
+                    "path": str(private),
+                    "data": '{"source":"etl_shipment_template"}',
+                },
+            )
+        store = FileSystemTemplateStore(str(tmp_path))
+        with tenant_scope(1):
+            assert store._db_templates() == []
+            assert store.resolve_template_file("db:1") is None
+
 
 class TestDiscoveryDirectoriesTenantPrivate:
     def test_includes_tenant_dirs_only_when_scoped(self, tmp_path, monkeypatch):

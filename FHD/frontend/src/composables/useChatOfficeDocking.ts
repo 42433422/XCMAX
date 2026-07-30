@@ -19,6 +19,7 @@ import {
   type OfficeFileUploadResult,
 } from '@/utils/officeEmployeeReadApi'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
+import { etlApi } from '@/api/etl'
 
 type OfficeDockingTarget = 'knowledge' | 'database'
 type OfficeDockingStatus = 'running' | 'ready' | 'error'
@@ -27,6 +28,7 @@ type OfficeDockingIntentId =
   | 'pending'
   | 'attendance_roster'
   | 'attendance_source'
+  | 'purchase_order'
   | 'shipment_delivery'
   | 'customer_product'
   | 'generic_table'
@@ -36,6 +38,7 @@ type OfficeDockingDatabaseAction =
   | 'attendance_import'
   | 'shipment_etl_execute'
   | 'customer_product_import'
+  | 'etl_auto_preview'
 
 export type ShipmentEtlNotePreview = {
   sheet_name?: string
@@ -78,6 +81,8 @@ export type ChatOfficeDockingReviewItem = {
   warnings: string[]
   error: string
   upload?: OfficeFileUploadResult
+  etlUploadId?: string
+  sourceFile?: File
   outputFiles: OfficeEmployeeOutputFile[]
   knowledgeText: string
   excelAnalysis?: Record<string, unknown>
@@ -92,6 +97,7 @@ export interface UseChatOfficeDockingDeps {
   addAndSaveMessage: (content: string, role?: 'user' | 'ai' | 'task', extras?: Record<string, unknown>) => Promise<void>
   stageExcelAnalysisContext: (payload: Record<string, unknown>) => void
   sendDatabaseImportMessage: (message: string) => Promise<void>
+  openEtlCenter: (runIds: string[]) => Promise<void> | void
 }
 
 const EMPLOYEE_LABELS: Record<string, string> = {
@@ -219,6 +225,11 @@ function inferOfficeDockingIntent(item: {
     && (haystack.includes('购货单位') || haystack.includes('购买单位') || haystack.includes('客户'))
     && ['型号', '品名', '产品名称', '数量'].filter((key) => haystack.includes(key)).length >= 2
   )
+  const looksLikePurchaseOrder = (
+    (haystack.includes('采购订单') || haystack.includes('采购单号') || haystack.includes('供应商'))
+    && ['型号', '品名', '产品名称', '数量', '单价', '金额']
+      .filter((key) => haystack.includes(key)).length >= 3
+  )
 
   if ((hasMingxi && (hasMonthly || hasRosterFields)) || file.includes('考勤转换结果')) {
     return {
@@ -256,12 +267,24 @@ function inferOfficeDockingIntent(item: {
     }
   }
 
+  if (looksLikePurchaseOrder) {
+    return {
+      intentId: 'purchase_order',
+      intentLabel: '采购订单候选',
+      intentSummary: '识别到采购抬头与商品明细；进入数据对接中心后由 AI 结合整份文件证据确认',
+      databaseTargetLabel: 'AI 自动识别业务对象',
+      databaseAction: 'etl_auto_preview',
+      databaseDisabledReason: '',
+      selectedDatabase: true,
+    }
+  }
+
   if (hasProductFields) {
     return {
       intentId: 'customer_product',
       intentLabel: '客户/产品业务表',
-      intentSummary: '识别到客户、产品、型号、价格等字段，可写入客户/产品库',
-      databaseTargetLabel: '客户/产品库',
+      intentSummary: '识别到客户与产品字段；进入数据对接中心后由 AI 结合整份文件证据确认',
+      databaseTargetLabel: 'AI 自动识别业务对象',
       databaseAction: 'customer_product_import',
       databaseDisabledReason: '',
       selectedDatabase: true,
@@ -270,12 +293,12 @@ function inferOfficeDockingIntent(item: {
 
   return {
     intentId: 'generic_table',
-    intentLabel: '通用表格',
-    intentSummary: '已读取表格，但业务目标不明确；先进入知识库，避免误写数据库',
-    databaseTargetLabel: '',
-    databaseAction: '',
-    databaseDisabledReason: '未识别到明确的业务库目标',
-    selectedDatabase: false,
+    intentLabel: '待识别业务表',
+    intentSummary: '字段规则不足以确认业务对象，将交给 AI 阅读完整文件；无法确认时仅提供导出，不写业务库',
+    databaseTargetLabel: 'AI 自动识别业务对象',
+    databaseAction: 'etl_auto_preview',
+    databaseDisabledReason: '',
+    selectedDatabase: true,
   }
 }
 
@@ -343,29 +366,6 @@ async function previewShipmentExcelEtl(
   const notes = asArray<ShipmentEtlNotePreview>(data.notes)
   if (!notes.length) return null
   return { ...data, notes, note_count: Number(data.note_count || notes.length) || notes.length }
-}
-
-async function executeShipmentExcelEtl(item: ChatOfficeDockingReviewItem): Promise<Record<string, unknown>> {
-  if (!item.upload?.file_path) throw new Error('缺少已上传文件路径')
-  await primeCsrfCookie()
-  const fd = new FormData()
-  fd.append('file_path', item.upload.file_path)
-  if (item.upload.workspace_root) fd.append('workspace_root', item.upload.workspace_root)
-  fd.append('import_products', '1')
-  fd.append('import_shipments', '1')
-  fd.append('idempotent', '1')
-  fd.append('include_ledger', '0')
-  fd.append('confirm_ledger', '0')
-  if (item.shipmentEtlPreview?.notes?.length) {
-    fd.append('notes_json', JSON.stringify(item.shipmentEtlPreview.notes))
-  }
-  const res = await apiFetch('/api/excel/data/shipment-etl/execute', { method: 'POST', body: fd })
-  const body = await res.json().catch(() => ({}))
-  const data = asRecord(body)
-  if (!res.ok || data.success === false) {
-    throw new Error(String(data.message || data.error || `送货单 ETL 失败 HTTP ${res.status}`))
-  }
-  return data
 }
 
 function stringifyPreview(value: unknown, max = 6000): string {
@@ -498,47 +498,6 @@ function buildKnowledgeText(item: {
   return lines.join('\n')
 }
 
-async function ingestKnowledge(item: ChatOfficeDockingReviewItem): Promise<void> {
-  const text = item.knowledgeText.trim()
-  if (!text) throw new Error('知识库文本为空')
-  await primeCsrfCookie()
-  // Governed Persy dataset path (legacy /ingest still dual-writes server-side).
-  const res = await apiFetch('/api/knowledge/v1/datasets/persy-knowledge/documents', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      source: item.fileName,
-      text,
-      chunk_strategy: 'semantic',
-      metadata: { entrypoint: 'chat_office_docking' },
-    }),
-  })
-  const body = await res.json().catch(() => ({}))
-  if (!res.ok || body?.success === false) {
-    throw new Error(String(body?.message || '知识库入库失败'))
-  }
-}
-
-async function ingestAttendanceDatabase(item: ChatOfficeDockingReviewItem): Promise<Record<string, unknown>> {
-  if (!item.upload?.file_path) throw new Error('缺少已上传文件路径')
-  await primeCsrfCookie()
-  const res = await apiFetch('/api/mod/taiyangniao-pro/attendance/import-workbook', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      file_path: item.upload.file_path,
-      workspace_root: item.upload.workspace_root,
-      source_name: item.fileName,
-      sync_ui_tables: true,
-    }),
-  })
-  const body = await res.json().catch(() => ({}))
-  if (!res.ok || body?.success === false) {
-    throw new Error(String(body?.error || body?.message || `考勤入库失败 HTTP ${res.status}`))
-  }
-  return asRecord(body?.data || body)
-}
-
 export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
   const officeDockingInputRef = ref<HTMLInputElement | null>(null)
   const officeDockingProcessing = ref(false)
@@ -584,6 +543,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       sampleRows: [],
       rowCount: 0,
       textPreview: '',
+      sourceFile: file,
     }
     officeDockingReviewItems.value.push(item)
     touchItems()
@@ -597,8 +557,17 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
     }
 
     try {
+      const etlUploadPromise = etlApi.upload(file).catch((error) => {
+        item.warnings = [
+          ...item.warnings,
+          `数据对接中心上传暂不可用：${error instanceof Error ? error.message : '上传失败'}`,
+        ]
+        return null
+      })
       const upload = await uploadChatOfficeFile(file)
       item.upload = upload
+      const etlUpload = await etlUploadPromise
+      item.etlUploadId = etlUpload?.upload_id
       item.summary = `已上传，正在由 ${item.employeeLabel} 读取...`
       touchItems()
       const employeeData = await runOfficeEmployeeRead(
@@ -655,6 +624,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       item.databaseAction = intent.databaseAction
       item.databaseDisabledReason = intent.databaseDisabledReason
       item.selectedDatabase = intent.selectedDatabase
+      item.selectedKnowledge = !intent.selectedDatabase
 
       const canRunShipmentEtl = (
         Boolean(item.upload?.file_path)
@@ -733,32 +703,28 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       item.commitStatus = 'committing'
       touchItems()
       try {
-        if (item.selectedKnowledge) {
-          await ingestKnowledge(item)
+        if (!item.etlUploadId && item.sourceFile) {
+          const upload = await etlApi.upload(item.sourceFile)
+          item.etlUploadId = upload.upload_id
         }
-        if (item.selectedDatabase) {
-          if (!item.excelAnalysis) {
-            throw new Error('该文件没有可导入数据库的表格上下文')
-          }
-          if (item.databaseAction === 'attendance_import') {
-            const result = await ingestAttendanceDatabase(item)
-            const employeeRows = Number(result.employee_rows || 0)
-            const departmentRows = Number(result.department_rows || 0)
-            item.summary = `考勤入库完成：人员 ${employeeRows} 条，部门 ${departmentRows} 条`
-          } else if (item.databaseAction === 'shipment_etl_execute') {
-            const result = await executeShipmentExcelEtl(item)
-            const noteCount = Number(result.note_count || item.shipmentEtlPreview?.note_count || 0)
-            const shipmentCreated = Number(result.shipment_created || 0)
-            const productImported = Number(asRecord(result.product_result).imported || 0)
-            item.summary = `送货单 ETL 完成：单 ${noteCount || shipmentCreated} 张，发货单新建 ${shipmentCreated}，产品写入 ${productImported}`
-          } else if (item.databaseAction === 'customer_product_import') {
-            deps.stageExcelAnalysisContext(item.excelAnalysis)
-            await deps.sendDatabaseImportMessage(`导入数据库，确认导入：${item.fileName}`)
-          } else {
-            throw new Error(item.databaseDisabledReason || '未识别到可写入的业务数据库')
-          }
+        if (!item.etlUploadId) throw new Error('文件尚未进入数据对接中心')
+
+        const targets: string[] = []
+        // The browser-side classifier is only an early candidate. The ETL
+        // service owns semantic routing from full workbook evidence.
+        if (item.selectedDatabase) targets.push('auto')
+        if (item.selectedKnowledge) targets.push('knowledge')
+        const runs = []
+        for (const targetType of [...new Set(targets)]) {
+          runs.push(await etlApi.preview({
+            upload_id: item.etlUploadId,
+            target_type: targetType,
+          }))
         }
+        if (!runs.length) throw new Error('请选择至少一个对接目标')
+        item.summary = `已创建 ${runs.length} 个预演任务，等待在数据对接中心确认`
         item.commitStatus = 'committed'
+        await deps.openEtlCenter(runs.map((run) => run.id))
       } catch (err) {
         item.commitStatus = 'failed'
         item.error = err instanceof Error ? err.message : String(err || '提交失败')
@@ -769,7 +735,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
     const okCount = ready.filter((item) => item.commitStatus === 'committed').length
     const failCount = ready.filter((item) => item.commitStatus === 'failed').length
     await deps.addAndSaveMessage(
-      `[对接] 审核提交完成：成功 ${okCount} 个${failCount ? `，失败 ${failCount} 个` : ''}。`,
+      `[对接] 已创建预演任务：成功 ${okCount} 个${failCount ? `，失败 ${failCount} 个` : ''}。数据不会在此处直接写库。`,
       failCount ? 'ai' : 'ai',
     )
   }

@@ -65,6 +65,22 @@ def _print_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
     ).strip()
 
 
+def _authenticated_print_owner_id(request: Request) -> int | None:
+    """Read only the middleware-authenticated owner for physical printing.
+
+    Legacy callers still use header/body ids for harmless AgentRun attribution
+    on older routes.  A document print is different: it spends a private,
+    one-click capability and must never treat either client-controlled field
+    as an authorization decision.
+    """
+
+    try:
+        owner_user_id = int(getattr(request.state, "user_id", None) or 0)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return owner_user_id if owner_user_id > 0 else None
+
+
 def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
     final_output = getattr(run, "final_output", None)
     node_outputs = dict((final_output or {}).get("node_outputs") or {})
@@ -100,6 +116,7 @@ def _run_print_agent(
     action: str,
     params: dict[str, Any],
     route_path: str,
+    authenticated_owner_user_id: int | None = None,
 ) -> dict[str, Any]:
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.types import PlanGraph, WorkflowNode
@@ -115,7 +132,11 @@ def _run_print_agent(
         }
 
     node_id = f"print_{action}"
-    user_id = _print_agent_user_id(request, params)
+    user_id = (
+        str(authenticated_owner_user_id)
+        if authenticated_owner_user_id is not None
+        else _print_agent_user_id(request, params)
+    )
     plan = PlanGraph(
         plan_id=node_id,
         intent=node_id,
@@ -227,30 +248,216 @@ def get_default_printer():
 
 @router.post("/document")
 def print_document(request: Request, data: dict[str, Any] = Body(default_factory=dict)):
+    reservation: dict[str, Any] | None = None
     try:
         file_path = data.get("file_path", "")
         printer_name = data.get("printer_name")
         use_automation = data.get("use_automation", False)
+        print_token = data.get("print_token")
+        order_id = data.get("order_id")
         if not file_path:
             return JSONResponse({"success": False, "message": "文件路径不能为空"}, status_code=400)
         if not os.path.exists(file_path):
             return JSONResponse(
                 {"success": False, "message": f"文件不存在: {file_path}"}, status_code=400
             )
+        from app.application.print_authorization import (
+            defer_document_print_capability,
+            finish_document_print_capability,
+            reserve_document_print_capability,
+        )
+
+        owner_user_id = _authenticated_print_owner_id(request)
+        reservation = reserve_document_print_capability(
+            print_token,
+            owner_user_id=owner_user_id,
+            file_path=file_path,
+            order_id=order_id,
+        )
+        if not reservation.get("success"):
+            error_code = str(reservation.get("error_code") or "")
+            status_code = 403 if error_code in {
+                "PRINT_AUTH_REQUIRED",
+                "PRINT_CONFIRMATION_OWNER_MISMATCH",
+            } else 409
+            return JSONResponse(reservation, status_code=status_code)
         result = _run_print_agent(
             request=request,
             action="print_document",
             params={
-                "file_path": str(file_path),
+                "file_path": str(reservation["file_path"]),
                 "printer_name": printer_name,
                 "use_automation": use_automation,
             },
             route_path="/api/print/document",
+            authenticated_owner_user_id=owner_user_id,
         )
+        print_succeeded = bool(result.get("success"))
+        # Older/Windows print adapters report only a success boolean and keep
+        # their historical behaviour.  macOS CUPS adapters additionally report
+        # physical completion after the bounded IPP monitor.
+        print_completed = bool(result.get("print_completed", print_succeeded))
+        result.setdefault("print_completed", print_completed)
+        result.setdefault(
+            "print_state",
+            "completed" if print_completed else ("queued" if print_succeeded else "failed"),
+        )
+        post_print_receipt = None
+        pending_job: dict[str, Any] | None = None
+        if print_succeeded and not print_completed:
+            pending_job = defer_document_print_capability(
+                reservation,
+                printer_name=result.get("printer"),
+                job_id=result.get("job_id"),
+            )
+            if pending_job.get("success"):
+                result["print_job_token"] = pending_job["print_job_token"]
+                result["print_tracking_available"] = bool(
+                    pending_job.get("tracking_available")
+                )
+            else:
+                # The operating system already owns a job, so never release
+                # the one-click capability for a duplicate submission.  This
+                # fallback is deliberately visible and requires regenerating
+                # a fresh document if CUPS cannot provide a job identifier.
+                finish_document_print_capability(
+                    reservation,
+                    print_succeeded=True,
+                    print_completed=False,
+                )
+                result["print_tracking_available"] = False
+                result["message"] = (
+                    "打印任务已提交，但无法追踪 macOS CUPS 状态；"
+                    "请核验打印机后重新生成发货单，勿重复提交当前任务"
+                )
+        else:
+            post_print_receipt = finish_document_print_capability(
+                reservation,
+                print_succeeded=print_succeeded,
+                print_completed=print_completed,
+            )
+        reservation = None
+        if result.get("success"):
+            if post_print_receipt:
+                result["post_print_receipt"] = post_print_receipt
+            result["printed_file_path"] = str(data.get("file_path") or "")
+            result["printed_order_id"] = order_id
         return JSONResponse(result, status_code=_print_agent_status_code(result))
     except RECOVERABLE_ERRORS as e:
+        if reservation and reservation.get("success"):
+            from app.application.print_authorization import finish_document_print_capability
+
+            finish_document_print_capability(reservation, print_succeeded=False)
         logger.error("打印文档失败: %s", e, exc_info=True)
         return JSONResponse({"success": False, "message": f"打印失败: {str(e)}"}, status_code=500)
+
+
+@router.get("/jobs/{print_job_token}")
+def get_document_print_job_status(request: Request, print_job_token: str):
+    """Owner-bound, read-only reconciliation for a queued CUPS job.
+
+    The initial document endpoint never turns an ``lp`` acknowledgement into a
+    shipment receipt.  This route queries the job's IPP state with trusted
+    tracker metadata and issues the receipt only when CUPS reports completed.
+    It never resubmits, cancels, or otherwise changes a physical print job.
+    """
+
+    from app.application.print_authorization import (
+        get_pending_document_print_job,
+        settle_pending_document_print_job,
+    )
+
+    owner_user_id = _authenticated_print_owner_id(request)
+    tracked = get_pending_document_print_job(
+        print_job_token,
+        owner_user_id=owner_user_id,
+    )
+    if not tracked.get("success"):
+        error_code = str(tracked.get("error_code") or "")
+        status_code = 403 if error_code in {
+            "PRINT_AUTH_REQUIRED",
+            "PRINT_PENDING_TRACKER_OWNER_MISMATCH",
+        } else 404
+        return JSONResponse(tracked, status_code=status_code)
+
+    existing_state = str(tracked.get("state") or "pending")
+    if existing_state == "completed":
+        return JSONResponse(
+            {
+                "success": True,
+                "print_completed": True,
+                "print_state": "completed",
+                "post_print_receipt": str(tracked.get("post_print_receipt") or ""),
+                "message": "macOS CUPS 已确认发货单打印完成",
+            }
+        )
+    if existing_state == "aborted":
+        return JSONResponse(
+            {
+                "success": False,
+                "print_completed": False,
+                "print_state": "aborted",
+                "error_code": "CUPS_JOB_ABORTED",
+                "message": "macOS CUPS 已确认打印任务中止",
+            }
+        )
+    if not bool(tracked.get("tracking_available")):
+        return JSONResponse(
+            {
+                "success": False,
+                "print_completed": False,
+                "print_state": "unknown",
+                "error_code": "CUPS_JOB_TRACKING_UNAVAILABLE",
+                "message": "该任务已提交但未获得可追踪的 CUPS 作业号，请核验后重新生成发货单",
+            }
+        )
+
+    observed = _svc().get_document_print_job_status(
+        str(tracked.get("printer_name") or ""),
+        str(tracked.get("job_id") or ""),
+    )
+    observed_state = str(observed.get("state") or "pending")
+    settled = settle_pending_document_print_job(
+        print_job_token,
+        owner_user_id=owner_user_id,
+        state=observed_state,
+        reason=observed.get("reason"),
+    )
+    if not settled.get("success") and str(settled.get("state") or "") != "aborted":
+        error_code = str(settled.get("error_code") or "")
+        status_code = 403 if error_code == "PRINT_PENDING_TRACKER_OWNER_MISMATCH" else 404
+        return JSONResponse(settled, status_code=status_code)
+
+    settled_state = str(settled.get("state") or observed_state or "pending")
+    if settled_state == "completed":
+        return JSONResponse(
+            {
+                "success": True,
+                "print_completed": True,
+                "print_state": "completed",
+                "post_print_receipt": str(settled.get("post_print_receipt") or ""),
+                "message": "macOS CUPS 已确认发货单打印完成",
+            }
+        )
+    if settled_state == "aborted":
+        reason = str(settled.get("reason") or observed.get("reason") or "").strip()
+        return JSONResponse(
+            {
+                "success": False,
+                "print_completed": False,
+                "print_state": "aborted",
+                "error_code": "CUPS_JOB_ABORTED",
+                "message": "macOS CUPS 已确认打印任务中止" + (f"（{reason}）" if reason else ""),
+            }
+        )
+    return JSONResponse(
+        {
+            "success": True,
+            "print_completed": False,
+            "print_state": "pending",
+            "message": "macOS CUPS 正在等待打印机完成，尚未标记为已打印",
+        }
+    )
 
 
 @router.post("/label")

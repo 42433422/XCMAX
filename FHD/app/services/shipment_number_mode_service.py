@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import difflib
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from app.bootstrap import get_shipment_app_service
 from app.db.models import Product
 from app.db.session import get_db
+from app.infrastructure.tenant_scope import apply_tenant_filter
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -22,15 +23,229 @@ class ShipmentNumberModeService:
     MODIFY_VERB_PATTERN = re.compile(
         r"(再加|还要|继续加|再补|加上|增加|减少|减去|删掉|删除|去掉|移除|改成|改为|改)"
     )
+    # Customer ledgers often use a parenthetical trading/shop alias while the
+    # delivery note records the legal/customer-facing name.  Keep this in
+    # lockstep with ``customer_alias_key`` used by the ETL parser, so a known
+    # value such as ``金汉武（宾驰）`` can still reach the canonical customer.
+    _PARENTHETICAL_UNIT_ALIAS_RE = re.compile(r"[（(][^）)]*[）)]")
 
     @staticmethod
     def _normalize_unit_name(value: str) -> str:
         text = str(value or "").strip().lower()
         if not text:
             return ""
+        text = ShipmentNumberModeService._PARENTHETICAL_UNIT_ALIAS_RE.sub("", text)
         text = re.sub(r"(有限责任公司|有限公司|公司|家私|家具|商贸|贸易|建材|装饰)", "", text)
         text = re.sub(r"[\s\-_()（）【】\[\]·,，.。/\\]+", "", text)
         return text
+
+    @staticmethod
+    def _normalize_product_name(value: Any) -> str:
+        text = str(value or "").strip().lower()
+        if not text:
+            return ""
+        return re.sub(r"[\s\-_()（）【】\[\]·,，.。/\\]+", "", text)
+
+    @staticmethod
+    def _product_row_value(
+        row: Any,
+        field: str,
+        *,
+        tuple_index: int | None = None,
+    ) -> Any:
+        """Read a Product ORM row, mapping, or compact legacy test tuple."""
+
+        if isinstance(row, Mapping):
+            return row.get(field)
+        if hasattr(row, field):
+            return getattr(row, field)
+        if tuple_index is not None and isinstance(row, (tuple, list)) and len(row) > tuple_index:
+            return row[tuple_index]
+        return None
+
+    @staticmethod
+    def _resolve_owner_preview_product_candidate(
+        *,
+        owner_user_id: int,
+        unit_name: str,
+        product_name: str,
+    ) -> tuple[str, dict[str, Any] | None]:
+        """Read one authenticated user's ETL preview without weakening scope.
+
+        The outcome deliberately separates ``not_found`` from ``conflict``.
+        A missing private preview may use the tenant-local master catalogue;
+        conflicting private preview facts must stop the confirmed shipment
+        instead of silently accepting possibly stale master model/price data.
+        """
+
+        if owner_user_id <= 0 or not str(product_name or "").strip():
+            return "not_requested", None
+        try:
+            from app.application.etl.shipment_preview_fallback import (
+                resolve_preview_product_candidate_outcome,
+            )
+
+            outcome = resolve_preview_product_candidate_outcome(
+                owner_user_id=owner_user_id,
+                unit_name=unit_name,
+                product_name=product_name,
+            )
+        except RECOVERABLE_ERRORS:
+            return "unavailable", None
+
+        if not isinstance(outcome, Mapping):
+            return "unavailable", None
+        status = str(outcome.get("status") or "").strip().lower()
+        candidate = outcome.get("candidate")
+        if status == "resolved" and isinstance(candidate, Mapping):
+            return status, dict(candidate)
+        if status in {"not_found", "conflict", "unavailable"}:
+            return status, None
+        return "unavailable", None
+
+    @staticmethod
+    def _preview_product_conflict_payload(
+        *,
+        parsed: dict[str, Any],
+        unit_name: str,
+        product_name: str,
+    ) -> dict[str, Any]:
+        """Return a stable, non-leaking failure for conflicting ETL facts."""
+
+        return {
+            "success": False,
+            "message": (
+                "编号模式解析失败，已按严格策略停止生成（未启用预览兜底）。 "
+                f"失败原因：购买单位“{unit_name}”下的产品“{product_name}”存在冲突的 ETL 预演信息，"
+                "请先在数据对接中心确认或修正后重试。"
+            ),
+            "error_code": "NUMBER_MODE_ETL_PREVIEW_CONFLICT",
+            "data": {
+                "parsed_data": parsed,
+                "unit_name": unit_name,
+                "product_name": product_name,
+                "match_error_code": "NUMBER_MODE_ETL_PREVIEW_CONFLICT",
+            },
+        }
+
+    def _load_active_product_catalog(self) -> list[dict[str, Any]]:
+        """Load only the current tenant's active product rows.
+
+        Name-based order requests must never inspect products from a different
+        tenant.  We retain tuple decoding solely for existing compatibility tests
+        and old compact query callers; production uses full Product ORM rows so
+        unit and price are available for deterministic customer-product matching.
+        """
+
+        # ``get_db`` commits when its context exits.  SQLAlchemy's default
+        # session policy then expires ORM instances, so copying the catalogue
+        # *after* this block would attempt a lazy refresh on detached Product
+        # rows during a normal chat shipment confirmation.  Make a plain data
+        # snapshot while the session is alive instead.
+        with get_db() as db:
+            rows = (
+                apply_tenant_filter(db.query(Product), Product)
+                .filter(
+                    (Product.is_active == 1)
+                    | (Product.is_active == True)
+                    | (Product.is_active.is_(None))
+                )
+                .all()
+            )
+            catalog: list[dict[str, Any]] = []
+            for row in rows or []:
+                catalog.append(
+                    {
+                        "model_number": str(
+                            self._product_row_value(row, "model_number", tuple_index=0) or ""
+                        ).strip(),
+                        "name": str(
+                            self._product_row_value(row, "name", tuple_index=1) or ""
+                        ).strip(),
+                        "unit": str(
+                            self._product_row_value(row, "unit", tuple_index=2) or ""
+                        ).strip(),
+                        "price": self._product_row_value(row, "price", tuple_index=3),
+                    }
+                )
+            return catalog
+
+    def _resolve_scoped_product_name(
+        self,
+        *,
+        product_name: str,
+        unit_name: str,
+        product_catalog: list[dict[str, Any]],
+    ) -> tuple[dict[str, Any] | None, str | None, list[dict[str, Any]]]:
+        """Resolve a literal product name within one canonical purchase unit.
+
+        The caller intentionally receives ambiguity instead of a fuzzy best guess.
+        A later preview/user confirmation may repair the record, but automatic
+        document generation must stop when the relationship is not unique.
+        """
+
+        normalized_unit = self._normalize_unit_name(unit_name)
+        normalized_name = self._normalize_product_name(product_name)
+        if not normalized_unit or not normalized_name:
+            return None, "NUMBER_MODE_PRODUCT_NAME_NOT_FOUND", []
+
+        scoped_rows = [
+            row
+            for row in product_catalog
+            if self._normalize_unit_name(row.get("unit") or "") == normalized_unit
+        ]
+        exact_rows = [
+            row
+            for row in scoped_rows
+            if self._normalize_product_name(row.get("name") or "") == normalized_name
+        ]
+        if len(exact_rows) == 1:
+            return exact_rows[0], None, exact_rows
+        if len(exact_rows) > 1:
+            return None, "NUMBER_MODE_PRODUCT_NAME_AMBIGUOUS", exact_rows
+        return None, "NUMBER_MODE_PRODUCT_NAME_NOT_FOUND", scoped_rows
+
+    def _resolve_scoped_product_model(
+        self,
+        *,
+        model_number: str,
+        unit_name: str,
+        product_catalog: list[dict[str, Any]],
+    ) -> tuple[dict[str, Any] | None, str | None, list[dict[str, Any]]]:
+        """Resolve a model number inside the canonical purchase unit.
+
+        Full Product rows always carry a customer/unit relationship in the current
+        product model.  Compact legacy query tuples do not, so only that legacy
+        shape retains model-only compatibility; real tenant data is never allowed
+        to fall back from ``(unit, model)`` to another customer's model.
+        """
+
+        normalized_unit = self._normalize_unit_name(unit_name)
+        normalized_model = str(model_number or "").strip().upper()
+        if not normalized_unit or not normalized_model:
+            return None, "NUMBER_MODE_PRODUCT_MODEL_NOT_FOUND", []
+
+        has_unit_relationship = any(
+            self._normalize_unit_name(row.get("unit") or "") for row in product_catalog
+        )
+        candidate_rows = product_catalog
+        if has_unit_relationship:
+            candidate_rows = [
+                row
+                for row in product_catalog
+                if self._normalize_unit_name(row.get("unit") or "") == normalized_unit
+            ]
+
+        exact_rows = [
+            row
+            for row in candidate_rows
+            if str(row.get("model_number") or "").strip().upper() == normalized_model
+        ]
+        if len(exact_rows) == 1:
+            return exact_rows[0], None, exact_rows
+        if len(exact_rows) > 1:
+            return None, "NUMBER_MODE_PRODUCT_MODEL_AMBIGUOUS", exact_rows
+        return None, "NUMBER_MODE_PRODUCT_MODEL_NOT_FOUND", candidate_rows
 
     def _query_active_purchase_unit_names(self) -> list[str]:
         from app.db.models.purchase_unit import PurchaseUnit
@@ -38,7 +253,7 @@ class ShipmentNumberModeService:
 
         with get_db() as db:
             rows = (
-                db.query(PurchaseUnit.unit_name)
+                apply_tenant_filter(db.query(PurchaseUnit.unit_name), PurchaseUnit)
                 .filter(PurchaseUnit.is_active == True)
                 .order_by(PurchaseUnit.unit_name.asc())
                 .all()
@@ -74,29 +289,54 @@ class ShipmentNumberModeService:
             if len(normalized_exact) == 1:
                 return normalized_exact[0]
 
-            contains = [
+            # A shorter, user-facing customer name may safely point at one
+            # longer canonical tenant name (for example ``七彩乐园`` ->
+            # ``成都七彩乐园家具有限公司``).  The reverse is not safe: a
+            # longer input that merely contains a canonical name can carry a
+            # meaningful business qualifier (``金汉武三江源`` is not
+            # automatically ``金汉武家私``).  Known parenthetical aliases are
+            # normalized above before this comparison.
+            short_alias_matches = [
                 unit
                 for unit in unit_pool
-                if normalized_typed in self._normalize_unit_name(unit)
-                or self._normalize_unit_name(unit) in normalized_typed
+                if (
+                    (normalized_unit := self._normalize_unit_name(unit))
+                    and normalized_typed != normalized_unit
+                    and normalized_typed in normalized_unit
+                )
             ]
-            if len(contains) == 1:
-                return contains[0]
-            if len(contains) > 1:
+            if len(short_alias_matches) == 1:
+                return short_alias_matches[0]
+            if len(short_alias_matches) > 1:
                 typed_digits = _tail_digits(normalized_typed)
                 if typed_digits:
                     digit_matched = [
                         unit
-                        for unit in contains
+                        for unit in short_alias_matches
                         if _tail_digits(self._normalize_unit_name(unit)) == typed_digits
                     ]
                     if len(digit_matched) == 1:
                         return digit_matched[0]
                     if len(digit_matched) > 1:
-                        contains = digit_matched
+                        short_alias_matches = digit_matched
 
+            # Do not allow fuzzy matching to re-introduce the rejected
+            # canonical-substring direction above.  The remaining candidates
+            # preserve the historical typo-tolerance without swallowing a
+            # longer, qualified customer name.
+            score_pool = short_alias_matches or [
+                unit
+                for unit in unit_pool
+                if (
+                    (normalized_unit := self._normalize_unit_name(unit))
+                    and not (
+                        normalized_unit != normalized_typed
+                        and normalized_unit in normalized_typed
+                    )
+                )
+            ]
             scored = []
-            for unit in contains or unit_pool:
+            for unit in score_pool:
                 normalized_unit = self._normalize_unit_name(unit)
                 if not normalized_unit:
                     continue
@@ -309,6 +549,7 @@ class ShipmentNumberModeService:
         template_name: str | None = None,
         template_id: str | None = None,
         preferred_template: str | None = None,
+        owner_user_id: int | None = None,
     ) -> tuple[dict[str, Any], int]:
         text = str(order_text or "").strip()
         if not text and not (direct_unit_name and direct_products):
@@ -322,26 +563,18 @@ class ShipmentNumberModeService:
         unit_to_use = str(direct_unit_name or "").strip()
         parsed = {"success": False, "unit_name": "", "products": []}
 
+        product_catalog: list[dict[str, Any]] = []
         model_pool: list[str] = []
         if text:
             parsed = parse_order_text(text) or {}
 
             # 解析失败时，补一层“XCAGI DB 词条解析”。
             if not parsed.get("success"):
-                with get_db() as db:
-                    model_rows = (
-                        db.query(Product.model_number)
-                        .filter(
-                            (Product.is_active == 1)
-                            | (Product.is_active == True)
-                            | (Product.is_active.is_(None))
-                        )
-                        .all()
-                    )
+                product_catalog = self._load_active_product_catalog()
                 model_pool = [
-                    str(row[0] or "").strip().upper()
-                    for row in model_rows
-                    if row and str(row[0] or "").strip()
+                    str(row.get("model_number") or "").strip().upper()
+                    for row in product_catalog
+                    if str(row.get("model_number") or "").strip()
                 ]
                 parsed_by_db = self._parse_by_db_terms(
                     text=text,
@@ -398,27 +631,17 @@ class ShipmentNumberModeService:
                 "data": {"parsed_data": parsed},
             }, 400
 
-        # 严格策略：产品必须具备“型号/数量/规格”，且型号须可在 XCAGI products 主库匹配。
-        with get_db() as db:
-            product_rows = (
-                db.query(Product.model_number, Product.name)
-                .filter(
-                    (Product.is_active == 1)
-                    | (Product.is_active == True)
-                    | (Product.is_active.is_(None))
-                )
-                .all()
-            )
+        try:
+            trusted_owner_user_id = int(owner_user_id) if owner_user_id is not None else 0
+        except (TypeError, ValueError):
+            trusted_owner_user_id = 0
 
-        model_set = {
-            str(model or "").strip().upper()
-            for model, _name in product_rows
-            if str(model or "").strip()
-        }
-        name_pool = {
-            str(name or "").strip() for _model, name in product_rows if str(name or "").strip()
-        }
+        # 严格策略：所有主库匹配都限定在当前租户；名称模式还必须唯一地
+        # 落在当前购买单位下，不能用全局/模糊产品结果替代。
+        if not product_catalog:
+            product_catalog = self._load_active_product_catalog()
 
+        preview_product_provenance: list[dict[str, Any]] = []
         for idx, product in enumerate(products, start=1):
             model_number = str(product.get("model_number") or "").strip().upper()
             product_name = str(product.get("product_name") or product.get("name") or "").strip()
@@ -434,13 +657,6 @@ class ShipmentNumberModeService:
             except RECOVERABLE_ERRORS:
                 quantity_value = 0.0
 
-            if not model_number:
-                return {
-                    "success": False,
-                    "message": f"编号模式解析失败，已按严格策略停止生成（未启用预览兜底）。 失败原因：第{idx}项型号缺失。",
-                    "error_code": "NUMBER_MODE_STRICT_FAILED",
-                    "data": {"parsed_data": parsed},
-                }, 400
             if not tin_spec:
                 return {
                     "success": False,
@@ -456,33 +672,224 @@ class ShipmentNumberModeService:
                     "data": {"parsed_data": parsed},
                 }, 400
 
-            model_matched = model_number in model_set
-            if not model_matched:
-                return {
-                    "success": False,
-                    "message": f"编号模式解析失败，已按严格策略停止生成（未启用预览兜底）。 失败原因：型号不存在（{model_number}）。",
-                    "error_code": "NUMBER_MODE_STRICT_FAILED",
-                    "data": {"parsed_data": parsed, "missing_model_number": model_number},
-                }, 400
+            preview_status, preview_candidate = self._resolve_owner_preview_product_candidate(
+                owner_user_id=trusted_owner_user_id,
+                unit_name=unit_to_use,
+                product_name=product_name,
+            )
+            if preview_status == "conflict":
+                return self._preview_product_conflict_payload(
+                    parsed=parsed,
+                    unit_name=unit_to_use,
+                    product_name=product_name,
+                ), 400
 
-            if product_name and product_name not in name_pool:
-                # 仅提示，不阻断：名称可能存在历史别名，但型号已被主库验证。
-                pass
+            product_from_preview: dict[str, Any] | None = None
+            matched_product: dict[str, Any] | None = None
+            preview_model = (
+                str(preview_candidate.get("model_number") if preview_candidate else "")
+                .strip()
+                .upper()
+            )
+
+            if not model_number:
+                # An exact, validated owner-scoped preview is newer business
+                # evidence than the master catalogue, which may still carry a
+                # historic model or price.  A preview without a usable model
+                # cannot satisfy strict number mode, so master matching remains
+                # available for that incomplete case.
+                if preview_candidate is not None and preview_model:
+                    matched_product = {
+                        "name": preview_candidate.get("name"),
+                        "model_number": preview_model,
+                        "price": preview_candidate.get("price"),
+                    }
+                    product_from_preview = preview_candidate
+                else:
+                    matched_product, resolution_error, related_rows = (
+                        self._resolve_scoped_product_name(
+                            product_name=product_name,
+                            unit_name=unit_to_use,
+                            product_catalog=product_catalog,
+                        )
+                    )
+                    if matched_product is None:
+                        if resolution_error == "NUMBER_MODE_PRODUCT_NAME_AMBIGUOUS":
+                            candidates = [
+                                {
+                                    "name": str(row.get("name") or ""),
+                                    "model_number": str(row.get("model_number") or ""),
+                                }
+                                for row in related_rows
+                            ]
+                            return {
+                                "success": False,
+                                "message": (
+                                    "编号模式解析失败，已按严格策略停止生成（未启用预览兜底）。 "
+                                    f"失败原因：购买单位“{unit_to_use}”下的产品名称“{product_name}”匹配到多个产品。"
+                                ),
+                                "error_code": "NUMBER_MODE_PRODUCT_NAME_AMBIGUOUS",
+                                "data": {
+                                    "parsed_data": parsed,
+                                    "unit_name": unit_to_use,
+                                    "product_name": product_name,
+                                    "candidates": candidates,
+                                },
+                            }, 400
+                        return {
+                            "success": False,
+                            "message": (
+                                "编号模式解析失败，已按严格策略停止生成（未启用预览兜底）。 "
+                                f"失败原因：第{idx}项型号缺失，且未找到购买单位“{unit_to_use}”下的产品名称“{product_name}”。"
+                            ),
+                            "error_code": "NUMBER_MODE_PRODUCT_NAME_NOT_FOUND",
+                            "data": {
+                                "parsed_data": parsed,
+                                "unit_name": unit_to_use,
+                                "product_name": product_name,
+                            },
+                        }, 400
+
+                canonical_name = str(matched_product.get("name") or product_name).strip()
+                canonical_model = str(matched_product.get("model_number") or "").strip().upper()
+                product["name"] = canonical_name
+                product["product_name"] = canonical_name
+                if canonical_model:
+                    product["model_number"] = canonical_model
+                    model_number = canonical_model
+                if product.get("unit_price") in (None, ""):
+                    product["unit_price"] = matched_product.get("price")
+
+            if model_number and product_from_preview is None:
+                # A caller-supplied model remains authoritative.  When the
+                # private preview agrees, it can still provide the fresher
+                # price; disagreement is an explicit business-fact conflict.
+                if preview_candidate is not None and preview_model:
+                    if preview_model != model_number:
+                        return self._preview_product_conflict_payload(
+                            parsed=parsed,
+                            unit_name=unit_to_use,
+                            product_name=product_name,
+                        ), 400
+                    matched_product = {
+                        "name": preview_candidate.get("name"),
+                        "model_number": preview_model,
+                        "price": preview_candidate.get("price"),
+                    }
+                    product_from_preview = preview_candidate
+                else:
+                    matched_product, resolution_error, related_rows = (
+                        self._resolve_scoped_product_model(
+                            model_number=model_number,
+                            unit_name=unit_to_use,
+                            product_catalog=product_catalog,
+                        )
+                    )
+                    if matched_product is None:
+                        if resolution_error == "NUMBER_MODE_PRODUCT_MODEL_AMBIGUOUS":
+                            candidates = [
+                                {
+                                    "name": str(row.get("name") or ""),
+                                    "model_number": str(row.get("model_number") or ""),
+                                }
+                                for row in related_rows
+                            ]
+                            return {
+                                "success": False,
+                                "message": (
+                                    "编号模式解析失败，已按严格策略停止生成（未启用预览兜底）。 "
+                                    f"失败原因：购买单位“{unit_to_use}”下的型号“{model_number}”匹配到多个产品。"
+                                ),
+                                "error_code": "NUMBER_MODE_PRODUCT_MODEL_AMBIGUOUS",
+                                "data": {
+                                    "parsed_data": parsed,
+                                    "unit_name": unit_to_use,
+                                    "model_number": model_number,
+                                    "candidates": candidates,
+                                },
+                            }, 400
+                        return {
+                            "success": False,
+                            "message": (
+                                "编号模式解析失败，已按严格策略停止生成（未启用预览兜底）。 "
+                                f"失败原因：型号不存在或不属于购买单位“{unit_to_use}”（{model_number}）。"
+                            ),
+                            "error_code": "NUMBER_MODE_STRICT_FAILED",
+                            "data": {
+                                "parsed_data": parsed,
+                                "missing_model_number": model_number,
+                                "match_error_code": "NUMBER_MODE_PRODUCT_MODEL_NOT_FOUND",
+                            },
+                        }, 400
+
+                canonical_name = str(matched_product.get("name") or product_name).strip()
+                canonical_model = (
+                    str(matched_product.get("model_number") or model_number).strip().upper()
+                )
+                if canonical_name:
+                    product["name"] = canonical_name
+                    product["product_name"] = canonical_name
+                product["model_number"] = canonical_model
+                if product.get("unit_price") in (None, ""):
+                    product["unit_price"] = matched_product.get("price")
+
+            if product_from_preview is not None:
+                provenance = product_from_preview.get("provenance")
+                if isinstance(provenance, dict):
+                    preview_product_provenance.append(dict(provenance))
+
+        parsed_order_number = str(parsed.get("order_number") or "").strip()
+        requested_order_number = str(custom_order_number or "").strip()
+        effective_order_number = requested_order_number or parsed_order_number
+        parsed_order_number_provenance = (
+            parsed.get("order_number_provenance")
+            if parsed_order_number
+            and parsed_order_number == effective_order_number
+            and isinstance(parsed.get("order_number_provenance"), dict)
+            else None
+        )
+
+        generate_kwargs: dict[str, Any] = {
+            "unit_name": unit_to_use,
+            "products": products,
+            "template_name": (str(template_name or "").strip() or None),
+            "template_id": (str(template_id or "").strip() or None),
+            "preferred_template": (str(preferred_template or "").strip() or None),
+            "order_number": effective_order_number or None,
+            "intent": "shipment_generate",
+            "raw_text": text,
+        }
+        # Private ETL templates are owner-scoped.  This value is supplied by
+        # the authenticated route, never by params parsed from the request.
+        if trusted_owner_user_id > 0:
+            generate_kwargs["owner_user_id"] = trusted_owner_user_id
 
         app_service = get_shipment_app_service()
         result = app_service.generate_shipment_document(
-            unit_name=unit_to_use,
-            products=products,
-            template_name=(str(template_name or "").strip() or None),
-            template_id=(str(template_id or "").strip() or None),
-            preferred_template=(str(preferred_template or "").strip() or None),
-            order_number=(str(custom_order_number or "").strip() or None),
-            intent="shipment_generate",
-            raw_text=text,
+            **generate_kwargs,
         )
         result = self._normalize_success_payload(result)
 
         if result.get("success"):
+            if parsed_order_number_provenance is not None:
+                result["order_number_provenance"] = dict(parsed_order_number_provenance)
+            if preview_product_provenance:
+                warning = (
+                    "本次产品信息来自尚未执行的 ETL 预演候选，仅用于本次已确认的发货单；"
+                    "未写入产品库。"
+                )
+                existing_warnings = result.get("warnings")
+                warnings = list(existing_warnings) if isinstance(existing_warnings, list) else []
+                warnings.append(
+                    {
+                        "code": "ETL_PREVIEW_PRODUCT_CANDIDATE_USED",
+                        "message": warning,
+                    }
+                )
+                result["warnings"] = warnings
+                result["etl_preview_provenance"] = {
+                    "products": preview_product_provenance,
+                }
             return result, 200
 
         return {

@@ -19,6 +19,7 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from app.db.etl_bootstrap import ensure_sqlite_etl_bootstrap
 from app.utils.external_sqlite import sqlite_conn
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -172,7 +173,6 @@ def initialize_databases(db_files: Iterable[str] = DEFAULT_DB_FILES) -> None:
 
         try:
             shutil.copy2(source_path, target_path)
-            # 轻量检查
             with sqlite_conn(target_path) as conn:
                 cur = conn.cursor()
                 cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -402,7 +402,6 @@ def init_distillation_tables(engine: Engine) -> None:
                 )
             )
         else:
-            # PostgreSQL 等与 Alembic b1f4a6d2e8c1 一致
             conn.execute(
                 text(
                     """
@@ -709,10 +708,7 @@ def _seed_default_admin_user(real_engine: Engine) -> None:
         return
     hp = generate_password_hash(password)
     with real_engine.begin() as conn:
-        # 注意：User 模型多个列为 NOT NULL 但仅有 Python 端 default（无 SQL 服务端默认）：
-        # tier / industry_id / failed_login_attempts / email_verified。原生 INSERT 绕过 ORM
-        # 不会套用 Python default，必须显式提供，否则空库播种管理员会触发
-        # NOT NULL constraint failed（如 users.tier / users.failed_login_attempts）。
+        # 原生 INSERT 不会套用 User 的 Python default，须显式提供 NOT NULL 字段。
         conn.execute(
             text(
                 """
@@ -779,9 +775,7 @@ def _seed_sqlite_rbac_defaults(real_engine: Engine) -> None:
 
     from app.db.models.permission import DEFAULT_PERMISSIONS, DEFAULT_ROLES, Permission, Role
 
-    # This helper is also called directly by compatibility tests and older
-    # bootstrap paths.  Relationship-backed ORM reads require the complete
-    # RBAC trio; the public bootstrap creates missing tables before invoking us.
+    # Compatibility callers also need the complete relationship-backed RBAC trio.
     if not {"permissions", "roles", "role_permissions"}.issubset(
         set(inspect(real_engine).get_table_names() or [])
     ):
@@ -1265,6 +1259,11 @@ def ensure_runtime_auth_bootstrap(
             swallow_errors=swallow_errors,
         )
         ensure_mobile_push_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
+        ensure_sqlite_etl_bootstrap(
             engine,
             database_url=url,
             swallow_errors=swallow_errors,

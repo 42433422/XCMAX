@@ -8,13 +8,14 @@ from typing import Any
 from fastapi import APIRouter, Body, Query
 from fastapi.responses import JSONResponse
 
-from app.application.agent_orchestrator import AgentOrchestrator
+from app.application.agent_orchestrator import AgentOrchestrator, get_agent_run_runtime
 from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["agent"])
+_ASYNC_STATUSES = {"queued", "planning", "running", "retrying", "paused", "waiting_user"}
 
 
 def _success(data: Any, **extra: Any) -> dict[str, Any]:
@@ -44,13 +45,23 @@ def create_agent_run(
         )
 
     try:
-        run = AgentOrchestrator().start_run(
-            user_id=user_id,
-            message=message,
-            runtime_context=runtime_context,
-            auto_execute=bool(data.get("auto_execute", True)),
-        )
-        status_code = 202 if run.status in {"waiting_user", "blocked"} else 200
+        auto_execute = bool(data.get("auto_execute", True))
+        background = bool(data.get("background", True)) and auto_execute
+        orchestrator = AgentOrchestrator()
+        if background:
+            run = orchestrator.submit_run(
+                user_id=user_id,
+                message=message,
+                runtime_context=runtime_context,
+            )
+        else:
+            run = orchestrator.start_run(
+                user_id=user_id,
+                message=message,
+                runtime_context=runtime_context,
+                auto_execute=auto_execute,
+            )
+        status_code = 202 if run.status in _ASYNC_STATUSES | {"blocked"} else 200
         return JSONResponse(_success(run.to_dict()), status_code=status_code)
     except RECOVERABLE_ERRORS as exc:
         logger.exception("create agent run failed: %s", exc)
@@ -67,6 +78,34 @@ def list_agent_runs(
         return _success([run.to_dict() for run in runs], count=len(runs))
     except RECOVERABLE_ERRORS as exc:
         logger.exception("list agent runs failed: %s", exc)
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+
+
+@router.get("/api/agent/tools/contracts", response_model=None)
+def list_agent_tool_contracts() -> dict[str, Any] | JSONResponse:
+    """Expose the executable contract used by planner, guard and verifier."""
+    try:
+        from app.application.agent_orchestrator.tool_spec import build_tool_specs_v2
+
+        contracts = [
+            spec.to_dict()
+            for _, spec in sorted(
+                build_tool_specs_v2().items(),
+                key=lambda item: (item[0][0], item[0][1]),
+            )
+        ]
+        return _success(contracts, count=len(contracts), schema_version="2.1")
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("list agent tool contracts failed: %s", exc)
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+
+
+@router.get("/api/agent/runtime", response_model=None)
+def get_agent_runtime_status() -> dict[str, Any] | JSONResponse:
+    try:
+        return _success(get_agent_run_runtime().status())
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("get agent runtime status failed: %s", exc)
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
 
@@ -98,22 +137,92 @@ def continue_agent_run(
             status_code=400,
         )
     try:
+        background = bool(data.get("background", True))
         run = AgentOrchestrator().continue_run(
             run_id,
             approved_by=str(data.get("approved_by") or ""),
             approved_step_id=str(data.get("step_id") or data.get("node_id") or ""),
             runtime_context=runtime_context,
+            auto_execute=not background,
         )
         if run is None:
             return JSONResponse(
                 {"success": False, "message": "agent run 不存在"},
                 status_code=404,
             )
-        status_code = 202 if run.status in {"waiting_user", "blocked"} else 200
+        if background and run.status == "queued":
+            run = get_agent_run_runtime().submit(run.run_id) or run
+        status_code = 202 if run.status in _ASYNC_STATUSES | {"blocked"} else 200
         return JSONResponse(_success(run.to_dict()), status_code=status_code)
     except RECOVERABLE_ERRORS as exc:
         logger.exception("continue agent run failed: %s", exc)
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+
+
+def _control_response(run) -> JSONResponse:
+    if run is None:
+        return JSONResponse(
+            {"success": False, "message": "agent run 不存在"},
+            status_code=404,
+        )
+    status_code = 202 if run.status in _ASYNC_STATUSES else 200
+    return JSONResponse(_success(run.to_dict()), status_code=status_code)
+
+
+@router.post("/api/agent/runs/{run_id}/pause", response_model=None)
+def pause_agent_run(
+    run_id: str,
+    body: dict[str, Any] = Body(default_factory=dict),
+) -> JSONResponse:
+    data = body or {}
+    return _control_response(
+        get_agent_run_runtime().request_pause(
+            run_id,
+            requested_by=str(data.get("requested_by") or ""),
+        )
+    )
+
+
+@router.post("/api/agent/runs/{run_id}/resume", response_model=None)
+def resume_agent_run(
+    run_id: str,
+    body: dict[str, Any] = Body(default_factory=dict),
+) -> JSONResponse:
+    data = body or {}
+    return _control_response(
+        get_agent_run_runtime().resume(
+            run_id,
+            requested_by=str(data.get("requested_by") or ""),
+        )
+    )
+
+
+@router.post("/api/agent/runs/{run_id}/cancel", response_model=None)
+def cancel_agent_run(
+    run_id: str,
+    body: dict[str, Any] = Body(default_factory=dict),
+) -> JSONResponse:
+    data = body or {}
+    return _control_response(
+        get_agent_run_runtime().cancel(
+            run_id,
+            requested_by=str(data.get("requested_by") or ""),
+        )
+    )
+
+
+@router.post("/api/agent/runs/{run_id}/retry", response_model=None)
+def retry_agent_run(
+    run_id: str,
+    body: dict[str, Any] = Body(default_factory=dict),
+) -> JSONResponse:
+    data = body or {}
+    return _control_response(
+        get_agent_run_runtime().retry(
+            run_id,
+            requested_by=str(data.get("requested_by") or ""),
+        )
+    )
 
 
 @router.get("/api/agent/runs/{run_id}/events", response_model=None)

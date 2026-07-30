@@ -4,6 +4,8 @@ import type { TaskItem } from './useChatPersistence'
 import type { ChatPlannerPayload } from '@/types/chat'
 import { parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
 import { asRecord, asArray, asString, asNumber, asBoolean } from '@/utils/typeGuards'
+import type { OrchestrationTraceStep } from '@/types/orchestration'
+import { extractAgentRunId } from './useAgentRunEvents'
 
 export interface UseChatResponseAttachDeps {
   messages: Ref<ChatMessage[]>
@@ -45,6 +47,17 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
       }
     }
     return ''
+  }
+
+  function attachOrchestrationTraceToLastAiMessage(trace: OrchestrationTraceStep[]): void {
+    if (!Array.isArray(trace) || !trace.length) return
+    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+      const msg = messages.value[i]
+      if (msg?.role === 'ai') {
+        msg.orchestrationTrace = trace
+        break
+      }
+    }
   }
 
   function attachTodoStepsToLastAiMessage(data: ChatPlannerPayload): void {
@@ -125,6 +138,7 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
     const messageRef = getLastAiMessageRef()
     if (action === 'workflow_confirmation_required') {
       const pendingId = asString(nestedData(resp).pending_workflow_id) || createTaskId('wf')
+      const agentRunId = extractAgentRunId(resp)
       upsertTask({
         id: pendingId,
         type: 'workflow',
@@ -134,7 +148,11 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
         progress: 10,
         summary: '等待确认执行',
         messageRef,
-        payload: { response: resp }
+        payload: {
+          response: resp,
+          agentRunId,
+          planId: pendingId,
+        }
       })
       return
     }
@@ -196,6 +214,7 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
 
   return {
     getLastAiMessageRef,
+    attachOrchestrationTraceToLastAiMessage,
     attachThinkingStepsToLastAiMessage,
     attachTodoStepsToLastAiMessage,
     attachWorkflowTraceToLastAiMessage,

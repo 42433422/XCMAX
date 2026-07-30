@@ -250,8 +250,20 @@ class ProductsService(NeuroEventPublisherMixin):
             logger.error("ProductRepository 未注入")
             return {"success": False, "message": "服务未正确初始化"}
 
-        result = self._repository.update(product_id, data)
+        result = dict(self._repository.update(product_id, data) or {})
         self._invalidate_single_product_cache(product_id)
+        if result.get("success"):
+            readback = self._repository.find_by_id(product_id)
+            if readback is not None:
+                if hasattr(readback, "to_dict"):
+                    readback = readback.to_dict()
+                result.update(
+                    {
+                        "record_id": product_id,
+                        "updated": 1,
+                        "data": readback,
+                    }
+                )
         return result
 
     def delete_product(self, product_id: int) -> dict[str, Any]:
@@ -262,7 +274,16 @@ class ProductsService(NeuroEventPublisherMixin):
 
         if success:
             self._invalidate_single_product_cache(product_id)
-            return {"success": True, "message": "产品删除成功"}
+            exists_after = self._repository.find_by_id(product_id) is not None
+            if exists_after:
+                return {"success": False, "message": "产品删除后回读仍存在"}
+            return {
+                "success": True,
+                "message": "产品删除成功",
+                "record_id": product_id,
+                "deleted": 1,
+                "data": {"id": product_id, "exists_after": False},
+            }
         return {"success": False, "message": "删除失败"}
 
     def batch_add_products(self, products_data: list[dict[str, Any]]) -> dict[str, Any]:

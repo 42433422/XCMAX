@@ -254,10 +254,19 @@ class TestMacosCupsPrinterUtils:
             stdout="system default destination: Canon_TS3700_series\n",
             stderr="",
         )
+        state_result = MagicMock(
+            returncode=0,
+            stdout="printer-state-reasons=none\n",
+            stderr="",
+        )
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
             patch("app.utils.print_utils.win32print", None),
-            patch.object(pu, "_run_cups", side_effect=[printer_result, default_result]),
+            patch.object(
+                pu,
+                "_run_cups",
+                side_effect=[printer_result, default_result, state_result, state_result],
+            ),
         ):
             printers = pu.get_available_printers()
 
@@ -266,11 +275,13 @@ class TestMacosCupsPrinterUtils:
                 "name": "Canon_TS3700_series",
                 "status": "就绪",
                 "is_default": True,
+                "is_printable": True,
             },
             {
                 "name": "Zebra_Label",
                 "status": "打印中",
                 "is_default": False,
+                "is_printable": True,
             },
         ]
 
@@ -286,10 +297,15 @@ class TestMacosCupsPrinterUtils:
             stdout="系统默认目的位置：Canon_TS3700_series\n",
             stderr="",
         )
+        state_result = MagicMock(
+            returncode=0,
+            stdout="printer-state-reasons=none\n",
+            stderr="",
+        )
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
             patch("app.utils.print_utils.win32print", None),
-            patch.object(pu, "_run_cups", side_effect=[printer_result, default_result]),
+            patch.object(pu, "_run_cups", side_effect=[printer_result, default_result, state_result]),
         ):
             printers = pu.get_available_printers()
 
@@ -298,8 +314,54 @@ class TestMacosCupsPrinterUtils:
                 "name": "Canon_TS3700_series",
                 "status": "就绪",
                 "is_default": True,
+                "is_printable": True,
             }
         ]
+
+    def test_discovers_offline_cups_printer_as_not_printable(self):
+        pu = PrinterUtils()
+        printer_result = MagicMock(
+            returncode=0,
+            stdout="printer Canon_TS3700_series is idle. enabled since Wed Jul 15\n",
+            stderr="",
+        )
+        default_result = MagicMock(
+            returncode=0,
+            stdout="system default destination: Canon_TS3700_series\n",
+            stderr="",
+        )
+        state_result = MagicMock(
+            returncode=0,
+            stdout="printer-state-reasons=offline-report\n",
+            stderr="",
+        )
+        with (
+            patch.object(pu, "_is_print_backend_available", return_value=True),
+            patch("app.utils.print_utils.win32print", None),
+            patch.object(pu, "_run_cups", side_effect=[printer_result, default_result, state_result]),
+        ):
+            printers = pu.get_available_printers()
+
+        assert printers == [
+            {
+                "name": "Canon_TS3700_series",
+                "status": "离线",
+                "is_default": True,
+                "state_reasons": ["offline-report"],
+                "is_printable": False,
+            }
+        ]
+
+    @pytest.mark.parametrize(
+        ("state_reason", "expected_status"),
+        [
+            ("offline-report", "离线"),
+            ("media-empty-error", "缺纸"),
+            ("paused", "已暂停"),
+        ],
+    )
+    def test_cups_state_reasons_never_report_ready(self, state_reason, expected_status):
+        assert PrinterUtils._cups_status_text("就绪", [state_reason]) == expected_status
 
     def test_gets_cups_default_printer(self):
         pu = PrinterUtils()
@@ -335,16 +397,132 @@ class TestMacosCupsPrinterUtils:
             patch.object(pu, "_resolve_allowed_print_path", return_value="/tmp/test.pdf"),
             patch("builtins.open", mock_open(read_data=b"pdf")),
             patch.object(pu, "_run_cups", return_value=result) as run_cups,
+            patch.object(
+                pu,
+                "_monitor_cups_job",
+                return_value={"state": "completed", "job_id": "Canon_TS3700_series-6"},
+            ),
         ):
             output = pu.print_file("/tmp/test.pdf", "Canon_TS3700_series")
 
         assert output["success"] is True
         assert output["method"] == "cups_lp"
+        assert output["print_completed"] is True
+        assert output["print_state"] == "completed"
         assert run_cups.call_args.args == (
             "lp",
             ("-d", "Canon_TS3700_series"),
         )
         assert run_cups.call_args.kwargs["input_stream"] is not None
+
+    def test_cups_submission_stays_pending_without_physical_completion(self):
+        pu = PrinterUtils()
+        result = MagicMock(
+            returncode=0,
+            stdout="request id is Canon_TS3700_series-12 (1 file(s))\n",
+            stderr="",
+        )
+        with (
+            patch.object(pu, "_resolve_cups_printer_name", return_value="Canon_TS3700_series"),
+            patch.object(pu, "_resolve_allowed_print_path", return_value="/tmp/test.pdf"),
+            patch("builtins.open", mock_open(read_data=b"pdf")),
+            patch.object(pu, "_run_cups", return_value=result),
+            patch.object(
+                pu,
+                "_monitor_cups_job",
+                return_value={"state": "pending", "job_id": "Canon_TS3700_series-12"},
+            ),
+        ):
+            output = pu._print_cups("/tmp/test.pdf", "Canon_TS3700_series")
+
+        assert output["success"] is True
+        assert output["print_completed"] is False
+        assert output["print_state"] == "queued"
+        assert output["job_id"] == "Canon_TS3700_series-12"
+
+    def test_cups_submission_recovers_job_id_from_unambiguous_queue_delta(self):
+        pu = PrinterUtils()
+        before = MagicMock(
+            returncode=0,
+            stdout="Canon_TS3700_series-18  user  100  Wed Jul 29 16:41:42 2026\n",
+            stderr="",
+        )
+        submitted_without_id = MagicMock(returncode=0, stdout="", stderr="")
+        after = MagicMock(
+            returncode=0,
+            stdout=(
+                "Canon_TS3700_series-18  user  100  Wed Jul 29 16:41:42 2026\n"
+                "Canon_TS3700_series-19  user  100  Thu Jul 30 04:08:39 2026\n"
+            ),
+            stderr="",
+        )
+        with (
+            patch.object(pu, "_resolve_cups_printer_name", return_value="Canon_TS3700_series"),
+            patch.object(pu, "_resolve_allowed_print_path", return_value="/tmp/test.pdf"),
+            patch("builtins.open", mock_open(read_data=b"pdf")),
+            patch.object(
+                pu,
+                "_run_cups",
+                side_effect=[before, submitted_without_id, after],
+            ),
+            patch.object(
+                pu,
+                "_monitor_cups_job",
+                return_value={"state": "completed", "job_id": "Canon_TS3700_series-19"},
+            ) as monitor,
+        ):
+            output = pu._print_cups("/tmp/test.pdf", "Canon_TS3700_series")
+
+        assert output["success"] is True
+        assert output["job_id"] == "Canon_TS3700_series-19"
+        assert output["print_completed"] is True
+        monitor.assert_called_once_with("Canon_TS3700_series", "Canon_TS3700_series-19")
+
+    def test_cups_submission_reports_aborted_job(self):
+        pu = PrinterUtils()
+        result = MagicMock(
+            returncode=0,
+            stdout="request id is Canon_TS3700_series-13 (1 file(s))\n",
+            stderr="",
+        )
+        with (
+            patch.object(pu, "_resolve_cups_printer_name", return_value="Canon_TS3700_series"),
+            patch.object(pu, "_resolve_allowed_print_path", return_value="/tmp/test.pdf"),
+            patch("builtins.open", mock_open(read_data=b"pdf")),
+            patch.object(pu, "_run_cups", return_value=result),
+            patch.object(
+                pu,
+                "_monitor_cups_job",
+                return_value={
+                    "state": "aborted",
+                    "job_id": "Canon_TS3700_series-13",
+                    "reason": "media-empty-error",
+                },
+            ),
+        ):
+            output = pu._print_cups("/tmp/test.pdf", "Canon_TS3700_series")
+
+        assert output["success"] is False
+        assert output["error_code"] == "CUPS_JOB_ABORTED"
+        assert output["print_state"] == "aborted"
+
+    def test_reads_verbose_ipp_job_state_and_reason(self):
+        pu = PrinterUtils()
+        result = MagicMock(
+            returncode=0,
+            stdout=(
+                "status-code = successful-ok (successful-ok)\n"
+                "job-state (enum) = aborted\n"
+                "job-state-reasons (1setOf keyword) = media-empty-error\n"
+            ),
+            stderr="",
+        )
+        with patch.object(pu, "_run_ipp_query", return_value=result) as query:
+            state = pu.get_cups_print_job_status("Canon_TS3700_series", "Canon_TS3700_series-15")
+
+        assert state["state"] == "aborted"
+        assert state["reason"] == "media-empty-error"
+        query.assert_called_once_with("Canon_TS3700_series", 15)
 
     def test_cups_rejects_untrusted_printer_name_without_running_command(self):
         pu = PrinterUtils()

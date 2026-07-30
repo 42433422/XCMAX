@@ -882,17 +882,16 @@ class TestExecutePrintLabelTool:
         with patch(
             "app.infrastructure.documents.shipment_document_generator_impl.SimpleLabelGenerator",
             return_value=mock_gen,
+        ), patch(
+            "app.infrastructure.documents.shipment_document_generator_impl.get_shipment_label_output_dir",
+            return_value=("/tmp/xcagi-labels/tenants/1/owners/2/runs/run-1", "run-1"),
         ):
-            with patch(
-                "app.utils.path_utils.get_resource_path",
-                return_value="/tmp/labels",
-            ):
-                with patch("os.makedirs"):
-                    result = _execute_print_label_tool(
-                        {"products": [{"name": "P1"}], "order_number": "ORD001"}
-                    )
-                    assert result["success"] is True
-                    assert len(result["data"]) == 2
+            result = _execute_print_label_tool(
+                {"products": [{"name": "P1"}], "order_number": "ORD001"}
+            )
+            assert result["success"] is True
+            assert result["label_run_id"] == "run-1"
+            assert len(result["data"]) == 2
 
     def test_doc_name_as_order_number_alias(self) -> None:
         """doc_name 作为 order_number 的别名。"""
@@ -901,16 +900,14 @@ class TestExecutePrintLabelTool:
         with patch(
             "app.infrastructure.documents.shipment_document_generator_impl.SimpleLabelGenerator",
             return_value=mock_gen,
+        ), patch(
+            "app.infrastructure.documents.shipment_document_generator_impl.get_shipment_label_output_dir",
+            return_value=("/tmp/xcagi-labels/tenants/1/owners/2/runs/run-2", "run-2"),
         ):
-            with patch(
-                "app.utils.path_utils.get_resource_path",
-                return_value="/tmp/labels",
-            ):
-                with patch("os.makedirs"):
-                    _execute_print_label_tool({"products": [{"name": "P1"}], "doc_name": "DOC001"})
-                    mock_gen.generate_labels_for_order.assert_called_once_with(
-                        order_number="DOC001", products=[{"name": "P1"}]
-                    )
+            _execute_print_label_tool({"products": [{"name": "P1"}], "doc_name": "DOC001"})
+            mock_gen.generate_labels_for_order.assert_called_once_with(
+                order_number="DOC001", products=[{"name": "P1"}]
+            )
 
     def test_default_order_number_when_missing(self) -> None:
         mock_gen = MagicMock()
@@ -918,16 +915,14 @@ class TestExecutePrintLabelTool:
         with patch(
             "app.infrastructure.documents.shipment_document_generator_impl.SimpleLabelGenerator",
             return_value=mock_gen,
+        ), patch(
+            "app.infrastructure.documents.shipment_document_generator_impl.get_shipment_label_output_dir",
+            return_value=("/tmp/xcagi-labels/tenants/1/owners/2/runs/run-3", "run-3"),
         ):
-            with patch(
-                "app.utils.path_utils.get_resource_path",
-                return_value="/tmp/labels",
-            ):
-                with patch("os.makedirs"):
-                    _execute_print_label_tool({"products": [{"name": "P1"}]})
-                    mock_gen.generate_labels_for_order.assert_called_once_with(
-                        order_number="LABEL", products=[{"name": "P1"}]
-                    )
+            _execute_print_label_tool({"products": [{"name": "P1"}]})
+            mock_gen.generate_labels_for_order.assert_called_once_with(
+                order_number="LABEL", products=[{"name": "P1"}]
+            )
 
     def test_import_error_returns_service_unavailable(self) -> None:
         with patch.dict(
@@ -942,7 +937,7 @@ class TestExecutePrintLabelTool:
 
     def test_value_error_returns_invalid_parameters(self) -> None:
         with patch(
-            "app.utils.path_utils.get_resource_path",
+            "app.infrastructure.documents.shipment_document_generator_impl.get_shipment_label_output_dir",
             side_effect=ValueError("bad"),
         ):
             result = _execute_print_label_tool({"products": [{"name": "P1"}]})
@@ -951,7 +946,7 @@ class TestExecutePrintLabelTool:
 
     def test_type_error_returns_invalid_parameters(self) -> None:
         with patch(
-            "app.utils.path_utils.get_resource_path",
+            "app.infrastructure.documents.shipment_document_generator_impl.get_shipment_label_output_dir",
             side_effect=TypeError("bad"),
         ):
             result = _execute_print_label_tool({"products": [{"name": "P1"}]})
@@ -960,7 +955,7 @@ class TestExecutePrintLabelTool:
 
     def test_oserror_returns_file_io_error(self) -> None:
         with patch(
-            "app.utils.path_utils.get_resource_path",
+            "app.infrastructure.documents.shipment_document_generator_impl.get_shipment_label_output_dir",
             side_effect=OSError("disk full"),
         ):
             result = _execute_print_label_tool({"products": [{"name": "P1"}]})
@@ -969,7 +964,7 @@ class TestExecutePrintLabelTool:
 
     def test_runtime_error_returns_generation_failed(self) -> None:
         with patch(
-            "app.utils.path_utils.get_resource_path",
+            "app.infrastructure.documents.shipment_document_generator_impl.get_shipment_label_output_dir",
             side_effect=RuntimeError("fail"),
         ):
             result = _execute_print_label_tool({"products": [{"name": "P1"}]})

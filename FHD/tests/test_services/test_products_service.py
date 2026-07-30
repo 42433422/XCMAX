@@ -214,8 +214,14 @@ class TestUpdateProduct:
 
     def test_update_success(self, service, mock_repo):
         mock_repo.update.return_value = {"success": True}
+        mock_repo.find_by_id.return_value = {"id": 1, "name": "B"}
         result = service.update_product(1, {"name": "B"})
-        assert result == {"success": True}
+        assert result == {
+            "success": True,
+            "record_id": 1,
+            "updated": 1,
+            "data": {"id": 1, "name": "B"},
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -232,8 +238,18 @@ class TestDeleteProduct:
 
     def test_delete_success(self, service, mock_repo):
         mock_repo.delete.return_value = True
+        mock_repo.find_by_id.return_value = None
         result = service.delete_product(1)
         assert result["success"] is True
+        assert result["record_id"] == 1
+        assert result["deleted"] == 1
+        assert result["data"] == {"id": 1, "exists_after": False}
+
+    def test_delete_fails_when_readback_still_exists(self, service, mock_repo):
+        mock_repo.delete.return_value = True
+        mock_repo.find_by_id.return_value = {"id": 1}
+        result = service.delete_product(1)
+        assert result == {"success": False, "message": "产品删除后回读仍存在"}
 
     def test_delete_failure(self, service, mock_repo):
         mock_repo.delete.return_value = False

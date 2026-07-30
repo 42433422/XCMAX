@@ -49,9 +49,28 @@ class TestLegacyShipmentDocumentGenerator:
         mock_loader.return_value = loader_ns
 
         gen = LegacyShipmentDocumentGenerator()
-        result = gen.generate(unit_name="测试单位", products=[])
+        with patch(
+            "app.infrastructure.documents.shipment_document_generator_impl.get_shipment_label_output_dir",
+            return_value=("/tmp/xcagi-labels/tenants/9/owners/7/runs/run-1", "run-1"),
+        ) as output_dir, patch(
+            "app.infrastructure.documents.shipment_document_generator_impl.SimpleLabelGenerator"
+        ) as label_generator:
+            label_generator.return_value.generate_labels_for_order.return_value = []
+            result = gen.generate(
+                unit_name="测试单位",
+                products=[],
+                tenant_id=9,
+                owner_user_id=7,
+                run_id="run-1",
+            )
 
         assert result["success"] is True
+        assert result["label_run_id"] == "run-1"
+        output_dir.assert_called_once_with(tenant_id=9, owner_user_id=7, run_id="run-1")
+        label_generator.assert_called_once_with(
+            "/tmp/xcagi-labels/tenants/9/owners/7/runs/run-1"
+        )
+        _mock_products_db.assert_called_once_with(unit_name="测试单位")
 
     @patch("app.infrastructure.documents.shipment_document_generator_impl.resolve_purchase_unit")
     def test_generate_unit_not_found(self, mock_resolve):

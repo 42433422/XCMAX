@@ -18,6 +18,7 @@ HOST_BASE_DB_API_PREFIXES: tuple[str, ...] = (
     "/api/xcmax/",
     "/api/conversations/",
     "/api/enterprise/",
+    "/api/etl/",
 )
 
 

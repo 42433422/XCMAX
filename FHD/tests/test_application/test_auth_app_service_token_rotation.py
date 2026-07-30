@@ -388,6 +388,19 @@ class TestPermissions:
             perms = svc.get_user_permissions(user)
         assert perms == ["edit"]
 
+    def test_enterprise_user_uses_operator_permissions(self) -> None:
+        svc = AuthApplicationService()
+        user = MagicMock(role="user", tier="enterprise")
+        etl_read = MagicMock(code="etl.read")
+        etl_execute = MagicMock(code="etl.execute")
+        operator_role = MagicMock(permissions=[etl_read, etl_execute])
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = operator_role
+        with patch("app.application.auth_app_service.get_db") as gdb:
+            gdb.return_value.__enter__.return_value = db
+            perms = svc.get_user_permissions(user)
+        assert perms == ["etl.read", "etl.execute"]
+
     def test_unknown_role_returns_empty_list(self) -> None:
         svc = AuthApplicationService()
         user = MagicMock(role="nobody")

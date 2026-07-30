@@ -60,7 +60,11 @@ export async function parseChatStreamErrorResponse(res: Response): Promise<strin
     const ct = res.headers.get('content-type') || '';
     if (ct.includes('application/json')) {
       const j = asRecord(await res.json());
-      msg = asString(j.message || j.detail) || msg;
+      const detail = asRecord(j.detail);
+      const error = asRecord(j.error);
+      const topLevelMessage = typeof j.message === 'string' ? j.message : '';
+      const directDetail = typeof j.detail === 'string' ? j.detail : '';
+      msg = asString(topLevelMessage || detail.message || error.message || directDetail) || msg;
     }
   } catch {
     /* ignore */

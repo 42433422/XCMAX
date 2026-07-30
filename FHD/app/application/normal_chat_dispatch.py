@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 from app.utils.ai_helpers import format_money, safe_float
@@ -17,10 +19,26 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def _json_safe_business_value(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {
+            str(key): _json_safe_business_value(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_json_safe_business_value(item) for item in value]
+    return value
+
+
 def route_normal_mode_message(message: str) -> dict[str, Any]:
     """
     普通版轻量槽位提取与任务分流：
     - shipment: 发货单 / 开单 / 打印 / 出货单等单据语境
+    - shipment_records_query: 发货/送货/出货记录查询
     - product_query: 产品库检索
     - customers_query: 客户/购买单位查询
     - inventory_alert: 库存预警
@@ -29,6 +47,31 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
     """
     text = (message or "").strip()
     lower = text.lower()
+
+    shipment_record_keywords = ("发货记录", "送货记录", "出货记录", "业务记录")
+    if any(keyword in text for keyword in shipment_record_keywords):
+        unit_name = re.sub(
+            r"^(?:帮我|给我|请)?\s*"
+            r"(?:查询|查一下|查下|查|查看|看看|看下|搜索|找下|找|检索|列出)?"
+            r"(?:一下)?\s*",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
+        unit_name = re.sub(
+            r"\s*(?:的)?(?:最近(?:的)?)?"
+            r"(?:发货记录|送货记录|出货记录|业务记录)(?:列表|明细)?"
+            r"(?:是什么|有哪些|有多少|多少条)?[？?。！!\s]*$",
+            "",
+            unit_name,
+            flags=re.IGNORECASE,
+        ).strip()
+        if unit_name in {"最近", "全部", "所有"}:
+            unit_name = ""
+        return {
+            "intent": "shipment_records_query",
+            "slots": {"unit_name": unit_name},
+        }
 
     shipment_keywords = ("发货单", "送货单", "出货单", "开单", "打单", "打印")
     number_style_order = bool(
@@ -57,13 +100,34 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
         "客户名单",
     )
     if any(k in text for k in customer_keywords):
+        # 「有哪些客户？」是一个枚举请求，不应把「有哪些」当作名称关键词，
+        # 否则会稳定地查出空列表。这里仅对完整的列表话术清空关键词；带有
+        # 具体公司名的查询仍走下面的名称提取逻辑。
+        normalized_customer_list_query = re.sub(r"[\s，,。！？!?：:]", "", text)
+        if re.fullmatch(
+            r"(?:有哪些|所有|全部)(?:的)?(?:客户|购买单位)(?:列表|名单)?"
+            r"|(?:客户|购买单位)(?:有哪些|列表|名单)"
+            r"|(?:查询|查找|搜索|查看|看|列出)(?:所有|全部)?(?:客户|购买单位)",
+            normalized_customer_list_query,
+        ):
+            return {"intent": "customers_query", "slots": {"keyword": ""}}
         keyword_match = re.search(
-            r"(?:查询|查找|找到|搜索)?\s*([^\s，,。]{2,})\s*(?:的)?(?:客户|购买单位)", text
+            r"(?:查询|查找|找到|搜索|查一下|查下|查)?\s*([^\s，,。]{2,})\s*(?:的)?(?:客户|购买单位)",
+            text,
         )
         return {
             "intent": "customers_query",
             "slots": {"keyword": (keyword_match.group(1) if keyword_match else "").strip()},
         }
+
+    # 同样把纯产品列表话术识别为无关键词查询。不要把这个规则扩展到
+    # 「产品价格怎么定」等开放式问题，后者仍交给正常聊天处理。
+    normalized_product_list_query = re.sub(r"[\s，,。！？!?：:]", "", text)
+    if re.fullmatch(
+        r"(?:查|查询|查看|看|看看|列出|有哪些|所有|全部)?(?:的)?(?:产品|商品)(?:库|列表|名单)?",
+        normalized_product_list_query,
+    ):
+        return {"intent": "product_query", "slots": {"keyword": ""}}
 
     # 库存预警
     inventory_keywords = ("库存", "库存预警", "低库存", "库存不足", "缺货", "原材料库存", "仓库")
@@ -214,6 +278,83 @@ def build_product_query_response_dict(route_result: dict[str, Any]) -> dict[str,
     }
 
 
+def build_shipment_records_query_response_dict(
+    route_result: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Build a tenant-scoped, read-only shipment record response."""
+
+    if route_result.get("intent") != "shipment_records_query":
+        return None
+    unit_name = str((route_result.get("slots") or {}).get("unit_name") or "").strip()
+    try:
+        from app.bootstrap import get_shipment_app_service
+
+        records = get_shipment_app_service().get_shipment_records(
+            unit_name or None,
+            limit=10,
+        )
+        records = _json_safe_business_value(records)
+    except RECOVERABLE_ERRORS as query_err:
+        logger.warning("发货记录查询失败：%s", query_err, exc_info=True)
+        return {
+            "success": False,
+            "message": "发货记录查询失败",
+            "response": "当前无法读取发货记录，请稍后重试。",
+            "data": {
+                "routing": "normal_slot_dispatch",
+                "intent": "shipment_records_query",
+                "slots": {"unit_name": unit_name},
+                "records": [],
+            },
+        }
+
+    title = f"{unit_name}最近的发货记录" if unit_name else "最近的发货记录"
+    lines = [f"{title}（{len(records)} 条）："]
+    total_amount = 0.0
+    status_labels = {
+        "pending": "待打印",
+        "printed": "已打印",
+        "completed": "已完成",
+        "cancelled": "已取消",
+    }
+    for row in records:
+        amount = safe_float(row.get("amount"))
+        total_amount += amount
+        product_name = str(row.get("product_name") or "-").strip()
+        model_number = str(row.get("model_number") or "").strip()
+        quantity_tins = int(safe_float(row.get("quantity_tins")))
+        quantity_kg = safe_float(row.get("quantity_kg"))
+        status = str(row.get("status") or "").strip()
+        product_label = f"{product_name}（{model_number}）" if model_number else product_name
+        quantity_bits = []
+        if quantity_tins:
+            quantity_bits.append(f"{quantity_tins}桶")
+        if quantity_kg:
+            quantity_bits.append(f"{format_money(quantity_kg)}kg")
+        lines.append(
+            f"- #{row.get('id')} | {product_label} | "
+            f"{'/'.join(quantity_bits) or '数量未填'} | "
+            f"￥{format_money(amount)} | {status_labels.get(status, status or '未标记')}"
+        )
+    if records:
+        lines.append(f"以上记录金额合计：￥{format_money(total_amount)}。")
+    else:
+        lines.append("没有找到匹配记录。")
+    return {
+        "success": True,
+        "message": "发货记录查询完成",
+        "response": "\n".join(lines),
+        "data": {
+            "routing": "normal_slot_dispatch",
+            "intent": "shipment_records_query",
+            "slots": {"unit_name": unit_name},
+            "records": records,
+            "count": len(records),
+            "total_amount": total_amount,
+        },
+    }
+
+
 def run_workflow_products_query_normal_profile(
     user_message: str,
     node_params: dict[str, Any] | None = None,
@@ -276,7 +417,11 @@ def resolve_tool_execution_profile(runtime_context: dict[str, Any] | None) -> st
     return "pro_default"
 
 
-def run_normal_slot_shipment_preview(order_text: str) -> dict[str, Any]:
+def run_normal_slot_shipment_preview(
+    order_text: str,
+    *,
+    authenticated_owner_user_id: int | None = None,
+) -> dict[str, Any]:
     """
     normal_slot_dispatch.shipment_preview：与普通版 unified_chat shipment 分支同源（编号解析 + 预览任务）。
     延迟导入避免循环依赖。
@@ -307,6 +452,13 @@ def run_normal_slot_shipment_preview(order_text: str) -> dict[str, Any]:
         parsed.get("unit_name", ""),
         parsed.get("products") or [],
         text,
+        order_number=parsed.get("order_number"),
+        order_number_provenance=(
+            parsed.get("order_number_provenance")
+            if isinstance(parsed.get("order_number_provenance"), dict)
+            else None
+        ),
+        authenticated_owner_user_id=authenticated_owner_user_id,
     )
     body["normal_slot_dispatch"] = True
     return body
@@ -332,12 +484,24 @@ def build_customers_query_response_dict(route_result: dict[str, Any]) -> dict[st
         return None
     keyword = str((route_result.get("slots") or {}).get("keyword") or "").strip()
     try:
-        from app.services.customers_service import CustomerService
+        # 统一经当前请求 Mod 上下文感知的应用服务读取。历史上这里引用了
+        # 不存在的 ``app.services.customers_service``，导致本地槽位命中后反而
+        # 降级为“服务不可用”。这个路径只调用 get_all，不会产生写入。
+        from app.bootstrap import get_customer_app_service
 
-        svc = CustomerService()
-        customers = svc.search(keyword=keyword) if keyword else svc.get_all()
+        result = get_customer_app_service().get_all(
+            keyword=keyword or None,
+            page=1,
+            per_page=20,
+        )
+        if not isinstance(result, dict) or not result.get("success"):
+            raise RuntimeError(
+                str(result.get("message") if isinstance(result, dict) else "客户查询失败")
+            )
+        customers = result.get("data") or []
         if not isinstance(customers, list):
             customers = []
+        total = int(result.get("total") or len(customers))
         if not customers:
             msg = f"未找到关键词「{keyword}」相关的客户。" if keyword else "暂无客户数据。"
         else:
@@ -345,11 +509,15 @@ def build_customers_query_response_dict(route_result: dict[str, Any]) -> dict[st
                 f"- {c.get('customer_name', '')} {c.get('contact_person', '')}"
                 for c in customers[:10]
             ]
-            msg = f"共找到 {len(customers)} 位客户：\n" + "\n".join(lines)
+            msg = f"共找到 {total} 位客户：\n" + "\n".join(lines)
         return {
             "success": True,
             "response": msg,
-            "data": {"intent": "customers_query", "customers": customers[:20]},
+            "data": {
+                "intent": "customers_query",
+                "customers": customers[:20],
+                "total": total,
+            },
             "normal_slot_dispatch": True,
         }
     except RECOVERABLE_ERRORS as e:

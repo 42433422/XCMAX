@@ -122,6 +122,53 @@ describe('useShipmentTask order number and enrichment', () => {
     await s.enrichShipmentPreviewProducts(task.value!)
     expect(task.value!.payload!.params!.products[0].name).toBe('蓝漆')
   })
+
+  it('keeps a complete server ETL preview row authoritative', async () => {
+    const m = makeMessages()
+    const base = shipmentTask([{ name: '黑棕面用修色精', quantity_tins: 3, tin_spec: 28 }])
+    const expectedItems = [{
+      单位: '金汉武',
+      型号: '方和',
+      产品名称: '黑棕面用修色精',
+      桶数: 3,
+      规格: 28,
+      单价: '48.00',
+      总价: '4032.00',
+    }]
+    base.items = expectedItems
+    const task = ref<ShipmentTask | null>(base)
+    const s = useShipmentTask(m, task)
+
+    await s.enrichShipmentPreviewProducts(task.value!)
+
+    expect(globalThis.fetch).not.toHaveBeenCalled()
+    expect(task.value!.items).toEqual(expectedItems)
+  })
+
+  it('uses the resolved product model instead of rendering the product name as a model', async () => {
+    const m = makeMessages()
+    const task = ref<ShipmentTask | null>(
+      shipmentTask([{ name: '黑棕面用修色精', quantity_tins: 3, tin_spec: 28 }])
+    )
+    const s = useShipmentTask(m, task)
+    mockFetchOnce({
+      success: true,
+      data: [{ model_number: '方和', name: '黑棕面用修色精', price: 48, tin_spec: 4 }],
+    })
+
+    await s.enrichShipmentPreviewProducts(task.value!)
+
+    expect(task.value!.payload!.params!.products[0].model_number).toBe('方和')
+    expect(task.value!.items).toEqual([{
+      单位: '甲单位',
+      型号: '方和',
+      产品名称: '黑棕面用修色精',
+      桶数: 3,
+      规格: 28,
+      单价: '48.00',
+      总价: '4032.00',
+    }])
+  })
 })
 
 describe('useShipmentTask table helpers', () => {
@@ -152,6 +199,9 @@ describe('useShipmentTask table helpers', () => {
     const s = useShipmentTask(m, task)
     expect(s.getTaskOrderNumber(null)).toBe('')
     expect(s.getTaskOrderNumber({ type: 'x', order_number: 'EXP-1' } as ShipmentTask)).toBe('EXP-1')
+    expect(
+      s.getTaskOrderNumber({ type: 'x', payload: { params: { order_number: 'EXP-2' } } } as ShipmentTask)
+    ).toBe('EXP-2')
     expect(s.getTaskOrderNumber(shipmentTask())).toBe('待生成')
   })
 })

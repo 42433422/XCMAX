@@ -1,9 +1,12 @@
 import {
   invalidateTenantStorageScopeCache,
+  readTenantScopedStorageItem,
   resolveTenantStorageScope,
   setTenantStorageScopeCache,
   type TenantStorageScopeInput,
+  writeTenantScopedStorageItem,
 } from '@/utils/tenantStorageScope'
+import { AI_SESSION_ID_STORAGE_KEY } from '@/utils/xcagiStorageKeys'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
 import { useWorkflowEmployeeSpaceStore } from '@/stores/workflowEmployeeSpace'
 import { useModsStore } from '@/stores/mods'
@@ -14,6 +17,13 @@ export function refreshTenantScopedClientStores(input?: TenantStorageScopeInput)
   invalidateTenantStorageScopeCache()
   const scope = resolveTenantStorageScope(input)
   setTenantStorageScopeCache(scope)
+  if (scope !== 'local') {
+    const scopedSessionId = readTenantScopedStorageItem(AI_SESSION_ID_STORAGE_KEY, scope)
+    const preLoginSessionId = readTenantScopedStorageItem(AI_SESSION_ID_STORAGE_KEY, 'local')
+    if (!scopedSessionId && preLoginSessionId) {
+      writeTenantScopedStorageItem(AI_SESSION_ID_STORAGE_KEY, preLoginSessionId, scope)
+    }
+  }
   try {
     useWorkflowAiEmployeesStore().reloadForTenantScope(scope)
   } catch {

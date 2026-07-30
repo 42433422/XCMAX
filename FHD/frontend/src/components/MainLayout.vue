@@ -266,7 +266,7 @@ const viewTitlesBase = {
   'materials-list': '资源库',
   materials: '资源库',
   'traditional-mode': '表格模式',
-  'business-docking': '业务对接',
+  'business-docking': '数据对接中心',
   orders: '业务单据',
   'orders-create': '新建业务单据',
   'shipment-records': '业务记录',
@@ -546,7 +546,16 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 768px) {
+  .sidebar-shell,
+  .sidebar-hover-trigger {
+    display: none;
+    width: 0;
+    flex: 0 0 0;
+  }
+
   .main-container :deep(.main-content) {
+    width: 100%;
+    flex: 1 1 100%;
     padding-bottom: calc(64px + env(safe-area-inset-bottom, 0));
   }
 }

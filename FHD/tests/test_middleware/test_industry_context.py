@@ -54,6 +54,7 @@ async def test_authenticated_user_injects_industry_id():
 
     assert resp.status_code == 200
     assert req.state.industry_id == "涂料"
+    assert req.state.user_id == 1
 
 
 async def test_unauthenticated_user_defaults_to_general():
@@ -66,6 +67,7 @@ async def test_unauthenticated_user_defaults_to_general():
 
     assert resp.status_code == 200
     assert req.state.industry_id == DEFAULT_INDUSTRY
+    assert req.state.user_id is None
 
 
 async def test_admin_user_injects_admin_industry():

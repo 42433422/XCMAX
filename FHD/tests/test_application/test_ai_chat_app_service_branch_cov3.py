@@ -629,26 +629,11 @@ class TestTryHandleDynamicWorkflowEdge:
             "approval_required": False,
             "approval_nodes": [],
         }
-        mock_agent_run = SimpleNamespace(
-            run_id="run-123",
-            status="completed",
-            steps=[],
-            tool_calls=[],
-            artifacts=[],
-            metadata={},
-            plan_id="plan_test",
-            intent="test",
-        )
-        with (
-            patch(
-                "app.application.agent_orchestrator.AgentOrchestrator.continue_run",
-                return_value=mock_agent_run,
-            ),
-            patch(
-                "app.application.ai_chat_app_service.AIChatApplicationService._format_agent_run_response",
-                return_value={"success": True, "response": "continued"},
-            ) as mock_format,
-        ):
+        with patch.object(
+            svc,
+            "_handle_durable_workflow_decision",
+            return_value={"success": True, "response": "continued"},
+        ) as mock_handle:
             result = svc._try_handle_dynamic_workflow(
                 user_id="u1",
                 message="确认",
@@ -657,7 +642,7 @@ class TestTryHandleDynamicWorkflowEdge:
                 file_context={},
             )
         assert result["response"] == "continued"
-        mock_format.assert_called_once()
+        mock_handle.assert_called_once()
         assert "u1" not in svc._pending_workflows
 
     def test_pending_workflow_confirm_without_agent_run_id(self):
@@ -700,14 +685,20 @@ class TestTryHandleDynamicWorkflowEdge:
             "approval_required": False,
             "approval_nodes": [],
         }
-        result = svc._try_handle_dynamic_workflow(
-            user_id="u1",
-            message="取消",
-            source="pro",
-            context={},
-            file_context={},
-        )
+        with patch.object(
+            svc,
+            "_handle_durable_workflow_decision",
+            return_value={"success": True, "response": "已取消本次工作流执行。"},
+        ) as mock_handle:
+            result = svc._try_handle_dynamic_workflow(
+                user_id="u1",
+                message="取消",
+                source="pro",
+                context={},
+                file_context={},
+            )
         assert result["response"] == "已取消本次工作流执行。"
+        mock_handle.assert_called_once()
         assert "u1" not in svc._pending_workflows
 
     def test_pending_workflow_confirm_with_approval_required(self):
@@ -732,6 +723,42 @@ class TestTryHandleDynamicWorkflowEdge:
         assert "已提交审批请求" in result["response"]
         mock_create.assert_called_once()
         assert "u1" in svc._pending_workflows  # not popped until approval
+
+    def test_pending_durable_workflow_submits_approval_with_exact_run(self):
+        svc = _make_svc()
+        plan = _make_plan(nodes=[_make_node(node_id="approval_node", tool_id="db", action="write")])
+        svc._pending_workflows["u1"] = {
+            "plan": plan,
+            "runtime_context": {"message": "test"},
+            "agent_run_id": "run-delete-1",
+            "thinking_steps": "thinking",
+            "approval_required": True,
+            "approval_nodes": [{"node_id": "approval_node", "tool_id": "db", "action": "write"}],
+        }
+        with patch.object(
+            svc,
+            "_handle_durable_workflow_decision",
+            return_value={"success": True, "response": "approval submitted"},
+        ) as mock_handle:
+            result = svc._try_handle_dynamic_workflow(
+                user_id="u1",
+                message="确认",
+                source="pro",
+                context={},
+                file_context={},
+                authenticated_owner_user_id=2,
+            )
+
+        assert result["response"] == "approval submitted"
+        mock_handle.assert_called_once_with(
+            user_id="u1",
+            confirmation={
+                "agent_run_id": "run-delete-1",
+                "plan_id": plan.plan_id,
+            },
+            action="submit_approval",
+            authenticated_owner_user_id=2,
+        )
 
     def test_normal_profile_returns_none_for_non_workflow(self):
         svc = _make_svc()
@@ -1289,7 +1316,8 @@ class TestExecuteProModeToolsEdge:
             ai_result,
             original_message="这是ACME的订单，需要5桶M1规格25",
         )
-        assert result["toolCall"]["params"]["order_text"] == "这是ACME的订单，需要5桶M1规格25"
+        assert result["task"]["payload"]["params"]["order_text"] == "这是ACME的订单，需要5桶M1规格25"
+        assert "toolCall" not in result
 
     def test_shipment_generate_with_all_slots_no_original(self):
         svc = _make_svc()
@@ -1303,8 +1331,10 @@ class TestExecuteProModeToolsEdge:
             ai_result,
             original_message="ok",
         )
-        assert "ACME" in result["toolCall"]["params"]["order_text"]
-        assert "5" in result["toolCall"]["params"]["order_text"]
+        params = result["task"]["payload"]["params"]
+        assert params["unit_name"] == "ACME"
+        assert params["products"][0]["quantity_tins"] == 5
+        assert "toolCall" not in result
 
     def test_shipment_generate_with_products_list(self):
         svc = _make_svc()
@@ -1319,7 +1349,8 @@ class TestExecuteProModeToolsEdge:
             ai_result,
             original_message="ok",
         )
-        assert "ACME" in result["toolCall"]["params"]["order_text"]
+        assert result["task"]["payload"]["params"]["unit_name"] == "ACME"
+        assert "toolCall" not in result
 
     def test_shipment_generate_with_parsed_order_products(self):
         svc = _make_svc()
@@ -1341,8 +1372,9 @@ class TestExecuteProModeToolsEdge:
                 ai_result,
                 original_message="打Parsed的货单",
             )
-        assert result["toolCall"]["params"]["unit_name"] == "Parsed"
-        assert len(result["toolCall"]["params"]["products"]) == 1
+        assert result["task"]["payload"]["params"]["unit_name"] == "Parsed"
+        assert len(result["task"]["payload"]["params"]["products"]) == 1
+        assert "toolCall" not in result
 
     def test_shipment_generate_fallback_to_ai_text(self):
         svc = _make_svc()
@@ -1356,7 +1388,8 @@ class TestExecuteProModeToolsEdge:
             ai_result,
             original_message="ok",
         )
-        assert result["toolCall"]["params"]["order_text"] == "fallback text"
+        assert "task" not in result
+        assert result["message"] == "订单信息不完整，请补充后再确认"
 
     def test_other_tool_pro_mode(self):
         svc = _make_svc()

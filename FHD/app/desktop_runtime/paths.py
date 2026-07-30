@@ -81,7 +81,10 @@ def configure_desktop_environment(data_dir: str | os.PathLike[str] | None = None
     (root / "config").mkdir(parents=True, exist_ok=True)
     apply_database_profile_to_env(root, local_sqlite_url=sqlite_database_url(root))
     # 本地 SQLite 模式：启动自检 + 自动恢复。PostgreSQL 模式跳过（主库在远端）。
-    if os.environ.get("DATABASE_URL", "").startswith("sqlite"):
+    skip_recovery_check = os.environ.get(
+        "XCAGI_SKIP_DESKTOP_RECOVERY_CHECK", ""
+    ).strip().lower() in {"1", "true", "yes", "on"}
+    if os.environ.get("DATABASE_URL", "").startswith("sqlite") and not skip_recovery_check:
         from .migrate import recover_if_corrupt
 
         try:

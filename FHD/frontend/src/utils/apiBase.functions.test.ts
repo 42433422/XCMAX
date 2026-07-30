@@ -211,6 +211,12 @@ describe('getActiveExtensionModHeaders', () => {
     expect(getActiveExtensionModHeaders('/api/debug/info')).toEqual({})
   })
 
+  it('skips header for global mod store and mod registry paths', () => {
+    mockReadActiveExtensionModId.mockReturnValue('taiyangniao-pro')
+    expect(getActiveExtensionModHeaders('/api/mod-store/catalog')).toEqual({})
+    expect(getActiveExtensionModHeaders('/api/mods/loading-status')).toEqual({})
+  })
+
   it('returns header for full URL with non-skip path', () => {
     mockReadActiveExtensionModId.mockReturnValue('taiyangniao-pro')
     expect(getActiveExtensionModHeaders('https://example.com/api/users')).toEqual({

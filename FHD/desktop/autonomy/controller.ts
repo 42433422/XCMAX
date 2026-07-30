@@ -25,7 +25,11 @@ import type {
 } from './types.js'
 import { deriveSignalsFromTruth } from './runtime-truth.js'
 import { predict } from './impact-predictor.js'
-import { checkBeforeAction, isEnabled as crossTierGateEnabled } from './cross-tier-gate.js'
+import {
+  checkBeforeAction,
+  isEnabled as crossTierGateEnabled,
+  requiresRemoteState,
+} from './cross-tier-gate.js'
 
 /** 默认配置 */
 const DEFAULTS = {
@@ -186,8 +190,9 @@ export class AutonomyController {
         return
       }
     }
-    // CrossTierGate 跨端门禁（默认启用；XCAGI_CROSS_TIER_GATE=0 关闭；查询失败 fail-closed）
-    if (crossTierGateEnabled()) {
+    // CrossTierGate 只保护会影响其他端的版本/发布动作。本机可逆修复（如清缓存、
+    // 恢复本机配置）不应因为离线而永久不可用；跨端动作仍查询失败即 fail-closed。
+    if (crossTierGateEnabled() && requiresRemoteState(action.type)) {
       let remoteState: Record<string, unknown> | null = null
       try {
         remoteState = (await this.adapter.getRemoteState?.()) ?? null

@@ -32,17 +32,15 @@ def _assert_shipment_order_run(repo: InMemoryAgentRunRepository, run_id: str, ac
     }
 
 
-def test_shipment_order_routes_execute_through_agent_orchestrator(
+def test_shipment_order_routes_preview_generation_and_agent_execute_other_actions(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     repo = InMemoryAgentRunRepository()
-    shipment_file = tmp_path / "shipment.xlsx"
-    shipment_file.write_bytes(b"fake")
     svc = MagicMock()
     svc.generate_shipment_document.return_value = {
         "success": True,
-        "file_path": str(shipment_file),
+        "file_path": str(tmp_path / "shipment.xlsx"),
         "record_id": 7,
     }
     svc.mark_as_printed.return_value = {"success": True, "message": "已标记为已打印"}
@@ -77,11 +75,6 @@ def test_shipment_order_routes_execute_through_agent_orchestrator(
             },
             headers={"X-User-Id": "tenant-a"},
         )
-        print_order = client.post(
-            "/api/shipment/print",
-            json={"file_path": str(shipment_file), "order_id": 7, "printer_name": "HP"},
-            headers={"X-User-Id": "tenant-a"},
-        )
         clear_unit = client.post(
             "/api/shipment/orders/clear-shipment",
             json={"purchase_unit": "星光贸易"},
@@ -107,42 +100,30 @@ def test_shipment_order_routes_execute_through_agent_orchestrator(
 
     assert generate.status_code == 200
     assert generate_batch.status_code == 200
-    assert print_order.status_code == 200
     assert clear_unit.status_code == 200
     assert set_sequence.status_code == 200
     assert reset_sequence.status_code == 200
     assert clear_all.status_code == 200
     assert delete_order.status_code == 200
 
-    assert svc.generate_shipment_document.call_args_list[0].kwargs == {
-        "unit_name": "星光贸易",
-        "products": [{"name": "5003", "qty": 2}],
-        "date": "2026-06-19",
-    }
-    assert svc.generate_shipment_document.call_args_list[1].kwargs == {
-        "unit_name": "星光贸易",
-        "products": [{"name": "5003", "qty": 2}],
-        "date": None,
-    }
-    svc.mark_as_printed.assert_called_once_with(7, printer_name="HP")
+    assert generate.json()["confirmation_required"] is True
+    assert generate.json()["task"]["api_url"] == "/api/tools/execute"
+    assert generate_batch.json()["confirmation_required"] is True
+    assert generate_batch.json()["tasks"][0]["api_url"] == "/api/tools/execute"
+    svc.generate_shipment_document.assert_not_called()
+    svc.mark_as_printed.assert_not_called()
     svc.clear_shipment_by_unit.assert_called_once_with("星光贸易")
     svc.set_order_sequence.assert_called_once_with(12)
     svc.reset_order_sequence.assert_called_once_with()
     svc.clear_all_orders.assert_called_once_with()
     svc.delete_shipment.assert_called_once_with(7)
 
-    assert generate.json()["record_id"] == 7
-    assert generate_batch.json()["data"]["processed"] == 1
-    assert print_order.json()["updated"] is True
     assert clear_unit.json()["cleared_count"] == 2
     assert set_sequence.json()["sequence"] == 12
     assert reset_sequence.json()["sequence"] == 1
     assert clear_all.json()["deleted_count"] == 5
     assert delete_order.json()["deleted_id"] == 7
 
-    _assert_shipment_order_run(repo, generate.json()["run_id"], "generate")
-    _assert_shipment_order_run(repo, generate_batch.json()["run_id"], "generate_batch")
-    _assert_shipment_order_run(repo, print_order.json()["run_id"], "print")
     _assert_shipment_order_run(repo, clear_unit.json()["run_id"], "clear_shipment")
     _assert_shipment_order_run(repo, set_sequence.json()["run_id"], "set_sequence")
     _assert_shipment_order_run(repo, reset_sequence.json()["run_id"], "reset_sequence")

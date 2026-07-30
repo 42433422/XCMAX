@@ -276,6 +276,13 @@ class AuthApplicationService:
         return cast("User | None", self.session_manager.validate_session(session_id))
 
     def get_user_permissions(self, user: User) -> list:
+        role_name = str(getattr(user, "role", "") or "").strip().lower()
+        tier = str(getattr(user, "tier", "") or "").strip().lower()
+        # Enterprise desktop accounts are JIT-mirrored locally with the legacy
+        # ``user`` role. Treat that local mirror as an operator so core business
+        # capabilities such as ETL are usable without granting admin-only rights.
+        if role_name == "user" and tier == "enterprise":
+            role_name = "operator"
         try:
             from app.db.init_db import ensure_runtime_auth_bootstrap
 
@@ -284,20 +291,23 @@ class AuthApplicationService:
             logger.warning("权限表自检跳过: %s", bootstrap_exc)
         try:
             with get_db() as db:
-                if user.role == "admin":
+                if role_name == "admin":
                     perms = db.query(Permission).all()
                     return [p.code for p in perms]
 
-                role = db.query(Role).filter(Role.name == user.role).first()
+                role = db.query(Role).filter(Role.name == role_name).first()
                 if not role:
                     return []
                 return [p.code for p in role.permissions]
         except RECOVERABLE_ERRORS as exc:
             logger.warning("get_user_permissions 回退为空列表: %s", exc)
-            if user.role == "admin":
-                from app.db.models.permission import DEFAULT_PERMISSIONS
+            from app.db.models.permission import DEFAULT_PERMISSIONS, DEFAULT_ROLES
 
+            if role_name == "admin":
                 return [p["code"] for p in DEFAULT_PERMISSIONS]
+            for role in DEFAULT_ROLES:
+                if role["name"] == role_name:
+                    return list(role.get("permissions", []))
             return []
 
     def has_permission(self, user: User, permission_code: str) -> bool:

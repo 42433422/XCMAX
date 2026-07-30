@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import {
   diskUsagePercent,
+  diskFreeMegabytes,
   computeConfigFingerprint,
   resolveNeurobus,
   resolveLastBackup,
@@ -35,6 +36,19 @@ describe('diskUsagePercent', () => {
   it('路径不存在时返回 0', () => {
     const pct = diskUsagePercent(path.join(tmpDir, 'nonexistent'))
     expect(pct).toBe(0)
+  })
+})
+
+describe('diskFreeMegabytes', () => {
+  it('returns a non-negative integer for an accessible directory', () => {
+    const freeMb = diskFreeMegabytes(tmpDir)
+    if (freeMb === undefined) throw new Error('expected accessible temp directory')
+    expect(freeMb).toBeGreaterThanOrEqual(0)
+    expect(Number.isInteger(freeMb)).toBe(true)
+  })
+
+  it('returns undefined for a missing directory', () => {
+    expect(diskFreeMegabytes(path.join(tmpDir, 'nonexistent'))).toBeUndefined()
   })
 })
 
@@ -295,6 +309,15 @@ describe('deriveSignalsFromTruth', () => {
     }
     const signals = deriveSignalsFromTruth(truth)
     expect(signals.some(s => s.kind === 'NEURO_BUS_DLQ_FULL')).toBe(false)
+  })
+
+  it('reads circuit and DLQ facts from the real neurobus health shape', () => {
+    expect(resolveNeurobus({
+      status: 'healthy',
+      running: true,
+      reliability: { circuit_open: true },
+      dlq_size: 1201,
+    })).toEqual({ available: true, circuit_open: true, dlq_size: 1201 })
   })
 
   // Phase 1 新增：disk_low / db_corrupt / network_down 信号派生

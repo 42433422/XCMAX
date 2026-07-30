@@ -96,6 +96,47 @@ class TestXcagiChatHttpExcExtended:
         result = ch._xcagi_chat_http_exc(exc)
         assert result.status_code == 502
 
+    def test_market_quota_429_uses_stable_code_and_safe_message(self):
+        exc = ValueError("平台错误(429): {\"error\": \"quota exhausted\"}")
+        result = ch._xcagi_chat_http_exc(exc)
+
+        assert result.status_code == 429
+        assert result.detail == {
+            "code": "MODEL_QUOTA_EXHAUSTED",
+            "message": "模型服务配额已用尽，请在「模型支付」充值或切换可用模型后重试。",
+        }
+        assert ch._xcagi_chat_error_event(result) == {
+            "type": "error",
+            "message": "模型服务配额已用尽，请在「模型支付」充值或切换可用模型后重试。",
+            "status_code": 429,
+            "code": "MODEL_QUOTA_EXHAUSTED",
+            "error_code": "MODEL_QUOTA_EXHAUSTED",
+        }
+
+    def test_nested_quota_error_wins_over_outer_provider_status_without_raw_body(self):
+        exc = ValueError(
+            "平台错误(502): {\"upstream\": \"429 quota exhausted\", "
+            "\"authorization\": \"do-not-return-this\"}"
+        )
+
+        result = ch._xcagi_chat_http_exc(exc)
+
+        assert result.status_code == 429
+        assert result.detail["code"] == "MODEL_QUOTA_EXHAUSTED"
+        assert "do-not-return-this" not in str(ch._xcagi_chat_error_event(result))
+
+    def test_generic_platform_error_is_safe_and_distinct_from_timeout(self):
+        result = ch._xcagi_chat_http_exc(
+            ValueError("平台错误(502): {\"authorization\": \"do-not-return-this\"}")
+        )
+
+        assert result.status_code == 502
+        assert result.detail == {
+            "code": "MODEL_PROVIDER_ERROR",
+            "message": "模型服务暂时不可用，请稍后重试或切换可用模型。",
+        }
+        assert "do-not-return-this" not in str(ch._xcagi_chat_error_event(result))
+
     def test_value_error_generic(self):
         exc = ValueError("some other error")
         result = ch._xcagi_chat_http_exc(exc)
@@ -449,6 +490,28 @@ class TestXcagiStreamFirstTokenTimeoutSecondsExtended:
     def test_invalid_value(self, monkeypatch):
         monkeypatch.setenv("XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC", "abc")
         assert ch._xcagi_stream_first_token_timeout_seconds() == 20.0
+
+    def test_desktop_upgrades_missing_or_legacy_20_second_timeout(self, monkeypatch):
+        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+        monkeypatch.delenv("XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC", raising=False)
+        assert ch._xcagi_stream_first_token_timeout_seconds() == 75.0
+        monkeypatch.setenv("XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC", "20")
+        assert ch._xcagi_stream_first_token_timeout_seconds() == 75.0
+        monkeypatch.setenv("XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC", "30")
+        assert ch._xcagi_stream_first_token_timeout_seconds() == 30.0
+
+    def test_first_response_timeout_uses_stable_sse_error_code(self):
+        exc = ch._XcagiStreamFirstResponseTimeout(75.0)
+        result = ch._xcagi_chat_http_exc(exc)
+
+        assert result.status_code == 504
+        assert ch._xcagi_chat_error_event(result) == {
+            "type": "error",
+            "message": "模型服务在>75 秒内未返回可处理结果。请稍后重试或切换可用模型。",
+            "status_code": 504,
+            "code": "MODEL_FIRST_RESPONSE_TIMEOUT",
+            "error_code": "MODEL_FIRST_RESPONSE_TIMEOUT",
+        }
 
 
 # ---------------------------------------------------------------------------

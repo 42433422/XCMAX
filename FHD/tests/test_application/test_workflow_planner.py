@@ -150,7 +150,31 @@ class TestLLMWorkflowPlanner:
         assert plan.intent == "add_product_to_unit"
         assert len(plan.nodes) >= 1
 
-    def test_fallback_plan_generic(self):
+    def test_explicit_product_delete_bypasses_llm_with_high_risk_tool(self):
+        planner = self._make_planner()
+        with (
+            patch.object(planner, "_plan_with_react_multiagent") as llm_plan,
+            patch(
+                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                return_value="full",
+            ),
+        ):
+            plan = planner.plan(
+                "u1",
+                "请删除数据库里的产品 ID 198",
+                get_tool_registry(),
+            )
+
+        llm_plan.assert_not_called()
+        assert plan.intent == "delete_product"
+        assert plan.risk_level == "high"
+        assert plan.metadata["planner"] == "explicit_mutation_guard"
+        assert len(plan.nodes) == 1
+        assert plan.nodes[0].tool_id == "products"
+        assert plan.nodes[0].action == "delete"
+        assert plan.nodes[0].params == {"id": 198}
+
+    def test_ambiguous_query_fallback_requests_clarification(self):
         planner = self._make_planner()
         with (
             patch.object(planner, "_plan_with_react_multiagent", return_value=None),
@@ -162,8 +186,8 @@ class TestLLMWorkflowPlanner:
         ):
             reg = get_tool_registry()
             plan = planner.plan("u1", "查询信息", reg)
-        assert plan.intent == "generic_workflow"
-        assert len(plan.nodes) >= 1
+        assert plan.intent == "clarification_required"
+        assert plan.nodes == []
 
     def test_fallback_plan_risk_level(self):
         planner = self._make_planner()

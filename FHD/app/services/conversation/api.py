@@ -173,14 +173,28 @@ class ApiMixin(NeuroEventPublisherMixin):
         t0 = time.perf_counter()
 
         try:
+            # Desktop software-account sessions are established after the
+            # process-wide conversation service is created. Resolve the
+            # request-bound account provider first so a successful login does
+            # not incorrectly fall through to local API-key configuration.
+            from app.application.etl.llm_session_provider import (
+                current_owner_market_provider,
+            )
             from app.infrastructure.llm.providers.registry import get_active_provider
 
-            provider = get_active_provider(conversation_service=self)
+            provider = current_owner_market_provider(timeout_seconds=60.0)
+            if provider is None:
+                provider = get_active_provider(conversation_service=self)
             if provider is None:
                 logger.error("❌ 无可用的 LLM Provider（检查 LLM_ROUTING_ORDER / 密钥）")
                 return None
 
             logger.info("🤖 [LLM] provider=%s", provider.provider_id)
+            provider_user_id = str(
+                getattr(provider, "owner_user_id", "")
+                or getattr(getattr(self, "modstore_adapter", None), "user_id", "")
+                or ""
+            )
 
             # 上下文压缩：调 LLM 前按 token 预算裁剪 + 必要时摘要旧轮次
             # 失败不阻断主对话（manager 内部已捕获，最坏情况返回 noop）
@@ -191,7 +205,7 @@ class ApiMixin(NeuroEventPublisherMixin):
             cwm = get_context_window_manager()
             compression = await cwm.compress(
                 messages,
-                user_id=str(getattr(getattr(self, "modstore_adapter", None), "user_id", "") or ""),
+                user_id=provider_user_id,
                 provider=provider,
             )
             messages = compression.messages
@@ -224,14 +238,7 @@ class ApiMixin(NeuroEventPublisherMixin):
                         billing_status=trace["billing_status"],
                         billing_source=trace["billing_source"],
                         source="conversation_service",
-                        user_id=str(
-                            getattr(
-                                getattr(self, "modstore_adapter", None),
-                                "user_id",
-                                "",
-                            )
-                            or ""
-                        ),
+                        user_id=provider_user_id,
                     )
                 except RECOVERABLE_ERRORS:
                     logger.debug("record_model_usage failed", exc_info=True)
@@ -244,9 +251,7 @@ class ApiMixin(NeuroEventPublisherMixin):
                         model=trace["model"] or trace["provider_id"],
                         latency_ms=latency_ms,
                         token_count=trace["total_tokens"],
-                        user_id=str(
-                            getattr(getattr(self, "modstore_adapter", None), "user_id", "") or ""
-                        ),
+                        user_id=provider_user_id,
                     )
                 except RECOVERABLE_ERRORS:
                     pass
@@ -261,10 +266,7 @@ class ApiMixin(NeuroEventPublisherMixin):
                             model="context-window-manager",
                             latency_ms=compression.compression_latency_ms,
                             token_count=compression.tokens_saved,
-                            user_id=str(
-                                getattr(getattr(self, "modstore_adapter", None), "user_id", "")
-                                or ""
-                            ),
+                            user_id=provider_user_id,
                         )
                     except RECOVERABLE_ERRORS:
                         pass

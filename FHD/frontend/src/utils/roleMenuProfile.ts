@@ -22,6 +22,7 @@ const ENTERPRISE_GENERIC_CORE_KEYS = new Set([
   'im',
   'ai-ecosystem',
   'persy-knowledge',
+  'business-docking',
   'employee-workflow',
   'workflow-employee-space',
   'mod-store',

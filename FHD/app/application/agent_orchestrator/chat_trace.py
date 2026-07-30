@@ -7,6 +7,9 @@ from uuid import uuid4
 
 from app.application.agent_orchestrator.artifact_ingestion import ingest_artifact_to_dataset
 from app.application.agent_orchestrator.budget import refresh_ai_budget_metadata
+from app.application.agent_orchestrator.orchestration_evidence import (
+    build_orchestration_evidence,
+)
 from app.application.agent_orchestrator.run_models import (
     AgentArtifact,
     AgentRun,
@@ -1255,6 +1258,8 @@ def _normalized_record_payload(
 def _append_legacy_tool_records_to_run(
     run: AgentRun,
     records: list[dict[str, Any]],
+    *,
+    runtime_context: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], int]:
     node_outputs: dict[str, Any] = {}
     total_cost = 0
@@ -1303,6 +1308,15 @@ def _append_legacy_tool_records_to_run(
         run.tool_calls.append(call)
         node_outputs[step.node_id] = output
         total_cost += call.cost_units
+        orchestration = build_orchestration_evidence(
+            step.tool_id,
+            step.action,
+            params,
+            output,
+            runtime_context,
+            status="completed" if step.status == "completed" else "failed",
+        )
+        call.metadata["orchestration"] = orchestration
         run.add_event(
             "tool.started",
             f"观察到 legacy 工具 {step.tool_id}.{step.action}",
@@ -1313,6 +1327,7 @@ def _append_legacy_tool_records_to_run(
                 "cost_units": call.cost_units,
                 "permission": call.permission,
                 "observed": True,
+                "orchestration": orchestration,
             },
         )
         event_type = "tool.completed" if step.status == "completed" else "tool.failed"
@@ -1325,6 +1340,7 @@ def _append_legacy_tool_records_to_run(
                 "call_id": call.call_id,
                 "cost_units": call.cost_units,
                 "observed": True,
+                "orchestration": orchestration,
             },
         )
         _append_artifacts_to_run(run, _extract_artifacts(output))
@@ -1367,7 +1383,11 @@ def _create_legacy_tool_records_run(
         {"channel": channel, "source": str(source or "").strip(), "observed": True},
     )
 
-    node_outputs, total_cost = _append_legacy_tool_records_to_run(run, records)
+    node_outputs, total_cost = _append_legacy_tool_records_to_run(
+        run,
+        records,
+        runtime_context=runtime_context,
+    )
     _append_llm_calls_to_run(run, _extract_llm_calls(payload))
     _append_retrieval_calls_to_run(run, _extract_retrieval_calls(payload, query=message))
     _append_memory_references_to_run(run, _extract_memory_references(payload, query=message))
@@ -1561,7 +1581,11 @@ def finalize_legacy_chat_run(
     total_cost = 0
     if records:
         run.metadata["trace_mode"] = "legacy_planner_run_with_tools"
-        node_outputs, total_cost = _append_legacy_tool_records_to_run(run, records)
+        node_outputs, total_cost = _append_legacy_tool_records_to_run(
+            run,
+            records,
+            runtime_context=runtime_context,
+        )
         if status == "completed" and any(step.status == "failed" for step in run.steps):
             run.status = "failed"
             run.error = "legacy planner tool failed"

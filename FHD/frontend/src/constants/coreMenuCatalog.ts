@@ -78,6 +78,12 @@ export const CORE_MENU_ITEMS_BASE: CoreMenuCatalogItem[] = [
     iconClass: 'fa-book',
     description: '查看企业知识、资料来源与长期记忆',
   },
+  {
+    key: 'business-docking',
+    name: '数据对接中心',
+    iconClass: 'fa-exchange',
+    description: '预演、确认并追踪文件数据对接',
+  },
   EMPLOYEE_WORKFLOW_MENU_ITEM,
 ]
 

@@ -51,11 +51,26 @@ export interface AgentRunEventsResponse {
   message?: string
 }
 
+export interface AgentToolContract {
+  tool_id: string
+  action: string
+  description?: string
+  input_schema?: Record<string, unknown>
+  output_schema?: Record<string, unknown>
+  risk?: string
+  permission?: string
+  idempotent?: boolean
+  required_params?: string[]
+  verification?: Record<string, unknown>
+  rollback?: Record<string, unknown>
+}
+
 export interface CreateAgentRunPayload {
   message: string
   user_id?: string
   runtime_context?: Record<string, unknown>
   auto_execute?: boolean
+  background?: boolean
 }
 
 export interface ContinueAgentRunPayload {
@@ -63,6 +78,11 @@ export interface ContinueAgentRunPayload {
   step_id?: string
   node_id?: string
   runtime_context?: Record<string, unknown>
+  background?: boolean
+}
+
+export interface AgentRunControlPayload {
+  requested_by?: string
 }
 
 export const agentRunsApi = {
@@ -76,6 +96,46 @@ export const agentRunsApi = {
   ): Promise<ApiResponse<AgentRun>> {
     return api.post<ApiResponse<AgentRun>>(
       `/api/agent/runs/${encodeURIComponent(runId)}/continue`,
+      payload,
+    )
+  },
+
+  pauseRun(
+    runId: string,
+    payload: AgentRunControlPayload = {},
+  ): Promise<ApiResponse<AgentRun>> {
+    return api.post<ApiResponse<AgentRun>>(
+      `/api/agent/runs/${encodeURIComponent(runId)}/pause`,
+      payload,
+    )
+  },
+
+  resumeRun(
+    runId: string,
+    payload: AgentRunControlPayload = {},
+  ): Promise<ApiResponse<AgentRun>> {
+    return api.post<ApiResponse<AgentRun>>(
+      `/api/agent/runs/${encodeURIComponent(runId)}/resume`,
+      payload,
+    )
+  },
+
+  cancelRun(
+    runId: string,
+    payload: AgentRunControlPayload = {},
+  ): Promise<ApiResponse<AgentRun>> {
+    return api.post<ApiResponse<AgentRun>>(
+      `/api/agent/runs/${encodeURIComponent(runId)}/cancel`,
+      payload,
+    )
+  },
+
+  retryRun(
+    runId: string,
+    payload: AgentRunControlPayload = {},
+  ): Promise<ApiResponse<AgentRun>> {
+    return api.post<ApiResponse<AgentRun>>(
+      `/api/agent/runs/${encodeURIComponent(runId)}/retry`,
       payload,
     )
   },
@@ -96,6 +156,10 @@ export const agentRunsApi = {
       `/api/agent/runs/${encodeURIComponent(runId)}/events`,
       params,
     )
+  },
+
+  listToolContracts(): Promise<ApiResponse<AgentToolContract[]>> {
+    return api.get<ApiResponse<AgentToolContract[]>>('/api/agent/tools/contracts')
   },
 }
 

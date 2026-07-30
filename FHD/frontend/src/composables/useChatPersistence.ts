@@ -14,7 +14,7 @@ import { isIndustryWelcomePlainText } from '@/constants/industryPresets'
 export const EXCEL_ANALYSIS_STORAGE_PREFIX = 'xcagi_excel_analysis_ctx_'
 export const CHAT_TASK_PANEL_STORAGE_PREFIX = 'xcagi_chat_task_panel_'
 
-export type TaskStatus = 'queued' | 'running' | 'success' | 'failed' | 'cancelled'
+export type TaskStatus = 'queued' | 'running' | 'paused' | 'success' | 'failed' | 'cancelled'
 
 export interface TaskItem {
   id: string
@@ -156,7 +156,7 @@ export function extractLikelyProductQueryKeyword(raw: string): string | null {
   const t = String(raw || '').trim()
   if (t.length < 2 || t.length > 200) return null
   if (/^(什么|怎么|如何|为什么|能否|请|帮)/.test(t)) return null
-  if (/(出货单|发货单|订单列表|客户列表|工作流|批量|导入|上传|数据库|打印标签|打印\s|有哪些客户|今天.*单)/.test(t)) {
+  if (/(出货单|发货单|送货单|发货记录|出货记录|送货记录|业务记录|订单列表|客户列表|工作流|批量|导入|上传|数据库|打印标签|打印\s|有哪些客户|今天.*单)/.test(t)) {
     return null
   }
   const patterns: RegExp[] = [

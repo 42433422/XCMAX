@@ -418,6 +418,55 @@ class TestShipmentOrdersRouterBranches:
             )
         assert result["success"] is True
 
+    def test_generate_propagates_only_authenticated_owner_context(self):
+        svc = self._svc()
+        svc.generate_shipment_document.return_value = {"success": True}
+        with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
+            result = _registered_router_shipment_orders(
+                "generate",
+                {"unit_name": "金汉武家私", "products": [{"model": "9803"}]},
+                {"owner_user_id": 42, "user_id": "999999"},
+                "admin",
+                "",
+            )
+
+        assert result["success"] is True
+        assert svc.generate_shipment_document.call_args.kwargs["owner_user_id"] == 42
+
+    def test_generate_does_not_promote_generic_runtime_user_to_template_owner(self):
+        svc = self._svc()
+        svc.generate_shipment_document.return_value = {"success": True}
+        with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
+            result = _registered_router_shipment_orders(
+                "generate",
+                {"unit_name": "金汉武家私", "products": [{"model": "9803"}]},
+                {"user_id": "999999"},
+                "admin",
+                "",
+            )
+
+        assert result["success"] is True
+        assert "owner_user_id" not in svc.generate_shipment_document.call_args.kwargs
+
+    def test_generate_batch_propagates_authenticated_owner_context(self):
+        svc = self._svc()
+        svc.generate_shipment_document.return_value = {"success": True}
+        with patch("app.bootstrap.get_shipment_app_service", return_value=svc):
+            result = _registered_router_shipment_orders(
+                "generate_batch",
+                {
+                    "shipments": [
+                        {"unit_name": "金汉武家私", "products": [{"model": "9803"}]},
+                    ]
+                },
+                {"owner_user_id": 42},
+                "admin",
+                "",
+            )
+
+        assert result["success"] is True
+        assert svc.generate_shipment_document.call_args.kwargs["owner_user_id"] == 42
+
     def test_generate_missing_unit_name(self):
         result = _registered_router_shipment_orders(
             "generate", {"products": [{"id": 1}]}, {}, "admin", ""

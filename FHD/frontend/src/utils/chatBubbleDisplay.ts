@@ -105,6 +105,16 @@ export function stripToolInvocationLeaks(src: string): string {
   return out
 }
 
+/** Remove model reasoning blocks before rendering, persistence, or TTS. */
+export function stripModelReasoningLeaks(src: string): string {
+  let out = String(src || '')
+  out = out.replace(/<think\b[^>]*>[\s\S]*?<\/think\s*>/gi, '\n')
+  out = out.replace(/^[\s\S]*?<\/think\s*>/i, '\n')
+  out = out.replace(/<think\b[^>]*>[\s\S]*$/i, '\n')
+  out = out.replace(/<\/?think\b[^>]*>/gi, '\n')
+  return out.replace(/\n{3,}/g, '\n\n').trim()
+}
+
 const STREAMING_PLACEHOLDER_RE = /^\.{2,3}$|^…$|^---$/
 
 export function isStreamingPlaceholderBody(raw: string | undefined | null): boolean {
@@ -113,9 +123,13 @@ export function isStreamingPlaceholderBody(raw: string | undefined | null): bool
 }
 
 export function hasVisibleChatBubbleBody(raw: string | undefined | null): boolean {
-  const plain = plainTextFromMessageContent(raw)
+  const plain = stripModelReasoningLeaks(
+    plainTextFromMessageContent(stripModelReasoningLeaks(String(raw || ''))),
+  )
   if (isStreamingPlaceholderBody(plain)) return false
-  return !!stripPlannerDisplayMarkers(stripToolInvocationLeaks(plain)).trim()
+  return !!stripPlannerDisplayMarkers(
+    stripToolInvocationLeaks(stripModelReasoningLeaks(plain)),
+  ).trim()
 }
 
 const PLANNER_DISPLAY_MARKERS: RegExp[] = [
@@ -152,8 +166,12 @@ export function stripPlannerDisplayMarkers(src: string): string {
 
 /** MessageBody / 流式渲染用的 Markdown 源文本（从气泡 HTML 还原并清洗）。 */
 export function aiMarkdownSourceFromContent(raw: string | undefined | null): string {
-  const plain = plainTextFromMessageContent(raw)
-  return stripPlannerDisplayMarkers(stripToolInvocationLeaks(plain))
+  const plain = stripModelReasoningLeaks(
+    plainTextFromMessageContent(stripModelReasoningLeaks(String(raw || ''))),
+  )
+  return stripPlannerDisplayMarkers(
+    stripToolInvocationLeaks(stripModelReasoningLeaks(plain)),
+  )
 }
 
 export function countThinkingStepLines(steps: string | undefined | null): number {

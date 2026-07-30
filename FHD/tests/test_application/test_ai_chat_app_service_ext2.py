@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -23,6 +24,228 @@ def _make_service():
         patch("app.application.ai_chat_app_service.get_approval_service"),
     ):
         return AIChatApplicationService()
+
+
+def test_background_agent_run_policy_keeps_single_crud_in_current_turn():
+    plan = SimpleNamespace(
+        nodes=[
+            SimpleNamespace(
+                tool_id="products",
+                action="create",
+            )
+        ]
+    )
+
+    assert AIChatApplicationService._should_background_agent_run(
+        plan,
+        {},
+        "新增产品：验收产品",
+    ) is False
+
+
+def test_background_agent_run_policy_enables_explicit_batch_work():
+    plan = SimpleNamespace(
+        nodes=[
+            SimpleNamespace(
+                tool_id="products",
+                action="batch_create",
+            )
+        ]
+    )
+
+    assert AIChatApplicationService._should_background_agent_run(
+        plan,
+        {},
+        "后台批量导入全部文件",
+    ) is True
+
+
+def _durable_product_run(*, user_id: str = "u1", status: str = "waiting_user"):
+    step_status = "completed" if status == "completed" else "waiting_user"
+    return SimpleNamespace(
+        run_id="run_product_1",
+        user_id=user_id,
+        message="新增产品：测试漆 型号：TEST-1 到 客户：测试客户 写入数据库",
+        status=status,
+        plan_id="plan_product_1",
+        intent="新增产品",
+        metadata={
+            "runtime_context": {
+                "user_id": user_id,
+                "background_execution": False,
+                "authenticated_owner_user_id": 2,
+            },
+            "plan": {
+                "todo_steps": ["写入产品"],
+                "risk_level": "medium",
+                "metadata": {},
+            },
+        },
+        steps=[
+            SimpleNamespace(
+                step_id="step_product_1",
+                node_id="write_product",
+                tool_id="business_db",
+                action="write",
+                params={
+                    "entity": "products",
+                    "operation": "create",
+                    "payload": {"name_or_model": "测试漆", "unit_name": "测试客户"},
+                },
+                risk="medium",
+                idempotent=False,
+                description="写入产品",
+                depends_on=[],
+                status=step_status,
+                output={"success": True, "created": True} if step_status == "completed" else {},
+                error="",
+                duration_ms=5,
+            )
+        ],
+        tool_calls=[],
+        artifacts=[],
+    )
+
+
+def test_confirmation_context_resumes_durable_agent_run_without_memory_state():
+    service = _make_service()
+    waiting = _durable_product_run()
+    completed = _durable_product_run(status="completed")
+    orchestrator = MagicMock()
+    orchestrator.get_run.return_value = waiting
+    orchestrator.continue_run.return_value = completed
+
+    with patch(
+        "app.application.agent_orchestrator.AgentOrchestrator",
+        return_value=orchestrator,
+    ):
+        result = service._try_handle_dynamic_workflow(
+            "u1",
+            "确认",
+            "normal",
+            {
+                "workflow_confirmation": {
+                    "action": "confirm",
+                    "agent_run_id": "run_product_1",
+                    "plan_id": "plan_product_1",
+                    "approved_step_id": "write_product",
+                }
+            },
+            {},
+            authenticated_owner_user_id=2,
+        )
+
+    assert result is not None
+    assert result["success"] is True
+    assert result["data"]["action"] == "workflow_done"
+    orchestrator.continue_run.assert_called_once_with(
+        "run_product_1",
+        approved_by="u1",
+        approved_step_id="write_product",
+        runtime_context=waiting.metadata["runtime_context"],
+        auto_execute=True,
+    )
+
+
+def test_confirmation_context_rejects_agent_run_from_another_user():
+    service = _make_service()
+    orchestrator = MagicMock()
+    orchestrator.get_run.return_value = _durable_product_run(user_id="other-user")
+
+    with patch(
+        "app.application.agent_orchestrator.AgentOrchestrator",
+        return_value=orchestrator,
+    ):
+        result = service._try_handle_dynamic_workflow(
+            "u1",
+            "确认",
+            "normal",
+            {
+                "workflow_confirmation": {
+                    "action": "confirm",
+                    "agent_run_id": "run_product_1",
+                    "plan_id": "plan_product_1",
+                }
+            },
+            {},
+            authenticated_owner_user_id=2,
+        )
+
+    assert result is not None
+    assert result["success"] is False
+    assert result["data"]["action"] == "workflow_confirmation_forbidden"
+    orchestrator.continue_run.assert_not_called()
+
+
+def test_submit_approval_context_binds_request_to_exact_durable_agent_run():
+    service = _make_service()
+    waiting = _durable_product_run()
+    waiting.steps[0].node_id = "delete_product_198"
+    waiting.steps[0].tool_id = "products"
+    waiting.steps[0].action = "delete"
+    waiting.steps[0].risk = "high"
+    waiting.steps[0].params = {"product_id": 198}
+    waiting.intent = "delete_product_198"
+    waiting.plan_id = "plan_delete_198"
+    orchestrator = MagicMock()
+    orchestrator.get_run.return_value = waiting
+    approval_request = MagicMock(request_id="approval_delete_198")
+    service.approval_service.get_approval_required_nodes.return_value = [
+        service._plan_from_agent_run(waiting).nodes[0]
+    ]
+    service.approval_service.create_approval_request.return_value = approval_request
+
+    with patch(
+        "app.application.agent_orchestrator.AgentOrchestrator",
+        return_value=orchestrator,
+    ):
+        result = service._try_handle_dynamic_workflow(
+            "u1",
+            "确认",
+            "normal",
+            {
+                "workflow_confirmation": {
+                    "action": "submit_approval",
+                    "agent_run_id": "run_product_1",
+                    "plan_id": "plan_delete_198",
+                    "approved_step_id": "delete_product_198",
+                }
+            },
+            {},
+            authenticated_owner_user_id=2,
+        )
+
+    assert result is not None
+    assert result["success"] is True
+    assert result["data"]["action"] == "approval_submitted"
+    assert result["data"]["data"]["approval_request_ids"] == ["approval_delete_198"]
+    service.approval_service.create_approval_request.assert_called_once()
+    call = service.approval_service.create_approval_request.call_args.kwargs
+    assert call["runtime_context"]["agent_run_id"] == "run_product_1"
+    orchestrator.continue_run.assert_not_called()
+
+
+def test_bare_confirmation_without_waiting_run_never_falls_through_to_llm():
+    service = _make_service()
+    orchestrator = MagicMock()
+    orchestrator.list_runs.return_value = []
+
+    with patch(
+        "app.application.agent_orchestrator.AgentOrchestrator",
+        return_value=orchestrator,
+    ):
+        result = service._try_handle_dynamic_workflow(
+            "u1",
+            "确认",
+            "normal",
+            {},
+            {},
+            authenticated_owner_user_id=2,
+        )
+
+    assert result is not None
+    assert result["success"] is False
+    assert result["data"]["action"] == "workflow_confirmation_missing"
 
 
 # ========================= _default_purchase_unit_for_import ==============
@@ -547,6 +770,37 @@ class TestTryHandleDynamicWorkflowExtended:
             result = service._try_handle_dynamic_workflow("u1", "查询产品", "pro", ctx, {})
         assert result is not None
         assert result["success"] is True
+
+    def test_pro_normal_profile_shipment_records_query(self):
+        service = _make_service()
+        ctx = {}
+        with (
+            patch(
+                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                return_value="normal",
+            ),
+            patch(
+                "app.application.normal_chat_dispatch.route_normal_mode_message",
+                return_value={
+                    "intent": "shipment_records_query",
+                    "slots": {"unit_name": "金汉武家私"},
+                },
+            ),
+            patch(
+                "app.application.normal_chat_dispatch.build_shipment_records_query_response_dict",
+                return_value={"success": True, "response": "4 条发货记录"},
+            ),
+        ):
+            result = service._try_handle_dynamic_workflow(
+                "u1",
+                "查询金汉武家私最近的发货记录",
+                "pro",
+                ctx,
+                {},
+            )
+        assert result is not None
+        assert result["success"] is True
+        assert result["response"] == "4 条发货记录"
 
     def test_pro_normal_profile_shipment(self):
         service = _make_service()

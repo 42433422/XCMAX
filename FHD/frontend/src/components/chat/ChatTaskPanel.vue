@@ -1,5 +1,5 @@
 <template>
-  <div class="right-panel">
+  <div class="right-panel" :class="{ 'right-panel--empty': isEmptyPanel }">
     <div class="panel-header">{{ $t('chat.currentTask') }}</div>
     <div class="panel-content panel-content-task" id="taskPanel">
       <div class="task-panel-body">
@@ -78,7 +78,7 @@
                 {{ $t('chat.downloadShipment') }}
               </a>
               <button
-                v-if="currentTask?.type === 'shipment_generate'"
+                v-if="currentTask?.type === 'shipment_generate' && !currentTask?.printPending && !currentTask?.printCompleted && !currentTask?.printTerminal"
                 type="button"
                 class="btn btn-success btn-sm"
                 data-action="start-print"
@@ -86,6 +86,34 @@
               >
                 {{ $t('chat.startPrint') }}
               </button>
+              <span
+                v-else-if="currentTask?.type === 'shipment_generate' && currentTask?.printPending"
+                class="task-print-pending"
+              >
+                已提交打印队列，等待设备完成；尚未标记已打印。
+                <button
+                  v-if="currentTask?.printJobToken"
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  data-action="check-print-status"
+                  :disabled="currentTask?.printStatusChecking"
+                  @click="$emit('check-print-status')"
+                >
+                  {{ currentTask?.printStatusChecking ? '正在检查' : '检查打印状态' }}
+                </button>
+              </span>
+              <span
+                v-else-if="currentTask?.type === 'shipment_generate' && currentTask?.printCompleted"
+                class="task-print-pending"
+              >
+                已由打印机确认完成，发货记录已更新。
+              </span>
+              <span
+                v-else-if="currentTask?.type === 'shipment_generate' && currentTask?.printTerminal"
+                class="task-print-pending"
+              >
+                当前打印任务未完成且不能重复提交；请重新生成发货单后再打印。
+              </span>
               <button
                 v-if="currentTask?.type === 'excel_import' && currentTask?.completed"
                 type="button"
@@ -147,6 +175,9 @@
                   v-if="typeof task.progress === 'number' && task.status !== 'failed' && task.status !== 'cancelled' && !(task.type === 'workflow_employee' && task.payload?.workflowProgressStarted === false)"
                 >{{ $t('chat.progress', { pct: task.progress }) }}</span>
                 <span v-if="task.stage">{{ normalizeTaskDisplayText(task.stage) }}</span>
+                <span v-if="task.type === 'agent_run' && agentRunEvidenceSummary(task)">
+                  {{ agentRunEvidenceSummary(task) }}
+                </span>
               </div>
               <div
                 v-if="task.type === 'workflow_employee' && expandedTaskIds.includes(task.id) && hasWorkflowBody(task)"
@@ -230,8 +261,24 @@
                     @click="$emit('open-shipment-records')"
                   >{{ $t('chat.openShipmentRecords') }}</button>
                   <button class="btn btn-secondary btn-sm" @click="$emit('jump-to-task-message', task)">{{ $t('chat.jumpToMessage') }}</button>
+                  <button
+                    v-if="task.type === 'agent_run' && (task.status === 'running' || task.status === 'queued')"
+                    class="btn btn-secondary btn-sm"
+                    @click="$emit('pause-task-by-id', task.id)"
+                  >
+                    <i class="fa fa-pause" aria-hidden="true" />
+                    {{ $t('chat.pauseTask') }}
+                  </button>
+                  <button
+                    v-if="task.type === 'agent_run' && task.status === 'paused'"
+                    class="btn btn-primary btn-sm"
+                    @click="$emit('resume-task-by-id', task.id)"
+                  >
+                    <i class="fa fa-play" aria-hidden="true" />
+                    {{ $t('chat.resumeTask') }}
+                  </button>
                   <button v-if="task.status === 'failed' || task.status === 'cancelled'" class="btn btn-primary btn-sm" @click="$emit('retry-task', task.id)">{{ $t('chat.retryTask') }}</button>
-                  <button v-if="task.status === 'running' || task.status === 'queued'" class="btn btn-secondary btn-sm" @click="$emit('cancel-task-by-id', task.id)">{{ $t('chat.cancel') }}</button>
+                  <button v-if="task.status === 'running' || task.status === 'queued' || task.status === 'paused'" class="btn btn-secondary btn-sm" @click="$emit('cancel-task-by-id', task.id)">{{ $t('chat.cancel') }}</button>
                 </div>
               </div>
             </div>
@@ -279,6 +326,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ShipmentTask } from '@/composables/useShipmentTask'
 import type { TaskItem } from '@/composables/useChatPersistence'
+import type { OrchestrationTraceStep } from '@/types/orchestration'
 import { workflowProgressIsIdle } from '@/workflow/coreWorkflowTaskUi'
 import { normalizeTaskDisplayText } from '@/utils/chatTaskLabels'
 
@@ -307,6 +355,39 @@ function hasWorkflowBody(task: TaskItem): boolean {
   )
 }
 
+function agentRunEvidenceSummary(task: TaskItem): string {
+  const trace = Array.isArray(task.payload?.orchestrationTrace)
+    ? task.payload.orchestrationTrace as OrchestrationTraceStep[]
+    : []
+  if (!trace.length) return ''
+  const databases = new Set<string>()
+  let employees = 0
+  let prints = 0
+  const changes = { created: 0, updated: 0, deleted: 0 }
+  for (const step of trace) {
+    for (const database of step.evidence?.databases || []) {
+      const name = String(database.runtime_database || database.database_id || '').trim()
+      if (name) databases.add(name)
+    }
+    employees += step.evidence?.employees?.length || 0
+    if (step.evidence?.kind === 'print') prints += 1
+    for (const change of step.evidence?.changes || []) {
+      changes.created += Number(change.counts?.created || 0)
+      changes.updated += Number(change.counts?.updated || 0)
+      changes.deleted += Number(change.counts?.deleted || 0)
+    }
+  }
+  const parts = [
+    databases.size ? `读取 ${Array.from(databases).slice(0, 2).join('、')}` : '',
+    employees ? `AI 员工 ${employees}` : '',
+    prints ? `打单 ${prints}` : '',
+    changes.created ? `新增 ${changes.created}` : '',
+    changes.updated ? `修改 ${changes.updated}` : '',
+    changes.deleted ? `删除 ${changes.deleted}` : '',
+  ].filter(Boolean)
+  return parts.join(' · ')
+}
+
 const props = defineProps<{
   currentTask: ShipmentTask | null
   taskList: TaskItem[]
@@ -328,6 +409,13 @@ const props = defineProps<{
   workflowTaskDotTitle: (task: TaskItem) => string
 }>()
 
+const isEmptyPanel = computed(() => (
+  !props.currentTask
+  && props.taskList.length === 0
+  && !(props.isProMode && props.proRuntimeTask)
+  && !props.latestAssistantPush
+))
+
 const emit = defineEmits<{
   'confirm-task': []
   'cancel-task': []
@@ -335,6 +423,7 @@ const emit = defineEmits<{
   'set-custom-order-number': [value: string]
   'shipment-download-click': []
   'start-print': []
+  'check-print-status': []
   'switch-view': [view: string]
   'set-task-filter': [filter: 'all' | 'running' | 'success' | 'failed']
   'clear-task-history': []
@@ -342,6 +431,8 @@ const emit = defineEmits<{
   'open-shipment-records': []
   'jump-to-task-message': [task: TaskItem]
   'retry-task': [id: string]
+  'pause-task-by-id': [id: string]
+  'resume-task-by-id': [id: string]
   'cancel-task-by-id': [id: string]
   'copy-assistant-push': []
   'open-assistant-float': []
@@ -447,6 +538,7 @@ const customOrderNumberModel = computed({
 
 .status-queued { background: #9ca3af; }
 .status-running { background: #3b82f6; }
+.status-paused { background: #f59e0b; }
 .status-success { background: #10b981; }
 .status-failed { background: #ef4444; }
 .status-cancelled { background: #6b7280; }

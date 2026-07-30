@@ -4,7 +4,7 @@ export type PlannerSseEvent =
   | { type: 'token'; text: string; ephemeral?: boolean }
   | { type: 'tool_progress'; label?: string; text?: string; phase?: string }
   | { type: 'done'; result?: unknown }
-  | { type: 'error'; message?: string; status_code?: number }
+  | { type: 'error'; message?: string; status_code?: number; code?: string; error_code?: string }
   | { type: 'requires_token'; token_name?: string; token_description?: string }
 
 function parseSseDataLine(line: string): PlannerSseEvent | null {

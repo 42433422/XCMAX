@@ -31,6 +31,8 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
     _ensure_vector_index_if_needed,
     _merge_runtime_context_with_message_paths,
     _message_requires_db_read_token,
+    _sse_event_line,
+    _xcagi_chat_error_event,
     _xcagi_chat_http_exc,
     _xcagi_chat_timeout_error_payload,
     _xcagi_chat_timeout_seconds,
@@ -43,6 +45,136 @@ from app.services.conversation.modstore_adapter import create_modstore_openai_cl
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+def _authenticated_owner_user_id(request: Request) -> int | None:
+    """Read the authenticated owner only from server request state.
+
+    ``body.user_id`` is a chat/session identifier and may be client supplied;
+    it must never select a private ETL preview.
+    """
+
+    try:
+        value = getattr(request.state, "user_id", None)
+        owner = int(value)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return owner if owner > 0 else None
+
+
+def _authenticated_tenant_id(request: Request) -> int | None:
+    """Read the tenant only from server-authenticated request state.
+
+    Streaming responses begin after ``BaseHTTPMiddleware`` has returned its
+    ``StreamingResponse`` object.  The request ContextVar is therefore not a
+    safe source for a tenant during later generator iterations; the immutable
+    server-populated ``request.state`` is.  Keep this helper deliberately
+    separate from any client chat/session identifier.
+    """
+
+    try:
+        value = getattr(request.state, "tenant_id", None)
+        tenant = int(value)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return tenant if tenant > 0 else None
+
+
+def _stream_shipment_preview_payload(
+    message: str,
+    *,
+    authenticated_owner_user_id: int | None = None,
+) -> dict[str, Any] | None:
+    """Return the deterministic *preview* for an order-like chat message.
+
+    The regular stream path used to jump straight to the legacy LLM planner.
+    That meant the same ``打印客户发货单…`` request which the non-streaming
+    normal/pro paths recognise locally could wait for a model first token (and
+    fail before a confirmation card was ever shown).  Keep this deliberately
+    narrow and side-effect free: it only creates a preview task.  The existing
+    confirmation flow still owns the later tool execution and the separate
+    print authorisation remains required.
+    """
+
+    try:
+        from app.application.normal_chat_dispatch import (
+            route_normal_mode_message,
+            run_normal_slot_shipment_preview,
+        )
+
+        route = route_normal_mode_message(message)
+        if route.get("intent") != "shipment":
+            return None
+        payload = run_normal_slot_shipment_preview(
+            message,
+            authenticated_owner_user_id=authenticated_owner_user_id,
+        )
+        return payload if isinstance(payload, dict) else None
+    except RECOVERABLE_ERRORS:
+        # A deterministic convenience path must never hide the normal,
+        # receipt-enforced planner error path when a local read dependency is
+        # temporarily unavailable.
+        logger.debug("stream shipment preview fast path skipped", exc_info=True)
+        return None
+
+
+def _stream_read_only_business_query_payload(message: str) -> dict[str, Any] | None:
+    """Return a deterministic answer for narrow, read-only business queries.
+
+    Customer and product list requests are already represented by normal-chat
+    slots and backed by local application services.  Serving those slots before
+    the model makes them available when a configured provider is rate-limited
+    or out of quota.  Keep the scope deliberately small: no import, document,
+    print, or mutation intent is handled here.
+
+    Raw database-read wording is intentionally excluded so this convenience
+    path cannot weaken the existing DB-read-token policy.
+    """
+
+    try:
+        # Do not infer intent from raw-database wording.  The complete
+        # authorization path (including DB_READ_TOKEN) must remain in charge
+        # of phrases such as “客户数据库 / 数据表 / schema / SQL”, even when the
+        # message also contains a customer or product keyword.
+        raw_db_markers = (
+            "数据库",
+            "数据表",
+            "表结构",
+            "schema",
+            "sql",
+            "raw",
+            "原始",
+            "全库",
+            "整库",
+            "数据库文件",
+        )
+        if any(marker in str(message or "").lower() for marker in raw_db_markers):
+            return None
+        if _message_requires_db_read_token(message):
+            return None
+
+        from app.application.normal_chat_dispatch import (
+            build_customers_query_response_dict,
+            build_product_query_response_dict,
+            build_shipment_records_query_response_dict,
+            route_normal_mode_message,
+        )
+
+        route = route_normal_mode_message(message)
+        intent = route.get("intent")
+        if intent == "shipment_records_query":
+            return build_shipment_records_query_response_dict(route)
+        if intent == "customers_query":
+            return build_customers_query_response_dict(route)
+        if intent == "product_query":
+            return build_product_query_response_dict(route)
+    except RECOVERABLE_ERRORS:
+        # If a local read dependency is temporarily unavailable, return its
+        # explicit, side-effect-free error payload when available rather than
+        # pretending the model has a business receipt.  Unexpected programming
+        # errors still reach the normal boundary.
+        logger.debug("stream read-only business query fast path skipped", exc_info=True)
+    return None
 
 
 def _request_session_candidates(request: Request) -> list[str]:
@@ -332,10 +464,11 @@ async def _execute_ai_chat_mainline(
     *,
     message: str | None = None,
     kitten_extra: dict[str, Any] | None = None,
+    authenticated_owner_user_id: int | None = None,
 ) -> dict[str, Any]:
-    from app.application.ai_chat_app_service import AIChatApplicationService
+    from app.application.ai_chat_app_service import get_ai_chat_app_service
 
-    service = AIChatApplicationService()
+    service = get_ai_chat_app_service()
     file_context = runtime_context.get("file_context")
     if not isinstance(file_context, dict):
         file_context = runtime_context.get("file_analysis")
@@ -350,6 +483,7 @@ async def _execute_ai_chat_mainline(
         context=dict(runtime_context or {}),
         source=getattr(body, "source", None),
         file_context=file_context,
+        authenticated_owner_user_id=authenticated_owner_user_id,
     )
     if not isinstance(payload, dict):
         payload = _xcagi_compat_reply_payload(str(payload))
@@ -456,6 +590,7 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> di
                     body,
                     planner_runtime_context,
                     kitten_extra=kitten_extra or None,
+                    authenticated_owner_user_id=_authenticated_owner_user_id(request),
                 ),
                 timeout=timeout,
             )
@@ -726,16 +861,19 @@ async def execute_compat_chat_batch(
             except RECOVERABLE_ERRORS as e:
                 if not _legacy_chat_fallback_allowed(planner_runtime_context):
                     err = _xcagi_chat_http_exc(e)
+                    error_event = _xcagi_chat_error_event(err)
+                    error_message = str(error_event["message"])
                     results.append(
                         {
                             "success": False,
-                            "message": (
-                                err.detail if isinstance(err.detail, str) else str(err.detail)
-                            ),
-                            "response": err.detail
-                            if isinstance(err.detail, str)
-                            else str(err.detail),
-                            "data": {"error": str(e)},
+                            "message": error_message,
+                            "response": error_message,
+                            "error_code": error_event.get("error_code"),
+                            "data": {
+                                "error": error_message,
+                                "status_code": err.status_code,
+                                "error_code": error_event.get("error_code"),
+                            },
                         }
                     )
                     continue
@@ -851,9 +989,15 @@ async def execute_compat_chat_batch(
                 )
         except RECOVERABLE_ERRORS as e:
             err = _xcagi_chat_http_exc(e)
+            error_event = _xcagi_chat_error_event(err)
             payload = {
                 "success": False,
-                "message": err.detail if isinstance(err.detail, str) else str(err.detail),
+                "message": str(error_event["message"]),
+                "error_code": error_event.get("error_code"),
+                "data": {
+                    "status_code": err.status_code,
+                    "error_code": error_event.get("error_code"),
+                },
             }
             if pre_run is not None:
                 results.append(
@@ -917,6 +1061,81 @@ def _resolve_chat_user_id(request: Request, body: XcagiCompatChatBody) -> str:
 async def compat_chat_stream_async(
     request: Request, body: XcagiCompatChatBody, *, ai_tier: str | None = None
 ):
+    """Stream a chat response with the authenticated tenant kept in scope.
+
+    Most ordinary request handlers can recover their tenant through the
+    request ContextVar.  A ``StreamingResponse`` runs this generator after
+    middleware has unwound, however, so owner-scoped ETL preview reads would
+    otherwise fail closed and render a shipment card without its proven
+    model/price/layout.  This scope is server-derived and read-only for the
+    preview path; it does not trust a client-supplied tenant or session id.
+    """
+
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    with tenant_scope(_authenticated_tenant_id(request)):
+        async for chunk in _compat_chat_stream_with_tenant_scope(
+            request,
+            body,
+            ai_tier=ai_tier,
+        ):
+            yield chunk
+
+
+async def _compat_chat_stream_with_tenant_scope(
+    request: Request, body: XcagiCompatChatBody, *, ai_tier: str | None = None
+):
+    # Yield before any parser, preview-store read, persona lookup, or model
+    # transport work.  A delivery-order request is normally handled locally,
+    # but its owner-scoped ETL evidence still requires a database read.  This
+    # protocol-level progress frame prevents a slow local dependency from
+    # being misreported by the desktop as a model "first packet" timeout.
+    yield _sse_event_line(
+        {
+            "type": "tool_progress",
+            "label": "正在识别需求",
+            "phase": "intent_recognition",
+        }
+    )
+
+    # Shipping / order phrases are deliberately handled before persona and
+    # model work for both normal and pro callers.  This only renders the
+    # confirmation task; it does not execute a tool, write a record, or submit
+    # a print job.  Keeping it at the common stream entry makes the UI's
+    # default `/api/ai/chat/stream` route behave like the non-streaming path.
+    shipment_preview = _stream_shipment_preview_payload(
+        body.message,
+        authenticated_owner_user_id=_authenticated_owner_user_id(request),
+    )
+    if shipment_preview is not None:
+        response_text = str(
+            shipment_preview.get("response") or shipment_preview.get("message") or ""
+        )
+        yield _sse_event_line({"type": "token", "text": response_text})
+        yield _sse_event_line({"type": "done", "result": shipment_preview})
+        return
+
+    # Read-only customer/product slots do not need an LLM.  This avoids a
+    # provider 429/quota failure for simple business lookups while preserving
+    # the existing confirmation-only shipment and print paths above.
+    business_query = _stream_read_only_business_query_payload(body.message)
+    if business_query is not None:
+        response_text = str(business_query.get("response") or business_query.get("message") or "")
+        yield _sse_event_line({"type": "token", "text": response_text})
+        yield _sse_event_line({"type": "done", "result": business_query})
+        return
+
+    # The first progress event above guarantees a prompt first packet.  This
+    # second phase tells the user where the remaining wait is happening; it
+    # does not create a synthetic answer or hide a provider error.
+    yield _sse_event_line(
+        {
+            "type": "tool_progress",
+            "label": "正在连接模型服务",
+            "phase": "model_connect",
+        }
+    )
+
     # 注入 persona system_prompt（前端没传时用 persona 系统生成去客服腔 prompt）
     if not body.system_prompt and body.message:
         try:

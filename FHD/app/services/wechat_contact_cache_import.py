@@ -11,22 +11,57 @@ import logging
 import os
 import traceback
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from app.db.models import WechatContact
 from app.db.session import get_db
 from app.utils.external_sqlite import sqlite_conn
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import get_resource_path
+from app.utils.path_utils import get_desktop_state_dir, get_resource_path
 
 logger = logging.getLogger(__name__)
+
+
+def _validated_desktop_state_dir() -> Path:
+    """Return a safe desktop state root without letting a relative env write cwd.
+
+    ``get_desktop_state_dir`` creates its return directory. Validate both
+    explicit settings first so an accidental ``XCAGI_*_DATA_DIR=relative/path``
+    cannot create a directory below the packaged backend's current directory.
+    """
+
+    for env_name in ("XCAGI_DESKTOP_DATA_DIR", "XCAGI_DATA_DIR"):
+        explicit = os.environ.get(env_name) or ""
+        if explicit and not Path(explicit).expanduser().is_absolute():
+            raise OSError("desktop user-data directory must be absolute")
+    root = Path(get_desktop_state_dir()).expanduser()
+    if not root.is_absolute():
+        raise OSError("desktop user-data directory must be absolute")
+    return root.resolve()
+
+
+def _wechat_runtime_cache_root() -> str:
+    """Return the writable cache root for raw and decrypted WeChat databases.
+
+    The decrypt tool itself may be bundled below PyInstaller resources, but its
+    database copies are user data.  Keeping the two separate prevents a sync
+    or decrypt run from modifying the signed desktop application bundle.
+    """
+
+    return str(_validated_desktop_state_dir() / "integrations" / "wechat" / "decrypt")
+
+
+def _wechat_runtime_cache_dirs() -> tuple[str, str]:
+    root = _wechat_runtime_cache_root()
+    return os.path.join(root, "raw_db"), os.path.join(root, "decrypted")
 
 
 def _resolve_wechat_decrypt_dir() -> str | None:
     """定位 wechat-decrypt 工具目录(含 config.py / key_utils.py / decrypt_db.py)。
 
     历史原因有多个可能路径:
-    - ``<repo>/resources/wechat-decrypt/`` (约定落点,但常只存 raw_db)
+    - ``<repo>/resources/wechat-decrypt/`` (工具与只读配置)
     - ``<repo>/XCAGI/resources/wechat-decrypt/`` (发行子树)
     - ``<repo>/XCAGI/wechat-decrypt/`` (便携副本)
     - ``<repo>/wechat-decrypt/`` (少数老部署)
@@ -80,10 +115,14 @@ def ensure_decrypted_wechat_dbs() -> dict[str, Any]:
         from config import load_config
 
         cfg = load_config()
-        raw_db_dir = os.path.join(wechat_decrypt_path, "raw_db")
-        decrypted_dir = cfg.get("decrypted_dir", os.path.join(wechat_decrypt_path, "decrypted"))
+        # ``wechat_decrypt_path`` is the tool/code location and may be inside
+        # XCAGI.app.  Never let config defaults redirect cache writes there.
+        raw_db_dir, decrypted_dir = _wechat_runtime_cache_dirs()
         keys_file = cfg.get("keys_file", os.path.join(wechat_decrypt_path, "all_keys.json"))
         db_dir = cfg.get("db_dir", "")
+
+        os.makedirs(raw_db_dir, exist_ok=True)
+        os.makedirs(decrypted_dir, exist_ok=True)
 
         if not db_dir or not os.path.isdir(db_dir):
             return {
@@ -212,13 +251,27 @@ def refresh_wechat_contacts_from_decrypt() -> tuple[dict[str, Any], int]:
                 "message": "微信解密尚未配置" if not_configured else "同步解密失败",
             }, status_code
 
-        # 定位解密后的库根目录:优先使用本次 ensure 成功定位到的工具目录
+        # Prefer the current user-data cache.  A legacy resource cache is
+        # read-only fallback only, so existing installations remain readable
+        # without ever writing under the bundled tool directory.
         wechat_decrypt_path = _resolve_wechat_decrypt_dir() or get_resource_path("wechat-decrypt")
+        _raw_db_dir, runtime_decrypted_dir = _wechat_runtime_cache_dirs()
+        legacy_decrypted_dir = os.path.join(wechat_decrypt_path, "decrypted")
+        decrypted_dirs = [runtime_decrypted_dir]
+        if os.path.abspath(legacy_decrypted_dir) != os.path.abspath(runtime_decrypted_dir):
+            decrypted_dirs.append(legacy_decrypted_dir)
 
         rows: list[Any] = []
         source_desc = "contact.db"
-        contact_db_path = os.path.join(wechat_decrypt_path, "decrypted", "contact", "contact.db")
-        if os.path.exists(contact_db_path):
+        contact_db_path = next(
+            (
+                os.path.join(candidate, "contact", "contact.db")
+                for candidate in decrypted_dirs
+                if os.path.exists(os.path.join(candidate, "contact", "contact.db"))
+            ),
+            "",
+        )
+        if contact_db_path:
             with sqlite_conn(contact_db_path) as conn:
                 cur = conn.cursor()
                 table_exists = cur.execute(
@@ -240,8 +293,15 @@ def refresh_wechat_contacts_from_decrypt() -> tuple[dict[str, Any], int]:
                     rows = cur.execute(sql).fetchall()
 
         if not rows:
-            msg_db_path = os.path.join(wechat_decrypt_path, "decrypted", "message", "message_0.db")
-            if os.path.exists(msg_db_path):
+            msg_db_path = next(
+                (
+                    os.path.join(candidate, "message", "message_0.db")
+                    for candidate in decrypted_dirs
+                    if os.path.exists(os.path.join(candidate, "message", "message_0.db"))
+                ),
+                "",
+            )
+            if msg_db_path:
                 with sqlite_conn(msg_db_path) as conn:
                     cur = conn.cursor()
                     table_exists = cur.execute(

@@ -142,6 +142,9 @@ class TestPrinterService(unittest.TestCase):
         mock_printer_instance = MagicMock()
         mock_printer.return_value = mock_printer_instance
         mock_printer_instance.get_default_printer.return_value = "Test Printer"
+        mock_printer_instance.get_available_printers.return_value = [
+            {"name": "Test Printer", "status": "就绪"},
+        ]
         mock_printer_instance.print_file.return_value = {"success": True, "message": "打印成功"}
 
         mock_enhanced_instance = MagicMock()
@@ -161,6 +164,7 @@ class TestPrinterService(unittest.TestCase):
         mock_printer_instance = MagicMock()
         mock_printer.return_value = mock_printer_instance
         mock_printer_instance.get_default_printer.return_value = None
+        mock_printer_instance.get_available_printers.return_value = []
 
         mock_enhanced_instance = MagicMock()
         mock_enhanced.return_value = mock_enhanced_instance
@@ -176,7 +180,7 @@ class TestPrinterService(unittest.TestCase):
             result = service.print_document("test.pdf")
 
         self.assertFalse(result["success"])
-        self.assertEqual(result["message"], "未指定打印机且无法获取默认打印机")
+        self.assertIn("未找到可用发货单打印机", result["message"])
 
     @patch("app.services.printer_service.EnhancedPrinterUtils")
     @patch("app.services.printer_service.PrinterUtils")
@@ -186,6 +190,9 @@ class TestPrinterService(unittest.TestCase):
         mock_printer_instance = MagicMock()
         mock_printer.return_value = mock_printer_instance
         mock_printer_instance.get_default_printer.return_value = "Test Printer"
+        mock_printer_instance.get_available_printers.return_value = [
+            {"name": "Test Printer", "status": "就绪"},
+        ]
         mock_printer_instance.print_file.return_value = {"success": False, "message": "打印机失败"}
 
         mock_enhanced_instance = MagicMock()
@@ -205,6 +212,9 @@ class TestPrinterService(unittest.TestCase):
         mock_printer_instance = MagicMock()
         mock_printer.return_value = mock_printer_instance
         mock_printer_instance.get_default_printer.return_value = "Test Printer"
+        mock_printer_instance.get_available_printers.return_value = [
+            {"name": "Test Printer", "status": "就绪"},
+        ]
 
         mock_enhanced_instance = MagicMock()
         mock_enhanced.return_value = mock_enhanced_instance
@@ -229,6 +239,9 @@ class TestPrinterService(unittest.TestCase):
         mock_printer_instance = MagicMock()
         mock_printer.return_value = mock_printer_instance
         mock_printer_instance.print_file.return_value = {"success": True, "message": "打印成功"}
+        mock_printer_instance.get_available_printers.return_value = [
+            {"name": "Label Printer", "status": "就绪"},
+        ]
 
         mock_enhanced_instance = MagicMock()
         mock_enhanced.return_value = mock_enhanced_instance
@@ -268,6 +281,9 @@ class TestPrinterService(unittest.TestCase):
         mock_printer_instance = MagicMock()
         mock_printer.return_value = mock_printer_instance
         mock_printer_instance.print_file.return_value = {"success": True, "message": "打印成功"}
+        mock_printer_instance.get_available_printers.return_value = [
+            {"name": "Label Printer", "status": "就绪"},
+        ]
 
         mock_enhanced_instance = MagicMock()
         mock_enhanced.return_value = mock_enhanced_instance
@@ -289,6 +305,9 @@ class TestPrinterService(unittest.TestCase):
         mock_printer_instance = MagicMock()
         mock_printer.return_value = mock_printer_instance
         mock_printer_instance.print_file.return_value = {"success": True, "message": "打印成功"}
+        mock_printer_instance.get_available_printers.return_value = [
+            {"name": "Custom Label Printer", "status": "就绪"},
+        ]
 
         mock_enhanced_instance = MagicMock()
         mock_enhanced.return_value = mock_enhanced_instance
@@ -327,6 +346,34 @@ class TestPrinterService(unittest.TestCase):
 
         self.assertTrue(result["success"])
         self.assertEqual(result["successful"], 2)
+
+    @patch("app.services.printer_service.EnhancedPrinterUtils")
+    @patch("app.services.printer_service.PrinterUtils")
+    def test_offline_document_printer_is_not_ready_or_printable(self, mock_printer, mock_enhanced):
+        from app.services.printer_service import PrinterService
+
+        mock_printer_instance = MagicMock()
+        mock_printer.return_value = mock_printer_instance
+        mock_printer_instance.get_available_printers.return_value = [
+            {
+                "name": "Canon_TS3700_series",
+                "status": "离线",
+                "is_default": True,
+                "is_printable": False,
+                "state_reasons": ["offline-report"],
+            }
+        ]
+        mock_enhanced.return_value = MagicMock()
+
+        service = PrinterService()
+        listing = service.get_printers()
+        printed = service.print_document("test.pdf", printer_name="Canon_TS3700_series")
+
+        self.assertFalse(listing["summary"]["document_printer_ready"])
+        self.assertFalse(listing["classified"]["document_printer"]["is_connected"])
+        self.assertFalse(printed["success"])
+        self.assertIn("离线", printed["message"])
+        mock_printer_instance.print_file.assert_not_called()
 
     @patch("app.services.printer_service.EnhancedPrinterUtils")
     @patch("app.services.printer_service.PrinterUtils")

@@ -138,6 +138,61 @@ class AIChatApplicationService(
         }
 
     @staticmethod
+    def _should_background_agent_run(
+        plan: Any,
+        runtime_context: dict[str, Any] | None,
+        message: str,
+    ) -> bool:
+        """Schedule only work that is plausibly long-running.
+
+        Single-record queries and CRUD stay synchronous so the user receives
+        the confirmation/result in the current chat turn. Batch, import,
+        export, synchronization and explicitly requested background work can
+        continue through the durable Agent runtime.
+        """
+
+        context = dict(runtime_context or {})
+        explicit = context.get("background_execution")
+        if isinstance(explicit, bool):
+            return explicit
+
+        text = str(message or "").lower()
+        if any(
+            marker in text
+            for marker in (
+                "后台运行",
+                "后台执行",
+                "异步执行",
+                "长任务",
+                "持续运行",
+                "全部文件",
+                "所有文件",
+                "批量",
+                "全量",
+            )
+        ):
+            return True
+
+        nodes = list(getattr(plan, "nodes", None) or [])
+        if len(nodes) >= 3:
+            return True
+        long_actions = {
+            "batch_create",
+            "batch_delete",
+            "import",
+            "export",
+            "sync",
+            "crawl",
+            "index",
+            "train",
+            "evaluate",
+        }
+        return any(
+            str(getattr(node, "action", "") or "").strip().lower() in long_actions
+            for node in nodes
+        )
+
+    @staticmethod
     def _merge_tool_runtime_context(
         user_id: str,
         message: str,
@@ -154,6 +209,314 @@ class AIChatApplicationService(
                     runtime_ctx[key] = context[key]
         return runtime_ctx
 
+    @staticmethod
+    def _workflow_confirmation_request(
+        context: dict[str, Any] | None,
+    ) -> dict[str, str] | None:
+        if not isinstance(context, dict):
+            return None
+        raw = context.get("workflow_confirmation")
+        if not isinstance(raw, dict):
+            return None
+        action = str(raw.get("action") or "").strip().lower()
+        run_id = str(raw.get("agent_run_id") or raw.get("run_id") or "").strip()
+        if action not in {"confirm", "cancel", "submit_approval"} or not run_id:
+            return None
+        return {
+            "action": action,
+            "agent_run_id": run_id,
+            "plan_id": str(raw.get("plan_id") or "").strip(),
+            "approved_step_id": str(
+                raw.get("approved_step_id") or raw.get("node_id") or ""
+            ).strip(),
+        }
+
+    @staticmethod
+    def _plan_from_agent_run(agent_run: Any) -> Any:
+        from app.application.workflow.types import PlanGraph, WorkflowNode
+
+        plan_meta = (
+            agent_run.metadata.get("plan")
+            if isinstance(getattr(agent_run, "metadata", None), dict)
+            else {}
+        )
+        plan_meta = plan_meta if isinstance(plan_meta, dict) else {}
+        raw_risk = str(plan_meta.get("risk_level") or "low").strip().lower()
+        risk_level = raw_risk if raw_risk in {"low", "medium", "high"} else "low"
+        nodes = []
+        for step in getattr(agent_run, "steps", []) or []:
+            step_risk = str(getattr(step, "risk", "") or "low").strip().lower()
+            nodes.append(
+                WorkflowNode(
+                    node_id=str(getattr(step, "node_id", "") or ""),
+                    tool_id=str(getattr(step, "tool_id", "") or ""),
+                    action=str(getattr(step, "action", "") or ""),
+                    params=dict(getattr(step, "params", None) or {}),
+                    risk=step_risk if step_risk in {"low", "medium", "high"} else "low",
+                    idempotent=bool(getattr(step, "idempotent", False)),
+                    description=str(getattr(step, "description", "") or ""),
+                    depends_on=list(getattr(step, "depends_on", None) or []),
+                )
+            )
+        return PlanGraph(
+            plan_id=str(getattr(agent_run, "plan_id", "") or ""),
+            intent=str(getattr(agent_run, "intent", "") or ""),
+            todo_steps=list(plan_meta.get("todo_steps") or []),
+            nodes=nodes,
+            risk_level=risk_level,
+            metadata=dict(plan_meta.get("metadata") or {}),
+        )
+
+    def _handle_durable_workflow_decision(
+        self,
+        *,
+        user_id: str,
+        confirmation: dict[str, str] | None,
+        action: str,
+        authenticated_owner_user_id: int | None,
+    ) -> dict[str, Any]:
+        from app.application.agent_orchestrator import (
+            AgentOrchestrator,
+            get_agent_run_runtime,
+        )
+
+        orchestrator = AgentOrchestrator()
+        requested_action = str(action or "").strip().lower()
+        run_id = str((confirmation or {}).get("agent_run_id") or "").strip()
+        if not run_id:
+            waiting_runs = [
+                run
+                for run in orchestrator.list_runs(user_id=user_id, limit=20)
+                if run.status == "waiting_user"
+            ]
+            if len(waiting_runs) != 1:
+                response = (
+                    "找不到唯一的待确认任务。请回到对应任务卡片点击“确认执行”或“取消”。"
+                )
+                return {
+                    "success": False,
+                    "message": "待确认任务不唯一或不存在",
+                    "response": response,
+                    "data": {
+                        "text": response,
+                        "action": "workflow_confirmation_missing",
+                        "data": {"waiting_run_count": len(waiting_runs)},
+                    },
+                }
+            run_id = waiting_runs[0].run_id
+
+        agent_run = orchestrator.get_run(run_id)
+        if agent_run is None:
+            response = "待确认任务不存在或已清理，请重新发起操作。"
+            return {
+                "success": False,
+                "message": "agent run 不存在",
+                "response": response,
+                "data": {
+                    "text": response,
+                    "action": "workflow_confirmation_invalid",
+                    "data": {"agent_run_id": run_id},
+                },
+            }
+
+        if str(agent_run.user_id or "") != str(user_id or ""):
+            response = "该待确认任务不属于当前会话，已拒绝执行。"
+            return {
+                "success": False,
+                "message": "agent run 归属校验失败",
+                "response": response,
+                "data": {
+                    "text": response,
+                    "action": "workflow_confirmation_forbidden",
+                    "data": {"agent_run_id": run_id},
+                },
+            }
+
+        stored_runtime = (
+            agent_run.metadata.get("runtime_context")
+            if isinstance(agent_run.metadata, dict)
+            else {}
+        )
+        stored_runtime = stored_runtime if isinstance(stored_runtime, dict) else {}
+        stored_owner = stored_runtime.get("authenticated_owner_user_id")
+        if (
+            stored_owner is not None
+            and authenticated_owner_user_id is not None
+            and str(stored_owner) != str(authenticated_owner_user_id)
+        ):
+            response = "该待确认任务不属于当前登录账号，已拒绝执行。"
+            return {
+                "success": False,
+                "message": "登录账号归属校验失败",
+                "response": response,
+                "data": {
+                    "text": response,
+                    "action": "workflow_confirmation_forbidden",
+                    "data": {"agent_run_id": run_id},
+                },
+            }
+
+        expected_plan_id = str((confirmation or {}).get("plan_id") or "").strip()
+        if expected_plan_id and expected_plan_id != str(agent_run.plan_id or ""):
+            response = "确认卡片与待执行计划不一致，已拒绝执行。"
+            return {
+                "success": False,
+                "message": "plan_id 校验失败",
+                "response": response,
+                "data": {
+                    "text": response,
+                    "action": "workflow_confirmation_invalid",
+                    "data": {"agent_run_id": run_id},
+                },
+            }
+
+        if agent_run.status != "waiting_user":
+            response = f"任务当前状态为 {agent_run.status}，不能重复确认。"
+            return {
+                "success": False,
+                "message": "agent run 状态不允许确认",
+                "response": response,
+                "data": {
+                    "text": response,
+                    "action": "workflow_confirmation_conflict",
+                    "data": {
+                        "agent_run_id": run_id,
+                        "agent_status": agent_run.status,
+                    },
+                },
+            }
+
+        if requested_action == "submit_approval":
+            plan = self._plan_from_agent_run(agent_run)
+            approval_nodes = self.approval_service.get_approval_required_nodes(plan)
+            if not approval_nodes:
+                response = "该任务没有可提交的审批步骤，已拒绝执行。"
+                return {
+                    "success": False,
+                    "message": "审批步骤不存在",
+                    "response": response,
+                    "data": {
+                        "text": response,
+                        "action": "workflow_confirmation_invalid",
+                        "data": {"agent_run_id": run_id},
+                    },
+                }
+
+            requested_step = str(
+                (confirmation or {}).get("approved_step_id") or ""
+            ).strip()
+            if requested_step and requested_step not in {
+                node.node_id for node in approval_nodes
+            }:
+                response = "审批卡片与待审批步骤不一致，已拒绝提交。"
+                return {
+                    "success": False,
+                    "message": "审批步骤校验失败",
+                    "response": response,
+                    "data": {
+                        "text": response,
+                        "action": "workflow_confirmation_invalid",
+                        "data": {"agent_run_id": run_id},
+                    },
+                }
+
+            approval_runtime = dict(stored_runtime)
+            approval_runtime["agent_run_id"] = run_id
+            approval_runtime["approval_submitted_by"] = user_id
+            request_ids = []
+            for node in approval_nodes:
+                node_runtime = dict(approval_runtime)
+                node_runtime["approval_node_id"] = node.node_id
+                request = self.approval_service.create_approval_request(
+                    plan_id=plan.plan_id,
+                    node=node,
+                    runtime_context=node_runtime,
+                    plan=plan,
+                )
+                request_ids.append(request.request_id)
+
+            pending = self._pending_workflows.get(user_id)
+            pending_plan_id = str(
+                getattr((pending or {}).get("plan"), "plan_id", "") or ""
+            )
+            if pending_plan_id == plan.plan_id:
+                self._pending_workflows.pop(user_id, None)
+
+            response = (
+                f"已提交 {len(request_ids)} 个审批请求。审批通过后，"
+                "系统将恢复当前任务并只执行这张卡片对应的步骤。"
+            )
+            return {
+                "success": True,
+                "message": "审批请求已提交",
+                "response": response,
+                "run_id": run_id,
+                "agent_run_id": run_id,
+                "data": {
+                    "text": response,
+                    "action": "approval_submitted",
+                    "run_id": run_id,
+                    "agent_run_id": run_id,
+                    "data": {
+                        "run_id": run_id,
+                        "agent_run_id": run_id,
+                        "plan_id": plan.plan_id,
+                        "approval_request_ids": request_ids,
+                        "agent_status": agent_run.status,
+                    },
+                },
+            }
+
+        if requested_action == "cancel":
+            cancelled = get_agent_run_runtime().cancel(run_id, requested_by=user_id)
+            response = "已取消本次工作流执行。"
+            return {
+                "success": bool(cancelled and cancelled.status == "cancelled"),
+                "message": "处理完成",
+                "response": response,
+                "run_id": run_id,
+                "agent_run_id": run_id,
+                "data": {
+                    "text": response,
+                    "action": "workflow_cancelled",
+                    "run_id": run_id,
+                    "agent_run_id": run_id,
+                    "data": {
+                        "run_id": run_id,
+                        "agent_run_id": run_id,
+                        "agent_status": getattr(cancelled, "status", ""),
+                    },
+                },
+            }
+
+        runtime_ctx = dict(stored_runtime)
+        if authenticated_owner_user_id is not None:
+            runtime_ctx["authenticated_owner_user_id"] = int(authenticated_owner_user_id)
+        background_execution = bool(runtime_ctx.get("background_execution"))
+        continued = orchestrator.continue_run(
+            run_id,
+            approved_by=user_id,
+            approved_step_id=str(
+                (confirmation or {}).get("approved_step_id") or ""
+            ).strip(),
+            runtime_context=runtime_ctx,
+            auto_execute=not background_execution,
+        )
+        if background_execution and continued is not None and continued.status == "queued":
+            continued = get_agent_run_runtime().submit(run_id) or continued
+        if continued is None:
+            return {
+                "success": False,
+                "message": "任务恢复失败",
+                "response": "任务恢复失败，请重新发起操作。",
+            }
+        return self._format_agent_run_response(
+            self._plan_from_agent_run(continued),
+            continued,
+            thinking_steps="已核对确认卡片与持久化任务，按原计划继续执行。",
+            user_message=str(continued.message or ""),
+        )
+
     def process_chat(
         self,
         user_id: str,
@@ -161,6 +524,7 @@ class AIChatApplicationService(
         context: dict[str, Any] | None = None,
         source: str | None = None,
         file_context: dict[str, Any] | None = None,
+        authenticated_owner_user_id: int | None = None,
     ) -> dict[str, Any]:
         """
         处理聊天请求
@@ -301,6 +665,7 @@ class AIChatApplicationService(
             source=source,
             context=ctx,
             file_context=file_context or {},
+            authenticated_owner_user_id=authenticated_owner_user_id,
         )
         if workflow_result is not None:
             return _finalize(workflow_result)
@@ -353,6 +718,12 @@ class AIChatApplicationService(
         # 向量已在 ctx 上注入；enriched_context 由 ctx 浅拷贝而来，无需再次检索。
         prepared_context = enriched_context
 
+        llm_owner_token = None
+        if authenticated_owner_user_id is not None:
+            from app.application.etl.llm_session_provider import bind_etl_llm_owner
+
+            llm_owner_token = bind_etl_llm_owner(authenticated_owner_user_id)
+
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
@@ -390,6 +761,10 @@ class AIChatApplicationService(
                     self._build_fallback_response(message, f"AI 服务暂时不可用：{error_msg[:100]}")
                 )
         finally:
+            if llm_owner_token is not None:
+                from app.application.etl.llm_session_provider import reset_etl_llm_owner
+
+                reset_etl_llm_owner(llm_owner_token)
             loop.close()
 
         logger.info(
@@ -607,8 +982,15 @@ class AIChatApplicationService(
         text = (message or "").strip().lower()
 
         fallback_responses = {
-            "greeting": "您好！我是 XCAGI 智能助手。😊\n\n⚠️ 当前 AI 服务暂时不可用，但我仍可以帮您：\n• 生成发货单\n• 查询产品库\n• 管理客户信息\n\n请尝试使用上述功能，或稍后再试。",
-            "default": f"抱歉，AI 助手暂时无法为您提供智能回复。\n\n原因：{error_reason}\n\n您可以：\n1. 稍后重试\n2. 使用其他功能（如产品查询、生成发货单）\n3. 联系管理员检查服务状态",
+            "greeting": (
+                "XCAGI 智能助手的模型当前不可用，本轮没有生成回复，也没有执行任何业务操作。"
+                "请稍后重试，或使用界面中的确定性查询与单据功能。"
+            ),
+            "default": (
+                "智能模型当前不可用，本轮没有执行任何推测性业务操作。\n\n"
+                f"原因：{error_reason}\n\n"
+                "请稍后重试；需要立即处理时，请明确选择界面中的确定性功能。"
+            ),
         }
 
         if any(k in text for k in ("你好", "您好", "hi", "hello", "嗨")):
@@ -627,6 +1009,9 @@ class AIChatApplicationService(
                     "error_reason": error_reason,
                     "original_message": message[:100],
                     "fallback_mode": True,
+                    "degraded": True,
+                    "planner_mode": "blocked",
+                    "execution_performed": False,
                 },
             },
         }
@@ -722,6 +1107,7 @@ class AIChatApplicationService(
         source: str | None,
         context: dict[str, Any],
         file_context: dict[str, Any],
+        authenticated_owner_user_id: int | None = None,
     ) -> dict[str, Any] | None:
         text = str(message or "").strip()
         if not text:
@@ -729,10 +1115,21 @@ class AIChatApplicationService(
         explicit_workflow_tool_intent = self._looks_like_explicit_workflow_tool_intent(text)
         smart_workflow_intent = self._looks_like_smart_workflow_intent(text, context)
         has_pending_workflow = user_id in self._pending_workflows
+        confirmation_request = self._workflow_confirmation_request(context)
+        confirm_words = {"确认", "是", "好的", "继续", "执行", "ok", "yes"}
+        cancel_words = {"取消", "否", "不要", "停止", "no"}
+        bare_workflow_decision = (
+            text.lower() in confirm_words
+            or text in confirm_words
+            or text.lower() in cancel_words
+            or text in cancel_words
+        )
         if (
             not self._is_pro_source(source)
             and not smart_workflow_intent
             and not has_pending_workflow
+            and confirmation_request is None
+            and not bare_workflow_decision
         ):
             return None
 
@@ -742,6 +1139,14 @@ class AIChatApplicationService(
             merged_file_ctx.update(context.get("file_context") or {})
         if isinstance(file_context, dict):
             merged_file_ctx.update(file_context)
+
+        if confirmation_request is not None:
+            return self._handle_durable_workflow_decision(
+                user_id=user_id,
+                confirmation=confirmation_request,
+                action=confirmation_request["action"],
+                authenticated_owner_user_id=authenticated_owner_user_id,
+            )
 
         import_intent = any(k in text for k in ("导入", "入库", "添加到数据库", "写入数据库"))
         if import_intent and (merged_file_ctx.get("suggested_use") == "unit_products_db"):
@@ -1151,20 +1556,32 @@ class AIChatApplicationService(
             build_inventory_alert_response_dict,
             build_label_print_response_dict,
             build_product_query_response_dict,
+            build_shipment_records_query_response_dict,
             resolve_tool_execution_profile,
             route_normal_mode_message,
             run_normal_slot_shipment_preview,
         )
 
         profile = resolve_tool_execution_profile(context if isinstance(context, dict) else {})
-        if profile == "normal" and not explicit_workflow_tool_intent:
+        if (
+            profile == "normal"
+            and not explicit_workflow_tool_intent
+            and (self._is_pro_source(source) or not smart_workflow_intent)
+        ):
             rr = route_normal_mode_message(text)
+            if rr.get("intent") == "shipment_records_query":
+                shipments = build_shipment_records_query_response_dict(rr)
+                if shipments:
+                    return shipments
             if rr.get("intent") == "product_query":
                 pq = build_product_query_response_dict(rr)
                 if pq:
                     return pq
             if rr.get("intent") == "shipment":
-                ship = run_normal_slot_shipment_preview(text)
+                ship = run_normal_slot_shipment_preview(
+                    text,
+                    authenticated_owner_user_id=authenticated_owner_user_id,
+                )
                 if ship.get("success"):
                     ship.pop("normal_slot_dispatch", None)
                     return ship
@@ -1255,8 +1672,6 @@ class AIChatApplicationService(
         # 处理混合模式下的确认/取消
         pending = self._pending_workflows.get(user_id)
         if pending:
-            confirm_words = {"确认", "是", "好的", "继续", "执行", "ok", "yes"}
-            cancel_words = {"取消", "否", "不要", "停止", "no"}
             if text.lower() in confirm_words or text in confirm_words:
                 plan = pending.get("plan")
                 runtime_ctx = pending.get("runtime_context", {})
@@ -1264,6 +1679,17 @@ class AIChatApplicationService(
                 approval_nodes = pending.get("approval_nodes", [])
 
                 if approval_required and approval_nodes:
+                    agent_run_id = str(pending.get("agent_run_id") or "").strip()
+                    if agent_run_id:
+                        return self._handle_durable_workflow_decision(
+                            user_id=user_id,
+                            confirmation={
+                                "agent_run_id": agent_run_id,
+                                "plan_id": str(getattr(plan, "plan_id", "") or ""),
+                            },
+                            action="submit_approval",
+                            authenticated_owner_user_id=authenticated_owner_user_id,
+                        )
                     for node_info in approval_nodes:
                         node = None
                         for n in plan.nodes:
@@ -1298,21 +1724,16 @@ class AIChatApplicationService(
 
                 agent_run_id = str(pending.get("agent_run_id") or "").strip()
                 if agent_run_id:
-                    from app.application.agent_orchestrator import AgentOrchestrator
-
-                    agent_run = AgentOrchestrator().continue_run(
-                        agent_run_id,
-                        approved_by=user_id,
-                        runtime_context=runtime_ctx,
-                    )
                     self._pending_workflows.pop(user_id, None)
-                    if agent_run is not None:
-                        return self._format_agent_run_response(
-                            plan,
-                            agent_run,
-                            thinking_steps=str(pending.get("thinking_steps") or ""),
-                            user_message=str(runtime_ctx.get("message") or ""),
-                        )
+                    return self._handle_durable_workflow_decision(
+                        user_id=user_id,
+                        confirmation={
+                            "agent_run_id": agent_run_id,
+                            "plan_id": str(getattr(plan, "plan_id", "") or ""),
+                        },
+                        action="confirm",
+                        authenticated_owner_user_id=authenticated_owner_user_id,
+                    )
 
                 run_result = self.workflow_engine.run(
                     plan=plan, runtime_context=runtime_ctx, max_retries=1
@@ -1324,7 +1745,20 @@ class AIChatApplicationService(
                     user_message=str(runtime_ctx.get("message") or ""),
                 )
             if text.lower() in cancel_words or text in cancel_words:
+                agent_run_id = str(pending.get("agent_run_id") or "").strip()
                 self._pending_workflows.pop(user_id, None)
+                if agent_run_id:
+                    return self._handle_durable_workflow_decision(
+                        user_id=user_id,
+                        confirmation={
+                            "agent_run_id": agent_run_id,
+                            "plan_id": str(
+                                getattr(pending.get("plan"), "plan_id", "") or ""
+                            ),
+                        },
+                        action="cancel",
+                        authenticated_owner_user_id=authenticated_owner_user_id,
+                    )
                 return {
                     "success": True,
                     "message": "处理完成",
@@ -1335,6 +1769,18 @@ class AIChatApplicationService(
                         "data": {},
                     },
                 }
+
+        if bare_workflow_decision:
+            return self._handle_durable_workflow_decision(
+                user_id=user_id,
+                confirmation=None,
+                action=(
+                    "cancel"
+                    if text.lower() in cancel_words or text in cancel_words
+                    else "confirm"
+                ),
+                authenticated_owner_user_id=authenticated_owner_user_id,
+            )
 
         # 普通工具画像（含「普通界面 + 专业意图」）：未命中槽位时勿走 LLM 工作流规划，避免长时间阻塞在 plan()；
         # 交给下方主对话链路（DeepSeek 等），体验与普通聊天一致。
@@ -1358,7 +1804,7 @@ class AIChatApplicationService(
                 if parsed_quick.get("success"):
                     # 结构与 _build_tool_call_response 一致，避免把多余键摊进 toolCall.params
                     quick_ai = {
-                        "text": "已识别订单，正在生成发货单…",
+                        "text": "已识别订单，请确认生成发货单。",
                         "action": "tool_call",
                         "data": {
                             "tool_key": "shipment_generate",
@@ -1378,18 +1824,29 @@ class AIChatApplicationService(
         from app.application.facades.tools_facade import get_workflow_tool_registry
 
         tool_registry = get_workflow_tool_registry()
+        planner_context = dict(context or {})
+        planner_context["source"] = str(source or "").strip()
         plan = self.workflow_planner.plan(
             user_id=user_id,
             message=message,
             tool_registry=tool_registry,
-            context=context,
+            context=planner_context,
         )
 
         decision = self.risk_gate.evaluate(plan=plan, context=context)
         runtime_ctx = self._merge_tool_runtime_context(user_id, message, context)
+        if authenticated_owner_user_id is not None:
+            runtime_ctx["authenticated_owner_user_id"] = int(authenticated_owner_user_id)
         runtime_ctx["source"] = str(source or "").strip()
         runtime_ctx["workflow_trace_mode"] = "agent_orchestrator"
         runtime_ctx["dynamic_workflow"] = True
+        runtime_ctx["autonomy_mode"] = "llm_controller"
+        runtime_ctx["execution_verification_required"] = True
+        runtime_ctx["background_execution"] = self._should_background_agent_run(
+            plan,
+            runtime_ctx,
+            message,
+        )
         thinking_steps = self._build_workflow_thinking_steps(
             plan=plan, decision_reason=decision.reason
         )
@@ -1405,13 +1862,22 @@ class AIChatApplicationService(
         if not has_approval_requirement and not use_agentic:
             from app.application.agent_orchestrator import AgentOrchestrator
 
-            agent_run = AgentOrchestrator().start_run_from_plan(
-                user_id=user_id,
-                message=message,
-                plan=plan,
-                runtime_context=runtime_ctx,
-                auto_execute=True,
-            )
+            orchestrator = AgentOrchestrator()
+            if runtime_ctx["background_execution"]:
+                agent_run = orchestrator.submit_run_from_plan(
+                    user_id=user_id,
+                    message=message,
+                    plan=plan,
+                    runtime_context=runtime_ctx,
+                )
+            else:
+                agent_run = orchestrator.start_run_from_plan(
+                    user_id=user_id,
+                    message=message,
+                    plan=plan,
+                    runtime_context=runtime_ctx,
+                    auto_execute=True,
+                )
             if agent_run.status != "waiting_user":
                 return self._format_agent_run_response(
                     plan,
@@ -1472,7 +1938,7 @@ class AIChatApplicationService(
             }
 
         agent_run_id = ""
-        if decision.requires_confirmation and not has_approval_requirement:
+        if decision.requires_confirmation or has_approval_requirement:
             from app.application.agent_orchestrator import AgentOrchestrator
 
             agent_run = AgentOrchestrator().start_run_from_plan(
@@ -1483,6 +1949,20 @@ class AIChatApplicationService(
                 auto_execute=True,
             )
             if agent_run.status != "waiting_user":
+                if has_approval_requirement:
+                    return {
+                        "success": False,
+                        "message": "审批任务未进入等待状态",
+                        "response": "高风险任务未能建立可恢复的审批检查点，已拒绝执行。",
+                        "data": {
+                            "text": "高风险任务未能建立可恢复的审批检查点，已拒绝执行。",
+                            "action": "workflow_confirmation_invalid",
+                            "data": {
+                                "agent_run_id": agent_run.run_id,
+                                "agent_status": agent_run.status,
+                            },
+                        },
+                    }
                 return self._format_agent_run_response(
                     plan,
                     agent_run,
@@ -1519,6 +1999,8 @@ class AIChatApplicationService(
                 f"{approval_info if has_approval_requirement else ''}"
             )
             risk_inner = {
+                "run_id": agent_run_id,
+                "agent_run_id": agent_run_id,
                 "plan_id": plan.plan_id,
                 "intent": plan.intent,
                 "thinking_steps": thinking_steps,
@@ -2033,7 +2515,13 @@ class AIChatApplicationService(
             )
         else:
             response_data = self._execute_normal_mode_tools(
-                response_data, tool_key, parsed_params, ai_result, result_data
+                response_data,
+                tool_key,
+                parsed_params,
+                ai_result,
+                result_data,
+                slots=slots,
+                original_message=original_message,
             )
 
         return response_data

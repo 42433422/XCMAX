@@ -27,10 +27,12 @@ from app.application.workflow.planner import (
     _execute_shipment_generate_tool,
     _extract_business_db_read_keyword,
     _extract_business_db_write_node,
+    _extract_explicit_product_mutation_node,
     _extract_named_slot,
     _filter_tool_registry_for_profile,
     _infer_business_db_entity,
     _looks_like_business_db_write,
+    _validate_explicit_mutation_alignment,
     execute_tool,
     get_tool_registry,
 )
@@ -547,6 +549,53 @@ class TestFallbackPlan:
         assert plan.intent == "business_db_read"
         assert plan.nodes[0].action == "read"
 
+    def test_explicit_product_delete_never_degrades_to_read(self) -> None:
+        planner = self._make_planner()
+        plan = planner._fallback_plan(
+            "p1",
+            "请删除数据库里的产品 ID 198",
+            {"business_db": {}, "products": {}},
+        )
+
+        assert plan.intent == "delete_product"
+        assert len(plan.nodes) == 1
+        assert plan.nodes[0].tool_id == "products"
+        assert plan.nodes[0].action == "delete"
+        assert plan.nodes[0].params == {"id": 198}
+        assert plan.nodes[0].risk == "high"
+
+    def test_explicit_product_update_extracts_target_name(self) -> None:
+        node = _extract_explicit_product_mutation_node(
+            "把数据库中产品ID 198的名称修改为 CODX验收漆-已修改"
+        )
+
+        assert node is not None
+        assert node.action == "update"
+        assert node.params == {"id": 198, "name": "CODX验收漆-已修改"}
+
+    def test_explicit_delete_rejects_llm_read_plan(self) -> None:
+        plan = PlanGraph(
+            plan_id="p-read",
+            intent="business_db_read",
+            nodes=[
+                WorkflowNode(
+                    node_id="read_product",
+                    tool_id="business_db",
+                    action="read",
+                    params={"entity": "products", "keyword": "198"},
+                    risk="low",
+                    idempotent=True,
+                )
+            ],
+        )
+
+        error = _validate_explicit_mutation_alignment(
+            "请删除数据库里的产品 ID 198",
+            plan,
+        )
+
+        assert error == "明确的产品 delete 必须使用 products.delete"
+
     def test_add_product_to_unit(self) -> None:
         planner = self._make_planner()
         plan = planner._fallback_plan("p1", "新增产品", {"customers": {}, "products": {}})
@@ -556,24 +605,23 @@ class TestFallbackPlan:
         assert plan.nodes[1].tool_id == "products"
         assert plan.nodes[1].depends_on == ["check_or_create_unit"]
 
-    def test_generic_fallback_products(self) -> None:
+    def test_ambiguous_fallback_does_not_guess_products(self) -> None:
         planner = self._make_planner()
         plan = planner._fallback_plan("p1", "随便看看", {"products": {}})
-        assert plan.intent == "generic_workflow"
-        assert plan.nodes[0].tool_id == "products"
-        assert plan.nodes[0].action == "query"
+        assert plan.intent == "clarification_required"
+        assert plan.nodes == []
 
-    def test_generic_fallback_customers(self) -> None:
+    def test_ambiguous_fallback_does_not_guess_customers(self) -> None:
         planner = self._make_planner()
         plan = planner._fallback_plan("p1", "随便看看", {"customers": {}})
-        assert plan.intent == "generic_workflow"
-        assert plan.nodes[0].tool_id == "customers"
+        assert plan.intent == "clarification_required"
+        assert plan.nodes == []
 
-    def test_generic_fallback_empty_registry(self) -> None:
+    def test_ambiguous_fallback_empty_registry_requests_clarification(self) -> None:
         planner = self._make_planner()
         plan = planner._fallback_plan("p1", "随便看看", {})
-        assert plan.intent == "generic_workflow"
-        assert len(plan.nodes) == 0
+        assert plan.intent == "clarification_required"
+        assert plan.nodes == []
 
     def test_risk_level_high(self) -> None:
         planner = self._make_planner()

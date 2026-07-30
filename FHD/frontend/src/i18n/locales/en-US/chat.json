@@ -59,6 +59,8 @@
     "openShipmentRecords": "Open shipment records",
     "jumpToMessage": "Jump to message",
     "retryTask": "Retry",
+    "pauseTask": "Pause",
+    "resumeTask": "Resume",
     "assistantPush": "Assistant push",
     "newMessage": "New message",
     "assistantPushHint": "Continue in the top float panel while keeping chat open",

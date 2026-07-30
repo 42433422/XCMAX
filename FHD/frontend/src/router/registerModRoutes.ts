@@ -21,10 +21,17 @@ function extractRoutesFromModule(m: Record<string, unknown>): RouteRecordRaw[] {
   for (const v of Object.values(m)) {
     if (!Array.isArray(v) || v.length === 0) continue;
     const first = v[0] as Record<string, unknown>;
+    const hasRouteTarget =
+      typeof first.component === 'function' ||
+      typeof first.components === 'object' ||
+      typeof first.redirect === 'string' ||
+      typeof first.redirect === 'object' ||
+      typeof first.redirect === 'function' ||
+      (Array.isArray(first.children) && first.children.length > 0);
     if (
       first &&
       typeof first.path === 'string' &&
-      (typeof first.component === 'function' || typeof first.components === 'object')
+      hasRouteTarget
     ) {
       candidates.push(v as RouteRecordRaw[]);
     }

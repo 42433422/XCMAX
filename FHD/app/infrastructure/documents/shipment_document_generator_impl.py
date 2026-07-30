@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+import sys
+import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -26,12 +30,113 @@ from app.domain.shipment.shipment_product_parser import prepare_parsed_products
 from app.infrastructure.lookups.purchase_unit_resolver import (
     resolve_purchase_unit,
 )
+from app.infrastructure.tenant_scope import apply_tenant_filter
 from app.legacy.documents.legacy_shipment_document import (
     load_legacy_shipment_document_generator,
 )
-from app.utils.path_utils import get_app_data_dir, get_base_dir, get_resource_path
+from app.utils.path_utils import get_app_data_dir, get_base_dir
 
 logger = logging.getLogger(__name__)
+
+
+def _positive_scope_id(value: Any, *, fallback: str) -> str:
+    """Return a filesystem-safe tenant/owner scope without trusting a path."""
+
+    try:
+        normalized = int(value) if value is not None else 0
+    except (TypeError, ValueError):
+        normalized = 0
+    return str(normalized) if normalized > 0 else fallback
+
+
+def _current_label_tenant_id() -> int | None:
+    try:
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        return current_tenant_id()
+    except (ImportError, TypeError, ValueError, AttributeError):
+        return None
+
+
+def _current_label_owner_user_id() -> int | None:
+    """Read the authenticated owner from request context when callers omit it."""
+
+    try:
+        from app.infrastructure.request_context import get_current_request
+
+        request = get_current_request()
+        value = getattr(getattr(request, "state", None), "user_id", None)
+        return int(value) if value is not None else None
+    except (ImportError, TypeError, ValueError, AttributeError):
+        return None
+
+
+def _safe_label_run_id(value: str | None) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return uuid.uuid4().hex
+    # A run id is an opaque directory component, never an input path.
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", raw).strip("._-")
+    return cleaned[:96] or uuid.uuid4().hex
+
+
+def get_shipment_label_output_dir(
+    *,
+    tenant_id: int | None = None,
+    owner_user_id: int | None = None,
+    run_id: str | None = None,
+) -> tuple[str, str]:
+    """Allocate the per-run user-data directory for generated shipment labels.
+
+    Bundled ``resources`` are read-only in signed desktop builds.  Labels are
+    business outputs, so they must be isolated by tenant, authenticated owner,
+    and generation run under the desktop user-data root instead.
+    """
+
+    resolved_tenant_id = tenant_id if tenant_id is not None else _current_label_tenant_id()
+    resolved_owner_user_id = (
+        owner_user_id if owner_user_id is not None else _current_label_owner_user_id()
+    )
+    tenant_scope = _positive_scope_id(resolved_tenant_id, fallback="local")
+    owner_scope = _positive_scope_id(resolved_owner_user_id, fallback="local")
+    label_run_id = _safe_label_run_id(run_id)
+
+    explicit_data_dir = os.environ.get("XCAGI_DATA_DIR") or os.environ.get(
+        "XCAGI_DESKTOP_DATA_DIR"
+    )
+    if explicit_data_dir:
+        explicit_path = Path(explicit_data_dir).expanduser()
+        if not explicit_path.is_absolute():
+            raise OSError("shipment label user-data directory must be absolute")
+        frozen_root = getattr(sys, "_MEIPASS", None)
+        if frozen_root:
+            try:
+                resource_root = Path(frozen_root).resolve()
+                resolved_explicit = explicit_path.resolve()
+                if resolved_explicit == resource_root or resource_root in resolved_explicit.parents:
+                    raise OSError("shipment label user-data directory cannot be inside app resources")
+            except OSError:
+                raise
+            except (TypeError, ValueError) as exc:
+                raise OSError("shipment label user-data directory is invalid") from exc
+    app_data_dir = Path(get_app_data_dir()).expanduser()
+    # ``XCAGI_DATA_DIR`` is expected to be absolute in packaged desktop mode.
+    # Rejecting a relative override avoids silently resolving it against the
+    # PyInstaller/Electron executable directory.
+    if not app_data_dir.is_absolute():
+        raise OSError("shipment label user-data directory must be absolute")
+    output_dir = (
+        app_data_dir.resolve()
+        / "shipment_outputs"
+        / "labels"
+        / "tenants"
+        / tenant_scope
+        / "owners"
+        / owner_scope
+        / "runs"
+        / label_run_id
+    )
+    return str(output_dir), label_run_id
 
 
 class SimpleLabelGenerator:
@@ -276,10 +381,21 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
         self.output_dir = os.path.join(get_app_data_dir(), "shipment_outputs")
         os.makedirs(self.output_dir, exist_ok=True)
 
-    def _load_products_from_main_db(self) -> list[dict[str, Any]]:
+    def _load_products_from_main_db(self, *, unit_name: str) -> list[dict[str, Any]]:
+        """Load only products that belong to the resolved customer in this tenant.
+
+        A model number is not globally meaningful in the desktop product master.
+        The ETL aggregate writes products under ``Product.unit`` and chat order
+        generation must preserve that same customer-product relationship rather
+        than letting a product from another customer fill a delivery note.
+        """
         products: list[dict[str, Any]] = []
         with get_db() as db:
-            rows = db.query(Product).filter(Product.is_active == 1).all()
+            rows = (
+                apply_tenant_filter(db.query(Product), Product)
+                .filter(Product.is_active == 1, Product.unit == str(unit_name or "").strip())
+                .all()
+            )
             for p in rows:
                 products.append(
                     {
@@ -302,6 +418,9 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
         date: str | None = None,
         template_name: str | None = None,
         order_number: str | None = None,
+        owner_user_id: int | None = None,
+        tenant_id: int | None = None,
+        run_id: str | None = None,
     ) -> dict[str, Any]:
         # 1) 统一单位名来源：purchase_units 主库
         resolved = resolve_purchase_unit(unit_name)
@@ -328,7 +447,7 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
         )
 
         # 4) 产品匹配（仅主库 products）
-        db_products = self._load_products_from_main_db()
+        db_products = self._load_products_from_main_db(unit_name=resolved.unit_name)
         parsed_products: list[dict[str, Any]] = prepare_parsed_products(
             input_products=products,
             db_products=db_products,
@@ -351,30 +470,71 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
         from app.db.init_db import get_db_path
 
         generator = ShipmentDocumentGenerator(db_path=get_db_path("products.db"))
-        doc = generator.generate_document(
-            order_text="",
-            parsed_data=parsed_data,
-            purchase_unit=purchase_unit_info,
-            template_name=template_name,
-            custom_order_number=order_number,
-        )
+        template_path = str(template_name or "").strip()
+        if template_path and os.path.isfile(template_path):
+            from app.infrastructure.documents.shipment_workbook_filler import (
+                fill_shipment_workbook,
+                safe_shipment_filename,
+            )
 
-        if hasattr(doc, "to_dict"):
-            info = doc.to_dict()
+            resolved_order_number = (
+                str(order_number or "").strip() or generator._generate_order_number()
+            )
+            output_path = os.path.join(
+                self.output_dir,
+                safe_shipment_filename(resolved_order_number),
+            )
+            info = fill_shipment_workbook(
+                template_path,
+                output_path=output_path,
+                unit_name=resolved.unit_name,
+                contact_person=resolved.contact_person or "",
+                products=parsed_products,
+                order_number=resolved_order_number,
+                date=date,
+            )
             file_path = info.get("filepath")
-            filename = info.get("filename") or (os.path.basename(file_path) if file_path else "")
-            order_number = info.get("order_number")
+            file_path = file_path or info.get("file_path")
+            filename = info.get("filename") or (
+                os.path.basename(file_path) if file_path else ""
+            )
+            order_number = info.get("order_number") or resolved_order_number
             total_amount = info.get("total_amount")
             total_quantity = info.get("total_quantity")
         else:
-            file_path = getattr(doc, "filepath", None)
-            filename = getattr(doc, "filename", os.path.basename(file_path) if file_path else "")
-            order_number = getattr(doc, "order_number", None)
-            total_amount = getattr(doc, "total_amount", None)
-            total_quantity = getattr(doc, "total_quantity", None)
+            doc = generator.generate_document(
+                order_text="",
+                parsed_data=parsed_data,
+                purchase_unit=purchase_unit_info,
+                template_name=template_name,
+                custom_order_number=order_number,
+            )
+            if hasattr(doc, "to_dict"):
+                info = doc.to_dict()
+                file_path = info.get("filepath")
+                filename = info.get("filename") or (
+                    os.path.basename(file_path) if file_path else ""
+                )
+                order_number = info.get("order_number")
+                total_amount = info.get("total_amount")
+                total_quantity = info.get("total_quantity")
+            else:
+                file_path = getattr(doc, "filepath", None)
+                filename = getattr(
+                    doc,
+                    "filename",
+                    os.path.basename(file_path) if file_path else "",
+                )
+                order_number = getattr(doc, "order_number", None)
+                total_amount = getattr(doc, "total_amount", None)
+                total_quantity = getattr(doc, "total_quantity", None)
 
-        # 6) 生成标签图片
-        labels_dir = get_resource_path("ai_assistant", "商标导出")
+        # 6) 生成标签图片。资源目录只放只读模板，不能作为安装版输出目录。
+        labels_dir, label_run_id = get_shipment_label_output_dir(
+            tenant_id=tenant_id,
+            owner_user_id=owner_user_id,
+            run_id=run_id,
+        )
         label_generator = SimpleLabelGenerator(labels_dir)
         generated_labels = label_generator.generate_labels_for_order(
             order_number=order_number or filename.replace(".xlsx", ""), products=parsed_products
@@ -392,4 +552,5 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
             "unit_id": resolved.id,
             "parsed_products": parsed_products,
             "labels": generated_labels,
+            "label_run_id": label_run_id,
         }

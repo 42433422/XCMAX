@@ -381,6 +381,38 @@ describe('AutonomyController — crossTierGate integration', () => {
     }
   }
 
+  function makeLocalRepairPolicy() {
+    return {
+      id: 'local-repair-p',
+      matches: ['trigger'],
+      gate: 'auto' as const,
+      plan(_signals: Signal[]) {
+        return {
+          diagnosis: { root_cause: 'test', confidence: 1, detail: '', evidence: [] },
+          actions: [{
+            type: 'clear_cache' as const,
+            params: { reason: 'test' },
+            idempotency_key: 'clear-cache:test',
+            max_attempts: 2,
+            risk: 'low' as const,
+          }],
+        }
+      },
+    }
+  }
+
+  it('default crossTierGate does not block a reversible local repair without remote state', async () => {
+    delete process.env[ENV_KEY]
+    const adapter = makeMockAdapter({
+      truth: makeBaseTruth({ disk_usage_percent: 91 }),
+    })
+    const ctrl = new AutonomyController(adapter, [makeLocalRepairPolicy()], { enabled: false })
+    ctrl.ingest(makeSignal('trigger', Date.now()))
+    await ctrl.tick()
+    expect(adapter.executed).toHaveLength(1)
+    expect(adapter.executed[0].type).toBe('clear_cache')
+  })
+
   it('env 未设时 crossTierGate 默认启用 + adapter 无 getRemoteState → fail-closed 阻断', async () => {
     delete process.env[ENV_KEY]
     const adapter = makeMockAdapter({

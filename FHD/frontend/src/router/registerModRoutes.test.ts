@@ -34,6 +34,22 @@ vi.mock('@/constants/modRouteGlob', () => ({
         },
       ],
     }),
+    '/mods/redirect-mod/frontend/routes.js': vi.fn().mockResolvedValue({
+      modMenu: [
+        {
+          id: 'redirect-menu',
+          label: 'Redirect Menu',
+          path: '/mod/redirect-mod/legacy',
+        },
+      ],
+      modRoutes: [
+        {
+          path: '/mod/redirect-mod/legacy',
+          name: 'redirect-mod-legacy',
+          redirect: '/im',
+        },
+      ],
+    }),
   },
 }))
 
@@ -65,6 +81,26 @@ describe('registerModRoutes', () => {
     ])
     expect(addSpy).toHaveBeenCalled()
     expect(router.getRoutes().some((r) => r.path.includes('test-mod'))).toBe(true)
+  })
+
+  it('registers redirect-only routes from bridge bundles', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        {
+          path: '/im',
+          name: 'im',
+          component: () => import('@/views/LoginView.vue'),
+        },
+      ],
+    })
+    await registerModRoutes(router, [
+      { mod_id: 'redirect-mod', routes_path: '/mods/redirect-mod/frontend/routes.js' },
+    ])
+
+    const route = router.getRoutes().find((r) => r.name === 'redirect-mod-legacy')
+    expect(route?.path).toBe('/mod/redirect-mod/legacy')
+    expect(route?.redirect).toBe('/im')
   })
 
   it('skips unknown mod bundle quietly', async () => {

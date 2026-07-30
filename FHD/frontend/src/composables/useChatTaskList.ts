@@ -26,7 +26,7 @@ export function useChatTaskList(options: UseChatTaskListOptions = {}) {
 
   function sortTaskList() {
     taskList.value.sort((a, b) => {
-      const rank = (s: TaskStatus) => (s === 'running' ? 0 : s === 'queued' ? 1 : s === 'failed' ? 2 : s === 'success' ? 3 : 4)
+      const rank = (s: TaskStatus) => (s === 'running' ? 0 : s === 'queued' ? 1 : s === 'paused' ? 2 : s === 'failed' ? 3 : s === 'success' ? 4 : 5)
       const r = rank(a.status) - rank(b.status)
       if (r !== 0) return r
       const startedDiff = (a.startedAt || 0) - (b.startedAt || 0)
@@ -145,7 +145,7 @@ export function useChatTaskList(options: UseChatTaskListOptions = {}) {
     const wfPersistent = list.filter((t) => t.type === 'workflow_employee' && t.status === 'running')
     if (taskFilter.value === 'all') return list
     if (taskFilter.value === 'running') {
-      return list.filter((t) => t.status === 'running' || t.status === 'queued')
+      return list.filter((t) => t.status === 'running' || t.status === 'queued' || t.status === 'paused')
     }
     if (taskFilter.value === 'success') {
       const rest = list.filter((t) => t.status === 'success')
@@ -164,7 +164,7 @@ export function useChatTaskList(options: UseChatTaskListOptions = {}) {
   }
 
   function clearTaskHistory() {
-    taskList.value = taskList.value.filter((t) => t.status === 'running' || t.status === 'queued')
+    taskList.value = taskList.value.filter((t) => t.status === 'running' || t.status === 'queued' || t.status === 'paused')
     expandedTaskIds.value = expandedTaskIds.value.filter((id) => taskList.value.some((t) => t.id === id))
     onPersist?.()
   }

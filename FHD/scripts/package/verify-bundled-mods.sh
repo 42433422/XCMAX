@@ -27,7 +27,16 @@ if [[ ! -d "${MODS_DIR}" ]]; then
   exit 1
 fi
 
-mapfile -t EXPECTED < <(python3 "${READ_SCRIPT}" "${SKU}")
+# The profile helper intentionally returns a JSON array (shared with the
+# PowerShell packager).  macOS ships Bash 3.2 and has no `mapfile`, so turn
+# that JSON into one safe array element per line with Python first.
+EXPECTED=()
+while IFS= read -r mod_id; do
+  [[ -n "${mod_id}" ]] && EXPECTED+=("${mod_id}")
+done < <(
+  python3 "${READ_SCRIPT}" "${SKU}" \
+    | python3 -c 'import json, sys; print("\n".join(str(x).strip() for x in json.load(sys.stdin) if str(x).strip()))'
+)
 
 has_erp=0
 [[ -d "${MODS_DIR}/${ERP_MOD}" ]] && has_erp=1

@@ -153,15 +153,9 @@ def test_build_inventory_alert_no_low_stock(mock_get: MagicMock) -> None:
     assert "正常" in body["response"]
 
 
-def test_build_customers_query_empty_list(monkeypatch: pytest.MonkeyPatch) -> None:
-    import sys
-    import types
-
-    mock_cls = MagicMock()
-    mock_cls.return_value.search.return_value = []
-    fake_mod = types.ModuleType("app.services.customers_service")
-    fake_mod.CustomerService = mock_cls  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "app.services.customers_service", fake_mod)
+@patch("app.bootstrap.get_customer_app_service")
+def test_build_customers_query_empty_list(mock_get: MagicMock) -> None:
+    mock_get.return_value.get_all.return_value = {"success": True, "data": [], "total": 0}
 
     rr = {"intent": "customers_query", "slots": {"keyword": "不存在公司"}}
     body = build_customers_query_response_dict(rr)

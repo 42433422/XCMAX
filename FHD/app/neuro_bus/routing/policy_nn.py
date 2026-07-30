@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import sys
 from pathlib import Path
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +46,36 @@ _policy: RoutingMLP | None = None
 _policy_device: str = "cpu"
 
 
+def _bundled_policies_dir() -> Path:
+    """Return the read-only policy seed directory shipped with the app."""
+    return Path(__file__).resolve().parents[3] / "resources" / "routing_policies"
+
+
+def _uses_runtime_policy_store() -> bool:
+    """Whether policy state must live outside a signed desktop bundle."""
+    return bool(getattr(sys, "frozen", False) or hasattr(sys, "_MEIPASS")) or (
+        os.environ.get("XCAGI_DESKTOP_MODE", "").strip().lower()
+        in {"1", "true", "yes", "on"}
+    )
+
+
+def policy_write_dir() -> Path:
+    """Return the only directory allowed to receive learned policy state."""
+    if _uses_runtime_policy_store():
+        return Path(get_app_data_dir()) / "models" / "routing_policies"
+    return _bundled_policies_dir()
+
+
+def policy_manifest_write_path() -> Path:
+    return policy_write_dir() / "manifest.json"
+
+
 def _manifest_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "resources" / "routing_policies" / "manifest.json"
+    """Prefer a learned desktop policy, otherwise read the bundled seed."""
+    runtime_manifest = policy_manifest_write_path()
+    if _uses_runtime_policy_store() and runtime_manifest.is_file():
+        return runtime_manifest
+    return _bundled_policies_dir() / "manifest.json"
 
 
 def load_active_policy() -> RoutingMLP | None:
@@ -60,8 +91,6 @@ def load_active_policy() -> RoutingMLP | None:
         logger.warning("routing manifest read failed: %s", e)
         return None
     ver = (manifest.get("active_version") or "0").strip()
-    import os
-
     override = (os.environ.get("XCAGI_ROUTING_POLICY_VERSION") or "").strip()
     if override:
         ver = override
@@ -69,7 +98,7 @@ def load_active_policy() -> RoutingMLP | None:
     for p in manifest.get("policies") or []:
         if str(p.get("version")) == ver:
             rel = p.get("path") or f"policy_v{ver}.pt"
-            weights = Path(__file__).resolve().parents[3] / "resources" / "routing_policies" / rel
+            weights = manifest_file.parent / rel
             break
     if weights is None or not weights.is_file():
         logger.debug("routing policy weights not found for version=%s", ver)

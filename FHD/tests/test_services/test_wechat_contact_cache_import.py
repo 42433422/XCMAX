@@ -124,6 +124,14 @@ class TestResolveWechatDecryptDir:
 class TestEnsureDecryptedWechatDbs:
     """Tests for ensure_decrypted_wechat_dbs."""
 
+    @pytest.fixture(autouse=True)
+    def _runtime_cache_dir(self, tmp_path, monkeypatch):
+        """Never create desktop userData outside this test's sandbox."""
+        monkeypatch.setattr(
+            "app.services.wechat_contact_cache_import.get_desktop_state_dir",
+            lambda: str(tmp_path / "userData"),
+        )
+
     def test_not_configured_when_no_decrypt_dir(self):
         with patch(
             "app.services.wechat_contact_cache_import._resolve_wechat_decrypt_dir",

@@ -101,6 +101,23 @@ def validate_payload(schema: dict[str, Any], payload: dict[str, Any]) -> tuple[b
     return _validate_schema_payload(schema, payload, subject="LLM 输出")
 
 
+def _schema_bound_messages(
+    messages: list[dict[str, str]],
+    schema: dict[str, Any],
+) -> list[dict[str, str]]:
+    instruction = {
+        "role": "system",
+        "content": (
+            "Return exactly one JSON object that satisfies this JSON Schema. "
+            "Do not add properties that the schema disallows. JSON Schema:\n"
+            f"{json.dumps(schema, ensure_ascii=False, separators=(',', ':'))}"
+        ),
+    }
+    if messages and messages[0].get("role") == "system":
+        return [messages[0], instruction, *messages[1:]]
+    return [instruction, *messages]
+
+
 def _max_repairs_default() -> int:
     raw = (os.environ.get("XCAGI_STRUCTURED_OUTPUT_MAX_REPAIRS") or "").strip()
     try:
@@ -117,11 +134,14 @@ async def complete_structured(
     profile: str = "default",
     temperature: float = 0.3,
     max_tokens: int = 2000,
+    conversation_service: Any | None = None,
+    provider: Any | None = None,
 ) -> StructuredResult:
     """调用 LLM 并保证返回通过 schema 校验的 dict；失败带反馈重试。"""
     repairs = _max_repairs_default() if max_repairs is None else max(0, max_repairs)
     total_attempts = 1 + repairs
-    attempt_messages = list(messages)
+    schema_bound_messages = _schema_bound_messages(messages, schema)
+    attempt_messages = list(schema_bound_messages)
     last_errors: list[str] = ["尚未调用"]
     last_raw = ""
 
@@ -132,6 +152,9 @@ async def complete_structured(
                 temperature=temperature,
                 max_tokens=max_tokens,
                 profile=profile,
+                conversation_service=conversation_service,
+                provider=provider,
+                response_format={"type": "json_object"},
             )
         except RECOVERABLE_ERRORS as exc:
             last_errors = [f"LLM 调用异常: {type(exc).__name__}: {exc}"]
@@ -168,7 +191,7 @@ async def complete_structured(
                 )
             last_errors = [message]
         attempt_messages = [
-            *messages,
+            *schema_bound_messages,
             {"role": "assistant", "content": raw},
             {
                 "role": "user",
@@ -194,17 +217,24 @@ def complete_structured_sync(
     timeout_seconds: float = 120.0,
     **kwargs: Any,
 ) -> StructuredResult:
-    """同步上下文桥：无运行 loop 直接 asyncio.run；有 loop 则独立线程执行。"""
+    """同步上下文桥，并确保异步提供商在截止时间内收到取消信号。"""
+
+    async def _complete_with_deadline() -> StructuredResult:
+        return await asyncio.wait_for(
+            complete_structured(messages, **kwargs),
+            timeout=timeout_seconds,
+        )
+
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        return asyncio.run(complete_structured(messages, **kwargs))
+        return asyncio.run(_complete_with_deadline())
 
     box: dict[str, Any] = {}
 
     def _runner() -> None:
         try:
-            box["result"] = asyncio.run(complete_structured(messages, **kwargs))
+            box["result"] = asyncio.run(_complete_with_deadline())
         except BaseException as exc:  # noqa: BLE001
             box["error"] = exc
 

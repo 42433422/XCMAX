@@ -123,10 +123,15 @@ class ApprovalService:
         logger.info("创建审批请求: %s for %s.%s", request_id, node.tool_id, node.action)
 
         # 同时持久化到 DB（防止重启丢失，且与 /api/approval/requests 工作台共享可见性）
-        self._persist_request_to_db(request)
+        self._persist_request_to_db(request, runtime_context=runtime_context)
         return request
 
-    def _persist_request_to_db(self, request: ApprovalRequest) -> None:
+    def _persist_request_to_db(
+        self,
+        request: ApprovalRequest,
+        *,
+        runtime_context: dict[str, Any] | None = None,
+    ) -> None:
         """将内存审批请求写入 DB approval_requests 表（幂等）。"""
         import json as _json
 
@@ -135,27 +140,83 @@ class ApprovalService:
 
             from app.db.session import get_db
 
+            runtime = dict(runtime_context or {})
             with get_db() as db:
                 existing = db.execute(
                     text("SELECT id FROM approval_requests WHERE request_no = :rno LIMIT 1"),
                     {"rno": request.request_id},
                 ).fetchone()
                 if not existing:
+                    flow = db.execute(
+                        text(
+                            "SELECT id FROM approval_flows "
+                            "WHERE flow_key = 'ai-workflow-agent-run' LIMIT 1"
+                        )
+                    ).fetchone()
+                    if not flow:
+                        db.execute(
+                            text(
+                                "INSERT INTO approval_flows "
+                                "(flow_key, flow_name, description, industry, business_type, "
+                                "node_type, allow_transfer, allow_delegate, allow_withdraw, "
+                                "timeout_hours, is_active, is_deleted, created_by) "
+                                "VALUES ('ai-workflow-agent-run', 'AI 工作流审批', "
+                                "'由智能对话持久化任务发起的高风险操作审批', '通用', "
+                                "'workflow_tool', 'serial', 0, 0, 0, 48, 1, 0, NULL)"
+                            )
+                        )
+                        flow = db.execute(
+                            text(
+                                "SELECT id FROM approval_flows "
+                                "WHERE flow_key = 'ai-workflow-agent-run' LIMIT 1"
+                            )
+                        ).fetchone()
+
+                    applicant_id = runtime.get("authenticated_owner_user_id")
+                    if applicant_id is None:
+                        fallback_user = db.execute(
+                            text("SELECT id FROM users ORDER BY id ASC LIMIT 1")
+                        ).fetchone()
+                        applicant_id = fallback_user[0] if fallback_user else None
+                    if not flow or applicant_id is None:
+                        raise RuntimeError("AI 审批缺少有效 flow_id 或 applicant_id")
+
+                    business_data = {
+                        "plan_id": request.plan_id,
+                        "node_id": request.node_id,
+                        "tool_id": request.tool_id,
+                        "action": request.action,
+                        "params": request.params or {},
+                        "agent_run_id": str(runtime.get("agent_run_id") or ""),
+                        "approval_node_id": str(
+                            runtime.get("approval_node_id") or request.node_id or ""
+                        ),
+                        "chat_user_id": str(runtime.get("user_id") or ""),
+                    }
                     db.execute(
                         text(
                             "INSERT INTO approval_requests "
-                            "(request_no, flow_id, business_type, title, description, applicant_id, status, created_at) "
-                            "VALUES (:rno, NULL, 'workflow_tool', :title, :desc, NULL, 'pending', :created)"
+                            "(request_no, flow_id, business_type, business_data, title, "
+                            "description, applicant_id, current_node_id, current_node_order, "
+                            "status, priority, created_at) "
+                            "VALUES (:rno, :flow_id, 'workflow_tool', :business_data, :title, "
+                            ":desc, :applicant_id, NULL, 1, 'pending', 'normal', :created)"
                         ),
                         {
                             "rno": request.request_id,
+                            "flow_id": int(flow[0]),
+                            "business_data": _json.dumps(
+                                business_data, ensure_ascii=False, default=str
+                            ),
                             "title": f"{request.tool_id}.{request.action}",
                             "desc": _json.dumps(
                                 request.params or {}, ensure_ascii=False, default=str
                             )[:500],
+                            "applicant_id": int(applicant_id),
                             "created": (request.created_at or datetime.now()).isoformat(),
                         },
                     )
+                    db.commit()
             # P2 NeuroBus: 广播审批创建事件
             try:
                 from app.neuro_bus.application_neuro_bridge import (

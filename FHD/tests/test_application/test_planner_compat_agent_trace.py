@@ -7,7 +7,11 @@ import pytest
 from fastapi import Request
 
 from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
-from app.application.planner_compat_service import execute_compat_chat, execute_compat_chat_batch
+from app.application.planner_compat_service import (
+    _execute_ai_chat_mainline,
+    execute_compat_chat,
+    execute_compat_chat_batch,
+)
 from app.fastapi_routes import xcagi_compat_chat_helpers as stream_helpers
 from app.fastapi_routes.xcagi_compat_chat_helpers import (
     XcagiCompatChatBatchBody,
@@ -34,6 +38,29 @@ def _sse_payloads(chunks: list[bytes]) -> list[dict]:
             continue
         payloads.append(json.loads(item[len("data: ") :]))
     return payloads
+
+
+@pytest.mark.asyncio
+async def test_ai_chat_mainline_reuses_registered_service_across_requests() -> None:
+    body = XcagiCompatChatBody(message="确认", user_id="u42", source="desktop")
+    service = MagicMock()
+    service.process_chat.return_value = {
+        "success": True,
+        "response": "continued",
+        "data": {"text": "continued"},
+    }
+
+    with patch(
+        "app.application.ai_chat_app_service.get_ai_chat_app_service",
+        return_value=service,
+    ) as get_service:
+        first = await _execute_ai_chat_mainline(body, {})
+        second = await _execute_ai_chat_mainline(body, {})
+
+    assert first["response"] == "continued"
+    assert second["response"] == "continued"
+    assert get_service.call_count == 2
+    assert service.process_chat.call_count == 2
 
 
 @pytest.mark.asyncio

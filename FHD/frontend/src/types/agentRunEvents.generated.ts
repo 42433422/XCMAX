@@ -16,6 +16,7 @@ export type AgentRunEventType =
   | 'budget.exceeded'
   | 'dataset.ingest_failed'
   | 'dataset.ingested'
+  | 'ledger.updated'
   | 'llm.completed'
   | 'llm.failed'
   | 'memory.failed'
@@ -23,28 +24,45 @@ export type AgentRunEventType =
   | 'observation.recorded'
   | 'planner.blocked'
   | 'planner.completed'
+  | 'planner.degraded'
   | 'planner.started'
   | 'rag.failed'
   | 'rag.retrieved'
+  | 'run.background_started'
+  | 'run.cancel_requested'
+  | 'run.cancelled'
   | 'run.completed'
   | 'run.continue_ignored'
   | 'run.created'
   | 'run.failed'
+  | 'run.pause_requested'
+  | 'run.paused'
+  | 'run.queued'
+  | 'run.recovered'
+  | 'run.resumed'
+  | 'run.retry_requested'
+  | 'run.verification_inconclusive'
   | 'step.approved'
   | 'step.blocked'
   | 'step.llm_repair_failed'
   | 'step.llm_repair_requested'
+  | 'step.recovered'
+  | 'step.recovery_confirmation_required'
   | 'step.repair_applied'
   | 'step.repair_rejected'
   | 'step.retry_scheduled'
   | 'step.waiting_user'
   | 'tool.completed'
   | 'tool.failed'
-  | 'tool.started';
+  | 'tool.started'
+  | 'verification.failed'
+  | 'verification.inconclusive'
+  | 'verification.verified';
 
 export const TERMINAL_AGENT_RUN_EVENT_TYPES: ReadonlySet<AgentRunEventType> = new Set([
   'budget.exceeded',
   'planner.blocked',
+  'run.cancelled',
   'run.completed',
   'run.failed',
 ]);

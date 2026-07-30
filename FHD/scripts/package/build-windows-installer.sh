@@ -47,6 +47,14 @@ sku_update_url() {
   esac
 }
 
+require_physical_desktop_node_modules() {
+  if [ -L "${ROOT}/desktop/node_modules" ]; then
+    echo "[err] desktop/node_modules must be a physical directory for release packaging; refusing linked dependencies" >&2
+    echo "[err] create a clean candidate worktree and run the build there" >&2
+    exit 1
+  fi
+}
+
 LABEL="$(sku_label "${SKU}")"
 OUT_DIR="${ROOT}/release/xcagi-v${VERSION}/${SKU}"
 mkdir -p "${OUT_DIR}"
@@ -110,7 +118,8 @@ printf '{"sku":"%s","schema_version":1}\n' "${SKU}" > desktop/resources/product-
 "${PYTHON}" scripts/package/generate-desktop-resources.py
 
 # Electron NSIS（宿主 electron-builder 可交叉编译 win）
-(cd desktop && [ -d node_modules ] || npm install)
+require_physical_desktop_node_modules
+(cd desktop && npm ci --no-audit --fund=false)
 (cd desktop && npm run build)
 for marker in "packagedBackendCandidates" "electron-backend.log" "backend', '_internal'" "return 17500" "backendHealthMs" "180_000"; do
   if ! grep -Fq "${marker}" desktop/dist/main.js; then
@@ -158,6 +167,7 @@ for required in \
     exit 1
   fi
 done
+(cd desktop && node build/verify-runtime-asar.cjs "${UNPACKED}/app.asar")
 
 XCAGI_PRODUCT_VERSION="${VERSION}" \
   node scripts/package/generate-update-metadata.mjs "${FINAL}" "${TOOLCHAIN_VERSION}" win

@@ -17,6 +17,18 @@ export interface UseChatRequestDeps {
   consumeMultimodalIntoPlannerContext: (ctx: Record<string, unknown>, parts: string[]) => void
 }
 
+export interface WorkflowConfirmationRequest {
+  action: 'confirm' | 'cancel' | 'submit_approval'
+  agent_run_id: string
+  plan_id?: string
+  approved_step_id?: string
+}
+
+export interface PlannerRequestOptions {
+  fromWriteUnlock?: boolean
+  workflowConfirmation?: WorkflowConfirmationRequest
+}
+
 export function useChatRequest(deps: UseChatRequestDeps) {
   const {
     messages,
@@ -38,7 +50,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
 
   function buildPlannerChatRequestPayload(
     message: string,
-    plannerOpts?: { fromWriteUnlock?: boolean }
+    plannerOpts?: PlannerRequestOptions
   ): {
     body: Record<string, unknown>
     proIntentEnabled: boolean
@@ -83,6 +95,15 @@ export function useChatRequest(deps: UseChatRequestDeps) {
         ? `【上一轮流式可见输出节选】\n${bodyDraft}\n\n【续跑要求】用户已在弹窗完成二级写入授权；本请求 JSON 已附带 db_write_token。请直接调用 import_excel_to_database 完成写入（file_path、sheet_name、header_row 与 excel_analysis / 运行时一致）。除非明显缺字段，不要再次整本重跑 excel_analysis 或重复开场白。`
         : '【续跑要求】用户已确认二级写入令牌；本请求已附带 db_write_token。请直接调用 import_excel_to_database，避免重复开场白与无谓的 excel_analysis。'
     }
+    if (plannerOpts?.workflowConfirmation) {
+      const decision = plannerOpts.workflowConfirmation
+      contextPayload.workflow_confirmation = {
+        action: decision.action,
+        agent_run_id: String(decision.agent_run_id || '').trim(),
+        plan_id: String(decision.plan_id || '').trim(),
+        approved_step_id: String(decision.approved_step_id || '').trim(),
+      }
+    }
     if (proIntentEnabled) {
       return {
         proIntentEnabled,
@@ -112,7 +133,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
   async function requestChatByMode(
     message: string,
     fetchOptions: RequestInit = {},
-    plannerOpts?: { fromWriteUnlock?: boolean }
+    plannerOpts?: PlannerRequestOptions
   ): Promise<ChatPlannerPayload> {
     const { body, proIntentEnabled } = buildPlannerChatRequestPayload(message, plannerOpts)
     const reqOpts = { signal: fetchOptions.signal }
@@ -205,7 +226,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
   async function requestChatByModeWithTimeout(
     message: string,
     timeoutMs: number = 45000,
-    plannerOpts?: { fromWriteUnlock?: boolean }
+    plannerOpts?: PlannerRequestOptions
   ): Promise<ChatPlannerPayload> {
     const controller = new AbortController()
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -236,7 +257,10 @@ export function useChatRequest(deps: UseChatRequestDeps) {
 
   function resolveChatTimeoutMs(message: string): number {
     const text = String(message || '').trim()
-    const isComplexTask = /(导入|入库|数据库|工作流|执行|创建|新增|批量|excel|上传|加入数据库)/i.test(text)
+    const isComplexTask =
+      /(导入|入库|数据库|工作流|执行|创建|新增|批量|excel|上传|加入数据库|查询.*(?:产品|客户|单位|物料|库存)|只读|返回实际)/i.test(
+        text,
+      )
     return isComplexTask ? 90000 : 30000
   }
 

@@ -98,18 +98,22 @@ class AuthService(NeuroEventPublisherMixin):
         return cast("User | None", self.session_service.validate_session(session_id))
 
     def get_user_permissions(self, user: User) -> list:
+        role_name = str(getattr(user, "role", "") or "").strip().lower()
+        tier = str(getattr(user, "tier", "") or "").strip().lower()
+        if role_name == "user" and tier == "enterprise":
+            role_name = "operator"
         with get_db() as db:
-            if user.role == "admin":
+            if role_name == "admin":
                 perms = db.query(Permission).all()
                 return [p.code for p in perms]
 
-            role = db.query(Role).filter(Role.name == user.role).first()
+            role = db.query(Role).filter(Role.name == role_name).first()
             if not role:
                 return []
             return [p.code for p in role.permissions]
 
     def has_permission(self, user: User, permission_code: str) -> bool:
-        if user.role == "admin":
+        if str(getattr(user, "role", "") or "").strip().lower() == "admin":
             return True
 
         perms = self.get_user_permissions(user)

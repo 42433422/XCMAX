@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import time
+from collections.abc import Callable
 from typing import Any
 
 from app.application.agent_orchestrator.artifact_ingestion import ingest_artifact_to_dataset
@@ -9,6 +10,13 @@ from app.application.agent_orchestrator.budget import (
     apply_ai_budget_metadata,
     budget_exceeded_payload,
     refresh_ai_budget_metadata,
+)
+from app.application.agent_orchestrator.execution_verifier import (
+    summarize_run_verification,
+    verify_tool_execution,
+)
+from app.application.agent_orchestrator.orchestration_evidence import (
+    build_orchestration_evidence,
 )
 from app.application.agent_orchestrator.repair_advisor import (
     is_llm_repair_enabled,
@@ -29,7 +37,11 @@ from app.application.agent_orchestrator.run_repository import (
     get_agent_run_repository,
 )
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
-from app.application.agent_orchestrator.tool_spec import get_tool_action_spec, validate_tool_call
+from app.application.agent_orchestrator.tool_spec import (
+    get_tool_action_spec,
+    normalize_tool_call_params,
+    validate_tool_call,
+)
 from app.application.workflow.types import PlanGraph, WorkflowNode
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -43,6 +55,62 @@ class AgentOrchestrator:
     ) -> None:
         self._repo = repository or get_agent_run_repository()
         self._tool_executor = tool_executor or AgentToolExecutor()
+
+    def submit_run(
+        self,
+        *,
+        user_id: str,
+        message: str,
+        runtime_context: dict[str, Any] | None = None,
+    ) -> AgentRun:
+        """Persist a run immediately and plan/execute it outside the request."""
+        run = AgentRun(user_id=str(user_id or ""), message=str(message or ""))
+        run.metadata["runtime_context"] = dict(runtime_context or {})
+        run.metadata["background_execution"] = True
+        run.add_event("run.created", "Agent run 已创建")
+        self._checkpoint(run, phase="queued")
+        saved = self._repo.save(run)
+
+        from app.application.agent_orchestrator.runtime import get_agent_run_runtime
+
+        return get_agent_run_runtime().submit(saved.run_id) or saved
+
+    def submit_run_from_plan(
+        self,
+        *,
+        user_id: str,
+        message: str,
+        plan: PlanGraph,
+        runtime_context: dict[str, Any] | None = None,
+    ) -> AgentRun:
+        """Persist a prepared plan and schedule its execution in the worker pool."""
+        run = AgentRun(user_id=str(user_id or ""), message=str(message or ""))
+        context = dict(runtime_context or {})
+        run.metadata["runtime_context"] = context
+        run.metadata["background_execution"] = True
+        run.add_event("run.created", "Agent run 已创建")
+        run.add_event(
+            "planner.completed",
+            "Agent 计划已接管",
+            {
+                "plan_id": plan.plan_id,
+                "intent": plan.intent,
+                "nodes": len(plan.nodes),
+                "source": "provided_plan",
+                "planner_mode": plan.metadata.get("planner_mode"),
+                "degraded": bool(plan.metadata.get("degraded")),
+                "degraded_reason": plan.metadata.get("degraded_reason"),
+            },
+        )
+        self._apply_plan(run, plan)
+        apply_ai_budget_metadata(run, dict(plan.metadata or {}), context)
+        run.status = "queued"
+        self._checkpoint(run, phase="planned")
+        saved = self._repo.save(run)
+
+        from app.application.agent_orchestrator.runtime import get_agent_run_runtime
+
+        return get_agent_run_runtime().submit(saved.run_id) or saved
 
     def start_run(
         self,
@@ -91,6 +159,9 @@ class AgentOrchestrator:
                 "intent": plan.intent,
                 "nodes": len(plan.nodes),
                 "source": "provided_plan",
+                "planner_mode": plan.metadata.get("planner_mode"),
+                "degraded": bool(plan.metadata.get("degraded")),
+                "degraded_reason": plan.metadata.get("degraded_reason"),
             },
         )
         try:
@@ -109,6 +180,68 @@ class AgentOrchestrator:
     def get_run(self, run_id: str) -> AgentRun | None:
         return self._repo.get(run_id)
 
+    def execute_existing_run(
+        self,
+        run_id: str,
+        *,
+        control_check: Callable[[AgentRun], str | None] | None = None,
+        worker_instance_id: str = "",
+    ) -> AgentRun | None:
+        """Continue a durable run from its latest completed checkpoint."""
+        run = self._repo.get(run_id)
+        if run is None:
+            return None
+        if run.status in {"completed", "failed", "cancelled", "blocked", "waiting_user", "paused"}:
+            return run
+
+        context = dict(run.metadata.get("runtime_context") or {})
+        runtime = self._runtime_metadata(run)
+        runtime["worker_instance_id"] = worker_instance_id
+        runtime["queue_state"] = "running"
+        if self._honor_control(run, control_check):
+            return self._repo.get(run.run_id)
+
+        try:
+            if not run.plan_id:
+                plan = self._plan(run, runtime_context=context)
+                if self._honor_control(run, control_check):
+                    return self._repo.get(run.run_id)
+                self._apply_plan(run, plan)
+                apply_ai_budget_metadata(run, dict(plan.metadata or {}), context)
+                self._checkpoint(run, phase="planned")
+                self._repo.save(run)
+            if run.status == "blocked":
+                self._checkpoint(run, phase="blocked")
+                return self._repo.save(run)
+            run.status = "running"
+            approved_step_id = str(run.metadata.pop("approved_step_id", "") or "")
+            self._execute_ready_steps(
+                run,
+                runtime_context=context,
+                approved_step_id=approved_step_id,
+                control_check=control_check,
+            )
+            phase = {
+                "completed": "completed",
+                "failed": "failed",
+                "cancelled": "cancelled",
+                "paused": "paused",
+                "waiting_user": "waiting_user",
+                "blocked": "blocked",
+            }.get(run.status, "running")
+            runtime = self._runtime_metadata(run)
+            runtime["queue_state"] = run.status
+            runtime["worker_finished_at"] = utc_now_iso()
+            self._checkpoint(run, phase=phase)
+            return self._repo.save(run)
+        except RECOVERABLE_ERRORS as exc:
+            run.status = "failed"
+            run.error = str(exc)
+            run.add_event("run.failed", "Agent run 失败", {"error": str(exc)})
+            self._runtime_metadata(run)["queue_state"] = "failed"
+            self._checkpoint(run, phase="failed")
+            return self._repo.save(run)
+
     def continue_run(
         self,
         run_id: str,
@@ -116,6 +249,7 @@ class AgentOrchestrator:
         approved_by: str = "",
         approved_step_id: str = "",
         runtime_context: dict[str, Any] | None = None,
+        auto_execute: bool = True,
     ) -> AgentRun | None:
         run = self._repo.get(run_id)
         if run is None:
@@ -162,11 +296,17 @@ class AgentOrchestrator:
                 "approved_by": approved_by,
             },
         )
-        self._execute_ready_steps(
-            run,
-            runtime_context=context,
-            approved_step_id=waiting_step.step_id,
-        )
+        if auto_execute:
+            self._execute_ready_steps(
+                run,
+                runtime_context=context,
+                approved_step_id=waiting_step.step_id,
+            )
+        else:
+            run.status = "queued"
+            run.metadata["background_execution"] = True
+            run.metadata["approved_step_id"] = waiting_step.step_id
+            self._checkpoint(run, phase="approved")
         return self._repo.save(run)
 
     def list_runs(self, *, user_id: str | None = None, limit: int = 50) -> list[AgentRun]:
@@ -209,10 +349,28 @@ class AgentOrchestrator:
 
         planner = LLMWorkflowPlanner()
         plan = planner.plan(run.user_id, run.message, get_workflow_tool_registry(), context)
+        if plan.metadata.get("degraded"):
+            run.add_event(
+                "planner.degraded",
+                "LLM 规划不可用，已进入受限降级模式",
+                {
+                    "plan_id": plan.plan_id,
+                    "intent": plan.intent,
+                    "planner_mode": plan.metadata.get("planner_mode"),
+                    "reason": plan.metadata.get("degraded_reason"),
+                    "execution_policy": plan.metadata.get("execution_policy"),
+                },
+            )
         run.add_event(
             "planner.completed",
             "Agent 计划生成完成",
-            {"plan_id": plan.plan_id, "intent": plan.intent, "nodes": len(plan.nodes)},
+            {
+                "plan_id": plan.plan_id,
+                "intent": plan.intent,
+                "nodes": len(plan.nodes),
+                "planner_mode": plan.metadata.get("planner_mode"),
+                "degraded": bool(plan.metadata.get("degraded")),
+            },
         )
         return plan
 
@@ -224,6 +382,11 @@ class AgentOrchestrator:
             "risk_level": plan.risk_level,
             "metadata": dict(plan.metadata or {}),
         }
+        run.metadata["planner_mode"] = str(
+            plan.metadata.get("planner_mode") or plan.metadata.get("planner") or "unknown"
+        )
+        run.metadata["degraded"] = bool(plan.metadata.get("degraded"))
+        run.metadata["degraded_reason"] = str(plan.metadata.get("degraded_reason") or "")
         run.steps = [self._step_from_node(node) for node in plan.nodes]
         self._apply_repair_policy(run, dict(plan.metadata or {}))
         self._attach_artifacts_from_payload(
@@ -234,17 +397,23 @@ class AgentOrchestrator:
         self._refresh_artifact_metadata(run)
         run.status = "running" if run.steps else "blocked"
         if not run.steps:
-            run.error = "planner returned no executable steps"
-            run.add_event("planner.blocked", "计划没有可执行节点")
+            execution_policy = str(plan.metadata.get("execution_policy") or "")
+            if execution_policy == "blocked_no_safe_action":
+                run.error = "需要补充明确目标、对象或必要参数后才能执行"
+                run.add_event("planner.blocked", "目标信息不足，未执行任何工具")
+            else:
+                run.error = "planner returned no executable steps"
+                run.add_event("planner.blocked", "计划没有可执行节点")
 
     @staticmethod
     def _step_from_node(node: WorkflowNode) -> AgentStep:
         spec = get_tool_action_spec(node.tool_id, node.action)
+        action = spec.action if spec is not None else node.action
         return AgentStep(
             node_id=node.node_id,
             tool_id=node.tool_id,
-            action=spec.action if spec is not None else node.action,
-            params=dict(node.params or {}),
+            action=action,
+            params=normalize_tool_call_params(node.tool_id, action, node.params),
             risk=spec.risk if spec is not None else str(node.risk or "low"),
             idempotent=bool(spec.idempotent) if spec is not None else bool(node.idempotent),
             description=str(node.description or ""),
@@ -272,7 +441,12 @@ class AgentOrchestrator:
         *,
         runtime_context: dict[str, Any],
         approved_step_id: str = "",
+        control_check: Callable[[AgentRun], str | None] | None = None,
     ) -> None:
+        if not run.steps:
+            run.status = "blocked"
+            return
+
         approved = str(approved_step_id or "").strip()
         completed_node_ids: set[str] = {
             step.node_id for step in run.steps if step.status == "completed"
@@ -284,6 +458,8 @@ class AgentOrchestrator:
         }
 
         for step in run.steps:
+            if self._honor_control(run, control_check):
+                return
             if step.status == "completed":
                 continue
             if any(dep not in completed_node_ids for dep in step.depends_on):
@@ -295,6 +471,8 @@ class AgentOrchestrator:
                     f"步骤 {step.node_id} 依赖未满足",
                     {"step_id": step.step_id, "depends_on": step.depends_on},
                 )
+                self._checkpoint(run, phase="blocked", current_step=step)
+                self._repo.save(run)
                 return
 
             step_is_approved = bool(approved and approved in {step.step_id, step.node_id})
@@ -312,9 +490,13 @@ class AgentOrchestrator:
                         "idempotent": step.idempotent,
                     },
                 )
+                self._checkpoint(run, phase="waiting_user", current_step=step)
+                self._repo.save(run)
                 return
 
             while True:
+                if self._honor_control(run, control_check):
+                    return
                 budget_payload = budget_exceeded_payload(
                     run,
                     additional_cost_units=self._step_cost_units(step),
@@ -326,9 +508,19 @@ class AgentOrchestrator:
                 self._execute_step(
                     run, step, runtime_context=runtime_context, node_outputs=node_outputs
                 )
+                self._checkpoint(
+                    run,
+                    phase="step_completed" if step.status == "completed" else "step_failed",
+                    current_step=step,
+                )
+                self._repo.save(run)
+                if self._honor_control(run, control_check):
+                    return
                 if step.status == "completed":
                     break
                 if self._prepare_repair_or_retry(run, step, runtime_context=runtime_context):
+                    self._checkpoint(run, phase="retrying", current_step=step)
+                    self._repo.save(run)
                     continue
                 run.status = "failed"
                 run.error = step.error or f"step {step.node_id} failed"
@@ -344,7 +536,10 @@ class AgentOrchestrator:
                     "error": run.error,
                     "repair_count": run.metadata.get("repair_count", 0),
                 }
+                self._attach_verification_summary(run)
                 self._append_llm_summary_to_final_output(run)
+                self._checkpoint(run, phase="failed", current_step=step)
+                self._repo.save(run)
                 return
             completed_node_ids.add(step.node_id)
 
@@ -359,8 +554,93 @@ class AgentOrchestrator:
             "ai_cost_units_total": run.metadata["ai_cost_units_total"],
             "repair_count": run.metadata.get("repair_count", 0),
         }
+        verification_summary = self._attach_verification_summary(run)
         self._append_llm_summary_to_final_output(run)
-        run.add_event("run.completed", "Agent run 执行完成", run.final_output)
+        if verification_summary["status"] == "inconclusive":
+            run.add_event(
+                "run.verification_inconclusive",
+                "Agent run 执行结束，但部分结果缺少独立业务回执",
+                verification_summary,
+            )
+        run.add_event(
+            "run.completed",
+            (
+                "Agent run 已执行并通过验收"
+                if verification_summary["goal_verified"]
+                else "Agent run 执行结束，结果待核验"
+            ),
+            run.final_output,
+        )
+        self._checkpoint(run, phase="completed")
+        self._repo.save(run)
+
+    def _honor_control(
+        self,
+        run: AgentRun,
+        control_check: Callable[[AgentRun], str | None] | None,
+    ) -> bool:
+        if control_check is None:
+            return False
+        action = str(control_check(run) or "")
+        runtime = self._runtime_metadata(run)
+        if action == "cancel":
+            run.status = "cancelled"
+            run.error = ""
+            runtime["cancel_requested"] = False
+            runtime["queue_state"] = "cancelled"
+            run.add_event("run.cancelled", "后台任务已取消")
+            self._checkpoint(run, phase="cancelled")
+            self._repo.save(run)
+            return True
+        if action == "pause":
+            run.status = "paused"
+            runtime["pause_requested"] = True
+            runtime["queue_state"] = "paused"
+            run.add_event("run.paused", "后台任务已暂停")
+            self._checkpoint(run, phase="paused")
+            self._repo.save(run)
+            return True
+        return False
+
+    def _checkpoint(
+        self,
+        run: AgentRun,
+        *,
+        phase: str,
+        current_step: AgentStep | None = None,
+    ) -> None:
+        checkpoint = run.metadata.get("checkpoint")
+        checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
+        sequence = int(checkpoint.get("sequence") or 0) + 1
+        next_step = next(
+            (
+                step
+                for step in run.steps
+                if step.status not in {"completed", "skipped"}
+            ),
+            None,
+        )
+        run.metadata["checkpoint"] = {
+            "schema_version": "1.0",
+            "sequence": sequence,
+            "phase": str(phase),
+            "saved_at": utc_now_iso(),
+            "current_step_id": current_step.step_id if current_step is not None else "",
+            "next_step_id": next_step.step_id if next_step is not None else "",
+            "completed_step_ids": [
+                step.step_id for step in run.steps if step.status == "completed"
+            ],
+            "last_event_id": run.events[-1].event_id if run.events else "",
+        }
+
+    @staticmethod
+    def _runtime_metadata(run: AgentRun) -> dict[str, Any]:
+        runtime = run.metadata.get("runtime")
+        if not isinstance(runtime, dict):
+            runtime = {}
+            run.metadata["runtime"] = runtime
+        runtime.setdefault("schema_version", "1.0")
+        return runtime
 
     @staticmethod
     def _can_auto_execute(step: AgentStep) -> bool:
@@ -375,6 +655,23 @@ class AgentOrchestrator:
         node_outputs: dict[str, Any],
     ) -> None:
         started = time.perf_counter()
+        normalized_params = normalize_tool_call_params(
+            step.tool_id,
+            step.action,
+            step.params,
+        )
+        if normalized_params != step.params:
+            step.params = normalized_params
+            run.add_event(
+                "step.params_normalized",
+                f"步骤 {step.node_id} 参数已按工具契约规范化",
+                {
+                    "step_id": step.step_id,
+                    "node_id": step.node_id,
+                    "tool_id": step.tool_id,
+                    "action": step.action,
+                },
+            )
         step.attempt_count += 1
         step.status = "running"
         step.started_at = utc_now_iso()
@@ -398,6 +695,14 @@ class AgentOrchestrator:
         )
         run.tool_calls.append(tool_call)
         self._refresh_run_cost_metadata(run)
+        orchestration = build_orchestration_evidence(
+            step.tool_id,
+            step.action,
+            step.params,
+            runtime_context=runtime_context,
+            status="running",
+        )
+        tool_call.metadata["orchestration"] = orchestration
         run.add_event(
             "tool.started",
             f"开始执行 {step.tool_id}.{step.action}",
@@ -408,6 +713,7 @@ class AgentOrchestrator:
                 "cost_units": tool_call.cost_units,
                 "permission": tool_call.permission,
                 "attempt_count": attempt_count,
+                "orchestration": orchestration,
             },
         )
         self._repo.save(run)
@@ -455,6 +761,35 @@ class AgentOrchestrator:
         tool_call.output = copy.deepcopy(step.output)
         tool_call.finished_at = step.finished_at
         tool_call.duration_ms = step.duration_ms
+        verification = verify_tool_execution(
+            step.tool_id,
+            step.action,
+            step.params,
+            step.output,
+        )
+        verification_payload = verification.to_dict()
+        tool_call.metadata["verification"] = verification_payload
+        if not verification.accepted:
+            raw_output = copy.deepcopy(step.output)
+            step.output = {
+                "success": False,
+                "error_code": "semantic_verification_failed",
+                "message": verification.reason,
+                "raw_success": raw_output.get("success"),
+                "raw_output": raw_output,
+                "verification": verification_payload,
+            }
+            tool_call.output = copy.deepcopy(step.output)
+        completed_status = "completed" if bool(step.output.get("success", False)) else "failed"
+        orchestration = build_orchestration_evidence(
+            step.tool_id,
+            step.action,
+            step.params,
+            step.output,
+            runtime_context,
+            status=completed_status,
+        )
+        tool_call.metadata["orchestration"] = orchestration
         self._attach_artifacts_from_payload(
             run,
             step.output,
@@ -467,6 +802,24 @@ class AgentOrchestrator:
             step,
             tool_call=tool_call,
             success=success,
+        )
+        run.add_event(
+            (
+                "verification.verified"
+                if verification.verified
+                else "verification.failed"
+                if not verification.accepted
+                else "verification.inconclusive"
+            ),
+            verification.reason,
+            {
+                "step_id": step.step_id,
+                "node_id": step.node_id,
+                "call_id": tool_call.call_id,
+                "tool_id": step.tool_id,
+                "action": step.action,
+                "verification": verification_payload,
+            },
         )
         if success:
             step.status = "completed"
@@ -484,6 +837,8 @@ class AgentOrchestrator:
                     "cost_units": tool_call.cost_units,
                     "attempt_count": attempt_count,
                     "observation_id": observation.get("observation_id"),
+                    "orchestration": orchestration,
+                    "verification": verification_payload,
                 },
             )
             return
@@ -507,6 +862,8 @@ class AgentOrchestrator:
                 "cost_units": tool_call.cost_units,
                 "attempt_count": attempt_count,
                 "observation_id": observation.get("observation_id"),
+                "orchestration": orchestration,
+                "verification": verification_payload,
             },
         )
 
@@ -748,7 +1105,59 @@ class AgentOrchestrator:
             "error": run.error,
             "repair_count": run.metadata.get("repair_count", 0),
         }
+        self._attach_verification_summary(run)
         self._append_llm_summary_to_final_output(run)
+
+    @staticmethod
+    def _attach_verification_summary(run: AgentRun) -> dict[str, Any]:
+        summary = summarize_run_verification(run.tool_calls)
+        run.metadata.update(summary)
+        if isinstance(run.final_output, dict):
+            run.final_output["verification"] = dict(summary)
+            run.final_output["goal_verified"] = bool(summary["goal_verified"])
+            verification_by_step = {
+                str(call.step_id): dict(call.metadata.get("verification") or {})
+                for call in run.tool_calls
+                if isinstance(call.metadata, dict)
+            }
+            ledger = {
+                "schema_version": "1.0",
+                "run_id": run.run_id,
+                "plan_id": run.plan_id,
+                "goal": run.message,
+                "intent": run.intent,
+                "planner_mode": run.metadata.get("planner_mode"),
+                "degraded": bool(run.metadata.get("degraded")),
+                "status": run.status,
+                "goal_verified": bool(summary["goal_verified"]),
+                "verification_status": summary["status"],
+                "steps": [
+                    {
+                        "step_id": step.step_id,
+                        "node_id": step.node_id,
+                        "tool_id": step.tool_id,
+                        "action": step.action,
+                        "status": step.status,
+                        "attempt_count": step.attempt_count,
+                        "verification": verification_by_step.get(step.step_id, {}),
+                        "error": step.error,
+                    }
+                    for step in run.steps
+                ],
+            }
+            run.final_output["task_ledger"] = ledger
+            run.metadata["task_ledger_schema_version"] = "1.0"
+            run.add_event(
+                "ledger.updated",
+                "任务账本已更新",
+                {
+                    "goal_verified": ledger["goal_verified"],
+                    "verification_status": ledger["verification_status"],
+                    "step_count": len(ledger["steps"]),
+                    "degraded": ledger["degraded"],
+                },
+            )
+        return summary
 
     def _record_observation(
         self,
@@ -777,6 +1186,11 @@ class AgentOrchestrator:
             "message": output_message,
             "error": "" if success else output_error,
             "status": "completed" if success else "failed",
+            "verification": copy.deepcopy(
+                tool_call.metadata.get("verification")
+                if isinstance(tool_call.metadata.get("verification"), dict)
+                else {}
+            ),
         }
         step.observations.append(observation)
         run.metadata["observation_count"] = sum(len(item.observations) for item in run.steps)

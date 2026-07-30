@@ -945,6 +945,8 @@ import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
 import adminAuditApi, { type AuditLogEntry } from '@/api/adminAudit';
 import { setAppLocale } from '@/i18n';
 import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards';
+import { fetchDeliverableStatus } from '@/utils/platformShellApi';
+import type { DeliverableStatus } from '@/constants/platformShell';
 
 const { t, te, locale } = useI18n();
 const appLocale = ref<'zh-CN' | 'en-US'>((locale.value === 'en-US' ? 'en-US' : 'zh-CN'));
@@ -1641,9 +1643,11 @@ const modsStore = useModsStore();
 const { clientModsUiOff, loadError, isLoaded, mods, modRoutes, activeModId } = storeToRefs(modsStore);
 
 const MODEL_PAYMENT_BRIDGE_ID = 'xcagi-model-payment-bridge';
+const hostFoundationStatus = ref<DeliverableStatus | null>(null);
 
 const modelPaymentBridgeInstalled = computed(() =>
-  mods.value.some((m) => String(m.id || '').trim() === MODEL_PAYMENT_BRIDGE_ID),
+  hostFoundationStatus.value?.host_foundation_bridges_ready === true
+  || mods.value.some((m) => String(m.id || '').trim() === MODEL_PAYMENT_BRIDGE_ID),
 );
 
 function openSettingsExtensions() {
@@ -1674,6 +1678,9 @@ const hostBridgeMods = computed(() => {
 });
 
 const hostBridgeInstalledCount = computed(() => {
+  if (hostFoundationStatus.value?.host_foundation_bridges_ready === true) {
+    return expectedHostBridgeModIds().length;
+  }
   const ids = new Set(mods.value.map((m) => String(m.id || '').trim()));
   return expectedHostBridgeModIds().filter((id) => ids.has(id)).length;
 });
@@ -1699,6 +1706,14 @@ function goHostPackOnboarding() {
 
 function goModStore() {
   router.push({ name: 'mod-store' });
+}
+
+async function loadHostFoundationStatus() {
+  try {
+    hostFoundationStatus.value = await fetchDeliverableStatus(true);
+  } catch {
+    hostFoundationStatus.value = null;
+  }
 }
 
 const activeModMeta = computed(() => {
@@ -2358,6 +2373,7 @@ onMounted(async () => {
       accountUsername: uname,
     });
   }
+  await loadHostFoundationStatus();
   sidebarThemePreset.value = readStoredSidebarTheme();
   applySidebarTheme(sidebarThemePreset.value);
   await industryStore.initialize();
@@ -2379,6 +2395,7 @@ onActivated(() => {
     loadMemoryV2();
     loadPersyProfile();
   });
+  void loadHostFoundationStatus();
 });
 
 watch(memoryV2UserId, () => {

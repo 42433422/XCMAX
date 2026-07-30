@@ -194,28 +194,70 @@ def _alembic_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _run_alembic_cli(*args: str) -> None:
+def _alembic_config():
+    from alembic.config import Config
+
     root = _alembic_root()
     ini = root / "alembic.ini"
     # Older/broken PyInstaller trees nested the file as alembic.ini/alembic.ini.
     if not ini.is_file() and (root / "alembic.ini" / "alembic.ini").is_file():
         ini = root / "alembic.ini" / "alembic.ini"
-        root = ini.parent
     if not ini.is_file():
         raise FileNotFoundError(f"alembic.ini not found: {ini}")
+    return Config(str(ini))
+
+
+def _script_revisions() -> tuple[set[str], set[str]]:
+    from alembic.script import ScriptDirectory
+
+    script = ScriptDirectory.from_config(_alembic_config())
+    known = {revision.revision for revision in script.walk_revisions()}
+    return known, set(script.get_heads())
+
+
+def _sqlite_current_revisions(
+    data_dir: str | os.PathLike[str] | None = None,
+) -> set[str] | None:
+    """Return desktop SQLite revision rows, or ``None`` for an unversioned DB."""
+    db_path = ensure_desktop_dirs(data_dir)["data"] / "xcagi.db"
+    if not db_path.exists() or db_path.stat().st_size == 0:
+        return set()
+    with sqlite3.connect(db_path) as conn:
+        exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='alembic_version'"
+        ).fetchone()
+        if not exists:
+            return None
+        rows = conn.execute("SELECT version_num FROM alembic_version").fetchall()
+    return {str(row[0]) for row in rows if row and row[0]}
+
+
+def migration_required(data_dir: str | os.PathLike[str] | None = None) -> bool:
+    """Return whether the packaged desktop schema is behind the bundled head."""
+    configure_desktop_environment(data_dir)
+    if _should_bootstrap_sqlite(data_dir):
+        return True
+    current = _sqlite_current_revisions(data_dir)
+    if current is None:
+        return True
+    known, heads = _script_revisions()
+    return bool(current - known) or current != heads
+
+
+def _run_alembic_cli(*args: str) -> None:
+    cfg = _alembic_config()
+    ini = Path(cfg.config_file_name or "")
+    root = ini.parent
     # PyInstaller 入口不支持 ``exe -m alembic``（参数会进 run_fastapi argparse），须走 API。
     if getattr(sys, "frozen", False):
-        from alembic.config import Config
-
         from alembic import command
 
-        cfg = Config(str(ini))
         op = args[0] if args else ""
-        target = args[1] if len(args) > 1 else "head"
+        target = next((arg for arg in args[1:] if not arg.startswith("--")), "head")
         if op == "upgrade":
             command.upgrade(cfg, target)
         elif op == "stamp":
-            command.stamp(cfg, target)
+            command.stamp(cfg, target, purge="--purge" in args)
         else:
             raise ValueError(f"unsupported alembic op: {args!r}")
         return
@@ -231,6 +273,13 @@ def run_alembic_upgrade(
         bootstrap_sqlite_schema(data_dir)
         _run_alembic_cli("stamp", "head")
         return
+    current = _sqlite_current_revisions(data_dir)
+    known, _heads = _script_revisions()
+    if current is None or current - known:
+        # Desktop SQLite historically used create_all without Alembic tracking.
+        # Re-baseline the already-existing schema, then replay the idempotent
+        # post-baseline migrations so newly added columns are not skipped.
+        _run_alembic_cli("stamp", "--purge", "2026_06_22_baseline")
     _run_alembic_cli("upgrade", version)
 
 

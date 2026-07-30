@@ -125,8 +125,11 @@ export function getClientModsUiOffHeader(): Record<string, string> {
 
 const ACTIVE_MOD_HEADER_SKIP_PREFIXES = [
   '/api/auth/',
+  '/api/mod-store/',
+  '/api/mods',
   '/api/platform-shell/',
   '/api/debug/',
+  '/api/etl/',
 ] as const
 
 function shouldAttachActiveModHeader(rawUrl = ''): boolean {

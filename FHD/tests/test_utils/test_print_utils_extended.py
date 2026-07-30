@@ -402,6 +402,50 @@ class TestPrintExcel:
             result = pu._print_excel("/tmp/test.xlsx", "printer1")
             assert result["success"] is False
 
+    def test_print_excel_macos_converts_to_pdf_before_cups(self):
+        pu = PrinterUtils()
+        with (
+            patch.object(pu, "_is_print_backend_available", return_value=True),
+            patch("app.utils.print_utils.win32api", None),
+            patch.object(pu, "_print_excel_macos", return_value={"success": True}) as print_macos,
+        ):
+            result = pu._print_excel("/tmp/test.xlsx", "printer1")
+        assert result["success"] is True
+        print_macos.assert_called_once_with("/tmp/test.xlsx", "printer1")
+
+    def test_print_excel_macos_reports_conversion_failure(self):
+        pu = PrinterUtils()
+        with patch.object(
+            pu,
+            "_convert_excel_to_pdf_macos",
+            return_value=(None, "未安装 Apple Numbers"),
+        ):
+            result = pu._print_excel_macos("/tmp/test.xlsx", "printer1")
+        assert result["success"] is False
+        assert "未安装 Apple Numbers" in result["message"]
+
+    def test_print_excel_macos_prints_pdf_then_removes_it(self):
+        pu = PrinterUtils()
+        with (
+            patch.object(
+                pu,
+                "_convert_excel_to_pdf_macos",
+                return_value=("/tmp/generated-shipment.pdf", ""),
+            ),
+            patch.object(
+                pu,
+                "_print_cups",
+                return_value={"success": True, "message": "ok"},
+            ) as print_cups,
+            patch("app.utils.print_utils.os.unlink") as unlink,
+        ):
+            result = pu._print_excel_macos("/tmp/test.xlsx", "printer1")
+        assert result["success"] is True
+        assert result["method"] == "numbers_pdf_cups"
+        assert result["file"] == "test.xlsx"
+        print_cups.assert_called_once_with("/tmp/generated-shipment.pdf", "printer1")
+        unlink.assert_called_once_with("/tmp/generated-shipment.pdf")
+
     def test_print_excel_startfile_success(self):
         pu = PrinterUtils()
         with (

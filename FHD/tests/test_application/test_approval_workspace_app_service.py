@@ -948,6 +948,55 @@ class TestApproveRequest:
         svc.remove_pending_workflow.assert_called_once_with("req-ai-1")
         engine.run.assert_called_once()
 
+    def test_resume_pending_ai_workflow_continues_bound_agent_run(self):
+        plan = SimpleNamespace(plan_id="plan-delete", intent="delete_product", nodes=[object()])
+        svc = MagicMock()
+        svc.approve.return_value = True
+        svc.get_pending_request.return_value = SimpleNamespace(node_id="delete_product_198")
+        svc.get_pending_workflow.return_value = {
+            "plan": plan,
+            "runtime_context": {
+                "message": "删除产品 198",
+                "agent_run_id": "run-delete-198",
+            },
+        }
+        continued = SimpleNamespace(
+            status="completed",
+            plan_id="plan-delete",
+            intent="delete_product",
+            steps=[SimpleNamespace(status="completed")],
+        )
+        orchestrator = MagicMock()
+        orchestrator.continue_run.return_value = continued
+
+        with (
+            patch("app.application.workflow.get_approval_service", return_value=svc),
+            patch(
+                "app.application.agent_orchestrator.AgentOrchestrator",
+                return_value=orchestrator,
+            ),
+            patch("app.fastapi_routes.domains.misc.helpers._dispatch_tool_for_approval"),
+        ):
+            out = _resume_pending_ai_workflow_after_approval(
+                request_no="req-delete-198",
+                opinion="同意",
+            )
+
+        assert out is not None
+        assert out["workflow_executed"] is True
+        assert out["agent_run_id"] == "run-delete-198"
+        orchestrator.continue_run.assert_called_once_with(
+            "run-delete-198",
+            approved_by="approval:req-delete-198",
+            approved_step_id="delete_product_198",
+            runtime_context={
+                "message": "删除产品 198",
+                "agent_run_id": "run-delete-198",
+            },
+            auto_execute=True,
+        )
+        svc.remove_pending_workflow.assert_called_once_with("req-delete-198")
+
     def test_no_actor_raises_401(self):
         request = Mock()
         with patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve:

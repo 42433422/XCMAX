@@ -13,7 +13,7 @@ import os
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import JSONResponse
 
 from app.build_identity import build_identity
@@ -24,7 +24,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["ai-assistant-compat"])
 
 _TRACE_MAX_STRING = 500
-_TRACE_SECRET_KEYS = {"audiobase64", "audio_base64", "key", "token", "password", "secret"}
+_TRACE_SECRET_KEYS = {
+    "audiobase64",
+    "audio_base64",
+    "key",
+    "token",
+    "password",
+    "secret",
+    "print_token",
+    "post_print_receipt",
+}
 
 
 def _ok(data: Any = None, **extra: Any) -> dict[str, Any]:
@@ -152,6 +161,16 @@ def compat_health():
 
 @router.post("/api/generate")
 def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
+    """Build a shipment confirmation card for legacy callers.
+
+    ``/api/generate`` used to create a document as soon as an order-shaped
+    payload arrived.  It is a public compatibility endpoint, so that behavior
+    bypassed the same preview/explicit-confirmation boundary used by the chat
+    surfaces and could not safely resolve a personal document layout.  Keep
+    the endpoint, but make it an alias for the shared preview task.  The
+    subsequent button click is the only path to ``/api/tools/execute`` where
+    the authenticated owner is injected by the server.
+    """
     order_text = str(payload.get("order_text") or "").strip()
     template_name = payload.get("template_name")
     template_id = payload.get("template_id")
@@ -172,53 +191,39 @@ def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
         if not unit_name or not products:
             return _fail("订单解析结果为空", 400)
 
-        app_service = _shipment_svc()
-        result = app_service.generate_shipment_document(
-            unit_name=unit_name,
-            products=products,
-            template_name=template_name,
-            template_id=template_id,
-            preferred_template=preferred_template,
-            intent="shipment_generate",
-            raw_text=order_text,
-        )
+        from app.application.ai_chat_helpers import build_shipment_preview_response_dict
 
-        if not result.get("success"):
-            safe_fail = {
-                "success": False,
-                "message": "生成失败",
-                "error_code": str(result.get("error_code") or "")[:64] or None,
-            }
-            traced = _trace_ai_assistant_route(
-                safe_fail,
-                route="/api/generate",
-                action="generate_shipment_document",
-                body=payload,
-            )
-            return JSONResponse(traced, status_code=500)
-
-        file_path = result.get("file_path")
-        doc_name = result.get("doc_name") or (os.path.basename(file_path) if file_path else None)
-        download_url = f"/api/shipment/download/{doc_name}" if doc_name else None
-
-        return _trace_ai_assistant_route(
-            _ok(
-                {
-                    "doc_name": doc_name,
-                    "file_path": file_path,
-                    "download_url": download_url,
-                    "order_number": result.get("order_number"),
-                    "total_amount": result.get("total_amount"),
-                    "total_quantity": result.get("total_quantity"),
-                    "template_resolution": result.get("template_resolution"),
-                    "products_source": result.get("products_source"),
-                },
-                message="发货单生成成功",
-                filename=doc_name,
-                file_path=file_path,
+        preview = build_shipment_preview_response_dict(
+            unit_name,
+            products,
+            order_text,
+            order_number=parsed.get("order_number"),
+            order_number_provenance=(
+                parsed.get("order_number_provenance")
+                if isinstance(parsed.get("order_number_provenance"), dict)
+                else None
             ),
+        )
+        task_params = preview["task"]["payload"]["params"]
+        # These values describe the user's requested layout only.  Do not
+        # carry an owner identifier from this legacy request: the confirmed
+        # execution endpoint binds it from ``request.state.user_id``.
+        for key, value in {
+            "template_name": template_name,
+            "template_id": template_id,
+            "preferred_template": preferred_template,
+        }.items():
+            if value is not None and str(value).strip():
+                task_params[key] = value
+        preview["confirmation_required"] = True
+        preview["data"] = {
+            **(preview.get("data") or {}),
+            "compatibility_endpoint": "/api/generate",
+        }
+        return _trace_ai_assistant_route(
+            preview,
             route="/api/generate",
-            action="generate_shipment_document",
+            action="shipment_preview",
             body=payload,
         )
     except RECOVERABLE_ERRORS as e:
@@ -398,17 +403,97 @@ def compat_print_diagnose():
 
 
 @router.post("/api/print/{filename:path}")
-def compat_print_shipment_file(filename: str, payload: dict[str, Any] = Body(default_factory=dict)):
+def compat_print_shipment_file(
+    filename: str,
+    request: Request,
+    payload: dict[str, Any] = Body(default_factory=dict),
+):
+    """Legacy filename print route, now backed by a generated-document grant.
+
+    A filename in ``shipment_outputs`` is deliberately not enough to submit a
+    physical print job.  The current authenticated user must spend the
+    one-click capability returned when that exact document was generated.
+    """
+
+    from app.application.print_authorization import (
+        defer_document_print_capability,
+        finish_document_print_capability,
+        reserve_document_print_capability,
+    )
     from app.utils.path_utils import get_app_data_dir
 
     printer_name = payload.get("printer_name") or payload.get("printer")
+    print_token = payload.get("print_token")
+    order_id = payload.get("order_id")
     output_dir = os.path.join(get_app_data_dir(), "shipment_outputs")
     safe = os.path.basename(filename) or filename
     file_path = os.path.join(output_dir, safe)
     if not file_path or not os.path.exists(file_path):
         return _fail("文件不存在", 404)
 
-    result = _printer_svc().print_document(file_path, printer_name=printer_name)
+    try:
+        owner_user_id = int(getattr(request.state, "user_id", None) or 0)
+    except (AttributeError, TypeError, ValueError):
+        owner_user_id = None
+    reservation = reserve_document_print_capability(
+        print_token,
+        owner_user_id=owner_user_id,
+        file_path=file_path,
+        order_id=order_id,
+    )
+    if not reservation.get("success"):
+        error_code = str(reservation.get("error_code") or "")
+        status_code = (
+            403
+            if error_code
+            in {
+                "PRINT_AUTH_REQUIRED",
+                "PRINT_CONFIRMATION_OWNER_MISMATCH",
+            }
+            else 409
+        )
+        return _fail(
+            str(reservation.get("message") or "打印确认无效"),
+            status_code,
+            error_code=error_code,
+        )
+
+    try:
+        result = _printer_svc().print_document(
+            str(reservation["file_path"]), printer_name=printer_name
+        )
+    except RECOVERABLE_ERRORS:
+        finish_document_print_capability(reservation, print_succeeded=False)
+        raise
+    print_succeeded = bool(result.get("success"))
+    print_completed = bool(result.get("print_completed", print_succeeded))
+    post_print_receipt = None
+    if print_succeeded and not print_completed:
+        pending_job = defer_document_print_capability(
+            reservation,
+            printer_name=result.get("printer"),
+            job_id=result.get("job_id"),
+        )
+        if pending_job.get("success"):
+            result["print_job_token"] = pending_job["print_job_token"]
+            result["print_tracking_available"] = bool(pending_job.get("tracking_available"))
+        else:
+            finish_document_print_capability(
+                reservation,
+                print_succeeded=True,
+                print_completed=False,
+            )
+            result["print_tracking_available"] = False
+    else:
+        post_print_receipt = finish_document_print_capability(
+            reservation,
+            print_succeeded=print_succeeded,
+            print_completed=print_completed,
+        )
+    if result.get("success"):
+        if post_print_receipt:
+            result["post_print_receipt"] = post_print_receipt
+        result["printed_order_id"] = order_id
     status = 200 if result.get("success") else 400
     traced = _trace_ai_assistant_route(
         dict(result),

@@ -2,6 +2,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+
+// The adapter only needs Electron's userData path in production.  Keep this
+// unit suite runnable in plain Node without downloading an Electron binary.
+const electronMocks = vi.hoisted(() => ({
+  app: { getPath: vi.fn(() => '') },
+}))
+vi.mock('electron', () => electronMocks)
+
 import { DesktopAutonomyAdapter } from '../desktop-adapter.js'
 import type { DesktopAdapterContext } from '../desktop-adapter.js'
 import type { Action, BackendRuntimeInfo } from '../types.js'
@@ -13,6 +21,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.unstubAllGlobals()
   try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch { /* ignore */ }
 })
 
@@ -73,33 +82,38 @@ describe('DesktopAutonomyAdapter.executeAction', () => {
       expect(result.detail).toContain('execute_threw')
       expect(result.detail).toContain('spawn failed')
     })
+
+    it('restartBackend 明确未确认启动时不把动作记为成功', async () => {
+      const ctx = makeCtx({ restartBackend: vi.fn(async () => false) })
+      const adapter = DesktopAutonomyAdapter.forTest(ctx, tmpDir)
+      const result = await adapter.executeAction(makeAction('restart_backend'))
+      expect(result.ok).toBe(false)
+      expect(result.detail).toContain('not confirmed')
+    })
   })
 
   describe('rollback_version', () => {
-    it('成功路径：设置 knownGoodFingerprint 后调用 triggerRollback', async () => {
+    it('成功路径：已安排回滚后返回 ok=true', async () => {
       const ctx = makeCtx()
       const adapter = DesktopAutonomyAdapter.forTest(ctx, tmpDir)
-      adapter.setKnownGoodFingerprint('abc123def456')
       const result = await adapter.executeAction(makeAction('rollback_version'))
       expect(result.ok).toBe(true)
       expect(result.detail).toContain('rollback triggered')
       expect(ctx.triggerRollback).toHaveBeenCalledTimes(1)
     })
 
-    it('knownGoodFingerprint=null 时拒绝回滚', async () => {
-      const ctx = makeCtx()
+    it('回滚未安排时拒绝把动作记为成功', async () => {
+      const ctx = makeCtx({ triggerRollback: vi.fn(async () => false) })
       const adapter = DesktopAutonomyAdapter.forTest(ctx, tmpDir)
-      // 不调用 setKnownGoodFingerprint，knownGoodFingerprint 为 null
       const result = await adapter.executeAction(makeAction('rollback_version'))
       expect(result.ok).toBe(false)
-      expect(result.detail).toContain('no known-good fingerprint')
-      expect(ctx.triggerRollback).not.toHaveBeenCalled()
+      expect(result.detail).toContain('rollback was not scheduled')
+      expect(ctx.triggerRollback).toHaveBeenCalledTimes(1)
     })
 
     it('未注入 triggerRollback 时拒绝回滚', async () => {
       const ctx = makeCtx({ triggerRollback: undefined })
       const adapter = DesktopAutonomyAdapter.forTest(ctx, tmpDir)
-      adapter.setKnownGoodFingerprint('abc123def456')
       const result = await adapter.executeAction(makeAction('rollback_version'))
       expect(result.ok).toBe(false)
       expect(result.detail).toContain('triggerRollback callback not injected')
@@ -110,7 +124,6 @@ describe('DesktopAutonomyAdapter.executeAction', () => {
         triggerRollback: vi.fn(async () => { throw new Error('rollback network error') }),
       })
       const adapter = DesktopAutonomyAdapter.forTest(ctx, tmpDir)
-      adapter.setKnownGoodFingerprint('abc123def456')
       const result = await adapter.executeAction(makeAction('rollback_version'))
       expect(result.ok).toBe(false)
       expect(result.detail).toContain('execute_threw')
@@ -203,6 +216,20 @@ describe('DesktopAutonomyAdapter.executeAction', () => {
       const backupContent = fs.readFileSync(backupPath, 'utf8')
       expect(backupContent).toBe(originalContent)
     })
+
+    it('可从当前桌面 database profile 快照恢复被篡改的配置', async () => {
+      const configPath = path.join(tmpDir, 'database.json')
+      const knownGoodContent = '{"mode":"local","remote":{"enabled":false}}\n'
+      fs.writeFileSync(configPath, knownGoodContent, 'utf8')
+      const adapter = DesktopAutonomyAdapter.forTest(makeCtx({ configPath }), tmpDir)
+      expect(adapter.captureKnownGoodConfigSnapshot()).not.toBeNull()
+      fs.writeFileSync(configPath, '{"mode":"remote","remote":{"enabled":true}}\n', 'utf8')
+
+      const result = await adapter.executeAction(makeAction('repair_config'))
+
+      expect(result.ok).toBe(true)
+      expect(fs.readFileSync(configPath, 'utf8')).toBe(knownGoodContent)
+    })
   })
 
   describe('escalate / noop', () => {
@@ -231,6 +258,33 @@ describe('DesktopAutonomyAdapter.executeAction', () => {
       expect(result.ok).toBe(false)
       expect(result.detail).toContain('not-implemented:restart_service')
     })
+  })
+})
+
+describe('DesktopAutonomyAdapter.collectTruth', () => {
+  it('collects the separate NeuroBus health facts used by the remediation policy', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes('/api/desktop/status')) {
+        return { ok: true, json: async () => ({ readyForUi: true }) }
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          status: 'healthy',
+          running: true,
+          reliability: { circuit_open: true },
+          dlq_size: 1002,
+        }),
+      }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const adapter = DesktopAutonomyAdapter.forTest(makeCtx({ port: 0 }), tmpDir)
+
+    const truth = await adapter.collectTruth()
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(truth.neurobus).toEqual({ available: true, circuit_open: true, dlq_size: 1002 })
+    expect(truth.disk_free_mb).toBeGreaterThanOrEqual(0)
   })
 })
 
@@ -289,13 +343,12 @@ describe('DesktopAutonomyAdapter.computeCurrentFingerprint', () => {
   })
 })
 
-describe('DesktopAutonomyAdapter.setKnownGoodFingerprint', () => {
-  it('设置后 rollback_version 不再被 knownGoodFingerprint=null 拒绝', async () => {
-    const ctx = makeCtx()
-    const adapter = DesktopAutonomyAdapter.forTest(ctx, tmpDir)
-    adapter.setKnownGoodFingerprint('newfp1234567')
-    const result = await adapter.executeAction(makeAction('rollback_version'))
-    expect(result.ok).toBe(true)
-    expect(ctx.triggerRollback).toHaveBeenCalledTimes(1)
+describe('DesktopAutonomyAdapter.captureKnownGoodConfigSnapshot', () => {
+  it('keeps configuration fingerprint available for drift detection', () => {
+    const configPath = path.join(tmpDir, 'config.json')
+    fs.writeFileSync(configPath, '{"port":17500}', 'utf8')
+    const adapter = DesktopAutonomyAdapter.forTest(makeCtx({ configPath }), tmpDir)
+    expect(adapter.captureKnownGoodConfigSnapshot()).toHaveLength(12)
+    expect(adapter.computeCurrentFingerprint()).toHaveLength(12)
   })
 })

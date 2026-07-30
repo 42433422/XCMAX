@@ -127,3 +127,35 @@ def test_task_agent_should_parse_compact_shipment_with_qty_verb():
     assert "9803" in result["data"]["params"]["order_text"]
     assert "12" in result["data"]["params"]["order_text"]
     assert "3 桶" in result["data"]["params"]["order_text"]
+
+
+@pytest.mark.parametrize(
+    "user_id,message",
+    [
+        (
+            "u_task_named_product_print",
+            "打印金汉武发货单，黑棕面用修色精，规格28，3桶",
+        ),
+        (
+            "u_task_named_product_open",
+            "开单 金汉武，黑棕面用修色精，规格28，3桶",
+        ),
+    ],
+)
+def test_task_agent_should_issue_named_product_shipment_call(user_id, message):
+    from app.services.task_agent import get_task_agent
+    from app.services.tools_execution.order_parser import _parse_order_text
+
+    agent = get_task_agent()
+    result = agent.process_message(user_id, message)
+
+    assert result is not None
+    assert result["action"] == "tool_call"
+    assert result["data"]["tool_key"] == "shipment_generate"
+    order_text = result["data"]["params"]["order_text"]
+    assert order_text.startswith("开单 金汉武")
+    assert "黑棕面用修色精" in order_text
+    assert "规格28" in order_text
+    assert "3桶" in order_text
+    parsed = _parse_order_text(order_text)
+    assert parsed["products"][0]["name"] == "黑棕面用修色精"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import uuid
 from collections.abc import Callable
 from datetime import datetime
@@ -519,6 +520,18 @@ def _registered_router_shipment_orders(
 
         svc = get_shipment_app_service()
 
+    # ``owner_user_id`` is created only from ``request.state.user_id`` by the
+    # HTTP entrypoint.  Do not infer it from the generic AgentRun ``user_id``:
+    # that value intentionally supports legacy headers/body input and is not a
+    # trustworthy authority for a personal ETL template.
+    try:
+        owner_value = runtime_context.get("owner_user_id")
+        owner_user_id = int(owner_value) if owner_value is not None else None
+    except (TypeError, ValueError):
+        owner_user_id = None
+    if owner_user_id is not None and owner_user_id <= 0:
+        owner_user_id = None
+
     if action == "generate":
         unit_name = str(params.get("unit_name") or params.get("purchase_unit") or "").strip()
         products = params.get("products") or params.get("items") or []
@@ -543,6 +556,8 @@ def _registered_router_shipment_orders(
             )
         if params.get("order_number"):
             gen_kwargs["order_number"] = params.get("order_number")
+        if owner_user_id is not None:
+            gen_kwargs["owner_user_id"] = owner_user_id
         return cast("dict[Any, Any]", svc.generate_shipment_document(**gen_kwargs))
 
     if action == "generate_batch":
@@ -575,6 +590,8 @@ def _registered_router_shipment_orders(
                     batch_kwargs["template_name"] = shipment.get("template_name")
                 if shipment.get("template_id"):
                     batch_kwargs["template_id"] = shipment.get("template_id")
+                if owner_user_id is not None:
+                    batch_kwargs["owner_user_id"] = owner_user_id
                 result = svc.generate_shipment_document(**batch_kwargs)
                 if result.get("success"):
                     ok_count += 1
@@ -1259,6 +1276,16 @@ def _registered_router_print(
             int(params.get("copies") or 1),
         )
     if action == "print_document":
+        # Only the HTTP print endpoint may enter this branch: it has already
+        # consumed an owner-bound generated-document capability.  Direct
+        # workflow/tool calls have no equivalent trustworthy click/owner proof
+        # and must use ``POST /api/print/document`` instead.
+        if str(runtime_context.get("service_source") or "") != "fastapi_print_route":
+            return {
+                "success": False,
+                "error_code": "PRINT_CAPABILITY_ROUTE_REQUIRED",
+                "message": "请通过已生成发货单的打印按钮提交，不能直接调用打印工具",
+            }
         return svc.print_document(
             str(params.get("file_path") or "").strip(),
             params.get("printer_name"),
@@ -1525,11 +1552,35 @@ def _registered_router_business_db(
         return {"success": False, "message": "customers 仅支持 create/ensure_exists/upsert。"}
 
     if entity == "products":
+        product_payload = dict(payload)
+        if operation == "create":
+            labeled = re.search(
+                r"新增产品\s*[：:]\s*(?P<name>.+?)\s+型号\s*[：:]\s*"
+                r"(?P<model>[A-Za-z0-9][A-Za-z0-9._*\-/]*)",
+                str(user_message or ""),
+                flags=re.IGNORECASE,
+            )
+            if labeled:
+                product_name = labeled.group("name").strip(" ，,。")
+                model_number = labeled.group("model").strip()
+                product_payload.setdefault("product_name", product_name)
+                product_payload.setdefault("name", product_name)
+                product_payload.setdefault("model_number", model_number)
+                product_payload["name_or_model"] = str(
+                    product_payload.get("product_name") or product_name
+                ).strip()
         if operation == "create":
             return _registered_router_products(
-                "create", payload, runtime_context, profile, user_message
+                "create", product_payload, runtime_context, profile, user_message
             )
-        return {"success": False, "message": "products 当前仅支持 create；查询请用 read。"}
+        if operation in ("update", "delete"):
+            return _registered_router_products(
+                operation, product_payload, runtime_context, profile, user_message
+            )
+        return {
+            "success": False,
+            "message": "products 支持 create/update/delete；查询请用 read。",
+        }
 
     if entity == "materials":
         if operation in ("create", "update", "delete", "batch_delete"):

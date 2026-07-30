@@ -1,5 +1,7 @@
 /** 聊天 UI 层消息（localStorage / 组件展示；role 用 ai 而非 API 的 assistant） */
 
+import type { OrchestrationTraceStep } from './orchestration'
+
 export interface ChatApprovalCard {
   version?: number
   kind?: string
@@ -47,6 +49,8 @@ export interface UiChatMessage {
   approvalCard?: ChatApprovalCard
   /** 附件（Excel 分析等 Mod 回传的结构化数据） */
   attachments?: Record<string, unknown>[]
+  /** 智能对话执行过的数据库、AI 员工与打印编排时间线 */
+  orchestrationTrace?: OrchestrationTraceStep[]
 }
 
 export type UiChatMessageExtras = Partial<UiChatMessage>

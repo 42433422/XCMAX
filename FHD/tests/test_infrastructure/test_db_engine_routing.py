@@ -119,11 +119,18 @@ def test_get_database_url_uses_database_url_env():
                 assert db_mod._get_database_url() == "sqlite:///env.db"
 
 
-def test_create_engine_sqlite_desktop_uses_static_pool():
+def test_create_engine_sqlite_desktop_uses_queue_pool_for_background_workers():
     with patch.dict("os.environ", {"XCAGI_DESKTOP_MODE": "true"}, clear=False):
         engine = db_mod._create_engine_for_url("sqlite:///desk.db")
         try:
-            assert "StaticPool" in type(engine.pool).__name__
+            assert "QueuePool" in type(engine.pool).__name__
+            first = engine.raw_connection()
+            second = engine.raw_connection()
+            try:
+                assert first.driver_connection is not second.driver_connection
+            finally:
+                second.close()
+                first.close()
         finally:
             engine.dispose()
 

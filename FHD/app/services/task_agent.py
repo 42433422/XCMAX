@@ -8,10 +8,12 @@ import re
 from typing import Any
 
 from .task_context_service import get_task_context_service
+from .tools_execution.order_parser import parse_named_product_order
 
 SLOT_LABELS = {
     "unit_name": "单位名称",
     "model_number": "编号/型号",
+    "product_name": "产品名称",
     "tin_spec": "规格",
     "quantity_tins": "桶数",
     "keyword": "关键词",
@@ -120,6 +122,20 @@ class TaskAgent:
         order_signal = any(k in msg for k in ["编号", "型号", "规格", "桶"])
         # 只要明显是发货单语境，就进入结构化审查；有槽位就抽取，缺项就追问
         if order_action and (order_signal or any(k in msg for k in ["发货单", "送货单", "出货单"])):
+            named_product_order = parse_named_product_order(msg)
+            if named_product_order:
+                named_products = list(named_product_order.get("products") or [])
+                named_product = named_products[0] if named_products else {}
+                return {
+                    "task_type": "shipment_generate",
+                    "slots": {
+                        "unit_name": str(named_product_order.get("unit_name") or "").strip(),
+                        "product_name": str(named_product.get("name") or "").strip(),
+                        "tin_spec": named_product.get("tin_spec"),
+                        "quantity_tins": named_product.get("quantity_tins"),
+                    },
+                    "source": "named_product_nlu",
+                }
             slots: dict[str, Any] = {}
             spec_span_end = -1
             m_model = re.search(r"(?:编号|型号)\s*[:：]?\s*(\d{3,6})", msg) or re.search(
@@ -217,9 +233,11 @@ class TaskAgent:
         slots = plan.get("slots") or {}
         missing: list[str] = []
         if task_type == "shipment_generate":
-            for key in ["unit_name", "model_number", "tin_spec", "quantity_tins"]:
+            for key in ["unit_name", "tin_spec", "quantity_tins"]:
                 if not slots.get(key):
                     missing.append(key)
+            if not (slots.get("model_number") or slots.get("product_name")):
+                missing.append("product_name")
         if task_type in ("product_query", "customer_query"):
             if not slots.get("keyword"):
                 missing.append("keyword")
@@ -244,17 +262,17 @@ class TaskAgent:
             return "我这边看了一下，问一下这次需要多少桶呢？"
         if missing_slots == ["tin_spec"]:
             return "我这边看了一下，问一下规格是多少呢？"
-        if missing_slots == ["model_number"]:
-            return "我这边看了一下，编号好像还没有呢，问一下是多少？"
+        if missing_slots == ["product_name"]:
+            return "我这边看了一下，产品名称或编号好像还没有呢，问一下是什么？"
         if missing_slots == ["unit_name"]:
             return "我这边看了一下，购买单位还没有呢，问一下是哪一家？"
         question_map = {
             "quantity_tins": "多少桶呢",
-            "model_number": "编号好像还没有呢，问一下是多少",
+            "product_name": "产品名称或编号好像还没有呢，问一下是什么",
             "tin_spec": "规格是多少呢",
             "unit_name": "购买单位是哪一家呢",
         }
-        ordered_keys = ["unit_name", "model_number", "tin_spec", "quantity_tins"]
+        ordered_keys = ["unit_name", "product_name", "tin_spec", "quantity_tins"]
         questions = [
             question_map[k] for k in ordered_keys if k in missing_slots and k in question_map
         ]
@@ -271,10 +289,16 @@ class TaskAgent:
             unit_name = slots.get("unit_name", "")
             quantity_tins = slots.get("quantity_tins", 0)
             model_number = slots.get("model_number", "")
+            product_name = slots.get("product_name", "")
             tin_spec = slots.get("tin_spec", 0)
 
             # 验证槽位有效性
-            if not unit_name or not quantity_tins or not model_number or not tin_spec:
+            if (
+                not unit_name
+                or not quantity_tins
+                or not (model_number or product_name)
+                or not tin_spec
+            ):
                 # 槽位不完整，返回错误消息而不是生成无效的 order_text
                 return {
                     "tool_key": "shipment_generate",
@@ -284,14 +308,20 @@ class TaskAgent:
                     "missing_slots": {
                         "unit_name": not unit_name,
                         "quantity_tins": not quantity_tins,
-                        "model_number": not model_number,
+                        "product_name": not (model_number or product_name),
                         "tin_spec": not tin_spec,
                     },
                 }
 
-            order_text = (
-                f"{unit_name}{int(quantity_tins)} 桶 {model_number} 规格 {int(float(tin_spec))}"
-            )
+            spec_display = int(float(tin_spec)) if float(tin_spec).is_integer() else float(tin_spec)
+            if model_number:
+                order_text = (
+                    f"{unit_name}{int(quantity_tins)} 桶 {model_number} 规格 {spec_display}"
+                )
+            else:
+                order_text = (
+                    f"开单 {unit_name}，{product_name}，规格{spec_display}，{int(quantity_tins)}桶"
+                )
             return {
                 "tool_key": "shipment_generate",
                 "intent": "shipment_generate",

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import threading
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -56,6 +58,10 @@ class TestCompleteStructured:
         assert result.data["intent"] == "x"
         assert result.attempts == 1 and result.repaired is False
         assert mock_call.await_count == 1
+        sent_messages = mock_call.await_args.args[0]
+        schema_message = next(item for item in sent_messages if item["role"] == "system")
+        assert '"required":["intent"]' in schema_message["content"]
+        assert mock_call.await_args.kwargs["response_format"] == {"type": "json_object"}
 
     async def test_bad_json_repaired_on_second_try(self):
         responses = [
@@ -132,3 +138,25 @@ class TestSyncBridge:
         ):
             result = so.complete_structured_sync([{"role": "user", "content": "hi"}], schema=SCHEMA)
         assert result.data["intent"] == "sync"
+
+    def test_sync_bridge_cancels_provider_at_deadline(self):
+        cancelled = threading.Event()
+
+        async def slow_call(*_args, **_kwargs):
+            try:
+                await asyncio.sleep(1)
+            finally:
+                cancelled.set()
+
+        with patch(
+            "app.infrastructure.llm.invoke.chat_completion_openai_format",
+            new=AsyncMock(side_effect=slow_call),
+        ):
+            with pytest.raises(TimeoutError):
+                so.complete_structured_sync(
+                    [{"role": "user", "content": "hi"}],
+                    schema=SCHEMA,
+                    timeout_seconds=0.02,
+                )
+
+        assert cancelled.wait(timeout=0.2)

@@ -18,11 +18,18 @@ def dispatch_legacy_tool_payload(
     json_response_fn,
     hdr_getter,
     parse_order_text_fn,
+    owner_user_id: int | None = None,
 ):
     """返回与原先 elif 分支相同的 Werkzeug JSON Response。"""
     _j = json_response_fn
     _hdr = hdr_getter
     _parse_order_text = parse_order_text_fn
+    try:
+        trusted_owner_user_id = int(owner_user_id) if owner_user_id is not None else 0
+    except (TypeError, ValueError):
+        trusted_owner_user_id = 0
+    if trusted_owner_user_id <= 0:
+        trusted_owner_user_id = None
 
     if tool_id == "products":
         effective_action = action
@@ -546,6 +553,7 @@ def dispatch_legacy_tool_payload(
                 template_name=params.get("template_name") or params.get("template"),
                 template_id=params.get("template_id"),
                 preferred_template=params.get("preferred_template") or params.get("template"),
+                owner_user_id=trusted_owner_user_id,
             )
             return _j(payload, status_code)
 
@@ -568,12 +576,69 @@ def dispatch_legacy_tool_payload(
             )
             return _j(result, 200)
         if action == "print_document":
-            result = svc.print_document(
-                str(params.get("file_path") or "").strip(),
-                params.get("printer_name"),
-                bool(params.get("use_automation", False)),
+            # This legacy dispatcher can be reached without the protected
+            # FastAPI print route.  A local path must not be sufficient to
+            # trigger a physical print: use the same owner-bound capability
+            # issued alongside a generated shipment document.
+            from app.application.print_authorization import (
+                defer_document_print_capability,
+                finish_document_print_capability,
+                reserve_document_print_capability,
             )
-            return _j(result, 200)
+
+            reservation = reserve_document_print_capability(
+                params.get("print_token"),
+                owner_user_id=trusted_owner_user_id,
+                file_path=params.get("file_path"),
+                order_id=params.get("order_id"),
+            )
+            if not reservation.get("success"):
+                error_code = str(reservation.get("error_code") or "")
+                status_code = 403 if error_code in {
+                    "PRINT_AUTH_REQUIRED",
+                    "PRINT_CONFIRMATION_OWNER_MISMATCH",
+                } else 409
+                return _j(reservation, status_code)
+            try:
+                result = svc.print_document(
+                    str(reservation["file_path"]),
+                    params.get("printer_name"),
+                    bool(params.get("use_automation", False)),
+                )
+            except RECOVERABLE_ERRORS as exc:
+                finish_document_print_capability(reservation, print_succeeded=False)
+                return _j({"success": False, "message": f"打印失败：{exc}"}, 500)
+            print_succeeded = bool(result.get("success"))
+            print_completed = bool(result.get("print_completed", print_succeeded))
+            receipt = None
+            if print_succeeded and not print_completed:
+                pending_job = defer_document_print_capability(
+                    reservation,
+                    printer_name=result.get("printer"),
+                    job_id=result.get("job_id"),
+                )
+                if pending_job.get("success"):
+                    result["print_job_token"] = pending_job["print_job_token"]
+                    result["print_tracking_available"] = bool(
+                        pending_job.get("tracking_available")
+                    )
+                else:
+                    finish_document_print_capability(
+                        reservation,
+                        print_succeeded=True,
+                        print_completed=False,
+                    )
+                    result["print_tracking_available"] = False
+            else:
+                receipt = finish_document_print_capability(
+                    reservation,
+                    print_succeeded=print_succeeded,
+                    print_completed=print_completed,
+                )
+            if result.get("success"):
+                if receipt:
+                    result["post_print_receipt"] = receipt
+            return _j(result, 200 if result.get("success") else 400)
         if action == "test":
             result = svc.test_printer(str(params.get("printer_name") or "").strip())
             return _j(result, 200)

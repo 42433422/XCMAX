@@ -1153,6 +1153,7 @@ class AIChatExcelImportMixin:
                 "新增",
                 "添加",
                 "创建",
+                "修改",
                 "更新",
                 "删除",
             )
@@ -1220,6 +1221,7 @@ class AIChatExcelImportMixin:
                 "新增",
                 "添加",
                 "写入",
+                "修改",
                 "更新",
                 "删除",
                 "导入",

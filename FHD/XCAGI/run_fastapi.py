@@ -152,6 +152,7 @@ def _verify_frozen_critical_runtime() -> None:
 
     import av
     import faster_whisper
+    import pypdfium2 as pdfium
     from pypdf import PdfReader
     from reportlab.lib.pagesizes import A4
     from reportlab.pdfbase import pdfmetrics
@@ -172,6 +173,15 @@ def _verify_frozen_critical_runtime() -> None:
         reader = PdfReader(str(output))
         if len(reader.pages) != 1 or output.stat().st_size < 512:
             raise RuntimeError("frozen PDF runtime probe produced an invalid document")
+        pdfium_document = pdfium.PdfDocument(str(output))
+        pdfium_page = pdfium_document[0]
+        try:
+            rendered = pdfium_page.render(scale=1).to_pil()
+            if rendered.width < 1 or rendered.height < 1:
+                raise RuntimeError("frozen PDFium runtime probe produced an invalid image")
+        finally:
+            pdfium_page.close()
+            pdfium_document.close()
 
         if _is_frozen():
             from app.desktop_runtime.paths import configure_desktop_environment
@@ -198,7 +208,8 @@ def _verify_frozen_critical_runtime() -> None:
                 )
     print(
         "[run_fastapi] frozen critical runtime probe OK: "
-        f"pypdf + reportlab + PyAV {av.__version__} + faster-whisper {faster_whisper.__version__}"
+        "pypdf + reportlab + PDFium + "
+        f"PyAV {av.__version__} + faster-whisper {faster_whisper.__version__}"
     )
 
 
@@ -214,6 +225,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--migrate-only", action="store_true", help="仅执行数据库迁移后退出")
     parser.add_argument(
         "--backup", action="store_true", help="迁移前备份（与 --migrate-only 合用）"
+    )
+    parser.add_argument(
+        "--if-needed",
+        action="store_true",
+        help="仅在数据库版本落后时迁移（与 --migrate-only 合用）",
     )
     parser.add_argument(
         "--verify-frozen-critical-runtime",
@@ -281,13 +297,20 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.migrate_only:
         _ensure_sys_path()
-        from app.desktop_runtime.migrate import backup_database, run_alembic_upgrade
+        from app.desktop_runtime.migrate import (
+            backup_database,
+            migration_required,
+            run_alembic_upgrade,
+        )
         from app.desktop_runtime.paths import (
             configure_desktop_environment,
             ensure_desktop_dirs,
         )
 
         configure_desktop_environment(args.data_dir)
+        if args.if_needed and not migration_required(args.data_dir):
+            print("XCAGI_MIGRATION_STATUS=current", flush=True)
+            return
         version = os.environ.get("XCAGI_VERSION", "unknown")
         if args.backup:
             dirs = ensure_desktop_dirs(args.data_dir)

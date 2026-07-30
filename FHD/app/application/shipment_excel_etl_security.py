@@ -10,18 +10,76 @@ class ShipmentEtlPathError(ValueError):
     """ETL 路径不在允许沙箱内。"""
 
 
+class ShipmentEtlRuntimeDataDirError(ShipmentEtlPathError):
+    """The desktop user-data root is unavailable; never substitute cwd."""
+
+    code = "ETL_RUNTIME_DATA_DIR_UNAVAILABLE"
+    status_code = 503
+
+    def __init__(self, message: str = "ETL 运行数据目录不可用，已拒绝使用应用安装目录") -> None:
+        super().__init__(message)
+
+
+def _etl_app_data_root() -> Path:
+    """Resolve the only persistent root permitted for legacy ETL state.
+
+    In packaged desktop mode the process cwd is the bundled backend directory.
+    A relative ``XCAGI_DATA_DIR`` is therefore unsafe as well: reject it before
+    ``get_app_data_dir`` can resolve it against the application bundle.
+    """
+
+    explicit = os.environ.get("XCAGI_DATA_DIR") or os.environ.get("XCAGI_DESKTOP_DATA_DIR")
+    if explicit and not Path(explicit).expanduser().is_absolute():
+        raise ShipmentEtlRuntimeDataDirError()
+    try:
+        from app.utils.path_utils import get_app_data_dir
+
+        root = Path(get_app_data_dir()).expanduser()
+        if not root.is_absolute():
+            raise ShipmentEtlRuntimeDataDirError()
+        root = root.resolve()
+        root.mkdir(parents=True, exist_ok=True)
+        return root
+    except ShipmentEtlRuntimeDataDirError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - convert environment failure to stable ETL code
+        raise ShipmentEtlRuntimeDataDirError() from exc
+
+
+def etl_runtime_data_dir() -> Path:
+    """Return legacy ETL's persistent data directory under app user-data."""
+
+    try:
+        root = _etl_app_data_root() / "data"
+        root.mkdir(parents=True, exist_ok=True)
+        return root.resolve()
+    except ShipmentEtlRuntimeDataDirError:
+        raise
+    except OSError as exc:
+        raise ShipmentEtlRuntimeDataDirError() from exc
+
+
+def etl_runtime_output_dir() -> Path:
+    """Return the dedicated runtime export root for bare ETL output names."""
+
+    try:
+        root = etl_runtime_data_dir() / "etl" / "outputs"
+        root.mkdir(parents=True, exist_ok=True)
+        return root.resolve()
+    except ShipmentEtlRuntimeDataDirError:
+        raise
+    except OSError as exc:
+        raise ShipmentEtlRuntimeDataDirError() from exc
+
+
 def _trusted_base_roots() -> list[Path]:
     """不可被请求参数扩展的受信根目录。"""
-    roots: list[Path] = []
-    try:
-        from app.utils.path_utils import get_app_data_dir, get_data_dir
-
-        roots.append(Path(get_app_data_dir()).resolve())
-        roots.append(Path(get_data_dir()).resolve())
-        roots.append((Path(get_app_data_dir()) / "temp_excel").resolve())
-    except Exception:  # noqa: BLE001
-        pass
-    roots.append(Path.cwd().resolve())
+    app_data_root = _etl_app_data_root()
+    roots: list[Path] = [
+        app_data_root,
+        etl_runtime_data_dir(),
+        (app_data_root / "temp_excel").resolve(),
+    ]
     # OCR/上传临时文件落系统 temp
     import tempfile
 
@@ -127,9 +185,8 @@ def resolve_etl_output_path(
         raise ShipmentEtlPathError("invalid output name")
     parent_raw = str(Path(raw).parent) if Path(raw).parent.as_posix() not in (".", "") else "."
     if parent_raw in (".", ""):
-        # 仅文件名：落到第一个受信根
-        roots = etl_allowed_roots(workspace_root)
-        parent = roots[0]
+        # Bare output names must not inherit the packaged process cwd.
+        parent = etl_runtime_output_dir()
     else:
         parent = _safe_under_roots(parent_raw, etl_allowed_roots(workspace_root))
     parent.mkdir(parents=True, exist_ok=True)

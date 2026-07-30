@@ -8,6 +8,7 @@
  * - 纯函数 checkBeforeAction(tier, action, remoteState) → GateResult
  * - 默认启用（env XCAGI_CROSS_TIER_GATE=0 关闭，opt-out）
  * - 失败模式：跨端查询失败（remoteState=null）fail-closed，allow=false
+ *   （仅适用于会改变跨端版本/发布状态的动作）
  * - 与服务器端 scripts/autonomy/cross_tier_gate.py 共用同一语义
  */
 
@@ -23,6 +24,21 @@ export interface GateResult {
 }
 
 /**
+ * Only these actions can conflict with state owned by another tier.  Local,
+ * reversible remediation such as cache cleanup must not become unavailable
+ * merely because the product is offline.
+ */
+const CROSS_TIER_ACTION_TYPES = new Set([
+  'rollback_version',
+  'rollback_to_last_tarball',
+  'cvm-push-release',
+])
+
+export function requiresRemoteState(actionType: string): boolean {
+  return CROSS_TIER_ACTION_TYPES.has(actionType)
+}
+
+/**
  * 跨端门禁纯函数。
  *
  * @param tier 当前执行端（desktop / server / ci）
@@ -31,7 +47,7 @@ export interface GateResult {
  * @returns GateResult.allow=true 可执行；allow=false 应跳过并写 audit
  *
  * 语义：
- * - remoteState=null（查询失败）→ allow=false（fail-closed）
+ * - 对跨端动作，remoteState=null（查询失败）→ allow=false（fail-closed）
  * - remoteState={}（已知空状态）→ allow=true
  * - 命中门禁规则 → allow=false + reasons
  */

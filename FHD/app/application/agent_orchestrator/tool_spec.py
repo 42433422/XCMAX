@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+import re
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -50,6 +52,8 @@ class ToolActionSpecV2:
     required_params: list[str] = field(default_factory=list)
     availability: str = "shared"
     test_fixtures: list[dict[str, Any]] = field(default_factory=list)
+    verification: dict[str, Any] = field(default_factory=dict)
+    rollback: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -67,6 +71,8 @@ class ToolActionSpecV2:
             "required_params": self.required_params,
             "availability": self.availability,
             "test_fixtures": self.test_fixtures,
+            "verification": self.verification,
+            "rollback": self.rollback,
         }
 
 
@@ -190,6 +196,98 @@ def _aiopen_tool_risk(action: str) -> tuple[RiskLevel, bool]:
     return AIOPEN_DEFAULT_RISK, False
 
 
+_READ_ACTIONS = {
+    "read",
+    "query",
+    "list",
+    "exists",
+    "get",
+    "preview",
+    "status",
+    "search",
+}
+_WRITE_ACTIONS = {
+    "write",
+    "create",
+    "update",
+    "delete",
+    "upsert",
+    "batch_create",
+    "batch_delete",
+    "execute_import",
+    "import_records",
+    "import_delivery_notes",
+    "stock_in",
+    "stock_out",
+    "transfer",
+    "approve_order",
+    "create_inbound",
+}
+
+
+def _verification_contract(tool_id: str, action: str) -> dict[str, Any]:
+    normalized_action = str(action or "").strip().lower()
+    if tool_id == "employee" and normalized_action == "execute":
+        return {
+            "verifier": "employee_result",
+            "mode": "semantic",
+            "required_evidence": ["summary", "items", "sheets", "outputs"],
+        }
+    if tool_id in {"print", "shipment_orders"} and (
+        normalized_action == "print" or "print" in normalized_action
+    ):
+        return {
+            "verifier": "print_receipt",
+            "mode": "receipt",
+            "required_evidence": ["job_id", "file_path", "download_url", "printed"],
+        }
+    if normalized_action in _READ_ACTIONS:
+        return {
+            "verifier": "query_receipt",
+            "mode": "receipt",
+            "required_evidence": ["data", "result_count", "count", "matched_count", "exists"],
+        }
+    if normalized_action in _WRITE_ACTIONS:
+        return {
+            "verifier": "business_write_receipt",
+            "mode": "receipt",
+            "required_evidence": [
+                "receipt",
+                "record_id",
+                "created",
+                "updated",
+                "deleted",
+                "imported_count",
+                "job_id",
+                "data",
+            ],
+        }
+    return {
+        "verifier": "tool_contract",
+        "mode": "schema_and_receipt",
+        "required_evidence": ["data", "message", "artifact", "artifacts", "result"],
+    }
+
+
+def _rollback_contract(tool_id: str, action: str, risk: RiskLevel) -> dict[str, Any]:
+    normalized_action = str(action or "").strip().lower()
+    if normalized_action in _READ_ACTIONS:
+        return {"required": False, "strategy": "none"}
+    if normalized_action == "delete":
+        return {
+            "required": True,
+            "strategy": "restore_from_audit_snapshot",
+            "manual_if_unavailable": True,
+        }
+    if normalized_action in _WRITE_ACTIONS or risk in {"medium", "high"}:
+        return {
+            "required": True,
+            "strategy": "registered_compensation_or_manual",
+            "manual_if_unavailable": True,
+        }
+    return {"required": False, "strategy": "none"}
+
+
 def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> None:
     try:
         from app.application.aiopen.service import TOOL_DEFINITIONS
@@ -258,6 +356,8 @@ def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> No
             required_params=required_params,
             availability="aiopen",
             test_fixtures=deepcopy(fixture),
+            verification=_verification_contract("aiopen", action),
+            rollback=_rollback_contract("aiopen", action, risk),
         )
 
 
@@ -307,6 +407,16 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
                     action_meta.get("availability") or tool_meta.get("availability") or "shared"
                 ),
                 test_fixtures=deepcopy(test_fixtures),
+                verification=deepcopy(
+                    action_meta.get("verification")
+                    if isinstance(action_meta.get("verification"), dict)
+                    else _verification_contract(str(tool_id), normalized_action)
+                ),
+                rollback=deepcopy(
+                    action_meta.get("rollback")
+                    if isinstance(action_meta.get("rollback"), dict)
+                    else _rollback_contract(str(tool_id), normalized_action, risk)
+                ),
             )
             specs[(spec.tool_id, spec.action)] = spec
     _add_aiopen_tool_specs(specs)
@@ -317,6 +427,49 @@ def get_tool_action_spec(tool_id: str, action: str) -> ToolActionSpecV2 | None:
     normalized_tool_id = str(tool_id or "").strip()
     normalized_action = _normalize_tool_action(str(action or "view"))
     return build_tool_specs_v2().get((normalized_tool_id, normalized_action))
+
+
+_INTEGER_TEXT_RE = re.compile(r"^[+-]?\d+$")
+_NUMBER_TEXT_RE = re.compile(
+    r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$"
+)
+
+
+def normalize_tool_call_params(
+    tool_id: str,
+    action: str,
+    params: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Canonicalize unambiguous scalar values using the registered input schema."""
+    payload = deepcopy(dict(params or {}))
+    normalized_tool_id = str(tool_id or "").strip()
+    normalized_action = _normalize_tool_action(str(action or "view"), payload)
+    spec = build_tool_specs_v2().get((normalized_tool_id, normalized_action))
+    if spec is None:
+        return payload
+
+    properties = (
+        spec.input_schema.get("properties")
+        if isinstance(spec.input_schema.get("properties"), dict)
+        else {}
+    )
+    for key, prop in properties.items():
+        if key not in payload or not isinstance(prop, dict):
+            continue
+        value = payload.get(key)
+        if not isinstance(value, str):
+            continue
+        text = value.strip()
+        expected_type = str(prop.get("type") or "").strip()
+        if expected_type == "integer" and _INTEGER_TEXT_RE.fullmatch(text):
+            payload[key] = int(text)
+        elif expected_type == "number" and _NUMBER_TEXT_RE.fullmatch(text):
+            number = float(text)
+            if math.isfinite(number):
+                payload[key] = number
+        elif expected_type == "boolean" and text.lower() in {"true", "false"}:
+            payload[key] = text.lower() == "true"
+    return payload
 
 
 def _is_empty(value: Any) -> bool:
@@ -358,7 +511,16 @@ def _validate_schema_payload(
     if subject == "工具输出" and payload.get("success") is False:
         required = [key for key in required if str(key) == "success"]
     for key in required:
-        if _is_empty(payload.get(str(key))):
+        normalized_key = str(key)
+        value = payload.get(normalized_key)
+        output_empty_collection_is_receipt = (
+            subject == "工具输出"
+            and normalized_key == "data"
+            and isinstance(value, (list, dict))
+        )
+        if normalized_key not in payload or (
+            not output_empty_collection_is_receipt and _is_empty(value)
+        ):
             return False, f"{subject} 缺少字段：{key}"
 
     properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
