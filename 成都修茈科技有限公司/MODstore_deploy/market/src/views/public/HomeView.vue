@@ -249,6 +249,10 @@
             <label for="contact-message">需求说明（选填）</label>
             <textarea id="contact-message" v-model.trim="contactForm.message" maxlength="8000" rows="4" />
           </div>
+          <label class="footer-meta contact-privacy-consent">
+            <input v-model="contactForm.privacyAgreed" type="checkbox" required />
+            <span>我已阅读并同意 <a href="/privacy.html" target="_blank" rel="noopener noreferrer">《用户协议与隐私政策》</a>，同意修茈科技仅为商务联络、方案评估与顾问回访处理本次提交的信息。</span>
+          </label>
           <div v-if="contactError" class="error-message">{{ contactError }}</div>
           <div v-if="contactSuccess" class="success-message">已提交，我们会尽快与您联系。</div>
           <div class="form-actions contact-form__actions">
@@ -497,13 +501,7 @@ const uploadError = ref('')
 const uploadSuccess = ref(false)
 const uploading = ref(false)
 
-const contactForm = ref({
-  name: '',
-  email: '',
-  phone: '',
-  company: '',
-  message: '',
-})
+const contactForm = ref({ name: '', email: '', phone: '', company: '', message: '', privacyAgreed: false })
 const contactSubmitting = ref(false)
 const contactError = ref('')
 const contactSuccess = ref(false)
@@ -586,6 +584,7 @@ async function submitContact() {
   if (contactSubmitting.value) return
   contactError.value = ''
   contactSuccess.value = false
+  if (!contactForm.value.privacyAgreed) { contactError.value = '请先阅读并同意用户协议与隐私政策'; return }
   contactSubmitting.value = true
   try {
     await api.submitLandingContact({
@@ -595,11 +594,12 @@ async function submitContact() {
       company: contactForm.value.company,
       message: contactForm.value.message,
       source: csIntakeActive.value ? 'cs_intake' : 'home',
+      privacy_agreed: true, privacy_version: '2026-06-20', privacy_url: '/privacy.html',
       cs_uid: csIntakeActive.value && csIntakeUid.value ? csIntakeUid.value : undefined,
       cs_t: csIntakeActive.value ? csIntakeToken.value : '',
     })
     contactSuccess.value = true
-    contactForm.value = { name: '', email: '', phone: '', company: '', message: '' }
+    contactForm.value = { name: '', email: '', phone: '', company: '', message: '', privacyAgreed: false }
   } catch (e) {
     contactError.value = (e as Error)?.message || '提交失败，请稍后重试'
   } finally {

@@ -173,8 +173,8 @@ describe('HomeView', () => {
 
       const vm = wrapper.vm as any
       expect(vm.userLabel).toBe('alice')
-      expect(vm.contactForm.name).toBe('张三')
-      expect(vm.contactForm.message).toContain('售后退款')
+        expect(vm.contactForm.name).toBe('张三')
+        expect(vm.contactForm.message).toContain('售后退款')
 
       vm.toggleMobileNav()
       await wrapper.vm.$nextTick()
@@ -183,17 +183,30 @@ describe('HomeView', () => {
       await wrapper.vm.$nextTick()
       expect(document.body.classList.contains('landing-nav-open')).toBe(false)
 
-      await vm.submitContact()
-      expect(api.submitLandingContact).toHaveBeenCalledWith(expect.objectContaining({
-        source: 'cs_intake',
-        cs_uid: 12,
-        cs_t: 'token-12',
-      }))
+        await vm.submitContact()
+        expect(api.submitLandingContact).not.toHaveBeenCalled()
+        expect(vm.contactError).toContain('用户协议与隐私政策')
+
+        vm.contactForm.privacyAgreed = true
+        await vm.submitContact()
+        expect(api.submitLandingContact).toHaveBeenCalledWith(expect.objectContaining({
+          source: 'cs_intake',
+          privacy_agreed: true,
+          cs_uid: 12,
+          cs_t: 'token-12',
+        }))
       expect(vm.contactSuccess).toBe(true)
 
-      vi.mocked(api.submitLandingContact).mockRejectedValueOnce(new Error('contact failed'))
-      vm.contactForm = { name: '李四', email: 'li@example.com', phone: '', company: '', message: '咨询' }
-      await vm.submitContact()
+        vi.mocked(api.submitLandingContact).mockRejectedValueOnce(new Error('contact failed'))
+        vm.contactForm = {
+          name: '李四',
+          email: 'li@example.com',
+          phone: '',
+          company: '',
+          message: '咨询',
+          privacyAgreed: true,
+        }
+        await vm.submitContact()
       expect(vm.contactError).toContain('contact failed')
 
       await vm.uploadEmployee()
