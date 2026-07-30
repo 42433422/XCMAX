@@ -8,6 +8,7 @@ PARA_RUNTIME_ROOT="${PARA_RUNTIME_ROOT:-$(cd "${PARA_API_ROOT}/.." && pwd)}"
 PARA_NODE_BIN="${PARA_NODE_BIN:-${HOME}/.local/bin/node}"
 PARA_CLEANUP_SCRIPT="${PARA_CLEANUP_SCRIPT:-${PARA_API_ROOT}/scripts/cleanup-expired-info.mjs}"
 PARA_CLEANUP_ARCHIVE_DIR="${PARA_CLEANUP_ARCHIVE_DIR:-${PARA_API_ROOT}/api/data/cleanup-archives}"
+PARA_DB_PATH="${PARA_DB_PATH:-${PARA_API_ROOT}/api/data/devfleet.db}"
 PARA_LOG_DIR="${PARA_LOG_DIR:-${PARA_RUNTIME_ROOT}/logs}"
 PARA_WORKSPACE_ROOT="${PARA_WORKSPACE_ROOT:-/tmp/devfleet-e2e/agent-workspace}"
 PARA_CLEANUP_LOCK_DIR="${PARA_CLEANUP_LOCK_DIR:-${PARA_RUNTIME_ROOT}/para-cleanup.lock}"
@@ -152,16 +153,69 @@ prune_series() {
 }
 
 cleanup_stale_workspaces() {
+  local active_cwds
+  local db_row
+  local lsof_status
+  local merge_conflict
+  local merge_requested_at
   local removed=0
   local directory
   local name
+  local task_id
+  local task_status
   [[ -d "${PARA_WORKSPACE_ROOT}" ]] || {
     log "任务工作区不存在，跳过: ${PARA_WORKSPACE_ROOT}"
     return 0
   }
+  command -v lsof >/dev/null 2>&1 || {
+    log "lsof 不可用，无法排除活动任务工作区，本轮不回收"
+    return 0
+  }
+  command -v sqlite3 >/dev/null 2>&1 || {
+    log "sqlite3 不可用，无法核对任务终态，本轮不回收任务工作区"
+    return 0
+  }
+  [[ -f "${PARA_DB_PATH}" ]] || {
+    log "Para 数据库不存在，无法核对任务终态: ${PARA_DB_PATH}"
+    return 0
+  }
+  if ! active_cwds="$(lsof -n -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')"; then
+    log "无法读取活动工作目录，本轮不回收任务工作区"
+    return 0
+  fi
   while IFS= read -r -d '' directory; do
     name="${directory##*/}"
     [[ "${name}" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}- ]] || continue
+    active_cwd_under "${active_cwds}" "${directory}" && continue
+    if lsof -n +D "${directory}" >/dev/null 2>&1; then
+      continue
+    else
+      lsof_status=$?
+      (( lsof_status == 1 )) || continue
+    fi
+    task_id="${name:0:36}"
+    [[ "${task_id}" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] ||
+      continue
+    if ! db_row="$(
+      sqlite3 -readonly -separator '|' "${PARA_DB_PATH}" \
+        "SELECT status, COALESCE(merge_requested_at, ''), COALESCE(merge_conflict, '') FROM tasks WHERE id = '${task_id}' LIMIT 1;"
+    )"; then
+      log "任务状态查询失败，本轮保留工作区: ${name}"
+      continue
+    fi
+    task_status=""
+    merge_requested_at=""
+    merge_conflict=""
+    if [[ -n "${db_row}" ]]; then
+      IFS='|' read -r task_status merge_requested_at merge_conflict <<< "${db_row}"
+    fi
+    case "${task_status}" in
+      pending | running | merge_conflict) continue ;;
+      completed)
+        [[ -z "${merge_requested_at}" && -z "${merge_conflict}" ]] || continue
+        ;;
+    esac
+    log "回收失活任务工作区 path=${directory} task_id=${task_id} task_status=${task_status:-missing} apply=${APPLY}"
     if (( APPLY == 1 )); then
       rm -rf "${directory}"
     fi
@@ -343,6 +397,7 @@ cleanup_stale_ephemeral_directories() {
     fi
     size_kb="$(du -sk "${directory}" 2>/dev/null | awk '{print $1}')"
     is_uint "${size_kb}" || size_kb=0
+    log "回收失活非 Git 临时目录 path=${directory} size_kb=${size_kb} apply=${APPLY}"
     if (( APPLY == 1 )); then
       rm -rf "${directory}"
     fi
