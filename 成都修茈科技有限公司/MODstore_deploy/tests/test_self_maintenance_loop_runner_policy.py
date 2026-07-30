@@ -700,6 +700,51 @@ def test_validate_remediation_branch_delivery_requires_advanced_work_branch(
     assert advanced["reason"] == "remediation_branch_advanced"
 
 
+def test_dynamic_low_risk_policy_blocks_marker_only_when_structured_review_hold():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-review",
+                "kind": "automated_remediation",
+                "para_task_id": "task-review",
+                "reason": "structured_review_blocking_findings",
+                "run_id": "run-review",
+                "task_id": "task-review",
+            }
+        ]
+    }
+    files = ["成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"]
+
+    result = _assess_branch_auto_merge_policy(files, _stats(), memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "marker_only_diff_requires_executable_change"
+
+
+def test_dynamic_low_risk_policy_blocks_kb_only_when_structured_review_hold():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-review",
+                "kind": "automated_remediation",
+                "para_task_id": "task-review",
+                "reason": "structured_review_blocking_findings",
+                "run_id": "run-review",
+                "task_id": "task-review",
+            }
+        ]
+    }
+    files = [
+        "FHD/XCAGI/kb/fixes/sample-fix.json",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats(), memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "auxiliary_only_diff_requires_executable_change"
+
+
 def test_dynamic_low_risk_policy_blocks_marker_only_when_memory_requires_executable_change():
     files = ["成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"]
     memory = {
@@ -2602,6 +2647,83 @@ def test_auto_merge_policy_blocks_kb_paths_during_retort_scope_remediation():
     assert result["kb_paths"] == [files[0]]
 
 
+def _retort_scope_memory() -> dict:
+    return {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-6d8f01",
+                "kind": "automated_remediation",
+                "para_task_id": "task-retort-scope",
+                "reason": "retort_scope_too_large",
+            }
+        ]
+    }
+
+
+def test_auto_merge_policy_blocks_retort_scope_when_file_budget_exceeded():
+    files = [
+        f"成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy_{index}.py"
+        for index in range(7)
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats(), memory=_retort_scope_memory())
+
+    assert result["ok"] is False
+    assert result["reason"] == "retort_scope_diff_contract_exceeded"
+    assert result["scoped_file_count"] == 7
+    assert "max_changed_files" in result["violations"]
+
+
+def test_auto_merge_policy_blocks_retort_scope_when_line_budget_exceeded():
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_retort_remediation.py",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(
+        files,
+        _stats(line_changes=401),
+        memory=_retort_scope_memory(),
+    )
+
+    assert result["ok"] is False
+    assert result["reason"] == "retort_scope_diff_contract_exceeded"
+    assert result["scoped_line_changes"] == 401
+    assert "max_changed_lines" in result["violations"]
+
+
+def test_auto_merge_policy_blocks_retort_scope_when_diff_chars_exceeded():
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_retort_remediation.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(
+        files,
+        {**_stats(line_changes=12), "git_diff_chars": 12001},
+        memory=_retort_scope_memory(),
+    )
+
+    assert result["ok"] is False
+    assert result["reason"] == "retort_scope_diff_contract_exceeded"
+    assert result["git_diff_chars"] == 12001
+    assert "max_diff_chars" in result["violations"]
+
+
+def test_auto_merge_policy_allows_retort_scope_within_contract():
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_retort_remediation.py",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(
+        files,
+        {**_stats(line_changes=80), "git_diff_chars": 4000},
+        memory=_retort_scope_memory(),
+    )
+
+    assert result.get("reason") != "retort_scope_diff_contract_exceeded"
+
+
 def test_auto_merge_policy_blocks_kb_paths_during_diff_too_large_remediation():
     memory = {
         "open_items": [
@@ -2898,8 +3020,49 @@ def test_reconcile_hold_merge_label_failure_continues_on_rejected_branch():
         "devfleet/cursor/sub-1-81ba09",
     )
     prompt = _code_task_text("run-hold-retry", {"gaps": []}, memory, candidate)
-    assert "hold-merge label infrastructure" in prompt
+    assert "hold-merge or risk-label infrastructure" in prompt
     assert "hold-merge-label-failed-before-review" in prompt
+
+
+def test_reconcile_risk_label_failure_continues_on_rejected_branch():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-91cc02",
+                "para_task_id": "task-risk-label",
+                "run_id": "run-risk-label",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-91cc02",
+            "detail": "risk-label-failed-after-review",
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is False
+    candidate = _resume_review_qa_candidate(memory)
+    assert candidate["continue_existing_code_task"] is True
+    assert _resume_dispatch_context(candidate, _resume_steps(candidate)) == (
+        None,
+        "devfleet/cursor/sub-1-91cc02",
+    )
+    prompt = _code_task_text("run-risk-label-retry", {"gaps": []}, memory, candidate)
+    assert "hold-merge or risk-label infrastructure" in prompt
+    assert "risk-label-failed-after-review" in prompt
 
 
 def test_reconcile_bot_merge_checks_unavailable_continues_on_rejected_branch():
@@ -2960,6 +3123,8 @@ def test_reconcile_bot_merge_checks_unavailable_continues_on_rejected_branch():
         "Error: bot merge checks failed or unavailable: gh CLI unavailable",
         "hold-merge-label-failed-before-review",
         "devfleet/cursor/sub-1-81ba09: hold-merge-label-remove-failed-after-review",
+        "risk-label-failed-after-review",
+        "devfleet/cursor/sub-1-91cc02: risk-label-failed-after-review",
     ],
 )
 def test_para_merge_conflict_continues_on_merge_worker_detail_formats(detail: str):
@@ -3022,6 +3187,7 @@ def test_para_merge_remediation_branch_preserving_helpers():
         "post-dispatch-check-failed: PR #765 checks=docker-build-fhd-api"
     )
     assert is_branch_preserving_para_merge_failure_detail("hold-merge-label-failed-before-review")
+    assert is_branch_preserving_para_merge_failure_detail("risk-label-failed-after-review")
     assert is_branch_preserving_para_merge_failure_detail(
         "bot merge checks failed or unavailable: Command failed: gh pr checks 813"
     )
@@ -3031,6 +3197,12 @@ def test_para_merge_remediation_branch_preserving_helpers():
         "X Cannot update PR branch due to conflicts"
     )
     assert not is_branch_preserving_para_merge_failure_detail(update_branch_detail)
+    assert (
+        resume_from_clean_baseline_for_para_merge(
+            "para_merge_conflict", "risk-label-failed-after-review"
+        )
+        is False
+    )
     assert (
         resume_from_clean_baseline_for_para_merge(
             "para_merge_conflict", "hold-merge-label-failed-before-review"

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Optional
 
 RETORT_SCOPE_REASON = "retort_scope_too_large"
 RETORT_SCOPE_MAX_FILES = 6
@@ -16,6 +16,96 @@ RETORT_SCOPE_EXCLUDED_PATHS = (
     "scripts/dev/source_governance.py",
     "self_maintenance_loop_status.py",
 )
+
+
+def _normalize_repo_path(path: str) -> str:
+    return (path or "").replace("\\", "/").strip().strip('"').strip("'")
+
+
+def _path_matches_retort_excluded_glob(path: str, excluded_glob: str) -> bool:
+    normalized = _normalize_repo_path(path)
+    pattern = _normalize_repo_path(excluded_glob)
+    if not normalized or not pattern:
+        return False
+    if pattern.endswith("/"):
+        return normalized.startswith(pattern) or f"/{pattern}" in f"/{normalized}/"
+    return normalized == pattern or normalized.endswith(f"/{pattern}")
+
+
+def _retort_scope_scoped_changed_files(changed_files: list[str]) -> tuple[list[str], list[str]]:
+    scoped: list[str] = []
+    excluded_hits: list[str] = []
+    for path in changed_files:
+        normalized = _normalize_repo_path(path)
+        if not normalized:
+            continue
+        if any(
+            _path_matches_retort_excluded_glob(normalized, glob)
+            for glob in RETORT_SCOPE_EXCLUDED_PATHS
+        ):
+            excluded_hits.append(normalized)
+            continue
+        scoped.append(normalized)
+    return scoped, excluded_hits
+
+
+def _retort_scope_line_changes(diff_stats: dict[str, Any] | None) -> int:
+    stats = diff_stats if isinstance(diff_stats, dict) else {}
+    try:
+        line_changes = int(stats.get("line_changes"))
+        if line_changes >= 0:
+            return line_changes
+    except (TypeError, ValueError):
+        pass
+    additions = int(stats.get("additions") or 0)
+    deletions = int(stats.get("deletions") or 0)
+    return max(additions + deletions, 0)
+
+
+def assess_retort_scope_diff_contract(
+    memory: dict[str, Any] | None,
+    changed_files: list[str],
+    diff_stats: dict[str, Any] | None,
+    *,
+    diff_excerpt: str = "",
+) -> Optional[dict[str, Any]]:
+    """Fail closed when an active Retort scope hold exceeds the clean-base diff budget."""
+
+    from modstore_server.self_maintenance_policy import memory_has_retort_scope_remediation
+
+    if not memory_has_retort_scope_remediation(memory):
+        return None
+
+    contract = retort_scope_remediation_contract()
+    scoped_files, excluded_hits = _retort_scope_scoped_changed_files(changed_files)
+    scoped_file_count = len(scoped_files)
+    scoped_line_changes = _retort_scope_line_changes(diff_stats)
+    diff_chars = int((diff_stats or {}).get("git_diff_chars") or 0)
+    if diff_chars <= 0 and diff_excerpt:
+        diff_chars = len(diff_excerpt)
+
+    violations: list[str] = []
+    if excluded_hits:
+        violations.append("excluded_paths_present")
+    if scoped_file_count > int(contract["max_changed_files"]):
+        violations.append("max_changed_files")
+    if scoped_line_changes > int(contract["max_changed_lines"]):
+        violations.append("max_changed_lines")
+    if diff_chars > int(contract["max_diff_chars"]):
+        violations.append("max_diff_chars")
+    if not violations:
+        return None
+
+    return {
+        "contract": contract,
+        "excluded_paths": excluded_hits,
+        "git_diff_chars": diff_chars,
+        "reason": "retort_scope_diff_contract_exceeded",
+        "scoped_changed_files": scoped_files,
+        "scoped_file_count": scoped_file_count,
+        "scoped_line_changes": scoped_line_changes,
+        "violations": violations,
+    }
 
 
 def retort_scope_remediation_contract() -> dict[str, Any]:
@@ -144,6 +234,7 @@ def retort_scope_remediation_prompt(resume_candidate: Any) -> str:
 
 __all__ = [
     "RETORT_SCOPE_REASON",
+    "assess_retort_scope_diff_contract",
     "reconcile_retort_scope_remediations",
     "retort_scope_only_clarification",
     "retort_scope_remediation_contract",
