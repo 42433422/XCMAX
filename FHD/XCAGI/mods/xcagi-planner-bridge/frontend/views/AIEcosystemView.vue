@@ -1,3 +1,4 @@
+<!-- Mod SSOT physical view (desktop). Keep behavior aligned with host AIEcosystemView; not a byte-identical mirror. -->
 <template>
   <div class="chat-view page-view active" id="view-ai-ecosystem">
     <div v-if="!inAnalyzer" class="ecosystem-home">

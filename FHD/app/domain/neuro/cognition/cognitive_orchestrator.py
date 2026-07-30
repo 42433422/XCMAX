@@ -11,8 +11,6 @@ from typing import Any
 from app.domain.neuro.cognition.counterfactual import CounterfactualProbe
 from app.domain.neuro.cognition.plan_constraints import select_processor_by_cost
 from app.domain.neuro.cognition.skill_contract import SkillRouter, get_skill_router
-from app.domain.neuro.evolution.learning_feedback import record_task_outcome
-from app.domain.neuro.evolution.self_reflection import get_self_reflection_engine
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -92,6 +90,10 @@ class CognitiveOrchestrator:
         note: str = "",
     ) -> dict[str, Any]:
         """执行后：反馈学习 + 可选反思（选错层）。"""
+        # 惰性导入 evolution，避免 cognition↔application 启动环。
+        from app.domain.neuro.evolution.learning_feedback import record_task_outcome
+        from app.domain.neuro.evolution.self_reflection import get_self_reflection_engine
+
         fb = record_task_outcome(
             success=success,
             processor=selected_processor,
