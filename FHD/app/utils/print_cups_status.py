@@ -199,7 +199,6 @@ class PrintCupsStatusMixin:
         interval: float = 0.1,
     ) -> str | None:
         """Recover an omitted ``lp`` id only when one new job is unambiguous."""
-
         deadline = time.monotonic() + max(0.0, float(timeout))
         while time.monotonic() < deadline:
             candidates = self._cups_job_ids(printer_name) - set(before)
@@ -303,7 +302,6 @@ class PrintCupsStatusMixin:
         interval: float = _CUPS_MONITOR_INTERVAL_SECONDS,
     ) -> dict:
         """Bounded state monitor for a just-submitted CUPS print job."""
-
         deadline = time.monotonic() + max(0.0, float(timeout))
         last: dict = {"state": "unknown", "job_id": job_id, "query_available": False}
         while time.monotonic() < deadline:
