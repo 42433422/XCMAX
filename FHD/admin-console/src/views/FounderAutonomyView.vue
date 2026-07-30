@@ -187,8 +187,10 @@
             <div><dt>治理健康</dt><dd>{{ snapshot.live_summary?.governance_ok ? '健康' : '需复盘' }}</dd></div>
             <div><dt>登记编制</dt><dd>{{ snapshot.live_summary?.registered_employees || 0 }}/{{ snapshot.live_summary?.planned_employees || 0 }}</dd></div>
             <div><dt>已有任务合同</dt><dd>{{ snapshot.live_summary?.assigned_employees || 0 }}/{{ snapshot.live_summary?.planned_employees || 0 }}</dd></div>
-            <div><dt>真实运行回执</dt><dd>{{ snapshot.live_summary?.proven_employees || 0 }}/{{ snapshot.live_summary?.planned_employees || 0 }}</dd></div>
-            <div><dt>安全 burn-in 候选</dt><dd>{{ snapshot.live_summary?.burn_in_plan_available ? `${snapshot.live_summary?.safe_burn_in_candidates || 0} 名 · ${snapshot.live_summary?.burn_in_execution_enabled ? '已启用' : '执行关闭'}` : '计划不可用' }}</dd></div>
+            <div><dt>能力回执（含演练）</dt><dd>{{ snapshot.live_summary?.proven_employees || 0 }}/{{ snapshot.live_summary?.planned_employees || 0 }}</dd></div>
+            <div><dt>burn-in 演练回执</dt><dd>{{ snapshot.live_summary?.burn_in_proven_employees || 0 }}/{{ snapshot.live_summary?.planned_employees || 0 }}</dd></div>
+            <div><dt>生产履职回执（不含演练）</dt><dd>{{ snapshot.live_summary?.production_proven_employees || 0 }}/{{ snapshot.live_summary?.planned_employees || 0 }}</dd></div>
+            <div><dt>生产履职门槛</dt><dd>{{ snapshot.live_summary?.employee_production_workforce_ready ? '已达到 80%' : '未达到 80%' }}</dd></div>
             <div><dt>空壳/无效 handler</dt><dd>{{ snapshot.live_summary?.shell_employees || 0 }} 名</dd></div>
             <div><dt>AI 员工主模型</dt><dd>{{ platformLlmLabel }}</dd></div>
             <div><dt>未解决死信</dt><dd>{{ snapshot.live_summary?.unresolved_dead_letters || 0 }} 条</dd></div>
@@ -211,7 +213,6 @@
             <div><dt>生产部署验证</dt><dd>{{ snapshot.live_summary?.deploy_verified ? '已证明' : '未证明' }}</dd></div>
           </dl>
         </article>
-
         <article class="truth-card">
           <span class="section-kicker">证据域</span>
           <h2>哪些层已经有证据</h2>
@@ -226,7 +227,6 @@
         </article>
       </section>
     </template>
-
     <section v-else-if="loading" class="loading-panel">正在汇总审批、知识库、员工、Goals 与 Loop 账本……</section>
   </main>
 </template>

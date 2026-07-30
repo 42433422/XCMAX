@@ -81,10 +81,19 @@
         <dt>decision</dt><dd>{{ selected.risk_decision?.decision || '—' }}</dd>
         <dt>reason</dt><dd>{{ selected.risk_decision?.reason || '—' }}</dd>
         <dt>rollback</dt><dd>{{ selected.risk_decision?.rollback_path || '—' }}</dd>
+        <dt>执行方式</dt><dd>{{ selected.execution_mode || '—' }}</dd>
       </dl>
+      <p class="execution-guidance">
+        {{ selected.execution_guidance || '审批前将再次验证执行器。' }}
+      </p>
       <pre class="payload">{{ pretty(selected.payload) }}</pre>
       <div class="drawer-actions">
-        <button class="btn btn-primary" type="button" :disabled="acting" @click="approveSelected">
+        <button
+          class="btn btn-primary"
+          type="button"
+          :disabled="acting || selected.admin_execution_ready !== true"
+          @click="approveSelected"
+        >
           通过并继续
         </button>
         <button class="btn btn-danger" type="button" :disabled="acting" @click="rejectSelected">
@@ -165,8 +174,8 @@ async function approveSelected() {
   if (!selected.value) return
   acting.value = true
   try {
-    await xcmaxAdminApi.resumeAutonomyAction(selected.value.action_id, 'admin')
-    await appAlert('已通过，等待下游执行回调')
+    const result = await xcmaxAdminApi.resumeAutonomyAction(selected.value.action_id)
+    await appAlert(`审批已执行，动作终态：${result.action?.state || 'executed'}`)
     await refreshAll()
   } catch (e: unknown) {
     await appAlert(e instanceof Error ? e.message : String(e))
@@ -181,7 +190,7 @@ async function rejectSelected() {
   if (reason === null) return
   acting.value = true
   try {
-    await xcmaxAdminApi.rejectAutonomyAction(selected.value.action_id, 'admin', reason || undefined)
+    await xcmaxAdminApi.rejectAutonomyAction(selected.value.action_id, reason || undefined)
     await appAlert('已拒绝')
     selectedId.value = ''
     await refreshAll()
@@ -376,6 +385,15 @@ onBeforeUnmount(() => {
 }
 .detail-grid dt { color: #64748b; }
 .detail-grid dd { margin: 0; word-break: break-all; }
+.execution-guidance {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.5;
+}
 .payload {
   flex: 1;
   overflow: auto;

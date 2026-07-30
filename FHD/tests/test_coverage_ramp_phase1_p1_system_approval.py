@@ -16,9 +16,11 @@ from app.application import approval_workspace_app_service as approval_ws
 @pytest.fixture
 def system_client() -> TestClient:
     from app.fastapi_routes.domains.system import routes as system_routes
+    from app.fastapi_routes.tools_execute import router as tools_execute_router
 
     app = FastAPI()
     app.include_router(system_routes.router)
+    app.include_router(tools_execute_router)
     return TestClient(app, raise_server_exceptions=False)
 
 

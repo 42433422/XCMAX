@@ -60,6 +60,11 @@ from .self_maintenance_merge_policy import max_files as _shared_auto_merge_max_f
 from .self_maintenance_merge_policy import max_lines as _shared_auto_merge_max_lines
 from .self_maintenance_merge_policy import normalize_repo_path as _shared_normalize_repo_path
 from .self_maintenance_merge_policy import scope_globs as _shared_auto_merge_scope_globs
+from .self_maintenance_para_merge_remediation import (
+    classify_para_merge_review_detail,
+    resume_candidate_from_para_ai_review_item,
+    resume_from_clean_baseline_for_para_merge,
+)
 from .self_maintenance_quality_gate import diff_quality_commands as _diff_quality_commands
 from .self_maintenance_quality_gate import (
     matches_focused_test_command as _matches_focused_test_command,
@@ -69,6 +74,7 @@ from .self_maintenance_quality_gate import (
 )
 from .self_maintenance_quality_gate import qa_verdict_failure_reason as _qa_verdict_failure_reason
 from .self_maintenance_quality_gate import quality_check_failure as _quality_check_failure
+from .self_maintenance_recovery_policy import pending_run_recovery
 from .self_maintenance_remediation_lineage import (
     automated_remediation_resume_plan as _automated_remediation_resume_plan,
 )
@@ -87,7 +93,6 @@ from .self_maintenance_remediation_lineage import (
 from .self_maintenance_remediation_prompts import (
     external_merge_remediation_prompt,
     external_review_remediation_prompt,
-    para_merge_conflict_continues_on_rejected_branch,
     qa_executor_retry_prompt,
 )
 from .self_maintenance_retry import close_successful_code_resume, is_transient_dispatch_failure
@@ -1079,6 +1084,18 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             candidate["continue_existing_code_task"] = True
         return candidate
 
+    # Para merge AI review vetoes are not in the generic code-resume plan, so a
+    # stale failed_steps review/qa hold must not starve the newest veto remediation.
+    for item in reversed(open_items):
+        if not isinstance(item, dict) or item.get("kind") not in {
+            "automated_remediation",
+            "human_strategy_approval",  # legacy ledger compatibility
+        }:
+            continue
+        candidate = resume_candidate_from_para_ai_review_item(memory, item)
+        if candidate is not None:
+            return candidate
+
     # Then check for review/qa failures
     review_failed_run_ids = set()
     for item in open_items:
@@ -1121,22 +1138,9 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
         }:
             continue
         reason = _normalize_automated_remediation_reason(memory, item)
-        if reason == "para_ai_review_rejected":
-            branch = str(item.get("branch") or "").strip()
-            para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
-            if branch and para_task_id:
-                return {
-                    "branch": branch,
-                    "failed_run_id": str(item.get("run_id") or "").strip(),
-                    "failed_steps": ["code"],
-                    "para_task_id": para_task_id,
-                    "reason": "resume_para_ai_review_rejection",
-                    "rejected_branch": branch,
-                    "review_feedback": str(item.get("review_feedback") or item.get("detail") or "")[
-                        :4000
-                    ],
-                }
-            continue
+        candidate = resume_candidate_from_para_ai_review_item(memory, item)
+        if candidate is not None:
+            return candidate
         if reason in {
             "auto_merge_safety_score_v2_too_low",
             "auto_merge_safety_score_v3_too_low",
@@ -1497,8 +1501,10 @@ def reconcile_stale_self_maintenance_runs(
                 "action": "stop",
                 "reason": terminal_reason,
                 "exclusive_lease_reacquired": interrupted,
+                "recovery_required": interrupted,
                 "stale_minutes": stale_minutes,
             },
+            "recovery_required": interrupted,
             "run_id": run_id,
             "started_at": _iso(started_at),
             "status": terminal_status,
@@ -1546,8 +1552,15 @@ def should_run_self_maintenance_loop(
 
     cooldown_minutes = self_maintenance_cooldown_minutes(triggered_by)
     last_started = _last_started_at()
+    pending_recovery = pending_run_recovery(_read_ledger(limit=300), triggered_by)
+    recovery_kind = str((pending_recovery or {}).get("kind") or "")
+    recovery_detail = (pending_recovery or {}).get("detail")
+    interrupted_recovery = recovery_detail if recovery_kind == "interrupted_recovery" else None
+    transient_failure_recovery = (
+        recovery_detail if recovery_kind == "transient_failure_recovery" else None
+    )
 
-    if not force and last_started is not None and cooldown_minutes > 0:
+    if not force and pending_recovery is None and last_started is not None and cooldown_minutes > 0:
         next_allowed = last_started + timedelta(minutes=cooldown_minutes)
         if _utc_now() < next_allowed:
             return {
@@ -1560,7 +1573,7 @@ def should_run_self_maintenance_loop(
                 "triggered_by": triggered_by,
             }
 
-    if not force and int(evaluation["signal_count"]) < threshold:
+    if not force and pending_recovery is None and int(evaluation["signal_count"]) < threshold:
         return {
             **evaluation,
             "cooldown_minutes": cooldown_minutes,
@@ -1572,7 +1585,21 @@ def should_run_self_maintenance_loop(
     return {
         **evaluation,
         "cooldown_minutes": cooldown_minutes,
-        "reason": "force" if force else "threshold_met",
+        "interrupted_recovery": interrupted_recovery,
+        "transient_failure_recovery": transient_failure_recovery,
+        "reason": (
+            "force"
+            if force
+            else (
+                "interrupted_recovery"
+                if interrupted_recovery is not None
+                else (
+                    "transient_failure_recovery"
+                    if transient_failure_recovery is not None
+                    else "threshold_met"
+                )
+            )
+        ),
         "should_run": True,
         "threshold": threshold,
     }
@@ -2361,27 +2388,32 @@ def _reconcile_requested_merge_feedback(
         )
         if not already_open:
             rejected_branch = str(conflict.get("branch_name") or branch).strip()
-            resume_from_clean_baseline = not (
-                reason == "para_merge_conflict"
-                and para_merge_conflict_continues_on_rejected_branch(detail)
+            resume_from_clean_baseline = resume_from_clean_baseline_for_para_merge(reason, detail)
+            veto_meta = (
+                classify_para_merge_review_detail(detail) if source == "ai-review-veto" else {}
             )
-            open_items.append(
-                {
-                    "branch": rejected_branch,
-                    "created_at": _iso(_utc_now()),
-                    "detail": detail,
-                    "kind": "automated_remediation",
-                    "para_task_id": task_id,
-                    "reason": reason,
-                    "rejected_branch": rejected_branch,
-                    "resume_from_clean_baseline": resume_from_clean_baseline,
-                    "review_feedback": detail if source == "ai-review-veto" else "",
-                    "run_id": str(run.get("run_id") or "").strip(),
-                    "source": source,
-                    "task_status": task_status,
-                    "task_id": task_id,
-                }
-            )
+            open_item: Dict[str, Any] = {
+                "branch": rejected_branch,
+                "created_at": _iso(_utc_now()),
+                "detail": detail,
+                "kind": "automated_remediation",
+                "para_task_id": task_id,
+                "reason": reason,
+                "rejected_branch": rejected_branch,
+                "resume_from_clean_baseline": resume_from_clean_baseline,
+                "review_feedback": detail if source == "ai-review-veto" else "",
+                "run_id": str(run.get("run_id") or "").strip(),
+                "source": source,
+                "task_status": task_status,
+                "task_id": task_id,
+            }
+            if source == "ai-review-veto":
+                open_item["review_actionable_findings"] = veto_meta.get("actionable_code_findings")
+                open_item["review_veto_branch_hint"] = veto_meta.get("branch_hint") or ""
+                open_item["review_veto_code"] = veto_meta.get("veto_code") or ""
+                if veto_meta.get("review_diff_chars") is not None:
+                    open_item["review_diff_chars"] = veto_meta["review_diff_chars"]
+            open_items.append(open_item)
             changed = True
             remediation_added += 1
 
@@ -4525,22 +4557,20 @@ def _assess_branch_auto_merge_policy(
 
     try:
         from modstore_server.self_maintenance_policy import (
-            is_marker_status_path,
-            loop_memory_requires_executable_change,
+            assess_loop_memory_executable_change_block,
+            para_merge_review_max_diff_chars,
         )
 
-        if all(is_marker_status_path(file_name) for file_name in normalized_files):
-            requirement = loop_memory_requires_executable_change(memory)
-            if requirement.get("required"):
-                return _decision(
-                    {
-                        "allowed_globs": allowed,
-                        "changed_files": normalized_files,
-                        "ok": False,
-                        "reason": "marker_only_diff_requires_executable_change",
-                        "self_maintenance_requirement": requirement,
-                    }
-                )
+        executable_block = assess_loop_memory_executable_change_block(memory, normalized_files)
+        if executable_block is not None:
+            decision_payload: Dict[str, Any] = {
+                "changed_files": normalized_files,
+                "ok": False,
+                **executable_block,
+            }
+            if "kb_paths" not in executable_block:
+                decision_payload["allowed_globs"] = allowed
+            return _decision(decision_payload)
     except Exception as exc:
         return _decision(
             {
@@ -4549,6 +4579,21 @@ def _assess_branch_auto_merge_policy(
                 "error": str(exc),
                 "ok": False,
                 "reason": "self_maintenance_policy_check_failed",
+            }
+        )
+
+    max_review_chars = para_merge_review_max_diff_chars()
+    diff_chars = int((diff_stats or {}).get("git_diff_chars") or 0)
+    if diff_chars <= 0 and diff_excerpt:
+        diff_chars = len(diff_excerpt)
+    if diff_chars > max_review_chars:
+        return _decision(
+            {
+                "changed_files": normalized_files,
+                "git_diff_chars": diff_chars,
+                "max_diff_chars": max_review_chars,
+                "ok": False,
+                "reason": "diff_too_large_for_para_merge_review",
             }
         )
 
