@@ -142,8 +142,7 @@ async def build_quarterly_plan(
     ctx = gather_planning_context()
     q = quarter or current_quarter()
     goal_text = (goal or "").strip() or (
-        "本季度把 XCMAX 从阈值自治推进到 LLM 驱动的目标分解与反思修正，"
-        "并交付 3 个可验收功能。"
+        "本季度把 XCMAX 从阈值自治推进到 LLM 驱动的目标分解与反思修正，并交付 3 个可验收功能。"
     )
 
     chat = None

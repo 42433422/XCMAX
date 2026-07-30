@@ -180,9 +180,7 @@ class SkillRouter:
                 continue
             score = self._keyword_score(text_norm, skill)
             if score >= self._min_score:
-                matches.append(
-                    SkillMatch(skill=skill, score=score, reason="keyword_overlap")
-                )
+                matches.append(SkillMatch(skill=skill, score=score, reason="keyword_overlap"))
 
         matches.sort(key=lambda m: m.score, reverse=True)
         return matches[: max(1, top_k)]
@@ -198,8 +196,10 @@ class SkillRouter:
         """封闭意图未命中 / 低置信 → 候选技能或新技能提案。"""
         unclear = (not intent) or intent in {"unk", "unknown"} or confidence < 0.45
         matches = self.match(text, intent=None if unclear else intent, domain=domain)
-        if matches and matches[0].score >= self._min_score and not (
-            unclear and matches[0].reason == "bootstrap_intent" and confidence < 0.2
+        if (
+            matches
+            and matches[0].score >= self._min_score
+            and not (unclear and matches[0].reason == "bootstrap_intent" and confidence < 0.2)
         ):
             top = matches[0]
             return {

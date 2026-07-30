@@ -76,9 +76,7 @@ class CognitiveRouter:
         except RECOVERABLE_ERRORS:
             logger.debug("soft constraint suggestion skipped", exc_info=True)
         try:
-            decision = decide_processor_with_policy(
-                text, event, trace_id=tid, extra=enriched_extra
-            )
+            decision = decide_processor_with_policy(text, event, trace_id=tid, extra=enriched_extra)
         except RECOVERABLE_ERRORS:
             logger.debug(
                 "CognitiveRouter.route failed, fallback to rule-based",

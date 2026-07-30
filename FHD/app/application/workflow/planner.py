@@ -1304,17 +1304,13 @@ class LLMWorkflowPlanner:
         except RECOVERABLE_ERRORS as e:
             logger.warning("Memory v2 不可用（不阻断主流程）: %s", e)
 
-        planned = self._plan_with_react_multiagent(
-            plan_id=plan_id,
-            user_id=user_id,
-            message=message,
-            tool_registry=registry_for_plan,
-            context=context,
-        )
         from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 
         return finalize_planned_graph(
-            planned, plan_id=plan_id, context=context, validate=validate_plan_graph,
+            self._plan_with_react_multiagent(plan_id, user_id, message, registry_for_plan, context),
+            plan_id=plan_id,
+            context=context,
+            validate=validate_plan_graph,
             fallback_factory=lambda: self._fallback_plan(plan_id, message, registry_for_plan),
             warn=logger.warning,
         )

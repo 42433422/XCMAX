@@ -80,10 +80,7 @@ def _path() -> Path:
     if override:
         return Path(override)
     return (
-        Path(__file__).resolve().parents[3]
-        / "resources"
-        / "autonomy"
-        / "adaptive_thresholds.json"
+        Path(__file__).resolve().parents[3] / "resources" / "autonomy" / "adaptive_thresholds.json"
     )
 
 

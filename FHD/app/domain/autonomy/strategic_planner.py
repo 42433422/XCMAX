@@ -430,7 +430,5 @@ class StrategicPlanner:
                     "用户价值闭环、自治规划能力、运维安全软约束；"
                     f"薄弱项={weak or ['heuristic']}。"
                 )
-                plan = await self.reflect_and_revise(
-                    plan, critique=auto_critique, context=context
-                )
+                plan = await self.reflect_and_revise(plan, critique=auto_critique, context=context)
         return plan

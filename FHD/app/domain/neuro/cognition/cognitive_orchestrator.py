@@ -36,8 +36,7 @@ class CognitiveOrchestrator:
         """增强意图结果：技能路由 + 可选反事实 + 软约束路径建议。"""
         out = dict(intent_result or {})
         raw = (
-            text
-            or str(out.get("raw_input") or out.get("text") or out.get("message") or "")
+            text or str(out.get("raw_input") or out.get("text") or out.get("message") or "")
         ).strip()
         intent = (
             out.get("final_intent")
@@ -103,11 +102,7 @@ class CognitiveOrchestrator:
             note=note,
         )
         reflection = None
-        if (
-            suggested_processor
-            and suggested_processor != selected_processor
-            and not success
-        ):
+        if suggested_processor and suggested_processor != selected_processor and not success:
             try:
                 patch = get_self_reflection_engine().reflect_on_routing_mistake(
                     selected=selected_processor,

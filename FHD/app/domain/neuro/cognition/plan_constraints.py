@@ -144,15 +144,14 @@ def score_processor_path(
     prior = c.priors.get(key) or c.priors.get("conscious") or {}
     sla = float(c.sla_ms.get(key, 200.0))
     latency = float(expected_latency_ms if expected_latency_ms is not None else sla)
-    latency_penalty = max(0.0, latency / max(sla, 1e-6) - 1.0) + min(1.0, latency / max(sla * 5, 1.0))
+    latency_penalty = max(0.0, latency / max(sla, 1e-6) - 1.0) + min(
+        1.0, latency / max(sla * 5, 1.0)
+    )
     risk = float(risk_override if risk_override is not None else prior.get("risk", 0.3))
     money = float(prior.get("cost", 0.3))
     success = float(prior.get("success", 0.7))
     cost = (
-        c.w_latency * latency_penalty
-        + c.w_risk * risk
-        + c.w_cost * money
-        - c.w_success * success
+        c.w_latency * latency_penalty + c.w_risk * risk + c.w_cost * money - c.w_success * success
     )
     return PathScore(
         processor=key,
