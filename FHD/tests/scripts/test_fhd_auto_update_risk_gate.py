@@ -102,6 +102,47 @@ def test_auto_update_and_deploy_bridge_have_no_human_approval_dependency() -> No
     assert "autonomy_approval" not in auto_update
 
 
+def test_auto_update_prefers_bundled_dr_sync_for_immutable_release(
+    tmp_path: Path,
+) -> None:
+    deploy_root, manifest, env = _runtime(tmp_path)
+    sync_script = deploy_root / "scripts" / "deploy" / "xcmax-release-sync.sh"
+    sync_script.parent.mkdir(parents=True)
+    sync_script.write_text(
+        '#!/bin/sh\nprintf "%s\\n" "$*" > "$SYNC_MARKER"\n',
+        encoding="utf-8",
+    )
+    sync_script.chmod(0o755)
+    marker = tmp_path / "sync-marker"
+    artifact_sha = "0" * 64
+    git_sha = "a" * 40
+    (deploy_root / ".deploy-sha256").write_text(artifact_sha, encoding="utf-8")
+    manifest.write_text(
+        json.dumps(
+            {
+                "admin_console_sha256": "1" * 64,
+                "artifact": "already-live.tar.gz",
+                "channel": "stable",
+                "deploy_mode": "tarball",
+                "git_sha": git_sha,
+                "sha256": artifact_sha,
+                "version": "test",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", str(SCRIPT)],
+        env={**env, "SYNC_MARKER": str(marker)},
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert marker.read_text(encoding="utf-8").strip() == (f"--component fhd --sha {git_sha}")
+
+
 def test_stable_auto_update_ignores_legacy_environment_approval(tmp_path: Path) -> None:
     _, manifest, env = _runtime(tmp_path)
     manifest.write_text(json.dumps(_manifest(approved=True)), encoding="utf-8")

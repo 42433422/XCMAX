@@ -9,7 +9,7 @@ from app.application.agent_orchestrator import InMemoryAgentRunRepository
 
 
 def _client(*, authenticated_user_id: int | None = None) -> TestClient:
-    from app.fastapi_routes.domains.system.routes import router
+    from app.fastapi_routes.tools_execute import router
 
     app = FastAPI()
     if authenticated_user_id is not None:

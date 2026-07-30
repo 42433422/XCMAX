@@ -1,0 +1,84 @@
+{
+  "version": "1.0.0",
+  "description": "开放世界技能契约：封闭意图仅作 bootstrap，新域可加技能描述而不改分类器权重",
+  "skills": [
+    {
+      "skill_id": "ship.generate",
+      "title": "生成发货单",
+      "bootstrap_intents": ["shipment_generate"],
+      "required_slots": ["unit_name"],
+      "optional_slots": ["quantity_tins", "tin_spec", "contact_phone"],
+      "side_effects": ["shipment.write", "inventory.read"],
+      "rollback": "void_draft_shipment",
+      "keywords": ["发货", "出货", "发货单", "出库", "ship"],
+      "domain_adapters": ["generic", "chemical"]
+    },
+    {
+      "skill_id": "customer.edit",
+      "title": "修改客户资料",
+      "bootstrap_intents": ["customer_edit", "customer_supplement"],
+      "required_slots": ["unit_name"],
+      "optional_slots": ["contact_person", "contact_phone", "contact_address"],
+      "side_effects": ["customer.write"],
+      "rollback": "restore_customer_snapshot",
+      "keywords": ["改客户", "修改客户", "补充客户", "联系人"],
+      "domain_adapters": ["generic", "chemical"]
+    },
+    {
+      "skill_id": "wechat.send",
+      "title": "发送微信消息",
+      "bootstrap_intents": ["wechat_send"],
+      "required_slots": ["unit_name"],
+      "optional_slots": ["contact_person"],
+      "side_effects": ["wechat.send"],
+      "rollback": "none",
+      "keywords": ["发微信", "微信通知", "wechat"],
+      "domain_adapters": ["generic"]
+    },
+    {
+      "skill_id": "catalog.query",
+      "title": "查询产品/材料",
+      "bootstrap_intents": ["products", "materials"],
+      "required_slots": [],
+      "optional_slots": ["unit_name", "keyword"],
+      "side_effects": ["catalog.read"],
+      "rollback": "none",
+      "keywords": ["产品", "材料", "库存查询", "查一下"],
+      "domain_adapters": ["generic", "chemical"]
+    },
+    {
+      "skill_id": "shipment.query",
+      "title": "查询发货记录",
+      "bootstrap_intents": ["shipments"],
+      "required_slots": [],
+      "optional_slots": ["unit_name", "order_no"],
+      "side_effects": ["shipment.read"],
+      "rollback": "none",
+      "keywords": ["发货记录", "出货记录", "订单发货"],
+      "domain_adapters": ["generic", "chemical"]
+    },
+    {
+      "skill_id": "label.print",
+      "title": "打印标签",
+      "bootstrap_intents": ["print_label"],
+      "required_slots": ["unit_name"],
+      "optional_slots": ["quantity_tins"],
+      "side_effects": ["print.write"],
+      "rollback": "cancel_print_job",
+      "keywords": ["打印", "标签", "贴标"],
+      "domain_adapters": ["generic", "chemical"]
+    },
+    {
+      "skill_id": "order.fulfillment.diagnose",
+      "title": "履约因果诊断",
+      "bootstrap_intents": [],
+      "required_slots": ["order_no"],
+      "optional_slots": ["unit_name"],
+      "side_effects": ["order.read", "inventory.read", "shipment.read"],
+      "rollback": "none",
+      "keywords": ["为什么延期", "缺货原因", "履约", "交期", "因果"],
+      "domain_adapters": ["generic"],
+      "uses_causal_graph": "order_fulfillment_scm_lite"
+    }
+  ]
+}

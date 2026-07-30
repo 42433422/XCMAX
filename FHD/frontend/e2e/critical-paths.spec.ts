@@ -164,10 +164,9 @@ test.describe('P0 critical paths', () => {
       // Browser-side fetches need an HTTP origin; about:blank cannot resolve /api/* URLs.
       await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
     } else {
-      // Prime the browser-side enterprise session cache through the real login
-      // UI before loading the deep link. A cookie-only session can be valid at
-      // the API layer while the route guard still redirects the first /orders
-      // navigation to the default workspace.
+      // Establish the browser-side enterprise session cache through the real
+      // login UI. API cookies alone can leave a deep link waiting on redundant
+      // remote validation in slower CI environments.
       await page.goto('/login?redirect=%2Forders', {
         waitUntil: 'domcontentloaded',
         timeout: 30_000,
@@ -176,8 +175,7 @@ test.describe('P0 critical paths', () => {
       await page.locator('#lv-password').fill(E2E_PASSWORD);
       const loginResponsePromise = page.waitForResponse(
         (response) =>
-          response.request().method() === 'POST' &&
-          /\/api\/auth\/login(?:\?|$)/.test(response.url()),
+          response.request().method() === 'POST' && /\/api\/auth\/login(?:\?|$)/.test(response.url()),
         { timeout: 30_000 }
       );
       await page.locator('.login-submit').click();
@@ -185,7 +183,7 @@ test.describe('P0 critical paths', () => {
       const loginText = await loginResponse.text();
       expect(loginResponse.status(), loginText).toBe(200);
       expect(JSON.parse(loginText || '{}')?.success, loginText).toBe(true);
-      await expect(page).toHaveURL(/\/orders(?:[?#]|$)/, { timeout: 30_000 });
+      await expect(page).toHaveURL(/\/orders(?:[?#]|$)/, { timeout: 25_000 });
       await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
     }
 
@@ -318,7 +316,7 @@ test.describe('P0 critical paths', () => {
     const loginText = await loginResponse.text();
     expect(loginResponse.status(), loginText).toBe(200);
     expect(JSON.parse(loginText || '{}')?.success, loginText).toBe(true);
-    await expect(page).toHaveURL(/\/orders(?:[?#]|$)/, { timeout: 30_000 });
+    await expect(page).toHaveURL(/\/orders(?:[?#]|$)/, { timeout: 25_000 });
     await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
     await page.goto('/materials', { waitUntil: 'domcontentloaded', timeout: 30_000 });
     await expect(page).toHaveURL(/\/materials(?:[?#]|$)/, { timeout: 30_000 });

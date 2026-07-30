@@ -47,6 +47,27 @@ def _require_ci() -> bool:
     )
 
 
+def _mark_change_request_validation_failed(
+    change_request_id: int,
+    failed_step: str,
+    *,
+    session_factory: Any = None,
+) -> bool:
+    """Make a pre-apply CI rejection terminal instead of leaving stale pending work."""
+
+    from modstore_server.models import EmployeeChangeRequest, get_session_factory
+
+    sf = session_factory or get_session_factory()
+    with sf() as session:
+        row = session.get(EmployeeChangeRequest, int(change_request_id))
+        if row is None or (row.status or "") != "pending":
+            return False
+        row.status = "failed"
+        row.error = f"narrow_ci_failed:{str(failed_step or 'unknown')}"[:2000]
+        session.commit()
+    return True
+
+
 # --------------------------------------------------------------------------- #
 # 风险评估
 # --------------------------------------------------------------------------- #
@@ -309,6 +330,12 @@ def maybe_auto_approve(
 
             narrow_ci = run_narrow_ci_validation(rel_path, content)
             if not narrow_ci.get("ok") and not narrow_ci.get("skipped"):
+                failed_step = str(narrow_ci.get("failed_step") or "unknown")
+                _mark_change_request_validation_failed(
+                    int(change_request_id),
+                    failed_step,
+                    session_factory=get_session_factory(),
+                )
                 record_cr_validation_failure_for_evolution(
                     change_request_id=int(change_request_id),
                     source_employee_id=source_employee_id,
@@ -317,7 +344,7 @@ def maybe_auto_approve(
                 )
                 return {
                     "auto_approved": False,
-                    "reason": f"narrow CI failed: {narrow_ci.get('failed_step')}",
+                    "reason": f"narrow CI failed: {failed_step}",
                     "narrow_ci": narrow_ci,
                 }
 

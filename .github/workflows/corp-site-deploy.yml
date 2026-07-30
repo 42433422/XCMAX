@@ -23,8 +23,12 @@ on:
       - '成都修茈科技有限公司/partials/**'
       - '成都修茈科技有限公司/styles.css'
       - '成都修茈科技有限公司/main.js'
+      - '成都修茈科技有限公司/contact-intake.js'
+      - '成都修茈科技有限公司/contact-channels.js'
       - '成都修茈科技有限公司/visualization.js'
       - '成都修茈科技有限公司/world-will.js'
+      - '成都修茈科技有限公司/world-will-ticker.js'
+      - '成都修茈科技有限公司/world-will-ticker.css'
       - '成都修茈科技有限公司/assets/**'
       - '成都修茈科技有限公司/nginx-xiu-ci*.conf'
       - '成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh'
@@ -77,23 +81,11 @@ jobs:
             # Always republish static chrome into the nginx live root (immutable
             # release symlink). Git sync alone only updates /root/XCMAX.
             export XCMAX_FORCE_SITE_PUBLISH=1
-            # workflow_dispatch / path-push deploy must not be blocked by the
-            # cron "hotfix hold" that skips overwrite when live release SHA
-            # differs from origin/<branch>.
-            export XCMAX_FORCE_AUTO_UPDATE=1
-            # Explicitly sync the deploy branch before auto-update / publish so
-            # live chrome never copies a stale worktree after an early exit.
-            # Server worktrees often have local dirty files from prior hotfixes;
-            # force checkout so deploy is not blocked.
-            git -C "${REMOTE_ROOT}" fetch origin "${BRANCH}" --prune
-            git -C "${REMOTE_ROOT}" checkout -f -B "${BRANCH}" "origin/${BRANCH}"
-            git -C "${REMOTE_ROOT}" reset --hard "origin/${BRANCH}"
-            git -C "${REMOTE_ROOT}" clean -fd
-            echo "[info] worktree $(git -C "${REMOTE_ROOT}" rev-parse --short HEAD) on ${BRANCH}"
             AUTO_SCRIPT="${REMOTE_ROOT}/成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh"
             if [ ! -f "${AUTO_SCRIPT}" ]; then
               echo "[err] 缺少 ${AUTO_SCRIPT}；请先 git pull 含该脚本的提交"
-              exit 1
+              git -C "${REMOTE_ROOT}" fetch origin "${BRANCH}"
+              git -C "${REMOTE_ROOT}" reset --hard "origin/${BRANCH}"
             fi
             bash "${AUTO_SCRIPT}"
             SITE_ROOT="${REMOTE_ROOT}/成都修茈科技有限公司"
@@ -105,12 +97,14 @@ jobs:
             if [ -d "${GIT_SITE}" ] && [ -d "${LIVE_SITE}" ] && [ "$(readlink -f "${GIT_SITE}")" != "${LIVE_SITE}" ]; then
               echo "[info] publishing site chrome ${GIT_SITE} -> ${LIVE_SITE}"
               chmod u+w "${LIVE_SITE}" 2>/dev/null || true
-              mkdir -p "${LIVE_SITE}/partials" "${LIVE_SITE}/assets" "${LIVE_SITE}/corp-butler"
-              chmod u+w "${LIVE_SITE}/partials" "${LIVE_SITE}/assets" "${LIVE_SITE}/corp-butler" 2>/dev/null || true
+              mkdir -p "${LIVE_SITE}/partials" "${LIVE_SITE}/assets"
+              chmod u+w "${LIVE_SITE}/partials" "${LIVE_SITE}/assets" 2>/dev/null || true
               # Runtime DB projections (action-board / company-hall JSON) must not be
               # overwritten by git snapshots — refresh them after publish instead.
-              for f in "${GIT_SITE}"/*.html "${GIT_SITE}/styles.css" "${GIT_SITE}/main.js" "${GIT_SITE}/contact-intake.js" "${GIT_SITE}/visualization.js" \
-                       "${GIT_SITE}/world-will.js" \
+              for f in "${GIT_SITE}"/*.html "${GIT_SITE}/styles.css" "${GIT_SITE}/main.js" "${GIT_SITE}/contact-intake.js" \
+                       "${GIT_SITE}/contact-channels.js" "${GIT_SITE}/visualization.js" \
+                       "${GIT_SITE}/world-will.js" "${GIT_SITE}/world-will-ticker.js" \
+                       "${GIT_SITE}/world-will-ticker.css" \
                        "${GIT_SITE}/download-release.json" "${GIT_SITE}/download-action-board.js"; do
                 [ -e "$f" ] || continue
                 base="$(basename "$f")"
@@ -123,15 +117,8 @@ jobs:
               if [ -d "${GIT_SITE}/assets" ]; then
                 cp -af "${GIT_SITE}/assets/." "${LIVE_SITE}/assets/"
               fi
-              if [ -d "${GIT_SITE}/corp-butler" ]; then
-                cp -af "${GIT_SITE}/corp-butler/." "${LIVE_SITE}/corp-butler/"
-              fi
               chmod a+rx "${LIVE_SITE}" 2>/dev/null || true
               echo "[ok] live site chrome published"
-              echo "[verify] published main.js head:"
-              sed -n '246,249p' "${LIVE_SITE}/main.js" || true
-              echo "[verify] download.html title:"
-              grep -E '<title>' "${LIVE_SITE}/download.html" | head -1 || true
             else
               echo "[info] live site root coincides with git tree or missing; skip publish copy"
             fi
@@ -203,9 +190,14 @@ jobs:
             echo "[verify] world-will company hall:"
             xc_curl -o /tmp/xc-world-will.html https://xiu-ci.com/world-will
             xc_curl -o /tmp/xc-world-will.js https://xiu-ci.com/world-will.js
+            xc_curl -o /tmp/xc-world-will-ticker.js https://xiu-ci.com/world-will-ticker.js
+            xc_curl -o /tmp/xc-world-will-ticker.css https://xiu-ci.com/world-will-ticker.css
             xc_curl -o /tmp/xc-company-hall.json https://xiu-ci.com/download-company-hall.json
             grep -E -q '公司大厅|hall-depts|download-company-hall' /tmp/xc-world-will.html
             grep -E -q 'filteredFeed|hall-timeline|download-company-hall' /tmp/xc-world-will.js
+            grep -F -q '/api/public/action-board' /tmp/xc-world-will.js
+            grep -F -q '/api/public/action-board' /tmp/xc-world-will-ticker.js
+            grep -F -q '.world-will' /tmp/xc-world-will-ticker.css
             grep -E -q 'public_company_hall|presence_model|departments' /tmp/xc-company-hall.json
             echo "[verify] live root partials on disk:"
             if [ -n "${LIVE_SITE:-}" ] && [ -f "${LIVE_SITE}/partials/header.html" ]; then

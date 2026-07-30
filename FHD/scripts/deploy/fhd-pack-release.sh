@@ -8,6 +8,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 FHD_ROOT="$(cd -- "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
+REPO_ROOT="$(cd -- "$FHD_ROOT/.." &>/dev/null && pwd)"
+DR_RELEASE_SYNC="$REPO_ROOT/ops/dr/xcmax_release_sync.sh"
 # shellcheck source=lib/deploy_emit.sh
 . "$SCRIPT_DIR/lib/deploy_emit.sh"
 export DEPLOY_SCRIPT_ID="fhd_pack_release"
@@ -76,6 +78,10 @@ fi
   echo "[err] release archive verifier is missing: $ARCHIVE_VERIFY" >&2
   exit 1
 }
+[[ -x "$DR_RELEASE_SYNC" ]] || {
+  echo "[err] DR release sync helper is missing or not executable: $DR_RELEASE_SYNC" >&2
+  exit 1
+}
 ADMIN_CONSOLE_SHA256="$(python3 "$ADMIN_VERIFY" --root "$ADMIN_DIST" --stamp-git-sha "$GIT_SHA" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha256"])')"
 [[ "$ADMIN_CONSOLE_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
   echo "[err] admin release SHA256 is invalid" >&2
@@ -135,6 +141,7 @@ cp "$SCRIPT_DIR/fhd-auto-update.sh" \
   "$SCRIPT_DIR/online_update_daemon.py" \
   "$SCRIPT_DIR/prune_release_cache.py" \
   "$STAGING/scripts/deploy/"
+cp "$DR_RELEASE_SYNC" "$STAGING/scripts/deploy/xcmax-release-sync.sh"
 cp "$SCRIPT_DIR/lib/deploy_emit.sh" \
   "$SCRIPT_DIR/lib/dora_event.sh" \
   "$SCRIPT_DIR/lib/autonomy_gate.sh" \

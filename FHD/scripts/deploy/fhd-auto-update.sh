@@ -128,6 +128,26 @@ append_autonomy_audit(
 PY
 }
 
+sync_dr_release() {
+  [[ "${CHANNEL:-}" == "stable" ]] || return 0
+  local bundled_sync="$DEPLOY_ROOT/scripts/deploy/xcmax-release-sync.sh"
+  local sync_script="${FHD_DR_SYNC_SCRIPT:-$bundled_sync}"
+  if [[ ! -x "$sync_script" && -z "${FHD_DR_SYNC_SCRIPT:-}" ]]; then
+    sync_script="/usr/local/xcmax-ops/dr/xcmax_release_sync.sh"
+  fi
+  if [[ ! -x "$sync_script" ]]; then
+    log "ERROR: DR 发布同步脚本不可用: $sync_script"
+    [[ "${FHD_DR_SYNC_STRICT:-1}" != "1" ]]
+    return
+  fi
+  if "$sync_script" --component fhd --sha "$GIT_SHA"; then
+    log "DR FHD 发布同步完成 sha=$GIT_SHA"
+    return 0
+  fi
+  log "ERROR: DR FHD 发布同步失败 sha=$GIT_SHA"
+  [[ "${FHD_DR_SYNC_STRICT:-1}" != "1" ]]
+}
+
 exec 9>"$LOCK"
 if ! flock -n 9; then
   log "另一实例运行中，跳过"
@@ -188,6 +208,7 @@ if [[ "$DEPLOY_MODE" == "image" ]]; then
 
   if [[ "$IMAGE_DIGEST" == "$LOCAL_DIGEST" ]]; then
     log "已是最新（compose） version=$VERSION digest=${IMAGE_DIGEST:0:19}..."
+    sync_dr_release
     exit 0
   fi
 
@@ -217,6 +238,7 @@ if [[ "$DEPLOY_MODE" == "image" ]]; then
     record_dora_deployment "failed" || true
     exit "$status"
   fi
+  sync_dr_release
   log "compose 自动更新完成 version=$VERSION"
   exit 0
 fi
@@ -234,6 +256,7 @@ fi
 
 if [[ "$REMOTE_SHA" == "$LOCAL_SHA" ]]; then
   log "已是最新 version=$VERSION sha=$GIT_SHA"
+  sync_dr_release
   exit 0
 fi
 
@@ -282,4 +305,5 @@ else
   record_dora_deployment "failed" || true
   exit "$status"
 fi
+sync_dr_release
 log "tarball 自动更新完成 version=$VERSION"

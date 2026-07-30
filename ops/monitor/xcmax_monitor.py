@@ -50,6 +50,12 @@ UNITS = [
     if u.strip()
 ]
 BACKUP_DIR = os.environ.get("OPS_BACKUP_DIR", "/var/backups/xcmax")
+WAL_ENABLED = os.environ.get("OPS_WAL_ENABLED", "0") == "1"
+WAL_PG16_ENABLED = os.environ.get("OPS_WAL_PG16_ENABLED", "0") == "1"
+WAL_MAX_AGE_SECONDS = int(os.environ.get("OPS_WAL_MAX_AGE_SECONDS", "2700"))
+WAL_BASE_MAX_AGE_SECONDS = int(
+    os.environ.get("OPS_WAL_BASE_MAX_AGE_SECONDS", str(8 * 86400))
+)
 MANIFEST = os.environ.get(
     "OPS_MANIFEST", "/var/www/update/releases/stable/server/fhd-manifest.json"
 )
@@ -313,6 +319,58 @@ def check_backup_freshness():
     ]
 
 
+def check_wal_freshness():
+    if not WAL_ENABLED:
+        return []
+    results = []
+    now = time.time()
+    checks = [
+        ("wal:ship", "wal_ship_last_success", WAL_MAX_AGE_SECONDS, "WAL 异地推送"),
+        (
+            "wal:base",
+            "wal_base_last_success",
+            WAL_BASE_MAX_AGE_SECONDS,
+            "WAL 物理基础备份",
+        ),
+    ]
+    if WAL_PG16_ENABLED:
+        checks.extend(
+            [
+                (
+                    "wal:pg16-ship",
+                    "wal_pg16_ship_last_success",
+                    WAL_MAX_AGE_SECONDS,
+                    "PostgreSQL 16 WAL 异地推送",
+                ),
+                (
+                    "wal:pg16-base",
+                    "wal_pg16_base_last_success",
+                    WAL_BASE_MAX_AGE_SECONDS,
+                    "PostgreSQL 16 物理基础备份",
+                ),
+            ]
+        )
+    for check_id, filename, max_age, label in checks:
+        path = os.path.join(STATE_DIR, "state", filename)
+        try:
+            with open(path, encoding="utf-8") as fh:
+                last_success = float(fh.read().strip())
+            age = max(0.0, now - last_success)
+            results.append(
+                _result(
+                    check_id,
+                    age < max_age,
+                    "crit",
+                    "%s %.1f 分钟前成功" % (label, age / 60.0),
+                )
+            )
+        except (IOError, OSError, ValueError):
+            results.append(
+                _result(check_id, False, "crit", "%s 尚无成功状态" % label)
+            )
+    return results
+
+
 def check_deploy_chain():
     """发布链健康：manifest（CI 推）与 .deploy-sha256（auto-update 消费）应收敛。"""
     if not os.path.exists(MANIFEST):
@@ -401,6 +459,7 @@ CHECKS = (
     check_journal_errors,
     check_disk_mem,
     check_backup_freshness,
+    check_wal_freshness,
     check_deploy_chain,
     check_tls_expiry,
 )

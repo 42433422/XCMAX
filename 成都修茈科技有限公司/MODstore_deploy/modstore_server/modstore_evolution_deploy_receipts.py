@@ -122,11 +122,15 @@ def verify_catalog_package(package_id: str, version: str) -> dict[str, Any]:
     clean_handlers = {_text(handler, 64) for handler in handlers if _text(handler, 64)}
     if not clean_handlers or not clean_handlers.issubset(EXECUTOR_ACTION_HANDLERS):
         raise EvolutionDeploymentReceiptError("employee_pack_handler_contract_invalid")
+    source_commit_sha = _text(record.get("source_commit_sha"), 64).lower()
+    if source_commit_sha and not _COMMIT_RE.fullmatch(source_commit_sha):
+        raise EvolutionDeploymentReceiptError("catalog_source_commit_invalid")
     return {
         "package_id": package_id,
         "version": version,
         "package_sha256": digest,
         "stored_filename": stored_filename,
+        "source_commit_sha": source_commit_sha,
         "catalog_readback_verified": True,
         "installability_verified": True,
         "runtime_contract_verified": True,
@@ -236,6 +240,62 @@ def record_evolution_deployment_receipts(
         if council.get("verified") is not True:
             raise EvolutionDeploymentReceiptError("strategic_council_review_failed")
         observed_at = datetime.now(timezone.utc).isoformat()
+        source_commit_sha = _text(verified.get("source_commit_sha"), 64).lower()
+        if _COMMIT_RE.fullmatch(source_commit_sha):
+            implementation_events = [
+                {
+                    **verified,
+                    "run_id": run_id,
+                    "event": "proactive_evolution_started",
+                    "event_type": "proactive_evolution_started",
+                    "phase": "start",
+                    "status": "running",
+                    "triggered_by": "proactive_signal",
+                    "force": False,
+                    "ok": True,
+                    "dry_run": False,
+                    "environment": "production",
+                    "merge_sha": merge_sha,
+                    "workflow_run_id": workflow_run_id,
+                    "created_at": observed_at,
+                },
+                {
+                    **verified,
+                    "run_id": run_id,
+                    "event": "proactive_evolution_source_code_verified",
+                    "event_type": "proactive_evolution_source_code_verified",
+                    "phase": "implementation",
+                    "step": "code",
+                    "status": "success",
+                    "triggered_by": "proactive_signal",
+                    "force": False,
+                    "ok": True,
+                    "dry_run": False,
+                    "environment": "production",
+                    "merge_sha": merge_sha,
+                    "workflow_run_id": workflow_run_id,
+                    "created_at": observed_at,
+                },
+                {
+                    **verified,
+                    "run_id": run_id,
+                    "event": "proactive_evolution_package_qa_verified",
+                    "event_type": "proactive_evolution_package_qa_verified",
+                    "phase": "verification",
+                    "step": "qa",
+                    "status": "success",
+                    "triggered_by": "proactive_signal",
+                    "force": False,
+                    "ok": True,
+                    "dry_run": False,
+                    "environment": "production",
+                    "merge_sha": merge_sha,
+                    "workflow_run_id": workflow_run_id,
+                    "created_at": observed_at,
+                },
+            ]
+            for implementation_event in implementation_events:
+                record_event(implementation_event)
         event = {
             **verified,
             "event": "employee_pack_registered",
@@ -253,6 +313,25 @@ def record_evolution_deployment_receipts(
             "created_at": observed_at,
         }
         record_event(event)
+        if _COMMIT_RE.fullmatch(source_commit_sha):
+            record_event(
+                {
+                    **verified,
+                    "run_id": run_id,
+                    "event": "proactive_evolution_completed",
+                    "event_type": "proactive_evolution_completed",
+                    "phase": "complete",
+                    "status": "completed_merged",
+                    "triggered_by": "proactive_signal",
+                    "force": False,
+                    "ok": True,
+                    "dry_run": False,
+                    "environment": "production",
+                    "merge_sha": merge_sha,
+                    "workflow_run_id": workflow_run_id,
+                    "created_at": observed_at,
+                }
+            )
         results.append({"package_id": package_id, "version": version, "recorded": True})
         rows = [*rows, event]
     return {

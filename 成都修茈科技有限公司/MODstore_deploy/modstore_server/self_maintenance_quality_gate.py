@@ -70,6 +70,18 @@ def _is_python_executable(token: str) -> bool:
     return _PYTHON_EXECUTABLE.fullmatch(Path(token).name) is not None
 
 
+_SHELL_ENV_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*", re.DOTALL)
+
+
+def _strip_leading_shell_env_assignments(tokens: list[str]) -> list[str]:
+    """Remove POSIX ``NAME=value`` prefixes before inspecting an executable."""
+
+    index = 0
+    while index < len(tokens) and _SHELL_ENV_ASSIGNMENT.fullmatch(tokens[index]):
+        index += 1
+    return tokens[index:]
+
+
 def matches_focused_test_command(command: Any, focused_command: str) -> bool:
     """Accept the focused pytest target across different worker runtimes."""
 
@@ -88,11 +100,12 @@ def matches_focused_test_command(command: Any, focused_command: str) -> bool:
         return False
 
     for segment in _shell_command_segments(tokens):
-        if len(segment) < 4 or segment[1:3] != ["-m", "pytest"]:
+        command_segment = _strip_leading_shell_env_assignments(segment)
+        if len(command_segment) < 4 or command_segment[1:3] != ["-m", "pytest"]:
             continue
-        if not _is_python_executable(segment[0]):
+        if not _is_python_executable(command_segment[0]):
             continue
-        if target_names <= _pytest_target_names(segment[3:]):
+        if target_names <= _pytest_target_names(command_segment[3:]):
             return True
     return False
 
@@ -126,6 +139,7 @@ def _matches_diff_quality_command(command: Any, tool: str) -> bool:
     if tokens is None:
         return False
     for segment in _shell_command_segments(tokens):
+        segment = _strip_leading_shell_env_assignments(segment)
         if (
             len(segment) < 9
             or not _is_python_executable(segment[0])
@@ -163,6 +177,7 @@ def matches_black_check_command(command: Any) -> bool:
     if tokens is None:
         return False
     for segment in _shell_command_segments(tokens):
+        segment = _strip_leading_shell_env_assignments(segment)
         args: list[str]
         if len(segment) >= 3 and _is_python_executable(segment[0]):
             if segment[1:3] != ["-m", "black"]:
@@ -189,6 +204,7 @@ def matches_isort_check_command(command: Any) -> bool:
     if tokens is None:
         return False
     for segment in _shell_command_segments(tokens):
+        segment = _strip_leading_shell_env_assignments(segment)
         args: list[str]
         if len(segment) >= 3 and _is_python_executable(segment[0]):
             if segment[1:3] != ["-m", "isort"]:
@@ -213,6 +229,7 @@ def matches_source_governance_command(command: Any) -> bool:
     if tokens is None:
         return False
     for segment in _shell_command_segments(tokens):
+        segment = _strip_leading_shell_env_assignments(segment)
         if len(segment) < 2 or not _is_python_executable(segment[0]):
             continue
         script = Path(segment[1])
@@ -256,3 +273,57 @@ def quality_check_failure(qa_json: dict[str, Any]) -> Optional[str]:
     ):
         return "structured_qa_source_governance_not_passed"
     return None
+
+
+_QA_EXECUTOR_STRONG_SIGNALS = (
+    "command execution backend unavailable",
+    "execution backend unavailable",
+    "executor backend unavailable",
+    "no observable exit code",
+    "shell backend unavailable",
+    "shell execution backend unavailable",
+)
+_QA_EXECUTOR_DERIVED_SIGNALS = (
+    "could not run",
+    "executor unavailable",
+    "missing successful focused",
+    "not executed",
+    "same backend failure",
+)
+
+
+def qa_executor_infrastructure_unavailable(obj: Any) -> bool:
+    """Identify a truthful QA infrastructure outage without masking test failures."""
+
+    if not isinstance(obj, dict):
+        return False
+    if str(obj.get("verdict") or "").strip().upper() != "FAIL":
+        return False
+    if obj.get("target_branch_available") is not True:
+        return False
+    test_delta = obj.get("test_delta") if isinstance(obj.get("test_delta"), dict) else {}
+    new_errors = test_delta.get("new_errors")
+    if not isinstance(new_errors, list) or not new_errors:
+        return False
+    normalized_errors = [str(value or "").strip().lower() for value in new_errors]
+    if not all(
+        any(signal in value for signal in _QA_EXECUTOR_STRONG_SIGNALS)
+        for value in normalized_errors
+    ):
+        return False
+    supporting = [
+        str(value or "").strip().lower() for value in test_delta.get("new_failures") or []
+    ]
+    supporting.extend(
+        str(value or "").strip().lower() for value in obj.get("blocking_findings") or []
+    )
+    allowed_signals = _QA_EXECUTOR_STRONG_SIGNALS + _QA_EXECUTOR_DERIVED_SIGNALS
+    return bool(supporting) and all(
+        any(signal in value for signal in allowed_signals) for value in supporting
+    )
+
+
+def qa_verdict_failure_reason(obj: Any) -> str:
+    if qa_executor_infrastructure_unavailable(obj):
+        return "structured_qa_executor_unavailable"
+    return "structured_qa_verdict_not_pass"

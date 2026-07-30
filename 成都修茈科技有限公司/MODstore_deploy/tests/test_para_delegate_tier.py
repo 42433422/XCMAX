@@ -510,10 +510,11 @@ def test_post_para_api_routes_busy_codex_to_idle_same_device_tool(monkeypatch):
 class _CliFallbackClient(_IntegClient):
     """First created task fails with spawn ENOENT; retry with next tool succeeds."""
 
-    def __init__(self, devices):
+    def __init__(self, devices, *, failing_tools=None):
         super().__init__(devices, task_status="completed")
         self._task_by_id = {}
         self._seq = 0
+        self._failing_tools = set(failing_tools or {"codex"})
 
     def post(self, url, headers=None, json=None):
         if url.endswith("/api/auth/guest"):
@@ -523,7 +524,8 @@ class _CliFallbackClient(_IntegClient):
             self._seq += 1
             task_id = f"task-{self._seq}"
             tool = str((json or {}).get("tool_name") or "codex")
-            status = "failed" if tool == "codex" else "completed"
+            failed = tool in self._failing_tools
+            status = "failed" if failed else "completed"
             self._task_by_id[task_id] = {
                 "id": task_id,
                 "status": status,
@@ -531,9 +533,7 @@ class _CliFallbackClient(_IntegClient):
                     {
                         "id": f"sub-{self._seq}",
                         "toolName": tool,
-                        "last_error": (
-                            "Codex CLI 失败: spawn codex ENOENT" if tool == "codex" else ""
-                        ),
+                        "last_error": f"{tool} CLI 失败: executable not found" if failed else "",
                     }
                 ],
             }
@@ -589,3 +589,46 @@ def test_post_para_api_retries_next_cli_after_spawn_enoent(monkeypatch):
     assert [p.get("tool_name") for p in client.posted_tasks] == ["codex", "cursor"]
     assert out["devices"][0]["tool_name"] == "cursor"
     assert out["tool_fallback_attempts"][0]["tool_name"] == "codex"
+
+
+def test_report_only_fallback_tries_each_distinct_cli_once(monkeypatch):
+    _integ_env(monkeypatch)
+    monkeypatch.setenv("MODSTORE_PARA_DEV_TOOL", "codex")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ORDER", "codex,cursor,trae")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ENABLED", "1")
+    monkeypatch.setenv("MODSTORE_PARA_DEVICE_ID", "mac-1")
+    client = _CliFallbackClient(
+        [
+            {
+                "id": "mac-1",
+                "status": "online",
+                "capabilities": {
+                    "codex_cli": True,
+                    "cursor_agent_cli": True,
+                    "trae_cli": True,
+                },
+            }
+        ],
+        failing_tools={"codex", "cursor"},
+    )
+    monkeypatch.setattr(h.httpx, "Client", lambda *a, **k: client)
+
+    out = h.dispatch_para_delegate(
+        task="独立评审",
+        input_data={"report_only": True},
+        employee_id="change-request-auditor",
+    )
+
+    assert out["ok"] is True
+    assert out.get("tool_fallback_used") is True
+    assert [payload.get("tool_name") for payload in client.posted_tasks] == [
+        "codex",
+        "cursor",
+        "trae",
+    ]
+    assert [payload.get("max_attempts") for payload in client.posted_tasks] == [1, 1, 1]
+    assert [attempt["tool_name"] for attempt in out["tool_fallback_attempts"]] == [
+        "codex",
+        "cursor",
+    ]
+    assert out["devices"][0]["tool_name"] == "trae"

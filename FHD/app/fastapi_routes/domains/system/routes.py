@@ -8,6 +8,12 @@ from typing import Any
 from fastapi import APIRouter, Body, File, Form, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse
 
+from app.fastapi_routes.tools_execute import (
+    tool_route_agent_payload as _tool_route_agent_payload,
+)
+from app.fastapi_routes.tools_execute import (
+    user_id_from_tool_request as _user_id_from_tool_request,
+)
 from app.template_analysis_progress import get_template_analysis_progress
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import get_base_dir
@@ -509,137 +515,6 @@ def skills_info(skill_id: str):
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 
-def _user_id_from_tool_request(request: Request, body: dict[str, Any]) -> str:
-    params = body.get("params") if isinstance(body.get("params"), dict) else {}
-    return str(
-        request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
-        or body.get("user_id")
-        or body.get("userId")
-        or params.get("user_id")
-        or "tools-route"
-    ).strip()
-
-
-def _authenticated_owner_user_id(request: Request) -> int | None:
-    """Return the middleware-authenticated owner id, never client input.
-
-    ``/api/tools/execute`` retains its legacy header/body user id for agent-run
-    tracing, but a private ETL-derived document template must only be selected
-    with the authenticated request identity injected by
-    :class:`IndustryContextMiddleware`.  In particular, do not promote
-    ``X-User-Id`` or a JSON ``user_id`` into this value.
-    """
-
-    try:
-        value = getattr(request.state, "user_id", None)
-        owner_user_id = int(value) if value is not None else 0
-    except (AttributeError, TypeError, ValueError):
-        return None
-    return owner_user_id if owner_user_id > 0 else None
-
-
-def _tool_route_agent_payload(run: Any, node_id: str) -> dict[str, Any]:
-    final_output = getattr(run, "final_output", None)
-    node_outputs = dict((final_output or {}).get("node_outputs") or {})
-    output = dict(node_outputs.get(node_id) or {})
-    if not output:
-        for step in getattr(run, "steps", []) or []:
-            if str(getattr(step, "node_id", "")) == node_id:
-                output = dict(getattr(step, "output", {}) or {})
-                if not output and str(getattr(step, "status", "")) == "waiting_user":
-                    output = {
-                        "success": True,
-                        "message": "工具执行需要用户确认",
-                        "waiting_step_id": getattr(step, "step_id", ""),
-                    }
-                break
-    if not output:
-        output = {"success": getattr(run, "status", "") in {"completed", "waiting_user"}}
-    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
-        output["message"] = getattr(run, "error", "")
-    run_id = str(getattr(run, "run_id", "") or "")
-    if run_id:
-        output["run_id"] = run_id
-        output["agent_run_id"] = run_id
-    output["agent_status"] = str(getattr(run, "status", "") or "")
-    output.setdefault("data", {})
-    if isinstance(output.get("data"), dict):
-        output["data"].setdefault("agent_run_id", run_id)
-        output["data"].setdefault("run_id", run_id)
-    return output
-
-
-def _run_tools_execute_agent(
-    *,
-    request: Request,
-    body: dict[str, Any],
-    route_path: str,
-) -> tuple[dict[str, Any], int] | None:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.application.workflow_registry_app import _normalize_action, get_workflow_tool_registry
-
-    raw_tool_id = body.get("tool_id") or body.get("skill_id")
-    tool_id = str(raw_tool_id or "").strip()
-    if not tool_id:
-        return None
-    params = body.get("params")
-    if not isinstance(params, dict):
-        params = {}
-    action = _normalize_action(str(body.get("action") or "view"), params)
-    registry = get_workflow_tool_registry()
-    if tool_id not in registry or action not in dict(registry[tool_id].get("actions") or {}):
-        return None
-
-    node_id = f"tools_execute_{tool_id}_{action}".replace(".", "_").replace("-", "_")
-    plan = PlanGraph(
-        plan_id=f"tools_execute_{tool_id}_{action}",
-        intent=f"tools_execute_{tool_id}_{action}",
-        todo_steps=[f"通过 AgentOrchestrator 执行 {tool_id}.{action}"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id=tool_id,
-                action=action,
-                params=dict(params),
-                risk=str(registry[tool_id]["actions"][action].get("risk") or "low"),
-                idempotent=bool(registry[tool_id]["actions"][action].get("idempotent", False)),
-                description=f"Execute {tool_id}.{action} through the unified Agent runtime.",
-            )
-        ],
-        risk_level=str(registry[tool_id]["actions"][action].get("risk") or "low"),
-        metadata={"source": "tools_execute_route", "route": route_path},
-    )
-    owner_user_id = _authenticated_owner_user_id(request)
-    # The authenticated owner is authoritative whenever it is available.  The
-    # header/body fallback below remains only for old unauthenticated routes'
-    # AgentRun attribution; it is deliberately not used for private templates.
-    user_id = (
-        str(owner_user_id)
-        if owner_user_id is not None
-        else _user_id_from_tool_request(request, body)
-    )
-    runtime_context = {
-        "source": "tools_execute_route",
-        "route": route_path,
-        "request_path": str(request.url.path),
-        "user_id": user_id,
-    }
-    if owner_user_id is not None:
-        runtime_context["owner_user_id"] = owner_user_id
-    run = AgentOrchestrator().start_run_from_plan(
-        user_id=user_id,
-        message=str(body.get("message") or f"Execute {tool_id}.{action}"),
-        plan=plan,
-        runtime_context=runtime_context,
-    )
-    payload = _tool_route_agent_payload(run, node_id)
-    if run.status in {"waiting_user", "blocked"}:
-        return payload, 202
-    return payload, 200 if payload.get("success") else 400
-
-
 async def _run_templates_analyze_agent(
     *,
     request: Request,
@@ -859,42 +734,6 @@ def _run_document_template_agent(
     if run.status in {"waiting_user", "blocked"}:
         status_code = 202
     return payload, status_code
-
-
-@router.post("/api/skills/execute")
-def skills_execute(request: Request, body: dict = Body(default_factory=dict)):
-    agent_result = _run_tools_execute_agent(
-        request=request,
-        body=body or {},
-        route_path="/api/skills/execute",
-    )
-    if agent_result is not None:
-        return JSONResponse(agent_result[0], status_code=agent_result[1])
-    from app.application.facades.tools_facade import run_archive_tools_execute
-
-    data, code = run_archive_tools_execute(
-        body,
-        owner_user_id=_authenticated_owner_user_id(request),
-    )
-    return JSONResponse(data, status_code=code)
-
-
-@router.post("/api/tools/execute")
-def tools_execute_route(request: Request, body: dict = Body(default_factory=dict)):
-    agent_result = _run_tools_execute_agent(
-        request=request,
-        body=body or {},
-        route_path="/api/tools/execute",
-    )
-    if agent_result is not None:
-        return JSONResponse(agent_result[0], status_code=agent_result[1])
-    from app.application.facades.tools_facade import run_archive_tools_execute
-
-    data, code = run_archive_tools_execute(
-        body,
-        owner_user_id=_authenticated_owner_user_id(request),
-    )
-    return JSONResponse(data, status_code=code)
 
 
 @router.post("/api/admin/llm/reload")

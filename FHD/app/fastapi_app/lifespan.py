@@ -27,6 +27,7 @@ from app.db.init_db import (
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+from .node_role import passive_node_enabled
 from .sqlite_paths import is_sqlite_url, resolve_effective_database_url, sqlite_db_file_from_url
 
 logger = logging.getLogger(__name__)
@@ -103,12 +104,13 @@ async def lifespan(app: FastAPI):
         await _init_employee_runtime_async(app)
         await _init_mobile_relay_desktop_async(app)
 
-        try:
-            from app.desktop_runtime.backup_scheduler import start_backup_scheduler
+        if not passive_node_enabled():
+            try:
+                from app.desktop_runtime.backup_scheduler import start_backup_scheduler
 
-            start_backup_scheduler()
-        except RECOVERABLE_ERRORS as exc:
-            logger.warning("⚠️ 桌面端定时备份调度器启动失败: %s", exc)
+                start_backup_scheduler()
+            except RECOVERABLE_ERRORS as exc:
+                logger.warning("⚠️ 桌面端定时备份调度器启动失败: %s", exc)
 
     mark_startup("lifespan_ready")
     logger.info("✅ FastAPI 应用启动完成%s", "（重服务后台加载）" if fast_start else "")
@@ -292,6 +294,9 @@ async def _init_neuro_ddd_async(app: FastAPI):
     """异步初始化 NeuroBus，并注册默认意图域（与对话意图桥接共用）。"""
     import os
 
+    if passive_node_enabled():
+        logger.info("被动应用节点：跳过 NeuroBus 后台运行时")
+        return
     raw = os.environ.get("XCAGI_NEURO_INTENT", "1").strip().lower()
     if raw in {"0", "false", "off", "no"}:
         logger.info(
@@ -334,6 +339,9 @@ async def _init_neuro_ddd_async(app: FastAPI):
 
 async def _init_employee_runtime_async(app: FastAPI):
     """Initialize local AI employee triggers and cron scheduler."""
+    if passive_node_enabled():
+        logger.info("被动应用节点：跳过员工触发器与本地调度器")
+        return
     try:
         from app.application.employee_runtime.scheduler import start_employee_scheduler
         from app.application.employee_runtime.triggers import refresh_employee_triggers
@@ -353,6 +361,9 @@ async def _init_employee_runtime_async(app: FastAPI):
 
 async def _init_mobile_relay_desktop_async(app: FastAPI):
     """Resume desktop relay polling when this runtime has a saved cloud binding."""
+    if passive_node_enabled():
+        logger.info("被动应用节点：跳过移动端云中继轮询")
+        return
     try:
         from app.services.mobile_relay_desktop_client import (
             _migrate_legacy_config_once,

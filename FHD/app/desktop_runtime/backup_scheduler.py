@@ -5,7 +5,7 @@
 2. 检查今天是否已有备份，没有则立即备份一次
 3. 周日额外创建一份 weekly 备份（保留 4 周，满足灾备硬约束）
 4. 之后每 24 小时备份一次
-5. 清理超期备份：daily 保留 7 天，weekly 保留 28 天
+5. 清理超期备份，并把本地自动备份限制为最近 2 份
 6. 若配置了 ``XCAGI_EXTERNAL_BACKUP_DIR``（如 USB 盘），同步复制到外部目录
 7. 主进程退出时通过 Event 信号让线程优雅退出
 
@@ -16,15 +16,21 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import shutil
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+from .backup_retention import (
+    AUTOMATIC_BACKUP_RE,
+    DEFAULT_DAILY_RETENTION_DAYS,
+    DEFAULT_WEEKLY_RETENTION_DAYS,
+    WEEKLY_MARKER,
+    cleanup_local_backups,
+)
 from .migrate import backup_database
 from .paths import ensure_desktop_dirs, is_desktop_mode
 
@@ -37,14 +43,14 @@ _INITIAL_DELAY_SECONDS = 10
 # 所以频繁检查不会导致频繁备份。
 _POLL_INTERVAL_SECONDS = 3600
 # daily 备份保留天数（按 mtime 清理）。
-_RETENTION_DAYS = 7
+_RETENTION_DAYS = DEFAULT_DAILY_RETENTION_DAYS
 # weekly 备份保留天数（周日额外创建一份，保留 4 周，满足灾备硬约束）。
-_RETENTION_WEEKLY_DAYS = 28
+_RETENTION_WEEKLY_DAYS = DEFAULT_WEEKLY_RETENTION_DAYS
 # 周日额外创建 weekly 备份的文件名标记。
-_WEEKLY_MARKER = "weekly"
+_WEEKLY_MARKER = WEEKLY_MARKER
 # xcagi-{version}-{stamp}.db / xcagi-{version}-weekly-{stamp}.db。
 # version 允许包含连字符，例如 1.0.0-beta 或 1.0.0-rc.1。
-_BACKUP_STAMP_RE = re.compile(r"^xcagi-(?P<version>.+?)(?:-weekly)?-(?P<stamp>\d{14})\.db$")
+_BACKUP_STAMP_RE = AUTOMATIC_BACKUP_RE
 
 _lock = threading.Lock()
 _stop_event: threading.Event | None = None
@@ -191,31 +197,19 @@ def _has_backup_today(backups_dir: Path) -> bool:
 
 
 def _cleanup_old_backups(backups_dir: Path, retention_days: int) -> None:
-    """清理超过保留天数的定时备份。
+    """按时间和数量双重上限清理定时备份。
 
     - daily 备份（xcagi-{version}-{stamp}.db）：保留 retention_days 天
     - weekly 备份（xcagi-{version}-weekly-{stamp}.db）：保留 _RETENTION_WEEKLY_DAYS 天
+    - 本地自动备份默认最多 2 份（最新恢复点 + weekly/recent fallback）
+    - pending rollback 引用的数据库备份额外保护
     - *.bak（用户手动备份）：不动
     """
-    if not backups_dir.is_dir():
-        return
-
-    now = datetime.now()
-    daily_cutoff = (now - timedelta(days=retention_days)).timestamp()
-    weekly_cutoff = (now - timedelta(days=_RETENTION_WEEKLY_DAYS)).timestamp()
-
-    for path in backups_dir.glob("xcagi-*.db"):
-        try:
-            mtime = path.stat().st_mtime
-            is_weekly = _WEEKLY_MARKER in path.stem
-            cutoff = weekly_cutoff if is_weekly else daily_cutoff
-            if mtime < cutoff:
-                path.unlink()
-                logger.info(
-                    "cleaned up %s backup: %s", "weekly" if is_weekly else "daily", path.name
-                )
-        except OSError as exc:
-            logger.warning("failed to clean up old backup %s: %s", path, exc)
+    cleanup_local_backups(
+        backups_dir,
+        retention_days=retention_days,
+        weekly_retention_days=_RETENTION_WEEKLY_DAYS,
+    )
 
 
 def get_last_backup_info(data_dir: str | os.PathLike[str] | None = None) -> dict[str, Any]:
