@@ -99,3 +99,39 @@ def test_parse_merge_review_diff_char_count_and_memory_flag():
     }
     assert memory_has_diff_too_large_remediation(memory) is True
     assert memory_has_diff_too_large_remediation({"open_items": []}) is False
+
+
+def test_retort_scope_remediation_requires_executable_change():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-6d8f01",
+                "kind": "automated_remediation",
+                "reason": "retort_scope_too_large",
+                "detail": (
+                    "Retort requested risk acceptance for 12 changed files; "
+                    "rebuild the smallest valid fix from the clean base."
+                ),
+            }
+        ]
+    }
+
+    requirement = loop_memory_requires_executable_change(memory)
+
+    assert requirement["required"] is True
+    assert "retort scope remediation" in requirement["reason"]
+
+
+def test_memory_has_retort_scope_remediation_flag():
+    from modstore_server.self_maintenance_policy import memory_has_retort_scope_remediation
+
+    memory = {
+        "open_items": [
+            {
+                "kind": "automated_remediation",
+                "reason": "retort_scope_too_large",
+            }
+        ]
+    }
+    assert memory_has_retort_scope_remediation(memory) is True
+    assert memory_has_retort_scope_remediation({"open_items": []}) is False
