@@ -97,7 +97,7 @@ def external_merge_remediation_prompt(resume_candidate: Any) -> str:
         strategy = (
             "The previous Para merge task failed during post-dispatch required-check polling, "
             "gh pr checks polling infrastructure (bot merge checks failed or unavailable), "
-            "merge-worker hold-merge label infrastructure, or indeterminate AI review "
+            "merge-worker hold-merge or risk-label infrastructure, or indeterminate AI review "
             "infrastructure, after the candidate branch already passed earlier gates. Continue on "
             "the rejected "
             "branch as the mutable base: diff it against main, keep the existing production fix "
