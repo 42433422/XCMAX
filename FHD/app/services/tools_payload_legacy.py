@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 
-from app.application.tools_payload_print import dispatch_legacy_print_payload
+from app.infrastructure.tools_payload_print import dispatch_legacy_print_payload
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

@@ -195,6 +195,6 @@ def parse_named_product_order(order_text: str) -> dict | None:
     return result
 
 
-from app.application.order_text_parser import (
+from app.infrastructure.order_text_parser import (
     _parse_order_text,
 )

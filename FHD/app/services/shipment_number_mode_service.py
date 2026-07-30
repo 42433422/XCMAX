@@ -5,10 +5,10 @@ import re
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from app.application.shipment_number_resolution import ShipmentNumberResolutionMixin
 from app.bootstrap import get_shipment_app_service
 from app.db.models import Product
 from app.db.session import get_db
+from app.infrastructure.shipment_number_resolution import ShipmentNumberResolutionMixin
 from app.infrastructure.tenant_scope import apply_tenant_filter
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 

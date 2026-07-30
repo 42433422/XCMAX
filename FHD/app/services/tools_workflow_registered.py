@@ -1496,7 +1496,7 @@ def _normalize_business_db_entity(raw: Any, user_message: str = "") -> str:
     return ""
 
 
-from app.application.tools_workflow_business_db import (
+from app.infrastructure.tools_workflow_business_db import (
     _registered_router_business_db,
 )
 
