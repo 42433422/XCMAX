@@ -28,6 +28,19 @@ def build_alignment_live_summary(
         "prohibited_posthoc_conclusive_count": _as_int(
             autonomy_audit.get("posthoc_conclusive_count")
         ),
+        "prohibited_posthoc_eligible_allow_count": _as_int(
+            autonomy_audit.get("posthoc_eligible_allow_count")
+        ),
+        "prohibited_posthoc_eligible_conclusive_count": _as_int(
+            autonomy_audit.get("posthoc_eligible_conclusive_count")
+        ),
+        "prohibited_posthoc_pending_count": _as_int(autonomy_audit.get("posthoc_pending_count")),
+        "prohibited_posthoc_pending_contracts": _as_list(
+            autonomy_audit.get("posthoc_pending_contracts")
+        ),
+        "prohibited_posthoc_maturity_minutes": _as_int(
+            autonomy_audit.get("posthoc_maturity_minutes")
+        ),
         "prohibited_posthoc_uncovered_count": _as_int(
             autonomy_audit.get("posthoc_uncovered_count")
         ),

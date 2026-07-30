@@ -21,6 +21,12 @@ from typing import Any, cast
 from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from app.fastapi_routes.xcmax_admin_auth import (
+    admin_approver_from_session as _admin_approver_from_session,
+)
+from app.fastapi_routes.xcmax_admin_auth import (
+    require_market_admin_session as _require_market_admin_session,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -30,36 +36,6 @@ router = APIRouter(prefix="/api/xcmax", tags=["xcmax-admin"])
 REMOTE_HOST = os.environ.get("XCMAX_REMOTE_HOST", "119.27.178.147")
 REMOTE_PORT = int(os.environ.get("XCMAX_REMOTE_PORT", "9999"))
 _DEFAULT_URLOPEN = urllib.request.urlopen
-
-
-def _require_market_admin_session(request: Request) -> JSONResponse | None:
-    from app.application.desktop_admin_gate import (
-        assert_desktop_allows_session,
-        forbidden_payload,
-        is_desktop_runtime,
-    )
-    from app.application.session_account_meta import load_session_account_meta
-    from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
-
-    if is_desktop_runtime():
-        return JSONResponse(forbidden_payload(), status_code=403)
-
-    sid = _session_id_from_request(request)
-    if not sid:
-        return JSONResponse(
-            {"success": False, "message": "请先登录"},
-            status_code=401,
-        )
-    meta = load_session_account_meta(sid) or {}
-    denied = assert_desktop_allows_session(meta, session_id=sid)
-    if denied is not None:
-        return JSONResponse(denied, status_code=403)
-    if meta.get("account_kind") != "admin" or not meta.get("market_is_admin"):
-        return JSONResponse(
-            {"success": False, "message": "需要管理员账号登录后访问"},
-            status_code=403,
-        )
-    return None
 
 
 @router.get("/admin/autonomy/audit-log", response_model=None)
@@ -103,23 +79,6 @@ async def autonomy_audit_log(
     }
 
 
-def _admin_approver_from_session(request: Request, body_approver: str = "") -> str:
-    """Prefer body approver; else session username / market username."""
-    explicit = str(body_approver or "").strip()
-    if explicit:
-        return explicit
-    from app.application.session_account_meta import load_session_account_meta
-    from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
-
-    sid = _session_id_from_request(request)
-    meta = load_session_account_meta(sid) if sid else {}
-    for key in ("username", "market_username", "display_name"):
-        value = str((meta or {}).get(key) or "").strip()
-        if value:
-            return value
-    return "admin"
-
-
 @router.get("/admin/autonomy/actions/pending", response_model=None)
 async def admin_pending_autonomy_actions(request: Request):
     """管理端审批中心：用管理员会话拉取待办（勿走 webhook token）。"""
@@ -139,6 +98,8 @@ async def admin_resume_autonomy_action(action_id: str, request: Request):
         return gate
     from app.application.autonomy.approval_resume import (
         ApprovalStateError,
+        admin_execution_contract,
+        get_action_state,
         resume_action,
     )
 
@@ -148,20 +109,45 @@ async def admin_resume_autonomy_action(action_id: str, request: Request):
         body = {}
     if not isinstance(body, dict):
         body = {}
-    approver = _admin_approver_from_session(request, str(body.get("approver") or ""))
-    # 管理端人工通过：默认只落审批态，执行由 CI/部署回调继续（避免无本地 executor 409）
-    defer = body.get("defer_execution")
-    defer_execution = True if defer is None else bool(defer)
+    approver = _admin_approver_from_session(request)
+
+    current = get_action_state(action_id)
+    if current is None:
+        return JSONResponse(
+            {"ok": False, "code": "action_not_found", "message": "待审批动作不存在"},
+            status_code=409,
+        )
+    contract = admin_execution_contract(current)
+    if not contract["admin_execution_ready"]:
+        return JSONResponse(
+            {
+                "ok": False,
+                "code": str(contract["execution_mode"]),
+                "message": str(contract["execution_guidance"]),
+                "action": {**current, **contract},
+            },
+            status_code=409,
+        )
     try:
         item = resume_action(
             action_id,
             approver=approver,
             approval_id=str(body.get("approval_id") or ""),
-            defer_execution=defer_execution,
+            defer_execution=False,
         )
     except ApprovalStateError as exc:
         return JSONResponse({"ok": False, "message": str(exc)}, status_code=409)
-    return {"ok": True, "action": item}
+    if str(item.get("state") or "") != "executed":
+        return JSONResponse(
+            {
+                "ok": False,
+                "code": "execution_failed",
+                "message": "审批已记录，但动作执行失败；请查看执行结果后修复。",
+                "action": item,
+            },
+            status_code=502,
+        )
+    return {"ok": True, "execution_dispatched": True, "action": item}
 
 
 @router.post("/admin/autonomy/actions/{action_id}/reject", response_model=None)
@@ -180,7 +166,7 @@ async def admin_reject_autonomy_action(action_id: str, request: Request):
         body = {}
     if not isinstance(body, dict):
         body = {}
-    approver = _admin_approver_from_session(request, str(body.get("approver") or ""))
+    approver = _admin_approver_from_session(request)
     if not approver:
         return JSONResponse(
             {"ok": False, "message": "approver is required"},

@@ -1,1 +1,1 @@
-"""Application services for autonomy audit and approval recovery."""
+"""Application services for autonomy audit, approval recovery, and strategic planning."""

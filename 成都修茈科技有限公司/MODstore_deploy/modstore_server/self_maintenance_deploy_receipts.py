@@ -19,6 +19,8 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Protocol, Seque
 
 import httpx
 
+from modstore_server.deployment_receipt_history import completed_receipt
+
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40,64}$")
 _ARTIFACT_RE = re.compile(r"^[0-9a-f]{64}$")
 _IMAGE_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -342,29 +344,6 @@ def correlated_verified_deploys(
     return verified
 
 
-def _completed_receipt(
-    rows: Iterable[Mapping[str, Any]],
-    *,
-    merge_sha: str,
-    environment: str,
-    workflow_run_id: str,
-) -> Dict[str, Any] | None:
-    """Return an already-recorded exact receipt for callback idempotency."""
-
-    for raw in reversed(list(rows)):
-        row = dict(raw) if isinstance(raw, Mapping) else {}
-        if (
-            row.get("event") == "post_deploy_verified"
-            and row.get("ok") is True
-            and row.get("identity_verified") is True
-            and _sha(row.get("merge_sha")) == merge_sha
-            and str(row.get("environment") or "").lower() == environment
-            and str(row.get("workflow_run_id") or "") == workflow_run_id
-        ):
-            return row
-    return None
-
-
 def resolve_pending_merge_request(
     rows: Iterable[Mapping[str, Any]],
     *,
@@ -499,13 +478,20 @@ def record_completed_deployment_receipt(
     if str(workflow_conclusion or "").strip().lower() != "success":
         raise DeploymentReceiptError("workflow_not_successful")
 
-    existing = _completed_receipt(
+    existing = completed_receipt(
         normalized_rows,
         merge_sha=merge_sha,
         environment=environment,
         workflow_run_id=workflow_run_id,
+        requested_run_id=requested_run_id,
     )
     if existing is not None:
+        previous_workflow_run_id = str(existing.get("workflow_run_id") or "")
+        if previous_workflow_run_id != workflow_run_id:
+            # A second successful deployment for the same loop/SHA is a valid
+            # idempotent retry, but it must still expose the exact runtime
+            # identity before the new workflow may be acknowledged.
+            verify_deployed_identity(merge_sha=merge_sha, release=release, health=health)
         run_id = str(existing.get("run_id") or "")
         merge_recorded = any(
             row.get("event") == "merge_completed"
@@ -532,6 +518,7 @@ def record_completed_deployment_receipt(
             "merge_sha": merge_sha,
             "environment": environment,
             "workflow_run_id": workflow_run_id,
+            "previous_workflow_run_id": previous_workflow_run_id,
         }
 
     pending = resolve_pending_merge_request(

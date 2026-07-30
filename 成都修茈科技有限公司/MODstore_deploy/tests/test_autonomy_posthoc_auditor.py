@@ -34,6 +34,7 @@ def session_factory(tmp_path, monkeypatch):
     db_base._SessionFactory = None
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "posthoc.sqlite"))
+    monkeypatch.setenv("MODSTORE_POSTHOC_MATURITY_MINUTES", "0")
     models.init_db()
     yield models.get_session_factory()
     for engine in {models._engine, db_base._engine}:
@@ -591,6 +592,7 @@ def test_historical_para_state_can_use_fail_closed_github_evidence(
         "base_branch": "main",
         "branch": "devfleet/cursor/sub-1-c0250e",
         "expected_merge_sha": "",
+        "expected_task_id": task_id,
     }
 
 

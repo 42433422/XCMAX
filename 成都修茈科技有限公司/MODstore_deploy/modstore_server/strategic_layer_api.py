@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from modstore_server.api.actor_identity import authenticated_admin_actor
 from modstore_server.api.deps import get_current_user, require_admin
 from modstore_server.models import User
 from modstore_server.strategic_layer import (
@@ -236,7 +237,6 @@ def run_strategic_council_review(
 
 class RetortClarificationAnswerRequest(BaseModel):
     answers: Any = Field(..., description="字符串、{question_id: answer} 或 [{id, answer}]")
-    answered_by: str = Field("admin", max_length=128)
 
 
 @router.get("/council/clarifications", response_model=Dict[str, Any])
@@ -269,14 +269,14 @@ def get_retort_clarification(
 def answer_retort_clarification(
     session_id: str,
     body: RetortClarificationAnswerRequest,
-    _: User = Depends(require_admin),
+    admin: User = Depends(require_admin),
 ) -> Dict[str, Any]:
     from modstore_server.retort_clarification_gate import answer_clarification
 
     out = answer_clarification(
         session_id,
         answers=body.answers,
-        answered_by=body.answered_by,
+        answered_by=authenticated_admin_actor(admin),
     )
     if not out.get("ok"):
         raise HTTPException(409, str(out.get("error") or "answer failed"))

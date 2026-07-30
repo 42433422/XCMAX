@@ -3,7 +3,7 @@
     <div class="page-content brain-page">
       <div class="page-header brain-agent-header">
         <div class="brain-agent-title-row">
-          <h2>{{ activeTab === 'private-mod' ? '客户私有 Mod 生产中心' : 'AI智脑集成' }}</h2>
+          <h2>{{ activeTab === 'private-mod' ? '客户私有 Mod 生产中心' : '生产员工' }}</h2>
           <span class="brain-agent-badge" title="编排与观测控制台">Agent</span>
         </div>
         <p v-if="activeTab !== 'private-mod'" class="muted brain-sub">

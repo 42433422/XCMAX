@@ -247,6 +247,7 @@ def _build_dimensions(
     evolution_gates: list[ScoreGate],
     alignment_gates: list[ScoreGate],
     workforce_ready: bool,
+    founder_workforce_ready: bool,
     pending_total: int,
     governance_clear: bool,
     runtime_provenance_ok: bool,
@@ -265,7 +266,7 @@ def _build_dimensions(
             gates=founder_gates,
             hard_cap=(
                 65
-                if not workforce_ready
+                if not founder_workforce_ready
                 else (
                     80
                     if pending_total > 5 or not governance_clear

@@ -294,6 +294,7 @@ sync_site_static() {
   # 不要从 git 快照覆盖 live，否则官网会冻在旧业务日。
   local paths=(
     '*.html' 'styles.css' 'main.js' 'contact-intake.js' 'contact-channels.js' 'visualization.js' 'world-will.js'
+    'world-will-ticker.js' 'world-will-ticker.css'
     'sitemap.xml' 'baidu_urls.txt' 'download-release.json' 'download-action-board.js'
     'images' 'site' 'assets' 'corp-butler' 'partials'
   )
@@ -333,7 +334,8 @@ publish_site_static_to_live() {
   shopt -s nullglob
   for f in "$git_site"/*.html "$git_site"/styles.css "$git_site"/main.js "$git_site"/contact-intake.js \
            "$git_site"/contact-channels.js \
-           "$git_site"/visualization.js "$git_site"/world-will.js \
+           "$git_site"/visualization.js "$git_site"/world-will.js "$git_site"/world-will-ticker.js \
+           "$git_site"/world-will-ticker.css \
            "$git_site"/sitemap.xml "$git_site"/baidu_urls.txt "$git_site"/download-release.json \
            "$git_site"/download-action-board.js; do
     [[ -e "$f" ]] || continue
