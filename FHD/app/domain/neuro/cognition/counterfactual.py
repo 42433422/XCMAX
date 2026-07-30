@@ -131,11 +131,7 @@ class CounterfactualProbe:
                         if intervention in {"补货", "replenish_or_split"}:
                             polarity = -edge.sign
                     direction = (
-                        "increase"
-                        if polarity > 0
-                        else "decrease"
-                        if polarity < 0
-                        else "unclear"
+                        "increase" if polarity > 0 else "decrease" if polarity < 0 else "unclear"
                     )
                     # 观测到已存在短缺时放大量级
                     mag = edge.strength
@@ -180,9 +176,7 @@ class CounterfactualProbe:
                 + (f"，动作={e.via_intervention}" if e.via_intervention else "")
             )
         for e in corr[:2]:
-            parts.append(
-                f"仅相关 → {e.node_id}（不可当作主因干预）"
-            )
+            parts.append(f"仅相关 → {e.node_id}（不可当作主因干预）")
         return "；".join(parts)
 
     def should_probe(self, *, risk_level: str | None, text: str = "") -> bool:

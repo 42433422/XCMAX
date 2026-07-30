@@ -26,10 +26,7 @@ def _log_path() -> Path:
     if override:
         return Path(override)
     return (
-        Path(__file__).resolve().parents[4]
-        / "resources"
-        / "routing_policies"
-        / "plan_graphs.jsonl"
+        Path(__file__).resolve().parents[4] / "resources" / "routing_policies" / "plan_graphs.jsonl"
     )
 
 

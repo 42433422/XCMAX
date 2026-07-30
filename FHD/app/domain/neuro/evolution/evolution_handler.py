@@ -262,12 +262,8 @@ class EvolutionHandler:
         patch = engine.critique_and_propose(
             target=str(payload.get("target") or "routing_policy"),
             critique=str(payload.get("critique") or payload.get("reason") or ""),
-            proposal=payload.get("proposal")
-            if isinstance(payload.get("proposal"), dict)
-            else None,
-            evidence=payload.get("evidence")
-            if isinstance(payload.get("evidence"), dict)
-            else None,
+            proposal=payload.get("proposal") if isinstance(payload.get("proposal"), dict) else None,
+            evidence=payload.get("evidence") if isinstance(payload.get("evidence"), dict) else None,
         )
         return {"reflection": patch.to_dict(), "advanced": False}
 

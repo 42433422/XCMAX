@@ -129,12 +129,16 @@ class ConsciousLLMHandler:
             enriched = get_cognitive_orchestrator().enrich_intent_result(
                 {
                     "text": query,
-                    "intent": context_data.get("intent") if isinstance(context_data, dict) else None,
+                    "intent": context_data.get("intent")
+                    if isinstance(context_data, dict)
+                    else None,
                     "confidence": context_data.get("confidence")
                     if isinstance(context_data, dict)
                     else 0.0,
                     "slots": context_data.get("slots") if isinstance(context_data, dict) else {},
-                    "domain": context_data.get("domain") if isinstance(context_data, dict) else "generic",
+                    "domain": context_data.get("domain")
+                    if isinstance(context_data, dict)
+                    else "generic",
                 },
                 text=query,
                 risk_level=str(
