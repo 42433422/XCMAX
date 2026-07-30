@@ -50,9 +50,17 @@ _EVENT_MINE = "evolution.mine"
 _EVENT_SEARCH = "evolution.search"
 _EVENT_INDEX = "evolution.index"
 _EVENT_EXPORT = "evolution.export"
+_EVENT_REFLECT = "evolution.reflect"
 
 _SUPPORTED_EVENTS = frozenset(
-    {_EVENT_ERROR_OCCURRED, _EVENT_MINE, _EVENT_SEARCH, _EVENT_INDEX, _EVENT_EXPORT}
+    {
+        _EVENT_ERROR_OCCURRED,
+        _EVENT_MINE,
+        _EVENT_SEARCH,
+        _EVENT_INDEX,
+        _EVENT_EXPORT,
+        _EVENT_REFLECT,
+    }
 )
 
 
@@ -112,6 +120,8 @@ class EvolutionHandler:
                 result.update(self._handle_index(payload))
             elif event_type == _EVENT_EXPORT:
                 result.update(self._handle_export(payload))
+            elif event_type == _EVENT_REFLECT:
+                result.update(self._handle_reflect(payload))
             else:
                 result["error"] = f"unsupported_event_type:{event_type}"
                 logger.debug("EvolutionHandler: unsupported event %s", event_type)
@@ -227,6 +237,35 @@ class EvolutionHandler:
             "min_confidence": min_confidence,
             "kb_stats": self._kb.get_stats(),
         }
+
+    def _handle_reflect(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """处理 ``evolution.reflect``——白名单自我反思 / 阶段晋升。"""
+        from app.domain.neuro.evolution.self_reflection import get_self_reflection_engine
+
+        engine = get_self_reflection_engine()
+        action = str(payload.get("action") or "propose").strip().lower()
+        if action == "advance":
+            patch_id = str(payload.get("patch_id") or "")
+            to_stage = str(payload.get("to_stage") or "shadow")
+            patch = engine.advance(
+                patch_id,
+                to_stage=to_stage,
+                evidence=payload.get("evidence")
+                if isinstance(payload.get("evidence"), dict)
+                else None,
+            )
+            return {
+                "reflection": patch.to_dict() if patch else None,
+                "advanced": bool(patch),
+            }
+
+        patch = engine.critique_and_propose(
+            target=str(payload.get("target") or "routing_policy"),
+            critique=str(payload.get("critique") or payload.get("reason") or ""),
+            proposal=payload.get("proposal") if isinstance(payload.get("proposal"), dict) else None,
+            evidence=payload.get("evidence") if isinstance(payload.get("evidence"), dict) else None,
+        )
+        return {"reflection": patch.to_dict(), "advanced": False}
 
     def get_stats(self) -> dict[str, Any]:
         """获取处理器统计。"""

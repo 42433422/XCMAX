@@ -7,9 +7,19 @@
 // 冲突：保留 PR + hold-merge veto，并写入 merge-conflict 供后续自治修复。
 
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -23,6 +33,45 @@ const REQUIRE_BOT_IDENTITY = process.env.MERGE_WORKER_REQUIRE_BOT_IDENTITY !== '
 const BOT_MERGE_WORKFLOW = String(
   process.env.MERGE_WORKER_BOT_WORKFLOW || 'fhd-ai-self-heal-auto-merge.yml',
 ).trim();
+const BOT_MERGE_WATCHDOG_REPOSITORY = String(
+  process.env.MERGE_WORKER_REPOSITORY || '',
+).trim();
+const SELF_UPDATE_ENABLED = process.env.MERGE_WORKER_SELF_UPDATE !== '0';
+const SELF_UPDATE_BRANCH = String(
+  process.env.MERGE_WORKER_SELF_UPDATE_BRANCH || 'main',
+).trim();
+const SELF_UPDATE_SOURCE_PATH = (
+  'FHD/scripts/autonomy/runtime_tools/merge_worker.mjs'
+);
+const SELF_UPDATE_CHECK_MS = Math.max(
+  5 * 60 * 1000,
+  Number.parseInt(
+    process.env.MERGE_WORKER_SELF_UPDATE_CHECK_MS || String(15 * 60 * 1000),
+    10,
+  ),
+);
+export const BOT_MERGE_WATCHDOG_STALE_MS = Math.max(
+  30 * 60 * 1000,
+  Number.parseInt(
+    process.env.MERGE_WORKER_BOT_WATCHDOG_STALE_MS || String(45 * 60 * 1000),
+    10,
+  ),
+);
+const BOT_MERGE_WATCHDOG_CHECK_MS = Math.max(
+  60_000,
+  Number.parseInt(
+    process.env.MERGE_WORKER_BOT_WATCHDOG_CHECK_MS || String(5 * 60 * 1000),
+    10,
+  ),
+);
+const BOT_MERGE_WATCHDOG_DISPATCH_COOLDOWN_MS = Math.max(
+  15 * 60 * 1000,
+  Number.parseInt(
+    process.env.MERGE_WORKER_BOT_WATCHDOG_DISPATCH_COOLDOWN_MS
+      || String(30 * 60 * 1000),
+    10,
+  ),
+);
 const BACKEND_CI_WORKFLOW = String(
   process.env.MERGE_WORKER_BACKEND_CI_WORKFLOW || 'modstore-ci-backend-python.yml',
 ).trim();
@@ -32,6 +81,18 @@ const PRODUCTION_DEPLOY_WORKFLOW = String(
 const MAX_RETRY_ATTEMPTS = Math.max(1, Number.parseInt(process.env.MERGE_WORKER_MAX_RETRIES || '5', 10));
 const RETRY_BASE_MS = Math.max(1_000, Number.parseInt(process.env.MERGE_WORKER_RETRY_BASE_MS || '30000', 10));
 const RETRY_MAX_MS = Math.max(RETRY_BASE_MS, Number.parseInt(process.env.MERGE_WORKER_RETRY_MAX_MS || '900000', 10));
+export const INDETERMINATE_REVIEW_RECOVERY_MAX_AGE_MS = Math.max(
+  60 * 60 * 1000,
+  Number.parseInt(
+    process.env.MERGE_WORKER_INDETERMINATE_RECOVERY_MAX_AGE_MS
+      || String(24 * 60 * 60 * 1000),
+    10,
+  ),
+);
+export const TASK_CONCURRENCY = Math.min(
+  8,
+  Math.max(1, Number.parseInt(process.env.MERGE_WORKER_TASK_CONCURRENCY || '4', 10)),
+);
 const AI_REVIEW_TIMEOUT_MS = Math.max(
   30_000,
   Number.parseInt(process.env.MERGE_WORKER_AI_REVIEW_TIMEOUT_MS || '180000', 10),
@@ -59,19 +120,23 @@ export const AUTO_PR_LABELS = Object.freeze(['risk:r0']);
 export const INITIAL_PR_LABELS = Object.freeze(['hold-merge']);
 
 // CI 等待策略（写进代码，不做隐式默认）：
-// - 等哪些 check：`gh pr checks --required`（branch protection 上标记为 required 的全部）
-// - 超时：MERGE_WORKER_CI_WAIT_TIMEOUT_MS，默认 30min
-// - 超时后：MERGE_WORKER_CI_TIMEOUT_POLICY=fail|human
+// - 等哪些 check：`gh pr checks` 返回的全部检查，与 bot merge SLA 的三重门禁一致
+// - 超时：MERGE_WORKER_CI_WAIT_TIMEOUT_MS，默认 60min
+// - 超时后：MERGE_WORKER_CI_TIMEOUT_POLICY=retry|fail|human
+//     retry → 退避后重新读取完整 rollup（默认；不把 CI 排队/长测误判为 AI 拒绝）
 //     fail  → 抛错并标 terminal（不自动合并；merge-worker 记 failed）
 //     human → 抛错文案含 needs-human，走人工（非 transient，不空转重试）
-export const CI_WAIT_MODE = 'required'; // only branch-protection required checks
+export const CI_WAIT_MODE = 'bot-merge-gate';
 export const CI_WAIT_TIMEOUT_MS = Math.max(
   60_000,
-  Number.parseInt(process.env.MERGE_WORKER_CI_WAIT_TIMEOUT_MS || String(30 * 60 * 1000), 10),
+  Number.parseInt(process.env.MERGE_WORKER_CI_WAIT_TIMEOUT_MS || String(60 * 60 * 1000), 10),
 );
-export const CI_TIMEOUT_POLICY = String(process.env.MERGE_WORKER_CI_TIMEOUT_POLICY || 'fail').trim().toLowerCase() === 'human'
-  ? 'human'
-  : 'fail';
+const requestedCiTimeoutPolicy = String(
+  process.env.MERGE_WORKER_CI_TIMEOUT_POLICY || 'retry',
+).trim().toLowerCase();
+export const CI_TIMEOUT_POLICY = ['retry', 'fail', 'human'].includes(requestedCiTimeoutPolicy)
+  ? requestedCiTimeoutPolicy
+  : 'retry';
 
 const FORBIDDEN_AUTO_MERGE_PATHS = [
   /^\.github\/workflows\//,
@@ -87,9 +152,108 @@ const FORBIDDEN_AUTO_MERGE_PATHS = [
 
 let cachedToken = '';
 let cachedTokenAt = 0;
+let botMergeWatchdogLastCheckedAt = 0;
+let botMergeWatchdogLastDispatchAt = 0;
+let selfUpdateLastCheckedAt = 0;
 
 function log(...args) {
   console.log(new Date().toISOString().slice(11, 19), '[merge-worker]', ...args);
+}
+
+export function gitBlobSha(source) {
+  const body = Buffer.isBuffer(source) ? source : Buffer.from(String(source || ''), 'utf8');
+  return createHash('sha1')
+    .update(Buffer.from(`blob ${body.length}\0`, 'utf8'))
+    .update(body)
+    .digest('hex');
+}
+
+export function decodeSelfUpdatePayload(payload) {
+  if (String(payload?.encoding || '').trim().toLowerCase() !== 'base64') {
+    throw new Error('self-update-content-encoding-invalid');
+  }
+  const expectedBlobSha = String(payload?.sha || '').trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(expectedBlobSha)) {
+    throw new Error('self-update-blob-sha-invalid');
+  }
+  const encoded = String(payload?.content || '').replace(/\s+/g, '');
+  if (!encoded) throw new Error('self-update-content-empty');
+  const source = Buffer.from(encoded, 'base64');
+  if (source.length === 0 || source.length > 5 * 1024 * 1024) {
+    throw new Error('self-update-content-size-invalid');
+  }
+  if (gitBlobSha(source) !== expectedBlobSha) {
+    throw new Error('self-update-blob-sha-mismatch');
+  }
+  const text = source.toString('utf8');
+  if (
+    !text.startsWith('#!/usr/bin/env node')
+    || !text.includes('Para /api/tasks/merge-queue')
+  ) {
+    throw new Error('self-update-source-identity-invalid');
+  }
+  return {
+    blobSha: expectedBlobSha,
+    digest: createHash('sha256').update(source).digest('hex'),
+    source,
+  };
+}
+
+export function selfUpdateTemporaryPath(currentFile, pid = process.pid) {
+  return `${currentFile}.self-update.${pid}.mjs`;
+}
+
+async function maybeSelfUpdate(nowMs = Date.now()) {
+  if (
+    !SELF_UPDATE_ENABLED
+    || !BOT_MERGE_WATCHDOG_REPOSITORY
+    || !SELF_UPDATE_BRANCH
+  ) {
+    return false;
+  }
+  if (nowMs - selfUpdateLastCheckedAt < SELF_UPDATE_CHECK_MS) return false;
+  selfUpdateLastCheckedAt = nowMs;
+
+  const { stdout } = await execFileAsync('gh', [
+    'api',
+    '--method', 'GET',
+    `repos/${BOT_MERGE_WATCHDOG_REPOSITORY}/contents/${SELF_UPDATE_SOURCE_PATH}`,
+    '-f', `ref=${SELF_UPDATE_BRANCH}`,
+  ], {
+    cwd: process.env.HOME || '/tmp',
+    maxBuffer: 10 * 1024 * 1024,
+    timeout: 30_000,
+  });
+  const remote = decodeSelfUpdatePayload(JSON.parse(stdout || '{}'));
+  const currentFile = fileURLToPath(import.meta.url);
+  const current = readFileSync(currentFile);
+  const currentDigest = createHash('sha256').update(current).digest('hex');
+  if (currentDigest === remote.digest) return false;
+
+  const temporary = selfUpdateTemporaryPath(currentFile);
+  try {
+    writeFileSync(temporary, remote.source, { mode: statSync(currentFile).mode & 0o777 });
+    chmodSync(temporary, statSync(currentFile).mode & 0o777);
+    await execFileAsync(process.execPath, ['--check', temporary], {
+      cwd: dirname(currentFile),
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 30_000,
+    });
+    renameSync(temporary, currentFile);
+    writeFileSync(
+      `${currentFile}.sha256`,
+      `${remote.digest}  source_blob=${remote.blobSha} branch=${SELF_UPDATE_BRANCH}\n`,
+      { mode: 0o600 },
+    );
+  } catch (error) {
+    if (existsSync(temporary)) unlinkSync(temporary);
+    throw error;
+  }
+  log(
+    `自更新完成：branch=${SELF_UPDATE_BRANCH} `
+    + `blob=${remote.blobSha.slice(0, 12)} sha256=${remote.digest.slice(0, 12)}`,
+  );
+  return true;
 }
 
 async function guestToken() {
@@ -213,6 +377,7 @@ export function isTransientMergeFailure(reason) {
   const text = String(reason || '').toLowerCase();
   const terminal = [
     'actor mismatch',
+    'bot merge checks failed',
     'changed-files-empty',
     'ci-wait-timeout-fail',
     'ci-wait-timeout-needs-human',
@@ -226,9 +391,49 @@ export function isTransientMergeFailure(reason) {
     'post-dispatch-check-failed',
     'reject:',
     'required checks failed',
+    'cannot update pr branch due to conflicts',
   ];
   if (terminal.some((pattern) => text.includes(pattern))) return false;
   return true;
+}
+
+export function mergeFailuresAreRetryable(results) {
+  return Array.isArray(results)
+    && results.length > 0
+    && results.every((result) => {
+      if (result?.vetoed) return false;
+      if (result?.retryable === true) return true;
+      if (result?.retryable === false) return false;
+      return isTransientMergeFailure(result?.reason || result?.error);
+    });
+}
+
+export function isRecoverableIndeterminateReviewRecord(record, nowMs = Date.now()) {
+  if (!['ai_rejected', 'retrying'].includes(String(record?.status || ''))) return false;
+  if (record?.exhausted === true || Number(record?.attempts || 0) > MAX_RETRY_ATTEMPTS) return false;
+  if (!/\bindeterminate-review:\s*\{/.test(String(record?.reason || ''))) return false;
+  const recordedAt = Date.parse(String(record?.at || ''));
+  if (!Number.isFinite(recordedAt) || recordedAt > nowMs) return false;
+  return nowMs - recordedAt <= INDETERMINATE_REVIEW_RECOVERY_MAX_AGE_MS;
+}
+
+export function taskHasRecoverableIndeterminateReviewConflict(task) {
+  const conflict = task?.merge_conflict;
+  return String(task?.status || '') === 'merge_conflict'
+    && Boolean(conflict)
+    && String(conflict.source || '') === 'merge-worker'
+    && /\bindeterminate-review:\s*\{/.test(String(conflict.detail || ''));
+}
+
+export function isProcessTimeoutError(err) {
+  const message = String(err?.message || err || '');
+  const code = String(err?.code || '').toUpperCase();
+  const signal = String(err?.signal || '').toUpperCase();
+  return err?.killed === true
+    || code === 'ETIMEDOUT'
+    || signal === 'SIGTERM'
+    || signal === 'SIGKILL'
+    || /ETIMEDOUT|timed?\s*out|timeout/i.test(message);
 }
 
 export function blockingMergePollReason(pr, prNumber = '') {
@@ -286,6 +491,95 @@ export function selectMatchingWorkflowRun(rows, mergeSha) {
     ))[0] || null;
 }
 
+export function botMergeWatchdogDecision(
+  rows,
+  {
+    nowMs = Date.now(),
+    staleAfterMs = BOT_MERGE_WATCHDOG_STALE_MS,
+    lastDispatchAtMs = 0,
+    dispatchCooldownMs = BOT_MERGE_WATCHDOG_DISPATCH_COOLDOWN_MS,
+  } = {},
+) {
+  const items = Array.isArray(rows) ? rows : [];
+  const active = items.find((row) => (
+    ['queued', 'in_progress', 'requested', 'waiting']
+      .includes(String(row?.status || '').trim().toLowerCase())
+  ));
+  if (active) {
+    return {
+      dispatch: false,
+      reason: 'workflow-active',
+      latest_run_at: String(active.createdAt || ''),
+    };
+  }
+  const latestRunMs = items.reduce((latest, row) => {
+    const parsed = Date.parse(String(row?.createdAt || ''));
+    return Number.isFinite(parsed) ? Math.max(latest, parsed) : latest;
+  }, 0);
+  if (latestRunMs > 0 && nowMs - latestRunMs < staleAfterMs) {
+    return {
+      dispatch: false,
+      reason: 'workflow-recent',
+      latest_run_at: new Date(latestRunMs).toISOString(),
+    };
+  }
+  if (lastDispatchAtMs > 0 && nowMs - lastDispatchAtMs < dispatchCooldownMs) {
+    return {
+      dispatch: false,
+      reason: 'dispatch-cooldown',
+      latest_run_at: latestRunMs > 0 ? new Date(latestRunMs).toISOString() : '',
+    };
+  }
+  return {
+    dispatch: true,
+    reason: latestRunMs > 0 ? 'workflow-stale' : 'workflow-missing',
+    latest_run_at: latestRunMs > 0 ? new Date(latestRunMs).toISOString() : '',
+  };
+}
+
+async function maybeRecoverStaleBotMergeWorkflow(nowMs = Date.now()) {
+  if (!BOT_MERGE_WORKFLOW || !BOT_MERGE_WATCHDOG_REPOSITORY) return;
+  if (nowMs - botMergeWatchdogLastCheckedAt < BOT_MERGE_WATCHDOG_CHECK_MS) return;
+  botMergeWatchdogLastCheckedAt = nowMs;
+  const { stdout } = await execFileAsync('gh', [
+    'api',
+    '--method', 'GET',
+    `repos/${BOT_MERGE_WATCHDOG_REPOSITORY}/actions/workflows/${BOT_MERGE_WORKFLOW}/runs`,
+    '-f', 'per_page=5',
+  ], {
+    cwd: process.env.HOME || '/tmp',
+    maxBuffer: 10 * 1024 * 1024,
+    timeout: 30_000,
+  });
+  const payload = JSON.parse(stdout || '{}');
+  const rows = (Array.isArray(payload.workflow_runs) ? payload.workflow_runs : [])
+    .map((row) => ({
+      createdAt: row?.created_at,
+      status: row?.status,
+    }));
+  const decision = botMergeWatchdogDecision(rows, {
+    nowMs,
+    lastDispatchAtMs: botMergeWatchdogLastDispatchAt,
+  });
+  if (!decision.dispatch) return;
+  await execFileAsync('gh', [
+    'workflow', 'run', BOT_MERGE_WORKFLOW,
+    '--repo', BOT_MERGE_WATCHDOG_REPOSITORY,
+    '--ref', 'main',
+    '-f', 'dry_run=false',
+    '-f', 'scan_regular_prs=true',
+  ], {
+    cwd: process.env.HOME || '/tmp',
+    maxBuffer: 10 * 1024 * 1024,
+    timeout: 60_000,
+  });
+  botMergeWatchdogLastDispatchAt = nowMs;
+  log(
+    `  watchdog dispatched ${BOT_MERGE_WORKFLOW} `
+    + `reason=${decision.reason} latest=${decision.latest_run_at || 'none'}`,
+  );
+}
+
 export function nextMergeRetryState(previous, reason, nowMs = Date.now()) {
   const attempts = Math.max(0, Number(previous?.attempts || 0)) + 1;
   const delayMs = mergeRetryDelayMs(attempts);
@@ -297,6 +591,37 @@ export function nextMergeRetryState(previous, reason, nowMs = Date.now()) {
     reason: String(reason || '').slice(0, 2000),
     status: 'retrying',
   };
+}
+
+export async function runTaskQueueFairly(
+  tasks,
+  handler,
+  concurrency = TASK_CONCURRENCY,
+) {
+  const items = Array.isArray(tasks) ? tasks : [];
+  if (items.length === 0) return [];
+  const workerCount = Math.min(
+    items.length,
+    Math.max(1, Number.parseInt(String(concurrency), 10) || 1),
+  );
+  const results = new Array(items.length);
+  let cursor = 0;
+  async function consume() {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      try {
+        results[index] = {
+          status: 'fulfilled',
+          value: await handler(items[index], index),
+        };
+      } catch (reason) {
+        results[index] = { status: 'rejected', reason };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: workerCount }, () => consume()));
+  return results;
 }
 
 async function listWorkflowRuns(workspace, repoFull, workflow, mergeSha) {
@@ -572,6 +897,40 @@ export function githubIssueLabelEndpoint(repoFull, prNumber, label) {
   return `${githubIssueLabelsEndpoint(repoFull, prNumber)}/${encodeURIComponent(label)}`;
 }
 
+export function requiredLabelsPresent(existingLabels, requiredLabels) {
+  const existing = new Set(
+    (Array.isArray(existingLabels) ? existingLabels : [])
+      .map((label) => String(label?.name || label || '').trim().toLowerCase())
+      .filter(Boolean),
+  );
+  return (Array.isArray(requiredLabels) ? requiredLabels : [])
+    .every((label) => existing.has(String(label || '').trim().toLowerCase()));
+}
+
+async function prHasAllLabels(workspace, prNumber, repoFull, labels) {
+  const args = repoFull
+    ? [
+      'api',
+      `repos/${repoFull}/issues/${prNumber}`,
+      '--jq', '[.labels[].name]',
+    ]
+    : [
+      'pr', 'view', prNumber,
+      '--json', 'labels',
+      '--jq', '[.labels[].name]',
+    ];
+  try {
+    const { stdout } = await execFileAsync('gh', args, {
+      cwd: workspace || process.env.HOME,
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 30_000,
+    });
+    return requiredLabelsPresent(JSON.parse(stdout || '[]'), labels);
+  } catch {
+    return false;
+  }
+}
+
 async function addPrLabels(workspace, prNumber, repoFull, labels) {
   // Best-effort 打标签。优先走 issues REST API，避免 `gh pr edit`
   // 查询已下线 Projects Classic 字段时连带失败，导致 veto 标签丢失。
@@ -589,6 +948,13 @@ async function addPrLabels(workspace, prNumber, repoFull, labels) {
     await execFileAsync('gh', args, { cwd, maxBuffer: 10 * 1024 * 1024, timeout: 30_000 });
     return true;
   } catch (err) {
+    if (await prHasAllLabels(workspace, prNumber, repoFull, labels)) {
+      log(
+        `  addPrLabels(${labels.join(',')}) 写回执失败但远端状态已满足 `
+        + `PR #${prNumber}，按幂等成功继续`,
+      );
+      return true;
+    }
     log(`  ⚠️ addPrLabels(${labels.join(',')}) 失败 PR #${prNumber}: ${String(err).slice(0, 200)}`);
     return false;
   }
@@ -637,17 +1003,23 @@ async function updatePullRequestBranch(workspace, prNumber, repoFull) {
   }
 }
 
-async function waitForRequiredChecks(workspace, prNumber, repoFull) {
-  if (!prNumber) throw new Error('cannot wait for required checks without PR number');
-  // Explicit policy: wait ONLY for branch-protection required checks (CI_WAIT_MODE=required).
+export function botMergeCheckArgs(prNumber, repoFull = '') {
   const args = [
-    'pr', 'checks', prNumber,
-    '--required',
+    'pr', 'checks', String(prNumber),
     '--watch',
     '--fail-fast',
     '--interval', '10',
   ];
   if (repoFull) args.push('--repo', repoFull);
+  return args;
+}
+
+async function waitForRequiredChecks(workspace, prNumber, repoFull) {
+  if (!prNumber) throw new Error('cannot wait for required checks without PR number');
+  // The bot workflow checks the complete rollup, not only branch-protection
+  // required checks. Dispatching earlier makes the bot skip the PR and leaves
+  // this worker polling for 30 minutes with no merge attempt in flight.
+  const args = botMergeCheckArgs(prNumber, repoFull);
   try {
     await execFileAsync('gh', args, {
       cwd: workspace || process.env.HOME,
@@ -656,21 +1028,26 @@ async function waitForRequiredChecks(workspace, prNumber, repoFull) {
     });
   } catch (err) {
     const message = String(err?.message || err);
-    const timedOut = /ETIMEDOUT|timed?\s*out|timeout/i.test(message)
-      || /kill|SIGTERM/i.test(message);
+    const timedOut = isProcessTimeoutError(err);
     if (timedOut) {
       if (CI_TIMEOUT_POLICY === 'human') {
         throw new Error(
-          `ci-wait-timeout-needs-human: required checks not green within ${CI_WAIT_TIMEOUT_MS}ms; `
+          `ci-wait-timeout-needs-human: bot merge checks not green within ${CI_WAIT_TIMEOUT_MS}ms; `
           + `escalate to human (policy=human). detail=${message.slice(0, 600)}`,
         );
       }
+      if (CI_TIMEOUT_POLICY === 'retry') {
+        throw new Error(
+          `ci-wait-timeout-retry: bot merge checks not green within ${CI_WAIT_TIMEOUT_MS}ms; `
+          + `retry with backoff (policy=retry). detail=${message.slice(0, 600)}`,
+        );
+      }
       throw new Error(
-        `ci-wait-timeout-fail: required checks not green within ${CI_WAIT_TIMEOUT_MS}ms; `
+        `ci-wait-timeout-fail: bot merge checks not green within ${CI_WAIT_TIMEOUT_MS}ms; `
         + `merge aborted (policy=fail). detail=${message.slice(0, 600)}`,
       );
     }
-    throw new Error(`required checks failed or unavailable: ${message.slice(0, 1000)}`);
+    throw new Error(`bot merge checks failed or unavailable: ${message.slice(0, 1000)}`);
   }
 }
 
@@ -1367,6 +1744,7 @@ async function processTask(token, task, state) {
               prNumber,
               merged: false,
               reason,
+              retryable: true,
               vetoed: false,
             });
           } else {
@@ -1409,7 +1787,7 @@ async function processTask(token, task, state) {
         // Review/policy vetoes are terminal. Operational failures retry with
         // bounded exponential backoff before being reported as a conflict.
         const reason = failed.map((r) => `${r.branch}: ${r.reason || r.error}`).join('\n');
-        const retryable = failed.every((result) => !result.vetoed && isTransientMergeFailure(result.reason || result.error));
+        const retryable = mergeFailuresAreRetryable(failed);
         let terminalAttempts = Number(state[task.id]?.attempts || 0);
         if (retryable) {
           const retry = nextMergeRetryState(state[task.id], reason);
@@ -1483,14 +1861,50 @@ async function main() {
 
   while (true) {
     try {
+      if (await maybeSelfUpdate()) {
+        log('自更新已原子落盘，退出并由 launchd 拉起新版本');
+        process.exit(75);
+      }
+    } catch (err) {
+      log(`自更新异常，继续运行当前已验证版本：${String(err).slice(0, 300)}`);
+    }
+    try {
+      await maybeRecoverStaleBotMergeWorkflow();
+    } catch (err) {
+      log(`合并扫描 watchdog 异常：${String(err).slice(0, 300)}`);
+    }
+    try {
       const token = await guestToken();
       await reconcileMergedDeployments(token, state);
       const queue = await fetchMergeQueue(token);
-      if (queue.length > 0) {
-        log(`队列 ${queue.length} 个任务`);
+      const queueById = new Map(queue.map((task) => [String(task?.id || ''), task]));
+      const recoveryIds = Object.entries(state)
+        .filter(([, record]) => isRecoverableIndeterminateReviewRecord(record))
+        .map(([taskId]) => taskId);
+      for (const taskId of recoveryIds) {
+        if (queueById.has(taskId)) continue;
+        try {
+          const task = await fetchTask(token, taskId);
+          if (taskHasRecoverableIndeterminateReviewConflict(task)) {
+            queueById.set(taskId, task);
+            log(`task ${taskId} 恢复：误终止 indeterminate-review → 有限重试`);
+          }
+        } catch (err) {
+          log(`task ${taskId} 恢复查询失败：${String(err).slice(0, 200)}`);
+        }
       }
-      for (const task of queue) {
-        await processTask(token, task, state);
+      const effectiveQueue = [...queueById.values()];
+      if (effectiveQueue.length > 0) {
+        log(`队列 ${effectiveQueue.length} 个任务 (常规=${queue.length} 恢复=${effectiveQueue.length - queue.length})`);
+      }
+      const results = await runTaskQueueFairly(
+        effectiveQueue,
+        (task) => processTask(token, task, state),
+      );
+      for (const result of results) {
+        if (result?.status === 'rejected') {
+          log(`队列任务异常：${String(result.reason).slice(0, 300)}`);
+        }
       }
     } catch (err) {
       log(`轮询异常：${String(err).slice(0, 300)}`);

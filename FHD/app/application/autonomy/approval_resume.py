@@ -28,6 +28,10 @@ class ApprovalStateError(RuntimeError):
     pass
 
 
+class ExecutionNotDispatchableError(ApprovalStateError):
+    """The approval exists, but this control plane cannot execute it safely."""
+
+
 def _ledger_path() -> Path:
     raw = (os.environ.get("XCAGI_AUTONOMY_APPROVAL_LEDGER_PATH") or "").strip()
     if raw:
@@ -109,6 +113,36 @@ def register_action_executor(
         _ACTION_EXECUTORS[str(action_id)] = executor
     else:
         _EXECUTORS[str(name)] = executor
+
+
+def admin_execution_contract(item: dict[str, Any]) -> dict[str, Any]:
+    """Describe whether the web approval center can execute a pending action.
+
+    ``approval_requested`` means an external approval provider already owns the
+    continuation.  The web console must not append a bare ``approved`` row and
+    pretend that provider will discover it.
+    """
+
+    action_id = str(item.get("action_id") or "")
+    state = str(item.get("state") or "")
+    executor_name = str(item.get("executor_name") or "")
+    if state == "approval_requested":
+        return {
+            "admin_execution_ready": False,
+            "execution_mode": "external_callback",
+            "execution_guidance": "该动作已交给外部审批回调，请在对应审批提供方完成处理。",
+        }
+    if action_id in _ACTION_EXECUTORS or executor_name in _EXECUTORS:
+        return {
+            "admin_execution_ready": True,
+            "execution_mode": "registered_executor",
+            "execution_guidance": "通过后将立即调用已注册执行器并记录真实结果。",
+        }
+    return {
+        "admin_execution_ready": False,
+        "execution_mode": "executor_unavailable",
+        "execution_guidance": "当前服务没有该动作的执行器，审批不会改变状态。",
+    }
 
 
 def record_pending_action(
@@ -282,7 +316,7 @@ def resume_action(
         if chosen is None:
             chosen = _EXECUTORS.get(str(latest.get("executor_name") or ""))
         if chosen is None:
-            raise ApprovalStateError(
+            raise ExecutionNotDispatchableError(
                 f"approved action {action_id} has no registered executor; execution was not attempted"
             )
     approved_row = _append_ledger(
@@ -433,7 +467,9 @@ def list_pending_actions(*, limit: int = 100) -> list[dict[str, Any]]:
         if action_id:
             latest_by_id[action_id] = item
     pending = [
-        item for item in latest_by_id.values() if item.get("state") in _AWAITING_REVIEW_STATES
+        {**item, **admin_execution_contract(item)}
+        for item in latest_by_id.values()
+        if item.get("state") in _AWAITING_REVIEW_STATES
     ]
     return sorted(pending, key=lambda item: str(item.get("timestamp") or ""), reverse=True)[
         : max(1, min(int(limit), 1000))
@@ -442,6 +478,8 @@ def list_pending_actions(*, limit: int = 100) -> list[dict[str, Any]]:
 
 __all__ = [
     "ApprovalStateError",
+    "ExecutionNotDispatchableError",
+    "admin_execution_contract",
     "complete_action",
     "get_action_state",
     "list_pending_actions",

@@ -35,6 +35,12 @@ def _ready_workforce(count: int = 55) -> dict:
         "assignment_ratio": 1.0,
         "proof_ratio": 1.0,
         "workforce_ready": True,
+        "burn_in_proven_count": 0,
+        "burn_in_proof_ratio": 0.0,
+        "production_proven_count": count,
+        "production_proof_ratio": 1.0,
+        "production_window_hours": 720,
+        "production_workforce_ready": True,
     }
 
 
@@ -97,6 +103,51 @@ def test_missing_evidence_is_not_reported_as_finished() -> None:
     assert dims["customer"]["progress"] == 0
     assert snapshot["truth_domains"]["local_runtime"]["available"] is False
     assert dims["code"]["remaining"] == 100
+
+
+def test_empty_goal_summary_does_not_pass_the_goals_gate() -> None:
+    snapshot = build_founder_autonomy_snapshot(
+        goals={"total": 0, "done": 0, "completion_rate": 0.0},
+        surfaces=_surfaces(),
+        generated_at=NOW,
+    )
+    founder = _dimensions(snapshot)["founder"]
+
+    assert "goals" not in {gate["key"] for gate in founder["evidence"]}
+    assert next(gate for gate in founder["gaps"] if gate["key"] == "goals")["gap"] == (
+        "接入可追踪 Goals 与完成率"
+    )
+
+
+def test_burn_in_receipts_do_not_prove_production_workforce() -> None:
+    capability = _ready_workforce()
+    capability.update(
+        {
+            "burn_in_proven_count": 55,
+            "burn_in_proof_ratio": 1.0,
+            "production_proven_count": 0,
+            "production_proof_ratio": 0.0,
+            "production_workforce_ready": False,
+        }
+    )
+
+    snapshot = build_founder_autonomy_snapshot(
+        employee_capability=capability,
+        surfaces=_surfaces(),
+        generated_at=NOW,
+    )
+    founder = _dimensions(snapshot)["founder"]
+
+    assert founder["hard_cap"] == 65
+    assert "employees" not in {gate["key"] for gate in founder["evidence"]}
+    assert snapshot["live_summary"]["employee_workforce_ready"] is True
+    assert snapshot["live_summary"]["employee_production_workforce_ready"] is False
+    assert snapshot["live_summary"]["burn_in_proven_employees"] == 55
+    assert snapshot["live_summary"]["production_proven_employees"] == 0
+    assert any(
+        item["kind"] == "employee_receipt" and item["count"] == 55
+        for item in snapshot["attention"]["items"]
+    )
 
 
 def test_complete_evidence_can_reach_the_target_band() -> None:
@@ -257,6 +308,8 @@ def test_complete_evidence_can_reach_the_target_band() -> None:
     assert snapshot["live_summary"]["deploy_verified"] is True
     assert snapshot["truth_domains"]["production_value"]["available"] is True
     assert snapshot["live_summary"]["employee_workforce_ready"] is True
+    assert snapshot["live_summary"]["employee_production_workforce_ready"] is True
+    assert snapshot["live_summary"]["production_proven_employees"] == 55
     assert snapshot["live_summary"]["dead_letters_healthy"] is True
     assert snapshot["live_summary"]["retort_clarifications_healthy"] is True
 
@@ -405,6 +458,35 @@ def test_public_projection_is_sanitized_and_written_to_all_site_targets(
         },
         approvals={"local_pending": 1},
         customer_value=_ready_customer_value(verified_paid_amount_cents=999999),
+        autonomy_audit={
+            "source_authoritative": True,
+            "append_only": True,
+            "append_only_enforced": True,
+            "total": 4,
+            "allow_count": 4,
+            "posthoc_conclusive_count": 2,
+            "posthoc_eligible_allow_count": 2,
+            "posthoc_eligible_conclusive_count": 1,
+            "posthoc_pending_count": 1,
+            "posthoc_pending_contracts": [
+                {
+                    "action": "self_maintenance_l1_merge",
+                    "source": "self_maintenance_loop.remote_merge_request",
+                    "count": 1,
+                }
+            ],
+            "posthoc_maturity_minutes": 90,
+            "posthoc_uncovered_count": 1,
+            "posthoc_coverage_rate": 66.67,
+            "prohibited_miss_evidence_status": "unknown",
+            "posthoc_uncovered_contracts": [
+                {
+                    "action": "daily_digest",
+                    "source": "daily_digest.cron",
+                    "count": 1,
+                }
+            ],
+        },
         surfaces=_surfaces(),
         generated_at=NOW,
     )
@@ -418,6 +500,31 @@ def test_public_projection_is_sanitized_and_written_to_all_site_targets(
     assert public["proof"]["customer_acceptance_verified"] is True
     assert public["proof"]["runtime_provenance_ok"] is False
     assert public["proof"]["employee_workforce_ready"] is False
+    assert public["proof"]["alignment_posthoc"] == {
+        "status": "unknown",
+        "coverage_rate": 66.67,
+        "allow_count": 4,
+        "conclusive_count": 2,
+        "eligible_allow_count": 2,
+        "eligible_conclusive_count": 1,
+        "pending_count": 1,
+        "pending_contracts": [
+            {
+                "action": "self_maintenance_l1_merge",
+                "source": "self_maintenance_loop.remote_merge_request",
+                "count": 1,
+            }
+        ],
+        "maturity_minutes": 90,
+        "uncovered_count": 1,
+        "uncovered_contracts": [
+            {
+                "action": "daily_digest",
+                "source": "daily_digest.cron",
+                "count": 1,
+            }
+        ],
+    }
     assert "private-run-id" not in body
     assert "secret-gate" not in body
     assert "999999" not in body
@@ -805,6 +912,94 @@ def test_forced_history_cannot_inflate_unattended_code_progress() -> None:
     assert snapshot["live_summary"]["latest_autonomous_complete_status"] == (
         "completed_merge_requested"
     )
+
+
+def test_scheduler_automated_remediation_counts_exact_deploy_chain() -> None:
+    run_id = "automated-remediation-run"
+    merge_sha = "b" * 40
+    workflow_run_id = "workflow-automated-remediation"
+    rows = [
+        {
+            "run_id": run_id,
+            "phase": "start",
+            "status": "running",
+            "triggered_by": "automated_remediation",
+            "force": False,
+        },
+        *[
+            {
+                "run_id": run_id,
+                "phase": "step",
+                "step": step,
+                "status": "success",
+                "ok": True,
+            }
+            for step in ("code", "review", "qa")
+        ],
+        {
+            "run_id": run_id,
+            "phase": "complete",
+            "status": "completed_merge_requested",
+        },
+        {
+            "run_id": run_id,
+            "phase": "deployment",
+            "event": "deploy_dispatch",
+            "environment": "production",
+            "status": "accepted",
+            "ok": True,
+            "merge_sha": merge_sha,
+            "workflow_run_id": workflow_run_id,
+        },
+        {
+            "run_id": run_id,
+            "phase": "deployment",
+            "event": "post_deploy_verified",
+            "environment": "production",
+            "status": "verified",
+            "ok": True,
+            "identity_verified": True,
+            "merge_sha": merge_sha,
+            "workflow_run_id": workflow_run_id,
+        },
+        {
+            "run_id": run_id,
+            "phase": "merge",
+            "event": "merge_completed",
+            "environment": "production",
+            "status": "completed_merged",
+            "ok": True,
+            "merge_sha": merge_sha,
+            "workflow_run_id": workflow_run_id,
+        },
+    ]
+
+    snapshot = build_founder_autonomy_snapshot(
+        runtime={
+            "evidence": {
+                "milestone_rows": rows,
+                "latest_complete": rows[4],
+                "open_run_ids": [],
+            }
+        },
+        generated_at=NOW,
+    )
+    code = _dimensions(snapshot)["code"]
+
+    assert code["progress"] == 100
+    assert {gate["key"] for gate in code["evidence"]} == {
+        "write",
+        "review",
+        "qa",
+        "merge",
+        "dispatch",
+        "verify",
+    }
+    assert snapshot["live_summary"]["latest_autonomous_complete_status"] == (
+        "completed_merge_requested"
+    )
+    assert snapshot["live_summary"]["real_deploy_dispatched"] is True
+    assert snapshot["live_summary"]["deploy_verified"] is True
 
 
 def test_fault_loop_cannot_mix_repair_and_recovery_across_run_ids() -> None:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 from modstore_server import employee_runtime, models, task_router, workflow_scheduler
@@ -168,6 +168,7 @@ def test_scheduler_registers_contract_cron_jobs(monkeypatch) -> None:
     contracts = workforce_contract_map()
     profiles = [{"id": employee_id} for employee_id in contracts]
     jobs = []
+    registration_rows = []
 
     class FakeScheduler:
         def add_job(self, fn, trigger, **kwargs):
@@ -185,6 +186,14 @@ def test_scheduler_registers_contract_cron_jobs(monkeypatch) -> None:
         },
     )
     monkeypatch.setattr(models, "get_session_factory", lambda: lambda: nullcontext(object()))
+    monkeypatch.setattr(
+        "modstore_server.scheduler_runtime.record_job_run",
+        lambda **kwargs: registration_rows.append(kwargs),
+    )
+    monkeypatch.setattr(
+        "modstore_server.scheduler_runtime.get_runtime_status",
+        lambda **_kwargs: {"jobs": []},
+    )
 
     workflow_scheduler._register_employee_cron_jobs()
 
@@ -196,6 +205,12 @@ def test_scheduler_registers_contract_cron_jobs(monkeypatch) -> None:
         "emp_cron_employee-interview-assistant",
     }
     assert "emp_cron_deploy-release-officer" not in {job["id"] for job in employee_jobs}
+    assert len(registration_rows) == 22
+    assert all(row["status"] == "success" for row in registration_rows)
+    assert {row["job_id"] for row in registration_rows} >= {
+        "employee_cron_registered:seo-sitemap-curator",
+        "employee_cron_registered:payment-billing-reconciler",
+    }
 
     captured = {}
 
@@ -217,12 +232,49 @@ def test_scheduler_registers_contract_cron_jobs(monkeypatch) -> None:
         "modstore_server.services.llm.resolve_platform_bench_llm",
         lambda: ("minimax", "MiniMax-M2.7"),
     )
+    tracked_job_ids = []
+
+    @contextmanager
+    def fake_track_job_run(job_id):
+        tracked_job_ids.append(job_id)
+        yield
+
+    monkeypatch.setattr(
+        "modstore_server.scheduler_runtime.track_job_run",
+        fake_track_job_run,
+    )
     payment_job = next(
         job for job in employee_jobs if job["id"] == "emp_cron_payment-billing-reconciler"
     )
     payment_job["fn"]()
+    assert tracked_job_ids == ["employee_cron:payment-billing-reconciler"]
     assert captured["employee_id"] == "payment-billing-reconciler"
     assert captured["input_data"]["allow_medium_risk"] is True
     assert captured["input_data"]["allow_high_risk_real_run"] is False
     assert captured["input_data"]["non_blocking_human_questions"] is True
     assert captured["bench_llm_override"] == ("minimax", "MiniMax-M2.7")
+
+    tracked_outcomes = []
+
+    @contextmanager
+    def fake_track_failed_job(job_id):
+        try:
+            yield
+        except RuntimeError:
+            tracked_outcomes.append((job_id, "failed"))
+            raise
+        else:
+            tracked_outcomes.append((job_id, "success"))
+
+    monkeypatch.setattr(
+        "modstore_server.scheduler_runtime.track_job_run",
+        fake_track_failed_job,
+    )
+    monkeypatch.setattr(
+        "modstore_server.employee_executor.execute_employee_task",
+        lambda *_args, **_kwargs: {"ok": False, "status": "handler_failed"},
+    )
+
+    payment_job["fn"]()
+
+    assert tracked_outcomes == [("employee_cron:payment-billing-reconciler", "failed")]

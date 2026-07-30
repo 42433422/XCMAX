@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.application.autonomy.approval_resume import request_action
+from app.application.autonomy.approval_resume import mark_approval_requested, request_action
 from app.domain.autonomy.autonomy_guard import reload_autonomy_guard
 from app.fastapi_routes import ops_autonomy, xcmax_admin
 
@@ -155,18 +155,55 @@ def test_workflow_dispatch_state_machine_and_prohibited_probe(tmp_path, monkeypa
     assert invalid.status_code == 400
 
 
+def test_admin_approver_identity_comes_from_authenticated_session(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+        lambda request: "private-session-token",
+    )
+    monkeypatch.setattr(
+        "app.application.session_account_meta.load_session_account_meta",
+        lambda session_id: {
+            "account_kind": "admin",
+            "market_is_admin": True,
+            "market_user_id": 42,
+        },
+    )
+
+    assert xcmax_admin._admin_approver_from_session(object()) == "market-admin:42"
+
+
 def test_admin_pending_resume_reject_use_session_not_webhook(tmp_path, monkeypatch) -> None:
     """管理端审批中心走 /api/xcmax/admin/autonomy/*，管理员会话即可，无需 webhook token。"""
     _isolate(tmp_path, monkeypatch)
     monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "require_human")
     reload_autonomy_guard()
-    request_action("rollback_release", action_id="admin-pending-1", source="route-test")
+    executed_by_admin: list[str] = []
+    request_action(
+        "rollback_release",
+        action_id="admin-pending-1",
+        source="route-test",
+        executor=lambda payload: (
+            executed_by_admin.append(str((payload.get("_approval") or {}).get("approver") or ""))
+            or {"ok": True}
+        ),
+    )
     request_action("rollback_release", action_id="admin-pending-2", source="route-test")
+    request_action("rollback_release", action_id="admin-no-executor", source="route-test")
+    request_action(
+        "rollback_release",
+        action_id="admin-external-callback",
+        source="route-test",
+        executor=lambda payload: {"ok": True},
+    )
+    mark_approval_requested(
+        "admin-external-callback",
+        approval_id="github-environment-7",
+    )
     monkeypatch.setattr(xcmax_admin, "_require_market_admin_session", lambda request: None)
     monkeypatch.setattr(
         xcmax_admin,
         "_admin_approver_from_session",
-        lambda request, body_approver="": str(body_approver or "console-admin"),
+        lambda request: "console-admin",
     )
     app = FastAPI()
     app.include_router(xcmax_admin.router)
@@ -183,14 +220,39 @@ def test_admin_pending_resume_reject_use_session_not_webhook(tmp_path, monkeypat
 
     resumed = client.post(
         "/api/xcmax/admin/autonomy/actions/admin-pending-1/resume",
-        json={"approver": "alice"},
+        json={"approver": "spoofed-browser-actor"},
     )
     assert resumed.status_code == 200
-    assert resumed.json()["action"]["state"] == "approved"
+    assert resumed.json()["execution_dispatched"] is True
+    assert resumed.json()["action"]["state"] == "executed"
+    assert resumed.json()["action"]["approver"] == "console-admin"
+    assert executed_by_admin == ["console-admin"]
+
+    unavailable = client.post(
+        "/api/xcmax/admin/autonomy/actions/admin-no-executor/resume",
+        json={"approver": "spoofed-browser-actor", "defer_execution": True},
+    )
+    assert unavailable.status_code == 409
+    assert unavailable.json()["code"] == "executor_unavailable"
+    still_pending = client.get("/api/xcmax/admin/autonomy/actions/pending").json()["items"]
+    assert any(item["action_id"] == "admin-no-executor" for item in still_pending)
+
+    external = client.post(
+        "/api/xcmax/admin/autonomy/actions/admin-external-callback/resume",
+        json={"approver": "spoofed-browser-actor", "defer_execution": True},
+    )
+    assert external.status_code == 409
+    assert external.json()["code"] == "external_callback"
+    still_pending = client.get("/api/xcmax/admin/autonomy/actions/pending").json()["items"]
+    assert any(
+        item["action_id"] == "admin-external-callback" and item["state"] == "approval_requested"
+        for item in still_pending
+    )
 
     rejected = client.post(
         "/api/xcmax/admin/autonomy/actions/admin-pending-2/reject",
-        json={"approver": "bob", "reason": "nope"},
+        json={"approver": "spoofed-browser-actor", "reason": "nope"},
     )
     assert rejected.status_code == 200
     assert rejected.json()["action"]["state"] == "rejected"
+    assert rejected.json()["action"]["approver"] == "console-admin"

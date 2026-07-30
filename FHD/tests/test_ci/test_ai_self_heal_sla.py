@@ -599,6 +599,8 @@ def _make_real_client() -> sla.GitHubClient:
     client.repo = "test/repo"
     client.token = "fake-token"
     client.branch_update_client = None
+    client.workflow_dispatch_client = None
+    client.require_independent_workflow_dispatch = False
     return client
 
 
@@ -746,6 +748,14 @@ class TestGetWorkflowRunConclusion:
 
 
 class TestMergeAndDispatchApi:
+    def test_workflow_requires_independent_post_merge_dispatch_token(self) -> None:
+        workflow = (FHD_ROOT / ".github" / "workflows" / "ai-self-heal-auto-merge.yml").read_text(
+            encoding="utf-8"
+        )
+
+        assert "WORKFLOW_DISPATCH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN }}" in workflow
+        assert 'REQUIRE_INDEPENDENT_WORKFLOW_DISPATCH_TOKEN: "1"' in workflow
+
     def test_mergeability_reports_behind_state(self) -> None:
         client = _make_real_client()
         mock_http = MagicMock()
@@ -759,6 +769,59 @@ class TestMergeAndDispatchApi:
         client.client = mock_http
 
         assert client.get_pr_mergeability(42) == (True, "behind")
+
+    def test_mergeability_retries_transient_unknown_until_behind(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        client = _make_real_client()
+        mock_http = MagicMock()
+        unknown = MagicMock()
+        unknown.status_code = 200
+        unknown.json.return_value = {
+            "mergeable": None,
+            "mergeable_state": "unknown",
+        }
+        behind = MagicMock()
+        behind.status_code = 200
+        behind.json.return_value = {
+            "mergeable": True,
+            "mergeable_state": "behind",
+        }
+        mock_http.get.side_effect = [unknown, behind]
+        client.client = mock_http
+        sleep = MagicMock()
+        monkeypatch.setattr(sla, "MERGEABILITY_POLL_ATTEMPTS", 3)
+        monkeypatch.setattr(sla, "MERGEABILITY_POLL_BASE_SECONDS", 0.25)
+        monkeypatch.setattr(sla.time, "sleep", sleep)
+
+        assert client.get_pr_mergeability(42) == (True, "behind")
+        assert mock_http.get.call_count == 2
+        sleep.assert_called_once_with(0.25)
+
+    def test_mergeability_unknown_retry_is_bounded_and_fails_closed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        client = _make_real_client()
+        mock_http = MagicMock()
+        unknown = MagicMock()
+        unknown.status_code = 200
+        unknown.json.return_value = {
+            "mergeable": None,
+            "mergeable_state": "unknown",
+        }
+        mock_http.get.return_value = unknown
+        client.client = mock_http
+        sleep = MagicMock()
+        monkeypatch.setattr(sla, "MERGEABILITY_POLL_ATTEMPTS", 3)
+        monkeypatch.setattr(sla, "MERGEABILITY_POLL_BASE_SECONDS", 0.25)
+        monkeypatch.setattr(sla.time, "sleep", sleep)
+
+        assert client.get_pr_mergeability(42) == (
+            None,
+            "unknown_after_3_attempts",
+        )
+        assert mock_http.get.call_count == 3
+        assert [call.args[0] for call in sleep.call_args_list] == [0.25, 0.5]
 
     def test_update_branch_sends_expected_head_sha(self) -> None:
         client = _make_real_client()
@@ -819,6 +882,38 @@ class TestMergeAndDispatchApi:
             "https://api.github.com/repos/test/repo/actions/workflows/fhd-ci-cd.yml/dispatches",
             json={"ref": "main", "inputs": {"push_to_cvm": "true"}},
         )
+
+    def test_dispatch_uses_independent_token_client_for_downstream_cd(self) -> None:
+        client = _make_real_client()
+        primary = MagicMock()
+        dispatch = MagicMock()
+        response = MagicMock()
+        response.status_code = 204
+        dispatch.post.return_value = response
+        client.client = primary
+        client.workflow_dispatch_client = dispatch
+        client.require_independent_workflow_dispatch = True
+
+        result = client.dispatch_workflow("modstore-ci-backend-python.yml")
+
+        assert result == (True, "ok")
+        dispatch.post.assert_called_once_with(
+            "https://api.github.com/repos/test/repo/actions/workflows/"
+            "modstore-ci-backend-python.yml/dispatches",
+            json={"ref": "main"},
+        )
+        primary.post.assert_not_called()
+
+    def test_dispatch_fails_closed_when_independent_token_is_required(self) -> None:
+        client = _make_real_client()
+        client.client = MagicMock()
+        client.require_independent_workflow_dispatch = True
+
+        assert client.dispatch_workflow("modstore-ci-backend-python.yml") == (
+            False,
+            "workflow_dispatch_token_missing",
+        )
+        client.client.post.assert_not_called()
 
     def test_dispatch_failure_preserves_api_reason(self) -> None:
         client = _make_real_client()

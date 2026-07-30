@@ -46,17 +46,17 @@ export const llm = {
   },
   llmAdminModelCapabilityReview: (body: { provider: string; model: string; l3_status: string; notes?: string }) =>
     req('/api/llm/admin/model-capabilities/review', { method: 'PUT', body: JSON.stringify(body) }),
-  llmChat: async (provider: string, model: string, messages: unknown[], maxTokens: number | null = null, conversationId: number | null = null) => {
+  llmChat: async (provider: string, model: string, messages: unknown[], maxTokens: number | null = null, conversationId: number | null = null, allowFailover: boolean = true) => {
     const res = (await req('/api/llm/chat', {
       method: 'POST',
-      body: JSON.stringify({ provider, model, messages, max_tokens: maxTokens, conversation_id: conversationId }),
+      body: JSON.stringify({ provider, model, messages, max_tokens: maxTokens, conversation_id: conversationId, allow_failover: allowFailover }),
     })) as { billed?: boolean; charge_amount?: number; content?: unknown } & Record<string, unknown>
     if (res && (res.billed === true || (Number(res.charge_amount) || 0) > 0)) {
       void import('../utils/llmBillingRefresh').then((m) => m.refreshLevelAndWalletAfterLlm())
     }
     return res
   },
-  llmChatStream: (provider: string, model: string, messages: unknown[], maxTokens: number | null = null, conversationId: number | null = null, signal?: AbortSignal) => {
+  llmChatStream: (provider: string, model: string, messages: unknown[], maxTokens: number | null = null, conversationId: number | null = null, signal?: AbortSignal, allowFailover: boolean = true) => {
     const headers = new Headers(authHeaders())
     headers.set('Content-Type', 'application/json')
     headers.set('Accept', 'text/event-stream')
@@ -64,7 +64,7 @@ export const llm = {
       method: 'POST',
       headers,
       signal,
-      body: JSON.stringify({ provider, model, messages, max_tokens: maxTokens, conversation_id: conversationId }),
+      body: JSON.stringify({ provider, model, messages, max_tokens: maxTokens, conversation_id: conversationId, allow_failover: allowFailover }),
     })
   },
   llmGenerateImage: (provider: string, model: string, prompt: string, opts: { size?: string; count?: number; n?: number } = {}) =>

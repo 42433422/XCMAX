@@ -7,9 +7,9 @@
 - _estimate_files（粗估规则）
 - _apply_files（路径穿越/敏感文件过滤）
 - ImplementResult / _write_report
-- _call_llm 缺 key 容错
+- _call_llm 缺 key 容错、严格 JSON 解析失败后的单次受控重试
 
-不测：网络请求、git 调用、LLM 调用、PR 创建（端到端在 CI 实跑）。
+不测：真实网络请求、git 调用、真实 LLM 调用、PR 创建（端到端在 CI 实跑）。
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -556,6 +557,80 @@ class TestCallLlmNoKey:
         result = _ai_impl._call_llm(prompt="test", api_key="")
         assert result["ok"] is False
         assert "LLM_API_KEY" in result["error"]
+
+
+class _FakeHttpResponse:
+    def __init__(self, content: str) -> None:
+        self._payload = json.dumps({"choices": [{"message": {"content": content}}]}).encode("utf-8")
+
+    def __enter__(self) -> _FakeHttpResponse:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self._payload
+
+
+class TestCallLlmStrictJsonRetry:
+    def test_invalid_json_retries_once_then_accepts_strict_json(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        responses = iter(
+            [
+                _FakeHttpResponse("{'files': []}"),
+                _FakeHttpResponse('```json\n{"files": [], "estimated_files": 0}\n```'),
+            ]
+        )
+        requests: list[dict[str, Any]] = []
+
+        def fake_urlopen(req: urllib.request.Request, timeout: int) -> _FakeHttpResponse:
+            assert timeout == 60
+            requests.append(json.loads(bytes(req.data or b"{}").decode("utf-8")))
+            return next(responses)
+
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+        result = _ai_impl._call_llm(prompt="implement safely", api_key="test-key")
+
+        assert result == {"files": [], "estimated_files": 0, "ok": True}
+        assert len(requests) == 2
+        assert requests[0]["temperature"] == 0.2
+        assert requests[1]["temperature"] == 0
+        assert "严格 JSON" in requests[1]["messages"][-1]["content"]
+
+    def test_two_invalid_responses_fail_closed_after_one_retry(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls = 0
+
+        def fake_urlopen(_req: urllib.request.Request, timeout: int) -> _FakeHttpResponse:
+            nonlocal calls
+            assert timeout == 60
+            calls += 1
+            return _FakeHttpResponse("{not-json}")
+
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+        result = _ai_impl._call_llm(prompt="implement safely", api_key="test-key")
+
+        assert result["ok"] is False
+        assert "重试 1 次后" in result["error"]
+        assert "JSON 解析失败" in result["error"]
+        assert calls == 2
+
+
+class TestParseLlmPlan:
+    def test_rejects_python_literal_instead_of_relaxing_json(self) -> None:
+        plan, error = _ai_impl._parse_llm_plan("{'files': []}")
+        assert plan is None
+        assert "JSON 解析失败" in error
+
+    def test_rejects_missing_object(self) -> None:
+        plan, error = _ai_impl._parse_llm_plan("no structured response")
+        assert plan is None
+        assert "未包含 JSON 对象" in error
 
 
 class TestChatCompletionsUrl:

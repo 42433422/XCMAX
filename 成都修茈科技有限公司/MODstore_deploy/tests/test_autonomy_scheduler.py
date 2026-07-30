@@ -80,6 +80,47 @@ def test_pending_remediation_requires_executable_branch_and_task(
     assert pending_automated_remediation() is None
 
 
+def test_pending_remediation_normalizes_legacy_target_ref_verdict_hold(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    branch = "devfleet/cursor/sub-1-legacy-target-ref"
+    memory = {
+        "last_policy_decision": {
+            "reason": "structured_qa_verdict_not_pass",
+            "structured_gate": {
+                "qa": {
+                    "blocking_findings": [
+                        f"target_branch_unavailable: refs/remotes/origin/{branch} cannot be resolved"
+                    ],
+                    "target_branch_available": False,
+                    "verdict": "FAIL",
+                },
+                "reason": "structured_qa_verdict_not_pass",
+            },
+        },
+        "open_items": [
+            {
+                "kind": "automated_remediation",
+                "reason": "structured_qa_verdict_not_pass",
+                "run_id": "run-legacy",
+                "branch": branch,
+                "task_id": "task-legacy",
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+        lambda: memory,
+    )
+
+    assert pending_automated_remediation() == {
+        "branch": branch,
+        "reason": "structured_qa_target_branch_unavailable",
+        "run_id": "run-legacy",
+        "task_id": "task-legacy",
+    }
+
+
 def test_pending_remediation_prefers_latest_executable_failed_review(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -113,6 +154,53 @@ def test_pending_remediation_prefers_latest_executable_failed_review(
         "run_id": "latest-run",
         "steps": ["review"],
         "task_id": "latest-task",
+    }
+
+
+def test_pending_remediation_prioritizes_incident_lineage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    memory = {
+        "open_items": [
+            {
+                "kind": "automated_remediation",
+                "reason": "structured_review_blocking_findings",
+                "run_id": "incident-run",
+                "branch": "devfleet/cursor/incident",
+                "task_id": "incident-task",
+            },
+            {
+                "kind": "failed_steps",
+                "run_id": "newer-run",
+                "branch": "devfleet/cursor/newer",
+                "para_task_id": "newer-task",
+                "retry_count": 1,
+                "steps": ["review"],
+            },
+        ]
+    }
+    monkeypatch.setattr(
+        "modstore_server.self_maintenance_loop_runner._load_loop_memory",
+        lambda: memory,
+    )
+    monkeypatch.setattr(
+        "modstore_server.autonomy_scheduler._remediation_lineage_by_run_id",
+        lambda: {
+            "incident-run": {
+                "origin_run_id": "incident-run",
+                "origin_triggered_by": "incident_event",
+                "origin_reason": "",
+            }
+        },
+    )
+
+    assert pending_automated_remediation() == {
+        "branch": "devfleet/cursor/incident",
+        "origin_run_id": "incident-run",
+        "origin_triggered_by": "incident_event",
+        "reason": "structured_review_blocking_findings",
+        "run_id": "incident-run",
+        "task_id": "incident-task",
     }
 
 
@@ -169,6 +257,12 @@ def test_pending_remediation_resumes_without_force(
             "triggered_by": "automated_remediation",
             "force": False,
             "reason": "resume:structured_review_blocking_findings",
+            "remediation_context": {
+                "branch": "devfleet/trae/fix-42",
+                "reason": "structured_review_blocking_findings",
+                "run_id": "run-42",
+                "task_id": "task-42",
+            },
         }
     ]
 

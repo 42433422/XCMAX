@@ -53,7 +53,6 @@ TRANSFER_WAIT_SECONDS="${OPS_DR_TRANSFER_WAIT_SECONDS:-1800}"
   echo "温备 SSH 目标或私钥未配置" >&2
   exit 1
 }
-git -C "$SOURCE_ROOT" cat-file -e "${SHA}^{commit}"
 install -d -m 0700 "$SPOOL" "$STATE" "$(dirname "$LOG")"
 touch "$LOG"
 exec 9>"$LOCK"
@@ -73,6 +72,7 @@ trap 'rm -rf -- "$staging"' EXIT
 install -d -m 0700 "$staging"
 
 if [[ "$COMPONENT" == "modstore" ]]; then
+  git -C "$SOURCE_ROOT" cat-file -e "${SHA}^{commit}"
   active_sha="$(
     python3 - "$MODSTORE_CURRENT/.xcmax-release.json" <<'PY'
 import json
