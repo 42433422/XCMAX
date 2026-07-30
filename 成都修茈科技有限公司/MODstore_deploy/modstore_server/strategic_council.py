@@ -431,9 +431,9 @@ def _live_persy_evidence(strategy_intent: str) -> dict[str, Any]:
     """Retrieve real Persy chunks and retain only source identities/digests."""
 
     try:
-        from modstore_server.xiaoc_cs_ssot import retrieve_knowledge_for_mode
+        from modstore_server.xiaoc_cs_ssot import retrieve_persy_knowledge
 
-        chunks = retrieve_knowledge_for_mode(strategy_intent, mode="admin", top_k=5)
+        chunks = retrieve_persy_knowledge(strategy_intent, top_k=5)
     except Exception as exc:  # noqa: BLE001 - absence must fail closed in the receipt
         return {
             "grounded": False,

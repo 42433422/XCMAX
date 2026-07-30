@@ -69,7 +69,10 @@ async def _build_and_publish_founder_autonomy(
         _safe_proxy("/api/ops/self-maintenance/status?limit=100"),
         _safe_proxy("/api/admin/duty-graph/health"),
         _safe_proxy("/api/admin/employee-autonomy/dashboard"),
-        _safe_proxy("/api/admin/employee-autonomy/execution-coverage?window_hours=24"),
+        _safe_proxy(
+            "/api/admin/employee-autonomy/execution-coverage"
+            "?window_hours=24&production_window_hours=720"
+        ),
         _safe_proxy("/api/admin/customer-value/evidence?window_days=90"),
         _safe_proxy("/api/admin/autonomy/evidence?window_days=30&limit=100"),
         _safe_proxy("/api/admin/events/dlq/health"),

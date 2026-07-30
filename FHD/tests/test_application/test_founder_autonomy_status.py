@@ -35,6 +35,12 @@ def _ready_workforce(count: int = 55) -> dict:
         "assignment_ratio": 1.0,
         "proof_ratio": 1.0,
         "workforce_ready": True,
+        "burn_in_proven_count": 0,
+        "burn_in_proof_ratio": 0.0,
+        "production_proven_count": count,
+        "production_proof_ratio": 1.0,
+        "production_window_hours": 720,
+        "production_workforce_ready": True,
     }
 
 
@@ -97,6 +103,51 @@ def test_missing_evidence_is_not_reported_as_finished() -> None:
     assert dims["customer"]["progress"] == 0
     assert snapshot["truth_domains"]["local_runtime"]["available"] is False
     assert dims["code"]["remaining"] == 100
+
+
+def test_empty_goal_summary_does_not_pass_the_goals_gate() -> None:
+    snapshot = build_founder_autonomy_snapshot(
+        goals={"total": 0, "done": 0, "completion_rate": 0.0},
+        surfaces=_surfaces(),
+        generated_at=NOW,
+    )
+    founder = _dimensions(snapshot)["founder"]
+
+    assert "goals" not in {gate["key"] for gate in founder["evidence"]}
+    assert next(gate for gate in founder["gaps"] if gate["key"] == "goals")["gap"] == (
+        "接入可追踪 Goals 与完成率"
+    )
+
+
+def test_burn_in_receipts_do_not_prove_production_workforce() -> None:
+    capability = _ready_workforce()
+    capability.update(
+        {
+            "burn_in_proven_count": 55,
+            "burn_in_proof_ratio": 1.0,
+            "production_proven_count": 0,
+            "production_proof_ratio": 0.0,
+            "production_workforce_ready": False,
+        }
+    )
+
+    snapshot = build_founder_autonomy_snapshot(
+        employee_capability=capability,
+        surfaces=_surfaces(),
+        generated_at=NOW,
+    )
+    founder = _dimensions(snapshot)["founder"]
+
+    assert founder["hard_cap"] == 65
+    assert "employees" not in {gate["key"] for gate in founder["evidence"]}
+    assert snapshot["live_summary"]["employee_workforce_ready"] is True
+    assert snapshot["live_summary"]["employee_production_workforce_ready"] is False
+    assert snapshot["live_summary"]["burn_in_proven_employees"] == 55
+    assert snapshot["live_summary"]["production_proven_employees"] == 0
+    assert any(
+        item["kind"] == "employee_receipt" and item["count"] == 55
+        for item in snapshot["attention"]["items"]
+    )
 
 
 def test_complete_evidence_can_reach_the_target_band() -> None:
@@ -257,6 +308,8 @@ def test_complete_evidence_can_reach_the_target_band() -> None:
     assert snapshot["live_summary"]["deploy_verified"] is True
     assert snapshot["truth_domains"]["production_value"]["available"] is True
     assert snapshot["live_summary"]["employee_workforce_ready"] is True
+    assert snapshot["live_summary"]["employee_production_workforce_ready"] is True
+    assert snapshot["live_summary"]["production_proven_employees"] == 55
     assert snapshot["live_summary"]["dead_letters_healthy"] is True
     assert snapshot["live_summary"]["retort_clarifications_healthy"] is True
 

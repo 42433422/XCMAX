@@ -532,6 +532,32 @@ async function sourceWorkspaceMatchesRepo(sourceWorkspace, repoUrl) {
     && sourceWorkspace.replace(/\\/g, '/').endsWith('/XCMAX');
 }
 
+async function refreshBaseBranchFromOrigin(taskDir, repoUrl, baseBranch) {
+  const remoteRef = `refs/remotes/origin/${baseBranch}`;
+  await git(taskDir, ['remote', 'set-url', 'origin', repoUrl]);
+  await git(taskDir, ['remote', 'set-url', '--push', 'origin', repoUrl]);
+  await git(taskDir, [
+    'fetch',
+    '--no-tags',
+    'origin',
+    `+refs/heads/${baseBranch}:${remoteRef}`,
+  ]);
+  const remoteHead = await git(taskDir, [
+    'rev-parse',
+    '--verify',
+    `${remoteRef}^{commit}`,
+  ]);
+  await git(taskDir, ['checkout', '-B', baseBranch, remoteHead]);
+  const localHead = await git(taskDir, ['rev-parse', '--verify', 'HEAD']);
+  if (localHead !== remoteHead) {
+    throw new Error(
+      `base refresh mismatch branch=${baseBranch} local=${localHead} remote=${remoteHead}`,
+    );
+  }
+  console.log(`[e2e-agent] 基线已刷新 ${baseBranch}@${remoteHead.slice(0, 12)}`);
+  return remoteHead;
+}
+
 async function cloneSourceWorkspace(sourceWorkspace, taskDir, task) {
   // 先尝试从本地 sourceWorkspace clone（快，避免 GitHub 网络延迟）。
   // 如果 sourceWorkspace 太大或 clone 失败，fallback 到 GitHub repoUrl（带代理）。
@@ -554,17 +580,11 @@ async function cloneSourceWorkspace(sourceWorkspace, taskDir, task) {
   const baseBranch = String(task?.base_branch || 'main').trim() || 'main';
   if (repoUrl) {
     // sourceWorkspace 是本地路径，clone 后 origin 指向它。
-    // 改 origin 指向真正的远程仓库，再 fetch 远程 base_branch。
-    // 否则 sourceWorkspace 中未推送的 commits 会污染 PR（PR 会领先 origin N 个 commits）。
-    await gitMaybe(taskDir, ['remote', 'set-url', 'origin', repoUrl]);
-    await gitMaybe(taskDir, ['remote', 'set-url', '--push', 'origin', repoUrl]);
-    const fetched = await gitMaybe(taskDir, ['fetch', '--no-tags', 'origin', baseBranch]);
-    if (fetched || existsSync(join(taskDir, '.git', 'refs', 'remotes', 'origin', baseBranch))) {
-      // 把本地 base_branch 强制 reset 到 origin 状态，丢弃 sourceWorkspace 中的未推送 commits
-      await gitMaybe(taskDir, ['checkout', '-B', baseBranch, `origin/${baseBranch}`]);
-    }
-  }
-  if (task.base_branch) {
+    // 必须 fail-closed 地刷新并核对远程基线。不能用 fetch 输出或 loose-ref
+    // 文件是否存在判断成功：成功 fetch 可以没有 stdout，remote ref 也可能
+    // 只存在于 packed-refs；旧逻辑会因此悄悄从陈旧本地 main 创建工作分支。
+    await refreshBaseBranchFromOrigin(taskDir, repoUrl, baseBranch);
+  } else if (task.base_branch) {
     if (!(await gitMaybe(taskDir, ['checkout', task.base_branch]))) {
       await gitMaybe(taskDir, ['checkout', '-B', task.base_branch, `origin/${task.base_branch}`]);
     }

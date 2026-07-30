@@ -68,7 +68,7 @@ export function normalizeDutyRosterLoopStatus(payload: HealthPayload | null | un
     : Array.isArray(scheduler.jobs)
       ? scheduler.jobs
       : []
-  const ok = Boolean(health.ok !== false)
+  const ok = health.ok === true || health.success === true || health.healthy === true
   const source = String(health.source || '').trim() || 'unknown'
   const message = typeof staffing.error === 'string'
     ? staffing.error
