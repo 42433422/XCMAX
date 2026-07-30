@@ -11,6 +11,7 @@ from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
 
 from app.application import get_excel_vector_ingest_app_service, get_excel_vector_search_app_service
+from app.utils.agent_route_status import agent_route_http_status
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import get_upload_dir
 
@@ -102,11 +103,7 @@ def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
 
 
 def _excel_vector_status(payload: dict[str, Any]) -> int:
-    if payload.get("success"):
-        return 200
-    if str(payload.get("error_code") or "") == "excel_vector_exception":
-        return 500
-    return 400
+    return agent_route_http_status(payload)
 
 
 @router.post("/ingest")

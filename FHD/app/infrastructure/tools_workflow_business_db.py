@@ -62,6 +62,13 @@ def _registered_router_business_db(
 
     if entity == "products":
         product_payload = dict(payload)
+        if operation in ("update", "delete") and not (
+            product_payload.get("id") or product_payload.get("product_id")
+        ):
+            return {
+                "success": False,
+                "message": f"products {operation} 需要 id。",
+            }
         if operation == "create":
             labeled = re.search(
                 r"新增产品\s*[：:]\s*(?P<name>.+?)\s+型号\s*[：:]\s*"

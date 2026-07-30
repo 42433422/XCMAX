@@ -52,11 +52,12 @@ def test_reset_planner_tool_dedup_state() -> None:
     reset_planner_tool_dedup_state()
 
 
-def test_fallback_plan_generic_query_node() -> None:
+def test_fallback_plan_generic_query_requires_business_object() -> None:
     planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
     plan = planner._fallback_plan("gid", "查库存5003", get_tool_registry())
     assert isinstance(plan, PlanGraph)
-    assert plan.nodes[0].tool_id in ("products", "customers")
+    assert plan.intent == "clarification_required"
+    assert plan.nodes == []
 
 
 @patch("app.application.workflow.planner.get_ai_conversation_service")

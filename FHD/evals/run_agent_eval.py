@@ -3936,6 +3936,7 @@ def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any
     action = str(task.get("route_action") or "generate").strip().lower()
     body = dict(task.get("body") or {})
     user_id = str(task.get("user_id") or "eval-shipment-order-user")
+    owner_user_id = int(task.get("owner_user_id") or 101)
     repo = InMemoryAgentRunRepository()
     service = Mock()
 
@@ -3971,6 +3972,30 @@ def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any
             body.setdefault("file_path", str(shipment_file))
             body.setdefault("order_id", 7)
             body.setdefault("printer_name", "HP")
+            from app.application.print_authorization import (
+                finish_document_print_capability,
+                issue_document_print_capability,
+                reserve_document_print_capability,
+            )
+
+            capability = issue_document_print_capability(
+                file_path=body["file_path"],
+                owner_user_id=owner_user_id,
+                order_id=body["order_id"],
+            )
+            if capability is None:
+                return _failed(task, "failed to issue shipment print capability")
+            reservation = reserve_document_print_capability(
+                capability["document_token"],
+                owner_user_id=owner_user_id,
+                file_path=body["file_path"],
+                order_id=body["order_id"],
+            )
+            body["post_print_receipt"] = finish_document_print_capability(
+                reservation,
+                print_succeeded=True,
+                print_completed=True,
+            )
         elif action == "clear_shipment":
             path = str(task.get("route_path") or "/api/shipment/orders/clear-shipment")
             body.setdefault("purchase_unit", "星光贸易")
@@ -3990,6 +4015,12 @@ def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any
 
         app = FastAPI()
         app.include_router(shipment_orders.router)
+
+        @app.middleware("http")
+        async def inject_authenticated_owner(request, call_next):
+            request.state.user_id = owner_user_id
+            return await call_next(request)
+
         client = TestClient(app, raise_server_exceptions=False)
 
         env_patch = {
@@ -4022,13 +4053,39 @@ def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any
         expected.get("run_id_present"),
         skip_when_expected_missing=True,
     )
-    _check_equal(checks, "run_attached", run is not None, True)
+    _check_equal(
+        checks,
+        "payload.confirmation_required",
+        payload.get("confirmation_required"),
+        expected.get("confirmation_required"),
+        skip_when_expected_missing=True,
+    )
+    _check_equal(
+        checks,
+        "run_attached",
+        run is not None,
+        expected.get("run_attached", True),
+    )
     if run is not None:
         _check_equal(checks, "run.status", run.status, expected.get("run_status"))
         _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
         _check_equal(checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count"))
         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
         _check_event_types(checks, run.events, list(expected.get("event_types") or []))
+    _check_equal(
+        checks,
+        "service.generate_shipment_document",
+        service.generate_shipment_document.call_count,
+        expected.get("generate_call_count"),
+        skip_when_expected_missing=True,
+    )
+    _check_equal(
+        checks,
+        "service.mark_as_printed",
+        service.mark_as_printed.call_count,
+        expected.get("mark_printed_call_count"),
+        skip_when_expected_missing=True,
+    )
     return _result(
         task,
         checks,
@@ -4059,6 +4116,7 @@ def _run_print_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     action = str(task.get("route_action") or "print_document").strip().lower()
     body = dict(task.get("body") or {})
     user_id = str(task.get("user_id") or "eval-print-user")
+    owner_user_id = int(task.get("owner_user_id") or 101)
     repo = InMemoryAgentRunRepository()
     service = Mock()
     method = "POST"
@@ -4106,6 +4164,16 @@ def _run_print_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             body.setdefault("file_path", str(document_file))
             body.setdefault("printer_name", "DocPrinter")
             body.setdefault("use_automation", False)
+            from app.application.print_authorization import issue_document_print_capability
+
+            capability = issue_document_print_capability(
+                file_path=body["file_path"],
+                owner_user_id=owner_user_id,
+                order_id=body.get("order_id"),
+            )
+            if capability is None:
+                return _failed(task, "failed to issue document print capability")
+            body["print_token"] = capability["document_token"]
         elif action == "print_label":
             path = "/api/print/label"
             body.setdefault("file_path", str(label_file))
@@ -4125,6 +4193,12 @@ def _run_print_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
 
         app = FastAPI()
         app.include_router(print_routes.router)
+
+        @app.middleware("http")
+        async def inject_authenticated_owner(request, call_next):
+            request.state.user_id = owner_user_id
+            return await call_next(request)
+
         client = TestClient(app, raise_server_exceptions=False)
 
         env_patch = {

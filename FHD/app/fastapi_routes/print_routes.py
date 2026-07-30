@@ -12,6 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 
+from app.utils.agent_route_status import agent_route_http_status
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -103,11 +104,7 @@ def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
 
 
 def _print_agent_status_code(result: dict[str, Any], *, failure_status: int = 400) -> int:
-    if result.get("success"):
-        return 200
-    if str(result.get("error_code") or "") == "tool_exception":
-        return 500
-    return failure_status
+    return agent_route_http_status(result, failure_status=failure_status)
 
 
 def _run_print_agent(

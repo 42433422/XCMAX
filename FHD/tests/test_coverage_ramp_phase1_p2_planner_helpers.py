@@ -172,11 +172,12 @@ def test_fallback_plan_add_product() -> None:
     assert len(plan.nodes) >= 1
 
 
-def test_fallback_plan_generic_query() -> None:
+def test_fallback_plan_generic_query_requires_clarification() -> None:
     planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
     plan = planner._fallback_plan("pid2", "随便问问", get_tool_registry())
     assert isinstance(plan, PlanGraph)
-    assert plan.nodes
+    assert plan.intent == "clarification_required"
+    assert plan.nodes == []
 
 
 @patch("app.application.workflow.planner.get_ai_conversation_service")

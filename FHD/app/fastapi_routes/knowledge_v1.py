@@ -28,9 +28,9 @@ from app.infrastructure.rag import (
     get_default_embedder,
     is_rag_enabled,
 )
+from app.utils.agent_route_status import restore_agent_domain_error
 
 logger = logging.getLogger(__name__)
-
 
 router = APIRouter(prefix="/api/knowledge/v1", tags=["knowledge-v1"])
 
@@ -499,7 +499,7 @@ def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
         output["run_id"] = run_id
         output["agent_run_id"] = run_id
     output["agent_status"] = str(getattr(run, "status", "") or "")
-    return cast("dict[str, Any]", _public_dataset_payload(output))
+    return restore_agent_domain_error(cast("dict[str, Any]", _public_dataset_payload(output)))
 
 
 def _dataset_agent_user_id(request: Request, params: dict[str, Any]) -> str:

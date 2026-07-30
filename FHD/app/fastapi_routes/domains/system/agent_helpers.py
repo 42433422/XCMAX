@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.utils.agent_route_status import agent_route_http_status
 from app.utils.mixin_module_sync import sync_module_functions
 
 
@@ -270,11 +271,7 @@ def _run_system_maintenance_agent(
         if continued is not None:
             run = continued
     payload = _tool_route_agent_payload(run, node_id)
-    status_code = int(
-        payload.pop("http_status_code", 0) or (200 if payload.get("success") else 400)
-    )
-    if payload.get("error_code") == "tool_exception":
-        status_code = 500
+    status_code = agent_route_http_status(payload)
     if run.status in {"waiting_user", "blocked"}:
         status_code = 202
     return payload, status_code
@@ -347,11 +344,7 @@ def _run_document_template_agent(
         if continued is not None:
             run = continued
     payload = _tool_route_agent_payload(run, node_id)
-    status_code = int(
-        payload.pop("http_status_code", 0) or (200 if payload.get("success") else 400)
-    )
-    if payload.get("error_code") == "tool_exception":
-        status_code = 500
+    status_code = agent_route_http_status(payload)
     if run.status in {"waiting_user", "blocked"}:
         status_code = 202
     return payload, status_code

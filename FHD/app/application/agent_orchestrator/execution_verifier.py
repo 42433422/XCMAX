@@ -104,11 +104,11 @@ def verify_tool_execution(
             verifier=verifier,
             reason=reason,
             evidence=_safe_evidence(
-                payload, ["employee_id", "summary", "items", "sheets", "outputs"]
+                payload, ["employee_id", "summary", "items", "sheets", "outputs", "data"]
             ),
             recovery_hint=""
             if ok
-            else "检查员工输出是否包含可验收的 summary、items、sheets 或 outputs。",
+            else "检查员工输出是否包含可验收的 summary、items、sheets、outputs 或 data。",
         )
 
     present = _present_keys(payload, required)

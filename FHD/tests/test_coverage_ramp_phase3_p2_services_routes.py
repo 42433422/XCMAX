@@ -237,11 +237,12 @@ def test_filter_tool_registry_pro_default() -> None:
     assert "shared" in filtered
 
 
-def test_fallback_plan_export_price_list() -> None:
+def test_fallback_plan_export_price_list_requires_clarification() -> None:
     planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
     plan = planner._fallback_plan("p3", "导出甲公司报价表", get_tool_registry())
     assert plan.plan_id == "p3"
-    assert plan.nodes
+    assert plan.intent == "clarification_required"
+    assert plan.nodes == []
 
 
 # ---------------------------------------------------------------------------

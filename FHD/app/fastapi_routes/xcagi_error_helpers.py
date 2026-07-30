@@ -1,8 +1,34 @@
-"""Extracted helpers for an existing public module."""
+"""Error helpers extracted from the XCAGI chat compatibility module."""
 
 from __future__ import annotations
 
+import logging
+import os
+import re
+from typing import Any
+from urllib.parse import urlsplit
+
+from fastapi import HTTPException
+from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
+
+from app.application.workflow.multimodal_user_content import (
+    EmptyMultimodalResponseError,
+    UnsupportedMultimodalModelError,
+)
 from app.utils.mixin_module_sync import sync_module_functions
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
+
+
+class _XcagiStreamFirstResponseTimeout(TimeoutError):
+    """The upstream model did not produce a first event before the deadline."""
+
+    def __init__(self, timeout: float) -> None:
+        self.timeout = timeout
+        super().__init__(
+            f"模型服务在>{int(timeout)} 秒内未返回可处理结果。请稍后重试或切换可用模型。"
+        )
 
 
 def _market_connection_label() -> str:

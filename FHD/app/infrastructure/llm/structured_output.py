@@ -105,17 +105,16 @@ def _schema_bound_messages(
     messages: list[dict[str, str]],
     schema: dict[str, Any],
 ) -> list[dict[str, str]]:
-    instruction = {
-        "role": "system",
-        "content": (
-            "Return exactly one JSON object that satisfies this JSON Schema. "
-            "Do not add properties that the schema disallows. JSON Schema:\n"
-            f"{json.dumps(schema, ensure_ascii=False, separators=(',', ':'))}"
-        ),
-    }
+    instruction = (
+        "Return exactly one JSON object that satisfies this JSON Schema. "
+        "Do not add properties that the schema disallows. JSON Schema:\n"
+        f"{json.dumps(schema, ensure_ascii=False, separators=(',', ':'))}"
+    )
     if messages and messages[0].get("role") == "system":
-        return [messages[0], instruction, *messages[1:]]
-    return [instruction, *messages]
+        first = dict(messages[0])
+        first["content"] = f"{first.get('content') or ''}\n\n{instruction}".strip()
+        return [first, *messages[1:]]
+    return [{"role": "system", "content": instruction}, *messages]
 
 
 def _max_repairs_default() -> int:

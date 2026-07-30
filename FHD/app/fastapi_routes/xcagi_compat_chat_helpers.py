@@ -49,22 +49,6 @@ logger = logging.getLogger(__name__)
 _DESKTOP_STREAM_FIRST_RESPONSE_TIMEOUT_SECONDS = 75.0
 
 
-class _XcagiStreamFirstResponseTimeout(TimeoutError):
-    """The upstream model never produced an event within the first-response budget.
-
-    This is deliberately distinct from a total request timeout.  The SSE
-    serializer can therefore give the desktop a stable, actionable error code
-    instead of presenting an upstream quota or provider failure as a generic
-    "first packet" problem.
-    """
-
-    def __init__(self, timeout: float) -> None:
-        self.timeout = timeout
-        super().__init__(
-            f"模型服务在>{int(timeout)} 秒内未返回可处理结果。请稍后重试或切换可用模型。"
-        )
-
-
 _CHAT_DB_READ_GRACE_SEC = 5 * 60
 _chat_db_read_grace_lock = threading.Lock()
 _chat_db_read_grace_until: dict[str, float] = {}
@@ -232,13 +216,14 @@ class XcagiCompatChatBatchBody(BaseModel):
     source: str | None = None
 
 
-from app.fastapi_routes.xcagi_compat_error_helpers import (
+from app.fastapi_routes.xcagi_error_helpers import (
     _market_429_error_detail,
     _market_connection_label,
     _model_provider_error_detail,
     _xcagi_chat_error_event,
     _xcagi_chat_http_exc,
     _xcagi_compat_reply_payload,
+    _XcagiStreamFirstResponseTimeout,
 )
 
 _EXCEL_PATH_PATTERN = re.compile(

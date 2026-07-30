@@ -237,7 +237,7 @@ class TaskAgent:
                 if not slots.get(key):
                     missing.append(key)
             if not (slots.get("model_number") or slots.get("product_name")):
-                missing.append("product_name")
+                missing.append("model_number")
         if task_type in ("product_query", "customer_query"):
             if not slots.get("keyword"):
                 missing.append("keyword")
@@ -262,17 +262,18 @@ class TaskAgent:
             return "我这边看了一下，问一下这次需要多少桶呢？"
         if missing_slots == ["tin_spec"]:
             return "我这边看了一下，问一下规格是多少呢？"
-        if missing_slots == ["product_name"]:
+        if missing_slots in (["model_number"], ["product_name"]):
             return "我这边看了一下，产品名称或编号好像还没有呢，问一下是什么？"
         if missing_slots == ["unit_name"]:
             return "我这边看了一下，购买单位还没有呢，问一下是哪一家？"
         question_map = {
             "quantity_tins": "多少桶呢",
+            "model_number": "产品名称或编号好像还没有呢，问一下是什么",
             "product_name": "产品名称或编号好像还没有呢，问一下是什么",
             "tin_spec": "规格是多少呢",
             "unit_name": "购买单位是哪一家呢",
         }
-        ordered_keys = ["unit_name", "product_name", "tin_spec", "quantity_tins"]
+        ordered_keys = ["unit_name", "model_number", "product_name", "tin_spec", "quantity_tins"]
         questions = [
             question_map[k] for k in ordered_keys if k in missing_slots and k in question_map
         ]
