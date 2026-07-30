@@ -67,7 +67,7 @@ describe('AIEcosystemView.vue', () => {
     expect(descs).toHaveLength(4)
     expect(descs[0].text()).toContain('可视化 AI 员工')
     expect(descs[1].text()).toContain('MCP/API')
-    expect(descs[2].text()).toContain('生产 AI 员工')
+    expect(descs[2].text()).toContain('客户私有 Mod')
     expect(descs[3].text()).toContain('MOD 扩展')
   })
 
@@ -129,14 +129,14 @@ describe('AIEcosystemView.vue', () => {
     const { wrapper, router } = await mountView()
     const pushSpy = vi.spyOn(router, 'push')
     await wrapper.find('.app-launcher--production').trigger('click')
-    expect(pushSpy).toHaveBeenCalledWith({ name: 'brain' })
+    expect(pushSpy).toHaveBeenCalledWith({ name: 'brain', query: { focus: 'private-mod' } })
   })
 
   it('navigates to mod-store shell page when modstore launcher clicked', async () => {
     const { wrapper, router } = await mountView()
     const pushSpy = vi.spyOn(router, 'push')
     await wrapper.find('.app-launcher--modstore').trigger('click')
-    expect(pushSpy).toHaveBeenCalledWith({ name: 'mod-store' })
+    expect(pushSpy).toHaveBeenCalledWith({ name: 'mod-store', query: {} })
   })
 
   it('uses mod path redirect when planner mod pages enabled (brain)', async () => {
@@ -144,7 +144,7 @@ describe('AIEcosystemView.vue', () => {
     const { wrapper, router } = await mountView()
     const pushSpy = vi.spyOn(router, 'push')
     await wrapper.find('.app-launcher--production').trigger('click')
-    expect(pushSpy).toHaveBeenCalledWith('/mod/brain')
+    expect(pushSpy).toHaveBeenCalledWith({ path: '/mod/brain', query: { focus: 'private-mod' } })
     expect(pushSpy).not.toHaveBeenCalledWith({ name: 'brain' })
   })
 
@@ -153,6 +153,6 @@ describe('AIEcosystemView.vue', () => {
     const { wrapper, router } = await mountView()
     const pushSpy = vi.spyOn(router, 'push')
     await wrapper.find('.app-launcher--modstore').trigger('click')
-    expect(pushSpy).toHaveBeenCalledWith('/mod/store')
+    expect(pushSpy).toHaveBeenCalledWith({ path: '/mod/store', query: {} })
   })
 })
