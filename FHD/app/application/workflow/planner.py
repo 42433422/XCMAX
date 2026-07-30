@@ -38,23 +38,6 @@ _DB_WRITE_KEYWORDS = frozenset(
     }
 )
 
-_UNDERSPECIFIED_REQUESTS = frozenset(
-    {
-        "随便问问",
-        "随便看看",
-        "帮我看看",
-        "帮忙看看",
-        "看一下",
-        "看一看",
-        "处理一下",
-        "弄一下",
-        "你来决定",
-        "你看着办",
-        "都可以",
-    }
-)
-
-
 from app.application.workflow.planner_business_intent import (
     _clean_db_slot_value,
     _explicit_mutation_kind,
@@ -68,23 +51,14 @@ from app.application.workflow.planner_business_intent import (
     _validate_explicit_mutation_alignment,
 )
 
-
 def get_tool_registry() -> dict[str, Any]:
-    """
-    返回工作流工具注册表，供 ai_chat_app_service 使用。
-    覆盖报价、主数据、出货、模板与微信辅助等能力，与意图层 tool_key 对齐。
-    """
+    """返回工作流工具注册表（报价/主数据/出货/模板/微信），供 ai_chat_app_service 使用。"""
     from app.services.tools_execution.registry import get_workflow_tool_registry
 
     return get_workflow_tool_registry()
 
-
 def execute_tool(tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
-    """
-    执行指定工具（支持 execute_registered_workflow_tool 注入的 _action）。
-
-    与 get_tool_registry 中的工具 id 一致。
-    """
+    """执行指定工具（支持 _action 注入）。"""
     logger.info("execute_tool called: tool_name=%s, params=%s", tool_name, params)
 
     merged = dict(params or {})
@@ -120,7 +94,6 @@ def execute_tool(tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
         "message": f"未知工具或动作: {tool_name}.{action}",
         "error_code": "unknown_tool_action",
     }
-
 
 def _execute_price_list_tool(params: dict[str, Any]) -> dict[str, Any]:
     """执行价格表导出工具"""
@@ -173,7 +146,6 @@ def _execute_price_list_tool(params: dict[str, Any]) -> dict[str, Any]:
             "message": "导出处理失败，请稍后重试",
             "error_code": "export_failed",
         }
-
 
 def _execute_products_tool(params: dict[str, Any]) -> dict[str, Any]:
     """执行产品查询工具"""
@@ -236,7 +208,6 @@ def _execute_products_tool(params: dict[str, Any]) -> dict[str, Any]:
         logger.error("产品查询运行时错误: %s", e)
         return {"success": False, "message": "查询失败，请稍后重试", "error_code": "query_failed"}
 
-
 def _execute_customers_tool(params: dict[str, Any]) -> dict[str, Any]:
     """执行客户查询工具"""
     try:
@@ -268,7 +239,6 @@ def _execute_customers_tool(params: dict[str, Any]) -> dict[str, Any]:
     except RuntimeError as e:
         logger.error("客户查询运行时错误: %s", e)
         return {"success": False, "message": "查询失败，请稍后重试", "error_code": "query_failed"}
-
 
 def _execute_customers_ensure_exists_tool(params: dict[str, Any]) -> dict[str, Any]:
     """创建客户（单位）如不存在。"""
@@ -324,7 +294,6 @@ def _execute_customers_ensure_exists_tool(params: dict[str, Any]) -> dict[str, A
             "error_code": "create_failed",
             "created": False,
         }
-
 
 def _execute_shipment_generate_tool(params: dict[str, Any]) -> dict[str, Any]:
     try:
@@ -397,7 +366,6 @@ def _execute_shipment_generate_tool(params: dict[str, Any]) -> dict[str, Any]:
             "error_code": "generation_failed",
         }
 
-
 def _execute_shipment_records_tool(params: dict[str, Any]) -> dict[str, Any]:
     try:
         from app.bootstrap import get_shipment_app_service
@@ -424,7 +392,6 @@ def _execute_shipment_records_tool(params: dict[str, Any]) -> dict[str, Any]:
     except RuntimeError as e:
         logger.error("出货记录查询运行时错误: %s", e)
         return {"success": False, "message": "查询失败，请稍后重试", "error_code": "query_failed"}
-
 
 def _execute_materials_tool(params: dict[str, Any]) -> dict[str, Any]:
     try:
@@ -457,7 +424,6 @@ def _execute_materials_tool(params: dict[str, Any]) -> dict[str, Any]:
     except RuntimeError as e:
         logger.error("原材料查询运行时错误: %s", e)
         return {"success": False, "message": "查询失败，请稍后重试", "error_code": "query_failed"}
-
 
 def _execute_print_label_tool(params: dict[str, Any]) -> dict[str, Any]:
     try:
@@ -516,7 +482,6 @@ def _execute_print_label_tool(params: dict[str, Any]) -> dict[str, Any]:
             "error_code": "generation_failed",
         }
 
-
 def _execute_excel_decompose_tool(params: dict[str, Any]) -> dict[str, Any]:
     try:
         from app.bootstrap import get_template_app_service
@@ -557,11 +522,9 @@ def _execute_excel_decompose_tool(params: dict[str, Any]) -> dict[str, Any]:
             "error_code": "decomposition_failed",
         }
 
-
 def _execute_template_extract_tool(params: dict[str, Any]) -> dict[str, Any]:
     """与 excel_decompose 共用模板分解能力。"""
     return _execute_excel_decompose_tool(params)
-
 
 def _execute_wechat_preview_tool(params: dict[str, Any]) -> dict[str, Any]:
     try:
@@ -592,7 +555,6 @@ def _execute_wechat_preview_tool(params: dict[str, Any]) -> dict[str, Any]:
     except RuntimeError as e:
         logger.error("微信联系人查询运行时错误: %s", e)
         return {"success": False, "message": "查询失败，请稍后重试", "error_code": "query_failed"}
-
 
 def _execute_excel_schema_tool(params: dict[str, Any]) -> dict[str, Any]:
     """分析 Excel 文件的表结构。"""
@@ -677,7 +639,6 @@ def _execute_excel_schema_tool(params: dict[str, Any]) -> dict[str, Any]:
             "message": "分析失败，请稍后重试",
             "error_code": "analysis_failed",
         }
-
 
 def _execute_excel_analysis_tool(params: dict[str, Any]) -> dict[str, Any]:
     """读取/查询/聚合 Excel 数据。"""
@@ -771,7 +732,6 @@ def _execute_excel_analysis_tool(params: dict[str, Any]) -> dict[str, Any]:
             "message": "分析失败，请稍后重试",
             "error_code": "analysis_failed",
         }
-
 
 def _execute_import_excel_tool(params: dict[str, Any]) -> dict[str, Any]:
     """将 Excel 数据导入数据库。"""
@@ -1009,30 +969,25 @@ def _execute_import_excel_tool(params: dict[str, Any]) -> dict[str, Any]:
             "error_code": "import_failed",
         }
 
-
 def _execute_employee_list_tool(params: dict[str, Any]) -> dict[str, Any]:
     from app.application.facades.tools_facade import execute_registered_workflow_tool
 
     return execute_registered_workflow_tool("employee", "list", params)
-
 
 def _execute_employee_execute_tool(params: dict[str, Any]) -> dict[str, Any]:
     from app.application.facades.tools_facade import execute_registered_workflow_tool
 
     return execute_registered_workflow_tool("employee", "execute", params)
 
-
 def _execute_business_db_read_tool(params: dict[str, Any]) -> dict[str, Any]:
     from app.application.facades.tools_facade import execute_registered_workflow_tool
 
     return execute_registered_workflow_tool("business_db", "read", params)
 
-
 def _execute_business_db_write_tool(params: dict[str, Any]) -> dict[str, Any]:
     from app.application.facades.tools_facade import execute_registered_workflow_tool
 
     return execute_registered_workflow_tool("business_db", "write", params)
-
 
 # 与 get_tool_registry / execute_tool 默认 action 对齐；(tool_id, action) -> 实现函数
 _WORKFLOW_TOOL_HANDLERS: dict[tuple[str, str], Callable[[dict[str, Any]], dict[str, Any]]] = {
@@ -1057,7 +1012,6 @@ _WORKFLOW_TOOL_HANDLERS: dict[tuple[str, str], Callable[[dict[str, Any]], dict[s
     ("business_db", "write"): _execute_business_db_write_tool,
 }
 
-
 def _get_planner_http_client() -> httpx.Client:
     global _planner_http_client
     if _planner_http_client is None:
@@ -1067,7 +1021,6 @@ def _get_planner_http_client() -> httpx.Client:
             trust_env=False,
         )
     return _planner_http_client
-
 
 def _filter_tool_registry_for_profile(
     tool_registry: dict[str, Any],
@@ -1106,9 +1059,7 @@ def _filter_tool_registry_for_profile(
         filtered[tool_id] = new_spec
     return filtered
 
-
 from app.application.workflow.planner_llm_support import PlannerLlmSupportMixin
-
 
 class LLMWorkflowPlanner(PlannerLlmSupportMixin):
     def __init__(self) -> None:

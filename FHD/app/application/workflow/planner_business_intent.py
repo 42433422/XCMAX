@@ -5,6 +5,22 @@ from __future__ import annotations
 from app.utils.mixin_module_sync import sync_module_functions
 
 
+_UNDERSPECIFIED_REQUESTS = frozenset(
+    {
+        "随便问问",
+        "随便看看",
+        "帮我看看",
+        "帮忙看看",
+        "看一下",
+        "看一看",
+        "处理一下",
+        "弄一下",
+        "你来决定",
+        "你看着办",
+        "都可以",
+    }
+)
+
 def _requires_clarification_before_execution(
     message: str,
     context: dict[str, Any] | None = None,

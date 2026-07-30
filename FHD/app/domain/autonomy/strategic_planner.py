@@ -10,7 +10,9 @@ import json
 import logging
 import re
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+
+UTC = timezone.utc  # noqa: UP017 - MODstore imports this module on Python 3.10
 from typing import Any, Protocol
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
