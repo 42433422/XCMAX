@@ -100,6 +100,9 @@ def parse_merge_review_diff_char_count(detail: str) -> Optional[int]:
         return None
 
 
+_RETORT_SCOPE_REASON = "retort_scope_too_large"
+
+
 def memory_has_diff_too_large_remediation(memory: Optional[Dict[str, Any]]) -> bool:
     open_items = memory.get("open_items") if isinstance(memory, dict) else None
     if not isinstance(open_items, list):
@@ -114,6 +117,18 @@ def memory_has_diff_too_large_remediation(memory: Optional[Dict[str, Any]]) -> b
         ):
             return True
     return False
+
+
+def memory_has_retort_scope_remediation(memory: Optional[Dict[str, Any]]) -> bool:
+    open_items = memory.get("open_items") if isinstance(memory, dict) else None
+    if not isinstance(open_items, list):
+        return False
+    return any(
+        isinstance(item, dict)
+        and item.get("kind") == "automated_remediation"
+        and item.get("reason") == _RETORT_SCOPE_REASON
+        for item in open_items
+    )
 
 
 def is_auxiliary_self_maintenance_evidence_path(path: str) -> bool:
@@ -232,6 +247,17 @@ def loop_memory_requires_executable_change(
                         "modstore_server production change under Para diff budget"
                     ),
                 }
+            if (
+                item.get("kind") == "automated_remediation"
+                and item.get("reason") == _RETORT_SCOPE_REASON
+            ):
+                return {
+                    "required": True,
+                    "reason": (
+                        "retort scope remediation requires focused modstore_server "
+                        "production change from the clean base"
+                    ),
+                }
             text = json.dumps(item, ensure_ascii=False).lower()
             if any(
                 marker in text
@@ -296,7 +322,12 @@ def assess_loop_memory_executable_change_blockers(
 
     normalized_files = [_normalize_repo_path(file_name) for file_name in files if file_name]
 
+    kb_block_reason = ""
     if memory_has_diff_too_large_remediation(memory):
+        kb_block_reason = "kb_paths_blocked_during_diff_too_large_remediation"
+    elif memory_has_retort_scope_remediation(memory):
+        kb_block_reason = "kb_paths_blocked_during_retort_scope_remediation"
+    if kb_block_reason:
         kb_paths = [
             file_name for file_name in normalized_files if file_name.startswith("FHD/XCAGI/kb/")
         ]
@@ -305,7 +336,7 @@ def assess_loop_memory_executable_change_blockers(
                 "blocked": True,
                 "changed_files": normalized_files,
                 "kb_paths": kb_paths,
-                "reason": "kb_paths_blocked_during_diff_too_large_remediation",
+                "reason": kb_block_reason,
                 "requirement": requirement,
             }
 
@@ -365,6 +396,7 @@ __all__ = [
     "load_loop_memory",
     "loop_memory_requires_executable_change",
     "memory_has_diff_too_large_remediation",
+    "memory_has_retort_scope_remediation",
     "normalize_merge_review_veto_code",
     "para_merge_review_max_diff_chars",
     "parse_diff_stat_paths",
