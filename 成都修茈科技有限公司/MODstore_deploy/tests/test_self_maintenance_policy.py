@@ -1,3 +1,5 @@
+import pytest
+
 from modstore_server.self_maintenance_policy import (
     loop_memory_requires_executable_change,
     parse_diff_stat_paths,
@@ -135,3 +137,48 @@ def test_memory_has_retort_scope_remediation_flag():
     }
     assert memory_has_retort_scope_remediation(memory) is True
     assert memory_has_retort_scope_remediation({"open_items": []}) is False
+
+
+@pytest.mark.parametrize(
+    "hold_reason",
+    [
+        "structured_review_blocking_findings",
+        "structured_qa_verdict_not_pass",
+        "structured_qa_blocking_findings",
+    ],
+)
+def test_structured_review_qa_holds_require_executable_change(hold_reason: str):
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-review",
+                "kind": "automated_remediation",
+                "reason": hold_reason,
+                "run_id": "run-review",
+                "task_id": "task-review",
+            }
+        ]
+    }
+
+    requirement = loop_memory_requires_executable_change(memory)
+
+    assert requirement["required"] is True
+    assert "structured review/QA hold" in requirement["reason"]
+
+
+def test_report_only_protocol_holds_do_not_require_executable_change():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-protocol",
+                "kind": "automated_remediation",
+                "reason": "missing_structured_review_object",
+                "run_id": "run-protocol",
+                "task_id": "task-protocol",
+            }
+        ]
+    }
+
+    requirement = loop_memory_requires_executable_change(memory)
+
+    assert requirement["required"] is False
