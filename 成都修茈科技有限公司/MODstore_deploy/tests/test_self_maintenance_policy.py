@@ -80,6 +80,25 @@ def test_diff_too_large_merge_review_veto_requires_executable_change():
     assert "diff-too-large merge-review" in requirement["reason"]
 
 
+def test_actionable_merge_review_veto_requires_executable_change():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/codex/fix-1",
+                "kind": "automated_remediation",
+                "reason": "para_ai_review_rejected",
+                "review_actionable_findings": True,
+                "review_feedback": "REJECT: missing regression test for policy gate",
+            }
+        ]
+    }
+
+    requirement = loop_memory_requires_executable_change(memory)
+
+    assert requirement["required"] is True
+    assert "actionable merge-review" in requirement["reason"]
+
+
 def test_parse_merge_review_diff_char_count_and_memory_flag():
     from modstore_server.self_maintenance_policy import (
         memory_has_diff_too_large_remediation,
