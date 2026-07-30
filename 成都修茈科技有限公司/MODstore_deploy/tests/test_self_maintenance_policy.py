@@ -156,3 +156,66 @@ def test_is_retort_scope_excluded_path_matches_contract_paths():
         )
         is False
     )
+
+
+def test_memory_has_indeterminate_remediation_flag():
+    from modstore_server.self_maintenance_policy import memory_has_indeterminate_remediation
+
+    memory = {
+        "open_items": [
+            {
+                "kind": "automated_remediation",
+                "reason": "para_ai_review_rejected",
+                "review_veto_code": "indeterminate-review",
+            }
+        ]
+    }
+    assert memory_has_indeterminate_remediation(memory) is True
+    assert memory_has_indeterminate_remediation({"open_items": []}) is False
+
+
+def test_assess_executable_change_blockers_runs_excluded_before_marker_during_diff_too_large():
+    from modstore_server.self_maintenance_policy import assess_executable_change_blockers
+
+    memory = {
+        "open_items": [
+            {
+                "kind": "automated_remediation",
+                "reason": "para_ai_review_rejected",
+                "review_veto_code": "diff-too-large",
+            }
+        ]
+    }
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py",
+    ]
+
+    blocker = assess_executable_change_blockers(files, memory)
+
+    assert blocker is not None
+    assert blocker["reason"] == "remediation_excluded_paths_blocked_during_diff_too_large"
+    assert blocker["reason"] != "marker_only_diff_requires_executable_change"
+
+
+def test_assess_executable_change_blockers_blocks_kb_during_indeterminate_remediation():
+    from modstore_server.self_maintenance_policy import assess_executable_change_blockers
+
+    memory = {
+        "open_items": [
+            {
+                "kind": "automated_remediation",
+                "reason": "para_ai_review_rejected",
+                "review_veto_code": "indeterminate-review",
+            }
+        ]
+    }
+    files = [
+        "FHD/XCAGI/kb/fixes/sample-fix.json",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_policy.py",
+    ]
+
+    blocker = assess_executable_change_blockers(files, memory)
+
+    assert blocker is not None
+    assert blocker["reason"] == "kb_paths_blocked_during_indeterminate_remediation"
+    assert blocker["kb_paths"] == [files[0]]

@@ -4557,91 +4557,24 @@ def _assess_branch_auto_merge_policy(
 
     try:
         from modstore_server.self_maintenance_policy import (
-            diff_includes_modstore_server_production_path,
-            is_auxiliary_self_maintenance_evidence_path,
-            is_marker_status_path,
+            assess_executable_change_blockers,
             loop_memory_requires_executable_change,
-            memory_has_diff_too_large_remediation,
-            memory_has_retort_scope_remediation,
             para_merge_review_max_diff_chars,
         )
 
         requirement = loop_memory_requires_executable_change(memory)
-        if requirement.get("required"):
-            has_diff_too_large = memory_has_diff_too_large_remediation(memory)
-            has_retort_scope = memory_has_retort_scope_remediation(memory)
-            kb_paths = [
-                file_name for file_name in normalized_files if file_name.startswith("FHD/XCAGI/kb/")
-            ]
-            if kb_paths and has_diff_too_large:
-                return _decision(
-                    {
-                        "changed_files": normalized_files,
-                        "kb_paths": kb_paths,
-                        "ok": False,
-                        "reason": "kb_paths_blocked_during_diff_too_large_remediation",
-                        "self_maintenance_requirement": requirement,
-                    }
-                )
-            if kb_paths and has_retort_scope:
-                return _decision(
-                    {
-                        "changed_files": normalized_files,
-                        "kb_paths": kb_paths,
-                        "ok": False,
-                        "reason": "kb_paths_blocked_during_retort_scope_remediation",
-                        "self_maintenance_requirement": requirement,
-                    }
-                )
-            if has_diff_too_large or has_retort_scope:
-                from modstore_server.self_maintenance_retort_remediation import (
-                    is_retort_scope_excluded_path,
-                )
-
-                excluded_paths = [
-                    file_name
-                    for file_name in normalized_files
-                    if is_retort_scope_excluded_path(file_name)
-                    and not file_name.startswith("FHD/XCAGI/kb/")
-                ]
-                if excluded_paths:
-                    excluded_reason = (
-                        "remediation_excluded_paths_blocked_during_diff_too_large"
-                        if has_diff_too_large and not has_retort_scope
-                        else "retort_scope_excluded_paths_blocked_during_remediation"
-                    )
-                    return _decision(
-                        {
-                            "changed_files": normalized_files,
-                            "excluded_paths": excluded_paths,
-                            "ok": False,
-                            "reason": excluded_reason,
-                            "self_maintenance_requirement": requirement,
-                        }
-                    )
-            if all(is_marker_status_path(file_name) for file_name in normalized_files):
-                return _decision(
-                    {
-                        "allowed_globs": allowed,
-                        "changed_files": normalized_files,
-                        "ok": False,
-                        "reason": "marker_only_diff_requires_executable_change",
-                        "self_maintenance_requirement": requirement,
-                    }
-                )
-            if all(
-                is_auxiliary_self_maintenance_evidence_path(file_name)
-                for file_name in normalized_files
-            ) and not diff_includes_modstore_server_production_path(normalized_files):
-                return _decision(
-                    {
-                        "allowed_globs": allowed,
-                        "changed_files": normalized_files,
-                        "ok": False,
-                        "reason": "auxiliary_only_diff_requires_executable_change",
-                        "self_maintenance_requirement": requirement,
-                    }
-                )
+        blocker = assess_executable_change_blockers(
+            normalized_files,
+            memory,
+            requirement=requirement,
+        )
+        if blocker:
+            return _decision(
+                {
+                    "changed_files": normalized_files,
+                    **blocker,
+                }
+            )
     except Exception as exc:
         return _decision(
             {

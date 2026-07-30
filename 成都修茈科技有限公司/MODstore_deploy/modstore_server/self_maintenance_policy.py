@@ -131,6 +131,118 @@ def memory_has_retort_scope_remediation(memory: Optional[Dict[str, Any]]) -> boo
     )
 
 
+def memory_has_indeterminate_remediation(memory: Optional[Dict[str, Any]]) -> bool:
+    open_items = memory.get("open_items") if isinstance(memory, dict) else None
+    if not isinstance(open_items, list):
+        return False
+    for item in open_items:
+        if not isinstance(item, dict):
+            continue
+        if (
+            item.get("kind") == "automated_remediation"
+            and item.get("reason") == "para_ai_review_rejected"
+            and _item_indeterminate_merge_review_veto(item)
+        ):
+            return True
+    return False
+
+
+def assess_executable_change_blockers(
+    normalized_files: List[str],
+    memory: Optional[Dict[str, Any]] = None,
+    *,
+    requirement: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Run every loop-memory executable-change blocker in deterministic order.
+
+    Callers must invoke this whenever ``loop_memory_requires_executable_change``
+    is required so remediation gates (KB, excluded paths, marker-only,
+    auxiliary-only) are not skipped by scattered fallthrough branches.
+    """
+
+    req = (
+        requirement
+        if isinstance(requirement, dict)
+        else loop_memory_requires_executable_change(memory)
+    )
+    if not req.get("required"):
+        return None
+
+    files = [_normalize_repo_path(file_name) for file_name in normalized_files if file_name]
+    if not files:
+        return None
+
+    has_diff_too_large = memory_has_diff_too_large_remediation(memory)
+    has_retort_scope = memory_has_retort_scope_remediation(memory)
+    has_indeterminate = memory_has_indeterminate_remediation(memory)
+    kb_paths = [file_name for file_name in files if file_name.startswith("FHD/XCAGI/kb/")]
+
+    if kb_paths:
+        if has_diff_too_large:
+            return {
+                "kb_paths": kb_paths,
+                "ok": False,
+                "reason": "kb_paths_blocked_during_diff_too_large_remediation",
+                "self_maintenance_requirement": req,
+            }
+        if has_retort_scope:
+            return {
+                "kb_paths": kb_paths,
+                "ok": False,
+                "reason": "kb_paths_blocked_during_retort_scope_remediation",
+                "self_maintenance_requirement": req,
+            }
+        if has_indeterminate:
+            return {
+                "kb_paths": kb_paths,
+                "ok": False,
+                "reason": "kb_paths_blocked_during_indeterminate_remediation",
+                "self_maintenance_requirement": req,
+            }
+
+    if has_diff_too_large or has_retort_scope:
+        from modstore_server.self_maintenance_retort_remediation import (
+            is_retort_scope_excluded_path,
+        )
+
+        excluded_paths = [
+            file_name
+            for file_name in files
+            if is_retort_scope_excluded_path(file_name)
+            and not file_name.startswith("FHD/XCAGI/kb/")
+        ]
+        if excluded_paths:
+            excluded_reason = (
+                "remediation_excluded_paths_blocked_during_diff_too_large"
+                if has_diff_too_large and not has_retort_scope
+                else "retort_scope_excluded_paths_blocked_during_remediation"
+            )
+            return {
+                "excluded_paths": excluded_paths,
+                "ok": False,
+                "reason": excluded_reason,
+                "self_maintenance_requirement": req,
+            }
+
+    if all(is_marker_status_path(file_name) for file_name in files):
+        return {
+            "ok": False,
+            "reason": "marker_only_diff_requires_executable_change",
+            "self_maintenance_requirement": req,
+        }
+
+    if all(is_auxiliary_self_maintenance_evidence_path(file_name) for file_name in files) and not (
+        diff_includes_modstore_server_production_path(files)
+    ):
+        return {
+            "ok": False,
+            "reason": "auxiliary_only_diff_requires_executable_change",
+            "self_maintenance_requirement": req,
+        }
+
+    return None
+
+
 def is_auxiliary_self_maintenance_evidence_path(path: str) -> bool:
     normalized = _normalize_repo_path(path)
     if not normalized:
@@ -333,6 +445,7 @@ def should_block_marker_only_diff_summary(
 
 
 __all__ = [
+    "assess_executable_change_blockers",
     "default_loop_memory_path",
     "diff_includes_modstore_server_production_path",
     "is_auxiliary_self_maintenance_evidence_path",
@@ -340,6 +453,7 @@ __all__ = [
     "load_loop_memory",
     "loop_memory_requires_executable_change",
     "memory_has_diff_too_large_remediation",
+    "memory_has_indeterminate_remediation",
     "memory_has_retort_scope_remediation",
     "normalize_merge_review_veto_code",
     "para_merge_review_max_diff_chars",

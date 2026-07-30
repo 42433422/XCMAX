@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "kind": "fix",
+  "created_at": "2026-07-30T04:53:00+00:00",
+  "symptom": "diff-too-large 或 indeterminate-review 补救期间，auto-merge 策略在 loop_memory_requires_executable_change 为 required 时把 KB/排除路径/标记文件阻断分散在嵌套分支里；无 KB 路径时会 fallthrough 到 marker-only 检查，indeterminate-review 甚至允许 KB+tests 仅以 auxiliary_only 理由阻断。",
+  "root_cause": "_assess_branch_auto_merge_policy 将补救阻断逻辑内联在 loop_runner 中，KB 阻断以 `kb_paths and has_*` 为门闩而非统一管线；indeterminate-review 未纳入 KB 阻断集合，与 diff-too-large/retort-scope 及提示文案不一致。",
+  "fix_diff": "diff --git \"a/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_policy.py\" \"b/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_policy.py\"\n--- \"a/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_policy.py\"\n+++ \"b/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_policy.py\"\n@@ -119,6 +119,99 @@ def memory_has_retort_scope_remediation(memory: Optional[Dict[str, Any]]) -> boo\n     )\n \n \n+def memory_has_indeterminate_remediation(memory: Optional[Dict[str, Any]]) -> bool:\n+    ...\n+\n+\n+def assess_executable_change_blockers(...) -> Optional[Dict[str, Any]]:\n+    \"\"\"Run every loop-memory executable-change blocker in deterministic order.\"\"\"\n+    ...\n+\n+\n def is_auxiliary_self_maintenance_evidence_path(path: str) -> bool:\n diff --git \"a/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py\" \"b/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py\"\n--- \"a/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py\"\n+++ \"b/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py\"\n@@ -4558,68 +4558,15 @@ def _assess_branch_auto_merge_policy(\n     try:\n         from modstore_server.self_maintenance_policy import (\n-            diff_includes_modstore_server_production_path,\n-            is_auxiliary_self_maintenance_evidence_path,\n-            is_marker_status_path,\n+            assess_executable_change_blockers,\n             loop_memory_requires_executable_change,\n-            memory_has_diff_too_large_remediation,\n-            memory_has_retort_scope_remediation,\n             para_merge_review_max_diff_chars,\n         )\n \n         requirement = loop_memory_requires_executable_change(memory)\n-        if requirement.get(\"required\"):\n-            ...\n+        blocker = assess_executable_change_blockers(\n+            normalized_files, memory, requirement=requirement\n+        )\n+        if blocker:\n+            return _decision({\"changed_files\": normalized_files, **blocker})",
+  "metadata": {
+    "component": "self_maintenance_policy,self_maintenance_loop_runner",
+    "files": [
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py",
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_policy.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
+    ]
+  },
+  "executable_template": {
+    "applicability_check": "open_items 含 indeterminate-review 或 diff-too-large 补救，且 auto-merge 对 KB 路径返回 auxiliary_only 或未在 required 时统一跑排除路径/标记阻断。",
+    "patch_strategy": "在 self_maintenance_policy 新增 assess_executable_change_blockers() 与 memory_has_indeterminate_remediation()；loop_runner 改为调用统一阻断器；indeterminate-review 与 diff-too-large/retort-scope 一样阻断 FHD/XCAGI/kb/*。",
+    "rollback_plan": "删除 assess_executable_change_blockers/memory_has_indeterminate_remediation，恢复 loop_runner 内联嵌套 if 阻断逻辑及原 indeterminate KB 测试期望。",
+    "required_tests": [
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_policy.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
+    ]
+  }
+}

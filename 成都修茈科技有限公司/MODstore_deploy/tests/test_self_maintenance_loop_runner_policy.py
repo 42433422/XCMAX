@@ -2504,7 +2504,8 @@ def test_dynamic_low_risk_policy_blocks_kb_only_when_indeterminate_veto_open():
     result = _assess_branch_auto_merge_policy(files, _stats(), memory=memory)
 
     assert result["ok"] is False
-    assert result["reason"] == "auxiliary_only_diff_requires_executable_change"
+    assert result["reason"] == "kb_paths_blocked_during_indeterminate_remediation"
+    assert result["kb_paths"] == [files[0]]
 
 
 def test_dynamic_low_risk_policy_blocks_kb_only_when_retort_scope_open():
