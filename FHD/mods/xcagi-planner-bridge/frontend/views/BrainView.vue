@@ -3,7 +3,7 @@
     <div class="page-content brain-page">
       <div class="page-header brain-agent-header">
         <div class="brain-agent-title-row">
-          <h2>AI智脑集成</h2>
+          <h2>生产员工</h2>
           <span class="brain-agent-badge" title="编排与观测控制台">Agent</span>
         </div>
         <p class="muted brain-sub">

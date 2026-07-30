@@ -3,10 +3,12 @@
     <div v-if="!inAnalyzer" class="ecosystem-home">
       <div class="ecosystem-home-title">AI生态应用</div>
       <div class="launcher-grid">
-        <button class="app-launcher" type="button" @click="enterAnalyzer('kitten')">
-          <span class="app-launcher-icon" aria-hidden="true">🐱</span>
+        <button class="app-launcher app-launcher--kitten" type="button" @click="enterAnalyzer('kitten')">
+          <span class="app-launcher-icon app-launcher-icon--kitten" aria-hidden="true">
+            <KittenLauncherIcon />
+          </span>
           <span class="app-launcher-name">智慧分析</span>
-          <span class="app-launcher-desc">上传表格、对话分析、生成丰富图表，并按需导出报告</span>
+          <span class="app-launcher-desc">接入可视化 AI 员工，上传表格、对话洞察、生成 ECharts 图表与报告</span>
         </button>
         <button class="app-launcher app-launcher--aiopen" type="button" @click="enterAnalyzer('aiopen')">
           <span class="app-launcher-icon app-launcher-icon--aiopen" aria-hidden="true">
@@ -22,7 +24,12 @@
           <span class="app-launcher-name">生产员工</span>
           <span class="app-launcher-desc">部署与调度生产 AI 员工，编排任务流、监控工位运行与自动化交付</span>
         </button>
-        <button class="app-launcher app-launcher--modstore" type="button" @click="goShellPage('mod-store')">
+        <button
+          class="app-launcher app-launcher--modstore"
+          type="button"
+          data-tour="ecosystem-launcher-modstore"
+          @click="goShellPage('mod-store')"
+        >
           <span class="app-launcher-icon app-launcher-icon--modstore" aria-hidden="true">
             <ModStoreLauncherIcon />
           </span>
@@ -43,6 +50,7 @@ import { ref, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { resolvePlannerPageRedirectForRouteName } from '@/utils/plannerPagePaths'
 import AiOpenLauncherIcon from '@/components/aiopen/AiOpenLauncherIcon.vue'
+import KittenLauncherIcon from '@/components/kitten/KittenLauncherIcon.vue'
 import ProductionEmployeeLauncherIcon from '@/components/workflow/ProductionEmployeeLauncherIcon.vue'
 import ModStoreLauncherIcon from '@/components/modStore/ModStoreLauncherIcon.vue'
 
@@ -121,6 +129,17 @@ const exitAnalyzer = () => {
   justify-content: center;
   font-size: 42px;
   background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+}
+.app-launcher-icon--kitten {
+  background: linear-gradient(145deg, #0f766e 0%, #1e40af 100%);
+  box-shadow:
+    0 8px 20px rgba(15, 118, 110, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+.app-launcher--kitten:hover .app-launcher-icon--kitten {
+  box-shadow:
+    0 10px 24px rgba(30, 64, 175, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 .app-launcher-icon--aiopen {
   background: linear-gradient(145deg, #3b82f6 0%, #1d4ed8 100%);
