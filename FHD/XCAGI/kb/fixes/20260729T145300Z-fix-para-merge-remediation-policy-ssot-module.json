@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "kind": "fix",
+  "created_at": "2026-07-29T14:53:00+00:00",
+  "symptom": "Para merge 补救的 resume_from_clean_baseline 与 continue_existing_code_task 门控逻辑嵌在 prompt 模块内，调度器 reconciliation 以取反内联方式重复同一判断，PR #841/sub-1-2e067e 在 main 已合入 update-branch 策略后难以安全续做 bot-merge 模块提取而不再次冲突。",
+  "root_cause": "merge_worker 失败分类缺少独立的 self_maintenance_para_merge_remediation SSOT；loop_runner 与 remediation_prompts 各自持有等价逻辑，扩展 update-branch/gh checks 规则时易漂移。",
+  "fix_diff": "diff --git \"a/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_para_merge_remediation.py\" \"b/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_para_merge_remediation.py\"\nnew file mode 100644\n--- /dev/null\n+++ \"b/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_para_merge_remediation.py\"\n@@ -0,0 +1,78 @@\n+\"\"\"Executable Para merge-worker failure classification for self-maintenance scheduling.\"\"\"\n+\n+from __future__ import annotations\n+\n+_OPERATIONAL_MERGE_FAILURE_PREFIXES = (\n+    \"post-dispatch-check-failed:\",\n+    \"indeterminate-review:\",\n+    \"bot merge checks failed or unavailable:\",\n+)\n+\n+_BRANCH_PRESERVING_MERGE_WORKER_TOKENS = (\n+    \"hold-merge-label-failed-before-review\",\n+    \"hold-merge-label-remove-failed-after-review\",\n+)\n+\n+_GIT_CONTENT_CONFLICT_MARKERS = (\"cannot update pr branch due to conflicts\",)\n+\n+\n+def para_merge_conflict_continues_on_rejected_branch(detail: str) -> bool:\n+    ...\n+\n+\n+def resume_from_clean_baseline_for_para_merge(reason: str, detail: str) -> bool:\n+    if reason == \"para_merge_conflict\" and para_merge_conflict_continues_on_rejected_branch(detail):\n+        return False\n+    return True\n",
+  "metadata": {
+    "component": "self_maintenance_para_merge_remediation",
+    "files": [
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_para_merge_remediation.py",
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py",
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_remediation_prompts.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
+    ]
+  },
+  "executable_template": {
+    "applicability_check": "loop_runner._reconcile_requested_merge_feedback 内联 para_merge_conflict_continues_on_rejected_branch 取反而非调用 resume_from_clean_baseline_for_para_merge；或分类常量仅存在于 self_maintenance_remediation_prompts。",
+    "patch_strategy": "Add self_maintenance_para_merge_remediation.py with shared classifiers and resume_from_clean_baseline_for_para_merge; import from loop_runner and re-export from remediation_prompts; add test_para_merge_remediation_branch_preserving_helpers including update-branch detail shape.",
+    "rollback_plan": "Inline logic back into remediation_prompts and delete self_maintenance_para_merge_remediation.py; restore loop_runner negated inline guard.",
+    "required_tests": [
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py::test_para_merge_remediation_branch_preserving_helpers",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py::test_reconcile_update_branch_content_conflict_restarts_from_clean_base"
+    ]
+  }
+}

@@ -58,10 +58,20 @@
     header.insertAdjacentHTML('afterend', html)
   }
 
-  fetch('/download-action-board.json', { cache: 'no-store' })
-    .then(function (res) {
+  function fetchBoard(url, wrapped) {
+    return fetch(url, { cache: 'no-store' }).then(function (res) {
       if (!res.ok) throw new Error('board ' + res.status)
       return res.json()
+    }).then(function (payload) {
+      if (!wrapped) return payload
+      if (!payload || payload.ok !== true || !payload.data) throw new Error('live board unavailable')
+      return payload.data
+    })
+  }
+
+  fetchBoard('/api/public/action-board', true)
+    .catch(function () {
+      return fetchBoard('/download-action-board.json', false)
     })
     .then(function (data) {
       mount(render((data && data.trajectory) || []))

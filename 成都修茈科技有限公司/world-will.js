@@ -774,6 +774,17 @@
     })
   }
 
+  function fetchBoard(url, wrapped) {
+    return fetch(url, { cache: 'no-store' }).then(function (res) {
+      if (!res.ok) throw new Error('board ' + res.status)
+      return res.json()
+    }).then(function (payload) {
+      if (!wrapped) return payload
+      if (!payload || payload.ok !== true || !payload.data) throw new Error('live board unavailable')
+      return payload.data
+    })
+  }
+
   function loadHall() {
     return fetchHall('/api/public/company-hall', true)
     .catch(function () {
@@ -781,10 +792,9 @@
     })
     .then(render)
     .catch(function () {
-      return fetch('/download-action-board.json', { cache: 'no-store' })
-        .then(function (res) {
-          if (!res.ok) throw new Error('board')
-          return res.json()
+      return fetchBoard('/api/public/action-board', true)
+        .catch(function () {
+          return fetchBoard('/download-action-board.json', false)
         })
         .then(function (board) {
           var traj = board.trajectory || []

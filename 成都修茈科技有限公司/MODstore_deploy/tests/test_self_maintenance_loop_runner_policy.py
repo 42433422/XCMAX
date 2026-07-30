@@ -48,6 +48,9 @@ from modstore_server.self_maintenance_loop_runner import (
     ensure_clean_baseline,
     loop_memory_path,
 )
+from modstore_server.self_maintenance_para_merge_remediation import (
+    classify_para_merge_review_detail,
+)
 from modstore_server.self_maintenance_quality_gate import (
     matches_black_check_command,
     matches_isort_check_command,
@@ -1523,7 +1526,12 @@ def test_retort_scope_hold_is_reconciled_to_clean_base_code_remediation(monkeypa
     assert "continue_existing_code_task" not in result
     prompt = _code_task_text("run-next", {}, memory, result)
     assert "RETORT SCOPE REMEDIATION" in prompt
-    assert "Do not copy its repository-wide formatting churn" in prompt
+    assert "never continue, merge, rebase, or cherry-pick the rejected branch" in prompt
+    assert "overrides the generic KB-writing instruction" in prompt
+    assert '"max_changed_files": 6' in prompt
+    assert '"max_changed_lines": 400' in prompt
+    assert '"max_diff_chars": 12000' in prompt
+    assert '"FHD/XCAGI/kb/"' in prompt
 
 
 def test_retort_non_scope_question_is_not_auto_remediated(monkeypatch):
@@ -2428,7 +2436,10 @@ def test_reconcile_para_review_veto_preserves_exact_findings_for_next_code_task(
         "para_task_id": "task-1",
         "reason": "resume_para_ai_review_rejection",
         "rejected_branch": "devfleet/codex/fix-1",
+        "review_actionable_findings": True,
         "review_feedback": feedback,
+        "review_veto_branch_hint": "",
+        "review_veto_code": "",
     }
     assert _resume_dispatch_context(candidate, _resume_steps(candidate)) == (None, None)
     prompt = _code_task_text("run-2", {"gaps": []}, memory, candidate)
@@ -2451,6 +2462,220 @@ def test_reconcile_para_review_veto_preserves_exact_findings_for_next_code_task(
     )
     assert repeated["changed"] is False
     assert len(memory["open_items"]) == 1
+
+
+def test_classify_indeterminate_merge_review_detail():
+    meta = classify_para_merge_review_detail(
+        "devfleet/codex/sub-1-46107b: indeterminate-review",
+    )
+    assert meta["veto_code"] == "indeterminate-review"
+    assert meta["branch_hint"] == "devfleet/codex/sub-1-46107b"
+    assert meta["actionable_code_findings"] is False
+
+
+def test_classify_diff_too_large_merge_review_detail():
+    meta = classify_para_merge_review_detail(
+        "devfleet/cursor/sub-1-ee8a21: diff-too-large:37810",
+    )
+    assert meta["veto_code"] == "diff-too-large"
+    assert meta["branch_hint"] == "devfleet/cursor/sub-1-ee8a21"
+    assert meta["actionable_code_findings"] is False
+    assert meta["review_diff_chars"] == 37810
+
+
+def test_dynamic_low_risk_policy_blocks_kb_only_when_indeterminate_veto_open():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-d0a091",
+                "kind": "automated_remediation",
+                "para_task_id": "task-cursor-indeterminate",
+                "reason": "para_ai_review_rejected",
+                "review_feedback": "devfleet/cursor/sub-1-d0a091: indeterminate-review",
+                "review_veto_code": "indeterminate-review",
+            }
+        ]
+    }
+    files = [
+        "FHD/XCAGI/kb/fixes/sample-fix.json",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats(), memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "auxiliary_only_diff_requires_executable_change"
+
+
+def test_dynamic_low_risk_policy_blocks_kb_only_when_retort_scope_open():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-6d8f01",
+                "kind": "automated_remediation",
+                "para_task_id": "task-retort-scope",
+                "reason": "retort_scope_too_large",
+                "detail": (
+                    "Retort requested risk acceptance for 12 changed files; "
+                    "rebuild the smallest valid fix from the clean base."
+                ),
+            }
+        ]
+    }
+    files = [
+        "FHD/XCAGI/kb/fixes/sample-fix.json",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats(), memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "kb_paths_blocked_during_retort_scope_remediation"
+    assert result["kb_paths"] == [files[0]]
+
+
+def test_dynamic_low_risk_policy_blocks_tests_only_when_retort_scope_open():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-6d8f01",
+                "kind": "automated_remediation",
+                "para_task_id": "task-retort-scope",
+                "reason": "retort_scope_too_large",
+            }
+        ]
+    }
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats(), memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "auxiliary_only_diff_requires_executable_change"
+
+
+def test_dynamic_low_risk_policy_blocks_tests_only_when_diff_too_large_open():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-3ee902",
+                "kind": "automated_remediation",
+                "para_task_id": "task-diff-large",
+                "reason": "para_ai_review_rejected",
+                "review_feedback": "devfleet/cursor/sub-1-3ee902: diff-too-large:59051",
+                "review_veto_code": "diff-too-large",
+            }
+        ]
+    }
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats(), memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "auxiliary_only_diff_requires_executable_change"
+
+
+def test_auto_merge_policy_blocks_kb_paths_during_retort_scope_remediation():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-6d8f01",
+                "kind": "automated_remediation",
+                "para_task_id": "task-retort-scope",
+                "reason": "retort_scope_too_large",
+            }
+        ]
+    }
+    files = [
+        "FHD/XCAGI/kb/fixes/sample-fix.json",
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats(), memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "kb_paths_blocked_during_retort_scope_remediation"
+    assert result["kb_paths"] == [files[0]]
+
+
+def test_auto_merge_policy_blocks_kb_paths_during_diff_too_large_remediation():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-327c02",
+                "kind": "automated_remediation",
+                "para_task_id": "task-diff-large-327",
+                "reason": "para_ai_review_rejected",
+                "review_feedback": "devfleet/cursor/sub-1-327c02: diff-too-large:50140",
+                "review_veto_code": "diff-too-large",
+            }
+        ]
+    }
+    files = [
+        "FHD/XCAGI/kb/fixes/sample-fix.json",
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+    diff_stats = {**_stats(line_changes=12), "git_diff_chars": 29900}
+
+    result = _assess_branch_auto_merge_policy(files, diff_stats, memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "kb_paths_blocked_during_diff_too_large_remediation"
+    assert result["kb_paths"] == [files[0]]
+
+
+def test_auto_merge_policy_rejects_diff_over_para_merge_review_budget():
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py",
+    ]
+    diff_stats = {**_stats(line_changes=5), "git_diff_chars": 59051}
+
+    result = _assess_branch_auto_merge_policy(files, diff_stats, memory={})
+
+    assert result["ok"] is False
+    assert result["reason"] == "diff_too_large_for_para_merge_review"
+
+
+def test_reconcile_diff_too_large_merge_review_veto_prompts_shrink_hint():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-3ee902",
+                "para_task_id": "task-diff-large",
+                "run_id": "run-diff-large",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    feedback = "devfleet/cursor/sub-1-3ee902: diff-too-large:59051"
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: {
+            "status": "merge_conflict",
+            "merge_conflict": {
+                "branch_name": "devfleet/cursor/sub-1-3ee902",
+                "detail": feedback,
+                "source": "ai-review-veto",
+            },
+        },
+    )
+
+    assert result["remediation_added"] == 1
+    item = memory["open_items"][0]
+    assert item["review_veto_code"] == "diff-too-large"
+    assert item["review_diff_chars"] == 59051
+    candidate = _resume_review_qa_candidate(memory)
+    prompt = _code_task_text("run-followup", {"gaps": []}, memory, candidate)
+    assert "DIFF TOO LARGE MERGE REVIEW VETO" in prompt
 
 
 def test_reconcile_real_para_merge_sha_closes_matching_open_item():
@@ -2636,6 +2861,47 @@ def test_reconcile_indeterminate_review_merge_failure_continues_on_rejected_bran
     assert "indeterminate-review" in prompt
 
 
+def test_reconcile_hold_merge_label_failure_continues_on_rejected_branch():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-81ba09",
+                "para_task_id": "task-hold",
+                "run_id": "run-hold",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-81ba09",
+            "detail": "hold-merge-label-failed-before-review",
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is False
+    candidate = _resume_review_qa_candidate(memory)
+    assert candidate["continue_existing_code_task"] is True
+    assert _resume_dispatch_context(candidate, _resume_steps(candidate)) == (
+        None,
+        "devfleet/cursor/sub-1-81ba09",
+    )
+    prompt = _code_task_text("run-hold-retry", {"gaps": []}, memory, candidate)
+    assert "hold-merge label infrastructure" in prompt
+    assert "hold-merge-label-failed-before-review" in prompt
+
+
 def test_reconcile_bot_merge_checks_unavailable_continues_on_rejected_branch():
     memory = {
         "closed_items": [],
@@ -2692,10 +2958,94 @@ def test_reconcile_bot_merge_checks_unavailable_continues_on_rejected_branch():
             "Command failed: gh pr checks 813 --watch --fail-fast"
         ),
         "Error: bot merge checks failed or unavailable: gh CLI unavailable",
+        "hold-merge-label-failed-before-review",
+        "devfleet/cursor/sub-1-81ba09: hold-merge-label-remove-failed-after-review",
     ],
 )
 def test_para_merge_conflict_continues_on_merge_worker_detail_formats(detail: str):
     assert para_merge_conflict_continues_on_rejected_branch(detail) is True
+
+
+def test_para_merge_conflict_does_not_continue_on_git_content_conflict():
+    assert para_merge_conflict_continues_on_rejected_branch("git merge conflict in foo.py") is False
+
+
+def test_reconcile_update_branch_content_conflict_restarts_from_clean_base():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-225e80",
+                "para_task_id": "task-update-branch",
+                "run_id": "run-update-branch",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    detail = (
+        "devfleet/cursor/sub-1-225e80: Error: update-branch failed: Command failed: "
+        "gh pr update-branch 830 --repo 42433422/XCMAX\n"
+        "X Cannot update PR branch due to conflicts"
+    )
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-225e80",
+            "detail": detail,
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is True
+    candidate = _resume_review_qa_candidate(memory)
+    assert "continue_existing_code_task" not in candidate
+    prompt = _code_task_text("run-update-branch-retry", {"gaps": []}, memory, candidate)
+    assert "update-branch content conflicts" in prompt
+    assert para_merge_conflict_continues_on_rejected_branch(detail) is False
+
+
+def test_para_merge_remediation_branch_preserving_helpers():
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        is_branch_preserving_para_merge_failure_detail,
+        resume_from_clean_baseline_for_para_merge,
+    )
+
+    assert is_branch_preserving_para_merge_failure_detail(
+        "post-dispatch-check-failed: PR #765 checks=docker-build-fhd-api"
+    )
+    assert is_branch_preserving_para_merge_failure_detail("hold-merge-label-failed-before-review")
+    assert is_branch_preserving_para_merge_failure_detail(
+        "bot merge checks failed or unavailable: Command failed: gh pr checks 813"
+    )
+    update_branch_detail = (
+        "devfleet/cursor/sub-1-225e80: Error: update-branch failed: Command failed: "
+        "gh pr update-branch 830 --repo 42433422/XCMAX\n"
+        "X Cannot update PR branch due to conflicts"
+    )
+    assert not is_branch_preserving_para_merge_failure_detail(update_branch_detail)
+    assert (
+        resume_from_clean_baseline_for_para_merge(
+            "para_merge_conflict", "hold-merge-label-failed-before-review"
+        )
+        is False
+    )
+    assert (
+        resume_from_clean_baseline_for_para_merge(
+            "para_merge_conflict",
+            "bot merge checks failed or unavailable: gh pr checks 813",
+        )
+        is False
+    )
+    assert resume_from_clean_baseline_for_para_merge("para_merge_conflict", update_branch_detail)
+    assert resume_from_clean_baseline_for_para_merge("para_merge_conflict", "true conflict")
 
 
 def test_reconcile_merge_worker_branch_prefixed_indeterminate_review_detail():
@@ -3819,6 +4169,49 @@ def test_escalated_failed_steps_do_not_block_other_branch_remediation(monkeypatc
     }
     assert len(memory["open_items"]) == 1
     assert memory["open_items"][0]["reason"] == "structured_review_blocking_findings"
+
+
+def test_para_ai_review_veto_not_starved_by_stale_review_failed_steps():
+    """A newer Para merge-review veto must resume code before stale review holds."""
+    from modstore_server import self_maintenance_loop_runner as loop_runner
+
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-stale",
+                "kind": "failed_steps",
+                "para_task_id": "task-stale",
+                "retry_count": 1,
+                "run_id": "run-stale",
+                "steps": ["review"],
+            },
+            {
+                "branch": "devfleet/cursor/sub-1-veto",
+                "detail": "devfleet/cursor/sub-1-veto: indeterminate-review",
+                "kind": "automated_remediation",
+                "para_task_id": "task-veto",
+                "reason": "para_ai_review_rejected",
+                "run_id": "run-veto",
+                "review_feedback": "devfleet/cursor/sub-1-veto: indeterminate-review",
+            },
+        ],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-stale",
+                "para_task_id": "task-stale",
+                "run_id": "run-stale",
+            }
+        ],
+    }
+
+    result = loop_runner._resume_review_qa_candidate(memory)
+
+    assert result is not None
+    assert result["reason"] == "resume_para_ai_review_rejection"
+    assert result["branch"] == "devfleet/cursor/sub-1-veto"
+    assert result["para_task_id"] == "task-veto"
+    assert result["failed_steps"] == ["code"]
+    assert result["review_veto_code"] == "indeterminate-review"
 
 
 def test_code_failure_items_log_correct_message_not_escalating_to_human(monkeypatch, caplog):

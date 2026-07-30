@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 import json
-import math
 import os
 import re
 import secrets
-from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
-from sqlalchemy import func
 
 from modstore_server.api.deps import get_current_user, require_admin
 from modstore_server.employee_autonomy_service import (
@@ -28,7 +25,6 @@ from modstore_server.employee_autonomy_service import (
 from modstore_server.models import (
     EmployeeCollabMessage,
     EmployeeCollabThread,
-    EmployeeExecutionMetric,
     EmployeeSuggestion,
     User,
     get_session_factory,
@@ -154,72 +150,28 @@ def get_autonomy_dashboard(
 @router.get("/execution-coverage")
 def get_execution_coverage(
     window_hours: int = Query(24, ge=1, le=24 * 30),
+    production_window_hours: int = Query(24 * 30, ge=24, le=24 * 90),
     _admin_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
-    """Return roster employees with a fresh successful execution receipt."""
+    """Return capability and production-duty receipts without conflating burn-in.
+
+    Strict duty burn-in proves that an employee can execute safely.  It does not
+    prove that the employee has performed production work, so production receipts
+    deliberately exclude the ``[duty-burn-in:...]`` task marker.
+    """
 
     _ = _admin_user
     from modstore_server.duty_roster import all_planned_employee_ids
+    from modstore_server.employee_execution_coverage import build_execution_coverage
 
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=window_hours)
     planned = set(all_planned_employee_ids())
-    sf = get_session_factory()
-    with sf() as session:
-        rows = (
-            session.query(
-                EmployeeExecutionMetric.employee_id,
-                func.max(EmployeeExecutionMetric.created_at),
-            )
-            .filter(
-                EmployeeExecutionMetric.status.in_(["success", "completed"]),
-                EmployeeExecutionMetric.created_at >= cutoff,
-            )
-            .group_by(EmployeeExecutionMetric.employee_id)
-            .all()
-        )
-    receipts = [
-        {"employee_id": str(employee_id), "latest_success_at": created_at.isoformat()}
-        for employee_id, created_at in rows
-        if str(employee_id or "") in planned and created_at is not None
-    ]
-    receipts.sort(key=lambda item: item["employee_id"])
     assignment = _workforce_assignment_snapshot(planned)
-    planned_count = len(planned)
-    assigned_required = math.ceil(planned_count * 0.95) if planned_count else 0
-    proven_required = math.ceil(planned_count * 0.80) if planned_count else 0
-    workforce_ready = bool(planned_count) and all(
-        (
-            assignment["assigned_count"] >= assigned_required,
-            len(receipts) >= proven_required,
-            assignment["shell_count"] == 0,
-        )
+    return build_execution_coverage(
+        planned=planned,
+        assignment=assignment,
+        window_hours=window_hours,
+        production_window_hours=production_window_hours,
     )
-    from modstore_server.services.llm import resolve_platform_bench_llm
-
-    bench_provider, bench_model = resolve_platform_bench_llm()
-    return {
-        "ok": True,
-        "window_hours": window_hours,
-        "cutoff": cutoff.isoformat(),
-        "planned_count": planned_count,
-        **assignment,
-        "proven_count": len(receipts),
-        "assignment_required_count": assigned_required,
-        "proof_required_count": proven_required,
-        "assignment_ratio": (
-            round(assignment["assigned_count"] / planned_count, 4) if planned_count else 0.0
-        ),
-        "proof_ratio": (round(len(receipts) / planned_count, 4) if planned_count else 0.0),
-        "workforce_ready": workforce_ready,
-        "employee_ids": [item["employee_id"] for item in receipts],
-        "receipts": receipts,
-        # Observable routing truth without exposing credential material.
-        "platform_llm": {
-            "configured": bool(bench_provider and bench_model),
-            "provider": bench_provider,
-            "model": bench_model,
-        },
-    }
 
 
 @router.get("/burn-in/plan")

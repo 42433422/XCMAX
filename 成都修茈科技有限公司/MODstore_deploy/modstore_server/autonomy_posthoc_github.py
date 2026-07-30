@@ -16,7 +16,18 @@ UTC = timezone.utc  # noqa: UP017 - production runtime still supports Python 3.1
 _REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 _SHA = re.compile(r"^[0-9a-f]{40,64}$", re.IGNORECASE)
 _BRANCH = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,244}$")
+_TASK_ID = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
 _SUCCESSFUL_CHECK_CONCLUSIONS = frozenset({"neutral", "skipped", "success"})
+_GENERATED_MERGE_REQUIRED_CHECKS = frozenset(
+    {
+        "release-verify",
+        "review",
+        "security-scan",
+    }
+)
 
 
 def _utc(value: datetime) -> datetime:
@@ -88,7 +99,90 @@ def _default_fetch_json(path: str, params: dict[str, str] | None = None) -> Any:
         return response.json()
 
 
-def _merge_scope_verdict(files: Any) -> dict[str, Any]:
+def _generated_para_merge_contract_verdict(
+    *,
+    pull: dict[str, Any],
+    checks: list[dict[str, Any]],
+    expected_task_id: str,
+    branch: str,
+    base_branch: str,
+) -> dict[str, Any]:
+    """Bind an out-of-legacy-scope merge to the guarded Para PR contract."""
+
+    task_id = str(expected_task_id or "").strip()
+    if not _TASK_ID.fullmatch(task_id):
+        return {"ok": False, "reason": "github_para_task_id_invalid"}
+    body = str(pull.get("body") or "")
+    required_markers = (
+        "## Para 自动派工产物",
+        f"**任务 ID**: {task_id}",
+        f"**工作分支**: `{branch}`",
+        f"**目标分支**: `{base_branch}`",
+        "本 PR 由 merge-worker 自动创建",
+        "AI review APPROVE",
+        "`risk:r0`",
+        "`hold-merge`",
+        "`github-actions[bot]`",
+    )
+    if any(marker not in body for marker in required_markers):
+        return {"ok": False, "reason": "github_para_generated_contract_missing"}
+
+    labels = pull.get("labels") if isinstance(pull.get("labels"), list) else []
+    label_names = {
+        str(label.get("name") or "").strip().lower() for label in labels if isinstance(label, dict)
+    }
+    if "risk:r0" not in label_names or "hold-merge" in label_names:
+        return {"ok": False, "reason": "github_para_merge_labels_invalid"}
+    merged_by = pull.get("merged_by") if isinstance(pull.get("merged_by"), dict) else {}
+    if str(merged_by.get("login") or "").strip().lower() != "github-actions[bot]":
+        return {"ok": False, "reason": "github_para_merge_actor_invalid"}
+
+    successful_action_checks = {
+        str(check.get("name") or "").strip()
+        for check in checks
+        if isinstance(check, dict)
+        and str(check.get("status") or "").lower() == "completed"
+        and str(check.get("conclusion") or "").lower() == "success"
+        and str(
+            (check.get("app") if isinstance(check.get("app"), dict) else {}).get("slug") or ""
+        ).lower()
+        == "github-actions"
+    }
+    missing_checks = sorted(_GENERATED_MERGE_REQUIRED_CHECKS - successful_action_checks)
+    if missing_checks:
+        return {
+            "ok": False,
+            "reason": "github_para_required_checks_missing",
+            "missing_checks": missing_checks,
+        }
+
+    contract_digest = hashlib.sha256(
+        json.dumps(
+            {
+                "base_branch": base_branch,
+                "branch": branch,
+                "labels": sorted(label_names),
+                "merge_actor": "github-actions[bot]",
+                "required_checks": sorted(_GENERATED_MERGE_REQUIRED_CHECKS),
+                "task_id": task_id,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    return {
+        "ok": True,
+        "contract_digest": contract_digest,
+        "reason": "github_para_generated_merge_contract_verified",
+    }
+
+
+def _merge_scope_verdict(
+    files: Any,
+    *,
+    allow_generated_contract: bool = False,
+) -> dict[str, Any]:
     if not isinstance(files, list) or not files:
         return {"ok": False, "reason": "github_pr_files_missing"}
     from modstore_server.self_maintenance_merge_policy import (
@@ -117,9 +211,9 @@ def _merge_scope_verdict(files: Any) -> dict[str, Any]:
             return {"ok": False, "reason": "github_pr_file_diff_incomplete"}
         if file_matches_any_glob(filename, absolute_forbidden):
             return {"ok": False, "reason": "github_pr_absolute_forbidden_scope"}
-        if file_matches_any_glob(filename, forbidden):
+        if not allow_generated_contract and file_matches_any_glob(filename, forbidden):
             return {"ok": False, "reason": "github_pr_forbidden_scope"}
-        if not file_matches_any_glob(filename, allowed_scope):
+        if not allow_generated_contract and not file_matches_any_glob(filename, allowed_scope):
             return {"ok": False, "reason": "github_pr_outside_low_risk_scope"}
         try:
             additions = int(item.get("additions"))
@@ -135,6 +229,9 @@ def _merge_scope_verdict(files: Any) -> dict[str, Any]:
     scope_digest = hashlib.sha256(
         json.dumps(
             {
+                "contract": (
+                    "generated_para_merge" if allow_generated_contract else "legacy_low_risk_scope"
+                ),
                 "files": sorted(normalized_files),
                 "line_changes": line_changes,
             },
@@ -147,6 +244,9 @@ def _merge_scope_verdict(files: Any) -> dict[str, Any]:
         "ok": True,
         "file_count": len(normalized_files),
         "line_changes": line_changes,
+        "scope_mode": (
+            "generated_para_merge" if allow_generated_contract else "legacy_low_risk_scope"
+        ),
         "scope_digest": scope_digest,
     }
 
@@ -157,6 +257,7 @@ def verify_github_self_maintenance_merge(
     base_branch: str,
     allowed_at: datetime,
     expected_merge_sha: str = "",
+    expected_task_id: str = "",
     fetch_json: Callable[[str, dict[str, str] | None], Any] | None = None,
 ) -> dict[str, Any]:
     """Verify one historical merge action from durable GitHub state.
@@ -268,9 +369,6 @@ def verify_github_self_maintenance_merge(
         return {"ok": False, "reason": "github_merge_evidence_unavailable"}
     if not isinstance(files, list) or len(files) != changed_files:
         return {"ok": False, "reason": "github_pr_files_incomplete"}
-    scope = _merge_scope_verdict(files)
-    if not scope.get("ok"):
-        return scope
 
     if not isinstance(checks, dict):
         return {"ok": False, "reason": "github_check_runs_invalid"}
@@ -294,6 +392,30 @@ def verify_github_self_maintenance_merge(
         ):
             return {"ok": False, "reason": "github_check_run_not_successful"}
 
+    generated_contract = _generated_para_merge_contract_verdict(
+        pull=pull,
+        checks=check_runs,
+        expected_task_id=expected_task_id,
+        branch=safe_head,
+        base_branch=safe_base,
+    )
+    scope = _merge_scope_verdict(
+        files,
+        allow_generated_contract=generated_contract.get("ok") is True,
+    )
+    if not scope.get("ok"):
+        if (
+            str(expected_task_id or "").strip()
+            and scope.get("reason")
+            in {
+                "github_pr_forbidden_scope",
+                "github_pr_outside_low_risk_scope",
+            }
+            and not generated_contract.get("ok")
+        ):
+            return generated_contract
+        return scope
+
     if not isinstance(comparison, dict):
         return {"ok": False, "reason": "github_main_ancestry_invalid"}
     merge_base = (
@@ -307,14 +429,20 @@ def verify_github_self_maintenance_merge(
     ):
         return {"ok": False, "reason": "github_merge_not_in_base_ancestry"}
 
+    generated_digest = str(generated_contract.get("contract_digest") or "")
+    evidence_ref = (
+        f"github-pr:{pull_number}:merged:{merge_sha[:12]}"
+        f"+checks:{check_count}+scope:{str(scope['scope_digest'])[:24]}"
+    )
+    reason = "github_merged_pr_scope_checks_and_ancestry_verified"
+    if generated_contract.get("ok") is True:
+        evidence_ref += f"+para-contract:{generated_digest[:24]}"
+        reason = "github_generated_para_merge_checks_and_ancestry_verified"
     return {
         "ok": True,
         "verdict": "no_prohibited_miss",
-        "evidence_ref": (
-            f"github-pr:{pull_number}:merged:{merge_sha[:12]}"
-            f"+checks:{check_count}+scope:{str(scope['scope_digest'])[:24]}"
-        ),
-        "reason": "github_merged_pr_scope_checks_and_ancestry_verified",
+        "evidence_ref": evidence_ref,
+        "reason": reason,
     }
 
 

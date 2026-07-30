@@ -21,8 +21,18 @@ import os
 
 from .types import Action, ActionType, Prediction, RuntimeTruthSnapshot
 
-# 磁盘清理触发阈值（与桌面端 impact-predictor.ts DISK_CLEAN_THRESHOLD 一致）
+# 磁盘清理触发阈值默认值（可被 adaptive_thresholds 覆盖）
 DISK_CLEAN_THRESHOLD = 70
+
+
+def _disk_clean_threshold() -> float:
+    """硬常量降级：优先读自适应阈值（带 floor/ceiling）。"""
+    try:
+        from app.domain.autonomy.adaptive_thresholds import get_threshold
+
+        return float(get_threshold("disk_clean_threshold").value)
+    except Exception:  # noqa: BLE001
+        return float(DISK_CLEAN_THRESHOLD)
 
 
 def predict(action: Action, truth: RuntimeTruthSnapshot) -> Prediction:
@@ -88,9 +98,10 @@ def predict(action: Action, truth: RuntimeTruthSnapshot) -> Prediction:
             reasons.append(f"logs 目录不存在：{logs_dir}")
         # 风险：磁盘未紧张时清理无意义（且可能误删用户临时文件）
         # 注：> 而非 >=，仅当磁盘占用严格超过阈值时才允许清理
-        if truth.disk_usage_percent <= DISK_CLEAN_THRESHOLD:
+        disk_threshold = _disk_clean_threshold()
+        if truth.disk_usage_percent <= disk_threshold:
             reasons.append(
-                f"磁盘占用 {truth.disk_usage_percent}% <= 阈值 {DISK_CLEAN_THRESHOLD}%，无需清理"
+                f"磁盘占用 {truth.disk_usage_percent}% <= 阈值 {disk_threshold}%，无需清理"
             )
 
     elif action.type in (ActionType.ESCALATE, ActionType.NOOP, ActionType.OPEN_INCIDENT_ISSUE):

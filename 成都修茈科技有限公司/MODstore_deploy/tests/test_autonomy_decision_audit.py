@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -40,6 +40,7 @@ def session_factory(tmp_path, monkeypatch):
     db_base._SessionFactory = None
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "autonomy-audit.sqlite"))
+    monkeypatch.setenv("MODSTORE_POSTHOC_MATURITY_MINUTES", "0")
     models.init_db()
     yield models.get_session_factory()
     for engine in {models._engine, db_base._engine}:
@@ -167,6 +168,64 @@ def test_uncovered_contract_summary_is_aggregate_and_has_no_action_ids(
         evidence["posthoc_uncovered_contracts"],
         sort_keys=True,
     )
+
+
+def test_fresh_allow_is_pending_until_posthoc_maturity_sla_expires(
+    session_factory,
+):
+    old_at = NOW - timedelta(minutes=120)
+    fresh_at = NOW - timedelta(minutes=30)
+    _decision(session_factory, "old-allow", "allow", occurred_at=old_at)
+    record_posthoc_anomaly_evidence(
+        action_id="old-allow",
+        verdict="no_prohibited_miss",
+        evidence_ref="production-receipt:old",
+        detector="post-deploy-anomaly-verifier",
+        occurred_at=old_at + timedelta(minutes=15),
+        session_factory=session_factory,
+    )
+    _decision(
+        session_factory,
+        "fresh-allow",
+        "allow",
+        action="self_maintenance_l1_merge",
+        source="self_maintenance_loop.remote_merge_request",
+        occurred_at=fresh_at,
+    )
+
+    within_sla = build_autonomy_decision_evidence(
+        session_factory=session_factory,
+        now=NOW,
+        posthoc_maturity_minutes=90,
+    )
+
+    assert within_sla["has_prohibited_miss"] is False
+    assert within_sla["posthoc_maturity_minutes"] == 90
+    assert within_sla["posthoc_eligible_allow_count"] == 1
+    assert within_sla["posthoc_eligible_conclusive_count"] == 1
+    assert within_sla["posthoc_pending_count"] == 1
+    assert within_sla["posthoc_pending_contracts"] == [
+        {
+            "action": "self_maintenance_l1_merge",
+            "source": "self_maintenance_loop.remote_merge_request",
+            "count": 1,
+        }
+    ]
+    assert within_sla["posthoc_uncovered_count"] == 0
+    assert within_sla["posthoc_coverage_rate"] == 100.0
+
+    overdue = build_autonomy_decision_evidence(
+        session_factory=session_factory,
+        now=NOW + timedelta(minutes=61),
+        posthoc_maturity_minutes=90,
+    )
+
+    assert overdue["has_prohibited_miss"] is None
+    assert overdue["prohibited_miss_evidence_status"] == "unknown"
+    assert overdue["posthoc_eligible_allow_count"] == 2
+    assert overdue["posthoc_pending_count"] == 0
+    assert overdue["posthoc_uncovered_count"] == 1
+    assert overdue["posthoc_coverage_rate"] == 50.0
 
 
 def test_posthoc_miss_requires_correlated_allowed_action(session_factory):

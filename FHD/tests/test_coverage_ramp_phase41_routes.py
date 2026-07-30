@@ -28,6 +28,7 @@ from app.fastapi_routes.domains.customer import routes as customer_compat
 from app.fastapi_routes.domains.customer import routes as customer_routes
 from app.fastapi_routes.domains.misc import routes as compat_misc
 from app.fastapi_routes.domains.system import routes as legacy_system_routes
+from app.fastapi_routes.tools_execute import router as tools_execute_router
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -80,6 +81,7 @@ def compat_customer_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 @pytest.fixture
 def tools_client() -> TestClient:
     app = FastAPI()
+    app.include_router(tools_execute_router)
     app.include_router(legacy_system_routes.router)
     app.include_router(compat_misc.router)
     return TestClient(app, raise_server_exceptions=False)

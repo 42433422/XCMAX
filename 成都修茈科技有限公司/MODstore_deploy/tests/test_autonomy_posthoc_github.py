@@ -15,9 +15,13 @@ ALLOWED_AT = datetime(2026, 7, 28, 8, 0, tzinfo=UTC)
 MERGE_SHA = "6" * 40
 HEAD_SHA = "7" * 40
 BRANCH = "devfleet/cursor/sub-1-2f18e3"
+TASK_ID = "584a11b2-9ff2-4c26-b33c-b10a162066df"
 ALLOWED_FILE = (
     "成都修茈科技有限公司/MODstore_deploy/"
     "modstore_server/self_maintenance_remediation_lineage.py"
+)
+OUTSIDE_LEGACY_SCOPE_FILE = (
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/autonomy_scheduler.py"
 )
 
 
@@ -28,9 +32,20 @@ def _responses():
         "head": {"ref": BRANCH, "sha": HEAD_SHA},
         "merge_commit_sha": MERGE_SHA,
         "merged": True,
+        "merged_by": {"login": "github-actions[bot]"},
         "merged_at": "2026-07-28T11:23:52Z",
         "number": 799,
         "state": "closed",
+        "body": (
+            "## Para 自动派工产物\n\n"
+            f"**任务 ID**: {TASK_ID}\n"
+            f"**工作分支**: `{BRANCH}`\n"
+            "**目标分支**: `main`\n\n"
+            "本 PR 由 merge-worker 自动创建，源任务由 Trae CLI 执行。\n"
+            "初始状态 `hold-merge`；AI review APPROVE 后添加 `risk:r0`，"
+            "由 `github-actions[bot]` 合并。"
+        ),
+        "labels": [{"name": "risk:r0"}],
     }
     return {
         "detail": deepcopy(pull),
@@ -46,11 +61,25 @@ def _responses():
         "checks": {
             "check_runs": [
                 {
+                    "app": {"slug": "github-actions"},
                     "conclusion": "success",
+                    "name": "review",
                     "status": "completed",
-                }
+                },
+                {
+                    "app": {"slug": "github-actions"},
+                    "conclusion": "success",
+                    "name": "security-scan",
+                    "status": "completed",
+                },
+                {
+                    "app": {"slug": "github-actions"},
+                    "conclusion": "success",
+                    "name": "release-verify",
+                    "status": "completed",
+                },
             ],
-            "total_count": 1,
+            "total_count": 3,
         },
         "comparison": {
             "merge_base_commit": {"sha": MERGE_SHA},
@@ -81,12 +110,13 @@ def _fetcher(responses):
     return _fetch
 
 
-def _verify(responses, *, expected_merge_sha=""):
+def _verify(responses, *, expected_merge_sha="", expected_task_id=""):
     return verify_github_self_maintenance_merge(
         branch=BRANCH,
         base_branch="main",
         allowed_at=ALLOWED_AT,
         expected_merge_sha=expected_merge_sha,
+        expected_task_id=expected_task_id,
         fetch_json=_fetcher(responses),
     )
 
@@ -97,7 +127,7 @@ def test_github_merge_requires_unique_pr_scope_checks_and_main_ancestry():
     assert result["ok"] is True
     assert result["verdict"] == "no_prohibited_miss"
     assert result["evidence_ref"].startswith(
-        f"github-pr:799:merged:{MERGE_SHA[:12]}+checks:1+scope:"
+        f"github-pr:799:merged:{MERGE_SHA[:12]}+checks:3+scope:"
     )
 
 
@@ -138,6 +168,54 @@ def test_github_merge_rejects_para_sha_contradiction_before_secondary_calls():
     result = _verify(_responses(), expected_merge_sha="9" * 40)
 
     assert result == {"ok": False, "reason": "github_merge_sha_contradiction"}
+
+
+def test_generated_para_contract_verifies_merge_outside_legacy_scope():
+    responses = _responses()
+    responses["files"][0]["filename"] = OUTSIDE_LEGACY_SCOPE_FILE
+
+    result = _verify(responses, expected_task_id=TASK_ID)
+
+    assert result["ok"] is True
+    assert result["reason"] == "github_generated_para_merge_checks_and_ancestry_verified"
+    assert "+para-contract:" in result["evidence_ref"]
+
+
+@pytest.mark.parametrize(
+    ("mutate", "reason"),
+    [
+        (
+            lambda data: data["detail"].update({"labels": [{"name": "hold-merge"}]}),
+            "github_para_merge_labels_invalid",
+        ),
+        (
+            lambda data: data["detail"].update({"merged_by": {"login": "42433422"}}),
+            "github_para_merge_actor_invalid",
+        ),
+        (
+            lambda data: data["checks"]["check_runs"][-1].update({"name": "optional-check"}),
+            "github_para_required_checks_missing",
+        ),
+    ],
+)
+def test_generated_para_contract_missing_guard_stays_unknown(mutate, reason):
+    responses = _responses()
+    responses["files"][0]["filename"] = OUTSIDE_LEGACY_SCOPE_FILE
+    mutate(responses)
+
+    result = _verify(responses, expected_task_id=TASK_ID)
+
+    assert result["ok"] is False
+    assert result["reason"] == reason
+
+
+def test_generated_para_contract_never_bypasses_absolute_forbidden_scope():
+    responses = _responses()
+    responses["files"][0]["filename"] = "runtime/service-token.txt"
+
+    result = _verify(responses, expected_task_id=TASK_ID)
+
+    assert result == {"ok": False, "reason": "github_pr_absolute_forbidden_scope"}
 
 
 def test_github_veto_requires_exact_unmerged_pull_and_hold_label():
