@@ -303,7 +303,7 @@ def _recognize_intents_impl(message: str) -> dict[str, Any]:
     cache_key = _make_intent_cache_key(message)
     cached_result = _intent_cache.get(cache_key)
     if cached_result is not None:
-        return cast("dict[str, Any]", cached_result)
+        return _attach_erp_domain_context(msg, cast("dict[str, Any]", cached_result))
 
     result: object = {
         "primary_intent": None,
@@ -491,6 +491,7 @@ def _recognize_intents_impl(message: str) -> dict[str, Any]:
     else:
         result["slots"] = {}
 
+    result = _attach_erp_domain_context(msg, cast("dict[str, Any]", result))
     _intent_cache.set(cache_key, result)
     return result
 
@@ -499,6 +500,59 @@ def get_tool_key_with_negation_check(message: str) -> str | None:
     """对外接口：在考虑否定后，返回应触发的 tool_key"""
     r = recognize_intents(message)
     return r.get("tool_key")
+
+
+def _attach_erp_domain_context(message: str, result: dict[str, Any]) -> dict[str, Any]:
+    """Attach open ERP ontology context without changing the closed tool route."""
+
+    if result.get("domain_context"):
+        return result
+    try:
+        from app.application.erp_domain_ontology import query_erp_ontology
+
+        erp = query_erp_ontology(message, top_k=5)
+    except RECOVERABLE_ERRORS as exc:
+        logger.debug("ERP ontology intent context skipped: %s", exc)
+        return result
+    chunks = [chunk for chunk in erp.get("chunks", []) if isinstance(chunk, dict)]
+    if not chunks:
+        return result
+
+    rules: list[dict[str, Any]] = []
+    domains: dict[str, str] = {}
+    for chunk in chunks:
+        metadata = chunk.get("metadata") if isinstance(chunk.get("metadata"), dict) else {}
+        domain_id = str(metadata.get("erp_domain") or "")
+        domain_label = str(metadata.get("erp_domain_label") or domain_id)
+        if domain_id:
+            domains[domain_id] = domain_label
+        rules.append(
+            {
+                "id": str(metadata.get("erp_ontology_id") or ""),
+                "label": str(metadata.get("erp_label") or ""),
+                "kind": str(metadata.get("erp_kind") or ""),
+                "domain": domain_id,
+                "symbolic_expression": str(metadata.get("symbolic_expression") or ""),
+                "score": chunk.get("score"),
+            }
+        )
+
+    enriched = dict(result)
+    enriched["domain_context"] = {
+        "source": "persy_erp_ontology",
+        "retriever": str(erp.get("retriever") or ""),
+        "ontology_version": str(erp.get("ontology_version") or ""),
+        "matched_domains": [
+            {"id": domain_id, "label": label} for domain_id, label in sorted(domains.items())
+        ],
+        "rules": rules,
+        "evidence_count": len(chunks),
+    }
+    hints = list(enriched.get("intent_hints") or [])
+    if "erp_domain_ontology" not in hints:
+        hints.append("erp_domain_ontology")
+    enriched["intent_hints"] = hints
+    return enriched
 
 
 _MULTI_UNIT_PATTERN = r"([^\s，,、和]+)(?:[和、,]([^\s，,、]+))+"

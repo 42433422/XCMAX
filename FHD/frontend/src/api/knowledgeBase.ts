@@ -64,6 +64,11 @@ export interface KnowledgeRuntimeHealth {
 
 export type KnowledgeGraphNodeType =
   | 'core'
+  | 'erp_constraint'
+  | 'erp_domain'
+  | 'erp_entity'
+  | 'erp_ontology'
+  | 'erp_rule'
   | 'source'
   | 'topic'
   | 'knowledge'
@@ -110,6 +115,11 @@ export interface KnowledgeGraphResponse {
     active_memory_count?: number
     pending_memory_count?: number
     entity_count?: number
+    erp_constraint_count?: number
+    erp_domain_count?: number
+    erp_entity_count?: number
+    erp_rule_count?: number
+    erp_ontology_version?: string
     truncated?: boolean
     categories?: Record<string, number>
   }
@@ -202,6 +212,12 @@ export interface KnowledgeBaseQueryResponse {
     count: number
     retriever?: string
     error_code?: string
+  }
+  erp_ontology?: {
+    available: boolean
+    count: number
+    retriever?: string
+    ontology_version?: string
   }
 }
 

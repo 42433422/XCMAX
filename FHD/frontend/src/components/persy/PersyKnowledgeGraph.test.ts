@@ -197,4 +197,55 @@ describe('PersyKnowledgeGraph', () => {
     expect(recallLink).toBeTruthy()
     wrapper.unmount()
   })
+
+  it('renders ERP ontology constraints as first-class semantic nodes', async () => {
+    const erpGraph: KnowledgeGraphResponse = {
+      ...graph,
+      nodes: [
+        ...graph.nodes,
+        {
+          id: 'erp:ontology',
+          label: 'ERP 领域本体',
+          type: 'erp_ontology',
+          metadata: { ontology_version: 'erp_domain_ontology_v1' },
+        },
+        {
+          id: 'erp-rule:accounting.double_entry_balance',
+          label: '借贷必平衡',
+          type: 'erp_constraint',
+          summary: '每张已过账凭证必须满足借方金额合计等于贷方金额合计。',
+          metadata: {
+            erp_domain_label: '财务会计',
+            symbolic_expression: "sum(debit) == sum(credit)",
+          },
+        },
+      ],
+      edges: [
+        ...graph.edges,
+        {
+          id: 'edge:persy:erp',
+          source: 'persy:persy-knowledge',
+          target: 'erp:ontology',
+          type: 'erp_ontology',
+          label: '领域语义',
+        },
+      ],
+    }
+
+    const wrapper = mount(PersyKnowledgeGraph, { props: { graph: erpGraph } })
+    await flushPromises()
+
+    const option = mocks.chart.setOption.mock.calls.at(-1)?.[0]
+    const erpConstraint = option.series[0].data.find(
+      (node: { id: string }) => node.id === 'erp-rule:accounting.double_entry_balance',
+    )
+    const erpLink = option.series[0].links.find(
+      (edge: { source: string; target: string }) =>
+        edge.source === 'persy:persy-knowledge' && edge.target === 'erp:ontology',
+    )
+    expect(erpConstraint.label.show).toBe(true)
+    expect(erpConstraint.label.position).toBe('top')
+    expect(erpLink.lineStyle.color).toBe('#8a6b36')
+    wrapper.unmount()
+  })
 })

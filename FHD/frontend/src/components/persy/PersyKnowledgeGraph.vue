@@ -64,6 +64,11 @@ const nodeTheme: Record<
   { color: string; border: string; category: string; labelColor: string }
 > = {
   core: { color: '#17211d', border: '#7ad1a5', category: 'Persy', labelColor: '#17211d' },
+  erp_ontology: { color: '#2f3327', border: '#b9c982', category: 'ERP 本体', labelColor: '#2f3327' },
+  erp_domain: { color: '#5f6d3f', border: '#c9d69c', category: 'ERP 领域', labelColor: '#48522f' },
+  erp_entity: { color: '#60798d', border: '#bdd2df', category: 'ERP 实体', labelColor: '#3e5768' },
+  erp_rule: { color: '#786a9d', border: '#d6caef', category: 'ERP 规则', labelColor: '#554775' },
+  erp_constraint: { color: '#9c4b46', border: '#efc0bb', category: 'ERP 约束', labelColor: '#70302c' },
   topic: { color: '#2f6f8f', border: '#b9dfef', category: '主题', labelColor: '#244c60' },
   source: { color: '#c56f3d', border: '#f2c6a7', category: '来源', labelColor: '#7a3f20' },
   knowledge: { color: '#268578', border: '#a9ddd5', category: '知识', labelColor: '#1d6259' },
@@ -104,7 +109,17 @@ const recalledNodeIds = computed(() => {
 })
 
 function prioritizeGraphNodes(nodes: KnowledgeGraphNode[]): KnowledgeGraphNode[] {
-  const stickyTypes = new Set(['core', 'onboarding', 'recall', 'topic', 'memory'])
+  const stickyTypes = new Set([
+    'core',
+    'erp_constraint',
+    'erp_domain',
+    'erp_ontology',
+    'erp_rule',
+    'onboarding',
+    'recall',
+    'topic',
+    'memory',
+  ])
   const sticky = nodes.filter((node) => stickyTypes.has(node.type))
   const rest = nodes
     .filter((node) => !stickyTypes.has(node.type))
@@ -130,7 +145,9 @@ const graphNodes = computed<KnowledgeGraphNode[]>(() => {
     })
   }
 
-  const hasKnowledge = base.some((node) => ['source', 'topic', 'knowledge', 'memory'].includes(node.type))
+  const hasKnowledge = base.some((node) =>
+    ['source', 'topic', 'knowledge', 'memory', 'erp_ontology'].includes(node.type),
+  )
   if (!hasKnowledge && !props.loading) {
     base.push(
       {
@@ -249,7 +266,14 @@ function buildOption(): EChartsCoreOption {
     const recalled = recalledNodeIds.value.has(node.id)
     const pending = node.type === 'memory' && node.metadata?.status === 'pending'
     const showLabel =
-      selected || recalled || node.type === 'core' || node.type === 'topic' || node.type === 'onboarding'
+      selected ||
+      recalled ||
+      node.type === 'core' ||
+      node.type === 'topic' ||
+      node.type === 'onboarding' ||
+      node.type === 'erp_ontology' ||
+      node.type === 'erp_domain' ||
+      node.type === 'erp_constraint'
     return {
       id: node.id,
       name: node.label,
@@ -273,7 +297,11 @@ function buildOption(): EChartsCoreOption {
         position:
           node.type === 'core'
             ? 'inside'
-            : node.type === 'topic' || node.type === 'memory'
+            : node.type === 'topic' ||
+                node.type === 'memory' ||
+                node.type === 'erp_ontology' ||
+                node.type === 'erp_domain' ||
+                node.type === 'erp_constraint'
               ? 'top'
               : 'right',
         distance: node.type === 'core' ? 0 : 7,
@@ -287,15 +315,16 @@ function buildOption(): EChartsCoreOption {
   const links = graphEdges.value.map((edge) => {
     const isRecall = edge.type === 'recall'
     const isOnboarding = edge.type === 'onboarding'
+    const isErp = String(edge.type || '').startsWith('erp_')
     return {
       id: edge.id,
       source: edge.source,
       target: edge.target,
       value: edge.label || edge.type,
       lineStyle: {
-        color: isRecall ? '#d39a29' : isOnboarding ? '#aab5af' : '#8fa29a',
-        width: isRecall ? 2.2 : Math.max(0.7, Number(edge.weight || 0.5) * 1.4),
-        opacity: isRecall ? 0.9 : isOnboarding ? 0.4 : 0.42,
+        color: isRecall ? '#d39a29' : isErp ? '#8a6b36' : isOnboarding ? '#aab5af' : '#8fa29a',
+        width: isRecall || isErp ? 2 : Math.max(0.7, Number(edge.weight || 0.5) * 1.4),
+        opacity: isRecall ? 0.9 : isErp ? 0.62 : isOnboarding ? 0.4 : 0.42,
         type: isOnboarding ? 'dashed' : 'solid',
         curveness: 0.06,
       },
