@@ -135,3 +135,24 @@ def test_memory_has_retort_scope_remediation_flag():
     }
     assert memory_has_retort_scope_remediation(memory) is True
     assert memory_has_retort_scope_remediation({"open_items": []}) is False
+
+
+def test_is_retort_scope_excluded_path_matches_contract_paths():
+    from modstore_server.self_maintenance_retort_remediation import is_retort_scope_excluded_path
+
+    assert is_retort_scope_excluded_path("FHD/XCAGI/kb/fixes/sample.json") is True
+    assert is_retort_scope_excluded_path(".github/workflows/modstore-ci.yml") is True
+    assert is_retort_scope_excluded_path("config/source_governance_baseline.json") is True
+    assert is_retort_scope_excluded_path("scripts/dev/source_governance.py") is True
+    assert (
+        is_retort_scope_excluded_path(
+            "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"
+        )
+        is True
+    )
+    assert (
+        is_retort_scope_excluded_path(
+            "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py"
+        )
+        is False
+    )

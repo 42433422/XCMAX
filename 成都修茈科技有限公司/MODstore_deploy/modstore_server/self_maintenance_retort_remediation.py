@@ -18,6 +18,26 @@ RETORT_SCOPE_EXCLUDED_PATHS = (
 )
 
 
+def _normalize_repo_path(path: str) -> str:
+    return (path or "").replace("\\", "/").strip().strip('"').strip("'")
+
+
+def is_retort_scope_excluded_path(path: str) -> bool:
+    """Return whether a changed path is forbidden during clean-base Retort retries."""
+
+    normalized = _normalize_repo_path(path)
+    if not normalized:
+        return False
+    for pattern in RETORT_SCOPE_EXCLUDED_PATHS:
+        if pattern.endswith("/"):
+            if normalized.startswith(pattern):
+                return True
+            continue
+        if normalized == pattern or normalized.endswith("/" + pattern):
+            return True
+    return False
+
+
 def retort_scope_remediation_contract() -> dict[str, Any]:
     """Return the deterministic diff budget for a clean-base Retort retry."""
 
@@ -144,6 +164,7 @@ def retort_scope_remediation_prompt(resume_candidate: Any) -> str:
 
 __all__ = [
     "RETORT_SCOPE_REASON",
+    "is_retort_scope_excluded_path",
     "reconcile_retort_scope_remediations",
     "retort_scope_only_clarification",
     "retort_scope_remediation_contract",

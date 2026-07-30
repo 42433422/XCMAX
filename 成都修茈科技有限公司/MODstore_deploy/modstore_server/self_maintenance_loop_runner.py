@@ -4567,11 +4567,13 @@ def _assess_branch_auto_merge_policy(
         )
 
         requirement = loop_memory_requires_executable_change(memory)
-        if requirement.get("required") and memory_has_diff_too_large_remediation(memory):
+        if requirement.get("required"):
+            has_diff_too_large = memory_has_diff_too_large_remediation(memory)
+            has_retort_scope = memory_has_retort_scope_remediation(memory)
             kb_paths = [
                 file_name for file_name in normalized_files if file_name.startswith("FHD/XCAGI/kb/")
             ]
-            if kb_paths:
+            if kb_paths and has_diff_too_large:
                 return _decision(
                     {
                         "changed_files": normalized_files,
@@ -4581,11 +4583,7 @@ def _assess_branch_auto_merge_policy(
                         "self_maintenance_requirement": requirement,
                     }
                 )
-        if requirement.get("required") and memory_has_retort_scope_remediation(memory):
-            kb_paths = [
-                file_name for file_name in normalized_files if file_name.startswith("FHD/XCAGI/kb/")
-            ]
-            if kb_paths:
+            if kb_paths and has_retort_scope:
                 return _decision(
                     {
                         "changed_files": normalized_files,
@@ -4595,7 +4593,32 @@ def _assess_branch_auto_merge_policy(
                         "self_maintenance_requirement": requirement,
                     }
                 )
-        if requirement.get("required"):
+            if has_diff_too_large or has_retort_scope:
+                from modstore_server.self_maintenance_retort_remediation import (
+                    is_retort_scope_excluded_path,
+                )
+
+                excluded_paths = [
+                    file_name
+                    for file_name in normalized_files
+                    if is_retort_scope_excluded_path(file_name)
+                    and not file_name.startswith("FHD/XCAGI/kb/")
+                ]
+                if excluded_paths:
+                    excluded_reason = (
+                        "remediation_excluded_paths_blocked_during_diff_too_large"
+                        if has_diff_too_large and not has_retort_scope
+                        else "retort_scope_excluded_paths_blocked_during_remediation"
+                    )
+                    return _decision(
+                        {
+                            "changed_files": normalized_files,
+                            "excluded_paths": excluded_paths,
+                            "ok": False,
+                            "reason": excluded_reason,
+                            "self_maintenance_requirement": requirement,
+                        }
+                    )
             if all(is_marker_status_path(file_name) for file_name in normalized_files):
                 return _decision(
                     {
