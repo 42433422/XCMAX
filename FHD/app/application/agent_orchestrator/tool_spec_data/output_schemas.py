@@ -1028,6 +1028,8 @@ _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "chunks": {"type": "array"},
             "citations": {"type": "array"},
             "tenant_id": {"type": "string"},
+            "include_public": {"type": "boolean"},
+            "visible_tenant_ids": {"type": "array"},
             "version": {"type": "string"},
             "vector_backend_used": {"type": "boolean"},
             "index": {"type": "object"},

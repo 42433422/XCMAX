@@ -347,6 +347,9 @@ class AuthApplicationService:
                     return {"success": False, "message": "用户不存在"}
 
                 user.password = generate_password_hash(new_password)
+                from app.application.account_security import reset_failed_attempts
+
+                reset_failed_attempts(user)
                 db.commit()
                 try:
                     from app.neuro_bus.application_neuro_bridge import (

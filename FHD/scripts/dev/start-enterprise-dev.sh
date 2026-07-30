@@ -28,6 +28,7 @@ export XCAGI_MODS_ADMIN_RUNTIME="${XCAGI_MODS_ADMIN_RUNTIME:-${ADMIN_MODS_RUNTIM
 # 桌面开发默认走本地 MODstore :8788；演示号已在官网注册，无本地市场时用 XCAGI_USE_REMOTE_MARKET=1
 LOCAL_MARKET_ENV="${XCAGI_DIR}/.env.local-market"
 if [[ "${XCAGI_USE_REMOTE_MARKET:-0}" == "1" ]]; then
+  export XCAGI_USE_REMOTE_MARKET=1
   export XCAGI_MARKET_BASE_URL="${XCAGI_MARKET_BASE_URL:-https://xiu-ci.com}"
   MARKET_MODE="官网"
   MARKET_HINT="演示号 xcagi-enterprise-demo 已在 ${XCAGI_MARKET_BASE_URL} 注册"
@@ -36,11 +37,13 @@ elif [[ -f "${LOCAL_MARKET_ENV}" ]]; then
   # shellcheck disable=SC1090
   source "${LOCAL_MARKET_ENV}"
   set +a
+  export XCAGI_USE_REMOTE_MARKET=0
   export XCAGI_MARKET_BASE_URL="${XCAGI_MARKET_BASE_URL:-http://127.0.0.1:8788}"
   export MODSTORE_LOCAL_BASE_URL="${MODSTORE_LOCAL_BASE_URL:-http://127.0.0.1:8788}"
   MARKET_MODE="本地"
   MARKET_HINT="请先 bash FHD/scripts/dev/run_modstore_daily_local.sh；或 XCAGI_USE_REMOTE_MARKET=1 走官网"
 else
+  export XCAGI_USE_REMOTE_MARKET=0
   export XCAGI_MARKET_BASE_URL="${XCAGI_MARKET_BASE_URL:-http://127.0.0.1:8788}"
   export MODSTORE_LOCAL_BASE_URL="${MODSTORE_LOCAL_BASE_URL:-http://127.0.0.1:8788}"
   MARKET_MODE="本地"
@@ -109,7 +112,7 @@ mkdir -p "${XCAGI_DATA_DIR}/data"
   export VECTOR_DB_URL=
   export XCAGI_GLOBAL_RATE_LIMIT=0
   export XCAGI_AUTH_RATE_LIMIT=0
-  export XCAGI_USE_REMOTE_MARKET="${XCAGI_USE_REMOTE_MARKET:-1}"
+  export XCAGI_USE_REMOTE_MARKET="${XCAGI_USE_REMOTE_MARKET:-0}"
   exec "${PY}" run_fastapi.py --desktop --headless --host 127.0.0.1 --port "${API_PORT}" --data-dir "${XCAGI_DATA_DIR}"
 ) &
 BACKEND_PID=$!
@@ -146,11 +149,14 @@ fi
   cd "${FHD_ROOT}"
   export XCAGI_DESKTOP_MODE=0
   export XCAGI_DESKTOP_FAST_START=0
+  export FASTAPI_HOST="${XCAGI_ADMIN_HOST:-127.0.0.1}"
   export FASTAPI_PORT="${ADMIN_API_PORT}"
   export XCAGI_API_PORT="${ADMIN_API_PORT}"
-  export XCAGI_GLOBAL_RATE_LIMIT=0
-  export XCAGI_AUTH_RATE_LIMIT=0
-  export XCAGI_USE_REMOTE_MARKET="${XCAGI_USE_REMOTE_MARKET:-1}"
+  export XCAGI_ALLOW_PORT_FALLBACK=0
+  export XCAGI_GLOBAL_RATE_LIMIT="${XCAGI_ADMIN_GLOBAL_RATE_LIMIT:-1}"
+  export XCAGI_AUTH_RATE_LIMIT="${XCAGI_ADMIN_AUTH_RATE_LIMIT:-1}"
+  export AUDIT_LOG_PATH="${AUDIT_LOG_PATH:-${ADMIN_WEB_DATA}/audit/admin-audit.jsonl}"
+  export XCAGI_USE_REMOTE_MARKET="${XCAGI_USE_REMOTE_MARKET:-0}"
   unset XCAGI_DESKTOP_FORCE_LOCAL_DATABASE || true
   unset XCAGI_MOD_ISOLATED_DATABASES || true
   exec "${PY}" run.py

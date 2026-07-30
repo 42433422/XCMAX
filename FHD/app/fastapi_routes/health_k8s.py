@@ -32,12 +32,82 @@ def _check_redis() -> dict[str, Any]:
     try:
         import redis
 
-        redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
+        from app.utils.deployment import (
+            deployment_is_production,
+            deployment_is_staging,
+            redis_url_from_env,
+        )
+
+        redis_url = redis_url_from_env()
+        if not redis_url:
+            if deployment_is_production() or deployment_is_staging():
+                return {"status": "unhealthy", "error": "redis_url_required"}
+            return {"status": "disabled", "reason": "not_configured"}
         client = redis.from_url(redis_url)
         client.ping()
         return {"status": "healthy", "latency_ms": 0}
     except RECOVERABLE_ERRORS as e:
         return {"status": "unhealthy", "error": str(e)}
+
+
+def _check_production_admin_baseline() -> dict[str, Any]:
+    from app.utils.deployment import deployment_is_production, deployment_is_staging
+
+    if not (deployment_is_production() or deployment_is_staging()):
+        return {"status": "disabled", "reason": "non_production"}
+
+    failures: list[str] = []
+    database_url = (os.environ.get("DATABASE_URL") or "").strip().lower()
+    if not database_url.startswith(("postgresql://", "postgresql+")):
+        failures.append("postgresql_required")
+    if not (os.environ.get("AUDIT_LOG_PATH") or "").strip():
+        failures.append("audit_log_path_required")
+    for flag in ("XCAGI_GLOBAL_RATE_LIMIT", "XCAGI_AUTH_RATE_LIMIT"):
+        if (os.environ.get(flag) or "1").strip().lower() not in {"1", "true", "yes", "on"}:
+            failures.append(f"{flag.lower()}_required")
+    if not (os.environ.get("SECRET_KEY") or "").strip():
+        failures.append("secret_key_required")
+
+    return {
+        "status": "healthy" if not failures else "unhealthy",
+        "failures": failures,
+    }
+
+
+def _check_admin_mfa() -> dict[str, Any]:
+    from app.utils.deployment import deployment_is_production, deployment_is_staging
+
+    if not (deployment_is_production() or deployment_is_staging()):
+        return {"status": "disabled", "reason": "non_production"}
+    try:
+        from app.db.models.user import User
+        from app.db.session import get_db
+        from app.utils.password_hash import check_password_hash
+
+        with get_db() as db:
+            admins = db.query(User).filter(User.role == "admin", User.is_active.is_(True)).all()
+            missing_mfa = [str(user.username) for user in admins if not bool(user.mfa_enabled)]
+            weak_passwords = [
+                str(user.username)
+                for user in admins
+                if check_password_hash(user.password, "admin123")
+            ]
+        failures: list[str] = []
+        if not admins:
+            failures.append("active_admin_required")
+        if missing_mfa:
+            failures.append("admin_mfa_required")
+        if weak_passwords:
+            failures.append("weak_admin_password")
+        return {
+            "status": "healthy" if not failures else "unhealthy",
+            "failures": failures,
+            "admin_count": len(admins),
+            "missing_mfa_count": len(missing_mfa),
+            "weak_password_count": len(weak_passwords),
+        }
+    except RECOVERABLE_ERRORS as exc:
+        return {"status": "unhealthy", "error": str(exc)}
 
 
 def _check_ai_service() -> dict[str, Any]:
@@ -192,6 +262,8 @@ def readiness():
         "ai_service": _check_ai_service(),
         "pgvector": _check_pgvector(),
         "rasa": _check_rasa_nlu(),
+        "production_admin_baseline": _check_production_admin_baseline(),
+        "admin_mfa": _check_admin_mfa(),
     }
     all_healthy = all(c["status"] in _ACCEPTABLE for c in checks.values())
     payload = {
@@ -210,6 +282,8 @@ def health_details(request: Request):
         "ai_service": _check_ai_service(),
         "pgvector": _check_pgvector(),
         "rasa": _check_rasa_nlu(),
+        "production_admin_baseline": _check_production_admin_baseline(),
+        "admin_mfa": _check_admin_mfa(),
     }
     ok = all(c["status"] in _ACCEPTABLE for c in checks.values())
     return JSONResponse(

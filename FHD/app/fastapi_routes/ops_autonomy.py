@@ -380,15 +380,18 @@ async def cs_ssot_retrieve(
         permissions=frozenset({DATASET_READ_PERMISSION, DATASET_ADMIN_PERMISSION}),
         is_admin=True,
     )
+    candidate_k = min(50, max(12, top_k * 3))
     result = get_dataset_rag_app_service().query(
         dataset_id=dataset_id,
         query=query,
-        top_k=top_k,
+        top_k=candidate_k,
+        rerank=True,
         access_context=access,
     )
     chunks = result.get("chunks") if isinstance(result, dict) else []
     if not isinstance(chunks, list):
         chunks = []
+    chunks = chunks[:top_k]
     return {
         "ok": bool(result.get("success")) if isinstance(result, dict) else True,
         "dataset_id": dataset_id,

@@ -96,7 +96,7 @@ class TestMarketBaseUrl:
 
             os.environ.pop("XCAGI_MARKET_BASE_URL", None)
             url = ma._market_base_url()
-        assert "127.0.0.1:8765" in url or url.startswith("http")
+        assert url == "http://127.0.0.1:8788"
 
     def test_custom_env(self) -> None:
         with patch.dict("os.environ", {"XCAGI_MARKET_BASE_URL": "http://custom:9999"}):

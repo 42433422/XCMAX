@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   graph: vi.fn(),
   memories: vi.fn(),
   omniscient: vi.fn(),
+  tenants: vi.fn(),
   query: vi.fn(),
   queryMemories: vi.fn(),
   confirmMemory: vi.fn(),
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   updateMemory: vi.fn(),
   deleteMemory: vi.fn(),
   deleteDocument: vi.fn(),
+  setDocumentPublication: vi.fn(),
   ingestDocument: vi.fn(),
   uploadDocument: vi.fn(),
 }))
@@ -75,6 +77,7 @@ describe('PersyKnowledgeView', () => {
       recommended_dataset_id: 'persy-knowledge',
       datasets: { 'persy-knowledge': { document_count: 0, chunk_count: 0 } },
     })
+    mocks.tenants.mockResolvedValue({ success: true, data: [] })
     mocks.status.mockResolvedValue({
       success: true,
       dataset_id: 'persy-knowledge',
@@ -102,6 +105,10 @@ describe('PersyKnowledgeView', () => {
     mocks.confirmMemory.mockResolvedValue({
       success: true,
       memory: { ...pendingMemory, status: 'active' },
+    })
+    mocks.setDocumentPublication.mockResolvedValue({
+      success: true,
+      publication_status: 'published',
     })
     mocks.query.mockResolvedValue({
       success: true,
@@ -176,65 +183,168 @@ describe('PersyKnowledgeView', () => {
     expect(wrapper.text()).toContain('下午联系，并遵循续约制度。')
   })
 
-  it('admin omniscient auto-switches to nonempty space and heals empty graph once', async () => {
+  it('admin separates public knowledge from enterprise-private knowledge', async () => {
     const { isAdminConsoleSpa } = await import('@/utils/adminConsoleUrl')
     vi.mocked(isAdminConsoleSpa).mockReturnValue(true)
     mocks.omniscient.mockResolvedValue({
       success: true,
-      document_count: 496,
-      chunk_count: 496,
-      dataset_count: 2,
-      recommended_dataset_id: 'user_tenant-a',
+      document_count: 2,
+      chunk_count: 2,
+      dataset_count: 1,
+      recommended_dataset_id: 'persy-knowledge',
       datasets: {
-        'persy-knowledge': { document_count: 0, chunk_count: 0 },
-        'user_tenant-a': { document_count: 496, chunk_count: 496 },
+        'persy-knowledge': {
+          document_count: 2,
+          chunk_count: 2,
+          documents: [
+            {
+              document_id: 'public-1',
+              tenant_id: 'public',
+              source: 'public.md',
+              metadata: { publication_status: 'published' },
+            },
+            { document_id: 'private-1', tenant_id: 'tenant-a', source: 'private.md' },
+          ],
+        },
       },
     })
-    mocks.status
-      .mockResolvedValueOnce({
-        success: true,
-        dataset_id: 'user_tenant-a',
-        document_count: 0,
-        chunk_count: 0,
-        documents: [],
-        index: { semantic_embedding_available: true },
-      })
-      .mockResolvedValueOnce({
-        success: true,
-        dataset_id: 'user_tenant-a',
-        document_count: 496,
-        chunk_count: 496,
-        documents: [],
-        index: { semantic_embedding_available: true },
-      })
-    mocks.graph
-      .mockResolvedValueOnce({
-        success: true,
-        dataset_id: 'user_tenant-a',
-        nodes: [{ id: 'persy:user_tenant-a', label: 'Persy', type: 'core' }],
-        edges: [],
-      })
-      .mockResolvedValueOnce({
-        success: true,
-        dataset_id: 'user_tenant-a',
-        nodes: [
-          { id: 'persy:user_tenant-a', label: 'Persy', type: 'core' },
-          { id: 'document:doc-1', label: '续约制度', type: 'source' },
-        ],
-        edges: [],
-        stats: { edge_count: 1 },
-      })
+    mocks.tenants.mockResolvedValue({
+      success: true,
+      data: [
+        {
+          id: 11,
+          tenant_id: 'tenant-a',
+          code: 'beichen',
+          name: '北辰科技',
+          is_active: true,
+        },
+      ],
+    })
+    mocks.status.mockResolvedValue({
+      success: true,
+      dataset_id: 'persy-knowledge',
+      document_count: 1,
+      chunk_count: 1,
+      documents: [],
+      index: { semantic_embedding_available: true },
+    })
+    mocks.graph.mockResolvedValue({
+      success: true,
+      dataset_id: 'persy-knowledge',
+      nodes: [
+        { id: 'persy:persy-knowledge', label: 'Persy', type: 'core' },
+        { id: 'document:doc-1', label: '公开资料', type: 'source' },
+      ],
+      edges: [],
+      stats: { edge_count: 1 },
+    })
     mocks.memories.mockResolvedValue({ success: true, memories: [] })
 
     const wrapper = mount(PersyKnowledgeView, { global: { plugins: [createPinia()] } })
     await flushPromises()
 
     expect(mocks.omniscient).toHaveBeenCalled()
-    expect(mocks.status).toHaveBeenCalledWith('user_tenant-a', { includeDocuments: false })
-    expect(mocks.graph).toHaveBeenCalledWith('user_tenant-a')
-    // first empty load + heal retry
-    expect(mocks.graph).toHaveBeenCalledTimes(2)
-    expect(wrapper.text()).toContain('496')
-    expect(wrapper.text()).toMatch(/内容/)
+    expect(mocks.status).toHaveBeenCalledWith('persy-knowledge', {
+      includeDocuments: false,
+      tenantId: 'public',
+    })
+    expect(mocks.graph).toHaveBeenCalledWith('persy-knowledge', 80, {
+      tenantId: 'public',
+    })
+    expect(wrapper.text()).toContain('公开知识库')
+    expect(wrapper.text()).toContain('企业私有库')
+    expect(mocks.tenants).toHaveBeenCalled()
+
+    const privateTab = wrapper.findAll('.knowledge-scope-switch button')[1]
+    await privateTab.trigger('click')
+    await flushPromises()
+
+    expect(mocks.status).toHaveBeenLastCalledWith('persy-knowledge', {
+      includeDocuments: false,
+      tenantId: 'tenant-a',
+    })
+    expect(wrapper.get('.tenant-scope-field select').text()).toContain('北辰科技')
+  })
+
+  it('admin imports public knowledge as a draft instead of publishing immediately', async () => {
+    const { isAdminConsoleSpa } = await import('@/utils/adminConsoleUrl')
+    vi.mocked(isAdminConsoleSpa).mockReturnValue(true)
+    mocks.ingestDocument.mockResolvedValue({
+      success: true,
+      dataset_id: 'persy-knowledge',
+      chunk_count: 2,
+    })
+
+    const wrapper = mount(PersyKnowledgeView, { global: { plugins: [createPinia()] } })
+    await flushPromises()
+    await wrapper.get('.import-button').trigger('click')
+    await wrapper.findAll('.import-tabs button')[1].trigger('click')
+    await wrapper.get('#persy-source').setValue('公开产品说明')
+    await wrapper.get('#persy-text').setValue('这是经过审核后才允许对企业发布的产品说明。')
+    await wrapper.get('.drawer-submit').trigger('click')
+    await flushPromises()
+
+    expect(mocks.ingestDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        datasetId: 'persy-knowledge',
+        tenantId: 'public',
+        metadata: expect.objectContaining({
+          audience: 'public',
+          visibility: 'public',
+          publication_status: 'draft',
+        }),
+      }),
+    )
+  })
+
+  it('admin publishes a public draft from the source list', async () => {
+    const { isAdminConsoleSpa } = await import('@/utils/adminConsoleUrl')
+    vi.mocked(isAdminConsoleSpa).mockReturnValue(true)
+    const publicDraft = {
+      document_id: 'public-draft-1',
+      tenant_id: 'public',
+      source: 'public-draft.md',
+      metadata: { publication_status: 'draft' },
+    }
+    mocks.omniscient.mockResolvedValue({
+      success: true,
+      document_count: 1,
+      chunk_count: 1,
+      dataset_count: 1,
+      datasets: {
+        'persy-knowledge': {
+          document_count: 1,
+          chunk_count: 1,
+          documents: [publicDraft],
+        },
+      },
+    })
+    mocks.status.mockResolvedValue({
+      success: true,
+      dataset_id: 'persy-knowledge',
+      document_count: 1,
+      chunk_count: 1,
+      documents: [publicDraft],
+    })
+    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('内容审核完成')
+
+    const wrapper = mount(PersyKnowledgeView, { global: { plugins: [createPinia()] } })
+    await flushPromises()
+    const sourceTab = wrapper.findAll('.view-switch button').find((button) =>
+      button.text().includes('来源'),
+    )
+    await sourceTab!.trigger('click')
+    await flushPromises()
+    await wrapper.get('button[aria-label="发布公开资料"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.setDocumentPublication).toHaveBeenCalledWith(
+      'persy-knowledge',
+      'public-draft-1',
+      'published',
+      '内容审核完成',
+      'draft',
+    )
+    prompt.mockRestore()
   })
 })

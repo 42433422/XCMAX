@@ -303,6 +303,59 @@ class TestListDeployEvents:
 
 
 class TestOperatingMetricsWindows:
+    def test_prefers_latest_durable_snapshots_without_live_scan(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        metrics_path = tmp_path / "autonomy-metrics.jsonl"
+        rows = [
+            {
+                "window_days": 30,
+                "snapshot_date": "2026-07-27",
+                "snapshot_at": "2026-07-27T00:00:00+00:00",
+                "cohort": "operational",
+                "veto_rate": 2.0,
+                "total": 10,
+                "veto_count": 2,
+            },
+            {
+                "window_days": 30,
+                "snapshot_date": "2026-07-28",
+                "snapshot_at": "2026-07-28T00:00:00+00:00",
+                "cohort": "operational",
+                "veto_rate": 1.0,
+                "total": 20,
+                "veto_count": 1,
+            },
+            {
+                "window_days": 90,
+                "snapshot_date": "2026-07-28",
+                "snapshot_at": "2026-07-28T00:00:00+00:00",
+                "cohort": "operational",
+                "veto_rate": 0.5,
+                "total": 40,
+                "veto_count": 2,
+            },
+        ]
+        metrics_path.write_text(
+            "\n".join(json.dumps(row) for row in rows) + "\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("XCAGI_AUTONOMY_METRICS_LOG_PATH", str(metrics_path))
+
+        def _unexpected_live_scan(days: int) -> dict[str, Any]:
+            raise AssertionError(f"unexpected live scan for {days}")
+
+        monkeypatch.setattr(
+            "app.domain.autonomy.operating_metrics.evaluate_autonomy_window",
+            _unexpected_live_scan,
+        )
+
+        data = ao.operating_metrics_windows()
+
+        assert data["windows"]["30"]["action_count"] == 20
+        assert data["windows"]["30"]["source"] == "snapshot"
+        assert data["windows"]["90"]["action_count"] == 40
+
     def test_recoverable_error_falls_back_to_error_report(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

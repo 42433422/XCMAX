@@ -9,7 +9,7 @@
         class="admin-tab"
         :class="{ active: activeTab === tab.id }"
         :aria-selected="activeTab === tab.id"
-        @click="activeTab = tab.id"
+        @click="selectAdminTab(tab.id)"
       >
         {{ tab.label }}
       </button>
@@ -36,8 +36,11 @@
           <div class="card-header">
             <i class="fa fa-desktop card-icon" aria-hidden="true"></i>
             <h3>本地节点</h3>
-            <span class="status-badge" :class="localStatus.ok ? 'badge-ok' : 'badge-err'">
-              {{ localStatus.ok ? '正常' : '异常' }}
+            <span
+              class="status-badge"
+              :class="localStatus.degraded ? 'badge-warn' : localStatus.ok ? 'badge-ok' : 'badge-err'"
+            >
+              {{ localStatus.degraded ? '降级' : localStatus.ok ? '正常' : '异常' }}
             </span>
           </div>
           <dl class="card-info">
@@ -114,7 +117,7 @@
             <button class="btn btn-secondary btn-sm" :disabled="autonomyHealthLoading" @click="loadAutonomyHealth">
               {{ autonomyHealthLoading ? '检测中...' : '刷新自治健康' }}
             </button>
-            <button class="btn btn-primary btn-sm" type="button" @click="activeTab = 'autonomy'">打开自治总览</button>
+            <button class="btn btn-primary btn-sm" type="button" @click="selectAdminTab('autonomy')">打开自治总览</button>
           </div>
         </div>
 
@@ -261,26 +264,26 @@
       </div>
     </div>
 
-    <div v-show="activeTab === 'autonomy'" class="page-content admin-tab-panel">
+    <div
+      v-if="mountedTabs.has('autonomy')"
+      v-show="activeTab === 'autonomy'"
+      class="page-content admin-tab-panel"
+    >
       <XCmaxAdminAutonomyTab />
     </div>
-    <div v-show="activeTab === 'infra'" class="page-content admin-tab-panel">
+    <div
+      v-if="mountedTabs.has('infra')"
+      v-show="activeTab === 'infra'"
+      class="page-content admin-tab-panel"
+    >
       <XCmaxAdminInfraTab />
     </div>
-    <div v-show="activeTab === 'duty'" class="page-content admin-tab-panel">
+    <div
+      v-if="mountedTabs.has('duty')"
+      v-show="activeTab === 'duty'"
+      class="page-content admin-tab-panel"
+    >
       <XCmaxAdminDutyTab />
-    </div>
-    <div v-show="activeTab === 'automation-policy'" class="page-content admin-tab-panel">
-      <div class="page-header">
-        <h2>自动化方针</h2>
-      </div>
-      <XcmaxDashboardEmbed :src="automationEmbedUrl" title="自动化方针" />
-    </div>
-    <div v-show="activeTab === 'duty-time-architecture'" class="page-content admin-tab-panel">
-      <div class="page-header">
-        <h2>同时完成时间架构</h2>
-      </div>
-      <XcmaxDashboardEmbed :src="timeArchEmbedUrl" title="同时完成时间架构" />
     </div>
     <AdminDeployUpdateModal v-model="deployModalOpen" @done="handleDeployDone" />
   </div>
@@ -296,12 +299,7 @@ import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref }
 import XCmaxAdminInfraTab from '@/components/admin/XCmaxAdminInfraTab.vue'
 import XCmaxAdminDutyTab from '@/components/admin/XCmaxAdminDutyTab.vue'
 import XCmaxAdminAutonomyTab from '@/components/admin/XCmaxAdminAutonomyTab.vue'
-import XcmaxDashboardEmbed from '@/components/admin/XcmaxDashboardEmbed.vue'
 import AdminDeployUpdateModal from '@host/components/admin/AdminDeployUpdateModal.vue'
-import {
-  xcmaxAutomationPolicyEmbedUrl,
-  xcmaxDutyTimeArchitectureEmbedUrl,
-} from '@/constants/xcmaxDashboardEmbed'
 import { xcmaxOpsApi } from '@/api/xcmaxOps'
 import xcmaxMarketProxy from '@/api/xcmaxMarketProxy'
 
@@ -310,12 +308,9 @@ const adminTabs = [
   { id: 'autonomy', label: '自治总览' },
   { id: 'infra', label: '基础设施' },
   { id: 'duty', label: '编制与调度' },
-  { id: 'automation-policy', label: '自动化方针' },
-  { id: 'duty-time-architecture', label: '同时完成时间架构' },
 ]
 const activeTab = ref('overview')
-const automationEmbedUrl = xcmaxAutomationPolicyEmbedUrl()
-const timeArchEmbedUrl = xcmaxDutyTimeArchitectureEmbedUrl()
+const mountedTabs = ref(new Set(['overview']))
 import { api } from '@/api'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import { appAlert } from '@/utils/appDialog'
@@ -325,7 +320,14 @@ const refreshing = ref(false)
 const syncing = ref(false)
 const syncingEmployees = ref(false)
 
-const localStatus = ref({ ok: false, version: '', database: '', uptime: '', address: window.location.host })
+const localStatus = ref({
+  ok: false,
+  degraded: false,
+  version: '',
+  database: '',
+  uptime: '',
+  address: window.location.host,
+})
 const remoteStatus = ref({
   reachable: false,
   latencyMs: null,
@@ -354,6 +356,13 @@ const autonomyHealth = ref({
 })
 /** 首次进入时拉取；之后依赖缓存与「刷新状态」 */
 const overviewBootstrapped = ref(false)
+
+function selectAdminTab(tabId) {
+  activeTab.value = tabId
+  if (!mountedTabs.value.has(tabId)) {
+    mountedTabs.value = new Set([...mountedTabs.value, tabId])
+  }
+}
 
 async function loadAutonomyHealth() {
   autonomyHealthLoading.value = true
@@ -489,9 +498,11 @@ async function handleDeployDone() {
 async function loadLocalStatus() {
   try {
     const r = await api.get('/api/health')
+    const status = String(r?.status || r?.data?.status || '').toLowerCase()
     localStatus.value = {
       // 后端 /api/health 使用 status: "healthy"（见 fastapi_routes.__init__），与 "ok" 口径并存
-      ok: r?.status === 'ok' || r?.status === 'healthy' || r?.ok === true,
+      ok: status === 'ok' || status === 'healthy' || r?.ok === true,
+      degraded: status === 'degraded',
       version: r?.version || r?.data?.version || '—',
       database: r?.database || 'ok',
       uptime: r?.uptime || '—',
@@ -499,6 +510,7 @@ async function loadLocalStatus() {
     }
   } catch {
     localStatus.value.ok = false
+    localStatus.value.degraded = false
   }
 }
 

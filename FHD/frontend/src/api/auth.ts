@@ -27,6 +27,7 @@ export interface User {
   role: string;
   is_active: boolean;
   avatar_url?: string;
+  mfa_enabled?: boolean;
 }
 
 export interface UserProfilePayload {
@@ -91,6 +92,7 @@ export const authApi = {
     username: string,
     password: string,
     accountKind: AccountKind = 'enterprise',
+    totpCode = '',
   ): Promise<ApiResponse<LoginResponse>> {
     await primeCsrfCookie();
     invalidateEnterpriseSessionCache();
@@ -101,6 +103,7 @@ export const authApi = {
           username,
           password,
           account_kind: accountKind,
+          ...(totpCode ? { totp_code: totpCode } : {}),
         },
         {
           timeoutMs: 30_000,
@@ -211,6 +214,16 @@ export const authApi = {
 
   async getProfile(): Promise<ApiResponse<{ user: User }>> {
     return api.get<ApiResponse<{ user: User }>>('/api/auth/profile', {}, { timeoutMs: 8_000 });
+  },
+
+  async setupMfa(): Promise<ApiResponse<{ secret: string; otpauth_uri: string }>> {
+    await primeCsrfCookie();
+    return api.post('/api/auth/mfa/setup', {});
+  },
+
+  async enableMfa(code: string): Promise<ApiResponse<Record<string, unknown>>> {
+    await primeCsrfCookie();
+    return api.post('/api/auth/mfa/enable', { code });
   },
 
   async updateProfile(payload: UserProfilePayload): Promise<ApiResponse<{ user: User }>> {

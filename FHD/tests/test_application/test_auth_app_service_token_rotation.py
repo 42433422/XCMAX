@@ -267,7 +267,11 @@ class TestChangeAndResetPassword:
 
     def test_reset_password_success_invalidates_sessions(self) -> None:
         svc = AuthApplicationService()
-        user = MagicMock(password="h")
+        user = MagicMock(
+            password="h",
+            failed_login_attempts=4,
+            locked_until="locked",
+        )
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = user
         with (
@@ -280,6 +284,8 @@ class TestChangeAndResetPassword:
             gdb.return_value.__enter__.return_value = db
             out = svc.reset_password(1, "new")
         assert out["success"] is True
+        assert user.failed_login_attempts == 0
+        assert user.locked_until is None
         del_sessions.assert_called_once_with(1)
 
     def test_reset_password_user_not_found(self) -> None:

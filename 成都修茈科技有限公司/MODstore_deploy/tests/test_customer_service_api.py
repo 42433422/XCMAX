@@ -225,6 +225,128 @@ def test_customer_service_greeting_does_not_create_ticket(client, monkeypatch):
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
+def test_customer_service_channel_chat_accepts_internal_key_without_csrf(client, monkeypatch):
+    """客来来服务端桥接没有浏览器 CSRF Cookie，应由内部 key 鉴权放行。"""
+    monkeypatch.setenv("MODSTORE_DISABLE_CSRF", "0")
+    monkeypatch.setenv("XCAGI_MARKET_INTERNAL_API_KEY", "secret-key")
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    user = _make_user("cs_channel")
+
+    r = client.post(
+        "/api/customer-service/channel/chat",
+        headers={"X-Internal-Api-Key": "secret-key"},
+        json={
+            "message": "你好",
+            "channel": "wework",
+            "external_userid": "wm_test",
+            "contact_name": "企微客户",
+            "context": {"market_user_id": user.id, "team_id": user.id},
+        },
+    )
+
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["ok"] is True
+    assert data["channel"] == "wework"
+    assert data["external_userid"] == "wm_test"
+    assert data["session"]["user_id"] == user.id
+    assert data["session"]["context"]["external_userid"] == "wm_test"
+    assert "小C" in data["message"]["content"]
+    assert user.username not in data["message"]["content"]
+    assert data["session"]["context"]["owner_user_id"] == user.id
+    assert "display_name" not in data["session"]["context"]
+    assert "membership" not in data["session"]["context"]
+    assert "email_hint" not in data["session"]["context"]
+
+
+def test_customer_service_channel_chat_uses_llm_and_reuses_external_session(
+    client, monkeypatch
+):
+    from modstore_server import customer_service_orchestrator
+
+    monkeypatch.setenv("MODSTORE_DISABLE_CSRF", "0")
+    monkeypatch.setenv("XCAGI_MARKET_INTERNAL_API_KEY", "secret-key")
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    user = _make_user("internal_owner", admin=True)
+    calls: list[str] = []
+
+    def _fake_reply(text, **_kwargs):
+        calls.append(text)
+        return f"了解，你来自武汉公司。你们目前想解决的业务问题是什么？[{len(calls)}]"
+
+    monkeypatch.setattr(
+        customer_service_orchestrator,
+        "_llm_generate_external_reply",
+        _fake_reply,
+    )
+    payload = {
+        "channel": "wework",
+        "external_userid": "wm_same_customer",
+        "contact_name": "企微客户",
+        "context": {"market_user_id": user.id, "team_id": user.id},
+    }
+
+    first = client.post(
+        "/api/customer-service/channel/chat",
+        headers={"X-Internal-Api-Key": "secret-key"},
+        json={**payload, "message": "我是武汉公司的"},
+    )
+    second = client.post(
+        "/api/customer-service/channel/chat",
+        headers={"X-Internal-Api-Key": "secret-key"},
+        json={**payload, "message": "我们想了解智能客服"},
+    )
+
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    first_data = first.json()
+    second_data = second.json()
+    assert first_data["session"]["id"] == second_data["session"]["id"]
+    assert first_data["message"]["payload"]["reply_source"] == "llm"
+    assert second_data["message"]["payload"]["reply_source"] == "llm"
+    assert user.username not in first_data["message"]["content"]
+    assert "管理员" not in first_data["message"]["content"]
+    assert calls == ["我是武汉公司的", "我们想了解智能客服"]
+
+
+def test_llm_cannot_misclassify_business_text_as_greeting(monkeypatch):
+    from modstore_server import customer_service_orchestrator
+
+    monkeypatch.setattr(
+        customer_service_orchestrator,
+        "_llm_classify_intent",
+        lambda _text: {
+            "intent": "greeting",
+            "need_ticket": False,
+            "confidence": 0.9,
+            "reason": "bad_model_guess",
+        },
+    )
+
+    out = customer_service_orchestrator.classify_customer_intent(
+        "我是武汉公司的",
+        {},
+        context={"channel": "wework", "external_userid": "wm_test"},
+    )
+
+    assert out["intent"] == "general"
+    assert out["reason"] == "non_greeting_text_corrected"
+
+
+def test_customer_service_channel_chat_rejects_bad_internal_key(client, monkeypatch):
+    monkeypatch.setenv("MODSTORE_DISABLE_CSRF", "0")
+    monkeypatch.setenv("XCAGI_MARKET_INTERNAL_API_KEY", "secret-key")
+
+    r = client.post(
+        "/api/customer-service/channel/chat",
+        headers={"X-Internal-Api-Key": "wrong-key"},
+        json={"message": "你好", "context": {}},
+    )
+
+    assert r.status_code == 403
+    assert r.json()["detail"] == "invalid internal api key"
+
+
 def test_customer_service_escalate_phrase_creates_ticket(client, monkeypatch):
     from modstore_server import customer_service_api
     from modstore_server.app import app

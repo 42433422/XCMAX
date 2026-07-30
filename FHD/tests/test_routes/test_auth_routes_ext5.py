@@ -1651,6 +1651,80 @@ class TestAuthLoginAdditional:
     """Cover auth_login additional branches."""
 
     @pytest.mark.asyncio
+    async def test_admin_kind_uses_local_auth_without_market(self):
+        import json
+
+        from app.fastapi_routes.domains.auth.routes import auth_login
+
+        request = MagicMock()
+        auth_service = MagicMock()
+        auth_service.login.return_value = {
+            "success": True,
+            "session_id": "admin-sid",
+            "user": {"username": "admin", "role": "admin"},
+        }
+        with (
+            patch("app.utils.metrics.auth_login_duration_seconds") as mock_metric,
+            patch(
+                "app.application.auth_app_service.get_auth_app_service",
+                return_value=auth_service,
+            ),
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
+            patch(
+                "app.application.enterprise_login_flow.run_market_first_login",
+                new=AsyncMock(),
+            ) as market_login,
+        ):
+            mock_metric.labels.return_value = MagicMock()
+            result = await auth_login(
+                request,
+                {"username": "admin", "password": "local", "account_kind": "admin"},
+            )
+
+        body = json.loads(result.body)
+        assert body["success"] is True
+        assert body["account_kind"] == "admin"
+        market_login.assert_not_awaited()
+        auth_service.login.assert_called_once_with(
+            "admin",
+            "local",
+            totp_code=None,
+            enforce_mfa=True,
+        )
+
+    @pytest.mark.asyncio
+    async def test_admin_kind_rejects_non_admin_local_user(self):
+        import json
+
+        from app.fastapi_routes.domains.auth.routes import auth_login
+
+        request = MagicMock()
+        auth_service = MagicMock()
+        auth_service.login.return_value = {
+            "success": True,
+            "session_id": "user-sid",
+            "user": {"username": "alice", "role": "user"},
+        }
+        with (
+            patch("app.utils.metrics.auth_login_duration_seconds") as mock_metric,
+            patch(
+                "app.application.auth_app_service.get_auth_app_service",
+                return_value=auth_service,
+            ),
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
+        ):
+            mock_metric.labels.return_value = MagicMock()
+            result = await auth_login(
+                request,
+                {"username": "alice", "password": "local", "account_kind": "admin"},
+            )
+
+        body = json.loads(result.body)
+        assert body["success"] is False
+        assert body["error"]["code"] == "ACCOUNT_KIND_MISMATCH"
+        auth_service.session_manager.delete_session.assert_called_once_with("user-sid")
+
+    @pytest.mark.asyncio
     async def test_enterprise_sku(self):
         from app.fastapi_routes.domains.auth.routes import auth_login
 

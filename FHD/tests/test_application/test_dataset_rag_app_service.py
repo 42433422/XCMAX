@@ -178,6 +178,46 @@ def test_dataset_persists_and_reloads_documents(tmp_path: Path) -> None:
     assert answer["citations"][0]["source_url"] == "persisted-policy.md"
 
 
+def test_running_service_reloads_documents_published_by_another_process(
+    tmp_path: Path,
+) -> None:
+    storage_path = tmp_path / "shared_dataset_store.json"
+    embedder = lambda text: [float(len(text)), float(text.count("新知识"))]
+    running = DatasetRagApplicationService(
+        embedder=embedder,
+        storage_path=storage_path,
+        vector_index_backend_name="none",
+        rebuild_workers_enabled=False,
+    )
+    publisher = DatasetRagApplicationService(
+        embedder=embedder,
+        storage_path=storage_path,
+        vector_index_backend_name="none",
+        rebuild_workers_enabled=False,
+    )
+
+    published = publisher.ingest_document(
+        dataset_id="live-reload",
+        source="external-publish.md",
+        text="新知识已经由外部发布器写入，运行服务无需重启即可检索。",
+        chunk_strategy="fixed",
+    )
+
+    status = running.status("live-reload")
+    graph = running.knowledge_graph("live-reload")
+    query = running.query(
+        dataset_id="live-reload",
+        query="外部发布器写入了什么新知识？",
+        top_k=1,
+    )
+
+    assert published["success"] is True
+    assert status["document_count"] == 1
+    assert graph["stats"]["document_count"] == 1
+    assert any(node.get("source") == "external-publish.md" for node in graph["nodes"])
+    assert query["chunks"][0]["source"] == "external-publish.md"
+
+
 def test_dataset_tenant_version_filter_rerank_and_index_persist(tmp_path: Path) -> None:
     def embedder(text: str) -> list[float]:
         lowered = text.lower()
@@ -641,6 +681,179 @@ def test_dataset_access_context_enforces_permissions_and_tenant_scope(tmp_path: 
     assert cross_job["error_code"] == "dataset_permission_denied"
 
 
+def test_tenant_query_combines_published_public_and_own_private_only(tmp_path: Path) -> None:
+    svc = DatasetRagApplicationService(
+        embedder=None,
+        allowed_roots=[tmp_path],
+        storage_path=tmp_path / "public_private_store.json",
+    )
+    admin = DatasetAccessContext(
+        actor_id="admin",
+        permissions=frozenset({"dataset.admin"}),
+        is_admin=True,
+    )
+    tenant_a_reader = DatasetAccessContext(
+        actor_id="alice",
+        tenant_id="tenant-a",
+        permissions=frozenset({"dataset.read"}),
+    )
+    fixtures = [
+        (
+            "public",
+            "public-warranty.md",
+            "Public warranty period is twelve months.",
+            {"publication_status": "published"},
+        ),
+        (
+            "public",
+            "public-draft.md",
+            "Unpublished launch codename is Orchid.",
+            {"publication_status": "draft"},
+        ),
+        (
+            "tenant-a",
+            "tenant-a-policy.md",
+            "Tenant A private discount policy is seven percent.",
+            {"visibility": "private"},
+        ),
+        (
+            "tenant-b",
+            "tenant-b-policy.md",
+            "Tenant B private merger plan is confidential.",
+            {"visibility": "private"},
+        ),
+    ]
+    for tenant_id, source, text, metadata in fixtures:
+        result = svc.ingest_document(
+            dataset_id="persy-knowledge",
+            tenant_id=tenant_id,
+            source=source,
+            text=text,
+            metadata=metadata,
+            chunk_strategy="fixed",
+            access_context=admin,
+        )
+        assert result["success"] is True
+
+    visible = svc.query(
+        dataset_id="persy-knowledge",
+        query="warranty discount merger codename",
+        top_k=10,
+        include_public=True,
+        access_context=tenant_a_reader,
+    )
+    private_only = svc.query(
+        dataset_id="persy-knowledge",
+        query="warranty discount",
+        top_k=10,
+        include_public=False,
+        access_context=tenant_a_reader,
+    )
+
+    visible_sources = {chunk["source"] for chunk in visible["chunks"]}
+    assert visible_sources == {"public-warranty.md", "tenant-a-policy.md"}
+    assert visible["visible_tenant_ids"] == ["tenant-a", "public"]
+    assert {chunk["source"] for chunk in private_only["chunks"]} == {"tenant-a-policy.md"}
+
+
+def test_public_document_publication_lifecycle_requires_admin_and_preserves_private(
+    tmp_path: Path,
+) -> None:
+    svc = DatasetRagApplicationService(
+        embedder=lambda text: [float(len(text)), float(text.count("公开"))],
+        storage_path=tmp_path / "publication_store.json",
+        vector_index_backend_name="none",
+        rebuild_workers_enabled=False,
+    )
+    admin = DatasetAccessContext(
+        actor_id="admin",
+        permissions=frozenset({"dataset.admin"}),
+        is_admin=True,
+    )
+    tenant_writer = DatasetAccessContext(
+        actor_id="tenant-user",
+        tenant_id="tenant-a",
+        permissions=frozenset({"dataset.read", "dataset.write"}),
+    )
+    public_doc = svc.ingest_document(
+        dataset_id="persy-knowledge",
+        tenant_id="public",
+        source="public-draft.md",
+        text="公开产品资料草稿，审核后才能被企业检索。",
+        metadata={"publication_status": "draft"},
+        chunk_strategy="fixed",
+        access_context=admin,
+    )
+    private_doc = svc.ingest_document(
+        dataset_id="persy-knowledge",
+        tenant_id="tenant-a",
+        source="private.md",
+        text="企业内部资料不能进入公开发布流程。",
+        chunk_strategy="fixed",
+        access_context=admin,
+    )
+    public_id = public_doc["document"]["document_id"]
+    private_id = private_doc["document"]["document_id"]
+
+    denied = svc.set_document_publication_status(
+        "persy-knowledge",
+        public_id,
+        "published",
+        reason="非管理员发布测试",
+        access_context=tenant_writer,
+    )
+    published = svc.set_document_publication_status(
+        "persy-knowledge",
+        public_id,
+        "published",
+        reason="内容审核完成",
+        expected_status="draft",
+        access_context=admin,
+    )
+    private_rejected = svc.set_document_publication_status(
+        "persy-knowledge",
+        private_id,
+        "published",
+        reason="错误范围发布测试",
+        access_context=admin,
+    )
+    visible = svc.query(
+        dataset_id="persy-knowledge",
+        tenant_id="public",
+        query="公开产品资料",
+        metadata_filter={"publication_status": "published"},
+    )
+    archived = svc.set_document_publication_status(
+        "persy-knowledge",
+        public_id,
+        "archived",
+        reason="资料已过期下线",
+        expected_status="published",
+        access_context=admin,
+    )
+    hidden = svc.query(
+        dataset_id="persy-knowledge",
+        tenant_id="public",
+        query="公开产品资料",
+        metadata_filter={"publication_status": "published"},
+    )
+    private_status = svc.status(
+        "persy-knowledge",
+        tenant_id="tenant-a",
+        access_context=admin,
+    )
+
+    assert denied["error_code"] == "dataset_permission_denied"
+    assert published["publication_status"] == "published"
+    assert published["document"]["metadata"]["publication_history"][-1]["reason"] == "内容审核完成"
+    assert visible["chunks"][0]["source"] == "public-draft.md"
+    assert private_rejected["error_code"] == "dataset_publication_scope_invalid"
+    assert archived["publication_status"] == "archived"
+    assert hidden["chunks"] == []
+    assert private_status["document_count"] == 1
+    assert private_status["documents"][0]["document_id"] == private_id
+
+
 def test_dataset_version_diff_rollback_and_rebuild_job_persist(tmp_path: Path) -> None:
     storage_path = tmp_path / "dataset_store.json"
     svc = DatasetRagApplicationService(
@@ -818,8 +1031,10 @@ def test_knowledge_v1_dataset_routes_use_dataset_service(tmp_path: Path) -> None
         "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
         return_value=svc,
     ):
+        admin_headers = {"X-Dataset-Admin": "true"}
         ingest = client.post(
             "/api/knowledge/v1/datasets/route-docs/documents",
+            headers=admin_headers,
             json={
                 "text": "Route dataset evidence says XCauto is the server model.",
                 "source": "route-policy.md",
@@ -830,6 +1045,7 @@ def test_knowledge_v1_dataset_routes_use_dataset_service(tmp_path: Path) -> None
         )
         query = client.post(
             "/api/knowledge/v1/datasets/route-docs/query",
+            headers=admin_headers,
             json={
                 "query": "What is the server model?",
                 "top_k": 1,
@@ -847,6 +1063,56 @@ def test_knowledge_v1_dataset_routes_use_dataset_service(tmp_path: Path) -> None
     assert body["success"] is True
     assert "XCauto" in body["answer"]
     assert body["citations"][0]["source_url"] == "route-policy.md"
+
+
+def test_knowledge_v1_publication_route_requires_dataset_admin(tmp_path: Path) -> None:
+    app = FastAPI()
+    app.include_router(knowledge_router)
+    client = TestClient(app, raise_server_exceptions=False)
+    svc = DatasetRagApplicationService(
+        embedder=lambda text: [float(len(text))],
+        storage_path=tmp_path / "publication_route_store.json",
+        vector_index_backend_name="none",
+        rebuild_workers_enabled=False,
+    )
+    admin = DatasetAccessContext(
+        actor_id="admin",
+        permissions=frozenset({"dataset.admin"}),
+        is_admin=True,
+    )
+    ingested = svc.ingest_document(
+        dataset_id="persy-knowledge",
+        tenant_id="public",
+        source="route-public.md",
+        text="公开知识发布路由测试资料。",
+        metadata={"publication_status": "draft"},
+        chunk_strategy="fixed",
+        access_context=admin,
+    )
+    document_id = ingested["document"]["document_id"]
+
+    with patch(
+        "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
+        return_value=svc,
+    ):
+        denied = client.patch(
+            f"/api/knowledge/v1/datasets/persy-knowledge/documents/{document_id}/publication",
+            json={"status": "published", "reason": "权限拒绝验证"},
+        )
+        published = client.patch(
+            f"/api/knowledge/v1/datasets/persy-knowledge/documents/{document_id}/publication",
+            headers={"X-Dataset-Admin": "true"},
+            json={
+                "status": "published",
+                "reason": "内容审核完成",
+                "expected_status": "draft",
+            },
+        )
+
+    assert denied.status_code == 403
+    assert denied.json()["required_permission"] == "dataset.admin"
+    assert published.status_code == 200
+    assert published.json()["publication_status"] == "published"
 
 
 def test_knowledge_v1_dataset_routes_enforce_access_context(tmp_path: Path) -> None:
@@ -926,6 +1192,16 @@ def test_knowledge_v1_dataset_routes_enforce_access_context(tmp_path: Path) -> N
                 "X-Dataset-Permissions": "dataset.read,dataset.write",
             },
         )
+        anonymous_private_status = client.get(
+            "/api/knowledge/v1/datasets/secure-route/status?tenant_id=tenant-b"
+        )
+        anonymous_private_query = client.post(
+            "/api/knowledge/v1/datasets/secure-route/query",
+            json={"query": "Tenant B policy", "tenant_id": "tenant-b"},
+        )
+        anonymous_public_status = client.get(
+            "/api/knowledge/v1/datasets/secure-route/status?tenant_id=public"
+        )
 
     assert tenant_a.status_code == 200
     assert own_query.status_code == 200
@@ -942,6 +1218,10 @@ def test_knowledge_v1_dataset_routes_enforce_access_context(tmp_path: Path) -> N
     assert status.json()["tenant_ids"] == ["tenant-a"]
     assert delete_cross.json()["success"] is False
     assert delete_cross.json()["error_code"] == "dataset_permission_denied"
+    assert anonymous_private_status.status_code == 401
+    assert anonymous_private_query.status_code == 401
+    assert anonymous_public_status.status_code == 200
+    assert anonymous_public_status.json()["tenant_ids"] == []
 
 
 def test_knowledge_v1_dataset_version_ops_and_rebuild_routes(tmp_path: Path) -> None:
@@ -958,8 +1238,10 @@ def test_knowledge_v1_dataset_version_ops_and_rebuild_routes(tmp_path: Path) -> 
         "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
         return_value=svc,
     ):
+        admin_headers = {"X-Dataset-Admin": "true"}
         first = client.post(
             "/api/knowledge/v1/datasets/route-versioned/documents",
+            headers=admin_headers,
             json={
                 "text": "Route policy v1 says local model.",
                 "source": "route-policy.md",
@@ -970,6 +1252,7 @@ def test_knowledge_v1_dataset_version_ops_and_rebuild_routes(tmp_path: Path) -> 
         )
         second = client.post(
             "/api/knowledge/v1/datasets/route-versioned/documents",
+            headers=admin_headers,
             json={
                 "text": "Route policy v2 says XCauto model.",
                 "source": "route-policy.md",
@@ -980,6 +1263,7 @@ def test_knowledge_v1_dataset_version_ops_and_rebuild_routes(tmp_path: Path) -> 
         )
         diff = client.post(
             "/api/knowledge/v1/datasets/route-versioned/versions/diff",
+            headers=admin_headers,
             json={
                 "source": "route-policy.md",
                 "tenant_id": "tenant-route",
@@ -989,6 +1273,7 @@ def test_knowledge_v1_dataset_version_ops_and_rebuild_routes(tmp_path: Path) -> 
         )
         rollback = client.post(
             "/api/knowledge/v1/datasets/route-versioned/versions/rollback",
+            headers=admin_headers,
             json={
                 "source": "route-policy.md",
                 "tenant_id": "tenant-route",
@@ -998,6 +1283,7 @@ def test_knowledge_v1_dataset_version_ops_and_rebuild_routes(tmp_path: Path) -> 
         )
         rebuild = client.post(
             "/api/knowledge/v1/datasets/route-versioned/index/rebuild",
+            headers=admin_headers,
             json={
                 "tenant_id": "tenant-route",
                 "metadata_filter": {"doc_type": "route_policy"},
@@ -1006,7 +1292,8 @@ def test_knowledge_v1_dataset_version_ops_and_rebuild_routes(tmp_path: Path) -> 
         )
         job_id = rebuild.json()["job"]["job_id"]
         job_status = client.get(
-            f"/api/knowledge/v1/datasets/route-versioned/index/rebuild/{job_id}"
+            f"/api/knowledge/v1/datasets/route-versioned/index/rebuild/{job_id}",
+            headers=admin_headers,
         )
 
     assert first.status_code == 200

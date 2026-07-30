@@ -156,7 +156,9 @@ vi.mock('@/utils/roleMenuProfile', () => ({
 }))
 
 vi.mock('@/constants/adminOperatorNav', () => ({
+  ADMIN_OPERATOR_ATTENDANCE_MOD_IDS: new Set(['attendance-industry', 'taiyangniao-pro']),
   ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES: new Set(['admin-entitlements']),
+  ADMIN_OPERATOR_HIDDEN_MOD_IDS: new Set(['sz-qsm-pro']),
   ADMIN_OPERATOR_HOME_ROUTE: 'admin-home',
 }))
 

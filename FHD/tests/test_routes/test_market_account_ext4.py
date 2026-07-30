@@ -29,7 +29,7 @@ class TestMarketBaseUrl:
             with patch.dict("os.environ", {"XCAGI_MARKET_BASE_URL": ""}, clear=False):
                 result = _market_base_url()
                 assert isinstance(result, str)
-                assert "127.0.0.1:8765" in result or result.startswith("http")
+                assert result == "http://127.0.0.1:8788"
 
     def test_custom_env_value(self):
         from app.fastapi_routes.market_account import _market_base_url
