@@ -13,16 +13,11 @@
     <string>scheduled</string>
   </array>
   <key>RunAtLoad</key>
-  <false/>
+  <true/>
   <key>KeepAlive</key>
   <false/>
-  <key>StartCalendarInterval</key>
-  <dict>
-    <key>Hour</key>
-    <integer>4</integer>
-    <key>Minute</key>
-    <integer>30</integer>
-  </dict>
+  <key>StartInterval</key>
+  <integer>3600</integer>
   <key>ThrottleInterval</key>
   <integer>3600</integer>
   <key>StandardOutPath</key>

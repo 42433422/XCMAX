@@ -10,6 +10,7 @@ FHD_ROOT = Path(__file__).resolve().parents[2]
 CLEANUP_SCRIPT = FHD_ROOT / "scripts" / "dev" / "para_runtime_cleanup.sh"
 WATCHDOG_SCRIPT = FHD_ROOT / "scripts" / "dev" / "para_health_watchdog.sh"
 INSTALL_SCRIPT = FHD_ROOT / "scripts" / "dev" / "install_para_health_watchdog.sh"
+CLEANUP_PLIST = FHD_ROOT / "scripts" / "dev" / "com.xcmax.para-cleanup.plist"
 
 
 def _runtime(tmp_path: Path) -> tuple[dict[str, str], Path, Path, Path]:
@@ -17,6 +18,8 @@ def _runtime(tmp_path: Path) -> tuple[dict[str, str], Path, Path, Path]:
     archive_dir = api_root / "api" / "data" / "cleanup-archives"
     log_dir = tmp_path / "runtime" / "logs"
     workspace_root = tmp_path / "workspaces"
+    xcagi_user_data = tmp_path / "xcagi-user-data"
+    xcagi_backups = xcagi_user_data / "backups"
     cleanup_program = api_root / "scripts" / "cleanup-expired-info.mjs"
     fake_node = tmp_path / "fake-node"
     fake_bin = tmp_path / "fake-bin"
@@ -27,6 +30,7 @@ def _runtime(tmp_path: Path) -> tuple[dict[str, str], Path, Path, Path]:
     archive_dir.mkdir(parents=True)
     log_dir.mkdir(parents=True)
     workspace_root.mkdir(parents=True)
+    xcagi_backups.mkdir(parents=True)
     cleanup_program.parent.mkdir(parents=True)
     cleanup_program.write_text("// test stub\n", encoding="utf-8")
     fake_node.write_text(
@@ -79,6 +83,10 @@ def _runtime(tmp_path: Path) -> tuple[dict[str, str], Path, Path, Path]:
         "PARA_TEST_NODE_ARGS": str(marker),
         "XCMAX_WORKTREE_GC_ENABLED": "0",
         "XCMAX_EPHEMERAL_GC_ENABLED": "0",
+        "XCAGI_BACKUP_GC_ENABLED": "1",
+        "XCAGI_USER_DATA_DIR": str(xcagi_user_data),
+        "XCAGI_BACKUP_DIR": str(xcagi_backups),
+        "XCAGI_LOCAL_BACKUP_KEEP": "2",
     }
     return env, archive_dir, log_dir, workspace_root
 
@@ -228,15 +236,80 @@ def test_cleanup_rejects_broad_delete_targets(tmp_path: Path) -> None:
     assert "拒绝不受限的日志目录" in result.stdout
 
 
+def test_apply_caps_xcagi_automatic_backups_and_preserves_manual_names(
+    tmp_path: Path,
+) -> None:
+    env, _, _, _ = _runtime(tmp_path)
+    backups = Path(env["XCAGI_BACKUP_DIR"])
+    automatic = [
+        backups / "xcagi-1.0.0-20260701000000.db",
+        backups / "xcagi-1.0.0-20260702000000.db",
+        backups / "xcagi-1.0.1-20260703000000.db",
+        backups / "xcagi-1.0.2-20260704000000.db",
+    ]
+    for index, path in enumerate(automatic):
+        path.write_bytes(str(index).encode())
+        os.utime(path, (1_700_000_000 + index, 1_700_000_000 + index))
+    sidecar = automatic[0].with_name(f"{automatic[0].name}-wal")
+    sidecar.write_bytes(b"wal")
+    manual = backups / "xcagi-before-1.0.2-20260704-120000.db"
+    manual.write_bytes(b"manual")
+
+    result = subprocess.run(
+        ["bash", str(CLEANUP_SCRIPT), "--apply", "--reason", "test"],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert [path.exists() for path in automatic] == [False, False, True, True]
+    assert not sidecar.exists()
+    assert manual.exists()
+    assert "XCAGI 自动备份 candidates=2" in result.stdout
+
+
+def test_xcagi_cleanup_fails_closed_during_pending_rollback(tmp_path: Path) -> None:
+    env, _, _, _ = _runtime(tmp_path)
+    backups = Path(env["XCAGI_BACKUP_DIR"])
+    automatic = [
+        backups / f"xcagi-1.0.0-2026070{day}000000.db"
+        for day in range(1, 5)
+    ]
+    for path in automatic:
+        path.write_bytes(b"backup")
+    (Path(env["XCAGI_USER_DATA_DIR"]) / "rollback-marker.json").write_text(
+        "{}",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", str(CLEANUP_SCRIPT), "--apply", "--reason", "test"],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert all(path.exists() for path in automatic)
+    assert "pending rollback" in result.stdout
+
+
 def test_watchdog_and_installer_wire_low_disk_cleanup() -> None:
     watchdog = WATCHDOG_SCRIPT.read_text(encoding="utf-8")
     installer = INSTALL_SCRIPT.read_text(encoding="utf-8")
+    cleanup_plist = CLEANUP_PLIST.read_text(encoding="utf-8")
 
     assert "PARA_DISK_MIN_AVAILABLE_KB" in watchdog
     assert "maybe_cleanup_disk" in watchdog
     assert "--reason low-disk" in watchdog
     assert "com.xcmax.para-cleanup.plist" in installer
     assert "PARA_CLEANUP_COMMAND" in installer
+    assert "<key>StartInterval</key>" in cleanup_plist
+    assert "<integer>3600</integer>" in cleanup_plist
+    assert "<key>RunAtLoad</key>\n  <true/>" in cleanup_plist
 
 
 def test_watchdog_triggers_cleanup_below_watermark_and_respects_cooldown(
