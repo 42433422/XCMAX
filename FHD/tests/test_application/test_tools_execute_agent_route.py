@@ -9,7 +9,7 @@ from app.application.agent_orchestrator import InMemoryAgentRunRepository
 
 
 def _client() -> TestClient:
-    from app.fastapi_routes.domains.system.routes import router
+    from app.fastapi_routes.tools_execute import router
 
     app = FastAPI()
     app.include_router(router)
