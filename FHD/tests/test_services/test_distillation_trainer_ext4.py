@@ -296,7 +296,6 @@ class TestDistillationTrainerTrainFullFlow:
 class TestDistillationTrainerLoadDataJSONLEdgeCases:
     def test_load_jsonl_with_empty_lines(self, tmp_path):
         jsonl_file = tmp_path / "data.jsonl"
-        # Empty lines should be skipped (json.loads raises on empty string)
         content = "\n".join(
             [
                 json.dumps({"text": "hi", "label": "greet"}),
@@ -308,12 +307,9 @@ class TestDistillationTrainerLoadDataJSONLEdgeCases:
         jsonl_file.write_text(content, encoding="utf-8")
 
         trainer = DistillationTrainer.__new__(DistillationTrainer)
-        # Empty line will cause json.loads to raise; the loop will propagate.
-        # But the source code doesn't catch — so we expect an error.
-        # Actually, looking at source: `for line in f: data = json.loads(line)`
-        # An empty line will raise json.JSONDecodeError. Let's verify behavior.
-        with pytest.raises(json.JSONDecodeError):
-            trainer.load_data(str(jsonl_file))
+        texts, labels = trainer.load_data(str(jsonl_file))
+        assert texts == ["hi", "bye"]
+        assert labels == [LABEL_TO_ID["greet"], LABEL_TO_ID["goodbye"]]
 
     def test_load_jsonl_default_label_unk(self, tmp_path):
         """When label key missing, defaults to 'unk'."""
