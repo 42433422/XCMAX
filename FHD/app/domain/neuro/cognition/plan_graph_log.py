@@ -60,8 +60,8 @@ def plan_to_record(
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if hasattr(plan, "plan_id"):
-        plan_id = str(getattr(plan, "plan_id") or "")
-        intent = str(getattr(plan, "intent") or "")
+        plan_id = str(plan.plan_id or "")
+        intent = str(getattr(plan, "intent", "") or "")
         nodes = getattr(plan, "nodes", []) or []
         todos = getattr(plan, "todo_steps", []) or []
         risk = str(getattr(plan, "risk_level", "") or "")
