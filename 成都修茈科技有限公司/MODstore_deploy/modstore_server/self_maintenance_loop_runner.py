@@ -4571,6 +4571,21 @@ def _assess_branch_auto_merge_policy(
             if "kb_paths" not in executable_block:
                 decision_payload["allowed_globs"] = allowed
             return _decision(decision_payload)
+
+        retort_scope_block = retort_remediation.assess_retort_scope_diff_budget_block(
+            memory,
+            normalized_files,
+            diff_stats,
+            diff_excerpt=diff_excerpt,
+        )
+        if retort_scope_block is not None:
+            return _decision(
+                {
+                    "changed_files": normalized_files,
+                    "ok": False,
+                    **retort_scope_block,
+                }
+            )
     except Exception as exc:
         return _decision(
             {
