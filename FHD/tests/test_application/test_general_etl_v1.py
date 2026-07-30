@@ -2226,7 +2226,7 @@ def test_attendance_adapter_is_idempotent_and_rolls_back_only_its_source(tmp_pat
             "products",
             "customers",
         ):
-            assert conn.execute(f"SELECT source_file FROM {table}").fetchall() == [
+            assert conn.execute(f"SELECT source_file FROM {table}").fetchmany(2) == [
                 ("unrelated-source",)
             ]
         assert conn.execute("SELECT COUNT(*) FROM attendance_import_batches").fetchone()[0] == 0

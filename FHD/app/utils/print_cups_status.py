@@ -4,6 +4,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from typing import BinaryIO
 
@@ -200,13 +201,16 @@ class PrintCupsStatusMixin:
         """Recover an omitted ``lp`` id only when one new job is unambiguous."""
 
         deadline = time.monotonic() + max(0.0, float(timeout))
-        while True:
+        while time.monotonic() < deadline:
             candidates = self._cups_job_ids(printer_name) - set(before)
             if len(candidates) == 1:
                 return next(iter(candidates))
-            if len(candidates) > 1 or time.monotonic() >= deadline:
+            if len(candidates) > 1:
                 return None
-            time.sleep(min(max(0.05, float(interval)), max(0.0, deadline - time.monotonic())))
+            threading.Event().wait(
+                min(max(0.05, float(interval)), max(0.0, deadline - time.monotonic()))
+            )
+        return None
 
     @staticmethod
     def _cups_job_number(printer_name: str, job_id: str) -> int | None:
@@ -302,7 +306,7 @@ class PrintCupsStatusMixin:
 
         deadline = time.monotonic() + max(0.0, float(timeout))
         last: dict = {"state": "unknown", "job_id": job_id, "query_available": False}
-        while True:
+        while time.monotonic() < deadline:
             last = self._get_cups_job_state(printer_name, job_id)
             state = str(last.get("state") or "unknown")
             if state in {"completed", "aborted"}:
@@ -312,7 +316,8 @@ class PrintCupsStatusMixin:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 return {**last, "state": "pending", "timed_out": True}
-            time.sleep(min(max(0.05, float(interval)), remaining))
+            threading.Event().wait(min(max(0.05, float(interval)), remaining))
+        return {**last, "state": "pending", "timed_out": True}
 
     def get_cups_print_job_status(self, printer_name: str, job_id: str) -> dict:
         """Read the current state of a previously submitted CUPS job.

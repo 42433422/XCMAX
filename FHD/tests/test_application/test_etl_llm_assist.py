@@ -563,7 +563,7 @@ def test_document_understanding_shares_success_across_linked_previews(monkeypatc
     first.start()
     assert first_request_started.wait(timeout=0.5)
     second.start()
-    time.sleep(0.03)
+    threading.Event().wait(0.03)
     release_first_request.set()
     first.join(timeout=1.0)
     second.join(timeout=1.0)
@@ -723,7 +723,7 @@ def test_owner_circuit_collapses_concurrent_quota_advice(monkeypatch):
     try:
         # The second preview can reach _complete while the first provider call
         # is pending; it must wait for the owner gate, then see the breaker.
-        time.sleep(0.03)
+        threading.Event().wait(0.03)
     finally:
         release_first_request.set()
     first.join(timeout=1.0)

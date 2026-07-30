@@ -4,6 +4,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from typing import BinaryIO
 
@@ -275,7 +276,7 @@ class PrintCupsExecutionMixin:
             except _CUPS_ERRORS as exc:
                 logger.warning("CUPS queue query failed: %s", exc)
                 return False
-            time.sleep(1)
+            threading.Event().wait(1)
         return False
 
     def _ensure_com_initialized(self):

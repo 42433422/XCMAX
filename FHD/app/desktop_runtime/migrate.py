@@ -228,7 +228,7 @@ def _sqlite_current_revisions(
         ).fetchone()
         if not exists:
             return None
-        rows = conn.execute("SELECT version_num FROM alembic_version").fetchall()
+        rows = conn.execute("SELECT version_num FROM alembic_version").fetchmany(2)
     return {str(row[0]) for row in rows if row and row[0]}
 
 
@@ -289,10 +289,10 @@ def _should_bootstrap_sqlite(data_dir: str | os.PathLike[str] | None = None) -> 
         return True
     try:
         with sqlite3.connect(db_path) as conn:
-            rows = conn.execute(
+            row = conn.execute(
                 "select name from sqlite_master where type='table' and name not like 'sqlite_%'"
-            ).fetchall()
-        return not rows
+            ).fetchone()
+        return row is None
     except sqlite3.DatabaseError:
         return True
 

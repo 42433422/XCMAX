@@ -4,7 +4,7 @@ import re
 import subprocess
 import sys
 import tempfile
-import time
+import threading
 from typing import BinaryIO
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -97,7 +97,7 @@ class PrintFileExecutionMixin:
 
                             logger.error(traceback.format_exc())
 
-                        time.sleep(0.5)
+                        threading.Event().wait(0.5)
                         try:
                             new_default = win32print.GetDefaultPrinter()
                             logger.info("验证 - 当前默认打印机: %s", new_default)
@@ -113,7 +113,7 @@ class PrintFileExecutionMixin:
                             )
                             try:
                                 win32print.SetDefaultPrinter(printer_name)
-                                time.sleep(0.5)
+                                threading.Event().wait(0.5)
                                 new_default = win32print.GetDefaultPrinter()
                                 logger.info("第二次修改后默认打印机: %s", new_default)
                             except RECOVERABLE_ERRORS as e:

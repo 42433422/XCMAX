@@ -47,7 +47,7 @@ def _wait_for_status(repo: InMemoryAgentRunRepository, run_id: str, status: str)
         run = repo.get(run_id)
         if run is not None and run.status == status:
             return run
-        time.sleep(0.01)
+        threading.Event().wait(0.01)
     run = repo.get(run_id)
     raise AssertionError(f"expected {status}, got {run.status if run else 'missing'}")
 

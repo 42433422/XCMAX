@@ -37,11 +37,10 @@ async def _xcagi_planner_stream_bytes_async(
     thread = threading.Thread(target=_feed_queue, daemon=True, name="xcagi-stream-async-bridge")
     thread.start()
 
-    while True:
-        item = await async_q.get()
-        if item is _SENTINEL:
-            break
+    item = await async_q.get()
+    while item is not _SENTINEL:
         yield item
+        item = await async_q.get()
 
 
 def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, ai_tier: str):

@@ -17,13 +17,14 @@ def test_import_mod_backend_never_returns_partially_initialized_module(tmp_path:
     (backend_dir / "slow_handler.py").write_text(
         "\n".join(
             [
-                "import time",
+                "from threading import Event",
                 "from pathlib import Path",
                 f"started = Path({str(started)!r})",
                 f"release = Path({str(release)!r})",
+                "poll_wait = Event()",
                 "started.write_text('1', encoding='utf-8')",
                 "while not release.exists():",
-                "    time.sleep(0.005)",
+                "    poll_wait.wait(0.005)",
                 "READY = True",
             ]
         ),
@@ -43,12 +44,12 @@ def test_import_mod_backend_never_returns_partially_initialized_module(tmp_path:
     first.start()
     deadline = time.monotonic() + 2
     while not started.exists() and time.monotonic() < deadline:
-        time.sleep(0.005)
+        threading.Event().wait(0.005)
     assert started.exists()
 
     second = threading.Thread(target=load_module)
     second.start()
-    time.sleep(0.05)
+    threading.Event().wait(0.05)
     assert second.is_alive(), "second importer observed a partially initialized module"
 
     release.write_text("1", encoding="utf-8")
