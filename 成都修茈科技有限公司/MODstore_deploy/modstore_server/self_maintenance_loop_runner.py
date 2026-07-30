@@ -4557,68 +4557,20 @@ def _assess_branch_auto_merge_policy(
 
     try:
         from modstore_server.self_maintenance_policy import (
-            diff_includes_modstore_server_production_path,
-            is_auxiliary_self_maintenance_evidence_path,
-            is_marker_status_path,
-            loop_memory_requires_executable_change,
-            memory_has_diff_too_large_remediation,
-            memory_has_retort_scope_remediation,
+            assess_loop_memory_executable_change_block,
             para_merge_review_max_diff_chars,
         )
 
-        requirement = loop_memory_requires_executable_change(memory)
-        if requirement.get("required") and memory_has_diff_too_large_remediation(memory):
-            kb_paths = [
-                file_name for file_name in normalized_files if file_name.startswith("FHD/XCAGI/kb/")
-            ]
-            if kb_paths:
-                return _decision(
-                    {
-                        "changed_files": normalized_files,
-                        "kb_paths": kb_paths,
-                        "ok": False,
-                        "reason": "kb_paths_blocked_during_diff_too_large_remediation",
-                        "self_maintenance_requirement": requirement,
-                    }
-                )
-        if requirement.get("required") and memory_has_retort_scope_remediation(memory):
-            kb_paths = [
-                file_name for file_name in normalized_files if file_name.startswith("FHD/XCAGI/kb/")
-            ]
-            if kb_paths:
-                return _decision(
-                    {
-                        "changed_files": normalized_files,
-                        "kb_paths": kb_paths,
-                        "ok": False,
-                        "reason": "kb_paths_blocked_during_retort_scope_remediation",
-                        "self_maintenance_requirement": requirement,
-                    }
-                )
-        if requirement.get("required"):
-            if all(is_marker_status_path(file_name) for file_name in normalized_files):
-                return _decision(
-                    {
-                        "allowed_globs": allowed,
-                        "changed_files": normalized_files,
-                        "ok": False,
-                        "reason": "marker_only_diff_requires_executable_change",
-                        "self_maintenance_requirement": requirement,
-                    }
-                )
-            if all(
-                is_auxiliary_self_maintenance_evidence_path(file_name)
-                for file_name in normalized_files
-            ) and not diff_includes_modstore_server_production_path(normalized_files):
-                return _decision(
-                    {
-                        "allowed_globs": allowed,
-                        "changed_files": normalized_files,
-                        "ok": False,
-                        "reason": "auxiliary_only_diff_requires_executable_change",
-                        "self_maintenance_requirement": requirement,
-                    }
-                )
+        executable_block = assess_loop_memory_executable_change_block(memory, normalized_files)
+        if executable_block is not None:
+            decision_payload: Dict[str, Any] = {
+                "changed_files": normalized_files,
+                "ok": False,
+                **executable_block,
+            }
+            if "kb_paths" not in executable_block:
+                decision_payload["allowed_globs"] = allowed
+            return _decision(decision_payload)
     except Exception as exc:
         return _decision(
             {
