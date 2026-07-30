@@ -252,7 +252,14 @@ async def platform_shell_onboarding_seed_demo(body: OnboardingSeedBody, request:
         from fastapi import HTTPException
 
         raise HTTPException(status_code=400, detail="?? tenant_id,????????")
-    data = seed_onboarding_demo_data(tenant_id=int(tenant_id), industry_id=body.industry_id)
+    try:
+        data = seed_onboarding_demo_data(tenant_id=int(tenant_id), industry_id=body.industry_id)
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("onboarding seed failed for tenant=%s: %s", tenant_id, exc)
+        raise HTTPException(status_code=503, detail="onboarding seed temporarily unavailable") from None
+    except Exception:
+        logger.exception("onboarding seed failed for tenant=%s", tenant_id)
+        raise HTTPException(status_code=500, detail="onboarding seed failed") from None
     return {"success": True, "data": data}
 
 

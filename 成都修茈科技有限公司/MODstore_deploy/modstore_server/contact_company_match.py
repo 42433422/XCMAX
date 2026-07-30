@@ -91,10 +91,12 @@ def _erp_company_names(query: str, limit: int) -> list[str]:
                 "ORDER BY LENGTH(customer_name) ASC LIMIT ?",
                 (pattern, limit),
             )
-            for row in cur.fetchall():
+            for row in cur:
                 val = (row[0] or "").strip()
                 if val and val not in names:
                     names.append(val)
+                if len(names) >= limit:
+                    break
             conn.close()
             if names:
                 break
