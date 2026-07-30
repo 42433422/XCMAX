@@ -131,6 +131,74 @@ def memory_has_retort_scope_remediation(memory: Optional[Dict[str, Any]]) -> boo
     )
 
 
+def kb_paths_in_changed_files(changed_files: List[str]) -> List[str]:
+    kb_paths: List[str] = []
+    for path in changed_files:
+        normalized = _normalize_repo_path(path)
+        if normalized.startswith("FHD/XCAGI/kb/"):
+            kb_paths.append(str(path))
+    return kb_paths
+
+
+def kb_paths_blocked_during_remediation(
+    memory: Optional[Dict[str, Any]],
+    changed_files: List[str],
+) -> Optional[Dict[str, Any]]:
+    """Return KB block metadata when remediation memory forbids kb/* deltas."""
+
+    kb_paths = kb_paths_in_changed_files(changed_files)
+    if not kb_paths:
+        return None
+    if memory_has_retort_scope_remediation(memory):
+        return {
+            "kb_paths": kb_paths,
+            "reason": "kb_paths_blocked_during_retort_scope_remediation",
+        }
+    if memory_has_diff_too_large_remediation(memory):
+        return {
+            "kb_paths": kb_paths,
+            "reason": "kb_paths_blocked_during_diff_too_large_remediation",
+        }
+    return None
+
+
+def assess_loop_memory_executable_change_block(
+    memory: Optional[Dict[str, Any]],
+    changed_files: List[str],
+) -> Optional[Dict[str, Any]]:
+    """Fail-closed gates when loop memory requires an executable production change."""
+
+    requirement = loop_memory_requires_executable_change(memory)
+    if not requirement.get("required"):
+        return None
+
+    kb_block = kb_paths_blocked_during_remediation(memory, changed_files)
+    if kb_block is not None:
+        return {
+            **kb_block,
+            "self_maintenance_requirement": requirement,
+        }
+
+    normalized = [_normalize_repo_path(path) for path in changed_files]
+    if normalized and all(is_marker_status_path(path) for path in normalized):
+        return {
+            "reason": "marker_only_diff_requires_executable_change",
+            "self_maintenance_requirement": requirement,
+        }
+
+    if (
+        normalized
+        and all(is_auxiliary_self_maintenance_evidence_path(path) for path in normalized)
+        and not diff_includes_modstore_server_production_path(changed_files)
+    ):
+        return {
+            "reason": "auxiliary_only_diff_requires_executable_change",
+            "self_maintenance_requirement": requirement,
+        }
+
+    return None
+
+
 def is_auxiliary_self_maintenance_evidence_path(path: str) -> bool:
     normalized = _normalize_repo_path(path)
     if not normalized:
@@ -333,10 +401,13 @@ def should_block_marker_only_diff_summary(
 
 
 __all__ = [
+    "assess_loop_memory_executable_change_block",
     "default_loop_memory_path",
     "diff_includes_modstore_server_production_path",
     "is_auxiliary_self_maintenance_evidence_path",
     "is_marker_status_path",
+    "kb_paths_blocked_during_remediation",
+    "kb_paths_in_changed_files",
     "load_loop_memory",
     "loop_memory_requires_executable_change",
     "memory_has_diff_too_large_remediation",
