@@ -80,6 +80,25 @@ def _item_diff_too_large_merge_review_veto(item: Dict[str, Any]) -> bool:
     return detail_code == _DIFF_TOO_LARGE_MERGE_REVIEW_CODE
 
 
+def _item_actionable_merge_review_veto(item: Dict[str, Any]) -> bool:
+    """True when merge-worker emitted actionable REJECT findings (not infra vetoes)."""
+
+    if item.get("review_actionable_findings") is True:
+        return True
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        classify_para_merge_review_detail,
+    )
+
+    feedback = str(item.get("review_feedback") or item.get("detail") or "")
+    meta = classify_para_merge_review_detail(feedback)
+    if not meta.get("actionable_code_findings"):
+        return False
+    veto = normalize_merge_review_veto_code(str(meta.get("veto_code") or ""))
+    if veto in _INDETERMINATE_MERGE_REVIEW_CODES or veto == _DIFF_TOO_LARGE_MERGE_REVIEW_CODE:
+        return False
+    return True
+
+
 def para_merge_review_max_diff_chars() -> int:
     raw = os.environ.get("MODSTORE_PARA_MERGE_REVIEW_MAX_DIFF_CHARS")
     try:
@@ -327,6 +346,18 @@ def loop_memory_requires_executable_change(
                     "reason": (
                         "diff-too-large merge-review veto requires focused "
                         "modstore_server production change under Para diff budget"
+                    ),
+                }
+            if (
+                item.get("kind") == "automated_remediation"
+                and item.get("reason") == "para_ai_review_rejected"
+                and _item_actionable_merge_review_veto(item)
+            ):
+                return {
+                    "required": True,
+                    "reason": (
+                        "actionable merge-review veto requires focused "
+                        "modstore_server production change"
                     ),
                 }
             if (
