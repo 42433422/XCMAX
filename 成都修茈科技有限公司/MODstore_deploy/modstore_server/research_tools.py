@@ -12,8 +12,6 @@ from html import unescape
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 
-import httpx
-
 # ── rate limits（内存计数，进程重启清零）──────────────────────────────────────
 _DEFAULT_USER_CAP = 40
 _counters: Dict[str, Tuple[date, int]] = {}
@@ -665,8 +663,6 @@ def extract_company_names_from_text(text: str, query: str, *, limit: int = 10) -
     q = (query or "").strip()
     if len(q) < 2:
         return []
-    qk = _company_name_key(q)
-    out: List[str] = []
     seen: Set[str] = set()
     candidates: List[str] = []
     for m in _COMPANY_NAME_RE.finditer(unescape(text or "")):
@@ -779,16 +775,66 @@ def web_search_result_titles(
     return out
 
 
-# 联系页联网检索实现见 contact_company_web_search（防 oversized 棘轮回退）
-from modstore_server.contact_company_web_search import (  # noqa: E402
-    _contact_company_web_fetch_one,
-    _contact_company_web_raw_results,
-    contact_company_web_search_queries,
-    contact_known_site_company_lookup,
-    contact_web_search_budget_sec,
-    rank_contact_serp_rows,
-    search_company_names_via_web,
-)
+# 联系页联网检索实现见 contact_company_web_search（防 oversized 棘轮回退）。
+# 保持 research_tools 的历史 import 路径，但延迟导入，避免
+# contact_company_web_search -> research_tools -> contact_company_web_search 循环初始化。
+def contact_company_web_search_queries(query: str) -> List[str]:
+    from modstore_server.contact_company_web_search import (
+        contact_company_web_search_queries as impl,
+    )
+
+    return impl(query)
+
+
+def contact_web_search_budget_sec() -> float:
+    from modstore_server.contact_company_web_search import contact_web_search_budget_sec as impl
+
+    return impl()
+
+
+def rank_contact_serp_rows(query: str, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    from modstore_server.contact_company_web_search import rank_contact_serp_rows as impl
+
+    return impl(query, rows)
+
+
+async def contact_known_site_company_lookup(query: str, *, max_results: int = 5) -> List[str]:
+    from modstore_server.contact_company_web_search import contact_known_site_company_lookup as impl
+
+    return await impl(query, max_results=max_results)
+
+
+async def _contact_company_web_fetch_one(
+    search_query: str,
+    *,
+    user_query: str,
+    max_results: int,
+    timeout_sec: float | None = None,
+) -> Tuple[List[Dict[str, Any]], str, List[str]]:
+    from modstore_server.contact_company_web_search import _contact_company_web_fetch_one as impl
+
+    return await impl(
+        search_query,
+        user_query=user_query,
+        max_results=max_results,
+        timeout_sec=timeout_sec,
+    )
+
+
+async def _contact_company_web_raw_results(
+    query: str, *, max_results: int
+) -> Tuple[List[Dict[str, Any]], str, List[str]]:
+    from modstore_server.contact_company_web_search import _contact_company_web_raw_results as impl
+
+    return await impl(query, max_results=max_results)
+
+
+async def search_company_names_via_web(
+    query: str, *, max_results: int = 8
+) -> Tuple[List[str], Optional[str], str]:
+    from modstore_server.contact_company_web_search import search_company_names_via_web as impl
+
+    return await impl(query, max_results=max_results)
 
 
 async def _web_search_free_tier(

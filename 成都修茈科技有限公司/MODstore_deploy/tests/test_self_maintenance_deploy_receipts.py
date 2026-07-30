@@ -453,6 +453,73 @@ def test_exact_completed_callback_is_idempotent() -> None:
     assert events == []
 
 
+def test_successful_redeploy_for_same_run_is_idempotent() -> None:
+    existing = {
+        "event": "post_deploy_verified",
+        "ok": True,
+        "identity_verified": True,
+        "run_id": "run-existing",
+        "merge_sha": MERGE_SHA,
+        "environment": "production",
+        "workflow_run_id": "777",
+    }
+    events: list[dict] = []
+
+    result = record_completed_deployment_receipt(
+        rows=[
+            existing,
+            {
+                **existing,
+                "event": "merge_completed",
+                "status": "completed_merged",
+            },
+        ],
+        record_event=events.append,
+        merge_sha=MERGE_SHA,
+        environment="production",
+        workflow_run_id="779",
+        workflow_status="completed",
+        workflow_conclusion="success",
+        release=BuildIdentity(git_sha=MERGE_SHA, artifact_sha256=ARTIFACT_SHA),
+        health=BuildIdentity(git_sha=MERGE_SHA, artifact_sha256=ARTIFACT_SHA),
+        is_ancestor=lambda _ancestor, _descendant: True,
+        requested_run_id="run-existing",
+    )
+
+    assert result["idempotent"] is True
+    assert result["recorded"] is False
+    assert result["workflow_run_id"] == "779"
+    assert result["previous_workflow_run_id"] == "777"
+    assert events == []
+
+
+def test_successful_redeploy_for_same_run_rechecks_runtime_identity() -> None:
+    existing = {
+        "event": "post_deploy_verified",
+        "ok": True,
+        "identity_verified": True,
+        "run_id": "run-existing",
+        "merge_sha": MERGE_SHA,
+        "environment": "production",
+        "workflow_run_id": "777",
+    }
+
+    with pytest.raises(DeploymentReceiptError, match="health_sha_mismatch"):
+        record_completed_deployment_receipt(
+            rows=[existing],
+            record_event=lambda _event: None,
+            merge_sha=MERGE_SHA,
+            environment="production",
+            workflow_run_id="779",
+            workflow_status="completed",
+            workflow_conclusion="success",
+            release=BuildIdentity(git_sha=MERGE_SHA, artifact_sha256=ARTIFACT_SHA),
+            health=BuildIdentity(git_sha="d" * 40, artifact_sha256=ARTIFACT_SHA),
+            is_ancestor=lambda _ancestor, _descendant: True,
+            requested_run_id="run-existing",
+        )
+
+
 def test_retry_repairs_missing_terminal_merge_row_after_verified_receipt() -> None:
     existing = {
         "event": "post_deploy_verified",

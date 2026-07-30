@@ -11,13 +11,12 @@ vi.mock('@/api/xcmaxMarketProxy', () => ({
 import {
   useDutyRosterLoopStatus,
   normalizeDutyRosterLoopStatus,
-  type DutyRosterLoopStatus,
 } from './useDutyRosterLoopStatus'
 
 describe('normalizeDutyRosterLoopStatus', () => {
   it('returns empty status for null payload', () => {
     const s = normalizeDutyRosterLoopStatus(null)
-    expect(s.ok).toBe(true) // Boolean(health.ok !== false) → true
+    expect(s.ok).toBe(false)
     expect(s.source).toBe('unknown')
     expect(s.missingCatalogIds).toEqual([])
     expect(s.missingLocalIds).toEqual([])
@@ -29,13 +28,13 @@ describe('normalizeDutyRosterLoopStatus', () => {
 
   it('returns empty status for undefined payload', () => {
     const s = normalizeDutyRosterLoopStatus(undefined)
-    expect(s.ok).toBe(true)
+    expect(s.ok).toBe(false)
     expect(s.source).toBe('unknown')
   })
 
   it('returns empty status for non-object payload', () => {
     const s = normalizeDutyRosterLoopStatus('not-an-object' as never)
-    expect(s.ok).toBe(true)
+    expect(s.ok).toBe(false)
     expect(s.source).toBe('unknown')
   })
 
@@ -110,9 +109,14 @@ describe('normalizeDutyRosterLoopStatus', () => {
     expect(s.ok).toBe(false)
   })
 
-  it('ok is true when health.ok is undefined', () => {
+  it('ok is false when no explicit healthy field is present', () => {
     const s = normalizeDutyRosterLoopStatus({})
-    expect(s.ok).toBe(true)
+    expect(s.ok).toBe(false)
+  })
+
+  it('accepts explicit success and healthy compatibility fields', () => {
+    expect(normalizeDutyRosterLoopStatus({ success: true }).ok).toBe(true)
+    expect(normalizeDutyRosterLoopStatus({ healthy: true }).ok).toBe(true)
   })
 
   it('source falls back to unknown when empty', () => {

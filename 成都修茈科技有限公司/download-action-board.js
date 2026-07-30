@@ -13,6 +13,20 @@
       .replace(/"/g, '&quot;')
   }
 
+  function fetchBoard(url, wrapped) {
+    return fetch(url, { cache: 'no-store' })
+      .then(function (r) {
+        var ct = r.headers.get('content-type') || ''
+        if (!r.ok || ct.indexOf('json') < 0) throw new Error('board ' + r.status)
+        return r.json()
+      })
+      .then(function (payload) {
+        if (!wrapped) return payload
+        if (!payload || payload.ok !== true || !payload.data) throw new Error('live board unavailable')
+        return payload.data
+      })
+  }
+
   function renderBoard(boardKey, accent) {
     var board = (window.__ACTION_BOARD__ && window.__ACTION_BOARD__[boardKey]) || null
     var meta = document.getElementById('board-meta')
@@ -106,10 +120,9 @@
   function boot() {
     var boardKey = document.body.getAttribute('data-board') || 'breakpoints'
     var accent = document.body.getAttribute('data-accent') || 'patch'
-    fetch('/download-action-board.json', { cache: 'no-store' })
-      .then(function (r) {
-        var ct = r.headers.get('content-type') || ''
-        return r.ok && ct.indexOf('json') >= 0 ? r.json() : null
+    fetchBoard('/api/public/action-board', true)
+      .catch(function () {
+        return fetchBoard('/download-action-board.json', false)
       })
       .then(function (data) {
         window.__ACTION_BOARD__ = data || null

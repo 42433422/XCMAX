@@ -11,12 +11,12 @@ def build_primary_gate_sets(
     facts: Mapping[str, Any],
 ) -> tuple[list[ScoreGate], list[ScoreGate], list[ScoreGate], list[ScoreGate]]:
     surfaces = facts["surfaces"]
-    workforce_ready = facts["workforce_ready"]
+    production_workforce_ready = facts["production_workforce_ready"]
     assigned_employees = facts["assigned_employees"]
     planned = facts["planned"]
     proven_employees = facts["proven_employees"]
+    production_proven_employees = facts["production_proven_employees"]
     shell_employees = facts["shell_employees"]
-    goals = facts["goals"]
     goals_total = facts["goals_total"]
     runtime = facts["runtime"]
     council_ready = facts["council_ready"]
@@ -84,16 +84,20 @@ def build_primary_gate_sets(
             "employees",
             "AI 员工真实工作",
             15,
-            bool(surfaces.get("ai_employees")) and workforce_ready,
-            f"已排工 {assigned_employees}/{planned}，有回执 {proven_employees}/{planned}，空壳 {shell_employees}",
-            "让至少 80% 编制产生真实运行回执，并清零空壳/无效 handler",
+            bool(surfaces.get("ai_employees")) and production_workforce_ready,
+            (
+                f"已排工 {assigned_employees}/{planned}，生产履职回执 "
+                f"{production_proven_employees}/{planned}，能力回执 "
+                f"{proven_employees}/{planned}，空壳 {shell_employees}"
+            ),
+            "让至少 80% 编制产生非 burn-in 的生产履职回执，并清零空壳/无效 handler",
             "local_runtime",
         ),
         ScoreGate(
             "goals",
             "Goals",
             10,
-            bool(surfaces.get("goals")) and bool(goals),
+            bool(surfaces.get("goals")) and goals_total > 0,
             f"目标条目 {int(goals_total)}",
             "接入可追踪 Goals 与完成率",
             "deployed_runtime",

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import subprocess
+import sys
 
-import httpx
 import pytest
 
 
@@ -36,6 +36,23 @@ def test_contact_company_web_search_queries() -> None:
     full = contact_company_web_search_queries("成都修茈科技有限公司")
     assert full[0] == "成都修茈科技有限公司"
     assert any("企查查" in q for q in full)
+
+
+def test_contact_company_module_can_import_before_research_tools() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import modstore_server.contact_company_web_search; "
+                "import modstore_server.market_auth_api"
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_rank_contact_serp_rows_prefers_query_hit() -> None:
