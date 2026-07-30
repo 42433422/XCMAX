@@ -89,7 +89,9 @@ async def _connect_funasr_parallel(funasr_urls: list[str], ssl_ctx):
     if len(funasr_urls) == 1:
         return await _try_connect_funasr(funasr_urls[0], ssl_ctx)
 
-    tasks = [asyncio.create_task(_try_connect_funasr(url, ssl_ctx)) for url in funasr_urls]
+    tasks = [
+        asyncio.create_task(_try_connect_funasr(url, ssl_ctx)) for url in funasr_urls
+    ]
     try:
         while tasks:
             done, pending = await asyncio.wait(
@@ -121,7 +123,12 @@ async def _proxy_to_mimo(client_ws: WebSocket) -> None:
     if not is_configured():
         try:
             await client_ws.send_text(
-                json.dumps({"type": "error", "message": "未配置小米 ASR 密钥（MIMO/XIAOMI_API_KEY）"})
+                json.dumps(
+                    {
+                        "type": "error",
+                        "message": "未配置小米 ASR 密钥（MIMO/XIAOMI_API_KEY）",
+                    }
+                )
             )
         except Exception:
             pass
@@ -147,7 +154,9 @@ async def _proxy_to_mimo(client_ws: WebSocket) -> None:
         recognizing = True
         try:
             wav = pcm16le_to_wav_bytes(blob, sample_rate=sample_rate)
-            text, err, meta = await transcribe_mimo_asr_async(wav, mime_type="audio/wav")
+            text, err, meta = await transcribe_mimo_asr_async(
+                wav, mime_type="audio/wav"
+            )
             if err or not text:
                 logger.warning("mimo-asr failed: %s meta=%s", err, meta)
                 try:
@@ -201,7 +210,9 @@ async def _proxy_to_mimo(client_ws: WebSocket) -> None:
     except Exception as exc:
         logger.info("mimo asr proxy error: %s", exc)
         try:
-            await client_ws.send_text(json.dumps({"type": "error", "message": str(exc)}))
+            await client_ws.send_text(
+                json.dumps({"type": "error", "message": str(exc)})
+            )
         except Exception:
             pass
 
@@ -220,7 +231,9 @@ async def _proxy_to_funasr(client_ws: WebSocket) -> None:
     if connect_result is None:
         logger.warning("FunASR 不可达，已尝试: %s", funasr_urls)
         try:
-            await client_ws.send_text(json.dumps({"type": "error", "message": "FunASR 服务未启动"}))
+            await client_ws.send_text(
+                json.dumps({"type": "error", "message": "FunASR 服务未启动"})
+            )
         except Exception:
             pass
         return
@@ -229,7 +242,9 @@ async def _proxy_to_funasr(client_ws: WebSocket) -> None:
     logger.info("FunASR connected via %s", funasr_url)
     try:
         try:
-            await client_ws.send_text(json.dumps({"type": "connected", "backend": "funasr"}))
+            await client_ws.send_text(
+                json.dumps({"type": "connected", "backend": "funasr"})
+            )
         except Exception:
             return
 
@@ -384,7 +399,9 @@ async def _dispatch_asr_proxy(client_ws: WebSocket) -> None:
         await _proxy_to_mimo(client_ws)
         return
     try:
-        await client_ws.send_text(json.dumps({"type": "error", "message": "FunASR 服务未启动"}))
+        await client_ws.send_text(
+            json.dumps({"type": "error", "message": "FunASR 服务未启动"})
+        )
     except Exception:
         pass
 
@@ -408,7 +425,9 @@ async def asr_funasr_ws(
     token = _ws_bearer_token(ws, token)
     if not token:
         try:
-            await ws.send_text(json.dumps({"type": "error", "message": "请先登录后再使用语音识别"}))
+            await ws.send_text(
+                json.dumps({"type": "error", "message": "请先登录后再使用语音识别"})
+            )
         except Exception:
             pass
         await ws.close()

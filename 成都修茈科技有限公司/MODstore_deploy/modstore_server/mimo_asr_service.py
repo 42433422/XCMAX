@@ -42,7 +42,9 @@ def is_configured() -> bool:
     return bool(key)
 
 
-def pcm16le_to_wav_bytes(pcm: bytes, *, sample_rate: int = 16000, channels: int = 1) -> bytes:
+def pcm16le_to_wav_bytes(
+    pcm: bytes, *, sample_rate: int = 16000, channels: int = 1
+) -> bytes:
     """将 16-bit LE PCM 包成 WAV，供 MiMo ASR data URL 使用。"""
     if not pcm:
         return b""
