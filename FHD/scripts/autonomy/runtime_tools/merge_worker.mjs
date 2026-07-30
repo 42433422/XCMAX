@@ -410,6 +410,7 @@ export function mergeFailuresAreRetryable(results) {
 
 export function isRecoverableIndeterminateReviewRecord(record, nowMs = Date.now()) {
   if (!['ai_rejected', 'retrying'].includes(String(record?.status || ''))) return false;
+  if (record?.exhausted === true || Number(record?.attempts || 0) > MAX_RETRY_ATTEMPTS) return false;
   if (!/\bindeterminate-review:\s*\{/.test(String(record?.reason || ''))) return false;
   const recordedAt = Date.parse(String(record?.at || ''));
   if (!Number.isFinite(recordedAt) || recordedAt > nowMs) return false;

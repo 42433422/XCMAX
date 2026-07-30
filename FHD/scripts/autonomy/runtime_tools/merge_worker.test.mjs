@@ -374,6 +374,14 @@ test('only recent structured merge-worker indeterminate conflicts are recovered'
     ),
     false,
   );
+  assert.equal(
+    isRecoverableIndeterminateReviewRecord({ ...record, exhausted: true }, now),
+    false,
+  );
+  assert.equal(
+    isRecoverableIndeterminateReviewRecord({ ...record, attempts: 999 }, now),
+    false,
+  );
 
   const task = {
     status: 'merge_conflict',
