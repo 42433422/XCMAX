@@ -6,24 +6,24 @@ import json
 from unittest.mock import patch
 
 from app.services.bert_intent_service import INTENT_LABELS as RUNTIME_INTENT_LABELS
-from app.services.distillation_trainer import (
-    INTENT_LABELS,
+from app.services.distillation_continuous_learning import (
+    build_continuous_learning_corpus,
+    export_continuous_training_data,
     ContinuousLearningCorpus,
     LearningSample,
-    build_continuous_learning_corpus,
+)
+from app.services.distillation_continuous_learning_collectors import (
     collect_bug_fix_learning,
     collect_change_request_learning,
     collect_user_feedback_samples,
-    export_continuous_training_data,
-    main,
 )
+from app.services.distillation_continuous_learning_models import INTENT_LABELS
+from app.services.distillation_trainer import main
 
 
 def _read_jsonl(path):
     return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
     ]
 
 
