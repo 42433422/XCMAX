@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import threading
 import uuid
@@ -317,15 +318,33 @@ def build_autonomy_decision_evidence(
     *,
     window_days: int = 30,
     limit: int = 100,
+    posthoc_maturity_minutes: int | None = None,
     session_factory: Callable[..., Any] | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """Return 30-day alignment and veto evidence from the immutable ledger."""
+    """Return 30-day alignment and veto evidence from the immutable ledger.
+
+    Fresh allow decisions remain visible as pending while their independent
+    execution, deployment, and anomaly receipts are still inside the bounded
+    posthoc SLA. Once the maturity window expires, missing evidence becomes
+    uncovered and therefore fail-closed.
+    """
 
     bounded_days = max(1, min(int(window_days), 3650))
     bounded_limit = max(1, min(int(limit), 1000))
+    if posthoc_maturity_minutes is None:
+        try:
+            configured_maturity = int(
+                str(os.environ.get("MODSTORE_POSTHOC_MATURITY_MINUTES") or "90")
+            )
+        except (TypeError, ValueError):
+            configured_maturity = 90
+    else:
+        configured_maturity = int(posthoc_maturity_minutes)
+    bounded_maturity_minutes = max(0, min(configured_maturity, 1440))
     current = _utc(now)
     cutoff = current - timedelta(days=bounded_days)
+    maturity_cutoff = current - timedelta(minutes=bounded_maturity_minutes)
     sf = session_factory or get_session_factory()
     with sf() as session:
         rows = (
@@ -343,11 +362,19 @@ def build_autonomy_decision_evidence(
     block_ids = {row.action_id for row in decisions if row.decision == "block"}
     veto_ids = {row.action_id for row in decisions if row.decision == "veto"}
     first_allow_at: dict[str, float] = {}
+    first_allow_contract: dict[str, tuple[float, str, str]] = {}
     for row in decisions:
         if row.decision != "allow":
             continue
         ts = _timestamp(row.occurred_at)
         first_allow_at[row.action_id] = min(first_allow_at.get(row.action_id, ts), ts)
+        previous = first_allow_contract.get(row.action_id)
+        if previous is None or ts < previous[0]:
+            first_allow_contract[row.action_id] = (
+                ts,
+                str(row.action or "unknown"),
+                str(row.source or "unknown"),
+            )
 
     prohibited_hit_ids: set[str] = set()
     prohibited_hit_events = 0
@@ -372,7 +399,52 @@ def build_autonomy_decision_evidence(
         if row.posthoc_verdict == "prohibited_miss":
             miss_ids.add(row.action_id)
 
-    coverage_complete = bool(allow_ids) and allow_ids.issubset(conclusive_ids)
+    eligible_allow_ids = {
+        action_id
+        for action_id in allow_ids
+        if first_allow_at.get(action_id, float("inf")) <= maturity_cutoff.timestamp()
+    }
+    eligible_conclusive_ids = eligible_allow_ids & conclusive_ids
+    pending_ids = (allow_ids - eligible_allow_ids) - conclusive_ids
+    uncovered_ids = eligible_allow_ids - conclusive_ids
+    coverage_denominator_ids = eligible_allow_ids | (allow_ids & conclusive_ids)
+    coverage_complete = bool(coverage_denominator_ids) and not uncovered_ids
+    uncovered_contract_counts = Counter(
+        (
+            first_allow_contract.get(action_id, (0.0, "unknown", "unknown"))[1],
+            first_allow_contract.get(action_id, (0.0, "unknown", "unknown"))[2],
+        )
+        for action_id in uncovered_ids
+    )
+    uncovered_contracts = [
+        {
+            "action": action,
+            "source": source,
+            "count": count,
+        }
+        for (action, source), count in sorted(
+            uncovered_contract_counts.items(),
+            key=lambda item: (-item[1], item[0][0], item[0][1]),
+        )
+    ]
+    pending_contract_counts = Counter(
+        (
+            first_allow_contract.get(action_id, (0.0, "unknown", "unknown"))[1],
+            first_allow_contract.get(action_id, (0.0, "unknown", "unknown"))[2],
+        )
+        for action_id in pending_ids
+    )
+    pending_contracts = [
+        {
+            "action": action,
+            "source": source,
+            "count": count,
+        }
+        for (action, source), count in sorted(
+            pending_contract_counts.items(),
+            key=lambda item: (-item[1], item[0][0], item[0][1]),
+        )
+    ]
     if miss_ids:
         has_prohibited_miss: bool | None = True
         miss_status = "detected"
@@ -387,7 +459,11 @@ def build_autonomy_decision_evidence(
         unknown_reason = (
             "no_allow_decisions_to_observe"
             if not allow_ids
-            else "incomplete_posthoc_anomaly_coverage"
+            else (
+                "posthoc_evidence_within_maturity_window"
+                if not coverage_denominator_ids and pending_ids
+                else "incomplete_posthoc_anomaly_coverage"
+            )
         )
 
     total = len(action_ids)
@@ -412,8 +488,21 @@ def build_autonomy_decision_evidence(
         "prohibited_hit_count": len(prohibited_hit_ids),
         "prohibited_hit_event_count": prohibited_hit_events,
         "posthoc_conclusive_count": len(conclusive_ids),
+        "posthoc_eligible_allow_count": len(eligible_allow_ids),
+        "posthoc_eligible_conclusive_count": len(eligible_conclusive_ids),
+        "posthoc_pending_count": len(pending_ids),
+        "posthoc_pending_contracts": pending_contracts,
+        "posthoc_maturity_minutes": bounded_maturity_minutes,
+        "posthoc_uncovered_count": len(uncovered_ids),
+        "posthoc_uncovered_contracts": uncovered_contracts,
         "posthoc_coverage_rate": (
-            round((len(conclusive_ids) / len(allow_ids)) * 100, 2) if allow_ids else 0.0
+            round(
+                (len(coverage_denominator_ids & conclusive_ids) / len(coverage_denominator_ids))
+                * 100,
+                2,
+            )
+            if coverage_denominator_ids
+            else 0.0
         ),
         "prohibited_miss_count": len(miss_ids),
         "has_prohibited_miss": has_prohibited_miss,
@@ -421,8 +510,10 @@ def build_autonomy_decision_evidence(
         "prohibited_miss_unknown_reason": unknown_reason,
         "counting_rule": (
             "unique action_id in the window; veto_rate counts action_ids with a veto decision. "
-            "has_prohibited_miss is false only when every allowed action has conclusive, "
-            "post-execution anomaly evidence; missing evidence yields null, never false"
+            "Fresh allow actions without receipts are pending until the bounded posthoc maturity "
+            "window expires. has_prohibited_miss is false only when every mature allowed action "
+            "has conclusive post-execution anomaly evidence; overdue missing evidence yields null, "
+            "never false"
         ),
         "items": items,
         "item_count": len(items),

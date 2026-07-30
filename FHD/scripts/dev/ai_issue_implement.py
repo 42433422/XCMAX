@@ -138,7 +138,9 @@ def _fetch_issue_comments(repo: str, issue_number: int, token: str) -> list[dict
 
 def _has_aimplement_label(issue: dict[str, Any]) -> bool:
     labels = issue.get("labels") or []
-    return any(str(lb.get("name") or "").strip() == "ai-implement" for lb in labels if isinstance(lb, dict))
+    return any(
+        str(lb.get("name") or "").strip() == "ai-implement" for lb in labels if isinstance(lb, dict)
+    )
 
 
 def _issue_label_names(issue: dict[str, Any]) -> list[str]:
@@ -227,7 +229,9 @@ def _allowlist_preauthorized(
     return False, "未命中域预授权 allowlist"
 
 
-def _owner_confirmed(issue: dict[str, Any], comments: list[dict[str, Any]], repo: str) -> tuple[bool, str]:
+def _owner_confirmed(
+    issue: dict[str, Any], comments: list[dict[str, Any]], repo: str
+) -> tuple[bool, str]:
     """决策矩阵要求：owner 评论「确认」才执行。
 
     判定：
@@ -296,7 +300,8 @@ def _estimate_files(issue_title: str, issue_body: str) -> int:
 def _call_llm(prompt: str, api_key: str) -> dict[str, Any]:
     """调用 LLM 生成实现建议。使用与项目一致的 DeepSeek/兼容客户端。
 
-    失败时返回 ok=False；上层据此跳过自动实现，避免误操作。
+    严格 JSON 解析失败时只重试一次，并再次强调只返回 JSON。两次均失败
+    才返回 ok=False；上层据此跳过自动实现，避免把格式异常当成代码计划。
     """
     if not api_key:
         return {"ok": False, "error": "LLM_API_KEY 未配置"}
@@ -304,53 +309,80 @@ def _call_llm(prompt: str, api_key: str) -> dict[str, Any]:
     model = os.environ.get("XCAGI_LLM_MODEL", "deepseek-chat")
     import urllib.request
 
-    body = json.dumps(
-        {
-            "model": model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "你是 XCMAX 项目的代码实现助手。"
-                        "根据 issue 输出最小且可直接应用的文件变更清单，路径相对 FHD/："
-                        "返回 JSON 对象 {\"files\": [{\"path\": \"...\", \"action\": \"create\", "
-                        "\"content\": \"完整文件内容\", \"rationale\": \"...\"}, "
-                        "{\"path\": \"...\", \"action\": \"modify\", "
-                        "\"old_text\": \"文件中唯一存在的完整原文\", \"new_text\": \"替换后的完整文本\", "
-                        "\"rationale\": \"...\"}], "
-                        "\"estimated_files\": N, \"cannot_automate\": bool, \"reason\": \"...\"}。"
-                        "禁止只返回 content_summary；禁止生成超过 5 个文件；"
-                        "禁止触碰 _local_secrets/、payment_*.py、.env、secrets 或工作流。"
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
-            "temperature": 0.2,
-            "max_tokens": 2000,
-        }
-    ).encode("utf-8")
-    req = urllib.request.Request(
-        _chat_completions_url(base),
-        data=body,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
+    system_prompt = (
+        "你是 XCMAX 项目的代码实现助手。"
+        "根据 issue 输出最小且可直接应用的文件变更清单，路径相对 FHD/："
+        '返回 JSON 对象 {"files": [{"path": "...", "action": "create", '
+        '"content": "完整文件内容", "rationale": "..."}, '
+        '{"path": "...", "action": "modify", '
+        '"old_text": "文件中唯一存在的完整原文", "new_text": "替换后的完整文本", '
+        '"rationale": "..."}], '
+        '"estimated_files": N, "cannot_automate": bool, "reason": "..."}。'
+        "禁止只返回 content_summary；禁止生成超过 5 个文件；"
+        "禁止触碰 _local_secrets/、payment_*.py、.env、secrets 或工作流。"
     )
+    last_error = "未知错误"
+    for attempt in range(2):
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ]
+        if attempt:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "上一轮响应无法按严格 JSON 解析。请重新回答："
+                        "只输出一个使用双引号的合法 JSON 对象，不要 Markdown、注释、"
+                        "Python 字面量或任何 JSON 之外的文字。"
+                    ),
+                }
+            )
+        body = json.dumps(
+            {
+                "model": model,
+                "messages": messages,
+                "temperature": 0 if attempt else 0.2,
+                "max_tokens": 2000,
+            }
+        ).encode("utf-8")
+        req = urllib.request.Request(
+            _chat_completions_url(base),
+            data=body,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+            plan, parse_error = _parse_llm_plan(str(content or ""))
+            if plan is None:
+                last_error = parse_error
+                continue
+            plan["ok"] = True
+            return plan
+        except Exception as exc:  # noqa: BLE001
+            last_error = str(exc)
+    return {"ok": False, "error": f"LLM 调用失败（重试 1 次后）：{last_error}"}
+
+
+def _parse_llm_plan(content: str) -> tuple[dict[str, Any] | None, str]:
+    """Extract one strict JSON object while rejecting Python/JSON5 lookalikes."""
+
+    match = re.search(r"\{[\s\S]*\}", str(content or ""))
+    if not match:
+        return None, "LLM 响应未包含 JSON 对象"
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
-        # 容错：模型可能返回带 markdown 包裹的 JSON
-        m = re.search(r"\{[\s\S]*\}", content)
-        if not m:
-            return {"ok": False, "error": "LLM 响应未包含 JSON"}
-        plan = json.loads(m.group(0))
-        plan["ok"] = True
-        return plan
-    except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "error": f"LLM 调用失败：{exc}"}
+        plan = json.loads(match.group(0))
+    except json.JSONDecodeError as exc:
+        return None, f"LLM 响应 JSON 解析失败：{exc}"
+    if not isinstance(plan, dict):
+        return None, "LLM 响应 JSON 顶层必须是对象"
+    return plan, ""
 
 
 def _chat_completions_url(base_url: str) -> str:
@@ -373,9 +405,7 @@ def _chat_completions_url(base_url: str) -> str:
 
 
 def _git(*args: str, cwd: str | None = None, check: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        ["git", *args], cwd=cwd, check=check, capture_output=True, text=True
-    )
+    return subprocess.run(["git", *args], cwd=cwd, check=check, capture_output=True, text=True)
 
 
 def _create_branch(base: str, issue_number: int) -> str:
@@ -677,7 +707,13 @@ def run(args: argparse.Namespace) -> ImplementResult:
             sys.exit(6)
         _validate_written_files(base_dir, written)
         pr_url, pr_num = _commit_and_pr(
-            base_dir, branch, issue_number, result.issue_title, written, repo, args.token,
+            base_dir,
+            branch,
+            issue_number,
+            result.issue_title,
+            written,
+            repo,
+            args.token,
             auth_source=auth_source,
         )
         result.pr_url = pr_url

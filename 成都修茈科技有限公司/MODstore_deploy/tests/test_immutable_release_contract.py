@@ -209,28 +209,42 @@ def test_production_workflow_deploys_only_successful_tested_main_sha() -> None:
 
 
 def test_production_receipt_finalizer_uses_completed_source_workflow_and_signed_callback() -> None:
-    source = yaml.safe_load((ROOT / ".github/workflows/prod-deploy-receipt.yml").read_text())
-    published = yaml.safe_load(
-        (REPO_ROOT / ".github/workflows/modstore-prod-deploy-receipt.yml").read_text()
-    )
+    source_path = ROOT / ".github/workflows/prod-deploy-receipt.yml"
+    published_path = REPO_ROOT / ".github/workflows/modstore-prod-deploy-receipt.yml"
+    source = yaml.safe_load(source_path.read_text())
+    published = yaml.safe_load(published_path.read_text())
 
     for workflow in (source, published):
         trigger = workflow[True]
         assert trigger["workflow_run"]["workflows"] == ["Deploy MODstore Production"]
+        assert trigger["workflow_dispatch"]["inputs"]["source_deploy_run_id"]["required"] is True
+        assert "package_source_sha" in trigger["workflow_dispatch"]["inputs"]
         receipt = workflow["jobs"]["receipt"]
         assert "workflow_run.conclusion == 'success'" in receipt["if"]
+        assert "github.event_name == 'workflow_dispatch'" in receipt["if"]
         rendered = str(receipt)
         assert workflow["permissions"]["pull-requests"] == "read"
         assert "actions/download-artifact@v4" in rendered
+        assert "source deployment run id must be numeric" in rendered
+        assert '.name == "Deploy MODstore Production"' in rendered
+        assert ".head_sha == $merge_sha" in rendered
+        assert "package source SHA is not an ancestor of deployed SHA" in rendered
+        assert "steps.source.outputs.package_source_sha" in rendered
         assert "/commits/${merge_sha}/pulls" in rendered
         assert "attested_branch_head_sha" in rendered
         assert "MODSTORE_OPS_INGEST_TOKEN" in rendered
         assert "/api/ops/self-maintenance/deployment-receipt" in rendered
+        assert ".recorded == true or .idempotent == true" in rendered
         assert "/api/ops/self-maintenance/evolution-deployment-receipt" in rendered
         assert "evolution-packages.json" in rendered
         assert "catalog_data/files/" in rendered
         assert "workflow_status" in rendered
         assert "completed" in rendered
+    for workflow_path in (source_path, published_path):
+        workflow_text = workflow_path.read_text(encoding="utf-8")
+        assert '"-z"' in workflow_text
+        assert 'split(b"\\0")' in workflow_text
+        assert "os.fsdecode" in workflow_text
 
 
 def test_corp_site_deploy_uses_canonical_vhost_and_fails_closed_on_public_smoke() -> None:
@@ -249,3 +263,25 @@ def test_corp_site_deploy_uses_canonical_vhost_and_fails_closed_on_public_smoke(
     ):
         assert public_url in workflow
     assert "developer.html | head -8 | grep -i title || true" not in workflow
+
+
+def test_corp_site_deploy_publishes_and_verifies_world_will_ticker() -> None:
+    updater = (ROOT / "scripts/xcmax-site-auto-update.sh").read_text(encoding="utf-8")
+    workflow = (REPO_ROOT / ".github/workflows/corp-site-deploy.yml").read_text(encoding="utf-8")
+    homepage = (REPO_ROOT / "成都修茈科技有限公司/index.html").read_text(encoding="utf-8")
+    visualization = (REPO_ROOT / "成都修茈科技有限公司/visualization.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert '"$git_site"/world-will-ticker.js' in updater
+    assert '"$git_site"/world-will-ticker.css' in updater
+    assert "'成都修茈科技有限公司/world-will-ticker.js'" in workflow
+    assert "'成都修茈科技有限公司/world-will-ticker.css'" in workflow
+    assert '"${GIT_SITE}/world-will-ticker.js"' in workflow
+    assert '"${GIT_SITE}/world-will-ticker.css"' in workflow
+    assert "https://xiu-ci.com/world-will-ticker.js" in workflow
+    assert "https://xiu-ci.com/world-will-ticker.css" in workflow
+    assert "grep -F -q '/api/public/action-board' /tmp/xc-world-will-ticker.js" in workflow
+    for page in (homepage, visualization):
+        assert 'href="/world-will-ticker.css?v=20260729a"' in page
+        assert 'src="/world-will-ticker.js?v=20260729a"' in page

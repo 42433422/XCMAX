@@ -68,10 +68,11 @@ def register_cognition_handlers() -> dict[str, Any]:
             "evolution.search",
             "evolution.index",
             "evolution.export",
+            "evolution.reflect",
         ):
             processor.register_handler(event_type, handler.handle)
             registered.append(f"evolution:{event_type}")
-        logger.info("✅ EvolutionHandler 已注册到 ConsciousProcessor（5 种事件）")
+        logger.info("✅ EvolutionHandler 已注册到 ConsciousProcessor（6 种事件）")
     except RECOVERABLE_ERRORS as e:
         logger.warning("⚠️ EvolutionHandler 注册失败: %s", e)
 

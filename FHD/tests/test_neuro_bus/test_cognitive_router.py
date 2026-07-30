@@ -244,10 +244,11 @@ class TestCognitiveRouterSlaHit:
         assert CognitiveRouter.is_sla_hit(ProcessorType.SUBCONSCIOUS, 15.0) is False
 
     def test_conscious_sla_threshold(self):
-        """Conscious SLA 阈值 200ms。"""
+        """Conscious 软 SLA：先验 200ms，默认 slack=1.25 → 上限 250ms。"""
         assert CognitiveRouter.is_sla_hit(ProcessorType.CONSCIOUS, 100.0) is True
         assert CognitiveRouter.is_sla_hit(ProcessorType.CONSCIOUS, 200.0) is True
-        assert CognitiveRouter.is_sla_hit(ProcessorType.CONSCIOUS, 250.0) is False
+        assert CognitiveRouter.is_sla_hit(ProcessorType.CONSCIOUS, 250.0) is True
+        assert CognitiveRouter.is_sla_hit(ProcessorType.CONSCIOUS, 251.0) is False
 
 
 class TestCognitiveRouterIsEnabled:

@@ -55,22 +55,38 @@ def _git_is_ancestor(ancestor: str, descendant: str) -> bool:
     repo_root = Path(
         os.environ.get("MODSTORE_SELF_MAINTENANCE_PROJECT_ROOT") or "/root/XCMAX"
     ).expanduser()
-    try:
-        result = subprocess.run(
-            [
-                "git",
-                "-C",
-                str(repo_root),
-                "merge-base",
-                "--is-ancestor",
-                ancestor,
-                descendant,
-            ],
+    commits = (str(ancestor or "").strip().lower(), str(descendant or "").strip().lower())
+    if any(
+        len(commit) not in {40, 64}
+        or any(character not in "0123456789abcdef" for character in commit)
+        for commit in commits
+    ):
+        return False
+
+    def _run_git(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", "-C", str(repo_root), *args],
             capture_output=True,
             text=True,
             timeout=20,
             check=False,
         )
+
+    def _commit_available(commit: str) -> bool:
+        return _run_git("cat-file", "-e", f"{commit}^{{commit}}").returncode == 0
+
+    try:
+        # The production checkout normally fetches only main. A reviewed branch
+        # head may therefore be absent after squash/rebase even though the signed
+        # GitHub receipt carries its exact SHA. Fetch only missing immutable
+        # commit objects, then perform the same local ancestry check.
+        for commit in commits:
+            if _commit_available(commit):
+                continue
+            fetched = _run_git("fetch", "--quiet", "--no-tags", "origin", commit)
+            if fetched.returncode != 0 or not _commit_available(commit):
+                return False
+        result = _run_git("merge-base", "--is-ancestor", *commits)
     except (OSError, subprocess.TimeoutExpired):
         return False
     return result.returncode == 0

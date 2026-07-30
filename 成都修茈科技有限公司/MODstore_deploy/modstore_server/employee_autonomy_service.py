@@ -21,6 +21,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from sqlalchemy import and_, func, or_
 
+from modstore_server import employee_pack_proposal as _employee_pack_proposal
 from modstore_server.llm_failure_classifier import FAILURE_KIND_QUOTA, FAILURE_KIND_TRANSIENT
 from modstore_server.models import (
     EmployeeChangeRequest,
@@ -1381,117 +1382,12 @@ __all__ = [
 ]
 
 
-# --------------------------------------------------------------------------- #
-# LLM 提议器：把演化信号转成结构化 employee_pack 提议
-# --------------------------------------------------------------------------- #
-
-VALID_DEPARTMENTS = {"engineering", "quality", "ops", "growth", "support", "security"}
-MAX_FILES_PER_PROPOSAL = 5
-MAX_TOKENS_PER_PROPOSAL = 100000
-
-
-class ProposalValidationError(ValueError):
-    """LLM 提议未通过 schema 校验。"""
-
-
-def _call_llm(prompt: str) -> Dict[str, Any]:
-    """调用 LLM，返回 JSON dict。
-
-    实际实现通过 platform_llm_scope 路由，这里只做接口。
-    生产环境由 secrets.LLM_API_KEY 鉴权。
-    """
-    try:
-        from modstore_server.platform_llm_scope import platform_llm_scoped
-
-        response_text = platform_llm_scoped(prompt, scope="evolution_proposal")
-        if isinstance(response_text, dict):
-            return response_text
-        return json.loads(response_text)
-    except Exception as e:
-        logger.warning("LLM call failed: %s", e)
-        return {}
-
-
-def validate_proposal(proposal: Dict[str, Any]) -> None:
-    """校验 LLM 提议是否符合 schema。失败抛 ProposalValidationError。"""
-    if not isinstance(proposal, dict):
-        raise ProposalValidationError("proposal must be dict")
-    if "proposal_id" not in proposal:
-        raise ProposalValidationError("missing proposal_id")
-    if proposal.get("department") not in VALID_DEPARTMENTS:
-        raise ProposalValidationError(
-            f"department must be one of {VALID_DEPARTMENTS}, got {proposal.get('department')}"
-        )
-    pack = proposal.get("employee_pack")
-    if not isinstance(pack, dict):
-        raise ProposalValidationError("missing employee_pack dict")
-    for key in ("name", "prompt_template", "skills", "tools", "acceptance_criteria"):
-        if key not in pack:
-            raise ProposalValidationError(f"employee_pack missing field: {key}")
-    if proposal.get("estimated_files", 999) > MAX_FILES_PER_PROPOSAL:
-        raise ProposalValidationError(
-            f"estimated_files {proposal.get('estimated_files')} exceeds {MAX_FILES_PER_PROPOSAL}"
-        )
-    if proposal.get("estimated_tokens", 999999) > MAX_TOKENS_PER_PROPOSAL:
-        raise ProposalValidationError(
-            f"estimated_tokens {proposal.get('estimated_tokens')} exceeds {MAX_TOKENS_PER_PROPOSAL}"
-        )
+# Keep the historical service API while the workflow imports the lightweight
+# module directly (this service also imports database-backed employee models).
+ProposalValidationError = _employee_pack_proposal.ProposalValidationError
+validate_proposal = _employee_pack_proposal.validate_proposal
+_call_llm = _employee_pack_proposal._call_llm
 
 
 def propose_employee_pack(signals: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """根据聚合信号生成 employee_pack 提议。
-
-    输入：aggregate_signals() 的输出。
-    输出：通过 validate_proposal 的提议 dict；无 signal 时返回 None。
-    """
-    if int(signals.get("signals_to_propose") or 0) == 0:
-        return None
-
-    # 找最强信号源
-    sources = ["legacy_usage", "intent_benchmark", "slo_metrics"]
-    strongest = max(sources, key=lambda s: signals.get(s, {}).get("signal_score") or 0)
-    score = signals.get(strongest, {}).get("signal_score") or 0
-    if score <= 0:
-        return None
-
-    prompt = _build_proposal_prompt(strongest, signals)
-    raw = _call_llm(prompt)
-    if not raw:
-        return None
-    raw.setdefault("triggered_by", strongest)
-    raw.setdefault("signal_score", score)
-    validate_proposal(raw)
-    return raw
-
-
-def _build_proposal_prompt(source: str, signals: Dict[str, Any]) -> str:
-    """构造给 LLM 的 prompt。"""
-    source_data = signals.get(source, {})
-    return f"""You are designing a new AI employee pack for XCMAX MODstore.
-
-Gap signal source: {source}
-Signal score: {source_data.get('signal_score', 0)}
-Source report: {json.dumps(source_data.get('report', {}), ensure_ascii=False)}
-
-Design a new AI employee pack that addresses this gap. Output JSON only:
-{{
-  "proposal_id": "<uuid>",
-  "department": "engineering|quality|ops|growth|support|security",
-  "employee_pack": {{
-    "name": "<pack-name>",
-    "responsibility": "<one sentence>",
-    "prompt_template": "<full prompt>",
-    "skills": ["<skill-1>", "<skill-2>"],
-    "tools": ["read_file", "write_pr_comment"],
-    "acceptance_criteria": ["<criterion-1>"]
-  }},
-  "estimated_files": <int <= 5>,
-  "estimated_tokens": <int <= 100000>
-}}
-
-Constraints:
-- estimated_files <= 5 (HARD LIMIT)
-- estimated_tokens <= 100000 (BUDGET LIMIT)
-- department must be one of the six lines (SIX_LINE_DEPARTMENTS)
-- acceptance_criteria must be machine-verifiable
-"""
+    return _employee_pack_proposal.propose_employee_pack(signals, llm_call=_call_llm)

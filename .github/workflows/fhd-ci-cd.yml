@@ -605,6 +605,33 @@ jobs:
             echo "::warning::CVM push failed with status ${status}; keeping main CI green. Use workflow_dispatch with push_to_cvm=true for a strict retry."
           fi
 
+  # Bot-token workflow_dispatch does not reliably emit a downstream workflow_run
+  # event. Dispatch Evolution with the repository PAT only after the exact CVM
+  # release and DR receipt have succeeded.
+  dispatch-evolution-after-cvm:
+    needs: [cvm-push-release]
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.push_to_cvm == true &&
+      needs.cvm-push-release.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch Evolution Orchestrator after exact production receipt
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${GH_TOKEN:-}"
+          gh workflow run fhd-evolution-orchestrator.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            -f force_run=false
+
   # Docker Build & Push
   docker-build:
     needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness]

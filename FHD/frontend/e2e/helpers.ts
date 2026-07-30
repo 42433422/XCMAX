@@ -80,6 +80,23 @@ export async function installE2eShellMocks(page: Page): Promise<void> {
 /** @deprecated 使用 installE2eShellMocks */
 export const installPersonalSkuMocks = installE2eShellMocks;
 
+const LOGIN_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000] as const;
+
+function isTransientLoginError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes('transient failure') ||
+    message.includes('Timeout') ||
+    message.includes('timed out') ||
+    message.includes('ECONNRESET') ||
+    message.includes('ECONNREFUSED')
+  );
+}
+
+async function waitBeforeLoginRetry(attempt: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, LOGIN_RETRY_DELAYS_MS[attempt]));
+}
+
 /** 与 pytest ``_csrf_headers`` 一致：先打 health 拿 csrf_token cookie。 */
 export async function csrfHeaders(
   request: APIRequestContext,
@@ -102,7 +119,7 @@ export async function csrfHeaders(
 
 async function createLoginCookies(page: Page, base: string): Promise<BrowserCookie[]> {
   let lastTransientError: unknown;
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
+  for (let attempt = 0; attempt <= LOGIN_RETRY_DELAYS_MS.length; attempt += 1) {
     try {
       const headers = await csrfHeaders(page.request, {}, base);
       const resp = await page.request.post(`${base}/api/auth/login`, {
@@ -125,15 +142,9 @@ async function createLoginCookies(page: Page, base: string): Promise<BrowserCook
       }
       return (await page.request.storageState()).cookies;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const isTransient =
-        message.includes('transient failure') ||
-        message.includes('Timeout') ||
-        message.includes('timed out') ||
-        message.includes('ECONNRESET') ||
-        message.includes('ECONNREFUSED');
-      if (!isTransient || attempt === 2) throw error;
+      if (!isTransientLoginError(error) || attempt === LOGIN_RETRY_DELAYS_MS.length) throw error;
       lastTransientError = error;
+      await waitBeforeLoginRetry(attempt);
     }
   }
 
@@ -141,18 +152,35 @@ async function createLoginCookies(page: Page, base: string): Promise<BrowserCook
 }
 
 async function assertCurrentBrowserSession(page: Page, base: string): Promise<void> {
-  const meResp = await page.request.get(`${base}/api/auth/me`, { timeout: 20_000 });
-  const meBody = await meResp.json().catch(() => ({}));
-  if (meResp.status() >= 500) {
-    throw new Error(
-      `E2E auth verification transient failure: status=${meResp.status()} body=${JSON.stringify(meBody)}`
-    );
+  let lastTransientError: unknown;
+  for (let attempt = 0; attempt <= LOGIN_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      const meResp = await page.request.get(`${base}/api/auth/me`, { timeout: 20_000 });
+      const meBody = await meResp.json().catch(() => ({}));
+      if (meResp.status() >= 500) {
+        throw new Error(
+          `E2E auth verification transient failure: status=${meResp.status()} body=${JSON.stringify(meBody)}`
+        );
+      }
+      if (meBody?.success !== true || !meBody?.data?.user) {
+        throw new InvalidE2ESessionError(
+          `E2E auth verification failed: status=${meResp.status()} body=${JSON.stringify(meBody)}`
+        );
+      }
+      return;
+    } catch (error) {
+      if (
+        error instanceof InvalidE2ESessionError ||
+        !isTransientLoginError(error) ||
+        attempt === LOGIN_RETRY_DELAYS_MS.length
+      ) {
+        throw error;
+      }
+      lastTransientError = error;
+      await waitBeforeLoginRetry(attempt);
+    }
   }
-  if (meBody?.success !== true || !meBody?.data?.user) {
-    throw new InvalidE2ESessionError(
-      `E2E auth verification failed: status=${meResp.status()} body=${JSON.stringify(meBody)}`
-    );
-  }
+  throw lastTransientError;
 }
 
 export async function loginBrowserSession(page: Page, apiBase = ''): Promise<void> {

@@ -960,8 +960,8 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
     attempts: list = []
     excluded: set[str] = set(_excluded_tools(req))
     result = _post_para_api_once(req)
-    max_attempts = _resolve_max_attempts(req)
-    for _ in range(max_attempts):
+    fallback_budget = max(0, len(_tool_candidates(req)) - 1)
+    for _ in range(fallback_budget):
         if bool(result.get("ok")):
             return _attach_tool_fallback_meta(result, attempts=attempts)
         if not _tool_fallback_allowed(req):
