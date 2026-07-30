@@ -111,9 +111,9 @@ class AIServiceNeuroDomain(NeuroDomain):
 _ai_domain: AIServiceNeuroDomain | None = None
 
 
-def get_ai_service_domain() -> AIServiceNeuroDomain:
+def get_ai_service_domain(bus=None) -> AIServiceNeuroDomain:
     global _ai_domain
     if _ai_domain is None:
-        _ai_domain = AIServiceNeuroDomain()
+        _ai_domain = AIServiceNeuroDomain(bus)
         get_domain_registry().register(_ai_domain)
     return _ai_domain
