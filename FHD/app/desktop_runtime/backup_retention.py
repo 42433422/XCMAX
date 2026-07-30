@@ -19,9 +19,7 @@ DEFAULT_LOCAL_BACKUP_KEEP = 2
 DEFAULT_DAILY_RETENTION_DAYS = 7
 DEFAULT_WEEKLY_RETENTION_DAYS = 28
 WEEKLY_MARKER = "weekly"
-AUTOMATIC_BACKUP_RE = re.compile(
-    r"^xcagi-(?P<version>.+?)(?:-weekly)?-(?P<stamp>\d{14})\.db$"
-)
+AUTOMATIC_BACKUP_RE = re.compile(r"^xcagi-(?P<version>.+?)(?:-weekly)?-(?P<stamp>\d{14})\.db$")
 
 
 def configured_local_backup_keep() -> int:

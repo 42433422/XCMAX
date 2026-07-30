@@ -273,10 +273,7 @@ def test_apply_caps_xcagi_automatic_backups_and_preserves_manual_names(
 def test_xcagi_cleanup_fails_closed_during_pending_rollback(tmp_path: Path) -> None:
     env, _, _, _ = _runtime(tmp_path)
     backups = Path(env["XCAGI_BACKUP_DIR"])
-    automatic = [
-        backups / f"xcagi-1.0.0-2026070{day}000000.db"
-        for day in range(1, 5)
-    ]
+    automatic = [backups / f"xcagi-1.0.0-2026070{day}000000.db" for day in range(1, 5)]
     for path in automatic:
         path.write_bytes(b"backup")
     (Path(env["XCAGI_USER_DATA_DIR"]) / "rollback-marker.json").write_text(

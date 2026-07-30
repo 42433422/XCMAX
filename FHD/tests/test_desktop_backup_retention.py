@@ -79,9 +79,7 @@ def test_backup_database_prunes_immediately_and_protects_new_backup(
     dirs = ensure_desktop_dirs(tmp_path)
     _database(dirs["data"] / "xcagi.db")
 
-    with patch(
-        "app.desktop_runtime.migrate.cleanup_local_backups"
-    ) as cleanup:
+    with patch("app.desktop_runtime.migrate.cleanup_local_backups") as cleanup:
         result = backup_database(tmp_path, version="1.0.0")
 
     assert result is not None
