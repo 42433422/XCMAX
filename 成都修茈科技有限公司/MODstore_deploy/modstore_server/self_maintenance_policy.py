@@ -103,6 +103,20 @@ def parse_merge_review_diff_char_count(detail: str) -> Optional[int]:
 _RETORT_SCOPE_REASON = "retort_scope_too_large"
 
 
+def _reason_requires_executable_code_remediation(reason: str) -> bool:
+    """True when automated_remediation_resume_plan routes the hold to a code step."""
+
+    from modstore_server.self_maintenance_remediation_lineage import (
+        automated_remediation_resume_plan,
+    )
+
+    plan = automated_remediation_resume_plan(str(reason or "").strip())
+    if plan is None:
+        return False
+    steps, _continue_on_branch = plan
+    return steps == ["code"]
+
+
 def memory_has_diff_too_large_remediation(memory: Optional[Dict[str, Any]]) -> bool:
     open_items = memory.get("open_items") if isinstance(memory, dict) else None
     if not isinstance(open_items, list):
@@ -324,6 +338,18 @@ def loop_memory_requires_executable_change(
                     "reason": (
                         "retort scope remediation requires focused modstore_server "
                         "production change from the clean base"
+                    ),
+                }
+            if item.get(
+                "kind"
+            ) == "automated_remediation" and _reason_requires_executable_code_remediation(
+                str(item.get("reason") or "")
+            ):
+                return {
+                    "required": True,
+                    "reason": (
+                        "structured review/QA hold requires focused modstore_server "
+                        "production change"
                     ),
                 }
             text = json.dumps(item, ensure_ascii=False).lower()
