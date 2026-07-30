@@ -55,6 +55,8 @@ def _register_mods_endpoints(router) -> None:
                     "success": True,
                     "data": {
                         "discovered_mod_ids": [],
+                        "public_mod_ids": [],
+                        "internal_component_ids": [],
                         "primary_mod_id": None,
                         "primary_mod_count": 0,
                         "mods_loaded": 0,
@@ -82,6 +84,18 @@ def _register_mods_endpoints(router) -> None:
 
             loaded_mods = mm.list_loaded_mods()
             mods_loaded = len(loaded_mods)
+            public_lister = getattr(mm, "list_public_mods", None)
+            try:
+                public_rows = public_lister() if callable(public_lister) else mm.list_all_mods()
+            except RECOVERABLE_ERRORS:
+                public_rows = []
+            if not isinstance(public_rows, list):
+                public_rows = []
+            public_mod_ids = [str(row.get("id") or "").strip() for row in public_rows]
+            public_mod_ids = [mid for mid in public_mod_ids if mid]
+            internal_component_ids = [
+                mid for mid in installed_on_disk if mid not in set(public_mod_ids)
+            ]
 
             primary_mods = [m for m in scanned if m.primary and m.id]
             primary_mod_id = primary_mods[0].id if len(primary_mods) == 1 else None
@@ -113,6 +127,8 @@ def _register_mods_endpoints(router) -> None:
                     "mods_search_roots": mm.all_mods_roots(),
                     "discovered_mod_ids": discovered_mod_ids,
                     "installed_mod_ids": installed_on_disk,
+                    "public_mod_ids": public_mod_ids,
+                    "internal_component_ids": internal_component_ids,
                     "primary_mod_id": primary_mod_id,
                     "primary_mod_count": primary_mod_count,
                     "mods_loaded": mods_loaded,
@@ -163,7 +179,8 @@ def _register_mods_endpoints(router) -> None:
                 return Response(status_code=304, headers={"ETag": f'"{etag}"'})
             # 侧栏菜单/图标需要实时反映 manifest 变更，默认也走磁盘扫描。
             # 保留 ?all=1 兼容旧调用方；当前两者行为一致。
-            mods = mm.list_all_mods()
+            public_lister = getattr(mm, "list_public_mods", None)
+            mods = public_lister() if callable(public_lister) else mm.list_all_mods()
             body = {"success": True, "data": mods}
             return JSONResponse(
                 content=body,

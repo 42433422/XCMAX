@@ -42,10 +42,19 @@
 
 ---
 
+## 1.0-A 首样板（当前）
+
+| 项 | 口径 |
+|----|------|
+| **首样板行业** | **通用**（`industry_id=通用`，L2 种子 `xcagi-planner-bridge`） |
+| **验收清单** | [customer/ACCEPTANCE_GENERIC_1.0-A.md](customer/ACCEPTANCE_GENERIC_1.0-A.md) |
+| **完成线** | L1 九件套 bridge + `deliverable: true` + 对话 / capabilities / neuro-bus 三动作 |
+| **非首样板** | 涂料、考勤等垂直包另开清单，不占用本战役对外承诺 |
+
 ## 客户标准路径
 
 1. 安装 XCAGI（generic 宿主）
-2. 首次打开 → **首次设置向导**（`/onboarding`）：认识宿主 → 宿主包就绪 → 行业定型（可跳过）
+2. 首次打开 → **首次设置向导**（`/onboarding`）：认识宿主 → 宿主包就绪 → **行业定型选「通用」**（可跳过，首样板验收须选通用）
 3. 宿主包未齐时：**一键装齐通用包**（或安装包已种子 Mod）
 4. 引导 **补基础线**：`POST /api/mod-store/install-industry-seed` 从 `industry-seeds/` 安装所选行业中性 Mod（定制 Mod 仍 entitlement + Catalog）
 5. 日常使用：智能对话 + Mod 菜单；数据在客户本机 `userData`

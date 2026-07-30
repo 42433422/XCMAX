@@ -530,3 +530,45 @@ jobs:
 - `成都修茈科技有限公司/MODstore_deploy/tests/test_audit_evolution.py`
 - `成都修茈科技有限公司/MODstore_deploy/tests/test_evolution_e2e.py`
 - `成都修茈科技有限公司/MODstore_deploy/tests/test_evolution_acceptance.py`
+
+---
+
+## 附录 B：Metric-Search Bridge（WeCo/AIDE 思想吸收）
+
+**日期**：2026-07-29  
+**状态**：P0/P1 已落地（引擎 + ledger 桥）；实战 heldout 仍为 partial
+
+### B.1 目标
+
+把「提案 → 跑可解析 eval → 留优 → 树扩展」挂进演化轨，而不改运维自治（CVM watcher / self_maintenance_loop_runner）。
+
+### B.2 Retort 引擎
+
+- 模块：`packages/retort_engine/retort_engine/metric_search.py`
+- CLI：`retort metric-search --project ... --eval-command ... --metric ... --max-nodes 8 --json`
+- 策略：best-first，`beam=2`，硬预算 `max_nodes`
+- 铁律：metric 必须从 eval stdout/stderr 用 regex 解析数字；解析失败 = trial failed
+
+### B.3 Ledger 编排
+
+- `propose-pack`：`validate_eval_spec`；缺 eval 写 `gate_failed`，不开 issue
+- `implement-pack`：`EVOLUTION_IMPLEMENT_MODE=retort-metric-search` 调 Retort；事件 `metric_search_started` / `metric_search_finished`
+- `collect-signals`：最近 metric-search `best_score` 低于 `RETORT_METRIC_THRESHOLD`（默认 0.8）时写 `signal_source=retort_metric`
+
+### B.4 Eval 契约形状
+
+```json
+{
+  "metric_name": "recall",
+  "eval_command": "python3 -c \"print('recall: 0.75')\"",
+  "higher_is_better": true
+}
+```
+
+可放在 `proposal.eval_spec`、`employee_pack.eval`，或 `acceptance_criteria` 中的 dict 项。
+
+### B.5 非目标
+
+- 不触发 restart/freeze 等运维 Action
+- V1 无 mid-run steerable UI
+- 单 trial 仍遵守 ≤5 文件 / ≤100K tokens 足迹

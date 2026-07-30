@@ -11,6 +11,7 @@ from typing import Any
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 ERP_DOMAIN_BRIDGE_MOD_ID = "xcagi-erp-domain-bridge"
+UNIFIED_ERP_MOD_ID = "xcagi-erp"
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +94,12 @@ def is_erp_domain_mod_installed() -> bool:
         if is_mods_disabled():
             return False
         for row in get_mod_manager().list_all_mods():
-            if str(row.get("id") or "").strip() == ERP_DOMAIN_BRIDGE_MOD_ID:
+            row_id = str(row.get("id") or "").strip()
+            legacy_ids = row.get("legacy_ids") if isinstance(row.get("legacy_ids"), list) else []
+            if (
+                row_id in {ERP_DOMAIN_BRIDGE_MOD_ID, UNIFIED_ERP_MOD_ID}
+                or ERP_DOMAIN_BRIDGE_MOD_ID in legacy_ids
+            ):
                 return True
     except RECOVERABLE_ERRORS:
         pass
@@ -165,7 +171,8 @@ def list_erp_domains_registry() -> dict[str, Any]:
     handlers_on = bool(handler_domains) and via_mod
     return {
         "success": True,
-        "mod_id": ERP_DOMAIN_BRIDGE_MOD_ID,
+        "mod_id": UNIFIED_ERP_MOD_ID,
+        "legacy_mod_id": ERP_DOMAIN_BRIDGE_MOD_ID,
         "domain_count": len(domains),
         "domains": domains,
         "execution_via_mod_facade": via_mod,
@@ -198,6 +205,7 @@ def resolve_host_api_path(facade_path: str) -> str:
 __all__ = [
     "DOMAIN_SPECS",
     "ERP_DOMAIN_BRIDGE_MOD_ID",
+    "UNIFIED_ERP_MOD_ID",
     "is_erp_domain_mod_installed",
     "is_erp_domain_via_mod_enabled",
     "list_erp_domains_registry",

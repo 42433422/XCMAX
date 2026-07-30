@@ -17,12 +17,12 @@
           <span class="app-launcher-name">AIOPEN 开放智控</span>
           <span class="app-launcher-desc">企业级 AI Agent 接入平台，基于 MCP/API 标准协议，提供远程 UI 操控与白名单业务接口开放</span>
         </button>
-        <button class="app-launcher app-launcher--production" type="button" @click="goShellPage('brain')">
+        <button class="app-launcher app-launcher--production" type="button" @click="goShellPage('brain', { focus: 'private-mod' })">
           <span class="app-launcher-icon app-launcher-icon--production" aria-hidden="true">
             <ProductionEmployeeLauncherIcon />
           </span>
           <span class="app-launcher-name">生产员工</span>
-          <span class="app-launcher-desc">部署与调度生产 AI 员工，编排任务流、监控工位运行与自动化交付</span>
+          <span class="app-launcher-desc">客户私有 Mod、业务模块与 AI 员工的生产、测试、验收和交付</span>
         </button>
         <button
           class="app-launcher app-launcher--modstore"
@@ -62,13 +62,13 @@ const AIOpenPanel = defineAsyncComponent(() => import('@/components/aiopen/AIOpe
 const inAnalyzer = ref(false)
 const activeApp = ref('kitten')
 
-const goShellPage = (name) => {
+const goShellPage = (name, query = {}) => {
   const modPath = resolvePlannerPageRedirectForRouteName(name)
   if (modPath) {
-    router.push(modPath)
+    router.push({ path: modPath, query })
     return
   }
-  router.push({ name })
+  router.push({ name, query })
 }
 
 const enterAnalyzer = (appKey = 'kitten') => {

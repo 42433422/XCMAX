@@ -347,6 +347,12 @@
           </div>
         </section>
 
+        <AdminPrivateDeliveryPanel :user-id="selectedUserId" />
+              </div>
+            </article>
+          </div>
+        </section>
+
         <div class="admin-mod-panel">
           <h4>已绑定客户 Mod</h4>
           <div v-if="userModIds.length" class="admin-mod-chips">
@@ -641,49 +647,6 @@ function modInstallText(modId: string) {
   if (!row) return '未安装';
   const version = String(row.version || '').trim();
   return version ? `已安装 v${version}` : '已安装';
-}
-
-function normalizeLocalCatalogRows(raw: Record<string, unknown>): LocalModRow[] {
-  const data = (raw?.data && typeof raw.data === 'object' ? raw.data : raw) as Record<string, unknown>;
-  const installed = Array.isArray(data.installed) ? data.installed : [];
-  const available = Array.isArray(data.available) ? data.available : [];
-  const byId = new Map<string, LocalModRow>();
-  for (const row of [...available, ...installed]) {
-    if (!row || typeof row !== 'object') continue;
-    const r = row as LocalModRow;
-    const id = String(r.id || '').trim();
-    if (!id) continue;
-    const prev = byId.get(id) || {};
-    const installedFlag = Boolean(prev.is_installed || r.is_installed || installed.includes(row));
-    byId.set(id, { ...prev, ...r, id, is_installed: installedFlag });
-  }
-  return Array.from(byId.values()).filter((row) => row.is_installed);
-}
-
-async function refreshLocalStatus() {
-  localStatusLoading.value = true;
-  localStatusError.value = '';
-  try {
-    const catalogRes = await apiFetch('/api/mod-store/catalog');
-    if (!catalogRes.ok) throw new Error(`本地 Mod 目录 HTTP ${catalogRes.status}`);
-    installedMods.value = normalizeLocalCatalogRows(await catalogRes.json());
-  } catch (e) {
-    installedMods.value = [];
-    localStatusError.value = `本地安装状态读取失败：${e instanceof Error ? e.message : String(e)}`;
-  }
-  try {
-    const syncRes = await apiFetch('/api/xcmax/sync/status');
-    if (!syncRes.ok) throw new Error(`同步状态 HTTP ${syncRes.status}`);
-    const body = await syncRes.json();
-    const data = body?.data && typeof body.data === 'object' ? body.data : body;
-    syncStatus.value = data as Record<string, unknown>;
-  } catch (e) {
-    syncStatus.value = null;
-    const msg = `同步状态读取失败：${e instanceof Error ? e.message : String(e)}`;
-    localStatusError.value = localStatusError.value ? `${localStatusError.value}；${msg}` : msg;
-  } finally {
-    localStatusLoading.value = false;
-  }
 }
 
 async function loadUsers() {
@@ -1533,6 +1496,7 @@ onMounted(async () => {
   margin: 0;
   font-size: 12px;
 }
+
 
 .admin-mod-chips {
   display: flex;

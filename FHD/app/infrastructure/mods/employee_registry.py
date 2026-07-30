@@ -51,6 +51,9 @@ class EmployeeRegistry:
             if normalize_artifact(data) != ARTIFACT_EMPLOYEE_PACK:
                 continue
             emp = data.get("employee") if isinstance(data.get("employee"), dict) else {}
+            from .mod_levels import descriptor_for_manifest
+
+            layer = descriptor_for_manifest(data)
             out.append(
                 {
                     "pack_id": name,
@@ -61,6 +64,16 @@ class EmployeeRegistry:
                     "description": data.get("description", ""),
                     "employee": emp,
                     "xcagi_host_profile": data.get("xcagi_host_profile"),
+                    "artifact": ARTIFACT_EMPLOYEE_PACK,
+                    "mod_level": layer.level,
+                    "mod_kind": layer.kind,
+                    "parent_mod_id": layer.parent_mod_id,
+                    "parent_mod_ids": list(layer.parent_mod_ids),
+                    "lifecycle": layer.lifecycle,
+                    "employee_mode": layer.employee_mode,
+                    "market_installable": layer.market_installable,
+                    "fixed_employees": list(layer.fixed_employees),
+                    "employee_slots": list(layer.employee_slots),
                 }
             )
         return out
@@ -99,6 +112,14 @@ class EmployeeRegistry:
                     "description": str(p.get("description") or ""),
                     "primary": False,
                     "type": "employee_pack",
+                    "artifact": "employee_pack",
+                    "mod_level": int(p.get("mod_level") or 4),
+                    "mod_kind": str(p.get("mod_kind") or "employee_pack"),
+                    "parent_mod_id": str(p.get("parent_mod_id") or ""),
+                    "parent_mod_ids": list(p.get("parent_mod_ids") or []),
+                    "lifecycle": str(p.get("lifecycle") or "market"),
+                    "employee_mode": str(p.get("employee_mode") or "pluggable"),
+                    "market_installable": bool(p.get("market_installable", True)),
                     "menu": [],
                     "workflow_employees": wf,
                     "comms_exports": [],

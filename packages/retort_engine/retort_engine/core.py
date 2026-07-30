@@ -509,6 +509,37 @@ class RetortService:
     def absorb(self, payload: dict[str, Any]) -> dict[str, Any]:
         return absorb(payload)
 
+    def metric_search(self, payload: dict[str, Any]) -> dict[str, Any]:
+        from retort_engine.metric_search import (
+            EvalSpec,
+            MetricSearchConfig,
+            run_metric_search,
+        )
+
+        eval_raw = payload.get("eval_spec")
+        if isinstance(eval_raw, dict):
+            eval_spec = EvalSpec.from_dict(eval_raw)
+        else:
+            eval_spec = EvalSpec(
+                metric_name=str(payload.get("metric") or payload.get("metric_name") or ""),
+                eval_command=str(payload.get("eval_command") or ""),
+                higher_is_better=bool(payload.get("higher_is_better", True)),
+                parse_regex=str(payload.get("parse_regex") or ""),
+            )
+        return run_metric_search(
+            MetricSearchConfig(
+                project=str(payload.get("project") or payload.get("project_path") or "."),
+                eval_spec=eval_spec,
+                max_nodes=int(payload.get("max_nodes") or 8),
+                beam=int(payload.get("beam") or 2),
+                wall_time_limit_sec=float(payload.get("wall_time_limit_sec") or 300.0),
+                eval_timeout_sec=float(payload.get("eval_timeout_sec") or 120.0),
+                run_id=str(payload.get("run_id") or ""),
+                output_dir=payload.get("output_dir") or None,
+                objective=str(payload.get("objective") or ""),
+            )
+        )
+
     def self_evolve(self, payload: dict[str, Any]) -> dict[str, Any]:
         project = str(payload.get("project") or ".")
         project_path = Path(project).expanduser().resolve()

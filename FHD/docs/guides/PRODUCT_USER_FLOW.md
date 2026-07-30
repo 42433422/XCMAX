@@ -5,6 +5,8 @@
 
 > 三端协同、手机绑定、AI 员工通讯录、超级员工 Codex、流程可视化的产品级验收，见 [PRODUCT_POLISH_CHECKLIST.md](./PRODUCT_POLISH_CHECKLIST.md)。
 
+> **1.0-A 首样板**：行业选 **通用**（干净宿主：对话 + 智能生态）。客户勾选清单见 [customer/ACCEPTANCE_GENERIC_1.0-A.md](../customer/ACCEPTANCE_GENERIC_1.0-A.md)。涂料 / 考勤等垂直样板另开，不挡首样板签字。
+
 ---
 
 ## 一、流程总览（5 个阶段）
