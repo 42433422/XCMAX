@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 import subprocess
 import time
 from pathlib import Path
@@ -18,7 +19,10 @@ def _runtime(tmp_path: Path) -> tuple[dict[str, str], Path, Path, Path]:
     workspace_root = tmp_path / "workspaces"
     cleanup_program = api_root / "scripts" / "cleanup-expired-info.mjs"
     fake_node = tmp_path / "fake-node"
+    fake_bin = tmp_path / "fake-bin"
+    fake_lsof = fake_bin / "lsof"
     marker = tmp_path / "node-args"
+    database = api_root / "api" / "data" / "devfleet.db"
 
     archive_dir.mkdir(parents=True)
     log_dir.mkdir(parents=True)
@@ -30,14 +34,44 @@ def _runtime(tmp_path: Path) -> tuple[dict[str, str], Path, Path, Path]:
         encoding="utf-8",
     )
     fake_node.chmod(0o755)
+    fake_bin.mkdir()
+    fake_lsof.write_text(
+        "#!/bin/sh\n"
+        'if [ "$2" = "-d" ]; then\n'
+        '  if [ -n "${PARA_TEST_ACTIVE_CWD:-}" ]; then\n'
+        '    printf "p1\\nn%s\\n" "$PARA_TEST_ACTIVE_CWD"\n'
+        "  fi\n"
+        "  exit 0\n"
+        "fi\n"
+        'if [ "$2" = "+D" ] && [ -n "${PARA_TEST_OPEN_DIR:-}" ] '
+        '&& [ "$3" = "$PARA_TEST_OPEN_DIR" ]; then\n'
+        "  exit 0\n"
+        "fi\n"
+        "exit 1\n",
+        encoding="utf-8",
+    )
+    fake_lsof.chmod(0o755)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            CREATE TABLE tasks (
+              id TEXT PRIMARY KEY,
+              status TEXT NOT NULL,
+              merge_requested_at TEXT,
+              merge_conflict TEXT
+            )
+            """
+        )
 
     env = {
         **os.environ,
+        "PATH": f"{fake_bin}:{os.environ.get('PATH', '')}",
         "PARA_API_ROOT": str(api_root),
         "PARA_RUNTIME_ROOT": str(tmp_path / "runtime"),
         "PARA_NODE_BIN": str(fake_node),
         "PARA_CLEANUP_SCRIPT": str(cleanup_program),
         "PARA_CLEANUP_ARCHIVE_DIR": str(archive_dir),
+        "PARA_DB_PATH": str(database),
         "PARA_LOG_DIR": str(log_dir),
         "PARA_WORKSPACE_ROOT": str(workspace_root),
         "PARA_CLEANUP_LOCK_DIR": str(tmp_path / "runtime" / "cleanup.lock"),
@@ -72,7 +106,7 @@ def test_apply_prunes_archives_logs_and_stale_uuid_workspaces(tmp_path: Path) ->
     current_log = log_dir / "current.log"
     current_log.write_text("current", encoding="utf-8")
 
-    stale_uuid = workspace_root / "12345678-1234-task"
+    stale_uuid = workspace_root / "12345678-1234-1234-1234-123456789abc-task"
     stale_uuid.mkdir()
     _age(stale_uuid, minutes=180)
     unrelated = workspace_root / "keep-user-folder"
@@ -113,7 +147,7 @@ def test_default_is_dry_run_and_keeps_files(tmp_path: Path) -> None:
     old_log = log_dir / "old.log"
     old_log.write_text("old", encoding="utf-8")
     _age(old_log, days=9)
-    stale_uuid = workspace_root / "12345678-1234-task"
+    stale_uuid = workspace_root / "12345678-1234-1234-1234-123456789abc-task"
     stale_uuid.mkdir()
     _age(stale_uuid, minutes=180)
 
@@ -131,6 +165,51 @@ def test_default_is_dry_run_and_keeps_files(tmp_path: Path) -> None:
     assert stale_uuid.exists()
     node_args = Path(env["PARA_TEST_NODE_ARGS"]).read_text(encoding="utf-8")
     assert "--apply" not in node_args
+
+
+def test_workspace_cleanup_preserves_active_and_nonterminal_tasks(tmp_path: Path) -> None:
+    env, _, _, workspace_root = _runtime(tmp_path)
+    task_rows = [
+        ("10000000-0000-0000-0000-000000000001", "pending", None, None),
+        ("10000000-0000-0000-0000-000000000002", "running", None, None),
+        ("10000000-0000-0000-0000-000000000003", "merge_conflict", None, "{}"),
+        ("10000000-0000-0000-0000-000000000004", "completed", "2026-07-30T00:00:00Z", None),
+        ("10000000-0000-0000-0000-000000000005", "completed", None, None),
+        ("10000000-0000-0000-0000-000000000006", "completed", None, None),
+        ("10000000-0000-0000-0000-000000000007", "completed", None, None),
+    ]
+    with sqlite3.connect(env["PARA_DB_PATH"]) as connection:
+        connection.executemany(
+            """
+            INSERT INTO tasks (id, status, merge_requested_at, merge_conflict)
+            VALUES (?, ?, ?, ?)
+            """,
+            task_rows,
+        )
+
+    directories: dict[str, Path] = {}
+    for task_id, *_ in task_rows:
+        directory = workspace_root / f"{task_id}-task"
+        directory.mkdir()
+        _age(directory, minutes=180)
+        directories[task_id] = directory
+    env["PARA_TEST_ACTIVE_CWD"] = str(directories[task_rows[-2][0]])
+    env["PARA_TEST_OPEN_DIR"] = str(directories[task_rows[-1][0]])
+
+    result = subprocess.run(
+        ["bash", str(CLEANUP_SCRIPT), "--apply", "--reason", "test"],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    for task_id, *_ in task_rows[:4]:
+        assert directories[task_id].exists()
+    assert not directories["10000000-0000-0000-0000-000000000005"].exists()
+    assert directories["10000000-0000-0000-0000-000000000006"].exists()
+    assert directories["10000000-0000-0000-0000-000000000007"].exists()
 
 
 def test_cleanup_rejects_broad_delete_targets(tmp_path: Path) -> None:
