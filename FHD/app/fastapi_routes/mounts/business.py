@@ -131,6 +131,14 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     )
     _mount(
         registry,
+        "xcmax_admin_private_delivery",
+        lambda: __import__(
+            "app.fastapi_routes.xcmax_admin_private_delivery", fromlist=["router"]
+        ).router,
+        priority=10,
+    )
+    _mount(
+        registry,
         "founder_autonomy",
         lambda: __import__("app.fastapi_routes.founder_autonomy_api", fromlist=["router"]).router,
         priority=10,
@@ -239,6 +247,14 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
         registry,
         "mod_store",
         lambda: __import__("app.fastapi_routes.mod_store_routes", fromlist=["router"]).router,
+        prefix="/api/mod-store",
+    )
+    _mount(
+        registry,
+        "mod_store_private_delivery",
+        lambda: __import__(
+            "app.fastapi_routes.mod_store_private_delivery_routes", fromlist=["router"]
+        ).router,
         prefix="/api/mod-store",
     )
     _mount(
