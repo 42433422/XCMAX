@@ -392,6 +392,10 @@ test('only recent structured merge-worker indeterminate conflicts are recovered'
   };
   assert.equal(taskHasRecoverableIndeterminateReviewConflict(task), true);
   assert.equal(
+    taskHasRecoverableIndeterminateReviewConflict({ status: 'merge_conflict' }),
+    false,
+  );
+  assert.equal(
     taskHasRecoverableIndeterminateReviewConflict({
       ...task,
       merge_conflict: { ...task.merge_conflict, source: 'ai-review-veto' },

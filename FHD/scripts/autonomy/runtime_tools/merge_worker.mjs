@@ -420,7 +420,7 @@ export function isRecoverableIndeterminateReviewRecord(record, nowMs = Date.now(
 export function taskHasRecoverableIndeterminateReviewConflict(task) {
   const conflict = task?.merge_conflict;
   return String(task?.status || '') === 'merge_conflict'
-    && conflict
+    && Boolean(conflict)
     && String(conflict.source || '') === 'merge-worker'
     && /\bindeterminate-review:\s*\{/.test(String(conflict.detail || ''));
 }
