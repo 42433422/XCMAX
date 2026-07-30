@@ -109,10 +109,12 @@ def external_merge_remediation_prompt(resume_candidate: Any) -> str:
     else:
         strategy = (
             "The previous Para merge task ended in a terminal failure (including gh pr "
-            "update-branch content conflicts with main). Start from the configured clean base. "
-            "Use the rejected branch only as read-only evidence, then reproduce the smallest "
-            "valid production fix and focused regression test; do not inherit or cherry-pick the "
-            "whole rejected diff."
+            "update-branch content conflicts with main or PR closed without merge). Start from "
+            "the configured clean base. Use the rejected branch only as read-only evidence, then "
+            "reproduce the smallest valid production fix and focused regression test; do not "
+            "inherit or cherry-pick the whole rejected diff. If every executable gap from the "
+            "rejected branch is already on main (for example superseded by another merged PR), "
+            "update loop status with NO_ACTION instead of marker-only edits."
         )
     return (
         "\n\n=== EXTERNAL MERGE FAILURE REMEDIATION ===\n"

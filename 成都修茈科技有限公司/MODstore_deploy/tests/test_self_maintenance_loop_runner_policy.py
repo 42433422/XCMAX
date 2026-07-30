@@ -745,6 +745,29 @@ def test_dynamic_low_risk_policy_blocks_kb_only_when_structured_review_hold():
     assert result["reason"] == "auxiliary_only_diff_requires_executable_change"
 
 
+def test_dynamic_low_risk_policy_blocks_marker_only_when_actionable_merge_review_hold():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/codex/fix-1",
+                "kind": "automated_remediation",
+                "para_task_id": "task-review",
+                "reason": "para_ai_review_rejected",
+                "review_actionable_findings": True,
+                "review_feedback": "REJECT: missing regression test for policy gate",
+                "run_id": "run-review",
+                "task_id": "task-review",
+            }
+        ]
+    }
+    files = ["成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"]
+
+    result = _assess_branch_auto_merge_policy(files, _stats(), memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "marker_only_diff_requires_executable_change"
+
+
 def test_dynamic_low_risk_policy_blocks_marker_only_when_memory_requires_executable_change():
     files = ["成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"]
     memory = {
@@ -2856,6 +2879,17 @@ def test_reconcile_real_para_merge_sha_closes_matching_open_item():
             },
             "para_merge_task_failed",
         ),
+        (
+            {
+                "status": "merge_conflict",
+                "merge_conflict": {
+                    "branch_name": "devfleet/cursor/sub-1-0ff79e",
+                    "detail": "PR #1011 closed without merge",
+                    "source": "merge-worker",
+                },
+            },
+            "para_merge_conflict",
+        ),
     ],
 )
 def test_reconcile_terminal_para_merge_failure_restarts_from_clean_base(task, expected_reason):
@@ -3218,6 +3252,26 @@ def test_para_merge_remediation_branch_preserving_helpers():
     )
     assert resume_from_clean_baseline_for_para_merge("para_merge_conflict", update_branch_detail)
     assert resume_from_clean_baseline_for_para_merge("para_merge_conflict", "true conflict")
+
+
+def test_terminal_merge_remediation_prompt_mentions_closed_pr_and_main_supersession():
+    from modstore_server.self_maintenance_remediation_prompts import (
+        external_merge_remediation_prompt,
+    )
+
+    prompt = external_merge_remediation_prompt(
+        {
+            "branch": "devfleet/cursor/sub-1-0ff79e",
+            "continue_existing_code_task": False,
+            "reason": "resume_automated_remediation_candidate",
+            "remediation_feedback": "PR #1011 closed without merge",
+            "remediation_reason": "para_merge_conflict",
+        }
+    )
+
+    assert "PR closed without merge" in prompt
+    assert "already on main" in prompt
+    assert "NO_ACTION" in prompt
 
 
 def test_reconcile_merge_worker_branch_prefixed_indeterminate_review_detail():
