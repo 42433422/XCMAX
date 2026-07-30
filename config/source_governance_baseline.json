@@ -1,7 +1,7 @@
 {
   "_note": "Cross-stack source debt ratchet. Existing oversized files and exact-copy debt may only shrink; generated/derived roots are excluded.",
   "schema_version": 1,
-  "updated_at": "2026-07-26",
+  "updated_at": "2026-07-30",
   "oversized_files": {
     "成都修茈科技有限公司/MODstore_deploy/market/src/views/WorkbenchHomeView.vue": {
       "stack": "modstore_vue",
@@ -10,12 +10,12 @@
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py": {
       "stack": "modstore_backend",
-      "lines": 8611,
+      "lines": 8549,
       "soft_cap": 800
     },
     "FHD/admin-console/src/components/workflow/DutyRosterGraphPanel.vue": {
       "stack": "fhd_vue",
-      "lines": 7440,
+      "lines": 7439,
       "soft_cap": 500
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workbench_api.py": {
@@ -40,7 +40,7 @@
     },
     "FHD/frontend/src/views/SettingsView.vue": {
       "stack": "fhd_vue",
-      "lines": 4147,
+      "lines": 4166,
       "soft_cap": 500
     },
     "FHD/mobile-flutter-poc/lib/src/data/mobile_repository.dart": {
@@ -48,19 +48,19 @@
       "lines": 3768,
       "soft_cap": 500
     },
+    "FHD/frontend/src/views/PersyKnowledgeView.vue": {
+      "stack": "fhd_vue",
+      "lines": 3719,
+      "soft_cap": 500
+    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor.py": {
       "stack": "modstore_backend",
       "lines": 3357,
       "soft_cap": 800
     },
-    "FHD/frontend/src/views/PersyKnowledgeView.vue": {
-      "stack": "fhd_vue",
-      "lines": 3236,
-      "soft_cap": 500
-    },
     "FHD/app/fastapi_routes/xcmax_admin.py": {
       "stack": "fhd_backend",
-      "lines": 3137,
+      "lines": 3122,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_scaffold_runner.py": {
@@ -98,6 +98,11 @@
       "lines": 2810,
       "soft_cap": 500
     },
+    "FHD/app/application/dataset_rag_app_service.py": {
+      "stack": "fhd_backend",
+      "lines": 2771,
+      "soft_cap": 800
+    },
     "FHD/app/mod_sdk/employee_specialized_tools.py": {
       "stack": "fhd_backend",
       "lines": 2748,
@@ -128,19 +133,19 @@
       "lines": 2601,
       "soft_cap": 800
     },
-    "FHD/app/application/dataset_rag_app_service.py": {
-      "stack": "fhd_backend",
-      "lines": 2501,
-      "soft_cap": 800
-    },
     "FHD/app/services/tools_workflow_registered.py": {
       "stack": "fhd_backend",
-      "lines": 2469,
+      "lines": 2470,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/market_routes.py": {
       "stack": "modstore_backend",
       "lines": 2439,
+      "soft_cap": 800
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_orchestrator.py": {
+      "stack": "modstore_backend",
+      "lines": 2432,
       "soft_cap": 800
     },
     "FHD/app/application/shipment_excel_etl_app_service.py": {
@@ -163,30 +168,20 @@
       "lines": 2229,
       "soft_cap": 800
     },
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_orchestrator.py": {
-      "stack": "modstore_backend",
-      "lines": 2223,
-      "soft_cap": 800
-    },
     "FHD/mobile-flutter-poc/lib/src/features/groups/ai_group_screens.dart": {
       "stack": "flutter",
       "lines": 2181,
       "soft_cap": 500
     },
-    "FHD/mods/xcagi-planner-bridge/frontend/views/ChatView.vue": {
-      "stack": "fhd_vue",
-      "lines": 2162,
-      "soft_cap": 500
-    },
-    "FHD/app/application/workflow/planner.py": {
-      "stack": "fhd_backend",
-      "lines": 2116,
-      "soft_cap": 800
-    },
     "FHD/mods/xcagi-erp-domain-bridge/frontend/views/TemplatePreviewView.vue": {
       "stack": "fhd_vue",
       "lines": 2116,
       "soft_cap": 500
+    },
+    "FHD/app/application/workflow/planner.py": {
+      "stack": "fhd_backend",
+      "lines": 2112,
+      "soft_cap": 800
     },
     "FHD/app/application/tools/workflow.py": {
       "stack": "fhd_backend",
@@ -208,11 +203,6 @@
       "lines": 2044,
       "soft_cap": 800
     },
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_scheduler.py": {
-      "stack": "modstore_backend",
-      "lines": 2025,
-      "soft_cap": 800
-    },
     "FHD/app/db/init_db.py": {
       "stack": "fhd_backend",
       "lines": 2019,
@@ -221,6 +211,11 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_surface_audit.py": {
       "stack": "modstore_backend",
       "lines": 2013,
+      "soft_cap": 800
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_scheduler.py": {
+      "stack": "modstore_backend",
+      "lines": 2008,
       "soft_cap": 800
     },
     "FHD/app/application/ai_group_chat_service.py": {
@@ -313,24 +308,9 @@
       "lines": 1520,
       "soft_cap": 500
     },
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/market_auth_api.py": {
-      "stack": "modstore_backend",
-      "lines": 1514,
-      "soft_cap": 800
-    },
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_autonomy_service.py": {
-      "stack": "modstore_backend",
-      "lines": 1497,
-      "soft_cap": 800
-    },
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api.py": {
-      "stack": "modstore_backend",
-      "lines": 1479,
-      "soft_cap": 800
-    },
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/research_tools.py": {
-      "stack": "modstore_backend",
-      "lines": 1473,
+    "FHD/app/fastapi_routes/knowledge_v1.py": {
+      "stack": "fhd_backend",
+      "lines": 1465,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/butler_qq_bridge.py": {
@@ -378,6 +358,11 @@
       "lines": 1403,
       "soft_cap": 800
     },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_autonomy_service.py": {
+      "stack": "modstore_backend",
+      "lines": 1393,
+      "soft_cap": 800
+    },
     "FHD/frontend/src/views/ProductOnboardingView.vue": {
       "stack": "fhd_vue",
       "lines": 1386,
@@ -403,6 +388,11 @@
       "lines": 1352,
       "soft_cap": 800
     },
+    "FHD/app/fastapi_routes/domains/auth/routes.py": {
+      "stack": "fhd_backend",
+      "lines": 1347,
+      "soft_cap": 800
+    },
     "FHD/admin-console/src/views/ServerFunctionsView.vue": {
       "stack": "fhd_vue",
       "lines": 1346,
@@ -423,11 +413,6 @@
       "lines": 1325,
       "soft_cap": 500
     },
-    "FHD/app/fastapi_routes/domains/auth/routes.py": {
-      "stack": "fhd_backend",
-      "lines": 1319,
-      "soft_cap": 800
-    },
     "成都修茈科技有限公司/MODstore_deploy/market/src/features/mod-authoring/composables/useModAuthoring.ts": {
       "stack": "modstore_vue",
       "lines": 1306,
@@ -438,14 +423,24 @@
       "lines": 1299,
       "soft_cap": 800
     },
+    "FHD/frontend/src/views/LoginView.vue": {
+      "stack": "fhd_vue",
+      "lines": 1292,
+      "soft_cap": 500
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/market_auth_api.py": {
+      "stack": "modstore_backend",
+      "lines": 1292,
+      "soft_cap": 800
+    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_bench.py": {
       "stack": "modstore_backend",
       "lines": 1283,
       "soft_cap": 800
     },
-    "FHD/app/fastapi_routes/knowledge_v1.py": {
-      "stack": "fhd_backend",
-      "lines": 1276,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/research_tools.py": {
+      "stack": "modstore_backend",
+      "lines": 1274,
       "soft_cap": 800
     },
     "FHD/app/application/agent_orchestrator/orchestrator.py": {
@@ -468,11 +463,6 @@
       "lines": 1255,
       "soft_cap": 800
     },
-    "FHD/frontend/src/views/LoginView.vue": {
-      "stack": "fhd_vue",
-      "lines": 1252,
-      "soft_cap": 500
-    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/craft_steps.py": {
       "stack": "modstore_backend",
       "lines": 1249,
@@ -488,6 +478,11 @@
       "lines": 1220,
       "soft_cap": 500
     },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api.py": {
+      "stack": "modstore_backend",
+      "lines": 1220,
+      "soft_cap": 800
+    },
     "成都修茈科技有限公司/MODstore_deploy/market/src/views/developer/DeveloperTokensPanel.vue": {
       "stack": "modstore_vue",
       "lines": 1218,
@@ -500,17 +495,12 @@
     },
     "FHD/app/application/agent_orchestrator/tool_spec_data/output_schemas.py": {
       "stack": "fhd_backend",
-      "lines": 1165,
+      "lines": 1167,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_employee_agent_runner.py": {
       "stack": "modstore_backend",
       "lines": 1162,
-      "soft_cap": 800
-    },
-    "FHD/app/services/conversation/modstore_adapter.py": {
-      "stack": "fhd_backend",
-      "lines": 1158,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/market/src/views/AccountSettingsView.vue": {
@@ -532,6 +522,11 @@
       "stack": "modstore_vue",
       "lines": 1124,
       "soft_cap": 500
+    },
+    "FHD/app/services/conversation/modstore_adapter.py": {
+      "stack": "fhd_backend",
+      "lines": 1112,
+      "soft_cap": 800
     },
     "FHD/mods/taiyangniao-pro/backend/taiyangniao_attendance/mapper.py": {
       "stack": "fhd_vue",
@@ -568,6 +563,11 @@
       "lines": 1079,
       "soft_cap": 800
     },
+    "FHD/admin-console/src/views/XCmaxAdminView.vue": {
+      "stack": "fhd_vue",
+      "lines": 1075,
+      "soft_cap": 500
+    },
     "成都修茈科技有限公司/MODstore_deploy/market/src/views/workbench/WorkbenchShell.vue": {
       "stack": "modstore_vue",
       "lines": 1073,
@@ -581,11 +581,6 @@
     "成都修茈科技有限公司/MODstore_deploy/market/src/views/developer/DeveloperWebhooksPanel.vue": {
       "stack": "modstore_vue",
       "lines": 1068,
-      "soft_cap": 500
-    },
-    "FHD/admin-console/src/views/XCmaxAdminView.vue": {
-      "stack": "fhd_vue",
-      "lines": 1063,
       "soft_cap": 500
     },
     "FHD/mods/xcagi-erp-domain-bridge/frontend/views/LabelEditorView.vue": {
@@ -630,7 +625,7 @@
     },
     "FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py": {
       "stack": "fhd_backend",
-      "lines": 1008,
+      "lines": 1009,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/retort_clarification_gate.py": {
@@ -645,7 +640,7 @@
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/duty_workforce_burnin.py": {
       "stack": "modstore_backend",
-      "lines": 993,
+      "lines": 992,
       "soft_cap": 800
     },
     "FHD/frontend/src/components/kitten/KittenAnalyzerView.vue": {
@@ -657,11 +652,6 @@
       "stack": "fhd_backend",
       "lines": 969,
       "soft_cap": 800
-    },
-    "FHD/mods/xcagi-planner-bridge/frontend/views/AIEcosystemView.vue": {
-      "stack": "fhd_vue",
-      "lines": 963,
-      "soft_cap": 500
     },
     "FHD/app/application/planner_compat_service.py": {
       "stack": "fhd_backend",
@@ -728,11 +718,6 @@
       "lines": 916,
       "soft_cap": 800
     },
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/admin_employee_autonomy_api.py": {
-      "stack": "modstore_backend",
-      "lines": 901,
-      "soft_cap": 800
-    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/public_company_hall.py": {
       "stack": "modstore_backend",
       "lines": 898,
@@ -758,11 +743,6 @@
       "lines": 882,
       "soft_cap": 800
     },
-    "FHD/app/fastapi_routes/domains/system/routes.py": {
-      "stack": "fhd_backend",
-      "lines": 879,
-      "soft_cap": 800
-    },
     "FHD/app/application/persy_memory_app_service.py": {
       "stack": "fhd_backend",
       "lines": 878,
@@ -783,9 +763,19 @@
       "lines": 862,
       "soft_cap": 800
     },
+    "FHD/frontend/src/router/index.ts": {
+      "stack": "fhd_vue",
+      "lines": 862,
+      "soft_cap": 600
+    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/telemetry_backlog_loop.py": {
       "stack": "modstore_backend",
       "lines": 862,
+      "soft_cap": 800
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/admin_employee_autonomy_api.py": {
+      "stack": "modstore_backend",
+      "lines": 853,
       "soft_cap": 800
     },
     "FHD/app/infrastructure/rag/dataset_vector_index.py": {
@@ -803,11 +793,6 @@
       "lines": 839,
       "soft_cap": 800
     },
-    "FHD/frontend/src/router/index.ts": {
-      "stack": "fhd_vue",
-      "lines": 832,
-      "soft_cap": 600
-    },
     "FHD/app/neuro_bus/circuit_breaker.py": {
       "stack": "fhd_backend",
       "lines": 830,
@@ -818,6 +803,11 @@
       "lines": 820,
       "soft_cap": 500
     },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/xiaoc_cs_ssot.py": {
+      "stack": "modstore_backend",
+      "lines": 817,
+      "soft_cap": 800
+    },
     "FHD/app/neuro_bus/bus.py": {
       "stack": "fhd_backend",
       "lines": 815,
@@ -827,11 +817,6 @@
       "stack": "fhd_vue",
       "lines": 811,
       "soft_cap": 500
-    },
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_deploy_receipts.py": {
-      "stack": "modstore_backend",
-      "lines": 808,
-      "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/ppt_extract_runtime.py": {
       "stack": "modstore_backend",
@@ -1125,7 +1110,7 @@
     },
     "FHD/admin-console/src/views/FounderAutonomyView.vue": {
       "stack": "fhd_vue",
-      "lines": 509,
+      "lines": 514,
       "soft_cap": 500
     },
     "FHD/frontend/src/components/persy/PersyKnowledgeGraph.vue": {
@@ -1175,17 +1160,17 @@
       "routes": 38,
       "soft_cap": 20
     },
-    "FHD/app/fastapi_routes/domains/system/routes.py": {
-      "stack": "fhd_backend",
-      "routes": 34,
-      "soft_cap": 20
-    },
     "FHD/app/fastapi_routes/domains/auth/routes.py": {
       "stack": "fhd_backend",
       "routes": 32,
       "soft_cap": 20
     },
     "FHD/app/fastapi_routes/domains/static/routes.py": {
+      "stack": "fhd_backend",
+      "routes": 32,
+      "soft_cap": 20
+    },
+    "FHD/app/fastapi_routes/domains/system/routes.py": {
       "stack": "fhd_backend",
       "routes": 32,
       "soft_cap": 20
@@ -1230,14 +1215,14 @@
       "routes": 26,
       "soft_cap": 20
     },
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_api.py": {
-      "stack": "modstore_backend",
+    "FHD/app/fastapi_routes/knowledge_v1.py": {
+      "stack": "fhd_backend",
       "routes": 25,
       "soft_cap": 20
     },
-    "FHD/app/fastapi_routes/knowledge_v1.py": {
-      "stack": "fhd_backend",
-      "routes": 24,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_api.py": {
+      "stack": "modstore_backend",
+      "routes": 25,
       "soft_cap": 20
     },
     "FHD/app/fastapi_routes/domains/wechat/routes.py": {
