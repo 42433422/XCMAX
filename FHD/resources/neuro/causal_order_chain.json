@@ -1,0 +1,68 @@
+{
+  "graph_id": "order_fulfillment_scm_lite",
+  "version": "1.0.0",
+  "description": "订单→库存→发货→回款 可干预因果样板（非全知识图谱）",
+  "nodes": [
+    {"id": "order.created", "kind": "event", "observable": true},
+    {"id": "inventory.reserved", "kind": "state", "observable": true},
+    {"id": "inventory.shortage", "kind": "state", "observable": true},
+    {"id": "shipment.planned", "kind": "event", "observable": true},
+    {"id": "shipment.dispatched", "kind": "event", "observable": true},
+    {"id": "payment.received", "kind": "event", "observable": true},
+    {"id": "delivery.delay", "kind": "outcome", "observable": true},
+    {"id": "customer.satisfaction", "kind": "outcome", "observable": false}
+  ],
+  "edges": [
+    {
+      "from": "order.created",
+      "to": "inventory.reserved",
+      "relation": "causes",
+      "intervention": "confirm_order",
+      "strength": 0.9
+    },
+    {
+      "from": "inventory.reserved",
+      "to": "shipment.planned",
+      "relation": "enables",
+      "intervention": "reserve_stock",
+      "strength": 0.85
+    },
+    {
+      "from": "inventory.shortage",
+      "to": "delivery.delay",
+      "relation": "causes",
+      "intervention": "replenish_or_split",
+      "strength": 0.8
+    },
+    {
+      "from": "shipment.planned",
+      "to": "shipment.dispatched",
+      "relation": "causes",
+      "intervention": "dispatch_shipment",
+      "strength": 0.9
+    },
+    {
+      "from": "shipment.dispatched",
+      "to": "payment.received",
+      "relation": "enables",
+      "intervention": "collect_payment",
+      "strength": 0.55
+    },
+    {
+      "from": "delivery.delay",
+      "to": "customer.satisfaction",
+      "relation": "causes",
+      "intervention": "notify_and_reschedule",
+      "strength": 0.7,
+      "sign": -1
+    },
+    {
+      "from": "payment.received",
+      "to": "customer.satisfaction",
+      "relation": "correlates_with",
+      "intervention": null,
+      "strength": 0.35,
+      "note": "相关但非直接可干预主因"
+    }
+  ]
+}

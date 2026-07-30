@@ -1220,33 +1220,44 @@ class LLMWorkflowPlanner(PlannerLlmSupportMixin):
             logger.debug("Memory v2 服务不可用（不阻断主流程）")
         except RECOVERABLE_ERRORS as e:
             logger.warning("Memory v2 不可用（不阻断主流程）: %s", e)
-        planned = self._plan_with_react_multiagent(
+        from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
+
+        react_planned = self._plan_with_react_multiagent(
             plan_id=plan_id,
             user_id=user_id,
             message=message,
             tool_registry=registry_for_plan,
             context=context,
         )
-        if planned is not None:
+
+        def _validate_planned(planned: PlanGraph) -> str | None:
             err = validate_plan_graph(planned)
             if err is None:
                 err = _validate_explicit_mutation_alignment(message, planned)
-            if err is None:
-                planned.metadata.update(
-                    {
-                        "planner_mode": "autonomous",
-                        "degraded": False,
-                        "goal": message,
-                    }
-                )
-                return planned
-            logger.warning("ReAct/CoT 计划校验失败，回退规则规划: %s", err)
-        return self._fallback_plan(
-            plan_id,
-            message,
-            registry_for_plan,
-            degraded_reason="llm_unavailable_or_invalid_plan",
+            return err
+
+        result = finalize_planned_graph(
+            react_planned,
+            plan_id=plan_id,
+            context=context,
+            validate=_validate_planned,
+            fallback_factory=lambda: self._fallback_plan(
+                plan_id,
+                message,
+                registry_for_plan,
+                degraded_reason="llm_unavailable_or_invalid_plan",
+            ),
+            warn=logger.warning,
         )
+        if react_planned is not None and result is react_planned:
+            result.metadata.update(
+                {
+                    "planner_mode": "autonomous",
+                    "degraded": False,
+                    "goal": message,
+                }
+            )
+        return result
 
     def _plan_with_react_multiagent(
         self,

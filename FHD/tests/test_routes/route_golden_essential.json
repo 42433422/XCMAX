@@ -385,6 +385,8 @@
   "/api/xcmax/ops/staffing/close-gap",
   "/api/xcmax/ops/staffing/install-local",
   "/api/xcmax/ops/staffing/onboard",
+  "/api/xcmax/ops/strategic-plan",
+  "/api/xcmax/ops/strategic-plan/latest",
   "/api/xcmax/production-line/event",
   "/api/xcmax/production-line/event-rail/backlog",
   "/api/xcmax/production-line/event-rail/status",

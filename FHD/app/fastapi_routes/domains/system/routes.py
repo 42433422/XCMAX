@@ -8,6 +8,11 @@ from typing import Any
 from fastapi import APIRouter, Body, File, Form, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse
 
+from app.fastapi_routes.domains.system.agent_helpers import (
+    _run_document_template_agent,
+    _run_system_maintenance_agent,
+    _run_templates_analyze_agent,
+)
 from app.template_analysis_progress import get_template_analysis_progress
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import get_base_dir
@@ -507,53 +512,6 @@ def skills_info(skill_id: str):
         return JSONResponse({"success": False, "message": "技能不存在"}, status_code=404)
     except RECOVERABLE_ERRORS as e:
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
-
-
-from app.fastapi_routes.domains.system.agent_helpers import (
-    _authenticated_owner_user_id,
-    _run_document_template_agent,
-    _run_system_maintenance_agent,
-    _run_templates_analyze_agent,
-    _run_tools_execute_agent,
-    _tool_route_agent_payload,
-    _user_id_from_tool_request,
-)
-
-
-@router.post("/api/skills/execute")
-def skills_execute(request: Request, body: dict = Body(default_factory=dict)):
-    agent_result = _run_tools_execute_agent(
-        request=request,
-        body=body or {},
-        route_path="/api/skills/execute",
-    )
-    if agent_result is not None:
-        return JSONResponse(agent_result[0], status_code=agent_result[1])
-    from app.application.facades.tools_facade import run_archive_tools_execute
-
-    data, code = run_archive_tools_execute(
-        body,
-        owner_user_id=_authenticated_owner_user_id(request),
-    )
-    return JSONResponse(data, status_code=code)
-
-
-@router.post("/api/tools/execute")
-def tools_execute_route(request: Request, body: dict = Body(default_factory=dict)):
-    agent_result = _run_tools_execute_agent(
-        request=request,
-        body=body or {},
-        route_path="/api/tools/execute",
-    )
-    if agent_result is not None:
-        return JSONResponse(agent_result[0], status_code=agent_result[1])
-    from app.application.facades.tools_facade import run_archive_tools_execute
-
-    data, code = run_archive_tools_execute(
-        body,
-        owner_user_id=_authenticated_owner_user_id(request),
-    )
-    return JSONResponse(data, status_code=code)
 
 
 @router.post("/api/admin/llm/reload")

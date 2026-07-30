@@ -4272,6 +4272,7 @@ def _run_tools_execute_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes.domains.system.routes import router
+    from app.fastapi_routes.tools_execute import router as tools_execute_router
 
     expected = dict(task.get("expected") or {})
     repo = InMemoryAgentRunRepository()
@@ -4279,6 +4280,8 @@ def _run_tools_execute_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     ocr_domain.emit_ocr_requested.return_value = bool(task.get("mock_publish_result", True))
     app = FastAPI()
     app.include_router(router)
+    # tools/execute 已从 system routes 拆出；eval 需单独挂载 always-on 路由。
+    app.include_router(tools_execute_router)
     client = TestClient(app, raise_server_exceptions=False)
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
