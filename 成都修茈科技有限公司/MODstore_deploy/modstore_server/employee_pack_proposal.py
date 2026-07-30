@@ -96,16 +96,22 @@ def _call_llm(prompt: str) -> Dict[str, Any]:
         response.raise_for_status()
         data = response.json()
         if token_plan and not explicit_endpoint:
-            blocks = data.get("content") if isinstance(data.get("content"), list) else []
+            blocks = (
+                data.get("content") if isinstance(data.get("content"), list) else []
+            )
             response_text = "".join(
                 str(block.get("text") or "")
                 for block in blocks
                 if isinstance(block, dict) and block.get("type") == "text"
             )
         else:
-            choices = data.get("choices") if isinstance(data.get("choices"), list) else []
+            choices = (
+                data.get("choices") if isinstance(data.get("choices"), list) else []
+            )
             first = choices[0] if choices and isinstance(choices[0], dict) else {}
-            message = first.get("message") if isinstance(first.get("message"), dict) else {}
+            message = (
+                first.get("message") if isinstance(first.get("message"), dict) else {}
+            )
             response_text = str(message.get("content") or "")
         match = re.search(r"\{[\s\S]*\}", response_text)
         return json.loads(match.group(0)) if match else {}
@@ -138,7 +144,11 @@ def extract_eval_spec(proposal: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not isinstance(pack, dict):
         return None
     nested = pack.get("eval")
-    if isinstance(nested, dict) and nested.get("eval_command") and nested.get("metric_name"):
+    if (
+        isinstance(nested, dict)
+        and nested.get("eval_command")
+        and nested.get("metric_name")
+    ):
         return {
             "metric_name": str(nested["metric_name"]).strip(),
             "eval_command": str(nested["eval_command"]).strip(),

@@ -24,6 +24,7 @@ dry-run 模式: 不真实创建 issue / PR / 上架,只记录 ledger 事件 + �
     python scripts/autonomy/evolution_decision_ledger.py list --since-days 1
     python scripts/autonomy/evolution_decision_ledger.py audit --event-id <uuid> --verdict approved
 """
+
 from __future__ import annotations
 
 # 防止本脚本所在目录（含 types.py 等）污染 stdlib import 顺序。
@@ -285,9 +286,7 @@ def cmd_propose_pack(args: argparse.Namespace) -> int:
     print(f"[trace_id={trace_id}] Step 2: propose-pack (dry_run={args.dry_run})")
 
     if args.dry_run:
-        proposal = _synthetic_proposal(
-            triggered_by="dry-run", signal_score=0.15
-        )
+        proposal = _synthetic_proposal(triggered_by="dry-run", signal_score=0.15)
         print(f"  (dry-run) using synthetic proposal_id={proposal['proposal_id']}")
     else:
         # 实模式：复用 evolution-orchestrator.yml 中的 Python API 流程
@@ -375,7 +374,10 @@ def cmd_open_issue(args: argparse.Namespace) -> int:
     else:
         # dry-run 兜底：用合成提议
         if not args.dry_run:
-            print("  ERROR: no proposal_generated event in ledger; pass --proposal-event-id", file=sys.stderr)
+            print(
+                "  ERROR: no proposal_generated event in ledger; pass --proposal-event-id",
+                file=sys.stderr,
+            )
             return 2
         proposal_evt = {
             "llm_proposal": _synthetic_proposal("dry-run", 0.15),
@@ -449,9 +451,7 @@ def _parse_issue_number(issue_url: str) -> Optional[int]:
 
 def _dispatch_implement_workflow(issue_number: int) -> "subprocess.CompletedProcess[str]":
     """连接点 4 显式触发：gh workflow run（非仅靠 issue 标签间接流转）。"""
-    workflow = os.environ.get(
-        "EVOLUTION_IMPLEMENT_WORKFLOW", "fhd-ai-issue-implement.yml"
-    )
+    workflow = os.environ.get("EVOLUTION_IMPLEMENT_WORKFLOW", "fhd-ai-issue-implement.yml")
     cmd = [
         "gh",
         "workflow",
@@ -520,21 +520,14 @@ def _resolve_eval_spec_for_implement(args: argparse.Namespace) -> Optional[Dict[
     return extract_eval_spec(latest.get("llm_proposal") or {})
 
 
-def _run_retort_metric_search(
-    eval_spec: Dict[str, Any], *, dry_run: bool
-) -> Dict[str, Any]:
+def _run_retort_metric_search(eval_spec: Dict[str, Any], *, dry_run: bool) -> Dict[str, Any]:
     """Invoke Retort metric-search CLI; dry-run writes a synthetic tree report."""
     project = os.environ.get(
         "RETORT_METRIC_SEARCH_PROJECT",
         str(REPO_ROOT / "packages" / "retort_engine"),
     )
     run_id = f"ledger-{uuid.uuid4().hex[:10]}"
-    out_dir = (
-        Path(project).expanduser().resolve()
-        / ".retort"
-        / "metric_search"
-        / run_id
-    )
+    out_dir = Path(project).expanduser().resolve() / ".retort" / "metric_search" / run_id
     if dry_run:
         out_dir.mkdir(parents=True, exist_ok=True)
         report = {
@@ -581,9 +574,7 @@ def _run_retort_metric_search(
 
     env = os.environ.copy()
     env["PYTHONPATH"] = (
-        str(REPO_ROOT / "packages" / "retort_engine")
-        + os.pathsep
-        + env.get("PYTHONPATH", "")
+        str(REPO_ROOT / "packages" / "retort_engine") + os.pathsep + env.get("PYTHONPATH", "")
     )
     cmd = [
         sys.executable,
@@ -641,10 +632,14 @@ def cmd_implement_pack(args: argparse.Namespace) -> int:
     print(f"[trace_id={trace_id}] Step 4: implement-pack (dry_run={args.dry_run})")
 
     mode = (
-        getattr(args, "implement_mode", None)
-        or os.environ.get("EVOLUTION_IMPLEMENT_MODE")
-        or "workflow"
-    ).strip().lower()
+        (
+            getattr(args, "implement_mode", None)
+            or os.environ.get("EVOLUTION_IMPLEMENT_MODE")
+            or "workflow"
+        )
+        .strip()
+        .lower()
+    )
 
     if mode in {"retort-metric-search", "retort_metric_search", "metric-search"}:
         eval_spec = _resolve_eval_spec_for_implement(args)
@@ -723,7 +718,9 @@ def cmd_implement_pack(args: argparse.Namespace) -> int:
                 "trace_id": trace_id,
                 "issue_url": getattr(args, "issue_url", None),
                 "metric_search": metric_payload,
-                "error": report.get("error") or report.get("stderr_excerpt") or "metric_search_failed",
+                "error": report.get("error")
+                or report.get("stderr_excerpt")
+                or "metric_search_failed",
                 "trigger": "ledger_retort_metric_search",
                 "dry_run": bool(args.dry_run),
                 "final_status": "needs_human",
@@ -747,7 +744,9 @@ def cmd_implement_pack(args: argparse.Namespace) -> int:
             }
         )
         _print_event_line("implement_succeeded", evt, trace_id=trace_id)
-        print("    pr_url=https://github.com/example/repo/pull/0#dry-run (dry-run, not actually created)")
+        print(
+            "    pr_url=https://github.com/example/repo/pull/0#dry-run (dry-run, not actually created)"
+        )
         return 0
 
     issue_url = args.issue_url
@@ -1029,9 +1028,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     subparsers = parser.add_subparsers(dest="cmd", required=True)
 
     # collect-signals
-    p = subparsers.add_parser(
-        "collect-signals", help="连接点 1: 聚合信号 → signal_detected"
-    )
+    p = subparsers.add_parser("collect-signals", help="连接点 1: 聚合信号 → signal_detected")
     p.add_argument("--legacy-report", help="legacy-usage-weekly 报告 JSON 路径")
     p.add_argument("--intent-report", help="intent-benchmark 报告 JSON 路径")
     p.add_argument("--slo-report", help="slo-metrics 报告 JSON 路径")
@@ -1041,18 +1038,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.set_defaults(func=cmd_collect_signals)
 
     # propose-pack
-    p = subparsers.add_parser(
-        "propose-pack", help="连接点 2: LLM 生成提案 → proposal_generated"
-    )
+    p = subparsers.add_parser("propose-pack", help="连接点 2: LLM 生成提案 → proposal_generated")
     p.add_argument("--signal-event-id", help="从指定 signal_detected 事件触发")
     p.add_argument("--trace-id", help="复用已有 trace_id")
     p.add_argument("--dry-run", action="store_true", help="用合成提议，不调 LLM")
     p.set_defaults(func=cmd_propose_pack)
 
     # open-issue
-    p = subparsers.add_parser(
-        "open-issue", help="连接点 3: 提案转 GitHub issue → issue_opened"
-    )
+    p = subparsers.add_parser("open-issue", help="连接点 3: 提案转 GitHub issue → issue_opened")
     p.add_argument("--proposal-event-id", help="从指定 proposal_generated 事件触发")
     p.add_argument("--trace-id", help="复用已有 trace_id")
     p.add_argument("--dry-run", action="store_true", help="不调 gh CLI")
@@ -1085,18 +1078,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.set_defaults(func=cmd_implement_pack)
 
     # publish-pack
-    p = subparsers.add_parser(
-        "publish-pack", help="连接点 5: PR 合并后上架 MODstore → pack_listed"
-    )
+    p = subparsers.add_parser("publish-pack", help="连接点 5: PR 合并后上架 MODstore → pack_listed")
     p.add_argument("--commit-sha", required=True, help="合并 commit SHA")
     p.add_argument("--trace-id", help="复用已有 trace_id")
     p.add_argument("--dry-run", action="store_true", help="不真实上架")
     p.set_defaults(func=cmd_publish_pack)
 
     # dry-run (完整闭环)
-    p = subparsers.add_parser(
-        "dry-run", help="完整闭环 dry-run: 5 连接点全部走一遍"
-    )
+    p = subparsers.add_parser("dry-run", help="完整闭环 dry-run: 5 连接点全部走一遍")
     p.set_defaults(func=cmd_dry_run)
 
     # list

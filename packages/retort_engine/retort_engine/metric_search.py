@@ -193,7 +193,11 @@ def run_eval_command(
     raw = runner(command, cwd=str(cwd), timeout_sec=timeout_sec)
     combined = f"{raw.get('stdout') or ''}\n{raw.get('stderr') or ''}"
     value = parse_metric_from_output(combined, eval_spec)
-    ok = value is not None and not raw.get("timed_out") and int(raw.get("returncode") or 0) == 0
+    ok = (
+        value is not None
+        and not raw.get("timed_out")
+        and int(raw.get("returncode") or 0) == 0
+    )
     return {
         "ok": ok,
         "metric_value": value,
@@ -282,10 +286,11 @@ def run_metric_search(config: MetricSearchConfig) -> dict[str, Any]:
         raise ValueError("beam must be >= 1")
     project = Path(config.project).expanduser().resolve()
     run_id = config.run_id or uuid.uuid4().hex[:12]
-    run_dir = Path(
-        config.output_dir
-        or (project / ".retort" / "metric_search" / run_id)
-    ).expanduser().resolve()
+    run_dir = (
+        Path(config.output_dir or (project / ".retort" / "metric_search" / run_id))
+        .expanduser()
+        .resolve()
+    )
     run_dir.mkdir(parents=True, exist_ok=True)
 
     tree = SolutionTree(
