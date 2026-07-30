@@ -24,6 +24,7 @@ _OPERATIONAL_MERGE_FAILURE_PREFIXES = (
 _BRANCH_PRESERVING_MERGE_WORKER_TOKENS = (
     "hold-merge-label-failed-before-review",
     "hold-merge-label-remove-failed-after-review",
+    "risk-label-failed-after-review",
 )
 
 # gh pr update-branch content conflicts: branch is behind/diverged from main; rebase on clean base.
