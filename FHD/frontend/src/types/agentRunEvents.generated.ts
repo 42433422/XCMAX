@@ -46,6 +46,7 @@ export type AgentRunEventType =
   | 'step.blocked'
   | 'step.llm_repair_failed'
   | 'step.llm_repair_requested'
+  | 'step.params_normalized'
   | 'step.recovered'
   | 'step.recovery_confirmation_required'
   | 'step.repair_applied'
