@@ -32,50 +32,11 @@ import { useChatRequest } from './useChatRequest'
 import { useChatResponseAttach } from './useChatResponseAttach'
 import { useChatSessionHistory } from './useChatSessionHistory'
 import { useAgentRunEventSync } from './useAgentRunEvents'
+import { syncPriceListTaskToShipmentExecution } from './usePriceListPrintTask'
+import { asAutoAction, asPlannerPayload, asShipmentTask, errorMessage, getXcagiWindow, type DynamicShipmentTask } from './useChatOrchestrationHelpers'
 import type { UseChatViewOptions } from './useChatView'
-import type { ChatAutoAction, ChatPlannerPayload, ChatRequest } from '@/types/chat'
+import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
-
-type XcagiChatWindow = Window & {
-  __VUE_CHAT_FILL__?: (value: string) => boolean
-  setWorkModeFromChat?: (enabled: boolean) => void
-  setMonitorModeFromChat?: (enabled: boolean) => void
-  refreshWorkModeMonitorList?: () => void
-  legacyAutoActionHandler?: (action: ChatAutoAction, userMessage: string) => void
-  isProTaskAcquisitionMessage?: (message: string) => boolean
-  jarvisSendMessage?: (message: string) => void
-}
-
-type DynamicShipmentTask = ShipmentTask & Record<string, unknown>
-
-function getXcagiWindow(): XcagiChatWindow {
-  return window as XcagiChatWindow
-}
-
-function asShipmentTask(value: unknown): DynamicShipmentTask {
-  const row = asRecord(value)
-  return {
-    ...row,
-    type: asString(row.type),
-  } as DynamicShipmentTask
-}
-
-function asPlannerPayload(value: unknown): ChatPlannerPayload {
-  return asRecord(value) as ChatPlannerPayload
-}
-
-function asAutoAction(value: unknown): ChatAutoAction {
-  return asRecord(value) as ChatAutoAction
-}
-
-function errorMessage(err: unknown, fallback: string): string {
-  return err instanceof Error ? err.message : asString(err, fallback)
-}
-
-function isDatabaseTokenRequirement(tokenName?: unknown, tokenDescription?: unknown): boolean {
-  const raw = `${String(tokenName || '')} ${String(tokenDescription || '')}`.toUpperCase()
-  return /DB_(READ|WRITE)_TOKEN|DATABASE TOKEN|数据库.*令牌|一级|二级|写入令牌|查看令牌/.test(raw)
-}
 
 export function useChatOrchestration(options: UseChatViewOptions) {
   const tutorialStore = useTutorialStore()
@@ -511,7 +472,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
     const context = lastShipmentExecution.value
     if (!context) {
-      await addAndSaveMessage('暂无可打印任务。请先生成发货单，再发送"开始打印"。', 'ai')
+      await addAndSaveMessage('暂无可打印任务。请先生成发货单或价格表，再发送"开始打印"。', 'ai')
       return true
     }
 
@@ -521,7 +482,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const orderId = context.orderId
 
     if (!labelPaths.length && !filePath) {
-      await addAndSaveMessage('最近一次任务未包含可打印文件。请重新生成发货单后再试。', 'ai')
+      await addAndSaveMessage('最近一次任务未包含可打印文件。请重新生成单据后再试。', 'ai')
       return true
     }
 
@@ -676,6 +637,13 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       scheduleAutoConfirmTask(nextTask)
     }
 
+    if (syncPriceListTaskToShipmentExecution(nextTask, {
+      lastShipmentExecution,
+      buildShipmentDownloadUrl,
+    })) {
+      return
+    }
+
     if (nextTask.type !== 'shipment_generate' || nextTask.completed) return
 
     const existingOrderNo = String(
@@ -769,10 +737,15 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const row = asRecord(data)
     const nestedData = asRecord(row.data)
     const document = asRecord(row.document || nestedData.document)
-    const directUrl = row.download_url || nestedData.download_url
+    const directUrl = row.downloadUrl || row.download_url || nestedData.download_url || nestedData.downloadUrl
     if (directUrl && typeof directUrl === 'string') return directUrl
 
-    const docName = row.doc_name || nestedData.doc_name || document.filename
+    const docName =
+      row.doc_name ||
+      nestedData.doc_name ||
+      row.filename ||
+      nestedData.filename ||
+      document.filename
     if (!docName || typeof docName !== 'string') return ''
 
     return `/api/shipment/download/${encodeURIComponent(docName)}`
