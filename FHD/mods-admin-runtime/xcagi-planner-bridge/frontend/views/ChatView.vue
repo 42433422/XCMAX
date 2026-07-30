@@ -1,3 +1,4 @@
+<!-- Mod SSOT physical view (desktop). Keep behavior aligned with host ChatView; not a byte-identical mirror. -->
 <template>
   <div class="chat-view page-view active" id="view-chat">
     <ChatQuickActions :buttons="visibleQuickButtons" @quick="sendQuick" />

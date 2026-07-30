@@ -1311,55 +1311,13 @@ class LLMWorkflowPlanner:
             tool_registry=registry_for_plan,
             context=context,
         )
-        if planned is not None:
-            err = validate_plan_graph(planned)
-            if err is None:
-                try:
-                    from app.domain.neuro.cognition.plan_graph_log import append_plan_graph
+        from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 
-                    append_plan_graph(
-                        planned,
-                        phase="planned",
-                        trace_id=str((context or {}).get("trace_id") or plan_id),
-                        extra={"source": "react_multiagent"},
-                    )
-                except RECOVERABLE_ERRORS:
-                    logger.debug("plan_graph_log skipped", exc_info=True)
-                return planned
-            logger.warning("ReAct/CoT 计划校验失败，回退规则规划: %s", err)
-            try:
-                from app.domain.neuro.cognition.plan_graph_log import append_plan_graph
-                from app.domain.neuro.evolution.self_reflection import get_self_reflection_engine
-
-                append_plan_graph(
-                    planned,
-                    phase="failed",
-                    force=True,
-                    trace_id=str((context or {}).get("trace_id") or plan_id),
-                    extra={"validate_error": err, "source": "react_multiagent"},
-                )
-                get_self_reflection_engine().critique_and_propose(
-                    target="prompt_template",
-                    critique=f"PlanGraph 校验失败: {err}",
-                    proposal={"action": "revise_planner_prompt", "error": err},
-                    evidence={"plan_id": plan_id},
-                )
-            except RECOVERABLE_ERRORS:
-                logger.debug("plan failure reflection skipped", exc_info=True)
-
-        fallback = self._fallback_plan(plan_id, message, registry_for_plan)
-        try:
-            from app.domain.neuro.cognition.plan_graph_log import append_plan_graph
-
-            append_plan_graph(
-                fallback,
-                phase="planned",
-                trace_id=str((context or {}).get("trace_id") or plan_id),
-                extra={"source": "fallback_rules"},
-            )
-        except RECOVERABLE_ERRORS:
-            logger.debug("fallback plan_graph_log skipped", exc_info=True)
-        return fallback
+        return finalize_planned_graph(
+            planned, plan_id=plan_id, context=context, validate=validate_plan_graph,
+            fallback_factory=lambda: self._fallback_plan(plan_id, message, registry_for_plan),
+            warn=logger.warning,
+        )
 
     def _plan_with_react_multiagent(
         self,
