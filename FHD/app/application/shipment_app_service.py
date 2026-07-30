@@ -43,9 +43,16 @@ class ShipmentApplicationService:
         items_data: list[dict[str, Any]],
         contact_person: str = "",
         contact_phone: str = "",
+        external_order_number: str = "",
+        order_date: str = "",
+        source_fingerprint: str = "",
+        source_kind: str = "",
     ) -> dict[str, Any]:
         """
-        创建发货单用例
+        创建发货单用例。
+
+        external_order_number / order_date 写入 raw_text 元数据，便于 ETL 追溯；
+        系统主键仍由仓储分配（历史兼容）。
         """
         try:
             contact_info = ContactInfo(person=contact_person, phone=contact_phone)
@@ -62,6 +69,17 @@ class ShipmentApplicationService:
             if not shipment.is_valid():
                 return {"success": False, "message": "发货单无效：缺少购买单位或产品"}
 
+            meta_parts = ["source=shipment_excel_etl"]
+            if str(external_order_number or "").strip():
+                meta_parts.append(f"external_order_number={str(external_order_number).strip()}")
+            if str(order_date or "").strip():
+                meta_parts.append(f"order_date={str(order_date).strip()}")
+            if str(source_fingerprint or "").strip():
+                meta_parts.append(f"fingerprint={str(source_fingerprint).strip()}")
+            if str(source_kind or "").strip():
+                meta_parts.append(f"source_kind={str(source_kind).strip()}")
+            shipment.raw_text = "|".join(meta_parts)
+
             saved_shipment = self._repository.save(shipment)
 
             try:
@@ -71,10 +89,16 @@ class ShipmentApplicationService:
             except RECOVERABLE_ERRORS as hook_err:
                 logger.warning("Hook trigger failed: %s", hook_err)
 
+            payload = saved_shipment.to_dict()
+            if str(external_order_number or "").strip():
+                payload["external_order_number"] = str(external_order_number).strip()
+            if str(order_date or "").strip():
+                payload["order_date"] = str(order_date).strip()
+
             return {
                 "success": True,
                 "message": "发货单创建成功",
-                "shipment": saved_shipment.to_dict(),
+                "shipment": payload,
             }
 
         except RECOVERABLE_ERRORS as e:
@@ -527,6 +551,37 @@ class ShipmentApplicationService:
             "total_amount": total_amount,
         }
 
+    def get_latest_products_for_unit(
+        self, unit_name: str, *, limit: int = 1
+    ) -> list[dict[str, Any]]:
+        """返回指定客户最近出货记录中的产品明细（打单缺货明细兜底）。"""
+        name = str(unit_name or "").strip()
+        if not name:
+            return []
+        orders = self.get_orders(max(20, int(limit) * 5)) or []
+        matched: list[dict[str, Any]] = []
+        for order in orders:
+            if not isinstance(order, dict):
+                continue
+            customer = str(
+                order.get("customer_name")
+                or order.get("unit_name")
+                or order.get("purchase_unit")
+                or ""
+            ).strip()
+            if not customer:
+                continue
+            if not (customer == name or name in customer or customer in name):
+                continue
+            items = order.get("products") or order.get("items") or []
+            if isinstance(items, list) and items:
+                matched.append({"order": order, "products": list(items)})
+                if len(matched) >= max(1, int(limit)):
+                    break
+        if not matched:
+            return []
+        return list(matched[0]["products"])
+
     def generate_shipment_document(
         self,
         *,
@@ -535,31 +590,134 @@ class ShipmentApplicationService:
         date: str | None = None,
         template_name: str | None = None,
         order_number: str | None = None,
+        template_id: str | None = None,
+        preferred_template: str | None = None,
+        intent: str = "shipment_generate",
+        allow_products_from_db: bool = False,
+        strict_template: bool | None = None,
+        raw_text: str = "",
     ) -> dict[str, Any]:
-        """生成发货单文档（用例编排）。"""
+        """生成发货单文档（用例编排）。
+
+        未指定模版时从模版库按意图 / 客户 / 偏好解析默认模版，闭合
+        ingest → templates → 打单 断点。
+        """
         if not self._document_generator:
             return {
                 "success": False,
                 "message": "document_generator 未配置",
+                "error_code": "DOCUMENT_GENERATOR_MISSING",
                 "doc_name": None,
                 "file_path": None,
             }
+
+        products_source = "request"
+        product_rows = list(products or [])
+        if not product_rows and allow_products_from_db:
+            from app.application.shipment_template_resolve import resolve_products_for_unit
+
+            product_rows = resolve_products_for_unit(unit_name)
+            if product_rows:
+                products_source = "db_latest_shipment"
+        if not product_rows:
+            return {
+                "success": False,
+                "message": "产品列表不能为空",
+                "error_code": "PRODUCTS_REQUIRED",
+                "doc_name": None,
+                "file_path": None,
+            }
+
+        from app.application.shipment_template_resolve import (
+            resolve_shipment_template,
+            shipment_template_strict_enabled,
+        )
+
+        strict = shipment_template_strict_enabled(strict_template)
+        resolved_template = template_name
+        template_meta: dict[str, Any] = {}
+        try:
+            resolved = resolve_shipment_template(
+                template_id=template_id,
+                template_name=template_name,
+                preferred=preferred_template,
+                unit_name=unit_name,
+                intent=intent,
+                strict=strict,
+                log_usage=False,
+            )
+            template_meta = resolved
+            if resolved.get("path"):
+                resolved_template = str(resolved["path"])
+            elif strict and not str(template_name or "").strip():
+                return {
+                    "success": False,
+                    "message": "未找到可用发货单模版，请先入库或指定 template_id",
+                    "error_code": resolved.get("error_code") or "TEMPLATE_NOT_FOUND",
+                    "template_resolution": {
+                        "template_id": resolved.get("template_id"),
+                        "template_name": resolved.get("template_name"),
+                        "reason": resolved.get("reason"),
+                        "error_code": resolved.get("error_code"),
+                    },
+                    "doc_name": None,
+                    "file_path": None,
+                }
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("模版库解析失败，回退 legacy: %s", exc)
+            if strict:
+                return {
+                    "success": False,
+                    "message": f"模版解析失败：{exc}",
+                    "error_code": "TEMPLATE_RESOLVE_FAILED",
+                    "doc_name": None,
+                    "file_path": None,
+                }
+
         result = self._document_generator.generate(
             unit_name=unit_name,
-            products=products,
+            products=product_rows,
             date=date,
-            template_name=template_name,
+            template_name=resolved_template,
             order_number=order_number,
         )
+        if isinstance(result, dict):
+            result["products_source"] = products_source
+            if template_meta:
+                result["template_resolution"] = {
+                    "template_id": template_meta.get("template_id"),
+                    "template_name": template_meta.get("template_name"),
+                    "template_type": template_meta.get("template_type"),
+                    "source": template_meta.get("source"),
+                    "reason": template_meta.get("reason"),
+                    "path": template_meta.get("path"),
+                    "score": template_meta.get("score"),
+                    "error_code": template_meta.get("error_code"),
+                    "ok": template_meta.get("ok"),
+                }
+                if result.get("success") and template_meta.get("template_id"):
+                    try:
+                        from app.application.shipment_template_resolve import log_template_usage
+
+                        log_template_usage(
+                            str(template_meta.get("template_id")),
+                            action="generate",
+                            result_text=(
+                                f"{template_meta.get('reason')}|unit={unit_name}|"
+                                f"ok={bool(result.get('success'))}"
+                            ),
+                        )
+                    except RECOVERABLE_ERRORS:
+                        pass
         if result.get("success") and self._record_store:
             try:
-                record_products = result.get("parsed_products") or products
+                record_products = result.get("parsed_products") or product_rows
                 record_result = self._record_store.record_document_generation(
                     unit_name=result.get("purchase_unit") or unit_name,
                     unit_id=result.get("unit_id"),
                     products=record_products,
                     document_result=result,
-                    raw_text="",
+                    raw_text=str(raw_text or ""),
                 )
                 record_id = (record_result or {}).get("record_id")
                 if record_id:

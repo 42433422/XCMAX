@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
-
+from typing import Any
 
 RequestReview = Callable[..., dict[str, Any]]
 FetchStatus = Callable[[str], dict[str, Any]]
@@ -26,17 +26,27 @@ def attach_llm_scoring(
     record_deep_result: RecordDeepResult,
     absorption_evidence: EvidenceProvider,
 ) -> dict[str, Any]:
-    require_deep = bool(payload.get("require_deep_review") or payload.get("require_llm_scores"))
+    require_deep = bool(
+        payload.get("require_deep_review") or payload.get("require_llm_scores")
+    )
     if not llm_enabled(payload):
         metadata = assessment.setdefault("metadata", {})
         disabled = llm_disabled_review(require_deep=require_deep)
         assessment["llm_review"] = disabled
         metadata["score_source"] = disabled["score_source"]
         if require_deep:
-            raise RuntimeError("PaiBi LLM scoring is required; local scoring has been removed")
+            raise RuntimeError(
+                "PaiBi LLM scoring is required; local scoring has been removed"
+            )
         return assessment
-    metadata = assessment.get("metadata", {}) if isinstance(assessment.get("metadata"), dict) else {}
-    external_source, external_path = llm_external_reference(metadata, external_source, external_path)
+    metadata = (
+        assessment.get("metadata", {})
+        if isinstance(assessment.get("metadata"), dict)
+        else {}
+    )
+    external_source, external_path = llm_external_reference(
+        metadata, external_source, external_path
+    )
     evidence = list(assessment.get("evidence", []))
     evidence.extend(absorption_evidence(project))
     review = maybe_request_llm_review(
@@ -54,7 +64,9 @@ def attach_llm_scoring(
     assessment["llm_review"] = review
     metadata = assessment.setdefault("metadata", {})
     metadata["score_source"] = "paibi_llm_pending"
-    wait_sec = float(payload.get("wait_llm_sec") or payload.get("wait_llm_seconds") or 0)
+    wait_sec = float(
+        payload.get("wait_llm_sec") or payload.get("wait_llm_seconds") or 0
+    )
     task_id = str((review.get("dispatch") or {}).get("task_id") or "")
     status: dict[str, Any] = {}
     if wait_sec > 0 and task_id:
@@ -68,11 +80,20 @@ def attach_llm_scoring(
             metadata["score_source"] = "paibi_llm"
             metadata["llm_task_id"] = status.get("task_id")
             if require_deep:
-                record_deep_result(project=project, mode=mode, review=review, status=status)
+                record_deep_result(
+                    project=project, mode=mode, review=review, status=status
+                )
     if require_deep and metadata.get("score_source") != "paibi_llm":
-        current = str((status or {}).get("status") or review.get("status") or (review.get("dispatch") or {}).get("status") or "not_completed")
+        current = str(
+            (status or {}).get("status")
+            or review.get("status")
+            or (review.get("dispatch") or {}).get("status")
+            or "not_completed"
+        )
         metadata["score_source"] = "paibi_llm_required_not_completed"
-        raise RuntimeError(f"PaiBi LLM deep review did not complete with scores; current status: {current}")
+        raise RuntimeError(
+            f"PaiBi LLM deep review did not complete with scores; current status: {current}"
+        )
     return assessment
 
 
@@ -90,7 +111,11 @@ def maybe_request_llm_review(
     request_review: RequestReview,
 ) -> dict[str, Any]:
     if not llm_enabled(payload):
-        return llm_disabled_review(require_deep=bool(payload.get("require_deep_review") or payload.get("require_llm_scores")))
+        return llm_disabled_review(
+            require_deep=bool(
+                payload.get("require_deep_review") or payload.get("require_llm_scores")
+            )
+        )
     review = request_review(
         project=str(project),
         mode=mode,
@@ -106,8 +131,14 @@ def maybe_request_llm_review(
     return review
 
 
-def llm_external_reference(metadata: dict[str, Any], external_source: str, external_path: str) -> tuple[str, str]:
-    state = metadata.get("absorption_state") if isinstance(metadata.get("absorption_state"), dict) else {}
+def llm_external_reference(
+    metadata: dict[str, Any], external_source: str, external_path: str
+) -> tuple[str, str]:
+    state = (
+        metadata.get("absorption_state")
+        if isinstance(metadata.get("absorption_state"), dict)
+        else {}
+    )
     if not external_source:
         external_source = str(state.get("source") or "")
     if not external_path:
@@ -116,7 +147,9 @@ def llm_external_reference(metadata: dict[str, Any], external_source: str, exter
 
 
 def llm_enabled(payload: dict[str, Any]) -> bool:
-    return bool(payload.get("use_llm") or payload.get("paibi_llm") or payload.get("llm_review"))
+    return bool(
+        payload.get("use_llm") or payload.get("paibi_llm") or payload.get("llm_review")
+    )
 
 
 def llm_disabled_review(*, require_deep: bool = False) -> dict[str, Any]:

@@ -31,11 +31,35 @@
 
 Veto（任一PR类型）：PR 标 `hold-merge` label 时不自动合并。
 
+合并失败处理（2026-07-25）：
+- 合并前先查 mergeable；冲突 / 403 / 其它 HTTP 错误分开文案，不再笼统写「权限不足」
+- 失败评论按 `❌ 自动合并失败` 去重，避免 schedule 每 30 分钟刷屏
+- 冲突时自动打 `needs-human` + `hold-merge`
+
+严格分支保护恢复（2026-07-26）：
+- mergeable=true 但 mergeable_state=behind 时，调用 GitHub update-branch API
+- 更新后停止本轮合并，等待新 head SHA 的 AI Review + CI 全量重跑
+- expected_head_sha 防止并发覆盖；更新失败 fail closed，不绕过 required checks
+- update-branch 必须使用独立 `BRANCH_UPDATE_TOKEN`，避免 `GITHUB_TOKEN`
+  触发的 PR 更新进入需要人工批准的 workflow 状态
+
+合并后发布闭环（2026-07-26）：
+- `GITHUB_TOKEN` 合并不会触发普通 `push` workflow；合并成功后必须用
+  独立 `WORKFLOW_DISPATCH_TOKEN` 显式 workflow_dispatch FHD CI/CD 与
+  MODstore 主干 CI，确保下游 `workflow_run` CD 事件不会被递归触发保护吞掉
+- 任一派发失败都记为 `post_merge_dispatch_failed`、标记 `needs-human`，
+  并让本次 SLA workflow 失败，禁止把“已合并”冒充“已发布”
+
 全部动作写 metrics/ai-self-heal-stale.jsonl。
 
 环境变量：
   GITHUB_TOKEN    必填
   GITHUB_REPOSITORY  必填（如 "owner/repo"）
+  BRANCH_UPDATE_TOKEN  behind PR 更新专用 token（CI 使用 CI_COMMIT_TOKEN）
+  WORKFLOW_DISPATCH_TOKEN  主干 CI 派发专用 token（CI 使用 CI_COMMIT_TOKEN）
+  REQUIRE_INDEPENDENT_WORKFLOW_DISPATCH_TOKEN=1 时缺 token 即 fail closed
+  MERGEABILITY_POLL_ATTEMPTS  GitHub mergeable=null 时的最大查询次数（默认 6）
+  MERGEABILITY_POLL_BASE_SECONDS  mergeable 重查退避基数秒（默认 1，最大 8 秒）
   AUTO_IMPLEMENT_ALLOWLIST_PATH  可选，覆盖 allowlist 路径（默认 <repo_root>/config/auto-implement-allowlist.yaml）
 """
 
@@ -70,6 +94,22 @@ DEFAULT_ALLOWLIST_PATH = REPO_ROOT / "config" / "auto-implement-allowlist.yaml"
 AI_REVIEW_WORKFLOW_NAME = "AI Review"
 AI_REVIEW_PASSED_LABEL = "ai-review: passed"
 HOLD_MERGE_LABEL = "hold-merge"
+NEEDS_HUMAN_LABEL = "needs-human"
+# 合并失败评论去重标记（勿改文案前缀，否则会再次刷屏）
+MERGE_FAIL_COMMENT_MARKER = "❌ 自动合并失败"
+POST_MERGE_DISPATCH_FAIL_MARKER = "❌ 自动合并后发布派发失败"
+
+POST_MERGE_WORKFLOWS: tuple[tuple[str, dict[str, str]], ...] = (
+    (
+        "fhd-ci-cd.yml",
+        {
+            "release_channel": "stable",
+            "push_to_cvm": "true",
+            "push_image_tar": "false",
+        },
+    ),
+    ("modstore-ci-backend-python.yml", {}),
+)
 
 # ai-self-heal / ai-generated 标签（用于区分普通 PR）
 AI_PR_LABELS = ("ai-self-heal", "ai-generated")
@@ -77,6 +117,15 @@ AI_PR_LABELS = ("ai-self-heal", "ai-generated")
 # 最终策略：r2/r3 永不进入 auto-merge 分支（仅 stale→close / 人工）
 MANUAL_MERGE_RISK_LEVELS = frozenset({"r2", "r3"})
 AUTO_MERGE_RISK_LEVELS = frozenset({"r0", "r1"})
+MERGEABILITY_POLL_ATTEMPTS = max(
+    1,
+    int(os.environ.get("MERGEABILITY_POLL_ATTEMPTS", "6")),
+)
+MERGEABILITY_POLL_BASE_SECONDS = max(
+    0.1,
+    float(os.environ.get("MERGEABILITY_POLL_BASE_SECONDS", "1")),
+)
+MERGEABILITY_POLL_MAX_SECONDS = 8.0
 
 
 # =====================================================================
@@ -119,6 +168,33 @@ class GitHubClient:
                 "Authorization": f"Bearer {token}",
                 "Accept": "application/vnd.github+json",
             },
+        )
+        branch_update_token = (os.environ.get("BRANCH_UPDATE_TOKEN") or "").strip()
+        self.branch_update_client = (
+            httpx.Client(
+                timeout=30.0,
+                headers={
+                    "Authorization": f"Bearer {branch_update_token}",
+                    "Accept": "application/vnd.github+json",
+                },
+            )
+            if branch_update_token
+            else None
+        )
+        workflow_dispatch_token = (os.environ.get("WORKFLOW_DISPATCH_TOKEN") or "").strip()
+        self.require_independent_workflow_dispatch = (
+            os.environ.get("REQUIRE_INDEPENDENT_WORKFLOW_DISPATCH_TOKEN") == "1"
+        )
+        self.workflow_dispatch_client = (
+            httpx.Client(
+                timeout=30.0,
+                headers={
+                    "Authorization": f"Bearer {workflow_dispatch_token}",
+                    "Accept": "application/vnd.github+json",
+                },
+            )
+            if workflow_dispatch_token
+            else None
         )
 
     def list_self_heal_prs(self) -> list[PRInfo]:
@@ -173,7 +249,13 @@ class GitHubClient:
         while True:
             resp = self.client.get(
                 url,
-                params={"state": "open", "per_page": 100, "page": page, "sort": "created", "direction": "desc"},
+                params={
+                    "state": "open",
+                    "per_page": 100,
+                    "page": page,
+                    "sort": "created",
+                    "direction": "desc",
+                },
             )
             resp.raise_for_status()
             items = resp.json()
@@ -260,10 +342,153 @@ class GitHubClient:
         resp.raise_for_status()
         return resp.json()["head"]["sha"]
 
-    def merge_pr(self, pr_number: int, method: str = "squash") -> bool:
+    def get_pr_mergeability(self, pr_number: int) -> tuple[bool | None, str]:
+        """查询 PR 是否可合并。
+
+        返回 (mergeable, reason)：
+        - (True, "ok")：可合并
+        - (True, "behind")：无冲突但落后主干，应先 update-branch 并重跑检查
+        - (False, "conflict")：有冲突
+        - (None, reason)：GitHub 仍在计算 / API 异常，调用方应跳过本轮
+
+        GitHub 会在首次读取 PR 后异步计算 ``mergeable``，因此全绿 PR 可能
+        短暂返回 null。这里做有界指数退避；仍未知时 fail closed，绝不把
+        unknown 当作可合并。
+        """
+        url = f"{GITHUB_API}/repos/{self.repo}/pulls/{pr_number}"
+        for attempt in range(1, MERGEABILITY_POLL_ATTEMPTS + 1):
+            resp = self.client.get(url)
+            if resp.status_code != 200:
+                return None, f"mergeability_api_error_{resp.status_code}"
+            data = resp.json()
+            mergeable = data.get("mergeable")
+            if mergeable is True:
+                if str(data.get("mergeable_state") or "").lower() == "behind":
+                    return True, "behind"
+                return True, "ok"
+            if mergeable is False:
+                return False, "conflict"
+            if attempt < MERGEABILITY_POLL_ATTEMPTS:
+                delay = min(
+                    MERGEABILITY_POLL_BASE_SECONDS * (2 ** (attempt - 1)),
+                    MERGEABILITY_POLL_MAX_SECONDS,
+                )
+                time.sleep(delay)
+        return None, f"unknown_after_{MERGEABILITY_POLL_ATTEMPTS}_attempts"
+
+    def update_pr_branch(self, pr_number: int, expected_head_sha: str) -> tuple[bool, str]:
+        """让 GitHub 把 base 合入 PR 分支；不绕过保护规则。
+
+        expected_head_sha 是并发守卫：PR head 已变化时 GitHub 会拒绝本次更新，
+        治理器下一轮重新读取新 head 后再评估。
+        """
+        if self.branch_update_client is None:
+            return False, "branch_update_token_missing"
+        url = f"{GITHUB_API}/repos/{self.repo}/pulls/{pr_number}/update-branch"
+        resp = self.branch_update_client.put(url, json={"expected_head_sha": expected_head_sha})
+        if resp.status_code == 202:
+            return True, "ok"
+        try:
+            message = str((resp.json() or {}).get("message") or "")
+        except Exception:
+            message = (resp.text or "")[:200]
+        lowered = message.lower()
+        if resp.status_code == 409 or "conflict" in lowered:
+            return False, "conflict"
+        if (
+            resp.status_code == 403
+            or "resource not accessible" in lowered
+            or "permission" in lowered
+        ):
+            return False, "permission"
+        detail = message.replace("\n", " ").strip() or "no_message"
+        return False, f"http_{resp.status_code}:{detail[:160]}"
+
+    def merge_pr(self, pr_number: int, method: str = "squash") -> tuple[bool, str, str]:
+        """尝试 squash/merge。返回 (ok, reason, merge_sha)。
+
+        reason 取值：ok / conflict / permission / http_<code>:<message>
+        """
         url = f"{GITHUB_API}/repos/{self.repo}/pulls/{pr_number}/merge"
         resp = self.client.put(url, json={"merge_method": method})
-        return resp.status_code == 200
+        if resp.status_code == 200:
+            try:
+                merge_sha = str((resp.json() or {}).get("sha") or "").strip()
+            except Exception:
+                merge_sha = ""
+            if len(merge_sha) != 40 or any(ch not in "0123456789abcdef" for ch in merge_sha):
+                return True, "ok_missing_merge_sha", ""
+            return True, "ok", merge_sha
+        message = ""
+        try:
+            message = str((resp.json() or {}).get("message") or "")
+        except Exception:
+            message = (resp.text or "")[:200]
+        lowered = message.lower()
+        if resp.status_code in (405, 409) or "conflict" in lowered:
+            return False, "conflict", ""
+        if (
+            resp.status_code == 403
+            or "resource not accessible" in lowered
+            or "permission" in lowered
+        ):
+            return False, "permission", ""
+        detail = message.replace("\n", " ").strip() or "no_message"
+        return False, f"http_{resp.status_code}:{detail[:160]}", ""
+
+    def dispatch_workflow(
+        self,
+        workflow_file: str,
+        *,
+        ref: str = "main",
+        inputs: dict[str, str] | None = None,
+    ) -> tuple[bool, str]:
+        """用独立 token 派发，保留下游 ``workflow_run`` 自动 CD 事件。"""
+
+        url = f"{GITHUB_API}/repos/{self.repo}/actions/workflows/{workflow_file}/dispatches"
+        payload: dict[str, Any] = {"ref": ref}
+        if inputs:
+            payload["inputs"] = inputs
+        dispatch_client = getattr(self, "workflow_dispatch_client", None)
+        if dispatch_client is None:
+            if getattr(
+                self,
+                "require_independent_workflow_dispatch",
+                False,
+            ):
+                return False, "workflow_dispatch_token_missing"
+            dispatch_client = self.client
+        resp = dispatch_client.post(url, json=payload)
+        if resp.status_code == 204:
+            return True, "ok"
+        try:
+            message = str((resp.json() or {}).get("message") or "")
+        except Exception:
+            message = (resp.text or "")[:200]
+        detail = message.replace("\n", " ").strip() or "no_message"
+        return False, f"http_{resp.status_code}:{detail[:160]}"
+
+    def has_issue_comment_containing(self, pr_number: int, needle: str) -> bool:
+        """是否已有包含 needle 的 issue/PR 评论（用于合并失败评论去重）。"""
+        if not needle:
+            return False
+        url = f"{GITHUB_API}/repos/{self.repo}/issues/{pr_number}/comments"
+        page = 1
+        while page <= 5:
+            resp = self.client.get(url, params={"per_page": 100, "page": page})
+            if resp.status_code != 200:
+                return False
+            items = resp.json() or []
+            if not items:
+                break
+            for item in items:
+                body = str(item.get("body") or "")
+                if needle in body:
+                    return True
+            if len(items) < 100:
+                break
+            page += 1
+        return False
 
     def close_pr(self, pr_number: int) -> bool:
         url = f"{GITHUB_API}/repos/{self.repo}/pulls/{pr_number}"
@@ -295,6 +520,207 @@ def _extract_login(user: Any) -> str:
     if not isinstance(user, dict):
         return ""
     return str(user.get("login") or "")
+
+
+def _merge_failure_comment(reason: str) -> str:
+    """按失败原因生成准确评论（避免把冲突误报成权限不足）。"""
+    if reason == "conflict":
+        return (
+            f"{MERGE_FAIL_COMMENT_MARKER}：PR 存在合并冲突（非权限问题）。"
+            f"请 rebase/解决冲突后去掉 `{NEEDS_HUMAN_LABEL}` 再重试。"
+        )
+    if reason == "permission":
+        return (
+            f"{MERGE_FAIL_COMMENT_MARKER}：GitHub token 权限不足（403）。"
+            "请检查 Actions `contents: write` / branch protection / fine-grained token 权限。"
+        )
+    if reason == "unknown":
+        return f"{MERGE_FAIL_COMMENT_MARKER}：GitHub 尚未算出 mergeable 状态，本轮跳过。"
+    return f"{MERGE_FAIL_COMMENT_MARKER}：{reason}，请人工处理。"
+
+
+def _notify_merge_failure_once(
+    client: GitHubClient,
+    pr: PRInfo,
+    reason: str,
+    *,
+    extra_labels: list[str] | None = None,
+) -> None:
+    """合并失败时：准确评论（去重）+ 打 needs-human，避免每 30 分钟刷屏。"""
+    body = _merge_failure_comment(reason)
+    already = False
+    try:
+        already = client.has_issue_comment_containing(pr.number, MERGE_FAIL_COMMENT_MARKER)
+    except Exception as ex:  # noqa: BLE001 — 去重失败不应阻断打标
+        print(f"  warn: comment dedup check failed: {ex}")
+    if already:
+        print(f"  skip comment: already notified merge failure on #{pr.number}")
+    else:
+        client.comment(pr.number, body)
+    labels = [NEEDS_HUMAN_LABEL]
+    if extra_labels:
+        labels.extend(extra_labels)
+    # 冲突时额外 hold，防止门禁仍绿却反复尝试 merge
+    if reason == "conflict" and HOLD_MERGE_LABEL not in labels:
+        labels.append(HOLD_MERGE_LABEL)
+    client.add_labels(pr.number, labels)
+
+
+def _try_auto_merge(
+    client: GitHubClient,
+    pr: PRInfo,
+    *,
+    success_comment: str,
+    success_action: str,
+    failure_action: str,
+    metric_extra: dict[str, Any] | None = None,
+) -> str:
+    """统一 auto-merge 路径：先查 mergeable/behind，再 merge。
+
+    返回 auto_merged / branch_updated / post_merge_dispatch_failed /
+    merge_failed / skipped。
+    """
+    mergeable, mreason = client.get_pr_mergeability(pr.number)
+    if mergeable is None:
+        print(f"  skip: mergeable 未知 ({mreason})")
+        _append_stale(
+            {
+                "pr": pr.number,
+                "kind": pr.kind,
+                "author": pr.author,
+                "action": "mergeability_unknown",
+                "reason": mreason,
+                **(metric_extra or {}),
+            }
+        )
+        return "skipped"
+    if mergeable is False:
+        print(f"  merge blocked: {mreason}")
+        _notify_merge_failure_once(client, pr, mreason)
+        _append_stale(
+            {
+                "pr": pr.number,
+                "kind": pr.kind,
+                "author": pr.author,
+                "action": failure_action,
+                "reason": mreason,
+                **(metric_extra or {}),
+            }
+        )
+        return "merge_failed"
+
+    if mreason == "behind":
+        expected_head_sha = pr.head_sha or client.get_pr_head_sha(pr.number)
+        if not expected_head_sha:
+            print("  skip: behind 但缺少 expected_head_sha")
+            _append_stale(
+                {
+                    "pr": pr.number,
+                    "kind": pr.kind,
+                    "author": pr.author,
+                    "action": "branch_update_failed",
+                    "reason": "missing_head_sha",
+                    **(metric_extra or {}),
+                }
+            )
+            return "skipped"
+        updated, update_reason = client.update_pr_branch(pr.number, expected_head_sha)
+        if updated:
+            print(
+                f"  branch update requested: head={expected_head_sha}; "
+                "等待新 head 的 AI Review + CI"
+            )
+            _append_stale(
+                {
+                    "pr": pr.number,
+                    "kind": pr.kind,
+                    "author": pr.author,
+                    "action": "branch_update_requested",
+                    "previous_head_sha": expected_head_sha,
+                    **(metric_extra or {}),
+                }
+            )
+            return "branch_updated"
+        print(f"  branch update failed: {update_reason}")
+        _append_stale(
+            {
+                "pr": pr.number,
+                "kind": pr.kind,
+                "author": pr.author,
+                "action": "branch_update_failed",
+                "previous_head_sha": expected_head_sha,
+                "reason": update_reason,
+                **(metric_extra or {}),
+            }
+        )
+        # 并发 head 变化或 GitHub 瞬时错误均由下一轮重新读取状态后重试；
+        # 不把 behind 误报为代码冲突，也不自动添加 hold-merge。
+        return "skipped"
+
+    ok, reason, merge_sha = client.merge_pr(pr.number, method="squash")
+    if ok:
+        dispatch_failures: list[str] = []
+        if not merge_sha:
+            dispatch_failures.append(f"merge_sha:{reason}")
+        else:
+            for workflow_file, inputs in POST_MERGE_WORKFLOWS:
+                dispatched, dispatch_reason = client.dispatch_workflow(
+                    workflow_file,
+                    ref="main",
+                    inputs=inputs,
+                )
+                if not dispatched:
+                    dispatch_failures.append(f"{workflow_file}:{dispatch_reason}")
+
+        if dispatch_failures:
+            failure_summary = "; ".join(dispatch_failures)
+            client.comment(
+                pr.number,
+                f"{POST_MERGE_DISPATCH_FAIL_MARKER}\n\n"
+                f"合并已完成，但主干 CI/CD 未全部派发：`{failure_summary}`。"
+                "已标记 `needs-human`；不得把本次动作计为生产闭环。",
+            )
+            client.add_labels(pr.number, [NEEDS_HUMAN_LABEL])
+            _append_stale(
+                {
+                    "pr": pr.number,
+                    "kind": pr.kind,
+                    "author": pr.author,
+                    "action": "post_merge_dispatch_failed",
+                    "merge_sha": merge_sha,
+                    "reason": failure_summary,
+                    **(metric_extra or {}),
+                }
+            )
+            return "post_merge_dispatch_failed"
+
+        client.comment(pr.number, success_comment)
+        _append_stale(
+            {
+                "pr": pr.number,
+                "kind": pr.kind,
+                "author": pr.author,
+                "action": success_action,
+                "merge_sha": merge_sha,
+                "dispatched_workflows": [item[0] for item in POST_MERGE_WORKFLOWS],
+                **(metric_extra or {}),
+            }
+        )
+        return "auto_merged"
+
+    print(f"  merge failed: {reason}")
+    _notify_merge_failure_once(client, pr, reason)
+    _append_stale(
+        {
+            "pr": pr.number,
+            "kind": pr.kind,
+            "author": pr.author,
+            "action": failure_action,
+            "reason": reason,
+            **(metric_extra or {}),
+        }
+    )
+    return "merge_failed"
 
 
 # =====================================================================
@@ -385,7 +811,7 @@ GUARD_CONFIG = {
         "allowed_suffixes": (".py", ".md"),
     },
     "ai_generated": {
-        "max_changed_files": 5,   # allowlist 域已预过滤低风险，放宽
+        "max_changed_files": 5,  # allowlist 域已预过滤低风险，放宽
         "max_diff_lines": 100,
         "allowed_suffixes": (".py", ".md", ".ts", ".vue", ".js", ".json", ".yaml", ".yml"),
     },
@@ -486,7 +912,8 @@ def process_regular_pr(
 ) -> str:
     """处理单个普通 PR：通过三重门禁 → squash merge；否则 skip。
 
-    返回动作：auto_merged / auto_merged_dry / skipped / merge_failed。
+    返回动作：auto_merged / branch_updated / auto_merged_dry / skipped /
+    merge_failed。
     不做 stale/close（普通 PR 由人工 review 兜底）。
     """
     print(
@@ -497,40 +924,29 @@ def process_regular_pr(
     passed, reason = check_regular_pr_gates(client, pr, trusted_authors)
     if not passed:
         print(f"  skip: 三重门禁未通过 ({reason})")
-        _append_stale({
-            "pr": pr.number,
-            "kind": "regular",
-            "author": pr.author,
-            "action": "regular_skipped",
-            "reason": reason,
-        })
+        _append_stale(
+            {
+                "pr": pr.number,
+                "kind": "regular",
+                "author": pr.author,
+                "action": "regular_skipped",
+                "reason": reason,
+            }
+        )
         return "skipped"
 
     print(f"  三重门禁通过 ({reason})，auto-merge (squash)")
     if not dry_run:
-        ok = client.merge_pr(pr.number, method="squash")
-        if ok:
-            client.comment(
-                pr.number,
+        return _try_auto_merge(
+            client,
+            pr,
+            success_comment=(
                 "✅ 三重门禁通过（ai-review:passed + ci:passed + author:trusted），"
-                "自动 squash merge。",
-            )
-            _append_stale({
-                "pr": pr.number,
-                "kind": "regular",
-                "author": pr.author,
-                "action": "regular_auto_merged",
-            })
-            return "auto_merged"
-        else:
-            client.comment(pr.number, "❌ 自动合并失败（可能冲突或权限不足），请人工处理。")
-            _append_stale({
-                "pr": pr.number,
-                "kind": "regular",
-                "author": pr.author,
-                "action": "regular_auto_merge_failed",
-            })
-            return "merge_failed"
+                "自动 squash merge。"
+            ),
+            success_action="regular_auto_merged",
+            failure_action="regular_auto_merge_failed",
+        )
     return "auto_merged_dry"
 
 
@@ -574,17 +990,21 @@ def process_pr(
     if not risk:
         risk = "r2" if pr.kind == "ai_generated" else "r3"
 
-    print(f"[PR #{pr.number}] kind={pr.kind} risk={risk} age={age_days:.1f}d files={pr.changed_files}")
+    print(
+        f"[PR #{pr.number}] kind={pr.kind} risk={risk} age={age_days:.1f}d files={pr.changed_files}"
+    )
 
     # ===== hold-merge veto（人工强制 hold，普适）=====
     if HOLD_MERGE_LABEL in pr.labels:
         print(f"  skip: 标 {HOLD_MERGE_LABEL} label，不自动合并/关闭")
-        _append_stale({
-            "pr": pr.number,
-            "kind": pr.kind,
-            "risk": risk,
-            "action": "hold_merge_vetoed",
-        })
+        _append_stale(
+            {
+                "pr": pr.number,
+                "kind": pr.kind,
+                "risk": risk,
+                "action": "hold_merge_vetoed",
+            }
+        )
         return "skipped"
 
     # ===== R0 / R1: auto-merge 候选 =====
@@ -605,20 +1025,29 @@ def process_pr(
                     f"⚠️ 二次守卫未通过（`{reason}`），自动升级为 `risk:r2`，"
                     f"转 stale→close 流程（7d 提醒 / 14d 关闭）。",
                 )
-                _append_stale({"pr": pr.number, "kind": pr.kind, "risk": risk, "action": "upgraded_to_r2", "reason": reason})
+                _append_stale(
+                    {
+                        "pr": pr.number,
+                        "kind": pr.kind,
+                        "risk": risk,
+                        "action": "upgraded_to_r2",
+                        "reason": reason,
+                    }
+                )
             return "upgraded"
 
         print(f"  二次守卫通过，auto-merge ({pr.kind} {risk} {threshold}h)")
         if not dry_run:
-            ok = client.merge_pr(pr.number, method="squash")
-            if ok:
-                client.comment(pr.number, f"✅ 二次守卫通过，{pr.kind} {risk} 等级 {threshold}h 到期，自动合并。")
-                _append_stale({"pr": pr.number, "kind": pr.kind, "risk": risk, "action": "auto_merged"})
-                return "auto_merged"
-            else:
-                client.comment(pr.number, "❌ 自动合并失败（可能冲突），请人工处理。")
-                _append_stale({"pr": pr.number, "risk": risk, "action": "auto_merge_failed"})
-                return "merge_failed"
+            return _try_auto_merge(
+                client,
+                pr,
+                success_comment=(
+                    f"✅ 二次守卫通过，{pr.kind} {risk} 等级 {threshold}h 到期，自动合并。"
+                ),
+                success_action="auto_merged",
+                failure_action="auto_merge_failed",
+                metric_extra={"risk": risk},
+            )
         return "auto_merged_dry"
 
     # ===== R2 / R3: 人工合并最终策略（永不 auto-merge）=====
@@ -637,7 +1066,14 @@ def process_pr(
                 f"指纹已记录，如需重新触发请推送新提交。",
             )
             client.close_pr(pr.number)
-            _append_stale({"pr": pr.number, "kind": pr.kind, "risk": risk, "action": f"closed_{close_threshold}d"})
+            _append_stale(
+                {
+                    "pr": pr.number,
+                    "kind": pr.kind,
+                    "risk": risk,
+                    "action": f"closed_{close_threshold}d",
+                }
+            )
         return "closed"
 
     if age_days >= stale_threshold:
@@ -648,7 +1084,14 @@ def process_pr(
                 f"⏰ 该 PR 已 stale {int(age_days)} 天（risk:{risk}），"
                 f"将于 {close_threshold} 天后自动关闭，请尽快 review。",
             )
-            _append_stale({"pr": pr.number, "kind": pr.kind, "risk": risk, "action": f"stale_warned_{stale_threshold}d"})
+            _append_stale(
+                {
+                    "pr": pr.number,
+                    "kind": pr.kind,
+                    "risk": risk,
+                    "action": f"stale_warned_{stale_threshold}d",
+                }
+            )
         return "stale_warned"
 
     print(f"  skip: 未达 stale 阈值 ({age_days:.1f}d < {stale_threshold}d)")
@@ -704,7 +1147,15 @@ def main(argv: list[str] | None = None) -> int:
         f"(ai-self-heal={by_kind['self_heal']} ai-generated={by_kind['ai_generated']})"
     )
 
-    stats = {"auto_merged": 0, "upgraded": 0, "stale_warned": 0, "closed": 0, "skipped": 0}
+    stats = {
+        "auto_merged": 0,
+        "branch_updated": 0,
+        "post_merge_dispatch_failed": 0,
+        "upgraded": 0,
+        "stale_warned": 0,
+        "closed": 0,
+        "skipped": 0,
+    }
     for pr in prs:
         try:
             action = process_pr(
@@ -725,6 +1176,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[sla] AI PR 处理完成: {stats}")
 
     # ===== 普通 PR: 三重门禁 auto-merge（opt-in）=====
+    regular_stats: dict[str, int] = {}
     if args.scan_regular_prs:
         allowlist_path = Path(args.allowlist_path) if args.allowlist_path else None
         trusted_authors = load_trusted_authors(allowlist_path)
@@ -740,7 +1192,13 @@ def main(argv: list[str] | None = None) -> int:
                 f"[sla] 发现 {len(regular_prs)} 个 open 普通 PR "
                 f"(trusted_authors={len(trusted_authors)})"
             )
-            regular_stats = {"auto_merged": 0, "skipped": 0, "merge_failed": 0}
+            regular_stats = {
+                "auto_merged": 0,
+                "branch_updated": 0,
+                "post_merge_dispatch_failed": 0,
+                "skipped": 0,
+                "merge_failed": 0,
+            }
             for pr in regular_prs:
                 try:
                     action = process_regular_pr(
@@ -754,6 +1212,15 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"[error] 普通 PR #{pr.number} 处理失败: {e}", file=sys.stderr)
             print(f"[sla] 普通 PR 处理完成: {regular_stats}")
 
+    dispatch_failures = stats.get("post_merge_dispatch_failed", 0) + regular_stats.get(
+        "post_merge_dispatch_failed", 0
+    )
+    if dispatch_failures:
+        print(
+            f"[error] {dispatch_failures} 个已合并 PR 未完成主干发布派发",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 

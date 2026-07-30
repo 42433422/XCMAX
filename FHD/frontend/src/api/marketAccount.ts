@@ -67,6 +67,8 @@ export type MarketLlmCatalogData = {
   preferences?: Record<string, unknown>;
   cache_ttl_seconds?: number;
   market_base_url?: string;
+  category_labels?: Record<string, string>;
+  billing_settings?: Record<string, unknown>;
 };
 
 export type MarketCheckoutData = Record<string, unknown> & {

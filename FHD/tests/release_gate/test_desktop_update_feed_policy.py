@@ -43,6 +43,7 @@ def test_macos_update_feed_is_generated_from_zip(tmp_path: Path) -> None:
     assert f"url: {update_zip.name}" in feed
     assert f"path: {update_zip.name}" in feed
     assert "buildSha: " + "a" * 40 in feed
+    assert "releaseDate:" in feed
     assert "releaseMedia:" in feed
     assert "https://cdn.example.com/a.webp" in feed
     assert "https://cdn.example.com/a.mp4" in feed
@@ -155,3 +156,38 @@ def test_emergency_mac_feed_repair_preserves_release_identity_and_path_parity() 
     assert restorer.index('mv -f "${OFFICIAL_DEST}/${ZIP_NAME}.part"') < restorer.index(
         'mv -f "${OFFICIAL_DEST}/latest-mac.yml.part"'
     )
+
+
+def test_update_metadata_requires_full_build_sha(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is required for desktop updater policy test")
+
+    generator = REPO_ROOT / "scripts" / "package" / "generate-update-metadata.mjs"
+    update_zip = tmp_path / "XCAGI-Enterprise-1.0.0.0-mac-arm64.zip"
+    update_zip.write_bytes(b"signed-app-archive-fixture")
+    env = {**os.environ}
+    env.pop("XCAGI_BUILD_SHA", None)
+    env.pop("GITHUB_SHA", None)
+    # Force empty SHA via bogus cwd without git? Keep generator fail by setting invalid SHA.
+    env["XCAGI_BUILD_SHA"] = "not-a-sha"
+    result = subprocess.run(
+        [node, str(generator), str(update_zip), "1.0.0", "mac"],
+        check=False,
+        env=env,
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+    )
+    assert result.returncode != 0
+    assert "buildSha" in result.stderr
+    assert not (tmp_path / "latest-mac.yml").exists()
+
+
+def test_desktop_updater_rejects_same_version_downgrade_by_release_date() -> None:
+    updater = (REPO_ROOT / "desktop" / "updater.ts").read_text(encoding="utf-8")
+    assert "isSameVersionRebuildNewer" in updater
+    assert "allowDowngrade = false" in updater
+    assert "remoteReleaseDate" in updater
+    assert "readLocalBuildTimeMs" in updater
+    assert "return Boolean(remoteSha && localSha && remoteSha !== localSha)" not in updater

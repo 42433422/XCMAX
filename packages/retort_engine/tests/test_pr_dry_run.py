@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import pytest
 from retort_engine.contracts import validate_contract
-from retort_engine.pr_dry_run import prepare_review_input, pr_diff_url, review_pr_url
-
+from retort_engine.pr_dry_run import pr_diff_url, prepare_review_input, review_pr_url
 
 PR_DIFF = """diff --git a/app.py b/app.py
 index 1111111..2222222 100644
@@ -17,8 +17,29 @@ index 1111111..2222222 100644
 
 
 def test_pr_diff_url_normalizes_github_pull_url() -> None:
-    assert pr_diff_url("https://github.com/sourcefuse/ai-pr-reviewer/pull/12") == "https://github.com/sourcefuse/ai-pr-reviewer/pull/12.diff"
-    assert pr_diff_url("https://github.com/sourcefuse/ai-pr-reviewer/pull/12.diff") == "https://github.com/sourcefuse/ai-pr-reviewer/pull/12.diff"
+    assert (
+        pr_diff_url("https://github.com/sourcefuse/ai-pr-reviewer/pull/12")
+        == "https://github.com/sourcefuse/ai-pr-reviewer/pull/12.diff"
+    )
+    assert (
+        pr_diff_url("https://github.com/sourcefuse/ai-pr-reviewer/pull/12.diff")
+        == "https://github.com/sourcefuse/ai-pr-reviewer/pull/12.diff"
+    )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "https://attacker.example/payload.diff",
+        "https://github.com.evil.example/owner/repo/pull/12.diff",
+        "https://user:password@github.com/owner/repo/pull/12",
+        "https://github.com/owner/repo/pull/12?redirect=http://127.0.0.1",
+        "http://github.com/owner/repo/pull/12",
+    ],
+)
+def test_pr_diff_url_rejects_noncanonical_or_untrusted_urls(value: str) -> None:
+    with pytest.raises(ValueError, match="exact github.com"):
+        pr_diff_url(value)
 
 
 def test_review_pr_url_fetches_diff_and_returns_contract(monkeypatch) -> None:
@@ -28,7 +49,9 @@ def test_review_pr_url_fetches_diff_and_returns_contract(monkeypatch) -> None:
 
     monkeypatch.setattr("retort_engine.pr_dry_run._fetch_diff", fake_fetch)
 
-    result = review_pr_url("https://github.com/sourcefuse/ai-pr-reviewer/pull/12", max_comments=5)
+    result = review_pr_url(
+        "https://github.com/sourcefuse/ai-pr-reviewer/pull/12", max_comments=5
+    )
 
     assert result["status"] == "reviewed"
     assert result["summary"]["file_count"] == 1

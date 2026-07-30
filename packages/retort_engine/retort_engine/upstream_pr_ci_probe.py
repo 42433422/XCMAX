@@ -4,9 +4,9 @@ import json
 import shutil
 import subprocess
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
-
+from typing import Any
 
 GitHubFetcher = Callable[[str], dict[str, Any]]
 
@@ -38,13 +38,27 @@ def build_upstream_pr_ci_probe(
     probes = [_probe_target(target, fetch=fetch) for target in selected_targets]
     ready_probes = [probe for probe in probes if probe["ready"]]
     primary = probes[0] if probes else _empty_probe()
-    successful_check_count = sum(int(probe["summary"]["successful_check_run_count"]) for probe in probes)
+    successful_check_count = sum(
+        int(probe["summary"]["successful_check_run_count"]) for probe in probes
+    )
     check_count = sum(int(probe["summary"]["check_run_count"]) for probe in probes)
-    failed_check_count = sum(int(probe["summary"]["failed_check_run_count"]) for probe in probes)
-    blocking_check_count = sum(int(probe["summary"]["blocking_check_run_count"]) for probe in probes)
-    accepted_check_count = sum(int(probe["summary"]["accepted_check_run_count"]) for probe in probes)
-    distinct_repos = {probe["summary"]["repo"] for probe in probes if probe["summary"].get("repo")}
-    language_families = {str(probe["summary"].get("language_family") or "unknown") for probe in probes if probe["summary"].get("language_family")}
+    failed_check_count = sum(
+        int(probe["summary"]["failed_check_run_count"]) for probe in probes
+    )
+    blocking_check_count = sum(
+        int(probe["summary"]["blocking_check_run_count"]) for probe in probes
+    )
+    accepted_check_count = sum(
+        int(probe["summary"]["accepted_check_run_count"]) for probe in probes
+    )
+    distinct_repos = {
+        probe["summary"]["repo"] for probe in probes if probe["summary"].get("repo")
+    }
+    language_families = {
+        str(probe["summary"].get("language_family") or "unknown")
+        for probe in probes
+        if probe["summary"].get("language_family")
+    }
     all_check_runs_successful = bool(probes) and len(ready_probes) == len(probes)
     summary = {
         **primary["summary"],
@@ -59,15 +73,30 @@ def build_upstream_pr_ci_probe(
         "total_accepted_check_run_count": accepted_check_count,
         "total_failed_check_run_count": failed_check_count,
         "total_blocking_check_run_count": blocking_check_count,
-        "all_target_prs_merged": bool(probes) and all(probe["summary"]["merged"] is True for probe in probes),
+        "all_target_prs_merged": bool(probes)
+        and all(probe["summary"]["merged"] is True for probe in probes),
         "all_target_check_runs_successful": all_check_runs_successful,
-        "all_target_check_runs_non_blocking": bool(probes) and blocking_check_count == 0 and accepted_check_count == check_count and check_count > 0,
+        "all_target_check_runs_non_blocking": bool(probes)
+        and blocking_check_count == 0
+        and accepted_check_count == check_count
+        and check_count > 0,
         "all_targets_real_remote_api": fetcher is None,
-        "multi_repo_ci_generalization": len(distinct_repos) >= 3 and len(ready_probes) >= 3 and all_check_runs_successful,
-        "cross_language_ci_generalization": len(language_families) >= 3 and len(ready_probes) >= 3 and all_check_runs_successful,
+        "multi_repo_ci_generalization": len(distinct_repos) >= 3
+        and len(ready_probes) >= 3
+        and all_check_runs_successful,
+        "cross_language_ci_generalization": len(language_families) >= 3
+        and len(ready_probes) >= 3
+        and all_check_runs_successful,
         "duration_sec": round(time.monotonic() - started, 3),
     }
-    ready = (summary["multi_repo_ci_generalization"] and summary["cross_language_ci_generalization"]) if len(probes) >= 3 else primary["ready"]
+    ready = (
+        (
+            summary["multi_repo_ci_generalization"]
+            and summary["cross_language_ci_generalization"]
+        )
+        if len(probes) >= 3
+        else primary["ready"]
+    )
     result = {
         "status": "ready" if ready else "needs_upstream_pr_ci_evidence",
         "project": str(root),
@@ -75,7 +104,14 @@ def build_upstream_pr_ci_probe(
         "pull_request": primary["pull_request"],
         "pull_requests": [probe["pull_request"] for probe in probes],
         "check_runs": primary["check_runs"],
-        "target_check_runs": [{"repo": probe["summary"]["repo"], "pr_number": probe["summary"]["pr_number"], "check_runs": probe["check_runs"]} for probe in probes],
+        "target_check_runs": [
+            {
+                "repo": probe["summary"]["repo"],
+                "pr_number": probe["summary"]["pr_number"],
+                "check_runs": probe["check_runs"],
+            }
+            for probe in probes
+        ],
         "probes": probes,
         "evidence": {
             "style": "readonly_real_upstream_merged_pr_and_ci_probe",
@@ -88,22 +124,46 @@ def build_upstream_pr_ci_probe(
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return result
 
 
 def _probe_target(target: dict[str, Any], *, fetch: GitHubFetcher) -> dict[str, Any]:
     repo = str(target["repo"])
     pr_number = int(target["pr_number"])
-    language_family = str(target.get("language_family") or _language_family_for_repo(repo))
+    language_family = str(
+        target.get("language_family") or _language_family_for_repo(repo)
+    )
     pr = fetch(f"repos/{repo}/pulls/{pr_number}")
     merge_sha = str(pr.get("merge_commit_sha") or "")
-    checks = fetch(f"repos/{repo}/commits/{merge_sha}/check-runs?per_page=100") if merge_sha else {}
+    checks = (
+        fetch(f"repos/{repo}/commits/{merge_sha}/check-runs?per_page=100")
+        if merge_sha
+        else {}
+    )
     runs = [run for run in checks.get("check_runs") or [] if isinstance(run, dict)]
-    successful = [run for run in runs if run.get("status") == "completed" and run.get("conclusion") == "success"]
-    accepted = [run for run in runs if run.get("status") == "completed" and run.get("conclusion") in ACCEPTED_CHECK_CONCLUSIONS]
-    failed = [run for run in runs if run.get("conclusion") not in {*ACCEPTED_CHECK_CONCLUSIONS, None}]
-    blocking = [run for run in runs if run.get("conclusion") in BLOCKING_CHECK_CONCLUSIONS]
+    successful = [
+        run
+        for run in runs
+        if run.get("status") == "completed" and run.get("conclusion") == "success"
+    ]
+    accepted = [
+        run
+        for run in runs
+        if run.get("status") == "completed"
+        and run.get("conclusion") in ACCEPTED_CHECK_CONCLUSIONS
+    ]
+    failed = [
+        run
+        for run in runs
+        if run.get("conclusion") not in {*ACCEPTED_CHECK_CONCLUSIONS, None}
+    ]
+    blocking = [
+        run for run in runs if run.get("conclusion") in BLOCKING_CHECK_CONCLUSIONS
+    ]
     summary = {
         "repo": repo,
         "pr_number": pr_number,
@@ -117,11 +177,19 @@ def _probe_target(target: dict[str, Any], *, fetch: GitHubFetcher) -> dict[str, 
         "accepted_check_run_count": len(accepted),
         "failed_check_run_count": len(failed),
         "blocking_check_run_count": len(blocking),
-        "all_check_runs_successful": bool(runs) and len(accepted) == len(runs) and bool(successful) and not blocking,
+        "all_check_runs_successful": bool(runs)
+        and len(accepted) == len(runs)
+        and bool(successful)
+        and not blocking,
         "all_check_runs_non_blocking": bool(runs) and not blocking,
         "real_remote_api": fetch is _gh_api,
     }
-    ready = summary["merged"] and bool(merge_sha) and summary["check_run_count"] > 0 and summary["all_check_runs_successful"]
+    ready = (
+        summary["merged"]
+        and bool(merge_sha)
+        and summary["check_run_count"] > 0
+        and summary["all_check_runs_successful"]
+    )
     return {
         "status": "ready" if ready else "needs_upstream_pr_ci_evidence",
         "ready": ready,
@@ -150,7 +218,10 @@ def _targets(
             {
                 "repo": str(item["repo"]),
                 "pr_number": int(item["pr_number"]),
-                "language_family": str(item.get("language_family") or _language_family_for_repo(str(item["repo"]))),
+                "language_family": str(
+                    item.get("language_family")
+                    or _language_family_for_repo(str(item["repo"]))
+                ),
             }
             for item in targets
         ]
@@ -159,7 +230,9 @@ def _targets(
         return [
             {
                 "repo": selected_repo,
-                "pr_number": int(pr_number or DEFAULT_UPSTREAM_PR_TARGETS[0]["pr_number"]),
+                "pr_number": int(
+                    pr_number or DEFAULT_UPSTREAM_PR_TARGETS[0]["pr_number"]
+                ),
                 "language_family": _language_family_for_repo(str(selected_repo)),
             }
         ]
@@ -192,13 +265,23 @@ def _empty_probe() -> dict[str, Any]:
 
 
 def _gh_api(path: str) -> dict[str, Any]:
-    completed = subprocess.run([_gh_executable(), "api", path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30, check=False)
+    completed = subprocess.run(
+        [_gh_executable(), "api", path],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
     if completed.returncode != 0:
         return {"error": completed.stderr[-500:], "path": path}
     try:
         payload = json.loads(completed.stdout)
     except json.JSONDecodeError:
-        return {"error": "invalid_json", "path": path, "stdout_tail": completed.stdout[-500:]}
+        return {
+            "error": "invalid_json",
+            "path": path,
+            "stdout_tail": completed.stdout[-500:],
+        }
     return payload if isinstance(payload, dict) else {"items": payload}
 
 
@@ -218,7 +301,9 @@ def _gh_executable() -> str:
 
 def _language_family_for_repo(repo: str) -> str:
     lowered = repo.lower()
-    if any(marker in lowered for marker in ("angular", "playwright", "vite", "next.js")):
+    if any(
+        marker in lowered for marker in ("angular", "playwright", "vite", "next.js")
+    ):
         return "typescript"
     if any(marker in lowered for marker in ("tokio", "serde", "rust", "clippy")):
         return "rust"

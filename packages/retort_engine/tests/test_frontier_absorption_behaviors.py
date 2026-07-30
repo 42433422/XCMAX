@@ -3,10 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from retort_engine.context_packager import build_context_pack
 from retort_engine.intent_alignment import assess_change_intent_alignment
-from retort_engine.pr_review import parse_unified_diff, review_context_for_file, review_diff
+from retort_engine.pr_review import (
+    parse_unified_diff,
+    review_context_for_file,
+    review_diff,
+)
 from retort_engine.real_absorption import _should_absorb_frontend_visual
 from retort_engine.static_analysis_gate import scan_static_analysis_findings
 
@@ -195,10 +198,14 @@ INTENT_CASES = [
 ]
 
 
-@pytest.mark.parametrize("case", INTENT_CASES, ids=[case["name"] for case in INTENT_CASES])
+@pytest.mark.parametrize(
+    "case", INTENT_CASES, ids=[case["name"] for case in INTENT_CASES]
+)
 def test_intent_alignment_frontier_cases(case: dict[str, object]) -> None:
     diff = diff_for(str(case["path"]), *[str(line) for line in case["lines"]])
-    result = assess_change_intent_alignment(parse_unified_diff(diff), issue_context=str(case["issue"]))
+    result = assess_change_intent_alignment(
+        parse_unified_diff(diff), issue_context=str(case["issue"])
+    )
 
     assert result["status"] == case["expected"]
     if case["expected"] == "aligned":
@@ -214,7 +221,11 @@ REVIEW_CONTEXT_CASES = [
     ("app/security/policy.py", "security", "secrets_permissions_and_auth_edges"),
     ("tests/test_auth.py", "tests", "behavior_proof_and_regression_scope"),
     ("pkg/__tests__/review.test.ts", "tests", "behavior_proof_and_regression_scope"),
-    (".github/workflows/review.yml", "ci_config", "repeatable_gates_and_release_safety"),
+    (
+        ".github/workflows/review.yml",
+        "ci_config",
+        "repeatable_gates_and_release_safety",
+    ),
     ("deploy/docker-compose.yml", "ci_config", "repeatable_gates_and_release_safety"),
     ("Dockerfile", "ci_config", "repeatable_gates_and_release_safety"),
     ("docs/README.md", "docs", "operator_evidence_and_task_clarity"),
@@ -243,7 +254,9 @@ REVIEW_CONTEXT_CASES = [
 
 
 @pytest.mark.parametrize("path,context,focus", REVIEW_CONTEXT_CASES)
-def test_review_context_frontier_classification(path: str, context: str, focus: str) -> None:
+def test_review_context_frontier_classification(
+    path: str, context: str, focus: str
+) -> None:
     result = review_diff(diff_for(path, "value = 1"), max_comments=2)
 
     assert review_context_for_file(path) == context
@@ -298,7 +311,9 @@ STATIC_ANALYSIS_CASES = [
 ]
 
 
-@pytest.mark.parametrize("case", STATIC_ANALYSIS_CASES, ids=[case["name"] for case in STATIC_ANALYSIS_CASES])
+@pytest.mark.parametrize(
+    "case", STATIC_ANALYSIS_CASES, ids=[case["name"] for case in STATIC_ANALYSIS_CASES]
+)
 def test_static_analysis_frontier_cases(case: dict[str, str]) -> None:
     files = parse_unified_diff(diff_for(case["path"], case["line"]))
     result = scan_static_analysis_findings(files)
@@ -311,7 +326,9 @@ def test_static_analysis_frontier_cases(case: dict[str, str]) -> None:
 
 
 def test_static_analysis_allows_safe_yaml_loader() -> None:
-    files = parse_unified_diff(diff_for("app/config.py", "yaml.load(payload, Loader=yaml.SafeLoader)"))
+    files = parse_unified_diff(
+        diff_for("app/config.py", "yaml.load(payload, Loader=yaml.SafeLoader)")
+    )
     result = scan_static_analysis_findings(files)
 
     assert result["status"] == "clean"
@@ -335,7 +352,9 @@ def test_review_diff_combines_static_analysis_and_intent_alignment() -> None:
     assert result["intent_alignment"]["status"] == "misaligned"
     assert result["summary"]["intent_alignment"]["aligned"] is False
     assert result["summary"]["ready_for_employee_tasking"] is True
-    assert any(comment["capability"] == "intent_alignment" for comment in result["comments"])
+    assert any(
+        comment["capability"] == "intent_alignment" for comment in result["comments"]
+    )
     assert result["summary"]["risk_counts"]["medium"] >= 1
 
 
@@ -360,10 +379,16 @@ def test_review_diff_keeps_intent_alignment_inside_comment_budget() -> None:
 
 CONTEXT_PACK_FILES = [
     ("retort_engine/real_absorption.py", "absorb context review graph " * 40),
-    ("retort_engine/pr_review.py", "review context issue alignment static analysis " * 35),
+    (
+        "retort_engine/pr_review.py",
+        "review context issue alignment static analysis " * 35,
+    ),
     ("retort_engine/context_packager.py", "context pack graph budget focus " * 30),
     ("retort_engine/intent_alignment.py", "issue intent alignment review " * 30),
-    ("retort_engine/static_analysis_gate.py", "static analysis security yaml shell " * 30),
+    (
+        "retort_engine/static_analysis_gate.py",
+        "static analysis security yaml shell " * 30,
+    ),
     ("retort_engine/codebase_graph.py", "codebase graph dependency hotspot " * 30),
     ("retort_engine/service.py", "api service context review " * 20),
     ("tests/test_pr_review.py", "review intent static analysis " * 30),
@@ -374,7 +399,9 @@ CONTEXT_PACK_FILES = [
 ]
 
 
-def test_context_pack_frontier_ignores_generated_noise_and_splits_budget(tmp_path: Path) -> None:
+def test_context_pack_frontier_ignores_generated_noise_and_splits_budget(
+    tmp_path: Path,
+) -> None:
     for path, text in CONTEXT_PACK_FILES:
         write(tmp_path / path, text)
 
@@ -392,7 +419,10 @@ def test_context_pack_frontier_ignores_generated_noise_and_splits_budget(tmp_pat
     assert "docs/retort_absorption_log.md" not in selected
     assert not any(path.startswith("node_modules/") for path in selected)
     assert not any(path.startswith(".retort/") for path in selected)
-    assert selected[0] in {"retort_engine/pr_review.py", "retort_engine/real_absorption.py"}
+    assert selected[0] in {
+        "retort_engine/pr_review.py",
+        "retort_engine/real_absorption.py",
+    }
     assert all(len(item["excerpt"]) <= 200 for item in pack["files"])
 
 
@@ -401,8 +431,12 @@ def test_context_pack_frontier_fallback_is_stable(tmp_path: Path) -> None:
     write(tmp_path / "alpha.py", "def alpha():\n    return 1\n")
     write(tmp_path / "beta.py", "def beta():\n    return 1\n")
 
-    first = build_context_pack(tmp_path, focus_terms=["missing"], max_files=2, max_chars=200)
-    second = build_context_pack(tmp_path, focus_terms=["missing"], max_files=2, max_chars=200)
+    first = build_context_pack(
+        tmp_path, focus_terms=["missing"], max_files=2, max_chars=200
+    )
+    second = build_context_pack(
+        tmp_path, focus_terms=["missing"], max_files=2, max_chars=200
+    )
 
     assert [item["path"] for item in first["files"]] == ["alpha.py", "beta.py"]
     assert first["files"] == second["files"]
@@ -467,7 +501,9 @@ VISUAL_PROFILES = [
 ]
 
 
-@pytest.mark.parametrize("case", VISUAL_PROFILES, ids=[case["name"] for case in VISUAL_PROFILES])
+@pytest.mark.parametrize(
+    "case", VISUAL_PROFILES, ids=[case["name"] for case in VISUAL_PROFILES]
+)
 def test_frontend_visual_absorption_frontier_profiles(case: dict[str, object]) -> None:
     assert _should_absorb_frontend_visual(case["profile"]) is case["expected"]
 
@@ -531,7 +567,9 @@ def test_issue_intent_alignment_keeps_missing_keywords_for_employee_followup() -
     assert {"invoice", "billing", "webhooks"} <= set(result["missing_keywords"])
 
 
-def test_review_diff_reports_absorbed_reviewscope_source_after_openrabbit_absorption() -> None:
+def test_review_diff_reports_absorbed_reviewscope_source_after_openrabbit_absorption() -> (
+    None
+):
     result = review_diff(
         diff_for("app/auth/password_reset.py", "def password_reset(): return True"),
         issue_context="Fix password reset token expiry in auth flow",
@@ -545,7 +583,9 @@ def test_review_diff_reports_absorbed_reviewscope_source_after_openrabbit_absorp
 
 
 def test_review_diff_incremental_review_preserves_intent_alignment_summary() -> None:
-    previous = diff_for("app/auth/password_reset.py", "def password_reset(): return True")
+    previous = diff_for(
+        "app/auth/password_reset.py", "def password_reset(): return True"
+    )
     current = diff_for(
         "app/auth/password_reset.py",
         "def password_reset(): return True",
@@ -576,7 +616,11 @@ def test_static_analysis_findings_flow_into_pr_review_comments() -> None:
         max_comments=5,
     )
 
-    static_comments = [comment for comment in result["comments"] if comment["capability"] == "static_analysis"]
+    static_comments = [
+        comment
+        for comment in result["comments"]
+        if comment["capability"] == "static_analysis"
+    ]
     assert result["summary"]["static_analysis"]["finding_count"] == 3
     assert len(static_comments) == 3
     assert {comment["severity"] for comment in static_comments} == {"high", "medium"}

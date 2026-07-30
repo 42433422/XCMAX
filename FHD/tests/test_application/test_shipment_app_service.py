@@ -1073,3 +1073,28 @@ class TestGenerateShipmentDocument:
         assert result["success"] is True
         # No record_id/order_id should be set when record_id is None
         assert "record_id" not in result or result.get("record_id") is None
+
+    def test_generate_strict_template_missing_fails(self, monkeypatch):
+        doc_gen = DummyDocumentGenerator(success=True)
+        svc = ShipmentApplicationService(
+            repository=DummyRepository(),
+            document_generator=doc_gen,
+        )
+        monkeypatch.setenv("XCAGI_SHIPMENT_TEMPLATE_STRICT", "1")
+        with patch(
+            "app.application.shipment_template_resolve.resolve_shipment_template",
+            return_value={
+                "ok": False,
+                "path": None,
+                "error_code": "TEMPLATE_NOT_FOUND",
+                "reason": "no_template_found",
+            },
+        ):
+            result = svc.generate_shipment_document(
+                unit_name="测试单位",
+                products=[{"name": "产品A"}],
+                strict_template=True,
+            )
+        assert result["success"] is False
+        assert result["error_code"] == "TEMPLATE_NOT_FOUND"
+        assert doc_gen.call_count == 0

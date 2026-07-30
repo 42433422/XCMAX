@@ -306,6 +306,9 @@ class ShipmentNumberModeService:
         direct_unit_name: str,
         direct_products: list[dict[str, Any]],
         parse_order_text: Callable[[str], dict[str, Any]],
+        template_name: str | None = None,
+        template_id: str | None = None,
+        preferred_template: str | None = None,
     ) -> tuple[dict[str, Any], int]:
         text = str(order_text or "").strip()
         if not text and not (direct_unit_name and direct_products):
@@ -470,8 +473,12 @@ class ShipmentNumberModeService:
         result = app_service.generate_shipment_document(
             unit_name=unit_to_use,
             products=products,
-            template_name=None,
+            template_name=(str(template_name or "").strip() or None),
+            template_id=(str(template_id or "").strip() or None),
+            preferred_template=(str(preferred_template or "").strip() or None),
             order_number=(str(custom_order_number or "").strip() or None),
+            intent="shipment_generate",
+            raw_text=text,
         )
         result = self._normalize_success_payload(result)
 

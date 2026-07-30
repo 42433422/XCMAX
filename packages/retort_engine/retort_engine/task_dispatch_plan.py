@@ -10,30 +10,57 @@ from retort_engine.history import RetortHistoryStore
 from retort_engine.models import EmployeeTaskRecord, ImprovementTask
 
 
-def build_task_dispatch_plan(project: str | Path, *, enqueue: bool = False) -> dict[str, Any]:
+def build_task_dispatch_plan(
+    project: str | Path, *, enqueue: bool = False
+) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     source_tasks = _latest_llm_employee_tasks(root) or _priority_tasks(root)
-    dispatch_tasks = [_dispatch_task(item, index) for index, item in enumerate(source_tasks, start=1)]
+    dispatch_tasks = [
+        _dispatch_task(item, index) for index, item in enumerate(source_tasks, start=1)
+    ]
     queued_records = _enqueue(root, dispatch_tasks) if enqueue else []
-    ready_count = sum(1 for item in dispatch_tasks if item.get("owner_hint") and item.get("acceptance") and item.get("evidence_required"))
+    ready_count = sum(
+        1
+        for item in dispatch_tasks
+        if item.get("owner_hint")
+        and item.get("acceptance")
+        and item.get("evidence_required")
+    )
     return {
-        "status": "ready" if dispatch_tasks and ready_count == len(dispatch_tasks) and (not enqueue or len(queued_records) == len(dispatch_tasks)) else "needs_tasks",
+        "status": "ready"
+        if dispatch_tasks
+        and ready_count == len(dispatch_tasks)
+        and (not enqueue or len(queued_records) == len(dispatch_tasks))
+        else "needs_tasks",
         "project": str(root),
         "summary": {
             "source_llm_task_count": len(source_tasks),
             "ready_task_count": ready_count,
             "dispatch_task_count": len(dispatch_tasks),
             "queued_dispatch_count": len(queued_records),
-            "all_tasks_have_owner": all(bool(item.get("owner_hint")) for item in dispatch_tasks),
-            "all_tasks_have_acceptance": all(bool(item.get("acceptance")) for item in dispatch_tasks),
-            "all_tasks_have_evidence_required": all(bool(item.get("evidence_required")) for item in dispatch_tasks),
+            "all_tasks_have_owner": all(
+                bool(item.get("owner_hint")) for item in dispatch_tasks
+            ),
+            "all_tasks_have_acceptance": all(
+                bool(item.get("acceptance")) for item in dispatch_tasks
+            ),
+            "all_tasks_have_evidence_required": all(
+                bool(item.get("evidence_required")) for item in dispatch_tasks
+            ),
             "enqueue": enqueue,
         },
-        "tasks": [{**task, "queue_id": queued.get("queue_id", "")} for task, queued in zip(dispatch_tasks, queued_records or [{} for _ in dispatch_tasks])],
+        "tasks": [
+            {**task, "queue_id": queued.get("queue_id", "")}
+            for task, queued in zip(
+                dispatch_tasks, queued_records or [{} for _ in dispatch_tasks]
+            )
+        ],
         "evidence": {
             "queue_path": str(root / ".retort" / "employee_queue.jsonl"),
             "history_store": str(root / ".retort" / "retort_history.sqlite"),
-            "source": "latest_llm_employee_tasks" if _latest_llm_employee_tasks(root) else "task_prioritization_report",
+            "source": "latest_llm_employee_tasks"
+            if _latest_llm_employee_tasks(root)
+            else "task_prioritization_report",
         },
     }
 
@@ -50,8 +77,16 @@ def _latest_llm_employee_tasks(root: Path) -> list[dict[str, Any]]:
             payload = json.loads(line)
         except json.JSONDecodeError:
             continue
-        result = payload.get("json_result") if isinstance(payload.get("json_result"), dict) else {}
-        current = [item for item in result.get("employee_tasks") or [] if isinstance(item, dict)]
+        result = (
+            payload.get("json_result")
+            if isinstance(payload.get("json_result"), dict)
+            else {}
+        )
+        current = [
+            item
+            for item in result.get("employee_tasks") or []
+            if isinstance(item, dict)
+        ]
         if current:
             tasks = current
     return tasks
@@ -80,7 +115,11 @@ def _priority_tasks(root: Path) -> list[dict[str, Any]]:
 
 def _dispatch_task(item: dict[str, Any], index: int) -> dict[str, Any]:
     evidence = item.get("evidence_required") or []
-    evidence_list = [str(evidence)] if isinstance(evidence, str) else [str(row) for row in evidence if str(row).strip()]
+    evidence_list = (
+        [str(evidence)]
+        if isinstance(evidence, str)
+        else [str(row) for row in evidence if str(row).strip()]
+    )
     title = str(item.get("title") or f"Retort dispatch task {index}")
     return {
         "task_id": f"retort-dispatch-{index:02d}-{uuid.uuid4().hex[:8]}",
@@ -90,8 +129,12 @@ def _dispatch_task(item: dict[str, Any], index: int) -> dict[str, Any]:
         "priority": "P1",
         "why": "LLM self-evolution requested this follow-up after deep review.",
         "action": f"Execute and verify: {title}",
-        "acceptance": str(item.get("acceptance") or "Evidence report proves task completion and no score regression."),
-        "evidence_required": evidence_list or ["execution_log", "result_artifact", "post_task_score"],
+        "acceptance": str(
+            item.get("acceptance")
+            or "Evidence report proves task completion and no score regression."
+        ),
+        "evidence_required": evidence_list
+        or ["execution_log", "result_artifact", "post_task_score"],
         "ready_for_employee": True,
     }
 
@@ -106,7 +149,8 @@ def _enqueue(root: Path, tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
             queue_id = str(uuid.uuid4())
             row = {
                 "queue_id": queue_id,
-                "run_id": "task-dispatch-plan-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
+                "run_id": "task-dispatch-plan-"
+                + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
                 "source": "retort_task_dispatch_plan",
                 "status": "queued",
                 "task": task,
@@ -128,7 +172,12 @@ def _record(queue_id: str, task: dict[str, Any]) -> EmployeeTaskRecord:
         owner_hint=str(task["owner_hint"]),
         priority=str(task["priority"]),
     )
-    return EmployeeTaskRecord(queue_id=queue_id, task=improvement, source="retort_task_dispatch_plan", status="queued")
+    return EmployeeTaskRecord(
+        queue_id=queue_id,
+        task=improvement,
+        source="retort_task_dispatch_plan",
+        status="queued",
+    )
 
 
 def _dimension_from_title(title: str) -> str:

@@ -14,7 +14,9 @@ from retort_engine.heterogeneous_absorption_replay import (
 from retort_engine.service import RetortService
 
 
-def test_heterogeneous_absorption_replay_proves_before_failure_after_pass(tmp_path: Path) -> None:
+def test_heterogeneous_absorption_replay_proves_before_failure_after_pass(
+    tmp_path: Path,
+) -> None:
     _seed_cached_sources(tmp_path)
 
     result = build_heterogeneous_absorption_replay(tmp_path)
@@ -25,18 +27,33 @@ def test_heterogeneous_absorption_replay_proves_before_failure_after_pass(tmp_pa
     assert result["summary"]["cached_source_count"] == result["summary"]["case_count"]
     assert result["summary"]["language_family_count"] >= 4
     assert result["summary"]["source_family_count"] >= 4
-    assert result["summary"]["pre_absorption_failure_count"] == result["summary"]["case_count"]
-    assert result["summary"]["post_absorption_pass_count"] == result["summary"]["case_count"]
+    assert (
+        result["summary"]["pre_absorption_failure_count"]
+        == result["summary"]["case_count"]
+    )
+    assert (
+        result["summary"]["post_absorption_pass_count"]
+        == result["summary"]["case_count"]
+    )
     assert result["summary"]["all_before_failed_after_passed"] is True
     assert result["summary"]["minimum_behavior_delta"] >= 35
     assert result["summary"]["independent_all_cases_accepted"] is True
     assert result["summary"]["cross_language_absorption_verified"] is True
-    assert all(case["pre_absorption"]["failed_expected_behavior"] for case in result["cases"])
-    assert all(case["post_absorption"]["passed_expected_behavior"] for case in result["cases"])
-    assert validate_contract("heterogeneous_absorption_replay_result", result)["valid"] is True
+    assert all(
+        case["pre_absorption"]["failed_expected_behavior"] for case in result["cases"]
+    )
+    assert all(
+        case["post_absorption"]["passed_expected_behavior"] for case in result["cases"]
+    )
+    assert (
+        validate_contract("heterogeneous_absorption_replay_result", result)["valid"]
+        is True
+    )
 
 
-def test_heterogeneous_absorption_replay_fails_without_cached_sources(tmp_path: Path) -> None:
+def test_heterogeneous_absorption_replay_fails_without_cached_sources(
+    tmp_path: Path,
+) -> None:
     result = build_heterogeneous_absorption_replay(tmp_path)
 
     assert result["status"] == "needs_more_heterogeneous_evidence"
@@ -53,7 +70,9 @@ def test_heterogeneous_absorption_replay_writes_report(tmp_path: Path) -> None:
     saved = json.loads(output.read_text(encoding="utf-8"))
 
     assert result["status"] == "ready"
-    assert saved["summary"]["language_families"] == result["summary"]["language_families"]
+    assert (
+        saved["summary"]["language_families"] == result["summary"]["language_families"]
+    )
 
 
 def test_heterogeneous_absorption_replay_service_surface(tmp_path: Path) -> None:
@@ -81,16 +100,20 @@ def test_heterogeneous_absorption_replay_cli_outputs_contract(tmp_path: Path) ->
         check=True,
         env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])},
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
     payload = json.loads(result.stdout)
 
     assert payload["status"] == "ready"
-    assert validate_contract("heterogeneous_absorption_replay_result", payload)["valid"] is True
+    assert (
+        validate_contract("heterogeneous_absorption_replay_result", payload)["valid"]
+        is True
+    )
 
 
 def _seed_cached_sources(root: Path) -> None:
     for case in HETEROGENEOUS_ABSORPTION_CASES:
         owner, repo = str(case["source_project"]).split("/", 1)
-        (root / ".retort" / "cache" / "github" / owner / repo).mkdir(parents=True, exist_ok=True)
+        (root / ".retort" / "cache" / "github" / owner / repo).mkdir(
+            parents=True, exist_ok=True
+        )

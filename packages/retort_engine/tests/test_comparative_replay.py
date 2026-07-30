@@ -19,8 +19,12 @@ def test_build_cross_project_replay_requires_real_evidence(tmp_path: Path) -> No
                 {
                     "source": f"https://github.com/acme/repo-{index}",
                     "run_id": f"run-{index}",
-                    "changed_files": [str(project / "retort_engine" / "absorbed_capabilities.py")],
-                    "external_profile": {"signals": ["review_pipeline", f"signal_{index}"]},
+                    "changed_files": [
+                        str(project / "retort_engine" / "absorbed_capabilities.py")
+                    ],
+                    "external_profile": {
+                        "signals": ["review_pipeline", f"signal_{index}"]
+                    },
                     "semantic_review": {"gaps": []},
                     "gates_passed": True,
                 },
@@ -28,8 +32,19 @@ def test_build_cross_project_replay_requires_real_evidence(tmp_path: Path) -> No
             ),
             encoding="utf-8",
         )
-    (docs / "retort_pr_dry_run_report.json").write_text(json.dumps({"status": "reviewed", "summary": {"comment_count": 4}}, ensure_ascii=False), encoding="utf-8")
-    (docs / "retort_pr_publish_dry_run.json").write_text(json.dumps({"status": "dry_run_ready", "summary": {"would_post_comment_count": 4}}, ensure_ascii=False), encoding="utf-8")
+    (docs / "retort_pr_dry_run_report.json").write_text(
+        json.dumps(
+            {"status": "reviewed", "summary": {"comment_count": 4}}, ensure_ascii=False
+        ),
+        encoding="utf-8",
+    )
+    (docs / "retort_pr_publish_dry_run.json").write_text(
+        json.dumps(
+            {"status": "dry_run_ready", "summary": {"would_post_comment_count": 4}},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
 
     result = build_cross_project_replay(project)
 

@@ -1,12 +1,23 @@
 from __future__ import annotations
 
 import pytest
-
-from retort_engine.absorption_quality import absorption_quality_gate, advantage_diff_map, capability_progress_from_execution, explain_missing_absorption_evidence
+from retort_engine.absorption_quality import (
+    absorption_quality_gate,
+    advantage_diff_map,
+    capability_progress_from_execution,
+    explain_missing_absorption_evidence,
+)
 
 
 @pytest.mark.parametrize(
-    ("changed_files", "gates", "expected_sources", "expected_tests", "expected_generated", "ready"),
+    (
+        "changed_files",
+        "gates",
+        "expected_sources",
+        "expected_tests",
+        "expected_generated",
+        "ready",
+    ),
     [
         (
             ["retort_engine/pr_review.py", "tests/test_pr_review.py"],
@@ -17,7 +28,10 @@ from retort_engine.absorption_quality import absorption_quality_gate, advantage_
             True,
         ),
         (
-            ["packages/retort_engine/retort_engine/review_context_bias.py", "packages/retort_engine/tests/test_review_context_bias.py"],
+            [
+                "packages/retort_engine/retort_engine/review_context_bias.py",
+                "packages/retort_engine/tests/test_review_context_bias.py",
+            ],
             [{"ok": True}, {"ok": True}],
             ["packages/retort_engine/retort_engine/review_context_bias.py"],
             ["packages/retort_engine/tests/test_review_context_bias.py"],
@@ -25,19 +39,31 @@ from retort_engine.absorption_quality import absorption_quality_gate, advantage_
             True,
         ),
         (
-            ["retort_engine/absorbed_capabilities.py", "tests/test_absorbed_capabilities.py"],
+            [
+                "retort_engine/absorbed_capabilities.py",
+                "tests/test_absorbed_capabilities.py",
+            ],
             [{"ok": True}],
             [],
             [],
-            ["retort_engine/absorbed_capabilities.py", "tests/test_absorbed_capabilities.py"],
+            [
+                "retort_engine/absorbed_capabilities.py",
+                "tests/test_absorbed_capabilities.py",
+            ],
             False,
         ),
         (
-            ["docs/retort_external_review_report.json", "docs/retort_absorption_log.md"],
+            [
+                "docs/retort_external_review_report.json",
+                "docs/retort_absorption_log.md",
+            ],
             [{"ok": True}],
             [],
             [],
-            ["docs/retort_external_review_report.json", "docs/retort_absorption_log.md"],
+            [
+                "docs/retort_external_review_report.json",
+                "docs/retort_absorption_log.md",
+            ],
             False,
         ),
         (
@@ -90,7 +116,11 @@ def test_capability_progress_matrix(
         (
             [],
             [],
-            {"missing_behavior_source_diff", "missing_behavior_test_diff", "missing_post_absorption_gate"},
+            {
+                "missing_behavior_source_diff",
+                "missing_behavior_test_diff",
+                "missing_post_absorption_gate",
+            },
         ),
         (
             ["retort_engine/pr_review.py"],
@@ -119,7 +149,9 @@ def test_capability_progress_matrix(
         ),
     ],
 )
-def test_missing_absorption_evidence_matrix(changed_files: list[str], gates: list[dict[str, object]], expected_missing: set[str]) -> None:
+def test_missing_absorption_evidence_matrix(
+    changed_files: list[str], gates: list[dict[str, object]], expected_missing: set[str]
+) -> None:
     missing = set(explain_missing_absorption_evidence(changed_files, gates))
 
     assert expected_missing <= missing
@@ -157,13 +189,27 @@ def test_advantage_diff_map_matches_each_signal_to_behavior_surface() -> None:
     assert by_signal["plugin_surface"]["has_behavior_diff"] is True
     assert by_signal["multi_provider"]["has_behavior_diff"] is True
     assert by_signal["safety_policy"]["has_behavior_diff"] is True
-    assert by_signal["review_pipeline"]["changed_files"] == ["retort_engine/pr_review.py", "tests/test_pr_review.py"]
-    assert "retort_engine/review_context_bias.py" in by_signal["file_grouping"]["changed_files"]
-    assert "tests/test_review_context_bias.py" in by_signal["file_grouping"]["changed_files"]
-    assert by_signal["benchmarking"]["changed_files"] == ["retort_engine/review_quality_benchmark.py", "retort_engine/swe_bench_oracle.py"]
+    assert by_signal["review_pipeline"]["changed_files"] == [
+        "retort_engine/pr_review.py",
+        "tests/test_pr_review.py",
+    ]
+    assert (
+        "retort_engine/review_context_bias.py"
+        in by_signal["file_grouping"]["changed_files"]
+    )
+    assert (
+        "tests/test_review_context_bias.py"
+        in by_signal["file_grouping"]["changed_files"]
+    )
+    assert by_signal["benchmarking"]["changed_files"] == [
+        "retort_engine/review_quality_benchmark.py",
+        "retort_engine/swe_bench_oracle.py",
+    ]
 
 
-def test_advantage_diff_map_treats_swe_bench_oracle_as_benchmark_eval_behavior() -> None:
+def test_advantage_diff_map_treats_swe_bench_oracle_as_benchmark_eval_behavior() -> (
+    None
+):
     rows = advantage_diff_map(
         ["retort_engine/swe_bench_oracle.py", "tests/test_swe_bench_oracle.py"],
         [{"signal": "benchmark_eval", "weight": 30}],
@@ -173,7 +219,10 @@ def test_advantage_diff_map_treats_swe_bench_oracle_as_benchmark_eval_behavior()
         {
             "signal": "benchmark_eval",
             "weight": 30,
-            "changed_files": ["retort_engine/swe_bench_oracle.py", "tests/test_swe_bench_oracle.py"],
+            "changed_files": [
+                "retort_engine/swe_bench_oracle.py",
+                "tests/test_swe_bench_oracle.py",
+            ],
             "has_behavior_diff": True,
         }
     ]
@@ -189,7 +238,10 @@ def test_advantage_diff_map_treats_codebase_graph_as_architecture_behavior() -> 
         {
             "signal": "codebase_graph",
             "weight": 30,
-            "changed_files": ["retort_engine/codebase_graph.py", "tests/test_codebase_graph.py"],
+            "changed_files": [
+                "retort_engine/codebase_graph.py",
+                "tests/test_codebase_graph.py",
+            ],
             "has_behavior_diff": True,
         }
     ]
@@ -206,13 +258,29 @@ def test_advantage_diff_map_ignores_generated_registry_and_reports() -> None:
         [{"signal": "review_pipeline", "weight": 30}],
     )
 
-    assert rows == [{"signal": "review_pipeline", "weight": 30, "changed_files": [], "has_behavior_diff": False}]
+    assert rows == [
+        {
+            "signal": "review_pipeline",
+            "weight": 30,
+            "changed_files": [],
+            "has_behavior_diff": False,
+        }
+    ]
 
 
 def test_bridge_alone_is_not_behavior_source_for_quality_gate() -> None:
     gate = absorption_quality_gate(
-        ["retort_engine/absorbed_behavior_bridge.py", "tests/test_absorbed_behavior_bridge.py"],
-        [{"ok": True, "command": ["pytest", "tests/test_absorbed_behavior_bridge.py"], "stdout_tail": "1 passed"}],
+        [
+            "retort_engine/absorbed_behavior_bridge.py",
+            "tests/test_absorbed_behavior_bridge.py",
+        ],
+        [
+            {
+                "ok": True,
+                "command": ["pytest", "tests/test_absorbed_behavior_bridge.py"],
+                "stdout_tail": "1 passed",
+            }
+        ],
         minimum_behavior_tests=1,
         ranked_capabilities=[{"signal": "review_pipeline", "weight": 30}],
     )
@@ -223,12 +291,26 @@ def test_bridge_alone_is_not_behavior_source_for_quality_gate() -> None:
 
 def test_absorbed_review_rank_weights_count_as_behavior_for_quality_gate() -> None:
     gate = absorption_quality_gate(
-        ["retort_engine/absorbed_review_rank_weights.py", "tests/test_absorbed_review_rank_weights.py"],
-        [{"ok": True, "command": ["pytest", "tests/test_absorbed_review_rank_weights.py"], "stdout_tail": "2 passed"}],
+        [
+            "retort_engine/absorbed_review_rank_weights.py",
+            "tests/test_absorbed_review_rank_weights.py",
+        ],
+        [
+            {
+                "ok": True,
+                "command": ["pytest", "tests/test_absorbed_review_rank_weights.py"],
+                "stdout_tail": "2 passed",
+            }
+        ],
         minimum_behavior_tests=1,
-        ranked_capabilities=[{"signal": "diff_hunk_review", "weight": 40}, {"signal": "review_pipeline", "weight": 30}],
+        ranked_capabilities=[
+            {"signal": "diff_hunk_review", "weight": 40},
+            {"signal": "review_pipeline", "weight": 30},
+        ],
     )
-    assert gate["progress"]["behavior_source_files"] == ["retort_engine/absorbed_review_rank_weights.py"]
+    assert gate["progress"]["behavior_source_files"] == [
+        "retort_engine/absorbed_review_rank_weights.py"
+    ]
     assert gate["advantage_diff_map"][0]["has_behavior_diff"] is True
 
 
@@ -236,24 +318,56 @@ def test_absorbed_review_rank_weights_count_as_behavior_for_quality_gate() -> No
     ("gates", "expected_observed"),
     [
         (
-            [{"ok": True, "command": ["python", "-m", "pytest", "tests/test_pr_review.py", "-q"], "stdout_tail": "12 passed in 0.2s"}],
+            [
+                {
+                    "ok": True,
+                    "command": [
+                        "python",
+                        "-m",
+                        "pytest",
+                        "tests/test_pr_review.py",
+                        "-q",
+                    ],
+                    "stdout_tail": "12 passed in 0.2s",
+                }
+            ],
             12,
         ),
         (
-            [{"ok": True, "command": ["pytest", "tests"], "stdout_tail": "134 tests collected\n133 passed"}],
+            [
+                {
+                    "ok": True,
+                    "command": ["pytest", "tests"],
+                    "stdout_tail": "134 tests collected\n133 passed",
+                }
+            ],
             134,
         ),
         (
-            [{"ok": True, "command": ["pytest", "tests/test_pr_review.py"], "stdout_tail": "1 failed, 5 passed"}],
+            [
+                {
+                    "ok": True,
+                    "command": ["pytest", "tests/test_pr_review.py"],
+                    "stdout_tail": "1 failed, 5 passed",
+                }
+            ],
             5,
         ),
         (
-            [{"ok": True, "command": ["python", "-c", "print('ok')"], "stdout_tail": "ok"}],
+            [
+                {
+                    "ok": True,
+                    "command": ["python", "-c", "print('ok')"],
+                    "stdout_tail": "ok",
+                }
+            ],
             0,
         ),
     ],
 )
-def test_absorption_quality_gate_counts_observed_behavior_tests(gates: list[dict[str, object]], expected_observed: int) -> None:
+def test_absorption_quality_gate_counts_observed_behavior_tests(
+    gates: list[dict[str, object]], expected_observed: int
+) -> None:
     gate = absorption_quality_gate(
         ["retort_engine/pr_review.py", "tests/test_pr_review.py"],
         gates,
@@ -267,7 +381,13 @@ def test_absorption_quality_gate_counts_observed_behavior_tests(gates: list[dict
 def test_absorption_quality_gate_passes_only_when_all_depth_evidence_exists() -> None:
     gate = absorption_quality_gate(
         ["retort_engine/pr_review.py", "tests/test_pr_review.py"],
-        [{"ok": True, "command": ["pytest", "tests/test_pr_review.py"], "stdout_tail": "9 passed"}],
+        [
+            {
+                "ok": True,
+                "command": ["pytest", "tests/test_pr_review.py"],
+                "stdout_tail": "9 passed",
+            }
+        ],
         minimum_behavior_tests=3,
         depth_gate={"passed": True},
         ranked_capabilities=[{"signal": "review_pipeline", "weight": 30}],
@@ -282,7 +402,13 @@ def test_absorption_quality_gate_passes_only_when_all_depth_evidence_exists() ->
 def test_absorption_quality_gate_fails_when_depth_gate_fails_even_with_tests() -> None:
     gate = absorption_quality_gate(
         ["retort_engine/pr_review.py", "tests/test_pr_review.py"],
-        [{"ok": True, "command": ["pytest", "tests/test_pr_review.py"], "stdout_tail": "9 passed"}],
+        [
+            {
+                "ok": True,
+                "command": ["pytest", "tests/test_pr_review.py"],
+                "stdout_tail": "9 passed",
+            }
+        ],
         minimum_behavior_tests=3,
         depth_gate={"passed": False},
         ranked_capabilities=[{"signal": "review_pipeline", "weight": 30}],
@@ -292,10 +418,18 @@ def test_absorption_quality_gate_fails_when_depth_gate_fails_even_with_tests() -
     assert "depth_absorption_gate_failed" in gate["missing"]
 
 
-def test_absorption_quality_gate_fails_when_ranked_advantage_has_no_matching_behavior_diff() -> None:
+def test_absorption_quality_gate_fails_when_ranked_advantage_has_no_matching_behavior_diff() -> (
+    None
+):
     gate = absorption_quality_gate(
         ["retort_engine/review_context_bias.py", "tests/test_review_context_bias.py"],
-        [{"ok": True, "command": ["pytest", "tests/test_review_context_bias.py"], "stdout_tail": "3 passed"}],
+        [
+            {
+                "ok": True,
+                "command": ["pytest", "tests/test_review_context_bias.py"],
+                "stdout_tail": "3 passed",
+            }
+        ],
         minimum_behavior_tests=1,
         ranked_capabilities=[{"signal": "safety_policy", "weight": 30}],
     )
@@ -304,10 +438,21 @@ def test_absorption_quality_gate_fails_when_ranked_advantage_has_no_matching_beh
     assert "missing_advantage_to_behavior_mapping" in gate["missing"]
 
 
-def test_absorption_quality_gate_fails_closed_for_report_only_with_passing_pytest() -> None:
+def test_absorption_quality_gate_fails_closed_for_report_only_with_passing_pytest() -> (
+    None
+):
     gate = absorption_quality_gate(
-        ["retort_engine/absorbed_capabilities.py", "tests/test_absorbed_capabilities.py"],
-        [{"ok": True, "command": ["pytest", "tests/test_absorbed_capabilities.py"], "stdout_tail": "20 passed"}],
+        [
+            "retort_engine/absorbed_capabilities.py",
+            "tests/test_absorbed_capabilities.py",
+        ],
+        [
+            {
+                "ok": True,
+                "command": ["pytest", "tests/test_absorbed_capabilities.py"],
+                "stdout_tail": "20 passed",
+            }
+        ],
         minimum_behavior_tests=1,
         depth_gate={"passed": True},
         ranked_capabilities=[{"signal": "review_pipeline", "weight": 30}],
@@ -322,7 +467,13 @@ def test_absorption_quality_gate_fails_closed_for_report_only_with_passing_pytes
 def test_absorption_quality_gate_requires_code_graph_proof_when_present() -> None:
     gate = absorption_quality_gate(
         ["retort_engine/codebase_graph.py", "tests/test_codebase_graph.py"],
-        [{"ok": True, "command": ["pytest", "tests/test_codebase_graph.py"], "stdout_tail": "6 passed"}],
+        [
+            {
+                "ok": True,
+                "command": ["pytest", "tests/test_codebase_graph.py"],
+                "stdout_tail": "6 passed",
+            }
+        ],
         minimum_behavior_tests=1,
         depth_gate={"passed": True},
         ranked_capabilities=[{"signal": "codebase_graph", "weight": 30}],

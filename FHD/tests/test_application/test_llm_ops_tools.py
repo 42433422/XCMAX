@@ -88,8 +88,10 @@ class TestLlmOpsToolRegistration:
         }
         missing = core - set(tools)
         assert not missing, f"缺少核心工具: {missing}"
-        # 当前工具集已从 6 扩展到 9（新增 cursor/codex/trae 用量查询）
+        # 当前工具集已扩展（含 VLM 路由与 CLI 用量查询）
         assert set(tools) == core | {
+            "list_vlm_models",
+            "get_vlm_route",
             "query_cursor_usage",
             "query_codex_usage",
             "query_trae_usage",

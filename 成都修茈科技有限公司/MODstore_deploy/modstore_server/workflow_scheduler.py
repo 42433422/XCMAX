@@ -15,17 +15,58 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from modstore_server import payment_orders
+from modstore_server import autonomy_scheduler, payment_orders
 from modstore_server.models import WorkflowTrigger, get_session_factory
 from modstore_server.workflow_event_runner import run_workflow_for_trigger
 
 logger = logging.getLogger(__name__)
 
 _scheduler: Optional[BackgroundScheduler] = None
+_scheduler_registration_complete = False
+_scheduler_startup_probe_failures: list[dict[str, str]] = []
+_scheduler_startup_recovery_deadlines: dict[str, datetime] = {}
 
 _JOB_PREFIX = "wf_trigger_"
 _LAST_TIME_RAIL_OBSERVABILITY_SYNC_TS = 0.0
 _LAST_TIME_RAIL_OBSERVABILITY_MISSING = -1
+
+_REQUIRED_CORE_JOB_IDS = frozenset(
+    {
+        "auto_fix_event_bindings_refresh",
+        "auto_merge_audit_sampling",
+        "auto_version_bump_daily",
+        "autonomy_metrics_snapshot",
+        "autonomy_posthoc_audit",
+        "customer_value_reconciler",
+        "daily_backup_job",
+        "daily_ops_digest_email",
+        "daily_orchestrator_job",
+        "dead_letter_reconciler",
+        "dr_recovery_probe_job",
+        "duty_workforce_learning",
+        "email_intake_poll",
+        "employee_autonomy_dispatch_loop",
+        "employee_evolution_scan_loop",
+        "employee_health_scan_loop",
+        "incident_collect_extended",
+        "incident_collect_nginx",
+        "incident_collect_pytest_cursor",
+        "inbox_approval_poll",
+        "kb_self_maintenance",
+        "payment_orders_expire",
+        "predictive_maintenance_forecast",
+        "retention_janitor_daily",
+        "scheduler_heartbeat",
+        "self_evolution_metrics",
+        "telemetry_backlog_scan",
+        "time_rail_observability_sync",
+    }
+)
+_CRITICAL_RUNTIME_JOB_TO_SCHEDULER_ID = {
+    "daily_digest": "daily_ops_digest_email",
+    "boss_daily_im_report": "boss_daily_im_report",
+    **autonomy_scheduler.CRITICAL_RUNTIME_JOBS,
+}
 
 
 def _env_int(name: str, default: int) -> int:
@@ -37,9 +78,7 @@ def _env_int(name: str, default: int) -> int:
 
 def _env_bool(name: str, default: bool) -> bool:
     raw = os.environ.get(name)
-    if raw is None:
-        return default
-    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+    return default if raw is None else str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _business_misfire_grace_time() -> int:
@@ -48,6 +87,168 @@ def _business_misfire_grace_time() -> int:
 
 def _cleanup_misfire_grace_time() -> int:
     return max(60, _env_int("MODSTORE_SCHEDULER_CLEANUP_MISFIRE_GRACE_SECONDS", 4 * 3600))
+
+
+def required_scheduler_job_ids() -> tuple[str, ...]:
+    required = set(_REQUIRED_CORE_JOB_IDS) | set(autonomy_scheduler.REQUIRED_JOB_IDS)
+    if _env_bool("MODSTORE_EMPLOYEE_BURN_IN_SCHEDULER_ENABLED", True):
+        required.add("duty_workforce_burnin")
+    if _env_bool("MODSTORE_BOSS_IM_REPORT_ENABLED", True):
+        required.add("boss_daily_im_report")
+    if _env_bool("MODSTORE_LLM_AUTOPILOT_ENABLED", False):
+        required.add("llm_route_autopilot")
+    if _env_bool("MODSTORE_DAILY_CHAIN_CRON_FALLBACK_ENABLED", False):
+        required.update(
+            {
+                "daily_release_train_orchestrator_job",
+                "daily_vibe_line_execute_job",
+            }
+        )
+    if _env_bool("MODSTORE_POST_DEPLOY_SMOKE_CRON_ENABLED", False):
+        required.add("post_deploy_smoke_interval")
+    return tuple(sorted(required))
+
+
+def scheduler_integrity_status() -> dict[str, Any]:
+    """Report scheduler engine and registration completeness separately."""
+
+    required = required_scheduler_job_ids()
+    active: set[str] = set()
+    engine_running = False
+    if _scheduler is not None:
+        engine_running = bool(getattr(_scheduler, "running", False))
+        try:
+            active = {str(job.id) for job in _scheduler.get_jobs()}
+        except Exception:
+            logger.exception("scheduler integrity: get_jobs failed")
+    missing = sorted(set(required) - active)
+    complete = bool(_scheduler_registration_complete)
+    return {
+        "ok": engine_running and complete and not missing,
+        "engine_running": engine_running,
+        "registration_complete": complete,
+        "required_job_count": len(required),
+        "active_job_count": len(active),
+        "missing_required_jobs": missing,
+        "startup_probe_failures": list(_scheduler_startup_probe_failures),
+    }
+
+
+def _run_scheduler_startup_probe(stage: str, fn: Callable[[], Any]) -> bool:
+    """Run an eager probe without allowing one dependency to truncate registration."""
+
+    try:
+        fn()
+        return True
+    except Exception as exc:
+        failure = {
+            "stage": stage,
+            "error_type": type(exc).__name__,
+            "message": str(exc)[:240],
+        }
+        _scheduler_startup_probe_failures.append(failure)
+        logger.warning(
+            "scheduler startup probe failed; registration continues: stage=%s error=%s",
+            stage,
+            failure["message"],
+        )
+        return False
+
+
+def _startup_recovery_kwargs(job_id: str, *, delay_seconds: int) -> dict[str, datetime]:
+    """Schedule one catch-up run when a critical daily job is missing or stale."""
+
+    if not _env_bool("MODSTORE_SCHEDULER_STARTUP_RECOVERY_ENABLED", True):
+        return {}
+    stale_after = max(
+        3600,
+        _env_int("MODSTORE_SCHEDULER_STARTUP_RECOVERY_STALE_SECONDS", 26 * 3600),
+    )
+    due = True
+    state = "missing"
+    try:
+        from modstore_server.scheduler_runtime import get_runtime_status
+
+        runtime = get_runtime_status(stale_after_seconds=stale_after)
+        row = next(
+            (item for item in runtime.get("jobs") or [] if item.get("job_id") == job_id),
+            None,
+        )
+        state = str((row or {}).get("state") or "missing")
+        due = not runtime.get("ok") or row is None or state in {"stale", "failing"}
+    except Exception:
+        logger.exception("scheduler startup recovery status failed: job_id=%s", job_id)
+    if not due:
+        return {}
+
+    now = datetime.now(timezone.utc)
+    recovery_at = now + timedelta(seconds=max(1, delay_seconds))
+    grace_seconds = max(
+        300,
+        _env_int("MODSTORE_SCHEDULER_STARTUP_RECOVERY_GRACE_SECONDS", 3600),
+    )
+    _scheduler_startup_recovery_deadlines[job_id] = now + timedelta(seconds=grace_seconds)
+    logger.warning(
+        "scheduler startup catch-up scheduled: job_id=%s state=%s run_at=%s",
+        job_id,
+        state,
+        recovery_at.isoformat(),
+    )
+    return {"next_run_time": recovery_at}
+
+
+def scheduler_runtime_health_status() -> dict[str, Any]:
+    """Return health for active, critical daily jobs only.
+
+    Historical rows from disabled jobs do not poison health. A startup catch-up
+    is reported as ``recovering`` for a bounded grace period instead of causing
+    the watchdog to restart the process while the recovery job is running.
+    """
+
+    from modstore_server.scheduler_runtime import get_runtime_status
+
+    integrity = scheduler_integrity_status()
+    active_required = set(required_scheduler_job_ids())
+    monitored = {
+        runtime_id: scheduler_id
+        for runtime_id, scheduler_id in _CRITICAL_RUNTIME_JOB_TO_SCHEDULER_ID.items()
+        if scheduler_id in active_required
+    }
+    runtime = get_runtime_status()
+    rows = {
+        str(item.get("job_id") or ""): dict(item)
+        for item in runtime.get("jobs") or []
+        if str(item.get("job_id") or "") in monitored
+    }
+    now = datetime.now(timezone.utc)
+    unhealthy: list[str] = []
+    recovering: list[str] = []
+    jobs: list[dict[str, Any]] = []
+    for runtime_id in sorted(monitored):
+        row = rows.get(runtime_id) or {
+            "job_id": runtime_id,
+            "state": "missing",
+            "last_status": None,
+            "last_run_at": None,
+            "last_success_at": None,
+            "consecutive_failures": 0,
+        }
+        state = str(row.get("state") or "missing")
+        deadline = _scheduler_startup_recovery_deadlines.get(runtime_id)
+        if state in {"missing", "stale", "failing"} and deadline and now <= deadline:
+            row = {**row, "state": "recovering", "recovery_deadline": deadline.isoformat()}
+            recovering.append(runtime_id)
+        elif state in {"missing", "stale", "failing"}:
+            unhealthy.append(runtime_id)
+        jobs.append(row)
+    return {
+        "ok": bool(runtime.get("ok")) and not unhealthy,
+        "integrity_ok": bool(integrity.get("ok")),
+        "jobs": jobs,
+        "unhealthy_jobs": unhealthy,
+        "recovering_jobs": recovering,
+        "generated_at": runtime.get("generated_at"),
+    }
 
 
 def _daily_pipeline_lock_wait_seconds(stage: str) -> int:
@@ -165,9 +366,13 @@ def _run_collector_with_timeout(
 
 
 def start_scheduler() -> None:
-    global _scheduler
+    global _scheduler, _scheduler_registration_complete, _scheduler_startup_probe_failures
+    global _scheduler_startup_recovery_deadlines
     if _scheduler is not None:
         return
+    _scheduler_registration_complete = False
+    _scheduler_startup_probe_failures = []
+    _scheduler_startup_recovery_deadlines = {}
     _scheduler = BackgroundScheduler()
     _scheduler.start()
     try:
@@ -204,6 +409,8 @@ def start_scheduler() -> None:
         max_instances=1,
     )
     _scheduler_heartbeat_job()
+
+    autonomy_scheduler.register_autonomy_jobs(_scheduler, _scheduler_startup_recovery_deadlines)
 
     def _dead_letter_reconcile_job() -> None:
         try:
@@ -286,7 +493,10 @@ def start_scheduler() -> None:
         coalesce=True,
         max_instances=1,
     )
-    _customer_value_reconcile_job()
+    _run_scheduler_startup_probe(
+        "customer_value_reconciler",
+        _customer_value_reconcile_job,
+    )
 
     def _close_stale_orders() -> None:
         try:
@@ -572,6 +782,7 @@ def start_scheduler() -> None:
             misfire_grace_time=_business_misfire_grace_time(),
             coalesce=True,
             max_instances=1,
+            **_startup_recovery_kwargs("daily_digest", delay_seconds=20),
         )
     except Exception:
         logger.exception("register daily digest cron failed")
@@ -659,6 +870,7 @@ def start_scheduler() -> None:
             misfire_grace_time=_business_misfire_grace_time(),
             coalesce=True,
             max_instances=1,
+            **_startup_recovery_kwargs("self_maintenance_loop_daily", delay_seconds=40),
         )
     except Exception:
         logger.exception("register self-maintenance loop cron failed")
@@ -1138,6 +1350,7 @@ def start_scheduler() -> None:
                 misfire_grace_time=_business_misfire_grace_time(),
                 coalesce=True,
                 max_instances=1,
+                **_startup_recovery_kwargs("boss_daily_im_report", delay_seconds=60),
             )
     except Exception:
         logger.exception("register boss daily im report cron failed")
@@ -1413,7 +1626,21 @@ def start_scheduler() -> None:
     except Exception:
         logger.exception("register post_deploy_smoke cron failed")
 
-    logger.info("workflow scheduler started")
+    _scheduler_registration_complete = True
+    integrity = scheduler_integrity_status()
+    if integrity["ok"]:
+        logger.info(
+            "workflow scheduler started: active=%s required=%s",
+            integrity["active_job_count"],
+            integrity["required_job_count"],
+        )
+    else:
+        logger.error(
+            "workflow scheduler registration incomplete: active=%s required=%s missing=%s",
+            integrity["active_job_count"],
+            integrity["required_job_count"],
+            integrity["missing_required_jobs"],
+        )
 
 
 _EMPLOYEE_CRON_JOB_PREFIX = "emp_cron_"
@@ -1508,6 +1735,10 @@ def _register_employee_cron_jobs() -> None:
             contract_schedule,
             workforce_contract_map,
         )
+        from modstore_server.employee_cron_registration_ledger import (
+            reconcile_employee_cron_registrations,
+            record_employee_cron_registration,
+        )
         from modstore_server.models import get_session_factory
     except Exception:
         logger.exception("employee cron: import failed")
@@ -1527,6 +1758,7 @@ def _register_employee_cron_jobs() -> None:
     sf = get_session_factory()
     registered = 0
     skipped = 0
+    registered_ids: set[str] = set()
     for prof in profiles:
         emp_id = str(prof.get("id") or "").strip()
         if not emp_id:
@@ -1581,50 +1813,16 @@ def _register_employee_cron_jobs() -> None:
             schedule_source: str = schedule_source_local,
         ) -> None:
             try:
-                import importlib
+                from modstore_server.employee_duty_cron_runtime import (
+                    execute_employee_cron_duty,
+                )
 
-                employee_executor = importlib.import_module("modstore_server.employee_executor")
-                from modstore_server.services.llm import resolve_platform_bench_llm
-
-                project_root = _employee_project_root()
-                bench_provider, bench_model = resolve_platform_bench_llm()
-                employee_executor.execute_employee_task(
-                    eid,
-                    brief,
-                    {
-                        "trigger": "schedule",
-                        "schedule_source": schedule_source,
-                        "work_contract": {
-                            "schema": "xcagi.duty_employee_work_contracts/v1",
-                            "mode": str(work_contract.get("mode") or "execute"),
-                            "risk_level": str(work_contract.get("risk_level") or "medium"),
-                            "acceptance": list(work_contract.get("acceptance") or []),
-                        },
-                        # The reviewed work-contract SSOT is the explicit
-                        # runtime approval for low/medium duty execution.  It
-                        # must not authorize high-risk work, which continues
-                        # through the existing approval/veto path below.
-                        "allow_medium_risk": str(work_contract.get("risk_level") or "medium")
-                        .strip()
-                        .lower()
-                        in {"low", "medium"},
-                        # Founder/veto stays available through the pending
-                        # question queue, but a 7x24 worker must never occupy a
-                        # scheduler thread while waiting for a human reply.
-                        "non_blocking_human_questions": True,
-                        # Scheduled duty never grants the high-risk bypass.  A
-                        # release/payment/destructive action still needs the
-                        # existing approval/veto path even if a contract exists.
-                        "allow_high_risk_real_run": False,
-                        **({"project_root": project_root} if project_root else {}),
-                    },
-                    user_id=0,
-                    # Duty work is a platform expense and must follow the
-                    # configured platform route, even when an old employee
-                    # manifest still names a previous provider/model.
-                    bench_llm_override=(
-                        (bench_provider, bench_model) if bench_provider and bench_model else None
-                    ),
+                execute_employee_cron_duty(
+                    employee_id=eid,
+                    task_brief=brief,
+                    work_contract=work_contract,
+                    schedule_source=schedule_source,
+                    project_root=_employee_project_root(),
                 )
             except Exception:
                 logger.exception("employee cron job failed: %s", eid)
@@ -1632,14 +1830,26 @@ def _register_employee_cron_jobs() -> None:
         try:
             _scheduler.add_job(_runner, trigger, id=job_id, replace_existing=True)
             registered += 1
+            registered_ids.add(emp_id)
+            record_employee_cron_registration(emp_id, status="success")
             logger.info(
                 "employee cron registered: %s -> %s",
                 emp_id,
                 cron_expr or f"interval {interval_seconds}s",
             )
-        except Exception:
+        except Exception as exc:
+            record_employee_cron_registration(
+                emp_id,
+                status="failed",
+                error=f"registration failed: {exc!r}",
+            )
             logger.exception("employee cron add_job failed: %s", emp_id)
             skipped += 1
+
+    try:
+        reconcile_employee_cron_registrations(registered_ids)
+    except Exception:
+        logger.exception("employee cron: registration ledger reconciliation failed")
 
     logger.info("employee cron: registered=%d skipped=%d", registered, skipped)
 
@@ -1689,11 +1899,15 @@ def reload_employee_cron_jobs() -> dict:
 
 
 def stop_scheduler() -> None:
-    global _scheduler
+    global _scheduler, _scheduler_registration_complete, _scheduler_startup_probe_failures
+    global _scheduler_startup_recovery_deadlines
     if _scheduler is not None:
         _scheduler.shutdown(wait=False)
         _scheduler = None
         logger.info("workflow scheduler stopped")
+    _scheduler_registration_complete = False
+    _scheduler_startup_probe_failures = []
+    _scheduler_startup_recovery_deadlines = {}
 
 
 def _job_id(trigger_id: int) -> str:

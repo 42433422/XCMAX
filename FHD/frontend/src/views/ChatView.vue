@@ -214,7 +214,8 @@ const industryStore = useIndustryStore()
 const { currentIndustryId } = storeToRefs(industryStore)
 
 const clientModeTiersUiEnabled = isClientModeTiersUiEnabled()
-const autoRefreshStarredWechat = ref(localStorage.getItem('xcagi_auto_refresh_starred_wechat') !== '0')
+// 主动意识：默认关闭，须用户主动勾选后才轮询星标会话
+const autoRefreshStarredWechat = ref(localStorage.getItem('xcagi_auto_refresh_starred_wechat') === '1')
 const proIntentExperienceEnabled = ref(
   clientModeTiersUiEnabled && localStorage.getItem(PRO_INTENT_EXPERIENCE_KEY) === '1',
 )

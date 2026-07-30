@@ -234,6 +234,43 @@ class TestOpenAICompatibleAdapter:
             result = await a.chat_completion([{"role": "user", "content": "hi"}])
         assert "choices" in result
 
+    @pytest.mark.asyncio
+    async def test_minimax_token_plan_uses_anthropic_compatible_protocol(self):
+        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+        adapter = OpenAICompatibleAdapter(
+            provider="minimax",
+            model="MiniMax-M2.7",
+            api_key="sk-cp-test",
+        )
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = {
+            "id": "msg-1",
+            "model": "MiniMax-M2.7",
+            "content": [{"type": "text", "text": "fallback ok"}],
+            "stop_reason": "end_turn",
+            "usage": {"input_tokens": 4, "output_tokens": 2},
+        }
+        client = AsyncMock()
+        client.post = AsyncMock(return_value=response)
+        client.is_closed = False
+
+        with patch.object(adapter, "_get_client", return_value=client):
+            result = await adapter.chat_completion(
+                [
+                    {"role": "system", "content": "system"},
+                    {"role": "user", "content": "hi"},
+                ]
+            )
+
+        call = client.post.call_args
+        assert call.args[0] == "https://api.minimaxi.com/anthropic/v1/messages"
+        assert call.kwargs["headers"]["x-api-key"] == "sk-cp-test"
+        assert call.kwargs["json"]["system"] == "system"
+        assert result["choices"][0]["message"]["content"] == "fallback ok"
+        assert result["_provider_protocol"] == "minimax_anthropic_compatible"
+
     # stream_chat_completion — no api key
     @pytest.mark.asyncio
     async def test_stream_no_key_raises(self):

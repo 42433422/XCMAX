@@ -1,0 +1,108 @@
+# 本机已 scp 上传 ZIP 后：用仓库密钥签名 latest-mac.yml 并发布到 stable/enterprise。
+name: Publish macOS update feed (signed)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Product version (four-part)
+        required: true
+        default: "1.0.0.0"
+      build_sha:
+        description: Full 40-char git SHA embedded in build-info
+        required: true
+      zip_name:
+        description: Enterprise macOS ZIP filename already on the update host
+        required: true
+        default: "XCAGI-Enterprise-1.0.0.0-mac-arm64.zip"
+      zip_sha512:
+        description: Base64 sha512 of the ZIP (openssl dgst -sha512 -binary | base64)
+        required: true
+      zip_size:
+        description: ZIP byte size
+        required: true
+      release_date:
+        description: ISO releaseDate for latest-mac.yml
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  publish-feed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install cryptography
+        run: pip install --quiet cryptography
+      - name: Build signed latest-mac.yml and upload
+        env:
+          XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
+          DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
+          PRODUCT_VERSION: ${{ github.event.inputs.version }}
+          BUILD_SHA: ${{ github.event.inputs.build_sha }}
+          ZIP_NAME: ${{ github.event.inputs.zip_name }}
+          ZIP_SHA512: ${{ github.event.inputs.zip_sha512 }}
+          ZIP_SIZE: ${{ github.event.inputs.zip_size }}
+          RELEASE_DATE: ${{ github.event.inputs.release_date }}
+        run: |
+          set -euo pipefail
+          if [ -z "${XCAGI_UPDATE_ED25519_PRIVATE_KEY:-}" ]; then
+            echo "::error::XCAGI_UPDATE_ED25519_PRIVATE_KEY missing"
+            exit 1
+          fi
+          if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
+            echo "::error::SERVER_SSH_KEY or FHD_PUSH_SSH_KEY missing"
+            exit 1
+          fi
+          TOOLCHAIN="$(printf '%s' "${PRODUCT_VERSION}" | cut -d. -f1-3)"
+          DATE_ISO="${RELEASE_DATE:-$(date -u +%Y-%m-%dT%H:%M:%S.000Z)}"
+          OUT="${RUNNER_TEMP}/latest-mac.yml"
+          {
+            echo "version: ${TOOLCHAIN}"
+            echo "productVersion: ${PRODUCT_VERSION}"
+            echo "buildSha: ${BUILD_SHA}"
+            echo "releaseNotes: |"
+            echo "  版本 ${PRODUCT_VERSION}"
+            echo "  构建 ${BUILD_SHA:0:12}"
+            echo "  "
+            echo "  • 更新桌面壳与本地后端运行时"
+            echo "  • 保留本机业务数据与已安装 Mod"
+            echo "  • 安装完成后重新加载进入新版本"
+            echo "files:"
+            echo "  - url: ${ZIP_NAME}"
+            echo "    sha512: ${ZIP_SHA512}"
+            echo "    size: ${ZIP_SIZE}"
+            echo "path: ${ZIP_NAME}"
+            echo "sha512: ${ZIP_SHA512}"
+            echo "releaseDate: '${DATE_ISO}'"
+            echo "stagingPercentage: 100"
+            echo "forceUpgrade: false"
+            echo "minVersion: ${TOOLCHAIN}"
+          } > "${OUT}"
+          python3 scripts/dev/sign_update_metadata.py "${OUT}"
+          echo "---- signed feed ----"
+          cat "${OUT}"
+          KEY_FILE="${RUNNER_TEMP}/desktop_ssh_key"
+          printf '%s\n' "${DESKTOP_SSH_KEY}" > "${KEY_FILE}"
+          chmod 600 "${KEY_FILE}"
+          HOST="${XCAGI_UPDATE_SSH_HOST:-119.27.178.147}"
+          USER="${XCAGI_UPDATE_SSH_USER:-root}"
+          BASE="${XCAGI_UPDATE_SSH_PATH:-/var/www/update/releases/stable}"
+          for dest in \
+            "${BASE}/enterprise/latest-mac.yml" \
+            "${BASE}/xcagi-v${PRODUCT_VERSION}/enterprise/latest-mac.yml"
+          do
+            ssh -i "${KEY_FILE}" -o StrictHostKeyChecking=no "${USER}@${HOST}" "mkdir -p \"$(dirname "${dest}")\""
+            scp -i "${KEY_FILE}" -o StrictHostKeyChecking=no "${OUT}" "${USER}@${HOST}:${dest}.part"
+            ssh -i "${KEY_FILE}" -o StrictHostKeyChecking=no "${USER}@${HOST}" \
+              "mv -f '${dest}.part' '${dest}' && echo OK ${dest}"
+          done

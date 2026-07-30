@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -29,14 +29,17 @@ def load_events(path: Path) -> list[dict]:
     return events
 
 
-def compute_dora(events: list[dict], window_days: int = 7) -> dict:
-    now = datetime.now(timezone.utc)
+def compute_dora(
+    events: list[dict],
+    window_days: int = 7,
+    *,
+    environment: str | None = None,
+    now: datetime | None = None,
+) -> dict:
+    now = now or datetime.now(UTC)
     cutoff = now.timestamp() - window_days * 86400
-    recent = [
-        e
-        for e in events
-        if _parse_ts(e["deployed_at"]).timestamp() >= cutoff
-    ]
+    scoped = [e for e in events if environment is None or e.get("environment") == environment]
+    recent = [e for e in scoped if _parse_ts(e["deployed_at"]).timestamp() >= cutoff]
     successes = [e for e in recent if e.get("status") == "success"]
     failures = [e for e in recent if e.get("status") == "failed"]
     rollbacks = [e for e in recent if e.get("status") == "rollback" or e.get("restored_at")]
@@ -47,9 +50,7 @@ def compute_dora(events: list[dict], window_days: int = 7) -> dict:
         if e.get("commit_at")
     ]
     mttr_samples = [
-        _hours_between(e["deployed_at"], e["restored_at"])
-        for e in recent
-        if e.get("restored_at")
+        _hours_between(e["deployed_at"], e["restored_at"]) for e in recent if e.get("restored_at")
     ]
 
     total = len(recent)
@@ -57,6 +58,8 @@ def compute_dora(events: list[dict], window_days: int = 7) -> dict:
 
     return {
         "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "environment": environment or "all",
+        "source_event_count": len(scoped),
         "window_days": window_days,
         "event_count": total,
         "deployment_frequency_per_day": round(len(successes) / max(window_days, 1), 4),
@@ -82,6 +85,11 @@ def main() -> None:
     )
     p.add_argument("--window-days", type=int, default=7)
     p.add_argument(
+        "--environment",
+        default=None,
+        help="Only count deployment events for this environment (for example: production)",
+    )
+    p.add_argument(
         "--output",
         type=Path,
         default=None,
@@ -89,8 +97,12 @@ def main() -> None:
     )
     args = p.parse_args()
     events = load_events(args.input)
-    report = compute_dora(events, window_days=args.window_days)
-    out = args.output or args.input.parent / f"dora-{datetime.now(timezone.utc):%Y%m%d}.json"
+    report = compute_dora(
+        events,
+        window_days=args.window_days,
+        environment=args.environment,
+    )
+    out = args.output or args.input.parent / f"dora-{datetime.now(UTC):%Y%m%d}.json"
     out.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2, ensure_ascii=False))
 

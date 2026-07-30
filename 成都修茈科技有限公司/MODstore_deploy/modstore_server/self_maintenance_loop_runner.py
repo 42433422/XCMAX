@@ -8,7 +8,6 @@ then delegates real work to duty employees through the existing Para bridge.
 from __future__ import annotations
 
 import base64
-import fnmatch
 import hashlib
 import hmac
 import json
@@ -32,6 +31,7 @@ from urllib.parse import unquote, urlparse
 import httpx
 from apscheduler.triggers.cron import CronTrigger
 
+from . import self_maintenance_retort_remediation as retort_remediation
 from .duty_employee_registry import duty_employee_records
 from .duty_roster import SIX_LINE_DEPARTMENTS, all_planned_employee_ids
 from .employee_executor import execute_employee_task
@@ -47,9 +47,62 @@ from .self_evolution_knowledge import (
     salvage_kb_from_workspace,
     validate_kb_payload,
 )
+from .self_maintenance_merge_policy import (
+    DEFAULT_FORBIDDEN_GLOBS as DEFAULT_AUTO_MERGE_FORBIDDEN_GLOBS,
+)
+from .self_maintenance_merge_policy import DEFAULT_SCOPE_GLOBS as DEFAULT_AUTO_MERGE_SCOPE_GLOBS
+from .self_maintenance_merge_policy import (
+    absolute_forbidden_globs as _shared_auto_merge_absolute_forbidden_globs,
+)
+from .self_maintenance_merge_policy import file_matches_any_glob as _shared_file_matches_any_glob
+from .self_maintenance_merge_policy import forbidden_globs as _shared_auto_merge_forbidden_globs
+from .self_maintenance_merge_policy import max_files as _shared_auto_merge_max_files
+from .self_maintenance_merge_policy import max_lines as _shared_auto_merge_max_lines
+from .self_maintenance_merge_policy import normalize_repo_path as _shared_normalize_repo_path
+from .self_maintenance_merge_policy import scope_globs as _shared_auto_merge_scope_globs
+from .self_maintenance_para_merge_remediation import (
+    classify_para_merge_review_detail,
+    resume_candidate_from_para_ai_review_item,
+    resume_from_clean_baseline_for_para_merge,
+)
+from .self_maintenance_quality_gate import diff_quality_commands as _diff_quality_commands
+from .self_maintenance_quality_gate import (
+    matches_focused_test_command as _matches_focused_test_command,
+)
+from .self_maintenance_quality_gate import (
+    qa_executor_infrastructure_unavailable as _qa_executor_infrastructure_unavailable,
+)
+from .self_maintenance_quality_gate import qa_verdict_failure_reason as _qa_verdict_failure_reason
+from .self_maintenance_quality_gate import quality_check_failure as _quality_check_failure
+from .self_maintenance_recovery_policy import pending_run_recovery
+from .self_maintenance_remediation_lineage import (
+    automated_remediation_resume_plan as _automated_remediation_resume_plan,
+)
+from .self_maintenance_remediation_lineage import (
+    normalize_automated_remediation_reason as _normalize_automated_remediation_reason,
+)
+from .self_maintenance_remediation_lineage import (
+    remediation_lineage_fields as _remediation_lineage_fields,
+)
+from .self_maintenance_remediation_lineage import (
+    resume_candidate_from_context as _resume_candidate_from_remediation_context,
+)
+from .self_maintenance_remediation_lineage import (
+    unavailable_context_record as _unavailable_remediation_context_record,
+)
+from .self_maintenance_remediation_prompts import (
+    external_merge_remediation_prompt,
+    external_review_remediation_prompt,
+    qa_executor_retry_prompt,
+)
+from .self_maintenance_retry import close_successful_code_resume, is_transient_dispatch_failure
+from .self_maintenance_subprocess import run_cmd_excerpt as _run_cmd_excerpt
 
 logger = logging.getLogger(__name__)
 
+RETORT_SCOPE_REASON = retort_remediation.RETORT_SCOPE_REASON
+_reconcile_retort_scope_remediations = retort_remediation.reconcile_retort_scope_remediations
+_retort_scope_only_clarification = retort_remediation.retort_scope_only_clarification
 
 DEFAULT_RUNTIME_DIR = str(Path.home() / ".xcmax" / "modstore-daily")
 DEFAULT_LEDGER_NAME = "self_maintenance_loop_runs.jsonl"
@@ -67,64 +120,6 @@ DEFAULT_STATUS_FILE = (
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"
 )
 DEFAULT_AUTO_MERGE_GLOBS = [DEFAULT_STATUS_FILE]
-DEFAULT_AUTO_MERGE_SCOPE_GLOBS = [
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_*.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/duty_workforce_learning.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_evolution_metrics_job.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_evolution_knowledge.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_evolution_kb_redisvl.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/incident_model_router.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/incident_team_orchestrator.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/adaptive_release_controller.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/auto_merge_audit_sampler.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/autonomous_risk_gate.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/human_uncertainty_queue.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/kb_self_maintenance.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/node_coordinator.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/predictive_maintenance.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/release_recovery_orchestrator.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/unified_autonomy_orchestrator.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/auto_approve_policy.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/ops_staged_auto_approve.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/cr_narrow_ci.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/digest_vibe_prep.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/evolution_signal_collector.py",
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/models_project_context.py",
-    "FHD/XCAGI/kb/fixes/*.json",
-    "FHD/XCAGI/kb/fixes/*.md",
-    "FHD/XCAGI/kb/patterns/*.json",
-    "FHD/XCAGI/kb/patterns/*.md",
-    "FHD/XCAGI/kb/metrics/*.jsonl",
-    "成都修茈科技有限公司/MODstore_deploy/tests/test_self_*.py",
-    "成都修茈科技有限公司/MODstore_deploy/tests/test_duty_workforce_learning.py",
-    "成都修茈科技有限公司/MODstore_deploy/tests/test_self_evolution_metrics_job.py",
-    "成都修茈科技有限公司/MODstore_deploy/tests/test_self_evolution_knowledge*.py",
-    "成都修茈科技有限公司/MODstore_deploy/tests/test_auto_approve_policy*.py",
-    "成都修茈科技有限公司/MODstore_deploy/tests/test_ops_staged_auto_approve*.py",
-    "成都修茈科技有限公司/MODstore_deploy/tests/test_digest_vibe_prep.py",
-    "成都修茈科技有限公司/MODstore_deploy/tests/test_project_context*.py",
-]
-DEFAULT_AUTO_MERGE_FORBIDDEN_GLOBS = [
-    "*.env",
-    "*.env.*",
-    "**/*.db",
-    "**/*.sqlite",
-    "**/*.sqlite3",
-    "**/*secret*",
-    "**/*credential*",
-    "**/*token*",
-    ".github/workflows/*",
-    "**/migrations/**",
-    "**/alembic/**",
-    "**/models.py",
-    "**/models/**",
-    "**/api/app_factory.py",
-    "**/Dockerfile*",
-    "**/docker-compose*.yml",
-    "**/requirements*.txt",
-    "**/pyproject.toml",
-    "**/package-lock.json",
-]
 _PARA_GUEST_AUTH_CACHE: Dict[str, tuple] = {}
 _PARA_GUEST_AUTH_TTL_SECONDS = 1800  # 30 分钟
 _PARA_GUEST_AUTH_FILE_SAFETY_SECONDS = 60
@@ -728,6 +723,21 @@ def _open_item_steps(item: Dict[str, Any]) -> List[str]:
     return [str(step) for step in steps if str(step)]
 
 
+def _failed_open_item_identity(item: Dict[str, Any]) -> str:
+    """Stable identity for max-retry open items; run_id alone is not unique enough."""
+
+    return "|".join(
+        [
+            str(item.get("kind") or ""),
+            str(item.get("run_id") or ""),
+            str(item.get("branch") or ""),
+            str(item.get("para_task_id") or item.get("task_id") or ""),
+            ",".join(_open_item_steps(item)),
+            str(item.get("created_at") or ""),
+        ]
+    )
+
+
 def _open_item_matches_resolution(
     item: Dict[str, Any],
     *,
@@ -838,11 +848,14 @@ def _close_items_resolved_by_final(memory: Dict[str, Any], final: Dict[str, Any]
         decision = {}
     action = str(decision.get("action") or "")
     status = str(final.get("status") or "")
-    if action not in {
-        "auto_merged_low_risk",
-        "auto_merge_requested_low_risk",
-        "auto_continue",
-    } and status not in {"completed_merged", "completed_merge_requested"}:
+    if (
+        action
+        not in {
+            "auto_merged_low_risk",
+            "auto_continue",
+        }
+        and status != "completed_merged"
+    ):
         return {"closed_count": 0, "closed_items": []}
 
     run_ids: List[str] = []
@@ -887,36 +900,93 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
         return None
     max_retries = int(os.environ.get("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES") or "3")
     open_items_raw = memory.get("open_items")
-    escalated_items = []
+    enqueue_success_keys: set[str] = set()
     if isinstance(open_items_raw, list):
+        # First pass: collect items exceeding max retries, but only mark escalated after successful enqueue for non-code items
+        over_retry_items = []
         for item in open_items_raw:
             if (
                 isinstance(item, dict)
                 and item.get("kind") == "failed_steps"
                 and int(item.get("retry_count") or 1) >= max_retries
             ):
-                item["escalated"] = True
-                escalated_items.append(item)
-                logger.warning(
-                    "open_item run_id=%s exceeded max_retries=%d, pausing automated retries",
-                    item.get("run_id"),
-                    max_retries,
+                over_retry_items.append(item)
+
+        # Enqueue non-code escalated items to human uncertainty queue first, only mark escalated on success
+        if over_retry_items:
+            try:
+                from modstore_server.human_uncertainty_queue import enqueue_uncertain_item
+
+                for item in over_retry_items:
+                    steps = _open_item_steps(item)
+                    item_identity = _failed_open_item_identity(item)
+                    if "code" in steps:
+                        # Code failures are handled separately, keep in open_items for code fix retries
+                        logger.warning(
+                            "open_item identity=%s exceeded max_retries=%d, steps include code, will retry code remediation",
+                            item_identity,
+                            max_retries,
+                        )
+                        continue
+                    # Non-code items: try to enqueue to human queue
+                    logger.warning(
+                        "open_item identity=%s exceeded max_retries=%d, escalating to human review",
+                        item_identity,
+                        max_retries,
+                    )
+                    try:
+                        result = enqueue_uncertain_item(
+                            context={
+                                "run_id": item.get("run_id"),
+                                "failed_steps": steps,
+                                "retry_count": item.get("retry_count"),
+                                "branch": item.get("branch"),
+                                "para_task_id": item.get("para_task_id"),
+                            },
+                            decision={
+                                "action": "await_human_strategy_approval",
+                                "reason": "max_retries_exceeded",
+                            },
+                            reason=f"self-maintenance step {steps} failed {item.get('retry_count')} times, exceeded max retries",
+                        )
+                        if result.get("queued") or result.get("reason") == "duplicate":
+                            item["escalated"] = True
+                            enqueue_success_keys.add(item_identity)
+                            logger.info(
+                                "successfully enqueued escalated item identity=%s to human queue",
+                                item_identity,
+                            )
+                        else:
+                            logger.warning(
+                                "failed to enqueue escalated item identity=%s to human queue, will retry next loop",
+                                item_identity,
+                            )
+                    except Exception as exc:
+                        logger.warning(
+                            "failed to enqueue escalated item identity=%s to human queue: %s, will retry next loop",
+                            item_identity,
+                            exc,
+                        )
+            except Exception as exc:
+                logger.warning("failed to import human uncertainty queue: %s", exc)
+
+        # Remove only successfully enqueued non-code escalated items from open_items; keep others for retry/visibility
+        if enqueue_success_keys:
+            memory["open_items"] = [
+                item
+                for item in open_items_raw
+                if not (
+                    isinstance(item, dict)
+                    and item.get("kind") == "failed_steps"
+                    and int(item.get("retry_count") or 1) >= max_retries
+                    and "code" not in _open_item_steps(item)
+                    and _failed_open_item_identity(item) in enqueue_success_keys
                 )
-        # Keep escalated items in open_items but mark them as escalated so they are visible
-        # to operators instead of silently being dropped
-        memory["open_items"] = [
-            item
-            for item in open_items_raw
-            if not (
-                isinstance(item, dict)
-                and item.get("kind") == "failed_steps"
-                and int(item.get("retry_count") or 1) >= max_retries
-                and "code" not in (item.get("steps") or [])
-            )
-        ]
-    # Max-retry exhaustion is an automatic terminal hold, not an approval request.
-    if escalated_items:
-        return None
+            ]
+        else:
+            memory["open_items"] = open_items_raw
+    # Escalated non-code failures are removed from open_items above; do not stop
+    # the whole loop when other branches still have executable remediation holds.
 
     # KB schema retry: if there's a non-escalated kb_schema_retry open_item,
     # return None to trigger a fresh code step. The employee will see the
@@ -977,6 +1047,55 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                 "reason": "resume_failed_code_step",
             }
 
+    # Code-level remediation takes priority over review/QA-only retries. Walk
+    # newest-first so a stale branch/failure pair cannot starve a later hold
+    # that already contains the current independent-review findings.
+    for item in reversed(open_items):
+        if not isinstance(item, dict) or item.get("kind") not in {
+            "automated_remediation",
+            "human_strategy_approval",  # legacy ledger compatibility
+        }:
+            continue
+        reason = _normalize_automated_remediation_reason(memory, item)
+        resume_plan = _automated_remediation_resume_plan(reason)
+        if resume_plan is None:
+            continue
+        failed_steps, continue_existing_code_task = resume_plan
+        if "code" not in failed_steps:
+            continue
+        branch = str(item.get("branch") or "").strip()
+        para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
+        if not branch or not para_task_id:
+            continue
+        candidate: Dict[str, Any] = {
+            "branch": branch,
+            "failed_run_id": str(item.get("run_id") or "").strip(),
+            "failed_steps": list(failed_steps),
+            "para_task_id": para_task_id,
+            "reason": "resume_automated_remediation_candidate",
+        }
+        if reason.startswith("para_merge_"):
+            candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
+            candidate["remediation_reason"] = reason
+        elif reason == RETORT_SCOPE_REASON:
+            candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
+            candidate["remediation_reason"] = reason
+        if continue_existing_code_task and not item.get("resume_from_clean_baseline"):
+            candidate["continue_existing_code_task"] = True
+        return candidate
+
+    # Para merge AI review vetoes are not in the generic code-resume plan, so a
+    # stale failed_steps review/qa hold must not starve the newest veto remediation.
+    for item in reversed(open_items):
+        if not isinstance(item, dict) or item.get("kind") not in {
+            "automated_remediation",
+            "human_strategy_approval",  # legacy ledger compatibility
+        }:
+            continue
+        candidate = resume_candidate_from_para_ai_review_item(memory, item)
+        if candidate is not None:
+            return candidate
+
     # Then check for review/qa failures
     review_failed_run_ids = set()
     for item in open_items:
@@ -1018,7 +1137,10 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             "human_strategy_approval",  # legacy ledger compatibility
         }:
             continue
-        reason = str(item.get("reason") or "")
+        reason = _normalize_automated_remediation_reason(memory, item)
+        candidate = resume_candidate_from_para_ai_review_item(memory, item)
+        if candidate is not None:
+            return candidate
         if reason in {
             "auto_merge_safety_score_v2_too_low",
             "auto_merge_safety_score_v3_too_low",
@@ -1037,26 +1159,30 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
                     "reason": "resume_safety_score_remediation",
                 }
             continue
-        if reason not in {
-            "changed_files_match_forbidden_globs",
-            "changed_files_outside_dynamic_low_risk_scope",
-            "changed_files_outside_low_risk_globs",
-            "missing_report_only_evidence",
-            "max_retries_exceeded",
-            "structured_qa_focused_command_not_passed",
-        }:
+        resume_plan = _automated_remediation_resume_plan(reason)
+        if resume_plan is None:
             continue
+        failed_steps, continue_existing_code_task = resume_plan
         branch = str(item.get("branch") or "").strip()
         para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
         run_id = str(item.get("run_id") or "").strip()
         if branch and para_task_id:
-            return {
+            candidate: Dict[str, Any] = {
                 "branch": branch,
                 "failed_run_id": run_id,
-                "failed_steps": ["qa"],
+                "failed_steps": list(failed_steps),
                 "para_task_id": para_task_id,
                 "reason": "resume_automated_remediation_candidate",
             }
+            if reason.startswith("para_merge_"):
+                candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
+                candidate["remediation_reason"] = reason
+            elif reason == RETORT_SCOPE_REASON:
+                candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
+                candidate["remediation_reason"] = reason
+            if continue_existing_code_task and not item.get("resume_from_clean_baseline"):
+                candidate["continue_existing_code_task"] = True
+            return candidate
     return None
 
 
@@ -1082,7 +1208,10 @@ def _resume_dispatch_context(
 
     Code retries must use a fresh Para task. A score remediation still keeps
     the prior candidate branch as its base so the production fix survives.
-    Review/QA-only retries keep the original task and branch for evidence.
+    A merge-review rejection starts from the configured clean base and treats
+    the rejected branch as reference only; otherwise each rejection compounds
+    the previous diff until the reviewer can never accept it. Review/QA-only
+    retries keep the original task and branch for evidence.
     """
 
     if not resume_candidate:
@@ -1372,8 +1501,10 @@ def reconcile_stale_self_maintenance_runs(
                 "action": "stop",
                 "reason": terminal_reason,
                 "exclusive_lease_reacquired": interrupted,
+                "recovery_required": interrupted,
                 "stale_minutes": stale_minutes,
             },
+            "recovery_required": interrupted,
             "run_id": run_id,
             "started_at": _iso(started_at),
             "status": terminal_status,
@@ -1417,14 +1548,19 @@ def should_run_self_maintenance_loop(
             "should_run": False,
         }
     threshold = _env_int("MODSTORE_SELF_MAINTENANCE_THRESHOLD", 1)
-    # incident 触发用独立更短冷却，避免 6 小时冷却导致信号被全部跳过
-    if triggered_by == "incident_event":
-        cooldown_minutes = _env_int("MODSTORE_SELF_MAINTENANCE_INCIDENT_COOLDOWN_MINUTES", 60)
-    else:
-        cooldown_minutes = _env_int("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360)
-    last_started = _last_started_at()
+    from modstore_server.autonomy_scheduler import self_maintenance_cooldown_minutes
 
-    if not force and last_started is not None and cooldown_minutes > 0:
+    cooldown_minutes = self_maintenance_cooldown_minutes(triggered_by)
+    last_started = _last_started_at()
+    pending_recovery = pending_run_recovery(_read_ledger(limit=300), triggered_by)
+    recovery_kind = str((pending_recovery or {}).get("kind") or "")
+    recovery_detail = (pending_recovery or {}).get("detail")
+    interrupted_recovery = recovery_detail if recovery_kind == "interrupted_recovery" else None
+    transient_failure_recovery = (
+        recovery_detail if recovery_kind == "transient_failure_recovery" else None
+    )
+
+    if not force and pending_recovery is None and last_started is not None and cooldown_minutes > 0:
         next_allowed = last_started + timedelta(minutes=cooldown_minutes)
         if _utc_now() < next_allowed:
             return {
@@ -1437,7 +1573,7 @@ def should_run_self_maintenance_loop(
                 "triggered_by": triggered_by,
             }
 
-    if not force and int(evaluation["signal_count"]) < threshold:
+    if not force and pending_recovery is None and int(evaluation["signal_count"]) < threshold:
         return {
             **evaluation,
             "cooldown_minutes": cooldown_minutes,
@@ -1449,10 +1585,39 @@ def should_run_self_maintenance_loop(
     return {
         **evaluation,
         "cooldown_minutes": cooldown_minutes,
-        "reason": "force" if force else "threshold_met",
+        "interrupted_recovery": interrupted_recovery,
+        "transient_failure_recovery": transient_failure_recovery,
+        "reason": (
+            "force"
+            if force
+            else (
+                "interrupted_recovery"
+                if interrupted_recovery is not None
+                else (
+                    "transient_failure_recovery"
+                    if transient_failure_recovery is not None
+                    else "threshold_met"
+                )
+            )
+        ),
         "should_run": True,
         "threshold": threshold,
     }
+
+
+# Preferred Para nests for delivery_validation lookup. Order is part of the
+# determinism contract: same payload shape always yields the same DV.
+_DELIVERY_VALIDATION_PREFERRED_KEYS = (
+    "para_result",
+    "response",
+    "outputs",
+    "result",
+    "change_delivery",
+    "snapshot",
+    "subtasks",
+    "data",
+    "subtask",
+)
 
 
 def _employee_result_ok(result: Dict[str, Any]) -> bool:
@@ -1481,7 +1646,55 @@ def _employee_result_ok(result: Dict[str, Any]) -> bool:
         for item in outputs:
             if isinstance(item, dict) and item.get("ok") is False:
                 return False
+    # Nested delivery_validation with non-zero exit codes is hard failure evidence
+    # even when the outer Para envelope claims ok=True.
+    dv_gate = _delivery_validation_gate(result)
+    if dv_gate.get("found") and not dv_gate.get("ok"):
+        return False
     return True
+
+
+def _delivery_validation_command_failed(command: Any) -> bool:
+    return isinstance(command, dict) and command.get("exit_code") not in (0, None)
+
+
+def _delivery_validation_gate(result: Any) -> Dict[str, Any]:
+    """Evaluate nested delivery_validation for closed-loop completion evidence.
+
+    Returns a stable dict used by validate/writeback completion checks:
+      found / ok / reason / delivery_validation
+    """
+    dv = _find_delivery_validation(result)
+    if not isinstance(dv, dict):
+        return {
+            "delivery_validation": None,
+            "found": False,
+            "ok": True,
+            "reason": "delivery_validation_absent",
+        }
+    cmds = dv.get("commands")
+    if not isinstance(cmds, list) or not cmds:
+        return {
+            "delivery_validation": dv,
+            "found": True,
+            "ok": True,
+            "reason": "delivery_validation_no_commands",
+        }
+    failed_cmds = [c for c in cmds if _delivery_validation_command_failed(c)]
+    if failed_cmds:
+        return {
+            "delivery_validation": dv,
+            "failed_commands": failed_cmds[:3],
+            "found": True,
+            "ok": False,
+            "reason": "delivery_validation_failed",
+        }
+    return {
+        "delivery_validation": dv,
+        "found": True,
+        "ok": True,
+        "reason": "delivery_validation_passed",
+    }
 
 
 def _find_delivery_validation(obj: Any, depth: int = 0) -> Optional[Dict[str, Any]]:
@@ -1489,24 +1702,60 @@ def _find_delivery_validation(obj: Any, depth: int = 0) -> Optional[Dict[str, An
 
     delivery_validation 不在本地代码产出，由 Para 平台返回时嵌在
     result.result.outputs[].response / para_result 等任意层级，故需递归。
-    限制深度 6 / 列表前 12 项，避免大对象全遍历。
+
+    Determinism contract:
+    - Prefer canonical Para nests (``para_result`` / ``response`` / ``outputs`` / …)
+      before other keys.
+    - Remaining dict keys are visited in sorted order (not insertion order).
+    - Lists keep the first 12 items; depth is capped at 6.
+    - When multiple DVs exist, prefer the one with a ``commands`` list (and among
+      those, the one with non-zero exit_code evidence).
     """
-    if depth > 6 or not isinstance(obj, (dict, list)):
+    candidates: List[Tuple[Tuple[int, int, int, int], Dict[str, Any]]] = []
+    _collect_delivery_validation_candidates(obj, depth=depth, out=candidates)
+    if not candidates:
         return None
+    # Higher score wins; tie-break by discovery rank (earlier preferred path).
+    best = max(candidates, key=lambda item: (item[0][0], item[0][1], item[0][2], -item[0][3]))
+    return best[1]
+
+
+def _collect_delivery_validation_candidates(
+    obj: Any,
+    *,
+    depth: int,
+    out: List[Tuple[Tuple[int, int, int, int], Dict[str, Any]]],
+    rank: int = 0,
+) -> int:
+    """Collect scored delivery_validation candidates; returns next discovery rank."""
+    if depth > 6 or not isinstance(obj, (dict, list)):
+        return rank
     if isinstance(obj, dict):
         dv = obj.get("delivery_validation")
         if isinstance(dv, dict):
-            return dv
-        for value in obj.values():
-            found = _find_delivery_validation(value, depth + 1)
-            if found is not None:
-                return found
-    else:
-        for item in obj[:12]:
-            found = _find_delivery_validation(item, depth + 1)
-            if found is not None:
-                return found
-    return None
+            cmds = dv.get("commands") if isinstance(dv.get("commands"), list) else []
+            failed = sum(1 for c in cmds if _delivery_validation_command_failed(c))
+            # score: has_commands, failed_count, commands_len, -rank
+            out.append(((1 if cmds else 0, failed, len(cmds), rank), dv))
+            rank += 1
+        preferred_present = [
+            key
+            for key in _DELIVERY_VALIDATION_PREFERRED_KEYS
+            if key in obj and key != "delivery_validation"
+        ]
+        remaining = sorted(
+            key
+            for key in obj.keys()
+            if key not in _DELIVERY_VALIDATION_PREFERRED_KEYS and key != "delivery_validation"
+        )
+        for key in preferred_present + remaining:
+            rank = _collect_delivery_validation_candidates(
+                obj.get(key), depth=depth + 1, out=out, rank=rank
+            )
+        return rank
+    for item in obj[:12]:
+        rank = _collect_delivery_validation_candidates(item, depth=depth + 1, out=out, rank=rank)
+    return rank
 
 
 def _extract_failure_reason(
@@ -1579,27 +1828,26 @@ def _extract_failure_reason(
     # delivery_validation 失败：员工交付了代码（change_delivery.ok=true）但验证命令
     # （测试/lint）失败。这是 code step 最常见的静默失败来源——_employee_result_ok
     # 判 False 但其他分支都提不到原因。delivery_validation 由 Para 远端返回，嵌在
-    # result 任意层级，用 _find_delivery_validation 递归定位。
-    dv = _find_delivery_validation(result)
-    if isinstance(dv, dict):
-        cmds = dv.get("commands")
-        if isinstance(cmds, list):
-            failed_cmds = [
-                c for c in cmds if isinstance(c, dict) and c.get("exit_code") not in (0, None)
-            ]
-            if failed_cmds:
-                parts: List[str] = []
-                for c in failed_cmds[:3]:
-                    ec = c.get("exit_code")
-                    cmd = str(c.get("command") or "")[:80]
-                    tail = str(c.get("output_tail") or c.get("output") or "")[:120]
-                    seg = f"exit={ec}"
-                    if cmd:
-                        seg += f" cmd={cmd}"
-                    if tail:
-                        seg += f" tail={tail}"
-                    parts.append(seg)
-                return "delivery_validation_failed: " + " | ".join(parts)[:300]
+    # result 任意层级，用 deterministic `_delivery_validation_gate` 定位。
+    dv_gate = _delivery_validation_gate(result)
+    if dv_gate.get("found") and not dv_gate.get("ok"):
+        failed_cmds = dv_gate.get("failed_commands") or []
+        parts: List[str] = []
+        for c in failed_cmds[:3]:
+            if not isinstance(c, dict):
+                continue
+            ec = c.get("exit_code")
+            cmd = str(c.get("command") or "")[:80]
+            tail = str(c.get("output_tail") or c.get("output") or "")[:120]
+            seg = f"exit={ec}"
+            if cmd:
+                seg += f" cmd={cmd}"
+            if tail:
+                seg += f" tail={tail}"
+            parts.append(seg)
+        if parts:
+            return "delivery_validation_failed: " + " | ".join(parts)[:300]
+        return "delivery_validation_failed"
 
     # para 层错误（走 Para bridge 时）
     if isinstance(para_meta, dict):
@@ -1716,34 +1964,64 @@ def _extract_report_excerpt(result: Dict[str, Any], limit: int = 4000) -> str:
 
 
 def _is_transient_employee_dispatch_failure(result: Dict[str, Any]) -> bool:
-    text = _extract_report_excerpt(result).lower()
-    transient_terms = (
-        "connection refused",
-        "econnrefused",
-        "para api 调用失败",
-        "para_api_failed_outboxed",
-        "para_api_rejected_outboxed",
-        "未在线",
-        "disconnected",
-        "timeout waiting for para",
-    )
-    return any(term in text for term in transient_terms)
+    # Accepted wait-timeout is not a transient network blip: the Para task was
+    # already created. Redispatching would duplicate work (see kb fix
+    # 20260723T062851Z-fix-accepted-para-timeout-duplicate-code-retry).
+    if _is_accepted_para_wait_timeout(result):
+        return False
+    return is_transient_dispatch_failure(result)
+
+
+def _coerce_truthy_flag(value: Any) -> bool:
+    if value is True:
+        return True
+    if value is False or value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return value == 1
+    return str(value).strip().lower() in {"1", "true", "yes", "y"}
+
+
+def _para_item_is_accepted_wait_timeout(item: Any) -> bool:
+    if not isinstance(item, dict):
+        return False
+    handler = str(item.get("handler") or "").strip()
+    if handler and handler != "para_delegate":
+        return False
+    if not _coerce_truthy_flag(item.get("accepted")):
+        return False
+    status = str(item.get("status") or "").strip().lower()
+    if status == "para_task_timeout":
+        return True
+    # Some wrappers put the wait outcome under para_result / snapshot.status.
+    for nest_key in ("para_result", "snapshot", "response"):
+        nested = item.get(nest_key)
+        if isinstance(nested, dict):
+            nested_status = str(nested.get("status") or "").strip().lower()
+            if nested_status == "para_task_timeout":
+                return True
+    return False
 
 
 def _is_accepted_para_wait_timeout(result: Dict[str, Any]) -> bool:
-    """Detect an accepted Para task whose synchronous wait expired."""
+    """Detect an accepted Para task whose synchronous wait expired.
 
+    Shapes covered (all mean: task accepted, do NOT start code_fix redispatch):
+    - ``result.outputs[]`` para_delegate item with accepted + para_task_timeout
+    - flat handler dict at top-level / ``result``
+    - accepted flag as bool/1/\"true\"; timeout status on item or nested para_result
+    """
+    if not isinstance(result, dict):
+        return False
+    if _para_item_is_accepted_wait_timeout(result):
+        return True
     inner = result.get("result") if isinstance(result.get("result"), dict) else result
+    if _para_item_is_accepted_wait_timeout(inner):
+        return True
     outputs = inner.get("outputs") if isinstance(inner, dict) else None
     if not isinstance(outputs, list):
         return False
-    return any(
-        isinstance(item, dict)
-        and item.get("handler") == "para_delegate"
-        and item.get("accepted") is True
-        and str(item.get("status") or "").strip().lower() == "para_task_timeout"
-        for item in outputs
-    )
+    return any(_para_item_is_accepted_wait_timeout(item) for item in outputs)
 
 
 def _loop_platform_bench_override() -> Optional[tuple]:
@@ -1823,23 +2101,10 @@ def _run_step_with_inner_retries(
     user_id: int,
     run_id: str,
 ) -> Tuple[Dict[str, Any], bool, str, Dict[str, Any], str, int, int]:
-    """Run a single step with inner fix-retry (code) or marker-retry (review/qa).
+    """Run code fix retries or report protocol/infrastructure retries.
 
-    返回 (result, ok, failure_reason, para_meta, report_excerpt,
-           code_fix_retry_rounds, marker_retry_rounds)。
-
-    内层重试边界：
-    - code step: MODSTORE_SELF_MAINTENANCE_CODE_FIX_RETRIES (默认 2) 额外轮数。
-      失败时把 failure_reason 反馈给员工，强制其重新跑测试/lint 直到通过再交付。
-      攻克 30/37 静默失败：员工代码测试不过 → loop 不再立即终止，而是给员工
-      N 次修代码机会，failure_reason 直接拼进 task_text 让 LLM 看到具体错误。
-    - review/qa step: MODSTORE_SELF_MAINTENANCE_MARKER_RETRIES (默认 1) 额外轮数。
-      dispatch 成功但缺 SELF_MAINTENANCE_*_JSON marker 时，提醒员工按格式
-      重新输出，gate 标准不变。攻克 13 条 waiting_human_strategy 中因 marker
-      缺失而误判的部分。
-
-    每次内层尝试写一条 phase=step_retry 的 ledger 记录（最终结论由调用方写
-    phase=step），保证内层痕迹可观测但不污染 steps 列表。
+    Returns the final employee result plus retry counters. Intermediate attempts
+    are recorded as ``phase=step_retry`` without polluting the final step list.
     """
     if step_name == "code":
         inner_max = max(1, _env_int("MODSTORE_SELF_MAINTENANCE_CODE_FIX_RETRIES", 2) + 1)
@@ -1896,9 +2161,15 @@ def _run_step_with_inner_retries(
             if not protocol_ok:
                 failure_reason = protocol_reason or "structured_protocol_invalid"
                 should_retry = True
+            elif step_name == "qa":
+                qa_json = _structured_report_from_step(
+                    {"report_excerpt": report_excerpt},
+                    STRUCTURED_QA_MARKER,
+                )
+                if _qa_executor_infrastructure_unavailable(qa_json):
+                    failure_reason = "structured_qa_executor_unavailable"
+                    should_retry = True
 
-        # 写非最终的 step_retry trace（最终 step 由调用方写）
-        # 只在确实要重试时才写 trace，避免 should_retry=False 时误写一条悬空 step_retry
         if not is_final and should_retry:
             trace_record = {
                 "employee_id": employee_id,
@@ -1929,6 +2200,9 @@ def _run_step_with_inner_retries(
                 + "report completion unless the previously failing command now exits 0."
             )
             code_fix_retry_rounds = attempt
+        elif failure_reason == "structured_qa_executor_unavailable":
+            last_task_text = qa_executor_retry_prompt(task_text, attempt, inner_max)
+            marker_retry_rounds = attempt
         else:  # marker / protocol
             last_task_text = (
                 task_text
@@ -1980,6 +2254,177 @@ def _fetch_para_task_report_excerpt(
             if content:
                 chunks.append(content)
     return "\n".join(chunks)[-limit:]
+
+
+def _fetch_para_task_state(api_base: str, task_id: str) -> Dict[str, Any]:
+    headers = _guest_auth_headers(api_base)
+    with httpx.Client(timeout=20.0, trust_env=False, verify=False) as client:
+        resp = client.get(f"{api_base.rstrip('/')}/api/tasks/{task_id}", headers=headers)
+        resp.raise_for_status()
+        task = (resp.json() or {}).get("task") or {}
+    return task if isinstance(task, dict) else {}
+
+
+def _reconcile_requested_merge_feedback(
+    memory: Dict[str, Any],
+    *,
+    api_base: Optional[str] = None,
+    task_fetcher: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Settle requested merges from Para without confusing request with success.
+
+    ``completed_merge_requested`` remains open until Para reports a real merged
+    SHA. Any terminal merge failure becomes an automated remediation item with
+    the exact findings. The next code employee starts from the configured clean
+    base and uses the rejected branch only as evidence, preventing retries from
+    accumulating an ever-larger inherited diff.
+    """
+
+    base = (api_base or os.environ.get("MODSTORE_PARA_API_BASE") or "").strip()
+    recent_runs = memory.get("recent_runs")
+    open_items = memory.get("open_items")
+    if not base or not isinstance(recent_runs, list):
+        return {"changed": False, "merged": 0, "remediation_added": 0}
+    if not isinstance(open_items, list):
+        open_items = []
+        memory["open_items"] = open_items
+
+    fetcher = task_fetcher or _fetch_para_task_state
+    changed = False
+    merged = 0
+    remediation_added = 0
+    checked_task_ids: set[str] = set()
+    for run in reversed(recent_runs):
+        if not isinstance(run, dict):
+            continue
+        if str(run.get("status") or "") != "completed_merge_requested":
+            continue
+        task_id = str(run.get("para_task_id") or "").strip()
+        if not task_id or task_id in checked_task_ids:
+            continue
+        checked_task_ids.add(task_id)
+        try:
+            task = fetcher(base, task_id)
+        except Exception:
+            logger.exception("failed to reconcile requested Para merge task_id=%s", task_id)
+            continue
+        task_status = str(task.get("status") or "").strip().lower()
+        branch = str(run.get("branch") or "").strip()
+        if task_status == "merged" and str(task.get("merge_commit_sha") or "").strip():
+            merge_sha = str(task.get("merge_commit_sha") or "").strip()
+            existing_receipt = run.get("merge_reconciliation")
+            receipt = {
+                "merge_commit_sha": merge_sha,
+                "reconciled_at": _iso(_utc_now()),
+                "status": "merged",
+                "task_id": task_id,
+            }
+            if not (
+                isinstance(existing_receipt, dict)
+                and existing_receipt.get("status") == "merged"
+                and existing_receipt.get("task_id") == task_id
+                and existing_receipt.get("merge_commit_sha") == merge_sha
+            ):
+                run["merge_reconciliation"] = receipt
+                changed = True
+            closed = _close_open_items_in_memory(
+                memory,
+                actor="para_merge_reconciler",
+                branches=[branch],
+                resolution_reason="para_reported_real_merge_sha",
+                task_ids=[task_id],
+            )
+            if closed.get("closed_count"):
+                changed = True
+            merged += 1
+            continue
+        terminal_failure_statuses = {
+            "cancelled",
+            "dispatch_error",
+            "dispatch_failed",
+            "failed",
+            "merge_conflict",
+        }
+        if task_status not in terminal_failure_statuses:
+            continue
+        conflict = task.get("merge_conflict")
+        if not isinstance(conflict, dict):
+            conflict = {}
+        source = str(conflict.get("source") or "").strip()
+        detail = str(
+            conflict.get("detail")
+            or task.get("fail_reason")
+            or task.get("error")
+            or f"Para merge task ended with status={task_status}"
+        ).strip()[:4000]
+        if source == "ai-review-veto":
+            reason = "para_ai_review_rejected"
+        elif task_status == "merge_conflict":
+            reason = "para_merge_conflict"
+        else:
+            reason = "para_merge_task_failed"
+        existing_receipt = run.get("merge_reconciliation")
+        receipt = {
+            "detail": detail,
+            "reconciled_at": _iso(_utc_now()),
+            "source": source,
+            "status": task_status,
+            "task_id": task_id,
+        }
+        if not (
+            isinstance(existing_receipt, dict)
+            and existing_receipt.get("status") == task_status
+            and existing_receipt.get("task_id") == task_id
+            and existing_receipt.get("source") == source
+            and existing_receipt.get("detail") == detail
+        ):
+            run["merge_reconciliation"] = receipt
+            changed = True
+        already_open = any(
+            isinstance(item, dict)
+            and str(item.get("task_id") or item.get("para_task_id") or "") == task_id
+            and item.get("reason") == reason
+            for item in open_items
+        )
+        if not already_open:
+            rejected_branch = str(conflict.get("branch_name") or branch).strip()
+            resume_from_clean_baseline = resume_from_clean_baseline_for_para_merge(reason, detail)
+            veto_meta = (
+                classify_para_merge_review_detail(detail) if source == "ai-review-veto" else {}
+            )
+            open_item: Dict[str, Any] = {
+                "branch": rejected_branch,
+                "created_at": _iso(_utc_now()),
+                "detail": detail,
+                "kind": "automated_remediation",
+                "para_task_id": task_id,
+                "reason": reason,
+                "rejected_branch": rejected_branch,
+                "resume_from_clean_baseline": resume_from_clean_baseline,
+                "review_feedback": detail if source == "ai-review-veto" else "",
+                "run_id": str(run.get("run_id") or "").strip(),
+                "source": source,
+                "task_status": task_status,
+                "task_id": task_id,
+            }
+            if source == "ai-review-veto":
+                open_item["review_actionable_findings"] = veto_meta.get("actionable_code_findings")
+                open_item["review_veto_branch_hint"] = veto_meta.get("branch_hint") or ""
+                open_item["review_veto_code"] = veto_meta.get("veto_code") or ""
+                if veto_meta.get("review_diff_chars") is not None:
+                    open_item["review_diff_chars"] = veto_meta["review_diff_chars"]
+            open_items.append(open_item)
+            changed = True
+            remediation_added += 1
+
+    if changed:
+        memory["open_items"] = (memory.get("open_items") or [])[-50:]
+        memory["updated_at"] = _iso(_utc_now())
+    return {
+        "changed": changed,
+        "merged": merged,
+        "remediation_added": remediation_added,
+    }
 
 
 def _base_para_input(extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -2067,6 +2512,11 @@ def _code_task_text(
 ) -> str:
     gaps = ", ".join(evaluation.get("gaps") or []) or "none"
     focused_test_command = _focused_test_command()
+    base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip() or "main"
+    black_command, isort_command = _diff_quality_commands(
+        base_ref=f"origin/{base_branch}",
+        target_ref="WORKTREE",
+    )
     evolution_context_dict = build_self_evolution_context(
         run_id=run_id, evaluation=evaluation, memory=memory
     )
@@ -2119,6 +2569,9 @@ def _code_task_text(
         "risk_score_v3_below_threshold_or_blocked",
     }:
         selected_remediation = last_decision
+    external_review_remediation = external_review_remediation_prompt(resume_candidate)
+    external_merge_remediation = external_merge_remediation_prompt(resume_candidate)
+    retort_scope_remediation = retort_remediation.retort_scope_remediation_prompt(resume_candidate)
     score_remediation = ""
     if isinstance(selected_remediation, dict):
         merge_result = (
@@ -2169,7 +2622,7 @@ def _code_task_text(
             f"{json.dumps(remediation_evidence, ensure_ascii=False, sort_keys=True)}"
         )
     return (
-        "Run a real MODstore self-maintenance improvement task. "
+        "Run a real MODstore self-maintenance improvement task. === SELF_MAINTENANCE_CANONICAL_MERGE_BASE:main === "
         "Use the previous loop memory and current evidence gaps to fix the highest-value "
         "executable gap in the self-maintenance loop. "
         "MANDATORY: Before reasoning from scratch, you MUST check the HISTORICAL FIXES below. "
@@ -2229,6 +2682,12 @@ def _code_task_text(
         "- Report every verification command with its real exit code and concise passing output.\n"
         f"Before reporting completion, execute `{focused_test_command}` in the target branch "
         "and require exit code 0. "
+        f"Also run `{black_command}` and `{isort_command}` from "
+        "`成都修茈科技有限公司/MODstore_deploy`; these commands deterministically "
+        "check every changed Python file in the target diff without importing "
+        "unrelated historical formatting debt. Also run "
+        "`python scripts/dev/source_governance.py --top 10` from the repository root; "
+        "all three are mandatory merge-readiness gates and must exit 0. "
         f"If and only if there is no safe actionable source change, update `{DEFAULT_STATUS_FILE}` "
         f"with LOOP_RUN_ID={run_id!r}, LOOP_KIND='scheduled_self_maintenance', "
         "BRIDGE='para_main_device', UPDATED_AT to the current UTC time, and a clear "
@@ -2244,9 +2703,118 @@ def _code_task_text(
         f"Current evidence gaps: {gaps}. "
         f"Previous loop memory JSON: {_memory_context(memory)}. "
         f"{score_remediation}"
+        f"{external_review_remediation}"
+        f"{external_merge_remediation}"
+        f"{retort_scope_remediation}"
         f"\n\n=== HISTORICAL FIXES (MUST READ FIRST) ===\n{fix_digest}\n"
         f"\n=== SELF_EVOLUTION_CONTEXT JSON ===\n{evolution_context}"
     )
+
+
+def _evaluate_retort_clarification_before_review(
+    *,
+    run_id: str,
+    branch: Optional[str],
+    para_task_id: str,
+    memory: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Force self-maintenance review through Retort clarification gate.
+
+    Returns ``{"blocked": True, "reason": ...}`` when human clarification is still
+    required; otherwise ``{"blocked": False, ...}``. Failures in the gate itself
+    are non-blocking so review can continue with evidence of the gate error.
+    """
+
+    enabled = os.environ.get(
+        "MODSTORE_SELF_MAINTENANCE_RETORT_CLARIFICATION", "1"
+    ).strip().lower() in {"1", "true", "yes", "on"}
+    if not enabled:
+        return {"blocked": False, "reason": "disabled"}
+
+    try:
+        from modstore_server.retort_clarification_gate import (
+            evaluate_retort_clarification_gate,
+            gate_enabled,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"blocked": False, "reason": f"gate_import_failed:{type(exc).__name__}"}
+
+    if not gate_enabled():
+        return {"blocked": False, "reason": "gate_disabled"}
+
+    changed_files: List[str] = []
+    base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
+    repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
+    target = str(branch or "").strip()
+    if repo_url and base_branch and target:
+        workspace_root = _runtime_dir() / DEFAULT_MERGE_WORKSPACE_ROOT
+        workspace = workspace_root / "retort-review-gate" / str(run_id or "run")
+        try:
+            changed_files = _changed_files_for_branch(
+                repo_url=repo_url,
+                base_branch=base_branch,
+                branch=target,
+                workspace=workspace,
+            )
+        except Exception as exc:  # noqa: BLE001 - fall back to memory hints
+            logger.warning(
+                "retort clarification branch diff failed run_id=%s err=%s",
+                run_id,
+                type(exc).__name__,
+            )
+        finally:
+            _cleanup_merge_workspace(workspace)
+
+    if not changed_files:
+        mem_files = memory.get("changed_files") if isinstance(memory, dict) else None
+        if isinstance(mem_files, list):
+            changed_files = [str(x).strip() for x in mem_files if str(x).strip()][:80]
+
+    intent_bits = [
+        f"self-maintenance review run {run_id}",
+        f"branch {target}" if target else "",
+        str((memory or {}).get("last_goal") or "").strip(),
+        str((memory or {}).get("summary") or "").strip(),
+    ]
+    strategy_intent = " | ".join(bit for bit in intent_bits if bit)[:4000]
+    try:
+        gate = evaluate_retort_clarification_gate(
+            strategy_intent=strategy_intent,
+            changed_files=changed_files,
+            proposal_id=f"self-maintenance:{run_id}",
+            run_id=str(run_id or ""),
+            package_id="change-request-auditor",
+            auto_open=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"blocked": False, "reason": f"gate_eval_failed:{type(exc).__name__}"}
+
+    blockers = list(gate.get("blockers") or [])
+    pending = "retort_clarification_pending" in blockers
+    expired = "retort_clarification_expired" in blockers
+    cancelled = "retort_clarification_cancelled" in blockers
+    if pending or expired or cancelled:
+        reason = (
+            "retort_clarification_pending"
+            if pending
+            else ("retort_clarification_expired" if expired else "retort_clarification_cancelled")
+        )
+        return {
+            "blocked": True,
+            "reason": reason,
+            "blockers": blockers,
+            "clarification": gate.get("clarification"),
+            "changed_file_count": len(changed_files),
+            "para_task_id": para_task_id,
+        }
+    return {
+        "blocked": False,
+        "reason": "aligned_or_not_needed",
+        "blockers": blockers,
+        "clarification": gate.get("clarification"),
+        "changed_file_count": len(changed_files),
+        "aligned": bool(gate.get("aligned")),
+    }
 
 
 def _review_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) -> str:
@@ -2295,6 +2863,12 @@ def _qa_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) ->
     base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
     repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
     focused_test_command = _focused_test_command()
+    base_ref = f"origin/{base_branch or 'main'}"
+    target_ref = f"origin/{str(branch or '').strip()}" if branch else "HEAD"
+    black_command, isort_command = _diff_quality_commands(
+        base_ref=base_ref,
+        target_ref=target_ref,
+    )
     return (
         "MODSTORE_REPORT_ONLY=1. Report-only QA task. "
         "Do not change files, do not commit, and do not push. "
@@ -2313,8 +2887,20 @@ def _qa_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) ->
         "path does not exist on this worker, also run a platform-equivalent local `python -m pytest` command "
         "against the same focused test file, and include both attempts in tested_commands. The equivalent "
         "command is valid evidence only when it executes the same pytest target successfully; a syntax-only "
-        "check or a different test target is not a substitute. Do not fail solely because the scheduler's "
-        "absolute Python path is unavailable when the equivalent focused command passes. "
+        "check or a different test target is not a substitute. Materialize the COMPLETE target ref into a "
+        "temporary directory (for example `git archive origin/<target> | tar -x`) before running the equivalent "
+        "command; do not archive only `成都修茈科技有限公司/MODstore_deploy`, because focused policy tests read "
+        "the sibling `FHD/` autonomy-guard SSOT. Run pytest from that complete target tree. If the complete-tree "
+        "equivalent command cannot finish, times out, or exits nonzero, return FAIL even when the failure looks "
+        "environmental; never report PASS with no successful focused tested_commands entry. Do not fail solely "
+        "because the scheduler's absolute Python path is unavailable when the complete-tree equivalent focused "
+        "command passes. "
+        "From the target branch archive, you MUST also run "
+        f"`{black_command}` and `{isort_command}` from "
+        "`成都修茈科技有限公司/MODstore_deploy`; these commands deterministically "
+        "check every changed Python file in the target diff. Also run "
+        "`python scripts/dev/source_governance.py --top 10` from the repository root. "
+        "Record their exact commands, real exit codes, and statuses in quality_checks. "
         "Use CLEAN_BASELINE_JSON to separate existing allowed failures from new failures; "
         "FAIL only for new failures, missing target branch, blocking findings, or unsafe evidence. "
         "Do not fail only because the final terminal ledger record for this in-flight run does not exist yet; "
@@ -2325,6 +2911,10 @@ def _qa_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) ->
         f"{STRUCTURED_QA_MARKER}: with schema "
         '{"verdict":"PASS|FAIL","blocking_findings":[],'
         '"tested_commands":[{"command":"...","exit_code":0,"status":"passed|failed"}],'
+        '"quality_checks":{'
+        '"black":{"command":"...","exit_code":0,"status":"passed|failed"},'
+        '"isort":{"command":"...","exit_code":0,"status":"passed|failed"},'
+        '"source_governance":{"command":"...","exit_code":0,"status":"passed|failed"}},'
         '"target_branch_available":true,'
         '"test_delta":{"baseline_id":"...","new_failures":[],"new_errors":[]},'
         '"changed_files_scope":"low|medium|high",'
@@ -2495,98 +3085,6 @@ def _structured_protocol_ok(step_name: str, report_excerpt: str) -> Tuple[bool, 
     return True, ""
 
 
-def _safe_command_tokens(command: str) -> Optional[List[str]]:
-    """Tokenize a reported command without guessing past malformed quoting."""
-
-    try:
-        return shlex.split(command)
-    except ValueError:
-        return None
-
-
-def _shell_command_segments(tokens: List[str]) -> List[List[str]]:
-    segments: List[List[str]] = [[]]
-    for token in tokens:
-        if token in {"&&", "||", ";"}:
-            if segments[-1]:
-                segments.append([])
-            continue
-        segments[-1].append(token)
-    return [segment for segment in segments if segment]
-
-
-def _trim_trailing_qa_note(tokens: List[str]) -> List[str]:
-    """Drop only a balanced, trailing ``(...)`` report annotation.
-
-    This intentionally operates on tokens instead of deleting every parenthesized
-    substring from the command, so quoted paths and pytest expressions containing
-    parentheses remain intact.
-    """
-
-    for index, token in enumerate(tokens):
-        suffix = " ".join(tokens[index:])
-        if (
-            token.startswith("(")
-            and suffix.endswith(")")
-            and suffix.count("(") == suffix.count(")")
-        ):
-            return tokens[:index]
-    return tokens
-
-
-def _pytest_target_names(tokens: List[str]) -> set[str]:
-    trimmed = _trim_trailing_qa_note(tokens)
-    names: set[str] = set()
-    for token in trimmed:
-        target = token.split("::", 1)[0]
-        if target.endswith(".py"):
-            names.add(Path(target).name)
-    return names
-
-
-def _focused_pytest_target_names(tokens: List[str]) -> set[str]:
-    names: set[str] = set()
-    for segment in _shell_command_segments(tokens):
-        for index in range(len(segment) - 1):
-            if segment[index : index + 2] == ["-m", "pytest"]:
-                names.update(_pytest_target_names(segment[index + 2 :]))
-    return names
-
-
-def _matches_focused_test_command(command: Any, focused_command: str) -> bool:
-    """Accept the focused pytest target across different worker runtimes.
-
-    Para workers may run on a different operating system from the scheduler, so
-    the scheduler's absolute Python path is not portable.  Keep exact matching
-    as the fast path, then accept only a real ``python -m pytest`` invocation
-    of the same focused test file.
-    """
-
-    raw = str(command or "").strip()
-    if not raw:
-        return False
-    tokens = _safe_command_tokens(raw)
-    focused_tokens = _safe_command_tokens(str(focused_command or "").strip())
-    if tokens is None or focused_tokens is None:
-        return False
-    if raw == focused_command:
-        return True
-
-    target_names = _focused_pytest_target_names(focused_tokens)
-    if not target_names:
-        return False
-
-    python_name = re.compile(r"python(?:\d+(?:\.\d+)*)?(?:\.exe)?", re.IGNORECASE)
-    for segment in _shell_command_segments(tokens):
-        if len(segment) < 4 or segment[1:3] != ["-m", "pytest"]:
-            continue
-        if python_name.fullmatch(Path(segment[0]).name) is None:
-            continue
-        if target_names <= _pytest_target_names(segment[3:]):
-            return True
-    return False
-
-
 def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
     review_steps = [step for step in steps if step.get("step") == "review"]
     qa_steps = [step for step in steps if step.get("step") == "qa"]
@@ -2642,17 +3140,17 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "review": review_json,
                 "qa": qa_json,
             }
-        verdict = str(qa_json.get("verdict") or "").upper()
-        if verdict != "PASS":
-            return {
-                "ok": False,
-                "reason": "structured_qa_verdict_not_pass",
-                "qa": qa_json,
-            }
         if qa_json.get("target_branch_available") is not True:
             return {
                 "ok": False,
                 "reason": "structured_qa_target_branch_unavailable",
+                "qa": qa_json,
+            }
+        verdict = str(qa_json.get("verdict") or "").upper()
+        if verdict != "PASS":
+            return {
+                "ok": False,
+                "reason": _qa_verdict_failure_reason(qa_json),
                 "qa": qa_json,
             }
         blocking = qa_json.get("blocking_findings")
@@ -2675,6 +3173,13 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "ok": False,
                 "reason": "structured_qa_focused_command_not_passed",
                 "focused_command": focused_command,
+                "qa": qa_json,
+            }
+        quality_failure = _quality_check_failure(qa_json)
+        if quality_failure:
+            return {
+                "ok": False,
+                "reason": quality_failure,
                 "qa": qa_json,
             }
         test_delta = (
@@ -2704,25 +3209,19 @@ def _allowed_auto_merge_globs() -> List[str]:
 
 
 def _auto_merge_scope_globs() -> List[str]:
-    return _env_list(
-        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SCOPE_GLOBS",
-        DEFAULT_AUTO_MERGE_SCOPE_GLOBS,
-    )
+    return _shared_auto_merge_scope_globs()
 
 
 def _auto_merge_forbidden_globs() -> List[str]:
-    return _env_list(
-        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_FORBIDDEN_GLOBS",
-        DEFAULT_AUTO_MERGE_FORBIDDEN_GLOBS,
-    )
+    return _shared_auto_merge_forbidden_globs()
 
 
 def _auto_merge_max_files() -> int:
-    return _env_int("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MAX_FILES", 12)
+    return _shared_auto_merge_max_files()
 
 
 def _auto_merge_max_lines() -> int:
-    return _env_int("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MAX_LINES", 600)
+    return _shared_auto_merge_max_lines()
 
 
 def _step_reports(steps: List[Dict[str, Any]]) -> str:
@@ -2788,15 +3287,30 @@ def _cleanup_merge_workspace(workspace: Path) -> bool:
     return True
 
 
+def _para_repository_candidates(repo_url: str) -> List[str]:
+    """Return authenticated Para transport first, then the public origin.
+
+    Production Para branches are created by devices that do not share the
+    scheduler's interactive HTTPS credentials.  ``MODSTORE_PARA_BARE_REPO``
+    is therefore the durable transport contract and may be either a local
+    bare path or an SSH URL.  The public origin remains a fail-soft fallback.
+    """
+
+    repositories: List[str] = []
+    for candidate in (
+        os.environ.get("MODSTORE_PARA_BARE_REPO", "").strip(),
+        str(repo_url or "").strip(),
+    ):
+        if candidate and candidate not in repositories:
+            repositories.append(candidate)
+    return repositories
+
+
 def _remote_branch_head(repo_url: str, branch: str) -> Optional[str]:
     """Resolve a Para branch head without mutating a workspace."""
     if not repo_url or not branch:
         return None
-    repositories = [repo_url]
-    para_bare_repo = os.environ.get("MODSTORE_PARA_BARE_REPO", "").strip()
-    if para_bare_repo and para_bare_repo not in repositories:
-        repositories.append(para_bare_repo)
-    for repository in repositories:
+    for repository in _para_repository_candidates(repo_url):
         try:
             proc = subprocess.run(
                 ["git", "ls-remote", "--heads", repository, f"refs/heads/{branch}"],
@@ -2870,7 +3384,38 @@ def _changed_files_for_branch(
     workspace.parent.mkdir(parents=True, exist_ok=True)
     if workspace.exists() and not _cleanup_merge_workspace(workspace):
         raise RuntimeError(f"stale merge workspace cleanup failed: {workspace}")
-    _run_cmd(["git", "clone", "--no-tags", repo_url, str(workspace)], timeout=300)
+    clone_errors: List[str] = []
+    cloned_from = ""
+    for repository in _para_repository_candidates(repo_url):
+        if workspace.exists() and not _cleanup_merge_workspace(workspace):
+            raise RuntimeError(f"failed clone workspace cleanup: {workspace}")
+        try:
+            # This workspace is used only for ref diffs and targeted ``git
+            # show`` calls.  Avoid materializing the multi-GB working tree;
+            # partial-clone support lazily fetches only a KB blob when schema
+            # validation actually needs it.
+            _run_cmd(
+                [
+                    "git",
+                    "clone",
+                    "--no-tags",
+                    "--filter=blob:none",
+                    "--no-checkout",
+                    repository,
+                    str(workspace),
+                ],
+                timeout=300,
+            )
+        except Exception as exc:
+            clone_errors.append(f"{type(exc).__name__}:{str(exc)[:300]}")
+            continue
+        cloned_from = repository
+        break
+    if not cloned_from:
+        raise RuntimeError(
+            "unable to clone Para repository through configured transports: "
+            + "; ".join(clone_errors)
+        )
     # Para 创建的分支可能只存在于 Para 本地工作区，尚未 push 到 origin。
     # 先 fetch base_branch（一定在远程），再 best-effort fetch branch。
     _run_cmd(["git", "fetch", "origin", base_branch], cwd=workspace, timeout=180)
@@ -2889,7 +3434,7 @@ def _changed_files_for_branch(
         bare_repo = os.environ.get(
             "MODSTORE_PARA_BARE_REPO", "/Users/a4243342/XCMAX-runtime/devfleet-bare.git"
         ).strip()
-        if bare_repo and Path(bare_repo).exists():
+        if bare_repo:
             _sp_run = subprocess.run(
                 ["git", "fetch", bare_repo, branch],
                 cwd=workspace,
@@ -2914,7 +3459,6 @@ def _changed_files_for_branch(
                     branch,
                     bare_repo,
                 )
-    _run_cmd(["git", "checkout", "-B", base_branch, f"origin/{base_branch}"], cwd=workspace)
     if not branch_ref:
         logger.warning(
             "auto_merge: branch %s not on remote or bareRepo — Para may not have pushed it",
@@ -3035,6 +3579,7 @@ def _validate_kb_json_changes_for_auto_merge(
 
 KB_SCHEMA_RETRY_MAX = 2
 KB_SCHEMA_FAILED_LABEL = "kb-schema-failed"
+KB_SCHEMA_FAILED_STATUS = "kb_schema_failed"
 NEEDS_HUMAN_LABEL = "needs-human"
 
 
@@ -3453,17 +3998,21 @@ def _reject_and_retry_kb_schema_failure(
     except Exception:
         logger.exception("kb_schema_retry: failed to write governance audit")
 
-    # 5. Build final state
-    final_status = "completed_waiting_human_strategy" if escalated else "failed"
+    # 5. Build final state — status must be distinct from generic ``failed`` so
+    # observers / dashboards can tell KB writeback schema rejection apart from
+    # dispatch or test failures.
+    final_status = "completed_waiting_human_strategy" if escalated else KB_SCHEMA_FAILED_STATUS
     policy_decision = {
         "action": "hold_for_automated_remediation",
         "active_gates": {
             "kb_schema_gate": {
                 "ok": False,
                 "blocking": True,
+                "label": KB_SCHEMA_FAILED_LABEL,
                 "reason": "kb_json_schema_validation_failed",
                 "retry_count": retry_count,
                 "escalated": escalated,
+                "status": final_status,
             }
         },
         "governance_gate": audit_record,
@@ -3471,11 +4020,15 @@ def _reject_and_retry_kb_schema_failure(
         "reason": "kb_json_schema_validation_failed",
         "retry_count": retry_count,
         "escalated": escalated,
+        "status": final_status,
     }
     final = {
         "branch": branch,
         "completed_at": _iso(now),
+        "error": "kb_json_schema_validation_failed",
         "failed_step": "code",
+        "failure_kind": KB_SCHEMA_FAILED_STATUS,
+        "kb_schema_failed": True,
         "kb_schema_retry": True,
         "para_task_id": para_task_id,
         "phase": "complete",
@@ -3491,7 +4044,7 @@ def _reject_and_retry_kb_schema_failure(
 
 
 def _normalize_repo_path(file_name: str) -> str:
-    return (file_name or "").replace("\\", "/").strip().strip('"').strip("'")
+    return _shared_normalize_repo_path(file_name)
 
 
 def _diff_stats_changed_files_consistency(
@@ -3533,8 +4086,7 @@ def _diff_stats_changed_files_consistency(
 
 
 def _file_matches_any_glob(file_name: str, globs: List[str]) -> bool:
-    normalized = _normalize_repo_path(file_name)
-    return any(fnmatch.fnmatch(normalized, pattern) for pattern in globs)
+    return _shared_file_matches_any_glob(file_name, globs)
 
 
 def _files_match_allowed_globs(files: List[str], globs: List[str]) -> bool:
@@ -4005,22 +4557,20 @@ def _assess_branch_auto_merge_policy(
 
     try:
         from modstore_server.self_maintenance_policy import (
-            is_marker_status_path,
-            loop_memory_requires_executable_change,
+            assess_loop_memory_executable_change_block,
+            para_merge_review_max_diff_chars,
         )
 
-        if all(is_marker_status_path(file_name) for file_name in normalized_files):
-            requirement = loop_memory_requires_executable_change(memory)
-            if requirement.get("required"):
-                return _decision(
-                    {
-                        "allowed_globs": allowed,
-                        "changed_files": normalized_files,
-                        "ok": False,
-                        "reason": "marker_only_diff_requires_executable_change",
-                        "self_maintenance_requirement": requirement,
-                    }
-                )
+        executable_block = assess_loop_memory_executable_change_block(memory, normalized_files)
+        if executable_block is not None:
+            decision_payload: Dict[str, Any] = {
+                "changed_files": normalized_files,
+                "ok": False,
+                **executable_block,
+            }
+            if "kb_paths" not in executable_block:
+                decision_payload["allowed_globs"] = allowed
+            return _decision(decision_payload)
     except Exception as exc:
         return _decision(
             {
@@ -4029,6 +4579,21 @@ def _assess_branch_auto_merge_policy(
                 "error": str(exc),
                 "ok": False,
                 "reason": "self_maintenance_policy_check_failed",
+            }
+        )
+
+    max_review_chars = para_merge_review_max_diff_chars()
+    diff_chars = int((diff_stats or {}).get("git_diff_chars") or 0)
+    if diff_chars <= 0 and diff_excerpt:
+        diff_chars = len(diff_excerpt)
+    if diff_chars > max_review_chars:
+        return _decision(
+            {
+                "changed_files": normalized_files,
+                "git_diff_chars": diff_chars,
+                "max_diff_chars": max_review_chars,
+                "ok": False,
+                "reason": "diff_too_large_for_para_merge_review",
             }
         )
 
@@ -4043,19 +4608,7 @@ def _assess_branch_auto_merge_policy(
             }
         )
 
-    absolute_forbidden_globs = _env_list(
-        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_ABSOLUTE_FORBIDDEN_GLOBS",
-        [
-            "*.env",
-            "*.env.*",
-            "**/*.db",
-            "**/*.sqlite",
-            "**/*.sqlite3",
-            "**/*secret*",
-            "**/*credential*",
-            "**/*token*",
-        ],
-    )
+    absolute_forbidden_globs = _shared_auto_merge_absolute_forbidden_globs()
     absolute_forbidden_hits = [
         file_name
         for file_name in normalized_files
@@ -4341,6 +4894,7 @@ def _mint_local_para_guest_auth_token(api_base: str) -> Optional[str]:
         return None
     try:
         with sqlite3.connect(str(db_file), timeout=2.0) as conn:
+            # fmt: off
             row = conn.execute("""
                 select id, email
                 from users
@@ -4349,6 +4903,7 @@ def _mint_local_para_guest_auth_token(api_base: str) -> Optional[str]:
                 order by case when email = 'guest@devfleet.local' then 0 else 1 end
                 limit 1
                 """).fetchone()
+            # fmt: on
     except Exception:
         logger.warning(
             "failed to read Para guest user from sqlite for local auth mint",
@@ -4859,12 +5414,6 @@ def _auto_merge_low_risk_branch(
 
         branch_head_sha = _remote_branch_head(repo_url, branch)
         base_head_sha = _remote_branch_head(repo_url, base_branch)
-        if not branch_head_sha:
-            return {
-                "ok": False,
-                "reason": "remote_branch_head_unavailable",
-                "branch": branch,
-            }
         if base_head_sha and branch_head_sha == base_head_sha:
             return {
                 "ok": False,
@@ -4872,6 +5421,16 @@ def _auto_merge_low_risk_branch(
                 "branch": branch,
                 "branch_head_sha": branch_head_sha,
             }
+
+        # Production CVM deployments intentionally do not require direct GitHub
+        # reachability.  When ls-remote is unavailable, defer the remote-head
+        # check to the authenticated Para merge worker.  That worker creates or
+        # reuses the PR by the exact reviewed branch name and fails closed if
+        # the branch is absent; review/QA and the autonomy guard still run here
+        # before the merge request is emitted.
+        head_verification = (
+            "verified_on_cvm" if branch_head_sha else "delegated_to_para_merge_worker"
+        )
 
         from modstore_server.autonomy_guard_delegate import evaluate_risk
 
@@ -4899,9 +5458,10 @@ def _auto_merge_low_risk_branch(
             "base_branch": base_branch,
             "base_head_sha": base_head_sha or "",
             "branch": branch,
-            "branch_head_sha": branch_head_sha,
+            "branch_head_sha": branch_head_sha or "",
             "created_at": _iso(_utc_now()),
             "event": "merge_requested",
+            "head_verification": head_verification,
             "ok": True,
             "para_task_id": task_id,
             "phase": "merge",
@@ -4918,7 +5478,8 @@ def _auto_merge_low_risk_branch(
         return {
             "ok": True,
             "base_head_sha": base_head_sha or "",
-            "branch_head_sha": branch_head_sha,
+            "branch_head_sha": branch_head_sha or "",
+            "head_verification": head_verification,
             "merge_requested": True,
             "para_request": request_result,
             "reason": "merge_requested_after_loop_risk_gate",
@@ -4953,6 +5514,20 @@ def _auto_merge_local_repo(
     task_id: str,
     workspace: Path,
 ) -> Dict[str, Any]:
+    from modstore_server.autonomy_guard_delegate import evaluate_risk
+
+    decision = evaluate_risk(
+        "self_maintenance_l1_merge",
+        action_id=f"loop:{run_id}:self_maintenance_l1_merge",
+        source="self_maintenance_loop.auto_merge",
+    )
+    if not decision.allowed:
+        return {
+            "ok": False,
+            "reason": "autonomy_guard_blocked",
+            "risk_decision": decision.to_dict(),
+        }
+
     files = _changed_files_for_branch(
         repo_url=repo_url,
         base_branch=base_branch,
@@ -4970,7 +5545,7 @@ def _auto_merge_local_repo(
     diff_stats = _diff_numstat_for_branch(
         base_branch=base_branch, branch=branch, workspace=workspace
     )
-    diff_excerpt = _run_cmd(
+    diff_excerpt = _run_cmd_excerpt(
         [
             "git",
             "-c",
@@ -4982,7 +5557,8 @@ def _auto_merge_local_repo(
         ],
         cwd=workspace,
         timeout=180,
-    )[:20000]
+        max_chars=20000,
+    )
     kb_validation = _validate_kb_json_changes_for_auto_merge(
         branch=branch,
         files=files,
@@ -5005,20 +5581,6 @@ def _auto_merge_local_repo(
     )
     if not policy.get("ok"):
         return policy
-
-    from modstore_server.autonomy_guard_delegate import evaluate_risk
-
-    decision = evaluate_risk(
-        "self_maintenance_l1_merge",
-        action_id=f"loop:{run_id}:self_maintenance_l1_merge",
-        source="self_maintenance_loop.auto_merge",
-    )
-    if not decision.allowed:
-        return {
-            "ok": False,
-            "reason": "autonomy_guard_blocked",
-            "risk_decision": decision.to_dict(),
-        }
 
     _run_cmd(["git", "merge", "--no-ff", "--no-edit", f"origin/{branch}"], cwd=workspace)
     merge_sha = _run_cmd(["git", "rev-parse", "HEAD"], cwd=workspace)
@@ -5805,24 +6367,27 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
                 new_item["para_task_id"] = final.get("para_task_id")
             open_items.append(new_item)
     if decision.get("action") == "hold_for_automated_remediation":
-        open_items.append(
-            {
-                "branch": final.get("branch"),
-                "active_gates": decision.get("active_gates"),
-                "created_at": _iso(_utc_now()),
-                "evolution_gate": decision.get("evolution_gate"),
-                "kind": "automated_remediation",
-                "governance_gate": decision.get("governance_gate"),
-                "reason": decision.get("reason"),
-                "roster_gate": decision.get("roster_gate"),
-                "run_id": final.get("run_id"),
-                "task_id": final.get("para_task_id"),
-            }
-        )
+        remediation_item = {
+            "branch": final.get("branch"),
+            "active_gates": decision.get("active_gates"),
+            "created_at": _iso(_utc_now()),
+            "evolution_gate": decision.get("evolution_gate"),
+            "kind": "automated_remediation",
+            "governance_gate": decision.get("governance_gate"),
+            "reason": decision.get("reason"),
+            "roster_gate": decision.get("roster_gate"),
+            "run_id": final.get("run_id"),
+            "task_id": final.get("para_task_id"),
+        }
+        if decision.get("detail"):
+            remediation_item["detail"] = decision.get("detail")
+        if decision.get("resume_from_clean_baseline"):
+            remediation_item["resume_from_clean_baseline"] = True
+        open_items.append(remediation_item)
     memory["open_items"] = open_items
+    close_successful_code_resume(memory, final, _close_open_items_in_memory)
     resolution_record = _close_items_resolved_by_final(memory, final)
     knowledge_record = record_loop_evolution_knowledge(final, gate)
-
     # KB salvage: record_loop_evolution_knowledge only writes on
     # auto_merged_low_risk, so failed / await_human runs would otherwise lose
     # any KB files the Para employee already produced. Scan the workspace
@@ -5955,7 +6520,11 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
 
 
 def _run_self_maintenance_loop_unlocked(
-    *, triggered_by: str = "manual", force: bool = False, reason: Optional[str] = None
+    *,
+    triggered_by: str = "manual",
+    force: bool = False,
+    reason: Optional[str] = None,
+    remediation_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Run the real employee maintenance chain when gates allow it."""
 
@@ -5979,12 +6548,35 @@ def _run_self_maintenance_loop_unlocked(
             "status": f"skipped_{gate.get('reason')}",
             "triggered_by": triggered_by,
         }
+        record.update(_remediation_lineage_fields(remediation_context))
         _append_ledger(record)
         return record
 
     user_id = _self_maintenance_actor_user_id()
     loop_memory = _load_loop_memory()
-    resume_candidate = _resume_review_qa_candidate(loop_memory)
+    merge_reconciliation = _reconcile_requested_merge_feedback(loop_memory)
+    retort_scope_reconciliation = _reconcile_retort_scope_remediations(loop_memory)
+    if merge_reconciliation.get("changed") or retort_scope_reconciliation.get("changed"):
+        _write_loop_memory(loop_memory)
+    resume_candidate = (
+        _resume_candidate_from_remediation_context(
+            loop_memory,
+            remediation_context,
+        )
+        if remediation_context
+        else _resume_review_qa_candidate(loop_memory)
+    )
+    if remediation_context and resume_candidate is None:
+        record = _unavailable_remediation_context_record(
+            created_at=_iso(started_at),
+            force=force,
+            gate=gate,
+            remediation_context=remediation_context,
+            run_id=run_id,
+            triggered_by=triggered_by,
+        )
+        _append_ledger(record)
+        return record
     start_record = {
         "created_at": _iso(started_at),
         "force": force,
@@ -5999,6 +6591,11 @@ def _run_self_maintenance_loop_unlocked(
         "user_id": user_id,
         "runtime_provenance": gate.get("runtime_provenance"),
     }
+    start_record.update(_remediation_lineage_fields(remediation_context))
+    if any(merge_reconciliation.values()):
+        start_record["merge_reconciliation"] = merge_reconciliation
+    if retort_scope_reconciliation.get("changed"):
+        start_record["retort_scope_reconciliation"] = retort_scope_reconciliation
     if resume_candidate:
         start_record["resume_candidate"] = resume_candidate
     _append_ledger(start_record)
@@ -6083,6 +6680,68 @@ def _run_self_maintenance_loop_unlocked(
             remediation_base_branch = (
                 str(extra.get("branch") or "").strip() if step_name == "code" else ""
             )
+
+            if step_name == "review":
+                retort_gate = _evaluate_retort_clarification_before_review(
+                    run_id=run_id,
+                    branch=code_branch,
+                    para_task_id=str(para_task_id or ""),
+                    memory=loop_memory,
+                )
+                if retort_gate.get("blocked"):
+                    scope_only = _retort_scope_only_clarification(retort_gate)
+                    step_record = {
+                        "employee_id": employee_id,
+                        "error": str(retort_gate.get("reason") or "retort_clarification_pending"),
+                        "ok": False,
+                        "para": {},
+                        "phase": "step",
+                        "report_excerpt": "",
+                        "run_id": run_id,
+                        "status": ("completed_held_for_remediation" if scope_only else "failed"),
+                        "step": step_name,
+                        "timestamp": _iso(_utc_now()),
+                        "retort_clarification": retort_gate,
+                    }
+                    steps.append(step_record)
+                    _append_ledger(step_record)
+                    final = {
+                        "branch": code_branch,
+                        "completed_at": _iso(_utc_now()),
+                        "error": str(retort_gate.get("reason") or "retort_clarification_pending"),
+                        "failed_step": step_name,
+                        "para_task_id": para_task_id,
+                        "phase": "complete",
+                        "run_id": run_id,
+                        "started_at": _iso(started_at),
+                        "status": "failed",
+                        "steps": steps,
+                        "triggered_by": triggered_by,
+                        "retort_clarification": retort_gate,
+                    }
+                    if resume_candidate:
+                        final["resume_candidate"] = resume_candidate
+                    if scope_only:
+                        final["policy_decision"] = {
+                            "action": "hold_for_automated_remediation",
+                            "detail": (
+                                "Retort requires a smaller clean-base patch before unattended review."
+                            ),
+                            "reason": RETORT_SCOPE_REASON,
+                            "resume_from_clean_baseline": True,
+                        }
+                    else:
+                        final["policy_decision"] = _decide_post_loop_policy(
+                            branch=code_branch,
+                            gate=gate,
+                            para_task_id=para_task_id,
+                            run_id=run_id,
+                            status="failed",
+                            steps=steps,
+                        )
+                    _append_ledger(final)
+                    _update_loop_memory(final, gate)
+                    return final
 
             (
                 result,
@@ -6265,7 +6924,11 @@ def _run_self_maintenance_loop_unlocked(
 
 @platform_llm_scoped
 def run_self_maintenance_loop(
-    *, triggered_by: str = "manual", force: bool = False, reason: Optional[str] = None
+    *,
+    triggered_by: str = "manual",
+    force: bool = False,
+    reason: Optional[str] = None,
+    remediation_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Run one maintenance transaction under an OS-backed exclusive lease."""
 
@@ -6275,6 +6938,7 @@ def run_self_maintenance_loop(
                 triggered_by=triggered_by,
                 force=force,
                 reason=reason,
+                remediation_context=remediation_context,
             )
         run_id = str(uuid.uuid4())
         record = {
@@ -6286,6 +6950,7 @@ def run_self_maintenance_loop(
             "status": "skipped_active_lease",
             "triggered_by": triggered_by,
         }
+        record.update(_remediation_lineage_fields(remediation_context))
         _append_ledger(record)
         return record
 
@@ -6634,6 +7299,8 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "review_blocking_findings": (review.get("blocking_findings") if review else []),
             "review_dimensions": review.get("dimensions") if review else {},
             "reason": str(row.get("reason") or "").strip(),
+            "triggered_by": str(row.get("triggered_by") or "").strip(),
+            "force": row.get("force") if isinstance(row.get("force"), bool) else None,
         }
 
     def _milestone_item(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -6647,6 +7314,7 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "event",
             "event_type",
             "final_status",
+            "force",
             "identity_verified",
             "installability_verified",
             "merge_sha",

@@ -3,7 +3,6 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-
 GENERATED_ABSORPTION_NAMES = {
     "retort_absorption_log.md",
     "retort_external_review_report.json",
@@ -49,11 +48,18 @@ def _runtime_status_prefixes(root: Path, project: Path) -> tuple[str, ...]:
     return (f"{rel_text}.retort/",)
 
 
-def _is_exempt_git_status_path(path: str, prefixes: tuple[str, ...], *, root: Path | None = None) -> bool:
+def _is_exempt_git_status_path(
+    path: str, prefixes: tuple[str, ...], *, root: Path | None = None
+) -> bool:
     normalized = path.replace("\\", "/")
-    if any(normalized == prefix.removesuffix("/") or normalized.startswith(prefix) for prefix in prefixes):
+    if any(
+        normalized == prefix.removesuffix("/") or normalized.startswith(prefix)
+        for prefix in prefixes
+    ):
         return True
-    if root is not None and _directory_contains_only_exempt_status_files(root / normalized, root, prefixes):
+    if root is not None and _directory_contains_only_exempt_status_files(
+        root / normalized, root, prefixes
+    ):
         return True
     project_prefix = _project_prefix_from_runtime_prefixes(prefixes)
     if project_prefix and not normalized.startswith(project_prefix):
@@ -72,7 +78,9 @@ def _is_exempt_git_status_path(path: str, prefixes: tuple[str, ...], *, root: Pa
     )
 
 
-def _directory_contains_only_exempt_status_files(path: Path, root: Path, prefixes: tuple[str, ...]) -> bool:
+def _directory_contains_only_exempt_status_files(
+    path: Path, root: Path, prefixes: tuple[str, ...]
+) -> bool:
     if not path.is_dir():
         return False
     files = [item for item in path.rglob("*") if item.is_file()]
@@ -96,7 +104,14 @@ def _project_prefix_from_runtime_prefixes(prefixes: tuple[str, ...]) -> str:
 
 
 def _git(root: Path, *args: str) -> str:
-    result = subprocess.run(["git", *args], cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30, check=False)
+    result = subprocess.run(
+        ["git", *args],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or result.stdout.strip())
     return result.stdout

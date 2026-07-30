@@ -157,20 +157,30 @@ def run_archive_template_delete(
 
         from app.db.init_db import init_template_tables
         from app.db.session import get_db
+        from app.infrastructure.templates.tenant_scope import (
+            ensure_templates_tenant_column,
+            templates_tenant_where_sql,
+        )
 
         try:
             init_template_tables()
+            ensure_templates_tenant_column()
         except RECOVERABLE_ERRORS:
             pass
+        tenant_sql, tenant_bind = templates_tenant_where_sql()
         with get_db() as db:
             row = db.execute(
-                text("SELECT id FROM templates WHERE id = :id"), {"id": db_id}
+                text(f"SELECT id FROM templates WHERE id = :id AND ({tenant_sql})"),
+                {"id": db_id, **tenant_bind},
             ).fetchone()
             if not row:
                 return {"success": False, "message": "模板不存在"}, 404
             db.execute(
-                text("UPDATE templates SET is_active = 0, updated_at = :updated_at WHERE id = :id"),
-                {"id": db_id, "updated_at": datetime.now()},
+                text(
+                    f"UPDATE templates SET is_active = 0, updated_at = :updated_at "
+                    f"WHERE id = :id AND ({tenant_sql})"
+                ),
+                {"id": db_id, "updated_at": datetime.now(), **tenant_bind},
             )
             db.commit()
         return {
@@ -195,3 +205,25 @@ def run_archive_template_analyze(
         content_type="application/octet-stream",
     )
     return _unpack_response(_tpl.analyze_template_with_upload(fs, template_name, template_scope))
+
+
+def run_archive_template_upload(
+    *,
+    file_body: bytes,
+    filename: str,
+    template_name: str = "",
+    template_scope: str = "",
+    source: str = "office_upload",
+) -> tuple[dict, int]:
+    """解析办公文件并自动写入模版库（analyze → create）。"""
+    from app.application.office_template_ingest_app_service import (
+        ingest_office_bytes_to_template_library,
+    )
+
+    return ingest_office_bytes_to_template_library(
+        file_body=file_body,
+        filename=filename,
+        template_name=template_name,
+        template_scope=template_scope,
+        source=source,
+    )

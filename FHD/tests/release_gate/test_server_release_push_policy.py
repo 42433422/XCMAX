@@ -230,13 +230,25 @@ def test_ci_requires_explicit_manual_opt_in_for_image_archive() -> None:
             "&& inputs.release_channel || (contains(github.ref, '-rc') "
             "&& 'staging' || 'stable') }}"
         ) in workflow
-        assert "cancel-in-progress: true" in workflow
+        assert "cancel-in-progress: false" in workflow
         assert (
             "FHD_PUSH_IMAGE_TAR: ${{ github.event_name == 'workflow_dispatch' "
             "&& inputs.push_image_tar && '1' || '0' }}"
         ) in workflow
-        assert 'FHD_CVM_PUSH_TIMEOUT: "55m"' in workflow
-        assert "timeout-minutes: 65" in workflow
+        assert 'FHD_CVM_PUSH_TIMEOUT: "75m"' in workflow
+        assert "timeout-minutes: 90" in workflow
+
+
+def test_evolution_dispatch_runs_before_any_checkout_directory_exists() -> None:
+    source = yaml.safe_load((FHD_ROOT / ".github/workflows/ci-cd.yml").read_text(encoding="utf-8"))
+    published = yaml.safe_load(
+        (REPO_ROOT / ".github/workflows/fhd-ci-cd.yml").read_text(encoding="utf-8")
+    )
+
+    for workflow in (source, published):
+        job = workflow["jobs"]["dispatch-evolution-after-cvm"]
+        assert job["steps"][0]["working-directory"] == "."
+        assert "actions/checkout" not in str(job["steps"])
 
 
 def test_autonomous_ci_workflows_have_no_environment_approval_gate() -> None:
@@ -302,6 +314,13 @@ def test_forced_self_maintenance_survives_its_own_service_restart() -> None:
     assert 'print("1" if success else "0")' in script
     assert "raise SystemExit(0 if success else 3)" in script
     assert "timeout-minutes: 120" in workflow
+    assert 'SSH_OPTS=(-i "$KEY_FILE"' in workflow
+    assert 'SCP_OPTS=(-i "$KEY_FILE"' in workflow
+    assert workflow.count("-o ServerAliveInterval=30") == 2
+    assert workflow.count("-o ServerAliveCountMax=120") == 2
+    assert workflow.count("-o TCPKeepAlive=yes") == 2
+    assert 'ssh "${SSH_OPTS[@]}"' in workflow
+    assert workflow.count('scp "${SCP_OPTS[@]}"') == 3
 
 
 def test_forced_self_maintenance_does_not_put_secret_or_reason_in_ssh_argv() -> None:

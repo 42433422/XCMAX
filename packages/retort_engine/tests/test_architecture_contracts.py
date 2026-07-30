@@ -5,10 +5,14 @@ from pathlib import Path
 from retort_engine.architecture_contracts import evaluate_architecture_contracts
 
 
-def test_architecture_contracts_pass_when_forbidden_import_is_absent(tmp_path: Path) -> None:
+def test_architecture_contracts_pass_when_forbidden_import_is_absent(
+    tmp_path: Path,
+) -> None:
     package = tmp_path / "retort_engine"
     package.mkdir()
-    (package / "codebase_graph.py").write_text("import ast\nfrom pathlib import Path\n", encoding="utf-8")
+    (package / "codebase_graph.py").write_text(
+        "import ast\nfrom pathlib import Path\n", encoding="utf-8"
+    )
 
     report = evaluate_architecture_contracts(tmp_path)
 
@@ -20,7 +24,9 @@ def test_architecture_contracts_pass_when_forbidden_import_is_absent(tmp_path: P
 def test_architecture_contracts_fail_on_forbidden_import(tmp_path: Path) -> None:
     package = tmp_path / "retort_engine"
     package.mkdir()
-    (package / "codebase_graph.py").write_text("from retort_engine.core import RetortService\n", encoding="utf-8")
+    (package / "codebase_graph.py").write_text(
+        "from retort_engine.core import RetortService\n", encoding="utf-8"
+    )
 
     report = evaluate_architecture_contracts(tmp_path)
 

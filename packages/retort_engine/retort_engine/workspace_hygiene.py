@@ -4,7 +4,6 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-
 # Closed-loop proof flags may remain. Everything else under .retort is runtime residue.
 DURABLE_RELATIVE_PATHS = frozenset(
     {
@@ -73,7 +72,12 @@ def clean_workspace(
             "removed": [],
             "kept": [],
             "errors": [],
-            "summary": {"removed_count": 0, "kept_count": 0, "residue_bytes": 0, "clean": True},
+            "summary": {
+                "removed_count": 0,
+                "kept_count": 0,
+                "residue_bytes": 0,
+                "clean": True,
+            },
         }
 
     for path in sorted(runtime.iterdir(), key=lambda item: item.name):
@@ -99,7 +103,11 @@ def clean_workspace(
 
     residue = workspace_residue_report(root, keep_durable_state=keep_durable_state)
     return {
-        "status": "clean" if residue["clean"] and not errors else ("partial" if removed else "dirty"),
+        "status": (
+            "clean"
+            if residue["clean"] and not errors
+            else ("partial" if removed else "dirty")
+        ),
         "project": str(root),
         "runtime_root": str(runtime),
         "removed": removed,
@@ -116,7 +124,9 @@ def clean_workspace(
     }
 
 
-def workspace_residue_report(project: str | Path, *, keep_durable_state: bool = True) -> dict[str, Any]:
+def workspace_residue_report(
+    project: str | Path, *, keep_durable_state: bool = True
+) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     runtime = retort_runtime_root(root)
     residues: list[dict[str, Any]] = []
@@ -125,7 +135,10 @@ def workspace_residue_report(project: str | Path, *, keep_durable_state: bool = 
             if not path.is_file():
                 continue
             rel = path.relative_to(root).as_posix()
-            if keep_durable_state and path.relative_to(runtime).as_posix() in DURABLE_RELATIVE_PATHS:
+            if (
+                keep_durable_state
+                and path.relative_to(runtime).as_posix() in DURABLE_RELATIVE_PATHS
+            ):
                 continue
             try:
                 size = path.stat().st_size
@@ -147,7 +160,9 @@ def workspace_residue_report(project: str | Path, *, keep_durable_state: bool = 
     }
 
 
-def assert_clean_workspace(project: str | Path, *, keep_durable_state: bool = True) -> dict[str, Any]:
+def assert_clean_workspace(
+    project: str | Path, *, keep_durable_state: bool = True
+) -> dict[str, Any]:
     report = workspace_residue_report(project, keep_durable_state=keep_durable_state)
     if not report["clean"]:
         raise RuntimeError(
@@ -159,7 +174,9 @@ def assert_clean_workspace(project: str | Path, *, keep_durable_state: bool = Tr
 
 def close_run_workspace(project: str | Path, *, run_id: str = "") -> dict[str, Any]:
     """Mandatory end-of-run closer: purge ephemeral residue and prove cleanliness."""
-    cleaned = clean_workspace(project, keep_durable_state=True, purge_empty_runtime=True)
+    cleaned = clean_workspace(
+        project, keep_durable_state=True, purge_empty_runtime=True
+    )
     proof = workspace_residue_report(project, keep_durable_state=True)
     return {
         "status": "closed" if proof["clean"] else "residue_remaining",

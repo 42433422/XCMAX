@@ -47,6 +47,10 @@ _DEFAULT_TEMPLATE_SCOPE_RULES = {
         "templateType": "销售报表",
         "requiredTerms": ["销售金额", "实收款", "下欠款金额"],
     },
+    "custom": {
+        "templateType": "自定义模板",
+        "requiredTerms": [],
+    },
 }
 
 

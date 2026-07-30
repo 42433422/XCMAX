@@ -1,0 +1,79 @@
+{
+  "success": true,
+  "fixtures_dir": "/Users/a4243342/Desktop/XCMAX/FHD/tests/fixtures/shipment_etl",
+  "steps": [
+    {
+      "step": "generate_delivery_template",
+      "success": true,
+      "file_path": "/Users/a4243342/Desktop/XCMAX/FHD/tests/fixtures/shipment_etl/闭环测试_送货单模板.xlsx",
+      "sheet_count": 2,
+      "profile_id": "default",
+      "message": "已生成送货单模板 闭环测试_送货单模板.xlsx（2 张表）"
+    },
+    {
+      "step": "generate_ledger_template",
+      "success": true,
+      "file_path": "/Users/a4243342/Desktop/XCMAX/FHD/tests/fixtures/shipment_etl/闭环流水客户.xlsx",
+      "unit_name": "闭环流水客户",
+      "row_count": 2,
+      "profile_id": "default",
+      "message": "已生成出货流水模板 闭环流水客户.xlsx"
+    },
+    {
+      "step": "parse_delivery",
+      "success": true,
+      "note_count": 2,
+      "units": [
+        "闭环测试客户甲",
+        "闭环测试客户乙"
+      ]
+    },
+    {
+      "step": "parse_ledger",
+      "success": true,
+      "note_count": 2,
+      "orders": [
+        "L-001",
+        "L-002"
+      ]
+    },
+    {
+      "step": "regenerate_roundtrip",
+      "success": true,
+      "fingerprint_match": true,
+      "output": "/Users/a4243342/Desktop/XCMAX/FHD/tests/fixtures/shipment_etl/闭环测试_反推再出单.xlsx"
+    },
+    {
+      "step": "batch_preview",
+      "success": true,
+      "file_count": 2,
+      "note_count": 4
+    },
+    {
+      "step": "batch_execute_first",
+      "success": true,
+      "shipment_created": 2,
+      "shipment_skipped": 0,
+      "fake_created": 2
+    },
+    {
+      "step": "batch_execute_second_idempotent",
+      "success": true,
+      "shipment_created": 0,
+      "shipment_skipped": 2,
+      "fake_created": 2
+    },
+    {
+      "step": "dry_run",
+      "success": true,
+      "dry_run": true,
+      "would_create": 0
+    },
+    {
+      "step": "single_execute_after_batch",
+      "success": true,
+      "shipment_created": 0,
+      "shipment_skipped": 2
+    }
+  ]
+}

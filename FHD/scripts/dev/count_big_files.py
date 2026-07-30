@@ -3,10 +3,10 @@
 
 守护两条基线（配合 architecture/REFACTOR_DECOMPOSITION_PLAN.md）：
 
-1. ``app/**/*.py`` 行数 > ``file_lines_soft_cap``（默认 800）的文件数 —— 巨型文件**不得新增**。
+1. ``app/**/*.py`` 行数 > ``file_lines_soft_cap``（默认 800）的文件 —— 巨型文件**不得新增或增长**。
    新代码应按职责拆分（router 拆 domain、app_service 拆 helper、巨型 schema 拆子模块）。
-2. 单文件 ``@router.`` 装饰器数 > ``routes_per_file_soft_cap``（默认 20）的文件数 ——
-   路由应聚合到 domain 子模块，违规清单**只减不增**（绞杀者式收口）。
+2. 单文件 ``@router.`` 装饰器数 > ``routes_per_file_soft_cap``（默认 20）的文件 ——
+   路由数**不得增长**，并应聚合到 domain 子模块（绞杀者式收口）。
 
 白名单在 ``scripts/dev/big_files_ratchet_baseline.json`` 的 ``allowlist`` 中维护，
 典型场景：纯数据 schema、生成产物、bootstrap DDL 等天然不可拆的巨型文件。
@@ -113,6 +113,10 @@ def write_baseline(repo_root: Path, baseline: dict, current: dict) -> Path:
         "big_router_files_over_20_routes": current["big_router_count"],
         "max_file_lines": current["max_file_lines"],
         "max_routes_per_file": current["max_routes_per_file"],
+        "file_line_limits": {item["file"]: item["lines"] for item in current["big_files_over_cap"]},
+        "router_route_limits": {
+            item["file"]: item["routes"] for item in current["big_router_files_over_cap"]
+        },
         "allowlist": baseline["allowlist"],
         "thresholds": baseline["thresholds"],
         "last_measured_commit": baseline.get("last_measured_commit", ""),
@@ -127,46 +131,51 @@ def evaluate(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     progress: list[str] = []
 
-    cur_big = current["big_files_count"]
-    base_big = baseline["big_files_over_800_lines"]
-    if cur_big > base_big:
-        new_files = [
-            f["file"]
-            for f in current["big_files_over_cap"]
-            if f["file"] not in {bf["file"] for bf in baseline.get("_big_files_snapshot", [])}
-        ]
-        errors.append(
-            f"app/ 巨型文件数（>{baseline['thresholds']['file_lines_soft_cap']} 行）增加："
-            f"{base_big} → {cur_big}（+{cur_big - base_big}）。"
-            "新代码请按职责拆分（router 拆 domain、app_service 拆 helper）。"
-        )
-        if new_files:
-            errors.append("新增巨型文件：\n" + "\n".join(f"    - {f}" for f in new_files[:10]))
-    elif cur_big < base_big:
-        progress.append(
-            f"app/ 巨型文件数下降：{base_big} → {cur_big}（-{base_big - cur_big}）✓ "
-            "运行 --update-baseline 锁定进度。"
-        )
+    file_limits = baseline.get("file_line_limits", {})
+    current_files = {item["file"]: item["lines"] for item in current["big_files_over_cap"]}
+    if file_limits:
+        for rel, lines in current_files.items():
+            limit = file_limits.get(rel)
+            if limit is None:
+                errors.append(
+                    f"新增巨型文件：{rel}（{lines} > "
+                    f"{baseline['thresholds']['file_lines_soft_cap']} 行）"
+                )
+            elif lines > limit:
+                errors.append(f"巨型文件继续增长：{rel}（{limit} → {lines} 行）")
+        removed = sorted(set(file_limits) - set(current_files))
+        if removed:
+            progress.append(f"app/ 巨型文件债务下降：移除 {len(removed)} 个基线项 ✓")
+    elif current["big_files_count"] > baseline["big_files_over_800_lines"]:
+        errors.append("app/ 巨型文件数增加；请生成逐文件 V2 基线。")
 
-    cur_router = current["big_router_count"]
-    base_router = baseline["big_router_files_over_20_routes"]
-    if cur_router > base_router:
-        errors.append(
-            f"app/ 巨型 router 文件数（>{baseline['thresholds']['routes_per_file_soft_cap']} 路由）"
-            f"增加：{base_router} → {cur_router}（+{cur_router - base_router}）。"
-            "路由请聚合到 domain 子模块。"
-        )
-    elif cur_router < base_router:
-        progress.append(
-            f"app/ 巨型 router 文件数下降：{base_router} → {cur_router}（-{base_router - cur_router}）✓ "
-            "运行 --update-baseline 锁定进度。"
-        )
+    route_limits = baseline.get("router_route_limits", {})
+    current_routers = {
+        item["file"]: item["routes"] for item in current["big_router_files_over_cap"]
+    }
+    if route_limits:
+        for rel, routes in current_routers.items():
+            limit = route_limits.get(rel)
+            if limit is None:
+                errors.append(
+                    f"新增巨型 router：{rel}（{routes} > "
+                    f"{baseline['thresholds']['routes_per_file_soft_cap']} 路由）"
+                )
+            elif routes > limit:
+                errors.append(f"巨型 router 继续增长：{rel}（{limit} → {routes} 路由）")
+        removed = sorted(set(route_limits) - set(current_routers))
+        if removed:
+            progress.append(f"app/ 巨型 router 债务下降：移除 {len(removed)} 个基线项 ✓")
+    elif current["big_router_count"] > baseline["big_router_files_over_20_routes"]:
+        errors.append("app/ 巨型 router 文件数增加；请生成逐文件 V2 基线。")
 
     return errors, progress
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--json", action="store_true", help="以 JSON 输出实测与判定")
     parser.add_argument("--top", type=int, metavar="N", help="列出 Top N 待拆分文件（按行数排序）")
     parser.add_argument(
@@ -175,7 +184,9 @@ def main(argv: list[str] | None = None) -> int:
         help="把当前实测写为新基线（默认只允许调低；升高需 --force）",
     )
     parser.add_argument("--force", action="store_true", help="允许 --update-baseline 调高基线")
-    parser.add_argument("--repo-root", type=Path, default=REPO_ROOT_DEFAULT, help="仓库根（默认自动推断）")
+    parser.add_argument(
+        "--repo-root", type=Path, default=REPO_ROOT_DEFAULT, help="仓库根（默认自动推断）"
+    )
     args = parser.parse_args(argv)
 
     repo_root: Path = args.repo_root
@@ -204,16 +215,32 @@ def main(argv: list[str] | None = None) -> int:
                 raising.append("big_files_over_800_lines")
             if current["big_router_count"] > baseline["big_router_files_over_20_routes"]:
                 raising.append("big_router_files_over_20_routes")
+            for item in current["big_files_over_cap"]:
+                old = baseline.get("file_line_limits", {}).get(item["file"])
+                if baseline.get("file_line_limits") and old is None:
+                    raising.append(f"new oversized file {item['file']}")
+                elif old is not None and item["lines"] > old:
+                    raising.append(f"{item['file']} lines")
+            for item in current["big_router_files_over_cap"]:
+                old = baseline.get("router_route_limits", {}).get(item["file"])
+                if baseline.get("router_route_limits") and old is None:
+                    raising.append(f"new oversized router {item['file']}")
+                elif old is not None and item["routes"] > old:
+                    raising.append(f"{item['file']} routes")
             if raising:
                 print(
-                    "拒绝调高基线（棘轮只减不增）：" + ", ".join(raising) + "。如确需放宽请加 --force。",
+                    "拒绝调高基线（棘轮只减不增）："
+                    + ", ".join(raising)
+                    + "。如确需放宽请加 --force。",
                     file=sys.stderr,
                 )
                 return 2
         out = write_baseline(repo_root, baseline, current)
         print(f"[big-files-ratchet] 基线已写入 {out.relative_to(repo_root)}")
         print(f"[big-files-ratchet]   big_files_over_800_lines = {current['big_files_count']}")
-        print(f"[big-files-ratchet]   big_router_files_over_20_routes = {current['big_router_count']}")
+        print(
+            f"[big-files-ratchet]   big_router_files_over_20_routes = {current['big_router_count']}"
+        )
         return 0
 
     if args.top is not None:
@@ -240,7 +267,9 @@ def main(argv: list[str] | None = None) -> int:
                     },
                     "baseline": {
                         "big_files_over_800_lines": baseline["big_files_over_800_lines"],
-                        "big_router_files_over_20_routes": baseline["big_router_files_over_20_routes"],
+                        "big_router_files_over_20_routes": baseline[
+                            "big_router_files_over_20_routes"
+                        ],
                     },
                     "errors": errors,
                     "progress": progress,

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import subprocess
+import sys
 
-import httpx
 import pytest
 
 
@@ -36,6 +36,23 @@ def test_contact_company_web_search_queries() -> None:
     full = contact_company_web_search_queries("成都修茈科技有限公司")
     assert full[0] == "成都修茈科技有限公司"
     assert any("企查查" in q for q in full)
+
+
+def test_contact_company_module_can_import_before_research_tools() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import modstore_server.contact_company_web_search; "
+                "import modstore_server.market_auth_api"
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_rank_contact_serp_rows_prefers_query_hit() -> None:
@@ -163,3 +180,50 @@ async def test_web_search_fallback_crawler_first(monkeypatch: pytest.MonkeyPatch
     assert via == "bing"
     assert results[0]["url"] == "https://a.test"
     assert err is None
+
+
+def test_contact_web_search_budget_sec(monkeypatch: pytest.MonkeyPatch) -> None:
+    from modstore_server.contact_company_web_search import contact_web_search_budget_sec
+
+    monkeypatch.delenv("MODSTORE_CONTACT_WEB_SEARCH_BUDGET", raising=False)
+    assert contact_web_search_budget_sec() == 5.0
+    monkeypatch.setenv("MODSTORE_CONTACT_WEB_SEARCH_BUDGET", "3.5")
+    assert contact_web_search_budget_sec() == 3.5
+    monkeypatch.setenv("MODSTORE_CONTACT_WEB_SEARCH_BUDGET", "99")
+    assert contact_web_search_budget_sec() == 20.0
+
+
+@pytest.mark.asyncio
+async def test_search_company_names_via_web_respects_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+    import time
+
+    from modstore_server import contact_company_web_search as ccw
+
+    monkeypatch.setenv("MODSTORE_CONTACT_WEB_SEARCH_BUDGET", "1.2")
+    monkeypatch.setattr(ccw, "contact_web_company_search_enabled", lambda: True)
+    monkeypatch.setattr(
+        ccw,
+        "contact_company_web_search_queries",
+        lambda q: [q, f"{q} site:qcc.com", f"{q} 企查查"],
+    )
+
+    calls = {"n": 0}
+
+    async def _slow_fetch(*_a, **_k):  # type: ignore[no-untyped-def]
+        calls["n"] += 1
+        await asyncio.sleep(3.0)
+        return [], "", ["slow"]
+
+    monkeypatch.setattr(ccw, "_contact_company_web_fetch_one", _slow_fetch)
+
+    started = time.monotonic()
+    names, err, via = await ccw.search_company_names_via_web("成都修茈", max_results=5)
+    elapsed = time.monotonic() - started
+    assert names == []
+    assert via == ""
+    assert err and ("timeout" in err or "budget_exhausted" in err)
+    assert elapsed < 2.5
+    assert calls["n"] == 1

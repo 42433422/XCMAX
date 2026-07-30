@@ -5,7 +5,7 @@
   - coverage-dual-summary.json：committed_head.* / ratchet_floors.* / targets.* / _retired.values
   - coverage-history.jsonl：最后一行为最新趋势
   - sla-snapshot.json：/api/health 健康探针
-  - dora-20260613.json：DORA 指标
+  - dora-YYYYMMDD.json：最新 DORA 指标
   - pyproject.toml：fail_under 正则交叉校验后端行 floor
   - VERSION.md『各端交付等级』表 vs docs/guides/MOBILE_ANDROID.md 实际状态
   - frontend/e2e/*.spec.ts：E2E spec 数
@@ -16,6 +16,7 @@
   python scripts/dev/gen_claimed_vs_actual.py            # 写文件
   python scripts/dev/gen_claimed_vs_actual.py --check    # 重新生成并比对（忽略「生成于」时间戳行），不一致 exit 1
 """
+
 from __future__ import annotations
 
 import argparse
@@ -62,6 +63,33 @@ def _read_jsonl_last(path: Path) -> dict:
         return {}
 
 
+def _latest_dora_snapshot(metrics_dir: Path = METRICS_DIR) -> tuple[dict, Path | None]:
+    candidates = sorted(
+        path
+        for path in metrics_dir.glob("dora-*.json")
+        if re.fullmatch(r"dora-\d{8}\.json", path.name)
+    )
+    if not candidates:
+        return {}, None
+    latest = candidates[-1]
+    return _read_json(latest), latest
+
+
+def _snapshot_age_days(
+    generated_at: str,
+    *,
+    now: datetime.datetime | None = None,
+) -> int | None:
+    try:
+        generated = datetime.datetime.fromisoformat(
+            generated_at.replace("Z", "+00:00")
+        )
+    except (AttributeError, TypeError, ValueError):
+        return None
+    now = now or datetime.datetime.now(datetime.UTC)
+    return max(0, (now - generated).days)
+
+
 def _fail_under_from_pyproject() -> int | None:
     pyproject = FHD_ROOT / "pyproject.toml"
     try:
@@ -97,10 +125,10 @@ def _android_levels() -> tuple[str, str, str]:
     try:
         for line in version_md.read_text(encoding="utf-8").splitlines():
             if "Android" in line and "|" in line and ("签约级" in line or "实验骨架" in line):
-                if "签约级" in line:
-                    claimed = "签约级"
-                elif "实验骨架" in line:
+                if "实验骨架" in line:
                     claimed = "实验骨架"
+                elif "签约级" in line:
+                    claimed = "签约级"
                 break
     except OSError:
         pass
@@ -118,7 +146,9 @@ def _android_levels() -> tuple[str, str, str]:
 
     # 声称（去掉星号后）与实测核心词一致 → 🟢，否则 🔴
     claimed_core = claimed.replace("*", "")
-    actual_core = "实验骨架" if "实验骨架" in actual else ("签约级" if "签约级" in actual else actual)
+    actual_core = (
+        "实验骨架" if "实验骨架" in actual else ("签约级" if "签约级" in actual else actual)
+    )
     status = ST_GREEN if claimed_core == actual_core else ST_RED
     return claimed, actual, status
 
@@ -133,7 +163,7 @@ def build_rows() -> tuple[list[list[str]], list[list[str]]]:
 
     hist = _read_jsonl_last(METRICS_DIR / "coverage-history.jsonl")
     sla = _read_json(METRICS_DIR / "sla-snapshot.json")
-    dora = _read_json(METRICS_DIR / "dora-20260613.json")
+    dora, dora_path = _latest_dora_snapshot()
     fail_under = _fail_under_from_pyproject()
 
     rows: list[list[str]] = []
@@ -143,46 +173,60 @@ def build_rows() -> tuple[list[list[str]], list[list[str]]]:
     be_line_floor = floors.get("backend_line")
     be_line_target = targets.get("backend_line_pct")
     if be_line is not None:
-        rows.append([
-            "后端行覆盖率",
-            f"≥{_fmt_pct(be_line_target)}（目标）",
-            _fmt_pct(be_line),
-            "coverage-dual-summary.json#committed_head.backend_line_pct",
-            _status_for(be_line, be_line_floor, be_line_target),
-        ])
+        rows.append(
+            [
+                "后端行覆盖率",
+                f"≥{_fmt_pct(be_line_target)}（目标）",
+                _fmt_pct(be_line),
+                "coverage-dual-summary.json#committed_head.backend_line_pct",
+                _status_for(be_line, be_line_floor, be_line_target),
+            ]
+        )
 
     # --- 后端分支 ---
     be_branch = head.get("backend_branch_pct")
     if be_branch is not None:
-        rows.append([
-            "后端分支覆盖率",
-            f"≥{_fmt_pct(targets.get('backend_branch_pct'))}（目标）",
-            _fmt_pct(be_branch),
-            "coverage-dual-summary.json#committed_head.backend_branch_pct",
-            _status_for(be_branch, floors.get("backend_branch"), targets.get("backend_branch_pct")),
-        ])
+        rows.append(
+            [
+                "后端分支覆盖率",
+                f"≥{_fmt_pct(targets.get('backend_branch_pct'))}（目标）",
+                _fmt_pct(be_branch),
+                "coverage-dual-summary.json#committed_head.backend_branch_pct",
+                _status_for(
+                    be_branch, floors.get("backend_branch"), targets.get("backend_branch_pct")
+                ),
+            ]
+        )
 
     # --- 前端行 ---
     fe_line = head.get("frontend_line_pct")
     if fe_line is not None:
-        rows.append([
-            "前端行覆盖率",
-            f"≥{_fmt_pct(targets.get('frontend_line_pct'))}（目标）",
-            _fmt_pct(fe_line),
-            "coverage-dual-summary.json#committed_head.frontend_line_pct",
-            _status_for(fe_line, floors.get("frontend_lines"), targets.get("frontend_line_pct")),
-        ])
+        rows.append(
+            [
+                "前端行覆盖率",
+                f"≥{_fmt_pct(targets.get('frontend_line_pct'))}（目标）",
+                _fmt_pct(fe_line),
+                "coverage-dual-summary.json#committed_head.frontend_line_pct",
+                _status_for(
+                    fe_line, floors.get("frontend_lines"), targets.get("frontend_line_pct")
+                ),
+            ]
+        )
 
     # --- 前端分支 ---
     fe_branch = head.get("frontend_branch_pct")
     if fe_branch is not None:
-        rows.append([
-            "前端分支覆盖率",
-            f"≥{_fmt_pct(targets.get('frontend_branch_pct'))}（目标）",
-            _fmt_pct(fe_branch),
-            "coverage-dual-summary.json#committed_head.frontend_branch_pct",
-            _status_for(fe_branch, floors.get("frontend_branches"), targets.get("frontend_branch_pct")),
-        ])
+        rows.append(
+            [
+                "前端分支覆盖率",
+                f"≥{_fmt_pct(targets.get('frontend_branch_pct'))}（目标）",
+                _fmt_pct(fe_branch),
+                "coverage-dual-summary.json#committed_head.frontend_branch_pct",
+                _status_for(
+                    fe_branch, floors.get("frontend_branches"), targets.get("frontend_branch_pct")
+                ),
+            ]
+        )
 
     # --- 前端函数 ---
     fe_func = head.get("frontend_function_pct")
@@ -190,38 +234,46 @@ def build_rows() -> tuple[list[list[str]], list[list[str]]]:
         fe_func_floor = floors.get("frontend_functions")
         # 无独立 target，复用 floor 作为达标线
         status = ST_GREEN if (fe_func_floor is not None and fe_func >= fe_func_floor) else ST_RED
-        rows.append([
-            "前端函数覆盖率",
-            f"≥{_fmt_pct(fe_func_floor)}（floor）",
-            _fmt_pct(fe_func),
-            "coverage-dual-summary.json#committed_head.frontend_function_pct",
-            status,
-        ])
+        rows.append(
+            [
+                "前端函数覆盖率",
+                f"≥{_fmt_pct(fe_func_floor)}（floor）",
+                _fmt_pct(fe_func),
+                "coverage-dual-summary.json#committed_head.frontend_function_pct",
+                status,
+            ]
+        )
 
     # --- pyproject fail_under 交叉校验后端行 floor ---
     be_line_floor_val = floors.get("backend_line")
     if fail_under is not None and be_line_floor_val is not None:
         consistent = fail_under == be_line_floor_val
-        rows.append([
-            "后端行 floor（fail_under 交叉校验）",
-            f"棘轮 floor={be_line_floor_val}",
-            f"pyproject fail_under={fail_under}",
-            "pyproject.toml fail_under vs coverage-dual-summary.json#ratchet_floors.backend_line",
-            ST_GREEN if consistent else ST_RED,
-        ])
+        rows.append(
+            [
+                "后端行 floor（fail_under 交叉校验）",
+                f"棘轮 floor={be_line_floor_val}",
+                f"pyproject fail_under={fail_under}",
+                "pyproject.toml fail_under vs coverage-dual-summary.json#ratchet_floors.backend_line",
+                ST_GREEN if consistent else ST_RED,
+            ]
+        )
 
     # --- 覆盖率最新趋势（history 最后一行） ---
     if hist:
         hist_be = hist.get("backend_lines")
         hist_date = hist.get("date", "?")
         if hist_be is not None:
-            rows.append([
-                f"覆盖率趋势（最新 {hist_date}）",
-                "趋势上行",
-                f"后端行 {hist_be}% / 前端行 {hist.get('frontend_lines')}%",
-                "coverage-history.jsonl（最后一行）",
-                _status_for(hist_be, be_line_floor_val, None) if be_line_floor_val else ST_GREEN,
-            ])
+            rows.append(
+                [
+                    f"覆盖率趋势（最新 {hist_date}）",
+                    "趋势上行",
+                    f"后端行 {hist_be}% / 前端行 {hist.get('frontend_lines')}%",
+                    "coverage-history.jsonl（最后一行）",
+                    _status_for(hist_be, be_line_floor_val, None)
+                    if be_line_floor_val
+                    else ST_GREEN,
+                ]
+            )
 
     # --- 健康探针 SLA ---
     probe = sla.get("probe", {}).get("probe_result", {}).get("health", {})
@@ -229,56 +281,80 @@ def build_rows() -> tuple[list[list[str]], list[list[str]]]:
         within = probe.get("within_budget")
         elapsed = probe.get("elapsed_ms")
         budget = probe.get("budget_ms")
-        rows.append([
-            "健康探针 /api/health",
-            f"P50 < {budget}ms 预算",
-            f"{elapsed}ms（status {probe.get('status_code')}）",
-            "sla-snapshot.json#probe.probe_result.health",
-            ST_GREEN if within else ST_RED,
-        ])
+        rows.append(
+            [
+                "健康探针 /api/health",
+                f"P50 < {budget}ms 预算",
+                f"{elapsed}ms（status {probe.get('status_code')}）",
+                "sla-snapshot.json#probe.probe_result.health",
+                ST_GREEN if within else ST_RED,
+            ]
+        )
 
     # --- DORA ---
     if dora:
         ev = dora.get("event_count", 0)
-        rows.append([
-            "DORA 部署频率",
-            "持续交付",
-            f"窗口 {dora.get('window_days')}d / 事件 {ev} / 频率 {dora.get('deployment_frequency_per_day')}/d",
-            "dora-20260613.json",
-            ST_GREEN if ev and ev > 0 else ST_YELLOW,
-        ])
+        generated_at = dora.get("generated_at", "")
+        age_days = _snapshot_age_days(generated_at)
+        stale = age_days is None or age_days > 2
+        freshness = (
+            "采集时间未知"
+            if age_days is None
+            else f"数据已过期 {age_days} 天"
+            if stale
+            else f"{age_days} 天内采集"
+        )
+        rows.append(
+            [
+                "DORA 部署频率",
+                "持续交付",
+                (
+                    f"环境 {dora.get('environment', '未标注')} / "
+                    f"窗口 {dora.get('window_days')}d / 事件 {ev} / "
+                    f"频率 {dora.get('deployment_frequency_per_day')}/d / {freshness}"
+                ),
+                dora_path.name if dora_path else "dora-YYYYMMDD.json",
+                ST_GREEN if ev and ev > 0 and not stale else ST_YELLOW,
+            ]
+        )
 
     # --- E2E spec 数 ---
     e2e_specs = sorted(glob.glob(str(FHD_ROOT / "frontend" / "e2e" / "*.spec.ts")))
     e2e_count = len(e2e_specs)
-    rows.append([
-        "前端 E2E spec 数",
-        "有 E2E 套件",
-        f"{e2e_count} 个 spec",
-        "frontend/e2e/*.spec.ts",
-        ST_GREEN if e2e_count > 0 else ST_RED,
-    ])
+    rows.append(
+        [
+            "前端 E2E spec 数",
+            "有 E2E 套件",
+            f"{e2e_count} 个 spec",
+            "frontend/e2e/*.spec.ts",
+            ST_GREEN if e2e_count > 0 else ST_RED,
+        ]
+    )
 
     # --- Android 端等级 ---
     a_claimed, a_actual, a_status = _android_levels()
-    rows.append([
-        "Android 端交付等级",
-        a_claimed,
-        a_actual,
-        "VERSION.md『各端交付等级』vs docs/guides/MOBILE_ANDROID.md",
-        a_status,
-    ])
+    rows.append(
+        [
+            "Android 端交付等级",
+            a_claimed,
+            a_actual,
+            "VERSION.md『各端交付等级』vs docs/guides/MOBILE_ANDROID.md",
+            a_status,
+        ]
+    )
 
     # --- 退役口径黑名单 ---
     retired_rows: list[list[str]] = []
     for key, reason in (retired.get("values", {}) or {}).items():
-        retired_rows.append([
-            f"退役口径 `{key}`",
-            "（曾对外引用）",
-            "已退役，禁止再引用",
-            "coverage-dual-summary.json#_retired.values",
-            f"{ST_RETIRED} {reason}",
-        ])
+        retired_rows.append(
+            [
+                f"退役口径 `{key}`",
+                "（曾对外引用）",
+                "已退役，禁止再引用",
+                "coverage-dual-summary.json#_retired.values",
+                f"{ST_RETIRED} {reason}",
+            ]
+        )
 
     return rows, retired_rows
 
@@ -292,7 +368,7 @@ def _md_table(header: list[str], rows: list[list[str]]) -> str:
 
 
 def render_doc() -> str:
-    now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     rows, retired_rows = build_rows()
 
     parts: list[str] = []
@@ -310,7 +386,9 @@ def render_doc() -> str:
     parts.append("")
     parts.append(_md_table(["维度", "声称", "实测", "数据源", "状态"], rows))
     parts.append("")
-    parts.append("**状态图例**：🟢 实测 ≥ 目标 · 🟡 floor ≤ 实测 < 目标 · 🔴 实测 < floor 或 声称≠实测 · ⛔ 已退役口径")
+    parts.append(
+        "**状态图例**：🟢 实测 ≥ 目标 · 🟡 floor ≤ 实测 < 目标 · 🔴 实测 < floor 或 声称≠实测 · ⛔ 已退役口径"
+    )
     parts.append("")
     parts.append("## 已退役口径（黑名单，禁止对外引用）")
     parts.append("")
@@ -324,9 +402,7 @@ def render_doc() -> str:
 
 def _strip_gen_line(text: str) -> str:
     """移除「生成于」时间戳所在行，供 --check 比对（忽略时间戳）。"""
-    return "\n".join(
-        ln for ln in text.splitlines() if not ln.startswith(GEN_LINE_PREFIX)
-    )
+    return "\n".join(ln for ln in text.splitlines() if not ln.startswith(GEN_LINE_PREFIX))
 
 
 def main() -> int:
@@ -348,7 +424,9 @@ def main() -> int:
         if _strip_gen_line(existing) == _strip_gen_line(new_content):
             print(f"[OK] {OUTPUT_DOC} 与 metrics 一致")
             return 0
-        print(f"[FAIL] {OUTPUT_DOC} 已过期，与 metrics 不一致；请运行 gen_claimed_vs_actual.py 重新生成")
+        print(
+            f"[FAIL] {OUTPUT_DOC} 已过期，与 metrics 不一致；请运行 gen_claimed_vs_actual.py 重新生成"
+        )
         return 1
 
     OUTPUT_DOC.parent.mkdir(parents=True, exist_ok=True)

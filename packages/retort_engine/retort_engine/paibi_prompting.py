@@ -7,12 +7,45 @@ from typing import Any
 
 from retort_engine.llm_schema import RETORT_SCORE_DIMENSIONS
 
+SOURCE_SUFFIXES = {
+    ".py",
+    ".js",
+    ".ts",
+    ".tsx",
+    ".jsx",
+    ".html",
+    ".css",
+    ".md",
+    ".toml",
+    ".yml",
+    ".yaml",
+    ".json",
+}
+SKIP_PARTS = {
+    ".git",
+    ".retort",
+    "__pycache__",
+    "node_modules",
+    ".venv",
+    ".pytest_cache",
+    ".ruff_cache",
+}
+GENERATED_EVIDENCE_FILES = {
+    "retort_external_review_report.json",
+    "retort_absorption_log.md",
+    "absorbed_external_patterns.py",
+    "retort_absorbed_patterns.py",
+}
 
-SOURCE_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".html", ".css", ".md", ".toml", ".yml", ".yaml", ".json"}
-SKIP_PARTS = {".git", ".retort", "__pycache__", "node_modules", ".venv", ".pytest_cache", ".ruff_cache"}
-GENERATED_EVIDENCE_FILES = {"retort_external_review_report.json", "retort_absorption_log.md", "absorbed_external_patterns.py", "retort_absorbed_patterns.py"}
-
-__all__ = ["RETORT_SCORE_DIMENSIONS", "RETORT_LLM_SCORING_RUBRIC", "build_retort_paibi_panel_prompt", "build_retort_paibi_prompt", "project_digest", "prioritized_evidence", "scoring_audit"]
+__all__ = [
+    "RETORT_LLM_SCORING_RUBRIC",
+    "RETORT_SCORE_DIMENSIONS",
+    "build_retort_paibi_panel_prompt",
+    "build_retort_paibi_prompt",
+    "prioritized_evidence",
+    "project_digest",
+    "scoring_audit",
+]
 RETORT_LLM_SCORING_RUBRIC = """Retort LLM 评分必须区分“证据闭环”和“能力吸收”，不能把证据文件完整度当成产品能力：
 - 你必须直接给每个维度 0-100 分，并给出可验证理由。
 - 重点评估深度，不用功能数量堆高分。
@@ -85,15 +118,32 @@ def build_retort_paibi_prompt(
     evidence: list[str] | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> str:
-    task_lines = "\n".join(f"- {item.get('task_id')}: {item.get('title')} [{item.get('dimension')}]" for item in tasks or []) or "- no tasks supplied"
+    task_lines = (
+        "\n".join(
+            f"- {item.get('task_id')}: {item.get('title')} [{item.get('dimension')}]"
+            for item in tasks or []
+        )
+        or "- no tasks supplied"
+    )
     critical = prioritized_evidence(evidence or [])
-    critical_evidence_lines = "\n".join(f"- {item}" for item in critical) or "- no critical evidence supplied"
+    critical_evidence_lines = (
+        "\n".join(f"- {item}" for item in critical) or "- no critical evidence supplied"
+    )
     critical_set = set(critical)
     secondary = [item for item in (evidence or []) if item not in critical_set][:45]
-    evidence_lines = "\n".join(f"- {item}" for item in secondary) or "- no secondary evidence supplied"
-    scoring_audit_json = json.dumps(scoring_audit(metadata or {}), ensure_ascii=False, indent=2, sort_keys=True)[:3000]
+    evidence_lines = (
+        "\n".join(f"- {item}" for item in secondary)
+        or "- no secondary evidence supplied"
+    )
+    scoring_audit_json = json.dumps(
+        scoring_audit(metadata or {}), ensure_ascii=False, indent=2, sort_keys=True
+    )[:3000]
     own = project_digest(project, snippet_limit=5, snippet_chars=420)
-    external_digest = project_digest(Path(external_path), snippet_limit=1, snippet_chars=300) if external_path and Path(external_path).is_dir() else "external project not materialized"
+    external_digest = (
+        project_digest(Path(external_path), snippet_limit=1, snippet_chars=300)
+        if external_path and Path(external_path).is_dir()
+        else "external project not materialized"
+    )
     return f"""MODSTORE_REPORT_ONLY=1
 report_only=true
 [report-only]
@@ -176,7 +226,9 @@ report_only=true
 """
 
 
-def project_digest(root: Path, *, snippet_limit: int = 18, snippet_chars: int = 900) -> str:
+def project_digest(
+    root: Path, *, snippet_limit: int = 18, snippet_chars: int = 900
+) -> str:
     if not root.is_dir():
         return "project folder not found"
     files = []
@@ -190,15 +242,29 @@ def project_digest(root: Path, *, snippet_limit: int = 18, snippet_chars: int = 
     suffix_counts: dict[str, int] = {}
     snippets: list[str] = []
     for path in files[:400]:
-        suffix_counts[path.suffix.lower() or "<none>"] = suffix_counts.get(path.suffix.lower() or "<none>", 0) + 1
-        if len(snippets) >= snippet_limit or path.suffix.lower() not in SOURCE_SUFFIXES or path.name in GENERATED_EVIDENCE_FILES:
+        suffix_counts[path.suffix.lower() or "<none>"] = (
+            suffix_counts.get(path.suffix.lower() or "<none>", 0) + 1
+        )
+        if (
+            len(snippets) >= snippet_limit
+            or path.suffix.lower() not in SOURCE_SUFFIXES
+            or path.name in GENERATED_EVIDENCE_FILES
+        ):
             continue
         text = _read(path)
         if not text.strip():
             continue
         rel = path.relative_to(root)
         snippets.append(f"## {rel}\n{_compact(text)[:snippet_chars]}")
-    return json.dumps({"file_count": len(files), "suffix_counts": suffix_counts, "snippets": snippets}, ensure_ascii=False, indent=2)
+    return json.dumps(
+        {
+            "file_count": len(files),
+            "suffix_counts": suffix_counts,
+            "snippets": snippets,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
 
 
 def prioritized_evidence(evidence: list[str]) -> list[str]:
@@ -335,10 +401,27 @@ def prioritized_evidence(evidence: list[str]) -> list[str]:
         "employee_scheduler_stress_",
         "cross_domain_ci_regression_",
     )
-    critical_keep = [item for item in evidence if any(str(item).startswith(prefix) for prefix in critical_keep_prefixes)]
-    critical_keep = sorted(critical_keep, key=lambda item: _evidence_priority(str(item), priority_prefixes))
-    must_keep = [item for item in evidence if any(str(item).startswith(prefix) for prefix in must_keep_prefixes) and item not in critical_keep]
-    selected = [item for item in evidence if any(str(item).startswith(prefix) for prefix in prefixes) and item not in critical_keep and item not in must_keep]
+    critical_keep = [
+        item
+        for item in evidence
+        if any(str(item).startswith(prefix) for prefix in critical_keep_prefixes)
+    ]
+    critical_keep = sorted(
+        critical_keep, key=lambda item: _evidence_priority(str(item), priority_prefixes)
+    )
+    must_keep = [
+        item
+        for item in evidence
+        if any(str(item).startswith(prefix) for prefix in must_keep_prefixes)
+        and item not in critical_keep
+    ]
+    selected = [
+        item
+        for item in evidence
+        if any(str(item).startswith(prefix) for prefix in prefixes)
+        and item not in critical_keep
+        and item not in must_keep
+    ]
     return [*critical_keep, *must_keep, *selected][:100]
 
 
@@ -350,11 +433,31 @@ def _evidence_priority(item: str, prefixes: tuple[str, ...]) -> int:
 
 
 def scoring_audit(metadata: dict[str, Any]) -> dict[str, Any]:
-    proof = metadata.get("closed_loop_proof") if isinstance(metadata.get("closed_loop_proof"), dict) else {}
-    audit = metadata.get("capability_absorption_audit") if isinstance(metadata.get("capability_absorption_audit"), dict) else {}
-    patch = audit.get("employee_patch_closure") if isinstance(audit.get("employee_patch_closure"), dict) else {}
-    review_runtime = audit.get("pr_review_runtime") if isinstance(audit.get("pr_review_runtime"), dict) else {}
-    hardening = audit.get("post_absorption_hardening") if isinstance(audit.get("post_absorption_hardening"), dict) else {}
+    proof = (
+        metadata.get("closed_loop_proof")
+        if isinstance(metadata.get("closed_loop_proof"), dict)
+        else {}
+    )
+    audit = (
+        metadata.get("capability_absorption_audit")
+        if isinstance(metadata.get("capability_absorption_audit"), dict)
+        else {}
+    )
+    patch = (
+        audit.get("employee_patch_closure")
+        if isinstance(audit.get("employee_patch_closure"), dict)
+        else {}
+    )
+    review_runtime = (
+        audit.get("pr_review_runtime")
+        if isinstance(audit.get("pr_review_runtime"), dict)
+        else {}
+    )
+    hardening = (
+        audit.get("post_absorption_hardening")
+        if isinstance(audit.get("post_absorption_hardening"), dict)
+        else {}
+    )
     compact_audit = {
         "local_score_removed": True,
         "status": audit.get("status"),
@@ -363,12 +466,22 @@ def scoring_audit(metadata: dict[str, Any]) -> dict[str, Any]:
         "reason": audit.get("reason"),
         "latest_behavior_source_count": len(audit.get("behavior_source_files") or []),
         "latest_behavior_test_count": len(audit.get("behavior_test_files") or []),
-        "support_behavior_source_count": len(audit.get("support_behavior_source_files") or []),
-        "support_behavior_test_count": len(audit.get("support_behavior_test_files") or []),
-        "post_absorption_hardening_source_count": len(hardening.get("behavior_source_files") or []),
-        "post_absorption_hardening_test_count": len(hardening.get("behavior_test_files") or []),
-        "total_behavior_source_count": len(audit.get("behavior_source_files") or []) + len(hardening.get("behavior_source_files") or []),
-        "total_behavior_test_count": len(audit.get("behavior_test_files") or []) + len(hardening.get("behavior_test_files") or []),
+        "support_behavior_source_count": len(
+            audit.get("support_behavior_source_files") or []
+        ),
+        "support_behavior_test_count": len(
+            audit.get("support_behavior_test_files") or []
+        ),
+        "post_absorption_hardening_source_count": len(
+            hardening.get("behavior_source_files") or []
+        ),
+        "post_absorption_hardening_test_count": len(
+            hardening.get("behavior_test_files") or []
+        ),
+        "total_behavior_source_count": len(audit.get("behavior_source_files") or [])
+        + len(hardening.get("behavior_source_files") or []),
+        "total_behavior_test_count": len(audit.get("behavior_test_files") or [])
+        + len(hardening.get("behavior_test_files") or []),
         "behavior_count_scope": "latest_absorption_plus_post_merge_hardening",
         "external_project_count": audit.get("external_project_count"),
         "test_to_source_ratio": audit.get("test_to_source_ratio"),
@@ -377,12 +490,22 @@ def scoring_audit(metadata: dict[str, Any]) -> dict[str, Any]:
         "employee_patch_closure": patch,
         "review_adjudication_calibration": {
             "status": review_runtime.get("adjudication_status"),
-            "no_human_operating_model": review_runtime.get("adjudication_no_human_operating_model"),
-            "human_review_required": review_runtime.get("adjudication_human_review_required"),
-            "calibration_label_count": review_runtime.get("adjudication_calibration_label_count"),
+            "no_human_operating_model": review_runtime.get(
+                "adjudication_no_human_operating_model"
+            ),
+            "human_review_required": review_runtime.get(
+                "adjudication_human_review_required"
+            ),
+            "calibration_label_count": review_runtime.get(
+                "adjudication_calibration_label_count"
+            ),
             "pass_rate": review_runtime.get("adjudication_pass_rate"),
-            "false_positive_count": review_runtime.get("adjudication_false_positive_count"),
-            "false_negative_count": review_runtime.get("adjudication_false_negative_count"),
+            "false_positive_count": review_runtime.get(
+                "adjudication_false_positive_count"
+            ),
+            "false_negative_count": review_runtime.get(
+                "adjudication_false_negative_count"
+            ),
         },
     }
     return {

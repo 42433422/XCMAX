@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import ipaddress
 import json
 import os
+import socket
 import sys
 import tempfile
 import time
@@ -35,9 +37,59 @@ def _safe_base_url(base_url: str, allowed_hosts: Iterable[str]) -> tuple[str, st
         raise ValueError("base_url 必须是 http/https URL")
     if parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise ValueError("base_url 不得包含凭据、查询参数或 fragment")
+    if parsed.path not in {"", "/"}:
+        raise ValueError("base_url 不得包含路径")
     if host not in allowed:
         raise ValueError(f"host 不在宿主探测白名单: {host}")
+    _assert_probe_destination_safe(host)
     return raw, host
+
+
+def _assert_probe_destination_safe(host: str) -> None:
+    """Reject DNS names that resolve into private space.
+
+    Explicitly allowlisted literal private IPs and ``localhost`` remain
+    available for the desktop-runtime probe. A public-looking DNS name cannot
+    be used to pivot into loopback or cloud metadata networks.
+    """
+
+    try:
+        literal = ipaddress.ip_address(host)
+    except ValueError:
+        literal = None
+    if literal is not None:
+        if (
+            literal.is_link_local
+            or literal.is_multicast
+            or literal.is_reserved
+            or literal.is_unspecified
+        ):
+            raise ValueError(f"host 位于永久禁用网段: {literal}")
+        # Loopback/private literal targets are a core use case for the desktop
+        # probe and have already passed the exact runtime allowlist above.
+        return
+    if host == "localhost":
+        return
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as exc:
+        raise ValueError(f"host 无法安全解析: {host}") from exc
+    if not infos:
+        raise ValueError(f"host 无解析结果: {host}")
+    for info in infos:
+        sockaddr = info[4]
+        if not sockaddr:
+            continue
+        address = ipaddress.ip_address(sockaddr[0])
+        if (
+            address.is_private
+            or address.is_loopback
+            or address.is_link_local
+            or address.is_multicast
+            or address.is_reserved
+            or address.is_unspecified
+        ):
+            raise ValueError(f"host 解析到禁用网段: {address}")
 
 
 def configured_host_probe_allowlist() -> set[str]:

@@ -12,8 +12,30 @@ from typing import Any
 from retort_engine.models import ProjectAssessment
 from retort_engine.ui_features import blackhole_ui_detected
 
-SKIP_DIRS = {".git", ".venv", "__pycache__", "node_modules", "dist", "build", ".ruff_cache", ".pytest_cache", "playwright-report"}
-SOURCE_SUFFIXES = {".py", ".ts", ".tsx", ".js", ".jsx", ".vue", ".kt", ".swift", ".java", ".html", ".css"}
+SKIP_DIRS = {
+    ".git",
+    ".venv",
+    "__pycache__",
+    "node_modules",
+    "dist",
+    "build",
+    ".ruff_cache",
+    ".pytest_cache",
+    "playwright-report",
+}
+SOURCE_SUFFIXES = {
+    ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".vue",
+    ".kt",
+    ".swift",
+    ".java",
+    ".html",
+    ".css",
+}
 
 
 @dataclass(frozen=True)
@@ -86,7 +108,9 @@ class EvidenceProjectEvaluator:
         )
 
 
-def collect_project_signals(project_path: Path, state: dict[str, Any]) -> ProjectSignals:
+def collect_project_signals(
+    project_path: Path, state: dict[str, Any]
+) -> ProjectSignals:
     source_files = python_package_files = test_files = test_functions = 0
     for root, dirs, files in os.walk(project_path):
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
@@ -99,7 +123,13 @@ def collect_project_signals(project_path: Path, state: dict[str, Any]) -> Projec
                 python_package_files += 1
             if filename.startswith("test_") and suffix == ".py":
                 test_files += 1
-                test_functions += len(re.findall(r"^\s*(?:async\s+def|def)\s+test_", _read_text(path), re.M))
+                test_functions += len(
+                    re.findall(
+                        r"^\s*(?:async\s+def|def)\s+test_",
+                        _read_text(path),
+                        re.MULTILINE,
+                    )
+                )
     context_policy = _context_policy(state)
     gate_results: dict[str, bool] = {}
     gate_sources: dict[str, str] = {}
@@ -155,7 +185,12 @@ def _strengths(signals: ProjectSignals) -> list[str]:
         strengths.append(f"{signals.test_files} Python test files detected")
     if signals.has_console_script:
         strengths.append("console script entrypoint exists")
-    for label in ("blackhole_ui", "branch_workflow", "employee_runtime_adapter", "license_gate"):
+    for label in (
+        "blackhole_ui",
+        "branch_workflow",
+        "employee_runtime_adapter",
+        "license_gate",
+    ):
         if signals.retort_features.get(label):
             strengths.append(label)
     return strengths
@@ -184,7 +219,9 @@ def _evidence(signals: ProjectSignals) -> list[str]:
         f"context_policy={signals.context_policy}",
     ]
     for name, passed in sorted(signals.gate_results.items()):
-        evidence.append(f"gate:{name}={passed} source={signals.gate_sources.get(name, 'unknown')}")
+        evidence.append(
+            f"gate:{name}={passed} source={signals.gate_sources.get(name, 'unknown')}"
+        )
     for key in signals.ignored_context_keys:
         evidence.append(f"ignored_context={key}")
     for key, value in sorted(signals.retort_features.items()):
@@ -193,9 +230,23 @@ def _evidence(signals: ProjectSignals) -> list[str]:
 
 
 def _retort_feature_flags(project_path: Path) -> dict[str, bool]:
-    text = _all_project_text(project_path, include_tests=False, exclude_filenames={"evaluators.py"}, include_docs=False)
-    all_code_text = _all_project_text(project_path, include_tests=True, exclude_filenames={"evaluators.py"}, include_docs=False)
-    frontend_text = _all_project_text(project_path / "retort_engine" / "frontend", include_tests=True, include_docs=True)
+    text = _all_project_text(
+        project_path,
+        include_tests=False,
+        exclude_filenames={"evaluators.py"},
+        include_docs=False,
+    )
+    all_code_text = _all_project_text(
+        project_path,
+        include_tests=True,
+        exclude_filenames={"evaluators.py"},
+        include_docs=False,
+    )
+    frontend_text = _all_project_text(
+        project_path / "retort_engine" / "frontend",
+        include_tests=True,
+        include_docs=True,
+    )
     return {
         "absorption_module": _has_file_named(project_path, "absorption.py"),
         "sources_module": _has_file_named(project_path, "sources.py"),
@@ -208,21 +259,50 @@ def _retort_feature_flags(project_path: Path) -> dict[str, bool]:
         "license_tests": _has_file_named(project_path, "test_runtime_integrations.py"),
         "branch_tests": _has_file_named(project_path, "test_branching.py"),
         "employee_owner_hints": "owner_hint" in text,
-        "employee_queue_integration": "enqueue_employee_task" in text or "RetortEmployeeRuntimeAdapter" in text,
-        "execution_feedback_ingest": "feedback_ingest" in text or "task_result" in text or "employee_result" in text,
+        "employee_queue_integration": "enqueue_employee_task" in text
+        or "RetortEmployeeRuntimeAdapter" in text,
+        "execution_feedback_ingest": "feedback_ingest" in text
+        or "task_result" in text
+        or "employee_result" in text,
         "history_store": "RetortHistoryStore" in text or "retort_history" in text,
         "license_warning": "license-incompatible" in text or "license_gate" in text,
-        "license_gate": "def license_gate" in text and "DEFAULT_ALLOWED_LICENSES" in text,
+        "license_gate": "def license_gate" in text
+        and "DEFAULT_ALLOWED_LICENSES" in text,
         "semantic_reviewer": "semantic_compare" in text and "ast.parse" in text,
         "json_output": "--json" in text,
         "report_output": "--output" in text or "write_text" in text,
-        "real_github_absorption_case": bool(re.search(r"run_absorption\([\s\S]{0,800}?github_url\s*=\s*['\"]https://github\.com/(?!owner/repo)", all_code_text)),
-        "employee_runtime_adapter": any(marker in text for marker in ("employee_runtime", "agent_loop", "workflow_scheduler", "RetortEmployeeRuntimeAdapter")),
-        "product_surface": any(marker in text for marker in ("FastAPI", "APIRouter", "uvicorn", "RetortService", "RetortUIServer")),
+        "real_github_absorption_case": bool(
+            re.search(
+                r"run_absorption\([\s\S]{0,800}?github_url\s*=\s*['\"]https://github\.com/(?!owner/repo)",
+                all_code_text,
+            )
+        ),
+        "employee_runtime_adapter": any(
+            marker in text
+            for marker in (
+                "employee_runtime",
+                "agent_loop",
+                "workflow_scheduler",
+                "RetortEmployeeRuntimeAdapter",
+            )
+        ),
+        "product_surface": any(
+            marker in text
+            for marker in (
+                "FastAPI",
+                "APIRouter",
+                "uvicorn",
+                "RetortService",
+                "RetortUIServer",
+            )
+        ),
         "blackhole_ui": blackhole_ui_detected(project_path),
-        "folder_project_picker": "ownProjectFolder" in frontend_text and "externalProjectFolder" in frontend_text,
-        "branch_workflow": "begin_absorption_branch" in text and "branch_workflow" in text,
-        "merge_after_absorption": "merge_absorption_branch" in text and "merge_after" in text,
+        "folder_project_picker": "ownProjectFolder" in frontend_text
+        and "externalProjectFolder" in frontend_text,
+        "branch_workflow": "begin_absorption_branch" in text
+        and "branch_workflow" in text,
+        "merge_after_absorption": "merge_absorption_branch" in text
+        and "merge_after" in text,
     }
 
 
@@ -235,15 +315,27 @@ def _gate_results_from_state(state: dict[str, Any]) -> dict[str, bool]:
             raw = {}
     if not isinstance(raw, dict):
         return {}
-    return {str(k): bool(v) if isinstance(v, bool) else str(v).lower() in {"pass", "passed", "ok", "true", "1"} for k, v in raw.items()}
+    return {
+        str(k): (
+            bool(v)
+            if isinstance(v, bool)
+            else str(v).lower() in {"pass", "passed", "ok", "true", "1"}
+        )
+        for k, v in raw.items()
+    }
 
 
 def _run_local_gates(project_path: Path) -> tuple[dict[str, bool], dict[str, str]]:
     results: dict[str, bool] = {}
     sources: dict[str, str] = {}
     env = dict(os.environ)
-    env["PYTHONPATH"] = str(project_path) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
-    for name, cmd in (("lint", [sys.executable, "-m", "ruff", "check", "."]), ("test", [sys.executable, "-m", "pytest", "tests", "-q"])):
+    env["PYTHONPATH"] = str(project_path) + (
+        os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
+    )
+    for name, cmd in (
+        ("lint", [sys.executable, "-m", "ruff", "check", "."]),
+        ("test", [sys.executable, "-m", "pytest", "tests", "-q"]),
+    ):
         if name == "test" and not (project_path / "tests").is_dir():
             continue
         if name == "lint" and not _has_python_files(project_path):
@@ -255,9 +347,19 @@ def _run_local_gates(project_path: Path) -> tuple[dict[str, bool], dict[str, str
     return results, sources
 
 
-def _run_gate(project_path: Path, cmd: list[str], env: dict[str, str]) -> tuple[bool, str]:
+def _run_gate(
+    project_path: Path, cmd: list[str], env: dict[str, str]
+) -> tuple[bool, str]:
     try:
-        result = subprocess.run(cmd, cwd=project_path, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, timeout=180, check=False)
+        result = subprocess.run(
+            cmd,
+            cwd=project_path,
+            text=True,
+            capture_output=True,
+            env=env,
+            timeout=180,
+            check=False,
+        )
     except subprocess.TimeoutExpired:
         return False, "local:timeout"
     except OSError:
@@ -273,10 +375,16 @@ def _context_policy(state: dict[str, Any]) -> str:
     return "provided" if raw in {"provided", "use_context", "context"} else "isolated"
 
 
-def _ignored_context_keys(state: dict[str, Any], context_policy: str) -> tuple[str, ...]:
+def _ignored_context_keys(
+    state: dict[str, Any], context_policy: str
+) -> tuple[str, ...]:
     if context_policy == "provided":
         return ()
-    return tuple(key for key in ("prompt", "gate_results", "allow_dirty") if state.get(key) not in (None, "", {}, [], False))
+    return tuple(
+        key
+        for key in ("prompt", "gate_results", "allow_dirty")
+        if state.get(key) not in (None, "", {}, [], False)
+    )
 
 
 def _bool_state(state: dict[str, Any], key: str) -> bool:
@@ -294,10 +402,18 @@ def _read_text(path: Path) -> str:
 
 
 def _contains(project_path: Path, needle: str) -> bool:
-    return needle in _all_project_text(project_path, include_tests=True, include_docs=True)
+    return needle in _all_project_text(
+        project_path, include_tests=True, include_docs=True
+    )
 
 
-def _all_project_text(project_path: Path, *, include_tests: bool, exclude_filenames: set[str] | None = None, include_docs: bool = True) -> str:
+def _all_project_text(
+    project_path: Path,
+    *,
+    include_tests: bool,
+    exclude_filenames: set[str] | None = None,
+    include_docs: bool = True,
+) -> str:
     exclude_filenames = exclude_filenames or set()
     chunks: list[str] = []
     suffixes = SOURCE_SUFFIXES | {".md", ".toml", ".yml", ".yaml", ".json"}
@@ -318,15 +434,25 @@ def _all_project_text(project_path: Path, *, include_tests: bool, exclude_filena
 
 
 def _has_file_named(project_path: Path, name: str) -> bool:
-    return any(path.name == name for path in project_path.rglob("*") if path.is_file() and not any(part in SKIP_DIRS for part in path.parts))
+    return any(
+        path.name == name
+        for path in project_path.rglob("*")
+        if path.is_file() and not any(part in SKIP_DIRS for part in path.parts)
+    )
 
 
 def _has_python_files(project_path: Path) -> bool:
-    return any(path.suffix == ".py" for path in project_path.rglob("*.py") if not any(part in SKIP_DIRS for part in path.parts))
+    return any(
+        path.suffix == ".py"
+        for path in project_path.rglob("*.py")
+        if not any(part in SKIP_DIRS for part in path.parts)
+    )
 
 
 def _has_workflow_dir(project_path: Path, repo_root: Path | None) -> bool:
-    return (project_path / ".github" / "workflows").is_dir() or bool(repo_root and (repo_root / ".github" / "workflows").is_dir())
+    return (project_path / ".github" / "workflows").is_dir() or bool(
+        repo_root and (repo_root / ".github" / "workflows").is_dir()
+    )
 
 
 def _has_retort_ci_reference(repo_root: Path | None) -> bool:
@@ -335,15 +461,31 @@ def _has_retort_ci_reference(repo_root: Path | None) -> bool:
     workflow_dir = repo_root / ".github" / "workflows"
     if not workflow_dir.is_dir():
         return False
-    return any("packages/retort_engine" in _read_text(path) or "retort_engine" in _read_text(path) for path in workflow_dir.glob("*.yml"))
+    return any(
+        "packages/retort_engine" in _read_text(path)
+        or "retort_engine" in _read_text(path)
+        for path in workflow_dir.glob("*.yml")
+    )
 
 
 def _git_root(project_path: Path) -> Path | None:
     try:
-        result = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=project_path, text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=10, check=False)
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=project_path,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+            check=False,
+        )
     except (OSError, subprocess.TimeoutExpired):
         return None
-    return Path(result.stdout.strip()) if result.returncode == 0 and result.stdout.strip() else None
+    return (
+        Path(result.stdout.strip())
+        if result.returncode == 0 and result.stdout.strip()
+        else None
+    )
 
 
 def _git_dirty(project_path: Path) -> bool | None:
@@ -351,7 +493,15 @@ def _git_dirty(project_path: Path) -> bool | None:
     if root is None:
         return None
     try:
-        result = subprocess.run(["git", "status", "--short", "--", str(project_path)], cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=10, check=False)
+        result = subprocess.run(
+            ["git", "status", "--short", "--", str(project_path)],
+            cwd=root,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+            check=False,
+        )
     except (OSError, subprocess.TimeoutExpired):
         return None
     return bool(result.stdout.strip())
@@ -367,8 +517,27 @@ def _git_tracking_state(project_path: Path) -> str:
     except ValueError:
         pass
     try:
-        tracked = subprocess.run(["git", "ls-files", "--error-unmatch", rel], cwd=root, text=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10, check=False).returncode == 0
-        status = subprocess.run(["git", "status", "--short", "--", rel], cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=10, check=False).stdout.strip()
+        tracked = (
+            subprocess.run(
+                ["git", "ls-files", "--error-unmatch", rel],
+                cwd=root,
+                text=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+                check=False,
+            ).returncode
+            == 0
+        )
+        status = subprocess.run(
+            ["git", "status", "--short", "--", rel],
+            cwd=root,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+            check=False,
+        ).stdout.strip()
     except (OSError, subprocess.TimeoutExpired):
         return "unknown"
     if not tracked and status:

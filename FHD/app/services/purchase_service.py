@@ -231,7 +231,7 @@ class PurchaseService(NeuroEventPublisherMixin):
                     item = PurchaseOrderItem(
                         order_id=order.id,
                         product_id=item_data.get("product_id"),
-                        product_name=product.name if product else item_data.get("product_name"),
+                        product_name=(product.name if product else item_data.get("product_name")),
                         specification=item_data.get("specification"),
                         quantity=quantity,
                         unit=item_data.get("unit", "个"),
@@ -248,6 +248,21 @@ class PurchaseService(NeuroEventPublisherMixin):
                 order.total_amount = total_amount
                 db.commit()
                 db.refresh(order)
+
+                # Sample Neuro-DDD closed loop: emit order.created after durable commit.
+                try:
+                    from decimal import Decimal
+
+                    from app.neuro_bus.domains.order_domain import get_order_domain
+
+                    get_order_domain().emit_order_created(
+                        order_id=str(order.id),
+                        customer_id=str(order.supplier_id or ""),
+                        items=list(items_data or []),
+                        total_amount=Decimal(str(total_amount or 0)),
+                    )
+                except Exception:  # noqa: BLE001 - never block purchase on bus emit
+                    logger.debug("emit_order_created skipped", exc_info=True)
 
                 return {
                     "success": True,
@@ -296,7 +311,9 @@ class PurchaseService(NeuroEventPublisherMixin):
                         item = PurchaseOrderItem(
                             order_id=order.id,
                             product_id=item_data.get("product_id"),
-                            product_name=product.name if product else item_data.get("product_name"),
+                            product_name=(
+                                product.name if product else item_data.get("product_name")
+                            ),
                             specification=item_data.get("specification"),
                             quantity=quantity,
                             unit=item_data.get("unit", "个"),
@@ -405,7 +422,7 @@ class PurchaseService(NeuroEventPublisherMixin):
                         inbound_id=inbound.id,
                         product_id=item_data.get("product_id"),
                         order_item_id=item_data.get("order_item_id"),
-                        product_name=product.name if product else item_data.get("product_name"),
+                        product_name=(product.name if product else item_data.get("product_name")),
                         batch_no=item_data.get("batch_no"),
                         quantity=quantity,
                         unit=item_data.get("unit", "个"),

@@ -27,15 +27,31 @@ def build_absorption_run_proof(
     llm_review: dict[str, Any],
 ) -> dict[str, Any]:
     run_id = str(execution.get("run_id") or "")
-    metadata = own_assessment.get("metadata") if isinstance(own_assessment.get("metadata"), dict) else {}
-    audit = metadata.get("capability_absorption_audit") if isinstance(metadata.get("capability_absorption_audit"), dict) else {}
+    metadata = (
+        own_assessment.get("metadata")
+        if isinstance(own_assessment.get("metadata"), dict)
+        else {}
+    )
+    audit = (
+        metadata.get("capability_absorption_audit")
+        if isinstance(metadata.get("capability_absorption_audit"), dict)
+        else {}
+    )
     changed_files = [str(item) for item in execution.get("changed_files") or []]
     gates = [item for item in execution.get("gates") or [] if isinstance(item, dict)]
-    code_graph_path = str(execution.get("code_graph_proof_path") or audit.get("latest_code_graph_proof_path") or "")
+    code_graph_path = str(
+        execution.get("code_graph_proof_path")
+        or audit.get("latest_code_graph_proof_path")
+        or ""
+    )
     code_graph = _read_json(Path(code_graph_path)) if code_graph_path else {}
     before_score = assessment_score(pre_assessment)
     after_score = assessment_score(own_assessment)
-    proof = absorption_state.get("closed_loop_proof") if isinstance(absorption_state.get("closed_loop_proof"), dict) else {}
+    proof = (
+        absorption_state.get("closed_loop_proof")
+        if isinstance(absorption_state.get("closed_loop_proof"), dict)
+        else {}
+    )
     flags = proof.get("flags") if isinstance(proof.get("flags"), dict) else {}
     final_llm = _final_llm_verdict(own_assessment, llm_review)
     core_change = _core_change_binding(changed_files, audit)
@@ -44,14 +60,20 @@ def build_absorption_run_proof(
         "path": code_graph_path,
         "exists": bool(code_graph_path and Path(code_graph_path).is_file()),
         "run_id": str(code_graph.get("run_id") or run_id),
-        "node_count": int(code_graph.get("node_count") or execution.get("code_graph_node_count") or 0),
-        "edge_count": int(code_graph.get("edge_count") or execution.get("code_graph_edge_count") or 0),
+        "node_count": int(
+            code_graph.get("node_count") or execution.get("code_graph_node_count") or 0
+        ),
+        "edge_count": int(
+            code_graph.get("edge_count") or execution.get("code_graph_edge_count") or 0
+        ),
         "changed_file_count": int(code_graph.get("changed_file_count") or 0),
     }
     return {
         "schema": "retort.absorption_run_proof.v1",
         "run_id": run_id,
-        "status": _run_proof_status(execution, final_llm, core_change, test_increment, code_graph_binding),
+        "status": _run_proof_status(
+            execution, final_llm, core_change, test_increment, code_graph_binding
+        ),
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "root": str(root),
         "source": source,
@@ -60,7 +82,9 @@ def build_absorption_run_proof(
             "before_score": before_score,
             "external_score": assessment_score(external_assessment),
             "after_score": after_score,
-            "score_delta": round(after_score - before_score, 1) if before_score is not None and after_score is not None else None,
+            "score_delta": round(after_score - before_score, 1)
+            if before_score is not None and after_score is not None
+            else None,
             "before_status": assessment_score_status(pre_assessment),
             "external_status": assessment_score_status(external_assessment),
             "after_status": assessment_score_status(own_assessment),
@@ -90,7 +114,13 @@ def build_absorption_run_proof(
         "task_binding": {
             "task_count": len(tasks),
             "task_ids": [str(task.get("task_id") or "") for task in tasks],
-            "dimensions": sorted({str(task.get("dimension") or "") for task in tasks if task.get("dimension")}),
+            "dimensions": sorted(
+                {
+                    str(task.get("dimension") or "")
+                    for task in tasks
+                    if task.get("dimension")
+                }
+            ),
         },
     }
 
@@ -100,7 +130,10 @@ def write_absorption_run_proof(root: Path, proof: dict[str, Any]) -> Path:
     path = run_proof_path(root, run_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     proof["path"] = str(path)
-    path.write_text(json.dumps(proof, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    path.write_text(
+        json.dumps(proof, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     return path
 
 
@@ -109,18 +142,34 @@ def summarize_run_proof_for_session(proof: dict[str, Any]) -> dict[str, Any]:
         "run_id": str(proof.get("run_id") or ""),
         "status": str(proof.get("status") or ""),
         "path": str(proof.get("path") or ""),
-        "score_binding": proof.get("score_binding") if isinstance(proof.get("score_binding"), dict) else {},
-        "core_change_binding": proof.get("core_change_binding") if isinstance(proof.get("core_change_binding"), dict) else {},
-        "code_graph_binding": proof.get("code_graph_binding") if isinstance(proof.get("code_graph_binding"), dict) else {},
-        "test_increment_binding": proof.get("test_increment_binding") if isinstance(proof.get("test_increment_binding"), dict) else {},
-        "llm_final_verdict": proof.get("llm_final_verdict") if isinstance(proof.get("llm_final_verdict"), dict) else {},
+        "score_binding": proof.get("score_binding")
+        if isinstance(proof.get("score_binding"), dict)
+        else {},
+        "core_change_binding": proof.get("core_change_binding")
+        if isinstance(proof.get("core_change_binding"), dict)
+        else {},
+        "code_graph_binding": proof.get("code_graph_binding")
+        if isinstance(proof.get("code_graph_binding"), dict)
+        else {},
+        "test_increment_binding": proof.get("test_increment_binding")
+        if isinstance(proof.get("test_increment_binding"), dict)
+        else {},
+        "llm_final_verdict": proof.get("llm_final_verdict")
+        if isinstance(proof.get("llm_final_verdict"), dict)
+        else {},
     }
 
 
-def _core_change_binding(changed_files: list[str], audit: dict[str, Any]) -> dict[str, Any]:
-    behavior_source_files = [str(item) for item in audit.get("behavior_source_files") or []]
+def _core_change_binding(
+    changed_files: list[str], audit: dict[str, Any]
+) -> dict[str, Any]:
+    behavior_source_files = [
+        str(item) for item in audit.get("behavior_source_files") or []
+    ]
     behavior_test_files = [str(item) for item in audit.get("behavior_test_files") or []]
-    generated_evidence_files = [str(item) for item in audit.get("generated_evidence_files") or []]
+    generated_evidence_files = [
+        str(item) for item in audit.get("generated_evidence_files") or []
+    ]
     core_files = behavior_source_files + behavior_test_files
     changed_count = len(changed_files)
     core_count = len(core_files)
@@ -129,12 +178,18 @@ def _core_change_binding(changed_files: list[str], audit: dict[str, Any]) -> dic
         "changed_file_count": changed_count,
         "core_behavior_files": core_files,
         "core_behavior_file_count": core_count,
-        "core_behavior_change_ratio": round(core_count / changed_count, 3) if changed_count else 0.0,
+        "core_behavior_change_ratio": round(core_count / changed_count, 3)
+        if changed_count
+        else 0.0,
         "behavior_source_files": behavior_source_files,
         "behavior_test_files": behavior_test_files,
         "generated_evidence_files": generated_evidence_files,
-        "latest_changed_source_line_count": int(audit.get("latest_changed_source_line_count") or 0),
-        "latest_changed_test_line_count": int(audit.get("latest_changed_test_line_count") or 0),
+        "latest_changed_source_line_count": int(
+            audit.get("latest_changed_source_line_count") or 0
+        ),
+        "latest_changed_test_line_count": int(
+            audit.get("latest_changed_test_line_count") or 0
+        ),
         "reason": str(audit.get("reason") or ""),
         "risk_level": str(audit.get("risk_level") or ""),
         "blockers": [str(item) for item in audit.get("blockers") or []],
@@ -152,29 +207,57 @@ def _test_increment_binding(audit: dict[str, Any]) -> dict[str, Any]:
         "test_file_count": len(behavior_test_files),
         "test_line_count": line_count,
         "latest_test_to_source_ratio": ratio,
-        "latest_test_to_source_ratio_status": str(audit.get("latest_test_to_source_ratio_status") or audit.get("test_to_source_ratio_status") or ""),
+        "latest_test_to_source_ratio_status": str(
+            audit.get("latest_test_to_source_ratio_status")
+            or audit.get("test_to_source_ratio_status")
+            or ""
+        ),
         "target": float(audit.get("latest_test_to_source_ratio_target") or 0.4),
     }
 
 
-def _final_llm_verdict(own_assessment: dict[str, Any], llm_review: dict[str, Any]) -> dict[str, Any]:
-    metadata = own_assessment.get("metadata") if isinstance(own_assessment.get("metadata"), dict) else {}
-    dispatch = llm_review.get("dispatch") if isinstance(llm_review.get("dispatch"), dict) else {}
-    scores = [item for item in own_assessment.get("scores") or [] if isinstance(item, dict)]
+def _final_llm_verdict(
+    own_assessment: dict[str, Any], llm_review: dict[str, Any]
+) -> dict[str, Any]:
+    metadata = (
+        own_assessment.get("metadata")
+        if isinstance(own_assessment.get("metadata"), dict)
+        else {}
+    )
+    dispatch = (
+        llm_review.get("dispatch")
+        if isinstance(llm_review.get("dispatch"), dict)
+        else {}
+    )
+    scores = [
+        item for item in own_assessment.get("scores") or [] if isinstance(item, dict)
+    ]
     return {
         "status": assessment_score_status(own_assessment),
         "score": assessment_score(own_assessment),
         "score_source": str(metadata.get("score_source") or "paibi_llm_pending"),
         "decision": str(metadata.get("llm_decision") or ""),
-        "llm_task_id": str(metadata.get("llm_task_id") or dispatch.get("task_id") or ""),
-        "llm_dispatch_status": str(dispatch.get("status") or llm_review.get("status") or ""),
+        "llm_task_id": str(
+            metadata.get("llm_task_id") or dispatch.get("task_id") or ""
+        ),
+        "llm_dispatch_status": str(
+            dispatch.get("status") or llm_review.get("status") or ""
+        ),
         "scores": scores,
-        "score_gate": metadata.get("llm_score_gate") if isinstance(metadata.get("llm_score_gate"), dict) else {},
+        "score_gate": metadata.get("llm_score_gate")
+        if isinstance(metadata.get("llm_score_gate"), dict)
+        else {},
         "record_policy": "只有排比 LLM 返回结构化分数时，最终评分才保留。",
     }
 
 
-def _run_proof_status(execution: dict[str, Any], final_llm: dict[str, Any], core_change: dict[str, Any], test_increment: dict[str, Any], code_graph: dict[str, Any]) -> str:
+def _run_proof_status(
+    execution: dict[str, Any],
+    final_llm: dict[str, Any],
+    core_change: dict[str, Any],
+    test_increment: dict[str, Any],
+    code_graph: dict[str, Any],
+) -> str:
     if execution.get("status") not in {"applied", "noop"}:
         return "execution_not_applied"
     if final_llm.get("status") == "paibi_llm_completed":

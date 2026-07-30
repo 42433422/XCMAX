@@ -80,6 +80,10 @@ def test_fhd_release_chain_carries_and_verifies_admin_identity() -> None:
     assert "templates/admin-vue-dist /app/templates/admin-vue-dist" in dockerfile
     assert "Set up Node.js for immutable admin console" in workflow
     assert "Restore CI-built admin console into image context" in workflow
+    assert "--exclude 'routing_policies/routing_decisions.jsonl'" in pack
+    assert "--exclude 'routing_policies/.online_update_state.json'" in pack
+    assert "--exclude 'routing_policies/routing_decisions.jsonl'" in apply_tar
+    assert "--exclude 'routing_policies/.online_update_state.json'" in apply_tar
 
     parsed = yaml.safe_load(workflow)
     jobs = parsed["jobs"]

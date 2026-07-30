@@ -7,11 +7,23 @@ from pathlib import Path
 
 from retort_engine.project_assessment import project_files
 
+PROFILE_SUFFIXES = {
+    ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".md",
+    ".yaml",
+    ".yml",
+    ".json",
+    ".toml",
+}
 
-PROFILE_SUFFIXES = {".py", ".ts", ".tsx", ".js", ".jsx", ".md", ".yaml", ".yml", ".json", ".toml"}
 
-
-def materialize_external_source(source: str, own_project: Path, refresh: bool = False) -> Path | None:
+def materialize_external_source(
+    source: str, own_project: Path, refresh: bool = False
+) -> Path | None:
     if not source:
         return None
     path = Path(source).expanduser()
@@ -31,7 +43,9 @@ def materialize_external_source(source: str, own_project: Path, refresh: bool = 
 
 
 def parse_github_url(source: str) -> tuple[str, str] | None:
-    match = re.search(r"github\.com[:/](?P<owner>[^/\s#?]+)/(?P<repo>[^/\s#?]+)", source)
+    match = re.search(
+        r"github\.com[:/](?P<owner>[^/\s#?]+)/(?P<repo>[^/\s#?]+)", source
+    )
     if not match:
         return None
     return match.group("owner"), match.group("repo").removesuffix(".git")
@@ -40,8 +54,7 @@ def parse_github_url(source: str) -> tuple[str, str] | None:
 def run_git_clone(url: str, target: Path) -> None:
     result = subprocess.run(
         ["git", "clone", "--depth", "1", url, str(target)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         timeout=180,
         check=False,
@@ -54,17 +67,70 @@ def external_project_profile(path: Path | None) -> dict[str, bool]:
     if path is None or not path.is_dir():
         return {}
     files = project_files(path, {".git", "__pycache__", "node_modules"})
-    text = "\n".join(read_text(file)[:20000] for file in files[:250] if file.suffix.lower() in PROFILE_SUFFIXES)
+    text = "\n".join(
+        read_text(file)[:20000]
+        for file in files[:250]
+        if file.suffix.lower() in PROFILE_SUFFIXES
+    )
     lowered = text.lower()
     return {
-        "review_pipeline": any(marker in lowered for marker in ("code review", "review pipeline", "reviewer", "reflection", "localization")),
-        "file_grouping": any(marker in lowered for marker in ("file group", "group files", "changed files", "diff hunk", "patch set")),
-        "benchmarking": any(marker in lowered for marker in ("benchmark", "precision", "recall", "eval", "evaluation")),
-        "plugin_surface": any(marker in lowered for marker in ("plugin", "cli", "github action", "codex")),
-        "planet_frontend": any(marker in lowered for marker in ("planet", "spheregeometry", "procedural planet", "terrain", "cloud layer")),
-        "atmosphere_shader": any(marker in lowered for marker in ("atmosphere", "fresnel", "rim light", "shader", "cloud")),
-        "procedural_surface": any(marker in lowered for marker in ("noise", "texture", "height map", "landmass", "terrain")),
-        "webgl_scene": any(marker in lowered for marker in ("webgl", "three.js", "threejs", "renderer", "scene", "camera", "orbit")),
+        "review_pipeline": any(
+            marker in lowered
+            for marker in (
+                "code review",
+                "review pipeline",
+                "reviewer",
+                "reflection",
+                "localization",
+            )
+        ),
+        "file_grouping": any(
+            marker in lowered
+            for marker in (
+                "file group",
+                "group files",
+                "changed files",
+                "diff hunk",
+                "patch set",
+            )
+        ),
+        "benchmarking": any(
+            marker in lowered
+            for marker in ("benchmark", "precision", "recall", "eval", "evaluation")
+        ),
+        "plugin_surface": any(
+            marker in lowered for marker in ("plugin", "cli", "github action", "codex")
+        ),
+        "planet_frontend": any(
+            marker in lowered
+            for marker in (
+                "planet",
+                "spheregeometry",
+                "procedural planet",
+                "terrain",
+                "cloud layer",
+            )
+        ),
+        "atmosphere_shader": any(
+            marker in lowered
+            for marker in ("atmosphere", "fresnel", "rim light", "shader", "cloud")
+        ),
+        "procedural_surface": any(
+            marker in lowered
+            for marker in ("noise", "texture", "height map", "landmass", "terrain")
+        ),
+        "webgl_scene": any(
+            marker in lowered
+            for marker in (
+                "webgl",
+                "three.js",
+                "threejs",
+                "renderer",
+                "scene",
+                "camera",
+                "orbit",
+            )
+        ),
     }
 
 

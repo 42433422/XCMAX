@@ -7,6 +7,7 @@ existing behaviour is preserved.
 
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -280,14 +281,57 @@ async def chat_dispatch_via_platform_only(
     if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
         base_url = platform_base_url(provider)
 
-    return await chat_dispatch(
+    fallback_kwargs: dict[str, Any] = {}
+    fallback_enabled = os.environ.get(
+        "MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_ENABLED", "1"
+    ).strip().lower() not in {"0", "false", "no", "off"}
+    fallback_provider = (
+        os.environ.get("MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_PROVIDER", "minimax").strip()
+        or "minimax"
+    )
+    fallback_model = os.environ.get(
+        "MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_MODEL", ""
+    ).strip() or _BENCH_DEFAULT_MODELS.get(fallback_provider, "")
+    fallback_key = (
+        platform_api_key(fallback_provider)
+        if fallback_enabled and fallback_provider != provider and fallback_model
+        else None
+    )
+    if fallback_key:
+        try:
+            fallback_timeout = float(
+                os.environ.get("MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_TIMEOUT_SECONDS", "20")
+            )
+        except ValueError:
+            fallback_timeout = 20.0
+        # The employee executor has its own outer timeout (45s by default).
+        # Keep enough time for the fallback request while rejecting unsafe values.
+        fallback_timeout = min(35.0, max(1.0, fallback_timeout))
+        fallback_kwargs = {
+            "timeout_fallback_s": fallback_timeout,
+            "fallback_provider": fallback_provider,
+            "fallback_model": fallback_model,
+            "fallback_api_key": fallback_key,
+            "fallback_base_url": (
+                platform_base_url(fallback_provider)
+                if fallback_provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
+                else None
+            ),
+        }
+
+    result = await chat_dispatch(
         provider,
         api_key=api_key,
         base_url=base_url,
         model=model,
         messages=messages,
         max_tokens=max_tokens,
+        **fallback_kwargs,
     )
+    if result.get("_fallback_used"):
+        result["_fallback_provider"] = fallback_provider
+        result["_fallback_model"] = fallback_model
+    return result
 
 
 _LOCK = Lock()

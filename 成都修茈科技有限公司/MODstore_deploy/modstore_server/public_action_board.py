@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from modstore_server.public_strategic_goals import verified_strategic_goal_items
+
 logger = logging.getLogger(__name__)
 
 _STATUS_PUBLIC = {
@@ -146,50 +148,108 @@ def build_trajectory(
                 "priority": str(it.get("priority") or "P2"),
                 "title": str(it.get("title") or ""),
                 "updated_at": str(it.get("updated_at") or "")[:40],
+                "goal_id": str(it.get("goal_id") or "")[:128],
+                "loop_run_id": str(it.get("loop_run_id") or "")[:128],
+                "para_task_id": str(it.get("para_task_id") or "")[:128],
+                "source": str(it.get("source") or "daily_action_items")[:64],
             }
         )
     return out
+
+
+def _calendar_today() -> str:
+    """行动板日历日：上海时区，避免 UTC 跨日把大厅 day 粘在昨天。"""
+    try:
+        from zoneinfo import ZoneInfo
+
+        return datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
+    except Exception:  # noqa: BLE001
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
 def build_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:
     """构建官网可读的双看板快照（patch=断点清单，update=工作目标）。"""
     from modstore_server.digest_action_items import latest_day, list_action_items, stats
 
-    use_day = day or latest_day() or None
+    calendar_day = _calendar_today()
+    day_stale = False
+    try:
+        strategic_updates = verified_strategic_goal_items(limit=100)
+    except Exception:
+        logger.exception("public_action_board: verified strategic goals unavailable")
+        strategic_updates = []
+    strategic_days = sorted(
+        {str(item.get("day") or "") for item in strategic_updates if item.get("day")}
+    )
+    source_day = max(
+        [value for value in [latest_day() or "", *strategic_days] if value], default=""
+    )
+    if day:
+        use_day = day
+    else:
+        # 优先「今天」；今天无条目再回退 latest，并显式标记 stale，禁止静默粘旧日。
+        today_any = list_action_items(day=calendar_day, limit=1)
+        today_strategic = any(item.get("day") == calendar_day for item in strategic_updates)
+        if today_any or today_strategic:
+            use_day = calendar_day
+        elif source_day:
+            use_day = source_day
+            day_stale = source_day != calendar_day
+        else:
+            use_day = calendar_day
+
     patches_raw = list_action_items(kind="patch", day=use_day, limit=100) if use_day else []
     updates_raw = list_action_items(kind="update", day=use_day, limit=100) if use_day else []
     patches = [_public_item(x) for x in patches_raw]
-    updates = [_public_item(x) for x in updates_raw]
+    updates = [
+        *[_public_item(x) for x in updates_raw],
+        *[item for item in strategic_updates if item.get("day") == use_day],
+    ]
     p_stats = stats(kind="patch", day=use_day) if use_day else {}
     u_stats = stats(kind="update", day=use_day) if use_day else {}
 
-    def _sum(s: Dict[str, Any]) -> Dict[str, Any]:
+    def _sum(s: Dict[str, Any], extras: List[Dict[str, Any]]) -> Dict[str, Any]:
         by_p = s.get("by_priority") or {}
+        extra_done = sum(1 for item in extras if item.get("status") in {"merged", "closed"})
+        total = int(s.get("total") or 0) + len(extras)
+        done = int(s.get("done") or 0) + extra_done
+        by_line = dict(s.get("by_line") or {})
+        for item in extras:
+            line = str(item.get("line") or "P-S")
+            by_line[line] = int(by_line.get(line) or 0) + 1
         return {
-            "total": int(s.get("total") or 0),
-            "done": int(s.get("done") or 0),
-            "completion_rate": float(s.get("completion_rate") or 0),
-            "p0": int(by_p.get("P0") or 0),
-            "p1_p2": int(by_p.get("P1") or 0) + int(by_p.get("P2") or 0),
-            "by_line": dict(s.get("by_line") or {}),
+            "total": total,
+            "done": done,
+            "completion_rate": round((done / total) * 100, 1) if total else 0.0,
+            "p0": int(by_p.get("P0") or 0)
+            + sum(1 for item in extras if item.get("priority") == "P0"),
+            "p1_p2": int(by_p.get("P1") or 0)
+            + int(by_p.get("P2") or 0)
+            + sum(1 for item in extras if item.get("priority") in {"P1", "P2"}),
+            "by_line": by_line,
         }
 
     return {
         "schema": "xcagi.public_action_board/v1",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "day": use_day,
+        "calendar_day": calendar_day,
+        "day_stale": day_stale,
         "readonly": True,
         "note": "公开只读进度看板；不含源码路径与内部标识。",
         "breakpoints": {
             "title": "断点清单",
             "kind": "patch",
-            "summary": _sum(p_stats),
+            "summary": _sum(p_stats, []),
             "items": patches,
         },
         "goals": {
             "title": "工作目标",
             "kind": "update",
-            "summary": _sum(u_stats),
+            "summary": _sum(
+                u_stats,
+                [item for item in strategic_updates if item.get("day") == use_day],
+            ),
             "items": updates,
         },
         "trajectory": build_trajectory(patches, updates),

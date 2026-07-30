@@ -1684,6 +1684,8 @@ def test_get_employee_tools_known_and_unknown():
         "test_llm_key_health",
         "query_provider_usage",
         "compare_model_prices",
+        "list_vlm_models",
+        "get_vlm_route",
         "query_local_token_usage",
         "query_cursor_usage",
         "query_codex_usage",

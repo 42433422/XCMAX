@@ -1,0 +1,25 @@
+{
+  "success": true,
+  "verdict": "PRODUCTION_READY_FOR_CONTROLLED_ROLLOUT",
+  "pytest_returncode": 0,
+  "stdout_tail": "============================= test session starts ==============================\nplatform darwin -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0\nrootdir: /Users/a4243342/Desktop/XCMAX/FHD\nconfigfile: pyproject.toml\nplugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.14.2\nasyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 18 items\n\ntests/test_application/test_shipment_excel_etl_production_ready.py ..... [ 27%]\n                                                                         [ 27%]\ntests/test_application/test_shipment_excel_etl_app_service.py .......... [ 83%]\n...                                                                      [100%]\n\n============================== 18 passed in 3.75s ==============================",
+  "stderr_tail": "",
+  "gates": [
+    "path_sandbox",
+    "auth_on_write_routes",
+    "tenant_fingerprint_unique",
+    "idempotent_immediate_persist",
+    "ledger_confirm_required",
+    "dry_run",
+    "compensate_on_failure",
+    "external_order_meta",
+    "batch_disabled_by_default",
+    "production_rbac_default_on_prod_env"
+  ],
+  "notes": [
+    "客户/产品导入与发货单写入仍非同一 DB 事务；发货单失败会补偿撤销本批发货单。",
+    "生产/预发默认要求登录 + shipment.create；桌面开发可设 FHD_SHIPMENT_ETL_REQUIRE_RBAC=0。",
+    "批量入库默认关闭，需 FHD_SHIPMENT_ETL_ALLOW_BATCH=1。",
+    "上线前请执行 alembic upgrade 到 2026_07_24_shipment_etl_fingerprints。"
+  ]
+}

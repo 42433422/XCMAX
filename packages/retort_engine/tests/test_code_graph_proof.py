@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from retort_engine.code_graph_proof import build_code_graph_proof, code_graph_proof_path, has_graph_parseable_code
+from retort_engine.code_graph_proof import (
+    build_code_graph_proof,
+    code_graph_proof_path,
+    has_graph_parseable_code,
+)
 
 
 def _write(path: Path, text: str) -> None:
@@ -26,7 +30,10 @@ def test_code_graph_proof_links_local_python_and_node_imports(tmp_path: Path) ->
         [root / "pkg" / "main.py", root / "web" / "view.ts"],
     )
 
-    edges = {(edge["source"], edge["target"], edge["target_is_local"]) for edge in proof["edges"]}
+    edges = {
+        (edge["source"], edge["target"], edge["target_is_local"])
+        for edge in proof["edges"]
+    }
     assert ("pkg/main.py", "pkg/helpers.py", True) in edges
     assert ("pkg/main.py", "json", False) in edges
     assert ("web/view.ts", "web/draw.ts", True) in edges
@@ -34,7 +41,9 @@ def test_code_graph_proof_links_local_python_and_node_imports(tmp_path: Path) ->
     assert proof["node_count"] >= 4
 
 
-def test_code_graph_parseable_filter_excludes_retort_cache_and_empty_files(tmp_path: Path) -> None:
+def test_code_graph_parseable_filter_excludes_retort_cache_and_empty_files(
+    tmp_path: Path,
+) -> None:
     root = tmp_path / "project"
     _write(root / "src" / "main.py", "print('ok')\n")
     _write(root / "src" / "empty.py", "")
@@ -42,5 +51,7 @@ def test_code_graph_parseable_filter_excludes_retort_cache_and_empty_files(tmp_p
 
     assert has_graph_parseable_code(root, root / "src" / "main.py") is True
     assert has_graph_parseable_code(root, root / "src" / "empty.py") is False
-    assert has_graph_parseable_code(root, root / ".retort" / "cache" / "tmp.py") is False
+    assert (
+        has_graph_parseable_code(root, root / ".retort" / "cache" / "tmp.py") is False
+    )
     assert code_graph_proof_path(root, "abc").name == "retort_code_graph_proof_abc.json"

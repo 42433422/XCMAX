@@ -15,13 +15,34 @@ def verify_external_advantage_rows(rows: list[dict[str, Any]]) -> dict[str, Any]
             "regression_case_count": len(cases),
             "passed_regression_case_count": len(passed),
             "direct_execution_case_count": len(direct_cases),
-            "all_use_direct_review_execution": bool(cases) and len(direct_cases) == len(cases),
+            "all_use_direct_review_execution": bool(cases)
+            and len(direct_cases) == len(cases),
             "all_delta_regressions_verified": bool(cases) and len(passed) == len(cases),
-            "all_have_before_after_scores": all(case["checks"]["before_after_scores"] for case in cases) if cases else False,
-            "all_have_positive_delta": all(case["checks"]["positive_delta"] for case in cases) if cases else False,
-            "all_match_expected_context": all(case["checks"]["expected_context"] for case in cases) if cases else False,
-            "all_match_expected_severity": all(case["checks"]["expected_severity"] for case in cases) if cases else False,
-            "all_have_publishable_output": all(case["checks"]["publishable_output"] for case in cases) if cases else False,
+            "all_have_before_after_scores": all(
+                case["checks"]["before_after_scores"] for case in cases
+            )
+            if cases
+            else False,
+            "all_have_positive_delta": all(
+                case["checks"]["positive_delta"] for case in cases
+            )
+            if cases
+            else False,
+            "all_match_expected_context": all(
+                case["checks"]["expected_context"] for case in cases
+            )
+            if cases
+            else False,
+            "all_match_expected_severity": all(
+                case["checks"]["expected_severity"] for case in cases
+            )
+            if cases
+            else False,
+            "all_have_publishable_output": all(
+                case["checks"]["publishable_output"] for case in cases
+            )
+            if cases
+            else False,
         },
         "cases": cases,
         "evidence": {
@@ -37,8 +58,12 @@ def _verify_row(row: dict[str, Any]) -> dict[str, Any]:
     retort = row.get("retort") if isinstance(row.get("retort"), dict) else {}
     expected_context = str(row.get("expected_context") or "")
     expected_severity = str(row.get("expected_severity") or "")
-    observed_contexts = {str(item) for item in retort.get("observed_contexts") or [] if str(item)}
-    observed_severities = {str(item) for item in retort.get("observed_severities") or [] if str(item)}
+    observed_contexts = {
+        str(item) for item in retort.get("observed_contexts") or [] if str(item)
+    }
+    observed_severities = {
+        str(item) for item in retort.get("observed_severities") or [] if str(item)
+    }
     try:
         baseline_score = int(baseline.get("score") or 0)
         retort_score = int(retort.get("score") or 0)
@@ -50,14 +75,21 @@ def _verify_row(row: dict[str, Any]) -> dict[str, Any]:
     direct = _direct_review_assertions(row, expected_context, expected_severity)
     checks = {
         "before_after_scores": retort_score > baseline_score >= 0,
-        "positive_delta": behavior_delta == retort_score - baseline_score and behavior_delta > 0,
+        "positive_delta": behavior_delta == retort_score - baseline_score
+        and behavior_delta > 0,
         "expected_context": bool(expected_context)
-        and (bool(retort.get("context_matched")) or expected_context in observed_contexts)
+        and (
+            bool(retort.get("context_matched")) or expected_context in observed_contexts
+        )
         and direct["context_matched"],
         "expected_severity": bool(expected_severity)
-        and (bool(retort.get("severity_matched")) or expected_severity in observed_severities)
+        and (
+            bool(retort.get("severity_matched"))
+            or expected_severity in observed_severities
+        )
         and direct["severity_matched"],
-        "publishable_output": int(retort.get("publishable_comment_count") or 0) > 0 and direct["publishable_output"],
+        "publishable_output": int(retort.get("publishable_comment_count") or 0) > 0
+        and direct["publishable_output"],
         "direct_review_execution": direct["executed"],
     }
     return {
@@ -73,7 +105,9 @@ def _verify_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _direct_review_assertions(row: dict[str, Any], expected_context: str, expected_severity: str) -> dict[str, Any]:
+def _direct_review_assertions(
+    row: dict[str, Any], expected_context: str, expected_severity: str
+) -> dict[str, Any]:
     diff = str(row.get("diff") or "")
     if not diff.strip():
         return {
@@ -85,13 +119,31 @@ def _direct_review_assertions(row: dict[str, Any], expected_context: str, expect
             "observed_contexts": [],
             "observed_severities": [],
         }
-    review = review_diff(diff, issue_context=str(row.get("external_advantage") or row.get("absorbed_signal") or ""), max_comments=8)
+    review = review_diff(
+        diff,
+        issue_context=str(
+            row.get("external_advantage") or row.get("absorbed_signal") or ""
+        ),
+        max_comments=8,
+    )
     comments = [item for item in review.get("comments") or [] if isinstance(item, dict)]
     summary = review.get("summary") if isinstance(review.get("summary"), dict) else {}
-    extension_policy = summary.get("extension_policy") if isinstance(summary.get("extension_policy"), dict) else {}
-    contexts = {str(item.get("review_context") or "") for item in comments if item.get("review_context")}
-    contexts.update(str(item) for item in extension_policy.get("review_contexts") or [] if str(item))
-    severities = {str(item.get("severity") or "") for item in comments if item.get("severity")}
+    extension_policy = (
+        summary.get("extension_policy")
+        if isinstance(summary.get("extension_policy"), dict)
+        else {}
+    )
+    contexts = {
+        str(item.get("review_context") or "")
+        for item in comments
+        if item.get("review_context")
+    }
+    contexts.update(
+        str(item) for item in extension_policy.get("review_contexts") or [] if str(item)
+    )
+    severities = {
+        str(item.get("severity") or "") for item in comments if item.get("severity")
+    }
     publishable_count = sum(1 for item in comments if item.get("publishable"))
     return {
         "executed": True,

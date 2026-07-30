@@ -46,8 +46,15 @@ export const xcmaxEmployeeAutonomyApi = {
   listQuestions(params: Record<string, unknown> = {}) {
     return empGet('/questions', params)
   },
-  answerQuestion(id: string | number, answer: string) {
-    return empPost(`/questions/${encodeURIComponent(String(id))}/answer`, { answer })
+  answerQuestion(
+    id: string | number,
+    answer: string,
+    answers?: Record<string, string>,
+  ) {
+    const body: Record<string, unknown> = {}
+    if (answer) body.answer = answer
+    if (answers && Object.keys(answers).length) body.answers = answers
+    return empPost(`/questions/${encodeURIComponent(String(id))}/answer`, body)
   },
   scorecard(params: Record<string, unknown> = {}) {
     return empGet('/scorecard', params)

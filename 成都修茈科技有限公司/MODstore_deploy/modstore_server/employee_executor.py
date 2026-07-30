@@ -21,6 +21,7 @@ from urllib.parse import urlparse
 import httpx
 
 from modstore_server.catalog_store import files_dir
+from modstore_server.duty_burn_in_handlers import bind_reviewed_burn_in_handlers
 from modstore_server.employee_runtime import (
     build_employee_context,
     load_employee_pack_resolved,
@@ -1138,22 +1139,33 @@ def _trusted_system_burn_in_project_root(
     user_id: int,
     read_only: bool,
 ) -> str:
-    """Allow only system read-only burn-ins to observe the configured repo.
+    """Allow system identity to use the configured monorepo root.
 
-    Normal agent runs remain tenant-workspace scoped.  The exception requires
-    all of: system identity, the burn-in marker, effective read-only mode, and
-    a real directory contained by ``XCMAX_MONOREPO_ROOT``.  Resolving both
-    paths before the containment check prevents symlink or ``..`` escapes.
+    Normal agent runs remain tenant-workspace scoped. Trusted exceptions:
+
+    - read-only burn-in / duty observation (``burn_in_read_only`` or
+      ``_trusted_duty_contract_execution`` + ``read_only``)
+    - system incident-team / duty write under monorepo
+      (``_trusted_incident_team_execution`` or write-capable trusted duty)
+
+    Paths must resolve under ``XCMAX_MONOREPO_ROOT`` (symlink/``..`` safe).
     """
 
-    trusted_duty_execution = cog_input.get("_trusted_duty_contract_execution") is True
-    if (
-        int(user_id or 0) > 0
-        or not read_only
-        or not (cog_input.get("burn_in_read_only") is True or trusted_duty_execution)
-    ):
+    if int(user_id or 0) > 0:
         return ""
-    configured = str(os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
+    trusted_duty_execution = cog_input.get("_trusted_duty_contract_execution") is True
+    trusted_incident_team = cog_input.get("_trusted_incident_team_execution") is True
+    burn_in = cog_input.get("burn_in_read_only") is True
+    allow_read = read_only and (burn_in or trusted_duty_execution)
+    allow_write = trusted_incident_team or (trusted_duty_execution and not read_only)
+    if not (allow_read or allow_write):
+        return ""
+    configured = str(
+        os.environ.get("XCMAX_MONOREPO_ROOT")
+        or os.environ.get("MODSTORE_DUTY_PROJECT_ROOT")
+        or os.environ.get("MODSTORE_REPO_ROOT")
+        or ""
+    ).strip()
     if not configured:
         return ""
     trusted_root = Path(configured).expanduser().resolve()
@@ -1712,15 +1724,51 @@ def _action_direct_python(
         if asyncio.iscoroutine(out):
             out = _run_coro_sync(out)
         if isinstance(out, dict):
-            return {
+            ok = bool(out.get("ok", out.get("success", True)))
+            detail = {
                 "handler": "direct_python",
-                "ok": bool(out.get("ok", out.get("success", True))),
+                "ok": ok,
                 "output": out,
             }
+            if not ok:
+                err = str(
+                    out.get("error") or out.get("error_code") or out.get("summary") or ""
+                ).strip()
+                if err:
+                    detail["error"] = err[:1000]
+            return detail
         return {"handler": "direct_python", "ok": True, "output": out}
     except Exception as exc:  # noqa: BLE001
         logger.exception("direct_python handler failed employee_id=%s", employee_id)
         return {"handler": "direct_python", "ok": False, "error": str(exc)[:1000]}
+
+
+def _prefer_para_with_local_fallback(
+    selected: List[str],
+    available: List[str],
+) -> List[str]:
+    """Para 优先，但保留本地 agent/vibe/cursor 回退，避免 Mac Bridge 离线整单卡死。"""
+    try:
+        from modstore_server.para_delegate_handler import (
+            para_delegate_enabled,
+            para_delegate_ready_for_dispatch,
+        )
+    except Exception:
+        return list(selected)
+
+    if not (para_delegate_enabled() and para_delegate_ready_for_dispatch()):
+        return list(selected)
+
+    avail = {str(h) for h in (available or [])}
+    ordered: List[str] = ["para_delegate"]
+    for handler in selected:
+        name = str(handler or "").strip()
+        if name and name != "para_delegate" and name not in ordered:
+            ordered.append(name)
+    for handler in ("agent", "vibe_edit", "cursor_delegate", "direct_python", "llm_md"):
+        if handler in avail and handler not in ordered:
+            ordered.append(handler)
+    return ordered
 
 
 def _filter_handlers_vibe_coding_maintainer(
@@ -1743,15 +1791,18 @@ def _filter_handlers_vibe_coding_maintainer(
         def para_delegate_ready_for_dispatch() -> bool:
             return False
 
-    if para_delegate_enabled() and para_delegate_ready_for_dispatch():
-        return ["para_delegate"]
+    # 目录包常落后于 SSOT：只剩 direct_python 时，事故 fix 会卡在模块不支持的 handler。
+    normalized = [str(h or "").strip() for h in handlers if str(h or "").strip()]
+    if normalized and set(normalized) <= {"direct_python"}:
+        expanded = ["vibe_edit", "agent", "llm_md", "direct_python"]
+        return _prefer_para_with_local_fallback(expanded, expanded)
 
     requested = str(inp.get("handler") or "").strip()
     if requested and requested in handlers:
         out = [requested]
         if "llm_md" in handlers and requested != "llm_md":
             out.append("llm_md")
-        return out
+        return _prefer_para_with_local_fallback(out, handlers)
 
     priority = str(inp.get("priority") or "").upper()
     delegate = str(inp.get("delegate") or "").lower()
@@ -1772,20 +1823,25 @@ def _filter_handlers_vibe_coding_maintainer(
             selected.append("direct_python")
         if "llm_md" in handlers:
             selected.append("llm_md")
-        return selected or list(handlers)
+        return _prefer_para_with_local_fallback(selected or list(handlers), handlers)
 
     if multi_step and "agent" in handlers:
         selected = ["agent"]
         if "llm_md" in handlers:
             selected.append("llm_md")
-        return selected
+        return _prefer_para_with_local_fallback(selected, handlers)
 
     selected = []
     if "vibe_edit" in handlers:
         selected.append("vibe_edit")
+    if "agent" in handlers:
+        selected.append("agent")
     if "llm_md" in handlers:
         selected.append("llm_md")
-    return selected or list(handlers)
+    base = selected or list(handlers)
+    if para_delegate_enabled() and para_delegate_ready_for_dispatch():
+        return _prefer_para_with_local_fallback(base, handlers)
+    return base
 
 
 def _actions_real(
@@ -1819,20 +1875,23 @@ def _actions_real(
         employee_id in ("vibe-coding-maintainer", "change-request-auditor", "test-qa-runner")
         and not deterministic_council_review
     ):
-        try:
-            from modstore_server.para_delegate_handler import (
-                para_delegate_enabled,
-                para_delegate_ready_for_dispatch,
-            )
-
-            if para_delegate_enabled() and para_delegate_ready_for_dispatch():
-                handlers = ["para_delegate"]
-        except Exception:
-            pass
+        # Para 优先，但绝不能独占 handlers（Mac Bridge 离线时需本地回退）
+        handlers = _prefer_para_with_local_fallback(list(handlers), list(handlers))
     if employee_id == "vibe-coding-maintainer":
         handlers = _filter_handlers_vibe_coding_maintainer(handlers, reasoning, task)
     outputs: List[Dict[str, Any]] = []
+    skip_local_after_para_ok = False
+    _LOCAL_FALLBACK_HANDLERS = {
+        "agent",
+        "vibe_edit",
+        "vibe_heal",
+        "vibe_code",
+        "cursor_delegate",
+        "direct_python",
+    }
     for handler in handlers:
+        if skip_local_after_para_ok and str(handler) in _LOCAL_FALLBACK_HANDLERS:
+            continue
         if handler == "echo":
             outputs.append({"handler": "echo", "output": reasoning.get("reasoning", "")})
         elif handler == "http_request":
@@ -1916,13 +1975,14 @@ def _actions_real(
             from modstore_server.para_delegate_handler import dispatch_para_delegate
 
             cog_in = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
-            outputs.append(
-                dispatch_para_delegate(
-                    task=task,
-                    input_data=cog_in,
-                    employee_id=employee_id,
-                )
+            para_out = dispatch_para_delegate(
+                task=task,
+                input_data=cog_in,
+                employee_id=employee_id,
             )
+            outputs.append(para_out)
+            if isinstance(para_out, dict) and para_out.get("ok") is True:
+                skip_local_after_para_ok = True
         elif handler == "cursor_delegate":
             from modstore_server.cursor_delegate_handler import dispatch_cursor_delegate
 
@@ -2197,13 +2257,18 @@ def _auto_wrap_execution_result_to_change_requests(
 
 
 def _handlers_execution_ok(result: Dict[str, Any]) -> bool:
-    """actions 层 outputs 中任一 handler 显式 ok=False 则视为失败。"""
+    """actions 层：任一 handler 显式成功即通过；否则任一 ok=False 为失败。
+
+    用于 Para 离线后的本地回退：``para_delegate`` 失败但 ``agent``/``vibe_edit``
+    成功时不应整单 handler_failed。
+    """
     outputs = result.get("outputs") if isinstance(result.get("outputs"), list) else []
     if not outputs:
         return True
-    for out in outputs:
-        if isinstance(out, dict) and out.get("ok") is False:
-            return False
+    if any(isinstance(out, dict) and out.get("ok") is True for out in outputs):
+        return True
+    if any(isinstance(out, dict) and out.get("ok") is False for out in outputs):
+        return False
     return True
 
 
@@ -2218,6 +2283,13 @@ def _handler_failure_detail(result: Dict[str, Any]) -> str:
             value = str(out.get(key) or "").strip()
             if value:
                 parts.append(f"{key}={value}")
+        nested = out.get("output") if isinstance(out.get("output"), dict) else {}
+        if nested:
+            for key in ("error_code", "error", "summary"):
+                value = str(nested.get(key) or "").strip()
+                if value:
+                    parts.append(f"{key}={value[:240]}")
+                    break
         return "handler failed: " + " ".join(parts) if parts else "handler returned ok=False"
     return "one or more handlers returned ok=False"
 
@@ -2295,7 +2367,7 @@ def execute_employee_task(
         with sf() as session:
             try:
                 pack = load_employee_pack_resolved(session, employee_id)
-                manifest = pack.get("manifest") or {}
+                manifest, burn_in_eligibility = pack.get("manifest") or {}, {}
                 reviewed_contract, reviewed_manifest = _trusted_system_duty_contract_execution(
                     employee_id,
                     payload,
@@ -2329,15 +2401,15 @@ def execute_employee_task(
 
                     manifest = load_reviewed_duty_manifest(employee_id)
                     reviewed_contract = workforce_contract_map().get(employee_id) or {}
-                    eligibility = assess_burn_in_eligibility(
+                    burn_in_eligibility = assess_burn_in_eligibility(
                         employee_id,
                         reviewed_contract,
                         manifest,
                     )
-                    if eligibility.get("eligible") is not True:
+                    if burn_in_eligibility.get("eligible") is not True:
                         raise RuntimeError(
                             "duty burn-in eligibility rejected: "
-                            + str(eligibility.get("reason") or "unknown")
+                            + str(burn_in_eligibility.get("reason") or "unknown")
                         )
                     # Never trust a caller-supplied contract risk label.  The
                     # risk SSOT receives the reviewed on-disk contract.
@@ -2361,6 +2433,7 @@ def execute_employee_task(
                         exc_info=True,
                     )
                     runtime_policy = {}
+                config = bind_reviewed_burn_in_handlers(config, burn_in_eligibility)
                 actions_section = config.get("actions") or {}
                 actions_inner = (
                     actions_section.get("actions")
@@ -2368,9 +2441,7 @@ def execute_employee_task(
                     else actions_section
                 )
                 handler_list = list((actions_inner or {}).get("handlers") or [])
-
                 gate = _evaluate_employee_risk_gate(employee_id, manifest, handler_list, payload)
-
                 if not gate.get("ok"):
                     duration_ms = round((time.perf_counter() - t0) * 1000, 3)
                     session.add(

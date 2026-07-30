@@ -20,6 +20,22 @@ describe('xcmaxMarketProxy functions', () => {
     vi.clearAllMocks()
   })
 
+  describe('assertDutyGraphHealth', () => {
+    it('accepts only an explicit healthy response', () => {
+      expect(() => xcmaxMarketProxy.assertDutyGraphHealth({ success: true })).not.toThrow()
+      expect(() => xcmaxMarketProxy.assertDutyGraphHealth({})).toThrow(
+        '编制健康接口未返回可信健康状态',
+      )
+    })
+
+    it('preserves a server staffing error even when success is true', () => {
+      expect(() => xcmaxMarketProxy.assertDutyGraphHealth({
+        success: true,
+        staffing: { error: 'Catalog 连接失败' },
+      })).toThrow('Catalog 连接失败')
+    })
+  })
+
   describe('isLocalDutyApiAvailable', () => {
     it('returns true when local API is available', async () => {
       mockApi.get.mockResolvedValue({ ok: true })

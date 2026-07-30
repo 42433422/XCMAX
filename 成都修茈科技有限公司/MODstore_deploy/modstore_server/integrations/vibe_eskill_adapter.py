@@ -50,7 +50,7 @@ def _render_brief(logic: Dict[str, Any], input_data: Dict[str, Any]) -> str:
 
 
 def _resolve_project_root(logic: Dict[str, Any], user_id: int) -> Optional[str]:
-    """Validate ``logic.project_root`` against the user workspace.
+    """Validate ``logic.project_root`` against trusted monorepo or user workspace.
 
     Returns the resolved absolute path string, or ``None`` when not supplied.
     Raises :class:`~modstore_server.integrations.vibe_adapter.VibePathError`
@@ -60,8 +60,17 @@ def _resolve_project_root(logic: Dict[str, Any], user_id: int) -> Optional[str]:
     if not raw:
         return None
     try:
+        from modstore_server.employee_executor import _trusted_system_burn_in_project_root
         from modstore_server.integrations.vibe_adapter import ensure_within_workspace
 
+        trusted = _trusted_system_burn_in_project_root(
+            raw,
+            cog_input=logic if isinstance(logic, dict) else {},
+            user_id=int(user_id or 0),
+            read_only=False,
+        )
+        if trusted:
+            return trusted
         validated = ensure_within_workspace(raw, user_id=int(user_id or 0))
         return str(validated)
     except Exception:  # VibePathError or any OS error — re-raise so caller can surface it
@@ -87,7 +96,6 @@ def execute_vibe_code_kind(
     try:
         from modstore_server.integrations.vibe_adapter import (
             VibeIntegrationError,
-            VibePathError,
             get_vibe_coder,
         )
     except ImportError as exc:  # pragma: no cover
@@ -105,10 +113,11 @@ def execute_vibe_code_kind(
             "error": "缺少 provider/model",
         }
 
-    # Validate and resolve project_root (workspace-bounded path check).
+    # Validate and resolve project_root (trusted monorepo or tenant workspace).
     project_root: Optional[str] = None
     try:
-        project_root = _resolve_project_root(logic, int(user_id or 0))
+        root_logic = {**(input_data or {}), **(logic or {})}
+        project_root = _resolve_project_root(root_logic, int(user_id or 0))
     except Exception as exc:  # noqa: BLE001
         return {
             "eskill_logic_type": "vibe_code",

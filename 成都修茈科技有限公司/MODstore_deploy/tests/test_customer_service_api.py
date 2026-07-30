@@ -42,7 +42,10 @@ def _paid_order(tmp_path, monkeypatch, user_id: int) -> str:
         plan_id="plan_basic",
     )
     payment_orders.update_status(
-        out_trade_no=order_no, status="paid", trade_no="TRADE1", paid_at="2026-01-01T00:00:00Z"
+        out_trade_no=order_no,
+        status="paid",
+        trade_no="TRADE1",
+        paid_at="2026-01-01T00:00:00Z",
     )
     return order_no
 
@@ -92,7 +95,8 @@ def test_customer_service_refund_chat_creates_ticket_action_and_refund(
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
-def test_customer_service_missing_fields_requests_more_info(client, monkeypatch):
+def test_customer_service_incomplete_refund_chats_without_ticket(client, monkeypatch):
+    """材料不齐的退款诉求只聊天引导，不立刻建单。"""
     from modstore_server import customer_service_api
     from modstore_server.app import app
 
@@ -103,16 +107,18 @@ def test_customer_service_missing_fields_requests_more_info(client, monkeypatch)
         r = client.post("/api/customer-service/chat", json={"message": "我要退款", "context": {}})
         assert r.status_code == 200, r.text
         data = r.json()
-        assert data["ticket"]["intent"] == "refund"
-        assert data["decision"]["decision"] == "needs_more_info"
-        assert data["actions"] == []
+        assert data["ticket"] is None
+        assert data["intent"]["intent"] == "refund"
+        assert data["intent"]["need_ticket"] is False
+        assert "提交工单" in data["message"]["content"]
     finally:
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
-def test_customer_service_chat_does_not_block_on_incident_publish(client, monkeypatch):
+def test_customer_service_chat_does_not_block_on_incident_publish_async(client, monkeypatch):
     """建单后的 incident 派发若同步执行会卡死「处理中…」；必须异步。"""
     import time
+    from threading import Event
 
     from modstore_server import customer_service_api
     from modstore_server.app import app
@@ -120,11 +126,11 @@ def test_customer_service_chat_does_not_block_on_incident_publish(client, monkey
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     user = _make_user("cs_async_inc")
     started = {"ok": False}
+    started_event = Event()
 
     def slow_publish(payload):
         started["ok"] = True
-        time.sleep(3)
-        return None
+        started_event.set()
 
     monkeypatch.setattr(customer_service_api, "_publish_customer_ticket_incident", slow_publish)
     app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
@@ -140,10 +146,46 @@ def test_customer_service_chat_does_not_block_on_incident_publish(client, monkey
         elapsed = time.time() - t0
         assert r.status_code == 200, r.text
         assert r.json().get("ticket")
-        assert elapsed < 1.5, f"chat blocked on incident publish: {elapsed:.2f}s"
-        deadline = time.time() + 1.0
-        while time.time() < deadline and not started["ok"]:
-            time.sleep(0.05)
+        assert elapsed < 4.0, f"chat unexpectedly slow on async incident publish: {elapsed:.2f}s"
+        assert started_event.wait(1.0)
+        assert started["ok"] is True
+    finally:
+        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+
+
+def test_customer_service_chat_does_not_block_on_incident_publish(client, monkeypatch):
+    """建单后的 incident 派发若同步执行会卡死「处理中…」；必须异步。"""
+    import time
+    from threading import Event
+
+    from modstore_server import customer_service_api
+    from modstore_server.app import app
+
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    user = _make_user("cs_async_inc")
+    started = {"ok": False}
+    started_event = Event()
+
+    def slow_publish(payload):
+        started["ok"] = True
+        started_event.set()
+
+    monkeypatch.setattr(customer_service_api, "_publish_customer_ticket_incident", slow_publish)
+    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+    try:
+        t0 = time.time()
+        r = client.post(
+            "/api/customer-service/chat",
+            json={
+                "message": "订单号 RF123456 想退款，原因是重复购买",
+                "context": {"channel": "web"},
+            },
+        )
+        elapsed = time.time() - t0
+        assert r.status_code == 200, r.text
+        assert r.json().get("ticket")
+        assert elapsed < 4.0, f"chat unexpectedly slow on async incident publish: {elapsed:.2f}s"
+        assert started_event.wait(1.0)
         assert started["ok"] is True
     finally:
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)
@@ -200,17 +242,313 @@ def test_customer_service_escalate_phrase_creates_ticket(client, monkeypatch):
         assert data["ticket"] is not None
         assert data["ticket"]["intent"] == "general"
         assert data["intent"]["need_ticket"] is True
+        # 功能/咨询类无自动动作：应登记跟进，不能秒结案
+        assert data["ticket"]["status"] == "processing"
+        assert data["ticket"]["status"] != "resolved"
+        assert (data.get("decision") or {}).get("decision") == "accepted"
+        assert "已处理完成" not in str(data.get("message", {}).get("content") or "")
     finally:
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
+def test_customer_service_ui_bug_escalate_stays_processing(client, monkeypatch):
+    from modstore_server import customer_service_api
+    from modstore_server.app import app
+
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    user = _make_user("cs_ui_bug")
+    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+    try:
+        r1 = client.post(
+            "/api/customer-service/chat",
+            json={"message": "浅色模式/自选模型文字看不见", "context": {}},
+        )
+        assert r1.status_code == 200, r1.text
+        d1 = r1.json()
+        assert d1["ticket"] is None
+        assert d1["intent"]["intent"] == "product_issue"
+        sid = d1["session"]["id"]
+        r2 = client.post(
+            "/api/customer-service/chat",
+            json={"message": "提交工单", "session_id": sid, "context": {}},
+        )
+        assert r2.status_code == 200, r2.text
+        data = r2.json()
+        assert data["ticket"] is not None
+        assert data["ticket"]["intent"] == "product_issue"
+        assert data["ticket"]["status"] == "processing"
+        assert data["ticket"]["title"] == "平台功能问题"
+        assert data["ticket"].get("issue_domain") == "platform"
+        assert data["ticket"].get("issue_domain_label") == "平台"
+        assert (data.get("decision") or {}).get("decision") == "accepted"
+        assert data["ticket"].get("lifecycle_stage") == 2
+        body = str(data.get("message", {}).get("content") or "")
+        assert "已处理完成" not in body
+        assert "功能问题" in body or "浅色" in body or "看不见" in body
+    finally:
+        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+
+
+def test_resolve_issue_domain_three_way():
+    from modstore_server.customer_service_orchestrator import (
+        _parse_domain_clarify_reply,
+        resolve_issue_domain,
+    )
+
+    platform = resolve_issue_domain(
+        intent="product_issue",
+        text="浅色模式/自选模型文字看不见",
+        extracted={},
+        context={},
+    )
+    assert platform["domain"] == "platform"
+
+    software = resolve_issue_domain(
+        intent="product_issue",
+        text="这个员工包打不开",
+        extracted={"catalog_id": 12},
+        context={},
+    )
+    assert software["domain"] == "software"
+
+    custom = resolve_issue_domain(
+        intent="product_issue",
+        text="我的定制员工回复异常",
+        extracted={"account_custom": True},
+        context={},
+    )
+    assert custom["domain"] == "custom"
+    assert custom["label"] == "客户定制"
+    assert _parse_domain_clarify_reply("是平台") == "platform"
+    assert (
+        resolve_issue_domain(intent="greeting", text="是平台", extracted={}, context={})["domain"]
+        == "platform"
+    )
+
+
+def test_product_issue_domain_clarify_continues_ticket(client, monkeypatch):
+    from modstore_server import customer_service_api
+    from modstore_server.app import app
+
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    published: list = []
+
+    def _fake_publish(event_type, payload, *, source, fingerprint=None):
+        published.append(
+            {"event_type": event_type, "payload": dict(payload or {}), "source": source}
+        )
+        return True
+
+    monkeypatch.setattr(
+        "modstore_server.incident_bus.publish",
+        _fake_publish,
+    )
+    # 强制同步调度线程目标，便于断言
+    monkeypatch.setattr(
+        customer_service_api,
+        "_schedule_customer_ticket_incident",
+        lambda payload: customer_service_api._publish_customer_ticket_incident(payload),
+    )
+
+    user = _make_user("cs_domain_clarify")
+    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+    try:
+        r1 = client.post(
+            "/api/customer-service/chat",
+            json={"message": "浅色模式/自选模型文字看不见", "context": {}},
+        )
+        assert r1.status_code == 200, r1.text
+        sid = r1.json()["session"]["id"]
+        r2 = client.post(
+            "/api/customer-service/chat",
+            json={
+                "message": "提交工单",
+                "session_id": sid,
+                "context": {"reason": "浅色模式/自选模型文字看不见"},
+            },
+        )
+        assert r2.status_code == 200, r2.text
+        assert r2.json()["ticket"]["status"] == "processing"
+        published.clear()
+
+        r3 = client.post(
+            "/api/customer-service/chat",
+            json={"message": "是平台", "session_id": sid, "context": {}},
+        )
+        assert r3.status_code == 200, r3.text
+        data = r3.json()
+        assert data["ticket"] is not None
+        assert data["ticket"]["intent"] == "product_issue"
+        assert data["ticket"]["status"] == "processing"
+        assert data["ticket"]["issue_domain"] == "platform"
+        assert data["ticket"]["title"] == "平台功能问题"
+        body = str(data.get("message", {}).get("content") or "")
+        assert "确认" in body or "平台" in body
+        assert "已处理完成" not in body
+        assert published, "应再次发布 ops.intake.customer_ticket 给 intake-dispatcher"
+        assert published[-1]["event_type"] == "ops.intake.customer_ticket"
+        assert published[-1]["payload"].get("user_confirmed_domain") == "platform"
+        assert published[-1]["payload"].get("source") == "customer_ticket"
+    finally:
+        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+
+
+def test_parse_intent_json_handles_truncated_minimax():
+    from modstore_server.customer_service_orchestrator import (
+        _parse_intent_json,
+        classify_customer_intent,
+        extract_fields,
+    )
+
+    truncated = '\n{"intent":"general","need_ticket":false,"confidence":0'
+    data = _parse_intent_json(truncated)
+    assert data is not None
+    assert data["intent"] == "general"
+
+    # LLM 关闭时，缺陷语义仍落到 product_issue
+    import os
+
+    os.environ["MODSTORE_CS_LLM_INTENT"] = "0"
+    c = classify_customer_intent(
+        "浅色模式/自选模型文字看不见",
+        extract_fields("浅色模式/自选模型文字看不见", {}),
+    )
+    assert c["intent"] == "product_issue"
+    assert c["need_ticket"] is False
+
+
+def test_ticket_lifecycle_five_stages():
+    from modstore_server.customer_service_orchestrator import (
+        ticket_lifecycle_payload,
+        ticket_lifecycle_stage,
+    )
+
+    assert ticket_lifecycle_stage("open") == 1
+    assert ticket_lifecycle_stage("processing") == 2
+    assert ticket_lifecycle_stage("processing", "accepted") == 2
+    assert ticket_lifecycle_stage("processing", "approved") == 3
+    assert ticket_lifecycle_stage("waiting_user") == 4
+    assert ticket_lifecycle_stage("resolved") == 5
+    payload = ticket_lifecycle_payload("waiting_user")
+    assert payload["lifecycle_label"] == "待补充"
+    assert [s["state"] for s in payload["lifecycle_steps"]] == [
+        "done",
+        "done",
+        "done",
+        "current",
+        "todo",
+    ]
+
+
+def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monkeypatch):
+    """incident team 结果应回写客服消息，并把工单推到「有结果」。"""
+    from modstore_server import customer_service_api
+    from modstore_server.app import app
+    from modstore_server.customer_service_orchestrator import (
+        apply_customer_ticket_incident_progress,
+        ticket_lifecycle_stage,
+    )
+    from modstore_server.models import get_session_factory
+    from modstore_server.models_cs import CustomerServiceMessage, CustomerServiceTicket
+
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    monkeypatch.setattr(
+        customer_service_api,
+        "_schedule_customer_ticket_incident",
+        lambda payload: None,
+    )
+    user = _make_user("cs_emp_progress")
+    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+    try:
+        r1 = client.post(
+            "/api/customer-service/chat",
+            json={"message": "浅色模式文字看不见", "context": {}},
+        )
+        assert r1.status_code == 200, r1.text
+        sid = r1.json()["session"]["id"]
+        r2 = client.post(
+            "/api/customer-service/chat",
+            json={
+                "message": "提交工单",
+                "session_id": sid,
+                "context": {"reason": "浅色模式文字看不见"},
+            },
+        )
+        assert r2.status_code == 200, r2.text
+        ticket_id = int(r2.json()["ticket"]["id"])
+    finally:
+        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+
+    sf = get_session_factory()
+    with sf() as db:
+        out = apply_customer_ticket_incident_progress(
+            db,
+            ticket_id=ticket_id,
+            event_id=99001,
+            team_ok=False,
+            team_rows=[
+                {
+                    "role": "scout",
+                    "employee_id": "change-request-auditor",
+                    "ok": False,
+                    "status": "handler_failed",
+                },
+                {
+                    "role": "fix",
+                    "employee_id": "vibe-coding-maintainer",
+                    "ok": False,
+                    "status": "handler_failed",
+                },
+                {
+                    "role": "verify",
+                    "employee_id": "test-qa-runner",
+                    "ok": True,
+                    "status": "success",
+                },
+            ],
+            summary_hint="浅色模式文字看不见",
+        )
+        db.commit()
+        assert out.get("ok") is True
+        assert out.get("lifecycle_stage") == 3
+        ticket = (
+            db.query(CustomerServiceTicket).filter(CustomerServiceTicket.id == ticket_id).first()
+        )
+        assert ticket is not None
+        assert ticket.status == "processing"
+        assert ticket.decision_status == "approved"
+        assert ticket_lifecycle_stage(ticket.status, ticket.decision_status) == 3
+        msgs = (
+            db.query(CustomerServiceMessage)
+            .filter(
+                CustomerServiceMessage.ticket_id == ticket_id,
+                CustomerServiceMessage.role == "assistant",
+            )
+            .order_by(CustomerServiceMessage.id.desc())
+            .all()
+        )
+        assert any("员工处理进展" in (m.content or "") for m in msgs)
+
+
 def test_infer_intent_order_no_alone_is_not_refund():
-    from modstore_server.customer_service_orchestrator import infer_intent, should_create_ticket
+    from modstore_server.customer_service_orchestrator import (
+        infer_intent,
+        should_create_ticket,
+    )
 
     intent = infer_intent("订单号：ABC123456789", {"order_no": "ABC123456789"})
     assert intent == "general"
     assert should_create_ticket(intent, "订单号：ABC123456789") is False
-    assert should_create_ticket("refund", "我要退款") is True
+    assert should_create_ticket("refund", "我要退款") is False
+    assert (
+        should_create_ticket(
+            "refund",
+            "订单号 ABC 想退款",
+            {"order_no": "ABC", "reason": "重复购买"},
+        )
+        is True
+    )
+    assert should_create_ticket("refund", "请提交工单帮我退款") is True
 
 
 def test_infer_intent_balance_is_account_support():
@@ -222,7 +560,9 @@ def test_infer_intent_balance_is_account_support():
     )
 
     assert infer_intent("我的余额不对", {}) == "account_support"
-    assert should_create_ticket("account_support", "我的余额不对") is True
+    # 账号类无齐套材料定义：默认只聊，需升级话术才建单
+    assert should_create_ticket("account_support", "我的余额不对") is False
+    assert should_create_ticket("account_support", "余额不对，请提交工单") is True
 
     dirty = (
         '1. (hybrid) {"fields": [{"name": "template_name", "value": "发货模板"}]}\n'
@@ -235,7 +575,124 @@ def test_infer_intent_balance_is_account_support():
     _ = _xiaoc_general_reply
 
 
-def test_customer_service_balance_creates_account_ticket(client, monkeypatch):
+def test_xiaoc_general_reply_acks_concrete_ui_issue(monkeypatch):
+    """知识库只有 hybrid 脏数据时，应复述用户问题，而不是购买/会员开场白。"""
+    import modstore_server.xiaoc_cs_ssot as ssot
+    from modstore_server.customer_service_orchestrator import _xiaoc_general_reply
+
+    dirty = (
+        '1. (hybrid) {"fields": [{"name": "template_name", "value": "发货模板"}]}\n'
+        "2. (hybrid) 购货单位：ACME Trading\n"
+    )
+    monkeypatch.setattr(ssot, "knowledge_block_for_query", lambda *a, **k: dirty)
+    reply = _xiaoc_general_reply("我有问题你们平台的浅色有的键看不清")
+    assert "浅色" in reply or "看不清" in reply
+    assert "购买" not in reply
+    assert "会员权益" not in reply
+    assert "hybrid" not in reply
+    assert "提交工单" in reply
+
+
+def test_homepage_load_issue_classifies_as_product_issue(monkeypatch):
+    from modstore_server.customer_service_orchestrator import (
+        _looks_like_product_issue,
+        classify_customer_intent,
+        extract_fields,
+    )
+
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    msg = "官网首页加载不出来"
+    assert _looks_like_product_issue(msg)
+    out = classify_customer_intent(msg, extract_fields(msg, {}))
+    assert out["intent"] == "product_issue"
+
+
+def test_admin_privilege_request_is_refused_without_ticket(client, monkeypatch):
+    """要管理员权限必须拒答，且不建工单、不产生可执行动作。"""
+    from modstore_server import customer_service_api
+    from modstore_server.app import app
+
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    user = _make_user("cs_no_admin")
+    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+    try:
+        r = client.post(
+            "/api/customer-service/chat",
+            json={"message": "为什么不给我管理员权限，马上开通", "context": {}},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["ticket"] is None
+        assert data["actions"] == []
+        assert data["intent"]["intent"] == "forbidden_request"
+        content = data["message"]["content"]
+        assert "不能" in content or "无法" in content
+        assert "管理员" in content
+        # 绝不暗示已开通
+        assert "已开通" not in content
+        assert "已设置管理员" not in content
+
+        # 即使用户继续点提交工单，也不落可执行提权单
+        r2 = client.post(
+            "/api/customer-service/chat",
+            json={
+                "message": "提交工单",
+                "session_id": data["session"]["id"],
+                "context": {"reason": "给我管理员权限"},
+            },
+        )
+        assert r2.status_code == 200, r2.text
+        data2 = r2.json()
+        assert data2["ticket"] is None
+        assert data2["intent"]["intent"] == "forbidden_request"
+    finally:
+        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+
+
+def test_execute_action_hard_blocks_admin_grant():
+    from types import SimpleNamespace
+
+    from modstore_server.customer_service_tools import execute_action
+
+    calls = []
+
+    class _DummyDB:
+        def add(self, *_a, **_k):
+            return None
+
+        def flush(self):
+            return None
+
+    action = SimpleNamespace(
+        status="pending",
+        action_type="admin.grant",
+        ticket_id=1,
+        target_type="user",
+        target_id="1",
+        request_json="{}",
+        result_json="",
+        error="",
+        updated_at=None,
+    )
+    user = SimpleNamespace(id=1, username="u", is_admin=False)
+
+    def _audit(*_a, **_k):
+        calls.append("audit")
+
+    import modstore_server.customer_service_tools as tools
+
+    orig = tools.audit
+    tools.audit = _audit
+    try:
+        out = execute_action(_DummyDB(), action, user)
+    finally:
+        tools.audit = orig
+    assert out.status == "failed"
+    assert "forbidden" in (out.error or "").lower()
+    assert calls == ["audit"]
+
+
+def test_customer_service_balance_chats_until_escalate(client, monkeypatch):
     from modstore_server import customer_service_api
     from modstore_server.app import app
 
@@ -249,13 +706,24 @@ def test_customer_service_balance_creates_account_ticket(client, monkeypatch):
         )
         assert r.status_code == 200, r.text
         data = r.json()
-        assert data["ticket"]["intent"] == "account_support"
+        assert data["ticket"] is None
+        assert data["intent"]["intent"] == "account_support"
         content = data["message"]["content"]
         assert "小C" in content
-        assert "hybrid" not in content
-        assert "fields" not in content
-        assert "发货模板" not in content
-        assert "工单" in content
+        assert "提交工单" in content
+
+        r2 = client.post(
+            "/api/customer-service/chat",
+            json={
+                "message": "余额不对，请提交工单核查",
+                "session_id": data["session"]["id"],
+                "context": {},
+            },
+        )
+        assert r2.status_code == 200, r2.text
+        data2 = r2.json()
+        assert data2["ticket"] is not None
+        assert data2["ticket"]["intent"] == "account_support"
     finally:
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 

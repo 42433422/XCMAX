@@ -8,7 +8,6 @@ from typing import Any
 
 from retort_engine.git_status import GENERATED_ABSORPTION_NAMES
 
-
 BEHAVIOR_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".go"}
 MIN_TEST_TO_SOURCE_RATIO = 0.8
 
@@ -55,13 +54,19 @@ def capability_absorption_audit(root: Path) -> dict[str, Any]:
         else:
             other_files.append(rel)
     pr_review = pr_review_runtime_evidence(root)
-    support_behavior_source_files = [str(rel) for rel in pr_review.get("behavior_source_files") or []]
-    support_behavior_test_files = [str(rel) for rel in pr_review.get("behavior_test_files") or []]
+    support_behavior_source_files = [
+        str(rel) for rel in pr_review.get("behavior_source_files") or []
+    ]
+    support_behavior_test_files = [
+        str(rel) for rel in pr_review.get("behavior_test_files") or []
+    ]
     post_hardening = post_absorption_hardening_files(root)
     employee_mode = latest_employee_execution_mode(root)
     employee_worker_review = latest_employee_worker_review(root)
     employee_patch_closure = employee_patch_closure_evidence(root)
-    generated_only = bool(changed_files) and not behavior_source_files and not behavior_test_files
+    generated_only = (
+        bool(changed_files) and not behavior_source_files and not behavior_test_files
+    )
     if generated_only:
         reason = "latest_absorption_changed_only_reports_logs_or_capability_registry"
     elif behavior_source_files and behavior_test_files:
@@ -77,7 +82,10 @@ def capability_absorption_audit(root: Path) -> dict[str, Any]:
         blockers.append("latest_behavior_change_missing_tests")
     if not behavior_source_files and not post_hardening["behavior_source_files"]:
         blockers.append("latest_absorption_missing_core_behavior_diff")
-    if health["source_line_count"] and health["test_to_source_ratio"] < MIN_TEST_TO_SOURCE_RATIO:
+    if (
+        health["source_line_count"]
+        and health["test_to_source_ratio"] < MIN_TEST_TO_SOURCE_RATIO
+    ):
         blockers.append("low_test_to_source_ratio")
     if external_project_count < 3:
         blockers.append("insufficient_cross_project_reproduction")
@@ -126,7 +134,9 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     adjudication_source = root / "retort_engine" / "review_adjudication_calibration.py"
     review_policy_source = root / "retort_engine" / "absorbed_review_policy.py"
     quality_gate_source = root / "retort_engine" / "quality_gate_bundle.py"
-    multi_absorption_source = root / "retort_engine" / "multi_project_absorption_replay.py"
+    multi_absorption_source = (
+        root / "retort_engine" / "multi_project_absorption_replay.py"
+    )
     continuity_source = root / "retort_engine" / "absorption_continuity_probe.py"
     pr_long_run_source = root / "retort_engine" / "pr_long_run_review.py"
     holdout_eval_source = root / "retort_engine" / "pr_holdout_blind_eval.py"
@@ -235,115 +245,305 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
         try:
             from retort_engine.pr_review import review_diff
             from retort_engine.review_pipeline import build_diff_pipeline_replay
-            from retort_engine.review_quality_benchmark import build_review_quality_benchmark
+            from retort_engine.review_quality_benchmark import (
+                build_review_quality_benchmark,
+            )
 
-            result = review_diff("diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1 +1,2 @@\n def f():\n+    token = \"secret\"\n")
+            result = review_diff(
+                'diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1 +1,2 @@\n def f():\n+    token = "secret"\n'
+            )
             sample_comment_count = len(result.get("comments") or [])
-            publishable_comment_count = int((result.get("summary") or {}).get("publishable_comment_count") or 0)
-            comment_ranking_model = str((result.get("summary") or {}).get("comment_ranking_model") or "")
-            rank_weights = (result.get("summary") or {}).get("absorbed_context_rank_weights") if isinstance(result.get("summary"), dict) else {}
+            publishable_comment_count = int(
+                (result.get("summary") or {}).get("publishable_comment_count") or 0
+            )
+            comment_ranking_model = str(
+                (result.get("summary") or {}).get("comment_ranking_model") or ""
+            )
+            rank_weights = (
+                (result.get("summary") or {}).get("absorbed_context_rank_weights")
+                if isinstance(result.get("summary"), dict)
+                else {}
+            )
             if isinstance(rank_weights, dict):
-                absorbed_context_rank_weight_count = sum(1 for value in rank_weights.values() if int(value or 0) > 0)
-                absorbed_context_rank_weight_max = max([int(value or 0) for value in rank_weights.values()] or [0])
-            calibration = (result.get("summary") or {}).get("calibration_policy") if isinstance(result.get("summary"), dict) else {}
+                absorbed_context_rank_weight_count = sum(
+                    1 for value in rank_weights.values() if int(value or 0) > 0
+                )
+                absorbed_context_rank_weight_max = max(
+                    [int(value or 0) for value in rank_weights.values()] or [0]
+                )
+            calibration = (
+                (result.get("summary") or {}).get("calibration_policy")
+                if isinstance(result.get("summary"), dict)
+                else {}
+            )
             if isinstance(calibration, dict):
                 calibration_policy_enabled = bool(calibration.get("enabled"))
-                calibration_weighted_context_count = int(calibration.get("weighted_context_count") or 0)
-                calibration_max_context_weight = int(calibration.get("max_context_weight") or 0)
+                calibration_weighted_context_count = int(
+                    calibration.get("weighted_context_count") or 0
+                )
+                calibration_max_context_weight = int(
+                    calibration.get("max_context_weight") or 0
+                )
             previous_diff = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1 +1,2 @@\n def f():\n+    # TODO: old issue\n"
-            current_diff = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1 +1,3 @@\n def f():\n+    # TODO: old issue\n+    token = \"secret\"\n"
-            incremental_result = review_diff(current_diff, previous_diff_text=previous_diff)
-            incremental = bool((incremental_result.get("incremental") or {}).get("enabled"))
-            incremental_skipped_count = int((incremental_result.get("summary") or {}).get("skipped_existing_change_count") or 0)
-            incremental_new_count = int((incremental_result.get("summary") or {}).get("reviewed_new_change_count") or 0)
-            benchmark = build_review_quality_benchmark(root, sample_count=80, negative_sample_count=4)
-            benchmark_summary = benchmark.get("summary") if isinstance(benchmark.get("summary"), dict) else {}
+            current_diff = 'diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1 +1,3 @@\n def f():\n+    # TODO: old issue\n+    token = "secret"\n'
+            incremental_result = review_diff(
+                current_diff, previous_diff_text=previous_diff
+            )
+            incremental = bool(
+                (incremental_result.get("incremental") or {}).get("enabled")
+            )
+            incremental_skipped_count = int(
+                (incremental_result.get("summary") or {}).get(
+                    "skipped_existing_change_count"
+                )
+                or 0
+            )
+            incremental_new_count = int(
+                (incremental_result.get("summary") or {}).get(
+                    "reviewed_new_change_count"
+                )
+                or 0
+            )
+            benchmark = build_review_quality_benchmark(
+                root, sample_count=80, negative_sample_count=4
+            )
+            benchmark_summary = (
+                benchmark.get("summary")
+                if isinstance(benchmark.get("summary"), dict)
+                else {}
+            )
             benchmark_status = str(benchmark.get("status") or "")
             benchmark_sample_count = int(benchmark_summary.get("sample_count") or 0)
             benchmark_score = int(benchmark_summary.get("aggregate_score") or 0)
-            benchmark_baseline_score = int(benchmark_summary.get("baseline_aggregate_score") or 0)
-            benchmark_delta = int(benchmark_summary.get("post_absorption_score_delta") or 0)
-            benchmark_publishable_comment_count = int(benchmark_summary.get("publishable_comment_count") or 0)
-            benchmark_cross_project_case_count = int(benchmark_summary.get("cross_project_case_count") or 0)
-            benchmark_cross_project_family_count = int(benchmark_summary.get("cross_project_family_count") or 0)
-            benchmark_cross_project_pass_rate = float(benchmark_summary.get("cross_project_pass_rate") or 0.0)
+            benchmark_baseline_score = int(
+                benchmark_summary.get("baseline_aggregate_score") or 0
+            )
+            benchmark_delta = int(
+                benchmark_summary.get("post_absorption_score_delta") or 0
+            )
+            benchmark_publishable_comment_count = int(
+                benchmark_summary.get("publishable_comment_count") or 0
+            )
+            benchmark_cross_project_case_count = int(
+                benchmark_summary.get("cross_project_case_count") or 0
+            )
+            benchmark_cross_project_family_count = int(
+                benchmark_summary.get("cross_project_family_count") or 0
+            )
+            benchmark_cross_project_pass_rate = float(
+                benchmark_summary.get("cross_project_pass_rate") or 0.0
+            )
             diff_pipeline = build_diff_pipeline_replay(
-                "diff --git a/app/auth.py b/app/auth.py\n--- a/app/auth.py\n+++ b/app/auth.py\n@@ -1 +1,3 @@\n def login():\n+    token = \"secret\"\n+    return True\n"
+                'diff --git a/app/auth.py b/app/auth.py\n--- a/app/auth.py\n+++ b/app/auth.py\n@@ -1 +1,3 @@\n def login():\n+    token = "secret"\n+    return True\n'
                 "diff --git a/tests/test_auth.py b/tests/test_auth.py\n--- a/tests/test_auth.py\n+++ b/tests/test_auth.py\n@@ -1 +1,2 @@\n def test_login():\n+    assert True\n"
                 "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -1 +1,2 @@\n name: ci\n+on: [push]\n",
                 issue_context="Fix login token handling",
                 max_comments=10,
             )
-            diff_pipeline_summary = diff_pipeline.get("summary") if isinstance(diff_pipeline.get("summary"), dict) else {}
+            diff_pipeline_summary = (
+                diff_pipeline.get("summary")
+                if isinstance(diff_pipeline.get("summary"), dict)
+                else {}
+            )
             diff_pipeline_status = str(diff_pipeline.get("status") or "")
-            diff_pipeline_depth_score = int(diff_pipeline_summary.get("diff_grouping_depth_score") or 0)
-            diff_pipeline_context_group_count = int(diff_pipeline_summary.get("context_group_count") or 0)
-            diff_pipeline_task_group_count = int(diff_pipeline_summary.get("task_group_count") or 0)
-            diff_pipeline_publishable_comment_count = int(diff_pipeline_summary.get("publishable_comment_count") or 0)
-            diff_pipeline_chunk_count = int(diff_pipeline_summary.get("chunk_count") or 0)
-            diff_pipeline_large_chunking = bool(diff_pipeline_summary.get("large_diff_chunking"))
+            diff_pipeline_depth_score = int(
+                diff_pipeline_summary.get("diff_grouping_depth_score") or 0
+            )
+            diff_pipeline_context_group_count = int(
+                diff_pipeline_summary.get("context_group_count") or 0
+            )
+            diff_pipeline_task_group_count = int(
+                diff_pipeline_summary.get("task_group_count") or 0
+            )
+            diff_pipeline_publishable_comment_count = int(
+                diff_pipeline_summary.get("publishable_comment_count") or 0
+            )
+            diff_pipeline_chunk_count = int(
+                diff_pipeline_summary.get("chunk_count") or 0
+            )
+            diff_pipeline_large_chunking = bool(
+                diff_pipeline_summary.get("large_diff_chunking")
+            )
             large_review = review_diff(_audit_large_diff_sample(), max_comments=4)
-            large_review_summary = large_review.get("summary") if isinstance(large_review.get("summary"), dict) else {}
-            core_large_diff_chunking = bool(large_review_summary.get("large_diff_chunking"))
-            core_large_diff_chunk_count = int(large_review_summary.get("large_diff_chunk_count") or 0)
-            core_large_diff_context_balancing = bool(large_review_summary.get("large_diff_context_balancing"))
+            large_review_summary = (
+                large_review.get("summary")
+                if isinstance(large_review.get("summary"), dict)
+                else {}
+            )
+            core_large_diff_chunking = bool(
+                large_review_summary.get("large_diff_chunking")
+            )
+            core_large_diff_chunk_count = int(
+                large_review_summary.get("large_diff_chunk_count") or 0
+            )
+            core_large_diff_context_balancing = bool(
+                large_review_summary.get("large_diff_context_balancing")
+            )
             feedback_before = review_diff(_audit_feedback_diff_sample(), max_comments=1)
-            feedback_after = review_diff(_audit_feedback_diff_sample(), max_comments=1, employee_feedback=[{"dimension": "test_gate_evidence", "status": "failed"}])
-            before_context = str(((feedback_before.get("comments") or [{}])[0] or {}).get("review_context") or "")
-            after_context = str(((feedback_after.get("comments") or [{}])[0] or {}).get("review_context") or "")
-            employee_feedback_changes_ranking = bool(before_context and after_context and before_context != after_context)
+            feedback_after = review_diff(
+                _audit_feedback_diff_sample(),
+                max_comments=1,
+                employee_feedback=[
+                    {"dimension": "test_gate_evidence", "status": "failed"}
+                ],
+            )
+            before_context = str(
+                ((feedback_before.get("comments") or [{}])[0] or {}).get(
+                    "review_context"
+                )
+                or ""
+            )
+            after_context = str(
+                ((feedback_after.get("comments") or [{}])[0] or {}).get(
+                    "review_context"
+                )
+                or ""
+            )
+            employee_feedback_changes_ranking = bool(
+                before_context and after_context and before_context != after_context
+            )
             employee_feedback_rank_context = after_context
-            extension_review = review_diff(_audit_extension_policy_sample(), max_comments=8)
-            extension_policy = (extension_review.get("summary") or {}).get("extension_policy") if isinstance(extension_review.get("summary"), dict) else {}
+            extension_review = review_diff(
+                _audit_extension_policy_sample(), max_comments=8
+            )
+            extension_policy = (
+                (extension_review.get("summary") or {}).get("extension_policy")
+                if isinstance(extension_review.get("summary"), dict)
+                else {}
+            )
             if isinstance(extension_policy, dict):
-                extension_policy_known_count = int(extension_policy.get("known_extension_count") or 0)
-                extension_policy_unknown_count = int(extension_policy.get("unknown_extension_count") or 0)
-                extension_policy_family_count = int(extension_policy.get("language_family_count") or 0)
-                extension_policy_context_count = int(extension_policy.get("review_context_count") or 0)
-            extension_policy_contexts = [str(item) for item in extension_policy.get("review_contexts") or []]
-            extension_policy_families = [str(item) for item in extension_policy.get("language_families") or []]
-            extension_policy_source_name = str(extension_policy.get("policy_source") or "")
-            cross_review = review_diff(_audit_cross_language_transfer_sample(), max_comments=10)
-            cross_transfer = cross_review.get("cross_language_transfer") if isinstance(cross_review.get("cross_language_transfer"), dict) else {}
-            cross_summary = cross_transfer.get("summary") if isinstance(cross_transfer.get("summary"), dict) else {}
+                extension_policy_known_count = int(
+                    extension_policy.get("known_extension_count") or 0
+                )
+                extension_policy_unknown_count = int(
+                    extension_policy.get("unknown_extension_count") or 0
+                )
+                extension_policy_family_count = int(
+                    extension_policy.get("language_family_count") or 0
+                )
+                extension_policy_context_count = int(
+                    extension_policy.get("review_context_count") or 0
+                )
+            extension_policy_contexts = [
+                str(item) for item in extension_policy.get("review_contexts") or []
+            ]
+            extension_policy_families = [
+                str(item) for item in extension_policy.get("language_families") or []
+            ]
+            extension_policy_source_name = str(
+                extension_policy.get("policy_source") or ""
+            )
+            cross_review = review_diff(
+                _audit_cross_language_transfer_sample(), max_comments=10
+            )
+            cross_transfer = (
+                cross_review.get("cross_language_transfer")
+                if isinstance(cross_review.get("cross_language_transfer"), dict)
+                else {}
+            )
+            cross_summary = (
+                cross_transfer.get("summary")
+                if isinstance(cross_transfer.get("summary"), dict)
+                else {}
+            )
             cross_language_status = str(cross_transfer.get("status") or "")
             cross_language_finding_count = int(cross_summary.get("finding_count") or 0)
             cross_language_pattern_count = int(cross_summary.get("pattern_count") or 0)
-            cross_language_family_count = int(cross_summary.get("language_family_count") or 0)
-            cross_language_core_mapping = bool(cross_summary.get("cross_language_core_mapping"))
-            cross_language_comment_count = sum(1 for comment in cross_review.get("comments") or [] if isinstance(comment, dict) and comment.get("capability") == "cross_language_transfer")
-            cross_core_score = (cross_review.get("summary") or {}).get("core_review_score") if isinstance(cross_review.get("summary"), dict) else {}
+            cross_language_family_count = int(
+                cross_summary.get("language_family_count") or 0
+            )
+            cross_language_core_mapping = bool(
+                cross_summary.get("cross_language_core_mapping")
+            )
+            cross_language_comment_count = sum(
+                1
+                for comment in cross_review.get("comments") or []
+                if isinstance(comment, dict)
+                and comment.get("capability") == "cross_language_transfer"
+            )
+            cross_core_score = (
+                (cross_review.get("summary") or {}).get("core_review_score")
+                if isinstance(cross_review.get("summary"), dict)
+                else {}
+            )
             if isinstance(cross_core_score, dict):
-                cross_language_top_ranked = bool(cross_core_score.get("cross_language_top_ranked"))
-                cross_language_core_score_active = bool(cross_core_score.get("cross_language_core_behavior_active"))
-                cross_language_max_rank_score = int(cross_core_score.get("cross_language_max_rank_score") or 0)
+                cross_language_top_ranked = bool(
+                    cross_core_score.get("cross_language_top_ranked")
+                )
+                cross_language_core_score_active = bool(
+                    cross_core_score.get("cross_language_core_behavior_active")
+                )
+                cross_language_max_rank_score = int(
+                    cross_core_score.get("cross_language_max_rank_score") or 0
+                )
             hunk_review = review_diff(_audit_hunk_semantic_sample(), max_comments=4)
-            hunk_summary = (hunk_review.get("summary") or {}).get("hunk_semantic_analysis") if isinstance(hunk_review.get("summary"), dict) else {}
-            hunk_core_score = (hunk_review.get("summary") or {}).get("core_review_score") if isinstance(hunk_review.get("summary"), dict) else {}
+            hunk_summary = (
+                (hunk_review.get("summary") or {}).get("hunk_semantic_analysis")
+                if isinstance(hunk_review.get("summary"), dict)
+                else {}
+            )
+            hunk_core_score = (
+                (hunk_review.get("summary") or {}).get("core_review_score")
+                if isinstance(hunk_review.get("summary"), dict)
+                else {}
+            )
             if isinstance(hunk_summary, dict):
                 hunk_semantic_status = str(hunk_summary.get("status") or "")
-                hunk_semantic_finding_count = int(hunk_summary.get("finding_count") or 0)
-                hunk_semantic_types = [str(item) for item in hunk_summary.get("finding_types") or []]
-            hunk_semantic_comment_count = sum(1 for comment in hunk_review.get("comments") or [] if isinstance(comment, dict) and comment.get("capability") == "hunk_semantic_review")
+                hunk_semantic_finding_count = int(
+                    hunk_summary.get("finding_count") or 0
+                )
+                hunk_semantic_types = [
+                    str(item) for item in hunk_summary.get("finding_types") or []
+                ]
+            hunk_semantic_comment_count = sum(
+                1
+                for comment in hunk_review.get("comments") or []
+                if isinstance(comment, dict)
+                and comment.get("capability") == "hunk_semantic_review"
+            )
             if isinstance(hunk_core_score, dict):
-                hunk_semantic_top_ranked = bool(hunk_core_score.get("hunk_semantic_top_ranked"))
-                hunk_semantic_core_score_active = bool(hunk_core_score.get("hunk_semantic_core_behavior_active"))
-                hunk_semantic_max_rank_score = int(hunk_core_score.get("hunk_semantic_max_rank_score") or 0)
-            adjudication_report = read_json(root / "docs" / "retort_review_adjudication_calibration.json")
-            adjudication_summary = adjudication_report.get("summary") if isinstance(adjudication_report.get("summary"), dict) else {}
+                hunk_semantic_top_ranked = bool(
+                    hunk_core_score.get("hunk_semantic_top_ranked")
+                )
+                hunk_semantic_core_score_active = bool(
+                    hunk_core_score.get("hunk_semantic_core_behavior_active")
+                )
+                hunk_semantic_max_rank_score = int(
+                    hunk_core_score.get("hunk_semantic_max_rank_score") or 0
+                )
+            adjudication_report = read_json(
+                root / "docs" / "retort_review_adjudication_calibration.json"
+            )
+            adjudication_summary = (
+                adjudication_report.get("summary")
+                if isinstance(adjudication_report.get("summary"), dict)
+                else {}
+            )
             adjudication_status = str(adjudication_report.get("status") or "")
-            adjudication_human_label_count = int(adjudication_summary.get("calibration_label_count") or adjudication_summary.get("human_label_count") or 0)
+            adjudication_human_label_count = int(
+                adjudication_summary.get("calibration_label_count")
+                or adjudication_summary.get("human_label_count")
+                or 0
+            )
             adjudication_pass_rate = float(adjudication_summary.get("pass_rate") or 0.0)
-            adjudication_false_positive_count = int(adjudication_summary.get("false_positive_count") or 0)
-            adjudication_false_negative_count = int(adjudication_summary.get("false_negative_count") or 0)
-        except Exception:
+            adjudication_false_positive_count = int(
+                adjudication_summary.get("false_positive_count") or 0
+            )
+            adjudication_false_negative_count = int(
+                adjudication_summary.get("false_negative_count") or 0
+            )
+        except Exception:  # noqa: BLE001 - optional audit evidence must fail closed
             sample_comment_count = 0
     return {
-        "runtime": source.is_file() and "parse_unified_diff" in source_text and "task_groups" in source_text,
+        "runtime": source.is_file()
+        and "parse_unified_diff" in source_text
+        and "task_groups" in source_text,
         "cli": "review-diff" in read_text(cli),
         "api": "/api/review-diff" in read_text(ui_server),
         "contract": "pr_review_result" in read_text(contracts),
-        "test_function_count": len(re.findall(r"^\s*def\s+test_", test_text, re.M)),
+        "test_function_count": len(
+            re.findall(r"^\s*def\s+test_", test_text, re.MULTILINE)
+        ),
         "sample_comment_count": sample_comment_count,
         "publishable_comment_count": publishable_comment_count,
         "comment_ranking_model": comment_ranking_model,
@@ -408,15 +608,33 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
         "adjudication_pass_rate": adjudication_pass_rate,
         "adjudication_false_positive_count": adjudication_false_positive_count,
         "adjudication_false_negative_count": adjudication_false_negative_count,
-        "dry_run_runtime": dry_source.is_file() and "review_pr_url" in dry_source_text and "pr_diff_url" in dry_source_text,
+        "dry_run_runtime": dry_source.is_file()
+        and "review_pr_url" in dry_source_text
+        and "pr_diff_url" in dry_source_text,
         "dry_run_cli": "review-pr" in read_text(cli),
         "dry_run_api": "/api/review-pr" in read_text(ui_server),
         "dry_run_contract": "pr_dry_run_result" in read_text(contracts),
-        "dry_run_test_function_count": len(re.findall(r"^\s*def\s+test_", dry_test_text, re.M)),
+        "dry_run_test_function_count": len(
+            re.findall(r"^\s*def\s+test_", dry_test_text, re.MULTILINE)
+        ),
         "dry_run_report_status": str(dry_report_payload.get("status") or ""),
         "dry_run_report_pr_url": str(dry_report_payload.get("pr_url") or ""),
-        "dry_run_report_comment_count": int(((dry_report_payload.get("summary") or {}) if isinstance(dry_report_payload.get("summary"), dict) else {}).get("comment_count") or 0),
-        "dry_run_report_file_count": int(((dry_report_payload.get("summary") or {}) if isinstance(dry_report_payload.get("summary"), dict) else {}).get("file_count") or 0),
+        "dry_run_report_comment_count": int(
+            (
+                (dry_report_payload.get("summary") or {})
+                if isinstance(dry_report_payload.get("summary"), dict)
+                else {}
+            ).get("comment_count")
+            or 0
+        ),
+        "dry_run_report_file_count": int(
+            (
+                (dry_report_payload.get("summary") or {})
+                if isinstance(dry_report_payload.get("summary"), dict)
+                else {}
+            ).get("file_count")
+            or 0
+        ),
         "behavior_source_files": [
             item
             for item, exists in (
@@ -429,24 +647,69 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("retort_engine/review_pipeline.py", pipeline_source.is_file()),
                 ("retort_engine/task_prioritization.py", task_source.is_file()),
                 ("retort_engine/task_dispatch_plan.py", dispatch_source.is_file()),
-                ("retort_engine/review_quality_benchmark.py", benchmark_source.is_file()),
+                (
+                    "retort_engine/review_quality_benchmark.py",
+                    benchmark_source.is_file(),
+                ),
                 ("retort_engine/employee_scheduler_stress.py", stress_source.is_file()),
-                ("retort_engine/employee_patch_closure.py", patch_closure_source.is_file()),
-                ("retort_engine/review_adjudication_calibration.py", adjudication_source.is_file()),
-                ("retort_engine/absorbed_review_policy.py", review_policy_source.is_file()),
+                (
+                    "retort_engine/employee_patch_closure.py",
+                    patch_closure_source.is_file(),
+                ),
+                (
+                    "retort_engine/review_adjudication_calibration.py",
+                    adjudication_source.is_file(),
+                ),
+                (
+                    "retort_engine/absorbed_review_policy.py",
+                    review_policy_source.is_file(),
+                ),
                 ("retort_engine/quality_gate_bundle.py", quality_gate_source.is_file()),
-                ("retort_engine/multi_project_absorption_replay.py", multi_absorption_source.is_file()),
-                ("retort_engine/absorption_continuity_probe.py", continuity_source.is_file()),
+                (
+                    "retort_engine/multi_project_absorption_replay.py",
+                    multi_absorption_source.is_file(),
+                ),
+                (
+                    "retort_engine/absorption_continuity_probe.py",
+                    continuity_source.is_file(),
+                ),
                 ("retort_engine/pr_long_run_review.py", pr_long_run_source.is_file()),
-                ("retort_engine/pr_holdout_blind_eval.py", holdout_eval_source.is_file()),
-                ("retort_engine/pr_failure_rollback_replay.py", failure_rollback_source.is_file()),
-                ("retort_engine/review_calibration_policy.py", calibration_policy_source.is_file()),
-                ("retort_engine/production_recovery_drill.py", recovery_drill_source.is_file()),
-                ("retort_engine/absorption_release_decision.py", release_decision_source.is_file()),
-                ("retort_engine/diff_extension_policy.py", extension_policy_source.is_file()),
-                ("retort_engine/external_advantage_matrix.py", external_advantage_source.is_file()),
-                ("retort_engine/cross_language_transfer.py", cross_language_source.is_file()),
-                ("retort_engine/diff_hunk_semantics.py", (root / "retort_engine" / "diff_hunk_semantics.py").is_file()),
+                (
+                    "retort_engine/pr_holdout_blind_eval.py",
+                    holdout_eval_source.is_file(),
+                ),
+                (
+                    "retort_engine/pr_failure_rollback_replay.py",
+                    failure_rollback_source.is_file(),
+                ),
+                (
+                    "retort_engine/review_calibration_policy.py",
+                    calibration_policy_source.is_file(),
+                ),
+                (
+                    "retort_engine/production_recovery_drill.py",
+                    recovery_drill_source.is_file(),
+                ),
+                (
+                    "retort_engine/absorption_release_decision.py",
+                    release_decision_source.is_file(),
+                ),
+                (
+                    "retort_engine/diff_extension_policy.py",
+                    extension_policy_source.is_file(),
+                ),
+                (
+                    "retort_engine/external_advantage_matrix.py",
+                    external_advantage_source.is_file(),
+                ),
+                (
+                    "retort_engine/cross_language_transfer.py",
+                    cross_language_source.is_file(),
+                ),
+                (
+                    "retort_engine/diff_hunk_semantics.py",
+                    (root / "retort_engine" / "diff_hunk_semantics.py").is_file(),
+                ),
             )
             if exists
         ],
@@ -465,20 +728,50 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("tests/test_review_quality_benchmark.py", benchmark_test.is_file()),
                 ("tests/test_employee_scheduler_stress.py", stress_test.is_file()),
                 ("tests/test_employee_patch_closure.py", patch_closure_test.is_file()),
-                ("tests/test_review_adjudication_calibration.py", adjudication_test.is_file()),
+                (
+                    "tests/test_review_adjudication_calibration.py",
+                    adjudication_test.is_file(),
+                ),
                 ("tests/test_absorbed_review_policy.py", review_policy_test.is_file()),
                 ("tests/test_quality_gate_bundle.py", quality_gate_test.is_file()),
-                ("tests/test_multi_project_absorption_replay.py", multi_absorption_test.is_file()),
-                ("tests/test_absorption_continuity_probe.py", continuity_test.is_file()),
+                (
+                    "tests/test_multi_project_absorption_replay.py",
+                    multi_absorption_test.is_file(),
+                ),
+                (
+                    "tests/test_absorption_continuity_probe.py",
+                    continuity_test.is_file(),
+                ),
                 ("tests/test_pr_long_run_review.py", pr_long_run_test.is_file()),
                 ("tests/test_pr_holdout_blind_eval.py", holdout_eval_test.is_file()),
-                ("tests/test_pr_failure_rollback_replay.py", failure_rollback_test.is_file()),
-                ("tests/test_review_calibration_policy.py", calibration_policy_test.is_file()),
-                ("tests/test_production_recovery_drill.py", recovery_drill_test.is_file()),
-                ("tests/test_absorption_release_decision.py", release_decision_test.is_file()),
-                ("tests/test_diff_extension_policy.py", extension_policy_test.is_file()),
-                ("tests/test_external_advantage_matrix.py", external_advantage_test.is_file()),
-                ("tests/test_diff_hunk_semantics.py", (root / "tests" / "test_diff_hunk_semantics.py").is_file()),
+                (
+                    "tests/test_pr_failure_rollback_replay.py",
+                    failure_rollback_test.is_file(),
+                ),
+                (
+                    "tests/test_review_calibration_policy.py",
+                    calibration_policy_test.is_file(),
+                ),
+                (
+                    "tests/test_production_recovery_drill.py",
+                    recovery_drill_test.is_file(),
+                ),
+                (
+                    "tests/test_absorption_release_decision.py",
+                    release_decision_test.is_file(),
+                ),
+                (
+                    "tests/test_diff_extension_policy.py",
+                    extension_policy_test.is_file(),
+                ),
+                (
+                    "tests/test_external_advantage_matrix.py",
+                    external_advantage_test.is_file(),
+                ),
+                (
+                    "tests/test_diff_hunk_semantics.py",
+                    (root / "tests" / "test_diff_hunk_semantics.py").is_file(),
+                ),
             )
             if exists
         ],
@@ -497,7 +790,10 @@ def _audit_large_diff_sample() -> str:
         ("app/runtime_4.py", "# TODO: runtime follow-up 4"),
         ("docs/release.md", "# TODO: document release"),
     ]
-    return "".join(f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -0,0 +1,1 @@\n+{line}\n" for path, line in rows)
+    return "".join(
+        f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -0,0 +1,1 @@\n+{line}\n"
+        for path, line in rows
+    )
 
 
 def _audit_feedback_diff_sample() -> str:
@@ -505,7 +801,10 @@ def _audit_feedback_diff_sample() -> str:
         ("app/runtime.py", "# TODO: finish runtime behavior"),
         ("tests/test_runtime.py", "# TODO: assert runtime behavior"),
     ]
-    return "".join(f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -0,0 +1,1 @@\n+{line}\n" for path, line in rows)
+    return "".join(
+        f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -0,0 +1,1 @@\n+{line}\n"
+        for path, line in rows
+    )
 
 
 def _audit_extension_policy_sample() -> str:
@@ -514,13 +813,19 @@ def _audit_extension_policy_sample() -> str:
         ("internal/worker.go", "// TODO: prove goroutine cancellation"),
         ("frontend/App.tsx", "const token = 'live-secret-value'"),
         ("service/Worker.cs", "// TODO: validate nullable contract"),
-        ("service/Worker.csproj", "<PackageReference Include=\"Example\" Version=\"1.0.0\" />"),
+        (
+            "service/Worker.csproj",
+            '<PackageReference Include="Example" Version="1.0.0" />',
+        ),
         ("native/buffer.cpp", "// TODO: audit pointer lifetime"),
         ("docs/architecture.adoc", "= Architecture"),
         ("go.mod", "require github.com/example/lib v1.2.3"),
         (".github/workflows/review.yml", "name: review"),
     ]
-    return "".join(f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -0,0 +1,1 @@\n+{line}\n" for path, line in rows)
+    return "".join(
+        f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -0,0 +1,1 @@\n+{line}\n"
+        for path, line in rows
+    )
 
 
 def _audit_cross_language_transfer_sample() -> str:
@@ -539,7 +844,9 @@ def _audit_cross_language_transfer_sample() -> str:
         grouped.setdefault(path, []).append(line)
     chunks: list[str] = []
     for path, lines in grouped.items():
-        chunks.append(f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -0,0 +1,{len(lines)} @@\n")
+        chunks.append(
+            f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -0,0 +1,{len(lines)} @@\n"
+        )
         chunks.extend(f"+{line}\n" for line in lines)
     return "".join(chunks)
 
@@ -561,21 +868,51 @@ def _audit_hunk_semantic_sample() -> str:
 def post_absorption_hardening_files(root: Path) -> dict[str, Any]:
     merge_commit = latest_absorption_merge_commit(root)
     if not merge_commit:
-        return {"merge_commit": "", "behavior_source_files": [], "behavior_test_files": [], "file_count": 0}
-    git_root = root.parents[1] if root.name == "retort_engine" and root.parent.name == "packages" else root
-    pathspec = ["packages/retort_engine/retort_engine", "packages/retort_engine/tests"] if git_root != root else ["retort_engine", "tests"]
+        return {
+            "merge_commit": "",
+            "behavior_source_files": [],
+            "behavior_test_files": [],
+            "file_count": 0,
+        }
+    git_root = (
+        root.parents[1]
+        if root.name == "retort_engine" and root.parent.name == "packages"
+        else root
+    )
+    pathspec = (
+        ["packages/retort_engine/retort_engine", "packages/retort_engine/tests"]
+        if git_root != root
+        else ["retort_engine", "tests"]
+    )
     result = subprocess.run(
         ["git", "diff", "--name-only", f"{merge_commit}..HEAD", "--", *pathspec],
         cwd=git_root,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         check=False,
     )
     if result.returncode != 0:
-        return {"merge_commit": merge_commit, "behavior_source_files": [], "behavior_test_files": [], "file_count": 0, "error": result.stderr[-400:]}
-    rels = [_project_rel_from_git_path(root, line.strip()) for line in result.stdout.splitlines() if line.strip()]
-    behavior_source = sorted({rel for rel in rels if Path(rel).suffix.lower() in BEHAVIOR_SUFFIXES and not is_behavior_test_file(rel) and not is_generated_absorption_file(rel)})
+        return {
+            "merge_commit": merge_commit,
+            "behavior_source_files": [],
+            "behavior_test_files": [],
+            "file_count": 0,
+            "error": result.stderr[-400:],
+        }
+    rels = [
+        _project_rel_from_git_path(root, line.strip())
+        for line in result.stdout.splitlines()
+        if line.strip()
+    ]
+    behavior_source = sorted(
+        {
+            rel
+            for rel in rels
+            if Path(rel).suffix.lower() in BEHAVIOR_SUFFIXES
+            and not is_behavior_test_file(rel)
+            and not is_generated_absorption_file(rel)
+        }
+    )
     behavior_tests = sorted({rel for rel in rels if is_behavior_test_file(rel)})
     return {
         "merge_commit": merge_commit,
@@ -587,7 +924,11 @@ def post_absorption_hardening_files(root: Path) -> dict[str, Any]:
 
 def latest_absorption_merge_commit(root: Path) -> str:
     state = read_json(root / ".retort" / "absorption_state.json")
-    proof = state.get("closed_loop_proof") if isinstance(state.get("closed_loop_proof"), dict) else {}
+    proof = (
+        state.get("closed_loop_proof")
+        if isinstance(state.get("closed_loop_proof"), dict)
+        else {}
+    )
     for item in proof.get("evidence") or []:
         text = str(item)
         if text.startswith("merge_commit="):
@@ -597,7 +938,11 @@ def latest_absorption_merge_commit(root: Path) -> str:
 
 def _project_rel_from_git_path(root: Path, path: str) -> str:
     prefix = "packages/retort_engine/"
-    if root.name == "retort_engine" and root.parent.name == "packages" and path.startswith(prefix):
+    if (
+        root.name == "retort_engine"
+        and root.parent.name == "packages"
+        and path.startswith(prefix)
+    ):
         return path.removeprefix(prefix)
     return path
 
@@ -656,10 +1001,26 @@ def latest_employee_result_payload(root: Path) -> dict[str, Any]:
 
 
 def _employee_worker_review_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    runtime = payload.get("runtime_evidence") if isinstance(payload.get("runtime_evidence"), dict) else {}
-    review = runtime.get("worker_review") if isinstance(runtime.get("worker_review"), dict) else {}
-    multi_worker = runtime.get("multi_worker") if isinstance(runtime.get("multi_worker"), dict) else {}
-    process_isolation = multi_worker.get("process_isolation") if isinstance(multi_worker.get("process_isolation"), dict) else {}
+    runtime = (
+        payload.get("runtime_evidence")
+        if isinstance(payload.get("runtime_evidence"), dict)
+        else {}
+    )
+    review = (
+        runtime.get("worker_review")
+        if isinstance(runtime.get("worker_review"), dict)
+        else {}
+    )
+    multi_worker = (
+        runtime.get("multi_worker")
+        if isinstance(runtime.get("multi_worker"), dict)
+        else {}
+    )
+    process_isolation = (
+        multi_worker.get("process_isolation")
+        if isinstance(multi_worker.get("process_isolation"), dict)
+        else {}
+    )
     if not review:
         return {}
     artifact_text = str(review.get("artifact") or "")
@@ -671,17 +1032,34 @@ def _employee_worker_review_from_payload(payload: dict[str, Any]) -> dict[str, A
         "worker_review_count": int(review.get("worker_review_count") or 0),
         "multi_worker_verified": bool(multi_worker.get("verified")),
         "worker_count": int(multi_worker.get("worker_count") or 0),
-        "independent_worker_count": int(multi_worker.get("independent_worker_count") or 0),
+        "independent_worker_count": int(
+            multi_worker.get("independent_worker_count") or 0
+        ),
         "result_path_count": int(multi_worker.get("result_path_count") or 0),
         "pid_isolation_verified": bool(process_isolation.get("pid_isolation_verified")),
-        "runtime_boundary_verified": bool(process_isolation.get("runtime_boundary_verified")),
-        "unique_process_id_count": int(process_isolation.get("unique_process_id_count") or 0),
-        "worker_process_trace_count": int(process_isolation.get("worker_process_trace_count") or 0),
-        "runtime_boundary_verified_count": int(process_isolation.get("runtime_boundary_verified_count") or 0),
-        "pid_cross_check_count": int(process_isolation.get("pid_cross_check_count") or 0),
-        "crash_isolation_verified": bool(process_isolation.get("crash_isolation_verified")),
-        "crash_isolation_verified_count": int(process_isolation.get("crash_isolation_verified_count") or 0),
-        "multi_file_review_verified": int(review.get("file_count") or 0) >= 10 and int(review.get("comment_count") or 0) >= 20,
+        "runtime_boundary_verified": bool(
+            process_isolation.get("runtime_boundary_verified")
+        ),
+        "unique_process_id_count": int(
+            process_isolation.get("unique_process_id_count") or 0
+        ),
+        "worker_process_trace_count": int(
+            process_isolation.get("worker_process_trace_count") or 0
+        ),
+        "runtime_boundary_verified_count": int(
+            process_isolation.get("runtime_boundary_verified_count") or 0
+        ),
+        "pid_cross_check_count": int(
+            process_isolation.get("pid_cross_check_count") or 0
+        ),
+        "crash_isolation_verified": bool(
+            process_isolation.get("crash_isolation_verified")
+        ),
+        "crash_isolation_verified_count": int(
+            process_isolation.get("crash_isolation_verified_count") or 0
+        ),
+        "multi_file_review_verified": int(review.get("file_count") or 0) >= 10
+        and int(review.get("comment_count") or 0) >= 20,
         "artifact": artifact_text,
         "artifact_exists": bool(artifact_text) and Path(artifact_text).is_file(),
     }
@@ -693,14 +1071,26 @@ def employee_patch_closure_evidence(root: Path) -> dict[str, Any]:
     latest_runtime_patch: dict[str, Any] = {}
     for path in reversed(employee_result_files(root)):
         payload = read_json(path)
-        runtime = payload.get("runtime_evidence") if isinstance(payload.get("runtime_evidence"), dict) else {}
-        patch = runtime.get("employee_patch_closure") if isinstance(runtime.get("employee_patch_closure"), dict) else {}
+        runtime = (
+            payload.get("runtime_evidence")
+            if isinstance(payload.get("runtime_evidence"), dict)
+            else {}
+        )
+        patch = (
+            runtime.get("employee_patch_closure")
+            if isinstance(runtime.get("employee_patch_closure"), dict)
+            else {}
+        )
         if patch:
-            patch_summary = patch.get("summary") if isinstance(patch.get("summary"), dict) else {}
+            patch_summary = (
+                patch.get("summary") if isinstance(patch.get("summary"), dict) else {}
+            )
             latest_runtime_patch = {
                 "status": patch.get("status", ""),
                 "success_case_verified": patch_summary.get("success_case_verified", ""),
-                "failure_case_rolled_back": patch_summary.get("failure_case_rolled_back", ""),
+                "failure_case_rolled_back": patch_summary.get(
+                    "failure_case_rolled_back", ""
+                ),
             }
             break
     return {
@@ -720,7 +1110,11 @@ def employee_result_files(root: Path) -> list[Path]:
     result_dir = root / ".retort" / "employee_results"
     if not result_dir.is_dir():
         return []
-    return [path for path in sorted(result_dir.glob("*.json")) if not path.name.endswith(".worker_review.json")]
+    return [
+        path
+        for path in sorted(result_dir.glob("*.json"))
+        if not path.name.endswith(".worker_review.json")
+    ]
 
 
 def absorption_external_project_count(root: Path) -> int:
@@ -765,7 +1159,11 @@ def architecture_memory_external_projects(root: Path) -> list[str]:
     except (OSError, json.JSONDecodeError):
         return []
     sources: set[str] = set()
-    component_index = payload.get("component_index") if isinstance(payload.get("component_index"), dict) else {}
+    component_index = (
+        payload.get("component_index")
+        if isinstance(payload.get("component_index"), dict)
+        else {}
+    )
     for component in component_index.values():
         if not isinstance(component, dict):
             continue
@@ -789,16 +1187,33 @@ def is_generated_absorption_file(rel: str) -> bool:
 
 def is_behavior_test_file(rel: str) -> bool:
     path = Path(rel)
-    return path.suffix.lower() in BEHAVIOR_SUFFIXES and ("tests" in path.parts or path.name.startswith("test_"))
+    return path.suffix.lower() in BEHAVIOR_SUFFIXES and (
+        "tests" in path.parts or path.name.startswith("test_")
+    )
 
 
 def is_project_behavior_source_file(rel: str) -> bool:
     path = Path(rel)
-    return path.suffix.lower() in BEHAVIOR_SUFFIXES and not is_generated_absorption_file(rel) and not is_behavior_test_file(rel)
+    return (
+        path.suffix.lower() in BEHAVIOR_SUFFIXES
+        and not is_generated_absorption_file(rel)
+        and not is_behavior_test_file(rel)
+    )
 
 
 def code_health(root: Path) -> dict[str, Any]:
-    files = project_files(root, {".git", ".retort", "__pycache__", "node_modules", ".venv", ".pytest_cache", ".ruff_cache"})
+    files = project_files(
+        root,
+        {
+            ".git",
+            ".retort",
+            "__pycache__",
+            "node_modules",
+            ".venv",
+            ".pytest_cache",
+            ".ruff_cache",
+        },
+    )
     source_lines = 0
     test_lines = 0
     source_files = 0
@@ -840,7 +1255,10 @@ def self_assessment_risk_checks(root: Path) -> dict[str, Any]:
     prompting = root / "retort_engine" / "paibi_prompting.py"
     evolution = root / "retort_engine" / "self_evolution.py"
     proof = root / "retort_engine" / "proof.py"
-    if not any(path.is_file() for path in (core, workflow, loop, paibi, prompting, evolution, proof)):
+    if not any(
+        path.is_file()
+        for path in (core, workflow, loop, paibi, prompting, evolution, proof)
+    ):
         return {"checks": [], "failed": []}
     workflow_text = read_text(workflow)
     loop_text = read_text(loop)
@@ -850,11 +1268,15 @@ def self_assessment_risk_checks(root: Path) -> dict[str, Any]:
     checks = [
         {
             "name": "strict_absorption_stdout_json",
-            "passed": "is_complete_absorption_stdout_json" in workflow_text and "required.issubset" in workflow_text and "candidates[-1]" in workflow_text,
+            "passed": "is_complete_absorption_stdout_json" in workflow_text
+            and "required.issubset" in workflow_text
+            and "candidates[-1]" in workflow_text,
         },
         {
             "name": "closed_loop_cross_validation",
-            "passed": "_closed_loop_cross_validation" in proof_text and "merge_commit_verified" in proof_text and "pytest_gates_verified" in proof_text,
+            "passed": "_closed_loop_cross_validation" in proof_text
+            and "merge_commit_verified" in proof_text
+            and "pytest_gates_verified" in proof_text,
         },
         {
             "name": "rollback_rehearsal_executes_git_revert",
@@ -862,19 +1284,23 @@ def self_assessment_risk_checks(root: Path) -> dict[str, Any]:
         },
         {
             "name": "similar_loop_saturation_reachable",
-            "passed": "remaining_strong_depth_candidate_count" in loop_text and "consecutive_no_new_core_depth_count" in loop_text,
+            "passed": "remaining_strong_depth_candidate_count" in loop_text
+            and "consecutive_no_new_core_depth_count" in loop_text,
         },
         {
             "name": "github_search_failure_explicit",
-            "passed": "search_failed" in loop_text and "search_stderr_tail" in loop_text,
+            "passed": "search_failed" in loop_text
+            and "search_stderr_tail" in loop_text,
         },
         {
             "name": "batch_absorption_safe_defaults",
-            "passed": "allow_dirty_branch: bool = False" in loop_text and "use_llm: bool = False" in loop_text,
+            "passed": "allow_dirty_branch: bool = False" in loop_text
+            and "use_llm: bool = False" in loop_text,
         },
         {
             "name": "single_absorb_failure_isolated",
-            "passed": "_loop_failure_summary" in loop_text and "except Exception as exc" in loop_text,
+            "passed": "_loop_failure_summary" in loop_text
+            and "except Exception as exc" in loop_text,
         },
         {
             "name": "max_rounds_is_enforced",
@@ -882,7 +1308,8 @@ def self_assessment_risk_checks(root: Path) -> dict[str, Any]:
         },
         {
             "name": "prompt_says_local_audit_has_no_score",
-            "passed": "能力吸收审计只提供风险信号" in prompting_text and "不得把本地能力吸收审计当作参考分" in prompting_text,
+            "passed": "能力吸收审计只提供风险信号" in prompting_text
+            and "不得把本地能力吸收审计当作参考分" in prompting_text,
         },
     ]
     failed = [str(item["name"]) for item in checks if not item["passed"]]

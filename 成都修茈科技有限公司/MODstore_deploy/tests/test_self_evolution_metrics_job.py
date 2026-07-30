@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -191,3 +192,14 @@ def test_fixed_qa_environment_excludes_runtime_secrets_and_release_identity(monk
     assert "MODSTORE_DB_PATH" not in child
     assert "MODSTORE_DAILY_ENV_CLEANROOM" not in child
     assert child["PYTHONNOUSERSITE"] == "1"
+
+
+def test_fixed_qa_environment_uses_repository_shared_package(tmp_path):
+    repo_root = tmp_path / "repo"
+    project = repo_root / "成都修茈科技有限公司" / "MODstore_deploy"
+    shared_package = repo_root / "packages" / "xcagi_common"
+    shared_package.mkdir(parents=True)
+
+    child = _qa_child_env(project, tmp_path / "temp")
+
+    assert str(shared_package) in child["PYTHONPATH"].split(os.pathsep)

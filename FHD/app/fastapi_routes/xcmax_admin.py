@@ -21,6 +21,12 @@ from typing import Any, cast
 from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from app.fastapi_routes.xcmax_admin_auth import (
+    admin_approver_from_session as _admin_approver_from_session,
+)
+from app.fastapi_routes.xcmax_admin_auth import (
+    require_market_admin_session as _require_market_admin_session,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -30,36 +36,6 @@ router = APIRouter(prefix="/api/xcmax", tags=["xcmax-admin"])
 REMOTE_HOST = os.environ.get("XCMAX_REMOTE_HOST", "119.27.178.147")
 REMOTE_PORT = int(os.environ.get("XCMAX_REMOTE_PORT", "9999"))
 _DEFAULT_URLOPEN = urllib.request.urlopen
-
-
-def _require_market_admin_session(request: Request) -> JSONResponse | None:
-    from app.application.desktop_admin_gate import (
-        assert_desktop_allows_session,
-        forbidden_payload,
-        is_desktop_runtime,
-    )
-    from app.application.session_account_meta import load_session_account_meta
-    from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
-
-    if is_desktop_runtime():
-        return JSONResponse(forbidden_payload(), status_code=403)
-
-    sid = _session_id_from_request(request)
-    if not sid:
-        return JSONResponse(
-            {"success": False, "message": "请先登录"},
-            status_code=401,
-        )
-    meta = load_session_account_meta(sid) or {}
-    denied = assert_desktop_allows_session(meta, session_id=sid)
-    if denied is not None:
-        return JSONResponse(denied, status_code=403)
-    if meta.get("account_kind") != "admin" or not meta.get("market_is_admin"):
-        return JSONResponse(
-            {"success": False, "message": "需要管理员账号登录后访问"},
-            status_code=403,
-        )
-    return None
 
 
 @router.get("/admin/autonomy/audit-log", response_model=None)
@@ -103,23 +79,6 @@ async def autonomy_audit_log(
     }
 
 
-def _admin_approver_from_session(request: Request, body_approver: str = "") -> str:
-    """Prefer body approver; else session username / market username."""
-    explicit = str(body_approver or "").strip()
-    if explicit:
-        return explicit
-    from app.application.session_account_meta import load_session_account_meta
-    from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
-
-    sid = _session_id_from_request(request)
-    meta = load_session_account_meta(sid) if sid else {}
-    for key in ("username", "market_username", "display_name"):
-        value = str((meta or {}).get(key) or "").strip()
-        if value:
-            return value
-    return "admin"
-
-
 @router.get("/admin/autonomy/actions/pending", response_model=None)
 async def admin_pending_autonomy_actions(request: Request):
     """管理端审批中心：用管理员会话拉取待办（勿走 webhook token）。"""
@@ -137,7 +96,12 @@ async def admin_resume_autonomy_action(action_id: str, request: Request):
     gate = _require_market_admin_session(request)
     if gate is not None:
         return gate
-    from app.application.autonomy.approval_resume import ApprovalStateError, resume_action
+    from app.application.autonomy.approval_resume import (
+        ApprovalStateError,
+        admin_execution_contract,
+        get_action_state,
+        resume_action,
+    )
 
     try:
         body = await request.json()
@@ -145,20 +109,45 @@ async def admin_resume_autonomy_action(action_id: str, request: Request):
         body = {}
     if not isinstance(body, dict):
         body = {}
-    approver = _admin_approver_from_session(request, str(body.get("approver") or ""))
-    # 管理端人工通过：默认只落审批态，执行由 CI/部署回调继续（避免无本地 executor 409）
-    defer = body.get("defer_execution")
-    defer_execution = True if defer is None else bool(defer)
+    approver = _admin_approver_from_session(request)
+
+    current = get_action_state(action_id)
+    if current is None:
+        return JSONResponse(
+            {"ok": False, "code": "action_not_found", "message": "待审批动作不存在"},
+            status_code=409,
+        )
+    contract = admin_execution_contract(current)
+    if not contract["admin_execution_ready"]:
+        return JSONResponse(
+            {
+                "ok": False,
+                "code": str(contract["execution_mode"]),
+                "message": str(contract["execution_guidance"]),
+                "action": {**current, **contract},
+            },
+            status_code=409,
+        )
     try:
         item = resume_action(
             action_id,
             approver=approver,
             approval_id=str(body.get("approval_id") or ""),
-            defer_execution=defer_execution,
+            defer_execution=False,
         )
     except ApprovalStateError as exc:
         return JSONResponse({"ok": False, "message": str(exc)}, status_code=409)
-    return {"ok": True, "action": item}
+    if str(item.get("state") or "") != "executed":
+        return JSONResponse(
+            {
+                "ok": False,
+                "code": "execution_failed",
+                "message": "审批已记录，但动作执行失败；请查看执行结果后修复。",
+                "action": item,
+            },
+            status_code=502,
+        )
+    return {"ok": True, "execution_dispatched": True, "action": item}
 
 
 @router.post("/admin/autonomy/actions/{action_id}/reject", response_model=None)
@@ -166,7 +155,10 @@ async def admin_reject_autonomy_action(action_id: str, request: Request):
     gate = _require_market_admin_session(request)
     if gate is not None:
         return gate
-    from app.application.autonomy.approval_resume import ApprovalStateError, reject_action
+    from app.application.autonomy.approval_resume import (
+        ApprovalStateError,
+        reject_action,
+    )
 
     try:
         body = await request.json()
@@ -174,7 +166,7 @@ async def admin_reject_autonomy_action(action_id: str, request: Request):
         body = {}
     if not isinstance(body, dict):
         body = {}
-    approver = _admin_approver_from_session(request, str(body.get("approver") or ""))
+    approver = _admin_approver_from_session(request)
     if not approver:
         return JSONResponse(
             {"ok": False, "message": "approver is required"},
@@ -248,7 +240,11 @@ async def admin_autonomy_overview(request: Request):
         "ok": True,
         "health": {"ok": True, "service": "ops-autonomy-approval"},
         "pending": {"count": len(pending), "items": pending[:20]},
-        "audit": {"items": audit_items, "count": len(audit_items), "summary": audit_summary},
+        "audit": {
+            "items": audit_items,
+            "count": len(audit_items),
+            "summary": audit_summary,
+        },
         "loop": extract_loop_run_summary(runtime if isinstance(runtime, dict) else {}),
         "runtime": runtime,
         "closure": {
@@ -303,7 +299,9 @@ async def admin_autonomy_cross_tier_gate(request: Request):
     gate = _require_market_admin_session(request)
     if gate is not None:
         return gate
-    from app.application.autonomy.admin_overview import evaluate_cross_tier_gate_snapshot
+    from app.application.autonomy.admin_overview import (
+        evaluate_cross_tier_gate_snapshot,
+    )
 
     return {"ok": True, **evaluate_cross_tier_gate_snapshot(None)}
 
@@ -396,6 +394,7 @@ async def _market_admin_proxy(
     *,
     json_body: dict[str, Any] | None = None,
     require_admin_session: bool = True,
+    authorization_override: str = "",
 ):
     """Proxy server-function calls through the market token bound to the local session."""
     if require_admin_session:
@@ -425,6 +424,7 @@ async def _market_admin_proxy(
                 )
     try:
         from app.fastapi_routes.market_account import (
+            _auth_header,
             _authorization_from_request_resolved,
             _error_message,
             _proxy_json,
@@ -436,7 +436,9 @@ async def _market_admin_proxy(
         )
 
     body_for_auth = json_body if isinstance(json_body, dict) else {}
-    authorization = await _authorization_from_request_resolved(request, body_for_auth)
+    authorization = _auth_header(authorization_override)
+    if not authorization:
+        authorization = await _authorization_from_request_resolved(request, body_for_auth)
     if not authorization:
         return JSONResponse(
             {
@@ -715,7 +717,10 @@ async def _remote_duty_health(request: Request) -> dict[str, Any]:
         return health_payload
     if hasattr(health_payload, "body"):
         try:
-            return cast("dict[str, Any]", json.loads(getattr(health_payload, "body", b"") or b"{}"))
+            return cast(
+                "dict[str, Any]",
+                json.loads(getattr(health_payload, "body", b"") or b"{}"),
+            )
         except RECOVERABLE_ERRORS:
             return {}
     return {}
@@ -1242,7 +1247,10 @@ async def admin_set_user_profile(
             # account_tier 仅企业可设
             if norm_account_tier is not None and not should_have_account_tier(final_tier):
                 return JSONResponse(
-                    {"success": False, "message": "账号等级（account_tier）仅企业用户可设置"},
+                    {
+                        "success": False,
+                        "message": "账号等级（account_tier）仅企业用户可设置",
+                    },
                     status_code=422,
                 )
 
@@ -1381,12 +1389,14 @@ async def admin_force_push_user_entitlements(
         },
         "mod_ids": _clean_string_list(payload.get("mod_ids")),
         "wallet": wallet_data,
-        "workflow_employees": payload.get("workflow_employees")
-        if isinstance(payload.get("workflow_employees"), list)
-        else [],
-        "installed_mods": payload.get("installed_mods")
-        if isinstance(payload.get("installed_mods"), list)
-        else [],
+        "workflow_employees": (
+            payload.get("workflow_employees")
+            if isinstance(payload.get("workflow_employees"), list)
+            else []
+        ),
+        "installed_mods": (
+            payload.get("installed_mods") if isinstance(payload.get("installed_mods"), list) else []
+        ),
         "source": "admin_entitlements_force_push",
         "meta": {
             "updated_at_ms": int(time.time() * 1000),
@@ -1814,7 +1824,9 @@ async def local_employee_execute(
     """管理端本机员工执行入口：绕开远端代理，直接调用 FHD employee_runtime。"""
     from app.application.auth_permission_resolver import require_allowed
     from app.application.employee_runtime.executor import execute_employee_task_local
-    from app.application.employee_runtime.result_verifier import verify_employee_run_result
+    from app.application.employee_runtime.result_verifier import (
+        verify_employee_run_result,
+    )
     from app.application.employee_runtime.run_ledger import (
         create_employee_run_log,
         finish_employee_run_log,
@@ -2213,7 +2225,10 @@ async def ops_duty_health(request: Request):
             "success": False,
             "staffing": closure.get("staffing") or {},
         }
-    merged = {**remote, "staffing": closure.get("staffing") or remote.get("staffing") or {}}
+    merged = {
+        **remote,
+        "staffing": closure.get("staffing") or remote.get("staffing") or {},
+    }
     merged["planned_employee_ids"] = closure.get("planned_employee_ids")
     merged["registered_employee_ids"] = closure.get("registered_employee_ids")
     merged["planned_local_installed_count"] = closure.get("planned_local_installed_count")
@@ -2278,114 +2293,27 @@ async def ops_closure_status(request: Request):
     return {"success": True, "data": data}
 
 
-@router.get("/ops/founder-autonomy", response_model=None)
-async def ops_founder_autonomy(request: Request):
-    """Aggregate the seven founder-autonomy dimensions from live evidence.
-
-    Each upstream is fail-soft: an unavailable evidence domain lowers the
-    corresponding score instead of making the management page unavailable or
-    silently converting source capability into runtime proof.
-    """
+@router.get("/ops/runtime-inventory", response_model=None)
+async def ops_runtime_inventory(request: Request):
+    """Desired×actual 运行时真相清单（拓扑 SSOT + 本机探针），并刷新公开投影。"""
 
     gate = _require_market_admin_session(request)
     if gate is not None:
         return gate
 
-    from app.application.autonomy.approval_resume import list_pending_actions
-    from app.application.founder_autonomy_status import (
-        build_founder_autonomy_snapshot,
-        write_public_founder_autonomy_projection,
-    )
-    from app.application.ops_closure_status import build_ops_closure_status
-    from app.fastapi_routes.knowledge_v1 import _knowledge_runtime_snapshot
-
-    async def _safe_proxy(path: str) -> dict[str, Any]:
-        try:
-            payload = await _market_admin_proxy(request, "GET", path)
-        except RECOVERABLE_ERRORS as exc:
-            logger.warning("founder autonomy evidence unavailable path=%s: %s", path, exc)
-            return {}
-        return payload if isinstance(payload, dict) else {}
-
-    (
-        runtime,
-        remote_health,
-        employee_autonomy,
-        employee_capability,
-        customer_value,
-        autonomy_audit,
-        dead_letters,
-        strategic_decisions,
-        strategic_council,
-        action_board,
-    ) = await asyncio.gather(
-        _safe_proxy("/api/ops/self-maintenance/status?limit=100"),
-        _safe_proxy("/api/admin/duty-graph/health"),
-        _safe_proxy("/api/admin/employee-autonomy/dashboard"),
-        _safe_proxy("/api/admin/employee-autonomy/execution-coverage?window_hours=24"),
-        _safe_proxy("/api/admin/customer-value/evidence?window_days=90"),
-        _safe_proxy("/api/admin/autonomy/evidence?window_days=30&limit=100"),
-        _safe_proxy("/api/admin/events/dlq/health"),
-        _safe_proxy("/api/xcmax/strategic/decisions?limit=100"),
-        _safe_proxy("/api/xcmax/strategic/council/status?limit=20"),
-        _safe_proxy("/api/public/action-board"),
-    )
-
-    action_board_data = (
-        action_board.get("data") if isinstance(action_board.get("data"), dict) else action_board
-    )
-    action_board_goal_section = action_board_data.get("goals")
-    action_board_goal_summary = (
-        action_board_goal_section.get("summary")
-        if isinstance(action_board_goal_section, dict)
-        else None
-    )
-    action_board_goals = (
-        action_board_goal_summary if isinstance(action_board_goal_summary, dict) else {}
-    )
+    from app.application.runtime_inventory import write_runtime_inventory_projection
 
     try:
-        knowledge = _knowledge_runtime_snapshot()
+        result = write_runtime_inventory_projection(host="127.0.0.1")
     except RECOVERABLE_ERRORS as exc:
-        logger.warning("founder autonomy knowledge evidence unavailable: %s", exc)
-        knowledge = {}
-    try:
-        pending_actions = list_pending_actions()
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("founder autonomy approvals unavailable: %s", exc)
-        pending_actions = []
-
-    closure = build_ops_closure_status(remote_health)
-    snapshot = build_founder_autonomy_snapshot(
-        runtime=runtime,
-        closure=closure,
-        approvals={"local_pending": len(pending_actions)},
-        knowledge=knowledge,
-        goals=action_board_goals,
-        customer_value=customer_value,
-        autonomy_audit=autonomy_audit,
-        employee_autonomy=employee_autonomy,
-        employee_capability=employee_capability,
-        dead_letters=dead_letters,
-        strategic_decisions=strategic_decisions,
-        strategic_council=strategic_council,
-        surfaces={
-            "founder_cockpit": True,
-            "approval_center": True,
-            "knowledge_base": True,
-            "ai_employees": True,
-            "goals": bool(action_board_goals),
-            "loops": True,
-        },
-    )
-    publication = write_public_founder_autonomy_projection(snapshot)
-    if not publication.get("ok"):
-        logger.warning(
-            "founder autonomy public projection not fully published written=%s errors=%s",
-            publication.get("written"),
-            publication.get("errors"),
-        )
-    return {"success": True, "data": snapshot}
+        logger.warning("runtime inventory probe failed: %s", exc)
+        return {"success": False, "error": str(exc)}
+    snapshot = result.get("snapshot") or {}
+    return {
+        "success": True,
+        "data": snapshot,
+        "publication": result.get("publication") or {},
+    }
 
 
 @router.post("/ops/staffing/onboard", response_model=None)
@@ -2911,7 +2839,8 @@ def _collect_cursor_usage() -> dict[str, Any]:
     for a in aggs:
         m = a.get("modelIntent", "unknown")
         slot = by_model.setdefault(
-            m, {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0, "cents": 0.0}
+            m,
+            {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0, "cents": 0.0},
         )
         slot["input"] += _to_int(a.get("inputTokens"))
         slot["output"] += _to_int(a.get("outputTokens"))
@@ -3146,7 +3075,13 @@ def _build_token_usage_summary() -> dict[str, Any]:
     codex = _collect_codex_usage()
     trae = _collect_trae_usage()
     mimo = _collect_mimo_usage()
-    sources = {"local": local, "cursor": cursor, "codex": codex, "trae": trae, "mimo": mimo}
+    sources = {
+        "local": local,
+        "cursor": cursor,
+        "codex": codex,
+        "trae": trae,
+        "mimo": mimo,
+    }
     # 给每个来源加费用估算
     for key, src in sources.items():
         src["estimated_cost_usd"] = round(_estimate_cost_usd(key, src), 2)
@@ -3164,7 +3099,9 @@ def _build_token_usage_summary() -> dict[str, Any]:
         "collected_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
     try:
-        from app.infrastructure.billing.platform_made_tokens import write_public_snapshot
+        from app.infrastructure.billing.platform_made_tokens import (
+            write_public_snapshot,
+        )
 
         snapshot_path = write_public_snapshot(summary)
         summary["public_snapshot_path"] = str(snapshot_path)

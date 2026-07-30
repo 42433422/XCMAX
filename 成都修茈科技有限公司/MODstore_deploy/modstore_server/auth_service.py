@@ -64,10 +64,19 @@ def verify_password(raw: str, hashed: str) -> bool:
         return False
 
 
-def create_access_token(user_id: int, username: str, *, is_admin: bool = False) -> str:
+def create_access_token(
+    user_id: int,
+    username: str,
+    *,
+    is_admin: bool = False,
+    expires_delta: Optional[timedelta] = None,
+    actor: str = "",
+) -> str:
     """签发 access JWT。``roles`` 与 Java 支付网关 ``JwtAuthenticationFilter`` 对齐（``ADMIN`` → ``ROLE_ADMIN``）。"""
     roles: List[str] = ["ADMIN"] if is_admin else []
-    expire = datetime.now(timezone.utc) + timedelta(hours=_JWT_EXPIRE_HOURS)
+    expire = datetime.now(timezone.utc) + (
+        expires_delta if expires_delta is not None else timedelta(hours=_JWT_EXPIRE_HOURS)
+    )
     payload = {
         "sub": str(user_id),
         "username": username,
@@ -75,6 +84,9 @@ def create_access_token(user_id: int, username: str, *, is_admin: bool = False) 
         "roles": roles,
         "exp": expire,
     }
+    actor_clean = str(actor or "").strip()
+    if actor_clean:
+        payload["actor"] = actor_clean
     return cast(str, jwt.encode(payload, _jwt_secret(), algorithm=_JWT_ALGORITHM))
 
 

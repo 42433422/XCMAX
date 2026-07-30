@@ -3,9 +3,9 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
-
+from typing import Any
 
 StateLoader = Callable[[Path], dict[str, Any]]
 StateSaver = Callable[[Path, dict[str, Any]], None]
@@ -65,7 +65,11 @@ def record_execution_proof(
 def rollback_rehearsal(root: Path, merge_commit: str) -> dict[str, Any]:
     command = f"git revert --no-commit -m 1 {merge_commit}"
     try:
-        parents = _git(root, "show", "--no-patch", "--format=%P", merge_commit).strip().split()
+        parents = (
+            _git(root, "show", "--no-patch", "--format=%P", merge_commit)
+            .strip()
+            .split()
+        )
     except RuntimeError as exc:
         return {
             "verified": False,
@@ -91,11 +95,21 @@ def rollback_rehearsal(root: Path, merge_commit: str) -> dict[str, Any]:
     try:
         add = _run_git(root, "worktree", "add", "--detach", str(temp_dir), merge_commit)
         if add.returncode != 0:
-            return {**result, "reason": "worktree_add_failed", "stderr_tail": _tail(add.stderr)}
+            return {
+                **result,
+                "reason": "worktree_add_failed",
+                "stderr_tail": _tail(add.stderr),
+            }
         revert = _run_git(temp_dir, "revert", "--no-commit", "-m", "1", merge_commit)
         diff = _run_git(temp_dir, "diff", "--name-only")
         cached = _run_git(temp_dir, "diff", "--cached", "--name-only")
-        changed_files = sorted({line.strip() for line in f"{diff.stdout}\n{cached.stdout}".splitlines() if line.strip()})
+        changed_files = sorted(
+            {
+                line.strip()
+                for line in f"{diff.stdout}\n{cached.stdout}".splitlines()
+                if line.strip()
+            }
+        )
         _run_git(temp_dir, "reset", "--hard", "HEAD")
         return {
             **result,
@@ -140,9 +154,15 @@ def record_closed_loop_proof(
     proof = {
         "branch_diff_verified": bool(payload.get("branch_diff_verified")),
         "employee_execution_verified": bool(payload.get("employee_execution_verified")),
-        "post_absorption_tests_passed": bool(payload.get("post_absorption_tests_passed")) and bool(validation["pytest_gates_verified"]),
-        "merge_verified": bool(payload.get("merge_verified")) and bool(validation["merge_commit_verified"]),
-        "external_advantage_reassessed": bool(payload.get("external_advantage_reassessed")),
+        "post_absorption_tests_passed": bool(
+            payload.get("post_absorption_tests_passed")
+        )
+        and bool(validation["pytest_gates_verified"]),
+        "merge_verified": bool(payload.get("merge_verified"))
+        and bool(validation["merge_commit_verified"]),
+        "external_advantage_reassessed": bool(
+            payload.get("external_advantage_reassessed")
+        ),
         "evidence": evidence,
         "validation": validation,
     }
@@ -166,9 +186,20 @@ def _closed_loop_cross_validation(
     git_root: GitRoot,
     git_command: GitCommand,
 ) -> dict[str, Any]:
-    merge_commit = _proof_merge_commit(root, payload, git_root=git_root, git_command=git_command)
-    merge_verified = _is_merge_commit(root, merge_commit, git_root=git_root, git_command=git_command) if merge_commit else False
-    pytest_verified = _proof_pytest_gates_verified(root, payload, latest_absorption_run=latest_absorption_run, run_command=run_command)
+    merge_commit = _proof_merge_commit(
+        root, payload, git_root=git_root, git_command=git_command
+    )
+    merge_verified = (
+        _is_merge_commit(root, merge_commit, git_root=git_root, git_command=git_command)
+        if merge_commit
+        else False
+    )
+    pytest_verified = _proof_pytest_gates_verified(
+        root,
+        payload,
+        latest_absorption_run=latest_absorption_run,
+        run_command=run_command,
+    )
     return {
         "merge_commit": merge_commit,
         "merge_commit_verified": merge_verified,
@@ -180,7 +211,9 @@ def _closed_loop_cross_validation(
     }
 
 
-def _proof_merge_commit(root: Path, payload: dict[str, Any], *, git_root: GitRoot, git_command: GitCommand) -> str:
+def _proof_merge_commit(
+    root: Path, payload: dict[str, Any], *, git_root: GitRoot, git_command: GitCommand
+) -> str:
     explicit = str(payload.get("merge_commit") or "").strip()
     if explicit:
         return explicit
@@ -198,18 +231,30 @@ def _proof_merge_commit(root: Path, payload: dict[str, Any], *, git_root: GitRoo
         return ""
 
 
-def _is_merge_commit(root: Path, commit: str, *, git_root: GitRoot, git_command: GitCommand) -> bool:
+def _is_merge_commit(
+    root: Path, commit: str, *, git_root: GitRoot, git_command: GitCommand
+) -> bool:
     repo = git_root(root)
     if repo is None or not commit:
         return False
     try:
-        parents = git_command(repo, "show", "--no-patch", "--format=%P", commit).strip().split()
+        parents = (
+            git_command(repo, "show", "--no-patch", "--format=%P", commit)
+            .strip()
+            .split()
+        )
     except RuntimeError:
         return False
     return len(parents) >= 2
 
 
-def _proof_pytest_gates_verified(root: Path, payload: dict[str, Any], *, latest_absorption_run: LatestRun, run_command: RunCommand) -> bool:
+def _proof_pytest_gates_verified(
+    root: Path,
+    payload: dict[str, Any],
+    *,
+    latest_absorption_run: LatestRun,
+    run_command: RunCommand,
+) -> bool:
     if _gates_have_passing_pytest(payload.get("gates") or []):
         return True
     latest = latest_absorption_run(root)
@@ -251,7 +296,14 @@ def _git(root: Path, *args: str) -> str:
 
 
 def _run_git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *args], cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120, check=False)
+    return subprocess.run(
+        ["git", *args],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
 
 
 def _tail(value: object, limit: int = 1000) -> str:

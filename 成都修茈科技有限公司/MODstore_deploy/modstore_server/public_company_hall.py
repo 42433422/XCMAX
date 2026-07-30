@@ -436,13 +436,20 @@ def _metric_signals(employee_ids: List[str]) -> Dict[str, Dict[str, Any]]:
                 },
             )
             slot["runs_24h"] += 1
-            st = str(m.status or "")
-            if st and st != "success":
+            st = str(m.status or "").strip().lower()
+            task = str(m.task or "")
+            # burn-in / 验收夹具失败不算运营告警；否则编制巡检会把大厅刷成大片红
+            burnin = (
+                st == "burnin_rejected"
+                or task.lstrip().startswith("[duty-burn-in:")
+                or "[duty-burn-in:" in task[:48]
+            )
+            if st and st not in {"success", "completed", "ok"} and not burnin:
                 slot["fail_24h"] += 1
             if slot["last_at"] is None:
                 slot["last_status"] = st
                 # 保留较长原文，公开投影时再摘要；避免列表层二次截断丢详情
-                slot["last_task"] = _clean(str(m.task or ""), 600)
+                slot["last_task"] = _clean(task, 600)
                 slot["last_at"] = _iso(m.created_at)
     except Exception:
         logger.exception("company_hall: metric signals failed")
@@ -463,10 +470,12 @@ def _presence_for(
     open_n = int(action.get("open") or 0)
     p0 = int(action.get("p0_open") or 0)
     fail = int(metric.get("fail_24h") or 0)
-    last_status = str(metric.get("last_status") or "")
+    last_status = str(metric.get("last_status") or "").strip().lower()
     titles = action.get("titles") or []
+    last_healthy = last_status in {"", "success", "completed", "ok"}
 
-    if p0 > 0 or fail >= 2 or last_status in {"failed", "error", "fail"}:
+    # 未闭环 P0：告警。失败计数仅在「最近一跑仍不健康」时拉红，避免事故风暴后成功恢复仍挂红一整天。
+    if p0 > 0 or (fail >= 2 and not last_healthy):
         label = titles[0] if titles else (metric.get("last_task") or "近期执行异常")
         return "alert", str(label)
 
@@ -591,9 +600,25 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
         published = _load_published_action_board()
         if published:
             board = published
+            cal = board.get("calendar_day") or board.get("day")
+            # 公开板可能粘旧日：抬升 day_stale，顶层 day 仍暴露事实并附 calendar_day
+            if not board.get("calendar_day"):
+                try:
+                    from modstore_server.public_action_board import _calendar_today
+
+                    board["calendar_day"] = _calendar_today()
+                except Exception:  # noqa: BLE001
+                    board["calendar_day"] = cal
+            if (
+                board.get("day")
+                and board.get("calendar_day")
+                and board["day"] != board["calendar_day"]
+            ):
+                board["day_stale"] = True
             logger.info(
-                "company_hall: DB action board empty; using published download-action-board.json day=%s",
+                "company_hall: DB action board empty; using published download-action-board.json day=%s stale=%s",
                 board.get("day"),
+                board.get("day_stale"),
             )
 
     # DB 无行动信号时，用公开板条目推导 working/alert（与轨迹同源，不造假心跳）
@@ -744,10 +769,25 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
     bp_items = list(((board.get("breakpoints") or {}).get("items") or [])[:12])
     goal_items = list(((board.get("goals") or {}).get("items") or [])[:12])
 
+    try:
+        from modstore_server.runtime_inventory import runtime_inventory_summary
+
+        runtime = runtime_inventory_summary()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("company_hall: runtime inventory unavailable: %s", exc)
+        runtime = {
+            "schema": "xcagi.runtime_inventory/v1",
+            "ok": False,
+            "failed_must_run": -1,
+            "note": f"runtime inventory unavailable: {exc}",
+        }
+
     return {
         "schema": "xcagi.public_company_hall/v1",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "day": board.get("day"),
+        "calendar_day": board.get("calendar_day"),
+        "day_stale": bool(board.get("day_stale")),
         "readonly": True,
         "note": "公司大厅公开投影：编制为 SSOT；状态由行动条目与执行度量推导，无虚构心跳在线。",
         "cadence": {
@@ -757,13 +797,14 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
         },
         "presence_model": {
             "working": "有未闭环行动条目，或 2h 内有成功执行",
-            "alert": "有未闭环 P0，或 24h 内多次执行失败",
+            "alert": "有未闭环 P0，或 24h 内多次失败且最近一跑仍不健康（不含 burn-in）",
             "idle": "编制内注册、当日无公开活跃任务；含按需触发岗位（非离线）",
         },
         "counts": counts,
         "departments": departments,
         "employees": employees,
         "ai_driver": _public_ai_driver_snapshot(),
+        "runtime": runtime,
         "feed": feed,
         "last_activity": last_activity,
         "board": {

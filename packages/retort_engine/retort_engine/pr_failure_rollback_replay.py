@@ -4,8 +4,9 @@ import json
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from retort_engine.pr_dry_run import review_pr_url
 
@@ -32,7 +33,9 @@ def build_pr_failure_rollback_replay(
 ) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     urls = tuple(pr_urls or DEFAULT_FAILURE_ROLLBACK_PR_URLS)
-    review_call = reviewer or (lambda url: review_pr_url(url, max_comments=8, max_bytes=300000))
+    review_call = reviewer or (
+        lambda url: review_pr_url(url, max_comments=8, max_bytes=300000)
+    )
     command_runner = runner or _run_command
     cases = [_run_case(url, review_call, command_runner) for url in urls]
     real_reviewed = [case for case in cases if case["real_pr_reviewed"]]
@@ -48,8 +51,12 @@ def build_pr_failure_rollback_replay(
         "distinct_repo_count": len(repos),
         "all_failures_rolled_back": len(rolled_back) == len(cases) and bool(cases),
         "uses_git_revert": all(bool(case.get("revert_commit")) for case in cases),
-        "total_review_comment_count": sum(int(case.get("comment_count") or 0) for case in real_reviewed),
-        "total_reviewed_new_change_count": sum(int(case.get("reviewed_new_change_count") or 0) for case in real_reviewed),
+        "total_review_comment_count": sum(
+            int(case.get("comment_count") or 0) for case in real_reviewed
+        ),
+        "total_reviewed_new_change_count": sum(
+            int(case.get("reviewed_new_change_count") or 0) for case in real_reviewed
+        ),
     }
     ready = (
         summary["case_count"] >= min_cases
@@ -76,14 +83,22 @@ def build_pr_failure_rollback_replay(
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return result
 
 
 def _run_case(url: str, reviewer: Reviewer, runner: Runner) -> dict[str, Any]:
     review = _safe_review(url, reviewer)
     summary = review.get("summary") if isinstance(review.get("summary"), dict) else {}
-    nested_summary = (review.get("review") or {}).get("summary") if isinstance(review.get("review"), dict) and isinstance((review.get("review") or {}).get("summary"), dict) else {}
+    nested_summary = (
+        (review.get("review") or {}).get("summary")
+        if isinstance(review.get("review"), dict)
+        and isinstance((review.get("review") or {}).get("summary"), dict)
+        else {}
+    )
     repo = _repo_slug(str(review.get("pr_url") or url))
     with tempfile.TemporaryDirectory(prefix="retort-failure-rollback-") as tmp:
         sandbox = Path(tmp)
@@ -92,13 +107,23 @@ def _run_case(url: str, reviewer: Reviewer, runner: Runner) -> dict[str, Any]:
         payload = {
             "pr_url": str(review.get("pr_url") or url),
             "repo": repo,
-            "comment_count": int(summary.get("comment_count") or nested_summary.get("comment_count") or 0),
-            "reviewed_new_change_count": int(nested_summary.get("reviewed_new_change_count") or summary.get("reviewed_new_change_count") or 0),
+            "comment_count": int(
+                summary.get("comment_count") or nested_summary.get("comment_count") or 0
+            ),
+            "reviewed_new_change_count": int(
+                nested_summary.get("reviewed_new_change_count")
+                or summary.get("reviewed_new_change_count")
+                or 0
+            ),
             "candidate_patch_state": "must_be_reverted_after_failed_gate",
         }
-        artifact.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        artifact.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         runner(["git", "add", "retort_review_payload.json"], sandbox)
-        commit = runner(["git", "commit", "-m", "candidate failed retort patch"], sandbox)
+        commit = runner(
+            ["git", "commit", "-m", "candidate failed retort patch"], sandbox
+        )
         candidate_commit = _head(sandbox, runner) if commit["returncode"] == 0 else ""
         gate = runner([sys.executable, "-c", "import sys; sys.exit(17)"], sandbox)
         revert = runner(["git", "revert", "--no-edit", "HEAD"], sandbox)
@@ -115,9 +140,16 @@ def _run_case(url: str, reviewer: Reviewer, runner: Runner) -> dict[str, Any]:
         "pr_url": str(review.get("pr_url") or url),
         "repo": repo,
         "review_status": str(review.get("status") or ""),
-        "real_pr_reviewed": review.get("status") == "reviewed" and int(summary.get("fetched_bytes") or 0) > 0,
-        "comment_count": int(summary.get("comment_count") or nested_summary.get("comment_count") or 0),
-        "reviewed_new_change_count": int(nested_summary.get("reviewed_new_change_count") or summary.get("reviewed_new_change_count") or 0),
+        "real_pr_reviewed": review.get("status") == "reviewed"
+        and int(summary.get("fetched_bytes") or 0) > 0,
+        "comment_count": int(
+            summary.get("comment_count") or nested_summary.get("comment_count") or 0
+        ),
+        "reviewed_new_change_count": int(
+            nested_summary.get("reviewed_new_change_count")
+            or summary.get("reviewed_new_change_count")
+            or 0
+        ),
         "candidate_commit": candidate_commit,
         "gate_failed": gate["returncode"] != 0,
         "gate_returncode": gate["returncode"],
@@ -129,8 +161,13 @@ def _run_case(url: str, reviewer: Reviewer, runner: Runner) -> dict[str, Any]:
 def _safe_review(url: str, reviewer: Reviewer) -> dict[str, Any]:
     try:
         return reviewer(url)
-    except Exception as exc:
-        return {"status": "failed", "pr_url": url, "summary": {"error": str(exc)[-300:]}, "review": {"summary": {}}}
+    except Exception as exc:  # noqa: BLE001 - injected reviewers are untrusted adapters
+        return {
+            "status": "failed",
+            "pr_url": url,
+            "summary": {"error": str(exc)[-300:]},
+            "review": {"summary": {}},
+        }
 
 
 def _init_repo(root: Path, runner: Runner) -> None:
@@ -155,5 +192,16 @@ def _repo_slug(url: str) -> str:
 
 
 def _run_command(command: list[str], cwd: Path) -> dict[str, Any]:
-    completed = subprocess.run(command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False, timeout=60)
-    return {"returncode": completed.returncode, "stdout": completed.stdout or "", "stderr": completed.stderr or ""}
+    completed = subprocess.run(
+        command,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+    return {
+        "returncode": completed.returncode,
+        "stdout": completed.stdout or "",
+        "stderr": completed.stderr or "",
+    }

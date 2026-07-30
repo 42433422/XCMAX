@@ -526,14 +526,24 @@ def _registered_router_shipment_orders(
             return {"success": False, "message": "缺少 unit_name"}
         if not isinstance(products, list) or not products:
             return {"success": False, "message": "products 须为非空数组"}
-        return cast(
-            "dict[Any, Any]",
-            svc.generate_shipment_document(
-                unit_name=unit_name,
-                products=products,
-                date=params.get("date"),
-            ),
-        )
+        gen_kwargs: dict[str, Any] = {
+            "unit_name": unit_name,
+            "products": products,
+            "date": params.get("date"),
+        }
+        if params.get("template_name"):
+            gen_kwargs["template_name"] = params.get("template_name")
+        elif params.get("template"):
+            gen_kwargs["template_name"] = params.get("template")
+        if params.get("template_id"):
+            gen_kwargs["template_id"] = params.get("template_id")
+        if params.get("preferred_template") or params.get("template"):
+            gen_kwargs["preferred_template"] = params.get("preferred_template") or params.get(
+                "template"
+            )
+        if params.get("order_number"):
+            gen_kwargs["order_number"] = params.get("order_number")
+        return cast("dict[Any, Any]", svc.generate_shipment_document(**gen_kwargs))
 
     if action == "generate_batch":
         shipments = params.get("shipments") or []
@@ -556,11 +566,16 @@ def _registered_router_shipment_orders(
                 errors.append({"index": idx, "error": "产品列表不能为空"})
                 continue
             try:
-                result = svc.generate_shipment_document(
-                    unit_name=unit_name,
-                    products=products,
-                    date=shipment.get("date"),
-                )
+                batch_kwargs: dict[str, Any] = {
+                    "unit_name": unit_name,
+                    "products": products,
+                    "date": shipment.get("date"),
+                }
+                if shipment.get("template_name"):
+                    batch_kwargs["template_name"] = shipment.get("template_name")
+                if shipment.get("template_id"):
+                    batch_kwargs["template_id"] = shipment.get("template_id")
+                result = svc.generate_shipment_document(**batch_kwargs)
                 if result.get("success"):
                     ok_count += 1
                 else:
@@ -913,6 +928,39 @@ def _registered_router_document_template(
             payload,
             base_dir=str(runtime_context.get("template_base_dir") or "") or None,
         )
+    elif action in ("ingest", "upload"):
+        from app.application.office_template_ingest_app_service import (
+            ingest_office_bytes_to_template_library,
+            ingest_office_path_to_template_library,
+        )
+
+        file_path = str(payload.get("file_path") or payload.get("original_file_path") or "").strip()
+        file_body = payload.get("file_body")
+        template_name = str(payload.get("template_name") or payload.get("name") or "").strip()
+        template_scope = str(
+            payload.get("template_scope") or payload.get("business_scope") or ""
+        ).strip()
+        source = (
+            str(payload.get("source") or "document_template_ingest").strip()
+            or "document_template_ingest"
+        )
+        if isinstance(file_body, (bytes, bytearray)):
+            data, status_code = ingest_office_bytes_to_template_library(
+                file_body=bytes(file_body),
+                filename=str(payload.get("filename") or "upload.bin"),
+                template_name=template_name,
+                template_scope=template_scope,
+                source=source,
+            )
+        elif file_path:
+            data, status_code = ingest_office_path_to_template_library(
+                file_path,
+                template_name=template_name,
+                template_scope=template_scope,
+                source=source,
+            )
+        else:
+            return {"success": False, "message": "缺少 file_path 或 file_body"}
     else:
         return {"success": False, "message": f"未知 document_template action: {action}"}
     result = dict(data or {})
@@ -1066,6 +1114,16 @@ def _registered_router_template_preview(
         template_key = (
             f"TPL_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8].upper()}"
         )
+        from app.infrastructure.templates.tenant_scope import templates_tenant_id_for_insert
+        from app.infrastructure.tenant_scope import TenantScopeError
+
+        try:
+            tenant_id = templates_tenant_id_for_insert()
+        except TenantScopeError:
+            return {
+                "success": False,
+                "message": "缺少租户上下文，无法创建模板",
+            }
         with get_db() as db:
             result = db.execute(
                 text(
@@ -1074,12 +1132,12 @@ def _registered_router_template_preview(
                         template_key, template_name, template_type,
                         original_file_path, analyzed_data, editable_config,
                         zone_config, merged_cells_config, style_config,
-                        business_rules, is_active
+                        business_rules, is_active, tenant_id
                     ) VALUES (
                         :template_key, :template_name, :template_type,
                         :original_file_path, :analyzed_data, :editable_config,
                         :zone_config, :merged_cells_config, :style_config,
-                        :business_rules, :is_active
+                        :business_rules, :is_active, :tenant_id
                     )
                 """
                 ),
@@ -1095,6 +1153,7 @@ def _registered_router_template_preview(
                     "style_config": json.dumps({}, ensure_ascii=False),
                     "business_rules": json.dumps(business_rules, ensure_ascii=False),
                     "is_active": 1,
+                    "tenant_id": tenant_id,
                 },
             )
             template_id = result.lastrowid
@@ -2209,6 +2268,39 @@ def _execute_excel_import_records(records: list[dict[str, Any]]) -> dict:
 def _registered_router_excel_import(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
+    if action in {"import_delivery_notes", "execute_delivery_etl"}:
+        file_path = str(params.get("file_path") or "").strip()
+        notes = params.get("notes")
+        if not file_path and not isinstance(notes, list):
+            return {"success": False, "message": "缺少 file_path 或 notes"}
+        try:
+            from app.application.shipment_excel_etl_app_service import (
+                get_shipment_excel_etl_app_service,
+            )
+
+            return get_shipment_excel_etl_app_service().execute(
+                file_path or "",
+                import_products=bool(params.get("import_products", True)),
+                import_shipments=bool(params.get("import_shipments", True)),
+                notes=notes if isinstance(notes, list) else None,
+            )
+        except RECOVERABLE_ERRORS as err:
+            logger.error("shipment delivery etl failed: %s", err, exc_info=True)
+            return {"success": False, "message": f"送货单闭环失败：{err}"}
+
+    if action == "preview_delivery_notes":
+        file_path = str(params.get("file_path") or "").strip()
+        if not file_path:
+            return {"success": False, "message": "缺少 file_path"}
+        try:
+            from app.application.shipment_excel_etl_app_service import (
+                get_shipment_excel_etl_app_service,
+            )
+
+            return get_shipment_excel_etl_app_service().preview(file_path)
+        except RECOVERABLE_ERRORS as err:
+            return {"success": False, "message": str(err)}
+
     if action == "execute_import":
         pending_import_id = str(params.get("pending_import_id") or "").strip()
         if not pending_import_id:
@@ -2222,6 +2314,24 @@ def _registered_router_excel_import(
 
         if not import_data:
             return {"success": False, "message": "未找到待处理的导入数据或已过期"}
+
+        if str(import_data.get("kind") or "") == "shipment_delivery_etl":
+            try:
+                from app.application.shipment_excel_etl_app_service import (
+                    get_shipment_excel_etl_app_service,
+                )
+
+                result = get_shipment_excel_etl_app_service().execute(
+                    str(import_data.get("file_path") or ""),
+                    notes=import_data.get("notes")
+                    if isinstance(import_data.get("notes"), list)
+                    else None,
+                )
+                if result.get("success"):
+                    pending_imports.pop(pending_import_id, None)
+                return result
+            except RECOVERABLE_ERRORS as err:
+                return {"success": False, "message": f"送货单闭环失败：{err}"}
 
         records = import_data.get("records", [])
         if not isinstance(records, list):

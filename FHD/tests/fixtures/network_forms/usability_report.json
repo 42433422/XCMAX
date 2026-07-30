@@ -1,0 +1,452 @@
+{
+  "summary": {
+    "total": 13,
+    "usable_ab": 9,
+    "tech_ok_but_bad_semantics": 0,
+    "grades": {
+      "A": 9,
+      "B": 0,
+      "C": 4,
+      "D": 0,
+      "F": 0
+    }
+  },
+  "cases": [
+    {
+      "file": "闭环测试_送货单模板.xlsx",
+      "grade": "A",
+      "preview_ok": true,
+      "note_count": 2,
+      "layout_cols": [
+        "产品型号",
+        "产品名称",
+        "数量/件",
+        "规格/KG",
+        "数量/KG",
+        "单价/元",
+        "金额/元"
+      ],
+      "best_unit": "闭环测试客户甲",
+      "unit_ok": true,
+      "semantic_ok": true,
+      "usable_items": 2,
+      "item_preview": [
+        {
+          "name": "PU哑光清漆",
+          "model": "RX-LOOP",
+          "qty": 2
+        },
+        {
+          "name": "PE白底漆",
+          "model": "GS621",
+          "qty": 1
+        }
+      ],
+      "create_ok": true,
+      "shipment_created": 2,
+      "create_error": "送货单闭环完成：新建 2，跳过重复 0；客户/产品已同步",
+      "generate_ok": true,
+      "template_reason": "resolved_by_id",
+      "usable": true
+    },
+    {
+      "file": "form_报价单_星光贸易.xlsx",
+      "grade": "A",
+      "preview_ok": true,
+      "note_count": 1,
+      "layout_cols": [
+        "型号",
+        "品名",
+        "规格kg",
+        "报价"
+      ],
+      "best_unit": "星光贸易有限公司",
+      "unit_ok": true,
+      "semantic_ok": true,
+      "usable_items": 2,
+      "item_preview": [
+        {
+          "name": "PE白底漆",
+          "model": "5003",
+          "qty": 1
+        },
+        {
+          "name": "PU清面漆",
+          "model": "5008",
+          "qty": 1
+        }
+      ],
+      "create_ok": true,
+      "shipment_created": 1,
+      "create_error": "送货单闭环完成：新建 1，跳过重复 0；客户/产品已同步",
+      "generate_ok": true,
+      "template_reason": "resolved_by_id",
+      "usable": true
+    },
+    {
+      "file": "form_考勤统计_3月.xlsx",
+      "grade": "C",
+      "preview_ok": true,
+      "note_count": 0,
+      "layout_cols": [
+        "姓名",
+        "部门",
+        "出勤天",
+        "加班小时",
+        "请假天"
+      ],
+      "best_unit": null,
+      "unit_ok": false,
+      "semantic_ok": false,
+      "usable_items": 0,
+      "item_preview": [],
+      "create_ok": false,
+      "shipment_created": null,
+      "create_error": null,
+      "generate_ok": false,
+      "template_reason": null,
+      "usable": false
+    },
+    {
+      "file": "form_送货单_星光贸易.xlsx",
+      "grade": "A",
+      "preview_ok": true,
+      "note_count": 1,
+      "layout_cols": [
+        "编号",
+        "品名",
+        "规格",
+        "桶数",
+        "金额"
+      ],
+      "best_unit": "星光贸易有限公司",
+      "unit_ok": true,
+      "semantic_ok": true,
+      "usable_items": 2,
+      "item_preview": [
+        {
+          "name": "PE白底漆",
+          "model": "5003",
+          "qty": 3
+        },
+        {
+          "name": "稀释剂",
+          "model": "6012",
+          "qty": 5
+        }
+      ],
+      "create_ok": true,
+      "shipment_created": 1,
+      "create_error": "送货单闭环完成：新建 1，跳过重复 0；客户/产品已同步",
+      "generate_ok": true,
+      "template_reason": "resolved_by_id",
+      "usable": true
+    },
+    {
+      "file": "form_采购订单_七彩乐园.xlsx",
+      "grade": "A",
+      "preview_ok": true,
+      "note_count": 1,
+      "layout_cols": [
+        "序号",
+        "型号",
+        "品名",
+        "规格",
+        "数量",
+        "单价",
+        "金额"
+      ],
+      "best_unit": "七彩乐园家私",
+      "unit_ok": true,
+      "semantic_ok": true,
+      "usable_items": 2,
+      "item_preview": [
+        {
+          "name": "PE白底漆",
+          "model": "GS621",
+          "qty": 10
+        },
+        {
+          "name": "PU哑光清漆",
+          "model": "RX-01",
+          "qty": 4
+        }
+      ],
+      "create_ok": true,
+      "shipment_created": 1,
+      "create_error": "送货单闭环完成：新建 1，跳过重复 0；客户/产品已同步",
+      "generate_ok": true,
+      "template_reason": "resolved_by_id",
+      "usable": true
+    },
+    {
+      "file": "net_PI_sample.xlsx",
+      "grade": "A",
+      "preview_ok": true,
+      "note_count": 1,
+      "layout_cols": [
+        "#",
+        "SKU",
+        "Description",
+        "HS Code",
+        "Qty",
+        "Unit Price",
+        "Amount"
+      ],
+      "best_unit": "Dukjil Trading Pte Ltd",
+      "unit_ok": true,
+      "semantic_ok": true,
+      "usable_items": 2,
+      "item_preview": [
+        {
+          "name": "DKJ-100",
+          "model": "DKJ-100",
+          "qty": 250
+        },
+        {
+          "name": "DKJ-220",
+          "model": "DKJ-220",
+          "qty": 140
+        }
+      ],
+      "create_ok": true,
+      "shipment_created": 1,
+      "create_error": "送货单闭环完成：新建 1，跳过重复 0；客户/产品已同步",
+      "generate_ok": true,
+      "template_reason": "resolved_by_id",
+      "usable": true
+    },
+    {
+      "file": "net_PL_sample.xlsx",
+      "grade": "A",
+      "preview_ok": true,
+      "note_count": 1,
+      "layout_cols": [
+        "Carton",
+        "SKU",
+        "Qty",
+        "NW(kg)",
+        "GW(kg)",
+        "CBM",
+        "L×W×H(cm)"
+      ],
+      "best_unit": "Dukjil Trading Pte Ltd",
+      "unit_ok": true,
+      "semantic_ok": true,
+      "usable_items": 3,
+      "item_preview": [
+        {
+          "name": "DKJ-100",
+          "model": "DKJ-100",
+          "qty": 100
+        },
+        {
+          "name": "DKJ-100",
+          "model": "DKJ-100",
+          "qty": 100
+        },
+        {
+          "name": "DKJ-100",
+          "model": "DKJ-100",
+          "qty": 50
+        }
+      ],
+      "create_ok": true,
+      "shipment_created": 1,
+      "create_error": "送货单闭环完成：新建 1，跳过重复 0；客户/产品已同步",
+      "generate_ok": true,
+      "template_reason": "resolved_by_id",
+      "usable": true
+    },
+    {
+      "file": "net_PackPlan_sample.xlsx",
+      "grade": "A",
+      "preview_ok": true,
+      "note_count": 1,
+      "layout_cols": [
+        "Carton No",
+        "Box Code",
+        "Contents",
+        "NW(kg)",
+        "GW(kg)",
+        "CBM",
+        "L×W×H (cm)",
+        "Fill%"
+      ],
+      "best_unit": "Dukjil Trading Pte Ltd",
+      "unit_ok": true,
+      "semantic_ok": true,
+      "usable_items": 6,
+      "item_preview": [
+        {
+          "name": "MB-DKJ100",
+          "model": "MB-DKJ100",
+          "qty": 1
+        },
+        {
+          "name": "MB-DKJ100",
+          "model": "MB-DKJ100",
+          "qty": 2
+        },
+        {
+          "name": "MB-DKJ100",
+          "model": "MB-DKJ100",
+          "qty": 3
+        }
+      ],
+      "create_ok": true,
+      "shipment_created": 1,
+      "create_error": "送货单闭环完成：新建 1，跳过重复 0；客户/产品已同步",
+      "generate_ok": true,
+      "template_reason": "resolved_by_id",
+      "usable": true
+    },
+    {
+      "file": "net_delivery_order.xlsx",
+      "grade": "A",
+      "preview_ok": true,
+      "note_count": 1,
+      "layout_cols": [
+        "To:",
+        "Semiconductor Technologies && Instruments Pte Ltd",
+        "DO No:",
+        "TSH-1910-1340"
+      ],
+      "best_unit": "Semiconductor Technologies && Instruments Pte Ltd",
+      "unit_ok": true,
+      "semantic_ok": true,
+      "usable_items": 6,
+      "item_preview": [
+        {
+          "name": "12000-015-028R00\nCABLE ASSY: POWER CABLE, +24V TO GARDASOFT INPOCKET",
+          "model": "12000-015-028R00\nCABLE ASSY: POWER CABLE, +24V TO GARDASOFT INPOCKET",
+          "qty": 1
+        },
+        {
+          "name": "190091-035-002R00\nCABLE ASSY: 5M, TRIGGER FOR TELI CAMERA INPOCKET",
+          "model": "190091-035-002R00\nCABLE ASSY: 5M, TRIGGER FOR TELI CAMERA INPOCKET",
+          "qty": 2
+        },
+        {
+          "name": "184101-000-001R02\nLIGHT ASSY: RTL-79-16-0-R",
+          "model": "184101-000-001R02\nLIGHT ASSY: RTL-79-16-0-R",
+          "qty": 3
+        }
+      ],
+      "create_ok": true,
+      "shipment_created": 1,
+      "create_error": "送货单闭环完成：新建 1，跳过重复 0；客户/产品已同步",
+      "generate_ok": true,
+      "template_reason": "resolved_by_id",
+      "usable": true
+    },
+    {
+      "file": "net_invoice_sample2.xlsx",
+      "grade": "C",
+      "preview_ok": true,
+      "note_count": 0,
+      "layout_cols": [
+        "Title",
+        "Identifier",
+        "Date",
+        "Subject",
+        "Description",
+        "Notes",
+        "Creator",
+        "Accession"
+      ],
+      "best_unit": null,
+      "unit_ok": false,
+      "semantic_ok": false,
+      "usable_items": 0,
+      "item_preview": [],
+      "create_ok": false,
+      "shipment_created": null,
+      "create_error": null,
+      "generate_ok": false,
+      "template_reason": null,
+      "usable": false
+    },
+    {
+      "file": "net_sample1.xlsx",
+      "grade": "C",
+      "preview_ok": true,
+      "note_count": 0,
+      "layout_cols": [
+        "Postcode",
+        "Sales_Rep_ID",
+        "Sales_Rep_Name",
+        "Year",
+        "Value"
+      ],
+      "best_unit": null,
+      "unit_ok": false,
+      "semantic_ok": false,
+      "usable_items": 0,
+      "item_preview": [],
+      "create_ok": false,
+      "shipment_created": null,
+      "create_error": null,
+      "generate_ok": false,
+      "template_reason": null,
+      "usable": false
+    },
+    {
+      "file": "net_sample3.xlsx",
+      "grade": "C",
+      "preview_ok": true,
+      "note_count": 0,
+      "layout_cols": [],
+      "best_unit": null,
+      "unit_ok": false,
+      "semantic_ok": false,
+      "usable_items": 0,
+      "item_preview": [],
+      "create_ok": false,
+      "shipment_created": null,
+      "create_error": null,
+      "generate_ok": false,
+      "template_reason": null,
+      "usable": false
+    },
+    {
+      "file": "net_tax_invoice.xlsx",
+      "grade": "A",
+      "preview_ok": true,
+      "note_count": 1,
+      "layout_cols": [
+        "To:",
+        "VDL Enabling Technologies Group (Singapore) Pte Ltd",
+        "Invoice No:",
+        "TSH-1910-1289"
+      ],
+      "best_unit": "VDL Enabling Technologies Group (Singapore) Pte Ltd",
+      "unit_ok": true,
+      "semantic_ok": true,
+      "usable_items": 3,
+      "item_preview": [
+        {
+          "name": "102289154-D_x000D_FRAME LL CLEANROOM WALL_x000D_POS#3",
+          "model": "102289154-D_x000D_FRAME LL CLEANROOM WALL_x000D_POS#3",
+          "qty": 1
+        },
+        {
+          "name": "102289154-D_x000D_FRAME LL CLEANROOM WALL_x000D_POS#4",
+          "model": "102289154-D_x000D_FRAME LL CLEANROOM WALL_x000D_POS#4",
+          "qty": 1
+        },
+        {
+          "name": "102289154-D_x000D_FRAME LL CLEANROOM WALL_x000D_POS#5",
+          "model": "102289154-D_x000D_FRAME LL CLEANROOM WALL_x000D_POS#5",
+          "qty": 1
+        }
+      ],
+      "create_ok": true,
+      "shipment_created": 1,
+      "create_error": "送货单闭环完成：新建 1，跳过重复 0；客户/产品已同步",
+      "generate_ok": true,
+      "template_reason": "resolved_by_id",
+      "usable": true
+    }
+  ]
+}

@@ -645,6 +645,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     inputEl.setAttribute('aria-expanded', 'true')
   }
 
+  async function fetchCompanyMatch(q, web, timeoutMs) {
+    const ctrl = new AbortController()
+    const timer = window.setTimeout(() => ctrl.abort(), timeoutMs)
+    try {
+      return await fetch(
+        `/api/public/contact/companies/match?q=${encodeURIComponent(q)}&limit=8&web=${web ? 'true' : 'false'}`,
+        { credentials: 'same-origin', signal: ctrl.signal },
+      )
+    } finally {
+      window.clearTimeout(timer)
+    }
+  }
+
   async function runCompanyMatch(query) {
     const q = (query || '').trim()
     if (q.length < 2) {
@@ -656,10 +669,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     setCompanyMatchResult('hidden')
     setCompanyMatchHint(`正在用「${q}」匹配公司名称…`)
     try {
-      const res = await fetch(
-        `/api/public/contact/companies/match?q=${encodeURIComponent(q)}&limit=8&web=true`,
-        { credentials: 'same-origin' },
-      )
+      let res
+      try {
+        res = await fetchCompanyMatch(q, true, 8000)
+      } catch (err) {
+        if (err?.name !== 'AbortError') throw err
+        // 联网匹配超时：退回本地库，避免输入框一直转圈
+        res = await fetchCompanyMatch(q, false, 6000)
+      }
       if (seq !== companyMatchSeq) return
       if (!res.ok) {
         if (res.status === 429) {

@@ -17,6 +17,8 @@ from typing import Any, Dict, List, Optional
 NODES_KEY = "xcmax:cluster:nodes"
 CLAIM_PREFIX = "xcmax:cluster:incident_claim:"
 DEFAULT_STALE_SECONDS = 300
+# 同节点不同 PID / 僵死派发：超过该秒数可抢夺未完成 claim（默认 3 分钟）
+DEFAULT_CLAIM_STEAL_AFTER = 180
 
 
 def _runtime_dir() -> Path:
@@ -30,6 +32,85 @@ def _node_id() -> str:
         or socket.gethostname()
         or "local-node"
     ).strip()
+
+
+def _claim_steal_after_seconds() -> int:
+    raw = (os.environ.get("MODSTORE_INCIDENT_CLAIM_STEAL_AFTER") or "").strip()
+    if not raw:
+        return DEFAULT_CLAIM_STEAL_AFTER
+    try:
+        return max(30, int(raw))
+    except ValueError:
+        return DEFAULT_CLAIM_STEAL_AFTER
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # 进程存在但无权限发信号，视为仍存活
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _parse_claim_owner(raw: Any) -> Dict[str, Any]:
+    if raw is None:
+        return {}
+    if isinstance(raw, dict):
+        return raw
+    text = str(raw or "").strip()
+    if not text:
+        return {}
+    if text.startswith("{"):
+        try:
+            data = json.loads(text)
+            return data if isinstance(data, dict) else {"node_id": text}
+        except Exception:
+            return {"node_id": text}
+    return {"node_id": text}
+
+
+def _claim_payload(*, event_id: int, ttl_seconds: int) -> Dict[str, Any]:
+    now = time.time()
+    return {
+        "claimed_at": now,
+        "event_id": int(event_id),
+        "expires_at": now + max(60, int(ttl_seconds or 900)),
+        "node_id": _node_id(),
+        "pid": os.getpid(),
+        "schema_version": 2,
+    }
+
+
+def _can_steal_claim(owner: Dict[str, Any]) -> bool:
+    """Allow reclaim when owner process is dead or claim soft-TTL elapsed."""
+    owner_node = str(owner.get("node_id") or "").strip()
+    if not owner_node:
+        return True
+    try:
+        owner_pid = int(owner.get("pid") or 0)
+    except (TypeError, ValueError):
+        owner_pid = 0
+    try:
+        claimed_at = float(owner.get("claimed_at") or 0)
+    except (TypeError, ValueError):
+        claimed_at = 0.0
+    age = time.time() - claimed_at if claimed_at > 0 else 10**9
+    steal_after = _claim_steal_after_seconds()
+    if owner_node == _node_id():
+        if owner_pid and owner_pid == os.getpid():
+            return False
+        if owner_pid and not _pid_alive(owner_pid):
+            return True
+        return age >= steal_after
+    # 跨节点：仅软超时后抢（避免双活误杀）；无 claimed_at 的旧字符串 claim 也可抢
+    return age >= steal_after
 
 
 def _node_role() -> str:
@@ -174,18 +255,60 @@ def is_leader() -> bool:
 
 
 def claim_incident_for_node(event_id: int, *, ttl_seconds: int = 900) -> Dict[str, Any]:
-    """Best-effort cross-node incident claim lock."""
+    """Best-effort cross-node incident claim lock.
+
+    Claim value is JSON ``{node_id, pid, claimed_at}`` so same-host uvicorn
+    workers do not all treat one hostname lock as owned by every PID. Stale or
+    dead-owner claims can be stolen after soft TTL.
+    """
 
     key = f"{CLAIM_PREFIX}{int(event_id)}"
     node_id = _node_id()
+    ttl = max(60, int(ttl_seconds or 900))
+    payload = _claim_payload(event_id=event_id, ttl_seconds=ttl)
+    payload_json = json.dumps(payload, ensure_ascii=False)
     r = _redis_client()
     if r is not None:
         try:
-            ok = bool(r.set(key, node_id, nx=True, ex=max(60, int(ttl_seconds or 900))))
-            owner = r.get(key)
+            ok = bool(r.set(key, payload_json, nx=True, ex=ttl))
+            if ok:
+                return {
+                    "backend": "redis",
+                    "claimed": True,
+                    "event_id": int(event_id),
+                    "node_id": node_id,
+                    "owner": payload,
+                    "pid": payload["pid"],
+                }
+            owner = _parse_claim_owner(r.get(key))
+            same_owner = (
+                str(owner.get("node_id") or "") == node_id
+                and int(owner.get("pid") or 0) == os.getpid()
+            )
+            if same_owner:
+                return {
+                    "backend": "redis",
+                    "claimed": True,
+                    "event_id": int(event_id),
+                    "node_id": node_id,
+                    "owner": owner,
+                    "pid": os.getpid(),
+                }
+            if _can_steal_claim(owner):
+                # 无 CAS：best-effort overwrite；双抢时靠后续 dispatched_count 去重
+                r.set(key, payload_json, ex=ttl)
+                return {
+                    "backend": "redis",
+                    "claimed": True,
+                    "event_id": int(event_id),
+                    "node_id": node_id,
+                    "owner": payload,
+                    "pid": payload["pid"],
+                    "stolen_from": owner,
+                }
             return {
                 "backend": "redis",
-                "claimed": ok or owner == node_id,
+                "claimed": False,
                 "event_id": int(event_id),
                 "node_id": node_id,
                 "owner": owner,
@@ -197,32 +320,95 @@ def claim_incident_for_node(event_id: int, *, ttl_seconds: int = 900) -> Dict[st
     claim_path = claim_dir / f"incident-{int(event_id)}.json"
     if claim_path.exists():
         try:
-            owner = json.loads(claim_path.read_text(encoding="utf-8")).get("node_id")
+            owner = _parse_claim_owner(claim_path.read_text(encoding="utf-8"))
         except Exception:
-            owner = ""
-        return {
-            "backend": "file",
-            "claimed": owner == node_id,
-            "event_id": int(event_id),
-            "node_id": node_id,
-            "owner": owner,
-        }
-    claim_path.write_text(
-        json.dumps({"claimed_at": time.time(), "event_id": int(event_id), "node_id": node_id})
-        + "\n",
-        encoding="utf-8",
-    )
+            owner = {}
+        same_owner = (
+            str(owner.get("node_id") or "") == node_id and int(owner.get("pid") or 0) == os.getpid()
+        )
+        if same_owner:
+            return {
+                "backend": "file",
+                "claimed": True,
+                "event_id": int(event_id),
+                "node_id": node_id,
+                "owner": owner,
+                "pid": os.getpid(),
+            }
+        if not _can_steal_claim(owner):
+            return {
+                "backend": "file",
+                "claimed": False,
+                "event_id": int(event_id),
+                "node_id": node_id,
+                "owner": owner,
+            }
+    claim_path.write_text(payload_json + "\n", encoding="utf-8")
     return {
         "backend": "file",
         "claimed": True,
         "event_id": int(event_id),
         "node_id": node_id,
-        "owner": node_id,
+        "owner": payload,
+        "pid": payload["pid"],
     }
+
+
+def release_incident_claim(event_id: int) -> Dict[str, Any]:
+    """Release claim when held by this process (best-effort)."""
+
+    key = f"{CLAIM_PREFIX}{int(event_id)}"
+    node_id = _node_id()
+    pid = os.getpid()
+    r = _redis_client()
+    if r is not None:
+        try:
+            owner = _parse_claim_owner(r.get(key))
+            if (
+                str(owner.get("node_id") or "") == node_id
+                and int(owner.get("pid") or 0) in {0, pid}
+            ) or not owner:
+                r.delete(key)
+                return {"backend": "redis", "released": True, "event_id": int(event_id)}
+            return {
+                "backend": "redis",
+                "released": False,
+                "event_id": int(event_id),
+                "owner": owner,
+            }
+        except Exception as exc:
+            return {
+                "backend": "redis",
+                "released": False,
+                "event_id": int(event_id),
+                "error": str(exc)[:200],
+            }
+    claim_path = _runtime_dir() / "cluster_claims" / f"incident-{int(event_id)}.json"
+    if claim_path.exists():
+        try:
+            owner = _parse_claim_owner(claim_path.read_text(encoding="utf-8"))
+        except Exception:
+            owner = {}
+        if (
+            str(owner.get("node_id") or "") == node_id and int(owner.get("pid") or 0) in {0, pid}
+        ) or not owner:
+            try:
+                claim_path.unlink()
+            except OSError:
+                pass
+            return {"backend": "file", "released": True, "event_id": int(event_id)}
+        return {
+            "backend": "file",
+            "released": False,
+            "event_id": int(event_id),
+            "owner": owner,
+        }
+    return {"backend": "file", "released": True, "event_id": int(event_id), "missing": True}
 
 
 __all__ = [
     "claim_incident_for_node",
+    "release_incident_claim",
     "cluster_status",
     "elect_leader",
     "is_leader",

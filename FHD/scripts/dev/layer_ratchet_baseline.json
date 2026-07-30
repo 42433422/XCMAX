@@ -7,7 +7,6 @@
     "fastapi_routes/domains/wechat/routes.py",
     "fastapi_routes/finance_invoices_api.py",
     "fastapi_routes/user_cs_wechat_passive_compat.py",
-    "fastapi_routes/voice_routes.py",
-    "fastapi_routes/ai_assistant.py"
+    "fastapi_routes/voice_routes.py"
   ]
 }

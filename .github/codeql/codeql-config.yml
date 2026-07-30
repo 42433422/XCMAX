@@ -4,5 +4,6 @@ paths-ignore:
   - "**/tests/**"
   - "**/examples/**"
   - "scripts/**"
+  - "**/scripts/**"
   - "**/node_modules/**"
   - "**/dist/**"

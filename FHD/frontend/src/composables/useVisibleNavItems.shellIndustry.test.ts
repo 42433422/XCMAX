@@ -105,6 +105,8 @@ describe('useVisibleNavItems · 平台壳第三步完成后长出行业菜单', 
     expect(keys).toContain('data-sources')
     expect(keys).toContain('template-preview')
     expect(keys).toContain('printer-list')
+    expect(keys).toContain('print')
+    expect(keys).not.toContain('mod-erp-print')
     expect(keys).not.toContain('enterprise-customer-service')
 
     const products = visibleNavItems.value.find((i) => i.key === 'products')
@@ -112,10 +114,14 @@ describe('useVisibleNavItems · 平台壳第三步完成后长出行业菜单', 
     expect(products?.name).toBe('人员管理')
     expect(customers?.name).toBe('部门管理')
 
-    // erp-domain-bridge 的同名 mod 入口被合并去重，products 槽位只出现一次
+    // erp-domain-bridge 的同名 mod 入口被合并去重，products / print 槽位只出现一次
     const productSlots = visibleNavItems.value.filter(
       (i) => i.key === 'products' || i.key === 'mod-erp-products',
     )
     expect(productSlots.length).toBe(1)
+    const printSlots = visibleNavItems.value.filter(
+      (i) => i.key === 'print' || i.key === 'mod-erp-print',
+    )
+    expect(printSlots.length).toBe(1)
   })
 })

@@ -2739,9 +2739,8 @@ async function load() {
 
   try {
     const health = (await api.adminDutyGraphHealth()) as Record<string, unknown>
+    api.assertDutyGraphHealth(health)
     const staffing = health?.staffing as Record<string, unknown> | undefined
-    const errStaff = typeof staffing?.error === 'string' ? staffing.error : ''
-    if (errStaff) throw new Error(errStaff)
     const missingCatalogRaw = Array.isArray(staffing?.missing_employees)
       ? staffing!.missing_employees
       : []

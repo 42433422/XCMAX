@@ -10,6 +10,8 @@ from retort_engine.quality_metrics import (
     latest_absorption_change_health,
     project_files,
     project_relative,
+)
+from retort_engine.quality_metrics import (
     test_code_health as build_test_code_health,
 )
 
@@ -37,9 +39,13 @@ def run():
 
 
 def test_generated_absorption_files_are_excluded() -> None:
-    assert is_generated_absorption_file("docs/retort_external_review_report.json") is True
+    assert (
+        is_generated_absorption_file("docs/retort_external_review_report.json") is True
+    )
     assert is_generated_absorption_file("docs/retort_code_graph_proof_abc.json") is True
-    assert is_generated_absorption_file("retort_engine/absorbed_capabilities.py") is True
+    assert (
+        is_generated_absorption_file("retort_engine/absorbed_capabilities.py") is True
+    )
     assert is_generated_absorption_file(".retort/cache/github/repo/file.py") is True
     assert is_generated_absorption_file("retort_engine/core.py") is False
 
@@ -50,7 +56,10 @@ def test_behavior_source_and_test_classification() -> None:
     assert is_behavior_test_file("retort_engine/core.py") is False
     assert is_project_behavior_source_file("retort_engine/core.py") is True
     assert is_project_behavior_source_file("tests/test_core.py") is False
-    assert is_project_behavior_source_file("docs/retort_external_review_report.json") is False
+    assert (
+        is_project_behavior_source_file("docs/retort_external_review_report.json")
+        is False
+    )
 
 
 def test_project_files_skip_cache_and_virtualenv(tmp_path: Path) -> None:
@@ -59,7 +68,10 @@ def test_project_files_skip_cache_and_virtualenv(tmp_path: Path) -> None:
     _write(tmp_path / ".venv" / "lib" / "skip.py", "x = 1\n")
     _write(tmp_path / "node_modules" / "skip.js", "x = 1\n")
 
-    rels = {project_relative(tmp_path, path) for path in project_files(tmp_path, {".retort", ".venv", "node_modules"})}
+    rels = {
+        project_relative(tmp_path, path)
+        for path in project_files(tmp_path, {".retort", ".venv", "node_modules"})
+    }
 
     assert rels == {"retort_engine/core.py"}
 
@@ -71,7 +83,12 @@ def test_test_code_health_reports_global_and_latest_ratios(tmp_path: Path) -> No
 
     health = build_test_code_health(
         tmp_path,
-        latest={"changed_files": [str(tmp_path / "retort_engine" / "core.py"), str(tmp_path / "tests" / "test_core.py")]},
+        latest={
+            "changed_files": [
+                str(tmp_path / "retort_engine" / "core.py"),
+                str(tmp_path / "tests" / "test_core.py"),
+            ]
+        },
     )
 
     assert health["source_file_count"] == 1
@@ -84,7 +101,9 @@ def test_test_code_health_reports_global_and_latest_ratios(tmp_path: Path) -> No
     assert health["latest_test_to_source_ratio_status"] == "healthy"
 
 
-def test_latest_absorption_change_health_splits_source_test_and_other(tmp_path: Path) -> None:
+def test_latest_absorption_change_health_splits_source_test_and_other(
+    tmp_path: Path,
+) -> None:
     source = tmp_path / "retort_engine" / "core.py"
     test = tmp_path / "tests" / "test_core.py"
     report = tmp_path / "docs" / "retort_external_review_report.json"
@@ -93,7 +112,9 @@ def test_latest_absorption_change_health_splits_source_test_and_other(tmp_path: 
     _write(test, "def test_a():\n    assert True\n")
     _write(report, "{}\n")
 
-    health = latest_absorption_change_health(tmp_path, {"changed_files": [str(source), str(test), str(report), str(missing)]})
+    health = latest_absorption_change_health(
+        tmp_path, {"changed_files": [str(source), str(test), str(report), str(missing)]}
+    )
 
     assert health["latest_changed_file_count"] == 4
     assert health["latest_changed_source_file_count"] == 1

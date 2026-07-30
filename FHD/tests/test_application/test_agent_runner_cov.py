@@ -236,6 +236,28 @@ class TestChatCompletion:
         assert "error" in result
         assert "net down" in result["error"]
 
+    async def test_primary_429_falls_back_to_minimax(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("FHD_EMPLOYEE_LLM_PROVIDER", "xiaomi")
+        monkeypatch.setenv("FHD_EMPLOYEE_LLM_MODEL", "mimo-v2.5-pro")
+        monkeypatch.setenv("FHD_EMPLOYEE_LLM_FALLBACK_PROVIDER", "minimax")
+        monkeypatch.setenv("FHD_EMPLOYEE_LLM_FALLBACK_MODEL", "MiniMax-M2.7")
+
+        primary = MagicMock(is_configured=True, model_name="mimo-v2.5-pro")
+        primary.chat_completion = AsyncMock(side_effect=ConnectionError("429 quota exhausted"))
+        fallback = MagicMock(is_configured=True, model_name="MiniMax-M2.7")
+        fallback.chat_completion = AsyncMock(
+            return_value={"choices": [{"message": {"content": "fallback ok"}}]}
+        )
+
+        with patch(ADAPTER_PATH, side_effect=[primary, fallback]) as mock_cls:
+            result = await _chat_completion([{"role": "user", "content": "hi"}])
+
+        assert result["choices"][0]["message"]["content"] == "fallback ok"
+        assert result["_fallback_used"] is True
+        assert result["_primary_provider"] == "xiaomi"
+        assert result["_fallback_provider"] == "minimax"
+        assert mock_cls.call_count == 2
+
     async def test_recoverable_value_error_truncated(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("FHD_EMPLOYEE_LLM_PROVIDER", "openai")
         monkeypatch.setenv("FHD_EMPLOYEE_LLM_MODEL", "gpt-4o")

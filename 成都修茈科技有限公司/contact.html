@@ -8,7 +8,7 @@
       name="description"
       content="联系成都修茈科技有限公司，咨询 AI 单据处理、企业自动化、MODstore 智能体市场和数字化解决方案。"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260723j" />
+    <link rel="stylesheet" href="./styles.css?v=20260727g" />
   </head>
 <body class="page-contact">
 <header class="site-header">
@@ -513,6 +513,120 @@
           </div>
         </div>
       </section>
+
+      <section
+        class="section contact-channels-section"
+        aria-labelledby="contact-channels-title"
+      >
+        <div class="container">
+          <div class="contact-channels reveal">
+            <header class="contact-channels__head">
+              <h2 id="contact-channels-title">更多联系渠道</h2>
+              <p>点击图标即可获取对应联系方式；当前已开通企业微信、抖音。</p>
+            </header>
+            <ul class="contact-channel-grid" role="list">
+              <li>
+                <button
+                  type="button"
+                  class="contact-channel-btn"
+                  data-channel="wecom"
+                  aria-expanded="false"
+                  aria-controls="contact-channel-panel-wecom"
+                >
+                  <span class="contact-channel-btn__icon" aria-hidden="true">
+                    <img
+                      class="contact-channel-btn__logo"
+                      src="/assets/wecom-icon.svg?v=20260727b"
+                      width="48"
+                      height="48"
+                      alt=""
+                      decoding="async"
+                    />
+                  </span>
+                  <span class="contact-channel-btn__label">企业微信</span>
+                  <span class="contact-channel-btn__hint">点击获取</span>
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  class="contact-channel-btn"
+                  data-channel="douyin"
+                  aria-expanded="false"
+                  aria-controls="contact-channel-panel-douyin"
+                >
+                  <span class="contact-channel-btn__icon" aria-hidden="true">
+                    <img
+                      class="contact-channel-btn__logo"
+                      src="/assets/douyin-icon.svg?v=20260727g"
+                      width="48"
+                      height="48"
+                      alt=""
+                      decoding="async"
+                    />
+                  </span>
+                  <span class="contact-channel-btn__label">抖音</span>
+                  <span class="contact-channel-btn__hint">点击获取</span>
+                </button>
+              </li>
+            </ul>
+
+            <div
+              id="contact-channel-panel-wecom"
+              class="contact-channel-panel"
+              data-channel-panel="wecom"
+              hidden
+              role="region"
+              aria-label="企业微信联系方式"
+            >
+              <ul class="contact-qr-pair" role="list">
+                <li class="contact-qr-item">
+                  <img
+                    src="/assets/wecom-kf-qr.png?v=20260727f"
+                    width="180"
+                    height="180"
+                    alt="企业客服二维码"
+                    loading="lazy"
+                  />
+                  <span class="contact-qr-item__name">企业客服</span>
+                </li>
+                <li class="contact-qr-item">
+                  <img
+                    src="/assets/wecom-person-qr.png?v=20260727f"
+                    width="180"
+                    height="180"
+                    alt="企业微信二维码"
+                    loading="lazy"
+                  />
+                  <span class="contact-qr-item__name">企业微信</span>
+                </li>
+              </ul>
+            </div>
+
+            <div
+              id="contact-channel-panel-douyin"
+              class="contact-channel-panel"
+              data-channel-panel="douyin"
+              hidden
+              role="region"
+              aria-label="抖音联系方式"
+            >
+              <ul class="contact-qr-pair contact-qr-pair--single" role="list">
+                <li class="contact-qr-item">
+                  <img
+                    src="/assets/douyin-qr.png?v=20260727g"
+                    width="180"
+                    height="180"
+                    alt="抖音二维码"
+                    loading="lazy"
+                  />
+                  <span class="contact-qr-item__name">抖音</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
 <footer class="site-footer">
       <div class="container footer-inner">
@@ -547,7 +661,99 @@
 
 
 
-<script src="./contact-intake.js?v=20260719b"></script>
+<script src="./contact-intake.js?v=20260727b"></script>
+<script src="./contact-channels.js?v=20260727g"></script>
+<script>
+/* 渠道点击兜底：外链脚本 404 / 被发版冲掉时仍可展开企微面板 */
+;(function () {
+  function bootContactChannels() {
+    if (window.__contactChannelsReady) return
+    window.__contactChannelsReady = true
+    var root = document.querySelector('.contact-channels')
+    if (!root) return
+    var buttons = Array.prototype.slice.call(
+      root.querySelectorAll('.contact-channel-btn[data-channel]'),
+    )
+    var panels = Array.prototype.slice.call(root.querySelectorAll('[data-channel-panel]'))
+    function closeAll() {
+      buttons.forEach(function (btn) {
+        btn.classList.remove('is-open')
+        btn.setAttribute('aria-expanded', 'false')
+      })
+      panels.forEach(function (panel) {
+        panel.hidden = true
+      })
+    }
+    function openChannel(channel) {
+      var btn = buttons.find(function (item) {
+        return item.getAttribute('data-channel') === channel
+      })
+      var panel = panels.find(function (item) {
+        return item.getAttribute('data-channel-panel') === channel
+      })
+      if (!btn || !panel) return
+      var alreadyOpen = btn.getAttribute('aria-expanded') === 'true'
+      closeAll()
+      if (alreadyOpen) return
+      btn.classList.add('is-open')
+      btn.setAttribute('aria-expanded', 'true')
+      panel.hidden = false
+      if (panel.scrollIntoView) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+    buttons.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openChannel(btn.getAttribute('data-channel') || '')
+      })
+    })
+    Array.prototype.slice
+      .call(root.querySelectorAll('[data-copy-target]'))
+      .forEach(function (copyBtn) {
+        copyBtn.addEventListener('click', function () {
+          var targetId = copyBtn.getAttribute('data-copy-target') || ''
+          var target = targetId ? document.getElementById(targetId) : null
+          var text = ((target && target.textContent) || '').replace(/^\s+|\s+$/g, '')
+          var status = document.getElementById('contact-wecom-copy-status')
+          if (!text) return
+          function ok() {
+            if (status) status.textContent = '已复制企微客服链接'
+            window.setTimeout(function () {
+              if (status) status.textContent = ''
+            }, 2200)
+          }
+          function fail() {
+            if (status) status.textContent = '复制失败，请手动选择链接'
+          }
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(ok).catch(fail)
+            return
+          }
+          try {
+            var ta = document.createElement('textarea')
+            ta.value = text
+            ta.setAttribute('readonly', '')
+            ta.style.position = 'fixed'
+            ta.style.left = '-9999px'
+            document.body.appendChild(ta)
+            ta.select()
+            document.execCommand('copy')
+            document.body.removeChild(ta)
+            ok()
+          } catch (e) {
+            fail()
+          }
+        })
+      })
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') closeAll()
+    })
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootContactChannels)
+  } else {
+    bootContactChannels()
+  }
+})()
+</script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   setTimeout(function () {

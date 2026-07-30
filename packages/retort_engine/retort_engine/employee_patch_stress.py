@@ -28,10 +28,16 @@ def build_employee_patch_stress(
     lab.mkdir(parents=True, exist_ok=True)
     worker_count = max(101, concurrent_workers)
     with ThreadPoolExecutor(max_workers=worker_count) as pool:
-        workers = list(pool.map(lambda worker: _patch_worker(lab, worker), range(1, worker_count + 1)))
+        workers = list(
+            pool.map(
+                lambda worker: _patch_worker(lab, worker), range(1, worker_count + 1)
+            )
+        )
     ready_workers = [item for item in workers if item["ready"]]
     rollback_verified = [item for item in workers if item["rollback_verified"]]
-    post_rollback_passed = [item for item in workers if item["post_rollback_gate_passed"]]
+    post_rollback_passed = [
+        item for item in workers if item["post_rollback_gate_passed"]
+    ]
     summary = {
         "run_id": stress_id,
         "worker_count": worker_count,
@@ -45,11 +51,20 @@ def build_employee_patch_stress(
         "ready_worker_count": len(ready_workers),
         "unique_thread_count": len({item["thread_id"] for item in workers}),
         "unique_process_id_count": len({item["process_id"] for item in workers}),
-        "trace_count": sum(1 for item in workers if Path(str(item["artifacts"]["trace"])).is_file()),
-        "state_leak_count": sum(1 for item in workers if item["before_sha256"] != item["after_rollback_sha256"]),
-        "all_gates_failed_before_rollback": bool(workers) and all(item["gate_failed"] for item in workers),
-        "all_rollbacks_verified": bool(workers) and len(rollback_verified) == len(workers),
-        "all_post_rollback_gates_passed": bool(workers) and len(post_rollback_passed) == len(workers),
+        "trace_count": sum(
+            1 for item in workers if Path(str(item["artifacts"]["trace"])).is_file()
+        ),
+        "state_leak_count": sum(
+            1
+            for item in workers
+            if item["before_sha256"] != item["after_rollback_sha256"]
+        ),
+        "all_gates_failed_before_rollback": bool(workers)
+        and all(item["gate_failed"] for item in workers),
+        "all_rollbacks_verified": bool(workers)
+        and len(rollback_verified) == len(workers),
+        "all_post_rollback_gates_passed": bool(workers)
+        and len(post_rollback_passed) == len(workers),
         "duration_sec": round(time.monotonic() - started, 3),
     }
     ready = (
@@ -76,7 +91,10 @@ def build_employee_patch_stress(
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return result
 
 
@@ -95,7 +113,9 @@ def _patch_worker(lab: Path, worker: int) -> dict[str, Any]:
         target.write_text(before, encoding="utf-8")
     after_sha = _sha256(target)
     post_gate = _compile_gate(target)
-    rollback_verified = before_sha == after_sha and target.read_text(encoding="utf-8") == before
+    rollback_verified = (
+        before_sha == after_sha and target.read_text(encoding="utf-8") == before
+    )
     trace = {
         "worker": worker,
         "process_id": os.getpid(),
@@ -109,7 +129,10 @@ def _patch_worker(lab: Path, worker: int) -> dict[str, Any]:
         "post_rollback_gate_passed": post_gate["passed"],
     }
     trace_path = worker_dir / "rollback_trace.json"
-    trace_path.write_text(json.dumps(trace, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    trace_path.write_text(
+        json.dumps(trace, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     return {
         **trace,
         "ready": gate_failed and rollback_verified and post_gate["passed"],
@@ -124,7 +147,11 @@ def _compile_gate(path: Path) -> dict[str, Any]:
     try:
         py_compile.compile(str(path), doraise=True)
     except py_compile.PyCompileError as exc:
-        return {"passed": False, "error_type": type(exc).__name__, "stderr_tail": str(exc)[-300:]}
+        return {
+            "passed": False,
+            "error_type": type(exc).__name__,
+            "stderr_tail": str(exc)[-300:],
+        }
     return {"passed": True, "error_type": "", "stderr_tail": ""}
 
 

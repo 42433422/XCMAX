@@ -8,7 +8,6 @@ from typing import Any
 
 from retort_engine.codebase_graph import code_graph_absorption_proof
 
-
 REQUIRED_PROOF_STYLE = "deterministic_post_absorption_code_graph"
 
 
@@ -21,7 +20,9 @@ def build_per_run_code_graph_proof(
     max_files: int = 400,
 ) -> dict[str, Any]:
     """Build the code graph proof that must travel with this absorption run."""
-    proof = code_graph_absorption_proof(project, changed_files, pre_absorption_focus, max_files=max_files)
+    proof = code_graph_absorption_proof(
+        project, changed_files, pre_absorption_focus, max_files=max_files
+    )
     proof["run_id"] = run_id
     proof["per_run_required"] = True
     proof.setdefault("summary", {})["changed_file_count"] = len(changed_files)
@@ -31,7 +32,9 @@ def build_per_run_code_graph_proof(
     return proof
 
 
-def code_graph_proof_gate(proof: dict[str, Any], *, run_id: str, started: float | None = None) -> dict[str, Any]:
+def code_graph_proof_gate(
+    proof: dict[str, Any], *, run_id: str, started: float | None = None
+) -> dict[str, Any]:
     """Return a gate proving that this run generated its own code graph proof."""
     started_at = started if started is not None else time.monotonic()
     missing = per_run_code_graph_proof_missing(proof, run_id=run_id)
@@ -48,7 +51,9 @@ def code_graph_proof_gate(proof: dict[str, Any], *, run_id: str, started: float 
     }
 
 
-def per_run_code_graph_proof_missing(proof: dict[str, Any] | None, *, run_id: str) -> list[str]:
+def per_run_code_graph_proof_missing(
+    proof: dict[str, Any] | None, *, run_id: str
+) -> list[str]:
     if not isinstance(proof, dict) or not proof:
         return ["missing_per_run_code_graph_proof"]
     missing: list[str] = []
@@ -72,13 +77,22 @@ def per_run_code_graph_proof_missing(proof: dict[str, Any] | None, *, run_id: st
 def record_real_absorption_run(root: Path, result: dict[str, Any]) -> Path:
     """Persist a real absorption run only after its per-run graph proof exists."""
     run_id = str(result.get("run_id") or "run")
-    missing = per_run_code_graph_proof_missing(result.get("code_graph_proof"), run_id=run_id)
+    missing = per_run_code_graph_proof_missing(
+        result.get("code_graph_proof"), run_id=run_id
+    )
     if missing:
-        raise RuntimeError(f"real absorption run missing per-run code graph proof: {', '.join(missing)}")
+        raise RuntimeError(
+            f"real absorption run missing per-run code graph proof: {', '.join(missing)}"
+        )
     path = root / ".retort" / "real_absorption_runs" / f"{run_id}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = dict(result)
-    payload["run_recorded_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    payload["run_recorded_at"] = datetime.now(timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
     payload["run_record_path"] = str(path)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     return path

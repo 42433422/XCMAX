@@ -8,6 +8,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 FHD_ROOT="$(cd -- "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
+REPO_ROOT="$(cd -- "$FHD_ROOT/.." &>/dev/null && pwd)"
+DR_RELEASE_SYNC="$REPO_ROOT/ops/dr/xcmax_release_sync.sh"
 # shellcheck source=lib/deploy_emit.sh
 . "$SCRIPT_DIR/lib/deploy_emit.sh"
 export DEPLOY_SCRIPT_ID="fhd_pack_release"
@@ -76,6 +78,10 @@ fi
   echo "[err] release archive verifier is missing: $ARCHIVE_VERIFY" >&2
   exit 1
 }
+[[ -x "$DR_RELEASE_SYNC" ]] || {
+  echo "[err] DR release sync helper is missing or not executable: $DR_RELEASE_SYNC" >&2
+  exit 1
+}
 ADMIN_CONSOLE_SHA256="$(python3 "$ADMIN_VERIFY" --root "$ADMIN_DIST" --stamp-git-sha "$GIT_SHA" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha256"])')"
 [[ "$ADMIN_CONSOLE_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
   echo "[err] admin release SHA256 is invalid" >&2
@@ -112,6 +118,8 @@ RSYNC_EXCLUDES=(
   --exclude '.secrets'
   --exclude '.env'
   --exclude '.env.*'
+  --exclude 'routing_policies/routing_decisions.jsonl'
+  --exclude 'routing_policies/.online_update_state.json'
 )
 
 for item in app XCAGI alembic alembic.ini config mods xcagi_common resources requirements-base.txt requirements.txt pyproject.toml; do
@@ -131,8 +139,11 @@ cp "$SCRIPT_DIR/fhd-auto-update.sh" \
   "$SCRIPT_DIR/fhd-apply-release-compose.sh" \
   "$SCRIPT_DIR/fhd-install-online-update-cron.sh" \
   "$SCRIPT_DIR/online_update_daemon.py" \
+  "$SCRIPT_DIR/prune_release_cache.py" \
   "$STAGING/scripts/deploy/"
+cp "$DR_RELEASE_SYNC" "$STAGING/scripts/deploy/xcmax-release-sync.sh"
 cp "$SCRIPT_DIR/lib/deploy_emit.sh" \
+  "$SCRIPT_DIR/lib/dora_event.sh" \
   "$SCRIPT_DIR/lib/autonomy_gate.sh" \
   "$SCRIPT_DIR/lib/verify_admin_console.py" \
   "$SCRIPT_DIR/lib/verify_release_archive.py" \
@@ -141,9 +152,10 @@ cp "$SCRIPT_DIR/lib/deploy_emit.sh" \
 cp "$FHD_ROOT/docker/docker-compose.fhd-prod.yml" "$STAGING/docker/"
 
 BUILT_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-python3 - <<'PY' "$STAGING/.build-identity.json" "$VERSION" "$GIT_SHA" "$BUILT_AT" "$CHANNEL" "$ADMIN_CONSOLE_SHA256"
+COMMIT_AT="$(git -C "$FHD_ROOT" show -s --format=%cI "$GIT_SHA")"
+python3 - <<'PY' "$STAGING/.build-identity.json" "$VERSION" "$GIT_SHA" "$BUILT_AT" "$COMMIT_AT" "$CHANNEL" "$ADMIN_CONSOLE_SHA256"
 import json, sys
-path, version, git_sha, built_at, channel, admin_console_sha256 = sys.argv[1:7]
+path, version, git_sha, built_at, commit_at, channel, admin_console_sha256 = sys.argv[1:8]
 with open(path, "w", encoding="utf-8") as fh:
     json.dump(
         {
@@ -151,6 +163,7 @@ with open(path, "w", encoding="utf-8") as fh:
             "artifact_sha256": "",
             "built_at": built_at,
             "channel": channel,
+            "commit_at": commit_at,
             "git_sha": git_sha,
             "image_digest": "",
             "version": version,
@@ -177,9 +190,9 @@ PY
 
 MANIFEST="$OUT_DIR/fhd-manifest.json"
 
-python3 - <<'PY' "$MANIFEST" "$VERSION" "$GIT_SHA" "$ARTIFACT" "$SHA256" "$BUILT_AT" "$CHANNEL" "$ADMIN_CONSOLE_SHA256"
+python3 - <<'PY' "$MANIFEST" "$VERSION" "$GIT_SHA" "$ARTIFACT" "$SHA256" "$BUILT_AT" "$COMMIT_AT" "$CHANNEL" "$ADMIN_CONSOLE_SHA256"
 import json, sys
-path, version, git_sha, artifact, sha256, built_at, channel, admin_console_sha256 = sys.argv[1:9]
+path, version, git_sha, artifact, sha256, built_at, commit_at, channel, admin_console_sha256 = sys.argv[1:10]
 doc = {
     "admin_console_sha256": admin_console_sha256,
     "product": "fhd-full",
@@ -190,6 +203,7 @@ doc = {
     "artifact": artifact,
     "sha256": sha256,
     "built_at": built_at,
+    "commit_at": commit_at,
 }
 with open(path, "w", encoding="utf-8") as fh:
     json.dump(doc, fh, ensure_ascii=False, indent=2)

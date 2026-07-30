@@ -49,7 +49,7 @@
 | **Windows 桌面** | 签约级 | 主交付面 |
 | **macOS 桌面** | 签约级 | arm64 + x64 dmg |
 | **Web / 后端** | 签约级 | FastAPI + Vue SPA |
-| **Android** | **签约级** | Flutter 主线；登录、SSE 对话、4 Tab、审批和通知；独立原生 Android 已删除 |
+| **Android** | **实验骨架·非签约级** | Flutter 主线已具备登录、SSE 对话、4 Tab、审批和通知；真机二维码/深链、真实审批与签名发布证据未闭环 |
 
 声称 vs 实测差距见 [`docs/CLAIMED_VS_ACTUAL.md`](docs/CLAIMED_VS_ACTUAL.md)。
 

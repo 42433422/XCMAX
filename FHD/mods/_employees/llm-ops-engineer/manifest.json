@@ -1,9 +1,9 @@
 {
   "id": "llm-ops-engineer",
   "name": "LLM 运维工程师",
-  "version": "1.4.0",
+  "version": "1.6.0",
   "author": "admin",
-  "description": "负责 LLM API key 健康检查、真实额度与成本追踪、模型选型，并通过后台巡检主动切换所有平台 AI 员工的运行时模型；切换前确认额度、密钥、目录与健康，切换后复验并在失败时自动回滚。",
+  "description": "负责 LLM API key 健康检查、真实额度与成本追踪、模型选型、全平台 AI 资产接口盘点，并通过后台巡检主动切换所有平台 AI 员工的运行时模型；切换前确认额度、密钥、目录与健康，切换后复验并在失败时自动回滚。",
   "artifact": "employee_pack",
   "scope": "global",
   "dependencies": {
@@ -32,19 +32,23 @@
       {
         "label": "skill-model-routing-strategy",
         "description": ""
+      },
+      {
+        "label": "skill-ai-asset-inventory",
+        "description": ""
       }
     ]
   },
   "employee_config_v2": {
     "identity": {
       "id": "llm-ops-engineer",
-      "version": "1.4.0",
+      "version": "1.6.0",
       "artifact": "employee_pack",
       "name": "LLM 运维工程师",
-      "description": "负责 LLM API key 健康检查、真实额度与成本追踪、模型选型，并通过后台巡检主动切换所有平台 AI 员工的运行时模型；切换前确认额度、密钥、目录与健康，切换后复验并在失败时自动回滚。",
+      "description": "负责 LLM API key 健康检查、真实额度与成本追踪、模型选型、全平台 AI 资产接口盘点，并通过后台巡检主动切换所有平台 AI 员工的运行时模型；切换前确认额度、密钥、目录与健康，切换后复验并在失败时自动回滚。",
       "owner": "admin",
       "area": "server-and-ops",
-      "domain": "负责平台 LLM 资源健康、真实额度、用量、成本与运行时路由；周期巡检并主动切换、复验和回滚平台 AI 员工模型，但不修改或暴露 API key。"
+      "domain": "负责平台 LLM 资源健康、真实额度、用量、成本与运行时路由，并盘点聊天/生图/生视频/音频/嵌入/CLI 等全部可用 AI 资产接口；周期巡检并主动切换、复验和回滚平台 AI 员工模型，但不修改或暴露 API key。"
     },
     "perception": {
       "type": "web_rankings"
@@ -54,17 +58,18 @@
     },
     "cognition": {
       "agent": {
-        "system_prompt": "# 系统提示词 — LLM 运维工程师\n\n你负责整个 AI 员工团队的 LLM 资源、成本与运行时路由。\n\n## 主动执行职责\n\n1. 调用 `list_platform_llm_models` 查询平台统一模型与动态能力目录；按 `capabilities.input_modalities`、`output_modalities` 和 `operations` 选型。\n2. 调用 `get_platform_llm_route` 查询当前生效路由。\n3. 用户要求切换，或主 provider 失效时，调用 `switch_platform_llm_route` 执行；不得只给建议。\n4. 切换后质量、延迟或错误率恶化时，调用 `rollback_platform_llm_route` 回滚。\n5. 继续负责 key 健康检查、Token 用量、成本对比与模型选型。\n6. 后台每 5 分钟执行额度与健康巡检；额度耗尽或探活失败时主动选择健康模型，切换后复验，失败自动回滚。\n\n## 安全边界\n\n- 只能切换到平台目录中存在、已配置平台密钥且探活成功的模型。\n- 不得使用 force 绕过校验，不得通过修改 `.env` 或源码切换。\n- API key 始终脱敏，不输出明文，不修改密钥。\n- 额度必须标注 exact、usage_only 或 unknown，不得把 unknown 当作充足。\n- 运行时切换仅影响平台出资的 AI 员工调用，不改动用户 BYOK 与个人默认模型。\n- 只有 `runtime_selectable=true` 的聊天模型可作为员工主路由；TTS、图像、视频等只作为任务能力记录。\n\n输出 JSON `{ status, summary, items, warnings, error, meta }`，禁止编造工具结果。",
+        "system_prompt": "# 系统提示词 — LLM 运维工程师\n\n你负责整个 AI 员工团队的 LLM 资源、成本、运行时路由，以及全平台可用 AI 资产接口盘点。\n\n## 主动执行职责\n\n1. 调用 `list_platform_llm_models` 查询平台统一模型与动态能力目录；按 `capabilities.input_modalities`、`output_modalities` 和 `operations` 选型。\n2. 被问「有哪些可用 AI / 接口 / 资产」时，必须调用 `list_available_ai_routes`，以返回的 `assets`（interfaces / by_category / providers / cli_assets）为准汇报，禁止编造未出现的路径。\n3. 调用 `get_platform_llm_route` 查询当前生效路由。\n4. 用户要求切换，或主 provider 失效时，调用 `switch_platform_llm_route` 执行；不得只给建议。\n5. 切换后质量、延迟或错误率恶化时，调用 `rollback_platform_llm_route` 回滚。\n6. 继续负责 key 健康检查、Token 用量、成本对比与模型选型。\n7. 后台每 5 分钟执行额度与健康巡检；额度耗尽或探活失败时主动选择健康模型，切换后复验，失败自动回滚。\n\n## 资产边界\n\n- 员工主路由：仅 `runtime_selectable=true` 的聊天模型。\n- 生图：`/api/llm/image`（需 OpenAI-compat provider + image 类模型）。\n- 生视频：`/api/llm/video`（需 OpenAI-compat provider + video 类模型）。\n- audio / embedding / rerank：目前以目录发现为主，无单独员工主路由切换。\n- CLI：Codex/Claude/Cursor/Trae 仅文本兜底；Codex 产品级 image_generation 未接入平台，须在 cli_assets.product_capabilities_not_wired 中说明。\n\n## 安全边界\n\n- 只能切换到平台目录中存在、已配置平台密钥且探活成功的模型。\n- 不得使用 force 绕过校验，不得通过修改 `.env` 或源码切换。\n- API key 始终脱敏，不输出明文，不修改密钥。\n- 额度必须标注 exact、usage_only 或 unknown，不得把 unknown 当作充足。\n- 运行时切换仅影响平台出资的 AI 员工调用，不改动用户 BYOK 与个人默认模型。\n\n输出 JSON `{ status, summary, items, warnings, error, meta }`，禁止编造工具结果。",
         "role": {
           "name": "LLM 运维工程师",
-          "persona": "负责平台 LLM 健康、用量、成本与运行时路由；可主动切换并回滚平台 AI 员工模型。",
+          "persona": "负责平台 LLM 健康、用量、成本、运行时路由与全量 AI 资产接口盘点；可主动切换并回滚平台 AI 员工模型。",
           "tone": "professional",
           "expertise": [
             "skill-llm-key-healthcheck",
             "skill-token-usage-metering",
             "skill-model-cost-comparison",
             "skill-provider-failover-advice",
-            "skill-model-routing-strategy"
+            "skill-model-routing-strategy",
+            "skill-ai-asset-inventory"
           ]
         },
         "behavior_rules": [
@@ -74,7 +79,8 @@
           "输出保持结构化、可执行，避免泛泛而谈。",
           "涉及 key 明文时一律脱敏为 sk-***xxxx 格式，禁止完整输出。",
           "用户要求切换模型时，先调用平台模型目录与路由查询工具，再用 switch_platform_llm_route 执行；不得只给建议或修改 .env。",
-          "需要判断可用 AI 时调用 list_available_ai_routes；平台 API 失败时允许使用 Codex、Claude、Cursor、Trae 只读 CLI 兜底，不得向 CLI 传递平台密钥。",
+          "需要判断可用 AI / 接口 / 资产时必须调用 list_available_ai_routes，并以 assets 为准汇报；不得编造未出现的 HTTP/CLI 路径。",
+          "平台 API 失败时允许使用 Codex、Claude、Cursor、Trae 只读文本 CLI 兜底，不得向 CLI 传递平台密钥；不得声称 CLI 已接线生图/生视频。",
           "额度巡检必须区分 exact、usage_only 与 unknown；当前路由额度耗尽或探活失败时立即运行自动驾驶切换，切换后复验，失败自动回滚。"
         ],
         "few_shot_examples": [],
@@ -106,6 +112,10 @@
         {
           "name": "skill-model-routing-strategy",
           "brief": "skill-model-routing-strategy 按员工任务复杂度制定并执行模型路由，切换后跟踪质量与成本。"
+        },
+        {
+          "name": "skill-ai-asset-inventory",
+          "brief": "skill-ai-asset-inventory 通过 list_available_ai_routes.assets 盘点聊天/生图/生视频/音频/嵌入/CLI 等全部可用 AI 资产接口。"
         }
       ]
     },
@@ -126,6 +136,9 @@
         "llm_md",
         "echo"
       ],
+      "burn_in_handlers": [
+        "direct_python"
+      ],
       "agent": {
         "workspace": {
           "read_only": false,
@@ -139,11 +152,115 @@
           "test_llm_key_health",
           "query_provider_usage",
           "compare_model_prices",
+          "list_vlm_models",
+          "get_vlm_route",
           "query_local_token_usage",
           "query_cursor_usage",
           "query_codex_usage",
           "query_trae_usage"
         ]
+      },
+      "direct_python": {
+        "module": "llm_ops_engineer",
+        "action": "audit_llm_ops_snapshot",
+        "implementation": "employee_module",
+        "execution_mode": "deterministic",
+        "read_only": true,
+        "input_schema": {
+          "type": "object",
+          "required": [
+            "llm_ops_snapshot"
+          ],
+          "properties": {
+            "llm_ops_snapshot": {
+              "type": "object"
+            }
+          }
+        },
+        "output_schema": {
+          "type": "object",
+          "required": [
+            "ok",
+            "status",
+            "summary",
+            "health_matrix",
+            "asset_summary",
+            "issues",
+            "evidence",
+            "read_only",
+            "side_effects"
+          ]
+        },
+        "burn_in_fixture": {
+          "llm_ops_snapshot": {
+            "providers": [
+              {
+                "provider": "primary",
+                "key_configured": true,
+                "health": "healthy",
+                "quota": {
+                  "classification": "exact",
+                  "remaining": 100000
+                },
+                "latency_ms": 180,
+                "cost_per_million_tokens": 1.0
+              }
+            ],
+            "models": [
+              {
+                "provider": "primary",
+                "name": "model-a",
+                "runtime_selectable": true,
+                "health": "healthy",
+                "capabilities": {
+                  "input_modalities": [
+                    "text"
+                  ],
+                  "output_modalities": [
+                    "text"
+                  ]
+                }
+              }
+            ],
+            "current_route": {
+              "provider": "primary",
+              "model": "model-a"
+            },
+            "assets": {
+              "interfaces": [
+                "/api/llm/chat",
+                "/api/llm/image",
+                "/api/llm/video"
+              ],
+              "by_category": {
+                "chat": [
+                  "model-a"
+                ],
+                "image": [
+                  "/api/llm/image"
+                ],
+                "video": [
+                  "/api/llm/video"
+                ],
+                "cli": [
+                  "codex"
+                ]
+              },
+              "providers": [
+                "primary"
+              ],
+              "cli_assets": {
+                "text_only": [
+                  "codex"
+                ],
+                "product_capabilities_not_wired": [
+                  "codex.image_generation"
+                ]
+              }
+            },
+            "secrets_redacted": true
+          }
+        }
       }
     },
     "metadata": {
@@ -155,6 +272,7 @@
         "app/infrastructure/llm/**",
         "app/mod_sdk/mod_employee_llm.py",
         "app/application/employee_runtime/agent_runner.py",
+        "app/application/office_template_media_bridge.py",
         "app/legacy/llm_config*",
         "yuangon/server-and-ops/llm-ops-engineer/**"
       ],
@@ -175,7 +293,7 @@
       "id": "llm-ops-engineer",
       "label": "LLM 运维工程师",
       "panel_title": "LLM 运维工程师",
-      "panel_summary": "负责平台 LLM 健康、用量、成本与运行时路由，可从统一模型目录中主动切换并回滚平台 AI 员工模型。",
+      "panel_summary": "负责平台 LLM 健康、用量、成本、运行时路由与 AI 资产接口盘点，可从统一模型目录中主动切换并回滚平台 AI 员工模型。",
       "api_base_path": "employees/llm-ops-engineer"
     }
   ],

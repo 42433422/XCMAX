@@ -4,14 +4,28 @@ import json
 from pathlib import Path
 
 from retort_engine.contracts import validate_contract
-from retort_engine.multi_project_absorption_replay import build_multi_project_absorption_replay
+from retort_engine.multi_project_absorption_replay import (
+    build_multi_project_absorption_replay,
+)
 from retort_engine.service import RetortService
 
 
-def test_multi_project_absorption_replay_requires_distinct_ready_projects(tmp_path: Path) -> None:
-    _write_run(tmp_path, "run-a", "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent", True)
+def test_multi_project_absorption_replay_requires_distinct_ready_projects(
+    tmp_path: Path,
+) -> None:
+    _write_run(
+        tmp_path,
+        "run-a",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent",
+        True,
+    )
     _write_employee_result(tmp_path, "run-a")
-    _write_run(tmp_path, "run-b", "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot", True)
+    _write_run(
+        tmp_path,
+        "run-b",
+        "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
+        True,
+    )
     _write_employee_result(tmp_path, "run-b")
 
     result = build_multi_project_absorption_replay(tmp_path, min_projects=2)
@@ -26,10 +40,15 @@ def test_multi_project_absorption_replay_requires_distinct_ready_projects(tmp_pa
     assert result["summary"]["latest_project_differs_from_previous"] is True
     assert result["summary"]["source_family_count"] == 2
     assert result["summary"]["heterogeneous_absorption_verified"] is True
-    assert validate_contract("multi_project_absorption_replay_result", result)["valid"] is True
+    assert (
+        validate_contract("multi_project_absorption_replay_result", result)["valid"]
+        is True
+    )
 
 
-def test_multi_project_absorption_replay_fails_without_second_project(tmp_path: Path) -> None:
+def test_multi_project_absorption_replay_fails_without_second_project(
+    tmp_path: Path,
+) -> None:
     _write_run(tmp_path, "run-a", "github/a", True)
     _write_employee_result(tmp_path, "run-a")
 
@@ -40,17 +59,31 @@ def test_multi_project_absorption_replay_fails_without_second_project(tmp_path: 
 
 
 def test_service_exposes_multi_project_absorption_replay(tmp_path: Path) -> None:
-    _write_run(tmp_path, "run-a", "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent", True)
+    _write_run(
+        tmp_path,
+        "run-a",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent",
+        True,
+    )
     _write_employee_result(tmp_path, "run-a")
-    _write_run(tmp_path, "run-b", "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot", True)
+    _write_run(
+        tmp_path,
+        "run-b",
+        "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
+        True,
+    )
     _write_employee_result(tmp_path, "run-b")
 
-    result = RetortService().multi_project_absorption_replay({"project": str(tmp_path), "min_projects": 2})
+    result = RetortService().multi_project_absorption_replay(
+        {"project": str(tmp_path), "min_projects": 2}
+    )
 
     assert result["status"] == "ready"
 
 
-def test_multi_project_absorption_replay_reports_historical_heterogeneous_families(tmp_path: Path) -> None:
+def test_multi_project_absorption_replay_reports_historical_heterogeneous_families(
+    tmp_path: Path,
+) -> None:
     sources = [
         "retort://post-absorption-hardening/abc123",
         "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent",
@@ -87,7 +120,9 @@ def _write_run(root: Path, run_id: str, source: str, gates_passed: bool) -> None
                     str(root / "retort_engine" / "review_context_bias.py"),
                     str(root / "tests" / "test_review_context_bias.py"),
                 ],
-                "employee_results_path": str(root / ".retort" / "employee_results" / f"{run_id}.json"),
+                "employee_results_path": str(
+                    root / ".retort" / "employee_results" / f"{run_id}.json"
+                ),
                 "code_graph_proof": _code_graph_proof(run_id),
             },
             ensure_ascii=False,
