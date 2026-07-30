@@ -3250,8 +3250,285 @@ def test_para_merge_remediation_branch_preserving_helpers():
         )
         is False
     )
+    assert (
+        resume_from_clean_baseline_for_para_merge("para_merge_conflict", "changed-files-empty")
+        is False
+    )
     assert resume_from_clean_baseline_for_para_merge("para_merge_conflict", update_branch_detail)
     assert resume_from_clean_baseline_for_para_merge("para_merge_conflict", "true conflict")
+
+
+def test_is_pr_closed_without_merge_detail_matches_merge_worker_error():
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        is_pr_closed_without_merge_detail,
+    )
+
+    detail = "devfleet/cursor/sub-1-0ff79e: Error: PR #1011 closed without merge"
+    assert is_pr_closed_without_merge_detail(detail) is True
+    assert is_pr_closed_without_merge_detail("risk-label-failed-after-review") is False
+
+
+def test_is_changed_files_empty_detail_matches_merge_worker_error():
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        is_changed_files_empty_detail,
+    )
+
+    detail = "devfleet/cursor/sub-1-a1b2c3: Error: changed-files-empty"
+    assert is_changed_files_empty_detail(detail) is True
+    assert is_changed_files_empty_detail("changed-files-empty") is True
+    assert is_changed_files_empty_detail("risk-label-failed-after-review") is False
+
+
+def test_para_merge_resume_pins_rejected_branch_edge_cases():
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        para_merge_resume_pins_rejected_branch,
+    )
+
+    assert (
+        para_merge_resume_pins_rejected_branch(
+            {
+                "detail": "hold-merge-label-failed-before-review",
+                "resume_from_clean_baseline": False,
+            }
+        )
+        is True
+    )
+    assert (
+        para_merge_resume_pins_rejected_branch(
+            {
+                "detail": "changed-files-empty",
+                "resume_from_clean_baseline": False,
+            }
+        )
+        is False
+    )
+    assert (
+        para_merge_resume_pins_rejected_branch(
+            {
+                "detail": "devfleet/cursor/sub-1-0ff79e: Error: PR #1011 closed without merge",
+                "resume_from_clean_baseline": False,
+            }
+        )
+        is False
+    )
+    assert (
+        para_merge_resume_pins_rejected_branch(
+            {
+                "detail": "true conflict",
+                "resume_from_clean_baseline": True,
+            }
+        )
+        is False
+    )
+
+
+def test_reconcile_changed_files_empty_sets_no_clean_baseline_rewrite():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-a1b2c3",
+                "para_task_id": "task-empty-files",
+                "run_id": "run-empty-files",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-a1b2c3",
+            "detail": "changed-files-empty",
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is False
+    candidate = _resume_review_qa_candidate(memory)
+    assert "continue_existing_code_task" not in candidate
+    prompt = _code_task_text("run-empty-files", {"gaps": []}, memory, candidate)
+    assert "changed-files-empty" in prompt
+    assert "NO_ACTION" in prompt
+
+
+def _absorbed_git_runner(policy_path: str, branch_suffix: str, remaining_diff: str = ""):
+    """Fake git runner for absorption tests; matches batched two-dot name-only diff."""
+
+    branch_ref = f"origin/devfleet/cursor/sub-1-{branch_suffix}"
+    scope = "成都修茈科技有限公司/MODstore_deploy/modstore_server/"
+
+    def fake_git(_root, *args: str):
+        if args[:4] == ("diff", "--name-only", "origin/main", branch_ref) and args[4] == "--":
+            return 0, remaining_diff, ""
+        if args[:3] == ("diff", "--name-only", f"origin/main...{branch_ref}") and args[3] == "--":
+            return 0, f"{policy_path}\n", ""
+        return 1, "", f"unexpected git args: {args}"
+
+    return fake_git
+
+
+def test_reconcile_absorbed_para_merge_closes_changed_files_empty_open_item():
+    from pathlib import Path
+
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        reconcile_absorbed_para_merge_remediations,
+    )
+
+    policy_path = "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py"
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-a1b2c3",
+                "detail": "changed-files-empty",
+                "kind": "automated_remediation",
+                "para_task_id": "task-empty-files",
+                "reason": "para_merge_conflict",
+                "resume_from_clean_baseline": False,
+                "run_id": "run-empty-files",
+                "task_id": "task-empty-files",
+            }
+        ],
+    }
+
+    result = reconcile_absorbed_para_merge_remediations(
+        memory,
+        repo_root=Path("/tmp/repo"),
+        run_git=_absorbed_git_runner(policy_path, "a1b2c3"),
+    )
+
+    assert result == {
+        "changed": True,
+        "closed_count": 1,
+        "closed_task_ids": ["task-empty-files"],
+    }
+    assert memory["open_items"] == []
+    assert _resume_review_qa_candidate(memory) is None
+
+
+def test_rejected_branch_production_delta_absorbed_when_main_matches():
+    from pathlib import Path
+
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        rejected_branch_production_delta_absorbed_by_main,
+    )
+
+    policy_path = "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py"
+
+    result = rejected_branch_production_delta_absorbed_by_main(
+        "devfleet/cursor/sub-1-0ff79e",
+        repo_root=Path("/tmp/repo"),
+        run_git=_absorbed_git_runner(policy_path, "0ff79e"),
+    )
+
+    assert result["absorbed"] is True
+    assert result["reason"] == "rejected_branch_production_delta_absorbed_by_main"
+    assert result["scoped_paths"] == [policy_path]
+
+
+def test_rejected_branch_production_delta_not_absorbed_when_diff_remains():
+    from pathlib import Path
+
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        rejected_branch_production_delta_absorbed_by_main,
+    )
+
+    policy_path = "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py"
+
+    result = rejected_branch_production_delta_absorbed_by_main(
+        "devfleet/cursor/sub-1-abc",
+        repo_root=Path("/tmp/repo"),
+        run_git=_absorbed_git_runner(policy_path, "abc", remaining_diff=f"{policy_path}\n"),
+    )
+
+    assert result["absorbed"] is False
+    assert result["reason"] == "rejected_branch_production_delta_present"
+    assert result["remaining_paths"] == [policy_path]
+
+
+def test_reconcile_absorbed_para_merge_closes_pr_closed_open_item():
+    from pathlib import Path
+
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        reconcile_absorbed_para_merge_remediations,
+    )
+
+    policy_path = "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py"
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-0ff79e",
+                "detail": "devfleet/cursor/sub-1-0ff79e: Error: PR #1011 closed without merge",
+                "kind": "automated_remediation",
+                "para_task_id": "task-0ff79e",
+                "reason": "para_merge_conflict",
+                "resume_from_clean_baseline": True,
+                "run_id": "run-0ff79e",
+                "task_id": "task-0ff79e",
+            }
+        ],
+    }
+
+    result = reconcile_absorbed_para_merge_remediations(
+        memory,
+        repo_root=Path("/tmp/repo"),
+        run_git=_absorbed_git_runner(policy_path, "0ff79e"),
+    )
+
+    assert result == {
+        "changed": True,
+        "closed_count": 1,
+        "closed_task_ids": ["task-0ff79e"],
+    }
+    assert memory["open_items"] == []
+    assert memory["closed_items"][0]["resolution_reason"] == (
+        "rejected_branch_production_delta_absorbed_by_main"
+    )
+    assert _resume_review_qa_candidate(memory) is None
+
+
+def test_reconcile_absorbed_para_merge_closes_pr_closed_even_when_resume_flag_false():
+    from pathlib import Path
+
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        reconcile_absorbed_para_merge_remediations,
+    )
+
+    policy_path = "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py"
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-edge",
+                "detail": "devfleet/cursor/sub-1-edge: Error: PR #1012 closed without merge",
+                "kind": "automated_remediation",
+                "para_task_id": "task-edge",
+                "reason": "para_merge_conflict",
+                "resume_from_clean_baseline": False,
+                "run_id": "run-edge",
+                "task_id": "task-edge",
+            }
+        ],
+    }
+
+    result = reconcile_absorbed_para_merge_remediations(
+        memory,
+        repo_root=Path("/tmp/repo"),
+        run_git=_absorbed_git_runner(policy_path, "edge"),
+    )
+
+    assert result["changed"] is True
+    assert result["closed_count"] == 1
+    assert memory["open_items"] == []
 
 
 def test_terminal_merge_remediation_prompt_mentions_closed_pr_and_main_supersession():

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "kind": "fix",
+  "created_at": "2026-07-31T05:28:00+00:00",
+  "symptom": "PR closed without merge 或 changed-files-empty 后，自维护循环仍对拒绝分支派发 clean-base 代码修复，尽管 modstore_server 生产增量已通过其他 PR 合入 main。",
+  "root_cause": "#1038 仅在 prompt 中提示 NO_ACTION，调度器未在派发前用 git 对比拒绝分支与 origin/main 的 modstore_server 生产路径；closed-without-merge 与 changed-files-empty 的 open_item 无法自动关闭。",
+  "fix_diff": "diff --git \"a/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_para_merge_remediation.py\" \"b/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_para_merge_remediation.py\"\nindex 57d748c28..a1b2c3d4e 100644\n--- \"a/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_para_merge_remediation.py\"\n+++ \"b/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_para_merge_remediation.py\"\n@@ -80,6 +80,220 @@ def resume_from_clean_baseline_for_para_merge(reason: str, detail: str) -> bool:\n     return True\n \n \n+def is_pr_closed_without_merge_detail(detail: str) -> bool:\n+    ...\n+\n+def is_changed_files_empty_detail(detail: str) -> bool:\n+    ...\n+\n+def para_merge_resume_pins_rejected_branch(item) -> bool:\n+    ...\n+\n+def rejected_branch_production_delta_absorbed_by_main(...):\n+    # batched two-dot name-only diff; max two git calls per assessment\n+    ...\n+\n+def reconcile_absorbed_para_merge_remediations(memory, *, base_branch, repo_root, run_git):\n+    ...\n+\n \n def resume_candidate_from_para_ai_review_item(\n     memory: Dict[str, Any],\n     item: Dict[str, Any],\n ) -> Optional[Dict[str, Any]]:\n     ...\ndiff --git \"a/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py\" \"b/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py\"\nindex 83d57f380..b2c3d4e5f 100644\n--- \"a/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py\"\n+++ \"b/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py\"\n@@ -6572,8 +6572,15 @@ def _run_self_maintenance_loop_unlocked(\n     merge_reconciliation = _reconcile_requested_merge_feedback(loop_memory)\n     retort_scope_reconciliation = _reconcile_retort_scope_remediations(loop_memory)\n-    if merge_reconciliation.get(\"changed\") or retort_scope_reconciliation.get(\"changed\"):\n+    absorbed_merge_reconciliation = _reconcile_absorbed_para_merge_remediations(\n+        loop_memory,\n+        base_branch=os.environ.get(\"MODSTORE_PARA_BRANCH\", \"\").strip() or \"main\",\n+    )\n+    if (\n+        merge_reconciliation.get(\"changed\")\n+        or retort_scope_reconciliation.get(\"changed\")\n+        or absorbed_merge_reconciliation.get(\"changed\")\n+    ):\n         _write_loop_memory(loop_memory)\n",
+  "metadata": {
+    "component": "self_maintenance_para_merge_remediation",
+    "files": [
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_para_merge_remediation.py",
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py",
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_remediation_lineage.py",
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_remediation_prompts.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
+    ]
+  },
+  "executable_template": {
+    "applicability_check": "open_items 含 kind=automated_remediation、reason=para_merge_conflict，且 detail 含 closed without merge 或 changed-files-empty；拒绝分支相对 origin/main 的 modstore_server 生产路径两点 diff 为空。",
+    "patch_strategy": "新增 is_pr_closed_without_merge_detail、is_changed_files_empty_detail、para_merge_resume_pins_rejected_branch、rejected_branch_production_delta_absorbed_by_main（批量 git diff）、reconcile_absorbed_para_merge_remediations；在 run_self_maintenance_loop 调度前关闭已吸收 open_item；测试通过 run_git 注入验证 reconcile 核心路径。",
+    "rollback_plan": "移除吸收 reconciler、para_merge_resume_pins_rejected_branch 及对应测试，恢复仅 prompt 级 NO_ACTION 提示与 resume_from_clean_baseline 门控。",
+    "required_tests": [
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py::test_reconcile_absorbed_para_merge_closes_pr_closed_open_item",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py::test_reconcile_absorbed_para_merge_closes_changed_files_empty_open_item",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py::test_rejected_branch_production_delta_absorbed_when_main_matches",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py::test_para_merge_resume_pins_rejected_branch_edge_cases"
+    ]
+  }
+}
