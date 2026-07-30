@@ -3216,6 +3216,10 @@ def test_para_merge_remediation_branch_preserving_helpers():
         )
         is False
     )
+    assert (
+        resume_from_clean_baseline_for_para_merge("para_merge_conflict", "changed-files-empty")
+        is False
+    )
     assert resume_from_clean_baseline_for_para_merge("para_merge_conflict", update_branch_detail)
     assert resume_from_clean_baseline_for_para_merge("para_merge_conflict", "true conflict")
 
@@ -3228,6 +3232,94 @@ def test_is_pr_closed_without_merge_detail_matches_merge_worker_error():
     detail = "devfleet/cursor/sub-1-0ff79e: Error: PR #1011 closed without merge"
     assert is_pr_closed_without_merge_detail(detail) is True
     assert is_pr_closed_without_merge_detail("risk-label-failed-after-review") is False
+
+
+def test_is_changed_files_empty_detail_matches_merge_worker_error():
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        is_changed_files_empty_detail,
+    )
+
+    detail = "devfleet/cursor/sub-1-a1b2c3: Error: changed-files-empty"
+    assert is_changed_files_empty_detail(detail) is True
+    assert is_changed_files_empty_detail("changed-files-empty") is True
+    assert is_changed_files_empty_detail("risk-label-failed-after-review") is False
+
+
+def test_reconcile_changed_files_empty_sets_no_clean_baseline_rewrite():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-a1b2c3",
+                "para_task_id": "task-empty-files",
+                "run_id": "run-empty-files",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-a1b2c3",
+            "detail": "changed-files-empty",
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is False
+    candidate = _resume_review_qa_candidate(memory)
+    assert "continue_existing_code_task" not in candidate
+    prompt = _code_task_text("run-empty-files", {"gaps": []}, memory, candidate)
+    assert "changed-files-empty" in prompt
+    assert "NO_ACTION" in prompt
+
+
+def test_reconcile_absorbed_para_merge_closes_changed_files_empty_open_item(monkeypatch):
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        reconcile_absorbed_para_merge_remediations,
+    )
+
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-a1b2c3",
+                "detail": "changed-files-empty",
+                "kind": "automated_remediation",
+                "para_task_id": "task-empty-files",
+                "reason": "para_merge_conflict",
+                "resume_from_clean_baseline": False,
+                "run_id": "run-empty-files",
+                "task_id": "task-empty-files",
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        "modstore_server.self_maintenance_para_merge_remediation.rejected_branch_production_delta_absorbed_by_main",
+        lambda *_args, **_kwargs: {
+            "absorbed": True,
+            "reason": "no_rejected_branch_production_delta",
+            "scoped_paths": [],
+        },
+    )
+
+    result = reconcile_absorbed_para_merge_remediations(memory)
+
+    assert result == {
+        "changed": True,
+        "closed_count": 1,
+        "closed_task_ids": ["task-empty-files"],
+    }
+    assert memory["open_items"] == []
+    assert _resume_review_qa_candidate(memory) is None
 
 
 def test_rejected_branch_production_delta_absorbed_when_main_matches():

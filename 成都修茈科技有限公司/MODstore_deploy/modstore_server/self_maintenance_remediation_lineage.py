@@ -177,7 +177,14 @@ def resume_candidate_from_context(
         "para_task_id": para_task_id,
         "reason": candidate_reason,
     }
-    if continue_existing_code_task and not matched_item.get("resume_from_clean_baseline"):
+    if continue_existing_code_task and matched_item.get("kind") == "automated_remediation":
+        from modstore_server.self_maintenance_para_merge_remediation import (
+            para_merge_resume_pins_rejected_branch,
+        )
+
+        if para_merge_resume_pins_rejected_branch(matched_item):
+            candidate["continue_existing_code_task"] = True
+    elif continue_existing_code_task and not matched_item.get("resume_from_clean_baseline"):
         candidate["continue_existing_code_task"] = True
     if reason == "para_ai_review_rejected":
         candidate["rejected_branch"] = branch

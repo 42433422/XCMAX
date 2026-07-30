@@ -6,6 +6,7 @@ from typing import Any
 
 from .self_maintenance_para_merge_remediation import (
     classify_para_merge_review_detail,
+    is_changed_files_empty_detail,
     para_merge_conflict_continues_on_rejected_branch,
 )
 from .self_maintenance_policy import normalize_merge_review_veto_code
@@ -93,7 +94,14 @@ def external_merge_remediation_prompt(resume_candidate: Any) -> str:
     remediation_reason = str(candidate.get("remediation_reason") or "").strip()
     feedback = str(candidate.get("remediation_feedback") or "").strip()[:4000]
     continue_on_branch = bool(candidate.get("continue_existing_code_task"))
-    if continue_on_branch:
+    if remediation_reason == "para_merge_conflict" and is_changed_files_empty_detail(feedback):
+        strategy = (
+            "merge-worker reported changed-files-empty after gh pr update-branch, so the PR "
+            "exposes zero scoped changed files. Compare the rejected branch against main; if "
+            "every modstore_server production delta is already on main, update loop status with "
+            "NO_ACTION instead of rewriting from the clean baseline or making marker-only edits."
+        )
+    elif continue_on_branch:
         strategy = (
             "The previous Para merge task failed during post-dispatch required-check polling, "
             "gh pr checks polling infrastructure (bot merge checks failed or unavailable), "

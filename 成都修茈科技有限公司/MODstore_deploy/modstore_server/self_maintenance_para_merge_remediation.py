@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import subprocess
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Mapping, Optional
 
 from .self_maintenance_policy import (
     is_auxiliary_self_maintenance_evidence_path,
@@ -33,6 +33,8 @@ _BRANCH_PRESERVING_MERGE_WORKER_TOKENS = (
 # gh pr update-branch content conflicts: branch is behind/diverged from main; rebase on clean base.
 _GIT_CONTENT_CONFLICT_MARKERS = ("cannot update pr branch due to conflicts",)
 _PR_CLOSED_WITHOUT_MERGE_MARKERS = ("closed without merge",)
+# merge_worker.mjs throws when update-branch leaves zero PR changed files.
+_CHANGED_FILES_EMPTY_MARKERS = ("changed-files-empty",)
 _MODSTORE_SERVER_SCOPE = "成都修茈科技有限公司/MODstore_deploy/modstore_server/"
 
 
@@ -85,7 +87,10 @@ def para_merge_conflict_continues_on_rejected_branch(detail: str) -> bool:
 def resume_from_clean_baseline_for_para_merge(reason: str, detail: str) -> bool:
     """Whether automated remediation must restart from the configured clean base."""
 
-    if reason == "para_merge_conflict" and is_branch_preserving_para_merge_failure_detail(detail):
+    if reason == "para_merge_conflict" and (
+        is_branch_preserving_para_merge_failure_detail(detail)
+        or is_changed_files_empty_detail(detail)
+    ):
         return False
     return True
 
@@ -98,6 +103,26 @@ def is_pr_closed_without_merge_detail(detail: str) -> bool:
         if any(marker in lowered for marker in _PR_CLOSED_WITHOUT_MERGE_MARKERS):
             return True
     return False
+
+
+def is_changed_files_empty_detail(detail: str) -> bool:
+    """True when merge-worker found zero PR changed files after update-branch."""
+
+    for candidate in operational_merge_reason_candidates(detail):
+        lowered = candidate.lower()
+        if any(marker in lowered for marker in _CHANGED_FILES_EMPTY_MARKERS):
+            return True
+    return False
+
+
+def para_merge_resume_pins_rejected_branch(item: Mapping[str, Any]) -> bool:
+    """Whether a para_merge remediation should continue on the rejected branch."""
+
+    if not isinstance(item, Mapping):
+        return False
+    if item.get("resume_from_clean_baseline"):
+        return False
+    return not is_changed_files_empty_detail(str(item.get("detail") or ""))
 
 
 def _normalize_repo_path(path: str) -> str:
@@ -245,10 +270,12 @@ def reconcile_absorbed_para_merge_remediations(
             continue
         if str(item.get("reason") or "").strip() != "para_merge_conflict":
             continue
-        if not item.get("resume_from_clean_baseline"):
-            continue
         detail = str(item.get("detail") or "")
-        if not is_pr_closed_without_merge_detail(detail):
+        empty_files = is_changed_files_empty_detail(detail)
+        closed_without_merge = is_pr_closed_without_merge_detail(detail)
+        if not empty_files and not closed_without_merge:
+            continue
+        if not empty_files and not item.get("resume_from_clean_baseline"):
             continue
         rejected_branch = str(item.get("rejected_branch") or item.get("branch") or "").strip()
         assessment = rejected_branch_production_delta_absorbed_by_main(
@@ -358,7 +385,9 @@ def classify_para_merge_review_detail(detail: str) -> Dict[str, Any]:
 __all__ = [
     "classify_para_merge_review_detail",
     "is_branch_preserving_para_merge_failure_detail",
+    "is_changed_files_empty_detail",
     "is_pr_closed_without_merge_detail",
+    "para_merge_resume_pins_rejected_branch",
     "operational_merge_reason_candidates",
     "para_merge_conflict_continues_on_rejected_branch",
     "reconcile_absorbed_para_merge_remediations",

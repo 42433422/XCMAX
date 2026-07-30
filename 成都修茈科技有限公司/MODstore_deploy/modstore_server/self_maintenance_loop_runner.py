@@ -62,6 +62,7 @@ from .self_maintenance_merge_policy import normalize_repo_path as _shared_normal
 from .self_maintenance_merge_policy import scope_globs as _shared_auto_merge_scope_globs
 from .self_maintenance_para_merge_remediation import (
     classify_para_merge_review_detail,
+    para_merge_resume_pins_rejected_branch,
     reconcile_absorbed_para_merge_remediations,
     resume_candidate_from_para_ai_review_item,
     resume_from_clean_baseline_for_para_merge,
@@ -1082,7 +1083,7 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
         elif reason == RETORT_SCOPE_REASON:
             candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
             candidate["remediation_reason"] = reason
-        if continue_existing_code_task and not item.get("resume_from_clean_baseline"):
+        if continue_existing_code_task and para_merge_resume_pins_rejected_branch(item):
             candidate["continue_existing_code_task"] = True
         return candidate
 
@@ -1182,7 +1183,7 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An
             elif reason == RETORT_SCOPE_REASON:
                 candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
                 candidate["remediation_reason"] = reason
-            if continue_existing_code_task and not item.get("resume_from_clean_baseline"):
+            if continue_existing_code_task and para_merge_resume_pins_rejected_branch(item):
                 candidate["continue_existing_code_task"] = True
             return candidate
     return None
