@@ -1,0 +1,16 @@
+{
+  "sla_ms": {
+    "reflex": 1.0,
+    "subconscious": 10.0,
+    "conscious": 200.0
+  },
+  "w_latency": 0.45,
+  "w_risk": 0.35,
+  "w_cost": 0.1,
+  "w_success": 0.1,
+  "priors": {
+    "reflex": {"risk": 0.15, "cost": 0.05, "success": 0.75},
+    "subconscious": {"risk": 0.25, "cost": 0.15, "success": 0.7},
+    "conscious": {"risk": 0.35, "cost": 0.55, "success": 0.82}
+  }
+}

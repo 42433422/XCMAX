@@ -58,6 +58,8 @@ Veto（任一PR类型）：PR 标 `hold-merge` label 时不自动合并。
   BRANCH_UPDATE_TOKEN  behind PR 更新专用 token（CI 使用 CI_COMMIT_TOKEN）
   WORKFLOW_DISPATCH_TOKEN  主干 CI 派发专用 token（CI 使用 CI_COMMIT_TOKEN）
   REQUIRE_INDEPENDENT_WORKFLOW_DISPATCH_TOKEN=1 时缺 token 即 fail closed
+  MERGEABILITY_POLL_ATTEMPTS  GitHub mergeable=null 时的最大查询次数（默认 6）
+  MERGEABILITY_POLL_BASE_SECONDS  mergeable 重查退避基数秒（默认 1，最大 8 秒）
   AUTO_IMPLEMENT_ALLOWLIST_PATH  可选，覆盖 allowlist 路径（默认 <repo_root>/config/auto-implement-allowlist.yaml）
 """
 
@@ -115,6 +117,15 @@ AI_PR_LABELS = ("ai-self-heal", "ai-generated")
 # 最终策略：r2/r3 永不进入 auto-merge 分支（仅 stale→close / 人工）
 MANUAL_MERGE_RISK_LEVELS = frozenset({"r2", "r3"})
 AUTO_MERGE_RISK_LEVELS = frozenset({"r0", "r1"})
+MERGEABILITY_POLL_ATTEMPTS = max(
+    1,
+    int(os.environ.get("MERGEABILITY_POLL_ATTEMPTS", "6")),
+)
+MERGEABILITY_POLL_BASE_SECONDS = max(
+    0.1,
+    float(os.environ.get("MERGEABILITY_POLL_BASE_SECONDS", "1")),
+)
+MERGEABILITY_POLL_MAX_SECONDS = 8.0
 
 
 # =====================================================================
@@ -338,21 +349,32 @@ class GitHubClient:
         - (True, "ok")：可合并
         - (True, "behind")：无冲突但落后主干，应先 update-branch 并重跑检查
         - (False, "conflict")：有冲突
-        - (None, "unknown")：GitHub 仍在计算 / API 异常，调用方应跳过本轮
+        - (None, reason)：GitHub 仍在计算 / API 异常，调用方应跳过本轮
+
+        GitHub 会在首次读取 PR 后异步计算 ``mergeable``，因此全绿 PR 可能
+        短暂返回 null。这里做有界指数退避；仍未知时 fail closed，绝不把
+        unknown 当作可合并。
         """
         url = f"{GITHUB_API}/repos/{self.repo}/pulls/{pr_number}"
-        resp = self.client.get(url)
-        if resp.status_code != 200:
-            return None, f"mergeability_api_error_{resp.status_code}"
-        data = resp.json()
-        mergeable = data.get("mergeable")
-        if mergeable is True:
-            if str(data.get("mergeable_state") or "").lower() == "behind":
-                return True, "behind"
-            return True, "ok"
-        if mergeable is False:
-            return False, "conflict"
-        return None, "unknown"
+        for attempt in range(1, MERGEABILITY_POLL_ATTEMPTS + 1):
+            resp = self.client.get(url)
+            if resp.status_code != 200:
+                return None, f"mergeability_api_error_{resp.status_code}"
+            data = resp.json()
+            mergeable = data.get("mergeable")
+            if mergeable is True:
+                if str(data.get("mergeable_state") or "").lower() == "behind":
+                    return True, "behind"
+                return True, "ok"
+            if mergeable is False:
+                return False, "conflict"
+            if attempt < MERGEABILITY_POLL_ATTEMPTS:
+                delay = min(
+                    MERGEABILITY_POLL_BASE_SECONDS * (2 ** (attempt - 1)),
+                    MERGEABILITY_POLL_MAX_SECONDS,
+                )
+                time.sleep(delay)
+        return None, f"unknown_after_{MERGEABILITY_POLL_ATTEMPTS}_attempts"
 
     def update_pr_branch(self, pr_number: int, expected_head_sha: str) -> tuple[bool, str]:
         """让 GitHub 把 base 合入 PR 分支；不绕过保护规则。

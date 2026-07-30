@@ -10,6 +10,7 @@ import {
   CI_TIMEOUT_POLICY,
   CI_WAIT_MODE,
   CI_WAIT_TIMEOUT_MS,
+  INDETERMINATE_REVIEW_RECOVERY_MAX_AGE_MS,
   INITIAL_PR_LABELS,
   TASK_CONCURRENCY,
   botMergeCheckArgs,
@@ -24,7 +25,9 @@ import {
   githubIssueLabelEndpoint,
   githubIssueLabelsEndpoint,
   isProcessTimeoutError,
+  isRecoverableIndeterminateReviewRecord,
   isTransientMergeFailure,
+  mergeFailuresAreRetryable,
   mergeRetryDelayMs,
   nextMergeRetryState,
   parseMergePollSnapshot,
@@ -37,6 +40,7 @@ import {
   selectMatchingWorkflowRun,
   selectTaskMergeBase,
   selfUpdateTemporaryPath,
+  taskHasRecoverableIndeterminateReviewConflict,
 } from './merge_worker.mjs';
 
 test('self-update accepts only the exact GitHub blob for the merge worker source', () => {
@@ -306,6 +310,105 @@ test('operational failures retry but explicit review and identity vetoes are ter
   assert.equal(isTransientMergeFailure('ci-wait-timeout-needs-human: escalate'), false);
   assert.equal(isTransientMergeFailure('ci-wait-timeout-retry: checks still queued'), true);
   assert.equal(isTransientMergeFailure('bot merge checks failed or unavailable'), false);
+  assert.equal(
+    isTransientMergeFailure(
+      'update-branch failed: Cannot update PR branch due to conflicts',
+    ),
+    false,
+  );
+});
+
+test('structured indeterminate reviews retry even when diagnostics quote REJECT syntax', () => {
+  const diagnostic = [
+    'indeterminate-review:',
+    '{"primary":"Command failed: trae-cli prompt says REJECT: <reason>","fallback":"empty"}',
+  ].join(' ');
+  assert.equal(isTransientMergeFailure(diagnostic), false);
+  assert.equal(
+    mergeFailuresAreRetryable([
+      {
+        branch: 'devfleet/cursor/example',
+        reason: diagnostic,
+        retryable: true,
+        vetoed: false,
+      },
+    ]),
+    true,
+  );
+  assert.equal(
+    mergeFailuresAreRetryable([
+      {
+        branch: 'devfleet/cursor/example',
+        reason: 'REJECT: unsafe behavior',
+        retryable: false,
+        vetoed: true,
+      },
+    ]),
+    false,
+  );
+});
+
+test('only recent structured merge-worker indeterminate conflicts are recovered', () => {
+  const now = Date.parse('2026-07-30T00:00:00Z');
+  const record = {
+    status: 'ai_rejected',
+    at: new Date(now - 60_000).toISOString(),
+    reason: 'devfleet/cursor/example: indeterminate-review: {"primary":"timeout"}',
+    attempts: 1,
+  };
+  assert.equal(isRecoverableIndeterminateReviewRecord(record, now), true);
+  assert.equal(
+    isRecoverableIndeterminateReviewRecord(
+      { ...record, reason: 'devfleet/cursor/example: REJECT: unsafe behavior' },
+      now,
+    ),
+    false,
+  );
+  assert.equal(
+    isRecoverableIndeterminateReviewRecord(
+      {
+        ...record,
+        at: new Date(now - INDETERMINATE_REVIEW_RECOVERY_MAX_AGE_MS - 1).toISOString(),
+      },
+      now,
+    ),
+    false,
+  );
+  assert.equal(
+    isRecoverableIndeterminateReviewRecord({ ...record, exhausted: true }, now),
+    false,
+  );
+  assert.equal(
+    isRecoverableIndeterminateReviewRecord({ ...record, attempts: 999 }, now),
+    false,
+  );
+
+  const task = {
+    status: 'merge_conflict',
+    merge_conflict: {
+      source: 'merge-worker',
+      detail: 'devfleet/cursor/example: indeterminate-review: {"fallback":"empty"}',
+    },
+  };
+  assert.equal(taskHasRecoverableIndeterminateReviewConflict(task), true);
+  assert.equal(
+    taskHasRecoverableIndeterminateReviewConflict({ status: 'merge_conflict' }),
+    false,
+  );
+  assert.equal(
+    taskHasRecoverableIndeterminateReviewConflict({
+      ...task,
+      merge_conflict: { ...task.merge_conflict, source: 'ai-review-veto' },
+    }),
+    false,
+  );
+  assert.equal(
+    taskHasRecoverableIndeterminateReviewConflict({
+      ...task,
+      merge_conflict: { ...task.merge_conflict, detail: 'REJECT: unsafe behavior' },
+    }),
+    false,
+  );
 });
 
 test('child process timeout detection includes killed and signal metadata', () => {

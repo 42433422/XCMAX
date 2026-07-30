@@ -1301,6 +1301,11 @@ class TestOpsFounderAutonomy:
         assert resp.status_code == 200
         assert resp.json() == {"success": True, "data": snapshot}
         assert proxy.await_count == 10
+        assert (
+            "/api/admin/employee-autonomy/execution-coverage"
+            "?window_hours=24&production_window_hours=720"
+            in {call.args[2] for call in proxy.await_args_list}
+        )
         assert build_snapshot.call_args.kwargs["runtime"] == {
             "ok": True,
             "runtime": "live",
