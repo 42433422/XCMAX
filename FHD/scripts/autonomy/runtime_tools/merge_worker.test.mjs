@@ -10,6 +10,7 @@ import {
   CI_TIMEOUT_POLICY,
   CI_WAIT_MODE,
   CI_WAIT_TIMEOUT_MS,
+  INDETERMINATE_REVIEW_RECOVERY_MAX_AGE_MS,
   INITIAL_PR_LABELS,
   TASK_CONCURRENCY,
   botMergeCheckArgs,
@@ -24,6 +25,7 @@ import {
   githubIssueLabelEndpoint,
   githubIssueLabelsEndpoint,
   isProcessTimeoutError,
+  isRecoverableIndeterminateReviewRecord,
   isTransientMergeFailure,
   mergeFailuresAreRetryable,
   mergeRetryDelayMs,
@@ -38,6 +40,7 @@ import {
   selectMatchingWorkflowRun,
   selectTaskMergeBase,
   selfUpdateTemporaryPath,
+  taskHasRecoverableIndeterminateReviewConflict,
 } from './merge_worker.mjs';
 
 test('self-update accepts only the exact GitHub blob for the merge worker source', () => {
@@ -341,6 +344,57 @@ test('structured indeterminate reviews retry even when diagnostics quote REJECT 
         vetoed: true,
       },
     ]),
+    false,
+  );
+});
+
+test('only recent structured merge-worker indeterminate conflicts are recovered', () => {
+  const now = Date.parse('2026-07-30T00:00:00Z');
+  const record = {
+    status: 'ai_rejected',
+    at: new Date(now - 60_000).toISOString(),
+    reason: 'devfleet/cursor/example: indeterminate-review: {"primary":"timeout"}',
+    attempts: 1,
+  };
+  assert.equal(isRecoverableIndeterminateReviewRecord(record, now), true);
+  assert.equal(
+    isRecoverableIndeterminateReviewRecord(
+      { ...record, reason: 'devfleet/cursor/example: REJECT: unsafe behavior' },
+      now,
+    ),
+    false,
+  );
+  assert.equal(
+    isRecoverableIndeterminateReviewRecord(
+      {
+        ...record,
+        at: new Date(now - INDETERMINATE_REVIEW_RECOVERY_MAX_AGE_MS - 1).toISOString(),
+      },
+      now,
+    ),
+    false,
+  );
+
+  const task = {
+    status: 'merge_conflict',
+    merge_conflict: {
+      source: 'merge-worker',
+      detail: 'devfleet/cursor/example: indeterminate-review: {"fallback":"empty"}',
+    },
+  };
+  assert.equal(taskHasRecoverableIndeterminateReviewConflict(task), true);
+  assert.equal(
+    taskHasRecoverableIndeterminateReviewConflict({
+      ...task,
+      merge_conflict: { ...task.merge_conflict, source: 'ai-review-veto' },
+    }),
+    false,
+  );
+  assert.equal(
+    taskHasRecoverableIndeterminateReviewConflict({
+      ...task,
+      merge_conflict: { ...task.merge_conflict, detail: 'REJECT: unsafe behavior' },
+    }),
     false,
   );
 });

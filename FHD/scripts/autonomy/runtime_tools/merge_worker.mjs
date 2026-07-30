@@ -81,6 +81,14 @@ const PRODUCTION_DEPLOY_WORKFLOW = String(
 const MAX_RETRY_ATTEMPTS = Math.max(1, Number.parseInt(process.env.MERGE_WORKER_MAX_RETRIES || '5', 10));
 const RETRY_BASE_MS = Math.max(1_000, Number.parseInt(process.env.MERGE_WORKER_RETRY_BASE_MS || '30000', 10));
 const RETRY_MAX_MS = Math.max(RETRY_BASE_MS, Number.parseInt(process.env.MERGE_WORKER_RETRY_MAX_MS || '900000', 10));
+export const INDETERMINATE_REVIEW_RECOVERY_MAX_AGE_MS = Math.max(
+  60 * 60 * 1000,
+  Number.parseInt(
+    process.env.MERGE_WORKER_INDETERMINATE_RECOVERY_MAX_AGE_MS
+      || String(24 * 60 * 60 * 1000),
+    10,
+  ),
+);
 export const TASK_CONCURRENCY = Math.min(
   8,
   Math.max(1, Number.parseInt(process.env.MERGE_WORKER_TASK_CONCURRENCY || '4', 10)),
@@ -398,6 +406,22 @@ export function mergeFailuresAreRetryable(results) {
       if (result?.retryable === false) return false;
       return isTransientMergeFailure(result?.reason || result?.error);
     });
+}
+
+export function isRecoverableIndeterminateReviewRecord(record, nowMs = Date.now()) {
+  if (!['ai_rejected', 'retrying'].includes(String(record?.status || ''))) return false;
+  if (!/\bindeterminate-review:\s*\{/.test(String(record?.reason || ''))) return false;
+  const recordedAt = Date.parse(String(record?.at || ''));
+  if (!Number.isFinite(recordedAt) || recordedAt > nowMs) return false;
+  return nowMs - recordedAt <= INDETERMINATE_REVIEW_RECOVERY_MAX_AGE_MS;
+}
+
+export function taskHasRecoverableIndeterminateReviewConflict(task) {
+  const conflict = task?.merge_conflict;
+  return String(task?.status || '') === 'merge_conflict'
+    && conflict
+    && String(conflict.source || '') === 'merge-worker'
+    && /\bindeterminate-review:\s*\{/.test(String(conflict.detail || ''));
 }
 
 export function isProcessTimeoutError(err) {
@@ -1852,11 +1876,28 @@ async function main() {
       const token = await guestToken();
       await reconcileMergedDeployments(token, state);
       const queue = await fetchMergeQueue(token);
-      if (queue.length > 0) {
-        log(`队列 ${queue.length} 个任务`);
+      const queueById = new Map(queue.map((task) => [String(task?.id || ''), task]));
+      const recoveryIds = Object.entries(state)
+        .filter(([, record]) => isRecoverableIndeterminateReviewRecord(record))
+        .map(([taskId]) => taskId);
+      for (const taskId of recoveryIds) {
+        if (queueById.has(taskId)) continue;
+        try {
+          const task = await fetchTask(token, taskId);
+          if (taskHasRecoverableIndeterminateReviewConflict(task)) {
+            queueById.set(taskId, task);
+            log(`task ${taskId} 恢复：误终止 indeterminate-review → 有限重试`);
+          }
+        } catch (err) {
+          log(`task ${taskId} 恢复查询失败：${String(err).slice(0, 200)}`);
+        }
+      }
+      const effectiveQueue = [...queueById.values()];
+      if (effectiveQueue.length > 0) {
+        log(`队列 ${effectiveQueue.length} 个任务 (常规=${queue.length} 恢复=${effectiveQueue.length - queue.length})`);
       }
       const results = await runTaskQueueFairly(
-        queue,
+        effectiveQueue,
         (task) => processTask(token, task, state),
       );
       for (const result of results) {
