@@ -3220,6 +3220,113 @@ def test_para_merge_remediation_branch_preserving_helpers():
     assert resume_from_clean_baseline_for_para_merge("para_merge_conflict", "true conflict")
 
 
+def test_is_pr_closed_without_merge_detail_matches_merge_worker_error():
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        is_pr_closed_without_merge_detail,
+    )
+
+    detail = "devfleet/cursor/sub-1-0ff79e: Error: PR #1011 closed without merge"
+    assert is_pr_closed_without_merge_detail(detail) is True
+    assert is_pr_closed_without_merge_detail("risk-label-failed-after-review") is False
+
+
+def test_rejected_branch_production_delta_absorbed_when_main_matches():
+    from pathlib import Path
+
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        rejected_branch_production_delta_absorbed_by_main,
+    )
+
+    policy_path = "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py"
+
+    def fake_git(_root: Path, *args: str):
+        if args[:3] == ("diff", "--name-only", "origin/main...origin/devfleet/cursor/sub-1-0ff79e"):
+            return 0, f"{policy_path}\n", ""
+        if args[:4] == ("diff", "origin/main", "origin/devfleet/cursor/sub-1-0ff79e", "--"):
+            return 0, "", ""
+        return 1, "", "unexpected git args"
+
+    result = rejected_branch_production_delta_absorbed_by_main(
+        "devfleet/cursor/sub-1-0ff79e",
+        repo_root=Path("/tmp/repo"),
+        run_git=fake_git,
+    )
+
+    assert result["absorbed"] is True
+    assert result["reason"] == "rejected_branch_production_delta_absorbed_by_main"
+    assert result["scoped_paths"] == [policy_path]
+
+
+def test_rejected_branch_production_delta_not_absorbed_when_diff_remains():
+    from pathlib import Path
+
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        rejected_branch_production_delta_absorbed_by_main,
+    )
+
+    policy_path = "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py"
+
+    def fake_git(_root: Path, *args: str):
+        if args[:3] == ("diff", "--name-only", "origin/main...origin/devfleet/cursor/sub-1-abc"):
+            return 0, f"{policy_path}\n", ""
+        if args[:4] == ("diff", "origin/main", "origin/devfleet/cursor/sub-1-abc", "--"):
+            return 0, "@@ still missing fix\n", ""
+        return 1, "", "unexpected git args"
+
+    result = rejected_branch_production_delta_absorbed_by_main(
+        "devfleet/cursor/sub-1-abc",
+        repo_root=Path("/tmp/repo"),
+        run_git=fake_git,
+    )
+
+    assert result["absorbed"] is False
+    assert result["reason"] == "rejected_branch_production_delta_present"
+    assert result["remaining_paths"] == [policy_path]
+
+
+def test_reconcile_absorbed_para_merge_closes_open_item(monkeypatch):
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        reconcile_absorbed_para_merge_remediations,
+    )
+
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-0ff79e",
+                "detail": "devfleet/cursor/sub-1-0ff79e: Error: PR #1011 closed without merge",
+                "kind": "automated_remediation",
+                "para_task_id": "task-0ff79e",
+                "reason": "para_merge_conflict",
+                "resume_from_clean_baseline": True,
+                "run_id": "run-0ff79e",
+                "task_id": "task-0ff79e",
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        "modstore_server.self_maintenance_para_merge_remediation.rejected_branch_production_delta_absorbed_by_main",
+        lambda *_args, **_kwargs: {
+            "absorbed": True,
+            "reason": "rejected_branch_production_delta_absorbed_by_main",
+            "scoped_paths": [],
+        },
+    )
+
+    result = reconcile_absorbed_para_merge_remediations(memory)
+
+    assert result == {
+        "changed": True,
+        "closed_count": 1,
+        "closed_task_ids": ["task-0ff79e"],
+    }
+    assert memory["open_items"] == []
+    assert memory["closed_items"][0]["resolution_reason"] == (
+        "rejected_branch_production_delta_absorbed_by_main"
+    )
+    assert _resume_review_qa_candidate(memory) is None
+
+
 def test_reconcile_merge_worker_branch_prefixed_indeterminate_review_detail():
     memory = {
         "closed_items": [],

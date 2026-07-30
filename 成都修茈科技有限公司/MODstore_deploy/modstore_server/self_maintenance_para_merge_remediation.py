@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, Optional
+import subprocess
+from pathlib import Path
+from typing import Any, Callable, Dict, Optional
 
 from .self_maintenance_policy import (
+    is_auxiliary_self_maintenance_evidence_path,
     normalize_merge_review_veto_code,
     parse_merge_review_diff_char_count,
 )
@@ -29,6 +32,8 @@ _BRANCH_PRESERVING_MERGE_WORKER_TOKENS = (
 
 # gh pr update-branch content conflicts: branch is behind/diverged from main; rebase on clean base.
 _GIT_CONTENT_CONFLICT_MARKERS = ("cannot update pr branch due to conflicts",)
+_PR_CLOSED_WITHOUT_MERGE_MARKERS = ("closed without merge",)
+_MODSTORE_SERVER_SCOPE = "成都修茈科技有限公司/MODstore_deploy/modstore_server/"
 
 
 def _strip_error_prefix(text: str) -> str:
@@ -83,6 +88,203 @@ def resume_from_clean_baseline_for_para_merge(reason: str, detail: str) -> bool:
     if reason == "para_merge_conflict" and is_branch_preserving_para_merge_failure_detail(detail):
         return False
     return True
+
+
+def is_pr_closed_without_merge_detail(detail: str) -> bool:
+    """True when merge-worker closed the PR without landing a merge commit."""
+
+    for candidate in operational_merge_reason_candidates(detail):
+        lowered = candidate.lower()
+        if any(marker in lowered for marker in _PR_CLOSED_WITHOUT_MERGE_MARKERS):
+            return True
+    return False
+
+
+def _normalize_repo_path(path: str) -> str:
+    return (path or "").replace("\\", "/").strip().strip('"').strip("'")
+
+
+def _is_production_modstore_server_path(path: str) -> bool:
+    normalized = _normalize_repo_path(path)
+    if not normalized.startswith(_MODSTORE_SERVER_SCOPE):
+        return False
+    return not is_auxiliary_self_maintenance_evidence_path(normalized)
+
+
+def _default_repo_root() -> Optional[Path]:
+    from modstore_server.runtime_provenance import resolve_runtime_repo_root
+
+    return resolve_runtime_repo_root()
+
+
+def _default_run_git(repo_root: Path, *args: str) -> tuple[int, str, str]:
+    proc = subprocess.run(
+        ["git", "-C", str(repo_root), "-c", "core.quotePath=false", *args],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    return proc.returncode, proc.stdout or "", proc.stderr or ""
+
+
+def _branch_remote_ref(branch: str, *, prefix: str = "origin/") -> str:
+    normalized = str(branch or "").strip()
+    if not normalized:
+        return ""
+    if normalized.startswith("refs/") or normalized.startswith("origin/"):
+        return normalized
+    return f"{prefix}{normalized}"
+
+
+def rejected_branch_production_delta_absorbed_by_main(
+    rejected_branch: str,
+    *,
+    base_ref: str = "origin/main",
+    repo_root: Optional[Path] = None,
+    run_git: Optional[Callable[..., tuple[int, str, str]]] = None,
+) -> Dict[str, Any]:
+    """Return whether rejected-branch production deltas are already on the base ref.
+
+    Compares the rejected branch's three-dot production scope against the base
+    ref. When every scoped production file is byte-identical on the base ref, the
+    closed PR can be reconciled without another clean-base rewrite.
+    """
+
+    branch_ref = _branch_remote_ref(rejected_branch)
+    if not branch_ref:
+        return {"absorbed": False, "reason": "missing_rejected_branch"}
+
+    root = repo_root or _default_repo_root()
+    if root is None:
+        return {"absorbed": False, "reason": "repo_root_unavailable"}
+
+    git_runner = run_git or _default_run_git
+    list_rc, list_out, list_err = git_runner(
+        root,
+        "diff",
+        "--name-only",
+        f"{base_ref}...{branch_ref}",
+        "--",
+        f"{_MODSTORE_SERVER_SCOPE.rstrip('/')}/",
+    )
+    if list_rc != 0:
+        return {
+            "absorbed": False,
+            "reason": "git_diff_name_only_failed",
+            "stderr": list_err[:300],
+        }
+
+    scoped_paths = [
+        _normalize_repo_path(path)
+        for path in (list_out or "").splitlines()
+        if _is_production_modstore_server_path(path)
+    ]
+    if not scoped_paths:
+        return {
+            "absorbed": True,
+            "base_ref": base_ref,
+            "branch_ref": branch_ref,
+            "reason": "no_rejected_branch_production_delta",
+            "scoped_paths": [],
+        }
+
+    remaining_paths: list[str] = []
+    for path in scoped_paths:
+        diff_rc, diff_out, diff_err = git_runner(root, "diff", base_ref, branch_ref, "--", path)
+        if diff_rc != 0:
+            return {
+                "absorbed": False,
+                "reason": "git_diff_failed",
+                "path": path,
+                "stderr": diff_err[:300],
+            }
+        if diff_out.strip():
+            remaining_paths.append(path)
+
+    if remaining_paths:
+        return {
+            "absorbed": False,
+            "base_ref": base_ref,
+            "branch_ref": branch_ref,
+            "reason": "rejected_branch_production_delta_present",
+            "remaining_paths": remaining_paths,
+            "scoped_paths": scoped_paths,
+        }
+
+    return {
+        "absorbed": True,
+        "base_ref": base_ref,
+        "branch_ref": branch_ref,
+        "reason": "rejected_branch_production_delta_absorbed_by_main",
+        "scoped_paths": scoped_paths,
+    }
+
+
+def reconcile_absorbed_para_merge_remediations(
+    memory: Dict[str, Any],
+    *,
+    base_branch: str = "main",
+    repo_root: Optional[Path] = None,
+    run_git: Optional[Callable[..., tuple[int, str, str]]] = None,
+) -> Dict[str, Any]:
+    """Close clean-base para_merge_conflict holds when main already has the fix."""
+
+    from modstore_server import self_maintenance_loop_runner as runner
+
+    open_items = memory.get("open_items")
+    if not isinstance(open_items, list):
+        return {"changed": False, "closed_count": 0, "closed_task_ids": []}
+
+    base_ref = f"origin/{(base_branch or 'main').strip() or 'main'}"
+    closed_task_ids: list[str] = []
+    for item in list(open_items):
+        if not isinstance(item, dict):
+            continue
+        if item.get("kind") != "automated_remediation":
+            continue
+        if str(item.get("reason") or "").strip() != "para_merge_conflict":
+            continue
+        if not item.get("resume_from_clean_baseline"):
+            continue
+        detail = str(item.get("detail") or "")
+        if not is_pr_closed_without_merge_detail(detail):
+            continue
+        rejected_branch = str(item.get("rejected_branch") or item.get("branch") or "").strip()
+        assessment = rejected_branch_production_delta_absorbed_by_main(
+            rejected_branch,
+            base_ref=base_ref,
+            repo_root=repo_root,
+            run_git=run_git,
+        )
+        if not assessment.get("absorbed"):
+            continue
+        task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
+        resolution = runner._close_open_items_in_memory(
+            memory,
+            actor="para_merge_absorption_reconciler",
+            branches=[rejected_branch],
+            resolution_reason="rejected_branch_production_delta_absorbed_by_main",
+            task_ids=[task_id] if task_id else None,
+        )
+        if resolution.get("closed_count"):
+            closed_task_ids.append(task_id)
+            memory.setdefault("absorbed_para_merge_reconciliations", []).append(
+                {
+                    "assessment": assessment,
+                    "closed_at": runner._iso(runner._utc_now()),
+                    "rejected_branch": rejected_branch,
+                    "task_id": task_id,
+                }
+            )
+
+    if closed_task_ids:
+        memory["updated_at"] = runner._iso(runner._utc_now())
+    return {
+        "changed": bool(closed_task_ids),
+        "closed_count": len(closed_task_ids),
+        "closed_task_ids": closed_task_ids,
+    }
 
 
 def resume_candidate_from_para_ai_review_item(
@@ -156,8 +358,11 @@ def classify_para_merge_review_detail(detail: str) -> Dict[str, Any]:
 __all__ = [
     "classify_para_merge_review_detail",
     "is_branch_preserving_para_merge_failure_detail",
+    "is_pr_closed_without_merge_detail",
     "operational_merge_reason_candidates",
     "para_merge_conflict_continues_on_rejected_branch",
+    "reconcile_absorbed_para_merge_remediations",
+    "rejected_branch_production_delta_absorbed_by_main",
     "resume_candidate_from_para_ai_review_item",
     "resume_from_clean_baseline_for_para_merge",
 ]

@@ -62,6 +62,7 @@ from .self_maintenance_merge_policy import normalize_repo_path as _shared_normal
 from .self_maintenance_merge_policy import scope_globs as _shared_auto_merge_scope_globs
 from .self_maintenance_para_merge_remediation import (
     classify_para_merge_review_detail,
+    reconcile_absorbed_para_merge_remediations,
     resume_candidate_from_para_ai_review_item,
     resume_from_clean_baseline_for_para_merge,
 )
@@ -102,6 +103,7 @@ logger = logging.getLogger(__name__)
 
 RETORT_SCOPE_REASON = retort_remediation.RETORT_SCOPE_REASON
 _reconcile_retort_scope_remediations = retort_remediation.reconcile_retort_scope_remediations
+_reconcile_absorbed_para_merge_remediations = reconcile_absorbed_para_merge_remediations
 _retort_scope_only_clarification = retort_remediation.retort_scope_only_clarification
 
 DEFAULT_RUNTIME_DIR = str(Path.home() / ".xcmax" / "modstore-daily")
@@ -6571,7 +6573,15 @@ def _run_self_maintenance_loop_unlocked(
     loop_memory = _load_loop_memory()
     merge_reconciliation = _reconcile_requested_merge_feedback(loop_memory)
     retort_scope_reconciliation = _reconcile_retort_scope_remediations(loop_memory)
-    if merge_reconciliation.get("changed") or retort_scope_reconciliation.get("changed"):
+    absorbed_merge_reconciliation = _reconcile_absorbed_para_merge_remediations(
+        loop_memory,
+        base_branch=os.environ.get("MODSTORE_PARA_BRANCH", "").strip() or "main",
+    )
+    if (
+        merge_reconciliation.get("changed")
+        or retort_scope_reconciliation.get("changed")
+        or absorbed_merge_reconciliation.get("changed")
+    ):
         _write_loop_memory(loop_memory)
     resume_candidate = (
         _resume_candidate_from_remediation_context(
@@ -6611,6 +6621,8 @@ def _run_self_maintenance_loop_unlocked(
         start_record["merge_reconciliation"] = merge_reconciliation
     if retort_scope_reconciliation.get("changed"):
         start_record["retort_scope_reconciliation"] = retort_scope_reconciliation
+    if absorbed_merge_reconciliation.get("changed"):
+        start_record["absorbed_para_merge_reconciliation"] = absorbed_merge_reconciliation
     if resume_candidate:
         start_record["resume_candidate"] = resume_candidate
     _append_ledger(start_record)
