@@ -175,5 +175,5 @@ test('customer service page renders hero for logged-in users', async ({ page }) 
 
   await page.goto('/customer-service')
 
-  await expect(page.getByRole('heading', { level: 1, name: '自动受理、审核、执行与追踪' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'AI 客服' })).toBeVisible()
 })

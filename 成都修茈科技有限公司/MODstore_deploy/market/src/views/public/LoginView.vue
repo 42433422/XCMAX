@@ -66,18 +66,37 @@ async function doLogin() {
   padding: 0 var(--layout-pad-x, 16px) 1rem;
 }
 .auth-card {
-  background: #111111;
+  background: var(--wb-surface-elevated, #ffffff);
   border-radius: 12px;
-  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  border: 0.5px solid var(--wb-border-default, rgba(0, 0, 0, 0.08));
+  box-shadow: var(--wb-card-shadow, 0 8px 28px rgba(0, 0, 0, 0.06));
   padding: 32px;
   width: 100%;
   max-width: min(400px, 100%);
   box-sizing: border-box;
 }
-.auth-card h2 { font-size: 22px; margin-bottom: 24px; text-align: center; color: #ffffff; }
+.auth-card h2 {
+  font-size: 22px;
+  margin-bottom: 24px;
+  text-align: center;
+  color: var(--wb-text-primary, #1d1d1f);
+}
 .form-group { margin-bottom: 16px; }
-.form-group label { display: block; font-size: 13px; color: rgba(255,255,255,0.5); margin-bottom: 6px; }
+.form-group label {
+  display: block;
+  font-size: 13px;
+  color: var(--wb-text-muted, #86868b);
+  margin-bottom: 6px;
+}
 .btn-block { width: 100%; }
-.auth-footer { text-align: center; margin-top: 16px; font-size: 14px; color: rgba(255,255,255,0.5); }
-.link { color: #ffffff; font-weight: 500; }
+.auth-footer {
+  text-align: center;
+  margin-top: 16px;
+  font-size: 14px;
+  color: var(--wb-text-muted, #86868b);
+}
+.link {
+  color: var(--wb-accent-primary, #0071e3);
+  font-weight: 500;
+}
 </style>

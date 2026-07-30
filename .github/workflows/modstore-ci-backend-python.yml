@@ -41,7 +41,7 @@ jobs:
       - name: Release gate subset (hard)
         run: python -m pytest -m release_gate -q --tb=short
 
-  backend-test:
+  modstore-backend-test:
     runs-on: ubuntu-latest
     needs: [release-gate]
 
@@ -71,7 +71,7 @@ jobs:
       - name: Run mypy type checking
         run: |
           pip install mypy types-redis types-requests types-pyyaml types-paramiko types-passlib types-psutil types-pytz
-          pip install -e ../packages/xcagi_common
+          pip install -e ../../packages/xcagi_common
           mypy --no-error-summary
 
       - name: Run tests with coverage (global floor — ratchet)

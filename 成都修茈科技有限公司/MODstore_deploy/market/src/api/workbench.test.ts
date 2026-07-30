@@ -242,32 +242,47 @@ describe('customerService API', () => {
 
   it('customerServiceSessions', async () => {
     await customerService.customerServiceSessions()
-    expect(mReq).toHaveBeenCalledWith('/api/customer-service/sessions')
+    expect(mReq).toHaveBeenCalledWith('/api/customer-service/sessions', expect.objectContaining({ timeoutMs: 15_000 }))
   })
 
   it('customerServiceSessionDetail', async () => {
     await customerService.customerServiceSessionDetail(1)
-    expect(mReq).toHaveBeenCalledWith('/api/customer-service/sessions/1')
+    expect(mReq).toHaveBeenCalledWith(
+      '/api/customer-service/sessions/1',
+      expect.objectContaining({ timeoutMs: 15_000 }),
+    )
   })
 
   it('customerServiceTickets with status', async () => {
     await customerService.customerServiceTickets('open')
-    expect(mReq).toHaveBeenCalledWith(expect.stringContaining('tickets?status=open'))
+    expect(mReq).toHaveBeenCalledWith(
+      expect.stringContaining('tickets?status=open'),
+      expect.objectContaining({ timeoutMs: 15_000 }),
+    )
   })
 
   it('customerServiceTicketDetail', async () => {
     await customerService.customerServiceTicketDetail(1)
-    expect(mReq).toHaveBeenCalledWith('/api/customer-service/tickets/1')
+    expect(mReq).toHaveBeenCalledWith(
+      '/api/customer-service/tickets/1',
+      expect.objectContaining({ timeoutMs: 15_000 }),
+    )
   })
 
   it('customerServiceActions', async () => {
     await customerService.customerServiceActions(1)
-    expect(mReq).toHaveBeenCalledWith(expect.stringContaining('actions'))
+    expect(mReq).toHaveBeenCalledWith(
+      expect.stringContaining('actions'),
+      expect.objectContaining({ timeoutMs: 15_000 }),
+    )
   })
 
   it('customerServiceStandards', async () => {
     await customerService.customerServiceStandards()
-    expect(mReq).toHaveBeenCalledWith('/api/customer-service/standards')
+    expect(mReq).toHaveBeenCalledWith(
+      '/api/customer-service/standards',
+      expect.objectContaining({ timeoutMs: 15_000 }),
+    )
   })
 
   it('customerServiceCreateStandard', async () => {

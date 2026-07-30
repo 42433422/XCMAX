@@ -31,7 +31,7 @@ const DEFAULT_SUGGESTIONS = [
 
 export function defaultPersonalSettings(): PersonalSettings {
   return {
-    theme: 'dark',
+    theme: 'light',
     fontPx: 15,
     memory: '',
     suggestions: DEFAULT_SUGGESTIONS.slice(),
@@ -73,7 +73,8 @@ export function loadPersonalSettings(): PersonalSettings {
     // 旧默认 s2s：升级到 unified（单连接流式 ASR，电话式体验更好）
     if (obj.voiceSpeechMode === 's2s') voiceSpeechMode = 'unified'
     return {
-      theme: obj.theme === 'light' || obj.theme === 'auto' ? obj.theme : 'dark',
+      theme:
+        obj.theme === 'light' || obj.theme === 'dark' || obj.theme === 'auto' ? obj.theme : def.theme,
       fontPx: Number.isFinite(Number(obj.fontPx)) ? Math.max(13, Math.min(20, Number(obj.fontPx))) : def.fontPx,
       memory: typeof obj.memory === 'string' ? obj.memory.slice(0, 600) : '',
       suggestions: Array.isArray(obj.suggestions) && obj.suggestions.length

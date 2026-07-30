@@ -26,7 +26,6 @@
       <router-link :to="{ name: 'plans' }" class="wb-user-menu__item" role="menuitem" @click="close">会员</router-link>
       <button type="button" class="wb-user-menu__item" role="menuitem" @click="onSettings">设置</button>
       <router-link :to="{ name: 'notifications' }" class="wb-user-menu__item" role="menuitem" @click="close">通知</router-link>
-      <router-link :to="{ name: 'customer-service' }" class="wb-user-menu__item" role="menuitem" @click="close">AI 客服</router-link>
       <router-link :to="{ name: 'ai-test' }" class="wb-user-menu__item" role="menuitem" @click="close">AI 测试</router-link>
       <a href="/index.html" class="wb-user-menu__item" target="_blank" rel="noopener" role="menuitem" @click="close">官网首页</a>
       <button v-if="isAdmin" type="button" class="wb-user-menu__item" role="menuitem" @click="onAdmin">管理端</button>

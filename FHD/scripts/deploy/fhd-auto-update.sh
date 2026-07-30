@@ -17,6 +17,15 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 APPLY_TARBALL="$SCRIPT_DIR/fhd-apply-release.sh"
 APPLY_COMPOSE="$SCRIPT_DIR/fhd-apply-release-compose.sh"
 LOG="${FHD_DEPLOY_LOG:-/var/log/fhd-auto-update.log}"
+if [[ -f "$SCRIPT_DIR/lib/dora_event.sh" ]]; then
+  # shellcheck source=lib/dora_event.sh
+  . "$SCRIPT_DIR/lib/dora_event.sh"
+else
+  dora_emit_deployment() {
+    echo "DORA event helper is missing; deployment outcome was not persisted" >&2
+    return 1
+  }
+fi
 
 MANIFEST="${FHD_MANIFEST_PATH:-/var/www/update/releases/stable/server/fhd-manifest.json}"
 ARTIFACT_DIR="${FHD_ARTIFACT_DIR:-$(dirname "$MANIFEST")}"
@@ -31,6 +40,23 @@ fi
 
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG"
+}
+
+record_dora_deployment() {
+  local status="$1"
+  local environment="staging"
+  [[ "${CHANNEL:-}" == "stable" ]] && environment="production"
+  if ! dora_emit_deployment \
+    "$status" \
+    "${GIT_SHA:-}" \
+    "${COMMIT_AT:-${BUILT_AT:-}}" \
+    "$environment" \
+    "${DEPLOY_MODE:-unknown}" \
+    "${VERSION:-}" \
+    "fhd-auto-update"; then
+    log "ERROR: DORA 部署事件写入失败 status=$status sha=${GIT_SHA:-unknown}"
+    return 1
+  fi
 }
 
 authorize_production_release() {
@@ -102,6 +128,26 @@ append_autonomy_audit(
 PY
 }
 
+sync_dr_release() {
+  [[ "${CHANNEL:-}" == "stable" ]] || return 0
+  local bundled_sync="$DEPLOY_ROOT/scripts/deploy/xcmax-release-sync.sh"
+  local sync_script="${FHD_DR_SYNC_SCRIPT:-$bundled_sync}"
+  if [[ ! -x "$sync_script" && -z "${FHD_DR_SYNC_SCRIPT:-}" ]]; then
+    sync_script="/usr/local/xcmax-ops/dr/xcmax_release_sync.sh"
+  fi
+  if [[ ! -x "$sync_script" ]]; then
+    log "ERROR: DR 发布同步脚本不可用: $sync_script"
+    [[ "${FHD_DR_SYNC_STRICT:-1}" != "1" ]]
+    return
+  fi
+  if "$sync_script" --component fhd --sha "$GIT_SHA"; then
+    log "DR FHD 发布同步完成 sha=$GIT_SHA"
+    return 0
+  fi
+  log "ERROR: DR FHD 发布同步失败 sha=$GIT_SHA"
+  [[ "${FHD_DR_SYNC_STRICT:-1}" != "1" ]]
+}
+
 exec 9>"$LOCK"
 if ! flock -n 9; then
   log "另一实例运行中，跳过"
@@ -118,7 +164,7 @@ if [[ ! -f "$MANIFEST" ]]; then
   exit 0
 fi
 
-IFS='|' read -r DEPLOY_MODE REMOTE_SHA ARTIFACT VERSION GIT_SHA IMAGE IMAGE_DIGEST CHANNEL ADMIN_CONSOLE_SHA256 <<<"$(
+IFS='|' read -r DEPLOY_MODE REMOTE_SHA ARTIFACT VERSION GIT_SHA IMAGE IMAGE_DIGEST CHANNEL ADMIN_CONSOLE_SHA256 BUILT_AT COMMIT_AT <<<"$(
   python3 - <<'PY' "$MANIFEST"
 import json, sys
 doc = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -132,6 +178,8 @@ values = [
     str(doc.get("image_digest", "")),
     str(doc.get("channel", "")),
     str(doc.get("admin_console_sha256", "")),
+    str(doc.get("built_at", "")),
+    str(doc.get("commit_at", "")),
 ]
 if any("|" in value or "\n" in value for value in values):
     raise SystemExit("manifest contains an invalid field delimiter")
@@ -160,6 +208,7 @@ if [[ "$DEPLOY_MODE" == "image" ]]; then
 
   if [[ "$IMAGE_DIGEST" == "$LOCAL_DIGEST" ]]; then
     log "已是最新（compose） version=$VERSION digest=${IMAGE_DIGEST:0:19}..."
+    sync_dr_release
     exit 0
   fi
 
@@ -182,11 +231,14 @@ if [[ "$DEPLOY_MODE" == "image" ]]; then
   [[ -n "${FHD_ENV_FILE:-}" ]] && APPLY_ENV+=("FHD_ENV_FILE=$FHD_ENV_FILE")
   if env "${APPLY_ENV[@]}" bash "$APPLY_COMPOSE"; then
     audit_production_release_outcome "$CHANNEL" "${GIT_SHA:-$IMAGE_DIGEST}" "executed"
+    record_dora_deployment "success"
   else
     status=$?
     audit_production_release_outcome "$CHANNEL" "${GIT_SHA:-$IMAGE_DIGEST}" "execution_failed"
+    record_dora_deployment "failed" || true
     exit "$status"
   fi
+  sync_dr_release
   log "compose 自动更新完成 version=$VERSION"
   exit 0
 fi
@@ -204,6 +256,7 @@ fi
 
 if [[ "$REMOTE_SHA" == "$LOCAL_SHA" ]]; then
   log "已是最新 version=$VERSION sha=$GIT_SHA"
+  sync_dr_release
   exit 0
 fi
 
@@ -245,9 +298,12 @@ APPLY_ENV=(
 [[ -n "${FHD_HEALTH_PORT:-}" ]] && APPLY_ENV+=("FHD_HEALTH_PORT=$FHD_HEALTH_PORT")
 if env "${APPLY_ENV[@]}" bash "$APPLY_TARBALL"; then
   audit_production_release_outcome "$CHANNEL" "${GIT_SHA:-$REMOTE_SHA}" "executed"
+  record_dora_deployment "success"
 else
   status=$?
   audit_production_release_outcome "$CHANNEL" "${GIT_SHA:-$REMOTE_SHA}" "execution_failed"
+  record_dora_deployment "failed" || true
   exit "$status"
 fi
+sync_dr_release
 log "tarball 自动更新完成 version=$VERSION"

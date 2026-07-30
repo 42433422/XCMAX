@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "kind": "fix",
+  "created_at": "2026-07-27T14:12:12+00:00",
+  "symptom": "自维护循环在将某一 exhausted 的 failed_steps（如 QA 重试耗尽）成功送入人工队列后，同一份 loop memory 里其他分支的 automated_remediation（structured_review_blocking_findings 等）仍无法被 _resume_review_qa_candidate 选中，调度表现为 loop_not_completed 停滞。",
+  "root_cause": "_resume_review_qa_candidate 在成功 enqueue 非 code 的 max_retries 项后设置 escalated_items 并无条件 return None，把「本项已升级人工」误判为「整轮循环不得再恢复任何候选」，与已实现的 open_items 局部清理逻辑冲突。",
+  "fix_diff": "diff --git \"a/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py\" \"b/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py\"\nindex 1d33b954..5a586e11 100644\n--- \"a/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py\"\n+++ \"b/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py\"\n@@ -980,7 +980,6 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An\n         return None\n     max_retries = int(os.environ.get(\"MODSTORE_SELF_MAINTENANCE_MAX_RETRIES\") or \"3\")\n     open_items_raw = memory.get(\"open_items\")\n-    escalated_items = []\n     successfully_enqueued_items = []\n     if isinstance(open_items_raw, list):\n         # First pass: collect items exceeding max retries, but only mark escalated after successful enqueue for non-code items\n@@ -1039,7 +1038,6 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An\n                         if result.get(\"queued\"):\n                             item[\"escalated\"] = True\n                             successfully_enqueued_items.append(item_key)\n-                            escalated_items.append(item)\n                             logger.info(\n                                 \"successfully enqueued escalated item run_id=%s to human queue\",\n                                 item.get(\"run_id\"),\n@@ -1079,9 +1077,8 @@ def _resume_review_qa_candidate(memory: Dict[str, Any]) -> Optional[Dict[str, An\n             ]\n         else:\n             memory[\"open_items\"] = open_items_raw\n-    # Max-retry exhaustion is an automatic terminal hold, not an approval request.\n-    if escalated_items:\n-        return None\n+    # Escalated non-code failures are removed from open_items above; do not stop\n+    # the whole loop when other branches still have executable remediation holds.\n \n     # KB schema retry: if there's a non-escalated kb_schema_retry open_item,\n     # return None to trigger a fresh code step. The employee will see the\n",
+  "metadata": {
+    "component": "self_maintenance_loop_runner",
+    "files": [
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
+    ]
+  },
+  "executable_template": {
+    "applicability_check": "Loop memory has multiple open_items: at least one exhausted non-code failed_steps that successfully enqueues to human_uncertainty_queue, plus another branch with kind=automated_remediation and a reason mapped by _automated_remediation_resume_plan; _resume_review_qa_candidate returns None despite the second hold.",
+    "patch_strategy": "Remove the blanket `if escalated_items: return None` after successful escalation cleanup so the function continues to scan automated_remediation code holds; add regression test mirroring QA exhaustion beside a structured_review_blocking_findings hold.",
+    "rollback_plan": "Restore `if escalated_items: return None` immediately after open_items cleanup if pausing the entire loop on any escalation is desired again.",
+    "required_tests": [
+      "test_self_maintenance_loop_runner_policy.py::test_escalated_failed_steps_do_not_block_other_branch_remediation",
+      "test_self_maintenance_loop_runner_policy.py::test_enqueue_success_matching_uses_composite_key_not_only_run_id"
+    ]
+  }
+}

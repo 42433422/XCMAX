@@ -13,7 +13,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Optional, Sequence, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,27 @@ def _require_ci() -> bool:
         "yes",
         "on",
     )
+
+
+def _mark_change_request_validation_failed(
+    change_request_id: int,
+    failed_step: str,
+    *,
+    session_factory: Any = None,
+) -> bool:
+    """Make a pre-apply CI rejection terminal instead of leaving stale pending work."""
+
+    from modstore_server.models import EmployeeChangeRequest, get_session_factory
+
+    sf = session_factory or get_session_factory()
+    with sf() as session:
+        row = session.get(EmployeeChangeRequest, int(change_request_id))
+        if row is None or (row.status or "") != "pending":
+            return False
+        row.status = "failed"
+        row.error = f"narrow_ci_failed:{str(failed_step or 'unknown')}"[:2000]
+        session.commit()
+    return True
 
 
 # --------------------------------------------------------------------------- #
@@ -183,7 +204,11 @@ def classify_change_risk(
 # --------------------------------------------------------------------------- #
 
 
-def maybe_auto_approve(change_request_id: int) -> Dict[str, Any]:
+def maybe_auto_approve(
+    change_request_id: int,
+    *,
+    skip_retort_block_check: bool = False,
+) -> Dict[str, Any]:
     """检查并尝试自动审批。
 
     返回 {"auto_approved": bool, "reason": str, "result": ...}
@@ -206,6 +231,26 @@ def maybe_auto_approve(change_request_id: int) -> Dict[str, Any]:
                 return {"auto_approved": False, "reason": "change_request not found"}
             if (row.status or "") != "pending":
                 return {"auto_approved": False, "reason": f"status={row.status}"}
+
+            try:
+                from modstore_server.retort_clarification_gate import (
+                    clarification_blocks_auto_approve,
+                )
+
+                if not skip_retort_block_check:
+                    clar_block = clarification_blocks_auto_approve(int(change_request_id))
+                    if clar_block.get("blocked"):
+                        return {
+                            "auto_approved": False,
+                            "reason": str(
+                                clar_block.get("reason") or "retort_clarification_pending"
+                            ),
+                            "retort_clarification": clar_block,
+                        }
+            except Exception:
+                logger.exception(
+                    "retort clarification gate check failed for CR %s", change_request_id
+                )
 
             try:
                 data = json.loads(row.diff_blob or "{}")
@@ -285,6 +330,12 @@ def maybe_auto_approve(change_request_id: int) -> Dict[str, Any]:
 
             narrow_ci = run_narrow_ci_validation(rel_path, content)
             if not narrow_ci.get("ok") and not narrow_ci.get("skipped"):
+                failed_step = str(narrow_ci.get("failed_step") or "unknown")
+                _mark_change_request_validation_failed(
+                    int(change_request_id),
+                    failed_step,
+                    session_factory=get_session_factory(),
+                )
                 record_cr_validation_failure_for_evolution(
                     change_request_id=int(change_request_id),
                     source_employee_id=source_employee_id,
@@ -293,7 +344,7 @@ def maybe_auto_approve(change_request_id: int) -> Dict[str, Any]:
                 )
                 return {
                     "auto_approved": False,
-                    "reason": f"narrow CI failed: {narrow_ci.get('failed_step')}",
+                    "reason": f"narrow CI failed: {failed_step}",
                     "narrow_ci": narrow_ci,
                 }
 

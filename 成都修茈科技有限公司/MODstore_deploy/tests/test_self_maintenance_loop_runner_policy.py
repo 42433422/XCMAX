@@ -3,6 +3,8 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import pytest
+
 from modstore_server import self_maintenance_loop_runner as loop_runner
 from modstore_server.autonomous_risk_gate import (
     _historical_rollback_rate as _historical_rollback_rate_v3,
@@ -10,6 +12,7 @@ from modstore_server.autonomous_risk_gate import (
 from modstore_server.self_maintenance_loop_runner import (
     _PARA_GUEST_AUTH_CACHE,
     KB_SCHEMA_FAILED_LABEL,
+    KB_SCHEMA_FAILED_STATUS,
     KB_SCHEMA_RETRY_MAX,
     NEEDS_HUMAN_LABEL,
     _assess_branch_auto_merge_policy,
@@ -30,6 +33,8 @@ from modstore_server.self_maintenance_loop_runner import (
     _load_loop_memory,
     _matches_focused_test_command,
     _qa_task_text,
+    _reconcile_requested_merge_feedback,
+    _reconcile_retort_scope_remediations,
     _reject_and_retry_kb_schema_failure,
     _resume_dispatch_context,
     _resume_review_qa_candidate,
@@ -43,6 +48,163 @@ from modstore_server.self_maintenance_loop_runner import (
     ensure_clean_baseline,
     loop_memory_path,
 )
+from modstore_server.self_maintenance_para_merge_remediation import (
+    classify_para_merge_review_detail,
+)
+from modstore_server.self_maintenance_quality_gate import (
+    matches_black_check_command,
+    matches_isort_check_command,
+    matches_source_governance_command,
+    quality_check_failure,
+)
+from modstore_server.self_maintenance_remediation_lineage import (
+    normalize_automated_remediation_reason,
+    remediation_lineage_fields,
+    resume_candidate_from_context,
+)
+from modstore_server.self_maintenance_remediation_prompts import (
+    para_merge_conflict_continues_on_rejected_branch,
+)
+
+QUALITY_CHECKS_JSON = (
+    '"quality_checks":{'
+    '"black":{"command":"python3 -m black --check modman/ modstore_server/ tests/",'
+    '"exit_code":0,"status":"passed"},'
+    '"isort":{"command":"python3 -m isort --check-only --diff modman/ modstore_server/ tests/",'
+    '"exit_code":0,"status":"passed"},'
+    '"source_governance":{"command":"python3 scripts/dev/source_governance.py --top 10",'
+    '"exit_code":0,"status":"passed"}},'
+)
+
+
+def test_scheduler_selected_remediation_is_resolved_exactly() -> None:
+    memory = {
+        "open_items": [
+            {
+                "kind": "failed_steps",
+                "run_id": "newer-general-run",
+                "branch": "devfleet/cursor/newer",
+                "para_task_id": "newer-task",
+                "steps": ["review"],
+            },
+            {
+                "kind": "automated_remediation",
+                "run_id": "incident-run",
+                "branch": "devfleet/cursor/incident",
+                "task_id": "incident-task",
+                "reason": "structured_qa_verdict_not_pass",
+            },
+        ]
+    }
+    context = {
+        "branch": "devfleet/cursor/incident",
+        "origin_run_id": "incident-run",
+        "origin_triggered_by": "incident_event",
+        "reason": "structured_qa_verdict_not_pass",
+        "run_id": "incident-run",
+        "task_id": "incident-task",
+    }
+
+    assert resume_candidate_from_context(memory, context) == {
+        "branch": "devfleet/cursor/incident",
+        "continue_existing_code_task": True,
+        "failed_run_id": "incident-run",
+        "failed_steps": ["code"],
+        "origin_run_id": "incident-run",
+        "origin_triggered_by": "incident_event",
+        "para_task_id": "incident-task",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
+def test_resume_candidate_from_context_normalizes_legacy_target_ref_hold() -> None:
+    branch = "devfleet/cursor/sub-1-legacy-target-ref"
+    memory = {
+        "last_policy_decision": {
+            "reason": "structured_qa_verdict_not_pass",
+            "structured_gate": {
+                "qa": {
+                    "blocking_findings": [
+                        f"target_branch_unavailable: refs/remotes/origin/{branch} cannot be resolved"
+                    ],
+                    "target_branch_available": False,
+                    "verdict": "FAIL",
+                },
+                "reason": "structured_qa_verdict_not_pass",
+            },
+        },
+        "open_items": [
+            {
+                "branch": branch,
+                "kind": "automated_remediation",
+                "reason": "structured_qa_verdict_not_pass",
+                "run_id": "r-legacy-target-ref",
+                "task_id": "task-legacy-target-ref",
+            }
+        ],
+    }
+    context = {
+        "branch": branch,
+        "reason": "structured_qa_verdict_not_pass",
+        "run_id": "r-legacy-target-ref",
+        "task_id": "task-legacy-target-ref",
+    }
+
+    assert resume_candidate_from_context(memory, context) == {
+        "branch": branch,
+        "failed_run_id": "r-legacy-target-ref",
+        "failed_steps": ["qa"],
+        "para_task_id": "task-legacy-target-ref",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
+def test_normalize_automated_remediation_reason_maps_legacy_target_ref() -> None:
+    branch = "devfleet/cursor/sub-1"
+    memory = {
+        "last_policy_decision": {
+            "reason": "structured_qa_verdict_not_pass",
+            "structured_gate": {
+                "qa": {
+                    "blocking_findings": [f"target_branch_unavailable: origin/{branch}"],
+                    "target_branch_available": False,
+                }
+            },
+        }
+    }
+    item = {"branch": branch, "reason": "structured_qa_verdict_not_pass"}
+
+    assert (
+        normalize_automated_remediation_reason(memory, item)
+        == "structured_qa_target_branch_unavailable"
+    )
+
+
+def test_remediation_lineage_emits_scorecard_visible_event() -> None:
+    assert remediation_lineage_fields(
+        {
+            "origin_reason": "nginx error",
+            "origin_run_id": "incident-run",
+            "origin_triggered_by": "incident_event",
+            "run_id": "parent-run",
+        }
+    ) == {
+        "event": "incident_remediation",
+        "origin_reason": "nginx error",
+        "origin_run_id": "incident-run",
+        "origin_triggered_by": "incident_event",
+        "parent_run_id": "parent-run",
+    }
+    assert (
+        remediation_lineage_fields(
+            {
+                "origin_run_id": "evolution-run",
+                "origin_triggered_by": "proactive_signal",
+                "run_id": "parent-run",
+            }
+        )["event"]
+        == "proactive_evolution_remediation"
+    )
 
 
 def _stats(line_changes=12, binary_files=None):
@@ -166,7 +328,7 @@ def test_remote_merge_request_is_not_emitted_when_ssot_blocks(monkeypatch):
     assert result["reason"] == "autonomy_guard_blocked"
 
 
-def test_remote_merge_request_requires_reviewed_branch_head(monkeypatch):
+def test_remote_merge_request_defers_unreachable_head_to_para_worker(monkeypatch):
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://github.com/example/repo.git")
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
     monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
@@ -174,10 +336,21 @@ def test_remote_merge_request_requires_reviewed_branch_head(monkeypatch):
     monkeypatch.setattr(loop_runner, "_structured_report_gate", lambda steps: {"ok": True})
     monkeypatch.setattr(loop_runner, "_remote_branch_head", lambda _repo, _branch: None)
     monkeypatch.setattr(
+        "modstore_server.autonomy_guard_delegate.evaluate_risk",
+        lambda *args, **kwargs: SimpleNamespace(
+            allowed=True,
+            to_dict=lambda: {"decision": "allow"},
+        ),
+    )
+    merge_calls = []
+    monkeypatch.setattr(
         loop_runner,
         "_request_para_task_merge",
-        lambda **kwargs: (_ for _ in ()).throw(AssertionError("unresolved branch was queued")),
+        lambda **kwargs: merge_calls.append(kwargs) or {"ok": True},
     )
+    ledger_rows = []
+    monkeypatch.setattr(loop_runner, "_append_ledger", ledger_rows.append)
+    monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda _row: None)
 
     result = loop_runner._auto_merge_low_risk_branch(
         run_id="remote-missing-head",
@@ -186,8 +359,12 @@ def test_remote_merge_request_requires_reviewed_branch_head(monkeypatch):
         steps=[],
     )
 
-    assert result["ok"] is False
-    assert result["reason"] == "remote_branch_head_unavailable"
+    assert result["ok"] is True
+    assert result["merge_requested"] is True
+    assert result["branch_head_sha"] == ""
+    assert result["head_verification"] == "delegated_to_para_merge_worker"
+    assert merge_calls == [{"api_base": "http://127.0.0.1:3001", "task_id": "task-remote"}]
+    assert ledger_rows[0]["head_verification"] == "delegated_to_para_merge_worker"
 
 
 def test_local_auto_merge_cleans_ephemeral_workspace_on_return(monkeypatch, tmp_path):
@@ -280,6 +457,83 @@ def test_merge_workspace_cleanup_refuses_outside_runtime_root(monkeypatch, tmp_p
 
     assert loop_runner._cleanup_merge_workspace(outside) is False
     assert outside.exists()
+
+
+def test_changed_files_prefers_configured_para_transport(monkeypatch, tmp_path):
+    workspace = tmp_path / "runtime" / "merge"
+    para_transport = "git@github-xcagi-modstore:example/XCMAX.git"
+    public_origin = "https://github.com/example/XCMAX.git"
+    monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(tmp_path / "runtime"))
+    monkeypatch.setenv("MODSTORE_PARA_BARE_REPO", para_transport)
+    clone_commands = []
+
+    def fake_run_cmd(args, cwd=None, timeout=120):
+        if args[:3] == ["git", "clone", "--no-tags"]:
+            clone_commands.append(args)
+            workspace.mkdir(parents=True)
+            return ""
+        if "diff" in args and "--name-only" in args:
+            return "FHD/app/example.py"
+        return ""
+
+    monkeypatch.setattr(loop_runner, "_run_cmd", fake_run_cmd)
+    monkeypatch.setattr(
+        loop_runner.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
+    )
+
+    files = loop_runner._changed_files_for_branch(
+        repo_url=public_origin,
+        base_branch="main",
+        branch="devfleet/codex/sub-1",
+        workspace=workspace,
+    )
+
+    assert files == ["FHD/app/example.py"]
+    assert [item[-2] for item in clone_commands] == [para_transport]
+    assert "--filter=blob:none" in clone_commands[0]
+    assert "--no-checkout" in clone_commands[0]
+
+
+def test_changed_files_falls_back_after_configured_transport_clone_failure(monkeypatch, tmp_path):
+    runtime_dir = tmp_path / "runtime"
+    workspace = runtime_dir / loop_runner.DEFAULT_MERGE_WORKSPACE_ROOT / "fallback"
+    para_transport = "git@github-xcagi-modstore:example/XCMAX.git"
+    public_origin = "https://github.com/example/XCMAX.git"
+    monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(runtime_dir))
+    monkeypatch.setenv("MODSTORE_PARA_BARE_REPO", para_transport)
+    clone_commands = []
+
+    def fake_run_cmd(args, cwd=None, timeout=120):
+        if args[:3] == ["git", "clone", "--no-tags"]:
+            clone_commands.append(args)
+            workspace.mkdir(parents=True, exist_ok=True)
+            if args[-2] == para_transport:
+                (workspace / "partial").write_text("partial", encoding="utf-8")
+                raise RuntimeError("ssh unavailable")
+            assert not (workspace / "partial").exists()
+            return ""
+        if "diff" in args and "--name-only" in args:
+            return "FHD/app/fallback.py"
+        return ""
+
+    monkeypatch.setattr(loop_runner, "_run_cmd", fake_run_cmd)
+    monkeypatch.setattr(
+        loop_runner.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
+    )
+
+    files = loop_runner._changed_files_for_branch(
+        repo_url=public_origin,
+        base_branch="main",
+        branch="devfleet/codex/sub-1",
+        workspace=workspace,
+    )
+
+    assert files == ["FHD/app/fallback.py"]
+    assert [item[-2] for item in clone_commands] == [para_transport, public_origin]
 
 
 def test_dynamic_low_risk_policy_allows_self_maintenance_code_and_tests(monkeypatch):
@@ -588,6 +842,81 @@ def test_transient_para_api_outbox_failure_is_retryable():
     assert _is_transient_employee_dispatch_failure(result) is True
 
 
+def test_report_only_cursor_tls_failure_is_retryable():
+    error = (
+        ("echoed report-only prompt without transport evidence " * 300)
+        + "[e2e-agent] report-only 执行器失败: Cursor Agent 失败: "
+        + "Client network socket disconnected before secure TLS connection was established"
+    )
+    result = {
+        "result": {
+            "outputs": [
+                {
+                    "error": error,
+                    "ok": False,
+                }
+            ]
+        }
+    }
+
+    assert _is_transient_employee_dispatch_failure(result) is True
+
+
+def test_report_only_executor_failure_without_transport_detail_is_retryable():
+    result = {
+        "result": {
+            "outputs": [
+                {
+                    "error": "[e2e-agent] report-only 执行器失败: Cursor Agent 失败: Command failed",
+                    "handler": "para_delegate",
+                    "ok": False,
+                }
+            ]
+        }
+    }
+
+    assert _is_transient_employee_dispatch_failure(result) is True
+
+
+def test_employee_dispatch_retries_report_only_cursor_tls_failure(monkeypatch):
+    attempts = [
+        {
+            "result": {
+                "outputs": [
+                    {
+                        "error": (
+                            "[e2e-agent] report-only 执行器失败: Cursor Agent 失败: "
+                            "Client network socket disconnected before secure TLS "
+                            "connection was established"
+                        ),
+                        "ok": False,
+                    }
+                ]
+            }
+        },
+        {"result": {"ok": True}},
+    ]
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_STEP_RETRIES", "2")
+    monkeypatch.setattr(loop_runner, "_wait_for_para_device_online", lambda: {"online": True})
+    monkeypatch.setattr(loop_runner.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        loop_runner,
+        "execute_employee_task",
+        lambda *_args, **_kwargs: attempts.pop(0),
+    )
+
+    result = loop_runner._execute_employee_task_with_retries(
+        "test-qa-runner",
+        "report-only QA",
+        {},
+        user_id=0,
+    )
+
+    assert result["self_maintenance_retry_attempts"] == 2
+    assert result["result"]["ok"] is True
+    assert attempts == []
+
+
 def test_business_failure_is_not_retryable():
     result = {"result": {"outputs": [{"error": "pytest failed: assertion error"}]}}
 
@@ -608,6 +937,57 @@ def test_accepted_para_wait_timeout_is_not_a_code_delivery_failure():
     }
 
     assert _is_accepted_para_wait_timeout(result) is True
+
+
+def test_accepted_para_wait_timeout_detects_flat_and_nested_shapes():
+    flat = {
+        "accepted": True,
+        "handler": "para_delegate",
+        "status": "para_task_timeout",
+        "error": "Para task task-flat 未在 1800s 内完成",
+    }
+    nested_status = {
+        "result": {
+            "outputs": [
+                {
+                    "accepted": "true",
+                    "handler": "para_delegate",
+                    "ok": False,
+                    "para_result": {"status": "para_task_timeout", "task_id": "task-nested"},
+                }
+            ]
+        }
+    }
+    not_accepted = {
+        "result": {
+            "outputs": [
+                {
+                    "accepted": False,
+                    "handler": "para_delegate",
+                    "status": "para_task_timeout",
+                }
+            ]
+        }
+    }
+    wrong_handler = {
+        "result": {
+            "outputs": [
+                {
+                    "accepted": True,
+                    "handler": "local_shell",
+                    "status": "para_task_timeout",
+                }
+            ]
+        }
+    }
+
+    assert _is_accepted_para_wait_timeout(flat) is True
+    assert _is_accepted_para_wait_timeout(nested_status) is True
+    assert _is_accepted_para_wait_timeout(not_accepted) is False
+    assert _is_accepted_para_wait_timeout(wrong_handler) is False
+    # Must not be treated as a redispatchable transient failure once fixed.
+    assert _is_transient_employee_dispatch_failure(flat) is False
+    assert _is_transient_employee_dispatch_failure(nested_status) is False
 
 
 def test_base_para_input_default_wait_budget_covers_real_agent_runtime(monkeypatch):
@@ -777,6 +1157,88 @@ def test_resume_review_qa_candidate_uses_failed_review_branch():
     }
 
 
+def test_resume_candidate_prefers_newer_same_task_code_hold_over_old_review_failure():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-quality",
+                "kind": "failed_steps",
+                "para_task_id": "task-quality",
+                "retry_count": 1,
+                "run_id": "run-old-review",
+                "steps": ["review"],
+            },
+            {
+                "branch": "devfleet/cursor/sub-1-quality",
+                "kind": "automated_remediation",
+                "reason": "structured_qa_black_not_passed",
+                "run_id": "run-new-quality-hold",
+                "task_id": "task-quality",
+            },
+        ],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-quality",
+                "para_task_id": "task-quality",
+                "run_id": "run-old-review",
+                "status": "failed",
+            }
+        ],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/cursor/sub-1-quality",
+        "continue_existing_code_task": True,
+        "failed_run_id": "run-new-quality-hold",
+        "failed_steps": ["code"],
+        "para_task_id": "task-quality",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
+def test_resume_candidate_prefers_latest_code_hold_over_stale_paired_hold():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/stale",
+                "kind": "failed_steps",
+                "para_task_id": "task-stale",
+                "retry_count": 1,
+                "run_id": "run-stale-review",
+                "steps": ["review"],
+            },
+            {
+                "branch": "devfleet/cursor/stale",
+                "kind": "automated_remediation",
+                "reason": "structured_qa_black_not_passed",
+                "run_id": "run-stale-hold",
+                "task_id": "task-stale",
+            },
+            {
+                "branch": "devfleet/cursor/latest",
+                "kind": "automated_remediation",
+                "reason": "structured_review_blocking_findings",
+                "run_id": "run-latest-hold",
+                "task_id": "task-latest",
+            },
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/cursor/latest",
+        "failed_run_id": "run-latest-hold",
+        "failed_steps": ["code"],
+        "para_task_id": "task-latest",
+        "reason": "resume_automated_remediation_candidate",
+    }
+    assert _resume_dispatch_context(result, _resume_steps(result)) == (None, None)
+
+
 def test_resume_steps_rerun_failed_step_and_downstream_chain():
     assert _resume_steps(None) == {"code", "review", "qa"}
     assert _resume_steps({"failed_steps": ["code"]}) == {"code", "review", "qa"}
@@ -833,6 +1295,317 @@ def test_resume_review_qa_candidate_retries_nonportable_focused_command():
         "para_task_id": "task-platform",
         "reason": "resume_automated_remediation_candidate",
     }
+
+
+def test_resume_review_qa_candidate_retries_missing_target_ref_as_qa_only():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-target-ref",
+                "kind": "automated_remediation",
+                "reason": "structured_qa_target_branch_unavailable",
+                "run_id": "r-target-ref",
+                "task_id": "task-target-ref",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/cursor/sub-1-target-ref",
+        "failed_run_id": "r-target-ref",
+        "failed_steps": ["qa"],
+        "para_task_id": "task-target-ref",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
+def test_resume_review_qa_candidate_retries_executor_outage_as_qa_only():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-executor-outage",
+                "kind": "automated_remediation",
+                "reason": "structured_qa_executor_unavailable",
+                "run_id": "r-executor-outage",
+                "task_id": "task-executor-outage",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/cursor/sub-1-executor-outage",
+        "failed_run_id": "r-executor-outage",
+        "failed_steps": ["qa"],
+        "para_task_id": "task-executor-outage",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
+def test_resume_review_qa_candidate_recovers_legacy_target_ref_failure_as_qa_only():
+    branch = "devfleet/cursor/sub-1-legacy-target-ref"
+    memory = {
+        "last_policy_decision": {
+            "reason": "structured_qa_verdict_not_pass",
+            "structured_gate": {
+                "qa": {
+                    "blocking_findings": [
+                        f"target_branch_unavailable: refs/remotes/origin/{branch} cannot be resolved"
+                    ],
+                    "target_branch_available": False,
+                    "verdict": "FAIL",
+                },
+                "reason": "structured_qa_verdict_not_pass",
+            },
+        },
+        "open_items": [
+            {
+                "branch": branch,
+                "kind": "automated_remediation",
+                "reason": "structured_qa_verdict_not_pass",
+                "run_id": "r-legacy-target-ref",
+                "task_id": "task-legacy-target-ref",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": branch,
+        "failed_run_id": "r-legacy-target-ref",
+        "failed_steps": ["qa"],
+        "para_task_id": "task-legacy-target-ref",
+        "reason": "resume_automated_remediation_candidate",
+    }
+
+
+@pytest.mark.parametrize(
+    ("hold_reason", "expected_steps", "expect_continue_code"),
+    [
+        ("missing_structured_qa_result", ["qa"], False),
+        ("missing_structured_review_object", ["review"], False),
+        ("invalid_max_severity", ["review"], False),
+    ],
+)
+def test_resume_review_qa_candidate_retries_report_only_protocol_holds(
+    hold_reason: str,
+    expected_steps: list[str],
+    expect_continue_code: bool,
+):
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/codex/sub-1-protocol",
+                "kind": "automated_remediation",
+                "reason": hold_reason,
+                "run_id": "r-protocol",
+                "task_id": "task-protocol",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result is not None
+    assert result["failed_steps"] == expected_steps
+    assert result["para_task_id"] == "task-protocol"
+    if expect_continue_code:
+        assert result.get("continue_existing_code_task") is True
+    else:
+        assert "continue_existing_code_task" not in result
+    assert _resume_steps(result) == set(expected_steps) | (
+        {"qa"} if "review" in expected_steps else set()
+    )
+
+
+@pytest.mark.parametrize(
+    "hold_reason",
+    [
+        "structured_qa_verdict_not_pass",
+        "structured_qa_blocking_findings",
+    ],
+)
+def test_resume_review_qa_candidate_retries_structured_qa_on_existing_branch(
+    hold_reason: str,
+):
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/codex/sub-1-structured",
+                "kind": "automated_remediation",
+                "reason": hold_reason,
+                "run_id": "r-structured",
+                "task_id": "task-structured",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/codex/sub-1-structured",
+        "continue_existing_code_task": True,
+        "failed_run_id": "r-structured",
+        "failed_steps": ["code"],
+        "para_task_id": "task-structured",
+        "reason": "resume_automated_remediation_candidate",
+    }
+    assert _resume_steps(result) == {"code", "review", "qa"}
+    assert _resume_dispatch_context(result, _resume_steps(result)) == (
+        None,
+        "devfleet/codex/sub-1-structured",
+    )
+
+
+def test_retort_scope_hold_is_reconciled_to_clean_base_code_remediation(monkeypatch):
+    memory = {
+        "last_policy_decision": {"action": "stop", "reason": "loop_not_completed"},
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/too-wide",
+                "kind": "failed_steps",
+                "para_task_id": "task-wide",
+                "retry_count": 1,
+                "run_id": "run-wide",
+                "steps": ["review"],
+            }
+        ],
+        "recent_runs": [],
+    }
+    monkeypatch.setattr(
+        loop_runner,
+        "_read_ledger",
+        lambda limit: [
+            {
+                "branch": "devfleet/cursor/too-wide",
+                "error": "retort_clarification_pending",
+                "para_task_id": "task-wide",
+                "phase": "complete",
+                "retort_clarification": {
+                    "changed_file_count": 13,
+                    "clarification": {
+                        "questions": [
+                            {"reason": "elevated_risk_or_large_diff"},
+                        ]
+                    },
+                },
+                "run_id": "run-wide",
+                "status": "failed",
+            }
+        ],
+    )
+
+    assert _reconcile_retort_scope_remediations(memory) == {
+        "added": 1,
+        "changed": True,
+        "run_ids": ["run-wide"],
+    }
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/cursor/too-wide",
+        "failed_run_id": "run-wide",
+        "failed_steps": ["code"],
+        "para_task_id": "task-wide",
+        "reason": "resume_automated_remediation_candidate",
+        "remediation_feedback": (
+            "Retort requested risk acceptance for 13 changed files; "
+            "rebuild the smallest valid fix from the clean base."
+        ),
+        "remediation_reason": "retort_scope_too_large",
+    }
+    assert "continue_existing_code_task" not in result
+    prompt = _code_task_text("run-next", {}, memory, result)
+    assert "RETORT SCOPE REMEDIATION" in prompt
+    assert "never continue, merge, rebase, or cherry-pick the rejected branch" in prompt
+    assert "overrides the generic KB-writing instruction" in prompt
+    assert '"max_changed_files": 6' in prompt
+    assert '"max_changed_lines": 400' in prompt
+    assert '"max_diff_chars": 12000' in prompt
+    assert '"FHD/XCAGI/kb/"' in prompt
+
+
+def test_retort_non_scope_question_is_not_auto_remediated(monkeypatch):
+    memory = {"open_items": []}
+    monkeypatch.setattr(
+        loop_runner,
+        "_read_ledger",
+        lambda limit: [
+            {
+                "branch": "devfleet/cursor/ambiguous",
+                "error": "retort_clarification_pending",
+                "para_task_id": "task-ambiguous",
+                "phase": "complete",
+                "retort_clarification": {
+                    "clarification": {
+                        "questions": [{"reason": "missing_business_intent"}],
+                    },
+                },
+                "run_id": "run-ambiguous",
+                "status": "failed",
+            }
+        ],
+    )
+
+    assert _reconcile_retort_scope_remediations(memory) == {
+        "added": 0,
+        "changed": False,
+        "run_ids": [],
+    }
+    assert memory["open_items"] == []
+
+
+@pytest.mark.parametrize(
+    "hold_reason",
+    [
+        "structured_review_blocking_findings",
+        "structured_review_dimension_fail",
+        "structured_review_high_severity",
+    ],
+)
+def test_resume_candidate_rebuilds_structured_review_rejection_from_clean_base(
+    hold_reason: str,
+):
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/codex/old-veto",
+                "kind": "automated_remediation",
+                "reason": "para_ai_review_rejected",
+                "review_feedback": "old finding",
+                "run_id": "run-old",
+                "task_id": "task-old",
+            },
+            {
+                "branch": "devfleet/trae/current-review",
+                "kind": "automated_remediation",
+                "reason": hold_reason,
+                "run_id": "run-current",
+                "task_id": "task-current",
+            },
+        ],
+        "recent_runs": [],
+    }
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/trae/current-review",
+        "failed_run_id": "run-current",
+        "failed_steps": ["code"],
+        "para_task_id": "task-current",
+        "reason": "resume_automated_remediation_candidate",
+    }
+    assert _resume_dispatch_context(result, _resume_steps(result)) == (None, None)
 
 
 def test_resume_review_qa_candidate_continues_score_remediation_on_existing_task():
@@ -949,14 +1722,43 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     assert "Target branch to verify: `devfleet/codex/sub-1`" in qa
     assert "Do not inspect your own report-only task branch" in review
     assert "Do not inspect your own report-only task branch" in qa
+    assert "bootstrap has already fetched" in review
+    assert "bootstrap has already fetched" in qa
+    assert "Do not run git fetch, clone" in review
+    assert "Do not run git fetch, clone" in qa
+    assert "Verify both refs with `git cat-file -e`" in review
+    assert "Verify both refs with `git cat-file -e`" in qa
     assert "file:///tmp/repo.git" in qa
     assert "`verified-python -m pytest focused.py -q`" in qa
     assert "platform-equivalent local `python -m pytest` command" in qa
     assert "same focused test file" in qa
+    assert "Materialize the COMPLETE target ref" in qa
+    assert "do not archive only `成都修茈科技有限公司/MODstore_deploy`" in qa
+    assert "sibling `FHD/` autonomy-guard SSOT" in qa
+    assert "never report PASS with no successful focused tested_commands entry" in qa
     assert "Do not fail solely because the scheduler's absolute Python path" in qa
+    assert (
+        "python -m modstore_server.self_maintenance_diff_quality --tool black "
+        "--base-ref origin/feat/base --target-ref origin/devfleet/codex/sub-1"
+    ) in qa
+    assert (
+        "python -m modstore_server.self_maintenance_diff_quality --tool isort "
+        "--base-ref origin/feat/base --target-ref origin/devfleet/codex/sub-1"
+    ) in qa
+    assert "python scripts/dev/source_governance.py --top 10" in qa
+    assert '"quality_checks"' in qa
 
     code = _code_task_text("run-1", {}, {})
     assert "`verified-python -m pytest focused.py -q`" in code
+    assert (
+        "python -m modstore_server.self_maintenance_diff_quality --tool black "
+        "--base-ref origin/feat/base --target-ref WORKTREE"
+    ) in code
+    assert (
+        "python -m modstore_server.self_maintenance_diff_quality --tool isort "
+        "--base-ref origin/feat/base --target-ref WORKTREE"
+    ) in code
+    assert "python scripts/dev/source_governance.py --top 10" in code
     assert "executable_template object" in code
     assert "validate_kb_payload" in code
 
@@ -1003,6 +1805,7 @@ def test_structured_report_gate_requires_qa_json_pass(monkeypatch):
             "report_excerpt": (
                 'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
                 f'"tested_commands":[{{"command":"{focused}","exit_code":0,"status":"passed"}}],'
+                f"{QUALITY_CHECKS_JSON}"
                 '"target_branch_available":true,'
                 '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
                 '"changed_files_scope":"low","risk_class":"low"}'
@@ -1033,6 +1836,73 @@ def test_structured_report_gate_blocks_missing_or_failed_qa_json(monkeypatch):
 
     assert _structured_report_gate(missing)["reason"] == "missing_structured_qa_result"
     assert _structured_report_gate(failed)["reason"] == "structured_qa_verdict_not_pass"
+
+
+def test_structured_report_gate_classifies_executor_outage_separately(monkeypatch):
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND",
+        "runtime-python -m pytest focused.py -q",
+    )
+    outage = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                'SELF_MAINTENANCE_QA_JSON: {"verdict":"FAIL",'
+                '"blocking_findings":['
+                '"QA worker shell execution backend unavailable; could not run focused pytest.",'
+                '"Missing successful focused tested_commands entry.",'
+                '"Diff review not executed due same backend failure."],'
+                '"tested_commands":[{"command":"runtime-python -m pytest focused.py -q",'
+                '"exit_code":1,"status":"failed"}],'
+                '"target_branch_available":true,'
+                '"test_delta":{"new_failures":["focused pytest not executed"],'
+                '"new_errors":["shell execution backend unavailable; no observable exit codes"]},'
+                '"changed_files_scope":"medium","risk_class":"high"}'
+            ),
+        }
+    ]
+    real_failure = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                'SELF_MAINTENANCE_QA_JSON: {"verdict":"FAIL",'
+                '"blocking_findings":["focused pytest assertion failed"],'
+                '"tested_commands":[{"command":"runtime-python -m pytest focused.py -q",'
+                '"exit_code":1,"status":"failed"}],'
+                '"target_branch_available":true,'
+                '"test_delta":{"new_failures":["test_policy assertion failed"],'
+                '"new_errors":[]},'
+                '"changed_files_scope":"medium","risk_class":"high"}'
+            ),
+        }
+    ]
+
+    assert _structured_report_gate(outage)["reason"] == "structured_qa_executor_unavailable"
+    assert _structured_report_gate(real_failure)["reason"] == "structured_qa_verdict_not_pass"
+
+
+def test_structured_report_gate_prioritizes_missing_target_ref(monkeypatch):
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND",
+        "runtime-python -m pytest focused.py -q",
+    )
+    steps = [
+        {
+            "step": "qa",
+            "report_excerpt": (
+                'SELF_MAINTENANCE_QA_JSON: {"verdict":"FAIL",'
+                '"blocking_findings":["target_branch_unavailable"],'
+                '"tested_commands":[],"target_branch_available":false,'
+                '"test_delta":{"new_failures":[],"new_errors":[]},'
+                '"changed_files_scope":"high","risk_class":"high"}'
+            ),
+        }
+    ]
+
+    result = _structured_report_gate(steps)
+
+    assert result["reason"] == "structured_qa_target_branch_unavailable"
+    assert result["qa"]["target_branch_available"] is False
 
 
 def test_structured_report_gate_blocks_failed_focused_command(monkeypatch):
@@ -1074,9 +1944,12 @@ def test_structured_report_gate_accepts_platform_equivalent_focused_command(
                 'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
                 '"tested_commands":['
                 f'{{"command":"{focused}","exit_code":127,"status":"failed"}},'
-                '{"command":"cd 成都修茈科技有限公司/MODstore_deploy && python3 -m pytest '
-                'tests/test_self_maintenance_loop_runner_policy.py -q (target branch)",'
+                '{"command":"cd /tmp/xcmax-qa-target && '
+                "PYTHONPATH='成都修茈科技有限公司/MODstore_deploy:FHD' python3 -m pytest "
+                "'成都修茈科技有限公司/MODstore_deploy/tests/"
+                "test_self_maintenance_loop_runner_policy.py' -q\","
                 '"exit_code":0,"status":"passed (27 tests passed)"}],'
+                f"{QUALITY_CHECKS_JSON}"
                 '"target_branch_available":true,'
                 '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
                 '"changed_files_scope":"low","risk_class":"low"}'
@@ -1095,7 +1968,9 @@ def test_structured_report_gate_rejects_unrelated_platform_pytest(monkeypatch):
             "step": "qa",
             "report_excerpt": (
                 'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
-                '"tested_commands":[{"command":"python3 -m pytest tests/test_other.py -q",'
+                '"tested_commands":[{"command":"cd /tmp/xcmax-qa-target && '
+                "PYTHONPATH='成都修茈科技有限公司/MODstore_deploy:FHD' "
+                'python3 -m pytest tests/test_other.py -q",'
                 '"exit_code":0,"status":"passed"}],"target_branch_available":true,'
                 '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
                 '"changed_files_scope":"low","risk_class":"low"}'
@@ -1104,6 +1979,166 @@ def test_structured_report_gate_rejects_unrelated_platform_pytest(monkeypatch):
     ]
 
     assert _structured_report_gate(steps)["reason"] == "structured_qa_focused_command_not_passed"
+
+
+def test_structured_report_gate_requires_black_isort_and_source_governance(monkeypatch):
+    focused = "runtime-python -m pytest focused.py -q"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", focused)
+
+    def qa_report(quality_checks):
+        return [
+            {
+                "step": "qa",
+                "report_excerpt": (
+                    'SELF_MAINTENANCE_QA_JSON: {"verdict":"PASS","blocking_findings":[],'
+                    f'"tested_commands":[{{"command":"{focused}","exit_code":0,'
+                    '"status":"passed"}],'
+                    f'"quality_checks":{json.dumps(quality_checks)},'
+                    '"target_branch_available":true,'
+                    '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
+                    '"changed_files_scope":"low","risk_class":"low"}'
+                ),
+            }
+        ]
+
+    missing_black = {
+        "isort": {
+            "command": ("python3 -m isort --check-only --diff modman/ modstore_server/ tests/"),
+            "exit_code": 0,
+            "status": "passed",
+        },
+        "source_governance": {
+            "command": "python3 scripts/dev/source_governance.py --top 10",
+            "exit_code": 0,
+            "status": "passed",
+        },
+    }
+    missing_isort = {
+        "black": {
+            "command": "python3 -m black --check modman/ modstore_server/ tests/",
+            "exit_code": 0,
+            "status": "passed",
+        },
+        "source_governance": {
+            "command": "python3 scripts/dev/source_governance.py --top 10",
+            "exit_code": 0,
+            "status": "passed",
+        },
+    }
+    failed_governance = {
+        "black": {
+            "command": "python3 -m black --check modman/ modstore_server/ tests/",
+            "exit_code": 0,
+            "status": "passed",
+        },
+        "isort": {
+            "command": ("python3 -m isort --check-only --diff modman/ modstore_server/ tests/"),
+            "exit_code": 0,
+            "status": "passed",
+        },
+        "source_governance": {
+            "command": "python3 scripts/dev/source_governance.py --top 10",
+            "exit_code": 1,
+            "status": "failed",
+        },
+    }
+
+    assert (
+        _structured_report_gate(qa_report(missing_black))["reason"]
+        == "structured_qa_black_not_passed"
+    )
+    assert (
+        _structured_report_gate(qa_report(missing_isort))["reason"]
+        == "structured_qa_isort_not_passed"
+    )
+    assert (
+        _structured_report_gate(qa_report(failed_governance))["reason"]
+        == "structured_qa_source_governance_not_passed"
+    )
+
+
+def test_quality_command_matchers_require_real_commands_and_scopes():
+    assert matches_black_check_command(
+        "python -m modstore_server.self_maintenance_diff_quality --tool black "
+        "--base-ref origin/main --target-ref origin/feature"
+    )
+    assert matches_isort_check_command(
+        "python3 -m modstore_server.self_maintenance_diff_quality --tool isort "
+        "--base-ref origin/main --target-ref HEAD"
+    )
+    assert matches_black_check_command(
+        "cd /tmp/target && GIT_DIR=/tmp/repo/.git GIT_WORK_TREE=/tmp/target "
+        "python3 -m modstore_server.self_maintenance_diff_quality --tool black "
+        "--base-ref origin/main --target-ref origin/feature"
+    )
+    assert matches_isort_check_command(
+        "cd /tmp/target && GIT_DIR=/tmp/repo/.git GIT_WORK_TREE=/tmp/target "
+        "python3 -m modstore_server.self_maintenance_diff_quality --tool isort "
+        "--base-ref origin/main --target-ref origin/feature"
+    )
+    assert not matches_black_check_command(
+        "python -m modstore_server.self_maintenance_diff_quality --tool isort "
+        "--base-ref origin/main --target-ref HEAD"
+    )
+    assert not matches_black_check_command(
+        "python -m modstore_server.self_maintenance_diff_quality --tool black "
+        "--base-ref HEAD --target-ref HEAD"
+    )
+    assert matches_black_check_command(
+        "cd 成都修茈科技有限公司/MODstore_deploy && "
+        "python3 -m black --check modman/ modstore_server/ tests/"
+    )
+    assert not matches_black_check_command(
+        "echo python3 -m black --check modman/ modstore_server/ tests/"
+    )
+    assert not matches_black_check_command("python3 -m black --check modstore_server/ tests/")
+    assert matches_isort_check_command(
+        "python3 -m isort --check-only --diff modman/ modstore_server/ tests/"
+    )
+    assert not matches_isort_check_command(
+        "echo python3 -m isort --check-only --diff modman/ modstore_server/ tests/"
+    )
+    assert matches_source_governance_command("python3 scripts/dev/source_governance.py --top 10")
+    assert matches_source_governance_command(
+        "PYTHONPATH=/tmp/target python3 scripts/dev/source_governance.py --top 10"
+    )
+    assert not matches_source_governance_command(
+        "echo python3 scripts/dev/source_governance.py --top 10"
+    )
+
+
+def test_quality_gate_accepts_worker_env_prefixes_on_real_commands():
+    diff_prefix = (
+        "cd /tmp/target && GIT_DIR=/tmp/repo/.git GIT_WORK_TREE=/tmp/target "
+        "python3 -m modstore_server.self_maintenance_diff_quality"
+    )
+    qa_json = {
+        "quality_checks": {
+            "black": {
+                "command": (
+                    f"{diff_prefix} --tool black --base-ref origin/main "
+                    "--target-ref origin/feature"
+                ),
+                "exit_code": 0,
+                "status": "passed",
+            },
+            "isort": {
+                "command": (
+                    f"{diff_prefix} --tool isort --base-ref origin/main "
+                    "--target-ref origin/feature"
+                ),
+                "exit_code": 0,
+                "status": "passed",
+            },
+            "source_governance": {
+                "command": "PYTHONPATH=/tmp/target python3 scripts/dev/source_governance.py --top 10",
+                "exit_code": 0,
+                "status": "passed",
+            },
+        }
+    }
+
+    assert quality_check_failure(qa_json) is None
 
 
 def test_focused_command_matcher_fails_closed_on_malformed_quotes():
@@ -1157,6 +2192,7 @@ def test_structured_report_gate_uses_latest_marker_after_echoed_prompt(monkeypat
                 "SELF_MAINTENANCE_QA_JSON: "
                 '{"verdict":"PASS","blocking_findings":[],'
                 f'"tested_commands":[{{"command":"{focused}","exit_code":0,"status":"passed"}}],'
+                f"{QUALITY_CHECKS_JSON}"
                 '"target_branch_available":true,'
                 '"test_delta":{"baseline_id":"b1","new_failures":[],"new_errors":[]},'
                 '"changed_files_scope":"low","risk_class":"low"}'
@@ -1258,6 +2294,795 @@ def test_update_loop_memory_closes_resumed_item_after_success(monkeypatch, tmp_p
     assert memory["last_resolution_record"]["closed_count"] == 1
 
 
+def test_update_loop_memory_retires_code_remediation_after_downstream_qa_failure(
+    monkeypatch, tmp_path
+):
+    memory_path = tmp_path / "loop_memory.json"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
+    loop_memory_path().write_text(
+        json.dumps(
+            {
+                "closed_items": [],
+                "open_items": [
+                    {
+                        "branch": "devfleet/cursor/old-code",
+                        "kind": "automated_remediation",
+                        "reason": "structured_qa_black_not_passed",
+                        "run_id": "old-run",
+                        "task_id": "old-task",
+                    }
+                ],
+                "recent_runs": [],
+                "run_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _update_loop_memory(
+        {
+            "branch": "devfleet/cursor/delivered-code",
+            "completed_at": "2026-07-27T00:00:00+00:00",
+            "para_task_id": "new-task",
+            "policy_decision": {"action": "stop", "reason": "loop_not_completed"},
+            "resume_candidate": {
+                "branch": "devfleet/cursor/old-code",
+                "failed_run_id": "old-run",
+                "failed_steps": ["code"],
+                "para_task_id": "old-task",
+            },
+            "run_id": "new-run",
+            "status": "failed",
+            "steps": [
+                {"ok": True, "step": "code"},
+                {"ok": True, "step": "review"},
+                {"ok": False, "step": "qa"},
+            ],
+        },
+        {"reason": "force"},
+    )
+    memory = _load_loop_memory()
+
+    assert len(memory["open_items"]) == 1
+    assert memory["open_items"][0]["branch"] == "devfleet/cursor/delivered-code"
+    assert memory["open_items"][0]["kind"] == "failed_steps"
+    assert memory["open_items"][0]["para_task_id"] == "new-task"
+    assert memory["open_items"][0]["run_id"] == "new-run"
+    assert memory["open_items"][0]["steps"] == ["qa"]
+    assert memory["closed_items"][-1]["original_item"]["run_id"] == "old-run"
+    assert memory["closed_items"][-1]["resolution_reason"] == "superseded_by_successful_code_step"
+
+
+def test_merge_request_does_not_close_open_remediation(monkeypatch, tmp_path):
+    memory_path = tmp_path / "loop_memory.json"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
+    loop_memory_path().write_text(
+        json.dumps(
+            {
+                "closed_items": [],
+                "open_items": [
+                    {
+                        "branch": "devfleet/codex/fix-1",
+                        "kind": "failed_steps",
+                        "run_id": "failed-run",
+                        "steps": ["qa"],
+                        "para_task_id": "task-1",
+                    }
+                ],
+                "recent_runs": [],
+                "run_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _update_loop_memory(
+        {
+            "branch": "devfleet/codex/fix-1",
+            "completed_at": "2026-07-23T00:00:00+00:00",
+            "para_task_id": "task-1",
+            "policy_decision": {
+                "action": "auto_merge_requested_low_risk",
+                "reason": "low_risk_merge_requested",
+            },
+            "run_id": "new-run",
+            "status": "completed_merge_requested",
+            "steps": [{"ok": True, "step": "qa"}],
+        },
+        {"reason": "force"},
+    )
+    memory = _load_loop_memory()
+
+    assert len(memory["open_items"]) == 1
+    assert memory["closed_items"] == []
+    assert memory["last_resolution_record"]["closed_count"] == 0
+
+
+def test_reconcile_para_review_veto_preserves_exact_findings_for_next_code_task():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/codex/fix-1",
+                "para_task_id": "task-1",
+                "run_id": "run-1",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    feedback = "REJECT: only mark escalated after enqueue succeeds"
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: {
+            "status": "merge_conflict",
+            "merge_conflict": {
+                "branch_name": "devfleet/codex/fix-1",
+                "detail": feedback,
+                "source": "ai-review-veto",
+            },
+        },
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["review_feedback"] == feedback
+    candidate = _resume_review_qa_candidate(memory)
+    assert candidate == {
+        "branch": "devfleet/codex/fix-1",
+        "failed_run_id": "run-1",
+        "failed_steps": ["code"],
+        "para_task_id": "task-1",
+        "reason": "resume_para_ai_review_rejection",
+        "rejected_branch": "devfleet/codex/fix-1",
+        "review_actionable_findings": True,
+        "review_feedback": feedback,
+        "review_veto_branch_hint": "",
+        "review_veto_code": "",
+    }
+    assert _resume_dispatch_context(candidate, _resume_steps(candidate)) == (None, None)
+    prompt = _code_task_text("run-2", {"gaps": []}, memory, candidate)
+    assert "EXTERNAL MERGE REVIEW REMEDIATION" in prompt
+    assert "starts from the configured clean base" in prompt
+    assert "do not inherit or cherry-pick the whole rejected diff" in prompt
+    assert feedback in prompt
+
+    repeated = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: {
+            "status": "merge_conflict",
+            "merge_conflict": {
+                "branch_name": "devfleet/codex/fix-1",
+                "detail": feedback,
+                "source": "ai-review-veto",
+            },
+        },
+    )
+    assert repeated["changed"] is False
+    assert len(memory["open_items"]) == 1
+
+
+def test_classify_indeterminate_merge_review_detail():
+    meta = classify_para_merge_review_detail(
+        "devfleet/codex/sub-1-46107b: indeterminate-review",
+    )
+    assert meta["veto_code"] == "indeterminate-review"
+    assert meta["branch_hint"] == "devfleet/codex/sub-1-46107b"
+    assert meta["actionable_code_findings"] is False
+
+
+def test_classify_diff_too_large_merge_review_detail():
+    meta = classify_para_merge_review_detail(
+        "devfleet/cursor/sub-1-ee8a21: diff-too-large:37810",
+    )
+    assert meta["veto_code"] == "diff-too-large"
+    assert meta["branch_hint"] == "devfleet/cursor/sub-1-ee8a21"
+    assert meta["actionable_code_findings"] is False
+    assert meta["review_diff_chars"] == 37810
+
+
+def test_dynamic_low_risk_policy_blocks_kb_only_when_indeterminate_veto_open():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-d0a091",
+                "kind": "automated_remediation",
+                "para_task_id": "task-cursor-indeterminate",
+                "reason": "para_ai_review_rejected",
+                "review_feedback": "devfleet/cursor/sub-1-d0a091: indeterminate-review",
+                "review_veto_code": "indeterminate-review",
+            }
+        ]
+    }
+    files = [
+        "FHD/XCAGI/kb/fixes/sample-fix.json",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats(), memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "auxiliary_only_diff_requires_executable_change"
+
+
+def test_dynamic_low_risk_policy_blocks_kb_only_when_retort_scope_open():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-6d8f01",
+                "kind": "automated_remediation",
+                "para_task_id": "task-retort-scope",
+                "reason": "retort_scope_too_large",
+                "detail": (
+                    "Retort requested risk acceptance for 12 changed files; "
+                    "rebuild the smallest valid fix from the clean base."
+                ),
+            }
+        ]
+    }
+    files = [
+        "FHD/XCAGI/kb/fixes/sample-fix.json",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats(), memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "kb_paths_blocked_during_retort_scope_remediation"
+    assert result["kb_paths"] == [files[0]]
+
+
+def test_dynamic_low_risk_policy_blocks_tests_only_when_retort_scope_open():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-6d8f01",
+                "kind": "automated_remediation",
+                "para_task_id": "task-retort-scope",
+                "reason": "retort_scope_too_large",
+            }
+        ]
+    }
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats(), memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "auxiliary_only_diff_requires_executable_change"
+
+
+def test_dynamic_low_risk_policy_blocks_tests_only_when_diff_too_large_open():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-3ee902",
+                "kind": "automated_remediation",
+                "para_task_id": "task-diff-large",
+                "reason": "para_ai_review_rejected",
+                "review_feedback": "devfleet/cursor/sub-1-3ee902: diff-too-large:59051",
+                "review_veto_code": "diff-too-large",
+            }
+        ]
+    }
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats(), memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "auxiliary_only_diff_requires_executable_change"
+
+
+def test_auto_merge_policy_blocks_kb_paths_during_retort_scope_remediation():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-6d8f01",
+                "kind": "automated_remediation",
+                "para_task_id": "task-retort-scope",
+                "reason": "retort_scope_too_large",
+            }
+        ]
+    }
+    files = [
+        "FHD/XCAGI/kb/fixes/sample-fix.json",
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats(), memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "kb_paths_blocked_during_retort_scope_remediation"
+    assert result["kb_paths"] == [files[0]]
+
+
+def test_auto_merge_policy_blocks_kb_paths_during_diff_too_large_remediation():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-327c02",
+                "kind": "automated_remediation",
+                "para_task_id": "task-diff-large-327",
+                "reason": "para_ai_review_rejected",
+                "review_feedback": "devfleet/cursor/sub-1-327c02: diff-too-large:50140",
+                "review_veto_code": "diff-too-large",
+            }
+        ]
+    }
+    files = [
+        "FHD/XCAGI/kb/fixes/sample-fix.json",
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+    diff_stats = {**_stats(line_changes=12), "git_diff_chars": 29900}
+
+    result = _assess_branch_auto_merge_policy(files, diff_stats, memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "kb_paths_blocked_during_diff_too_large_remediation"
+    assert result["kb_paths"] == [files[0]]
+
+
+def test_auto_merge_policy_rejects_diff_over_para_merge_review_budget():
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py",
+    ]
+    diff_stats = {**_stats(line_changes=5), "git_diff_chars": 59051}
+
+    result = _assess_branch_auto_merge_policy(files, diff_stats, memory={})
+
+    assert result["ok"] is False
+    assert result["reason"] == "diff_too_large_for_para_merge_review"
+
+
+def test_reconcile_diff_too_large_merge_review_veto_prompts_shrink_hint():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-3ee902",
+                "para_task_id": "task-diff-large",
+                "run_id": "run-diff-large",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    feedback = "devfleet/cursor/sub-1-3ee902: diff-too-large:59051"
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: {
+            "status": "merge_conflict",
+            "merge_conflict": {
+                "branch_name": "devfleet/cursor/sub-1-3ee902",
+                "detail": feedback,
+                "source": "ai-review-veto",
+            },
+        },
+    )
+
+    assert result["remediation_added"] == 1
+    item = memory["open_items"][0]
+    assert item["review_veto_code"] == "diff-too-large"
+    assert item["review_diff_chars"] == 59051
+    candidate = _resume_review_qa_candidate(memory)
+    prompt = _code_task_text("run-followup", {"gaps": []}, memory, candidate)
+    assert "DIFF TOO LARGE MERGE REVIEW VETO" in prompt
+
+
+def test_reconcile_real_para_merge_sha_closes_matching_open_item():
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/codex/fix-1",
+                "kind": "automated_remediation",
+                "para_task_id": "task-1",
+                "reason": "para_ai_review_rejected",
+            }
+        ],
+        "recent_runs": [
+            {
+                "branch": "devfleet/codex/fix-1",
+                "para_task_id": "task-1",
+                "run_id": "run-1",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: {
+            "status": "merged",
+            "merge_commit_sha": "a" * 40,
+        },
+    )
+
+    assert result["merged"] == 1
+    assert memory["open_items"] == []
+    assert memory["closed_items"][0]["resolution_reason"] == "para_reported_real_merge_sha"
+
+
+@pytest.mark.parametrize(
+    ("task", "expected_reason"),
+    [
+        (
+            {
+                "status": "merge_conflict",
+                "merge_conflict": {
+                    "branch_name": "devfleet/codex/fix-conflict",
+                    "detail": "content conflict in policy.py",
+                    "source": "git-merge",
+                },
+            },
+            "para_merge_conflict",
+        ),
+        (
+            {
+                "status": "failed",
+                "fail_reason": "required CI checks failed",
+            },
+            "para_merge_task_failed",
+        ),
+    ],
+)
+def test_reconcile_terminal_para_merge_failure_restarts_from_clean_base(task, expected_reason):
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/codex/fix-conflict",
+                "para_task_id": "task-failed",
+                "run_id": "run-failed",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["reason"] == expected_reason
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is True
+    candidate = _resume_review_qa_candidate(memory)
+    assert candidate["failed_steps"] == ["code"]
+    assert "continue_existing_code_task" not in candidate
+    assert _resume_dispatch_context(candidate, _resume_steps(candidate)) == (None, None)
+    prompt = _code_task_text("run-retry", {"gaps": []}, memory, candidate)
+    assert "EXTERNAL MERGE FAILURE REMEDIATION" in prompt
+    assert expected_reason in prompt
+
+    repeated = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+    assert repeated["changed"] is False
+    assert len(memory["open_items"]) == 1
+
+
+def test_reconcile_post_dispatch_merge_failure_continues_on_rejected_branch():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-bd3ea8",
+                "para_task_id": "task-ci",
+                "run_id": "run-ci",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-bd3ea8",
+            "detail": "post-dispatch-check-failed: PR #765 checks=docker-build-fhd-api",
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is False
+    candidate = _resume_review_qa_candidate(memory)
+    assert candidate["continue_existing_code_task"] is True
+    assert _resume_dispatch_context(candidate, _resume_steps(candidate)) == (
+        None,
+        "devfleet/cursor/sub-1-bd3ea8",
+    )
+    prompt = _code_task_text("run-ci-retry", {"gaps": []}, memory, candidate)
+    assert "Continue on the rejected branch as the mutable base" in prompt
+    assert "docker-build-fhd-api" in prompt
+
+
+def test_reconcile_indeterminate_review_merge_failure_continues_on_rejected_branch():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-16960f",
+                "para_task_id": "task-indeterminate",
+                "run_id": "run-indeterminate",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-16960f",
+            "detail": (
+                'indeterminate-review: {"chunks":[{"chunk":1,'
+                '"diagnostics":{"primary":"Command failed: trae-cli","fallback":"empty"}}]}'
+            ),
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is False
+    candidate = _resume_review_qa_candidate(memory)
+    assert candidate["continue_existing_code_task"] is True
+    assert _resume_dispatch_context(candidate, _resume_steps(candidate)) == (
+        None,
+        "devfleet/cursor/sub-1-16960f",
+    )
+    prompt = _code_task_text("run-indeterminate-retry", {"gaps": []}, memory, candidate)
+    assert "indeterminate AI review infrastructure" in prompt
+    assert "indeterminate-review" in prompt
+
+
+def test_reconcile_hold_merge_label_failure_continues_on_rejected_branch():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-81ba09",
+                "para_task_id": "task-hold",
+                "run_id": "run-hold",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-81ba09",
+            "detail": "hold-merge-label-failed-before-review",
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is False
+    candidate = _resume_review_qa_candidate(memory)
+    assert candidate["continue_existing_code_task"] is True
+    assert _resume_dispatch_context(candidate, _resume_steps(candidate)) == (
+        None,
+        "devfleet/cursor/sub-1-81ba09",
+    )
+    prompt = _code_task_text("run-hold-retry", {"gaps": []}, memory, candidate)
+    assert "hold-merge label infrastructure" in prompt
+    assert "hold-merge-label-failed-before-review" in prompt
+
+
+def test_reconcile_bot_merge_checks_unavailable_continues_on_rejected_branch():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-67f884",
+                "para_task_id": "task-gh-checks",
+                "run_id": "run-gh-checks",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-67f884",
+            "detail": (
+                "bot merge checks failed or unavailable: Command failed: gh pr checks 813 "
+                "--watch --fail-fast --interval 10 --repo 42433422/XCMAX"
+            ),
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is False
+    candidate = _resume_review_qa_candidate(memory)
+    assert candidate["continue_existing_code_task"] is True
+    assert _resume_dispatch_context(candidate, _resume_steps(candidate)) == (
+        None,
+        "devfleet/cursor/sub-1-67f884",
+    )
+    prompt = _code_task_text("run-gh-checks-retry", {"gaps": []}, memory, candidate)
+    assert "gh pr checks polling infrastructure" in prompt
+    assert "bot merge checks failed or unavailable" in prompt
+
+
+@pytest.mark.parametrize(
+    "detail",
+    [
+        (
+            "devfleet/cursor/sub-1-16960f: indeterminate-review: "
+            '{"chunks":[{"chunk":1,"diagnostics":{"primary":"timeout"}}]}'
+        ),
+        (
+            "devfleet/cursor/sub-1-67f884: Error: bot merge checks failed or unavailable: "
+            "Command failed: gh pr checks 813 --watch --fail-fast"
+        ),
+        "Error: bot merge checks failed or unavailable: gh CLI unavailable",
+        "hold-merge-label-failed-before-review",
+        "devfleet/cursor/sub-1-81ba09: hold-merge-label-remove-failed-after-review",
+    ],
+)
+def test_para_merge_conflict_continues_on_merge_worker_detail_formats(detail: str):
+    assert para_merge_conflict_continues_on_rejected_branch(detail) is True
+
+
+def test_para_merge_conflict_does_not_continue_on_git_content_conflict():
+    assert para_merge_conflict_continues_on_rejected_branch("git merge conflict in foo.py") is False
+
+
+def test_reconcile_update_branch_content_conflict_restarts_from_clean_base():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-225e80",
+                "para_task_id": "task-update-branch",
+                "run_id": "run-update-branch",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    detail = (
+        "devfleet/cursor/sub-1-225e80: Error: update-branch failed: Command failed: "
+        "gh pr update-branch 830 --repo 42433422/XCMAX\n"
+        "X Cannot update PR branch due to conflicts"
+    )
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-225e80",
+            "detail": detail,
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is True
+    candidate = _resume_review_qa_candidate(memory)
+    assert "continue_existing_code_task" not in candidate
+    prompt = _code_task_text("run-update-branch-retry", {"gaps": []}, memory, candidate)
+    assert "update-branch content conflicts" in prompt
+    assert para_merge_conflict_continues_on_rejected_branch(detail) is False
+
+
+def test_para_merge_remediation_branch_preserving_helpers():
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        is_branch_preserving_para_merge_failure_detail,
+        resume_from_clean_baseline_for_para_merge,
+    )
+
+    assert is_branch_preserving_para_merge_failure_detail(
+        "post-dispatch-check-failed: PR #765 checks=docker-build-fhd-api"
+    )
+    assert is_branch_preserving_para_merge_failure_detail("hold-merge-label-failed-before-review")
+    assert is_branch_preserving_para_merge_failure_detail(
+        "bot merge checks failed or unavailable: Command failed: gh pr checks 813"
+    )
+    update_branch_detail = (
+        "devfleet/cursor/sub-1-225e80: Error: update-branch failed: Command failed: "
+        "gh pr update-branch 830 --repo 42433422/XCMAX\n"
+        "X Cannot update PR branch due to conflicts"
+    )
+    assert not is_branch_preserving_para_merge_failure_detail(update_branch_detail)
+    assert (
+        resume_from_clean_baseline_for_para_merge(
+            "para_merge_conflict", "hold-merge-label-failed-before-review"
+        )
+        is False
+    )
+    assert (
+        resume_from_clean_baseline_for_para_merge(
+            "para_merge_conflict",
+            "bot merge checks failed or unavailable: gh pr checks 813",
+        )
+        is False
+    )
+    assert resume_from_clean_baseline_for_para_merge("para_merge_conflict", update_branch_detail)
+    assert resume_from_clean_baseline_for_para_merge("para_merge_conflict", "true conflict")
+
+
+def test_reconcile_merge_worker_branch_prefixed_indeterminate_review_detail():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-16960f",
+                "para_task_id": "task-indeterminate-prefixed",
+                "run_id": "run-indeterminate-prefixed",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-16960f",
+            "detail": (
+                "devfleet/cursor/sub-1-16960f: indeterminate-review: "
+                '{"chunks":[{"chunk":1,"diagnostics":{"primary":"Command failed: trae-cli"}}]}'
+            ),
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is False
+
+
 # ---------------------------------------------------------------------------
 # _find_delivery_validation: 直接单元测试（2026-07-20 修复核心）
 # ---------------------------------------------------------------------------
@@ -1344,7 +3169,7 @@ class TestFindDeliveryValidation:
         assert _find_delivery_validation({}) is None
 
     def test_find_delivery_validation_multiple_occurrences(self):
-        """多个 delivery_validation 时返回第一个（DFS 顺序）。"""
+        """多个同质 delivery_validation 时返回更早发现的候选（稳定排序）。"""
         dv_first = {"commands": [{"exit_code": 1}], "marker": "first"}
         dv_second = {"commands": [{"exit_code": 2}], "marker": "second"}
         result = {
@@ -1357,6 +3182,34 @@ class TestFindDeliveryValidation:
         found = _find_delivery_validation(result)
 
         assert found is dv_first
+
+    def test_find_delivery_validation_prefers_commands_over_stub(self):
+        """无 commands 的 stub 不应盖过 para_result 里带 commands 的真 DV。"""
+        stub = {"ok": True, "marker": "stub"}
+        real = {"commands": [{"exit_code": 1, "command": "pytest"}], "marker": "real"}
+        # Insertion order puts stub first; preferred key + commands score must win.
+        result = {
+            "zzz_stub": {"delivery_validation": stub},
+            "para_result": {"delivery_validation": real},
+        }
+
+        found = _find_delivery_validation(result)
+
+        assert found is real
+        assert found["marker"] == "real"
+
+    def test_find_delivery_validation_sorted_keys_are_deterministic(self):
+        """非 preferred key 按字典序遍历，不依赖插入顺序。"""
+        dv_a = {"commands": [{"exit_code": 1}], "marker": "a"}
+        dv_b = {"commands": [{"exit_code": 1}], "marker": "b"}
+        left_first = {"alpha": {"delivery_validation": dv_a}, "beta": {"delivery_validation": dv_b}}
+        right_first = {
+            "beta": {"delivery_validation": dv_b},
+            "alpha": {"delivery_validation": dv_a},
+        }
+
+        assert _find_delivery_validation(left_first) is dv_a
+        assert _find_delivery_validation(right_first) is dv_a
 
     def test_find_delivery_validation_in_list_items(self):
         """列表项中包含 delivery_validation 能被找到。"""
@@ -1838,12 +3691,21 @@ def test_reject_and_retry_kb_schema_first_failure_writes_open_item(monkeypatch, 
         gate={},
     )
 
-    # 验证 final 状态
-    assert final["status"] == "failed"
+    # 验证 final 状态：必须是 kb_schema_failed，不能落成泛化 failed
+    assert final["status"] == KB_SCHEMA_FAILED_STATUS
+    assert final["status"] != "failed"
+    assert final["failure_kind"] == KB_SCHEMA_FAILED_STATUS
+    assert final["kb_schema_failed"] is True
+    assert final["error"] == "kb_json_schema_validation_failed"
     assert final["failed_step"] == "code"
     assert final["kb_schema_retry"] is True
     assert final["policy_decision"]["action"] == "hold_for_automated_remediation"
     assert final["policy_decision"]["reason"] == "kb_json_schema_validation_failed"
+    assert final["policy_decision"]["status"] == KB_SCHEMA_FAILED_STATUS
+    assert (
+        final["policy_decision"]["active_gates"]["kb_schema_gate"]["label"]
+        == KB_SCHEMA_FAILED_LABEL
+    )
     assert final["policy_decision"]["retry_count"] == 1
     assert final["policy_decision"]["escalated"] is False
 
@@ -2140,3 +4002,302 @@ def test_find_pr_number_for_branch_returns_none_on_gh_failure(monkeypatch):
 
     result = _find_pr_number_for_branch("any-branch")
     assert result is None
+
+
+def test_over_retry_non_code_duplicate_enqueue_removes_item(monkeypatch):
+    """人工队列返回 duplicate 时视为已升级，应从 open_items 移除。"""
+    from modstore_server import self_maintenance_loop_runner as loop_runner
+
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
+
+    item = {
+        "branch": "devfleet/codex/review-dup",
+        "created_at": "2026-07-24T00:00:00+00:00",
+        "kind": "failed_steps",
+        "para_task_id": "task-dup",
+        "retry_count": 3,
+        "run_id": "run-dup",
+        "steps": ["review"],
+    }
+    memory = {"open_items": [item], "recent_runs": []}
+
+    def fake_enqueue(**kwargs):
+        return {"queued": False, "reason": "duplicate", "fingerprint": "abc"}
+
+    monkeypatch.setattr(
+        "modstore_server.human_uncertainty_queue.enqueue_uncertain_item",
+        fake_enqueue,
+    )
+
+    result = loop_runner._resume_review_qa_candidate(memory)
+
+    assert result is None
+    assert memory["open_items"] == []
+    assert item.get("escalated") is True
+
+
+def test_over_retry_non_code_items_not_marked_escalated_on_enqueue_failure(monkeypatch, caplog):
+    """入队失败的非code项不应被标记为escalated，应留在open_items等待下次重试。"""
+    from modstore_server import self_maintenance_loop_runner as loop_runner
+
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
+
+    # Mock enqueue to fail
+    def fake_enqueue(*args, **kwargs):
+        return {"queued": False}
+
+    monkeypatch.setattr(
+        "modstore_server.human_uncertainty_queue.enqueue_uncertain_item",
+        fake_enqueue,
+    )
+
+    memory = {
+        "open_items": [
+            {
+                "kind": "failed_steps",
+                "steps": ["review"],
+                "retry_count": 3,
+                "run_id": "failed-enqueue-run",
+                "branch": "devfleet/test/branch",
+                "para_task_id": "task-1",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    with caplog.at_level("WARNING"):
+        result = loop_runner._resume_review_qa_candidate(memory)
+
+    # 入队失败的项不应被标记为escalated
+    item = memory["open_items"][0]
+    assert item.get("escalated") is not True
+    # 项应保留在open_items中
+    assert len(memory["open_items"]) == 1
+    # 应打印重试日志
+    assert "will retry next loop" in caplog.text
+    # 没有成功入队的项，应返回None（hold）
+    assert result is None
+
+
+def test_enqueue_success_matching_uses_composite_key_not_only_run_id(monkeypatch):
+    """使用复合键（run_id+branch+task_id+steps）匹配成功入队项，run_id为None时也能正确删除。"""
+    from modstore_server import self_maintenance_loop_runner as loop_runner
+
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
+
+    enqueue_calls = []
+
+    def fake_enqueue(context, **kwargs):
+        enqueue_calls.append(context)
+        return {"queued": True}
+
+    monkeypatch.setattr(
+        "modstore_server.human_uncertainty_queue.enqueue_uncertain_item",
+        fake_enqueue,
+    )
+
+    # 两个项有相同的run_id=None，其他字段不同
+    memory = {
+        "open_items": [
+            {
+                "kind": "failed_steps",
+                "steps": ["qa"],
+                "retry_count": 3,
+                "run_id": None,
+                "branch": "devfleet/test/branch-1",
+                "para_task_id": "task-1",
+            },
+            {
+                "kind": "failed_steps",
+                "steps": ["qa"],
+                "retry_count": 3,
+                "run_id": None,
+                "branch": "devfleet/test/branch-2",
+                "para_task_id": "task-2",
+            },
+        ],
+        "recent_runs": [],
+    }
+
+    result = loop_runner._resume_review_qa_candidate(memory)
+
+    # 两个项都成功入队，应从open_items中移除
+    assert len(memory["open_items"]) == 0
+    assert len(enqueue_calls) == 2
+    assert result is None
+
+
+def test_escalated_failed_steps_do_not_block_other_branch_remediation(monkeypatch):
+    """Exhausted QA on one branch must not prevent code resume on another hold."""
+    from modstore_server import self_maintenance_loop_runner as loop_runner
+
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
+    monkeypatch.setattr(
+        "modstore_server.human_uncertainty_queue.enqueue_uncertain_item",
+        lambda *args, **kwargs: {"queued": True},
+    )
+
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-29b56e",
+                "kind": "failed_steps",
+                "para_task_id": "b3fd2376-34fd-4c14-91da-0e773229b56e",
+                "retry_count": 3,
+                "run_id": "f3e7bd4a-87df-4ed6-a95f-b8beaf747c32",
+                "steps": ["qa"],
+            },
+            {
+                "branch": "devfleet/cursor/sub-1-latest",
+                "kind": "automated_remediation",
+                "reason": "structured_review_blocking_findings",
+                "run_id": "run-latest-hold",
+                "task_id": "task-latest",
+            },
+        ],
+        "recent_runs": [],
+    }
+
+    result = loop_runner._resume_review_qa_candidate(memory)
+
+    assert result == {
+        "branch": "devfleet/cursor/sub-1-latest",
+        "failed_run_id": "run-latest-hold",
+        "failed_steps": ["code"],
+        "para_task_id": "task-latest",
+        "reason": "resume_automated_remediation_candidate",
+    }
+    assert len(memory["open_items"]) == 1
+    assert memory["open_items"][0]["reason"] == "structured_review_blocking_findings"
+
+
+def test_para_ai_review_veto_not_starved_by_stale_review_failed_steps():
+    """A newer Para merge-review veto must resume code before stale review holds."""
+    from modstore_server import self_maintenance_loop_runner as loop_runner
+
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-stale",
+                "kind": "failed_steps",
+                "para_task_id": "task-stale",
+                "retry_count": 1,
+                "run_id": "run-stale",
+                "steps": ["review"],
+            },
+            {
+                "branch": "devfleet/cursor/sub-1-veto",
+                "detail": "devfleet/cursor/sub-1-veto: indeterminate-review",
+                "kind": "automated_remediation",
+                "para_task_id": "task-veto",
+                "reason": "para_ai_review_rejected",
+                "run_id": "run-veto",
+                "review_feedback": "devfleet/cursor/sub-1-veto: indeterminate-review",
+            },
+        ],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-stale",
+                "para_task_id": "task-stale",
+                "run_id": "run-stale",
+            }
+        ],
+    }
+
+    result = loop_runner._resume_review_qa_candidate(memory)
+
+    assert result is not None
+    assert result["reason"] == "resume_para_ai_review_rejection"
+    assert result["branch"] == "devfleet/cursor/sub-1-veto"
+    assert result["para_task_id"] == "task-veto"
+    assert result["failed_steps"] == ["code"]
+    assert result["review_veto_code"] == "indeterminate-review"
+
+
+def test_code_failure_items_log_correct_message_not_escalating_to_human(monkeypatch, caplog):
+    """code类失败项应打印代码重试日志，而不是escalating to human review。"""
+    from modstore_server import self_maintenance_loop_runner as loop_runner
+
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
+
+    memory = {
+        "open_items": [
+            {
+                "kind": "failed_steps",
+                "steps": ["code"],
+                "retry_count": 3,
+                "run_id": "code-failure-run",
+                "branch": "devfleet/test/branch",
+                "para_task_id": "task-code",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    with caplog.at_level("WARNING"):
+        result = loop_runner._resume_review_qa_candidate(memory)
+
+    # code项不应被escalated，也不应入队人工队列
+    item = memory["open_items"][0]
+    assert item.get("escalated") is not True
+    assert len(memory["open_items"]) == 1
+    # 应打印代码重试日志，而不是人工评审日志
+    assert "will retry code remediation" in caplog.text
+    assert "escalating to human review" not in caplog.text
+    assert result is None
+
+
+def test_run_cmd_excerpt_truncates_and_terminates_large_output_quickly():
+    import sys
+    import time
+
+    from modstore_server.self_maintenance_subprocess import run_cmd_excerpt
+
+    args = [
+        sys.executable,
+        "-c",
+        "import sys; sys.stdout.write('a' * 100000); sys.stdout.flush()",
+    ]
+    started = time.monotonic()
+    out = run_cmd_excerpt(args, max_chars=200, timeout=180)
+    elapsed = time.monotonic() - started
+    assert len(out) == 200
+    assert elapsed < 15
+
+
+def test_run_cmd_excerpt_raises_on_nonzero_when_fully_read():
+    import sys
+
+    from modstore_server.self_maintenance_subprocess import run_cmd_excerpt
+
+    with pytest.raises(RuntimeError, match="command failed"):
+        run_cmd_excerpt(
+            [sys.executable, "-c", "import sys; sys.exit(2)"],
+            max_chars=10_000,
+        )
+
+
+def test_run_cmd_excerpt_accepts_truncated_success_despite_late_exit():
+    import sys
+
+    from modstore_server.self_maintenance_subprocess import run_cmd_excerpt
+
+    script = "import sys\n" "sys.stdout.write('z' * 50000)\n" "sys.stdout.flush()\n" "sys.exit(0)\n"
+    out = run_cmd_excerpt(
+        [sys.executable, "-c", script],
+        max_chars=128,
+    )
+    assert out == "z" * 128
+
+
+def test_run_cmd_excerpt_raises_on_nonzero_when_truncated():
+    import sys
+
+    from modstore_server.self_maintenance_subprocess import run_cmd_excerpt
+
+    script = "import sys\n" "sys.stdout.write('x' * 50000)\n" "sys.stdout.flush()\n" "sys.exit(2)\n"
+    with pytest.raises(RuntimeError, match="command failed"):
+        run_cmd_excerpt(
+            [sys.executable, "-c", script],
+            max_chars=128,
+        )

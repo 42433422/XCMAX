@@ -28,13 +28,20 @@ class RetortUIServer:
                 if parsed.path == "/api/default-project":
                     self._json({"project": str(outer.default_project)})
                     return
-                target = outer.static_root / ("index.html" if parsed.path in {"", "/"} else parsed.path.lstrip("/"))
+                target = outer.static_root / (
+                    "index.html"
+                    if parsed.path in {"", "/"}
+                    else parsed.path.lstrip("/")
+                )
                 if not target.is_file():
                     self.send_error(404)
                     return
                 data = target.read_bytes()
                 self.send_response(200)
-                self.send_header("Content-Type", mimetypes.guess_type(str(target))[0] or "application/octet-stream")
+                self.send_header(
+                    "Content-Type",
+                    mimetypes.guess_type(str(target))[0] or "application/octet-stream",
+                )
                 self.send_header("Cache-Control", "no-store, max-age=0")
                 self.send_header("Pragma", "no-cache")
                 self.send_header("Content-Length", str(len(data)))
@@ -116,7 +123,9 @@ class RetortUIServer:
                         self._json(outer.service.llm_parallel_status(payload))
                     else:
                         self.send_error(404)
-                except Exception as exc:
+                except (
+                    Exception  # noqa: BLE001 - HTTP boundary normalizes failures
+                ) as exc:
                     self._json({"status": "error", "error": str(exc)}, 400)
 
             def log_message(self, format: str, *args: Any) -> None:
@@ -124,7 +133,11 @@ class RetortUIServer:
 
             def _read_json(self) -> dict[str, Any]:
                 length = int(self.headers.get("Content-Length") or "0")
-                return {} if not length else json.loads(self.rfile.read(length).decode("utf-8"))
+                return (
+                    {}
+                    if not length
+                    else json.loads(self.rfile.read(length).decode("utf-8"))
+                )
 
             def _json(self, payload: dict[str, Any], status: int = 200) -> None:
                 data = json.dumps(payload, ensure_ascii=False).encode("utf-8")

@@ -16,7 +16,7 @@ describe('siteKnowledge corp welcome', () => {
 
   it('returns page-specific welcome title on home', () => {
     const title = getCorpWelcomeTitle('/index.html')
-    expect(title).toContain('修茈')
+    expect(title).toContain('XCAGI')
     expect(title).not.toBe('')
   })
 

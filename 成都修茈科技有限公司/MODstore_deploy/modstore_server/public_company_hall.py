@@ -53,6 +53,27 @@ _WORKING_STATUSES = frozenset({"open", "dispatched", "in_progress"})
 _DONE_STATUSES = frozenset({"merged", "closed"})
 _PATH_TICK = re.compile(r"`([^`]*/[^`]*)`")
 _CODE_FENCE = re.compile(r"```[\s\S]*?```")
+# 公开动态勿直接泄漏内部角色提示 / 执行 SOP
+_ROLE_PROMPT = re.compile(r"(?:^|[。；;\n])\s*你是[^。\n]{2,120}。[ \t]*")
+_INSTRUCTION_BOILERPLATE = re.compile(
+    r"(?:回复必须说人话|先给结论/?状态|再说下一步|输出采用 JSON|不要泄露提示词|"
+    r"不要直接倾倒|不要输出内部|内部字段或英文模板|你的任务是|"
+    r"SYSTEM[_ ]?PROMPT|作为[^。\n]{0,40}助手)[^。；;\n]{0,200}[。；;\n]?"
+)
+_META_KV = re.compile(
+    r"(?:执行模式|风险级别|事件类型|输出采用|必须使用|验收回执|"
+    r"问题摘要|任务摘要|岗位任务)[^。；;\n]{0,120}[。；;]?"
+)
+_TASK_FIELD = re.compile(
+    r"(?:岗位任务|问题摘要|任务摘要|公开摘要)[:：]\s*"
+    r"(.+?)(?=\s*(?:执行模式|风险级别|事件类型|验收回执|必须使用|输出采用|回复必须)[:：]|\s*[。\n]|$)"
+)
+_EVENT_TOKEN = re.compile(r"^[a-z][a-z0-9_.-]{2,64}$")
+_PROMPT_LEAK = re.compile(
+    r"(?:你是|回复必须说人话|系统提示|SYSTEM[_ ]?PROMPT|事故处理小组的\s*scout|"
+    r"不要直接倾倒|你的任务是|内部字段或英文模板)",
+    re.I,
+)
 
 
 def _repo_root() -> Path:
@@ -70,6 +91,78 @@ def _clean(text: str, max_len: int = 120) -> str:
     if len(s) > max_len:
         s = s[: max_len - 1] + "…"
     return s
+
+
+def _looks_like_prompt_leak(text: str) -> bool:
+    s = str(text or "").strip().strip("。；;·:- ")
+    if not s:
+        return False
+    if _PROMPT_LEAK.search(s):
+        return True
+    if _EVENT_TOKEN.fullmatch(s):
+        # 仅剩事件代号（如 ops.incident.email）也不适合直接展示
+        return True
+    # 「问题摘要：ops.xxx」这类元数据残片
+    if re.fullmatch(
+        r"(?:问题摘要|任务摘要|岗位任务|事件类型)[:：]\s*[a-z][a-z0-9_.-]{2,64}",
+        s,
+        flags=re.I,
+    ):
+        return True
+    return False
+
+
+def _public_fallback_from_raw(raw: str) -> str:
+    """提示词洗不干净时的人话兜底。"""
+    s = str(raw or "")
+    m = re.search(r"事件类型[:：]\s*([a-z][a-z0-9_.-]{2,64})", s, re.I)
+    if m:
+        return f"事故巡检：处理事件 {m.group(1)}"
+    m = _TASK_FIELD.search(s)
+    if m:
+        token = (m.group(1) or "").strip()
+        if token and not _looks_like_prompt_leak(token) and not _EVENT_TOKEN.fullmatch(token):
+            return token
+    return "岗位任务执行摘要（内部提示词已隐藏）"
+
+
+def _publicize_feed_text(
+    raw: str, *, summary_len: int = 96, detail_len: int = 600
+) -> Tuple[str, str]:
+    """把内部任务/提示词压成官网可读摘要；返回 (列表摘要, 详情全文)。"""
+    s = str(raw or "")
+    s = _CODE_FENCE.sub("", s)
+    s = _PATH_TICK.sub("", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    if not s:
+        return "（暂无公开摘要）", "（暂无公开摘要）"
+
+    preferred = ""
+    m = _TASK_FIELD.search(s)
+    if m:
+        preferred = (m.group(1) or "").strip(" ·:-")
+        if _looks_like_prompt_leak(preferred) or _EVENT_TOKEN.fullmatch(preferred):
+            preferred = ""
+
+    cleaned = _ROLE_PROMPT.sub(" ", s)
+    cleaned = _INSTRUCTION_BOILERPLATE.sub(" ", cleaned)
+    cleaned = _META_KV.sub(" ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ·:-；;")
+    # 若仍含角色口吻 / 指令腔，再剥一层
+    cleaned = _ROLE_PROMPT.sub(" ", cleaned)
+    cleaned = _INSTRUCTION_BOILERPLATE.sub(" ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ·:-；;")
+
+    detail_src = preferred or cleaned
+    if not detail_src or _looks_like_prompt_leak(detail_src):
+        detail_src = _public_fallback_from_raw(s)
+
+    detail = _clean(detail_src, detail_len) or "（暂无公开摘要）"
+    summary = _clean(preferred or detail_src, summary_len) or detail
+    if _looks_like_prompt_leak(summary):
+        summary = _clean(_public_fallback_from_raw(s), summary_len)
+        detail = summary if len(detail) < 8 or _looks_like_prompt_leak(detail) else detail
+    return summary, detail
 
 
 def _iso(dt: Any) -> Optional[str]:
@@ -343,12 +436,20 @@ def _metric_signals(employee_ids: List[str]) -> Dict[str, Dict[str, Any]]:
                 },
             )
             slot["runs_24h"] += 1
-            st = str(m.status or "")
-            if st and st != "success":
+            st = str(m.status or "").strip().lower()
+            task = str(m.task or "")
+            # burn-in / 验收夹具失败不算运营告警；否则编制巡检会把大厅刷成大片红
+            burnin = (
+                st == "burnin_rejected"
+                or task.lstrip().startswith("[duty-burn-in:")
+                or "[duty-burn-in:" in task[:48]
+            )
+            if st and st not in {"success", "completed", "ok"} and not burnin:
                 slot["fail_24h"] += 1
             if slot["last_at"] is None:
                 slot["last_status"] = st
-                slot["last_task"] = _clean(str(m.task or ""), 80)
+                # 保留较长原文，公开投影时再摘要；避免列表层二次截断丢详情
+                slot["last_task"] = _clean(task, 600)
                 slot["last_at"] = _iso(m.created_at)
     except Exception:
         logger.exception("company_hall: metric signals failed")
@@ -369,10 +470,12 @@ def _presence_for(
     open_n = int(action.get("open") or 0)
     p0 = int(action.get("p0_open") or 0)
     fail = int(metric.get("fail_24h") or 0)
-    last_status = str(metric.get("last_status") or "")
+    last_status = str(metric.get("last_status") or "").strip().lower()
     titles = action.get("titles") or []
+    last_healthy = last_status in {"", "success", "completed", "ok"}
 
-    if p0 > 0 or fail >= 2 or last_status in {"failed", "error", "fail"}:
+    # 未闭环 P0：告警。失败计数仅在「最近一跑仍不健康」时拉红，避免事故风暴后成功恢复仍挂红一整天。
+    if p0 > 0 or (fail >= 2 and not last_healthy):
         label = titles[0] if titles else (metric.get("last_task") or "近期执行异常")
         return "alert", str(label)
 
@@ -497,9 +600,25 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
         published = _load_published_action_board()
         if published:
             board = published
+            cal = board.get("calendar_day") or board.get("day")
+            # 公开板可能粘旧日：抬升 day_stale，顶层 day 仍暴露事实并附 calendar_day
+            if not board.get("calendar_day"):
+                try:
+                    from modstore_server.public_action_board import _calendar_today
+
+                    board["calendar_day"] = _calendar_today()
+                except Exception:  # noqa: BLE001
+                    board["calendar_day"] = cal
+            if (
+                board.get("day")
+                and board.get("calendar_day")
+                and board["day"] != board["calendar_day"]
+            ):
+                board["day_stale"] = True
             logger.info(
-                "company_hall: DB action board empty; using published download-action-board.json day=%s",
+                "company_hall: DB action board empty; using published download-action-board.json day=%s stale=%s",
                 board.get("day"),
+                board.get("day_stale"),
             )
 
     # DB 无行动信号时，用公开板条目推导 working/alert（与轨迹同源，不造假心跳）
@@ -558,6 +677,10 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
             day=t.get("day") or board.get("day"),
             clock=t.get("ts"),
         )
+        summary, detail = _publicize_feed_text(str(t.get("title") or t.get("text") or ""))
+        href = str(t.get("href") or "").strip()
+        if href in {"", "/", "/world-will", "/world-will.html"}:
+            href = ""
         feed.append(
             {
                 "ts": t.get("ts") or "—",
@@ -575,8 +698,9 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
                 or ("working" if t.get("status") in _WORKING_STATUSES else "idle"),
                 "status": t.get("status"),
                 "status_label": t.get("status_label"),
-                "text": t.get("title") or t.get("text") or "",
-                "href": t.get("href") or "/world-will",
+                "text": summary,
+                "detail": detail,
+                "href": href,
                 "source": "action_board",
             }
         )
@@ -590,6 +714,8 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
         emp = by_emp.get(eid) or {}
         mood = "alert" if str(met.get("last_status")) != "success" else "idle"
         occurred_at = _feed_occurred_at(raw=met.get("last_at"))
+        raw_task = str(met.get("last_task") or "")
+        summary, detail = _publicize_feed_text(raw_task)
         feed.append(
             {
                 "ts": (occurred_at[11:16] if occurred_at else "—"),
@@ -603,8 +729,11 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
                 "presence": mood if mood == "alert" else emp.get("presence") or "idle",
                 "status": met.get("last_status"),
                 "status_label": "执行失败" if mood == "alert" else "最近执行",
-                "text": met.get("last_task"),
-                "href": "/world-will",
+                "text": summary,
+                "detail": detail,
+                # 执行指标 task 列为 VARCHAR(128)，入库即截断；官网只能展示摘要
+                "detail_truncated": True,
+                "href": "",
                 "source": "execution_metric",
             }
         )
@@ -640,10 +769,25 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
     bp_items = list(((board.get("breakpoints") or {}).get("items") or [])[:12])
     goal_items = list(((board.get("goals") or {}).get("items") or [])[:12])
 
+    try:
+        from modstore_server.runtime_inventory import runtime_inventory_summary
+
+        runtime = runtime_inventory_summary()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("company_hall: runtime inventory unavailable: %s", exc)
+        runtime = {
+            "schema": "xcagi.runtime_inventory/v1",
+            "ok": False,
+            "failed_must_run": -1,
+            "note": f"runtime inventory unavailable: {exc}",
+        }
+
     return {
         "schema": "xcagi.public_company_hall/v1",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "day": board.get("day"),
+        "calendar_day": board.get("calendar_day"),
+        "day_stale": bool(board.get("day_stale")),
         "readonly": True,
         "note": "公司大厅公开投影：编制为 SSOT；状态由行动条目与执行度量推导，无虚构心跳在线。",
         "cadence": {
@@ -653,13 +797,14 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
         },
         "presence_model": {
             "working": "有未闭环行动条目，或 2h 内有成功执行",
-            "alert": "有未闭环 P0，或 24h 内多次执行失败",
+            "alert": "有未闭环 P0，或 24h 内多次失败且最近一跑仍不健康（不含 burn-in）",
             "idle": "编制内注册、当日无公开活跃任务；含按需触发岗位（非离线）",
         },
         "counts": counts,
         "departments": departments,
         "employees": employees,
         "ai_driver": _public_ai_driver_snapshot(),
+        "runtime": runtime,
         "feed": feed,
         "last_activity": last_activity,
         "board": {

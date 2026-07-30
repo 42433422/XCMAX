@@ -145,6 +145,7 @@ def _build_request(
         "device_id": str(
             input_data.get("device_id") or os.environ.get("MODSTORE_PARA_DEVICE_ID") or ""
         ),
+        "tool_name": str(input_data.get("tool_name") or input_data.get("dev_tool") or ""),
         "depends_on": (
             input_data.get("depends_on") if isinstance(input_data.get("depends_on"), list) else []
         ),
@@ -495,9 +496,156 @@ def _first_para_error(snapshot: Dict[str, Any]) -> str:
 _SUBTASK_LABELS = ("需求定位与方案", "核心实现", "验证与收尾")
 
 
+def _fallback_order_tools() -> list[str]:
+    configured = os.environ.get(
+        "MODSTORE_PARA_TOOL_FALLBACK_ORDER",
+        "cursor,claude_code,trae",
+    )
+    out: list[str] = []
+    for value in configured.split(","):
+        tool = _normalize_tool_name(value)
+        if tool in _VALID_DEV_TOOLS and tool not in out:
+            out.append(tool)
+    return out
+
+
 def _dev_tool() -> str:
     """loops 桥默认派给的设备工具(DevFleet devTool)，用于设备过滤。"""
-    return (os.environ.get("MODSTORE_PARA_DEV_TOOL") or "codex").strip() or "codex"
+    normalized = _normalize_tool_name(os.environ.get("MODSTORE_PARA_DEV_TOOL") or "")
+    if normalized in _VALID_DEV_TOOLS:
+        return normalized
+    order = _fallback_order_tools()
+    return order[0] if order else "cursor"
+
+
+_VALID_DEV_TOOLS = ("codex", "claude_code", "cursor", "trae")
+_TOOL_INPUT_ALIASES = {
+    "claude": "claude_code",
+    "claude-code": "claude_code",
+    "cursor_agent": "cursor",
+    "cursor-agent": "cursor",
+}
+
+# DevFleet / Mac Bridge 上报的 capability / toolName 与调度侧命名不完全一致。
+_TOOL_CAP_ALIASES: Dict[str, tuple[str, ...]] = {
+    "codex": ("codex_cli",),
+    "cursor": ("cursor_cli", "cursor_agent_cli", "cursor-agent_cli"),
+    "claude_code": ("claude_code_cli", "claude_cli", "claude-code_cli"),
+    "trae": ("trae_cli",),
+}
+_TOOL_NAME_ALIASES: Dict[str, tuple[str, ...]] = {
+    "codex": ("codex",),
+    "cursor": ("cursor", "cursor_agent", "cursor-agent"),
+    "claude_code": ("claude_code", "claude", "claude-code"),
+    "trae": ("trae",),
+}
+
+
+def _normalize_tool_name(name: str) -> str:
+    raw = str(name or "").strip()
+    if not raw:
+        return ""
+    if raw in _VALID_DEV_TOOLS:
+        return raw
+    return _TOOL_INPUT_ALIASES.get(raw, raw)
+
+
+def _tool_fallback_allowed(req: Dict[str, Any]) -> bool:
+    """Whether CLI runtime failure may retry another tool.
+
+    ``allow_tool_fallback=0`` pins the requested tool.  Otherwise the env master
+    switch wins — an explicit ``tool_name`` no longer silently disables recovery
+    (that previously left ``spawn codex ENOENT`` storms with no fallback).
+    """
+    raw = req.get("raw_input") if isinstance(req.get("raw_input"), dict) else {}
+    raw_fallback = raw.get("allow_tool_fallback")
+    if raw_fallback is None and "allow_tool_fallback" not in req:
+        return _env_bool("MODSTORE_PARA_TOOL_FALLBACK_ENABLED", "1")
+    value = raw_fallback if raw_fallback is not None else req.get("allow_tool_fallback")
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _excluded_tools(req: Dict[str, Any]) -> set[str]:
+    raw = req.get("raw_input") if isinstance(req.get("raw_input"), dict) else {}
+    excluded: set[str] = set()
+    for key in ("_para_exclude_tools", "para_exclude_tools"):
+        blob = raw.get(key)
+        if isinstance(blob, (list, tuple, set)):
+            excluded.update(str(item or "").strip() for item in blob if str(item or "").strip())
+    top = req.get("_para_exclude_tools")
+    if isinstance(top, (list, tuple, set)):
+        excluded.update(str(item or "").strip() for item in top if str(item or "").strip())
+    return {item for item in excluded if item in _VALID_DEV_TOOLS}
+
+
+def _tool_candidates(req: Dict[str, Any]) -> list[str]:
+    """Return the preferred executor followed by allowed same-device fallbacks.
+
+    With fallback enabled, an explicit tool stays first but other tools from
+    ``MODSTORE_PARA_TOOL_FALLBACK_ORDER`` remain eligible.  Without an explicit
+    tool, the fallback order itself is the preference list (no silent codex
+    prepend).  Pin with ``allow_tool_fallback=0`` for strict single-tool mode.
+    """
+    raw = req.get("raw_input") if isinstance(req.get("raw_input"), dict) else {}
+    explicit = _normalize_tool_name(
+        str(req.get("tool_name") or raw.get("tool_name") or raw.get("dev_tool") or "")
+    )
+    preferred = explicit if explicit in _VALID_DEV_TOOLS else _dev_tool()
+    order = _fallback_order_tools()
+
+    if not _tool_fallback_allowed(req):
+        candidates = [preferred]
+    elif explicit:
+        candidates = [explicit] + [tool for tool in order if tool != explicit]
+    else:
+        candidates = list(order) if order else [preferred]
+        if preferred not in candidates:
+            candidates.insert(0, preferred)
+
+    excluded = _excluded_tools(req)
+    return [tool for tool in candidates if tool not in excluded]
+
+
+def _is_cli_runtime_failure(
+    *,
+    error: str = "",
+    status: str = "",
+    snapshot: Any = None,
+    api_error: str = "",
+) -> bool:
+    """True when the chosen CLI is missing/broken and another tool may succeed."""
+
+    parts = [str(error or ""), str(status or ""), str(api_error or "")]
+    if isinstance(snapshot, dict):
+        parts.append(str(snapshot.get("task_status") or ""))
+        for sub in snapshot.get("subtasks") or []:
+            if isinstance(sub, dict):
+                parts.append(str(sub.get("last_error") or ""))
+                parts.append(str(sub.get("status") or ""))
+        for item in snapshot.get("logs_tail") or []:
+            if isinstance(item, dict):
+                parts.append(str(item.get("content") or ""))
+    text = " ".join(parts).lower()
+    needles = (
+        "enoent",
+        "not_installed",
+        "not installed",
+        "command not found",
+        "no such file",
+        "spawn codex",
+        "spawn cursor",
+        "spawn claude",
+        "spawn trae",
+        "codex cli",
+        "cursor cli",
+        "claude cli",
+        "trae cli",
+        "cli 失败",
+        "cli failed",
+        "executable not found",
+        "is not recognized",
+    )
+    return any(token in text for token in needles)
 
 
 def _device_discovery_enabled() -> bool:
@@ -513,11 +661,23 @@ def _safe_json(resp: httpx.Response) -> Any:
 
 def _device_tool_entry(item: Dict[str, Any], tool_name: str) -> Optional[Dict[str, Any]]:
     tools = item.get("tools")
-    if isinstance(tools, list):
-        for tool in tools:
-            if isinstance(tool, dict) and tool.get("toolName") == tool_name:
-                return tool
+    if not isinstance(tools, list):
+        return None
+    aliases = _TOOL_NAME_ALIASES.get(tool_name, (tool_name,))
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+        name = str(tool.get("toolName") or tool.get("name") or "").strip()
+        if name in aliases:
+            return tool
     return None
+
+
+def _device_has_capability(caps: Dict[str, Any], tool_name: str) -> bool:
+    for key in _TOOL_CAP_ALIASES.get(tool_name, (f"{tool_name}_cli",)):
+        if caps.get(key) is True:
+            return True
+    return False
 
 
 def _device_eligible(item: Any, tool_name: str) -> bool:
@@ -536,11 +696,66 @@ def _device_eligible(item: Any, tool_name: str) -> bool:
         return False
     if not tool:
         caps = item.get("capabilities") if isinstance(item.get("capabilities"), dict) else {}
-        if caps.get(f"{tool_name}_cli") is True:
+        if _device_has_capability(caps, tool_name):
             return True
         # 无 tools 列表时，仅当声明的 devTool 匹配才视为就绪（避免盲派到缺 CLI 设备）
-        return str(item.get("devTool") or "") == tool_name
+        dev_tool = str(item.get("devTool") or "").strip()
+        aliases = _TOOL_NAME_ALIASES.get(tool_name, (tool_name,))
+        return dev_tool in aliases
     return True
+
+
+def _selected_tool_for_device(item: Any, req: Dict[str, Any]) -> str:
+    for tool_name in _tool_candidates(req):
+        if _device_eligible(item, tool_name):
+            return tool_name
+    return ""
+
+
+def _with_selected_tool(item: Dict[str, Any], tool_name: str) -> Dict[str, Any]:
+    return {**item, "_selected_tool": tool_name}
+
+
+def _select_local_device_with_fallback(devices: list, req: Dict[str, Any]) -> list:
+    local_id = (os.environ.get("MODSTORE_PARA_DEVICE_ID") or "").strip()
+    ordered: list = []
+    if local_id:
+        ordered.extend(
+            item
+            for item in devices
+            if isinstance(item, dict) and str(item.get("id") or "") == local_id
+        )
+    else:
+        primary = [item for item in devices if isinstance(item, dict) and item.get("isPrimary")]
+        ordered.extend(primary or [item for item in devices if isinstance(item, dict)])
+    for item in ordered:
+        selected_tool = _selected_tool_for_device(item, req)
+        if selected_tool:
+            return [_with_selected_tool(item, selected_tool)]
+    return []
+
+
+def _select_fleet_devices_with_fallback(devices: list, req: Dict[str, Any]) -> list:
+    raw = req.get("raw_input") if isinstance(req.get("raw_input"), dict) else {}
+    target = raw.get("target_devices")
+    targets = (
+        {str(x).strip() for x in target if str(x).strip()} if isinstance(target, list) else {"all"}
+    )
+    candidates: list = []
+    for item in devices:
+        if not isinstance(item, dict):
+            continue
+        if (
+            "all" not in targets
+            and str(item.get("id") or "") not in targets
+            and str(item.get("name") or "") not in targets
+        ):
+            continue
+        selected_tool = _selected_tool_for_device(item, req)
+        if selected_tool:
+            candidates.append(_with_selected_tool(item, selected_tool))
+    workers = [item for item in candidates if not item.get("isPrimary")]
+    return (workers or candidates)[: _max_fleet_devices(req)]
 
 
 def _filter_executor_ready(devices: list, tool_name: str) -> list:
@@ -650,24 +865,50 @@ def _resolve_dispatch_devices(
     """返回 (tier, [device dicts], reason)。显式 device_id → 零回归走一级单设备。"""
     explicit = str(req.get("device_id") or "").strip()
     if explicit:
-        return 1, [{"id": explicit}], ""
+        devices = _fetch_devices(client, base, token)
+        target = next(
+            (
+                item
+                for item in devices
+                if isinstance(item, dict) and str(item.get("id") or "") == explicit
+            ),
+            None,
+        )
+        if target is not None:
+            selected_tool = _selected_tool_for_device(target, req)
+            if selected_tool:
+                return 1, [_with_selected_tool(target, selected_tool)], ""
+        # Preserve the explicit-device contract when discovery is unavailable or
+        # every executor is busy: Para may queue the preferred tool safely.
+        return 1, [{"id": explicit, "_selected_tool": _tool_candidates(req)[0]}], ""
     if not _device_discovery_enabled():
         return (
             1,
             [],
             "未配置 MODSTORE_PARA_DEVICE_ID 且设备发现关闭(MODSTORE_PARA_DEVICE_DISCOVERY=0)",
         )
-    tool = _dev_tool()
     devices = _fetch_devices(client, base, token)
     tier = _resolve_tier(req)
     if tier == 1:
-        local = _select_local_device(devices, tool)
+        # 优先走同设备多 CLI 候选；避免「preferred 看似可用」时跳过 idle fallback。
+        local = _select_local_device_with_fallback(devices, req)
         if local:
             return 1, local, ""
+        preferred = (_tool_candidates(req) or [_dev_tool()])[0]
+        local = _select_local_device(devices, preferred)
+        if local:
+            return 1, [_with_selected_tool(local[0], preferred)], ""
         tier = 2  # 本机不可用 → 升二级
-    selected = _select_fleet_devices(devices, req, tool)
+    selected = _select_fleet_devices_with_fallback(devices, req)
     if not selected:
-        return tier, [], f"未发现在线可用 {tool} 设备(共 {len(devices)} 台)"
+        preferred = (_tool_candidates(req) or [_dev_tool()])[0]
+        selected = [
+            _with_selected_tool(item, preferred)
+            for item in _select_fleet_devices(devices, req, preferred)
+        ]
+    if not selected:
+        tools = ",".join(_tool_candidates(req)) or _dev_tool()
+        return tier, [], f"未发现在线可用 {tools} 执行器(共 {len(devices)} 台设备)"
     return tier, selected, ""
 
 
@@ -690,7 +931,91 @@ def _para_subtask_title(req: Dict[str, Any], index: int, total: int) -> str:
     return f"{label}：{title[:60]}"
 
 
+def _req_with_excluded_tools(req: Dict[str, Any], excluded: set[str]) -> Dict[str, Any]:
+    work = dict(req or {})
+    raw = dict(work.get("raw_input") or {}) if isinstance(work.get("raw_input"), dict) else {}
+    merged = sorted((set(excluded) | _excluded_tools(work)))
+    raw["_para_exclude_tools"] = merged
+    work["raw_input"] = raw
+    work["_para_exclude_tools"] = merged
+    # 换 CLI 必须新开 task，避免复用已失败的 subtask
+    work.pop("para_task_id", None)
+    return work
+
+
+def _attach_tool_fallback_meta(
+    result: Dict[str, Any],
+    *,
+    attempts: list,
+) -> Dict[str, Any]:
+    if not isinstance(result, dict):
+        return result
+    if attempts:
+        result["tool_fallback_attempts"] = list(attempts)
+        result["tool_fallback_used"] = True
+    return result
+
+
 def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
+    attempts: list = []
+    excluded: set[str] = set(_excluded_tools(req))
+    result = _post_para_api_once(req)
+    fallback_budget = max(0, len(_tool_candidates(req)) - 1)
+    for _ in range(fallback_budget):
+        if bool(result.get("ok")):
+            return _attach_tool_fallback_meta(result, attempts=attempts)
+        if not _tool_fallback_allowed(req):
+            return _attach_tool_fallback_meta(result, attempts=attempts)
+        used_tool = ""
+        for item in result.get("devices") or []:
+            if isinstance(item, dict) and str(item.get("tool_name") or "").strip():
+                used_tool = str(item.get("tool_name") or "").strip()
+                break
+        if not used_tool:
+            used_tool = str(
+                (result.get("request") or {}).get("tool_name")
+                if isinstance(result.get("request"), dict)
+                else ""
+            ).strip()
+        if used_tool not in _VALID_DEV_TOOLS:
+            # 从 payload / 候选里推断刚失败的首选工具
+            candidates = _tool_candidates(_req_with_excluded_tools(req, excluded))
+            used_tool = candidates[0] if candidates else ""
+        if not used_tool or used_tool in excluded:
+            return _attach_tool_fallback_meta(result, attempts=attempts)
+        if not _is_cli_runtime_failure(
+            error=str(result.get("error") or ""),
+            status=str(result.get("status") or ""),
+            snapshot=result.get("para_result"),
+            api_error=str(result.get("error") or ""),
+        ):
+            return _attach_tool_fallback_meta(result, attempts=attempts)
+        attempts.append(
+            {
+                "tool_name": used_tool,
+                "status": result.get("status"),
+                "error": str(result.get("error") or "")[:500],
+            }
+        )
+        excluded.add(used_tool)
+        next_req = _req_with_excluded_tools(req, excluded)
+        if not _tool_candidates(next_req):
+            return _attach_tool_fallback_meta(result, attempts=attempts)
+        logger_msg = (
+            f"para tool runtime failure tool={used_tool}; retry with "
+            f"{','.join(_tool_candidates(next_req))}"
+        )
+        try:
+            import logging
+
+            logging.getLogger(__name__).warning(logger_msg)
+        except Exception:
+            pass
+        result = _post_para_api_once(next_req)
+    return _attach_tool_fallback_meta(result, attempts=attempts)
+
+
+def _post_para_api_once(req: Dict[str, Any]) -> Dict[str, Any]:
     base = _api_base()
     if not base:
         return _outbox_response(
@@ -765,6 +1090,9 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
                     "report_only": report_only,
                     "max_attempts": max_attempts,
                 }
+                selected_tool = str(device.get("_selected_tool") or "").strip()
+                if selected_tool:
+                    payload["tool_name"] = selected_tool
                 if repo_url:
                     payload["repo_url"] = repo_url
                 if auto_merge:
@@ -799,6 +1127,11 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
                                 "para_response": _summarize_para_response(body),
                             }
                         )
+                        err_text = str(
+                            (body.get("error") or body.get("detail") or resp.text[:500])
+                            if isinstance(body, dict)
+                            else resp.text[:500]
+                        )
                         return {
                             "handler": "para_delegate",
                             "ok": False,
@@ -808,14 +1141,17 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
                             "source": "para_api",
                             "failure_kind": "para_api",
                             "para_tier": tier,
-                            "error": str(
-                                (body.get("error") or body.get("detail") or resp.text[:500])
-                                if isinstance(body, dict)
-                                else resp.text[:500]
-                            ),
+                            "error": err_text,
                             "outbox_path": str(outbox),
                             "request": _public_request(req),
                             "response": _summarize_para_response(body),
+                            "devices": [
+                                {
+                                    "device_id": device_id,
+                                    "device_name": device.get("name"),
+                                    "tool_name": selected_tool or _dev_tool(),
+                                }
+                            ],
                         }
                     continue  # 多设备时后续设备失败：记录并继续，task 已建
                 accepted = _summarize_para_response(body)
@@ -829,6 +1165,7 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
                         "device_id": device_id,
                         "device_name": accepted.get("device_name") or device.get("name"),
                         "subtask_id": accepted.get("subtask_id"),
+                        "tool_name": selected_tool or _dev_tool(),
                     }
                 )
 

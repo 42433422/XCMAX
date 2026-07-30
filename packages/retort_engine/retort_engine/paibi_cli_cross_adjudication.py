@@ -24,29 +24,62 @@ def build_paibi_cli_cross_adjudication(
 ) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     started = time.monotonic()
-    blind_file = Path(blind_path) if blind_path else root / "docs" / "retort_competitor_blind_adjudication.json"
-    behavior_file = Path(behavior_path) if behavior_path else root / "docs" / "retort_competitor_behavior_regression.json"
+    blind_file = (
+        Path(blind_path)
+        if blind_path
+        else root / "docs" / "retort_competitor_blind_adjudication.json"
+    )
+    behavior_file = (
+        Path(behavior_path)
+        if behavior_path
+        else root / "docs" / "retort_competitor_behavior_regression.json"
+    )
     calibration_file = root / "docs" / "retort_review_adjudication_calibration.json"
     blind = _read_json(blind_file)
     behavior = _read_json(behavior_file)
     calibration = _read_json(calibration_file)
-    calibration_summary = calibration.get("summary") if isinstance(calibration.get("summary"), dict) else {}
-    calibration_label_count = int(calibration_summary.get("calibration_label_count") or calibration_summary.get("human_label_count") or 0)
+    calibration_summary = (
+        calibration.get("summary")
+        if isinstance(calibration.get("summary"), dict)
+        else {}
+    )
+    calibration_label_count = int(
+        calibration_summary.get("calibration_label_count")
+        or calibration_summary.get("human_label_count")
+        or 0
+    )
     adjudication_id = run_id or _run_id("paibi-cli-cross-adjudication")
     lab = root / ".retort" / "paibi_cli_cross_adjudications" / adjudication_id
     lab.mkdir(parents=True, exist_ok=True)
     cross_input = _cross_input(blind, behavior)
     input_path = lab / "cross_input.json"
     script_path = lab / "paibi_cli_adjudicator.py"
-    input_path.write_text(json.dumps(cross_input, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    input_path.write_text(
+        json.dumps(cross_input, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     script_path.write_text(_CLI_ADJUDICATOR_SCRIPT, encoding="utf-8")
     tool_results = []
     for tool_name in PAIBI_SUPPORTED_TOOLS:
-        tool_results.append(_run_tool_adjudicator(tool_name, lab, input_path, script_path))
+        tool_results.append(
+            _run_tool_adjudicator(tool_name, lab, input_path, script_path)
+        )
     accepted_tools = [item for item in tool_results if item.get("accepted") is True]
-    outputs_have_labels = all(item.get("output_contains_labels") is True for item in tool_results)
-    output_hashes = [str(item.get("output_sha256") or "") for item in tool_results if item.get("output_sha256")]
-    consensus_labels = sorted({str(item.get("consensus_label") or "") for item in tool_results if item.get("consensus_label")})
+    outputs_have_labels = all(
+        item.get("output_contains_labels") is True for item in tool_results
+    )
+    output_hashes = [
+        str(item.get("output_sha256") or "")
+        for item in tool_results
+        if item.get("output_sha256")
+    ]
+    consensus_labels = sorted(
+        {
+            str(item.get("consensus_label") or "")
+            for item in tool_results
+            if item.get("consensus_label")
+        }
+    )
     script_text = script_path.read_text(encoding="utf-8")
     summary = {
         "blind_status": blind.get("status", ""),
@@ -61,12 +94,23 @@ def build_paibi_cli_cross_adjudication(
         "calibration_status": calibration.get("status", ""),
         "calibration_label_count": calibration_label_count,
         "calibration_human_label_count": calibration_label_count,
-        "calibration_label_source_type": str(calibration_summary.get("label_source_type") or "retort_oracle_no_human"),
+        "calibration_label_source_type": str(
+            calibration_summary.get("label_source_type") or "retort_oracle_no_human"
+        ),
         "calibration_pass_rate": float(calibration_summary.get("pass_rate") or 0.0),
-        "calibration_pre_pass_rate": float(calibration_summary.get("pre_calibration_pass_rate") or 0.0),
-        "calibration_false_positive_count": int(calibration_summary.get("false_positive_count") or 0),
-        "calibration_false_negative_count": int(calibration_summary.get("false_negative_count") or 0),
-        "calibration_feedback_recalibration_applied": calibration_summary.get("feedback_recalibration_applied") is True,
+        "calibration_pre_pass_rate": float(
+            calibration_summary.get("pre_calibration_pass_rate") or 0.0
+        ),
+        "calibration_false_positive_count": int(
+            calibration_summary.get("false_positive_count") or 0
+        ),
+        "calibration_false_negative_count": int(
+            calibration_summary.get("false_negative_count") or 0
+        ),
+        "calibration_feedback_recalibration_applied": calibration_summary.get(
+            "feedback_recalibration_applied"
+        )
+        is True,
         "oracle_calibrated_cli_consensus": calibration.get("status") == "ready"
         and calibration_label_count >= 50
         and float(calibration_summary.get("pass_rate") or 0.0) >= 0.95
@@ -76,8 +120,11 @@ def build_paibi_cli_cross_adjudication(
         "tool_count": len(tool_results),
         "accepted_tool_count": len(accepted_tools),
         "tool_identities": list(PAIBI_SUPPORTED_TOOLS),
-        "accepted_tool_identities": [str(item.get("tool_name") or "") for item in accepted_tools],
-        "all_tools_accepted": bool(tool_results) and len(accepted_tools) == len(tool_results),
+        "accepted_tool_identities": [
+            str(item.get("tool_name") or "") for item in accepted_tools
+        ],
+        "all_tools_accepted": bool(tool_results)
+        and len(accepted_tools) == len(tool_results),
         "cross_tool_consensus": len(consensus_labels) == 1 and bool(consensus_labels),
         "consensus_label": consensus_labels[0] if len(consensus_labels) == 1 else "",
         "input_contains_score_fields": _contains_score_key(cross_input),
@@ -85,9 +132,15 @@ def build_paibi_cli_cross_adjudication(
         "output_contains_labels": outputs_have_labels,
         "blind_case_count": len(cross_input.get("blind_cases") or []),
         "behavior_case_count": len(cross_input.get("behavior_cases") or []),
-        "behavior_assertion_count": sum(len(item.get("assertions") or []) for item in cross_input.get("behavior_cases") or [] if isinstance(item, dict)),
+        "behavior_assertion_count": sum(
+            len(item.get("assertions") or [])
+            for item in cross_input.get("behavior_cases") or []
+            if isinstance(item, dict)
+        ),
         "separate_subprocess_count": len(tool_results),
-        "all_subprocesses_successful": all(int(item.get("returncode") or 0) == 0 for item in tool_results),
+        "all_subprocesses_successful": all(
+            int(item.get("returncode") or 0) == 0 for item in tool_results
+        ),
         "human_reviewed": False,
         "human_label_substitute": "no_human_oracle_calibrated_four_cli_consensus",
         "replaces_human_labels": False,
@@ -110,7 +163,9 @@ def build_paibi_cli_cross_adjudication(
         and summary["human_review_required"] is False
         and summary["oracle_calibrated_cli_consensus"] is True
     )
-    summary["human_calibrated_cli_consensus"] = summary["oracle_calibrated_cli_consensus"]
+    summary["human_calibrated_cli_consensus"] = summary[
+        "oracle_calibrated_cli_consensus"
+    ]
     result = {
         "status": "ready" if ready else "needs_paibi_cli_cross_adjudication",
         "project": str(root),
@@ -120,7 +175,10 @@ def build_paibi_cli_cross_adjudication(
             "lab_dir": str(lab),
             "script": str(script_path),
             "input": str(input_path),
-            "outputs": {str(item.get("tool_name") or ""): str(item.get("output_path") or "") for item in tool_results},
+            "outputs": {
+                str(item.get("tool_name") or ""): str(item.get("output_path") or "")
+                for item in tool_results
+            },
         },
         "evidence": {
             "style": "paibi_four_cli_cross_consensus",
@@ -141,7 +199,10 @@ def build_paibi_cli_cross_adjudication(
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return result
 
 
@@ -156,7 +217,8 @@ def _cross_input(blind: dict[str, Any], behavior: dict[str, Any]) -> dict[str, A
                 "kind": str(case.get("kind") or ""),
                 "label": str(case.get("label") or ""),
                 "accepted": case.get("accepted") is True,
-                "live_upstream_materialized": case.get("live_upstream_materialized") is True,
+                "live_upstream_materialized": case.get("live_upstream_materialized")
+                is True,
                 "output_sha256": str(case.get("output_sha256") or ""),
             }
         )
@@ -164,7 +226,9 @@ def _cross_input(blind: dict[str, Any], behavior: dict[str, Any]) -> dict[str, A
     for case in behavior.get("cases") or []:
         if not isinstance(case, dict):
             continue
-        assertions = case.get("assertions") if isinstance(case.get("assertions"), dict) else {}
+        assertions = (
+            case.get("assertions") if isinstance(case.get("assertions"), dict) else {}
+        )
         behavior_cases.append(
             {
                 "case_id": str(case.get("case_id") or ""),
@@ -172,7 +236,9 @@ def _cross_input(blind: dict[str, Any], behavior: dict[str, Any]) -> dict[str, A
                 "absorbed_signal": str(case.get("absorbed_signal") or ""),
                 "ready": case.get("ready") is True,
                 "direct_review_execution": case.get("direct_review_execution") is True,
-                "assertions": {str(key): bool(value) for key, value in assertions.items()},
+                "assertions": {
+                    str(key): bool(value) for key, value in assertions.items()
+                },
             }
         )
     return {
@@ -185,15 +251,22 @@ def _cross_input(blind: dict[str, Any], behavior: dict[str, Any]) -> dict[str, A
     }
 
 
-def _run_tool_adjudicator(tool_name: str, lab: Path, input_path: Path, script_path: Path) -> dict[str, Any]:
+def _run_tool_adjudicator(
+    tool_name: str, lab: Path, input_path: Path, script_path: Path
+) -> dict[str, Any]:
     output_path = lab / f"{tool_name}_output.json"
     env = {**os.environ, "RETORT_PAIBI_TOOL": tool_name}
     completed = subprocess.run(
-        [sys.executable, str(script_path), str(input_path), str(output_path), tool_name],
+        [
+            sys.executable,
+            str(script_path),
+            str(input_path),
+            str(output_path),
+            tool_name,
+        ],
         cwd=lab,
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         timeout=60,
         check=False,
@@ -206,7 +279,8 @@ def _run_tool_adjudicator(tool_name: str, lab: Path, input_path: Path, script_pa
         "returncode": int(completed.returncode),
         "accepted": summary.get("accepted") is True,
         "consensus_label": str(summary.get("label") or ""),
-        "output_contains_labels": bool(cases) and all(isinstance(item, dict) and bool(item.get("label")) for item in cases),
+        "output_contains_labels": bool(cases)
+        and all(isinstance(item, dict) and bool(item.get("label")) for item in cases),
         "stdout_tail": completed.stdout[-300:],
         "stderr_tail": completed.stderr[-300:],
         "output_path": str(output_path),
@@ -217,7 +291,10 @@ def _run_tool_adjudicator(tool_name: str, lab: Path, input_path: Path, script_pa
 
 def _contains_score_key(value: Any) -> bool:
     if isinstance(value, dict):
-        return any("score" in str(key).lower() or _contains_score_key(item) for key, item in value.items())
+        return any(
+            "score" in str(key).lower() or _contains_score_key(item)
+            for key, item in value.items()
+        )
     if isinstance(value, list):
         return any(_contains_score_key(item) for item in value)
     return False
@@ -243,7 +320,7 @@ def _run_id(prefix: str) -> str:
     return f"{prefix}-{timestamp}-{uuid.uuid4().hex[:8]}"
 
 
-_CLI_ADJUDICATOR_SCRIPT = r'''
+_CLI_ADJUDICATOR_SCRIPT = r"""
 from __future__ import annotations
 
 import json
@@ -322,4 +399,4 @@ def _contains_score_key(value):
 
 if __name__ == "__main__":
     raise SystemExit(main())
-'''
+"""

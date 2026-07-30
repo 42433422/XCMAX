@@ -902,6 +902,110 @@ class AIChatApplicationService(
             field_names = [x for x in field_names if x]
             summary = str(excel_analysis.get("summary") or "").strip()
             todo_lines = [
+                "按内容指纹识别送货单表（标题含送货单+购货单位+产品明细）",
+                "解析抬头客户与明细行",
+                "写入客户、产品，并生成发货单",
+                "返回闭环结果（发货单数/产品数）",
+            ]
+            file_path = str(
+                excel_analysis.get("file_path")
+                or (
+                    (excel_analysis.get("preview_data") or {})
+                    if isinstance(excel_analysis.get("preview_data"), dict)
+                    else {}
+                ).get("file_path")
+                or ""
+            ).strip()
+            delivery_notes: list = []
+            if file_path:
+                try:
+                    from app.application.shipment_excel_etl_app_service import (
+                        parse_delivery_notes,
+                    )
+
+                    parsed_notes = parse_delivery_notes(file_path)
+                    if parsed_notes.get("success") and parsed_notes.get("notes"):
+                        delivery_notes = list(parsed_notes.get("notes") or [])
+                except RECOVERABLE_ERRORS as parse_err:
+                    logger.warning("shipment etl detect failed: %s", parse_err)
+
+            if delivery_notes:
+                from app.application.workflow.types import PlanGraph, WorkflowNode
+
+                note_summary = "；".join(
+                    f"{n.get('sheet')}→{n.get('unit_name')}({n.get('item_count')}行)"
+                    for n in delivery_notes[:5]
+                )
+                plan = PlanGraph(
+                    plan_id=f"plan_shipment_etl_{uuid.uuid4().hex[:12]}",
+                    intent="excel_import_to_db",
+                    todo_steps=todo_lines,
+                    nodes=[
+                        WorkflowNode(
+                            node_id="import_delivery_notes",
+                            tool_id="excel_import",
+                            action="import_delivery_notes",
+                            params={
+                                "file_path": file_path,
+                                "notes": delivery_notes,
+                                "import_products": True,
+                                "import_shipments": True,
+                                "source": "deterministic_shipment_etl",
+                            },
+                            risk="medium",
+                            idempotent=False,
+                            description="将送货单写入客户/产品/发货单（闭环）",
+                        )
+                    ],
+                    risk_level="medium",
+                    metadata={
+                        "source": "deterministic_shipment_excel_etl",
+                        "artifacts": [
+                            {
+                                "artifact_type": "shipment_delivery_notes",
+                                "name": str(
+                                    excel_analysis.get("file_name")
+                                    or excel_analysis.get("template_name")
+                                    or "shipment_etl"
+                                ),
+                                "source": "excel_analysis",
+                                "uri": file_path,
+                                "summary": note_summary or f"送货单 {len(delivery_notes)} 张",
+                                "preview": {
+                                    "note_count": len(delivery_notes),
+                                    "sample_notes": [
+                                        {
+                                            "sheet": n.get("sheet"),
+                                            "unit_name": n.get("unit_name"),
+                                            "item_count": n.get("item_count"),
+                                            "total_amount": n.get("total_amount"),
+                                        }
+                                        for n in delivery_notes[:3]
+                                    ],
+                                },
+                                "metadata": {
+                                    "import_pipeline": "shipment_delivery_etl",
+                                    "closed_loop": True,
+                                },
+                            }
+                        ],
+                    },
+                )
+                thinking_steps = self._build_workflow_thinking_steps(
+                    plan,
+                    "检测到送货单版式，将写入客户/产品/发货单，需用户确认",
+                )
+                return self._start_deterministic_import_agent_run(
+                    user_id=user_id,
+                    message=message,
+                    source=source,
+                    context=context,
+                    file_context=merged_file_ctx,
+                    plan=plan,
+                    thinking_steps=thinking_steps,
+                )
+
+            todo_lines = [
                 "解析 Excel 数据并映射单位/产品/型号/价格字段",
                 "检查客户是否存在，不存在则创建",
                 "检查产品是否存在，缺失则创建并绑定单位",

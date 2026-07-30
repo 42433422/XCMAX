@@ -36,6 +36,7 @@ _workflow_registry_cache_ver: int | None = None
 _WORKFLOW_REG_VER = 3
 
 
+from app.application.tools.safe_dataframe_query import safe_filter_dataframe
 from app.application.tools.workflow_excel_paths import resolve_safe_excel_path
 
 
@@ -171,7 +172,7 @@ def handle_excel_analysis(
         return out
     if action == "query":
         expr = str(args.get("query_expression") or "").strip()
-        out_df = df.query(expr) if expr else df
+        out_df = safe_filter_dataframe(df, expr)
         return {
             "success": True,
             "action": "query",

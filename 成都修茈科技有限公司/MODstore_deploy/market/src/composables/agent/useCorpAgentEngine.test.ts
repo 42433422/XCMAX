@@ -88,6 +88,15 @@ describe('useCorpAgentEngine', () => {
     await handleInput('随便问问')
     const store = useAgentStore()
     const last = store.messages[store.messages.length - 1]
-    expect(last.content).toContain('小C')
+    expect(last.content).toMatch(/指路|下载 XCAGI|产品能力/)
+  })
+
+  it('answers download via keyword without corp LLM', async () => {
+    const { handleInput } = useCorpAgentEngine()
+    await handleInput('怎么下载 XCAGI？')
+    expect(api.agentCorpChat).not.toHaveBeenCalled()
+    const store = useAgentStore()
+    const last = store.messages[store.messages.length - 1]
+    expect(last.content).toContain('/download')
   })
 })

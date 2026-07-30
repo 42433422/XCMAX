@@ -77,6 +77,52 @@ def test_eligible_online_with_capability():
     )
 
 
+def test_eligible_cursor_agent_cli_capability_alias():
+    assert h._device_eligible(
+        {
+            "id": "d1",
+            "status": "online",
+            "capabilities": {"cursor_agent_cli": True},
+        },
+        "cursor",
+    )
+
+
+def test_eligible_claude_cli_capability_alias_for_claude_code():
+    assert h._device_eligible(
+        {"id": "d1", "status": "online", "capabilities": {"claude_cli": True}},
+        "claude_code",
+    )
+
+
+def test_device_tool_entry_accepts_claude_alias():
+    item = {
+        "tools": [
+            {"toolName": "claude", "status": "idle"},
+            {"toolName": "codex", "status": "running", "currentTask": "x"},
+        ]
+    }
+    entry = h._device_tool_entry(item, "claude_code")
+    assert entry is not None
+    assert entry["toolName"] == "claude"
+
+
+def test_is_cli_runtime_failure_detects_spawn_enoent():
+    assert h._is_cli_runtime_failure(
+        error="[e2e-agent] Codex CLI 失败: spawn codex ENOENT",
+        status="para_task_failed",
+    )
+
+
+def test_tool_candidates_skip_excluded(monkeypatch):
+    monkeypatch.setenv("MODSTORE_PARA_DEV_TOOL", "codex")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ORDER", "cursor,trae")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ENABLED", "1")
+    out = h._tool_candidates({"raw_input": {"_para_exclude_tools": ["codex"]}})
+    assert out[0] == "cursor"
+    assert "codex" not in out
+
+
 def test_ineligible_offline():
     assert not h._device_eligible({"id": "d1", "status": "offline"}, "codex")
 
@@ -105,6 +151,61 @@ def test_eligible_by_dev_tool_when_no_tools_list():
 
 def test_ineligible_non_dict():
     assert not h._device_eligible("nope", "codex")
+
+
+def test_selects_idle_same_device_fallback_when_codex_is_busy(monkeypatch):
+    monkeypatch.delenv("MODSTORE_PARA_DEV_TOOL", raising=False)
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ORDER", "claude_code,cursor,trae")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ENABLED", "1")
+    item = {
+        "id": "d1",
+        "status": "online",
+        "tools": [
+            {"toolName": "codex", "status": "running", "currentTask": "other"},
+            {"toolName": "claude_code", "status": "idle"},
+            {"toolName": "cursor", "status": "idle"},
+        ],
+    }
+    assert h._selected_tool_for_device(item, {"raw_input": {}}) == "claude_code"
+
+
+def test_explicit_tool_is_strict_when_fallback_opted_out():
+    item = {
+        "id": "d1",
+        "status": "online",
+        "tools": [
+            {"toolName": "codex", "status": "running", "currentTask": "other"},
+            {"toolName": "cursor", "status": "idle"},
+        ],
+    }
+    assert (
+        h._selected_tool_for_device(
+            item,
+            {"tool_name": "codex", "raw_input": {"allow_tool_fallback": False}},
+        )
+        == ""
+    )
+
+
+def test_explicit_tool_can_fallback_when_env_enabled(monkeypatch):
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ENABLED", "1")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ORDER", "cursor,trae")
+    item = {
+        "id": "d1",
+        "status": "online",
+        "tools": [
+            {"toolName": "codex", "status": "running", "currentTask": "other"},
+            {"toolName": "cursor", "status": "idle"},
+        ],
+    }
+    assert h._selected_tool_for_device(item, {"tool_name": "codex", "raw_input": {}}) == "cursor"
+
+
+def test_default_candidates_follow_fallback_order_not_codex(monkeypatch):
+    monkeypatch.delenv("MODSTORE_PARA_DEV_TOOL", raising=False)
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ORDER", "cursor,claude_code,trae")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ENABLED", "1")
+    assert h._tool_candidates({"raw_input": {}}) == ["cursor", "claude_code", "trae"]
 
 
 # ─────────────── _select_local_device ───────────────
@@ -188,8 +289,27 @@ def test_explicit_device_id_zero_regression():
     assert [d["id"] for d in devices] == ["fixed-dev"]
 
 
+def test_explicit_device_uses_idle_tool_fallback():
+    fleet = [
+        {
+            "id": "fixed-dev",
+            "status": "online",
+            "tools": [
+                {"toolName": "codex", "status": "running", "currentTask": "other"},
+                {"toolName": "cursor", "status": "idle"},
+            ],
+        }
+    ]
+    req = {"device_id": "fixed-dev", "raw_input": {}}
+    tier, devices, reason = h._resolve_dispatch_devices(_FakeClient(fleet), "http://p", "tok", req)
+    assert tier == 1
+    assert devices[0]["_selected_tool"] == "cursor"
+
+
 def test_discovery_tier_one_picks_local(monkeypatch):
     monkeypatch.delenv("MODSTORE_PARA_DEVICE_ID", raising=False)
+    monkeypatch.setenv("MODSTORE_PARA_DEV_TOOL", "codex")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ORDER", "codex,cursor,claude_code,trae")
     fleet = [_online_codex("p1", isPrimary=True), _online_codex("w1")]
     req = {"task": "修复", "raw_input": {}}
     tier, devices, reason = h._resolve_dispatch_devices(_FakeClient(fleet), "http://p", "tok", req)
@@ -292,6 +412,10 @@ def _integ_env(monkeypatch):
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://example.com/repo.git")
     monkeypatch.setenv("MODSTORE_PARA_DISABLE_AUTO_RETRY", "0")  # 跳过 sqlite 写
     monkeypatch.setenv("MODSTORE_PARA_SKIP_GIT_PREFLIGHT", "1")
+    # Fixtures use _online_codex (codex_cli only); pin preferred tool for these tests.
+    monkeypatch.setenv("MODSTORE_PARA_DEV_TOOL", "codex")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ORDER", "codex,cursor,claude_code,trae")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ENABLED", "1")
     monkeypatch.delenv("MODSTORE_PARA_DELEGATE_WEBHOOK", raising=False)
     monkeypatch.delenv("MODSTORE_PARA_DEVICE_ID", raising=False)
 
@@ -356,3 +480,155 @@ def test_post_para_api_explicit_device_id_zero_regression(monkeypatch):
     assert out["para_tier"] == 1
     assert [d["device_id"] for d in out["devices"]] == ["fixed-dev"]
     assert client.posted_tasks[0]["device_id"] == "fixed-dev"
+
+
+def test_post_para_api_routes_busy_codex_to_idle_same_device_tool(monkeypatch):
+    _integ_env(monkeypatch)
+    monkeypatch.setenv("MODSTORE_PARA_DEVICE_ID", "fixed-dev")
+    client = _IntegClient(
+        [
+            {
+                "id": "fixed-dev",
+                "status": "online",
+                "tools": [
+                    {"toolName": "codex", "status": "running", "currentTask": "other"},
+                    {"toolName": "claude_code", "status": "idle"},
+                ],
+            }
+        ]
+    )
+    monkeypatch.setattr(h.httpx, "Client", lambda *a, **k: client)
+
+    out = h.dispatch_para_delegate(task="验证分支", input_data={}, employee_id="test-qa-runner")
+
+    assert out["ok"] is True
+    assert client.posted_tasks[0]["device_id"] == "fixed-dev"
+    assert client.posted_tasks[0]["tool_name"] == "claude_code"
+    assert out["devices"][0]["tool_name"] == "claude_code"
+
+
+class _CliFallbackClient(_IntegClient):
+    """First created task fails with spawn ENOENT; retry with next tool succeeds."""
+
+    def __init__(self, devices, *, failing_tools=None):
+        super().__init__(devices, task_status="completed")
+        self._task_by_id = {}
+        self._seq = 0
+        self._failing_tools = set(failing_tools or {"codex"})
+
+    def post(self, url, headers=None, json=None):
+        if url.endswith("/api/auth/guest"):
+            return _IntegResp({"token": "guest-token"})
+        if url.endswith("/api/tasks"):
+            self.posted_tasks.append(json)
+            self._seq += 1
+            task_id = f"task-{self._seq}"
+            tool = str((json or {}).get("tool_name") or "codex")
+            failed = tool in self._failing_tools
+            status = "failed" if failed else "completed"
+            self._task_by_id[task_id] = {
+                "id": task_id,
+                "status": status,
+                "subTasks": [
+                    {
+                        "id": f"sub-{self._seq}",
+                        "toolName": tool,
+                        "last_error": f"{tool} CLI 失败: executable not found" if failed else "",
+                    }
+                ],
+            }
+            return _IntegResp(
+                {
+                    "task": {"id": task_id, "status": "running"},
+                    "subtask": {"id": f"sub-{self._seq}", "device_name": "mac"},
+                }
+            )
+        return _IntegResp({}, status_code=404)
+
+    def get(self, url, headers=None):
+        if url.endswith("/api/devices"):
+            return _IntegResp({"devices": self._devices})
+        if "/api/tasks/" in url:
+            task_id = url.rstrip("/").split("/")[-1]
+            task = self._task_by_id.get(task_id) or {
+                "id": task_id,
+                "status": "failed",
+                "subTasks": [],
+            }
+            return _IntegResp({"task": task})
+        return _IntegResp({}, status_code=404)
+
+
+def test_post_para_api_retries_next_cli_after_spawn_enoent(monkeypatch):
+    _integ_env(monkeypatch)
+    monkeypatch.setenv("MODSTORE_PARA_DEV_TOOL", "codex")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ORDER", "cursor,trae")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ENABLED", "1")
+    monkeypatch.setenv("MODSTORE_PARA_DEVICE_ID", "mac-1")
+    client = _CliFallbackClient(
+        [
+            {
+                "id": "mac-1",
+                "status": "online",
+                "capabilities": {
+                    "codex_cli": True,
+                    "cursor_agent_cli": True,
+                    "trae_cli": True,
+                },
+            }
+        ]
+    )
+    monkeypatch.setattr(h.httpx, "Client", lambda *a, **k: client)
+
+    out = h.dispatch_para_delegate(
+        task="修复首页", input_data={}, employee_id="vibe-coding-maintainer"
+    )
+
+    assert out["ok"] is True
+    assert out.get("tool_fallback_used") is True
+    assert [p.get("tool_name") for p in client.posted_tasks] == ["codex", "cursor"]
+    assert out["devices"][0]["tool_name"] == "cursor"
+    assert out["tool_fallback_attempts"][0]["tool_name"] == "codex"
+
+
+def test_report_only_fallback_tries_each_distinct_cli_once(monkeypatch):
+    _integ_env(monkeypatch)
+    monkeypatch.setenv("MODSTORE_PARA_DEV_TOOL", "codex")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ORDER", "codex,cursor,trae")
+    monkeypatch.setenv("MODSTORE_PARA_TOOL_FALLBACK_ENABLED", "1")
+    monkeypatch.setenv("MODSTORE_PARA_DEVICE_ID", "mac-1")
+    client = _CliFallbackClient(
+        [
+            {
+                "id": "mac-1",
+                "status": "online",
+                "capabilities": {
+                    "codex_cli": True,
+                    "cursor_agent_cli": True,
+                    "trae_cli": True,
+                },
+            }
+        ],
+        failing_tools={"codex", "cursor"},
+    )
+    monkeypatch.setattr(h.httpx, "Client", lambda *a, **k: client)
+
+    out = h.dispatch_para_delegate(
+        task="独立评审",
+        input_data={"report_only": True},
+        employee_id="change-request-auditor",
+    )
+
+    assert out["ok"] is True
+    assert out.get("tool_fallback_used") is True
+    assert [payload.get("tool_name") for payload in client.posted_tasks] == [
+        "codex",
+        "cursor",
+        "trae",
+    ]
+    assert [payload.get("max_attempts") for payload in client.posted_tasks] == [1, 1, 1]
+    assert [attempt["tool_name"] for attempt in out["tool_fallback_attempts"]] == [
+        "codex",
+        "cursor",
+    ]
+    assert out["devices"][0]["tool_name"] == "trae"

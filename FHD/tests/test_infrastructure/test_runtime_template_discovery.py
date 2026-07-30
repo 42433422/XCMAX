@@ -5,9 +5,9 @@ from app.infrastructure.templates.template_store_impl import FileSystemTemplateS
 
 def test_attendance_template_is_discovered_from_desktop_data_dir(tmp_path, monkeypatch) -> None:
     runtime_root = tmp_path / "runtime"
-    attendance_dir = runtime_root / "424"
-    attendance_dir.mkdir(parents=True)
-    template = attendance_dir / "考勤-2026-3月份考勤统计表.xlsx"
+    tenant_templates = runtime_root / "tenants" / "424" / "templates"
+    tenant_templates.mkdir(parents=True)
+    template = tenant_templates / "考勤-2026-3月份考勤统计表.xlsx"
     template.write_bytes(b"PK test workbook")
     code_root = tmp_path / "code"
     code_root.mkdir()
@@ -15,6 +15,10 @@ def test_attendance_template_is_discovered_from_desktop_data_dir(tmp_path, monke
     monkeypatch.setattr(
         "app.infrastructure.templates.template_store_impl.get_app_data_dir",
         lambda: str(runtime_root),
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.tenant_scope.current_tenant_id",
+        lambda: 424,
     )
     store = FileSystemTemplateStore(str(code_root))
 

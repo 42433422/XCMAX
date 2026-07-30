@@ -243,24 +243,31 @@ function loadCorpButler() {
     root.id = 'xc-corp-butler-root'
     document.body.appendChild(root)
   }
-  const ver = '20260723d'
-  if (!document.querySelector('link[data-xc-corp-butler-css]')) {
+  const ver = '20260725a'
+  const wantCss = `/corp-butler/corp-butler.css?v=${ver}`
+  const wantJs = `/corp-butler/corp-butler.js?v=${ver}`
+  const existingCss = document.querySelector('link[data-xc-corp-butler-css]')
+  if (!existingCss) {
     const css = document.createElement('link')
     css.rel = 'stylesheet'
-    css.href = `/corp-butler/corp-butler.css?v=${ver}`
+    css.href = wantCss
     css.setAttribute('data-xc-corp-butler-css', '1')
     document.head.appendChild(css)
+  } else if ((existingCss.getAttribute('href') || '') !== wantCss) {
+    existingCss.setAttribute('href', wantCss)
   }
-  if (!document.querySelector('script[data-xc-corp-butler-js]')) {
-    const script = document.createElement('script')
-    script.type = 'module'
-    script.src = `/corp-butler/corp-butler.js?v=${ver}`
-    script.setAttribute('data-xc-corp-butler-js', '1')
-    script.addEventListener('error', () => {
-      console.warn('[xc-corp-butler] 脚本加载失败，请强制刷新页面')
-    })
-    document.body.appendChild(script)
-  }
+  const existingJs = document.querySelector('script[data-xc-corp-butler-js]')
+  if (existingJs && (existingJs.getAttribute('src') || '') === wantJs) return
+  // 页面硬编码旧版时：在 module 执行前替换，避免继续加载过期 bundle
+  if (existingJs) existingJs.remove()
+  const script = document.createElement('script')
+  script.type = 'module'
+  script.src = wantJs
+  script.setAttribute('data-xc-corp-butler-js', '1')
+  script.addEventListener('error', () => {
+    console.warn('[xc-corp-butler] 脚本加载失败，请强制刷新页面')
+  })
+  document.body.appendChild(script)
 }
 
 if (document.readyState === 'loading') {

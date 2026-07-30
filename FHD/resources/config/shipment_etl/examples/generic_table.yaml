@@ -1,0 +1,117 @@
+# 通用明细表：报价/订单/清单等扁平面表（无「送货单」抬头也能识别）
+# 自定义：复制本文件到 FHD_EXCEL_ETL_PROFILE_DIR，改 id/别名/写出模板即可
+id: generic_table
+kind: tabular_order
+label: 通用明细表
+target: preview_only
+
+detect:
+  primary:
+    title_patterns:
+      - "报价单"
+      - "报价"
+      - "采购订单"
+      - "销售订单"
+      - "订单明细"
+      - "产品清单"
+      - "发货明细"
+      - "发货清单"
+      - "明细表"
+    title_weight: 25
+    buyer_token: "客户"
+    buyer_weight: 20
+    header_hit_tokens:
+      - "型号"
+      - "SKU"
+      - "品名"
+      - "名称"
+      - "数量"
+      - "单价"
+      - "金额"
+      - "规格"
+    header_hit_weight: 8
+    header_hit_cap: 6
+    bonus_tokens:
+      - token: "金额"
+        weight: 5
+    min_score: 40
+    probe_rows: 10
+
+meta:
+  buyer_label: "客户"
+  buyer_pattern: "客户[（(]?[甲乙]*[)）]?[：:\\s]*([^\\s联系人日期订单编号]+)"
+  buyer_split_pattern: "客户[（(]?[甲乙]*[)）]?[：:]"
+  buyer_stop_pattern: "联系人|日期|订单编号|单号"
+  contact_pattern: "联系人[：:\\s]*([^\\s日期订单编号客户]*)"
+  date_pattern: "((?:20)?\\d{2}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日|\\d{4}[-/]\\d{1,2}[-/]\\d{1,2})"
+  order_no_pattern: "(?:订单编号|单号)[：:\\s]*([A-Za-z0-9\\-]+)"
+  stop_row_pattern: "合计|总计|小计|备注说明"
+
+header_detect:
+  primary:
+    max_scan_rows: 16
+    require_groups:
+      - ["型号", "编号", "sku"]
+      - ["名称", "品名"]
+      - ["数量"]
+
+columns:
+  model_number:
+    - contains_any: ["型号", "sku"]
+    - contains_any: ["编号"]
+      exclude_any: ["订单", "单号"]
+  product_name:
+    - contains_any: ["名称", "品名"]
+  quantity_tins:
+    - contains_all_groups:
+        - ["数量"]
+        - ["件", "桶"]
+    - exact: ["数量", "数量/"]
+      only_if_missing: ["quantity_tins", "quantity_kg"]
+    - contains_any: ["数量"]
+  tin_spec:
+    - contains_any: ["规格"]
+  quantity_kg:
+    - contains_all_groups:
+        - ["数量"]
+        - ["kg", "公斤"]
+  unit_price:
+    - contains_any: ["单价", "价格"]
+  amount:
+    - contains_any: ["金额"]
+  remark:
+    - contains_any: ["备注"]
+  order_number:
+    - contains_any: ["单号"]
+  order_date:
+    - contains_any: ["日期"]
+
+write:
+  seller_title: "通用明细表"
+  default_sheet_name: "明细"
+  sheet_name_prefix: "表"
+  meta_line_template: "客户：{unit}     联系人：{contact}        日期：{order_date}         单号：{order_no}"
+  demo_meta_line: "客户：示例客户     联系人：测试        日期：2026年07月25日         单号：DEMO-1"
+  header_row:
+    - "型号"
+    - "名称"
+    - "数量"
+    - "规格"
+    - "单价"
+    - "金额"
+  footer_label: ""
+  date_format: "%Y年%m月%d日"
+  item_columns:
+    model_number: 1
+    product_name: 2
+    quantity_tins: 3
+    tin_spec: 4
+    unit_price: 5
+    amount: 6
+  demo_item:
+    model_number: "SKU-1"
+    product_name: "示例产品"
+    quantity_tins: 1
+    tin_spec: 1
+    unit_price: 10
+    amount: 10

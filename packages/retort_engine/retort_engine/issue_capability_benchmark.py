@@ -9,7 +9,6 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-
 PatchProducer = Callable[[dict[str, Any]], str]
 PatchVerifier = Callable[[dict[str, Any], str], dict[str, Any]]
 
@@ -24,7 +23,9 @@ def evaluate_issue_instances(
     project: str | Path | None = None,
 ) -> dict[str, Any]:
     """Evaluate patches only when the original fails and the patched case passes."""
-    active_verifier = verifier or pytest_node_verifier(Path(project or ".").expanduser().resolve())
+    active_verifier = verifier or pytest_node_verifier(
+        Path(project or ".").expanduser().resolve()
+    )
     rows: list[dict[str, Any]] = []
     for raw in instances:
         instance = dict(raw)
@@ -68,7 +69,9 @@ def evaluate_issue_instances(
     }
 
 
-def synthesize_verified_issue_tasks(records: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+def synthesize_verified_issue_tasks(
+    records: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """Create replayable issue tasks only from verified fail-to-pass repairs."""
     tasks: list[dict[str, Any]] = []
     for raw in records:
@@ -84,7 +87,10 @@ def synthesize_verified_issue_tasks(records: Sequence[dict[str, Any]]) -> list[d
         tasks.append(
             {
                 "instance_id": str(record.get("instance_id") or record["test_id"]),
-                "problem_statement": str(record.get("problem_statement") or f"Repair failing test {record['test_id']}"),
+                "problem_statement": str(
+                    record.get("problem_statement")
+                    or f"Repair failing test {record['test_id']}"
+                ),
                 "test_id": str(record["test_id"]),
                 "failing_output": str(record["failing_output"]),
                 "reference_patch": str(record["patch"]),
@@ -101,22 +107,35 @@ def pytest_node_verifier(project: Path) -> PatchVerifier:
 
     def _verify(instance: dict[str, Any], patch: str) -> dict[str, Any]:
         files = instance.get("files") if isinstance(instance.get("files"), dict) else {}
-        patch_files = instance.get("patch_files") if isinstance(instance.get("patch_files"), dict) else {}
+        patch_files = (
+            instance.get("patch_files")
+            if isinstance(instance.get("patch_files"), dict)
+            else {}
+        )
         test_id = str(instance.get("test_id") or "")
         if not files or not patch_files or not test_id or not patch:
-            return {"patch_applied": False, "before_passed": None, "after_passed": None, "evidence": ["incomplete_oracle_case"]}
+            return {
+                "patch_applied": False,
+                "before_passed": None,
+                "after_passed": None,
+                "evidence": ["incomplete_oracle_case"],
+            }
         workspace = Path(tempfile.mkdtemp(prefix="retort-oracle-"))
         evidence: list[str] = []
         try:
             _materialize_files(workspace, files)
             before = _run_pytest_node(workspace, test_id)
-            evidence.append(f"before:{before['returncode']}:{before['stdout_tail'][-200:]}")
+            evidence.append(
+                f"before:{before['returncode']}:{before['stdout_tail'][-200:]}"
+            )
             for rel, content in patch_files.items():
                 target = workspace / str(rel)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(str(content), encoding="utf-8")
             after = _run_pytest_node(workspace, test_id)
-            evidence.append(f"after:{after['returncode']}:{after['stdout_tail'][-200:]}")
+            evidence.append(
+                f"after:{after['returncode']}:{after['stdout_tail'][-200:]}"
+            )
             return {
                 "patch_applied": True,
                 "before_passed": before["returncode"] == 0,
@@ -147,7 +166,9 @@ def run_heldout_oracle_suite(project: str | Path) -> dict[str, Any]:
     cases = load_oracle_cases(root)
     evaluation = evaluate_issue_instances(
         cases,
-        patch_producer=lambda item: json.dumps(item.get("patch_files") or {}, sort_keys=True),
+        patch_producer=lambda item: json.dumps(
+            item.get("patch_files") or {}, sort_keys=True
+        ),
         verifier=pytest_node_verifier(root),
     )
     resolved_records: list[dict[str, Any]] = []
@@ -175,7 +196,8 @@ def run_heldout_oracle_suite(project: str | Path) -> dict[str, Any]:
             "resolved_count": evaluation["summary"]["resolved_count"],
             "verified_task_count": len(tasks),
             "all_resolved": evaluation["summary"]["all_resolved"],
-            "tasks_match_resolutions": len(tasks) == evaluation["summary"]["resolved_count"],
+            "tasks_match_resolutions": len(tasks)
+            == evaluation["summary"]["resolved_count"],
         },
     }
 

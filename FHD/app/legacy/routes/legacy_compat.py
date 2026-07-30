@@ -197,6 +197,11 @@ def _register_xcagi_compat_routes(app: FastAPI) -> None:
         log_name="xcagi_compat_router (prefix=/api)",
         prefix="/api",
     )
+    _mount_router(
+        app,
+        "app.fastapi_routes.sidebar_capability_compat",
+        log_name="sidebar_capability_compat (/api/knowledge|persy|employees|data-sources|print/templates)",
+    )
 
 
 def _register_document_routes(app: FastAPI) -> None:
@@ -257,6 +262,13 @@ def _register_shipment_routes(app: FastAPI) -> None:
 
 def _register_ai_routes(app: FastAPI) -> None:
     """Mount AI assistant/intent/kitten/qclaw/open routes."""
+    # Always-on: chat task cards POST here; must not depend on XCAGI_REGISTER_LEGACY_ROUTES.
+    _mount_router(
+        app,
+        "app.fastapi_routes.tools_execute",
+        log_name="tools_execute (/api/tools/execute, /api/skills/execute)",
+    )
+
     _mount_router(
         app,
         "app.fastapi_routes.ai_assistant",

@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from typing import Any
 
-
 STOPWORDS = {
     "about",
     "above",
@@ -53,9 +52,14 @@ def assess_change_intent_alignment(
             "issue_keywords": [],
             "overlap_keywords": [],
             "missing_keywords": [],
-            "evidence": {"style": "reviewscope_absorbed_issue_validation", "reason": "no_issue_context"},
+            "evidence": {
+                "style": "reviewscope_absorbed_issue_validation",
+                "reason": "no_issue_context",
+            },
         }
-    changed_terms = _keywords(_changed_text(files, pr_body), min_keyword_length=min_keyword_length)
+    changed_terms = _keywords(
+        _changed_text(files, pr_body), min_keyword_length=min_keyword_length
+    )
     overlap = sorted(issue_terms & changed_terms)
     missing = sorted(issue_terms - changed_terms)
     aligned = bool(overlap)
@@ -94,13 +98,17 @@ def _keywords(text: str, *, min_keyword_length: int) -> set[str]:
     terms = set(re.findall(r"[a-z][a-z0-9]{2,}|[\u4e00-\u9fff]{2,}", normalized))
     for cjk in re.findall(r"[\u4e00-\u9fff]{2,}", normalized):
         terms.update(_cjk_ngrams(cjk, min_keyword_length=min_keyword_length))
-    return {term for term in terms if len(term) >= min_keyword_length and term not in STOPWORDS}
+    return {
+        term
+        for term in terms
+        if len(term) >= min_keyword_length and term not in STOPWORDS
+    }
 
 
 def _cjk_ngrams(value: str, *, min_keyword_length: int) -> set[str]:
     max_size = min(6, len(value))
     grams: set[str] = set()
     for size in range(max(2, min_keyword_length), max_size + 1):
-        for index in range(0, len(value) - size + 1):
+        for index in range(len(value) - size + 1):
             grams.add(value[index : index + size])
     return grams

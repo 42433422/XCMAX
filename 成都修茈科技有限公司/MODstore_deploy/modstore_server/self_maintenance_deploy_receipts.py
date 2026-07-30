@@ -19,6 +19,8 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Protocol, Seque
 
 import httpx
 
+from modstore_server.deployment_receipt_history import completed_receipt
+
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40,64}$")
 _ARTIFACT_RE = re.compile(r"^[0-9a-f]{64}$")
 _IMAGE_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -342,35 +344,14 @@ def correlated_verified_deploys(
     return verified
 
 
-def _completed_receipt(
-    rows: Iterable[Mapping[str, Any]],
-    *,
-    merge_sha: str,
-    environment: str,
-    workflow_run_id: str,
-) -> Dict[str, Any] | None:
-    """Return an already-recorded exact receipt for callback idempotency."""
-
-    for raw in reversed(list(rows)):
-        row = dict(raw) if isinstance(raw, Mapping) else {}
-        if (
-            row.get("event") == "post_deploy_verified"
-            and row.get("ok") is True
-            and row.get("identity_verified") is True
-            and _sha(row.get("merge_sha")) == merge_sha
-            and str(row.get("environment") or "").lower() == environment
-            and str(row.get("workflow_run_id") or "") == workflow_run_id
-        ):
-            return row
-    return None
-
-
 def resolve_pending_merge_request(
     rows: Iterable[Mapping[str, Any]],
     *,
     merge_sha: str,
     is_ancestor: AncestorCheck,
     requested_run_id: str = "",
+    attested_branch: str = "",
+    attested_branch_head_sha: str = "",
 ) -> Dict[str, Any]:
     """Resolve one pending loop merge by exact Git ancestry.
 
@@ -391,14 +372,12 @@ def resolve_pending_merge_request(
     pending_by_run: Dict[str, Dict[str, Any]] = {}
     for row in normalized:
         run_id = str(row.get("run_id") or "").strip()
-        branch_head = _sha(row.get("branch_head_sha"))
         if (
             row.get("event") != "merge_requested"
             or row.get("ok") is not True
             or str(row.get("status") or "").lower() != "pending"
             or not run_id
             or run_id in terminal_run_ids
-            or not _COMMIT_RE.fullmatch(branch_head)
         ):
             continue
         if requested_run_id and run_id != requested_run_id:
@@ -408,17 +387,56 @@ def resolve_pending_merge_request(
     matches: List[Dict[str, Any]] = []
     for row in pending_by_run.values():
         branch_head = _sha(row.get("branch_head_sha"))
+        if not _COMMIT_RE.fullmatch(branch_head):
+            continue
         try:
             matched = bool(is_ancestor(branch_head, merge_sha))
         except Exception:
             matched = False
         if matched:
             matches.append(row)
-    if not matches:
-        raise DeploymentReceiptError("pending_merge_not_found")
-    if len(matches) != 1:
+    if len(matches) > 1:
         raise DeploymentReceiptError("pending_merge_ambiguous")
-    return matches[0]
+    if matches:
+        return matches[0]
+
+    # Protected GitHub branches may squash a reviewed PR, so its final head is
+    # not an ancestor of the deployed commit.  The receipt workflow supplies a
+    # GitHub API attestation for the unique PR associated with that exact
+    # deployed commit.  This fallback is deliberately available only when the
+    # trusted workflow also carries the exact requested run id and branch.
+    attested_branch = str(attested_branch or "").strip()
+    attested_head = _sha(attested_branch_head_sha)
+    if not requested_run_id or not attested_branch or not _COMMIT_RE.fullmatch(attested_head):
+        raise DeploymentReceiptError("pending_merge_not_found")
+
+    attested_matches: List[Dict[str, Any]] = []
+    for row in pending_by_run.values():
+        if str(row.get("run_id") or "").strip() != requested_run_id:
+            continue
+        if str(row.get("branch") or "").strip() != attested_branch:
+            continue
+        requested_head = _sha(row.get("branch_head_sha"))
+        if _COMMIT_RE.fullmatch(requested_head) and requested_head != attested_head:
+            try:
+                head_advanced = bool(is_ancestor(requested_head, attested_head))
+            except Exception:
+                head_advanced = False
+            if not head_advanced:
+                continue
+        attested_matches.append(
+            {
+                **row,
+                "branch_head_sha": attested_head,
+                "head_verification": "github_pr_attestation",
+                "requested_branch_head_sha": requested_head,
+            }
+        )
+    if not attested_matches:
+        raise DeploymentReceiptError("pending_merge_not_found")
+    if len(attested_matches) != 1:
+        raise DeploymentReceiptError("pending_merge_ambiguous")
+    return attested_matches[0]
 
 
 def record_completed_deployment_receipt(
@@ -434,6 +452,9 @@ def record_completed_deployment_receipt(
     health: BuildIdentity,
     is_ancestor: AncestorCheck,
     requested_run_id: str = "",
+    attested_branch: str = "",
+    attested_branch_head_sha: str = "",
+    attested_pr_number: str = "",
     workflow_url: str = "",
     action_id: str = "",
     observed_at: str = "",
@@ -457,13 +478,20 @@ def record_completed_deployment_receipt(
     if str(workflow_conclusion or "").strip().lower() != "success":
         raise DeploymentReceiptError("workflow_not_successful")
 
-    existing = _completed_receipt(
+    existing = completed_receipt(
         normalized_rows,
         merge_sha=merge_sha,
         environment=environment,
         workflow_run_id=workflow_run_id,
+        requested_run_id=requested_run_id,
     )
     if existing is not None:
+        previous_workflow_run_id = str(existing.get("workflow_run_id") or "")
+        if previous_workflow_run_id != workflow_run_id:
+            # A second successful deployment for the same loop/SHA is a valid
+            # idempotent retry, but it must still expose the exact runtime
+            # identity before the new workflow may be acknowledged.
+            verify_deployed_identity(merge_sha=merge_sha, release=release, health=health)
         run_id = str(existing.get("run_id") or "")
         merge_recorded = any(
             row.get("event") == "merge_completed"
@@ -490,6 +518,7 @@ def record_completed_deployment_receipt(
             "merge_sha": merge_sha,
             "environment": environment,
             "workflow_run_id": workflow_run_id,
+            "previous_workflow_run_id": previous_workflow_run_id,
         }
 
     pending = resolve_pending_merge_request(
@@ -497,6 +526,8 @@ def record_completed_deployment_receipt(
         merge_sha=merge_sha,
         is_ancestor=is_ancestor,
         requested_run_id=requested_run_id,
+        attested_branch=attested_branch,
+        attested_branch_head_sha=attested_branch_head_sha,
     )
     identity = verify_deployed_identity(merge_sha=merge_sha, release=release, health=health)
     run_id = str(pending.get("run_id") or "").strip()
@@ -506,12 +537,14 @@ def record_completed_deployment_receipt(
     )
     correlation: Dict[str, Any] = {
         "action_id": action_id,
+        "attested_pr_number": str(attested_pr_number or "").strip(),
         "branch": str(pending.get("branch") or ""),
         "branch_head_sha": branch_head_sha,
         "created_at": str(observed_at or ""),
         "environment": environment,
         "merge_sha": merge_sha,
         "para_task_id": str(pending.get("para_task_id") or ""),
+        "head_verification": str(pending.get("head_verification") or "git_ancestry"),
         "run_id": run_id,
         "workflow_run_id": workflow_run_id,
         "workflow_url": str(workflow_url or ""),

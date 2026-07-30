@@ -114,8 +114,41 @@ def build_action(
     return row
 
 
+_FORBIDDEN_ACTION_TYPES = frozenset(
+    {
+        "admin.grant",
+        "admin.promote",
+        "role.grant_admin",
+        "user.set_admin",
+        "privilege.escalate",
+    }
+)
+
+
 def execute_action(db: Session, action: CustomerServiceAction, user: User) -> CustomerServiceAction:
     if action.status in {"completed", "skipped"}:
+        return action
+    action_type = str(action.action_type or "").strip().lower()
+    # 硬闸：任何提权/管理员动作一律拒绝执行（即使误建 action）
+    if (
+        action_type in _FORBIDDEN_ACTION_TYPES
+        or "grant_admin" in action_type
+        or action_type.endswith(".set_admin")
+        or "privilege.escalate" in action_type
+    ):
+        action.status = "failed"
+        action.error = "forbidden: customer service cannot grant admin or escalate privileges"
+        action.result_json = json_dumps(
+            {"ok": False, "message": "拒绝执行：客服通道禁止提权/开通管理员"}
+        )
+        action.updated_at = datetime.now(timezone.utc)
+        audit(
+            db,
+            event_type="action_forbidden",
+            ticket_id=action.ticket_id,
+            actor=user,
+            detail={"action_type": action.action_type, "reason": "privilege_escalation"},
+        )
         return action
     action.status = "running"
     action.updated_at = datetime.now(timezone.utc)
@@ -170,7 +203,7 @@ def execute_matching_integrations(
 ) -> list[CustomerServiceAction]:
     rows = (
         db.query(CustomerServiceIntegration)
-        .filter(CustomerServiceIntegration.enabled == True)
+        .filter(CustomerServiceIntegration.enabled.is_(True))
         .filter(CustomerServiceIntegration.scenario.in_([scenario, "general"]))
         .order_by(CustomerServiceIntegration.id.asc())
         .all()

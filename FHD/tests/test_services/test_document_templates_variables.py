@@ -168,4 +168,14 @@ class TestDefaultTemplateScopeRules:
         for scope_key, meta in _DEFAULT_TEMPLATE_SCOPE_RULES.items():
             assert "templateType" in meta
             assert "requiredTerms" in meta
-            assert len(meta["requiredTerms"]) > 0
+            if scope_key == "custom":
+                assert meta["requiredTerms"] == []
+            else:
+                assert len(meta["requiredTerms"]) > 0
+
+    def test_custom_scope_allows_free_create(self):
+        ok, missing = _validate_required_terms({}, [], "custom")
+        assert ok is True
+        assert missing == []
+        assert "custom" in _DEFAULT_TEMPLATE_SCOPE_RULES
+        assert _DEFAULT_TEMPLATE_SCOPE_RULES["custom"]["templateType"] == "自定义模板"

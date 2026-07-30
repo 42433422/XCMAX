@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from modstore_server.api.actor_identity import authenticated_admin_actor
 from modstore_server.api.deps import get_current_user, require_admin
 from modstore_server.models import User
 from modstore_server.strategic_layer import (
@@ -232,6 +233,65 @@ def run_strategic_council_review(
     except RuntimeError as exc:
         raise HTTPException(409, str(exc)) from exc
     return {"ok": receipt.get("verified") is True, "receipt": receipt}
+
+
+class RetortClarificationAnswerRequest(BaseModel):
+    answers: Any = Field(..., description="字符串、{question_id: answer} 或 [{id, answer}]")
+
+
+@router.get("/council/clarifications", response_model=Dict[str, Any])
+def list_retort_clarifications(
+    include_terminal: bool = Query(False),
+    limit: int = Query(50, ge=1, le=200),
+    _: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """List open (or all) Retort clarification sessions after TTL sweep."""
+
+    from modstore_server.retort_clarification_gate import list_clarifications
+
+    return list_clarifications(include_terminal=include_terminal, limit=limit)
+
+
+@router.get("/council/clarifications/{session_id}", response_model=Dict[str, Any])
+def get_retort_clarification(
+    session_id: str,
+    _: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    from modstore_server.retort_clarification_gate import get_clarification
+
+    row = get_clarification(session_id)
+    if not row:
+        raise HTTPException(404, "clarification session not found")
+    return {"ok": True, "session": row}
+
+
+@router.post("/council/clarifications/{session_id}/answer", response_model=Dict[str, Any])
+def answer_retort_clarification(
+    session_id: str,
+    body: RetortClarificationAnswerRequest,
+    admin: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    from modstore_server.retort_clarification_gate import answer_clarification
+
+    out = answer_clarification(
+        session_id,
+        answers=body.answers,
+        answered_by=authenticated_admin_actor(admin),
+    )
+    if not out.get("ok"):
+        raise HTTPException(409, str(out.get("error") or "answer failed"))
+    return out
+
+
+@router.post("/council/clarifications/sweep", response_model=Dict[str, Any])
+def sweep_retort_clarifications(
+    _: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Expire stale sessions and prune terminal backlog (anti-pileup)."""
+
+    from modstore_server.retort_clarification_gate import sweep_expired_clarifications
+
+    return sweep_expired_clarifications()
 
 
 # ─── 决策账本路由 ──────────────────────────────────────────────────────────

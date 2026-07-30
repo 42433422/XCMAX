@@ -1,0 +1,77 @@
+# desktop-init-cards-settings-20260724 media index
+shell=/Applications/XCAGI.app
+sku=enterprise
+gitSha=16a9cf27322be4b85d902cdf664a6ddb3cb645a8
+api=http://127.0.0.1:17500
+
+## shots (png)
+- shots/00-main-shell.png
+- shots/00-sidebar-业务对象.png
+- shots/00-sidebar-员工工作台.png
+- shots/00-sidebar-审批中心.png
+- shots/00-sidebar-智能对话.png
+- shots/00-sidebar-智能生态.png
+- shots/01-welcome-next.png
+- shots/01-welcome.png
+- shots/02-industry-after.png
+- shots/02-industry-selected.png
+- shots/02-industry.png
+- shots/03-host-pack-action.png
+- shots/03-host-pack-after.png
+- shots/03-host-pack-details.png
+- shots/03-host-pack.png
+- shots/04-seed-demo-after.png
+- shots/04-seed-demo-next.png
+- shots/04-seed-demo.png
+- shots/05-first-ai-task-action.png
+- shots/05-first-ai-task-done.png
+- shots/05-first-ai-task.png
+- shots/06-settings-about.png
+- shots/06-settings-ai-intent.png
+- shots/06-settings-ai.png
+- shots/06-settings-all-00-个人主页.png
+- shots/06-settings-all-01-模型服务.png
+- shots/06-settings-all-02-AI_意图能力.png
+- shots/06-settings-all-03-拟人_Persy_系统.png
+- shots/06-settings-all-04-基本设置.png
+- shots/06-settings-all-05-移动端连接.png
+- shots/06-settings-all-06-扩展与_Mod.png
+- shots/06-settings-all-07-蒸馏模型版本.png
+- shots/06-settings-all-08-关于.png
+- shots/06-settings-appearance.png
+- shots/06-settings-audit.png
+- shots/06-settings-basic.png
+- shots/06-settings-data.png
+- shots/06-settings-extensions.png
+- shots/06-settings-memory.png
+- shots/06-settings-mobile.png
+- shots/06-settings-root.png
+
+## rec
+- rec/00-full-walkthrough.mp4
+- rec/00-main-shell.mp4
+- rec/01-welcome.mp4
+- rec/02-industry.mp4
+- rec/03-host-pack.mp4
+- rec/04-seed-demo.mp4
+- rec/05-first-ai-task.mp4
+- rec/06-system-settings.mp4
+
+## clips
+- clips/settings-00-个人主页.mp4
+- clips/settings-01-模型服务.mp4
+- clips/settings-02-AI_意图能力.mp4
+- clips/settings-03-拟人_Persy_系统.mp4
+- clips/settings-04-基本设置.mp4
+- clips/settings-05-移动端连接.mp4
+- clips/settings-06-扩展与_Mod.mp4
+- clips/settings-07-蒸馏模型版本.mp4
+- clips/settings-08-关于.mp4
+- clips/settings-ai.mp4
+- clips/settings-appearance.mp4
+- clips/settings-basic.mp4
+- clips/settings-data.mp4
+- clips/settings-misc.mp4
+- clips/settings-update.mp4
+
+at=2026-07-24T16:31:25+08:00

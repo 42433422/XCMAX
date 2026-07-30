@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 from retort_engine.codebase_graph import build_codebase_graph
-
 
 PACK_SUFFIXES = {
     ".py",
@@ -32,7 +31,16 @@ SKIP_DIRS = {
     ".pytest_cache",
     ".ruff_cache",
 }
-DEFAULT_FOCUS_TERMS = ("retort", "absorb", "review", "benchmark", "codebase", "graph", "security", "context")
+DEFAULT_FOCUS_TERMS = (
+    "retort",
+    "absorb",
+    "review",
+    "benchmark",
+    "codebase",
+    "graph",
+    "security",
+    "context",
+)
 GENERATED_CONTEXT_PREFIXES = ("docs/retort_",)
 
 
@@ -47,11 +55,17 @@ def build_context_pack(
     root = Path(project).expanduser().resolve()
     terms = _normalize_terms(focus_terms or DEFAULT_FOCUS_TERMS)
     graph = build_codebase_graph(root, include_tests=True, max_files=500)
-    graph_degree = {str(item.get("path") or ""): int(item.get("degree") or 0) for item in graph.get("hotspots") or [] if isinstance(item, dict)}
-    candidates = [_score_file(root, path, terms, graph_degree) for path in _pack_files(root)]
+    graph_degree = {
+        str(item.get("path") or ""): int(item.get("degree") or 0)
+        for item in graph.get("hotspots") or []
+        if isinstance(item, dict)
+    }
+    candidates = [
+        _score_file(root, path, terms, graph_degree) for path in _pack_files(root)
+    ]
     ranked = [item for item in candidates if item["score"] > 0]
     if not ranked:
-        ranked = sorted(candidates, key=lambda item: (item["path"]))[:max_files]
+        ranked = sorted(candidates, key=lambda item: item["path"])[:max_files]
     ranked = sorted(ranked, key=lambda item: (-int(item["score"]), item["path"]))
     files: list[dict[str, Any]] = []
     used_chars = 0
@@ -59,7 +73,9 @@ def build_context_pack(
     for item in ranked:
         if len(files) >= max_files or used_chars >= max_chars:
             break
-        budget = max(0, min(int(item["char_count"]), per_file_budget, max_chars - used_chars))
+        budget = max(
+            0, min(int(item["char_count"]), per_file_budget, max_chars - used_chars)
+        )
         if budget <= 0:
             break
         excerpt = _read_excerpt(root / item["path"], budget)
@@ -103,7 +119,9 @@ def _pack_files(root: Path) -> list[Path]:
     return files
 
 
-def _score_file(root: Path, path: Path, terms: list[str], graph_degree: dict[str, int]) -> dict[str, Any]:
+def _score_file(
+    root: Path, path: Path, terms: list[str], graph_degree: dict[str, int]
+) -> dict[str, Any]:
     rel = path.relative_to(root).as_posix()
     try:
         text = path.read_text(encoding="utf-8")

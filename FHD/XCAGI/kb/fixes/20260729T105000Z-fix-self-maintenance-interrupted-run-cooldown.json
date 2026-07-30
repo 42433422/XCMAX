@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "kind": "fix",
+  "created_at": "2026-07-29T10:50:00+00:00",
+  "symptom": "自维护运行已写入 phase=start 后遇到 MODstore 部署重启，租约恢复会真实记录 abandoned_interrupted；后续同一 automated_remediation 调度却继续按该 start 时间进入 cooldown，导致待恢复任务最长停滞 6 小时，并让系统自治评分的连续完成门禁回落。",
+  "root_cause": "reconcile_stale_self_maintenance_runs 只负责关闭孤儿 run，should_run_self_maintenance_loop 仅按最近 start 时间判断 cooldown；两者之间没有可执行的中断恢复信号，也没有限定同一触发来源的安全旁路。",
+  "fix_diff": "diff --git a/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py b/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py\n@@\n+def _pending_interrupted_recovery(triggered_by):\n+    # 仅识别最新 start、abandoned_interrupted 且触发来源相同的 run\n+    ...\n@@\n-    if not force and last_started is not None and cooldown_minutes > 0:\n+    if not force and interrupted_recovery is None and last_started is not None and cooldown_minutes > 0:\n@@\n-    if not force and signal_count < threshold:\n+    if not force and interrupted_recovery is None and signal_count < threshold:\n@@\n+    reason = \"interrupted_recovery\" if interrupted_recovery else reason\n",
+  "metadata": {
+    "component": "self_maintenance_loop_runner",
+    "files": [
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_run_reconciliation.py"
+    ]
+  },
+  "executable_template": {
+    "applicability_check": "最新自维护 start 的终态为 abandoned_interrupted，后续同一 triggered_by 调度因最近 start 时间返回 skipped_cooldown，且没有更新的完整 start/complete 运行。",
+    "patch_strategy": "从只追加账本识别同触发来源的最新中断 run；仅绕过 cooldown 与低信号阈值，把中断本身视为恢复信号，同时继续执行运行来源、进化暂停、治理、review、QA、veto 与合并门禁。",
+    "rollback_plan": "移除 _pending_interrupted_recovery 及 should_run_self_maintenance_loop 的 interrupted_recovery 条件，恢复所有非 force 运行统一受 cooldown 与信号阈值限制。",
+    "required_tests": [
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_run_reconciliation.py::test_same_trigger_interruption_bypasses_cooldown_and_signal_threshold",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_run_reconciliation.py::test_interruption_does_not_bypass_cooldown_for_another_trigger",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_run_reconciliation.py::test_interruption_recovery_does_not_bypass_evolution_pause"
+    ]
+  }
+}

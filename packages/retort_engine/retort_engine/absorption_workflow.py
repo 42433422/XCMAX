@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
-
+from typing import Any
 
 PythonResolver = Callable[[], str]
 GitRootResolver = Callable[[Path], Path | None]
@@ -24,9 +24,21 @@ def run_real_absorption_cli(
     package_root: Path,
 ) -> dict[str, Any]:
     if not truthy(payload.get("execute_absorption", True)):
-        return {"status": "disabled", "summary": "Real CLI absorption is disabled for this request.", "changed_files": [], "gates": [], "gates_passed": False}
+        return {
+            "status": "disabled",
+            "summary": "Real CLI absorption is disabled for this request.",
+            "changed_files": [],
+            "gates": [],
+            "gates_passed": False,
+        }
     if external_path is None or not external_path.is_dir():
-        return {"status": "skipped_no_external_project", "summary": "External project is not available locally.", "changed_files": [], "gates": [], "gates_passed": False}
+        return {
+            "status": "skipped_no_external_project",
+            "summary": "External project is not available locally.",
+            "changed_files": [],
+            "gates": [],
+            "gates_passed": False,
+        }
     request_dir = own / ".retort" / "execution_requests"
     request_dir.mkdir(parents=True, exist_ok=True)
     request_path = request_dir / f"{os.urandom(16).hex()}.json"
@@ -42,13 +54,34 @@ def run_real_absorption_cli(
         "python": resolve_python(),
         "keep_runtime_residue": bool(payload.get("keep_runtime_residue")),
     }
-    request_path.write_text(json.dumps(request_payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-    cmd = [resolve_python(), "-m", "retort_engine.cli", "apply-absorption", "--payload-file", str(request_path), "--json"]
+    request_path.write_text(
+        json.dumps(request_payload, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    cmd = [
+        resolve_python(),
+        "-m",
+        "retort_engine.cli",
+        "apply-absorption",
+        "--payload-file",
+        str(request_path),
+        "--json",
+    ]
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(package_root) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    env["PYTHONPATH"] = str(package_root) + (
+        os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
+    )
     timeout = int(payload.get("execution_timeout_sec") or 1800)
     try:
-        result = subprocess.run(cmd, cwd=own, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=timeout, check=False)
+        result = subprocess.run(
+            cmd,
+            cwd=own,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
     except subprocess.TimeoutExpired as exc:
         return {
             "status": "timeout",
@@ -112,7 +145,11 @@ def is_complete_absorption_stdout_json(value: dict[str, Any]) -> bool:
         "review_report_path",
         "employee_results_path",
     }
-    return required.issubset(value) and isinstance(value.get("changed_files"), list) and isinstance(value.get("gates"), list)
+    return (
+        required.issubset(value)
+        and isinstance(value.get("changed_files"), list)
+        and isinstance(value.get("gates"), list)
+    )
 
 
 def commit_absorption_execution(
@@ -126,10 +163,17 @@ def commit_absorption_execution(
     from retort_engine.git_status import blocking_git_status
 
     root = git_root(own)
-    changed_files = [Path(path).expanduser().resolve() for path in execution.get("changed_files") or []]
+    changed_files = [
+        Path(path).expanduser().resolve()
+        for path in execution.get("changed_files") or []
+    ]
     if root is None:
         return {"status": "skipped", "reason": "no_git_root_or_no_changed_files"}
-    rels = [str(path.relative_to(root)) for path in changed_files if path.is_relative_to(root)]
+    rels = [
+        str(path.relative_to(root))
+        for path in changed_files
+        if path.is_relative_to(root)
+    ]
     # Also stage leftover absorption artifacts so merge is not blocked by untracked files
     # that CLI wrote but did not list in changed_files.
     for line in blocking_git_status(root, own).splitlines():
@@ -141,7 +185,18 @@ def commit_absorption_execution(
     if not rels:
         return {"status": "skipped", "reason": "no_changed_files_inside_git_root"}
     git_command(root, "add", "--", *rels)
-    staged = subprocess.run(["git", "diff", "--cached", "--quiet", "--", *rels], cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True, timeout=30, check=False).returncode != 0
+    staged = (
+        subprocess.run(
+            ["git", "diff", "--cached", "--quiet", "--", *rels],
+            cwd=root,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=30,
+            check=False,
+        ).returncode
+        != 0
+    )
     if not staged:
         return {"status": "skipped", "reason": "no_staged_changes"}
     git_command(root, "commit", "-m", f"Retort absorb {source[:80]}")

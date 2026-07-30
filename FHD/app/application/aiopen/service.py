@@ -36,19 +36,45 @@ MCP_DEFAULT_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_NAME = "xcagi-aiopen"
 
 # 运行时状态 SSOT（进程内，无持久化；与旧 qclaw 面板共享）。
+# 白名单默认覆盖侧栏能力闭环主前缀；api_call 按「精确或子路径前缀」匹配。
+CAPABILITY_ROUTE_PREFIXES: tuple[str, ...] = (
+    "/api/ai/chat",
+    "/api/ai/unified_chat",
+    "/api/chat/send",
+    "/api/conversations",
+    "/api/planner",
+    "/api/im",
+    "/api/mobile/v1/ai-groups",
+    "/api/platform-shell",
+    "/api/mods",
+    "/api/knowledge",
+    "/api/persy/knowledge",
+    "/api/system/workflow-employee-catalog",
+    "/api/workflow-employee-space",
+    "/api/mod",
+    "/api/products",
+    "/api/customers",
+    "/api/materials",
+    "/api/orders",
+    "/api/shipment",
+    "/api/print",
+    "/api/wechat_contacts",
+    "/api/templates",
+    "/api/excel",
+    "/api/document-templates",
+    "/api/data-sources",
+    "/api/auth/me",
+)
+
+
+def _default_capability_whitelist() -> dict[str, bool]:
+    return dict.fromkeys(CAPABILITY_ROUTE_PREFIXES, True)
+
+
 AIOPEN_STATE: dict[str, Any] = {
     "wechat_open": True,
     "openclaw_base": "http://localhost:28789",
-    "whitelist": {
-        "/api/ai/chat": True,
-        "/api/ai/unified_chat": True,
-        "/api/wechat_contacts": True,
-        "/api/shipment/orders": True,
-        "/api/print/printers": True,
-        "/api/products": True,
-        "/api/customers": True,
-        "/api/materials": True,
-    },
+    "whitelist": _default_capability_whitelist(),
     # 虚拟光标远程操控总开关（面板可改；默认开，前端 screen 端默认不连）
     "remote_control_enabled": True,
     # 面板运行时生成的 API Key：{key: {"label": str, "created_at": float}}
@@ -125,13 +151,24 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     },
     {
         "name": "api_call",
-        "description": "调用白名单内的 XCAGI 业务 API（GET/POST）。path 必须在 api_catalog 中且已启用。",
+        "description": (
+            "调用白名单内的 XCAGI 业务 API。"
+            "path 支持精确匹配或已启用前缀的子路径（如启用 /api/products 则可调 /api/products/list）。"
+            "method 支持 GET/POST/PUT/PATCH/DELETE。"
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "API 路径，如 /api/products"},
-                "method": {"type": "string", "enum": ["GET", "POST"], "default": "GET"},
-                "body": {"type": "object", "description": "POST 请求体（JSON）"},
+                "path": {
+                    "type": "string",
+                    "description": "API 路径，如 /api/products/list；可带 query",
+                },
+                "method": {
+                    "type": "string",
+                    "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"],
+                    "default": "GET",
+                },
+                "body": {"type": "object", "description": "请求体（JSON，非 GET/DELETE 时使用）"},
             },
             "required": ["path"],
         },
@@ -143,6 +180,27 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {"message": {"type": "string", "description": "要发送的消息"}},
             "required": ["message"],
+        },
+    },
+    {
+        "name": "capability_loop",
+        "description": (
+            "全调用闭环自检：api_catalog → 抽样 api_call(GET) → chat → ui_sessions，"
+            "返回各步成败，供外部 Agent 确认 MCP 已打通。"
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "probe_path": {
+                    "type": "string",
+                    "description": "可选抽样 API，默认自动选已启用白名单路径",
+                },
+                "message": {
+                    "type": "string",
+                    "description": "可选 chat 探测文案",
+                },
+            },
+            "additionalProperties": False,
         },
     },
     {
@@ -441,6 +499,26 @@ def format_tool_result_text(tool_name: str, result: dict[str, Any]) -> str:
             body = body[:4000] + "\n…(truncated)"
         return f"API 调用成功：{method} {path} → HTTP {status}\n\n{body}"
 
+    if name == "capability_loop":
+        steps = result.get("steps") if isinstance(result.get("steps"), list) else []
+        lines = [
+            f"全调用闭环：{'通过' if ok else '未通过'}",
+            f"提示：{result.get('hint', '')}",
+        ]
+        for s in steps:
+            if not isinstance(s, dict):
+                continue
+            mark = "✓" if s.get("ok") else "✗"
+            extra = ""
+            if s.get("path"):
+                extra += f" {s.get('path')}"
+            if s.get("status_code") is not None:
+                extra += f" HTTP {s.get('status_code')}"
+            if s.get("session_count") is not None:
+                extra += f" sessions={s.get('session_count')}"
+            lines.append(f"  {mark} {s.get('step')}{extra}")
+        return "\n".join(lines)
+
     if name == "chat":
         if not ok:
             return f"对话失败：{result.get('message', '')}"
@@ -678,50 +756,132 @@ curl -X POST '{invoke_url}' \\
 # ---------------------------------------------------------------------------
 
 
+def normalize_api_path(path: str) -> str:
+    """规范化 API 路径：去空白、补前导 /、去掉 query 与尾部 /。"""
+    raw = str(path or "").strip()
+    if not raw:
+        return ""
+    base = raw.split("?", 1)[0].strip()
+    if not base.startswith("/"):
+        base = "/" + base
+    if len(base) > 1 and base.endswith("/"):
+        base = base.rstrip("/")
+    return base
+
+
+def is_path_whitelisted(path: str, whitelist: dict[str, bool] | None = None) -> bool:
+    """精确匹配，或命中已启用前缀的子路径（``/api/products`` → ``/api/products/list``）。"""
+    wl = whitelist if whitelist is not None else AIOPEN_STATE.get("whitelist", {})
+    if not isinstance(wl, dict):
+        return False
+    target = normalize_api_path(path)
+    if not target:
+        return False
+    if bool(wl.get(target, False)):
+        return True
+    # 带 query 的原始 path：再试一次仅 path 部分（已在 normalize 去掉）
+    matched_len = -1
+    for prefix, enabled in wl.items():
+        if not enabled:
+            continue
+        p = normalize_api_path(str(prefix or ""))
+        if not p:
+            continue
+        if target == p or target.startswith(p + "/"):
+            matched_len = max(matched_len, len(p))
+    return matched_len >= 0
+
+
+def seed_capability_whitelist(*, enable: bool = True, merge: bool = True) -> dict[str, Any]:
+    """一键写入侧栏/业务全能力前缀白名单（全调用闭环默认入口）。"""
+    wl = AIOPEN_STATE.setdefault("whitelist", {})
+    if not isinstance(wl, dict):
+        wl = {}
+        AIOPEN_STATE["whitelist"] = wl
+    if not merge:
+        wl.clear()
+    for path in CAPABILITY_ROUTE_PREFIXES:
+        wl[path] = bool(enable)
+    enabled = sum(1 for v in wl.values() if v)
+    return {
+        "success": True,
+        "enabled": bool(enable),
+        "merge": bool(merge),
+        "enabled_count": enabled,
+        "total_count": len(wl),
+        "routes": [{"path": p, "enabled": bool(e)} for p, e in sorted(wl.items())],
+    }
+
+
 def _tool_api_catalog() -> dict[str, Any]:
     whitelist: dict[str, bool] = AIOPEN_STATE.get("whitelist", {})
     return {
         "success": True,
-        "routes": [{"path": p, "enabled": bool(e)} for p, e in whitelist.items()],
+        "match_mode": "exact_or_prefix",
+        "routes": [{"path": p, "enabled": bool(e)} for p, e in sorted(whitelist.items())],
     }
+
+
+_API_CALL_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})
 
 
 def _tool_api_call(app: Any, args: dict[str, Any]) -> dict[str, Any]:
     from starlette.testclient import TestClient
 
-    path = str(args.get("path") or "").strip()
+    raw_path = str(args.get("path") or "").strip()
     method = str(args.get("method") or "GET").upper()
     body = args.get("body") if isinstance(args.get("body"), dict) else {}
-    if not path:
+    if not raw_path:
         return {"success": False, "message": "path 不能为空"}
-    whitelist: dict[str, bool] = AIOPEN_STATE.get("whitelist", {})
-    if not bool(whitelist.get(path, False)):
+    if method not in _API_CALL_METHODS:
         return {
             "success": False,
-            "message": f"路由 {path} 未在 AIOPEN 白名单启用",
+            "message": f"不支持的 method：{method}",
+            "code": "METHOD_NOT_ALLOWED",
+        }
+    if not is_path_whitelisted(raw_path):
+        return {
+            "success": False,
+            "message": f"路由 {normalize_api_path(raw_path)} 未在 AIOPEN 白名单启用",
             "code": "ROUTE_NOT_WHITELISTED",
         }
     try:
         client = TestClient(app)
-        if method == "POST":
+        headers: dict[str, str] = {"X-AIOPEN-Internal": "1"}
+        # 变更类请求补齐 CSRF 双提交（与市场/桌面内部 client 同策略）
+        if method in {"POST", "PUT", "PATCH", "DELETE"}:
+            try:
+                client.get("/api/aiopen/manifest")
+            except RECOVERABLE_ERRORS:
+                pass
+            csrf = client.cookies.get("csrf_token")
+            if csrf:
+                headers["X-CSRF-Token"] = str(csrf)
+        if method == "GET":
+            resp = client.get(raw_path, headers=headers)
+        elif method == "DELETE":
+            resp = client.delete(raw_path, headers=headers)
+        else:
             payload = dict(body)
             payload.setdefault("source", "aiopen")
-            resp = client.post(path, json=payload)
-        else:
-            resp = client.get(path)
+            resp = client.request(method, raw_path, json=payload, headers=headers)
         try:
             data = resp.json()
         except (ValueError, TypeError):
             data = {"raw": resp.text[:2000]}
+        try:
+            status_code = int(resp.status_code)
+        except (TypeError, ValueError):
+            status_code = 599
         return {
-            "success": resp.status_code < 500,
-            "path": path,
+            "success": status_code < 500,
+            "path": raw_path,
             "method": method,
-            "status_code": resp.status_code,
+            "status_code": status_code,
             "data": data,
         }
     except RECOVERABLE_ERRORS as err:
-        return {"success": False, "path": path, "method": method, "message": str(err)}
+        return {"success": False, "path": raw_path, "method": method, "message": str(err)}
 
 
 def _tool_chat(app: Any, args: dict[str, Any]) -> dict[str, Any]:
@@ -738,6 +898,115 @@ def _tool_chat(app: Any, args: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def _pick_probe_path(routes: list[dict[str, Any]], preferred: str = "") -> str | None:
+    pref = normalize_api_path(preferred)
+    if pref and is_path_whitelisted(pref):
+        return pref
+    enabled = [
+        normalize_api_path(str(r.get("path") or ""))
+        for r in routes
+        if isinstance(r, dict) and r.get("enabled")
+    ]
+    enabled = [p for p in enabled if p]
+    for candidate in (
+        "/api/auth/me",
+        "/api/products/list",
+        "/api/customers/list",
+        "/api/mods/",
+        "/api/print/printers",
+    ):
+        n = normalize_api_path(candidate)
+        if any(n == p or n.startswith(p + "/") or p.startswith(n) for p in enabled):
+            if is_path_whitelisted(n):
+                return n if n != "/api/mods" else "/api/mods/"
+    return enabled[0] if enabled else None
+
+
+def _tool_capability_loop(app: Any, args: dict[str, Any]) -> dict[str, Any]:
+    """catalog → api_call → chat → ui_sessions 闭环自检。"""
+
+    def _step_http_ok(res: dict[str, Any]) -> bool:
+        code = res.get("status_code")
+        try:
+            status = int(code) if code is not None else 599
+        except (TypeError, ValueError):
+            status = 599
+        return bool(res.get("success")) and status < 400
+
+    steps: list[dict[str, Any]] = []
+    catalog = _tool_api_catalog()
+    routes = catalog.get("routes") if isinstance(catalog.get("routes"), list) else []
+    enabled_count = sum(1 for r in routes if isinstance(r, dict) and r.get("enabled"))
+    steps.append(
+        {
+            "step": "api_catalog",
+            "ok": bool(catalog.get("success")),
+            "enabled_count": enabled_count,
+            "total_count": len(routes),
+        }
+    )
+
+    probe = _pick_probe_path(routes, str(args.get("probe_path") or ""))
+    if probe:
+        call_res = _tool_api_call(app, {"path": probe, "method": "GET"})
+        steps.append(
+            {
+                "step": "api_call",
+                "ok": _step_http_ok(call_res),
+                "path": probe,
+                "status_code": call_res.get("status_code"),
+                "message": call_res.get("message"),
+            }
+        )
+    else:
+        steps.append(
+            {
+                "step": "api_call",
+                "ok": False,
+                "message": "无已启用白名单路径可探测；请先 seed 全能力白名单",
+            }
+        )
+
+    msg = str(args.get("message") or "").strip() or "AIOPEN 全调用闭环探测"
+    chat_res = _tool_chat(app, {"message": msg})
+    steps.append(
+        {
+            "step": "chat",
+            "ok": _step_http_ok(chat_res),
+            "status_code": chat_res.get("status_code"),
+            "message": chat_res.get("message"),
+        }
+    )
+
+    sessions = aiopen_cursor_hub.sessions_info()
+    remote_on = bool(AIOPEN_STATE.get("remote_control_enabled", False))
+    steps.append(
+        {
+            "step": "ui_sessions",
+            "ok": True,
+            "remote_control_enabled": remote_on,
+            "session_count": len(sessions),
+            "ui_ready": remote_on and len(sessions) > 0,
+        }
+    )
+
+    core_ok = all(
+        bool(s.get("ok")) for s in steps if s.get("step") in {"api_catalog", "api_call", "chat"}
+    )
+    return {
+        "success": core_ok,
+        "closed_loop": core_ok,
+        "ui_loop_ready": remote_on and len(sessions) > 0,
+        "steps": steps,
+        "hint": (
+            "API/对话闭环已通"
+            + ("；虚拟光标已就绪" if remote_on and sessions else "；UI 闭环需面板开启「本页待命」")
+            if core_ok
+            else "闭环未通过：请检查白名单、鉴权与 unified_chat 是否可写"
+        ),
+    }
+
+
 async def invoke_tool(name: str, args: dict[str, Any] | None, app: Any) -> dict[str, Any]:
     """统一工具执行入口（MCP tools/call 与 REST invoke 共用）。"""
     args = args if isinstance(args, dict) else {}
@@ -749,6 +1018,8 @@ async def invoke_tool(name: str, args: dict[str, Any] | None, app: Any) -> dict[
         return _tool_api_call(app, args)
     if name == "chat":
         return _tool_chat(app, args)
+    if name == "capability_loop":
+        return _tool_capability_loop(app, args)
     if name == "ui_sessions":
         return {
             "success": True,

@@ -473,11 +473,15 @@ def excel_templates_test():
 def get_template(template_id: int):
     try:
         from app.db.session import get_db
+        from app.infrastructure.templates.tenant_scope import templates_tenant_where_sql
 
+        tenant_sql, tenant_bind = templates_tenant_where_sql()
         with get_db() as db:
             result = db.execute(
-                text("SELECT * FROM templates WHERE id = :id AND is_active = 1"),
-                {"id": template_id},
+                text(
+                    f"SELECT * FROM templates WHERE id = :id AND is_active = 1 AND ({tenant_sql})"
+                ),
+                {"id": template_id, **tenant_bind},
             )
             row = result.fetchone()
             if not row:
@@ -508,15 +512,18 @@ def get_template(template_id: int):
 def update_template(template_id: int, data: dict[str, Any] = Body(default_factory=dict)):
     try:
         from app.db.session import get_db
+        from app.infrastructure.templates.tenant_scope import templates_tenant_where_sql
 
+        tenant_sql, tenant_bind = templates_tenant_where_sql()
         with get_db() as db:
             result = db.execute(
-                text("SELECT id FROM templates WHERE id = :id"), {"id": template_id}
+                text(f"SELECT id FROM templates WHERE id = :id AND ({tenant_sql})"),
+                {"id": template_id, **tenant_bind},
             )
             if not result.fetchone():
                 return JSONResponse({"success": False, "message": "模板不存在"}, status_code=404)
             updates = []
-            params: dict[str, Any] = {"id": template_id}
+            params: dict[str, Any] = {"id": template_id, **tenant_bind}
             if "template_name" in data:
                 updates.append("template_name = :template_name")
                 params["template_name"] = data["template_name"]
@@ -534,7 +541,9 @@ def update_template(template_id: int, data: dict[str, Any] = Body(default_factor
                 params["business_rules"] = json.dumps(data["business_rules"], ensure_ascii=False)
             updates.append("updated_at = :updated_at")
             params["updated_at"] = datetime.now()
-            sql = "UPDATE templates SET " + ", ".join(updates) + " WHERE id = :id"
+            sql = (
+                "UPDATE templates SET " + ", ".join(updates) + f" WHERE id = :id AND ({tenant_sql})"
+            )
             db.execute(text(sql), params)
             db.commit()
             db.execute(
@@ -556,16 +565,22 @@ def update_template(template_id: int, data: dict[str, Any] = Body(default_factor
 def delete_template(template_id: int):
     try:
         from app.db.session import get_db
+        from app.infrastructure.templates.tenant_scope import templates_tenant_where_sql
 
+        tenant_sql, tenant_bind = templates_tenant_where_sql()
         with get_db() as db:
             result = db.execute(
-                text("SELECT id FROM templates WHERE id = :id"), {"id": template_id}
+                text(f"SELECT id FROM templates WHERE id = :id AND ({tenant_sql})"),
+                {"id": template_id, **tenant_bind},
             )
             if not result.fetchone():
                 return JSONResponse({"success": False, "message": "模板不存在"}, status_code=404)
             db.execute(
-                text("UPDATE templates SET is_active = 0, updated_at = :updated_at WHERE id = :id"),
-                {"id": template_id, "updated_at": datetime.now()},
+                text(
+                    f"UPDATE templates SET is_active = 0, updated_at = :updated_at "
+                    f"WHERE id = :id AND ({tenant_sql})"
+                ),
+                {"id": template_id, "updated_at": datetime.now(), **tenant_bind},
             )
             db.execute(
                 text(

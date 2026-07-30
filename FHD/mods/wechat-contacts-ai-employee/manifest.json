@@ -26,7 +26,7 @@
       "id": "wechat_contacts_hub",
       "label": "微信触点管家",
       "panel_title": "工作流 · 微信触点",
-      "panel_summary": "在「数据来源」中同步微信缓存、搜索与星标、查看聊天记录；与智能对话副窗「推送」及「星标聊天自动刷新」配合。",
+      "panel_summary": "在「数据来源」中同步微信缓存、搜索与星标、查看聊天记录；与智能对话副窗「推送」及「主动意识启用」配合。",
       "workflow_placeholder": true
     }
   ]

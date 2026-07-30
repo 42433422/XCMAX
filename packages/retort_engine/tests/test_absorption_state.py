@@ -3,18 +3,39 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from retort_engine.absorption_state import advance_absorption_state, closed_loop_proof, load_absorption_state, public_absorption_state, record_absorption_shock, save_absorption_state
+from retort_engine.absorption_state import (
+    advance_absorption_state,
+    closed_loop_proof,
+    load_absorption_state,
+    public_absorption_state,
+    record_absorption_shock,
+    save_absorption_state,
+)
 
 
 def test_record_absorption_shock_persists_public_state(tmp_path: Path) -> None:
     external = tmp_path / "external"
     external.mkdir()
     tasks = [
-        {"task_id": "one", "dimension": "architecture", "title": "A", "owner_hint": "core", "priority": "P1"},
-        {"task_id": "two", "dimension": "tests", "title": "B", "owner_hint": "qa", "priority": "P1"},
+        {
+            "task_id": "one",
+            "dimension": "architecture",
+            "title": "A",
+            "owner_hint": "core",
+            "priority": "P1",
+        },
+        {
+            "task_id": "two",
+            "dimension": "tests",
+            "title": "B",
+            "owner_hint": "qa",
+            "priority": "P1",
+        },
     ]
 
-    public = record_absorption_shock(tmp_path, "https://github.com/owner/repo", external, tasks)
+    public = record_absorption_shock(
+        tmp_path, "https://github.com/owner/repo", external, tasks
+    )
 
     assert public["active"] is True
     assert public["status"] == "pending_llm_reassessment"
@@ -25,9 +46,13 @@ def test_record_absorption_shock_persists_public_state(tmp_path: Path) -> None:
 
 
 def test_advance_absorption_state_logs_self_evolution_actions(tmp_path: Path) -> None:
-    record_absorption_shock(tmp_path, "repo", None, [{"task_id": "one", "dimension": "tests"}])
+    record_absorption_shock(
+        tmp_path, "repo", None, [{"task_id": "one", "dimension": "tests"}]
+    )
 
-    finished = advance_absorption_state(tmp_path, ["architecture"], 3, [{"task_id": "fix", "dimension": "architecture"}])
+    finished = advance_absorption_state(
+        tmp_path, ["architecture"], 3, [{"task_id": "fix", "dimension": "architecture"}]
+    )
 
     assert finished is False
     public = public_absorption_state(tmp_path)

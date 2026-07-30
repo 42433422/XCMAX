@@ -29,6 +29,7 @@ const TEMPLATE_ENDPOINTS = {
   list: getConfiguredEndpoint('VITE_TEMPLATE_LIST_ENDPOINT', '/api/templates'),
   detail: getConfiguredEndpoint('VITE_TEMPLATE_DETAIL_ENDPOINT', '/api/templates'),
   analyze: getConfiguredEndpoint('VITE_TEMPLATE_ANALYZE_ENDPOINT', '/api/templates/analyze'),
+  upload: getConfiguredEndpoint('VITE_TEMPLATE_UPLOAD_ENDPOINT', '/api/templates/upload'),
   progress: getConfiguredEndpoint('VITE_TEMPLATE_PROGRESS_ENDPOINT', '/api/templates/progress'),
   create: getConfiguredEndpoint('VITE_TEMPLATE_CREATE_ENDPOINT', '/api/templates/create'),
   update: getConfiguredEndpoint('VITE_TEMPLATE_UPDATE_ENDPOINT', '/api/templates/update'),
@@ -68,6 +69,11 @@ export const templatePreviewApi = {
 
   analyzeTemplate(formData: FormData) {
     return api.post(TEMPLATE_ENDPOINTS.analyze, formData);
+  },
+
+  /** 解析办公文件并自动入库模版库（analyze → create）。 */
+  uploadTemplate(formData: FormData) {
+    return api.post(TEMPLATE_ENDPOINTS.upload, formData);
   },
 
   getAnalysisProgress(taskId: string | number) {

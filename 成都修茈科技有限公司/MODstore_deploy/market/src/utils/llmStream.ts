@@ -26,6 +26,8 @@ export interface StreamOptions {
   messages: Array<{ role: string; content: LlmMessageContent }>
   maxTokens?: number | null
   conversationId?: number | null
+  /** Auto 模式默认 true；自选可关 */
+  allowFailover?: boolean
   onToken: (delta: string, soFar: string) => void
   onError?: (e: Error) => void
   onDone?: (full: string, aborted: boolean) => void
@@ -64,6 +66,7 @@ export function streamLLMChat(opts: StreamOptions): StreamHandle {
       opts.messages as unknown[],
       opts.maxTokens ?? null,
       opts.conversationId ?? null,
+      opts.allowFailover !== false,
     )
     if (ctrl.signal.aborted) {
       aborted = true
@@ -127,6 +130,7 @@ export function streamLLMChat(opts: StreamOptions): StreamHandle {
       opts.maxTokens ?? null,
       opts.conversationId ?? null,
       ctrl.signal,
+      opts.allowFailover !== false,
     )
     if (!res.ok || !res.body) {
       const text = await res.text().catch(() => '')

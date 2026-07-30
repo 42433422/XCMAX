@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import socket
 import subprocess
 import sys
@@ -18,7 +17,7 @@ import httpx
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FHD_ROOT = REPO_ROOT / "FHD"
 MARKET_ROOT = REPO_ROOT / "成都修茈科技有限公司" / "MODstore_deploy"
-XIUCI_COMMON_ROOT = REPO_ROOT / "成都修茈科技有限公司" / "packages" / "xcagi_common"
+XIUCI_COMMON_ROOT = REPO_ROOT / "packages" / "xcagi_common"
 
 if str(FHD_ROOT) not in sys.path:
     sys.path.insert(0, str(FHD_ROOT))
@@ -82,9 +81,8 @@ with sf() as session:
 token = create_access_token(user.id, user.username)
 print(json.dumps({"user_id": user.id, "username": user.username, "token": token}))
 """
-    python = shutil.which("python3") or sys.executable
     proc = subprocess.run(
-        [python, "-c", code],
+        [sys.executable, "-c", code],
         cwd=str(MARKET_ROOT),
         env=env,
         text=True,
@@ -97,10 +95,9 @@ print(json.dumps({"user_id": user.id, "username": user.username, "token": token}
 
 
 def _start_market_server(env: dict[str, str], port: int) -> subprocess.Popen[str]:
-    python = shutil.which("python3") or sys.executable
     return subprocess.Popen(
         [
-            python,
+            sys.executable,
             "-m",
             "uvicorn",
             "modstore_server.api.app_factory:create_app",
@@ -128,15 +125,21 @@ def _wait_for_market(base_url: str, proc: subprocess.Popen[str]) -> None:
             output = proc.stdout.read() if proc.stdout else ""
             raise RuntimeError(f"market server exited early code={proc.returncode}\n{output}")
         try:
-            response = httpx.get(f"{base_url}/openapi.json", timeout=1.0)
+            response = httpx.get(
+                f"{base_url}/openapi.json",
+                timeout=1.0,
+                trust_env=False,
+            )
             if response.status_code == 200:
                 return
             last_error = f"HTTP {response.status_code}"
         except httpx.HTTPError as exc:
             last_error = str(exc)
         time.sleep(0.2)
-    output = proc.stdout.read() if proc.stdout else ""
-    raise RuntimeError(f"market server did not become ready: {last_error}\n{output}")
+    # The server is still alive here, so reading a PIPE to EOF would block
+    # forever. The caller's finally block terminates the process and preserves
+    # a deterministic timeout instead of deadlocking the whole test suite.
+    raise RuntimeError(f"market server did not become ready: {last_error}")
 
 
 def _terminate(proc: subprocess.Popen[str]) -> None:
@@ -201,7 +204,9 @@ def run_cross_process_eval() -> dict[str, Any]:
                         return_value={"success": False, "message": "temporary database error"},
                     )
                 )
-                run = AgentOrchestrator(repository=InMemoryAgentRunRepository()).start_run_from_plan(
+                run = AgentOrchestrator(
+                    repository=InMemoryAgentRunRepository()
+                ).start_run_from_plan(
                     user_id=str(user["user_id"]),
                     message="cross process market wallet refund",
                     plan=plan,
@@ -209,16 +214,15 @@ def run_cross_process_eval() -> dict[str, Any]:
                 )
 
             headers = {"Authorization": f"Bearer {user['token']}"}
-            transactions_response = httpx.get(
-                f"{base_url}/api/wallet/transactions",
-                headers=headers,
-                timeout=5.0,
-            )
-            overview_response = httpx.get(
-                f"{base_url}/api/wallet/overview",
-                headers=headers,
-                timeout=5.0,
-            )
+            with httpx.Client(trust_env=False, timeout=5.0) as client:
+                transactions_response = client.get(
+                    f"{base_url}/api/wallet/transactions",
+                    headers=headers,
+                )
+                overview_response = client.get(
+                    f"{base_url}/api/wallet/overview",
+                    headers=headers,
+                )
             transactions_response.raise_for_status()
             overview_response.raise_for_status()
             transactions = transactions_response.json().get("transactions") or []
@@ -234,8 +238,7 @@ def run_cross_process_eval() -> dict[str, Any]:
                 "market_refund_amount": wallet_refund.get("amount_yuan") == "0.02",
                 "market_balance_restored": run.metadata.get("model_wallet_balance_yuan") == "10.00",
                 "market_transactions": all(
-                    txn_type in txn_types
-                    for txn_type in ("ai_preauth", "ai_settle", "ai_refund")
+                    txn_type in txn_types for txn_type in ("ai_preauth", "ai_settle", "ai_refund")
                 ),
                 "wallet_overview_balance": str(
                     (overview.get("wallet") or {}).get("balance") or overview.get("balance") or ""

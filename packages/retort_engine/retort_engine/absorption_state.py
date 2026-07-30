@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-
 ABSORPTION_STATE_RELATIVE_PATH = Path(".retort") / "absorption_state.json"
 SELF_EVOLUTION_ACTIONS_RELATIVE_PATH = Path(".retort") / "self_evolution_actions.jsonl"
 CLOSED_LOOP_FLAGS = (
@@ -23,7 +22,9 @@ class _MissingFlags(list[str]):
         return super().__eq__(other)
 
 
-def record_absorption_shock(own: Path, source: str, external_path: Path | None, tasks: list[dict[str, str]]) -> dict[str, Any]:
+def record_absorption_shock(
+    own: Path, source: str, external_path: Path | None, tasks: list[dict[str, str]]
+) -> dict[str, Any]:
     task_dimensions = {task["dimension"] for task in tasks}
     state = {
         "active": True,
@@ -37,14 +38,21 @@ def record_absorption_shock(own: Path, source: str, external_path: Path | None, 
     return public_absorption_state(own)
 
 
-def advance_absorption_state(root: Path, weak_dimensions: list[str], round_index: int, tasks: list[dict[str, str]]) -> bool:
+def advance_absorption_state(
+    root: Path,
+    weak_dimensions: list[str],
+    round_index: int,
+    tasks: list[dict[str, str]],
+) -> bool:
     state = load_absorption_state(root)
     if not state.get("active"):
         return False
     state["active"] = True
     state["status"] = "awaiting_execution_evidence"
     state["resolved_round"] = round_index
-    state["resolved_dimensions"] = sorted(set(weak_dimensions) | set(state.get("pending_dimensions") or []))
+    state["resolved_dimensions"] = sorted(
+        set(weak_dimensions) | set(state.get("pending_dimensions") or [])
+    )
     state["self_evolution_tasks"] = tasks
     save_absorption_state(root, state)
     log_path = root / SELF_EVOLUTION_ACTIONS_RELATIVE_PATH
@@ -89,7 +97,11 @@ def public_absorption_state(root: Path) -> dict[str, Any]:
 
 def closed_loop_proof(root: Path) -> dict[str, Any]:
     state = load_absorption_state(root)
-    proof = state.get("closed_loop_proof") if isinstance(state.get("closed_loop_proof"), dict) else {}
+    proof = (
+        state.get("closed_loop_proof")
+        if isinstance(state.get("closed_loop_proof"), dict)
+        else {}
+    )
     flags = {name: bool(proof.get(name)) for name in CLOSED_LOOP_FLAGS}
     missing = _MissingFlags(key for key, value in flags.items() if not value)
     return {
@@ -114,4 +126,7 @@ def load_absorption_state(root: Path) -> dict[str, Any]:
 def save_absorption_state(root: Path, state: dict[str, Any]) -> None:
     path = root / ABSORPTION_STATE_RELATIVE_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    path.write_text(
+        json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )

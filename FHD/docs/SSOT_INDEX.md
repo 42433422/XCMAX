@@ -1,7 +1,7 @@
 # SSOT 索引（唯一真相源登记表）
 
 > **本文件为 SSOT 索引的 SSOT**。任何文档声称 SSOT 必须在此登记。
-> 最后更新：2026-07-07
+> 最后更新：2026-07-24
 
 ## 登记规则
 
@@ -38,8 +38,36 @@
 | mobile-android（Flutter 渠道） | [guides/MOBILE_ANDROID.md](guides/MOBILE_ANDROID.md) | Flutter Android Runner、本地验证、签名和发布指南 |
 | local-data（本地数据安全） | [security/LOCAL_DATA_POLICY.md](security/LOCAL_DATA_POLICY.md) | 桌面/Web 本地数据分类、purge CLI、诊断包与上传鉴权策略 |
 | neuro-bus-events（事件契约） | [../config/neuro_bus_events.yaml](../config/neuro_bus_events.yaml) | NeuroBus 三流事件契约统一 SSOT（NeuroBus 域事件 + AgentRun 事件 + 应用桥接），点号命名规范化，派生 Python 常量 + TS 类型 + OpenAPI schema |
+| customer-ticket-bus（客服工单闭环） | [architecture/CUSTOMER_TICKET_BUS_SSOT.md](architecture/CUSTOMER_TICKET_BUS_SSOT.md) | 客服工单总线/告警闭环的唯一事实源：MODstore incident_bus + incident_team 与入场边界 |
 | deployment-modes（AI 部署模式） | [../config/deployment_modes.yaml](../config/deployment_modes.yaml) | 三档部署模式唯一真相源：绝对安全、安全、性能；统一内网/外网、手机局域网直连与移动端超级员工 LAN 优先策略 |
 | database-storage（数据库存储） | [../config/database_storage_modes.yaml](../config/database_storage_modes.yaml) | SQLite/PG 存储模式唯一真相源：桌面 database.json profile、SQLite→PostgreSQL 同步计划、重启生效策略 |
+
+## 机器注册表（ssot.yaml）
+
+> 与 `FHD/config/ssot.yaml` 的 **enabled 域** 一一对应；由 `scripts/dev/ssot_registry_crosscheck.py` 互校验（CI blocking）。
+> 域名 / SSOT 路径必须与 yaml 字节级一致；门禁列仅供人读。
+
+| 域名 | SSOT 路径 | 门禁 |
+|------|----------|------|
+| mods | `FHD/mods/` | blocking |
+| ci-workflows | `FHD/.github/workflows/` | blocking |
+| coverage | `FHD/metrics/coverage_ratchet_baseline.json` | blocking |
+| version | `FHD/VERSION.md` | blocking |
+| docs-ssot | `FHD/docs/SSOT_INDEX.md` | blocking |
+| account-system | `FHD/docs/account_system_ssot.md` | blocking |
+| test-files | `FHD/tests/` | blocking |
+| deploy-scripts | `FHD/scripts/deploy/` | blocking |
+| deps | `FHD/pyproject.toml` | blocking |
+| error-codes | `FHD/app/http/error_codes.py` | blocking |
+| registry-crosscheck | `FHD/docs/SSOT_INDEX.md` | blocking |
+| employee-roster | `FHD/config/duty_roster.json` | blocking |
+| db-schema | `FHD/alembic/versions/` | blocking |
+| service-topology | `FHD/config/service_topology.yaml` | blocking |
+| deployment-modes | `FHD/config/deployment_modes.yaml` | blocking |
+| database-storage | `FHD/config/database_storage_modes.yaml` | blocking |
+| mobile-tri-platform | `FHD/docs/mobile_tri_platform_ssot.md` | blocking |
+| neuro-bus-events | `FHD/config/neuro_bus_events.yaml` | blocking |
+| runtime-inventory | `FHD/config/service_topology.yaml` | blocking |
 
 ## 已退役 SSOT（指针化）
 

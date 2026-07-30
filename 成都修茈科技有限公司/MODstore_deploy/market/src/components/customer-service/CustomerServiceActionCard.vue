@@ -1,134 +1,254 @@
 <template>
-  <section class="cs-card">
+  <!-- 未知/内部卡片（如 intent）不对客户展示，避免露出调试 JSON -->
+  <section v-if="isCustomerFacing" class="cs-card">
     <div class="cs-card__head">
       <span class="cs-card__type">{{ title }}</span>
-      <span v-if="status" :class="['cs-card__status', `cs-card__status--${status}`]">{{ statusLabel }}</span>
+      <span v-if="statusLabel" :class="['cs-card__status', `cs-card__status--${statusKey}`]">
+        {{ statusLabel }}
+      </span>
     </div>
 
-    <div v-if="card.type === 'ticket'" class="cs-grid">
-      <div><b>工单号</b><span>{{ card.ticket_no || '—' }}</span></div>
-      <div><b>场景</b><span>{{ card.intent || 'general' }}</span></div>
-      <div><b>对象</b><span>{{ card.subject_type || '—' }} {{ card.subject_id || '' }}</span></div>
-      <div><b>状态</b><span>{{ card.status || '—' }}</span></div>
+    <div v-if="card.type === 'ticket'" class="cs-plain">
+      <p>{{ ticketSummary }}</p>
+      <p v-if="subjectHint" class="cs-plain__meta">{{ subjectHint }}</p>
     </div>
 
-    <div v-else-if="card.type === 'decision'" class="cs-decision">
-      <p>{{ card.rationale || '已完成审核判断。' }}</p>
-      <div class="cs-grid">
-        <div><b>结论</b><span>{{ card.decision || '—' }}</span></div>
-        <div><b>风险</b><span>{{ card.risk_level || 'low' }}</span></div>
-        <div><b>置信度</b><span>{{ confidenceText }}</span></div>
-      </div>
+    <div v-else-if="card.type === 'decision'" class="cs-plain">
+      <p>{{ humanRationale }}</p>
+      <p class="cs-plain__meta">{{ decisionLabel }}</p>
     </div>
 
     <div v-else-if="card.type === 'actions'" class="cs-actions">
-      <div v-for="item in card.items || []" :key="item.id || item.action_type" class="cs-action-row">
-        <span>{{ item.action_type }}</span>
-        <span :class="['cs-card__status', `cs-card__status--${item.status}`]">{{ item.status }}</span>
+      <div v-for="item in visibleActions" :key="item.id || item.action_type" class="cs-action-row">
+        <span>{{ actionLabel(item.action_type) }}</span>
+        <span :class="['cs-card__status', `cs-card__status--${displayActionStatus(item)}`]">
+          {{ actionStatusText(displayActionStatus(item)) }}
+        </span>
       </div>
     </div>
-
-    <pre v-else class="cs-json">{{ card }}</pre>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { ticketIntentLabel, ticketLifecycleLabel } from '../../utils/csTicketLifecycle'
 
 const props = defineProps<{
   card: Record<string, any>
 }>()
 
+const CUSTOMER_FACING = new Set(['ticket', 'decision', 'actions'])
+
+const isCustomerFacing = computed(() => CUSTOMER_FACING.has(String(props.card?.type || '')))
+
 const title = computed(() => {
-  if (props.card.type === 'ticket') return '工单'
-  if (props.card.type === 'decision') return '审核标准'
-  if (props.card.type === 'actions') return '自动动作'
-  return '客服卡片'
+  if (props.card.type === 'ticket') return '进度'
+  if (props.card.type === 'decision') return '下一步'
+  if (props.card.type === 'actions') return '已办理'
+  return ''
 })
 
-const status = computed(() => String(props.card.status || props.card.decision || '').trim())
-const statusLabel = computed(() => status.value || 'pending')
-const confidenceText = computed(() => {
-  const n = Number(props.card.confidence || 0)
-  return n > 0 ? `${Math.round(n * 100)}%` : '—'
+const intentLabel = computed(() => ticketIntentLabel(props.card.intent))
+
+const subjectHint = computed(() => {
+  const typeMap: Record<string, string> = {
+    order: '相关订单',
+    catalog_item: '相关商品',
+    account: '相关账号',
+    llm_model: '相关模型',
+  }
+  const t = String(props.card.subject_type || '')
+  const id = String(props.card.subject_id || '').trim()
+  const label = typeMap[t] || ''
+  if (!label) return ''
+  return id ? `${label}：${id}` : label
 })
+
+const ticketSummary = computed(() => {
+  const kind = intentLabel.value
+  const stage = ticketLifecycleLabel(props.card)
+  if (stage === '待补充') return `你的${kind}还缺一些信息，请在对话里直接补充。`
+  if (stage === '处理中' || stage === '已收到') return `你的${kind}已收到，正在处理。`
+  if (stage === '有结果') return `你的${kind}已有处理结果。`
+  if (stage === '已完成') return `你的${kind}已处理完成。`
+  return `你的${kind}进度：${stage}`
+})
+
+const decisionLabel = computed(() => {
+  const map: Record<string, string> = {
+    approved: '已开始处理',
+    rejected: '未能通过',
+    needs_more_info: '请先补充信息',
+  }
+  return map[String(props.card.decision || '')] || ''
+})
+
+const humanRationale = computed(() => humanizeUserText(String(props.card.rationale || '')))
+
+const statusKey = computed(() => {
+  const raw = String(props.card.status || props.card.decision || '').toLowerCase().replace(/\s+/g, '_')
+  return raw || 'pending'
+})
+
+const statusLabel = computed(() => {
+  if (props.card.type === 'actions') return ''
+  return ticketLifecycleLabel(props.card)
+})
+
+function humanizeUserText(text: string) {
+  let s = text || ''
+  const map: Record<string, string> = {
+    order_no: '订单号',
+    catalog_id: '商品编号',
+    complaint_type: '问题类型',
+    reason: '原因说明',
+    provider: '模型厂商',
+    model: '模型名称',
+    needs_more_info: '需补充材料',
+    approved: '已受理',
+    rejected: '未通过',
+  }
+  for (const [k, v] of Object.entries(map)) {
+    s = s.split(k).join(v)
+  }
+  // 去掉重复「还需要补充：还需要补充」
+  s = s.replace(/还需要补充：还需要补充/g, '还需要补充')
+  return s.trim() || '已根据你的说明给出处理结论。'
+}
+
+/** 员工跟进进度写回勿对用户显示「转交失败」红字 */
+const visibleActions = computed(() => {
+  const items = Array.isArray(props.card.items) ? props.card.items : []
+  // 同类型只保留最近一条，避免三次回写叠三条失败行
+  const seen = new Set<string>()
+  const out: Record<string, any>[] = []
+  for (const item of [...items].reverse()) {
+    const key = String(item?.action_type || item?.id || '')
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    out.push(item)
+  }
+  return out.reverse()
+})
+
+function displayActionStatus(item: Record<string, any>) {
+  const type = String(item?.action_type || '')
+  const status = String(item?.status || '').toLowerCase()
+  if (type === 'employee.dispatch' && status === 'failed') return 'running'
+  return status
+}
+
+function actionStatusText(raw: unknown) {
+  const s = String(raw || '').toLowerCase()
+  const map: Record<string, string> = {
+    completed: '已完成',
+    running: '进行中',
+    failed: '失败',
+    skipped: '已跳过',
+    pending: '待处理',
+  }
+  return map[s] || (raw ? String(raw) : '')
+}
+
+function actionLabel(raw: unknown) {
+  const s = String(raw || '')
+  const map: Record<string, string> = {
+    'refund.apply': '退款申请',
+    'catalog.complaint.create': '投诉登记',
+    'catalog.compliance.review': '合规审核',
+    'llm.model_capability.propose': '模型扩展申请',
+    'employee.dispatch': '员工跟进',
+  }
+  return map[s] || '处理动作'
+}
 </script>
 
 <style scoped>
 .cs-card {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 18px;
-  padding: 14px;
-  margin-top: 10px;
+  margin-top: 8px;
+  border: 1px solid color-mix(in srgb, var(--wb-text-primary, #1d1d1f) 10%, transparent);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--wb-text-primary, #1d1d1f) 3%, transparent);
 }
 
-.cs-card__head,
-.cs-action-row {
+.cs-card__head {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
   align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .cs-card__type {
-  color: #f7e9bf;
-  font-weight: 800;
+  font-size: 0.78rem;
+  font-weight: 750;
+  color: var(--wb-text-secondary, #6e6e73);
 }
 
 .cs-card__status {
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  display: inline-flex;
+  padding: 2px 8px;
   border-radius: 999px;
-  padding: 4px 9px;
-  color: #d7fbe8;
-  background: rgba(35, 195, 126, 0.12);
-  font-size: 12px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--wb-accent-primary, #0071e3) 12%, transparent);
+  color: var(--wb-accent-primary, #0071e3);
 }
 
 .cs-card__status--failed,
 .cs-card__status--rejected {
-  color: #ffd3d3;
-  background: rgba(255, 72, 72, 0.14);
+  background: color-mix(in srgb, #c9342d 14%, transparent);
+  color: #c9342d;
 }
 
 .cs-card__status--needs_more_info,
 .cs-card__status--waiting_user {
-  color: #ffe4a3;
-  background: rgba(255, 180, 51, 0.14);
+  background: color-mix(in srgb, #b36b00 14%, transparent);
+  color: #b36b00;
 }
 
-.cs-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 10px;
-  margin-top: 12px;
+.cs-card__status--resolved,
+.cs-card__status--done,
+.cs-card__status--closed,
+.cs-card__status--completed,
+.cs-card__status--approved {
+  background: color-mix(in srgb, #248a3d 14%, transparent);
+  color: #248a3d;
 }
 
-.cs-grid div {
-  display: grid;
-  gap: 4px;
+.cs-plain p {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.45;
 }
 
-.cs-grid b {
-  color: rgba(255, 255, 255, 0.56);
-  font-size: 12px;
-}
-
-.cs-grid span,
-.cs-decision p,
-.cs-action-row {
-  color: rgba(255, 255, 255, 0.9);
+.cs-plain__meta {
+  margin-top: 4px !important;
+  font-size: 0.76rem !important;
+  color: var(--wb-text-secondary, #6e6e73);
 }
 
 .cs-actions {
   display: grid;
-  gap: 8px;
-  margin-top: 12px;
+  gap: 6px;
 }
 
-.cs-json {
-  margin-top: 10px;
-  white-space: pre-wrap;
-  color: rgba(255, 255, 255, 0.75);
+.cs-action-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+
+html:not([data-workbench-theme='light']) .cs-card {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+html:not([data-workbench-theme='light']) .cs-card__type,
+html:not([data-workbench-theme='light']) .cs-plain__meta {
+  color: rgba(255, 255, 255, 0.62);
 }
 </style>

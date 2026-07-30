@@ -14,17 +14,7 @@
           </svg>
         </button>
         <div class="tts-sub__stack">
-          <p v-if="prev" class="tts-sub__line tts-sub__line--prev">
-            <span class="tts-sub__zh">{{ prev.zh }}</span>
-          </p>
-          <div class="tts-sub__line tts-sub__line--cur">
-            <p class="tts-sub__zh">{{ current.zh }}</p>
-            <p v-if="current.en" class="tts-sub__en">{{ current.en }}</p>
-            <p v-else class="tts-sub__en tts-sub__en--pending">Translating…</p>
-          </div>
-          <p v-if="next" class="tts-sub__line tts-sub__line--next">
-            <span class="tts-sub__zh">{{ next.zh }}</span>
-          </p>
+          <p class="tts-sub__zh">{{ current.zh }}</p>
         </div>
       </div>
     </Transition>
@@ -34,7 +24,7 @@
 <script setup lang="ts">
 import { useTtsSubtitleStore } from '../composables/ttsSubtitleStore'
 
-const { visible, current, prev, next, dismiss } = useTtsSubtitleStore()
+const { visible, current, dismiss } = useTtsSubtitleStore()
 </script>
 
 <style scoped>
@@ -78,37 +68,8 @@ const { visible, current, prev, next, dismiss } = useTtsSubtitleStore()
 .tts-sub__stack {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  min-height: 64px;
+  min-height: 40px;
   justify-content: center;
-}
-
-.tts-sub__line {
-  margin: 0;
-  transition: opacity 0.28s ease, transform 0.28s ease, filter 0.28s ease;
-}
-
-.tts-sub__line--prev,
-.tts-sub__line--next {
-  opacity: 0.28;
-  filter: blur(0.2px);
-  transform: scale(0.92);
-}
-
-.tts-sub__line--prev .tts-sub__zh,
-.tts-sub__line--next .tts-sub__zh {
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.35;
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.tts-sub__line--cur {
-  opacity: 1;
-  transform: scale(1);
 }
 
 .tts-sub__zh {
@@ -121,23 +82,6 @@ const { visible, current, prev, next, dismiss } = useTtsSubtitleStore()
   text-shadow:
     0 1px 0 rgba(255, 255, 255, 0.95),
     0 0 10px rgba(255, 255, 255, 0.55);
-}
-
-.tts-sub__en {
-  margin: 6px 0 0;
-  font-size: clamp(12px, 1.6vw, 14px);
-  font-weight: 450;
-  line-height: 1.4;
-  color: #222;
-  letter-spacing: 0.01em;
-  text-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.92),
-    0 0 8px rgba(255, 255, 255, 0.45);
-}
-
-.tts-sub__en--pending {
-  opacity: 0.45;
-  font-style: italic;
 }
 
 .tts-sub-enter-active,
@@ -153,7 +97,6 @@ const { visible, current, prev, next, dismiss } = useTtsSubtitleStore()
 
 @media (prefers-reduced-motion: reduce) {
   .tts-sub,
-  .tts-sub__line,
   .tts-sub-enter-active,
   .tts-sub-leave-active {
     transition: none;

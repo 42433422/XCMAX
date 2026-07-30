@@ -33,7 +33,7 @@ class BranchWorkflowState:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, object]) -> "BranchWorkflowState":
+    def from_dict(cls, payload: dict[str, object]) -> BranchWorkflowState:
         return cls(
             bool(payload.get("enabled")),
             str(payload.get("project_root") or ""),
@@ -50,22 +50,41 @@ class BranchWorkflowError(RuntimeError):
     pass
 
 
-def begin_absorption_branch(project_path: str | Path, *, source: str, branch_name: str = "", allow_dirty: bool = False) -> BranchWorkflowState:
+def begin_absorption_branch(
+    project_path: str | Path,
+    *,
+    source: str,
+    branch_name: str = "",
+    allow_dirty: bool = False,
+) -> BranchWorkflowState:
     project = Path(project_path).expanduser().resolve()
     root = _git_root(project)
     if root is None:
         raise BranchWorkflowError("Main project folder is not inside a Git repository")
     if not allow_dirty and blocking_git_status(root, project):
-        raise BranchWorkflowError("Main project has uncommitted changes; commit or enable dirty branch workflow first")
+        raise BranchWorkflowError(
+            "Main project has uncommitted changes; commit or enable dirty branch workflow first"
+        )
     base = _git(["branch", "--show-current"], root).strip()
     if not base:
         raise BranchWorkflowError("Cannot create absorption branch from detached HEAD")
     target = branch_name or _default_branch_name(source)
     _git(["checkout", "-b", target], root)
-    return BranchWorkflowState(True, str(root), base, target, True, False, "branch_created", f"Created {target} from {base}")
+    return BranchWorkflowState(
+        True,
+        str(root),
+        base,
+        target,
+        True,
+        False,
+        "branch_created",
+        f"Created {target} from {base}",
+    )
 
 
-def merge_absorption_branch(project_path: str | Path, state: BranchWorkflowState) -> BranchWorkflowState:
+def merge_absorption_branch(
+    project_path: str | Path, state: BranchWorkflowState
+) -> BranchWorkflowState:
     if not state.enabled or not state.absorption_branch:
         return state
     project = Path(project_path).expanduser().resolve()
@@ -73,24 +92,67 @@ def merge_absorption_branch(project_path: str | Path, state: BranchWorkflowState
     if _git(["branch", "--show-current"], root).strip() != state.absorption_branch:
         _git(["checkout", state.absorption_branch], root)
     if blocking_git_status(root, project):
-        raise BranchWorkflowError("Absorption branch has uncommitted changes; commit before merge")
+        raise BranchWorkflowError(
+            "Absorption branch has uncommitted changes; commit before merge"
+        )
     _git(["checkout", state.base_branch], root)
-    _git(["merge", "--no-ff", state.absorption_branch, "-m", f"Merge {state.absorption_branch}"], root)
-    return BranchWorkflowState(True, str(root), state.base_branch, state.absorption_branch, state.created, True, "merged", f"Merged {state.absorption_branch} into {state.base_branch}")
+    _git(
+        [
+            "merge",
+            "--no-ff",
+            state.absorption_branch,
+            "-m",
+            f"Merge {state.absorption_branch}",
+        ],
+        root,
+    )
+    return BranchWorkflowState(
+        True,
+        str(root),
+        state.base_branch,
+        state.absorption_branch,
+        state.created,
+        True,
+        "merged",
+        f"Merged {state.absorption_branch} into {state.base_branch}",
+    )
 
 
 def _git_root(path: Path) -> Path | None:
     try:
-        result = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=path, text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5, check=False)
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=path,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+            check=False,
+        )
     except (OSError, subprocess.TimeoutExpired):
         return None
-    return Path(result.stdout.strip()) if result.returncode == 0 and result.stdout.strip() else None
+    return (
+        Path(result.stdout.strip())
+        if result.returncode == 0 and result.stdout.strip()
+        else None
+    )
 
 
 def _git(args: list[str], cwd: Path) -> str:
-    result = subprocess.run(["git", *args], cwd=cwd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30, check=False)
+    result = subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
     if result.returncode != 0:
-        raise BranchWorkflowError(result.stderr.strip() or result.stdout.strip() or f"git {' '.join(args)} failed")
+        raise BranchWorkflowError(
+            result.stderr.strip()
+            or result.stdout.strip()
+            or f"git {' '.join(args)} failed"
+        )
     return result.stdout
 
 

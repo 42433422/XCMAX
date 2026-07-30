@@ -109,6 +109,19 @@ def test_delivery_receipt_requires_customer_value_evidence() -> None:
     assert output["blockers"] == ["value_evidence_missing"]
 
 
+def test_delivery_receipt_missing_receipt_is_rejected_not_handler_failed() -> None:
+    """事故/任务完成派发常不带 receipt：应只读驳回，勿 ok=False 刷红大厅。"""
+    output = _module("delivery-receipt-officer").run(
+        {"task": "[employee.task.done] ecosystem-joint-catalog-officer employee.task.done"},
+        {},
+    )
+    assert output["ok"] is True
+    assert output["status"] == "rejected"
+    assert output["blockers"] == ["missing_receipt"]
+    assert output["read_only"] is True
+    assert output["side_effects"] == []
+
+
 def test_knowledge_curator_rejects_unverified_fact() -> None:
     output = _module("doc-knowledge-curator").run(
         {"facts": [{"statement": "claim", "source": "probe://1", "verified": False}]},

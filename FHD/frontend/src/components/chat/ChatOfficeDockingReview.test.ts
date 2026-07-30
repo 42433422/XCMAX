@@ -42,11 +42,11 @@ function excelItem(overrides: Partial<ChatOfficeDockingReviewItem> = {}): ChatOf
     kindLabel: 'Excel',
     status: 'ready',
     commitStatus: '',
-    intentId: 'attendance',
+    intentId: 'attendance_roster',
     intentLabel: '考勤表入库',
     intentSummary: '识别成功，可入库',
     databaseTargetLabel: '考勤数据库',
-    databaseAction: 'insert',
+    databaseAction: 'attendance_import',
     databaseDisabledReason: '',
     selectedKnowledge: false,
     selectedDatabase: true,
@@ -298,5 +298,36 @@ describe('ChatOfficeDockingReview', () => {
       props: { items: [wordItem()], processing: false },
     })
     expect(wrapper.get('.office-docking-review__status').text()).toBe('待确认')
+  })
+
+  it('renders shipment ETL note preview and confirm target', () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: {
+        items: [excelItem({
+          fileName: '国圣送货单.xlsx',
+          intentId: 'shipment_delivery',
+          intentLabel: '送货单/发货单',
+          intentSummary: '识别到 1 张送货单',
+          databaseTargetLabel: '客户/产品/发货单',
+          databaseAction: 'shipment_etl_execute',
+          sampleRows: [],
+          fieldNames: ['购货单位', '型号'],
+          shipmentEtlPreview: {
+            note_count: 1,
+            notes: [{
+              sheet_name: '送货单',
+              unit_name: '甲公司',
+              item_count: 2,
+              total_amount: 20,
+            }],
+          },
+        })],
+        processing: false,
+      },
+    })
+    expect(wrapper.get('.office-docking-review__preview-snippet').text()).toContain('送货单 1 张')
+    expect(wrapper.get('.office-docking-review__shipment-notes').text()).toContain('甲公司')
+    expect(wrapper.get('.office-docking-review__preview-details summary').text()).toBe('查看送货单结构化预览')
+    expect(wrapper.get('button.btn-primary').text()).toBe('确认写入客户/产品/发货单')
   })
 })

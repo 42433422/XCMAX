@@ -122,9 +122,10 @@ async function doLogin() {
 }
 
 .auth-card {
-  background: #111111;
-  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  background: var(--wb-surface-elevated, #ffffff);
+  border: 0.5px solid var(--wb-border-default, rgba(0, 0, 0, 0.08));
   border-radius: 12px;
+  box-shadow: var(--wb-card-shadow, 0 8px 28px rgba(0, 0, 0, 0.06));
   padding: 32px;
   width: 100%;
   max-width: min(400px, 100%);
@@ -135,6 +136,7 @@ async function doLogin() {
   font-size: 20px;
   margin-bottom: 24px;
   text-align: center;
+  color: var(--wb-text-primary, #1d1d1f);
 }
 
 .form-group {
@@ -144,27 +146,28 @@ async function doLogin() {
 .form-group label {
   display: block;
   font-size: 13px;
-  color: rgba(255,255,255,0.5);
+  color: var(--wb-text-muted, #86868b);
   margin-bottom: 6px;
 }
 
 .input {
   width: 100%;
   padding: 10px 12px;
-  border: 0.5px solid rgba(255,255,255,0.15);
+  border: 0.5px solid var(--wb-border-default, rgba(0, 0, 0, 0.12));
   border-radius: 8px;
   font-size: 14px;
   outline: none;
-  background: rgba(255,255,255,0.03);
-  color: #ffffff;
+  background: var(--wb-surface-sunken, #f5f5f7);
+  color: var(--wb-text-primary, #1d1d1f);
+  box-sizing: border-box;
 }
 
 .input:focus {
-  border-color: rgba(255,255,255,0.3);
+  border-color: var(--wb-accent-primary, #0071e3);
 }
 
 .input:disabled {
-  opacity: 0.5;
+  opacity: 0.55;
 }
 
 .btn-block {
@@ -174,8 +177,8 @@ async function doLogin() {
 }
 
 .btn-primary-solid {
-  background: #ffffff;
-  color: #0a0a0a;
+  background: var(--wb-text-primary, #1d1d1f);
+  color: #ffffff;
   border: none;
   padding: 12px;
   border-radius: 8px;
@@ -197,7 +200,7 @@ async function doLogin() {
 .btn-text {
   background: none;
   border: none;
-  color: rgba(255,255,255,0.5);
+  color: var(--wb-text-muted, #86868b);
   cursor: pointer;
   font-size: 13px;
   padding: 4px 0;
@@ -205,12 +208,12 @@ async function doLogin() {
 }
 
 .btn-text:hover {
-  color: #ffffff;
+  color: var(--wb-text-primary, #1d1d1f);
 }
 
 .countdown {
   font-size: 12px;
-  color: rgba(255,255,255,0.3);
+  color: var(--wb-text-muted, #86868b);
   text-align: center;
   margin-bottom: 8px;
 }
@@ -219,11 +222,11 @@ async function doLogin() {
   text-align: center;
   margin-top: 20px;
   font-size: 14px;
-  color: rgba(255,255,255,0.4);
+  color: var(--wb-text-muted, #86868b);
 }
 
 .link {
-  color: #60a5fa;
+  color: var(--wb-accent-primary, #0071e3);
   text-decoration: none;
 }
 
@@ -239,12 +242,12 @@ async function doLogin() {
 }
 
 .flash-ok {
-  background: rgba(74,222,128,0.1);
-  color: #4ade80;
+  background: rgba(52, 211, 153, 0.12);
+  color: #059669;
 }
 
 .flash-err {
-  background: rgba(255,80,80,0.1);
-  color: #ff6b6b;
+  background: rgba(248, 113, 113, 0.12);
+  color: #dc2626;
 }
 </style>

@@ -38,16 +38,12 @@
 
 <script setup lang="ts">
 import type { AgentMessage } from '../../types/agent'
+import { renderButlerBubbleHtml } from '../../utils/butlerBubbleText'
 
 defineProps<{ msg: AgentMessage }>()
 
 function renderText(content: string): string {
-  return content
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br>')
+  return renderButlerBubbleHtml(content)
 }
 
 function formatArgs(args?: Record<string, unknown>): string {
@@ -171,4 +167,15 @@ function formatTime(ts: number): string {
 }
 
 .bubble-text :deep(strong) { font-weight: 700; color: #fff; }
+
+.bubble-text :deep(.bubble-link) {
+  color: #60a5fa;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
+
+.bubble-text :deep(.bubble-link:hover) {
+  color: #93c5fd;
+}
 </style>

@@ -237,3 +237,25 @@ def conversations_get(
         "messages": msgs,
         "metadata": {},
     }
+
+
+@router.post("/conversations/{conversation_id}/messages")
+def conversations_post_message(
+    conversation_id: str,
+    body: dict = Body(default_factory=dict),
+) -> dict:
+    """会话消息写入（兼容探测/旧客户端 POST …/messages，避免仅 GET 导致 405）。"""
+    payload = dict(body or {})
+    payload["session_id"] = (
+        str(conversation_id or "").strip() or str(payload.get("session_id") or "").strip()
+    )
+    if not str(payload.get("content") or "").strip():
+        # 兼容 message / text 字段
+        for key in ("message", "text", "query"):
+            raw = str(payload.get(key) or "").strip()
+            if raw:
+                payload["content"] = raw
+                break
+    if not payload.get("role"):
+        payload["role"] = "user"
+    return conversations_save_message(payload)

@@ -510,9 +510,13 @@ def _execute_shipment_generate_tool(params: dict[str, Any]) -> dict[str, Any]:
             svc.generate_shipment_document(
                 unit_name=str(parsed.get("unit_name") or ""),
                 products=list(parsed.get("products") or []),
-                template_name=params.get("template_name"),
+                template_name=params.get("template_name") or params.get("template"),
+                template_id=params.get("template_id"),
+                preferred_template=params.get("preferred_template") or params.get("template"),
                 date=params.get("date"),
                 order_number=params.get("order_number"),
+                intent="shipment_generate",
+                allow_products_from_db=True,
                 raw_text=order_text or str(params.get("raw_text") or ""),
             ),
         )
@@ -1300,20 +1304,16 @@ class LLMWorkflowPlanner:
         except RECOVERABLE_ERRORS as e:
             logger.warning("Memory v2 不可用（不阻断主流程）: %s", e)
 
-        planned = self._plan_with_react_multiagent(
-            plan_id=plan_id,
-            user_id=user_id,
-            message=message,
-            tool_registry=registry_for_plan,
-            context=context,
-        )
-        if planned is not None:
-            err = validate_plan_graph(planned)
-            if err is None:
-                return planned
-            logger.warning("ReAct/CoT 计划校验失败，回退规则规划: %s", err)
+        from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 
-        return self._fallback_plan(plan_id, message, registry_for_plan)
+        return finalize_planned_graph(
+            self._plan_with_react_multiagent(plan_id, user_id, message, registry_for_plan, context),
+            plan_id=plan_id,
+            context=context,
+            validate=validate_plan_graph,
+            fallback_factory=lambda: self._fallback_plan(plan_id, message, registry_for_plan),
+            warn=logger.warning,
+        )
 
     def _plan_with_react_multiagent(
         self,

@@ -77,6 +77,22 @@ class TestParseDiff:
         assert hunks[0].file_path == "a.py"
         assert hunks[1].file_path == "b.py"
 
+    def test_quoted_paths_supported(self) -> None:
+        diff = (
+            'diff --git "a/中文/含空格 文件.py" "b/中文/含空格 文件.py"\n'
+            "@@ -1,2 +1,2 @@\n"
+            "-old line\n"
+            "+new line\n"
+            "diff --git a/c.py b/c.py\n"
+            "@@ -3,1 +3,1 @@\n"
+            "-x\n"
+            "+y\n"
+        )
+        hunks = review.parse_diff(diff)
+        assert len(hunks) == 2
+        assert hunks[0].file_path == "中文/含空格 文件.py"
+        assert hunks[1].file_path == "c.py"
+
     def test_hunk_with_no_additions(self) -> None:
         diff = "diff --git a/foo.py b/foo.py\n@@ -1,2 +1,2 @@\n context\n-removed\n context2\n"
         hunks = review.parse_diff(diff)
@@ -291,6 +307,44 @@ class TestMatchRules:
         ]
         findings = review.match_high_risk_rules(hunks)
         assert len(findings) == 0
+
+    def test_kb_evidence_diff_does_not_trigger_executable_code_rules(self) -> None:
+        hunks = [
+            review.DiffHunk(
+                file_path="FHD/XCAGI/kb/fixes/example.json",
+                start_line=7,
+                lines=[
+                    (
+                        7,
+                        "+",
+                        '"fix_diff": "for u in users: db.query(User).get(u.id)\\nwhile True:",',
+                    )
+                ],
+                raw_header="@@ -7,1 +7,1 @@",
+            )
+        ]
+        findings = review.match_high_risk_rules(hunks)
+        assert not any(
+            finding.rule in {"n-plus-one-inline", "unbounded-while-true"} for finding in findings
+        )
+
+    def test_kb_evidence_still_scans_for_committed_secrets(self) -> None:
+        hunks = [
+            review.DiffHunk(
+                file_path="FHD/XCAGI/kb/fixes/example.json",
+                start_line=7,
+                lines=[
+                    (
+                        7,
+                        "+",
+                        '"fix_diff": "TOKEN = \'ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789\'",',
+                    )
+                ],
+                raw_header="@@ -7,1 +7,1 @@",
+            )
+        ]
+        findings = review.match_high_risk_rules(hunks)
+        assert any(finding.rule == "hardcoded-aws-secret" for finding in findings)
 
     def test_dedup_same_rule_same_line(self) -> None:
         hunks = [

@@ -10,6 +10,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from app.application.founder_autonomy_alignment_summary import build_alignment_live_summary
+from app.application.founder_autonomy_employee_summary import build_employee_live_summary
 from app.application.founder_autonomy_primary_gates import build_primary_gate_sets
 from app.application.founder_autonomy_projection import (
     build_public_founder_autonomy_projection,
@@ -89,6 +91,22 @@ def build_founder_autonomy_snapshot(
         *timeline_rows,
         *_as_list(_as_dict(runtime.get("governance_audit")).get("recent")),
     ]
+    autonomous_triggers = {"incident_event", "proactive_signal", "scheduler"}
+    autonomous_triggers.add("automated_remediation")
+    autonomous_run_ids = {
+        str(_as_dict(row).get("run_id") or "").strip()
+        for row in all_rows
+        if str(_as_dict(row).get("phase") or "").strip().lower() == "start"
+        and _as_dict(row).get("force") is False
+        and str(_as_dict(row).get("triggered_by") or "").strip().lower() in autonomous_triggers
+        and str(_as_dict(row).get("run_id") or "").strip()
+    }
+    autonomy_rows = [
+        row
+        for row in all_rows
+        if not str(_as_dict(row).get("run_id") or "").strip()
+        or str(_as_dict(row).get("run_id") or "").strip() in autonomous_run_ids
+    ]
 
     active_gates = _as_dict(runtime.get("active_gates"))
     governance_gate = _as_dict(runtime.get("governance_gate"))
@@ -97,6 +115,15 @@ def build_founder_autonomy_snapshot(
     runtime_provenance = _as_dict(current_gate.get("runtime_provenance"))
     contract_status = _as_dict(runtime.get("contract_status"))
     latest_complete = _as_dict(evidence.get("latest_complete"))
+    latest_autonomous_complete: dict[str, Any] = {}
+    for row in reversed(autonomy_rows):
+        item = _as_dict(row)
+        if (
+            str(item.get("phase") or "").strip().lower() == "complete"
+            and str(item.get("run_id") or "").strip() in autonomous_run_ids
+        ):
+            latest_autonomous_complete = item
+            break
     open_run_ids = [str(value) for value in _as_list(evidence.get("open_run_ids")) if str(value)]
     latest_age = _latest_event_age_hours(runtime, now)
 
@@ -105,7 +132,13 @@ def build_founder_autonomy_snapshot(
     pending_total = local_pending + strategic_pending
     knowledge_documents = _first_number(
         knowledge,
-        ("documents", "document_count", "indexed_documents", "sources", "indexed_sources"),
+        (
+            "documents",
+            "document_count",
+            "indexed_documents",
+            "sources",
+            "indexed_sources",
+        ),
     )
     knowledge_chunks = _first_number(knowledge, ("chunks", "chunk_count", "indexed_chunks"))
 
@@ -176,8 +209,11 @@ def build_founder_autonomy_snapshot(
     employee_dashboard_ok = bool(employee_autonomy) and not bool(employee_autonomy.get("error"))
     assigned_employees = _as_int(employee_capability.get("assigned_count"))
     proven_employees = _as_int(employee_capability.get("proven_count"))
+    burn_in_proven_employees = _as_int(employee_capability.get("burn_in_proven_count"))
+    production_proven_employees = _as_int(employee_capability.get("production_proven_count"))
     shell_employees = _as_int(employee_capability.get("shell_count"))
     workforce_ready = bool(employee_capability.get("workforce_ready"))
+    production_workforce_ready = bool(employee_capability.get("production_workforce_ready"))
     workforce_assigned = bool(planned) and assigned_employees >= max(1, round(planned * 0.95))
     unresolved_dead_letters = _as_int(dead_letters.get("unresolved_count"))
     resolved_dead_letters = _as_int(dead_letters.get("resolved_count"))
@@ -193,15 +229,17 @@ def build_founder_autonomy_snapshot(
     gates_clear = bool(active_gates.get("ok"))
     governance_clear = bool(governance_gate.get("ok"))
     has_open_run = bool(open_run_ids)
-    latest_completed = str(latest_complete.get("status") or "").startswith("completed")
-    latest_merged = "merged" in str(latest_complete.get("status") or "").lower()
+    latest_completed = str(latest_autonomous_complete.get("status") or "").startswith("completed")
+    latest_merged = "merged" in str(latest_autonomous_complete.get("status") or "").lower()
 
-    wrote = _has_event(all_rows, "code", "success")
-    reviewed = _has_event(all_rows, "review", "success")
-    qa_passed = _has_event(all_rows, "qa", "success") or _has_event(all_rows, "qa", "pass")
-    merged = latest_merged or _has_event(all_rows, "completed_merged")
-    deploy_attempted = _has_event(all_rows, "deploy_dispatch", require_ok=False)
-    accepted_deploys, verified_deploys = _correlated_deploy_evidence(all_rows)
+    wrote = _has_event(autonomy_rows, "code", "success")
+    reviewed = _has_event(autonomy_rows, "review", "success")
+    qa_passed = _has_event(autonomy_rows, "qa", "success") or _has_event(
+        autonomy_rows, "qa", "pass"
+    )
+    merged = latest_merged or _has_event(autonomy_rows, "completed_merged")
+    deploy_attempted = _has_event(autonomy_rows, "deploy_dispatch", require_ok=False)
+    accepted_deploys, verified_deploys = _correlated_deploy_evidence(autonomy_rows)
     real_deploy_dispatched = bool(accepted_deploys)
     deploy_verified = any(
         str(row.get("environment") or "").lower() == "production" for row in verified_deploys
@@ -213,25 +251,25 @@ def build_founder_autonomy_snapshot(
     )
     incident_run_ids = {
         str(_as_dict(row).get("run_id") or "")
-        for row in all_rows
+        for row in autonomy_rows
         if "incident" in _event_text(row) and str(_as_dict(row).get("run_id") or "")
     }
     repair_run_ids = {
         str(_as_dict(row).get("run_id") or "")
-        for row in all_rows
+        for row in autonomy_rows
         if _event_ok(row)
         and "code" in _event_text(row)
         and str(_as_dict(row).get("run_id") or "") in incident_run_ids
     }
     completed_repair_run_ids = {
         str(_as_dict(row).get("run_id") or "")
-        for row in all_rows
+        for row in autonomy_rows
         if str(_as_dict(row).get("status") or "") in {"completed_merged", "completed"}
         and str(_as_dict(row).get("run_id") or "") in repair_run_ids
     }
     verified_repair_run_ids = {
         str(_as_dict(row).get("run_id") or "")
-        for row in all_rows
+        for row in autonomy_rows
         if _event_ok(row)
         and str(_as_dict(row).get("run_id") or "") in completed_repair_run_ids
         and any(token in _event_text(row) for token in ("verified", "recovered", "healthy"))
@@ -268,31 +306,39 @@ def build_founder_autonomy_snapshot(
     reusable_knowledge = _first_number(kb_summary, ("fix_count", "pattern_count", "total")) > 0
     proactive_run_ids = {
         str(_as_dict(row).get("run_id") or "")
-        for row in all_rows
+        for row in autonomy_rows
         if any(token in _event_text(row) for token in ("proactive", "evolution"))
         and str(_as_dict(row).get("run_id") or "")
     }
     proactive_code_runs = {
         str(_as_dict(row).get("run_id") or "")
-        for row in all_rows
+        for row in autonomy_rows
         if _event_ok(row)
         and "code" in _event_text(row)
         and str(_as_dict(row).get("run_id") or "") in proactive_run_ids
     }
     proactive_qa_runs = {
         str(_as_dict(row).get("run_id") or "")
-        for row in all_rows
+        for row in autonomy_rows
         if _event_ok(row)
         and "qa" in _event_text(row)
         and str(_as_dict(row).get("run_id") or "") in proactive_run_ids
     }
     evolution_implemented = bool(proactive_code_runs & proactive_qa_runs)
-    employee_pack_built = _has_event(all_rows, "employee_pack", "built") or _has_event(
-        all_rows, "pack", "registered"
+    employee_pack_built = _has_event(autonomy_rows, "employee_pack", "built") or _has_event(
+        autonomy_rows, "pack", "registered"
     )
-    modstore_deployed = any(_is_strong_modstore_deployment(row) for row in all_rows)
+    modstore_deployed = any(_is_strong_modstore_deployment(row) for row in autonomy_rows)
     council_roles = _as_dict(strategic_council.get("roles"))
     council_latest = _as_dict(strategic_council.get("latest_receipt"))
+    retort_clarifications = _as_dict(strategic_council.get("retort_clarifications"))
+    retort_open = _as_int(retort_clarifications.get("open_count"))
+    retort_critical = _as_int(retort_clarifications.get("critical_count"))
+    retort_healthy = (
+        bool(retort_clarifications.get("healthy"))
+        if "healthy" in retort_clarifications
+        else retort_open == 0
+    )
     council_ready = (
         bool(strategic_council.get("ready"))
         and all(
@@ -318,6 +364,7 @@ def build_founder_autonomy_snapshot(
         evolution_gates=evolution_gates,
         alignment_gates=alignment_gates,
         workforce_ready=workforce_ready,
+        founder_workforce_ready=production_workforce_ready,
         pending_total=pending_total,
         governance_clear=governance_clear,
         runtime_provenance_ok=runtime_provenance_ok,
@@ -339,8 +386,10 @@ def build_founder_autonomy_snapshot(
         veto_pending=veto_pending,
         prohibited_miss=prohibited_miss,
         planned=planned,
-        proven_employees=proven_employees,
+        proven_employees=production_proven_employees,
         shell_employees=shell_employees,
+        retort_open=retort_open,
+        retort_critical=retort_critical,
     )
 
     return {
@@ -354,8 +403,9 @@ def build_founder_autonomy_snapshot(
             "total": sum(_as_int(item.get("count")) for item in attention_items),
             "items": attention_items,
             "human_intervention_rare": pending_total <= 5
+            and retort_open == 0
             and governance_clear
-            and workforce_ready
+            and production_workforce_ready
             and runtime_provenance_ok,
         },
         "live_summary": {
@@ -366,6 +416,8 @@ def build_founder_autonomy_snapshot(
             "runtime_provenance_reasons": _as_list(runtime_provenance.get("reasons")),
             "latest_event_at": runtime.get("latest_event_at"),
             "latest_complete_status": latest_complete.get("status"),
+            "latest_autonomous_complete_status": latest_autonomous_complete.get("status"),
+            "autonomous_run_count": len(autonomous_run_ids),
             "open_run_ids": open_run_ids,
             "milestone_evidence_rows": len(milestone_rows),
             "milestone_evidence_window": _as_dict(evidence.get("milestone_window")),
@@ -373,14 +425,7 @@ def build_founder_autonomy_snapshot(
             "blocking_gate_keys": _as_list(active_gates.get("blocking_keys")),
             "governance_ok": governance_clear,
             "governance_summary": _as_dict(governance_gate.get("summary")),
-            "planned_employees": planned,
-            "registered_employees": registered,
-            "assigned_employees": assigned_employees,
-            "proven_employees": proven_employees,
-            "shell_employees": shell_employees,
-            "employee_workforce_ready": workforce_ready,
-            "employee_assignment_ratio": _as_float(employee_capability.get("assignment_ratio")),
-            "employee_proof_ratio": _as_float(employee_capability.get("proof_ratio")),
+            **build_employee_live_summary(employee_capability, locals()),
             "loop_participants": len(participants),
             "goals_total": int(goals_total),
             "goals_closed": int(goals_closed),
@@ -400,13 +445,12 @@ def build_founder_autonomy_snapshot(
             "paid_amount_cents": int(paid_amount),
             "production_value_verified": production_value_verified,
             "outcome_verified": outcome_verified,
-            "veto_rate": veto_rate,
-            "autonomy_audit_authoritative": audit_available,
-            "autonomy_audit_count": audit_total,
-            "prohibited_miss_status": autonomy_audit.get("prohibited_miss_evidence_status")
-            or ("detected" if prohibited_miss else "unknown"),
-            "prohibited_posthoc_coverage_rate": _as_float(
-                autonomy_audit.get("posthoc_coverage_rate")
+            **build_alignment_live_summary(
+                autonomy_audit,
+                audit_available=audit_available,
+                audit_total=audit_total,
+                prohibited_miss=prohibited_miss,
+                veto_rate=veto_rate,
             ),
             "veto_channel_available": veto_channel_available,
             "veto_pending": veto_pending,
@@ -423,15 +467,24 @@ def build_founder_autonomy_snapshot(
             "strategic_council_receipts": _as_int(strategic_council.get("verified_receipt_count")),
             "strategic_council_roles": council_roles,
             "strategic_council_latest": council_latest,
+            "retort_clarifications_open": retort_open,
+            "retort_clarifications_critical": retort_critical,
+            "retort_clarifications_healthy": retort_healthy,
         },
         "truth_domains": {
             "source_capability": {"available": True, "label": "当前源码能力"},
-            "local_runtime": {"available": bool(runtime.get("ok")), "label": "本机实际运行"},
+            "local_runtime": {
+                "available": bool(runtime.get("ok")),
+                "label": "本机实际运行",
+            },
             "deployment_runtime": {
                 "available": real_deploy_dispatched or deploy_attempted,
                 "label": "部署派发/验证",
             },
-            "production_value": {"available": outcome_verified, "label": "真实客户付费与价值"},
+            "production_value": {
+                "available": outcome_verified,
+                "label": "真实客户付费与价值",
+            },
         },
     }
 

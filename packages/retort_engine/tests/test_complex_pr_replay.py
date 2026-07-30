@@ -22,7 +22,11 @@ def test_complex_pr_replay_summarizes_real_pr_shape(tmp_path: Path) -> None:
             },
             "review": {
                 "summary": {"reviewed_new_change_count": 40},
-                "files": [{"path": f"app/{number}.py"}, {"path": f"web/{number}.ts"}, {"path": f"docs/{number}.md"}],
+                "files": [
+                    {"path": f"app/{number}.py"},
+                    {"path": f"web/{number}.ts"},
+                    {"path": f"docs/{number}.md"},
+                ],
                 "comments": [
                     {"severity": "high"},
                     {"severity": "medium"},
@@ -32,7 +36,15 @@ def test_complex_pr_replay_summarizes_real_pr_shape(tmp_path: Path) -> None:
             },
         }
 
-    result = build_complex_pr_replay_report(tmp_path, pr_urls=["https://github.com/o/r/pull/1", "https://github.com/o/r/pull/2", "https://github.com/o/r/pull/3"], reviewer=reviewer)
+    result = build_complex_pr_replay_report(
+        tmp_path,
+        pr_urls=[
+            "https://github.com/o/r/pull/1",
+            "https://github.com/o/r/pull/2",
+            "https://github.com/o/r/pull/3",
+        ],
+        reviewer=reviewer,
+    )
 
     assert result["status"] == "ready"
     assert result["summary"]["reviewed_pr_count"] == 3

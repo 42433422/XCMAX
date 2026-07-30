@@ -8,7 +8,7 @@
 - 自动路由：根据provider/model自动选择厂商
 - 密钥管理：平台自动解析（用户BYOK > 平台密钥）
 - 计费集成：自动钱包预授权/结算
-- 智能降级：超时自动切换备用模型
+- 智能降级：配额/限流失败时自动切换备用模型（桌面侧候选重试 + 市场 allow_failover）
 - ✨ 会话集成：自动从FHD登录Session获取Token（无需手动配置）
 
 使用方式：
@@ -26,6 +26,7 @@
     adapter = create_modstore_adapter_from_env()
 """
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -43,6 +44,9 @@ from app.application.workflow.multimodal_user_content import (
     messages_have_image_parts,
     replace_image_parts_with_ocr_text,
 )
+from app.infrastructure.llm import modstore_adapter_failover as _mfailover
+from app.infrastructure.llm.modstore_chat_failover import is_market_chat_failoverable
+from app.infrastructure.llm.modstore_response_normalize import normalize_market_chat_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -103,6 +107,15 @@ def _to_openai_object(value: Any) -> Any:
     if isinstance(value, list):
         return [_to_openai_object(v) for v in value]
     return value
+
+
+def _response_status_code(response: Any, default: int = 200) -> int:
+    raw = getattr(response, "status_code", default)
+    if isinstance(raw, int) and not isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str) and raw.isdigit():
+        return int(raw)
+    return default
 
 
 def _normalize_stream_choice(choice: Dict[str, Any]) -> Dict[str, Any]:
@@ -432,6 +445,38 @@ class ModstorePlatformAdapter:
 
         return headers
 
+    def _list_chat_failover_candidates_sync(
+        self, primary_provider: str, primary_model: str
+    ) -> list[tuple[str, str]]:
+        return _mfailover._list_chat_failover_candidates_sync(self, primary_provider, primary_model)
+
+    def _post_market_chat_sync(
+        self,
+        *,
+        provider: str,
+        model: str,
+        messages: List[Dict[str, Any]],
+        temperature: float,
+        max_tokens: int,
+        allow_failover: bool,
+        extra: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        return _mfailover._post_market_chat_sync(
+            self,
+            provider=provider,
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            allow_failover=allow_failover,
+            extra=extra,
+        )
+
+    def _normalize_response(
+        self, raw_response: Dict[str, Any], provider: str, model: str
+    ) -> Dict[str, Any]:
+        return normalize_market_chat_response(raw_response, provider, model)
+
     def _resolve_provider_model(
         self,
         provider: str = None,
@@ -564,83 +609,101 @@ class ModstorePlatformAdapter:
             raise ValueError("修茈市场平台URL未配置 (MODSTORE_PLATFORM_URL)")
 
         effective_provider, effective_model = self._resolve_provider_model(provider, model)
-        messages = await self._prepare_messages(messages, effective_provider, effective_model)
-
-        url = f"{self.platform_url}/api/llm/chat"
-
-        payload: Dict[str, Any] = {
-            "provider": effective_provider,
-            "model": effective_model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            **kwargs,
-        }
-
-        if self.user_id:
-            payload["user_id"] = self.user_id
-
-        logger.debug(
-            "[Modstore] 调用平台: %s/%s, messages=%s, user_id=%s",
-            effective_provider,
-            effective_model,
-            len(messages),
-            self.user_id,
+        # 异步路径复用同步候选组装（status/catalog 拉取开销可接受）
+        candidates = await asyncio.to_thread(
+            self._list_chat_failover_candidates_sync, effective_provider, effective_model
         )
-
-        t0 = time.perf_counter()
-
-        try:
-            client = await self._get_client()
-            response = await client.post(url, json=payload)
-
-            latency_ms = (time.perf_counter() - t0) * 1000.0
-
-            if response.status_code >= 400:
-                error_text = response.text[:500]
-                logger.error("[Modstore] 平台返回错误 %s: %s", response.status_code, error_text)
-                raise ValueError(f"平台错误({response.status_code}): {error_text}")
-
-            result = response.json()
-
-            # 性能监控（解析真实 token 用量，之前硬编码 token_count=0）
-            try:
-                from app.neuro_bus.application_neuro_bridge import (
-                    neuro_notify_ai_model_roundtrip,
-                )
-
-                raw_usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
-                raw_total = 0
-                try:
-                    raw_total = int(raw_usage.get("total_tokens") or 0)
-                except (TypeError, ValueError):
-                    raw_total = 0
-                neuro_notify_ai_model_roundtrip(
-                    model=f"modstore:{effective_provider}/{effective_model}",
-                    latency_ms=latency_ms,
-                    token_count=raw_total,
-                    user_id=str(self.user_id or ""),
-                )
-            except RECOVERABLE_ERRORS:
-                pass
-
-            # 标准化响应格式为OpenAI兼容格式
-            normalized = self._normalize_response(result, effective_provider, effective_model)
-
-            logger.info(
-                f"[Modstore] 调用成功 [{latency_ms:.0f}ms], "
-                f"key_source={result.get('key_source', 'unknown')}, "
-                f"billed={result.get('billed', False)}"
+        last_error: Exception | None = None
+        for idx, (prov, mdl) in enumerate(candidates):
+            prepared = await self._prepare_messages(messages, prov, mdl)
+            url = f"{self.platform_url}/api/llm/chat"
+            payload: Dict[str, Any] = {
+                "provider": prov,
+                "model": mdl,
+                "messages": prepared,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "allow_failover": idx == 0,
+                **kwargs,
+            }
+            if self.user_id:
+                payload["user_id"] = self.user_id
+            logger.debug(
+                "[Modstore] 调用平台: %s/%s, messages=%s, user_id=%s failover=%s",
+                prov,
+                mdl,
+                len(prepared),
+                self.user_id,
+                idx == 0,
             )
+            t0 = time.perf_counter()
+            try:
+                client = await self._get_client()
+                response = await client.post(url, json=payload)
+                latency_ms = (time.perf_counter() - t0) * 1000.0
+                status_code = _response_status_code(response)
+                if status_code >= 400:
+                    error_text = response.text[:500]
+                    err = ValueError(f"平台错误({status_code}): {error_text}")
+                    if idx + 1 < len(candidates) and is_market_chat_failoverable(
+                        status_code, error_text
+                    ):
+                        logger.warning(
+                            "[Modstore] 异步换模重试 %s/%s -> %s err=%s",
+                            prov,
+                            mdl,
+                            candidates[idx + 1],
+                            error_text[:200],
+                        )
+                        last_error = err
+                        continue
+                    logger.error("[Modstore] 平台返回错误 %s: %s", status_code, error_text)
+                    raise err
+                result = response.json()
+                used_provider = str(result.get("provider") or prov)
+                used_model = str(result.get("model") or mdl)
+                try:
+                    from app.neuro_bus.application_neuro_bridge import (
+                        neuro_notify_ai_model_roundtrip,
+                    )
 
-            return normalized
-
-        except httpx.HTTPError as e:
-            logger.error("[Modstore] HTTP请求失败: %s", e)
-            raise
-        except RECOVERABLE_ERRORS as e:
-            logger.error("[Modstore] 调用异常: %s", e, exc_info=True)
-            raise
+                    raw_usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
+                    try:
+                        raw_total = int(raw_usage.get("total_tokens") or 0)
+                    except (TypeError, ValueError):
+                        raw_total = 0
+                    neuro_notify_ai_model_roundtrip(
+                        model=f"modstore:{used_provider}/{used_model}",
+                        latency_ms=latency_ms,
+                        token_count=raw_total,
+                        user_id=str(self.user_id or ""),
+                    )
+                except RECOVERABLE_ERRORS:
+                    pass
+                logger.info(
+                    "[Modstore] 调用成功 [%.0fms], %s/%s key_source=%s billed=%s",
+                    latency_ms,
+                    used_provider,
+                    used_model,
+                    result.get("key_source", "unknown"),
+                    result.get("billed", False),
+                )
+                return self._normalize_response(result, used_provider, used_model)
+            except httpx.HTTPError as e:
+                last_error = e
+                if idx + 1 < len(candidates) and is_market_chat_failoverable(None, str(e)):
+                    logger.warning("[Modstore] HTTP 失败换模 %s/%s: %s", prov, mdl, e)
+                    continue
+                logger.error("[Modstore] HTTP请求失败: %s", e)
+                raise
+            except ValueError:
+                raise
+            except RECOVERABLE_ERRORS as e:
+                logger.error("[Modstore] 调用异常: %s", e, exc_info=True)
+                raise
+        if last_error is not None:
+            raise last_error
+        raise ValueError("平台聊天失败且无可用备用模型")
 
     async def stream_chat_completion(
         self,
@@ -715,52 +778,42 @@ class ModstorePlatformAdapter:
             pass
 
         effective_provider, effective_model = self._resolve_provider_model(provider, model)
-        messages = self._prepare_messages_sync(messages, effective_provider, effective_model)
-        url = f"{self.platform_url}/api/llm/chat"
-        payload: Dict[str, Any] = {
-            "provider": effective_provider,
-            "model": effective_model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            **kwargs,
-        }
-        if self.user_id:
-            payload["user_id"] = self.user_id
-
-        t0 = time.perf_counter()
-        with httpx.Client(
-            timeout=httpx.Timeout(self.timeout, connect=10.0),
-            limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
-            headers=self._build_headers(),
-        ) as client:
-            response = client.post(url, json=payload)
-            latency_ms = (time.perf_counter() - t0) * 1000.0
-            if response.status_code >= 400:
-                error_text = response.text[:500]
-                logger.error("[Modstore] 平台同步返回错误 %s: %s", response.status_code, error_text)
-                raise ValueError(f"平台错误({response.status_code}): {error_text}")
-            result = response.json()
-
-        try:
-            from app.neuro_bus.application_neuro_bridge import neuro_notify_ai_model_roundtrip
-
-            raw_usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
-            raw_total = 0
+        candidates = self._list_chat_failover_candidates_sync(effective_provider, effective_model)
+        last_error: Exception | None = None
+        for idx, (prov, mdl) in enumerate(candidates):
+            prepared = self._prepare_messages_sync(messages, prov, mdl)
             try:
-                raw_total = int(raw_usage.get("total_tokens") or 0)
-            except (TypeError, ValueError):
-                raw_total = 0
-            neuro_notify_ai_model_roundtrip(
-                model=f"modstore:{effective_provider}/{effective_model}",
-                latency_ms=latency_ms,
-                token_count=raw_total,
-                user_id=str(self.user_id or ""),
-            )
-        except RECOVERABLE_ERRORS:
-            pass
-
-        return self._normalize_response(result, effective_provider, effective_model)
+                # 首枪交给市场 allow_failover；若市场未升级或仍失败，再由桌面侧换候选
+                return self._post_market_chat_sync(
+                    provider=prov,
+                    model=mdl,
+                    messages=prepared,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    allow_failover=(idx == 0),
+                    extra=kwargs or None,
+                )
+            except ValueError as exc:
+                last_error = exc
+                status_match = re.search(r"平台错误\((\d{3})\)", str(exc))
+                status_code = int(status_match.group(1)) if status_match else None
+                if idx + 1 >= len(candidates) or not is_market_chat_failoverable(
+                    status_code, str(exc)
+                ):
+                    raise
+                logger.warning(
+                    "[Modstore] 桌面侧换模重试 primary=%s/%s failed=%s/%s next=%s err=%s",
+                    effective_provider,
+                    effective_model,
+                    prov,
+                    mdl,
+                    candidates[idx + 1],
+                    str(exc)[:240],
+                )
+                continue
+        if last_error is not None:
+            raise last_error
+        raise ValueError("平台聊天失败且无可用备用模型")
 
     def stream_chat_completion_sync(
         self,
@@ -776,156 +829,81 @@ class ModstorePlatformAdapter:
             raise ValueError("修茈市场平台URL未配置")
 
         effective_provider, effective_model = self._resolve_provider_model(provider, model)
-        messages = self._prepare_messages_sync(messages, effective_provider, effective_model)
-        url = f"{self.platform_url}/api/llm/chat/stream"
-        payload: Dict[str, Any] = {
-            "provider": effective_provider,
-            "model": effective_model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "stream": True,
-            **kwargs,
-        }
-        if self.user_id:
-            payload["user_id"] = self.user_id
-
-        logger.info("[Modstream] 启动同步流式请求: %s/%s", effective_provider, effective_model)
-        with httpx.Client(
-            timeout=httpx.Timeout(self.timeout, connect=10.0),
-            limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
-            headers=self._build_headers(),
-        ) as client:
-            with client.stream("POST", url, json=payload) as response:
-                if response.status_code >= 400:
-                    error_text = response.read().decode("utf-8", errors="ignore")[:500]
-                    logger.error(
-                        "[Modstream] 平台同步流式返回错误 %s: %s", response.status_code, error_text
-                    )
-                    raise ValueError(f"平台错误({response.status_code}): {error_text}")
-                current_event = ""
-                for line in response.iter_lines():
-                    text = (line or "").strip()
-                    if not text:
-                        continue
-                    if text.startswith("event:"):
-                        current_event = text[6:].strip().lower()
-                        continue
-                    if text.startswith("data:"):
-                        text = text[5:].strip()
-                    if text == "[DONE]":
-                        break
-                    if current_event in {"meta", "done"}:
-                        continue
-                    yield text
-
-    def _normalize_response(
-        self, raw_response: Dict[str, Any], provider: str, model: str
-    ) -> Dict[str, Any]:
-        """
-        将修茈市场响应标准化为OpenAI格式
-
-        修茈市场返回格式:
-        {
-            "success": True,
-            "content": "...",
-            "usage": {...},
-            "charge_amount": 0.01,
-            "key_source": "platform",
-            "provider": "xiaomi",
-            "model": "mimo-v2.5-pro",
-            ...
-        }
-
-        OpenAI标准格式:
-        {
-            "choices": [{
-                "message": {"role": "assistant", "content": "..."},
-                "index": 0,
-                "finish_reason": "stop"
-            }],
-            "usage": {...},
-            "model": "..."
-        }
-        """
-        raw_choices = raw_response.get("choices")
-        if isinstance(raw_choices, list) and raw_choices:
-            normalized_choices: List[Dict[str, Any]] = []
-            for idx, choice in enumerate(raw_choices):
-                choice_dict = choice if isinstance(choice, dict) else {}
-                message = (
-                    choice_dict.get("message")
-                    if isinstance(choice_dict.get("message"), dict)
-                    else {}
-                )
-                normalized_message: Dict[str, Any] = {
-                    "role": message.get("role") or "assistant",
-                    "content": message.get("content") or "",
-                }
-                if message.get("tool_calls"):
-                    normalized_message["tool_calls"] = message.get("tool_calls")
-                normalized_choices.append(
-                    {
-                        "message": normalized_message,
-                        "index": choice_dict.get("index", idx),
-                        "finish_reason": choice_dict.get("finish_reason", "stop"),
-                    }
-                )
-            usage = raw_response.get("usage", {})
-            usage_dict = dict(usage) if isinstance(usage, dict) else {}
-            return {
-                "choices": normalized_choices,
-                "usage": usage_dict,
-                "model": raw_response.get("model") or f"{provider}/{model}",
-                "_modstore_meta": {
-                    "success": raw_response.get("success"),
-                    "provider": raw_response.get("provider"),
-                    "model": raw_response.get("model"),
-                    "key_source": raw_response.get("key_source"),
-                    "billed": raw_response.get("billed"),
-                    "charge_amount": raw_response.get("charge_amount"),
-                    "conversation_id": raw_response.get("conversation_id"),
-                    "request_id": raw_response.get("request_id"),
-                },
+        candidates = self._list_chat_failover_candidates_sync(effective_provider, effective_model)
+        last_error: Exception | None = None
+        for idx, (prov, mdl) in enumerate(candidates):
+            prepared = self._prepare_messages_sync(messages, prov, mdl)
+            url = f"{self.platform_url}/api/llm/chat/stream"
+            payload: Dict[str, Any] = {
+                "provider": prov,
+                "model": mdl,
+                "messages": prepared,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "stream": True,
+                "allow_failover": idx == 0,
+                **kwargs,
             }
-
-        content = raw_response.get("content", "")
-        usage = raw_response.get("usage", {})
-        tool_calls = raw_response.get("tool_calls")
-
-        # 处理usage对象（可能是dataclass或dict）
-        if hasattr(usage, "__dict__"):
-            usage_dict = usage.__dict__
-        else:
-            usage_dict = dict(usage) if isinstance(usage, dict) else {}
-
-        normalized = {
-            "choices": [
-                {
-                    "message": {
-                        "role": "assistant",
-                        "content": content,
-                        **({"tool_calls": tool_calls} if tool_calls else {}),
-                    },
-                    "index": 0,
-                    "finish_reason": "stop",
-                }
-            ],
-            "usage": usage_dict,
-            "model": f"{provider}/{model}",
-            "_modstore_meta": {
-                "success": raw_response.get("success"),
-                "provider": raw_response.get("provider"),
-                "model": raw_response.get("model"),
-                "key_source": raw_response.get("key_source"),
-                "billed": raw_response.get("billed"),
-                "charge_amount": raw_response.get("charge_amount"),
-                "conversation_id": raw_response.get("conversation_id"),
-                "request_id": raw_response.get("request_id"),
-            },
-        }
-
-        return normalized
+            if self.user_id:
+                payload["user_id"] = self.user_id
+            logger.info(
+                "[Modstream] 启动同步流式请求: %s/%s (attempt %s/%s)",
+                prov,
+                mdl,
+                idx + 1,
+                len(candidates),
+            )
+            retry_next = False
+            with httpx.Client(
+                timeout=httpx.Timeout(self.timeout, connect=10.0),
+                limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
+                headers=self._build_headers(),
+            ) as client:
+                with client.stream("POST", url, json=payload) as response:
+                    status_code = _response_status_code(response)
+                    if status_code >= 400:
+                        error_text = response.read().decode("utf-8", errors="ignore")[:500]
+                        err = ValueError(f"平台错误({status_code}): {error_text}")
+                        if idx + 1 < len(candidates) and is_market_chat_failoverable(
+                            status_code, error_text
+                        ):
+                            logger.warning(
+                                "[Modstream] 流式换模 %s/%s -> %s",
+                                prov,
+                                mdl,
+                                candidates[idx + 1],
+                            )
+                            last_error = err
+                            retry_next = True
+                        else:
+                            logger.error(
+                                "[Modstream] 平台同步流式返回错误 %s: %s",
+                                status_code,
+                                error_text,
+                            )
+                            raise err
+                    else:
+                        current_event = ""
+                        for line in response.iter_lines():
+                            line_text = (line or "").strip()
+                            if not line_text:
+                                continue
+                            if line_text.startswith("event:"):
+                                current_event = line_text[6:].strip().lower()
+                                continue
+                            if line_text.startswith("data:"):
+                                line_text = line_text[5:].strip()
+                            if line_text == "[DONE]":
+                                break
+                            if current_event in {"meta", "done"}:
+                                continue
+                            yield line_text
+                        return
+            if retry_next:
+                continue
+        if last_error is not None:
+            raise last_error
+        raise ValueError("平台流式聊天失败且无可用备用模型")
 
     async def get_available_providers(self) -> List[Dict[str, Any]]:
         """
@@ -939,11 +917,12 @@ class ModstorePlatformAdapter:
         try:
             client = await self._get_client()
             response = await client.get(url)
+            status_code = _response_status_code(response)
 
-            if response.status_code == 200:
+            if status_code == 200:
                 return cast("list[dict[str, Any]]", response.json().get("providers", []))
             else:
-                logger.warning("[Modstore] 获取供应商列表失败: %s", response.status_code)
+                logger.warning("[Modstore] 获取供应商列表失败: %s", status_code)
                 return []
 
         except RECOVERABLE_ERRORS as e:
@@ -966,11 +945,12 @@ class ModstorePlatformAdapter:
         try:
             client = await self._get_client()
             response = await client.get(url)
+            status_code = _response_status_code(response)
 
-            if response.status_code == 200:
+            if status_code == 200:
                 return cast("dict[str, Any]", response.json())
             else:
-                return {"error": f"HTTP {response.status_code}"}
+                return {"error": f"HTTP {status_code}"}
 
         except RECOVERABLE_ERRORS as e:
             return {"error": str(e)}

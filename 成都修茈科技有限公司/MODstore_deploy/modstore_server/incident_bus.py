@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import os
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List
@@ -38,16 +39,22 @@ _NON_DISPATCH_EVENT_TYPES = frozenset(
     }
 )
 
-# Successful lifecycle events are workflow signals, not incidents.  They may
-# still drive an explicit ``EmployeeTriggerBinding`` (for example
-# ``employee.task.done:intent-analyst`` -> ``employee-planner``), but must not
-# enter the generic incident team or task market.  Treating every successful
-# employee completion as an incident caused the recovery path to dispatch a
-# code-fix task for healthy work.
+# Workflow lifecycle signals are not generic incidents.  They may still drive
+# an explicit ``EmployeeTriggerBinding`` (for example
+# ``employee.task.done:intent-analyst`` -> ``employee-planner`` or
+# ``ops.change_request.submitted`` -> ``change-request-auditor``), but must not
+# enter the generic incident team or task market.  Treating healthy task,
+# scheduler, backup, or planned change-request signals as incidents creates
+# recursive scout/fix/verify teams and disposable workspaces for normal work.
 _BINDING_ONLY_EVENT_TYPES = frozenset(
     {
+        "backup.completed",
+        "backup.dr_guard.cleared",
+        "backup.ondemand_completed",
         "employee.task.assigned",
         "employee.task.done",
+        "ops.change_request.submitted",
+        "schedule.tick",
     }
 )
 
@@ -185,10 +192,29 @@ def publish(
                 )
         except Exception:
             logger.exception("consistency_check.completed autofix trigger failed")
-    try:
-        _dispatch_incident(eid)
-    except Exception:  # noqa: BLE001
-        logger.exception("dispatch incident id=%s failed", eid)
+    # 默认异步派发：同步跑员工编排/LLM 会拖死 HTTP（如 AI 客服 /chat → 处理中卡住）。
+    # 测试或显式需要可设 MODSTORE_INCIDENT_SYNC_DISPATCH=1。
+    sync_dispatch = (os.environ.get("MODSTORE_INCIDENT_SYNC_DISPATCH") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+    def _run_dispatch() -> None:
+        try:
+            _dispatch_incident(eid)
+        except Exception:  # noqa: BLE001
+            logger.exception("dispatch incident id=%s failed", eid)
+
+    if sync_dispatch:
+        _run_dispatch()
+    else:
+        threading.Thread(
+            target=_run_dispatch,
+            daemon=True,
+            name=f"incident-dispatch-{eid}",
+        ).start()
     return True
 
 
@@ -233,7 +259,7 @@ def _admin_user_id() -> int:
     sf = get_session_factory()
     with sf() as session:
         u = (
-            session.query(User).filter(User.is_admin == True).order_by(User.id.asc()).first()
+            session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
         )  # noqa: E712
         if u:
             return int(u.id)
@@ -283,6 +309,7 @@ def _incident_employee_input(
 
 @platform_llm_scoped
 def _dispatch_incident(event_id: int) -> None:
+    claimed_here = False
     try:
         from modstore_server.node_coordinator import claim_incident_for_node
 
@@ -294,9 +321,110 @@ def _dispatch_incident(event_id: int) -> None:
                 claim.get("owner"),
             )
             return
+        claimed_here = True
     except Exception:
         logger.debug("incident cluster claim skipped event_id=%s", event_id, exc_info=True)
 
+    try:
+        _dispatch_incident_body(event_id)
+    finally:
+        if claimed_here:
+            try:
+                from modstore_server.node_coordinator import release_incident_claim
+
+                release_incident_claim(event_id)
+            except Exception:
+                logger.debug(
+                    "incident cluster claim release failed event_id=%s",
+                    event_id,
+                    exc_info=True,
+                )
+
+
+def _extract_routing_plan(exec_result: Any) -> List[Dict[str, Any]]:
+    """Pull intake-dispatcher ``routing_plan`` out of execute_employee_task result."""
+
+    if not isinstance(exec_result, dict):
+        return []
+    result = exec_result.get("result")
+    if not isinstance(result, dict):
+        return []
+    out = result.get("output")
+    if isinstance(out, dict) and isinstance(out.get("routing_plan"), list):
+        return [row for row in out["routing_plan"] if isinstance(row, dict)]
+    outputs = result.get("outputs")
+    if isinstance(outputs, list):
+        for item in outputs:
+            if not isinstance(item, dict):
+                continue
+            nested = item.get("output")
+            if isinstance(nested, dict) and isinstance(nested.get("routing_plan"), list):
+                return [row for row in nested["routing_plan"] if isinstance(row, dict)]
+    return []
+
+
+def _routing_plan_owners(exec_result: Any) -> set[str]:
+    return {
+        str(row.get("proposed_owner") or "").strip()
+        for row in _extract_routing_plan(exec_result)
+        if str(row.get("proposed_owner") or "").strip()
+    }
+
+
+def _dispatch_intake_routing_plan(
+    exec_result: Any,
+    *,
+    incident_payload: Dict[str, Any],
+    event_type: str,
+    source: str,
+    admin_id: int,
+    catalog_ids: set[str],
+    skip_ids: set[str],
+    brief: str,
+) -> int:
+    """Execute ``proposed_owner`` employees from intake routing_plan (real side effects)."""
+
+    from modstore_server.duty_workforce_contracts import duty_event_execution_input
+
+    extra = 0
+    for row in _extract_routing_plan(exec_result):
+        owner = str(row.get("proposed_owner") or "").strip()
+        if not owner or owner in skip_ids or owner not in catalog_ids:
+            continue
+        try:
+            duty_input = duty_event_execution_input(
+                owner,
+                event_type=event_type,
+                source=source,
+                incident=incident_payload,
+            )
+            owner_brief = (f"{brief} | route={owner} request_id={row.get('request_id') or ''}")[
+                :500
+            ]
+            execute_employee_task(
+                owner,
+                owner_brief,
+                duty_input
+                or _incident_employee_input(
+                    incident_payload=incident_payload,
+                    event_type=event_type,
+                    source=source,
+                ),
+                user_id=0 if duty_input else admin_id,
+            )
+            extra += 1
+            skip_ids.add(owner)
+            logger.info(
+                "incident_bus: intake routing_plan dispatched owner=%s request_id=%s",
+                owner,
+                row.get("request_id"),
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("incident_bus: intake routing_plan dispatch failed owner=%s", owner)
+    return extra
+
+
+def _dispatch_incident_body(event_id: int) -> None:
     event_type_pre = _incident_event_type(event_id)
     if event_type_pre in _NON_DISPATCH_EVENT_TYPES:
         logger.info(
@@ -360,12 +488,18 @@ def _dispatch_incident(event_id: int) -> None:
                         else None
                     ),
                 )
-                return
-            logger.info(
-                "incident_bus: team did not claim event_id=%s reason=%s; fallback market",
-                event_id,
-                team.get("reason"),
-            )
+                # 客服工单：团队抢单后仍走 binding，让 intake-dispatcher /
+                # user-customer-service-officer 按既有订阅接单（跳过 market 防双派）。
+                if event_type_pre == "ops.intake.customer_ticket":
+                    binding_only = True
+                else:
+                    return
+            else:
+                logger.info(
+                    "incident_bus: team did not claim event_id=%s reason=%s; fallback market",
+                    event_id,
+                    team.get("reason"),
+                )
         except Exception:
             logger.exception("incident team failed event_id=%s; fallback market", event_id)
 
@@ -452,6 +586,7 @@ def _dispatch_incident(event_id: int) -> None:
         brief = f"[{event_type}] {summary}"[:500]
 
     dispatched = 0
+    already_ran: set[str] = set()
     for eid_emp in binding_ids:
         if not eid_emp or eid_emp not in catalog_ids:
             continue
@@ -464,7 +599,7 @@ def _dispatch_incident(event_id: int) -> None:
                 source=source,
                 incident=payload,
             )
-            execute_employee_task(
+            exec_result = execute_employee_task(
                 eid_emp,
                 brief,
                 duty_input
@@ -476,13 +611,29 @@ def _dispatch_incident(event_id: int) -> None:
                 user_id=0 if duty_input else admin_id,
             )
             dispatched += 1
+            already_ran.add(eid_emp)
+            # intake-dispatcher: consume routing_plan → real downstream dispatch
+            if eid_emp == "intake-dispatcher":
+                extra = _dispatch_intake_routing_plan(
+                    exec_result,
+                    incident_payload=payload,
+                    event_type=event_type,
+                    source=source,
+                    admin_id=admin_id,
+                    catalog_ids=catalog_ids,
+                    skip_ids=already_ran,
+                    brief=brief,
+                )
+                dispatched += int(extra)
+                already_ran.update(_routing_plan_owners(exec_result))
         except Exception as exc:  # noqa: BLE001
             logger.exception("incident dispatch employee=%s: %s", eid_emp, exc)
 
     with sf() as session:
         ev2 = session.query(IncidentEvent).filter(IncidentEvent.id == event_id).first()
         if ev2:
-            ev2.dispatched_count = int(dispatched)
+            # team/market 可能已写过 dispatched_count；binding 追加而非覆盖
+            ev2.dispatched_count = int(ev2.dispatched_count or 0) + int(dispatched)
             session.commit()
 
 

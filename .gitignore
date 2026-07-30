@@ -18,6 +18,10 @@ release-apk/
 # Agent/Codex 本地 smoke 验证产物（跨子模块）
 **/.codex-artifacts/
 
+# 已集成的转录恢复快照仅作本地证据，不是独立源码树
+/FHD/_recovered-*/
+/FHD/_restored-from-transcript-*/
+
 # 全局 Python/IDE/构建产物（FHD/.gitignore 已覆盖大多数，此处为根级兜底）
 __pycache__/
 *.py[cod]
@@ -26,6 +30,8 @@ __pycache__/
 .venv*/
 .coverage
 htmlcov/
+packages/xcagi_common/build/
+packages/xcagi_common/*.egg-info/
 .idea/
 .vscode/
 .DS_Store

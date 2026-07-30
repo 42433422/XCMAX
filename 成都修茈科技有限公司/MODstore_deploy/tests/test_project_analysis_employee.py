@@ -12,10 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-import sys
-from typing import Any, Dict, List
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -392,3 +389,56 @@ def test_system_burn_in_repo_exception_rejects_outside_path(tmp_path, monkeypatc
         )
         == ""
     )
+
+
+def test_trusted_incident_team_allows_monorepo_write(tmp_path, monkeypatch):
+    from modstore_server.employee_executor import _trusted_system_burn_in_project_root
+
+    repo = tmp_path / "repo"
+    project = repo / "成都修茈科技有限公司"
+    project.mkdir(parents=True)
+    monkeypatch.setenv("XCMAX_MONOREPO_ROOT", str(repo))
+
+    resolved = _trusted_system_burn_in_project_root(
+        project,
+        cog_input={"_trusted_incident_team_execution": True},
+        user_id=0,
+        read_only=False,
+    )
+    assert resolved == str(project.resolve())
+
+
+def test_handlers_execution_ok_prefers_any_success():
+    from modstore_server.employee_executor import _handlers_execution_ok
+
+    assert _handlers_execution_ok(
+        {
+            "outputs": [
+                {"handler": "para_delegate", "ok": False, "status": "para_api_rejected_outboxed"},
+                {"handler": "agent", "ok": True},
+            ]
+        }
+    )
+    assert not _handlers_execution_ok(
+        {
+            "outputs": [
+                {"handler": "para_delegate", "ok": False, "status": "para_api_rejected_outboxed"}
+            ]
+        }
+    )
+
+
+def test_prefer_para_keeps_local_fallback(monkeypatch):
+    from modstore_server import employee_executor as ee
+
+    monkeypatch.setattr("modstore_server.para_delegate_handler.para_delegate_enabled", lambda: True)
+    monkeypatch.setattr(
+        "modstore_server.para_delegate_handler.para_delegate_ready_for_dispatch", lambda: True
+    )
+    out = ee._prefer_para_with_local_fallback(
+        ["vibe_edit", "llm_md"],
+        ["para_delegate", "vibe_edit", "agent", "llm_md"],
+    )
+    assert out[0] == "para_delegate"
+    assert "vibe_edit" in out
+    assert "agent" in out

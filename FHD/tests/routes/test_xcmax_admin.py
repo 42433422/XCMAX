@@ -14,7 +14,9 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
+import app.fastapi_routes.founder_autonomy_api as founder_routes
 import app.fastapi_routes.xcmax_admin as admin_routes
+from app.fastapi_routes.founder_autonomy_api import router as founder_autonomy_router
 from app.fastapi_routes.xcmax_admin import router
 
 
@@ -22,6 +24,7 @@ from app.fastapi_routes.xcmax_admin import router
 def app_with_router() -> FastAPI:
     app = FastAPI()
     app.include_router(router)
+    app.include_router(founder_autonomy_router)
     return app
 
 
@@ -1288,12 +1291,21 @@ class TestOpsFounderAutonomy:
                 "app.application.founder_autonomy_status.build_founder_autonomy_snapshot",
                 return_value=snapshot,
             ) as build_snapshot,
+            patch(
+                "app.application.founder_autonomy_status.write_public_founder_autonomy_projection",
+                return_value={"ok": True, "written": ["public.json"], "errors": []},
+            ) as publish_projection,
         ):
             resp = client.get("/api/xcmax/ops/founder-autonomy")
 
         assert resp.status_code == 200
         assert resp.json() == {"success": True, "data": snapshot}
         assert proxy.await_count == 10
+        assert (
+            "/api/admin/employee-autonomy/execution-coverage"
+            "?window_hours=24&production_window_hours=720"
+            in {call.args[2] for call in proxy.await_args_list}
+        )
         assert build_snapshot.call_args.kwargs["runtime"] == {
             "ok": True,
             "runtime": "live",
@@ -1306,6 +1318,49 @@ class TestOpsFounderAutonomy:
         }
         assert build_snapshot.call_args.kwargs["surfaces"]["goals"] is True
         assert build_snapshot.call_args.kwargs["strategic_council"]["data"]["ready"] is True
+        publish_projection.assert_called_once_with(snapshot)
+
+    def test_internal_refresh_requires_independent_automation_token(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("AUTONOMY_WEBHOOK_TOKEN", "automation-secret")
+        resp = client.post(
+            "/api/xcmax/ops/founder-autonomy/refresh-internal",
+            headers={"Authorization": "Bearer market-admin-jwt"},
+        )
+        assert resp.status_code == 401
+
+    def test_internal_refresh_publishes_with_market_bearer_and_automation_token(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("AUTONOMY_WEBHOOK_TOKEN", "automation-secret")
+        snapshot = {
+            "schema_version": "founder_autonomy_status.v1",
+            "dimensions": [{"id": str(index)} for index in range(7)],
+        }
+        publication = {"ok": True, "written": ["public.json"], "errors": []}
+        with patch.object(
+            founder_routes,
+            "_build_and_publish_founder_autonomy",
+            new_callable=AsyncMock,
+            return_value=(snapshot, publication),
+        ) as refresh:
+            resp = client.post(
+                "/api/xcmax/ops/founder-autonomy/refresh-internal",
+                headers={
+                    "Authorization": "Bearer market-admin-jwt",
+                    "X-Autonomy-Token": "automation-secret",
+                },
+            )
+
+        assert resp.status_code == 200
+        assert resp.json()["publication"]["ok"] is True
+        refresh.assert_awaited_once()
+        assert refresh.await_args.kwargs["require_admin_session"] is False
 
 
 class TestOpsStaffingOnboard:
@@ -1630,6 +1685,37 @@ class TestMarketAdminProxy:
             )
         assert isinstance(result, dict)
         assert result["success"] is True
+
+    def test_authorization_override_does_not_reuse_session_token(self) -> None:
+        from starlette.requests import Request
+
+        request = MagicMock(spec=Request)
+        with (
+            patch(
+                "app.fastapi_routes.market_account._authorization_from_request_resolved",
+                new_callable=AsyncMock,
+            ) as resolve_session_token,
+            patch(
+                "app.fastapi_routes.market_account._proxy_json",
+                new_callable=AsyncMock,
+                return_value={"success": True},
+            ) as proxy,
+        ):
+            import asyncio
+
+            result = asyncio.get_event_loop().run_until_complete(
+                admin_routes._market_admin_proxy(
+                    request,
+                    "GET",
+                    "/api/test",
+                    require_admin_session=False,
+                    authorization_override="Bearer machine-market-token",
+                )
+            )
+
+        assert result == {"success": True}
+        resolve_session_token.assert_not_awaited()
+        assert proxy.await_args.kwargs["authorization"] == "Bearer machine-market-token"
 
 
 # ---------------------------------------------------------------------------

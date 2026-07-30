@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-
 DEFAULT_LLM_WAIT_SEC = 12.0
 TEST_TO_SOURCE_HEALTHY_RATIO = 0.4
 
 
-def apply_default_llm_policy(payload: dict[str, Any], *, require_scores: bool = False) -> dict[str, Any]:
+def apply_default_llm_policy(
+    payload: dict[str, Any], *, require_scores: bool = False
+) -> dict[str, Any]:
     normalized = dict(payload)
     explicit_disable = bool(normalized.pop("no_llm", False))
     llm_keys = {"use_llm", "paibi_llm", "llm_review"}
@@ -31,12 +32,18 @@ def apply_default_llm_policy(payload: dict[str, Any], *, require_scores: bool = 
         normalized["require_deep_review"] = True
     else:
         normalized.setdefault("require_deep_review", False)
-    if normalized.get("use_llm") and "wait_llm_sec" not in normalized and "wait_llm_seconds" not in normalized:
+    if (
+        normalized.get("use_llm")
+        and "wait_llm_sec" not in normalized
+        and "wait_llm_seconds" not in normalized
+    ):
         normalized["wait_llm_sec"] = DEFAULT_LLM_WAIT_SEC
     return normalized
 
 
-def test_source_ratio_status(ratio: float | None, *, target: float = TEST_TO_SOURCE_HEALTHY_RATIO) -> str:
+def test_source_ratio_status(
+    ratio: float | None, *, target: float = TEST_TO_SOURCE_HEALTHY_RATIO
+) -> str:
     if ratio is None:
         return "unknown"
     if ratio >= target:

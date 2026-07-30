@@ -7,9 +7,9 @@
 - _estimate_files（粗估规则）
 - _apply_files（路径穿越/敏感文件过滤）
 - ImplementResult / _write_report
-- _call_llm 缺 key 容错
+- _call_llm 缺 key 容错、严格 JSON 解析失败后的单次受控重试
 
-不测：网络请求、git 调用、LLM 调用、PR 创建（端到端在 CI 实跑）。
+不测：真实网络请求、git 调用、真实 LLM 调用、PR 创建（端到端在 CI 实跑）。
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -257,9 +258,9 @@ class TestIsAuthorized:
 
 
 class TestCommitAndPrLabelRouting:
-    """_commit_and_pr 按授权来源分流标签（Gap-1 核心保证）。"""
+    """LLM code remains review-gated regardless of execution authorization."""
 
-    def test_allowlist_source_labels_r0(
+    def test_allowlist_source_still_requires_r2_review(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         captured: dict[str, Any] = {}
@@ -291,9 +292,9 @@ class TestCommitAndPrLabelRouting:
         )
         assert pr_num == 1
         assert "ai-generated" in captured["labels_payload"]["labels"]
-        assert "risk:r0" in captured["labels_payload"]["labels"]
-        assert "needs-human" not in captured["labels_payload"]["labels"]
-        assert "risk:r2" not in captured["labels_payload"]["labels"]
+        assert "risk:r2" in captured["labels_payload"]["labels"]
+        assert "needs-human" in captured["labels_payload"]["labels"]
+        assert "risk:r0" not in captured["labels_payload"]["labels"]
         # PR body 必须含 allowlist 来源说明
         assert "allowlist" in captured["pr_payload"]["body"]
 
@@ -416,10 +417,32 @@ class TestApplyFiles:
         assert written[0] == "new_module.py"
         assert (tmp_path / "new_module.py").read_text(encoding="utf-8") == "print('hello')\n"
 
-    def test_modify_not_applied(self, tmp_path: Path) -> None:
-        files = [{"path": "existing.py", "action": "modify", "content": "..."}]
+    def test_modify_requires_exact_replacement(self, tmp_path: Path) -> None:
+        (tmp_path / "existing.py").write_text("before value\n", encoding="utf-8")
+        files = [
+            {
+                "path": "existing.py",
+                "action": "modify",
+                "old_text": "before value",
+                "new_text": "after value",
+            }
+        ]
         written = _ai_impl._apply_files(tmp_path, files)
-        assert written == []
+        assert written == ["existing.py"]
+        assert (tmp_path / "existing.py").read_text(encoding="utf-8") == "after value\n"
+
+    def test_modify_rejects_missing_or_ambiguous_old_text(self, tmp_path: Path) -> None:
+        (tmp_path / "existing.py").write_text("duplicate line\nduplicate line\n", encoding="utf-8")
+        files = [
+            {
+                "path": "existing.py",
+                "action": "modify",
+                "old_text": "duplicate line",
+                "new_text": "replacement",
+            }
+        ]
+
+        assert _ai_impl._apply_files(tmp_path, files) == []
 
     def test_path_traversal_blocked(self, tmp_path: Path) -> None:
         files = [{"path": "../escape.py", "action": "create", "content": "x"}]
@@ -448,7 +471,7 @@ class TestApplyFiles:
         assert written == []
         assert (tmp_path / "exists.py").read_text(encoding="utf-8") == "ORIGINAL"
 
-    def test_nested_dir_created(self, tmp_path: Path) -> None:
+    def test_fabricated_parent_directory_rejected(self, tmp_path: Path) -> None:
         files = [
             {
                 "path": "deep/nested/dir/file.py",
@@ -457,15 +480,15 @@ class TestApplyFiles:
             }
         ]
         written = _ai_impl._apply_files(tmp_path, files)
-        assert len(written) == 1
-        assert (tmp_path / "deep/nested/dir/file.py").is_file()
+        assert written == []
+        assert not (tmp_path / "deep/nested/dir/file.py").exists()
 
     def test_empty_path_skipped(self, tmp_path: Path) -> None:
         files = [{"path": "", "action": "create", "content": "x"}]
         written = _ai_impl._apply_files(tmp_path, files)
         assert written == []
 
-    def test_no_content_uses_summary(self, tmp_path: Path) -> None:
+    def test_summary_is_never_used_as_source_code(self, tmp_path: Path) -> None:
         files = [
             {
                 "path": "from_summary.py",
@@ -474,19 +497,30 @@ class TestApplyFiles:
             }
         ]
         written = _ai_impl._apply_files(tmp_path, files)
-        assert len(written) == 1
-        assert "stub" in (tmp_path / "from_summary.py").read_text(encoding="utf-8")
+        assert written == []
+        assert not (tmp_path / "from_summary.py").exists()
 
     def test_multiple_files_mixed_actions(self, tmp_path: Path) -> None:
-        (tmp_path / "existing.py").write_text("ORIG", encoding="utf-8")
+        (tmp_path / "existing.py").write_text("ORIGINAL", encoding="utf-8")
         files = [
-            {"path": "existing.py", "action": "modify", "content": "x"},
+            {
+                "path": "existing.py",
+                "action": "modify",
+                "old_text": "ORIGINAL",
+                "new_text": "UPDATED",
+            },
             {"path": "new1.py", "action": "create", "content": "1"},
             {"path": "new2.py", "action": "create", "content": "2"},
             {"path": "../escape.py", "action": "create", "content": "x"},
         ]
         written = _ai_impl._apply_files(tmp_path, files)
-        assert sorted(written) == ["new1.py", "new2.py"]
+        assert sorted(written) == ["existing.py", "new1.py", "new2.py"]
+
+    def test_fhd_prefix_is_normalized(self, tmp_path: Path) -> None:
+        files = [{"path": "FHD/new_module.py", "action": "create", "content": "value = 1\n"}]
+
+        assert _ai_impl._apply_files(tmp_path, files) == ["new_module.py"]
+        assert (tmp_path / "new_module.py").is_file()
 
 
 class TestImplementResultDataclass:
@@ -523,6 +557,80 @@ class TestCallLlmNoKey:
         result = _ai_impl._call_llm(prompt="test", api_key="")
         assert result["ok"] is False
         assert "LLM_API_KEY" in result["error"]
+
+
+class _FakeHttpResponse:
+    def __init__(self, content: str) -> None:
+        self._payload = json.dumps({"choices": [{"message": {"content": content}}]}).encode("utf-8")
+
+    def __enter__(self) -> _FakeHttpResponse:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self._payload
+
+
+class TestCallLlmStrictJsonRetry:
+    def test_invalid_json_retries_once_then_accepts_strict_json(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        responses = iter(
+            [
+                _FakeHttpResponse("{'files': []}"),
+                _FakeHttpResponse('```json\n{"files": [], "estimated_files": 0}\n```'),
+            ]
+        )
+        requests: list[dict[str, Any]] = []
+
+        def fake_urlopen(req: urllib.request.Request, timeout: int) -> _FakeHttpResponse:
+            assert timeout == 60
+            requests.append(json.loads(bytes(req.data or b"{}").decode("utf-8")))
+            return next(responses)
+
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+        result = _ai_impl._call_llm(prompt="implement safely", api_key="test-key")
+
+        assert result == {"files": [], "estimated_files": 0, "ok": True}
+        assert len(requests) == 2
+        assert requests[0]["temperature"] == 0.2
+        assert requests[1]["temperature"] == 0
+        assert "严格 JSON" in requests[1]["messages"][-1]["content"]
+
+    def test_two_invalid_responses_fail_closed_after_one_retry(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls = 0
+
+        def fake_urlopen(_req: urllib.request.Request, timeout: int) -> _FakeHttpResponse:
+            nonlocal calls
+            assert timeout == 60
+            calls += 1
+            return _FakeHttpResponse("{not-json}")
+
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+        result = _ai_impl._call_llm(prompt="implement safely", api_key="test-key")
+
+        assert result["ok"] is False
+        assert "重试 1 次后" in result["error"]
+        assert "JSON 解析失败" in result["error"]
+        assert calls == 2
+
+
+class TestParseLlmPlan:
+    def test_rejects_python_literal_instead_of_relaxing_json(self) -> None:
+        plan, error = _ai_impl._parse_llm_plan("{'files': []}")
+        assert plan is None
+        assert "JSON 解析失败" in error
+
+    def test_rejects_missing_object(self) -> None:
+        plan, error = _ai_impl._parse_llm_plan("no structured response")
+        assert plan is None
+        assert "未包含 JSON 对象" in error
 
 
 class TestChatCompletionsUrl:

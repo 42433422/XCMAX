@@ -102,7 +102,7 @@ sync_corp_pages_to_dist_fallback() {
     cp -af "$f" "${dist}/"
     n=$((n + 1))
   done
-  for f in styles.css main.js contact-intake.js visualization.js; do
+  for f in styles.css main.js contact-intake.js contact-channels.js visualization.js; do
     if [[ -f "${corp}/${f}" ]]; then
       cp -af "${corp}/${f}" "${dist}/"
       n=$((n + 1))
@@ -293,7 +293,8 @@ sync_site_static() {
   # 注意：download-action-board.json / download-company-hall.json 由运行时 DB 投影写出，
   # 不要从 git 快照覆盖 live，否则官网会冻在旧业务日。
   local paths=(
-    '*.html' 'styles.css' 'main.js' 'contact-intake.js' 'visualization.js' 'world-will.js'
+    '*.html' 'styles.css' 'main.js' 'contact-intake.js' 'contact-channels.js' 'visualization.js' 'world-will.js'
+    'world-will-ticker.js' 'world-will-ticker.css'
     'sitemap.xml' 'baidu_urls.txt' 'download-release.json' 'download-action-board.js'
     'images' 'site' 'assets' 'corp-butler' 'partials'
   )
@@ -332,7 +333,9 @@ publish_site_static_to_live() {
   local f base
   shopt -s nullglob
   for f in "$git_site"/*.html "$git_site"/styles.css "$git_site"/main.js "$git_site"/contact-intake.js \
-           "$git_site"/visualization.js "$git_site"/world-will.js \
+           "$git_site"/contact-channels.js \
+           "$git_site"/visualization.js "$git_site"/world-will.js "$git_site"/world-will-ticker.js \
+           "$git_site"/world-will-ticker.css \
            "$git_site"/sitemap.xml "$git_site"/baidu_urls.txt "$git_site"/download-release.json \
            "$git_site"/download-action-board.js; do
     [[ -e "$f" ]] || continue
@@ -436,6 +439,23 @@ restart_app_services() {
     fi
   done
 }
+
+# Hotfix hold: when production release is pinned to a SHA that is not current
+# origin/main (e.g. PR-not-yet-merged restore), do not overwrite live static /
+# market dist from the older git tip every cron tick.
+live_release_sha=""
+if [[ -f /etc/xcmax/modstore-release.env ]]; then
+  live_release_sha="$(
+    awk -F= '$1=="MODSTORE_GIT_SHA" || $1=="MODSTORE_EXPECTED_GIT_SHA" {print $2; exit}'       /etc/xcmax/modstore-release.env | tr -d " \r"
+  )"
+fi
+if [[ -n "${live_release_sha}" ]]; then
+  remote_main_sha="$(git -C "$XCMAX_ROOT" rev-parse "origin/${BRANCH}" 2>/dev/null || true)"
+  if [[ -n "${remote_main_sha}" && "${live_release_sha}" != "${remote_main_sha}"       && "${XCMAX_FORCE_AUTO_UPDATE:-0}" != "1" ]]; then
+    log "hotfix hold: live release ${live_release_sha:0:12} != origin/${BRANCH} ${remote_main_sha:0:12}; skip overwrite"
+    exit 0
+  fi
+fi
 
 OLD_XCMAX_SHA=""
 if [[ -f "${STATE_DIR}/xcmax.sha" ]]; then

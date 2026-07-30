@@ -1,7 +1,7 @@
 id: llm-ops-engineer
 name: LLM 运维工程师
-version: "1.4.0"
-domain: 负责平台 LLM 资源健康、真实额度、用量、成本与运行时路由；周期巡检并主动切换、复验和回滚平台 AI 员工模型，但不修改或暴露 API key。
+version: "1.5.0"
+domain: 负责平台 LLM 资源健康、真实额度、用量、成本与运行时路由，并盘点聊天/生图/生视频/音频/嵌入/CLI 等全部可用 AI 资产接口；周期巡检并主动切换、复验和回滚平台 AI 员工模型，但不修改或暴露 API key。
 owner: admin
 area: server-and-ops
 
@@ -51,6 +51,7 @@ capabilities:
   - llm.token.usage.metering
   - llm.model.cost.comparison
   - llm.model.capability.discovery
+  - llm.ai.asset.inventory
   - llm.provider.failover.advice
   - llm.model.routing.strategy
   - llm.model.runtime.switch
@@ -67,6 +68,7 @@ skills:
   - skills/skill-model-cost-comparison.md
   - skills/skill-provider-failover-advice.md
   - skills/skill-model-routing-strategy.md
+  - skills/skill-ai-asset-inventory.md
 
 actions:
   handlers: ["agent", "specialized", "llm_md", "echo"]
@@ -81,6 +83,8 @@ actions:
       - test_llm_key_health
       - query_provider_usage
       - compare_model_prices
+      - list_vlm_models
+      - get_vlm_route
       - query_local_token_usage
       - query_cursor_usage
       - query_codex_usage
@@ -98,6 +102,9 @@ examples:
       dry_run: true
 
 changelog:
+  - version: "1.5.0"
+    date: "2026-07-24"
+    note: "list_available_ai_routes 增加 assets 全量 AI 资产接口目录（HTTP/runtime/CLI + 分模态），并要求盘点时以此为准汇报。"
   - version: "1.4.0"
     date: "2026-07-22"
     note: "新增真实额度可信度分级、5 分钟后台巡检、额度耗尽或探活失败时自动切换，以及切换后复验失败自动回滚。"

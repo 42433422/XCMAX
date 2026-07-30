@@ -11,7 +11,7 @@
 #   - incident issue 由 watcher 兜底创建（前置 remediation action 失败时）
 #   - 标签含 ai-implement + incident + auto-incident + auto-generated
 #   - 命中 ^incident$ 跳过 owner 确认，ai-issue-implement.yml workflow 自动生成修复 PR
-#   - 修复 PR 标 ai-generated + risk:r0（命中 allowlist 即低风险），由 ai-self-heal-auto-merge SLA 二次守卫后 auto-merge
+#   - allowlist 只预授权执行；模型生成的修复仍标 needs-human + risk:r2，必须独立审查
 
 version: 1
 enabled: true

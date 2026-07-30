@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import pytest
-
-from retort_engine.pr_review import _comment_rank_score, _core_review_score_summary, _rank_reason
-
+from retort_engine.pr_review import (
+    _comment_rank_score,
+    _core_review_score_summary,
+    _rank_reason,
+)
 
 CORE_SCORE_CASES = [
     pytest.param(
@@ -5770,7 +5772,9 @@ CORE_SCORE_CASES = [
 
 
 @pytest.mark.parametrize(("comment", "expected_score"), CORE_SCORE_CASES)
-def test_core_comment_rank_score_matches_weight_matrix(comment: dict[str, object], expected_score: int) -> None:
+def test_core_comment_rank_score_matches_weight_matrix(
+    comment: dict[str, object], expected_score: int
+) -> None:
     assert _comment_rank_score(comment) == expected_score
     reason = _rank_reason(comment)
     assert str(comment["severity"]) in reason
@@ -5797,7 +5801,9 @@ def test_cross_language_transfer_weight_changes_core_ordering() -> None:
     static_analysis = {**base_comment, "capability": "static_analysis"}
     cross_language = {**base_comment, "capability": "cross_language_transfer"}
 
-    assert _comment_rank_score(cross_language) - _comment_rank_score(static_analysis) == 50
+    assert (
+        _comment_rank_score(cross_language) - _comment_rank_score(static_analysis) == 50
+    )
 
 
 def test_hunk_semantic_review_weight_beats_cross_language_when_confident() -> None:
@@ -5812,13 +5818,19 @@ def test_hunk_semantic_review_weight_beats_cross_language_when_confident() -> No
         "publishable": True,
     }
     cross_language = {**base_comment, "capability": "cross_language_transfer"}
-    hunk_semantic = {**base_comment, "capability": "hunk_semantic_review", "semantic_confidence": 92}
+    hunk_semantic = {
+        **base_comment,
+        "capability": "hunk_semantic_review",
+        "semantic_confidence": 92,
+    }
 
     assert _comment_rank_score(hunk_semantic) > _comment_rank_score(cross_language)
     assert "semantic=92" in _rank_reason(hunk_semantic)
 
 
-def test_core_review_score_summary_proves_cross_language_transfer_is_top_ranked() -> None:
+def test_core_review_score_summary_proves_cross_language_transfer_is_top_ranked() -> (
+    None
+):
     cross_language_comment = {
         "capability": "cross_language_transfer",
         "rank_score": 612,
@@ -5830,7 +5842,10 @@ def test_core_review_score_summary_proves_cross_language_transfer_is_top_ranked(
 
     summary = _core_review_score_summary([cross_language_comment, static_comment])
 
-    assert summary["model"] == "severity_context_transfer_publishability_v5_external_diagnostics"
+    assert (
+        summary["model"]
+        == "severity_context_transfer_publishability_v5_external_diagnostics"
+    )
     assert summary["max_rank_score"] == 612
     assert summary["min_rank_score"] == 560
     assert summary["ranked_comment_count"] == 2
@@ -5844,10 +5859,14 @@ def test_core_review_score_summary_proves_cross_language_transfer_is_top_ranked(
 
 
 def test_core_review_score_summary_flags_missing_cross_language_core_behavior() -> None:
-    summary = _core_review_score_summary([{
-        "capability": "static_analysis",
-        "rank_score": 455,
-    }])
+    summary = _core_review_score_summary(
+        [
+            {
+                "capability": "static_analysis",
+                "rank_score": 455,
+            }
+        ]
+    )
 
     assert summary["cross_language_ranked_comment_count"] == 0
     assert summary["cross_language_max_rank_score"] == 0

@@ -250,7 +250,7 @@ function toggleSection(key: string) {
 function syncFromProps() {
   const v = props.modelValue || ({} as PersonalSettings)
   const def = defaultPersonalSettings()
-  model.theme = (v.theme || 'dark') as 'dark' | 'light' | 'auto'
+  model.theme = (v.theme || 'light') as 'dark' | 'light' | 'auto'
   model.fontPx = Number.isFinite(Number(v.fontPx)) ? Number(v.fontPx) : 15
   model.memory = String(v.memory || '').slice(0, 600)
   model.suggestions = Array.isArray(v.suggestions) ? v.suggestions.slice(0, 6) : []

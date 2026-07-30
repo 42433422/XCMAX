@@ -124,6 +124,22 @@
 
     <!-- 输入区：官网模式单行（麦+输入+发送），避免输入条挤在标题下 -->
     <footer class="panel-foot" :class="{ 'panel-foot--corp': corpMode }">
+      <input
+        ref="imageInputRef"
+        type="file"
+        accept="image/*"
+        class="panel-image-input"
+        tabindex="-1"
+        aria-hidden="true"
+        @change="onImagePicked"
+      />
+      <div v-if="pendingImageDataUrl" class="panel-attach-preview" :class="{ 'panel-attach-preview--light': isLightTheme || corpMode }">
+        <img :src="pendingImageDataUrl" alt="待发送图片" class="panel-attach-preview__img" />
+        <button type="button" class="panel-attach-preview__clear" aria-label="移除图片" title="移除图片" @click="clearPendingImage">
+          ×
+        </button>
+      </div>
+      <p v-if="imagePickError" class="panel-attach-error" role="alert">{{ imagePickError }}</p>
       <template v-if="corpMode">
         <div class="panel-composer panel-composer--corp">
           <AgentVoiceInput
@@ -134,6 +150,25 @@
             :session-ready="voiceSessionReady"
             @toggle="toggleVoice"
           />
+          <button
+            type="button"
+            class="panel-shot-btn"
+            :class="{
+              'panel-shot-btn--active': !!pendingImageDataUrl,
+              'panel-shot-btn--light': isLightTheme || corpMode,
+            }"
+            :aria-pressed="!!pendingImageDataUrl"
+            aria-label="上传图片"
+            :title="pendingImageDataUrl ? '已选图：再次点击可更换' : '点击上传图片发给 AI（需 vision 模型）'"
+            :disabled="imagePicking"
+            @click="openImagePicker"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8" />
+              <circle cx="8.5" cy="10" r="1.6" fill="currentColor" />
+              <path d="M3.5 16.5 9 12l3.2 2.8L15 12l5.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
           <textarea
             ref="textareaRef"
             v-model="draft"
@@ -147,7 +182,7 @@
           <button
             type="button"
             class="panel-send"
-            :disabled="!draft.trim() || agentStore.isLoading"
+            :disabled="(!draft.trim() && !pendingImageDataUrl) || agentStore.isLoading || imagePicking"
             aria-label="发送"
             @click="sendText"
           >
@@ -158,14 +193,35 @@
         </div>
       </template>
       <template v-else>
-        <AgentVoiceInput
-          :voice-state="voiceState"
-          :is-supported="voiceIsSupported"
-          :error="voiceError"
-          :loading-hint="voiceLoadingHint"
-          :session-ready="voiceSessionReady"
-          @toggle="toggleVoice"
-        />
+        <div class="panel-tools">
+          <AgentVoiceInput
+            :voice-state="voiceState"
+            :is-supported="voiceIsSupported"
+            :error="voiceError"
+            :loading-hint="voiceLoadingHint"
+            :session-ready="voiceSessionReady"
+            @toggle="toggleVoice"
+          />
+          <button
+            type="button"
+            class="panel-shot-btn"
+            :class="{
+              'panel-shot-btn--active': !!pendingImageDataUrl,
+              'panel-shot-btn--light': isLightTheme,
+            }"
+            :aria-pressed="!!pendingImageDataUrl"
+            aria-label="上传图片"
+            :title="pendingImageDataUrl ? '已选图：再次点击可更换' : '点击上传图片发给 AI（需 vision 模型）'"
+            :disabled="imagePicking"
+            @click="openImagePicker"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8" />
+              <circle cx="8.5" cy="10" r="1.6" fill="currentColor" />
+              <path d="M3.5 16.5 9 12l3.2 2.8L15 12l5.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+        </div>
         <div class="panel-composer">
           <textarea
             ref="textareaRef"
@@ -180,7 +236,7 @@
           <button
             type="button"
             class="panel-send"
-            :disabled="!draft.trim() || agentStore.isLoading"
+            :disabled="(!draft.trim() && !pendingImageDataUrl) || agentStore.isLoading || imagePicking"
             aria-label="发送"
             @click="sendText"
           >
@@ -189,13 +245,6 @@
             </svg>
           </button>
         </div>
-        <label
-          class="panel-screenshot-toggle"
-          title="是否附带截图发给 AI（需 vision 模型）"
-        >
-          <input v-model="withScreenshot" type="checkbox" />
-          <span>附带截图</span>
-        </label>
       </template>
     </footer>
   </div>
@@ -221,6 +270,10 @@ import ButlerFilesDrawer from './ButlerFilesDrawer.vue'
 import { useButlerWorkbenchTrayStore } from '../../stores/butlerWorkbenchTray'
 import { useButlerDownloadHistoryStore } from '../../stores/butlerDownloadHistory'
 import AgentVoiceInput from './AgentVoiceInput.vue'
+import {
+  compressImageFileToDataUrl,
+  isImageFileForVision,
+} from '../../utils/visionMultimodal'
 
 import type { QuickAction } from '../../content/siteKnowledge'
 
@@ -274,10 +327,52 @@ const brandLogoUrl = computed(() =>
 const handleInput = props.handleInput
 
 const draft = ref('')
-const withScreenshot = ref(false)
+const pendingImageDataUrl = ref<string | null>(null)
+const imagePickError = ref('')
+const imagePicking = ref(false)
+const imageInputRef = ref<HTMLInputElement | null>(null)
 const showLog = ref(false)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const panelRef = ref<HTMLDivElement | null>(null)
+
+function openImagePicker() {
+  imagePickError.value = ''
+  const input = imageInputRef.value
+  if (!input) return
+  input.value = ''
+  input.click()
+}
+
+function clearPendingImage() {
+  pendingImageDataUrl.value = null
+  imagePickError.value = ''
+  if (imageInputRef.value) imageInputRef.value.value = ''
+}
+
+async function onImagePicked(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  imagePickError.value = ''
+  if (!isImageFileForVision(file)) {
+    imagePickError.value = '请选择图片文件（png/jpg/webp 等）'
+    input.value = ''
+    return
+  }
+  imagePicking.value = true
+  try {
+    pendingImageDataUrl.value = await compressImageFileToDataUrl(file, {
+      maxEdge: 1600,
+      maxBytes: 2.5 * 1024 * 1024,
+    })
+  } catch (e: unknown) {
+    pendingImageDataUrl.value = null
+    imagePickError.value = e instanceof Error ? e.message : '图片处理失败'
+  } finally {
+    imagePicking.value = false
+    input.value = ''
+  }
+}
 
 const actionLog = computed(() => getActionLog().slice().reverse())
 
@@ -376,15 +471,18 @@ function toggleVoice() {
 
 async function sendText() {
   const text = draft.value.trim()
-  if (!text) return
+  const imageDataUrl = pendingImageDataUrl.value
+  if (!text && !imageDataUrl) return
   draft.value = ''
+  pendingImageDataUrl.value = null
+  imagePickError.value = ''
   await nextTick()
   autoResize()
-  await sendMessage(text)
+  await sendMessage(text, imageDataUrl)
 }
 
-async function sendMessage(text: string) {
-  await handleInput(text, { withScreenshot: withScreenshot.value })
+async function sendMessage(text: string, imageDataUrl?: string | null) {
+  await handleInput(text, { imageDataUrl: imageDataUrl || null })
 }
 
 async function handleQuick(text: string) {
@@ -606,6 +704,7 @@ function autoResize() {
 
 /* 底部输入区 */
 .panel-foot {
+  position: relative;
   padding: 8px 10px 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
@@ -658,19 +757,111 @@ function autoResize() {
 .panel-send:hover:not(:disabled) { background: rgba(59, 130, 246, 0.38); }
 .panel-send:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.panel-screenshot-toggle {
+.panel-tools {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 0.72rem;
-  color: rgba(255, 255, 255, 0.34);
-  cursor: pointer;
-  user-select: none;
-  align-self: flex-end;
+  gap: 6px;
 }
 
-.panel-screenshot-toggle input { accent-color: #64748b; cursor: pointer; }
-.panel-screenshot-toggle:hover { color: rgba(255, 255, 255, 0.55); }
+.panel-shot-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.panel-shot-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.panel-shot-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.panel-shot-btn--active {
+  background: rgba(0, 220, 255, 0.15);
+  border-color: rgba(0, 220, 255, 0.45);
+  color: #00dcff;
+}
+
+.panel-shot-btn--light {
+  border-color: rgba(148, 163, 184, 0.5);
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.panel-shot-btn--light:hover {
+  background: #e2e8f0;
+  color: #1e3a8a;
+}
+
+.panel-shot-btn--light.panel-shot-btn--active {
+  background: rgba(37, 99, 235, 0.12);
+  border-color: rgba(37, 99, 235, 0.5);
+  color: #2563eb;
+}
+
+.panel-image-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.panel-attach-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 12px 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.panel-attach-preview--light {
+  background: #f8fafc;
+  border-color: rgba(148, 163, 184, 0.45);
+}
+
+.panel-attach-preview__img {
+  width: 52px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+}
+
+.panel-attach-preview__clear {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.08);
+  color: #334155;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.panel-attach-error {
+  margin: 0 12px 6px;
+  font-size: 12px;
+  color: #dc2626;
+}
 
 /* 浅色工作台：与「智能对话」悬浮窗一致 */
 .butler-panel.butler-panel--light {
@@ -759,14 +950,6 @@ function autoResize() {
   background: #1d4ed8;
 }
 
-.butler-panel--light .panel-screenshot-toggle {
-  color: #64748b;
-}
-
-.butler-panel--light .panel-screenshot-toggle:hover {
-  color: #334155;
-}
-
 .butler-panel--light :deep(.status-bar) {
   border-bottom-color: rgba(226, 232, 240, 0.92);
 }
@@ -828,6 +1011,17 @@ function autoResize() {
 
 .butler-panel--light :deep(.bubble-text strong) {
   color: #0f172a;
+}
+
+.butler-panel--light :deep(.bubble-link) {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
+
+.butler-panel--light :deep(.bubble-link:hover) {
+  color: #1d4ed8;
 }
 
 .butler-panel--light :deep(.bubble--tool) {

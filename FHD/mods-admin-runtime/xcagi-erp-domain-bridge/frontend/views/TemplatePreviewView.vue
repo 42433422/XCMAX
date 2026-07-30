@@ -5,7 +5,7 @@
         <div class="tp-hero-main">
           <h2 class="tp-title">模板库</h2>
           <p class="tp-lead muted">
-            管理办公五类导出模板（Excel / Word / CSV / PPT / PDF），按业务筛选；替换 Excel 模板时会校验必备词条。
+            管理办公五类导出模板（Excel / Word / CSV / PPT / PDF）。可按固定业务筛选，也可选「自定义」自由新建任意模板；替换固定业务 Excel 时仍会校验必备词条。
           </p>
         </div>
         <div class="tp-hero-actions">
@@ -235,8 +235,24 @@
                     {{ option.label }}
                   </option>
                 </select>
-                <div class="muted scope-required-terms">
-                  必备词条：{{ selectedScopeRequiredTerms.join('、') }}
+                <div v-if="isCustomScope" class="custom-scope-fields">
+                  <input
+                    v-model="customScopeLabel"
+                    type="text"
+                    class="form-control"
+                    placeholder="自定义业务名称（可选），如：考勤汇总、合同审批"
+                  />
+                  <input
+                    v-model="customTemplateType"
+                    type="text"
+                    class="form-control"
+                    placeholder="模板类型（可选），默认用模板名称"
+                  />
+                  <div class="muted scope-required-terms">自定义业务不强制必备词条，可自由上传各类模板。</div>
+                </div>
+                <div v-else class="muted scope-required-terms">
+                  必备词条：{{ selectedScopeRequiredTerms.length ? selectedScopeRequiredTerms.join('、') : '无' }}
+                  <span v-if="selectedScopeRequiredTerms.length">（缺少时可选择仍继续创建）</span>
                 </div>
               </div>
               <FileUploadStep
@@ -487,6 +503,8 @@ export default {
       selectedFile: null,
       templateName: '',
       templateScope: 'orders',
+      customScopeLabel: '',
+      customTemplateType: '',
       recognizedType: null,
       editorFields: [],
       editorTemplateType: 'excel',
@@ -537,6 +555,7 @@ export default {
       )
 
       for (const scopeKey of Object.keys(TEMPLATE_SCOPE_CONFIG)) {
+        if (scopeKey === 'custom') continue
         if (!existingScopes.has(scopeKey)) {
           realTemplates.push(this.createVirtualTemplate(scopeKey))
         }
@@ -580,10 +599,17 @@ export default {
       }))
     },
     scopeOptions() {
-      return Object.entries(TEMPLATE_SCOPE_CONFIG).map(([value, meta]) => ({
+      const options = Object.entries(TEMPLATE_SCOPE_CONFIG).map(([value, meta]) => ({
         value,
-        label: meta.label
+        label: value === 'custom' ? '自定义（不限业务）' : meta.label
       }))
+      if (!options.some((item) => item.value === 'custom')) {
+        options.push({ value: 'custom', label: '自定义（不限业务）' })
+      }
+      return options
+    },
+    isCustomScope() {
+      return String(this.templateScope || '') === 'custom'
     },
     selectedScopeRequiredTerms() {
       return this.getRequiredTermsByScope(this.templateScope)
@@ -869,6 +895,8 @@ export default {
       this.selectedFile = null
       this.templateName = ''
       this.templateScope = 'orders'
+      this.customScopeLabel = ''
+      this.customTemplateType = ''
       this.recognizedType = null
       this.editorFields = []
       this.editorTemplateType = 'excel'
@@ -941,8 +969,18 @@ export default {
           this.uploadValidationResult = validation
           if (!validation.valid) {
             this.analyzing = false
-            await appAlert(`模板词条校验未通过，缺少：${validation.missing.join('、')}`)
-            return false
+            const missingText = validation.missing.join('、')
+            const proceed = await appConfirm(
+              `模板词条校验未通过，缺少：${missingText}。\n\n仍要以「自定义」业务继续创建吗？`
+            )
+            if (!proceed) {
+              return false
+            }
+            this.templateScope = 'custom'
+            if (!this.customScopeLabel.trim()) {
+              this.customScopeLabel = String(this.templateName || '').trim() || '自定义业务'
+            }
+            this.analyzing = true
           }
 
           const taskId = res.task_id
@@ -965,10 +1003,39 @@ export default {
         }
 
         this.analyzing = false
+        const missing = Array.isArray(res?.missing_terms) ? res.missing_terms.filter(Boolean) : []
+        if (missing.length && !this.isCustomScope) {
+          const switchCustom = await appConfirm(
+            `${res?.message || '模板缺少必备词条'}：${missing.join('、')}。\n\n是否改为「自定义（不限业务）」后继续创建？`
+          )
+          if (switchCustom) {
+            this.templateScope = 'custom'
+            if (!this.customScopeLabel.trim()) {
+              this.customScopeLabel = String(this.templateName || '').trim() || '自定义业务'
+            }
+            return await this.analyzeFile()
+          }
+          return false
+        }
         await appAlert((res && res.message) || '分析失败')
         return false
       } catch (err) {
         this.analyzing = false
+        const data = err?.data || err?.response?.data || {}
+        const missing = Array.isArray(data?.missing_terms) ? data.missing_terms.filter(Boolean) : []
+        if (missing.length && !this.isCustomScope) {
+          const switchCustom = await appConfirm(
+            `${data?.message || err?.message || '模板缺少必备词条'}：${missing.join('、')}。\n\n是否改为「自定义（不限业务）」后继续创建？`
+          )
+          if (switchCustom) {
+            this.templateScope = 'custom'
+            if (!this.customScopeLabel.trim()) {
+              this.customScopeLabel = String(this.templateName || '').trim() || '自定义业务'
+            }
+            return await this.analyzeFile()
+          }
+          return false
+        }
         await appAlert('分析失败：' + (err && err.message ? err.message : String(err)))
         return false
       }
@@ -1030,9 +1097,15 @@ export default {
     async saveTemplate() {
       try {
         const fields = Array.isArray(this.editorFields) ? [...this.editorFields] : []
-        const scopeMeta = TEMPLATE_SCOPE_CONFIG[this.templateScope] || TEMPLATE_SCOPE_CONFIG.orders
+        const isCustom = this.isCustomScope
+        const scopeMeta = this.getScopeMeta(this.templateScope) || {}
         const category = normalizeTemplateMediaKind(this.editorTemplateType, 'excel')
         const isWord = category === 'word'
+        const customLabel = String(this.customScopeLabel || '').trim()
+        const customType = String(this.customTemplateType || '').trim()
+        const templateType = isCustom
+          ? (customType || String(this.templateName || '').trim() || scopeMeta.templateType || '自定义模板')
+          : (scopeMeta.templateType || '自定义模板')
 
         const basePreview =
           this.analyzedPreviewData && typeof this.analyzedPreviewData === 'object'
@@ -1057,6 +1130,9 @@ export default {
             grid_preview: strippedGrid
           }
         }
+        if (isCustom && customLabel) {
+          preview_data.custom_scope_label = customLabel
+        }
 
         const file_path =
           String(this.analyzedFilePath || preview_data.file_path || '').trim() || undefined
@@ -1064,8 +1140,8 @@ export default {
         const saveData = {
           name: this.templateName,
           category,
-          template_type: scopeMeta.templateType,
-          business_scope: this.templateScope,
+          template_type: templateType,
+          business_scope: this.templateScope || 'custom',
           fields,
           preview_data,
           file_path,
@@ -1385,12 +1461,26 @@ export default {
     },
 
     getScopeMeta(scopeKey) {
-      return TEMPLATE_SCOPE_CONFIG[scopeKey] || null
+      const key = String(scopeKey || '').trim()
+      if (!key) return null
+      if (Object.prototype.hasOwnProperty.call(TEMPLATE_SCOPE_CONFIG, key)) {
+        return TEMPLATE_SCOPE_CONFIG[key]
+      }
+      if (key === 'custom') {
+        return { label: '自定义', templateType: '自定义模板', requiredTerms: [] }
+      }
+      return null
+    },
+
+    isKnownScopeKey(scopeKey) {
+      const key = String(scopeKey || '').trim()
+      if (!key) return false
+      return Object.prototype.hasOwnProperty.call(TEMPLATE_SCOPE_CONFIG, key) || key === 'custom'
     },
 
     getRequiredTermsByScope(scopeKey) {
       const meta = this.getScopeMeta(scopeKey)
-      return meta ? meta.requiredTerms : []
+      return meta ? (Array.isArray(meta.requiredTerms) ? meta.requiredTerms : []) : []
     },
 
     getEquivalentNormalizedTerms(term) {
@@ -1430,17 +1520,17 @@ export default {
     getTemplateScopeKey(tpl) {
       if (tpl?.category === 'word') {
         const explicitScope = String(tpl?.business_scope || '').trim()
-        if (explicitScope && Object.prototype.hasOwnProperty.call(TEMPLATE_SCOPE_CONFIG, explicitScope)) {
+        if (this.isKnownScopeKey(explicitScope)) {
           return explicitScope
         }
         const inferred = this.inferWordTemplateScopeKey(tpl)
-        if (inferred && Object.prototype.hasOwnProperty.call(TEMPLATE_SCOPE_CONFIG, inferred)) {
+        if (this.isKnownScopeKey(inferred)) {
           return inferred
         }
         return ''
       }
       const explicitScope = String(tpl?.business_scope || '').trim()
-      if (explicitScope && Object.prototype.hasOwnProperty.call(TEMPLATE_SCOPE_CONFIG, explicitScope)) {
+      if (this.isKnownScopeKey(explicitScope)) {
         return explicitScope
       }
       const matched = this.getMatchedScopeKeys(tpl)
@@ -1449,6 +1539,11 @@ export default {
 
     getTemplateScopeLabel(tpl) {
       const scopeKey = this.getTemplateScopeKey(tpl)
+      if (scopeKey === 'custom') {
+        const customLabel = String(tpl?.preview_data?.custom_scope_label || '').trim()
+        if (customLabel) return customLabel
+        return this.getScopeMeta('custom')?.label || '自定义'
+      }
       const meta = this.getScopeMeta(scopeKey)
       return (meta?.label || scopeKey || '未分类')
     },
@@ -1640,13 +1735,14 @@ export default {
     getMatchedScopeKeys(tpl) {
       if (tpl?.virtual) return []
       const explicitScope = String(tpl?.business_scope || '').trim()
-      if (explicitScope && Object.prototype.hasOwnProperty.call(TEMPLATE_SCOPE_CONFIG, explicitScope)) {
+      if (this.isKnownScopeKey(explicitScope)) {
         return [explicitScope]
       }
       if (tpl?.category !== 'excel' && tpl?.category !== 'word') return []
       const termSet = this.extractTemplateTermSet(tpl?.fields, tpl?.preview_data)
       const matched = []
       for (const scopeKey of Object.keys(TEMPLATE_SCOPE_CONFIG)) {
+        if (scopeKey === 'custom') continue
         const required = this.getRequiredTermsByScope(scopeKey)
         if (required.length && required.every(term => this.hasEquivalentTerm(termSet, term))) {
           matched.push(scopeKey)
@@ -2316,6 +2412,13 @@ export default {
 .scope-required-terms {
   margin-top: 6px;
   font-size: 12px;
+}
+
+.custom-scope-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .validation-warning {

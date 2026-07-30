@@ -32,6 +32,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Optional
 
+from modstore_server.duty_burn_in_handlers import select_reviewed_burn_in_handlers
 from modstore_server.duty_workforce_contracts import (
     load_reviewed_duty_manifest,
     workforce_contract_map,
@@ -248,27 +249,23 @@ def assess_burn_in_eligibility(
     )
     try:
         handlers = _extract_handlers(manifest)
+        actions = _actions_config(manifest)
     except Exception as exc:  # noqa: BLE001
         return {
             "eligible": False,
             "reason": f"manifest_invalid:{type(exc).__name__}",
         }
-    dangerous = sorted(set(handlers) & _DANGEROUS_HANDLERS)
-    if dangerous:
-        return {
-            "eligible": False,
-            "reason": "dangerous_handler:" + ",".join(dangerous),
-            "handlers": handlers,
-        }
-    capability_handlers = sorted(set(handlers) & _CAPABILITY_HANDLERS)
-    if not capability_handlers:
-        return {
-            "eligible": False,
-            "reason": "no_safe_executable_handler",
-            "handlers": handlers,
-        }
+    selection = select_reviewed_burn_in_handlers(
+        actions,
+        handlers,
+        dangerous_handlers=_DANGEROUS_HANDLERS,
+        capability_handlers=_CAPABILITY_HANDLERS,
+    )
+    if selection.get("error"):
+        return selection["error"]
+    capability_handlers = selection["capability_handlers"]
+    burn_in_handlers_explicit = selection["burn_in_handlers_explicit"]
     if "direct_python" in capability_handlers and "agent" not in capability_handlers:
-        actions = _actions_config(manifest)
         direct = (
             actions.get("direct_python") if isinstance(actions.get("direct_python"), dict) else {}
         )
@@ -343,6 +340,7 @@ def assess_burn_in_eligibility(
             "handlers": handlers,
             "capability_handlers": capability_handlers,
             "burn_in_fixture": fixture,
+            "burn_in_handlers_explicit": burn_in_handlers_explicit,
             "prohibited_semantics_fixture_override": bool(prohibited_reason and semantics_override),
             "high_risk_fixture_only": risk == "high",
         }
@@ -356,6 +354,7 @@ def assess_burn_in_eligibility(
         "risk_level": risk,
         "handlers": handlers,
         "capability_handlers": capability_handlers,
+        "burn_in_handlers_explicit": burn_in_handlers_explicit,
     }
 
 

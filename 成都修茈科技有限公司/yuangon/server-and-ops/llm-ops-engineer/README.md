@@ -2,7 +2,7 @@
 
 ## 一句话职责
 
-负责全员工 LLM 资源管理：API key 健康检查、真实额度与 token/成本追踪、模型选型，以及后台周期巡检、主动切换和回滚平台 AI 员工运行时模型。密钥仍只读且始终脱敏；路由切换必须通过额度、目录和真实探活校验，切换后复验并写入审计历史。
+负责全员工 LLM 资源管理：API key 健康检查、真实额度与 token/成本追踪、模型选型，后台周期巡检、主动切换和回滚平台 AI 员工运行时模型，以及盘点聊天/生图/生视频/音频/嵌入/CLI 等全部可用 AI 资产接口。密钥仍只读且始终脱敏；路由切换必须通过额度、目录和真实探活校验，切换后复验并写入审计历史。
 
 ## 来源
 
@@ -20,10 +20,11 @@
 | `MODstore_deploy/modstore_server/llm_catalog.py` | 供应商模型与原生能力元数据动态目录 |
 | `MODstore_deploy/modstore_server/llm_model_taxonomy.py` | 跨供应商模态、操作能力与推断来源归一化 |
 | `MODstore_deploy/modstore_server/llm_runtime_route.py` | 平台 AI 员工运行时切换、探活、审计和回滚 |
+| `MODstore_deploy/modstore_server/llm_ai_assets.py` | 全量 AI 资产/接口目录（供 list_available_ai_routes.assets） |
 | `MODstore_deploy/modstore_server/llm_billing.py` | 后端 LLM 计费账本 |
 | `MODstore_deploy/docs/runbooks/llm-ops-*.md` | LLM 运维 Runbook |
 
-## 九大职责
+## 十大职责
 
 1. **API key 健康检查**：定期 ping 各 provider，检测失效/限额/欠费，生成 key 健康报告。
 2. **Token 用量计量**：统计各员工/各模型/各时段的 token 消耗，识别烧钱大户与异常突增。
@@ -32,8 +33,9 @@
 5. **模型路由策略**：按员工任务复杂度建议模型分配（简单任务用便宜模型，复杂推理用强模型，离线场景用 Ollama）。
 6. **路由审计与回滚**：记录切换人、原因、前后路由和探活结果，支持一键回滚。
 7. **模型能力发现**：动态读取供应商模态、任务类型和上下文限制；上游未提供时再用版本化规则推断，并显式标注来源。
-8. **CLI 兜底**：检查 Codex、Cursor、Claude、Trae 的安装、版本与真实回答；平台 API 失败时在隔离临时目录中以只读方式顺序兜底。
-9. **额度与自动驾驶闭环**：优先读取供应商精确剩余额度；无公开接口时标记 usage_only/unknown 并用真实调用探测。后台每 5 分钟巡检，额度耗尽或探活失败时自动切换，切换后复验，失败自动回滚。
+8. **AI 资产接口盘点**：通过 `list_available_ai_routes.assets` 汇总 HTTP（chat/image/video/pptx）、runtime-route、分模态目录与 CLI 接线状态；被问可用 AI 时以此为准。
+9. **CLI 兜底**：检查 Codex、Cursor、Claude、Trae 的安装、版本与真实回答；平台 API 失败时在隔离临时目录中以只读方式顺序兜底（仅文本；Codex 产品出图未接线）。
+10. **额度与自动驾驶闭环**：优先读取供应商精确剩余额度；无公开接口时标记 usage_only/unknown 并用真实调用探测。后台每 5 分钟巡检，额度耗尽或探活失败时自动切换，切换后复验，失败自动回滚。
 
 ## KPI
 

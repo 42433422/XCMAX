@@ -529,6 +529,32 @@ async function sourceWorkspaceMatchesRepo(sourceWorkspace, repoUrl) {
     && sourceWorkspace.replace(/\\/g, '/').endsWith('/XCMAX');
 }
 
+async function refreshBaseBranchFromOrigin(taskDir, repoUrl, baseBranch) {
+  const remoteRef = `refs/remotes/origin/${baseBranch}`;
+  await git(taskDir, ['remote', 'set-url', 'origin', repoUrl]);
+  await git(taskDir, ['remote', 'set-url', '--push', 'origin', repoUrl]);
+  await git(taskDir, [
+    'fetch',
+    '--no-tags',
+    'origin',
+    `+refs/heads/${baseBranch}:${remoteRef}`,
+  ]);
+  const remoteHead = await git(taskDir, [
+    'rev-parse',
+    '--verify',
+    `${remoteRef}^{commit}`,
+  ]);
+  await git(taskDir, ['checkout', '-B', baseBranch, remoteHead]);
+  const localHead = await git(taskDir, ['rev-parse', '--verify', 'HEAD']);
+  if (localHead !== remoteHead) {
+    throw new Error(
+      `base refresh mismatch branch=${baseBranch} local=${localHead} remote=${remoteHead}`,
+    );
+  }
+  console.log(`[e2e-agent] 基线已刷新 ${baseBranch}@${remoteHead.slice(0, 12)}`);
+  return remoteHead;
+}
+
 async function cloneSourceWorkspace(sourceWorkspace, taskDir, task) {
   // 先尝试从本地 sourceWorkspace clone（快，避免 GitHub 网络延迟）。
   // 如果 sourceWorkspace 太大或 clone 失败，fallback 到 GitHub repoUrl（带代理）。
@@ -551,17 +577,11 @@ async function cloneSourceWorkspace(sourceWorkspace, taskDir, task) {
   const baseBranch = String(task?.base_branch || 'main').trim() || 'main';
   if (repoUrl) {
     // sourceWorkspace 是本地路径，clone 后 origin 指向它。
-    // 改 origin 指向真正的远程仓库，再 fetch 远程 base_branch。
-    // 否则 sourceWorkspace 中未推送的 commits 会污染 PR（PR 会领先 origin N 个 commits）。
-    await gitMaybe(taskDir, ['remote', 'set-url', 'origin', repoUrl]);
-    await gitMaybe(taskDir, ['remote', 'set-url', '--push', 'origin', repoUrl]);
-    const fetched = await gitMaybe(taskDir, ['fetch', '--no-tags', 'origin', baseBranch]);
-    if (fetched || existsSync(join(taskDir, '.git', 'refs', 'remotes', 'origin', baseBranch))) {
-      // 把本地 base_branch 强制 reset 到 origin 状态，丢弃 sourceWorkspace 中的未推送 commits
-      await gitMaybe(taskDir, ['checkout', '-B', baseBranch, `origin/${baseBranch}`]);
-    }
-  }
-  if (task.base_branch) {
+    // 必须 fail-closed 地刷新并核对远程基线。不能用 fetch 输出或 loose-ref
+    // 文件是否存在判断成功：成功 fetch 可以没有 stdout，remote ref 也可能
+    // 只存在于 packed-refs；旧逻辑会因此悄悄从陈旧本地 main 创建工作分支。
+    await refreshBaseBranchFromOrigin(taskDir, repoUrl, baseBranch);
+  } else if (task.base_branch) {
     if (!(await gitMaybe(taskDir, ['checkout', task.base_branch]))) {
       await gitMaybe(taskDir, ['checkout', '-B', task.base_branch, `origin/${task.base_branch}`]);
     }
@@ -600,32 +620,83 @@ function isReportOnlyTask(task) {
 
 function reportOnlyTargetBranch(task) {
   if (!isReportOnlyTask(task)) return '';
-  const text = `${task?.title || ''}\n${task?.description || ''}`;
-  const match = text.match(/target branch (?:to inspect|to verify)\s*:\s*`([^`]+)`/i)
-    || text.match(/\bTARGET_BRANCH=([^\s]+)/i);
-  const branch = (match?.[1] || '').trim();
-  if (!branch || branch.startsWith('-') || branch.includes('..') || /[\s~^:?*[\\]/.test(branch)) return '';
-  return branch;
+  const texts = [
+    String(task?.description || ''),
+    String(task?.title || ''),
+  ];
+  for (const text of texts) {
+    const match = text.match(/target branch (?:to inspect|to verify)\s*:\s*`([^`\r\n]+)`/i)
+      || text.match(/\bTARGET_BRANCH=([^\s\r\n]+)/i);
+    const branch = (match?.[1] || '').trim();
+    if (!branch || branch.startsWith('-') || branch.includes('..') || /[\s~^:?*[\\]/.test(branch)) {
+      continue;
+    }
+    return branch;
+  }
+  return '';
 }
 
 async function prepareReportOnlyTargetBranch(taskDir, task) {
   const targetBranch = reportOnlyTargetBranch(task);
-  if (!targetBranch) return;
+  if (!targetBranch) return null;
   const baseBranch = (task?.base_branch || 'main').trim() || 'main';
   const baseRef = `refs/remotes/origin/${baseBranch}`;
   const targetRef = `refs/remotes/origin/${targetBranch}`;
-  const refspecs = [
-    `${baseBranch}:${baseRef}`,
-    ...(targetBranch === baseBranch ? [] : [`${targetBranch}:${targetRef}`]),
-  ];
   await git(taskDir, [
     'fetch',
     '--no-tags',
     'origin',
-    ...refspecs,
+    `+refs/heads/${baseBranch}:${baseRef}`,
   ]);
+  let targetSource = 'origin';
+  if (targetBranch !== baseBranch) {
+    try {
+      await git(taskDir, [
+        'fetch',
+        '--no-tags',
+        'origin',
+        `+refs/heads/${targetBranch}:${targetRef}`,
+      ]);
+    } catch (originError) {
+      if (!existsSync(bareRepo)) throw originError;
+      await git(taskDir, [
+        'fetch',
+        '--no-tags',
+        bareRepo,
+        `+refs/heads/${targetBranch}:${targetRef}`,
+      ]);
+      targetSource = 'bareRepo';
+    }
+  }
   await git(taskDir, ['cat-file', '-e', `${baseRef}^{commit}`]);
   await git(taskDir, ['cat-file', '-e', `${targetRef}^{commit}`]);
+  const baseSha = await git(taskDir, ['rev-parse', '--verify', `${baseRef}^{commit}`]);
+  const targetSha = await git(taskDir, ['rev-parse', '--verify', `${targetRef}^{commit}`]);
+  const evidence = {
+    verified_at: new Date().toISOString(),
+    base_branch: baseBranch,
+    base_ref: baseRef,
+    base_sha: baseSha,
+    target_branch: targetBranch,
+    target_ref: targetRef,
+    target_sha: targetSha,
+    target_source: targetSource,
+  };
+  console.log(
+    `[e2e-agent] report-only refs verified base=${baseSha.slice(0, 12)} target=${targetSha.slice(0, 12)} source=${targetSource}`,
+  );
+  return evidence;
+}
+
+function reportOnlyRefEvidencePrompt(evidence) {
+  if (!evidence) return '';
+  return [
+    '',
+    'E2E_REPORT_ONLY_REF_EVIDENCE_JSON:',
+    JSON.stringify(evidence),
+    'The e2e-agent fetched and verified both refs with git cat-file immediately before invoking you.',
+    'Use the exact base_ref and target_ref above. If a lookup disagrees, retry the exact refs once before reporting target_branch_unavailable.',
+  ].join('\n');
 }
 
 function buildReportOnlyContent(task, output) {
@@ -928,11 +999,20 @@ async function handleTask(ws, task) {
   });
   taskDir = await prepareWorkspace(task);
   const reportOnly = isReportOnlyTask(task);
-  if (reportOnly) await prepareReportOnlyTargetBranch(taskDir, task);
+  const reportOnlyRefEvidence = reportOnly
+    ? await prepareReportOnlyTargetBranch(taskDir, task)
+    : null;
   mkdirSync(join(taskDir, '.devfleet'), { recursive: true });
+  if (reportOnlyRefEvidence) {
+    writeFileSync(
+      join(taskDir, '.devfleet', 'REPORT_ONLY_REFS.json'),
+      `${JSON.stringify(reportOnlyRefEvidence, null, 2)}\n`,
+    );
+  }
+  const executionPrompt = `${task.description}${reportOnlyRefEvidencePrompt(reportOnlyRefEvidence)}`;
   writeFileSync(
     join(taskDir, '.devfleet', 'TASK.md'),
-    `# DevFleet 任务\n\n## 标题\n${task.title}\n\n## 要求\n${task.description}\n\n## 工作分支\n${task.work_branch}\n`,
+    `# DevFleet 任务\n\n## 标题\n${task.title}\n\n## 要求\n${executionPrompt}\n\n## 工作分支\n${task.work_branch}\n`,
   );
   excludeAgentMetadata(taskDir);
   // 任务基线 HEAD：工具自行 commit 时靠它识别变更（工作区会是干净的）。
@@ -987,7 +1067,7 @@ async function handleTask(ws, task) {
       level: 'info',
     });
     try {
-      const output = await runTraeAgent(taskDir, task.description);
+      const output = await runTraeAgent(taskDir, executionPrompt);
       if (output) toolOutput = `${toolOutput}\n${output}`.trim();
       if (output) {
         send(ws, {
@@ -1024,7 +1104,7 @@ async function handleTask(ws, task) {
           level: 'warn',
         });
         try {
-          const output = await runCodexAgent(taskDir, task.description);
+          const output = await runCodexAgent(taskDir, executionPrompt);
           const codexNonZero = String(output || '').startsWith('[codex exit=');
           if (output) toolOutput = `${toolOutput}\n${output}`.trim();
           if (output) {
@@ -1063,7 +1143,7 @@ async function handleTask(ws, task) {
       level: 'info',
     });
     try {
-      const output = await runClaudeAgent(taskDir, task.description);
+      const output = await runClaudeAgent(taskDir, executionPrompt);
       if (output) toolOutput = `${toolOutput}\n${output}`.trim();
       if (output) {
         send(ws, {
@@ -1095,7 +1175,7 @@ async function handleTask(ws, task) {
       level: 'info',
     });
     try {
-      const output = await runCursorAgent(taskDir, task.description);
+      const output = await runCursorAgent(taskDir, executionPrompt);
       if (output) toolOutput = `${toolOutput}\n${output}`.trim();
       if (output) {
         send(ws, {
@@ -1127,7 +1207,7 @@ async function handleTask(ws, task) {
       level: 'info',
     });
     try {
-      let output = await runCodexAgent(taskDir, task.description);
+      let output = await runCodexAgent(taskDir, executionPrompt);
       let codexNonZero = String(output || '').startsWith('[codex exit=');
       if (output) {
         send(ws, {
@@ -1154,7 +1234,7 @@ async function handleTask(ws, task) {
             level: 'warn',
           });
           try {
-            output = await runTraeAgent(taskDir, task.description);
+            output = await runTraeAgent(taskDir, executionPrompt);
             codexNonZero = false;
             toolError = '';
             if (output) {

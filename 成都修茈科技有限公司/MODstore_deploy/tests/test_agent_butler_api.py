@@ -471,3 +471,56 @@ class TestSafeJson:
 
         result = _safe_json("invalid json {")
         assert result == {}
+
+
+# ─── Tests: corp-chat credentials follow llm-ops runtime route ────
+
+
+class TestResolveCorpCredentials:
+    def test_prefers_platform_runtime_route_over_qq_llm(self, monkeypatch, mock_db):
+        from modstore_server.agent_butler_api import _resolve_corp_credentials
+
+        monkeypatch.delenv("BUTLER_CORP_PROVIDER", raising=False)
+        monkeypatch.delenv("BUTLER_CORP_API_KEY", raising=False)
+        monkeypatch.delenv("BUTLER_CORP_MODEL", raising=False)
+        monkeypatch.setenv("BUTLER_QQ_LLM_PROVIDER", "xiaomi")
+        monkeypatch.setenv("BUTLER_QQ_LLM_API_KEY", "sk-mimo-exhausted")
+        monkeypatch.setenv("BUTLER_QQ_LLM_MODEL", "mimo-v2.5-pro")
+
+        with (
+            patch(
+                "modstore_server.services.llm.resolve_platform_bench_llm",
+                return_value=("minimax", "MiniMax-M2.7"),
+            ),
+            patch(
+                "modstore_server.llm_key_resolver.platform_api_key",
+                return_value="sk-minimax-ok",
+            ),
+            patch(
+                "modstore_server.llm_key_resolver.platform_base_url",
+                return_value="https://api.minimaxi.com",
+            ),
+        ):
+            provider, model, api_key, base_url = _resolve_corp_credentials(mock_db)
+
+        assert provider == "minimax"
+        assert model == "MiniMax-M2.7"
+        assert api_key == "sk-minimax-ok"
+        assert base_url == "https://api.minimaxi.com"
+
+    def test_explicit_corp_pin_beats_runtime_route(self, monkeypatch, mock_db):
+        from modstore_server.agent_butler_api import _resolve_corp_credentials
+
+        monkeypatch.setenv("BUTLER_CORP_PROVIDER", "deepseek")
+        monkeypatch.setenv("BUTLER_CORP_API_KEY", "sk-corp-pin")
+        monkeypatch.setenv("BUTLER_CORP_MODEL", "deepseek-chat")
+
+        with patch(
+            "modstore_server.services.llm.resolve_platform_bench_llm",
+            return_value=("minimax", "MiniMax-M2.7"),
+        ):
+            provider, model, api_key, _base = _resolve_corp_credentials(mock_db)
+
+        assert provider == "deepseek"
+        assert model == "deepseek-chat"
+        assert api_key == "sk-corp-pin"

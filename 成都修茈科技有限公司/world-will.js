@@ -16,6 +16,22 @@
       .replace(/"/g, '&quot;')
   }
 
+  /** 前端二次脱敏：避免接口/回退板仍带出角色提示词 */
+  function sanitizePublicFeedText(raw) {
+    var s = String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim()
+    if (!s) return '（暂无公开摘要）'
+    if (
+      /你是|回复必须说人话|SYSTEM\s*PROMPT|事故处理小组的\s*scout|不要直接倾倒|你的任务是|内部字段或英文模板/i.test(
+        s,
+      )
+    ) {
+      var m = s.match(/事件类型[:：]\s*([a-z][a-z0-9_.-]{2,64})/i)
+      if (m) return '事故巡检：处理事件 ' + m[1]
+      return '岗位任务执行摘要（内部提示词已隐藏）'
+    }
+    return s
+  }
+
   function fmtGen(iso) {
     if (!iso) return '—'
     try {
@@ -413,15 +429,16 @@
     el.innerHTML =
       '<ol class="hall-timeline">' +
       feed
-        .map(function (f) {
+        .map(function (f, idx) {
           var stamp = fmtFeedStamp(f)
+          var preview = sanitizePublicFeedText(f.text || '')
           return (
             '<li class="hall-timeline-item hall-timeline-item--' +
             esc(f.presence || 'idle') +
             '">' +
-            '<a href="' +
-            esc(f.href || '/world-will') +
-            '">' +
+            '<button type="button" class="hall-timeline-btn" data-feed-idx="' +
+            idx +
+            '" aria-label="查看动态详情">' +
             '<time' +
             (stamp.datetime ? ' datetime="' + esc(stamp.datetime) + '"' : '') +
             ' title="' +
@@ -443,12 +460,76 @@
             esc(f.status_label || presenceLabel(f.presence)) +
             '</span>' +
             '<p>' +
-            esc(f.text || '') +
-            '</p></div></a></li>'
+            esc(preview) +
+            '</p>' +
+            '<span class="hall-feed-more">查看详情</span></div></button></li>'
           )
         })
         .join('') +
       '</ol>'
+
+    if (!el._feedBound) {
+      el._feedBound = true
+      el.addEventListener('click', function (ev) {
+        var btn = ev.target && ev.target.closest ? ev.target.closest('[data-feed-idx]') : null
+        if (!btn || !el.contains(btn)) return
+        var idx = Number(btn.getAttribute('data-feed-idx'))
+        var list = filteredFeed((STATE.data && STATE.data.feed) || [])
+        var item = list[idx]
+        if (!item) return
+        openFeedDetail(item)
+      })
+    }
+  }
+
+  function openFeedDetail(item) {
+    var panel = document.getElementById('hall-feed-detail')
+    if (!panel) return
+    var stamp = fmtFeedStamp(item)
+    var body = sanitizePublicFeedText(item.detail || item.text || '（暂无公开摘要）')
+    var href = String(item.href || '').trim()
+    var truncated =
+      item.detail_truncated === true ||
+      /…$/.test(body) ||
+      String(item.source || '') === 'execution_metric'
+    var linkHtml = ''
+    if (href && href !== '/world-will' && href !== '/world-will.html') {
+      linkHtml =
+        '<p class="hall-feed-detail-link"><a href="' +
+        esc(href) +
+        '">打开关联看板 →</a></p>'
+    }
+    var noteHtml = truncated
+      ? '<p class="hall-feed-detail-note">这不是完整任务原文。公开执行指标仅保留约 128 字任务摘要；内部提示词与完整执行日志不在官网展示。</p>'
+      : ''
+    panel.hidden = false
+    panel.innerHTML =
+      '<div class="hall-detail-head" style="--dept:' +
+      esc(item.dept_color || '#94a3b8') +
+      '"><h2>动态详情</h2>' +
+      '<button type="button" class="hall-close" id="hall-feed-close">收起</button></div>' +
+      '<p class="hall-feed-detail-meta">' +
+      esc(stamp.title || stamp.day + ' ' + stamp.clock) +
+      ' · ' +
+      esc(item.dept_label || '') +
+      ' · ' +
+      esc(item.employee_name || '') +
+      ' · ' +
+      esc(item.status_label || presenceLabel(item.presence)) +
+      '</p>' +
+      '<p class="hall-feed-detail-body">' +
+      esc(body) +
+      '</p>' +
+      noteHtml +
+      linkHtml
+    var close = document.getElementById('hall-feed-close')
+    if (close) {
+      close.addEventListener('click', function () {
+        panel.hidden = true
+        panel.innerHTML = ''
+      })
+    }
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }
 
   function renderBoardLists(data) {
@@ -693,6 +774,17 @@
     })
   }
 
+  function fetchBoard(url, wrapped) {
+    return fetch(url, { cache: 'no-store' }).then(function (res) {
+      if (!res.ok) throw new Error('board ' + res.status)
+      return res.json()
+    }).then(function (payload) {
+      if (!wrapped) return payload
+      if (!payload || payload.ok !== true || !payload.data) throw new Error('live board unavailable')
+      return payload.data
+    })
+  }
+
   function loadHall() {
     return fetchHall('/api/public/company-hall', true)
     .catch(function () {
@@ -700,10 +792,9 @@
     })
     .then(render)
     .catch(function () {
-      return fetch('/download-action-board.json', { cache: 'no-store' })
-        .then(function (res) {
-          if (!res.ok) throw new Error('board')
-          return res.json()
+      return fetchBoard('/api/public/action-board', true)
+        .catch(function () {
+          return fetchBoard('/download-action-board.json', false)
         })
         .then(function (board) {
           var traj = board.trajectory || []

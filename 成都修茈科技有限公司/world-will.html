@@ -10,7 +10,7 @@
     />
     <meta name="keywords" content="世界意志, AI 公司大厅, 无人公司, XCAGI, 六线部门, AI 员工" />
     <link rel="canonical" href="https://xiu-ci.com/world-will" />
-    <link rel="stylesheet" href="./styles.css?v=20260719b" />
+    <link rel="stylesheet" href="./styles.css?v=20260723j" />
     <style>
       body[data-page='world-will'] .ww-hero {
         padding: 72px 0 40px;
@@ -153,22 +153,90 @@
       }
       body[data-page='world-will'] .hall-timeline-item {
         position: relative;
-        padding: 0 0 16px 0;
+        padding: 0 0 18px 0;
       }
       body[data-page='world-will'] .hall-timeline-item:last-child { padding-bottom: 0; }
-      body[data-page='world-will'] .hall-timeline-item a {
+      /* 兼容旧 <a> 包整行：去掉蓝字下划线，与按钮同一栅格 */
+      body[data-page='world-will'] .hall-timeline-btn,
+      body[data-page='world-will'] .hall-timeline-item > a {
         display: grid;
-        grid-template-columns: 76px 16px 1fr;
-        gap: 8px;
+        grid-template-columns: 72px 14px minmax(0, 1fr);
+        column-gap: 10px;
+        align-items: start;
+        width: 100%;
+        margin: 0;
+        padding: 8px 10px;
+        border: 0;
+        background: transparent;
+        text-align: left;
+        color: #0f172a;
         text-decoration: none;
-        color: inherit;
+        cursor: pointer;
+        font: inherit;
+        border-radius: 12px;
+        box-sizing: border-box;
       }
+      body[data-page='world-will'] .hall-timeline-btn:hover,
+      body[data-page='world-will'] .hall-timeline-item > a:hover {
+        background: #f8fafc;
+        text-decoration: none;
+      }
+      body[data-page='world-will'] .hall-timeline-btn:focus-visible,
+      body[data-page='world-will'] .hall-timeline-item > a:focus-visible {
+        outline: 2px solid #93c5fd;
+        outline-offset: 2px;
+      }
+      body[data-page='world-will'] .hall-timeline-btn *,
+      body[data-page='world-will'] .hall-timeline-item > a * {
+        text-decoration: none;
+      }
+      body[data-page='world-will'] .hall-feed-more {
+        display: inline-block;
+        margin-top: 8px;
+        color: #0b63f6;
+        font-size: 11px;
+        font-weight: 650;
+      }
+      body[data-page='world-will'] .hall-feed-detail {
+        margin: 12px 0 0;
+        padding: 14px 16px;
+        border: 1px solid #e2e6ec;
+        border-radius: 12px;
+        background: #fbfdff;
+      }
+      body[data-page='world-will'] .hall-feed-detail-meta {
+        margin: 0 0 10px;
+        color: #64748b;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      body[data-page='world-will'] .hall-feed-detail-body {
+        margin: 0;
+        color: #0f172a;
+        font-size: 13px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      body[data-page='world-will'] .hall-feed-detail-note {
+        margin: 10px 0 0;
+        color: #64748b;
+        font-size: 11px;
+        line-height: 1.45;
+      }
+      body[data-page='world-will'] .hall-feed-detail-link {
+        margin: 12px 0 0;
+        font-size: 12px;
+        font-weight: 650;
+      }
+      body[data-page='world-will'] .hall-feed-detail-link a { color: #0b63f6; }
       body[data-page='world-will'] .hall-timeline-item time {
         color: #94a3b8;
         font-size: 12px;
         font-variant-numeric: tabular-nums;
         font-weight: 700;
         padding-top: 2px;
+        grid-column: 1;
       }
       body[data-page='world-will'] .hall-timeline-item time span { display: block; }
       body[data-page='world-will'] .hall-timeline-day {
@@ -178,32 +246,69 @@
         letter-spacing: -0.2px;
         white-space: nowrap;
       }
-      body[data-page='world-will'] .hall-timeline-clock { line-height: 1.35; }
+      body[data-page='world-will'] .hall-timeline-clock {
+        line-height: 1.35;
+        color: #0f172a;
+      }
       body[data-page='world-will'] .hall-timeline-dot {
         width: 10px;
         height: 10px;
         border-radius: 50%;
-        margin-top: 5px;
+        margin: 6px auto 0;
         position: relative;
         z-index: 1;
         box-shadow: 0 0 0 3px #fff;
+        grid-column: 2;
+        justify-self: center;
       }
+      /* 轴线对齐圆点中心：padding-left 10 + 72 + gap 10 + 7 */
       body[data-page='world-will'] .hall-timeline-item::before {
         content: '';
         position: absolute;
-        left: 52px;
-        top: 14px;
+        left: 99px;
+        top: 22px;
         bottom: -2px;
         width: 2px;
         background: #e8edf3;
+        pointer-events: none;
       }
       body[data-page='world-will'] .hall-timeline-item:last-child::before { display: none; }
-      body[data-page='world-will'] .hall-timeline-item strong { display: block; font-size: 12px; }
+      body[data-page='world-will'] .hall-timeline-item strong {
+        display: block;
+        font-size: 13px;
+        font-weight: 750;
+        color: #0f172a;
+        line-height: 1.35;
+      }
+      body[data-page='world-will'] .hall-feed-status {
+        display: inline-block;
+        margin-top: 4px;
+        padding: 1px 8px;
+        border-radius: 999px;
+        background: #f1f5f9;
+        color: #64748b;
+        font-size: 11px;
+        font-weight: 650;
+        line-height: 1.4;
+      }
+      body[data-page='world-will'] .hall-timeline-item--alert .hall-feed-status,
+      body[data-page='world-will'] .hall-timeline-item--error .hall-feed-status {
+        background: #fef2f2;
+        color: #b91c1c;
+      }
+      body[data-page='world-will'] .hall-timeline-item--working .hall-feed-status {
+        background: #eff6ff;
+        color: #1d4ed8;
+      }
       body[data-page='world-will'] .hall-timeline-item p {
-        margin: 4px 0 0;
+        margin: 6px 0 0;
         font-size: 12px;
-        line-height: 1.45;
-        color: #334155;
+        line-height: 1.5;
+        color: #475569;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
       }
       body[data-page='world-will'] .ww-sum-card strong {
         display: block;
@@ -412,7 +517,7 @@
       body[data-page='world-will'] .hall-feed-item i { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; }
       body[data-page='world-will'] .hall-feed-item time { color: #94a3b8; font-size: 12px; font-variant-numeric: tabular-nums; }
       body[data-page='world-will'] .hall-feed-item strong { display: block; font-size: 12px; }
-      body[data-page='world-will'] .hall-feed-status { color: #64748b; font-size: 11px; margin-left: 6px; }
+      body[data-page='world-will'] .hall-feed-item .hall-feed-status { margin-left: 6px; }
       body[data-page='world-will'] .hall-feed-item p { margin: 4px 0 0; font-size: 12px; line-height: 1.45; color: #334155; }
       body[data-page='world-will'] .hall-report-grid {
         display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px;
@@ -553,6 +658,7 @@
                 <a href="#ai-driver">查看驾驶员 →</a>
               </div>
               <div class="ww-feed" id="hall-feed" aria-live="polite"></div>
+              <div id="hall-feed-detail" class="hall-feed-detail" hidden></div>
             </section>
             <section class="ww-panel" aria-labelledby="hall-report-title">
               <div class="ww-panel-head">
@@ -614,15 +720,15 @@
       </div>
     </footer>
 <button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button>
-<script src="./main.js?v=20260719b"></script>
+<script src="./main.js?v=20260725a"></script>
 
 
-<script src="./world-will.js?v=20260722h" defer></script>
+<script src="./world-will.js?v=20260723k" defer></script>
 
 
 <div id="xc-corp-butler-root"></div>
-<link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260723d" data-xc-corp-butler-css="1" />
-<script type="module" src="/corp-butler/corp-butler.js?v=20260723d" data-xc-corp-butler-js="1"></script>
+<link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260725a" data-xc-corp-butler-css="1" />
+<script type="module" src="/corp-butler/corp-butler.js?v=20260725a" data-xc-corp-butler-js="1"></script>
 
 </body>
 </html>

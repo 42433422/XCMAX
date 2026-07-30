@@ -560,7 +560,7 @@
                 ref="fileInput"
                 class="visually-hidden"
                 type="file"
-                accept=".pdf,.docx,.txt,.md,.csv,.json,.log"
+                accept=".pdf,.docx,.xlsx,.xls,.txt,.md,.csv,.json,.log"
                 @change="selectFile"
               />
               <button
@@ -578,7 +578,7 @@
                 </span>
                 <strong>{{ selectedFile?.name || '选择或拖入资料' }}</strong>
                 <span v-if="selectedFile">{{ fileSizeText(selectedFile.size) }}</span>
-                <span v-else>PDF、Word、Markdown、CSV、JSON，最大 25 MB</span>
+                <span v-else>PDF、Word、Excel、Markdown、CSV、JSON，最大 25 MB</span>
               </button>
               <button
                 v-if="selectedFile"
@@ -1206,22 +1206,41 @@ function setSelectedFile(file: File | null): void {
   if (file && (source.value === 'Persy 系统资料' || !source.value.trim())) source.value = file.name
 }
 
+function validateKnowledgeFile(file: File): string {
+  const extension = file.name.includes('.') ? `.${file.name.split('.').pop()?.toLowerCase()}` : ''
+  if (!['.pdf', '.docx', '.xlsx', '.xls', '.txt', '.md', '.csv', '.json', '.log'].includes(extension)) {
+    return `不支持的资料类型：${extension || '无扩展名'}`
+  }
+  if (file.size > 25 * 1024 * 1024) {
+    return '资料文件不能超过 25 MB'
+  }
+  return ''
+}
+
 function selectFile(event: Event): void {
   const input = event.target as HTMLInputElement
-  setSelectedFile(input.files?.[0] || null)
+  const file = input.files?.[0] || null
+  if (!file) {
+    setSelectedFile(null)
+    return
+  }
+  const error = validateKnowledgeFile(file)
+  if (error) {
+    ingestError.value = error
+    clearSelectedFile()
+    return
+  }
+  ingestError.value = ''
+  setSelectedFile(file)
 }
 
 function dropFile(event: DragEvent): void {
   draggingFile.value = false
   const file = event.dataTransfer?.files?.[0] || null
   if (!file) return
-  const extension = file.name.includes('.') ? `.${file.name.split('.').pop()?.toLowerCase()}` : ''
-  if (!['.pdf', '.docx', '.txt', '.md', '.csv', '.json', '.log'].includes(extension)) {
-    ingestError.value = `不支持的资料类型：${extension || '无扩展名'}`
-    return
-  }
-  if (file.size > 25 * 1024 * 1024) {
-    ingestError.value = '资料文件不能超过 25 MB'
+  const error = validateKnowledgeFile(file)
+  if (error) {
+    ingestError.value = error
     return
   }
   ingestError.value = ''

@@ -210,6 +210,69 @@ def matching_duty_event_contract(
     return {}
 
 
+def enrich_customer_ticket_publish_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize publish-boundary payload for ``ops.intake.customer_ticket``.
+
+    Guarantees ``requests`` / ``ticket`` shapes before the event hits incident_bus
+    bindings, so no consumer depends on a later enrich path that might be skipped.
+    """
+
+    body = dict(payload or {})
+    _enrich_customer_ticket_duty_input("intake-dispatcher", body, body)
+    _enrich_customer_ticket_duty_input("user-customer-service-officer", body, body)
+    return body
+
+
+def _enrich_customer_ticket_duty_input(
+    employee_id: str,
+    payload: Dict[str, Any],
+    incident: Dict[str, Any],
+) -> None:
+    """Map incident-bus fields into deterministic direct_python shapes.
+
+    Reviewed duty packs for intake / CS expect ``requests`` / ``ticket``. Raw
+    ``ops.intake.customer_ticket`` payloads only carry ticket_id/summary, which
+    previously made every binding dispatch ``handler_failed``.
+    """
+
+    eid = str(employee_id or "").strip()
+    ticket_no = str(
+        incident.get("ticket_no") or incident.get("subject_id") or incident.get("ticket_id") or ""
+    ).strip()
+    summary = str(incident.get("summary") or incident.get("title") or "").strip()
+    raw = incident.get("raw") if isinstance(incident.get("raw"), dict) else {}
+    if not summary:
+        summary = str(raw.get("body") or raw.get("title") or "").strip()
+    if eid == "intake-dispatcher" and not (
+        isinstance(payload.get("requests"), list) and payload.get("requests")
+    ):
+        text = summary or f"客服工单 {ticket_no or '?'} 待归一化"
+        payload["requests"] = [
+            {
+                "id": ticket_no or "customer-ticket",
+                "text": text[:2000],
+                "route_hint": "user-customer-service-officer",
+            }
+        ]
+    if eid == "user-customer-service-officer" and not isinstance(payload.get("ticket"), dict):
+        payload["ticket"] = {
+            "id": ticket_no or "CS-unknown",
+            "issue": summary or f"客服工单 {ticket_no or '?'}",
+            "knowledge_sources": [
+                {
+                    "source": "customer_ticket_incident",
+                    "text": (summary or ticket_no or "customer_ticket")[:500],
+                }
+            ],
+            "severity": str(incident.get("severity") or "normal").strip().lower() or "normal",
+        }
+    # surface common fields for modules that read top-level keys
+    if ticket_no and not payload.get("ticket_no"):
+        payload["ticket_no"] = ticket_no
+    if summary and not payload.get("summary"):
+        payload["summary"] = summary
+
+
 def duty_event_execution_input(
     employee_id: str,
     *,
@@ -225,11 +288,12 @@ def duty_event_execution_input(
     project_root = str(
         os.environ.get("MODSTORE_DUTY_PROJECT_ROOT") or os.environ.get("XCMAX_MONOREPO_ROOT") or ""
     ).strip()
+    incident_body = dict(incident or {})
     payload: Dict[str, Any] = {
         "allow_high_risk_real_run": False,
         "allow_medium_risk": True,
         "event_type": str(event_type or "").strip(),
-        "incident": dict(incident or {}),
+        "incident": incident_body,
         "non_blocking_human_questions": True,
         "schedule_source": "duty_work_contract",
         "source": str(source or "").strip(),
@@ -245,12 +309,17 @@ def duty_event_execution_input(
     }
     if project_root:
         payload["project_root"] = project_root
+    if str(event_type or "").strip() == "ops.intake.customer_ticket" or str(
+        incident_body.get("source") or ""
+    ).strip().lower() in {"customer_ticket", "customer-service-api", "customer-service-sim"}:
+        _enrich_customer_ticket_duty_input(employee_id, payload, incident_body)
     return payload
 
 
 __all__ = [
     "contract_schedule",
     "duty_event_execution_input",
+    "enrich_customer_ticket_publish_payload",
     "load_workforce_contracts",
     "load_reviewed_duty_manifest",
     "matching_duty_event_contract",

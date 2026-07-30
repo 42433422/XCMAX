@@ -88,12 +88,15 @@ async def _deferred_heavy_startup(app: FastAPI) -> None:
     await _init_mobile_relay_desktop_async(app)
     mark_startup("deferred_heavy_ready")
 
-    try:
-        from app.desktop_runtime.backup_scheduler import start_backup_scheduler
+    from app.fastapi_app.node_role import passive_node_enabled
 
-        start_backup_scheduler()
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("⚠️ 桌面端定时备份调度器启动失败: %s", exc)
+    if not passive_node_enabled():
+        try:
+            from app.desktop_runtime.backup_scheduler import start_backup_scheduler
+
+            start_backup_scheduler()
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("⚠️ 桌面端定时备份调度器启动失败: %s", exc)
 
 
 async def schedule_deferred_heavy_startup(app: FastAPI) -> None:

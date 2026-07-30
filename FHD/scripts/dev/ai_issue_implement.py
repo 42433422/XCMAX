@@ -3,9 +3,8 @@
 约束（来自 .trae/rules/cicd-e2e-prompt.md）：
   - owner 评论「确认」才执行（除非命中域预授权 allowlist）
   - 预估变更 >5 文件拒做
-  - 实现后创建 PR，按授权来源分流标签：
-    * allowlist 命中 → ai-generated + risk:r0（SLA 二次守卫后 auto-merge）
-    * owner 确认    → needs-human + ai-generated + risk:r2（人工 review）
+  - 实现后创建 PR；LLM 代码一律标 needs-human + ai-generated + risk:r2
+  - 只接受完整新文件内容或唯一精确替换，不把描述摘要当源码
 
 预授权（方案 B）：
   ``config/auto-implement-allowlist.yaml`` 中的 ``label_patterns``
@@ -59,6 +58,8 @@ DEFAULT_ALLOWLIST_PATH = REPO_ROOT / "config" / "auto-implement-allowlist.yaml"
 MAX_CHANGED_FILES = 5  # 决策矩阵硬阈值
 BRANCH_PREFIX = "ai-impl"
 CONFIRM_KEYWORDS = ("确认", "confirm", "approved", "approve", "+1", "OK", "go")
+SAFE_SOURCE_SUFFIXES = {".py", ".ts", ".vue", ".js", ".json", ".md", ".yml", ".yaml", ".sh"}
+MAX_GENERATED_FILE_BYTES = 200_000
 
 
 @dataclass
@@ -137,7 +138,9 @@ def _fetch_issue_comments(repo: str, issue_number: int, token: str) -> list[dict
 
 def _has_aimplement_label(issue: dict[str, Any]) -> bool:
     labels = issue.get("labels") or []
-    return any(str(lb.get("name") or "").strip() == "ai-implement" for lb in labels if isinstance(lb, dict))
+    return any(
+        str(lb.get("name") or "").strip() == "ai-implement" for lb in labels if isinstance(lb, dict)
+    )
 
 
 def _issue_label_names(issue: dict[str, Any]) -> list[str]:
@@ -226,7 +229,9 @@ def _allowlist_preauthorized(
     return False, "未命中域预授权 allowlist"
 
 
-def _owner_confirmed(issue: dict[str, Any], comments: list[dict[str, Any]], repo: str) -> tuple[bool, str]:
+def _owner_confirmed(
+    issue: dict[str, Any], comments: list[dict[str, Any]], repo: str
+) -> tuple[bool, str]:
     """决策矩阵要求：owner 评论「确认」才执行。
 
     判定：
@@ -257,8 +262,10 @@ def _is_authorized(
     """授权：域预授权 allowlist 命中，或 owner 评论确认。
 
     返回 (authorized, reason, source)，source ∈ {"allowlist", "owner", ""}：
-      - allowlist: 命中 config/auto-implement-allowlist.yaml:label_patterns → 低风险，PR 标 ai-generated + risk:r0
-      - owner:     owner 评论「确认」 → 仍需人工 review，PR 标 needs-human + ai-generated + risk:r2
+      - allowlist: 命中 config/auto-implement-allowlist.yaml:label_patterns，授权执行
+      - owner:     owner 评论「确认」，授权执行
+
+    授权来源不决定代码风险；LLM 代码统一进入 risk:r2 独立审查。
     """
     pre_ok, pre_reason = _allowlist_preauthorized(issue)
     if pre_ok:
@@ -281,7 +288,7 @@ def _estimate_files(issue_title: str, issue_body: str) -> int:
     text = f"{issue_title}\n{issue_body}"
     # 明确文件路径
     paths = re.findall(r"`?([a-zA-Z0-9_./-]+\.(?:py|ts|vue|js|json|md|yml|yaml))`?", text)
-    explicit = set(p for p in paths if "/" in p or p.startswith(("FHD", "app", "src", "tests")))
+    explicit = {p for p in paths if "/" in p or p.startswith(("FHD", "app", "src", "tests"))}
     count = len(explicit)
     if re.search(r"新增|新建|add new|create new|scaffold", text, re.IGNORECASE):
         count += 2
@@ -293,7 +300,8 @@ def _estimate_files(issue_title: str, issue_body: str) -> int:
 def _call_llm(prompt: str, api_key: str) -> dict[str, Any]:
     """调用 LLM 生成实现建议。使用与项目一致的 DeepSeek/兼容客户端。
 
-    失败时返回 ok=False；上层据此跳过自动实现，避免误操作。
+    严格 JSON 解析失败时只重试一次，并再次强调只返回 JSON。两次均失败
+    才返回 ok=False；上层据此跳过自动实现，避免把格式异常当成代码计划。
     """
     if not api_key:
         return {"ok": False, "error": "LLM_API_KEY 未配置"}
@@ -301,49 +309,80 @@ def _call_llm(prompt: str, api_key: str) -> dict[str, Any]:
     model = os.environ.get("XCAGI_LLM_MODEL", "deepseek-chat")
     import urllib.request
 
-    body = json.dumps(
-        {
-            "model": model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "你是 XCMAX 项目的代码实现助手。"
-                        "根据 issue 输出最小可行的文件变更清单："
-                        "返回 JSON 对象 {\"files\": [{\"path\": \"...\", \"action\": \"create|modify\", "
-                        "\"content_summary\": \"...\", \"rationale\": \"...\"}], "
-                        "\"estimated_files\": N, \"cannot_automate\": bool, \"reason\": \"...\"}。"
-                        "禁止生成超过 5 个文件；禁止触碰 _local_secrets/、payment_*.py、.env。"
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
-            "temperature": 0.2,
-            "max_tokens": 2000,
-        }
-    ).encode("utf-8")
-    req = urllib.request.Request(
-        _chat_completions_url(base),
-        data=body,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
+    system_prompt = (
+        "你是 XCMAX 项目的代码实现助手。"
+        "根据 issue 输出最小且可直接应用的文件变更清单，路径相对 FHD/："
+        '返回 JSON 对象 {"files": [{"path": "...", "action": "create", '
+        '"content": "完整文件内容", "rationale": "..."}, '
+        '{"path": "...", "action": "modify", '
+        '"old_text": "文件中唯一存在的完整原文", "new_text": "替换后的完整文本", '
+        '"rationale": "..."}], '
+        '"estimated_files": N, "cannot_automate": bool, "reason": "..."}。'
+        "禁止只返回 content_summary；禁止生成超过 5 个文件；"
+        "禁止触碰 _local_secrets/、payment_*.py、.env、secrets 或工作流。"
     )
+    last_error = "未知错误"
+    for attempt in range(2):
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ]
+        if attempt:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "上一轮响应无法按严格 JSON 解析。请重新回答："
+                        "只输出一个使用双引号的合法 JSON 对象，不要 Markdown、注释、"
+                        "Python 字面量或任何 JSON 之外的文字。"
+                    ),
+                }
+            )
+        body = json.dumps(
+            {
+                "model": model,
+                "messages": messages,
+                "temperature": 0 if attempt else 0.2,
+                "max_tokens": 2000,
+            }
+        ).encode("utf-8")
+        req = urllib.request.Request(
+            _chat_completions_url(base),
+            data=body,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+            plan, parse_error = _parse_llm_plan(str(content or ""))
+            if plan is None:
+                last_error = parse_error
+                continue
+            plan["ok"] = True
+            return plan
+        except Exception as exc:  # noqa: BLE001
+            last_error = str(exc)
+    return {"ok": False, "error": f"LLM 调用失败（重试 1 次后）：{last_error}"}
+
+
+def _parse_llm_plan(content: str) -> tuple[dict[str, Any] | None, str]:
+    """Extract one strict JSON object while rejecting Python/JSON5 lookalikes."""
+
+    match = re.search(r"\{[\s\S]*\}", str(content or ""))
+    if not match:
+        return None, "LLM 响应未包含 JSON 对象"
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
-        # 容错：模型可能返回带 markdown 包裹的 JSON
-        m = re.search(r"\{[\s\S]*\}", content)
-        if not m:
-            return {"ok": False, "error": "LLM 响应未包含 JSON"}
-        plan = json.loads(m.group(0))
-        plan["ok"] = True
-        return plan
-    except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "error": f"LLM 调用失败：{exc}"}
+        plan = json.loads(match.group(0))
+    except json.JSONDecodeError as exc:
+        return None, f"LLM 响应 JSON 解析失败：{exc}"
+    if not isinstance(plan, dict):
+        return None, "LLM 响应 JSON 顶层必须是对象"
+    return plan, ""
 
 
 def _chat_completions_url(base_url: str) -> str:
@@ -366,9 +405,7 @@ def _chat_completions_url(base_url: str) -> str:
 
 
 def _git(*args: str, cwd: str | None = None, check: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        ["git", *args], cwd=cwd, check=check, capture_output=True, text=True
-    )
+    return subprocess.run(["git", *args], cwd=cwd, check=check, capture_output=True, text=True)
 
 
 def _create_branch(base: str, issue_number: int) -> str:
@@ -380,34 +417,81 @@ def _create_branch(base: str, issue_number: int) -> str:
 def _apply_files(base: Path, files: list[dict[str, Any]]) -> list[str]:
     """应用 LLM 生成的文件清单到磁盘。
 
-    本实现仅做「create」类型的安全写入；「modify」类型需人工 review，不自动应用。
+    create 必须提供完整 content 且父目录已存在；modify 必须提供在目标
+    文件中只出现一次的 old_text 与完整 new_text。摘要永远不作为源码。
     返回实际写入的文件路径列表。
     """
     written: list[str] = []
     for f in files or []:
         action = str(f.get("action") or "").strip().lower()
-        rel = str(f.get("path") or "").strip()
-        if not rel or action != "create":
+        raw_rel = str(f.get("path") or "").strip()
+        if not raw_rel or action not in {"create", "modify"}:
             continue
-        # 安全闸：禁止路径穿越与敏感文件
-        if ".." in rel or rel.startswith("/"):
+        if "\\" in raw_rel:
             continue
-        if any(seg in rel for seg in ("_local_secrets", ".env", "payment_", "secrets")):
+        rel = raw_rel[4:] if raw_rel.startswith("FHD/") else raw_rel
+        rel_path = Path(rel)
+        lower_parts = [part.lower() for part in rel_path.parts]
+        if rel_path.is_absolute() or ".." in rel_path.parts:
             continue
-        content = str(f.get("content") or f.get("content_summary") or "")
-        if not content:
+        if rel_path.suffix.lower() not in SAFE_SOURCE_SUFFIXES:
             continue
-        dest = (base / rel).resolve()
+        if any(
+            part in {".github", "_local_secrets", ".env"}
+            or "secret" in part
+            or part.startswith("payment_")
+            for part in lower_parts
+        ):
+            continue
+        dest = (base / rel_path).resolve()
         try:
             dest.relative_to(base.resolve())
         except ValueError:
             continue
-        if dest.exists():
-            continue  # create 不覆盖
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(content, encoding="utf-8")
-        written.append(rel)
+        if action == "create":
+            content = f.get("content")
+            if not isinstance(content, str) or not content:
+                continue
+            if len(content.encode("utf-8")) > MAX_GENERATED_FILE_BYTES:
+                continue
+            if dest.exists() or not dest.parent.is_dir():
+                continue
+            dest.write_text(content, encoding="utf-8")
+            written.append(rel_path.as_posix())
+            continue
+
+        if not dest.is_file():
+            continue
+        old_text = f.get("old_text")
+        new_text = f.get("new_text")
+        if not isinstance(old_text, str) or len(old_text) < 8:
+            continue
+        if not isinstance(new_text, str) or old_text == new_text:
+            continue
+        current = dest.read_text(encoding="utf-8")
+        if current.count(old_text) != 1:
+            continue
+        updated = current.replace(old_text, new_text, 1)
+        if len(updated.encode("utf-8")) > MAX_GENERATED_FILE_BYTES:
+            continue
+        dest.write_text(updated, encoding="utf-8")
+        written.append(rel_path.as_posix())
     return written
+
+
+def _validate_written_files(base: Path, files: list[str]) -> None:
+    """Fail closed on whitespace errors and invalid generated Python syntax."""
+
+    _git("diff", "--check", "--", *files, cwd=str(base))
+    for rel in files:
+        if Path(rel).suffix.lower() != ".py":
+            continue
+        subprocess.run(
+            [sys.executable, "-m", "py_compile", str(base / rel)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
 
 
 def _commit_and_pr(
@@ -420,6 +504,13 @@ def _commit_and_pr(
     token: str,
     auth_source: str = "",
 ) -> tuple[str, int]:
+    _git("config", "user.name", "github-actions[bot]", cwd=str(base))
+    _git(
+        "config",
+        "user.email",
+        "41898282+github-actions[bot]@users.noreply.github.com",
+        cwd=str(base),
+    )
     _git("add", *files, cwd=str(base))
     _git(
         "commit",
@@ -431,23 +522,13 @@ def _commit_and_pr(
         cwd=str(base),
     )
     _git("push", "origin", branch, cwd=str(base))
-    # 授权来源 → PR 标签分流：
-    #   allowlist: 命中预授权域 → 低风险，PR 标 ai-generated + risk:r0
-    #              → ai-self-heal-auto-merge SLA 12h 二次守卫通过后 auto-merge
-    #   owner:     owner 评论「确认」 → 仍需人工 review，PR 标 needs-human + ai-generated + risk:r2
-    #              → SLA 7d stale 提醒 / 14d 自动关闭
-    if auth_source == "allowlist":
-        pr_labels = ["ai-generated", "risk:r0"]
-        pr_footer = (
-            "_本 PR 由 ai-issue-implement workflow 生成（命中域预授权 allowlist），"
-            "标 `ai-generated` + `risk:r0`，由 ai-self-heal-auto-merge SLA 二次守卫后 auto-merge。_"
-        )
-    else:
-        pr_labels = ["needs-human", "ai-generated", "risk:r2"]
-        pr_footer = (
-            "_本 PR 由 ai-issue-implement workflow 生成（owner 评论确认），"
-            "标 `needs-human` + `risk:r2` 待人工合并，7d stale / 14d 自动关闭。_"
-        )
+    # Domain pre-authorization allows execution, not a claim that arbitrary LLM
+    # code is mechanically safe.  Independent review/CI is always required.
+    pr_labels = ["needs-human", "ai-generated", "risk:r2"]
+    pr_footer = (
+        f"_本 PR 由 ai-issue-implement workflow 生成（授权来源：{auth_source or 'owner'}），"
+        "标 `needs-human` + `risk:r2`，禁止按低风险代码自动合并。_"
+    )
     pr_body = (
         f"## 关联 issue\n\nCloses #{issue_number}\n\n"
         f"## 变更文件 ({len(files)})\n\n" + "\n".join(f"- `{f}`" for f in files) + "\n\n"
@@ -469,6 +550,8 @@ def _commit_and_pr(
     )
     pr_url = pr.get("html_url") or ""
     pr_number = int(pr.get("number") or 0)
+    if not pr_url or not pr_number:
+        raise RuntimeError(f"GitHub PR creation failed: {pr.get('_error') or 'missing PR result'}")
     # 打风险分流标签
     if pr_number:
         _gh_post(
@@ -579,6 +662,20 @@ def run(args: argparse.Namespace) -> ImplementResult:
 
     result.llm_used = True
     files = plan.get("files") or []
+    if plan.get("cannot_automate") or not isinstance(files, list) or not files:
+        result.status = "failed"
+        result.reason = str(plan.get("reason") or "LLM 未返回可安全应用的文件变更")
+        result.finished_at = _utc_now()
+        result.duration_ms = int((time.time() - start_ts) * 1000)
+        _write_report(result)
+        sys.exit(6)
+    if len(files) > MAX_CHANGED_FILES:
+        result.status = "rejected_too_large"
+        result.reason = f"LLM 计划变更 {len(files)} 文件 > 阈值 {MAX_CHANGED_FILES}；拒做"
+        result.finished_at = _utc_now()
+        result.duration_ms = int((time.time() - start_ts) * 1000)
+        _write_report(result)
+        sys.exit(3)
     result.changed_files = [str(f.get("path") or "") for f in files if f.get("path")]
 
     if args.dry_run:
@@ -601,41 +698,35 @@ def run(args: argparse.Namespace) -> ImplementResult:
         result.changed_files = written
         if not written:
             result.status = "failed"
-            result.reason = "无文件被实际写入（可能全是 modify 类型，需人工）"
+            result.reason = "无文件被安全应用（缺完整内容、唯一精确替换或路径未通过策略）"
             _git("checkout", "main", cwd=str(repo_root))
             _git("branch", "-D", branch, cwd=str(repo_root))
             result.finished_at = _utc_now()
             result.duration_ms = int((time.time() - start_ts) * 1000)
             _write_report(result)
             sys.exit(6)
+        _validate_written_files(base_dir, written)
         pr_url, pr_num = _commit_and_pr(
-            base_dir, branch, issue_number, result.issue_title, written, repo, args.token,
+            base_dir,
+            branch,
+            issue_number,
+            result.issue_title,
+            written,
+            repo,
+            args.token,
             auth_source=auth_source,
         )
         result.pr_url = pr_url
         result.pr_number = pr_num
         result.status = "pr_created"
         result.ok = True
-        if auth_source == "allowlist":
-            result.reason = (
-                f"PR #{pr_num} 已创建（命中 allowlist → ai-generated + risk:r0），"
-                f"待 SLA 二次守卫通过后 auto-merge"
-            )
-            pr_comment = (
-                f"✅ 已创建 PR #{pr_num}: {pr_url}\n\n"
-                f"授权来源：**域预授权 allowlist**（低风险）。\n"
-                f"PR 已标 `ai-generated` + `risk:r0`，"
-                f"将由 `ai-self-heal-auto-merge` SLA 12h 二次守卫通过后自动合并。"
-            )
-        else:
-            result.reason = (
-                f"PR #{pr_num} 已创建（owner 确认 → needs-human + risk:r2），待人工合并"
-            )
-            pr_comment = (
-                f"✅ 已创建 PR #{pr_num}: {pr_url}\n\n"
-                f"授权来源：**owner 评论确认**。\n"
-                f"PR 已标 `needs-human` + `ai-generated` + `risk:r2`，待人工 review 合并。"
-            )
+        result.reason = f"PR #{pr_num} 已创建（LLM 代码 → needs-human + risk:r2）"
+        pr_comment = (
+            f"✅ 已创建 PR #{pr_num}: {pr_url}\n\n"
+            f"授权来源：**{auth_source or 'owner'}**。\n"
+            "PR 已标 `needs-human` + `ai-generated` + `risk:r2`，"
+            "必须经过独立审查和 CI，不按低风险代码自动合并。"
+        )
         _gh_post(
             f"https://api.github.com/repos/{repo}/issues/{issue_number}/comments",
             args.token,

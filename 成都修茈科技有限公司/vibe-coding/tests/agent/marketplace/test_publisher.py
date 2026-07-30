@@ -31,7 +31,6 @@ from vibe_coding.agent.marketplace import (
     SkillPublisher,
 )
 
-
 # --------------------------------------------------------------- shared fixtures
 
 
@@ -106,6 +105,29 @@ def test_client_login_stores_access_token() -> None:
     assert client.access_token == "tok-abc"
 
 
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "file:///etc/passwd",
+        "https://user:password@example.com",
+        "https://example.com/api",
+        "http://169.254.169.254",
+    ],
+)
+def test_client_rejects_unsafe_base_urls(base_url: str) -> None:
+    with pytest.raises(MODstoreError):
+        MODstoreClient(base_url=base_url)
+
+
+def test_client_private_network_requires_explicit_opt_in() -> None:
+    client = MODstoreClient(
+        base_url="http://127.0.0.1:9999",
+        allow_private_network=True,
+    )
+
+    assert client.base_url == "http://127.0.0.1:9999"
+
+
 def test_client_login_raises_auth_error_on_401() -> None:
     import urllib.error
 
@@ -133,8 +155,8 @@ def test_upload_catalog_sends_multipart(tmp_path: Path) -> None:
     def handler(req):
         ct = req.headers.get("Content-type") or req.headers.get("Content-Type") or ""
         seen_payload["content_type"] = ct
-        seen_payload["auth"] = (
-            req.headers.get("Authorization") or req.headers.get("authorization")
+        seen_payload["auth"] = req.headers.get("Authorization") or req.headers.get(
+            "authorization"
         )
         seen_payload["body_starts_with"] = bytes(req.data)[:120]
         return _FakeResponse(
@@ -164,7 +186,7 @@ def test_upload_catalog_sends_multipart(tmp_path: Path) -> None:
     assert seen_payload["content_type"].startswith("multipart/form-data; boundary=")
     assert seen_payload["auth"] == "Bearer t"
     # Boundary marker plus our pkg_id field appear early in the multipart body.
-    assert b"name=\"pkg_id\"" in seen_payload["body_starts_with"]
+    assert b'name="pkg_id"' in seen_payload["body_starts_with"]
 
 
 def test_upload_requires_token() -> None:

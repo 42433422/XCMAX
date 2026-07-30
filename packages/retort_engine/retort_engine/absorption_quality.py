@@ -4,7 +4,6 @@ import re
 from pathlib import PurePosixPath
 from typing import Any
 
-
 BEHAVIOR_SOURCE_SUFFIXES = (".py", ".js", ".ts", ".tsx", ".jsx", ".go")
 GENERATED_ABSORPTION_NAMES = {
     "absorbed_capabilities.py",
@@ -17,31 +16,97 @@ GENERATED_ABSORPTION_NAMES = {
     "test_absorbed_behavior_bridge.py",
 }
 SIGNAL_BEHAVIOR_HINTS = {
-    "review_pipeline": ("pr_review", "review_pipeline", "employee_runtime_worker", "pr_dry_run", "pr_publish", "absorbed_review_rank_weights", "absorbed_hunk_semantic_rules"),
-    "file_grouping": ("pr_review", "review_context", "file_grouping", "context_group", "review_context_bias"),
-    "diff_hunk_review": ("pr_review", "diff_hunk", "hunk", "review_diff", "absorbed_review_rank_weights", "absorbed_hunk_semantic_rules"),
-    "benchmarking": ("benchmark", "quality_benchmark", "eval", "precision", "swe_bench", "issue_patch", "oracle"),
-    "benchmark_eval": ("benchmark", "quality_benchmark", "eval", "precision", "swe_bench", "issue_patch", "oracle"),
-    "codebase_graph": ("codebase_graph", "graph", "dependency", "hotspot", "architecture"),
+    "review_pipeline": (
+        "pr_review",
+        "review_pipeline",
+        "employee_runtime_worker",
+        "pr_dry_run",
+        "pr_publish",
+        "absorbed_review_rank_weights",
+        "absorbed_hunk_semantic_rules",
+    ),
+    "file_grouping": (
+        "pr_review",
+        "review_context",
+        "file_grouping",
+        "context_group",
+        "review_context_bias",
+    ),
+    "diff_hunk_review": (
+        "pr_review",
+        "diff_hunk",
+        "hunk",
+        "review_diff",
+        "absorbed_review_rank_weights",
+        "absorbed_hunk_semantic_rules",
+    ),
+    "benchmarking": (
+        "benchmark",
+        "quality_benchmark",
+        "eval",
+        "precision",
+        "swe_bench",
+        "issue_patch",
+        "oracle",
+    ),
+    "benchmark_eval": (
+        "benchmark",
+        "quality_benchmark",
+        "eval",
+        "precision",
+        "swe_bench",
+        "issue_patch",
+        "oracle",
+    ),
+    "codebase_graph": (
+        "codebase_graph",
+        "graph",
+        "dependency",
+        "hotspot",
+        "architecture",
+    ),
     "plugin_surface": ("cli", "api", "plugin", "server"),
     "multi_provider": ("provider", "llm", "paibi", "model"),
     "safety_policy": ("license_gate", "safety", "secret", "policy"),
 }
-FALLBACK_SIGNALS = ("review_pipeline", "file_grouping", "diff_hunk_review", "benchmarking", "plugin_surface", "multi_provider", "safety_policy", "workflow_ci", "benchmark_eval")
+FALLBACK_SIGNALS = (
+    "review_pipeline",
+    "file_grouping",
+    "diff_hunk_review",
+    "benchmarking",
+    "plugin_surface",
+    "multi_provider",
+    "safety_policy",
+    "workflow_ci",
+    "benchmark_eval",
+)
 SIGNAL_ALIASES = {
     "benchmark_eval": {"benchmarking"},
     "benchmarking": {"benchmark_eval"},
 }
 
 
-def capability_progress_from_execution(changed_files: list[str], gates: list[dict[str, Any]]) -> dict[str, Any]:
+def capability_progress_from_execution(
+    changed_files: list[str], gates: list[dict[str, Any]]
+) -> dict[str, Any]:
     """Measure whether absorption changed runtime behavior and proved it."""
-    behavior_source_files = [path for path in changed_files if _is_behavior_source_file(path)]
-    behavior_test_files = [path for path in changed_files if _is_behavior_test_file(path)]
-    generated_evidence_files = [path for path in changed_files if _is_generated_absorption_file(path)]
+    behavior_source_files = [
+        path for path in changed_files if _is_behavior_source_file(path)
+    ]
+    behavior_test_files = [
+        path for path in changed_files if _is_behavior_test_file(path)
+    ]
+    generated_evidence_files = [
+        path for path in changed_files if _is_generated_absorption_file(path)
+    ]
     gate_count = len(gates)
     passed_gates = sum(1 for gate in gates if bool(gate.get("ok")))
-    ready = bool(behavior_source_files and behavior_test_files and gate_count and passed_gates == gate_count)
+    ready = bool(
+        behavior_source_files
+        and behavior_test_files
+        and gate_count
+        and passed_gates == gate_count
+    )
     return {
         "behavior_source_files": behavior_source_files,
         "behavior_test_files": behavior_test_files,
@@ -52,7 +117,9 @@ def capability_progress_from_execution(changed_files: list[str], gates: list[dic
     }
 
 
-def explain_missing_absorption_evidence(changed_files: list[str], gates: list[dict[str, Any]]) -> list[str]:
+def explain_missing_absorption_evidence(
+    changed_files: list[str], gates: list[dict[str, Any]]
+) -> list[str]:
     """Explain why a run cannot be counted as real deep absorption."""
     progress = capability_progress_from_execution(changed_files, gates)
     missing: list[str] = []
@@ -67,18 +134,28 @@ def explain_missing_absorption_evidence(changed_files: list[str], gates: list[di
     return missing
 
 
-def advantage_diff_map(changed_files: list[str], ranked_capabilities: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def advantage_diff_map(
+    changed_files: list[str], ranked_capabilities: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     """Map each external advantage to project-local behavior diffs only."""
-    behavior_files = [path for path in changed_files if _is_behavior_source_file(path) or _is_behavior_test_file(path)]
+    behavior_files = [
+        path
+        for path in changed_files
+        if _is_behavior_source_file(path) or _is_behavior_test_file(path)
+    ]
     rows: list[dict[str, Any]] = []
-    ranked_signal_names = {str(item.get("signal") or "") for item in ranked_capabilities}
+    ranked_signal_names = {
+        str(item.get("signal") or "") for item in ranked_capabilities
+    }
     ranked_signal_family = set(ranked_signal_names)
     for signal in tuple(ranked_signal_names):
         ranked_signal_family.update(SIGNAL_ALIASES.get(signal, set()))
     for capability in ranked_capabilities:
         signal = str(capability.get("signal") or "")
         hints = SIGNAL_BEHAVIOR_HINTS.get(signal, (signal, signal.replace("_", "-")))
-        matched = [path for path in behavior_files if _matches_signal(path, signal, hints)]
+        matched = [
+            path for path in behavior_files if _matches_signal(path, signal, hints)
+        ]
         rows.append(
             {
                 "signal": signal,
@@ -95,7 +172,9 @@ def advantage_diff_map(changed_files: list[str], ranked_capabilities: list[dict[
         fallback_hints = SIGNAL_BEHAVIOR_HINTS.get(fallback_signal, (fallback_signal,))
         fallback_matched = sorted(
             {
-                path for path in behavior_files if _matches_signal(path, fallback_signal, fallback_hints)
+                path
+                for path in behavior_files
+                if _matches_signal(path, fallback_signal, fallback_hints)
             }
         )
         if fallback_matched:
@@ -133,9 +212,12 @@ def absorption_quality_gate(
     requested_capabilities = ranked_capabilities or []
     mapped = advantage_diff_map(changed_files, requested_capabilities)
     requested_rows = mapped[: len(requested_capabilities)]
-    if requested_rows and not any(row["has_behavior_diff"] for row in requested_rows):
-        missing.append("missing_advantage_to_behavior_mapping")
-    elif mapped and not any(row["has_behavior_diff"] for row in mapped):
+    if (
+        requested_rows
+        and not any(row["has_behavior_diff"] for row in requested_rows)
+        or mapped
+        and not any(row["has_behavior_diff"] for row in mapped)
+    ):
         missing.append("missing_advantage_to_behavior_mapping")
     if code_graph_proof is not None and not code_graph_proof.get("passed"):
         missing.append("code_graph_focus_not_proved")
@@ -174,10 +256,14 @@ def _matches_signal(path: str, signal: str, hints: tuple[str, ...]) -> bool:
     normalized = _normalize(path).lower()
     compact = normalized.replace("-", "_")
     signal_forms = {signal, signal.replace("_", "-"), signal.replace("_", "")}
-    return any(form and form in compact for form in signal_forms) or any(hint and hint in compact for hint in hints)
+    return any(form and form in compact for form in signal_forms) or any(
+        hint and hint in compact for hint in hints
+    )
 
 
-def _observed_behavior_tests(gates: list[dict[str, Any]], behavior_test_files: list[str]) -> int:
+def _observed_behavior_tests(
+    gates: list[dict[str, Any]], behavior_test_files: list[str]
+) -> int:
     if not behavior_test_files:
         return 0
     observed = 0
@@ -196,7 +282,9 @@ def _observed_behavior_tests(gates: list[dict[str, Any]], behavior_test_files: l
     return observed
 
 
-def _gate_covers_behavior_test(command_text: str, behavior_test_files: list[str]) -> bool:
+def _gate_covers_behavior_test(
+    command_text: str, behavior_test_files: list[str]
+) -> bool:
     normalized_command = _normalize(command_text)
     if re.search(r"(^|\s)tests($|\s)", normalized_command):
         return True

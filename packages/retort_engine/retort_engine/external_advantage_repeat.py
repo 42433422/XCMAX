@@ -15,9 +15,19 @@ def build_external_advantage_repeat(
     output: str | Path = "",
 ) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
-    runs = [build_external_advantage_matrix(root, min_cases=min_cases) for _ in range(max(2, repeat_count))]
+    runs = [
+        build_external_advantage_matrix(root, min_cases=min_cases)
+        for _ in range(max(2, repeat_count))
+    ]
     deltas = [float((run.get("summary") or {}).get("score_delta") or 0) for run in runs]
-    case_ids_by_run = [[str(row.get("case_id") or "") for row in run.get("matrix") or [] if isinstance(row, dict)] for run in runs]
+    case_ids_by_run = [
+        [
+            str(row.get("case_id") or "")
+            for row in run.get("matrix") or []
+            if isinstance(row, dict)
+        ]
+        for run in runs
+    ]
     first_case_ids = case_ids_by_run[0] if case_ids_by_run else []
     stable_case_set = all(case_ids == first_case_ids for case_ids in case_ids_by_run)
     ready_runs = [run for run in runs if run.get("status") == "ready"]
@@ -26,7 +36,9 @@ def build_external_advantage_repeat(
         "ready_repeat_count": len(ready_runs),
         "min_case_count": min_cases,
         "case_count_per_run": [len(case_ids) for case_ids in case_ids_by_run],
-        "total_case_evaluation_count": sum(len(case_ids) for case_ids in case_ids_by_run),
+        "total_case_evaluation_count": sum(
+            len(case_ids) for case_ids in case_ids_by_run
+        ),
         "score_deltas": deltas,
         "stable_case_set": stable_case_set,
         "stable_score_delta": len(set(deltas)) == 1,
@@ -63,5 +75,8 @@ def build_external_advantage_repeat(
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return result

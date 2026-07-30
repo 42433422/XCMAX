@@ -10,7 +10,20 @@ _REQUIRED_LINKS = ("goal_id", "artifact_id", "customer_id")
 def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
     receipt = payload.get("receipt")
     if not isinstance(receipt, dict):
-        return _failed("receipt object is required", "missing_receipt")
+        # 事故总线 / employee.task.done 等派发常不带 receipt。缺回执应记为只读驳回，
+        # 不可 ok=False（否则大厅会因 handler_failed 长期挂红）。
+        return {
+            "ok": True,
+            "status": "rejected",
+            "summary": "无交付回执可核验：输入未提供 receipt；未修改交付状态。",
+            "linked": False,
+            "acceptance_count": 0,
+            "blockers": ["missing_receipt"],
+            "error_code": "missing_receipt",
+            "evidence": [],
+            "read_only": True,
+            "side_effects": [],
+        }
 
     missing = [
         key for key in _REQUIRED_LINKS if not str(receipt.get(key) or "").strip()
@@ -54,18 +67,6 @@ def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
             "receipt.acceptance",
             "receipt.value_evidence",
         ],
-        "read_only": True,
-        "side_effects": [],
-    }
-
-
-def _failed(message: str, code: str) -> dict[str, Any]:
-    return {
-        "ok": False,
-        "status": "failed",
-        "summary": message,
-        "error_code": code,
-        "evidence": [],
         "read_only": True,
         "side_effects": [],
     }

@@ -85,10 +85,16 @@ def assert_url_outbound_safe(url: str) -> None:
     """
     if not url:
         raise OutboundBlocked("url 为空")
+    if len(url) > 2048:
+        raise OutboundBlocked("url 过长")
     parsed = urlparse(url)
     scheme = (parsed.scheme or "").lower()
     if scheme not in ("http", "https"):
         raise OutboundBlocked(f"不允许的协议: {scheme or '未指定'}")
+    if parsed.username or parsed.password:
+        raise OutboundBlocked("url 不得包含用户凭据")
+    if parsed.fragment:
+        raise OutboundBlocked("url 不得包含 fragment")
     host = (parsed.hostname or "").strip()
     if not host:
         raise OutboundBlocked("缺少 host")
@@ -104,8 +110,10 @@ def assert_url_outbound_safe(url: str) -> None:
         pass
     try:
         infos = socket.getaddrinfo(host, None)
-    except socket.gaierror:
-        return  # 解析失败让 httpx 继续尝试，否则可能误伤离线开发场景
+    except socket.gaierror as exc:
+        raise OutboundBlocked(f"主机 {host} 无法安全解析") from exc
+    if not infos:
+        raise OutboundBlocked(f"主机 {host} 无解析结果")
     for info in infos:
         sockaddr = info[4]
         if not sockaddr:

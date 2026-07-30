@@ -15,18 +15,20 @@ from typing import Any
 from retort_engine.llm_schema import RETORT_SCORE_DIMENSIONS
 
 __all__ = [
-    "summarize_task",
-    "parallel_summary",
     "analyze_task_blockers",
-    "unblock_tasks_from_blockers",
-    "status_has_stale_dispatch",
     "extract_last_json_object",
     "normalize_llm_scores",
+    "parallel_summary",
+    "status_has_stale_dispatch",
+    "summarize_task",
+    "unblock_tasks_from_blockers",
 ]
 
 
 def summarize_task(task_body: dict[str, Any]) -> dict[str, Any]:
-    task = task_body.get("task") if isinstance(task_body.get("task"), dict) else task_body
+    task = (
+        task_body.get("task") if isinstance(task_body.get("task"), dict) else task_body
+    )
     subtasks = task.get("subTasks") or task.get("subtasks") or []
     normalized_subtasks: list[dict[str, Any]] = []
     logs: list[str] = []
@@ -34,7 +36,9 @@ def summarize_task(task_body: dict[str, Any]) -> dict[str, Any]:
         for subtask in subtasks:
             if not isinstance(subtask, dict):
                 continue
-            subtask_logs = subtask.get("logs") if isinstance(subtask.get("logs"), list) else []
+            subtask_logs = (
+                subtask.get("logs") if isinstance(subtask.get("logs"), list) else []
+            )
             for row in subtask_logs:
                 if isinstance(row, dict) and str(row.get("content") or "").strip():
                     logs.append(str(row.get("content") or "").strip())
@@ -44,8 +48,15 @@ def summarize_task(task_body: dict[str, Any]) -> dict[str, Any]:
                     "title": str(subtask.get("title") or ""),
                     "status": str(subtask.get("status") or ""),
                     "blocked": bool(subtask.get("blocked")),
-                    "last_error": str(subtask.get("last_error") or subtask.get("lastError") or ""),
-                    "depends_on": [str(item) for item in (subtask.get("depends_on") or subtask.get("dependsOn") or [])],
+                    "last_error": str(
+                        subtask.get("last_error") or subtask.get("lastError") or ""
+                    ),
+                    "depends_on": [
+                        str(item)
+                        for item in (
+                            subtask.get("depends_on") or subtask.get("dependsOn") or []
+                        )
+                    ],
                     "progress": subtask.get("progress") or 0,
                     "device_name": str(subtask.get("device_name") or ""),
                     "branch_name": str(subtask.get("branch_name") or ""),
@@ -69,7 +80,9 @@ def summarize_task(task_body: dict[str, Any]) -> dict[str, Any]:
 
 
 def parallel_summary(status: dict[str, Any]) -> dict[str, Any]:
-    subtasks = status.get("subtasks") if isinstance(status.get("subtasks"), list) else []
+    subtasks = (
+        status.get("subtasks") if isinstance(status.get("subtasks"), list) else []
+    )
     counts: dict[str, int] = {}
     devices: set[str] = set()
     for subtask in subtasks:
@@ -79,11 +92,18 @@ def parallel_summary(status: dict[str, Any]) -> dict[str, Any]:
         counts[sub_status] = counts.get(sub_status, 0) + 1
         if subtask.get("device_name"):
             devices.add(str(subtask.get("device_name")))
-    return {"subtask_count": len(subtasks), "status_counts": counts, "device_count": len(devices), "has_blockers": bool(analyze_task_blockers(status))}
+    return {
+        "subtask_count": len(subtasks),
+        "status_counts": counts,
+        "device_count": len(devices),
+        "has_blockers": bool(analyze_task_blockers(status)),
+    }
 
 
 def analyze_task_blockers(status: dict[str, Any]) -> list[dict[str, Any]]:
-    subtasks = status.get("subtasks") if isinstance(status.get("subtasks"), list) else []
+    subtasks = (
+        status.get("subtasks") if isinstance(status.get("subtasks"), list) else []
+    )
     logs = str(status.get("logs_excerpt") or "")
     blockers: list[dict[str, Any]] = []
     if _is_stale_dispatch(status, subtasks, logs):
@@ -100,9 +120,13 @@ def analyze_task_blockers(status: dict[str, Any]) -> list[dict[str, Any]]:
     pending_without_deps = [
         subtask
         for subtask in subtasks
-        if isinstance(subtask, dict) and str(subtask.get("status") or "") == "pending" and not (subtask.get("depends_on") or [])
+        if isinstance(subtask, dict)
+        and str(subtask.get("status") or "") == "pending"
+        and not (subtask.get("depends_on") or [])
     ]
-    if pending_without_deps and ("当前不可用" in logs or "执行器忙" in logs or "busy" in logs.lower()):
+    if pending_without_deps and (
+        "当前不可用" in logs or "执行器忙" in logs or "busy" in logs.lower()
+    ):
         blockers.append(
             {
                 "kind": "worker_capacity_limit",
@@ -119,16 +143,26 @@ def analyze_task_blockers(status: dict[str, Any]) -> list[dict[str, Any]]:
         blocked = bool(subtask.get("blocked")) or sub_status in {"failed", "blocked"}
         if not blocked:
             continue
-        text = " ".join([sub_status, str(subtask.get("last_error") or ""), logs]).lower()
+        text = " ".join(
+            [sub_status, str(subtask.get("last_error") or ""), logs]
+        ).lower()
         kind = "subtask_blocked"
         action = "inspect_logs_and_retry"
-        if "git clone --no-hardlinks" in text or "fetch-pack" in text or "tmp_pack" in text:
+        if (
+            "git clone --no-hardlinks" in text
+            or "fetch-pack" in text
+            or "tmp_pack" in text
+        ):
             kind = "workspace_clone_race"
             action = "retry_serial_or_unique_workspace"
         elif "未在线" in text or "offline" in text:
             kind = "device_offline"
             action = "start_or_replace_device"
-        elif "缺少自动改码执行器" in text or "not_installed" in text or "executor" in text:
+        elif (
+            "缺少自动改码执行器" in text
+            or "not_installed" in text
+            or "executor" in text
+        ):
             kind = "executor_missing"
             action = "install_or_select_executor"
         elif "depends" in text or "前置" in text:
@@ -149,7 +183,14 @@ def analyze_task_blockers(status: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     if status.get("status") in {"failed", "blocked"} and not blockers:
-        blockers.append({"kind": "task_blocked", "action": "inspect_task_logs_and_retry", "task_id": status.get("task_id"), "status": status.get("status")})
+        blockers.append(
+            {
+                "kind": "task_blocked",
+                "action": "inspect_task_logs_and_retry",
+                "task_id": status.get("task_id"),
+                "status": status.get("status"),
+            }
+        )
     return blockers
 
 
@@ -160,7 +201,9 @@ def unblock_tasks_from_blockers(blockers: list[dict[str, Any]]) -> list[dict[str
         subtask = str(blocker.get("subtask_id") or blocker.get("task_id") or "")
         if kind == "device_offline":
             title = "恢复或替换离线 Para 工作设备"
-            acceptance = f"子任务 {subtask} 所在设备在线，或任务已迁移到在线 Codex 设备。"
+            acceptance = (
+                f"子任务 {subtask} 所在设备在线，或任务已迁移到在线 Codex 设备。"
+            )
             owner = "runtime"
         elif kind == "executor_missing":
             title = "安装或切换 Codex 执行器"
@@ -168,7 +211,9 @@ def unblock_tasks_from_blockers(blockers: list[dict[str, Any]]) -> list[dict[str
             owner = "runtime"
         elif kind == "dependency_wait":
             title = "解除无效前置依赖"
-            acceptance = f"子任务 {subtask} 的 depends_on 已完成或被移除，调度器可派发。"
+            acceptance = (
+                f"子任务 {subtask} 的 depends_on 已完成或被移除，调度器可派发。"
+            )
             owner = "scheduler"
         elif kind == "timeout":
             title = "拆小并重试超时子任务"
@@ -176,7 +221,9 @@ def unblock_tasks_from_blockers(blockers: list[dict[str, Any]]) -> list[dict[str
             owner = "scheduler"
         elif kind == "worker_capacity_limit":
             title = "增加 Para worker 或等待执行槽位"
-            acceptance = "pending 子任务进入 running/completed，或被迁移到其它在线 Codex 设备。"
+            acceptance = (
+                "pending 子任务进入 running/completed，或被迁移到其它在线 Codex 设备。"
+            )
             owner = "runtime"
         elif kind == "workspace_clone_race":
             title = "串行重试或隔离 Para 工作区"
@@ -212,7 +259,10 @@ def status_has_stale_dispatch(status: dict[str, Any]) -> bool:
     blockers = status.get("blockers")
     if not isinstance(blockers, list):
         blockers = analyze_task_blockers(status)
-    return any(isinstance(item, dict) and item.get("kind") == "stale_dispatch" for item in blockers)
+    return any(
+        isinstance(item, dict) and item.get("kind") == "stale_dispatch"
+        for item in blockers
+    )
 
 
 def _is_stale_dispatch(status: dict[str, Any], subtasks: list[Any], logs: str) -> bool:
@@ -236,7 +286,12 @@ def _is_stale_dispatch(status: dict[str, Any], subtasks: list[Any], logs: str) -
     )
     if not dispatch_waiting:
         return False
-    unfinished = [subtask for subtask in subtasks if isinstance(subtask, dict) and str(subtask.get("status") or "") not in {"completed", "failed", "blocked"}]
+    unfinished = [
+        subtask
+        for subtask in subtasks
+        if isinstance(subtask, dict)
+        and str(subtask.get("status") or "") not in {"completed", "failed", "blocked"}
+    ]
     if not unfinished:
         return False
     return all(_progress_value(subtask.get("progress")) <= 0 for subtask in unfinished)
@@ -287,12 +342,16 @@ def normalize_llm_scores(payload: dict[str, Any] | None) -> list[dict[str, Any]]
                 value = max(0.0, min(100.0, float(item.get("value"))))
             except (TypeError, ValueError):
                 continue
-            evidence = item.get("evidence") if isinstance(item.get("evidence"), list) else []
+            evidence = (
+                item.get("evidence") if isinstance(item.get("evidence"), list) else []
+            )
             scores.append(
                 {
                     "dimension": dimension,
                     "value": round(value, 1),
-                    "reason": str(item.get("reason") or "LLM score from Retort scoring prompt."),
+                    "reason": str(
+                        item.get("reason") or "LLM score from Retort scoring prompt."
+                    ),
                     "evidence": [str(row) for row in evidence],
                 }
             )

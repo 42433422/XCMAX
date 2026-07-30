@@ -14,7 +14,6 @@ from typing import Any
 
 from retort_engine.pr_review import review_diff
 
-
 COMPETITOR_PROFILES: tuple[dict[str, str], ...] = (
     {
         "project": "mopemope/pr-ai-review-bot",
@@ -70,7 +69,11 @@ def build_competitor_runtime_comparison(
         for profile in COMPETITOR_PROFILES
     ]
     primary_runtime = runtimes[0] if runtimes else {}
-    primary_output = primary_runtime.get("output") if isinstance(primary_runtime.get("output"), dict) else {}
+    primary_output = (
+        primary_runtime.get("output")
+        if isinstance(primary_runtime.get("output"), dict)
+        else {}
+    )
     competitor_output_path = lab / "competitor_outputs.json"
     retort_output_path = lab / "retort_output.json"
     competitor_output = {
@@ -79,7 +82,10 @@ def build_competitor_runtime_comparison(
         "primary": primary_output,
         "runtimes": runtimes,
     }
-    competitor_output_path.write_text(json.dumps(competitor_output, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    competitor_output_path.write_text(
+        json.dumps(competitor_output, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     external_diagnostics = _external_diagnostics_from_runtimes(runtimes)
     retort_output = review_diff(
         _full_diff(patch),
@@ -87,17 +93,42 @@ def build_competitor_runtime_comparison(
         external_diagnostics=external_diagnostics,
         max_comments=8,
     )
-    retort_output_path.write_text(json.dumps(retort_output, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-    retort_summary = retort_output.get("summary") if isinstance(retort_output.get("summary"), dict) else {}
-    comments = [item for item in retort_output.get("comments") or [] if isinstance(item, dict)]
-    hunks = [item for item in primary_output.get("hunks") or [] if isinstance(item, dict)]
+    retort_output_path.write_text(
+        json.dumps(retort_output, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    retort_summary = (
+        retort_output.get("summary")
+        if isinstance(retort_output.get("summary"), dict)
+        else {}
+    )
+    comments = [
+        item for item in retort_output.get("comments") or [] if isinstance(item, dict)
+    ]
+    hunks = [
+        item for item in primary_output.get("hunks") or [] if isinstance(item, dict)
+    ]
     ready_runtimes = [item for item in runtimes if item.get("ready")]
     source_present = [item for item in runtimes if item.get("source_exists")]
-    external_zero = [item for item in runtimes if int(item.get("external_process_returncode", -1)) == 0]
-    live_verified = [item for item in runtimes if (item.get("live_upstream") or {}).get("verified")]
-    live_materialized = [item for item in runtimes if (item.get("live_upstream") or {}).get("materialized")]
-    live_refresh_used = [item for item in runtimes if item.get("source_mode") == "live_materialized"]
-    max_competitor_findings = max((int(item.get("finding_count") or 0) for item in runtimes), default=0)
+    external_zero = [
+        item
+        for item in runtimes
+        if int(item.get("external_process_returncode", -1)) == 0
+    ]
+    live_verified = [
+        item for item in runtimes if (item.get("live_upstream") or {}).get("verified")
+    ]
+    live_materialized = [
+        item
+        for item in runtimes
+        if (item.get("live_upstream") or {}).get("materialized")
+    ]
+    live_refresh_used = [
+        item for item in runtimes if item.get("source_mode") == "live_materialized"
+    ]
+    max_competitor_findings = max(
+        (int(item.get("finding_count") or 0) for item in runtimes), default=0
+    )
     summary = {
         "competitor_project": "mopemope/pr-ai-review-bot",
         "competitor_projects": [str(item.get("project", "")) for item in runtimes],
@@ -106,37 +137,63 @@ def build_competitor_runtime_comparison(
         "real_cached_project_count": len(source_present),
         "external_process_count": len(runtimes),
         "external_process_success_count": len(external_zero),
-        "all_external_processes_successful": len(external_zero) == len(runtimes) and bool(runtimes),
-        "all_competitor_sources_exist": len(source_present) == len(runtimes) and bool(runtimes),
+        "all_external_processes_successful": len(external_zero) == len(runtimes)
+        and bool(runtimes),
+        "all_competitor_sources_exist": len(source_present) == len(runtimes)
+        and bool(runtimes),
         "live_upstream_requested": live_upstream,
         "force_live_refresh": force_live_refresh,
         "live_upstream_probe_count": len(runtimes) if live_upstream else 0,
         "live_upstream_verified_count": len(live_verified),
         "live_upstream_materialized_count": len(live_materialized),
         "live_refresh_used_count": len(live_refresh_used),
-        "all_runtime_sources_from_live_refresh": bool(force_live_refresh) and len(live_refresh_used) == len(runtimes) and bool(runtimes),
-        "all_live_upstream_sources_verified": bool(live_upstream) and len(live_verified) == len(runtimes) and bool(runtimes),
-        "all_live_upstream_sources_materialized": bool(live_upstream) and len(live_materialized) == len(runtimes) and bool(runtimes),
-        "live_upstream_projects": [str(item.get("project", "")) for item in live_verified],
+        "all_runtime_sources_from_live_refresh": bool(force_live_refresh)
+        and len(live_refresh_used) == len(runtimes)
+        and bool(runtimes),
+        "all_live_upstream_sources_verified": bool(live_upstream)
+        and len(live_verified) == len(runtimes)
+        and bool(runtimes),
+        "all_live_upstream_sources_materialized": bool(live_upstream)
+        and len(live_materialized) == len(runtimes)
+        and bool(runtimes),
+        "live_upstream_projects": [
+            str(item.get("project", "")) for item in live_verified
+        ],
         "competitor_root": str(primary_runtime.get("root", "")),
         "competitor_source_exists": bool(primary_runtime.get("source_exists")),
         "competitor_source_mode": str(primary_runtime.get("source_mode", "")),
         "competitor_source_sha256": str(primary_runtime.get("source_sha256", "")),
-        "external_process_returncode": int(primary_runtime.get("external_process_returncode", -1)),
-        "external_process_stdout_tail": str(primary_runtime.get("external_process_stdout_tail", "")),
-        "external_process_stderr_tail": str(primary_runtime.get("external_process_stderr_tail", "")),
+        "external_process_returncode": int(
+            primary_runtime.get("external_process_returncode", -1)
+        ),
+        "external_process_stdout_tail": str(
+            primary_runtime.get("external_process_stdout_tail", "")
+        ),
+        "external_process_stderr_tail": str(
+            primary_runtime.get("external_process_stderr_tail", "")
+        ),
         "competitor_hunk_count": len(hunks),
         "competitor_added_line_count": int(primary_output.get("added_line_count") or 0),
-        "competitor_finding_count": sum(int(item.get("finding_count") or 0) for item in runtimes),
+        "competitor_finding_count": sum(
+            int(item.get("finding_count") or 0) for item in runtimes
+        ),
         "external_diagnostic_count": len(external_diagnostics),
         "retort_review_status": retort_output.get("status", ""),
         "retort_comment_count": len(comments),
         "retort_task_group_count": int(retort_summary.get("task_group_count") or 0),
-        "retort_publishable_comment_count": sum(1 for item in comments if item.get("publishable")),
-        "side_by_side_output_materialized": competitor_output_path.is_file() and retort_output_path.is_file(),
-        "multi_competitor_side_by_side": len(runtimes) >= 3 and competitor_output_path.is_file() and retort_output_path.is_file(),
-        "retort_exceeds_patch_parser_by_semantic_comments": len(comments) > 0 and int(retort_summary.get("task_group_count") or 0) > 0,
-        "retort_exceeds_all_competitors_by_semantic_comments": len(comments) >= max_competitor_findings and int(retort_summary.get("task_group_count") or 0) > 0,
+        "retort_publishable_comment_count": sum(
+            1 for item in comments if item.get("publishable")
+        ),
+        "side_by_side_output_materialized": competitor_output_path.is_file()
+        and retort_output_path.is_file(),
+        "multi_competitor_side_by_side": len(runtimes) >= 3
+        and competitor_output_path.is_file()
+        and retort_output_path.is_file(),
+        "retort_exceeds_patch_parser_by_semantic_comments": len(comments) > 0
+        and int(retort_summary.get("task_group_count") or 0) > 0,
+        "retort_exceeds_all_competitors_by_semantic_comments": len(comments)
+        >= max_competitor_findings
+        and int(retort_summary.get("task_group_count") or 0) > 0,
         "duration_sec": round(time.monotonic() - started, 3),
     }
     ready = (
@@ -172,7 +229,9 @@ def build_competitor_runtime_comparison(
         "evidence": {
             "style": "multi_live_or_cached_competitor_runtime_side_by_side_output",
             "competitor_sources": [str(item.get("source", "")) for item in runtimes],
-            "competitor_source_modes": [str(item.get("source_mode", "")) for item in runtimes],
+            "competitor_source_modes": [
+                str(item.get("source_mode", "")) for item in runtimes
+            ],
             "competitor_boundary": "external_node_and_python_processes_no_retort_engine_imports",
             "retort_runtime": "retort_engine.pr_review.review_diff",
             "diagnostic_bridge": "reviewdog_style_external_diagnostics_to_review_diff",
@@ -181,7 +240,10 @@ def build_competitor_runtime_comparison(
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return result
 
 
@@ -226,25 +288,44 @@ def _run_competitor_profile(
     else:
         competitor = root / profile["cache_path"]
     source = competitor / profile["source"]
-    live = _probe_live_source(profile, lab=lab) if live_upstream else {"requested": False, "verified": False, "materialized": False}
-    live_source = Path(str(live.get("materialized_path") or "")) if live.get("materialized") else Path()
-    effective_source = live_source if force_live_refresh and live_source.is_file() else source
-    source_mode = "live_materialized" if effective_source == live_source and live_source.is_file() else "cache"
+    live = (
+        _probe_live_source(profile, lab=lab)
+        if live_upstream
+        else {"requested": False, "verified": False, "materialized": False}
+    )
+    live_source = (
+        Path(str(live.get("materialized_path") or ""))
+        if live.get("materialized")
+        else Path()
+    )
+    effective_source = (
+        live_source if force_live_refresh and live_source.is_file() else source
+    )
+    source_mode = (
+        "live_materialized"
+        if effective_source == live_source and live_source.is_file()
+        else "cache"
+    )
     runner_path = lab / profile["runner"]
     output_path = lab / f"{profile['project'].replace('/', '__')}_output.json"
-    runner_source, command = _runner_for_profile(profile, runner_path, patch_path, output_path)
+    runner_source, command = _runner_for_profile(
+        profile, runner_path, patch_path, output_path
+    )
     runner_path.write_text(runner_source, encoding="utf-8")
     completed = subprocess.run(
         command,
         cwd=lab,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         timeout=30,
         check=False,
     )
     output = _read_json(output_path)
-    finding_count = int(output.get("finding_count") or len(output.get("findings") or []) or len(output.get("diagnostics") or []))
+    finding_count = int(
+        output.get("finding_count")
+        or len(output.get("findings") or [])
+        or len(output.get("diagnostics") or [])
+    )
     return {
         "project": profile["project"],
         "kind": profile["kind"],
@@ -253,7 +334,9 @@ def _run_competitor_profile(
         "cached_source": str(source),
         "source_mode": source_mode,
         "source_exists": effective_source.is_file(),
-        "source_sha256": _sha256(effective_source) if effective_source.is_file() else "",
+        "source_sha256": (
+            _sha256(effective_source) if effective_source.is_file() else ""
+        ),
         "runner_path": str(runner_path),
         "output_path": str(output_path),
         "external_process_returncode": completed.returncode,
@@ -261,17 +344,36 @@ def _run_competitor_profile(
         "external_process_stderr_tail": completed.stderr[-300:],
         "finding_count": finding_count,
         "live_upstream": live,
-        "ready": effective_source.is_file() and completed.returncode == 0 and output_path.is_file(),
+        "ready": effective_source.is_file()
+        and completed.returncode == 0
+        and output_path.is_file(),
         "output": output,
     }
 
 
-def _runner_for_profile(profile: dict[str, str], runner_path: Path, patch_path: Path, output_path: Path) -> tuple[str, list[str]]:
+def _runner_for_profile(
+    profile: dict[str, str], runner_path: Path, patch_path: Path, output_path: Path
+) -> tuple[str, list[str]]:
     if profile["kind"] == "node_patch_parser":
-        return _NODE_PATCH_RUNTIME, [_node_executable(), str(runner_path), str(patch_path), str(output_path)]
+        return _NODE_PATCH_RUNTIME, [
+            _node_executable(),
+            str(runner_path),
+            str(patch_path),
+            str(output_path),
+        ]
     if profile["kind"] == "python_review_signal_counter":
-        return _PYTHON_REVIEW_SIGNAL_RUNTIME, [sys.executable, str(runner_path), str(patch_path), str(output_path)]
-    return _PYTHON_DIFF_DIAGNOSTIC_RUNTIME, [sys.executable, str(runner_path), str(patch_path), str(output_path)]
+        return _PYTHON_REVIEW_SIGNAL_RUNTIME, [
+            sys.executable,
+            str(runner_path),
+            str(patch_path),
+            str(output_path),
+        ]
+    return _PYTHON_DIFF_DIAGNOSTIC_RUNTIME, [
+        sys.executable,
+        str(runner_path),
+        str(patch_path),
+        str(output_path),
+    ]
 
 
 def _node_executable() -> str:
@@ -288,10 +390,14 @@ def _node_executable() -> str:
     return "node"
 
 
-def _external_diagnostics_from_runtimes(runtimes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _external_diagnostics_from_runtimes(
+    runtimes: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     diagnostics: list[dict[str, Any]] = []
     for runtime in runtimes:
-        output = runtime.get("output") if isinstance(runtime.get("output"), dict) else {}
+        output = (
+            runtime.get("output") if isinstance(runtime.get("output"), dict) else {}
+        )
         project = str(runtime.get("project") or "external")
         kind = str(runtime.get("kind") or "external_runtime")
         for item in output.get("diagnostics") or []:
@@ -304,7 +410,10 @@ def _external_diagnostics_from_runtimes(runtimes: list[dict[str, Any]]) -> list[
                     "line": int(item.get("line") or 0),
                     "rule_id": f"{kind}:diagnostic",
                     "severity": "warning",
-                    "message": str(item.get("message") or "external diagnostic mapped from competitor runtime"),
+                    "message": str(
+                        item.get("message")
+                        or "external diagnostic mapped from competitor runtime"
+                    ),
                 }
             )
     return diagnostics
@@ -314,9 +423,13 @@ def _probe_live_source(profile: dict[str, str], *, lab: Path) -> dict[str, Any]:
     repo = profile["project"]
     source = profile["source"]
     repo_result = _gh_api(f"repos/{repo}")
-    default_branch = str((repo_result.get("json") or {}).get("default_branch") or "HEAD")
+    default_branch = str(
+        (repo_result.get("json") or {}).get("default_branch") or "HEAD"
+    )
     source_result = _gh_api(f"repos/{repo}/contents/{source}?ref={default_branch}")
-    payload = source_result.get("json") if isinstance(source_result.get("json"), dict) else {}
+    payload = (
+        source_result.get("json") if isinstance(source_result.get("json"), dict) else {}
+    )
     sha = str(payload.get("sha") or "")
     materialized_path = lab / "live_upstream" / repo.replace("/", "__") / source
     content = str(payload.get("content") or "")
@@ -329,14 +442,22 @@ def _probe_live_source(profile: dict[str, str], *, lab: Path) -> dict[str, Any]:
     if decoded:
         materialized_path.parent.mkdir(parents=True, exist_ok=True)
         materialized_path.write_bytes(decoded)
-    materialized_sha = hashlib.sha1((f"blob {len(decoded)}\0").encode("utf-8") + decoded).hexdigest() if decoded else ""
+    materialized_sha = (
+        hashlib.sha1((f"blob {len(decoded)}\0").encode() + decoded).hexdigest()
+        if decoded
+        else ""
+    )
     return {
         "requested": True,
         "project": repo,
         "source": source,
         "default_branch": default_branch,
-        "verified": repo_result["returncode"] == 0 and source_result["returncode"] == 0 and bool(sha),
-        "materialized": bool(decoded) and materialized_path.is_file() and materialized_sha == sha,
+        "verified": repo_result["returncode"] == 0
+        and source_result["returncode"] == 0
+        and bool(sha),
+        "materialized": bool(decoded)
+        and materialized_path.is_file()
+        and materialized_sha == sha,
         "source_sha": sha,
         "materialized_git_blob_sha": materialized_sha,
         "materialized_path": str(materialized_path) if decoded else "",
@@ -344,7 +465,9 @@ def _probe_live_source(profile: dict[str, str], *, lab: Path) -> dict[str, Any]:
         "download_url": str(payload.get("download_url") or ""),
         "repo_api_returncode": repo_result["returncode"],
         "source_api_returncode": source_result["returncode"],
-        "stderr_tail": (repo_result["stderr_tail"] + source_result["stderr_tail"])[-300:],
+        "stderr_tail": (repo_result["stderr_tail"] + source_result["stderr_tail"])[
+            -300:
+        ],
     }
 
 
@@ -352,8 +475,7 @@ def _gh_api(endpoint: str) -> dict[str, Any]:
     try:
         completed = subprocess.run(
             [_gh_executable(), "api", endpoint],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             timeout=30,
             check=False,
@@ -364,7 +486,11 @@ def _gh_api(endpoint: str) -> dict[str, Any]:
         payload = json.loads(completed.stdout)
     except json.JSONDecodeError:
         payload = {}
-    return {"returncode": completed.returncode, "json": payload if isinstance(payload, dict) else {}, "stderr_tail": completed.stderr[-300:]}
+    return {
+        "returncode": completed.returncode,
+        "json": payload if isinstance(payload, dict) else {},
+        "stderr_tail": completed.stderr[-300:],
+    }
 
 
 def _gh_executable() -> str:
@@ -398,7 +524,7 @@ def _run_id(prefix: str) -> str:
     return f"{prefix}-{timestamp}-{uuid.uuid4().hex[:8]}"
 
 
-_NODE_PATCH_RUNTIME = r'''
+_NODE_PATCH_RUNTIME = r"""
 const fs = require("node:fs");
 
 const patchPath = process.argv[2];
@@ -445,10 +571,10 @@ function parsePatch(filename, patchText) {
 const hunks = parsePatch("src/main.ts", patch);
 const addedLineCount = hunks.reduce((total, hunk) => total + hunk.to.content.filter((line) => line.includes(" +")).length, 0);
 fs.writeFileSync(outputPath, JSON.stringify({ status: "parsed", hunk_count: hunks.length, added_line_count: addedLineCount, hunks }, null, 2));
-'''
+"""
 
 
-_PYTHON_REVIEW_SIGNAL_RUNTIME = r'''
+_PYTHON_REVIEW_SIGNAL_RUNTIME = r"""
 import json
 import re
 import sys
@@ -468,10 +594,10 @@ for name, pattern in patterns.items():
     if hits:
         findings.append({"rule": name, "hit_count": len(hits), "samples": hits[:3]})
 output.write_text(json.dumps({"status": "review_signal_counted", "finding_count": len(findings), "findings": findings}, indent=2, sort_keys=True), encoding="utf-8")
-'''
+"""
 
 
-_PYTHON_DIFF_DIAGNOSTIC_RUNTIME = r'''
+_PYTHON_DIFF_DIAGNOSTIC_RUNTIME = r"""
 import json
 import sys
 from pathlib import Path
@@ -495,4 +621,4 @@ for raw in patch.splitlines():
     elif raw.startswith(" ") or (raw and not raw.startswith("-")):
         line_no += 1
 output.write_text(json.dumps({"status": "diagnostics_mapped", "finding_count": len(diagnostics), "diagnostics": diagnostics}, indent=2, sort_keys=True), encoding="utf-8")
-'''
+"""

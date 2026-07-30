@@ -146,12 +146,23 @@ def test_refund_outcome_dispatches_distinct_messages(fresh_bus, monkeypatch):
 
 
 def test_subscriber_failures_increment_error_counter(fresh_bus, monkeypatch):
-    from modstore_server import notification_service
+    from modstore_server import notification_service, payment_fulfilment
 
     def boom(**_kw):
         raise RuntimeError("notification db down")
 
     monkeypatch.setattr(notification_service, "create_notification", boom)
+
+    class _AlreadyFulfilled:
+        @staticmethod
+        def is_already_fulfilled(_session, _ctx):
+            return True
+
+    monkeypatch.setattr(
+        payment_fulfilment,
+        "select_strategy",
+        lambda _ctx: _AlreadyFulfilled(),
+    )
 
     subscribers.install_default_subscribers(fresh_bus)
 

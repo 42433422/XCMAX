@@ -99,6 +99,20 @@
           <div><dt>Loop</dt><dd>{{ snapshot.live_summary?.strategic_council_latest?.loop_run_id || '未绑定' }}</dd></div>
           <div><dt>Para task</dt><dd>{{ snapshot.live_summary?.strategic_council_latest?.para_task_id || '未绑定' }}</dd></div>
           <div><dt>验证回执</dt><dd>{{ snapshot.live_summary?.strategic_council_receipts || 0 }} 条</dd></div>
+          <div>
+            <dt>Retort 澄清</dt>
+            <dd :class="{ warn: !snapshot.live_summary?.retort_clarifications_healthy }">
+              <template v-if="snapshot.live_summary?.retort_clarifications_healthy">队列健康</template>
+              <template v-else>
+                待答 {{ snapshot.live_summary?.retort_clarifications_open || 0 }}
+                <template v-if="snapshot.live_summary?.retort_clarifications_critical">
+                  · 即将超时 {{ snapshot.live_summary.retort_clarifications_critical }}
+                </template>
+                ·
+                <router-link :to="{ name: 'employee-autonomy', query: { tab: 'questions' } }">去问答</router-link>
+              </template>
+            </dd>
+          </div>
         </dl>
       </section>
 
@@ -173,8 +187,10 @@
             <div><dt>治理健康</dt><dd>{{ snapshot.live_summary?.governance_ok ? '健康' : '需复盘' }}</dd></div>
             <div><dt>登记编制</dt><dd>{{ snapshot.live_summary?.registered_employees || 0 }}/{{ snapshot.live_summary?.planned_employees || 0 }}</dd></div>
             <div><dt>已有任务合同</dt><dd>{{ snapshot.live_summary?.assigned_employees || 0 }}/{{ snapshot.live_summary?.planned_employees || 0 }}</dd></div>
-            <div><dt>真实运行回执</dt><dd>{{ snapshot.live_summary?.proven_employees || 0 }}/{{ snapshot.live_summary?.planned_employees || 0 }}</dd></div>
-            <div><dt>安全 burn-in 候选</dt><dd>{{ snapshot.live_summary?.burn_in_plan_available ? `${snapshot.live_summary?.safe_burn_in_candidates || 0} 名 · ${snapshot.live_summary?.burn_in_execution_enabled ? '已启用' : '执行关闭'}` : '计划不可用' }}</dd></div>
+            <div><dt>能力回执（含演练）</dt><dd>{{ snapshot.live_summary?.proven_employees || 0 }}/{{ snapshot.live_summary?.planned_employees || 0 }}</dd></div>
+            <div><dt>burn-in 演练回执</dt><dd>{{ snapshot.live_summary?.burn_in_proven_employees || 0 }}/{{ snapshot.live_summary?.planned_employees || 0 }}</dd></div>
+            <div><dt>生产履职回执（不含演练）</dt><dd>{{ snapshot.live_summary?.production_proven_employees || 0 }}/{{ snapshot.live_summary?.planned_employees || 0 }}</dd></div>
+            <div><dt>生产履职门槛</dt><dd>{{ snapshot.live_summary?.employee_production_workforce_ready ? '已达到 80%' : '未达到 80%' }}</dd></div>
             <div><dt>空壳/无效 handler</dt><dd>{{ snapshot.live_summary?.shell_employees || 0 }} 名</dd></div>
             <div><dt>AI 员工主模型</dt><dd>{{ platformLlmLabel }}</dd></div>
             <div><dt>未解决死信</dt><dd>{{ snapshot.live_summary?.unresolved_dead_letters || 0 }} 条</dd></div>
@@ -197,7 +213,6 @@
             <div><dt>生产部署验证</dt><dd>{{ snapshot.live_summary?.deploy_verified ? '已证明' : '未证明' }}</dd></div>
           </dl>
         </article>
-
         <article class="truth-card">
           <span class="section-kicker">证据域</span>
           <h2>哪些层已经有证据</h2>
@@ -212,7 +227,6 @@
         </article>
       </section>
     </template>
-
     <section v-else-if="loading" class="loading-panel">正在汇总审批、知识库、员工、Goals 与 Loop 账本……</section>
   </main>
 </template>
@@ -268,7 +282,7 @@ const councilRoles = computed(() => {
   const rows = [
     { key: 'persy', eyebrow: '拟人', name: 'Persy', responsibility: '从知识库提供事实、历史与长期记忆', expected: 'grounded' },
     { key: 'para', eyebrow: '排比', name: 'Para', responsibility: '把战略绑定到真实 Goal、Loop 与执行任务', expected: 'linked' },
-    { key: 'retort', eyebrow: '反问', name: 'Retort', responsibility: '质疑变更是否符合意图，未对齐就阻止部署', expected: 'aligned' },
+    { key: 'retort', eyebrow: '反问', name: 'Retort', responsibility: '意图不清先澄清（Boss 问答页），未对齐或未回答就阻止部署', expected: 'aligned' },
   ]
   return rows.map((row) => {
     const detail = roles[row.key] || {}
@@ -416,10 +430,12 @@ onBeforeUnmount(stopPolling)
 .council-grid p { min-height: 40px; margin: 8px 0; color: #647995; font-size: 12px; line-height: 1.55; }
 .council-grid small { color: #9b5e0b; font-weight: 750; }
 .council-grid small.ok { color: #18744f; }
-.council-links { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 12px 0 0; }
+.council-links { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 12px 0 0; }
 .council-links div { min-width: 0; padding: 9px 11px; border-radius: 10px; background: rgba(233, 239, 249, 0.8); }
 .council-links dt { color: #7b8ca1; font-size: 10px; }
 .council-links dd { margin: 3px 0 0; color: #263b59; font-size: 12px; font-weight: 750; overflow-wrap: anywhere; }
+.council-links dd.warn { color: #a35c00; }
+.council-links dd a { color: #1890ff; text-decoration: none; font-weight: 700; }
 
 .score-section { margin-top: 30px; }
 .section-heading { align-items: end; margin-bottom: 14px; }

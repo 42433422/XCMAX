@@ -146,6 +146,15 @@
         <div class="wb-sidebar-bottom">
           <div v-if="currentMode !== 'admin'" class="wb-sidebar-nav-links">
             <router-link
+              :to="{ name: 'customer-service' }"
+              class="wb-sidebar-mode-btn"
+              :class="{ 'wb-sidebar-mode-btn--active': route.name === 'customer-service' }"
+              @click="wbSidebar.closeMobile()"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a4.5 4.5 0 019 0v1.5a1.5 1.5 0 01-1.5 1.5h-.5V7.5"/><path d="M3.5 7.5V9A1.5 1.5 0 005 10.5h.5"/><path d="M8 12.5v1M6.5 14h3"/></svg>
+              <span>AI 客服</span>
+            </router-link>
+            <router-link
               :to="{ name: 'ai-store' }"
               class="wb-sidebar-mode-btn"
               :class="{ 'wb-sidebar-mode-btn--active': route.name === 'ai-store' }"
@@ -404,10 +413,8 @@ const shouldShowButler = computed(() => {
   if (isAndroidEmbeddedShell.value) return false
   return !BUTLER_EXCLUDED_PATHS.some((ep) => p === ep || p.startsWith(ep + '/'))
 })
-/** 客户端（含桌面）统一女版；管理端所有页面统一男版。 */
-const shouldUseMaleButlerAvatar = computed(
-  () => currentMode.value === 'admin' || (route.path || '').startsWith('/admin'),
-)
+/** 管理员账号统一男版小 C；普通用户统一女版（含桌面客户端）。 */
+const shouldUseMaleButlerAvatar = computed(() => isAdmin.value)
 /** 未登录访客在公开落地页使用官网咨询引擎（不调用需登录的 Butler API） */
 const shouldShowGuestCorpButler = computed(() => {
   if (isLoggedIn.value) return false

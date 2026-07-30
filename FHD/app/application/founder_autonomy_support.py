@@ -247,6 +247,7 @@ def _build_dimensions(
     evolution_gates: list[ScoreGate],
     alignment_gates: list[ScoreGate],
     workforce_ready: bool,
+    founder_workforce_ready: bool,
     pending_total: int,
     governance_clear: bool,
     runtime_provenance_ok: bool,
@@ -265,7 +266,7 @@ def _build_dimensions(
             gates=founder_gates,
             hard_cap=(
                 65
-                if not workforce_ready
+                if not founder_workforce_ready
                 else (
                     80
                     if pending_total > 5 or not governance_clear
@@ -335,6 +336,8 @@ def _build_attention_items(
     planned: int,
     proven_employees: int,
     shell_employees: int,
+    retort_open: int = 0,
+    retort_critical: int = 0,
 ) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     if local_pending:
@@ -344,6 +347,19 @@ def _build_attention_items(
                 "count": local_pending,
                 "label": "本地审批待处理",
                 "route": "approval-hub",
+            }
+        )
+    if retort_open:
+        label = "Retort 待澄清（Boss 问答）"
+        if retort_critical:
+            label = f"Retort 待澄清（{retort_critical} 条即将超时）"
+        items.append(
+            {
+                "kind": "retort_clarification",
+                "count": retort_open,
+                "label": label,
+                "route": "employee-autonomy",
+                "query": {"tab": "questions"},
             }
         )
     if strategic_pending:

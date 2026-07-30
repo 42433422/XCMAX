@@ -10,6 +10,7 @@ import pytest
 from fastapi import FastAPI
 
 _MODULE_PATH = Path(__file__).resolve().parents[2] / "app" / "fastapi_app" / "deferred_startup.py"
+_NODE_ROLE_PATH = Path(__file__).resolve().parents[2] / "app" / "fastapi_app" / "node_role.py"
 
 
 def _load_deferred_startup():
@@ -17,6 +18,18 @@ def _load_deferred_startup():
     if name in sys.modules:
         return sys.modules[name]
     spec = importlib.util.spec_from_file_location(name, _MODULE_PATH)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _load_node_role():
+    name = "xcagi_node_role_isolated"
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, _NODE_ROLE_PATH)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
     sys.modules[name] = mod
@@ -43,6 +56,27 @@ def test_desktop_fast_start_enabled(monkeypatch, env, expected):
     else:
         monkeypatch.setenv("XCAGI_DESKTOP_FAST_START", env)
     assert mod._desktop_fast_start_enabled() is expected
+
+
+@pytest.mark.parametrize(
+    ("env", "expected"),
+    [
+        (None, False),
+        ("0", False),
+        ("false", False),
+        ("1", True),
+        ("true", True),
+        ("on", True),
+        ("yes", True),
+    ],
+)
+def test_passive_node_enabled(monkeypatch, env, expected):
+    mod = _load_node_role()
+    if env is None:
+        monkeypatch.delenv("XCAGI_PASSIVE_NODE", raising=False)
+    else:
+        monkeypatch.setenv("XCAGI_PASSIVE_NODE", env)
+    assert mod.passive_node_enabled() is expected
 
 
 @pytest.mark.asyncio

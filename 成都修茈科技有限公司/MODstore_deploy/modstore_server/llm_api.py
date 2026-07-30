@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user, _require_admin
 from modstore_server.infrastructure.db import get_db
+from modstore_server.llm_billed_chat import run_billed_llm_chat, stream_billed_llm_chat
 from modstore_server.llm_billing import (
     JavaWalletClient,
     WalletHold,
@@ -147,135 +148,6 @@ async def resolve_default_llm_route(db: Session, user_id: int) -> dict[str, Any]
         "未配置任何可用 LLM 密钥（平台环境变量或 BYOK）。请在钱包页为至少一个厂商配置密钥，"
         "或将账户默认供应商改为已配置密钥的厂商；若已保存 BYOK，请确认服务端已配置 MODSTORE_LLM_MASTER_KEY。",
     )
-
-
-async def run_billed_llm_chat(
-    request: Request,
-    db: Session,
-    user: User,
-    *,
-    provider: str,
-    model: str,
-    messages: list[dict[str, Any]],
-    max_tokens: Optional[int] = None,
-    conversation_id: Optional[int] = None,
-) -> dict[str, Any]:
-    """执行一轮 LLM 对话并完成钱包预授权/结算（与 ``POST /api/llm/chat`` 行为一致）。"""
-    if provider not in KNOWN_PROVIDERS:
-        raise HTTPException(400, "unknown provider")
-    api_key, key_source = resolve_api_key(db, user.id, provider)
-    if not api_key:
-        raise HTTPException(
-            400,
-            f"供应商「{provider}」未配置可用 API Key（平台环境变量或 BYOK）。"
-            f"请在钱包页为该厂商保存密钥，或将默认模型切换到已有密钥的厂商；"
-            f"仅配置了其它厂商（如 DeepSeek）时，请把 LLM 默认供应商改为该厂商或切到「自选」。",
-        )
-    is_byok = key_source == "user_override"
-    base = (
-        resolve_base_url(db, user.id, provider)
-        if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
-        else None
-    )
-    msgs = messages
-    if not msgs:
-        raise HTTPException(400, "messages 不能为空")
-    size_err = validate_multimodal_payload_size(msgs)
-    if size_err:
-        raise HTTPException(400, size_err)
-    if (
-        messages_use_openai_multipart_content(msgs)
-        and provider not in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
-    ):
-        raise HTTPException(
-            400,
-            "多模态消息仅支持 OpenAI 兼容供应商（含 SiliconFlow、DashScope 等 chat/completions 网关）；"
-            "请更换 provider 或改发纯文本。",
-        )
-    model = model.strip()
-    request_id = new_request_id()
-    enforce_risk_limits(db, user.id, provider, model, msgs, request)
-    wallet = JavaWalletClient()
-    if is_byok:
-        hold = WalletHold(hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False)
-    else:
-        preauth_amount = estimate_preauthorization(db, provider, model, msgs, max_tokens)
-        hold = await wallet.preauthorize(
-            authorization_header(request), preauth_amount, provider, model, request_id
-        )
-    charge = Decimal("0")
-    try:
-        result = await chat_dispatch(
-            provider,
-            api_key=api_key,
-            base_url=base,
-            model=model,
-            messages=msgs,
-            max_tokens=max_tokens,
-        )
-        if not result.get("ok"):
-            err = result.get("error") or "upstream error"
-            save_failure_log(
-                db,
-                user_id=user.id,
-                provider=provider,
-                model=model,
-                error=str(err),
-                hold_no=hold.hold_no,
-            )
-            raise HTTPException(502, err)
-        content = result.get("content", "")
-        usage = usage_from_response(result.get("usage") or {}, msgs, content)
-        if is_byok:
-            charge = Decimal("0")
-        else:
-            charge = calculate_charge(db, provider, model, usage)
-            await wallet.settle(authorization_header(request), hold, charge, request_id)
-        conversation_row_id = save_success_log(
-            db,
-            user_id=user.id,
-            provider=provider,
-            model=model,
-            messages=msgs,
-            content=content,
-            usage=usage,
-            charge=charge,
-            hold_no=hold.hold_no,
-            conversation_id=conversation_id,
-        )
-    except HTTPException as exc:
-        try:
-            await wallet.release(authorization_header(request), hold, str(exc.detail), request_id)
-        except Exception:
-            logger.exception("failed to release LLM wallet hold")
-        raise
-    except Exception as exc:
-        try:
-            save_failure_log(
-                db,
-                user_id=user.id,
-                provider=provider,
-                model=model,
-                error=str(exc),
-                hold_no=hold.hold_no,
-            )
-            await wallet.release(authorization_header(request), hold, str(exc), request_id)
-        except Exception:
-            logger.exception("failed to release LLM wallet hold after unexpected error")
-        raise
-    return {
-        "ok": True,
-        "content": content,
-        "conversation_id": conversation_row_id,
-        "usage": usage.__dict__,
-        "charge_amount": float(charge),
-        "hold_no": hold.hold_no,
-        "key_source": key_source,
-        "billed": not is_byok,
-        "provider": provider,
-        "model": model,
-        "request_id": request_id,
-    }
 
 
 def _membership_meta(plan_id: str | None) -> Dict[str, Any]:
@@ -1171,6 +1043,7 @@ class LlmChatDTO(BaseModel):
     messages: List[ChatMessageDTO]
     max_tokens: Optional[int] = Field(None, ge=1, le=32000)
     conversation_id: Optional[int] = Field(None, ge=1)
+    allow_failover: bool = True
 
 
 class LlmImageDTO(BaseModel):
@@ -1212,8 +1085,9 @@ async def llm_chat(
         messages=msgs,
         max_tokens=body.max_tokens,
         conversation_id=body.conversation_id,
+        allow_failover=bool(body.allow_failover),
     )
-    return {
+    payload = {
         "ok": out["ok"],
         "content": out["content"],
         "conversation_id": out["conversation_id"],
@@ -1222,11 +1096,13 @@ async def llm_chat(
         "hold_no": out["hold_no"],
         "key_source": out["key_source"],
         "billed": out["billed"],
+        "provider": out.get("provider"),
+        "model": out.get("model"),
     }
-
-
-def _sse(event: str, data: Dict[str, Any]) -> str:
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+    if out.get("failover_from"):
+        payload["failover_from"] = out["failover_from"]
+        payload["failover_attempts"] = out.get("failover_attempts") or []
+    return payload
 
 
 @router.post("/chat/stream")
@@ -1236,152 +1112,17 @@ async def llm_chat_stream(
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
 ):
-    if body.provider not in KNOWN_PROVIDERS:
-        raise HTTPException(400, "unknown provider")
-    api_key, key_source = resolve_api_key(db, user.id, body.provider)
-    if not api_key:
-        raise HTTPException(
-            400,
-            f"供应商「{body.provider}」未配置可用 API Key（平台环境变量或 BYOK）。",
-        )
-    is_byok = key_source == "user_override"
-    base = (
-        resolve_base_url(db, user.id, body.provider)
-        if body.provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
-        else None
-    )
     msgs = [{"role": m.role, "content": m.content} for m in body.messages]
-    if not msgs:
-        raise HTTPException(400, "messages 不能为空")
-    size_err = validate_multimodal_payload_size(msgs)
-    if size_err:
-        raise HTTPException(400, size_err)
-    if (
-        messages_use_openai_multipart_content(msgs)
-        and body.provider not in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
-    ):
-        raise HTTPException(
-            400,
-            "多模态消息仅支持 OpenAI 兼容供应商；请更换 provider 或改发纯文本。",
-        )
-    model = body.model.strip()
-    request_id = new_request_id()
-    enforce_risk_limits(db, user.id, body.provider, model, msgs, request)
-    wallet = JavaWalletClient()
-    if is_byok:
-        hold = WalletHold(hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False)
-    else:
-        preauth_amount = estimate_preauthorization(db, body.provider, model, msgs, body.max_tokens)
-        hold = await wallet.preauthorize(
-            authorization_header(request), preauth_amount, body.provider, model, request_id
-        )
-
-    async def gen():
-        parts: List[str] = []
-        upstream_usage: Dict[str, Any] = {}
-        try:
-            yield _sse(
-                "meta",
-                {
-                    "ok": True,
-                    "request_id": request_id,
-                    "hold_no": hold.hold_no,
-                    "key_source": key_source,
-                    "billed": not is_byok,
-                },
-            )
-            async for ev in chat_dispatch_stream(
-                body.provider,
-                api_key=api_key,
-                base_url=base,
-                model=model,
-                messages=msgs,
-                max_tokens=body.max_tokens,
-            ):
-                if ev.get("type") == "error":
-                    err = ev.get("error") or "upstream error"
-                    save_failure_log(
-                        db,
-                        user_id=user.id,
-                        provider=body.provider,
-                        model=model,
-                        error=str(err),
-                        hold_no=hold.hold_no,
-                    )
-                    try:
-                        await wallet.release(
-                            authorization_header(request), hold, str(err), request_id
-                        )
-                    except Exception:
-                        logger.exception(
-                            "failed to release LLM wallet hold after stream upstream error"
-                        )
-                    yield _sse(
-                        "error", {"ok": False, "error": str(err), "status": ev.get("status")}
-                    )
-                    return
-                if ev.get("type") == "usage":
-                    upstream_usage = ev.get("usage") or {}
-                    continue
-                if ev.get("type") == "delta":
-                    delta = str(ev.get("delta") or "")
-                    if delta:
-                        parts.append(delta)
-                        yield _sse("delta", {"delta": delta})
-            content = "".join(parts)
-            usage = usage_from_response(upstream_usage, msgs, content)
-            if is_byok:
-                charge = Decimal("0")
-            else:
-                charge = calculate_charge(db, body.provider, model, usage)
-                await wallet.settle(authorization_header(request), hold, charge, request_id)
-            conversation_id = save_success_log(
-                db,
-                user_id=user.id,
-                provider=body.provider,
-                model=model,
-                messages=msgs,
-                content=content,
-                usage=usage,
-                charge=charge,
-                hold_no=hold.hold_no,
-                conversation_id=body.conversation_id,
-            )
-            yield _sse(
-                "done",
-                {
-                    "ok": True,
-                    "content": content,
-                    "conversation_id": conversation_id,
-                    "usage": usage.__dict__,
-                    "charge_amount": float(charge),
-                    "hold_no": hold.hold_no,
-                    "key_source": key_source,
-                    "billed": not is_byok,
-                },
-            )
-        except Exception as exc:
-            try:
-                save_failure_log(
-                    db,
-                    user_id=user.id,
-                    provider=body.provider,
-                    model=model,
-                    error=str(exc),
-                    hold_no=hold.hold_no,
-                )
-                await wallet.release(authorization_header(request), hold, str(exc), request_id)
-            except Exception:
-                logger.exception("failed to release LLM wallet hold after unexpected stream error")
-            yield _sse("error", {"ok": False, "error": str(exc)})
-
-    return StreamingResponse(
-        gen(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
+    return await stream_billed_llm_chat(
+        request,
+        db,
+        user,
+        provider=body.provider,
+        model=body.model.strip(),
+        messages=msgs,
+        max_tokens=body.max_tokens,
+        conversation_id=body.conversation_id,
+        allow_failover=bool(body.allow_failover),
     )
 
 

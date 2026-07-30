@@ -29,7 +29,9 @@ jobs:
   force-loop:
     name: Force self-maintenance (${{ inputs.environment }})
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # One real loop can legitimately spend up to 30 minutes in each of code,
+    # review, and QA. Leave margin for device retries and the deploy callback.
+    timeout-minutes: 120
     steps:
       - name: Require CVM SSH secrets
         env:
@@ -59,6 +61,12 @@ jobs:
           KEY_FILE="${RUNNER_TEMP}/fhd_force_loop_key"
           printf '%s\n' "$FHD_PUSH_SSH_KEY_RAW" > "$KEY_FILE"
           chmod 600 "$KEY_FILE"
+          # A real loop can be silent while Codex writes/reviews/tests for tens
+          # of minutes. Keep the control channel alive so an idle NAT or SSH
+          # server timeout cannot turn a healthy remote run into a false CI
+          # failure while the orphaned process continues on the CVM.
+          SSH_OPTS=(-i "$KEY_FILE" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=30 -o ServerAliveCountMax=120 -o TCPKeepAlive=yes)
+          SCP_OPTS=(-i "$KEY_FILE" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=30 -o ServerAliveCountMax=120 -o TCPKeepAlive=yes)
           if [ "$TARGET_ENV" = "staging" ]; then
             HEALTH_PORT="5101"
             ROOTS="/opt/fhd-staging:/root/XCMAX:/root/XCMAX/成都修茈科技有限公司/MODstore_deploy"
@@ -66,10 +74,22 @@ jobs:
             HEALTH_PORT="5100"
             ROOTS="/opt/fhd-full:/root/XCMAX:/root/XCMAX/成都修茈科技有限公司/MODstore_deploy"
           fi
+          RUN_TAG="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          LOCAL_REASON_FILE="${RUNNER_TEMP}/force-loop-${RUN_TAG}.reason"
+          LOCAL_TOKEN_FILE="${RUNNER_TEMP}/force-loop-${RUN_TAG}.token"
+          REMOTE_REASON_FILE="/tmp/xcmax-force-loop-${RUN_TAG}.reason"
+          REMOTE_TOKEN_FILE="/tmp/xcmax-force-loop-${RUN_TAG}.token"
+          printf '%s' "$LOOP_REASON" > "$LOCAL_REASON_FILE"
+          printf '%s' "$OPS_TOKEN" > "$LOCAL_TOKEN_FILE"
+          chmod 600 "$LOCAL_REASON_FILE" "$LOCAL_TOKEN_FILE"
           REMOTE_SCRIPT="FHD/scripts/deploy/force_self_maintenance_remote.sh"
           test -f "$REMOTE_SCRIPT"
-          scp -i "$KEY_FILE" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 \
+          scp "${SCP_OPTS[@]}" \
             "$REMOTE_SCRIPT" "${USER}@${HOST}:/tmp/force_loop_remote.sh"
-          ssh -i "$KEY_FILE" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 \
+          scp "${SCP_OPTS[@]}" \
+            "$LOCAL_REASON_FILE" "${USER}@${HOST}:${REMOTE_REASON_FILE}"
+          scp "${SCP_OPTS[@]}" \
+            "$LOCAL_TOKEN_FILE" "${USER}@${HOST}:${REMOTE_TOKEN_FILE}"
+          ssh "${SSH_OPTS[@]}" \
             "${USER}@${HOST}" \
-            "chmod +x /tmp/force_loop_remote.sh && LOOP_PYTHONPATHS='${ROOTS}' /tmp/force_loop_remote.sh '${HEALTH_PORT}' '${LOOP_REASON}' '${OPS_TOKEN}'"
+            "set -euo pipefail; chmod 700 /tmp/force_loop_remote.sh; chmod 600 '${REMOTE_REASON_FILE}' '${REMOTE_TOKEN_FILE}'; trap 'rm -f \"${REMOTE_REASON_FILE}\" \"${REMOTE_TOKEN_FILE}\"' EXIT; LOOP_PYTHONPATHS='${ROOTS}' /tmp/force_loop_remote.sh '${HEALTH_PORT}' '${REMOTE_REASON_FILE}' '${REMOTE_TOKEN_FILE}'"

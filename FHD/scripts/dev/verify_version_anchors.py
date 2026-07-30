@@ -41,7 +41,8 @@ ANCHORS: list[tuple[str, str, str]] = [
 ]
 
 
-def _canonical_version() -> str:
+def canonical_version() -> str:
+    """从 VERSION.md 动态读取稳定产品版本（四段）。唯一数字 SSOT 出口。"""
     version_md = REPO_ROOT / "VERSION.md"
     if not version_md.is_file():
         raise FileNotFoundError(f"missing {version_md}")
@@ -53,7 +54,8 @@ def _canonical_version() -> str:
     raise ValueError("could not parse stable product version from VERSION.md")
 
 
-def _toolchain_version() -> str:
+def toolchain_version() -> str:
+    """从 VERSION.md 动态读取工具链兼容版本（三段）。"""
     version_md = REPO_ROOT / "VERSION.md"
     if not version_md.is_file():
         raise FileNotFoundError(f"missing {version_md}")
@@ -65,10 +67,15 @@ def _toolchain_version() -> str:
     raise ValueError("could not parse toolchain version from VERSION.md")
 
 
+# 兼容旧私有名；新代码请用 canonical_version / toolchain_version
+_canonical_version = canonical_version
+_toolchain_version = toolchain_version
+
+
 def _expected_versions() -> dict[str, str]:
     return {
-        PRODUCT_VERSION: _canonical_version(),
-        TOOLCHAIN_VERSION: _toolchain_version(),
+        PRODUCT_VERSION: canonical_version(),
+        TOOLCHAIN_VERSION: toolchain_version(),
     }
 
 

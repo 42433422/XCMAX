@@ -13,7 +13,10 @@ def test_intent_alignment_detects_issue_overlap() -> None:
 +    return "reset"
 """
 
-    result = assess_change_intent_alignment(parse_unified_diff(diff), issue_context="Add password reset flow for auth accounts")
+    result = assess_change_intent_alignment(
+        parse_unified_diff(diff),
+        issue_context="Add password reset flow for auth accounts",
+    )
 
     assert result["status"] == "aligned"
     assert {"password", "reset", "auth"} & set(result["overlap_keywords"])
@@ -28,7 +31,10 @@ def test_intent_alignment_flags_unrelated_changes() -> None:
 +.card { border-radius: 8px; }
 """
 
-    result = assess_change_intent_alignment(parse_unified_diff(diff), issue_context="Fix password reset token expiry in auth flow")
+    result = assess_change_intent_alignment(
+        parse_unified_diff(diff),
+        issue_context="Fix password reset token expiry in auth flow",
+    )
 
     assert result["status"] == "misaligned"
     assert result["summary"]["overlap_keyword_count"] == 0

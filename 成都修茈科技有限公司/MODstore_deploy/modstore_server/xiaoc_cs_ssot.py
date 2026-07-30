@@ -154,13 +154,24 @@ def active_plan_id_for_user(db: Any, user_id: int) -> str:
     try:
         from modstore_server.models import UserPlan
 
-        row = (
-            db.query(UserPlan)
-            .filter(UserPlan.user_id == int(user_id), UserPlan.is_active == True)  # noqa: E712
-            .order_by(UserPlan.id.desc())
-            .first()
-        )
-        return str(row.plan_id) if row else ""
+        # SAVEPOINT：查询失败时只回滚嵌套事务，避免吞掉异常后污染外层事务
+        # （否则后续客服建会话 INSERT 会变成 InFailedSqlTransaction → 500）
+        nested = db.begin_nested() if hasattr(db, "begin_nested") else None
+        try:
+            row = (
+                db.query(UserPlan)
+                .filter(UserPlan.user_id == int(user_id), UserPlan.is_active == True)  # noqa: E712
+                .order_by(UserPlan.id.desc())
+                .first()
+            )
+            plan_id = str(row.plan_id) if row else ""
+            if nested is not None:
+                nested.commit()
+            return plan_id
+        except Exception:
+            if nested is not None:
+                nested.rollback()
+            raise
     except Exception:  # noqa: BLE001
         logger.debug("active_plan_id_for_user failed", exc_info=True)
         return ""
@@ -746,8 +757,17 @@ def last_user_text(messages: Optional[List[Any]]) -> str:
         if role is None and isinstance(item, dict):
             role = item.get("role")
             content = item.get("content")
-        if str(role or "") == "user":
-            return str(content or "").strip()
+        if str(role or "") != "user":
+            continue
+        if isinstance(content, list):
+            parts: List[str] = []
+            for part in content:
+                if isinstance(part, dict) and str(part.get("type") or "") == "text":
+                    parts.append(str(part.get("text") or ""))
+                elif isinstance(part, str):
+                    parts.append(part)
+            return " ".join(p for p in parts if p).strip()
+        return str(content or "").strip()
     return ""
 
 

@@ -36,6 +36,7 @@ XCMAX 自治系统覆盖三个执行端，组成完整闭环：
 | **触发闭环**：告警→RCA→修复→验证→上线→回滚半自动 | 三端 AutonomyController + cvm-autonomy-watcher + ai-self-heal 形成完整链路，关键节点自动执行 |
 | **非代码故障**：配置漂移/基础设施/网络/数据不一致 AI 看得见动不了 | degraded-remediation policy + 服务器 4 个 policy（health_down/manifest_drift/disk_full/compose_unhealthy）+ CI LLM 兜底诊断 |
 | **副作用预测**：修了 A 崩了 B | 桌面 impact-predictor.ts + 服务器 impact_predictor.py + 跨端门禁 cross_tier_gate |
+| **战略规划**：这个季度做哪三个功能 | LLM `StrategicPlanner` + `/api/xcmax/ops/strategic-plan` + 反思修订；阈值机降级为 adaptive_thresholds |
 
 ---
 
@@ -353,7 +354,7 @@ python scripts/autonomy/audit_query.py --source ci --since 7d \
 | ImpactPredictor deny | 桌面 controller | 写 audit + return |
 | CI 自愈失败 | ai-self-heal | PR 标 `needs-human` 标签 |
 | CI review confirmed-high | ai-review | PR review 阻断合并 |
-| CVM 部署异常 | cvm-autonomy-watcher | 创建根因 issue（只诊断不改码） |
+| CVM 部署异常 | cvm-autonomy-watcher | 创建根因 issue（只诊断不改码；token=`CVM_INCIDENT_PAT` 或缺省 `github.token`） |
 
 ### 7.1 人工介入入口
 

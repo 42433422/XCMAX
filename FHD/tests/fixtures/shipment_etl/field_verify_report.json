@@ -1,0 +1,25 @@
+{
+  "success": true,
+  "ok_count": 16,
+  "error_count": 0,
+  "errors": [],
+  "oks": [
+    "profile loaded id=universal",
+    "write delivery sheets=2",
+    "xlsx cells ok sheet=甲单",
+    "xlsx cells ok sheet=乙单",
+    "parsed fields ok order=V-1001",
+    "parsed fields ok order=V-1002",
+    "regenerate fingerprint_match=true",
+    "regen stable V-1001",
+    "regen stable V-1002",
+    "write ledger rows=2",
+    "ledger xlsx cells match",
+    "ledger parsed LV-001",
+    "ledger parsed LV-002",
+    "execute created=2",
+    "execute units match",
+    "execute order meta written"
+  ],
+  "workdir": "/var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/etl_field_verify_2_1avihd"
+}

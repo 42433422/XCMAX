@@ -237,6 +237,16 @@ def init_db(db_path: Optional[Path] = None):
                 _add_column_if_missing(engine, "users", column, ddl_type)
             except Exception:
                 pass
+        # user_plans：续费字段（缺列会导致 ORM 查询失败并污染客服会话事务）
+        for column, ddl_type in (
+            ("auto_renew", "BOOLEAN NOT NULL DEFAULT TRUE"),
+            ("renewal_fail_reason", "TEXT DEFAULT ''"),
+            ("source_order_id", "VARCHAR(64) DEFAULT ''"),
+        ):
+            try:
+                _add_column_if_missing(engine, "user_plans", column, ddl_type)
+            except Exception:
+                pass
         init_default_plan_templates()
         init_default_customer_service_standards()
         _maybe_bootstrap_first_admin()

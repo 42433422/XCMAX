@@ -20,6 +20,12 @@ ALLOWLIST_SUFFIXES = (
     "app/security/license_store.py",
     # 表名来自可信模型常量 __tablename__，行数据全部走 :uid/:limit 绑定参数（无用户可控 SQL 拼接）。
     "app/infrastructure/persona/persona_repository_impl.py",
+    # 模板多租户：WHERE 片段仅来自 templates_tenant_where_sql() 可信助手，绑定参数走 :id/:tenant。
+    "app/application/excel_template_http_app_service.py",
+    "app/fastapi_routes/document_templates_compat.py",
+    "app/infrastructure/skills/template_manager/template_manager.py",
+    "app/infrastructure/templates/template_store_impl.py",
+    "app/services/document_templates/crud.py",
 )
 
 TEXT_F_PATTERN = re.compile(r"\btext\s*\(\s*f[\"']", re.MULTILINE)

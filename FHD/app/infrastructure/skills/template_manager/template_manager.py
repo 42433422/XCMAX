@@ -64,10 +64,13 @@ def get_template_info(template_id: int) -> dict | None:
     from sqlalchemy import text
 
     from app.db.session import get_db
+    from app.infrastructure.templates.tenant_scope import templates_tenant_where_sql
 
+    tenant_sql, tenant_bind = templates_tenant_where_sql()
     with get_db() as db:
         result = db.execute(
-            text("SELECT * FROM templates WHERE id = :id AND is_active = 1"), {"id": template_id}
+            text(f"SELECT * FROM templates WHERE id = :id AND is_active = 1 AND ({tenant_sql})"),
+            {"id": template_id, **tenant_bind},
         )
         row = result.fetchone()
 
@@ -101,8 +104,14 @@ def create_template(template_name: str, template_type: str = "通用", **kwargs)
     from sqlalchemy import text
 
     from app.db.session import get_db
+    from app.infrastructure.templates.tenant_scope import templates_tenant_id_for_insert
+    from app.infrastructure.tenant_scope import TenantScopeError
 
     template_key = f"TPL_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8].upper()}"
+    try:
+        tenant_id = templates_tenant_id_for_insert()
+    except TenantScopeError:
+        return {"success": False, "message": "缺少租户上下文，无法创建模板"}
 
     with get_db() as db:
         result = db.execute(
@@ -112,12 +121,12 @@ def create_template(template_name: str, template_type: str = "通用", **kwargs)
                     template_key, template_name, template_type,
                     original_file_path, analyzed_data, editable_config,
                     zone_config, merged_cells_config, style_config,
-                    business_rules
+                    business_rules, tenant_id
                 ) VALUES (
                     :template_key, :template_name, :template_type,
                     :original_file_path, :analyzed_data, :editable_config,
                     :zone_config, :merged_cells_config, :style_config,
-                    :business_rules
+                    :business_rules, :tenant_id
                 )
             """
             ),
@@ -136,6 +145,7 @@ def create_template(template_name: str, template_type: str = "通用", **kwargs)
                 ),
                 "style_config": json.dumps(kwargs.get("style_config", {}), ensure_ascii=False),
                 "business_rules": json.dumps(kwargs.get("business_rules", {}), ensure_ascii=False),
+                "tenant_id": tenant_id,
             },
         )
         template_id = result.lastrowid
@@ -167,14 +177,19 @@ def update_template(template_id: int, **updates) -> dict:
     from sqlalchemy import text
 
     from app.db.session import get_db
+    from app.infrastructure.templates.tenant_scope import templates_tenant_where_sql
 
+    tenant_sql, tenant_bind = templates_tenant_where_sql()
     with get_db() as db:
-        result = db.execute(text("SELECT id FROM templates WHERE id = :id"), {"id": template_id})
+        result = db.execute(
+            text(f"SELECT id FROM templates WHERE id = :id AND ({tenant_sql})"),
+            {"id": template_id, **tenant_bind},
+        )
         if not result.fetchone():
             return {"success": False, "message": "模板不存在"}
 
         db_updates = []
-        params = {"id": template_id}
+        params = {"id": template_id, **tenant_bind}
 
         for key, value in updates.items():
             if value is not None:
@@ -185,7 +200,11 @@ def update_template(template_id: int, **updates) -> dict:
             db_updates.append("updated_at = :updated_at")
             params["updated_at"] = datetime.now()
 
-            sql = "UPDATE templates SET " + ", ".join(db_updates) + " WHERE id = :id"
+            sql = (
+                "UPDATE templates SET "
+                + ", ".join(db_updates)
+                + f" WHERE id = :id AND ({tenant_sql})"
+            )
             db.execute(text(sql), params)
             db.commit()
 
@@ -209,15 +228,23 @@ def delete_template(template_id: int) -> dict:
     from sqlalchemy import text
 
     from app.db.session import get_db
+    from app.infrastructure.templates.tenant_scope import templates_tenant_where_sql
 
+    tenant_sql, tenant_bind = templates_tenant_where_sql()
     with get_db() as db:
-        result = db.execute(text("SELECT id FROM templates WHERE id = :id"), {"id": template_id})
+        result = db.execute(
+            text(f"SELECT id FROM templates WHERE id = :id AND ({tenant_sql})"),
+            {"id": template_id, **tenant_bind},
+        )
         if not result.fetchone():
             return {"success": False, "message": "模板不存在"}
 
         db.execute(
-            text("UPDATE templates SET is_active = 0, updated_at = :updated_at WHERE id = :id"),
-            {"id": template_id, "updated_at": datetime.now()},
+            text(
+                f"UPDATE templates SET is_active = 0, updated_at = :updated_at "
+                f"WHERE id = :id AND ({tenant_sql})"
+            ),
+            {"id": template_id, "updated_at": datetime.now(), **tenant_bind},
         )
 
         db.execute(

@@ -109,6 +109,26 @@ def test_register_in_packages_json_appends_new_pack(tmp_path, monkeypatch):
     assert (files_root / data["packages"][0]["stored_filename"]).is_file()
 
 
+def test_register_in_packages_json_binds_valid_source_commit(tmp_path, monkeypatch):
+    catalog_path = tmp_path / "packages.json"
+    catalog_path.write_text(json.dumps({"schema": 1, "packages": []}), encoding="utf-8")
+    files_root = tmp_path / "catalog_data" / "files"
+    files_root.mkdir(parents=True)
+    pack_dir = _make_pack_files(tmp_path)
+    monkeypatch.setenv("MODSTORE_CATALOG_PACKAGES_PATH", str(catalog_path))
+    monkeypatch.setenv("MODSTORE_CATALOG_FILES_ROOT", str(files_root))
+    manifest = json.loads((pack_dir / "manifest.json").read_text(encoding="utf-8"))
+
+    register_in_packages_json(
+        manifest,
+        files_dir=pack_dir,
+        source_commit_sha="a" * 40,
+    )
+
+    row = json.loads(catalog_path.read_text(encoding="utf-8"))["packages"][0]
+    assert row["source_commit_sha"] == "a" * 40
+
+
 def test_register_in_packages_json_replaces_legacy_duplicate(tmp_path, monkeypatch):
     catalog_path = tmp_path / "packages.json"
     catalog_path.write_text(

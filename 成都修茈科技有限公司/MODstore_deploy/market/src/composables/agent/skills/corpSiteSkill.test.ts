@@ -24,6 +24,12 @@ describe('matchCorpSiteIntent', () => {
     expect(r?.assistantReply).toContain(CORP_LINKS.services)
   })
 
+  it('matches download / XCAGI intent', () => {
+    const r = matchCorpSiteIntent(ctx('怎么下载 XCAGI？'))
+    expect(r?.assistantReply).toContain(CORP_LINKS.download)
+    expect(r?.assistantReply).toMatch(/安装包|下载/)
+  })
+
   it('matches case manufacture', () => {
     const r = matchCorpSiteIntent(ctx('制造企业案例详情'))
     expect(r?.assistantReply).toContain(CORP_LINKS.caseManufacture)

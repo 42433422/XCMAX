@@ -7,7 +7,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-
 Planner = Callable[[str, list[dict[str, Any]]], dict[str, Any]]
 Executor = Callable[[dict[str, Any]], dict[str, Any]]
 Judge = Callable[[str, list[dict[str, Any]]], dict[str, Any]]
@@ -40,7 +39,11 @@ def run_bounded_agent_loop(
     started = time.monotonic()
     trajectory: list[dict[str, Any]] = []
     status = "step_limit"
-    verdict: dict[str, Any] = {"complete": False, "score": 0.0, "missing": "not audited"}
+    verdict: dict[str, Any] = {
+        "complete": False,
+        "score": 0.0,
+        "missing": "not audited",
+    }
     for step in range(1, max_steps + 1):
         if time.monotonic() - started >= wall_time_limit_sec:
             status = "time_limit"
@@ -90,7 +93,9 @@ def run_bounded_agent_loop(
     return payload
 
 
-def persist_trajectory(payload: dict[str, Any], trajectory_dir: str | Path, *, run_id: str = "") -> Path:
+def persist_trajectory(
+    payload: dict[str, Any], trajectory_dir: str | Path, *, run_id: str = ""
+) -> Path:
     root = Path(trajectory_dir).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
     stamp = run_id or uuid.uuid4().hex[:12]
@@ -105,18 +110,23 @@ def persist_trajectory(payload: dict[str, Any], trajectory_dir: str | Path, *, r
         "trajectory": payload.get("trajectory"),
         "evidence": payload.get("evidence"),
     }
-    path.write_text(json.dumps(record, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    path.write_text(
+        json.dumps(record, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     return path
 
 
 def load_trajectory(path: str | Path) -> dict[str, Any]:
     payload = json.loads(Path(path).expanduser().resolve().read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
-        raise ValueError("trajectory artifact must be an object")
+        raise TypeError("trajectory artifact must be an object")
     return payload
 
 
-def detect_stuck_pattern(trajectory: list[dict[str, Any]], *, repeat_limit: int = 3) -> str:
+def detect_stuck_pattern(
+    trajectory: list[dict[str, Any]], *, repeat_limit: int = 3
+) -> str:
     """Detect repeated action/observation, repeated errors, and alternating cycles."""
     if _is_repeating(trajectory, repeat_limit):
         return "repeated_action_observation"
@@ -131,8 +141,14 @@ def _is_repeating(trajectory: list[dict[str, Any]], repeat_limit: int) -> bool:
     if len(trajectory) < repeat_limit:
         return False
     recent = trajectory[-repeat_limit:]
-    first = {"action": recent[0].get("action"), "observation": recent[0].get("observation")}
-    return all({"action": row.get("action"), "observation": row.get("observation")} == first for row in recent[1:])
+    first = {
+        "action": recent[0].get("action"),
+        "observation": recent[0].get("observation"),
+    }
+    return all(
+        {"action": row.get("action"), "observation": row.get("observation")} == first
+        for row in recent[1:]
+    )
 
 
 def _is_repeating_errors(trajectory: list[dict[str, Any]], repeat_limit: int) -> bool:
@@ -154,7 +170,11 @@ def _is_alternating(trajectory: list[dict[str, Any]], repeat_limit: int) -> bool
         return False
     recent = trajectory[-window:]
     signatures = [
-        json.dumps({"action": row.get("action"), "observation": row.get("observation")}, sort_keys=True, default=str)
+        json.dumps(
+            {"action": row.get("action"), "observation": row.get("observation")},
+            sort_keys=True,
+            default=str,
+        )
         for row in recent
     ]
     if len(set(signatures)) != 2:

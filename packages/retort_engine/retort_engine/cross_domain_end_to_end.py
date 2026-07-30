@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from retort_engine.cross_domain_absorption_replay import build_cross_domain_absorption_replay
+from retort_engine.cross_domain_absorption_replay import (
+    build_cross_domain_absorption_replay,
+)
 from retort_engine.pr_review import review_diff
 
 
@@ -24,7 +26,9 @@ def build_cross_domain_end_to_end(
     replay_id = run_id or _run_id("cross-domain-e2e")
     lab = root / ".retort" / "cross_domain_end_to_end" / replay_id
     lab.mkdir(parents=True, exist_ok=True)
-    replay = build_cross_domain_absorption_replay(root, min_domains=min_domains, run_id=f"{replay_id}-source")
+    replay = build_cross_domain_absorption_replay(
+        root, min_domains=min_domains, run_id=f"{replay_id}-source"
+    )
     cases = [case for case in replay.get("cases") or [] if isinstance(case, dict)]
     stages = _linked_stages(cases)
     issue_context = _issue_context(stages)
@@ -36,17 +40,26 @@ def build_cross_domain_end_to_end(
     summary = review.get("summary") if isinstance(review.get("summary"), dict) else {}
     comments = [item for item in review.get("comments") or [] if isinstance(item, dict)]
     domains = sorted({str(stage["domain"]) for stage in stages if stage.get("domain")})
-    direct_modules = sorted({str(stage["direct_module"]) for stage in stages if stage.get("direct_module")})
-    review_contexts = {str(item.get("review_context") or "") for item in comments if item.get("review_context")}
+    direct_modules = sorted(
+        {str(stage["direct_module"]) for stage in stages if stage.get("direct_module")}
+    )
+    review_contexts = {
+        str(item.get("review_context") or "")
+        for item in comments
+        if item.get("review_context")
+    }
     assertions = {
         "source_replay_ready": replay.get("status") == "ready",
         "domain_floor_met": len(domains) >= min_domains,
-        "all_stages_chained": bool(stages) and all(stage["consumes_previous_stage"] for stage in stages[1:]),
-        "all_stage_outputs_consumed": bool(stages) and all(stage["output_consumed_by_integrated_review"] for stage in stages),
+        "all_stages_chained": bool(stages)
+        and all(stage["consumes_previous_stage"] for stage in stages[1:]),
+        "all_stage_outputs_consumed": bool(stages)
+        and all(stage["output_consumed_by_integrated_review"] for stage in stages),
         "review_runtime_executed": review.get("status") == "reviewed",
         "review_task_groups_created": int(summary.get("task_group_count") or 0) > 0,
         "publishable_review_output": any(item.get("publishable") for item in comments),
-        "security_static_analysis_reached_review": "security" in review_contexts or "runtime" in review_contexts,
+        "security_static_analysis_reached_review": "security" in review_contexts
+        or "runtime" in review_contexts,
     }
     result_summary = {
         "run_id": replay_id,
@@ -58,11 +71,17 @@ def build_cross_domain_end_to_end(
         "integrated_review_status": review.get("status", ""),
         "integrated_review_comment_count": len(comments),
         "integrated_review_task_group_count": summary.get("task_group_count", 0),
-        "integrated_review_publishable_comment_count": sum(1 for item in comments if item.get("publishable")),
+        "integrated_review_publishable_comment_count": sum(
+            1 for item in comments if item.get("publishable")
+        ),
         "all_stages_chained": assertions["all_stages_chained"],
         "all_stage_outputs_consumed": assertions["all_stage_outputs_consumed"],
-        "all_domains_contributed_to_review_context": all(stage["domain"] in issue_context for stage in stages),
-        "all_direct_modules_contributed_to_review_context": all(stage["direct_module"] in issue_context for stage in stages),
+        "all_domains_contributed_to_review_context": all(
+            stage["domain"] in issue_context for stage in stages
+        ),
+        "all_direct_modules_contributed_to_review_context": all(
+            stage["direct_module"] in issue_context for stage in stages
+        ),
         "output_assertions_passed": all(assertions.values()),
         "duration_sec": round(time.monotonic() - started, 3),
     }
@@ -102,7 +121,10 @@ def build_cross_domain_end_to_end(
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return result
 
 
@@ -120,8 +142,11 @@ def _linked_stages(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "expected_behavior": str(case.get("expected_behavior") or ""),
             "previous_stage": previous,
             "consumes_previous_stage": index == 1 or bool(previous),
-            "post_absorption_summary": (case.get("post_absorption") or {}).get("summary", {}),
-            "output_consumed_by_integrated_review": bool(case.get("ready")) and bool(case.get("direct_module")),
+            "post_absorption_summary": (case.get("post_absorption") or {}).get(
+                "summary", {}
+            ),
+            "output_consumed_by_integrated_review": bool(case.get("ready"))
+            and bool(case.get("direct_module")),
         }
         stages.append(stage)
         previous = stage_id
@@ -153,17 +178,20 @@ def _integrated_diff(stages: list[dict[str, Any]]) -> str:
     for stage in stages:
         added_lines.append(f"+        '{stage['domain']}:{stage['direct_module']}',")
     added_lines.extend(["+    ]}", ""])
+    added_body = "\n".join(added_lines)
     return (
         "diff --git a/retort_engine/absorption_orchestrator.py b/retort_engine/absorption_orchestrator.py\n"
         "--- a/retort_engine/absorption_orchestrator.py\n"
         "+++ b/retort_engine/absorption_orchestrator.py\n"
-        "@@ -0,0 +1,%d @@\n%s"
-        % (len(added_lines) - 1, "\n".join(added_lines))
+        f"@@ -0,0 +1,{len(added_lines) - 1} @@\n{added_body}"
     )
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
 
 
 def _run_id(prefix: str) -> str:

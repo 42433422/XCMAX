@@ -46,6 +46,7 @@ from app.db.models.purchase import (
 from app.db.models.purchase_unit import PurchaseUnit
 from app.db.models.service_request import ServiceBridgeConfig, ServiceRequest
 from app.db.models.shipment import ShipmentRecord
+from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
 from app.db.models.wechat import WechatContact, WechatContactContext, WechatTask
@@ -72,6 +73,7 @@ __all__ = [
     "ImMessage",
     "Product",
     "ShipmentRecord",
+    "ShipmentEtlImportFingerprint",
     "Customer",
     "FinancialTransaction",
     "WechatTask",
