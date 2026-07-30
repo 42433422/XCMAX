@@ -2602,6 +2602,83 @@ def test_auto_merge_policy_blocks_kb_paths_during_retort_scope_remediation():
     assert result["kb_paths"] == [files[0]]
 
 
+def _retort_scope_memory() -> dict:
+    return {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-6d8f01",
+                "kind": "automated_remediation",
+                "para_task_id": "task-retort-scope",
+                "reason": "retort_scope_too_large",
+            }
+        ]
+    }
+
+
+def test_auto_merge_policy_blocks_retort_scope_when_file_budget_exceeded():
+    files = [
+        f"成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy_{index}.py"
+        for index in range(7)
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats(), memory=_retort_scope_memory())
+
+    assert result["ok"] is False
+    assert result["reason"] == "retort_scope_diff_contract_exceeded"
+    assert result["scoped_file_count"] == 7
+    assert "max_changed_files" in result["violations"]
+
+
+def test_auto_merge_policy_blocks_retort_scope_when_line_budget_exceeded():
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_retort_remediation.py",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(
+        files,
+        _stats(line_changes=401),
+        memory=_retort_scope_memory(),
+    )
+
+    assert result["ok"] is False
+    assert result["reason"] == "retort_scope_diff_contract_exceeded"
+    assert result["scoped_line_changes"] == 401
+    assert "max_changed_lines" in result["violations"]
+
+
+def test_auto_merge_policy_blocks_retort_scope_when_diff_chars_exceeded():
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_retort_remediation.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(
+        files,
+        {**_stats(line_changes=12), "git_diff_chars": 12001},
+        memory=_retort_scope_memory(),
+    )
+
+    assert result["ok"] is False
+    assert result["reason"] == "retort_scope_diff_contract_exceeded"
+    assert result["git_diff_chars"] == 12001
+    assert "max_diff_chars" in result["violations"]
+
+
+def test_auto_merge_policy_allows_retort_scope_within_contract():
+    files = [
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_retort_remediation.py",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(
+        files,
+        {**_stats(line_changes=80), "git_diff_chars": 4000},
+        memory=_retort_scope_memory(),
+    )
+
+    assert result.get("reason") != "retort_scope_diff_contract_exceeded"
+
+
 def test_auto_merge_policy_blocks_kb_paths_during_diff_too_large_remediation():
     memory = {
         "open_items": [
