@@ -48,12 +48,17 @@ def verify_webhook_secret(header: str | None) -> bool:
 
 
 def apply_landing_submission_to_pipeline(payload: dict[str, Any]) -> dict[str, Any]:
-    from app.services.user_cs_pipeline import load_pipeline, save_pipeline, set_pipeline_stage
+    from app.services.user_cs_pipeline import (
+        load_pipeline,
+        save_pipeline,
+        set_pipeline_stage,
+    )
 
     uid = int(payload.get("market_user_id") or 0)
     if uid <= 0:
         raise ValueError("market_user_id 无效")
     doc = load_pipeline(uid, username=str(payload.get("username") or ""))
+    source = str(payload.get("intake_source") or payload.get("source") or "").strip()[:64]
     intake = {
         "name": str(payload.get("name") or "").strip(),
         "email": str(payload.get("email") or "").strip(),
@@ -62,6 +67,15 @@ def apply_landing_submission_to_pipeline(payload: dict[str, Any]) -> dict[str, A
         "message": str(payload.get("message") or "").strip(),
         "desktop_os": str(payload.get("desktop_os") or "").strip(),
         "need_mobile": bool(payload.get("need_mobile", True)),
+        "intake_source": source,
+        "campaign": str(payload.get("campaign") or "").strip()[:128],
+        "medium": str(payload.get("medium") or "").strip()[:64],
+        "content": str(payload.get("content") or "").strip()[:128],
+        "privacy_agreed": bool(payload.get("privacy_agreed")),
+        "privacy_version": str(payload.get("privacy_version") or "").strip()[:32],
+        "privacy_url": str(payload.get("privacy_url") or "").strip()[:256],
+        "privacy_agreed_at": str(payload.get("privacy_agreed_at") or "").strip(),
+        "audit_code": str(payload.get("audit_code") or "").strip()[:32],
     }
     doc["intake_form"] = intake
     if intake.get("company"):
@@ -70,10 +84,10 @@ def apply_landing_submission_to_pipeline(payload: dict[str, Any]) -> dict[str, A
     doc["intake_submitted_at"] = submitted
     if int(payload.get("landing_contact_id") or 0) > 0:
         doc["landing_contact_id"] = int(payload["landing_contact_id"])
-    doc = set_pipeline_stage(
+    save_pipeline(doc)
+    return set_pipeline_stage(
         uid, "intake_done", username=doc.get("username") or "", source="landing"
     )
-    return save_pipeline(doc)
 
 
 async def fetch_submission_by_audit_code(audit_code: str) -> dict[str, Any]:
@@ -145,6 +159,10 @@ async def sync_intake_from_market_if_newer(
                     "message",
                     "submitted_at",
                     "landing_contact_id",
+                    "privacy_agreed",
+                    "privacy_version",
+                    "privacy_url",
+                    "privacy_agreed_at",
                 )
             },
         }

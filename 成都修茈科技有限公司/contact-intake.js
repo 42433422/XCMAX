@@ -38,9 +38,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     company: '',
     timeline: '',
     budget: '',
+    desktopOs: '',
+    needMobile: true,
     needIntegration: '',
     integrationNote: '',
     extraNote: '',
+    privacyAgreed: false,
   }
 
   let stepIndex = 0
@@ -71,6 +74,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch {
       return ''
     }
+  }
+
+  function readTrackingParams() {
+    const q = new URLSearchParams(window.location.search)
+    const out = {}
+    const limits = { source: 64, campaign: 128, medium: 64, content: 128 }
+    Object.keys(limits).forEach((key) => {
+      const val = (q.get(key) || '').trim()
+      if (val) out[key] = val.slice(0, limits[key])
+    })
+    return out
   }
 
   function applyCsIntakeFromUrl() {
@@ -109,9 +123,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     state.painGoals = (form.elements.painGoals?.value || '').trim()
     state.timeline = (form.elements.timeline?.value || '').trim()
     state.budget = (form.elements.budget?.value || '').trim()
+    state.desktopOs = selectedRadio('desktopOs')
+    state.needMobile = form.elements.needMobile ? Boolean(form.elements.needMobile.checked) : true
     state.needIntegration = (form.elements.needIntegration?.value || '').trim()
     state.integrationNote = (form.elements.integrationNote?.value || '').trim()
     state.extraNote = (form.elements.extraNote?.value || '').trim()
+    state.privacyAgreed = Boolean(form.elements.privacyAgreed?.checked)
   }
 
   function syncFieldsFromState() {
@@ -135,9 +152,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (form.elements.painGoals) form.elements.painGoals.value = state.painGoals
     if (form.elements.timeline) form.elements.timeline.value = state.timeline
     if (form.elements.budget) form.elements.budget.value = state.budget
+    form.querySelectorAll('input[name="desktopOs"]').forEach((el) => {
+      el.checked = el.value === state.desktopOs
+    })
+    if (form.elements.needMobile) form.elements.needMobile.checked = Boolean(state.needMobile)
     if (form.elements.needIntegration) form.elements.needIntegration.value = state.needIntegration
     if (form.elements.integrationNote) form.elements.integrationNote.value = state.integrationNote
     if (form.elements.extraNote) form.elements.extraNote.value = state.extraNote
+    if (form.elements.privacyAgreed) form.elements.privacyAgreed.checked = Boolean(state.privacyAgreed)
   }
 
   function setError(name, msg) {
@@ -211,6 +233,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       setError('timeline', '请选择大概什么时候需要')
       ok = false
     } else setError('timeline', '')
+    if (!state.desktopOs) {
+      setError('desktopOs', '请选择日常使用的电脑系统')
+      ok = false
+    } else setError('desktopOs', '')
     if (!state.needIntegration) {
       setError('needIntegration', '请选择是否需要和现有系统连起来')
       ok = false
@@ -222,13 +248,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     return ok
   }
 
+  function validateReview() {
+    syncStateFromFields()
+    if (!state.privacyAgreed) {
+      setError('privacyAgreed', '请先阅读并同意用户协议与隐私政策')
+      return false
+    }
+    setError('privacyAgreed', '')
+    return true
+  }
+
   const validators = {
     profile: validateProfile,
     problem: validateProblem,
     workflow: validateWorkflow,
     contact: validateContact,
     plan: validatePlan,
-    review: () => true,
+    review: validateReview,
   }
 
   function buildMessage() {
@@ -266,6 +302,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       '■ 时间与对接',
       `期望时间：${state.timeline || '—'}`,
       `预算：${state.budget || '暂未确定'}`,
+      `桌面系统：${state.desktopOs === 'mac' ? 'macOS' : state.desktopOs === 'win' ? 'Windows' : '—'}`,
+      `手机端安装包：${state.needMobile ? '需要 Android APK' : '暂不需要'}`,
       `系统对接：${integration}`,
       '',
       '■ 补充',
@@ -294,7 +332,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       ['公司', state.company || '—'],
       ['期望时间', state.timeline || '—'],
       ['预算', state.budget || '暂未确定'],
+      ['桌面系统', state.desktopOs === 'mac' ? 'macOS' : state.desktopOs === 'win' ? 'Windows' : '—'],
+      ['手机端安装包', state.needMobile ? '需要 Android APK' : '暂不需要'],
       ['系统对接', integration],
+      ['隐私同意', state.privacyAgreed ? '已同意' : '未同意'],
     ]
     reviewBody.innerHTML = rows
       .map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(v)}</dd>`)
@@ -342,8 +383,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       problem: !!state.primaryGoal,
       workflow: state.manualSteps.length >= 6 && state.painGoals.length >= 4,
       contact: !!state.name && !!state.email,
-      plan: !!state.timeline && !!state.needIntegration,
-      review: stepIndex === STEPS.length - 1,
+      plan: !!state.timeline && !!state.desktopOs && !!state.needIntegration,
+      review: stepIndex === STEPS.length - 1 && state.privacyAgreed,
     }
     checklistItems.forEach((el) => {
       const key = el.getAttribute('data-intake-check')
@@ -1341,7 +1382,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (apiError) apiError.textContent = ''
     if (success) success.classList.remove('visible')
 
-    const order = ['profile', 'problem', 'workflow', 'contact', 'plan']
+    const order = ['profile', 'problem', 'workflow', 'contact', 'plan', 'review']
     for (const id of order) {
       if (!validators[id]()) {
         stepIndex = STEPS.findIndex((s) => s.id === id)
@@ -1360,14 +1401,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         return
       }
 
+      const tracking = readTrackingParams()
       const payload = {
         name: state.name,
         email: state.email,
         phone: state.phone,
         company: state.company,
         message: buildMessage(),
-        source: csIntake.active ? 'cs_intake' : 'contact',
+        source: csIntake.active ? 'cs_intake' : (tracking.source || 'contact'),
+        desktop_os: state.desktopOs,
+        need_mobile: state.needMobile,
+        privacy_agreed: true,
+        privacy_version: '2026-06-20',
+        privacy_url: '/privacy.html',
       }
+      if (tracking.campaign) payload.campaign = tracking.campaign
+      if (tracking.medium) payload.medium = tracking.medium
+      if (tracking.content) payload.content = tracking.content
       if (csIntake.active && csIntake.uid && csIntake.token) {
         payload.cs_uid = csIntake.uid
         payload.cs_t = csIntake.token

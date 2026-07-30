@@ -1,4 +1,4 @@
-"""Deterministic, read-only customer-support grounding auditor."""
+"""Deterministic, read-only customer-support employee."""
 
 from __future__ import annotations
 
@@ -76,7 +76,13 @@ def _normalize_ticket(payload: dict) -> Optional[Dict[str, Any]]:
 
 def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     del ctx  # deterministic; no host side effects
-    ticket = _normalize_ticket(dict(payload or {}))
+    data = dict(payload or {})
+    action = str(data.get("action") or "").strip()
+    if action == "status":
+        return _status()
+    if action == "demand_intake":
+        return _demand_intake(data)
+    ticket = _normalize_ticket(data)
     if not isinstance(ticket, dict):
         return _failed("ticket object is required", "missing_ticket")
     ticket_id = str(ticket.get("id") or "").strip()[:160]
@@ -116,6 +122,67 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "read_only": True,
         "side_effects": [],
     }
+
+
+def _status() -> dict[str, Any]:
+    return {
+        "ok": True,
+        "status": "ready",
+        "summary": "用户客服员工已就绪：可生成需求采集话术、表单链接草稿，并保留只读资料核对能力。",
+        "issues": [],
+        "ready_for_response_draft": True,
+        "evidence": ["input.action"],
+        "read_only": True,
+        "side_effects": [],
+    }
+
+
+def _demand_intake(payload: dict[str, Any]) -> dict[str, Any]:
+    brief = _clip(payload.get("brief"), 1200)
+    if not brief:
+        return _failed("brief is required", "missing_brief")
+    client_name = _clip(payload.get("client_name"), 128)
+    form_url = _clip(payload.get("form_url"), 512) or "https://xiu-ci.com/contact.html"
+    channel = _clip(payload.get("channel"), 32) or "wechat"
+    greeting = f"{client_name}，您好" if client_name else "您好"
+    questions = [
+        "当前最想让 AI 员工接住的业务场景是什么？",
+        "现有资料、系统或 Excel 表里，哪些数据可以先接入？",
+        "希望这次试点最后用什么结果来验收？",
+    ]
+    message_text = "\n".join(
+        [
+            f"{greeting}，我是修茈 XCMAX 的业务顾问。",
+            f"我先按您刚才的场景整理了一个需求采集入口：{form_url}",
+            "请您打开后补充公司、联系方式和关键需求，我们会按提交编号分配销售并安排 AI 员工跟进。",
+            f"我已记录的背景：{brief[:500]}",
+        ]
+    )
+    return {
+        "ok": True,
+        "status": "drafted",
+        "summary": "已生成需求采集话术草稿和表单链接；未发送客户消息。",
+        "items": [
+            {
+                "type": "message_draft",
+                "channel": channel,
+                "message_text": message_text,
+                "form_url": form_url,
+                "questions": questions,
+            }
+        ],
+        "form_url": form_url,
+        "issues": [],
+        "ready_for_send": True,
+        "ready_for_response_draft": True,
+        "evidence": ["input.brief", "input.form_url", "input.channel"],
+        "read_only": True,
+        "side_effects": [],
+    }
+
+
+def _clip(value: Any, limit: int) -> str:
+    return str(value or "").strip()[:limit]
 
 
 def _failed(message: str, code: str) -> dict[str, Any]:
