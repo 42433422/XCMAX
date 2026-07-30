@@ -390,8 +390,6 @@ class PrintCupsStatusMixin:
 
         if not _CUPS_PRINTER_NAME_RE.fullmatch(printer_name):
             return []
-        if not os.path.isfile(_CUPS_LPOPTIONS) or not os.access(_CUPS_LPOPTIONS, os.X_OK):
-            return []
         try:
             result = self._run_cups("lpoptions", ("-p", printer_name))
         except _CUPS_ERRORS as exc:
