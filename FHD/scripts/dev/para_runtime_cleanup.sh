@@ -25,6 +25,10 @@ XCMAX_WORKTREE_RETENTION_MINUTES="${XCMAX_WORKTREE_RETENTION_MINUTES:-360}"
 XCMAX_EPHEMERAL_GC_ENABLED="${XCMAX_EPHEMERAL_GC_ENABLED:-1}"
 XCMAX_EPHEMERAL_ROOT="${XCMAX_EPHEMERAL_ROOT:-/private/tmp}"
 XCMAX_EPHEMERAL_RETENTION_MINUTES="${XCMAX_EPHEMERAL_RETENTION_MINUTES:-2880}"
+XCAGI_BACKUP_GC_ENABLED="${XCAGI_BACKUP_GC_ENABLED:-1}"
+XCAGI_USER_DATA_DIR="${XCAGI_USER_DATA_DIR:-${HOME}/Library/Application Support/XCAGI}"
+XCAGI_BACKUP_DIR="${XCAGI_BACKUP_DIR:-${XCAGI_USER_DATA_DIR}/backups}"
+XCAGI_LOCAL_BACKUP_KEEP="${XCAGI_LOCAL_BACKUP_KEEP:-2}"
 
 APPLY=0
 REASON="scheduled"
@@ -71,6 +75,15 @@ safe_scoped_dir() {
   [[ "${target}" == "${allowed_root}/"* ]]
 }
 
+file_mtime_epoch() {
+  local file="$1"
+  if stat -f '%m' "${file}" >/dev/null 2>&1; then
+    stat -f '%m' "${file}"
+  else
+    stat -c '%Y' "${file}"
+  fi
+}
+
 require_uint PARA_DB_RETENTION_DAYS "${PARA_DB_RETENTION_DAYS}"
 require_uint PARA_LOG_RETENTION_DAYS "${PARA_LOG_RETENTION_DAYS}"
 require_uint PARA_WORKSPACE_RETENTION_MINUTES "${PARA_WORKSPACE_RETENTION_MINUTES}"
@@ -81,6 +94,12 @@ require_uint XCMAX_WORKTREE_GC_ENABLED "${XCMAX_WORKTREE_GC_ENABLED}"
 require_uint XCMAX_WORKTREE_RETENTION_MINUTES "${XCMAX_WORKTREE_RETENTION_MINUTES}"
 require_uint XCMAX_EPHEMERAL_GC_ENABLED "${XCMAX_EPHEMERAL_GC_ENABLED}"
 require_uint XCMAX_EPHEMERAL_RETENTION_MINUTES "${XCMAX_EPHEMERAL_RETENTION_MINUTES}"
+require_uint XCAGI_BACKUP_GC_ENABLED "${XCAGI_BACKUP_GC_ENABLED}"
+require_uint XCAGI_LOCAL_BACKUP_KEEP "${XCAGI_LOCAL_BACKUP_KEEP}"
+(( XCAGI_LOCAL_BACKUP_KEEP >= 1 )) || {
+  log "XCAGI_LOCAL_BACKUP_KEEP 必须至少为 1"
+  exit 2
+}
 
 safe_scoped_dir "${PARA_CLEANUP_ARCHIVE_DIR}" "${PARA_API_ROOT}" || {
   log "拒绝不受限的归档目录: ${PARA_CLEANUP_ARCHIVE_DIR}"
@@ -100,6 +119,10 @@ safe_scoped_dir "${PARA_LOG_DIR}" "${PARA_RUNTIME_ROOT}" || {
 }
 [[ -n "${XCMAX_EPHEMERAL_ROOT}" && "${XCMAX_EPHEMERAL_ROOT}" != "/" && "${XCMAX_EPHEMERAL_ROOT}" != "${HOME%/}" ]] || {
   log "拒绝不安全的临时目录根: ${XCMAX_EPHEMERAL_ROOT}"
+  exit 2
+}
+safe_scoped_dir "${XCAGI_BACKUP_DIR}" "${XCAGI_USER_DATA_DIR}" || {
+  log "拒绝不安全的 XCAGI 备份目录: ${XCAGI_BACKUP_DIR}"
   exit 2
 }
 
@@ -243,6 +266,66 @@ cleanup_old_logs() {
     find "${PARA_LOG_DIR}" -type f -mtime "+${PARA_LOG_RETENTION_DAYS}" -print0
   )
   log "旧日志 candidates=${removed} retention_days=${PARA_LOG_RETENTION_DAYS} apply=${APPLY}"
+}
+
+cleanup_xcagi_backups() {
+  local file
+  local index=0
+  local lsof_status
+  local name
+  local removed=0
+  local removed_kb=0
+  local size_kb
+
+  (( XCAGI_BACKUP_GC_ENABLED == 1 )) || {
+    log "XCAGI 自动备份回收已关闭"
+    return 0
+  }
+  [[ -d "${XCAGI_BACKUP_DIR}" ]] || {
+    log "XCAGI 备份目录不存在，跳过: ${XCAGI_BACKUP_DIR}"
+    return 0
+  }
+  # A pending updater rollback may reference any automatic backup. Fail closed
+  # instead of parsing or racing the marker while an update is in progress.
+  if [[ -f "${XCAGI_USER_DATA_DIR}/rollback-marker.json" ]]; then
+    log "检测到 XCAGI pending rollback，本轮保留全部自动备份"
+    return 0
+  fi
+  command -v lsof >/dev/null 2>&1 || {
+    log "lsof 不可用，无法排除正在写入的 XCAGI 备份，本轮不回收"
+    return 0
+  }
+
+  while IFS= read -r file; do
+    [[ -n "${file}" ]] || continue
+    name="${file##*/}"
+    [[ "${name}" =~ ^xcagi-.+-[0-9]{14}\.db$ ]] || continue
+    index=$((index + 1))
+    (( index > XCAGI_LOCAL_BACKUP_KEEP )) || continue
+    if lsof -n -- "${file}" >/dev/null 2>&1; then
+      continue
+    else
+      lsof_status=$?
+      (( lsof_status == 1 )) || continue
+    fi
+    size_kb="$(du -k "${file}" 2>/dev/null | awk '{print $1}')"
+    is_uint "${size_kb}" || size_kb=0
+    log "回收 XCAGI 自动备份 path=${file} size_kb=${size_kb} apply=${APPLY}"
+    if (( APPLY == 1 )); then
+      rm -f -- "${file}" "${file}-wal" "${file}-shm"
+    fi
+    removed=$((removed + 1))
+    removed_kb=$((removed_kb + size_kb))
+  done < <(
+    while IFS= read -r -d '' file; do
+      printf '%s\t%s\n' "$(file_mtime_epoch "${file}")" "${file}"
+    done < <(
+      find "${XCAGI_BACKUP_DIR}" -maxdepth 1 -type f -name "xcagi-*.db" -print0
+    ) |
+      LC_ALL=C sort -rn |
+      cut -f2-
+  )
+  log "XCAGI 自动备份 candidates=${removed} reclaimable_kb=${removed_kb} keep=${XCAGI_LOCAL_BACKUP_KEEP} apply=${APPLY}"
 }
 
 cleanup_merged_worktrees() {
@@ -445,6 +528,7 @@ cleanup_on_exit() {
 trap cleanup_on_exit EXIT
 
 log "开始 reason=${REASON} apply=${APPLY}"
+cleanup_xcagi_backups
 cleanup_stale_workspaces
 cleanup_old_logs
 cleanup_merged_worktrees
