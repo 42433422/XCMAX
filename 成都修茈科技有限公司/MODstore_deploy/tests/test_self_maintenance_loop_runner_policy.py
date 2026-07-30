@@ -700,6 +700,51 @@ def test_validate_remediation_branch_delivery_requires_advanced_work_branch(
     assert advanced["reason"] == "remediation_branch_advanced"
 
 
+def test_dynamic_low_risk_policy_blocks_marker_only_when_structured_review_hold():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-review",
+                "kind": "automated_remediation",
+                "para_task_id": "task-review",
+                "reason": "structured_review_blocking_findings",
+                "run_id": "run-review",
+                "task_id": "task-review",
+            }
+        ]
+    }
+    files = ["成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"]
+
+    result = _assess_branch_auto_merge_policy(files, _stats(), memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "marker_only_diff_requires_executable_change"
+
+
+def test_dynamic_low_risk_policy_blocks_kb_only_when_structured_review_hold():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-review",
+                "kind": "automated_remediation",
+                "para_task_id": "task-review",
+                "reason": "structured_review_blocking_findings",
+                "run_id": "run-review",
+                "task_id": "task-review",
+            }
+        ]
+    }
+    files = [
+        "FHD/XCAGI/kb/fixes/sample-fix.json",
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(files, _stats(), memory=memory)
+
+    assert result["ok"] is False
+    assert result["reason"] == "auxiliary_only_diff_requires_executable_change"
+
+
 def test_dynamic_low_risk_policy_blocks_marker_only_when_memory_requires_executable_change():
     files = ["成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"]
     memory = {
