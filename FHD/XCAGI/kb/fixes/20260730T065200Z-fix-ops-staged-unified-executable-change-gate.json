@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "kind": "fix",
+  "created_at": "2026-07-30T06:52:00+00:00",
+  "symptom": "diff-too-large remediation 活跃时，OpsStaged 低风险自动审批仍可能放行仅含 KB 或 tests 的辅助证据变更，因为只调用 marker-only 摘要检查而未执行 KB/辅助路径阻断。",
+  "root_cause": "should_auto_approve_staged 未复用 assess_loop_memory_executable_change_block SSOT，loop memory 要求可执行生产变更时的统一门控仅在 auto-merge 路径生效，ops staged 部署旁路。",
+  "fix_diff": "diff --git \"a/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/ops_staged_auto_approve.py\" \"b/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/ops_staged_auto_approve.py\"\nindex 1111111..2222222 100644\n--- \"a/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/ops_staged_auto_approve.py\"\n+++ \"b/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/modstore_server/ops_staged_auto_approve.py\"\n@@ -119,16 +119,24 @@ def should_auto_approve_staged(\n         return False\n     try:\n         from modstore_server.self_maintenance_policy import (\n-            should_block_marker_only_diff_summary,\n+            assess_loop_memory_executable_change_block,\n+            load_loop_memory,\n+            parse_diff_stat_paths,\n         )\n \n-        policy = should_block_marker_only_diff_summary(diff_summary)\n-        if policy.get(\"blocked\"):\n+        memory = load_loop_memory()\n+        paths = (\n+            [str(path) for path in changed_files]\n+            if changed_files\n+            else parse_diff_stat_paths(diff_summary)\n+        )\n+        executable_block = assess_loop_memory_executable_change_block(memory, paths)\n+        if executable_block is not None:\n             logger.info(\n-                \"ops staged auto-approve blocked: self-maintenance marker-only diff: %s\",\n-                policy.get(\"reason\"),\n+                \"ops staged auto-approve blocked: self-maintenance executable gate: %s\",\n+                executable_block.get(\"reason\"),\n             )\n             return False\n     except Exception:\n         logger.exception(\"ops staged self-maintenance policy failed closed\")\n         return False\ndiff --git \"a/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/tests/test_ops_staged_auto_approve.py\" \"b/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/tests/test_ops_staged_auto_approve.py\"\nindex 3333333..4444444 100644\n--- \"a/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/tests/test_ops_staged_auto_approve.py\"\n+++ \"b/\\346\\210\\220\\351\\203\\275\\344\\277\\256\\350\\214\\210\\347\\247\\221\\346\\212\\200\\346\\234\\211\\351\\231\\220\\345\\205\\254\\345\\217\\270/MODstore_deploy/tests/test_ops_staged_auto_approve.py\"\n@@ -116,3 +116,49 @@ def test_marker_only_self_maintenance_status_rejected_after_review_risk(monkeypa\n         )\n         is False\n     )\n+\n+\n+def test_ops_staged_blocks_kb_paths_during_diff_too_large_remediation(monkeypatch) -> None:\n+    ...\n+\n+\n+def test_ops_staged_blocks_tests_only_during_diff_too_large_remediation(monkeypatch) -> None:\n+    ...\n",
+  "metadata": {
+    "component": "ops_staged_auto_approve,self_maintenance_policy",
+    "files": [
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/ops_staged_auto_approve.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_ops_staged_auto_approve.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_policy.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
+    ]
+  },
+  "executable_template": {
+    "applicability_check": "MODSTORE_OPS_STAGED_AUTO_APPROVE=1 且 loop memory 含 diff-too-large/retort-scope 等 open_item 要求可执行生产变更时，仅 KB/tests/marker 路径的 staged diff 仍被自动审批。",
+    "patch_strategy": "在 should_auto_approve_staged 中解析 changed_files 或 diff stat 路径后调用 assess_loop_memory_executable_change_block；补 ops staged 与 policy 层回归测试。",
+    "rollback_plan": "恢复 should_block_marker_only_diff_summary 单点检查并删除新增回归测试。",
+    "required_tests": [
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_ops_staged_auto_approve.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_policy.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
+    ]
+  }
+}

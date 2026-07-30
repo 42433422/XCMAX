@@ -1,4 +1,5 @@
 from modstore_server.self_maintenance_policy import (
+    assess_loop_memory_executable_change_block,
     loop_memory_requires_executable_change,
     parse_diff_stat_paths,
     should_block_marker_only_diff_summary,
@@ -135,3 +136,46 @@ def test_memory_has_retort_scope_remediation_flag():
     }
     assert memory_has_retort_scope_remediation(memory) is True
     assert memory_has_retort_scope_remediation({"open_items": []}) is False
+
+
+def test_assess_loop_memory_block_runs_marker_gate_without_kb_paths():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-327c02",
+                "kind": "automated_remediation",
+                "reason": "para_ai_review_rejected",
+                "review_feedback": "devfleet/cursor/sub-1-327c02: diff-too-large:50140",
+                "review_veto_code": "diff-too-large",
+            }
+        ]
+    }
+    marker_path = (
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"
+    )
+
+    block = assess_loop_memory_executable_change_block(memory, [marker_path])
+
+    assert block is not None
+    assert block["reason"] == "marker_only_diff_requires_executable_change"
+
+
+def test_assess_loop_memory_block_allows_production_change_without_kb_paths():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-327c02",
+                "kind": "automated_remediation",
+                "reason": "para_ai_review_rejected",
+                "review_feedback": "devfleet/cursor/sub-1-327c02: diff-too-large:50140",
+                "review_veto_code": "diff-too-large",
+            }
+        ]
+    }
+    production_path = (
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py"
+    )
+
+    block = assess_loop_memory_executable_change_block(memory, [production_path])
+
+    assert block is None

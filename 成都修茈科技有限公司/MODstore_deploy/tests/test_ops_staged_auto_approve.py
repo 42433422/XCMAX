@@ -116,3 +116,53 @@ def test_marker_only_self_maintenance_status_rejected_after_review_risk(monkeypa
         )
         is False
     )
+
+
+def test_ops_staged_blocks_kb_paths_during_diff_too_large_remediation(monkeypatch) -> None:
+    monkeypatch.setenv("MODSTORE_OPS_STAGED_AUTO_APPROVE", "1")
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_LOOP_MEMORY_JSON",
+        (
+            '{"open_items":[{"branch":"devfleet/cursor/sub-1-327c02",'
+            '"kind":"automated_remediation","para_task_id":"task-diff-large-327",'
+            '"reason":"para_ai_review_rejected",'
+            '"review_feedback":"devfleet/cursor/sub-1-327c02: diff-too-large:50140",'
+            '"review_veto_code":"diff-too-large"}]}'
+        ),
+    )
+    kb_path = "FHD/XCAGI/kb/fixes/sample-fix.json"
+
+    assert (
+        should_auto_approve_staged(
+            files_changed_count=1,
+            diff_summary=f"{kb_path} | 12 +++++",
+            changed_files=[kb_path],
+        )
+        is False
+    )
+
+
+def test_ops_staged_blocks_tests_only_during_diff_too_large_remediation(monkeypatch) -> None:
+    monkeypatch.setenv("MODSTORE_OPS_STAGED_AUTO_APPROVE", "1")
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_LOOP_MEMORY_JSON",
+        (
+            '{"open_items":[{"branch":"devfleet/cursor/sub-1-3ee902",'
+            '"kind":"automated_remediation","para_task_id":"task-diff-large",'
+            '"reason":"para_ai_review_rejected",'
+            '"review_feedback":"devfleet/cursor/sub-1-3ee902: diff-too-large:59051",'
+            '"review_veto_code":"diff-too-large"}]}'
+        ),
+    )
+    test_path = (
+        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
+    )
+
+    assert (
+        should_auto_approve_staged(
+            files_changed_count=1,
+            diff_summary=f"{test_path} | 4 ++++",
+            changed_files=[test_path],
+        )
+        is False
+    )

@@ -120,14 +120,22 @@ def should_auto_approve_staged(
         return False
     try:
         from modstore_server.self_maintenance_policy import (
-            should_block_marker_only_diff_summary,
+            assess_loop_memory_executable_change_block,
+            load_loop_memory,
+            parse_diff_stat_paths,
         )
 
-        policy = should_block_marker_only_diff_summary(diff_summary)
-        if policy.get("blocked"):
+        memory = load_loop_memory()
+        paths = (
+            [str(path) for path in changed_files]
+            if changed_files
+            else parse_diff_stat_paths(diff_summary)
+        )
+        executable_block = assess_loop_memory_executable_change_block(memory, paths)
+        if executable_block is not None:
             logger.info(
-                "ops staged auto-approve blocked: self-maintenance marker-only diff: %s",
-                policy.get("reason"),
+                "ops staged auto-approve blocked: self-maintenance executable gate: %s",
+                executable_block.get("reason"),
             )
             return False
     except Exception:
