@@ -645,6 +645,32 @@ function modInstallText(modId: string) {
   return version ? `已安装 v${version}` : '已安装';
 }
 
+async function refreshLocalStatus() {
+  localStatusLoading.value = true;
+  localStatusError.value = '';
+  try {
+    const catalogRes = await apiFetch('/api/mod-store/catalog');
+    if (!catalogRes.ok) throw new Error(`本地 Mod 目录 HTTP ${catalogRes.status}`);
+    installedMods.value = normalizeLocalCatalogRows(await catalogRes.json());
+  } catch (e) {
+    installedMods.value = [];
+    localStatusError.value = `本地安装状态读取失败：${e instanceof Error ? e.message : String(e)}`;
+  }
+  try {
+    const syncRes = await apiFetch('/api/xcmax/sync/status');
+    if (!syncRes.ok) throw new Error(`同步状态 HTTP ${syncRes.status}`);
+    const body = await syncRes.json();
+    const data = body?.data && typeof body.data === 'object' ? body.data : body;
+    syncStatus.value = data as Record<string, unknown>;
+  } catch (e) {
+    syncStatus.value = null;
+    const msg = `同步状态读取失败：${e instanceof Error ? e.message : String(e)}`;
+    localStatusError.value = localStatusError.value ? `${localStatusError.value}；${msg}` : msg;
+  } finally {
+    localStatusLoading.value = false;
+  }
+}
+
 async function loadUsers() {
   const res = await xcmaxAdminApi.listUsers();
   const data = res as { users?: AdminUser[]; data?: { users?: AdminUser[] } };
