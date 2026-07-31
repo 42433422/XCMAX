@@ -1,97 +1,81 @@
 <template>
-  <div :class="['agent-run-trace', `is-${trace.status}`]">
-    <!-- 顶部：意图徽章 + 状态 dot + 耗时 -->
-    <div class="trace-header">
-      <span class="trace-dot" :class="`dot-${trace.status}`" aria-hidden="true"></span>
-      <span class="trace-badge">agent_run</span>
-      <span v-if="trace.intent" class="trace-intent">{{ trace.intent }}</span>
-      <span class="trace-status-label">{{ statusLabel }}</span>
-      <span v-if="durationLabel" class="trace-duration">{{ durationLabel }}</span>
-      <span v-if="!trace.terminal" class="trace-running-pulse" aria-hidden="true"></span>
+  <div :class="['art-trace', `is-${trace.status}`]">
+    <!-- 单行 header：状态点 + intent + 状态文字 + 耗时 -->
+    <div class="art-head">
+      <span class="art-dot" aria-hidden="true"></span>
+      <span v-if="trace.intent" class="art-intent">{{ trace.intent }}</span>
+      <span class="art-status">{{ statusLabel }}</span>
+      <span v-if="durationLabel" class="art-dur">{{ durationLabel }}</span>
+      <span v-if="!trace.terminal" class="art-pulse" aria-hidden="true"></span>
     </div>
 
-    <!-- mermaid 计划图（折叠，按需渲染） -->
-    <details v-if="mermaidSource" class="trace-mermaid" @toggle="onMermaidToggle">
-      <summary>查看执行计划图</summary>
-      <div ref="mermaidHostRef" class="mermaid-host" v-html="mermaidSvg"></div>
-    </details>
-
-    <!-- 垂直时间线 -->
-    <ol class="trace-stream">
-      <li
+    <!-- phase 流：每行一个，无 box -->
+    <div class="art-stream">
+      <div
         v-for="(phase, idx) in trace.phases"
         :key="phase.started_event_id || idx"
-        :class="['trace-phase', `phase-${phase.kind}`, `phase-${phase.status}`]"
+        :class="['art-row', `row-${phase.kind}`, `row-${phase.status}`]"
       >
-        <!-- 状态指示符 -->
-        <span class="phase-marker" aria-hidden="true">{{ markerFor(phase) }}</span>
-
-        <!-- 主行：标题 + 副标题 + 耗时 -->
-        <div class="phase-main">
-          <div class="phase-title-row">
-            <span class="phase-title">{{ phase.title || fallbackTitle(phase) }}</span>
-            <span v-if="phase.subtitle" class="phase-subtitle">{{ phase.subtitle }}</span>
-            <span v-if="phase.duration_ms != null" class="phase-duration">{{ phase.duration_ms }}ms</span>
-            <span v-if="isTool(phase) && phase.retries > 0" class="phase-retries">↻ {{ phase.retries }}</span>
-            <span v-if="isTool(phase) && phase.waiting_approval" class="phase-waiting-chip">等待确认</span>
-            <span v-if="isTool(phase) && getPermissionBadge(phase.tool_id)" class="phase-permission-chip" :class="`perm-${getPermissionBadge(phase.tool_id)}`">
-              {{ getPermissionBadge(phase.tool_id) === 'session' ? '已授权·会话' : '已授权·永久' }}
+        <span class="art-marker" aria-hidden="true">{{ markerFor(phase) }}</span>
+        <div class="art-row-main">
+          <div class="art-row-title">
+            <span class="art-title">{{ phase.title || fallbackTitle(phase) }}</span>
+            <span v-if="phase.subtitle" class="art-sub">{{ phase.subtitle }}</span>
+            <span v-if="phase.duration_ms != null" class="art-ms">{{ phase.duration_ms }}ms</span>
+            <span v-if="isTool(phase) && phase.retries > 0" class="art-retry" title="重试次数">↻{{ phase.retries }}</span>
+            <span v-if="isTool(phase) && phase.waiting_approval" class="art-wait">等待确认</span>
+            <span
+              v-if="isTool(phase) && getPermissionBadge(phase.tool_id)"
+              class="art-perm"
+              :class="`perm-${getPermissionBadge(phase.tool_id)}`"
+            >
+              {{ getPermissionBadge(phase.tool_id) === 'session' ? '会话授权' : '永久授权' }}
             </span>
             <button
               v-if="isTool(phase) && phase.waiting_approval && getPermissionBadge(phase.tool_id)"
               type="button"
-              class="phase-auto-approve-btn"
+              class="art-auto-btn"
               @click.stop="onAutoApprove(phase.tool_id)"
-            >
-              自动确认
-            </button>
+            >自动确认</button>
           </div>
 
-          <!-- 工具调用 terminal 块 -->
-          <div v-if="isTool(phase)" class="phase-terminal">
-            <div v-if="phase.tool_id || phase.action" class="terminal-header">
-              <span v-if="phase.tool_id" class="terminal-tool">{{ phase.tool_id }}</span>
-              <span v-if="phase.action" class="terminal-action">{{ phase.action }}</span>
-              <span v-if="phase.node_id" class="terminal-node">#{{ phase.node_id }}</span>
+          <!-- 工具调用 inline 折叠（无 terminal box） -->
+          <details
+            v-if="isTool(phase) && (phase.params_json || phase.output_preview || phase.error || phase.observations.length || phase.repair_history.length)"
+            class="art-tool-detail"
+          >
+            <summary>
+              <code v-if="phase.tool_id">{{ phase.tool_id }}</code>
+              <span v-if="phase.action" class="art-action">{{ phase.action }}</span>
+              <span v-if="phase.node_id" class="art-node">#{{ phase.node_id }}</span>
+            </summary>
+            <div class="art-tool-body">
+              <pre v-if="phase.params_json" class="art-params">{{ phase.params_json }}</pre>
+              <pre v-if="phase.output_preview" class="art-out">{{ phase.output_preview }}</pre>
+              <pre v-if="phase.error" class="art-err">{{ phase.error }}</pre>
+              <ul v-if="phase.observations.length" class="art-obs">
+                <li v-for="(o, oIdx) in phase.observations" :key="oIdx">{{ o }}</li>
+              </ul>
+              <ul v-if="phase.repair_history.length" class="art-repairs">
+                <li v-for="(r, rIdx) in phase.repair_history" :key="rIdx">{{ r }}</li>
+              </ul>
             </div>
-            <pre v-if="phase.params_json" class="terminal-params">{{ phase.params_json }}</pre>
-            <details v-if="phase.output_preview || phase.error || phase.observations.length || phase.repair_history.length" class="terminal-details">
-              <summary>展开输出</summary>
-              <div v-if="phase.output_preview" class="terminal-output">
-                <div class="output-label">output</div>
-                <pre>{{ phase.output_preview }}</pre>
-              </div>
-              <div v-if="phase.observations.length" class="terminal-observations">
-                <div class="output-label">observations</div>
-                <ul>
-                  <li v-for="(o, oIdx) in phase.observations" :key="oIdx">{{ o }}</li>
-                </ul>
-              </div>
-              <div v-if="phase.error" class="terminal-error">
-                <div class="output-label">error</div>
-                <pre>{{ phase.error }}</pre>
-              </div>
-              <div v-if="phase.repair_history.length" class="terminal-repairs">
-                <div class="output-label">repair history</div>
-                <ul>
-                  <li v-for="(r, rIdx) in phase.repair_history" :key="rIdx">{{ r }}</li>
-                </ul>
-              </div>
-            </details>
-          </div>
+          </details>
 
-          <!-- Run phase 的最终输出预览 -->
-          <div v-else-if="isRun(phase) && phase.final_output_preview" class="phase-final-output">
-            <pre>{{ phase.final_output_preview }}</pre>
-          </div>
+          <!-- Run phase 最终输出 -->
+          <pre v-else-if="isRun(phase) && phase.final_output_preview" class="art-final">{{ phase.final_output_preview }}</pre>
 
-          <!-- Planner phase 的详情（如计划被阻断时的错误） -->
-          <div v-else-if="isPlanner(phase) && phase.detail" class="phase-planner-detail">
-            <pre>{{ phase.detail }}</pre>
-          </div>
+          <!-- Planner 详情 -->
+          <pre v-else-if="isPlanner(phase) && phase.detail" class="art-planner-detail">{{ phase.detail }}</pre>
         </div>
-      </li>
-    </ol>
+      </div>
+    </div>
+
+    <!-- mermaid 计划图（折叠入口极轻量） -->
+    <details v-if="mermaidSource" class="art-mermaid" @toggle="onMermaidToggle">
+      <summary>查看执行计划图</summary>
+      <div ref="mermaidHostRef" class="mermaid-host" v-html="mermaidSvg"></div>
+    </details>
   </div>
 </template>
 
@@ -213,7 +197,6 @@ async function renderMermaid() {
   }
 }
 
-/** details 展开（toggle）时按需渲染——避免每个折叠卡都加载 mermaid */
 async function onMermaidToggle(ev: Event) {
   const open = (ev.target as HTMLDetailsElement).open
   if (!open || mermaidSvg.value) return
@@ -221,10 +204,9 @@ async function onMermaidToggle(ev: Event) {
 }
 
 onMounted(() => {
-  // 如果 details 默认是关闭的，等用户打开才渲染。这里不做预渲染。
+  // details 默认关闭，等用户打开才渲染
 })
 
-// 当 trace 增量更新（流式轮询）时，如果 details 已展开则重新渲染
 watch(
   () => mermaidSource.value,
   async (src, prev) => {
@@ -242,7 +224,6 @@ function getPermissionBadge(toolId: string): ToolPermissionScope | null {
 }
 
 function onAutoApprove(toolId: string) {
-  // 默认按 session scope 授权（用户可在父组件弹层改为 persistent）
   setToolPermission(toolId, 'session')
   emit('grant-tool-permission', toolId, 'session')
   emit('auto-approve-tool', toolId)
@@ -250,121 +231,321 @@ function onAutoApprove(toolId: string) {
 </script>
 
 <style scoped>
-.agent-run-trace {
-  --trace-fg: var(--xc-color-text-primary, #1f2937);
-  --trace-muted: #6b7280;
-  --trace-border: #e5e7eb;
-  --trace-bg: #f9fafb;
-  --trace-blue: #3b82f6;
-  --trace-green: #10b981;
-  --trace-red: #ef4444;
-  --trace-amber: #f59e0b;
-  --trace-gray: #9ca3af;
-  --trace-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+/* Trae/Cursor 风格：无 box、左侧色条、inline 折叠、融入消息流 */
+.art-trace {
+  --art-fg: var(--xc-color-text-primary, #1f2937);
+  --art-muted: #6b7280;
+  --art-muted-2: #9ca3af;
+  --art-blue: #3b82f6;
+  --art-green: #10b981;
+  --art-red: #ef4444;
+  --art-amber: #f59e0b;
+  --art-gray: #9ca3af;
+  --art-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
 
-  margin-top: 8px;
-  border: 1px solid var(--trace-border);
-  border-radius: 8px;
-  background: var(--trace-bg);
+  position: relative;
+  margin-top: 6px;
+  padding: 2px 0 2px 10px;
   font-size: 12px;
-  color: var(--trace-fg);
-  overflow: hidden;
+  line-height: 1.6;
+  color: var(--art-fg);
+  /* 左侧 2px 色条（无 box 边框） */
+  border-left: 2px solid var(--art-gray);
 }
 
-/* Header */
-.trace-header {
+/* 状态色条 */
+.art-trace.is-running { border-left-color: var(--art-blue); }
+.art-trace.is-success { border-left-color: var(--art-green); }
+.art-trace.is-failed { border-left-color: var(--art-red); }
+.art-trace.is-waiting { border-left-color: var(--art-amber); }
+.art-trace.is-blocked { border-left-color: var(--art-gray); }
+
+/* Header：单行 inline */
+.art-head {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
-  background: rgba(0, 0, 0, 0.02);
-  border-bottom: 1px solid var(--trace-border);
-  font-family: var(--trace-mono);
-}
-
-.trace-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.dot-running {
-  background: var(--trace-blue);
-}
-.dot-success {
-  background: var(--trace-green);
-}
-.dot-failed {
-  background: var(--trace-red);
-}
-.dot-waiting {
-  background: var(--trace-amber);
-}
-.dot-blocked {
-  background: var(--trace-gray);
-}
-
-.trace-badge {
-  background: rgba(59, 130, 246, 0.1);
-  color: var(--trace-blue);
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-}
-
-.trace-intent {
-  color: var(--trace-fg);
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 220px;
-}
-
-.trace-status-label {
-  margin-left: auto;
-  color: var(--trace-muted);
+  flex-wrap: wrap;
+  color: var(--art-muted);
   font-size: 11px;
+  margin-bottom: 2px;
 }
 
-.trace-duration {
-  color: var(--trace-muted);
-  font-size: 11px;
-}
-
-.trace-running-pulse {
+.art-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--trace-blue);
-  animation: trace-pulse 1.2s ease-in-out infinite;
+  background: var(--art-gray);
+  flex-shrink: 0;
+}
+.is-running .art-dot { background: var(--art-blue); }
+.is-success .art-dot { background: var(--art-green); }
+.is-failed .art-dot { background: var(--art-red); }
+.is-waiting .art-dot { background: var(--art-amber); }
+
+.art-intent {
+  color: var(--art-fg);
+  font-weight: 500;
+  font-family: var(--art-mono);
+  font-size: 11px;
 }
 
-@keyframes trace-pulse {
-  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+.art-status {
+  color: var(--art-muted-2);
+  font-size: 10px;
+}
+
+.art-dur {
+  color: var(--art-muted-2);
+  font-family: var(--art-mono);
+  font-size: 10px;
+}
+
+.art-pulse {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--art-blue);
+  animation: art-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes art-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.7); }
   50% { opacity: 1; transform: scale(1.1); }
 }
 
-/* Mermaid 计划图（折叠） */
-.trace-mermaid {
-  border-bottom: 1px solid var(--trace-border);
-  background: #fff;
+/* Stream：无 ol 样式，紧凑行 */
+.art-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
-.trace-mermaid > summary {
-  padding: 4px 10px;
+
+.art-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 1px 0;
+}
+
+.art-marker {
+  flex-shrink: 0;
+  width: 12px;
+  text-align: center;
   font-size: 10px;
-  color: var(--trace-muted);
+  line-height: 1.6;
+  color: var(--art-muted-2);
+  font-family: var(--art-mono);
+}
+
+.row-success .art-marker { color: var(--art-green); }
+.row-failed .art-marker { color: var(--art-red); }
+.row-waiting .art-marker { color: var(--art-amber); }
+.row-running .art-marker { color: var(--art-blue); }
+
+.art-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.art-row-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  color: var(--art-fg);
+  font-size: 12px;
+}
+
+.art-title {
+  color: var(--art-fg);
+}
+
+.art-sub {
+  color: var(--art-muted);
+  font-family: var(--art-mono);
+  font-size: 10px;
+}
+
+.art-ms {
+  color: var(--art-muted-2);
+  font-family: var(--art-mono);
+  font-size: 10px;
+}
+
+.art-retry {
+  color: var(--art-amber);
+  font-size: 10px;
+}
+
+.art-wait {
+  color: #b45309;
+  font-size: 10px;
+  background: rgba(245, 158, 11, 0.12);
+  padding: 0 5px;
+  border-radius: 2px;
+}
+
+.art-perm {
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 2px;
+}
+.art-perm.perm-session {
+  color: #1e40af;
+  background: rgba(59, 130, 246, 0.12);
+}
+.art-perm.perm-persistent {
+  color: #065f46;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.art-auto-btn {
+  background: transparent;
+  color: #065f46;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  padding: 0 6px;
+  border-radius: 2px;
+  font-size: 10px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.art-auto-btn:hover {
+  background: rgba(16, 185, 129, 0.1);
+}
+
+/* 工具调用 inline 折叠（无 terminal box） */
+.art-tool-detail {
+  margin-top: 2px;
+  margin-left: 0;
+}
+
+.art-tool-detail > summary {
   cursor: pointer;
   user-select: none;
+  color: var(--art-muted);
+  font-size: 11px;
+  font-family: var(--art-mono);
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
-.trace-mermaid[open] > summary {
-  border-bottom: 1px solid var(--trace-border);
+.art-tool-detail > summary::before {
+  content: '▸';
+  font-size: 9px;
+  color: var(--art-muted-2);
+}
+.art-tool-detail[open] > summary::before {
+  content: '▾';
+}
+.art-tool-detail > summary::-webkit-details-marker {
+  display: none;
+}
+
+.art-tool-detail > summary code {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--art-blue);
+  padding: 0 4px;
+  border-radius: 2px;
+  font-size: 11px;
+  font-family: var(--art-mono);
+}
+
+.art-action {
+  color: var(--art-muted);
+  font-size: 10px;
+}
+
+.art-node {
+  color: var(--art-muted-2);
+  font-size: 10px;
+}
+
+.art-tool-body {
+  margin-top: 4px;
+  padding-left: 8px;
+  border-left: 1px solid rgba(127, 127, 127, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.art-params,
+.art-out,
+.art-err,
+.art-final,
+.art-planner-detail {
+  margin: 0;
+  padding: 4px 6px;
+  font-family: var(--art-mono);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(127, 127, 127, 0.05);
+  border-radius: 3px;
+  color: #4b5563;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.art-err {
+  color: var(--art-red);
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.art-final {
+  color: #374151;
+  background: rgba(16, 185, 129, 0.05);
+  border-left: 2px solid var(--art-green);
+  border-radius: 0 3px 3px 0;
+}
+
+.art-planner-detail {
+  color: var(--art-red);
+  background: rgba(239, 68, 68, 0.06);
+  border-left: 2px solid var(--art-red);
+  border-radius: 0 3px 3px 0;
+}
+
+.art-obs,
+.art-repairs {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--art-muted);
+  font-family: var(--art-mono);
+}
+.art-obs li,
+.art-repairs li {
+  word-break: break-word;
+}
+
+/* mermaid 折叠入口极轻量 */
+.art-mermaid {
+  margin-top: 4px;
+}
+.art-mermaid > summary {
+  cursor: pointer;
+  user-select: none;
+  color: var(--art-muted-2);
+  font-size: 10px;
+  list-style: none;
+  display: inline-block;
+}
+.art-mermaid > summary::before {
+  content: '▸ ';
+}
+.art-mermaid[open] > summary::before {
+  content: '▾ ';
+}
+.art-mermaid > summary::-webkit-details-marker {
+  display: none;
 }
 .mermaid-host {
-  padding: 8px 10px;
-  text-align: center;
+  margin-top: 4px;
+  padding: 4px 0;
+  text-align: left;
   overflow-x: auto;
 }
 .mermaid-host :deep(svg) {
@@ -372,331 +553,47 @@ function onAutoApprove(toolId: string) {
   height: auto;
 }
 .mermaid-fail {
-  color: var(--trace-red);
+  color: var(--art-red);
   font-size: 11px;
-  padding: 6px;
+  padding: 4px 0;
 }
 
-/* 工具权限徽章 */
-.phase-permission-chip {
-  background: rgba(16, 185, 129, 0.15);
-  color: #065f46;
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 10px;
-  font-weight: 500;
-}
-.phase-permission-chip.perm-session {
-  background: rgba(59, 130, 246, 0.15);
-  color: #1e40af;
-}
-.phase-permission-chip.perm-persistent {
-  background: rgba(16, 185, 129, 0.15);
-  color: #065f46;
-}
-.phase-auto-approve-btn {
-  background: rgba(16, 185, 129, 0.15);
-  color: #065f46;
-  border: 1px solid rgba(16, 185, 129, 0.4);
-  padding: 1px 8px;
-  border-radius: 3px;
-  font-size: 10px;
-  cursor: pointer;
-}
-.phase-auto-approve-btn:hover {
-  background: rgba(16, 185, 129, 0.25);
-}
-
-/* Stream */
-.trace-stream {
-  list-style: none;
-  padding: 6px 10px 8px;
-  margin: 0;
-  position: relative;
-}
-
-.trace-stream::before {
-  content: '';
-  position: absolute;
-  left: 14px;
-  top: 12px;
-  bottom: 12px;
-  width: 1px;
-  background: var(--trace-border);
-}
-
-.trace-phase {
-  position: relative;
-  padding-left: 18px;
-  padding-bottom: 6px;
-}
-.trace-phase:last-child {
-  padding-bottom: 0;
-}
-
-.phase-marker {
-  position: absolute;
-  left: 8px;
-  top: 0;
-  width: 13px;
-  text-align: center;
-  font-size: 10px;
-  line-height: 14px;
-  background: var(--trace-bg);
-  color: var(--trace-muted);
-}
-
-/* Phase status colors */
-.phase-success .phase-marker {
-  color: var(--trace-green);
-}
-.phase-failed .phase-marker {
-  color: var(--trace-red);
-}
-.phase-waiting .phase-marker {
-  color: var(--trace-amber);
-}
-.phase-running .phase-marker {
-  color: var(--trace-blue);
-}
-
-.phase-main {
-  min-width: 0;
-}
-
-.phase-title-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.phase-title {
-  color: var(--trace-fg);
-  font-weight: 500;
-}
-
-.phase-subtitle {
-  color: var(--trace-muted);
-  font-family: var(--trace-mono);
-  font-size: 11px;
-}
-
-.phase-duration {
-  color: var(--trace-muted);
-  font-family: var(--trace-mono);
-  font-size: 10px;
-}
-
-.phase-retries {
-  color: var(--trace-amber);
-  font-size: 10px;
-}
-
-.phase-waiting-chip {
-  background: rgba(245, 158, 11, 0.15);
-  color: #b45309;
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 10px;
-  font-weight: 500;
-}
-
-/* Terminal block (tool phase) */
-.phase-terminal {
-  margin-top: 4px;
-  border: 1px solid var(--trace-border);
-  border-left: 2px solid var(--trace-blue);
-  border-radius: 4px;
-  background: #fff;
-  font-family: var(--trace-mono);
-  overflow: hidden;
-}
-
-.phase-failed .phase-terminal {
-  border-left-color: var(--trace-red);
-}
-
-.terminal-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 8px;
-  background: rgba(0, 0, 0, 0.03);
-  border-bottom: 1px solid var(--trace-border);
-  font-size: 11px;
-}
-
-.terminal-tool {
-  color: var(--trace-blue);
-  font-weight: 600;
-}
-
-.terminal-action {
-  color: var(--trace-fg);
-}
-
-.terminal-node {
-  color: var(--trace-muted);
-  margin-left: auto;
-  font-size: 10px;
-}
-
-.terminal-params {
-  margin: 0;
-  padding: 6px 8px;
-  font-size: 11px;
-  color: #4b5563;
-  background: #fafafa;
-  border-bottom: 1px solid var(--trace-border);
-  white-space: pre-wrap;
-  word-break: break-all;
-  max-height: 120px;
-  overflow: auto;
-}
-
-.terminal-details {
-  border-top: 1px solid transparent;
-}
-
-.terminal-details > summary {
-  padding: 3px 8px;
-  font-size: 10px;
-  color: var(--trace-muted);
-  cursor: pointer;
-  user-select: none;
-}
-
-.terminal-details[open] > summary {
-  border-bottom: 1px solid var(--trace-border);
-}
-
-.terminal-output,
-.terminal-observations,
-.terminal-error,
-.terminal-repairs {
-  padding: 4px 8px;
-  font-size: 11px;
-}
-
-.output-label {
-  color: var(--trace-muted);
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 2px;
-}
-
-.terminal-output pre,
-.terminal-error pre {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: #374151;
-  font-family: var(--trace-mono);
-}
-
-.terminal-error pre {
-  color: var(--trace-red);
-}
-
-.terminal-observations ul,
-.terminal-repairs ul {
-  margin: 0;
-  padding-left: 16px;
-}
-
-.terminal-observations li,
-.terminal-repairs li {
-  color: #4b5563;
-  font-family: var(--trace-mono);
-  word-break: break-word;
-}
-
-/* Run phase final output */
-.phase-final-output {
-  margin-top: 4px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  background: rgba(16, 185, 129, 0.06);
-  border-left: 2px solid var(--trace-green);
-}
-
-.phase-failed .phase-final-output {
-  background: rgba(239, 68, 68, 0.06);
-  border-left-color: var(--trace-red);
-}
-
-.phase-final-output pre {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: var(--trace-mono);
-  font-size: 11px;
-}
-
-/* Planner phase detail */
-.phase-planner-detail {
-  margin-top: 4px;
-  padding: 4px 8px;
-  background: rgba(239, 68, 68, 0.06);
-  border-left: 2px solid var(--trace-red);
-  border-radius: 4px;
-}
-
-.phase-planner-detail pre {
-  margin: 0;
-  white-space: pre-wrap;
-  font-family: var(--trace-mono);
-  font-size: 11px;
-  color: var(--trace-red);
-}
-
-/* Dark theme — 跟随 prefers-color-scheme（MessageBody.vue 同款策略） */
+/* Dark theme — 跟随 prefers-color-scheme */
 @media (prefers-color-scheme: dark) {
-  .agent-run-trace {
-    --trace-fg: #e5e7eb;
-    --trace-muted: #9ca3af;
-    --trace-border: #374151;
-    --trace-bg: #1f2937;
+  .art-trace {
+    --art-fg: #e5e7eb;
+    --art-muted: #9ca3af;
+    --art-muted-2: #6b7280;
   }
-
-  .trace-header {
-    background: rgba(255, 255, 255, 0.03);
+  .art-title,
+  .art-intent {
+    color: #e5e7eb;
   }
-
-  .phase-terminal {
-    background: #111827;
-  }
-
-  .terminal-header {
+  .art-params,
+  .art-out {
     background: rgba(255, 255, 255, 0.04);
-  }
-
-  .terminal-params {
-    background: #0b1220;
     color: #d1d5db;
   }
-
-  .terminal-output pre,
-  .terminal-observations li,
-  .terminal-repairs li {
+  .art-final {
+    background: rgba(16, 185, 129, 0.08);
     color: #d1d5db;
   }
-
-  .trace-mermaid {
-    background: #0b1220;
+  .art-obs li,
+  .art-repairs li {
+    color: #9ca3af;
   }
-  .phase-permission-chip.perm-session {
-    background: rgba(59, 130, 246, 0.25);
+  .art-tool-body {
+    border-left-color: rgba(255, 255, 255, 0.15);
+  }
+  .art-perm.perm-session {
     color: #93c5fd;
+    background: rgba(59, 130, 246, 0.2);
   }
-  .phase-permission-chip.perm-persistent {
-    background: rgba(16, 185, 129, 0.25);
+  .art-perm.perm-persistent {
     color: #6ee7b7;
-  }
-  .phase-auto-approve-btn {
     background: rgba(16, 185, 129, 0.2);
+  }
+  .art-auto-btn {
     color: #6ee7b7;
     border-color: rgba(16, 185, 129, 0.5);
   }
