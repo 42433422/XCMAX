@@ -3721,6 +3721,52 @@ def test_reconcile_absorbed_para_merge_closes_update_branch_content_conflict_ope
     assert _resume_review_qa_candidate(memory) is None
 
 
+def test_reconcile_absorbed_para_merge_closes_branch_preserving_infra_open_item():
+    from pathlib import Path
+
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        reconcile_absorbed_para_merge_remediations,
+    )
+
+    policy_path = "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py"
+    detail = (
+        "devfleet/cursor/sub-1-864d41: Error: bot merge checks failed or unavailable: "
+        "Command failed: gh pr checks 979 --watch --fail-fast --interval 10 --repo 42433422/XCMAX"
+    )
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-864d41",
+                "detail": detail,
+                "kind": "automated_remediation",
+                "para_task_id": "task-gh-checks-absorb",
+                "reason": "para_merge_conflict",
+                "resume_from_clean_baseline": False,
+                "run_id": "run-gh-checks-absorb",
+                "task_id": "task-gh-checks-absorb",
+            }
+        ],
+    }
+
+    result = reconcile_absorbed_para_merge_remediations(
+        memory,
+        repo_root=Path("/tmp/repo"),
+        run_git=_absorbed_git_runner(policy_path, "864d41"),
+    )
+
+    assert result == {
+        "changed": True,
+        "closed_count": 1,
+        "closed_task_ids": ["task-gh-checks-absorb"],
+    }
+    assert memory["open_items"] == []
+    assert memory["closed_items"][0]["resolution_reason"] == (
+        "rejected_branch_production_delta_absorbed_by_main"
+    )
+    assert _resume_review_qa_candidate(memory) is None
+
+
 def test_reconcile_absorbed_para_merge_closes_ai_review_pr_closed_open_item():
     from pathlib import Path
 

@@ -299,7 +299,13 @@ def reconcile_absorbed_para_merge_remediations(
         empty_files = is_changed_files_empty_detail(detail)
         closed_without_merge = is_pr_closed_without_merge_detail(detail)
         update_branch_conflict = is_update_branch_content_conflict_detail(detail)
-        if not empty_files and not closed_without_merge and not update_branch_conflict:
+        branch_preserving_infra = is_branch_preserving_para_merge_failure_detail(detail)
+        if (
+            not empty_files
+            and not closed_without_merge
+            and not update_branch_conflict
+            and not branch_preserving_infra
+        ):
             continue
         rejected_branch = str(item.get("rejected_branch") or item.get("branch") or "").strip()
         cache_key = f"{base_ref}\0{rejected_branch}"
