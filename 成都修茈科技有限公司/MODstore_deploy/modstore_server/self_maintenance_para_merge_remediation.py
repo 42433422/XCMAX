@@ -100,7 +100,7 @@ def resume_from_clean_baseline_for_para_merge(reason: str, detail: str) -> bool:
         if is_changed_files_empty_detail(detail) or is_pr_closed_without_merge_detail(detail):
             return False
         return True
-    if normalized == "para_merge_conflict" and (
+    if normalized.startswith("para_merge_") and (
         is_branch_preserving_para_merge_failure_detail(detail)
         or is_changed_files_empty_detail(detail)
         or is_pr_closed_without_merge_detail(detail)
