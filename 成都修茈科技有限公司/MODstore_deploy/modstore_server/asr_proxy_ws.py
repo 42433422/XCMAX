@@ -178,9 +178,13 @@ async def _proxy_to_mimo(client_ws: WebSocket) -> None:
         finally:
             recognizing = False
 
+    client_open = True
     try:
-        while True:
+        while client_open:
             msg = await client_ws.receive()
+            if msg.get("type") == "websocket.disconnect":
+                client_open = False
+                break
             if "bytes" in msg and msg["bytes"] is not None:
                 pcm_chunks.append(bytes(msg["bytes"]))
                 continue
@@ -202,6 +206,7 @@ async def _proxy_to_mimo(client_ws: WebSocket) -> None:
             if body.get("is_speaking") is False:
                 await finalize_utterance()
     except WebSocketDisconnect:
+        client_open = False
         await finalize_utterance()
     except Exception as exc:
         logger.info("mimo asr proxy error: %s", exc)
@@ -242,8 +247,12 @@ async def _proxy_to_funasr(client_ws: WebSocket) -> None:
             text_count = 0
             bytes_count = 0
             try:
-                while True:
+                client_open = True
+                while client_open:
                     msg = await client_ws.receive()
+                    if msg.get("type") == "websocket.disconnect":
+                        client_open = False
+                        break
                     if "text" in msg:
                         data = msg["text"]
                         text_count += 1
