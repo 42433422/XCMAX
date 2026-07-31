@@ -2859,7 +2859,7 @@ def test_reconcile_real_para_merge_sha_closes_matching_open_item():
 
 
 @pytest.mark.parametrize(
-    ("task", "expected_reason"),
+    ("task", "expected_reason", "expected_resume_from_clean_baseline"),
     [
         (
             {
@@ -2871,6 +2871,7 @@ def test_reconcile_real_para_merge_sha_closes_matching_open_item():
                 },
             },
             "para_merge_conflict",
+            True,
         ),
         (
             {
@@ -2878,6 +2879,7 @@ def test_reconcile_real_para_merge_sha_closes_matching_open_item():
                 "fail_reason": "required CI checks failed",
             },
             "para_merge_task_failed",
+            True,
         ),
         (
             {
@@ -2889,10 +2891,13 @@ def test_reconcile_real_para_merge_sha_closes_matching_open_item():
                 },
             },
             "para_merge_conflict",
+            False,
         ),
     ],
 )
-def test_reconcile_terminal_para_merge_failure_restarts_from_clean_base(task, expected_reason):
+def test_reconcile_terminal_para_merge_failure_restarts_from_clean_base(
+    task, expected_reason, expected_resume_from_clean_baseline
+):
     memory = {
         "closed_items": [],
         "open_items": [],
@@ -2914,7 +2919,9 @@ def test_reconcile_terminal_para_merge_failure_restarts_from_clean_base(task, ex
 
     assert result["remediation_added"] == 1
     assert memory["open_items"][0]["reason"] == expected_reason
-    assert memory["open_items"][0]["resume_from_clean_baseline"] is True
+    assert (
+        memory["open_items"][0]["resume_from_clean_baseline"] is expected_resume_from_clean_baseline
+    )
     candidate = _resume_review_qa_candidate(memory)
     assert candidate["failed_steps"] == ["code"]
     assert "continue_existing_code_task" not in candidate
@@ -3529,6 +3536,66 @@ def test_reconcile_absorbed_para_merge_closes_pr_closed_even_when_resume_flag_fa
     assert result["changed"] is True
     assert result["closed_count"] == 1
     assert memory["open_items"] == []
+
+
+def test_reconcile_absorbed_para_merge_closes_ai_review_pr_closed_open_item():
+    from pathlib import Path
+
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        reconcile_absorbed_para_merge_remediations,
+    )
+
+    policy_path = "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py"
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-review",
+                "detail": "devfleet/cursor/sub-1-review: Error: PR #1020 closed without merge",
+                "kind": "automated_remediation",
+                "para_task_id": "task-review",
+                "reason": "para_ai_review_rejected",
+                "resume_from_clean_baseline": True,
+                "review_feedback": "devfleet/cursor/sub-1-review: REJECT: missing regression test",
+                "run_id": "run-review",
+                "source": "ai-review-veto",
+                "task_id": "task-review",
+            }
+        ],
+    }
+
+    result = reconcile_absorbed_para_merge_remediations(
+        memory,
+        repo_root=Path("/tmp/repo"),
+        run_git=_absorbed_git_runner(policy_path, "review"),
+    )
+
+    assert result == {
+        "changed": True,
+        "closed_count": 1,
+        "closed_task_ids": ["task-review"],
+    }
+    assert memory["open_items"] == []
+    assert memory["closed_items"][0]["resolution_reason"] == (
+        "rejected_branch_production_delta_absorbed_by_main"
+    )
+    assert _resume_review_qa_candidate(memory) is None
+
+
+def test_resume_from_clean_baseline_false_for_ai_review_pr_closed_without_merge():
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        resume_from_clean_baseline_for_para_merge,
+    )
+
+    detail = "devfleet/cursor/sub-1-review: Error: PR #1020 closed without merge"
+    assert resume_from_clean_baseline_for_para_merge("para_ai_review_rejected", detail) is False
+    assert (
+        resume_from_clean_baseline_for_para_merge(
+            "para_ai_review_rejected",
+            "devfleet/cursor/sub-1-review: REJECT: missing regression test",
+        )
+        is True
+    )
 
 
 def test_terminal_merge_remediation_prompt_mentions_closed_pr_and_main_supersession():
