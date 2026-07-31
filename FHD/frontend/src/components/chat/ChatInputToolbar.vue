@@ -39,7 +39,7 @@
     >
     <label
       v-if="clientModeTiersUiEnabled"
-      class="intent-pro-toggle"
+      class="input-toolbar-toggle input-toolbar-toggle--intent intent-pro-toggle"
       data-tutorial-id="intent-pro-experience-toggle"
       :title="$t('chat.proIntentTitle')"
     >
@@ -52,8 +52,8 @@
     </label>
     <label
       data-tutorial-id="star-auto-refresh-toggle"
+      class="input-toolbar-toggle input-toolbar-toggle--star"
       :title="$t('chat.starAutoRefreshTitle')"
-      style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:var(--app-font-size-caption);color:var(--app-text-muted);cursor:pointer;user-select:none;"
     >
       <input
         type="checkbox"
@@ -63,8 +63,8 @@
       {{ $t('chat.starAutoRefresh') }}
     </label>
     <label
+      class="input-toolbar-toggle input-toolbar-toggle--tts"
       :title="$t('chat.ttsTitle')"
-      style="margin-left:12px;display:flex;align-items:center;gap:6px;font-size:var(--app-font-size-caption);color:var(--app-text-muted);cursor:pointer;user-select:none;"
     >
       <input
         type="checkbox"
@@ -136,5 +136,24 @@ function onAutoRefreshChange(event: Event) {
 .input-toolbar {
   align-items: center;
   flex-wrap: wrap;
+}
+
+.input-toolbar-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--app-font-size-caption);
+  color: var(--app-text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.input-toolbar-toggle--star {
+  margin-left: auto;
+}
+
+.input-toolbar-toggle--intent,
+.input-toolbar-toggle--tts {
+  margin-left: 12px;
 }
 </style>

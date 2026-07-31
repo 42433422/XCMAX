@@ -1,15 +1,14 @@
-"""REST API：/api/desktop/automation/*"""
+"""REST API：/api/desktop/automation/*（从 app/fastapi_routes/desktop_automation.py 迁移）。"""
 
 from __future__ import annotations
 
 import logging
 from typing import Any
 
+from drivers import MacDriver, MCPDriver, WindowsDriver
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-
-from app.desktop_automation.service import get_desktop_automation_service
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from service import get_desktop_automation_service
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +41,6 @@ class RegisterProfileBody(BaseModel):
 @router.get("/status")
 def automation_status():
     svc = get_desktop_automation_service()
-    from app.desktop_automation.drivers import MacDriver, MCPDriver, WindowsDriver
-
     return {
         "success": True,
         "data": {
@@ -126,7 +123,7 @@ async def bootstrap_app(body: BootstrapBody):
                     },
                 ]
                 return await mod_employee_complete(messages, max_tokens=2048, temperature=0.1)
-            except RECOVERABLE_ERRORS as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.warning("vision api bootstrap failed: %s", exc)
                 return "{}"
 

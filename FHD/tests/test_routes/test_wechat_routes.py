@@ -35,30 +35,16 @@ class TestSendWechatViaAutomation:
             assert "安全校验" in result["message"]
 
     def test_automation_success(self):
-        with (
-            patch(
-                "app.services.wechat_passive_group_monitor.assert_safe_outbound_group_reply",
-                return_value="safe msg",
-            ),
-            patch("app.desktop_automation.service.get_desktop_automation_service") as mock_svc,
-        ):
-            mock_svc.return_value.send_wechat_message.return_value = {"success": True}
+        with patch("app.services.wechat_sender.send_wechat_message") as mock_send:
+            mock_send.return_value = {"success": True, "message": "已发送给 张三"}
             result = routes._send_wechat_via_automation("张三", "test msg")
             assert result["success"] is True
 
     def test_automation_fail_non_windows(self):
-        with (
-            patch(
-                "app.services.wechat_passive_group_monitor.assert_safe_outbound_group_reply",
-                return_value="safe msg",
-            ),
-            patch("app.desktop_automation.service.get_desktop_automation_service") as mock_svc,
-            patch("app.fastapi_routes.domains.wechat.routes.sys") as mock_sys,
-        ):
-            mock_sys.platform = "darwin"
-            mock_svc.return_value.send_wechat_message.return_value = {
+        with patch("app.services.wechat_sender.send_wechat_message") as mock_send:
+            mock_send.return_value = {
                 "success": False,
-                "error": "not available",
+                "message": "wechat automation mod not installed and CV fallback is Windows-only",
             }
             result = routes._send_wechat_via_automation("张三", "test msg")
             assert result["success"] is False

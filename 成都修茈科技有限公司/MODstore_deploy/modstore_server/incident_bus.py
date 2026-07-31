@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List
@@ -23,6 +24,20 @@ from modstore_server.models import (
 from modstore_server.platform_llm_scope import platform_llm_scoped
 
 logger = logging.getLogger(__name__)
+
+# 2026-07-31 修复：uvicorn --workers 4 + uvloop 下，裸 threading.Thread(daemon=True)
+# 会被 asyncio 事件循环干扰，导致 daemon thread 不执行（dispatched_count 停在 0）。
+# 用模块级 ThreadPoolExecutor 替代，线程池有任务队列和线程管理，更稳健。
+_DISPATCH_EXECUTOR = ThreadPoolExecutor(
+    max_workers=4,
+    thread_name_prefix="incident-dispatch",
+)
+
+# dispatch_pending_incidents 的并发限制（避免 PG 连接池耗尽）
+_PENDING_DISPATCH_EXECUTOR = ThreadPoolExecutor(
+    max_workers=2,
+    thread_name_prefix="incident-pending",
+)
 
 _NON_DISPATCH_EVENT_TYPES = frozenset(
     {
@@ -203,18 +218,18 @@ def publish(
 
     def _run_dispatch() -> None:
         try:
+            logger.info("incident_bus: dispatch thread started event_id=%s", eid)
             _dispatch_incident(eid)
+            logger.info("incident_bus: dispatch thread completed event_id=%s", eid)
         except Exception:  # noqa: BLE001
             logger.exception("dispatch incident id=%s failed", eid)
 
     if sync_dispatch:
         _run_dispatch()
     else:
-        threading.Thread(
-            target=_run_dispatch,
-            daemon=True,
-            name=f"incident-dispatch-{eid}",
-        ).start()
+        # 2026-07-31 修复：改用 ThreadPoolExecutor 替代裸 threading.Thread(daemon=True)。
+        # 旧实现在 uvicorn --workers 4 + uvloop 下 daemon thread 不执行（dispatched_count 停在 0）。
+        _DISPATCH_EXECUTOR.submit(_run_dispatch)
     return True
 
 
@@ -339,6 +354,66 @@ def _dispatch_incident(event_id: int) -> None:
                     event_id,
                     exc_info=True,
                 )
+
+
+def dispatch_pending_incidents(*, max_age_seconds: int = 3600, limit: int = 5) -> int:
+    """扫描 dispatched_count=0 的 incident_events 并补派发。
+
+    2026-07-31 修复：uvicorn --workers 4 + uvloop 下 daemon thread/ThreadPoolExecutor
+    不执行，导致 incident_event 写入后 dispatched_count 停在 0。此函数由
+    modstore-scheduler.service 定期调用（每 30 秒），作为 dispatch 的兜底机制。
+
+    只处理创建超过 30 秒但仍未派发的事件（避免和 publish 里的异步 dispatch 竞争）。
+    用 thread 异步执行 dispatch，避免阻塞 scheduler（dispatch 可能跑 15 分钟）。
+    _dispatch_incident 内部有 claim_incident_for_node 机制避免重复 dispatch。
+    """
+    sf = get_session_factory()
+    pending_ids: list[int] = []
+    with sf() as session:
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=max_age_seconds)
+        grace = datetime.now(timezone.utc) - timedelta(seconds=30)
+        rows = (
+            session.query(IncidentEvent.id, IncidentEvent.event_type)
+            .filter(
+                IncidentEvent.dispatched_count == 0,
+                IncidentEvent.created_at >= cutoff,
+                IncidentEvent.created_at < grace,
+                IncidentEvent.event_type.notin_(_NON_DISPATCH_EVENT_TYPES),
+            )
+            .order_by(IncidentEvent.id.asc())
+            .limit(limit)
+            .all()
+        )
+        pending_ids = [int(r[0]) for r in rows]
+    if not pending_ids:
+        return 0
+    logger.info(
+        "incident_bus: dispatch_pending_incidents found %d pending events: %s",
+        len(pending_ids),
+        pending_ids,
+    )
+    submitted = 0
+    for eid in pending_ids:
+        # 用 ThreadPoolExecutor 限制并发（max_workers=2），避免 PG 连接池耗尽
+        # _dispatch_incident 内部有 claim_incident_for_node 机制避免重复 dispatch
+        _PENDING_DISPATCH_EXECUTOR.submit(_safe_dispatch_incident, eid)
+        submitted += 1
+    logger.info(
+        "incident_bus: dispatch_pending_incidents submitted %d/%d async dispatch threads",
+        submitted,
+        len(pending_ids),
+    )
+    return submitted
+
+
+def _safe_dispatch_incident(event_id: int) -> None:
+    """_dispatch_incident 的安全包装，捕获所有异常并记录日志。"""
+    try:
+        logger.info("incident_bus: pending dispatch thread started event_id=%s", event_id)
+        _dispatch_incident(event_id)
+        logger.info("incident_bus: pending dispatch thread completed event_id=%s", event_id)
+    except Exception:  # noqa: BLE001
+        logger.exception("dispatch_pending_incidents event_id=%s failed", event_id)
 
 
 def _extract_routing_plan(exec_result: Any) -> List[Dict[str, Any]]:

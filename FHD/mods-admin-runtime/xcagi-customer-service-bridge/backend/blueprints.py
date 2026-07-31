@@ -614,7 +614,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         )
         from app.services.user_cs_intake_notice import _primary_contact_name
         from app.services.user_cs_pipeline import load_pipeline
-        from app.desktop_automation.service import get_desktop_automation_service
+        from app.services.wechat_sender import send_wechat_message
 
         uid = int(body.market_user_id)
         rows = list_change_requests(uid, username=body.username)
@@ -628,12 +628,10 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         client = str(doc.get("username") or body.username or "")
         text = build_change_request_wechat_message(row, client_name=client)
         try:
-            send_result = get_desktop_automation_service().send_wechat_message(contact, text)
+            send_result = send_wechat_message(contact, text)
         except Exception as exc:
             return {"success": False, "error": str(exc)[:300]}
-        ok = bool(send_result.get("success")) and bool(
-            send_result.get("message_sent", send_result.get("success"))
-        )
+        ok = bool(send_result.get("success"))
         if ok:
             mark_change_request_wechat_notified(uid, ticket_id, username=body.username)
         return {
@@ -896,7 +894,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         from app.services.user_cs_delivery import build_delivery_progress_message, ensure_delivery_on_doc
         from app.services.user_cs_intake_notice import _primary_contact_name
         from app.services.user_cs_pipeline import load_pipeline, save_pipeline
-        from app.desktop_automation.service import get_desktop_automation_service
+        from app.services.wechat_sender import send_wechat_message
 
         uid = int(body.market_user_id)
         doc = ensure_delivery_on_doc(load_pipeline(uid, username=body.username))
@@ -908,12 +906,10 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             client_name=str(doc.get("username") or body.username or ""),
         )
         try:
-            send_result = get_desktop_automation_service().send_wechat_message(contact, text)
+            send_result = send_wechat_message(contact, text)
         except Exception as exc:
             return {"success": False, "error": str(exc)[:300]}
-        ok = bool(send_result.get("success")) and bool(
-            send_result.get("message_sent", send_result.get("success"))
-        )
+        ok = bool(send_result.get("success"))
         if ok:
             delivery = dict(doc.get("delivery") or {})
             delivery["last_progress_notice_at"] = datetime.now(timezone.utc).isoformat()
@@ -1125,7 +1121,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/wechat/send")
     async def user_cs_wechat_send(body: WechatSendBody):
-        from app.desktop_automation.service import get_desktop_automation_service
+        from app.services.wechat_sender import send_wechat_message
         from app.services.wechat_group_customer_bridge import get_bindings_for_user
 
         uid = int(body.market_user_id)
@@ -1137,9 +1133,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         if not contact:
             return {"success": False, "error": "请先保存群聊绑定，或确认群名称"}
 
-        svc = get_desktop_automation_service()
-        result = svc.send_wechat_message(contact, body.message.strip())
-        sent = bool(result.get("success")) and bool(result.get("message_sent", result.get("success")))
+        result = send_wechat_message(contact, body.message.strip())
+        sent = bool(result.get("success"))
         if sent:
             try:
                 from app.services.user_cs_pipeline import load_pipeline, save_pipeline

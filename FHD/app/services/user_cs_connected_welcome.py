@@ -29,10 +29,10 @@ def maybe_send_connected_welcome(
         "后续需求采集、合同与交付进度都会在此群同步，请随时 @ 我。"
     )
     try:
-        from app.desktop_automation.service import get_desktop_automation_service
+        from app.services.wechat_sender import send_wechat_message
 
-        result = get_desktop_automation_service().send_wechat_message(contact, text)
-        ok = bool(result.get("success")) and bool(result.get("message_sent", result.get("success")))
+        result = send_wechat_message(contact, text)
+        ok = bool(result.get("success"))
     except RECOVERABLE_ERRORS as exc:
         return {"sent": False, "error": str(exc)[:300]}
     if ok:

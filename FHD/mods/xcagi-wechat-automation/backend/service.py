@@ -1,18 +1,21 @@
-"""桌面自动化服务的安全占位实现。
+"""微信桌面自动化服务（从 app/desktop_automation/service.py 迁移）。
 
-见 :mod:`app.desktop_automation` 的包级说明。本占位**不连接任何真实桌面**：所有动作型
-方法返回 ``{"success": False, ...}``。真实桌面构建可用同名模块覆盖。
+安全占位实现：所有动作型方法返回 ``{"success": False, ...}``。
+真实桌面构建可用同名模块覆盖本文件，提供真实 RPA 驱动。
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-_UNAVAILABLE = "desktop automation backend not installed in this build"
+_UNAVAILABLE = "wechat automation mod installed but no real driver backend provided"
 
 
 class DesktopAutomationService:
-    """安全占位：永远报告「后端不可用」，绝不伪造执行结果。"""
+    """安全占位：永远报告「驱动未实现」，绝不伪造执行结果。
+
+    真实驱动实现应覆盖本类，``available = True`` 并实现各动作方法。
+    """
 
     available: bool = False
 
@@ -52,7 +55,7 @@ _service: DesktopAutomationService | None = None
 
 
 def get_desktop_automation_service() -> DesktopAutomationService:
-    """返回进程级单例占位服务。"""
+    """返回进程级单例服务。"""
     global _service
     if _service is None:
         _service = DesktopAutomationService()

@@ -51,6 +51,7 @@ _REQUIRED_CORE_JOB_IDS = frozenset(
         "incident_collect_extended",
         "incident_collect_nginx",
         "incident_collect_pytest_cursor",
+        "incident_dispatch_pending",
         "inbox_approval_poll",
         "kb_self_maintenance",
         "payment_orders_expire",
@@ -444,6 +445,30 @@ def start_scheduler() -> None:
         max_instances=1,
     )
     _dead_letter_reconcile_job()
+
+    def _incident_dispatch_pending_job() -> None:
+        """2026-07-31: 兜底派发 dispatched_count=0 的 incident_events。
+
+        uvicorn --workers 4 + uvloop 下 daemon thread/ThreadPoolExecutor 不执行，
+        此 job 由 scheduler 每 30 秒扫描补派发。
+        """
+        try:
+            from modstore_server.incident_bus import dispatch_pending_incidents
+
+            dispatch_pending_incidents(max_age_seconds=3600, limit=5)
+        except Exception:
+            logger.exception("incident_dispatch_pending job failed")
+
+    _scheduler.add_job(
+        _incident_dispatch_pending_job,
+        IntervalTrigger(seconds=max(15, _env_int("MODSTORE_INCIDENT_DISPATCH_PENDING_INTERVAL", 30))),
+        id="incident_dispatch_pending",
+        replace_existing=True,
+        misfire_grace_time=_cleanup_misfire_grace_time(),
+        coalesce=True,
+        max_instances=1,
+    )
+    _incident_dispatch_pending_job()
 
     def _customer_value_reconcile_job() -> None:
         if not _env_bool("MODSTORE_CUSTOMER_VALUE_RECONCILE_ENABLED", True):

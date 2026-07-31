@@ -34,13 +34,13 @@ def test_notify_dry_run_no_push(mock_load, mock_save, items):
     "app.infrastructure.persistence.contract_expiry_notification_repository.get_contract_expiry_notification_repository"
 )
 @patch("app.services.user_cs_intake_notice._primary_contact_name", return_value="wx-contact")
-@patch("app.desktop_automation.service.get_desktop_automation_service")
+@patch("app.services.wechat_sender.send_wechat_message")
 @patch("app.services.user_cs_pipeline.save_pipeline")
 @patch("app.services.user_cs_pipeline.load_pipeline")
 def test_notify_push_success(
     mock_load,
     mock_save,
-    mock_desktop,
+    mock_send,
     mock_contact,
     mock_repo_factory,
     items,
@@ -50,10 +50,7 @@ def test_notify_push_success(
     repo.was_recently_notified.return_value = False
     repo.insert_notification.return_value = {"id": 1, "push_status": "success"}
     mock_repo_factory.return_value = repo
-    mock_desktop.return_value.send_wechat_message.return_value = {
-        "success": True,
-        "message_sent": True,
-    }
+    mock_send.return_value = {"success": True, "message": "已发送给 wx-contact"}
 
     out = notify_contract_expiry_items(items, dry_run=False, push=True)
     assert out["pushed"] == 1

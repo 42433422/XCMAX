@@ -17,45 +17,14 @@ router = APIRouter(tags=["legacy-wechat"], deprecated=True)
 
 
 def _send_wechat_via_automation(contact_name: str, message: str) -> dict:
-    """优先 DesktopAutomationService，失败则回退 wechat_cv_send。"""
-    from app.desktop_automation.service import get_desktop_automation_service
-    from app.services.wechat_passive_group_monitor import assert_safe_outbound_group_reply
+    """委托 wechat_sender（安全校验 + Windows CV 回退）。
 
-    safe = assert_safe_outbound_group_reply(message)
-    if not safe:
-        return {
-            "success": False,
-            "message": "消息内容未通过客服发送安全校验（疑似思考过程或任务复述），已拦截",
-        }
-    message = safe
+    真实 RPA 驱动由可选的 xcagi-wechat-automation Mod 提供；未安装时本函数仍可
+    通过 wechat_cv_send 完成发送（仅 Windows）。
+    """
+    from app.services.wechat_sender import send_wechat_message
 
-    auto_result = get_desktop_automation_service().send_wechat_message(contact_name, message)
-    if auto_result.get("success"):
-        return {"success": True, "message": f"已发送给 {contact_name}", "result": auto_result}
-
-    if not sys.platform.startswith("win"):
-        return {
-            "success": False,
-            "message": auto_result.get("error") or auto_result.get("message") or "发送失败",
-            "result": auto_result,
-        }
-
-    from app.utils.path_utils import get_resource_path
-
-    sys_path = get_resource_path("wechat-decrypt")
-    if sys_path not in sys.path:
-        sys.path.insert(0, sys_path)
-
-    from resources.wechat_cv.wechat_cv_send import search_and_send_by_cv
-
-    result = search_and_send_by_cv(contact_name, message, delay=1.0, use_ocr=True)
-    if result.get("status") == "success":
-        return {"success": True, "message": f"已发送给 {contact_name}", "result": result}
-    return {
-        "success": False,
-        "message": f"发送失败: {auto_result.get('error') or result.get('message', '未知错误')}",
-        "result": {"automation": auto_result, "cv": result},
-    }
+    return send_wechat_message(contact_name, message)
 
 
 def _secret_key() -> str:

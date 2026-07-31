@@ -1,6 +1,6 @@
-"""桌面自动化驱动占位。
+"""桌面自动化驱动占位（从 app/desktop_automation/drivers.py 迁移）。
 
-后端未安装时所有驱动 :meth:`is_available` 恒为 ``False``；真实桌面构建以同名模块覆盖。
+真实桌面构建以同名模块覆盖：实现 ``is_available`` 返回 True 并补全动作方法。
 """
 
 from __future__ import annotations

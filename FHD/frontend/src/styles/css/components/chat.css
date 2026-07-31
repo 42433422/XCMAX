@@ -17,9 +17,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background:
-        radial-gradient(circle at 20% 0%, rgba(14, 116, 217, 0.08), transparent 32%),
-        rgba(255, 255, 255, 0.42);
+    background: #fff;
 }
 
 .chat-messages-shell {
@@ -43,8 +41,8 @@
     max-width: min(85%, 760px);
     min-width: min(100%, 220px);
     flex-shrink: 0; /* 避免 flex 列布局把气泡压扁导致内容被裁切 */
-    padding: 14px 18px 12px;
-    border-radius: 18px;
+    padding: 14px 16px 12px;
+    border-radius: 14px;
     position: relative;
     line-height: 1.65;
     animation: chatMessageEnter 220ms ease both;
@@ -218,20 +216,18 @@
     background: #1e3a5f;
     color: white;
     border-bottom-right-radius: 6px;
-    box-shadow: 0 6px 16px rgba(30, 58, 95, 0.18);
+    box-shadow: 0 3px 10px rgba(30, 58, 95, 0.16);
 }
 
 .message.ai {
     align-self: flex-start;
     width: fit-content;
     max-width: min(85%, 640px);
-    padding: 16px 18px 14px;
+    padding: 14px 16px 12px;
     background: rgba(255, 255, 255, 0.94);
     border: 1px solid rgba(213, 222, 235, 0.9);
     border-bottom-left-radius: 6px;
-    box-shadow:
-        0 12px 30px rgba(15, 23, 42, 0.08),
-        inset 0 1px 0 rgba(255, 255, 255, 0.78);
+    box-shadow: none;
 }
 
 .context-summary {
@@ -398,9 +394,10 @@
 
 .input-area {
     padding: 14px 20px 18px;
-    background: rgba(255, 255, 255, 0.76);
+    background: rgba(255, 255, 255, 0.96);
     border-top: 1px solid rgba(213, 222, 235, 0.72);
-    backdrop-filter: blur(18px);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .input-toolbar {
@@ -411,16 +408,23 @@
 
 .toolbar-btn {
     padding: 6px 12px;
-    border: none;
-    border-radius: 4px;
-    background: #f0f0f0;
+    border: 1px solid rgba(203, 213, 225, 0.9);
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #1f2937;
     cursor: pointer;
     font-size: 13px;
     transition: background 0.2s;
 }
 
 .toolbar-btn:hover {
-    background: #e0e0e0;
+    background: #eef2f7;
+    border-color: rgba(148, 163, 184, 0.95);
+}
+
+.toolbar-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 .intent-pro-toggle {
@@ -454,8 +458,8 @@
 .input-wrapper textarea {
     flex: 1;
     border: 1px solid rgba(190, 203, 221, 0.95);
-    border-radius: 16px;
-    padding: 13px 14px;
+    border-radius: 12px;
+    padding: 12px 14px;
     resize: none;
     font-family: inherit;
     background: rgba(255, 255, 255, 0.92);
@@ -657,25 +661,10 @@
     margin-top: 8px;
 }
 
-/* ChatView.vue layout (Phase 7 extract) */
-.input-area {
-  flex-shrink: 0;
-}
-
-.input-toolbar {
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-#messageInput {
-  min-height: 54px;
-  max-height: 150px;
-}
-
 .voice-input-btn,
 .send-message-btn {
-  min-height: 48px;
-  border-radius: 16px;
+  min-height: 44px;
+  border-radius: 12px;
 }
 
 .send-message-btn {

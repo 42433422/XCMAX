@@ -33,15 +33,6 @@ def register_infrastructure_routes(app: FastAPI) -> None:
         )
         logger.warning("Desktop runtime routes skipped: %s", e)
     try:
-        from app.fastapi_routes.desktop_automation import router as desktop_automation_router
-
-        app.include_router(desktop_automation_router)
-        record_runtime_component(app, "desktop_automation_routes", ok=True)
-        logger.info("Registered desktop_automation_router (/api/desktop/automation/*)")
-    except RECOVERABLE_ERRORS as e:
-        record_runtime_component(app, "desktop_automation_routes", ok=False, detail=str(e))
-        logger.warning("Desktop automation routes skipped: %s", e)
-    try:
         from app.fastapi_routes.gdpr import router as gdpr_router
 
         app.include_router(gdpr_router)

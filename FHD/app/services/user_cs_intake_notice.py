@@ -72,10 +72,10 @@ def maybe_send_intake_form_notice(
     form_url = build_intake_form_url(uid, brief=brief, client_name=contact)
     text = build_intake_form_notice_message(contact_name=contact, form_url=form_url, brief=brief)
     try:
-        from app.desktop_automation.service import get_desktop_automation_service
+        from app.services.wechat_sender import send_wechat_message
 
-        result = get_desktop_automation_service().send_wechat_message(contact, text)
-        ok = bool(result.get("success")) and bool(result.get("message_sent", result.get("success")))
+        result = send_wechat_message(contact, text)
+        ok = bool(result.get("success"))
     except RECOVERABLE_ERRORS as exc:
         return {"sent": False, "error": str(exc)[:300]}
     if ok:

@@ -126,15 +126,14 @@ def notify_contract_expiry_items(
         push_status = "failed"
         error_message: str | None = None
         try:
-            from app.desktop_automation.service import get_desktop_automation_service
+            from app.services.wechat_sender import send_wechat_message
 
-            svc = get_desktop_automation_service()
-            result = svc.send_wechat_message(contact, f"合同将于 {end_date} 到期，请及时续签。")
-            if result.get("success") and result.get("message_sent"):
+            result = send_wechat_message(contact, f"合同将于 {end_date} 到期，请及时续签。")
+            if result.get("success"):
                 push_status = "success"
                 pushed += 1
             else:
-                error_message = str(result.get("error") or "push failed")
+                error_message = str(result.get("message") or result.get("error") or "push failed")
                 failed += 1
         except RECOVERABLE_ERRORS as exc:
             error_message = str(exc)

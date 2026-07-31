@@ -165,25 +165,25 @@ def test_wechat_tasks(mock_get: MagicMock, wechat_client: TestClient) -> None:
     assert r.json()["total"] == 0
 
 
-@patch("app.desktop_automation.service.get_desktop_automation_service")
+@patch("app.services.wechat_sender.send_wechat_message")
 @patch("app.services.wechat_passive_group_monitor.assert_safe_outbound_group_reply")
 def test_send_wechat_via_automation_success(mock_safe: MagicMock, mock_auto: MagicMock) -> None:
     from app.fastapi_routes.domains.wechat import routes as wechat_routes
 
     mock_safe.return_value = "hello"
-    mock_auto.return_value.send_wechat_message.return_value = {"success": True}
+    mock_auto.return_value = {"success": True}
     out = wechat_routes._send_wechat_via_automation("Bob", "hello")
     assert out["success"] is True
 
 
-@patch("app.desktop_automation.service.get_desktop_automation_service")
 @patch("app.services.wechat_passive_group_monitor.assert_safe_outbound_group_reply")
-def test_send_wechat_blocked(mock_safe: MagicMock, mock_auto: MagicMock) -> None:
+def test_send_wechat_blocked(mock_safe: MagicMock) -> None:
     from app.fastapi_routes.domains.wechat import routes as wechat_routes
 
     mock_safe.return_value = None
     out = wechat_routes._send_wechat_via_automation("Bob", "bad")
     assert out["success"] is False
+    assert "安全校验" in out["message"]
 
 
 def test_wechat_secret_key(monkeypatch: pytest.MonkeyPatch) -> None:

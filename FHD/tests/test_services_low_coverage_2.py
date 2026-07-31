@@ -33,63 +33,63 @@ class TestMaybeSendConnectedWelcome:
         assert result["sent"] is False
         assert "未找到" in result["error"]
 
-    @patch("app.desktop_automation.service.get_desktop_automation_service")
+    @patch("app.services.wechat_sender.send_wechat_message")
     @patch("app.services.user_cs_intake_notice._primary_contact_name")
     @patch("app.services.user_cs_pipeline.load_pipeline")
     @patch("app.services.user_cs_pipeline.save_pipeline")
     def test_send_success(self, mock_save, mock_load, mock_contact, mock_auto):
         mock_load.return_value = {"stage": "idle"}
         mock_contact.return_value = "张三"
-        mock_auto.return_value.send_wechat_message.return_value = {
+        mock_auto.return_value = {
             "success": True,
             "message_sent": True,
         }
         result = maybe_send_connected_welcome(1)
         assert result["sent"] is True
 
-    @patch("app.desktop_automation.service.get_desktop_automation_service")
+    @patch("app.services.wechat_sender.send_wechat_message")
     @patch("app.services.user_cs_intake_notice._primary_contact_name")
     @patch("app.services.user_cs_pipeline.load_pipeline")
     def test_send_failure(self, mock_load, mock_contact, mock_auto):
         mock_load.return_value = {}
         mock_contact.return_value = "张三"
-        mock_auto.return_value.send_wechat_message.return_value = {"success": False}
+        mock_auto.return_value = {"success": False}
         result = maybe_send_connected_welcome(1)
         assert result["sent"] is False
 
-    @patch("app.desktop_automation.service.get_desktop_automation_service")
+    @patch("app.services.wechat_sender.send_wechat_message")
     @patch("app.services.user_cs_intake_notice._primary_contact_name")
     @patch("app.services.user_cs_pipeline.load_pipeline")
     def test_send_exception(self, mock_load, mock_contact, mock_auto):
         mock_load.return_value = {}
         mock_contact.return_value = "张三"
-        mock_auto.return_value.send_wechat_message.side_effect = ConnectionError("network error")
+        mock_auto.side_effect = ConnectionError("network error")
         result = maybe_send_connected_welcome(1)
         assert result["sent"] is False
         assert "network error" in result["error"]
 
-    @patch("app.desktop_automation.service.get_desktop_automation_service")
+    @patch("app.services.wechat_sender.send_wechat_message")
     @patch("app.services.user_cs_intake_notice._primary_contact_name")
     @patch("app.services.user_cs_pipeline.load_pipeline")
     @patch("app.services.user_cs_pipeline.save_pipeline")
     def test_force_resend(self, mock_save, mock_load, mock_contact, mock_auto):
         mock_load.return_value = {"connected_welcome_sent": True}
         mock_contact.return_value = "张三"
-        mock_auto.return_value.send_wechat_message.return_value = {
+        mock_auto.return_value = {
             "success": True,
             "message_sent": True,
         }
         result = maybe_send_connected_welcome(1, force=True)
         assert result["sent"] is True
 
-    @patch("app.desktop_automation.service.get_desktop_automation_service")
+    @patch("app.services.wechat_sender.send_wechat_message")
     @patch("app.services.user_cs_intake_notice._primary_contact_name")
     @patch("app.services.user_cs_pipeline.load_pipeline")
     @patch("app.services.user_cs_pipeline.save_pipeline")
     def test_stage_updated_on_success(self, mock_save, mock_load, mock_contact, mock_auto):
         mock_load.return_value = {"stage": "idle"}
         mock_contact.return_value = "张三"
-        mock_auto.return_value.send_wechat_message.return_value = {
+        mock_auto.return_value = {
             "success": True,
             "message_sent": True,
         }
@@ -97,14 +97,14 @@ class TestMaybeSendConnectedWelcome:
         saved_doc = mock_save.call_args[0][0]
         assert saved_doc["stage"] == "connected"
 
-    @patch("app.desktop_automation.service.get_desktop_automation_service")
+    @patch("app.services.wechat_sender.send_wechat_message")
     @patch("app.services.user_cs_intake_notice._primary_contact_name")
     @patch("app.services.user_cs_pipeline.load_pipeline")
     @patch("app.services.user_cs_pipeline.save_pipeline")
     def test_stage_not_overwritten(self, mock_save, mock_load, mock_contact, mock_auto):
         mock_load.return_value = {"stage": "intake_done"}
         mock_contact.return_value = "张三"
-        mock_auto.return_value.send_wechat_message.return_value = {
+        mock_auto.return_value = {
             "success": True,
             "message_sent": True,
         }
