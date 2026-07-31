@@ -149,8 +149,6 @@ class TestXiaocPersona:
         ):
             assert retrieve_knowledge_for_mode("公司产品", mode="external") == []
 
-<<<<<<< HEAD
-=======
     def test_local_public_retrieval_queries_public_published_scope(self, monkeypatch, tmp_path):
         import sys
         import types
@@ -200,7 +198,6 @@ class TestXiaocPersona:
             "knowledge_owner": "chengdu-xiuci-technology",
         }
 
->>>>>>> resolve/codex/repair-module-linkage-20260728
 
 class TestKnowledgeFormat:
     def test_format_knowledge_block(self):
