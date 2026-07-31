@@ -4,6 +4,12 @@
   "version": "1.0.0.0",
   "author": "成都修茈科技有限公司",
   "description": "通用业务 API 门面 + Repository 可插拔 + Mod 业务页（K+/O+ 物理视图；L 仓储边界）。",
+  "mod_level": 2,
+  "mod_kind": "system_mod",
+  "parent_mod_id": "xcagi-host-core",
+  "composite_owner": "xcagi-erp",
+  "lifecycle": "bundled",
+  "market_installable": false,
   "primary": false,
   "dependencies": {
     "xcagi": ">=1.0.0.0"

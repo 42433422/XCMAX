@@ -1,5 +1,11 @@
 {
   "id": "xcagi-neuro-bus-bridge",
+  "mod_level": 2,
+  "mod_kind": "system_mod",
+  "parent_mod_id": "xcagi-host-core",
+  "composite_owner": "xcagi-erp",
+  "lifecycle": "bundled",
+  "market_installable": false,
   "name": "NeuroBus 事件桥接 Mod",
   "version": "1.0.0.0",
   "author": "成都修茈科技有限公司",

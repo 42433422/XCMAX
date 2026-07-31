@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "virtual_ids": {
+    "host_core": "xcagi-host-core",
+    "unified_erp": "xcagi-erp"
+  },
+  "levels": {
+    "1": {
+      "kind": "host_core",
+      "label": "宿主核心",
+      "artifact": "host_core",
+      "market_installable": false,
+      "lifecycle": "bundled"
+    },
+    "2": {
+      "kind": "system_mod",
+      "label": "系统 Mod",
+      "artifact": "mod",
+      "market_installable": false,
+      "lifecycle": "bundled"
+    },
+    "3": {
+      "kind": "domain_mod",
+      "label": "行业/定制 Mod",
+      "artifact": "mod",
+      "market_installable": false,
+      "lifecycle": "seeded_or_admin",
+      "children": ["industry_mod", "custom_mod"]
+    },
+    "4": {
+      "kind": "employee_pack",
+      "label": "可插拔员工",
+      "artifact": "employee_pack",
+      "market_installable": true,
+      "lifecycle": "market"
+    }
+  },
+  "kinds": {
+    "host_core": {"level": 1, "parent_levels": [], "market_installable": false},
+    "system_mod": {"level": 2, "parent_levels": [1], "market_installable": false},
+    "industry_mod": {"level": 3, "parent_levels": [2, 3], "market_installable": false},
+    "custom_mod": {"level": 3, "parent_levels": [2, 3], "market_installable": false},
+    "employee_pack": {"level": 4, "parent_levels": [3], "market_installable": true}
+  },
+  "composites": {
+    "xcagi-erp": {
+      "kind": "system_mod",
+      "level": 2,
+      "label": "统一 ERP 系统 Mod",
+      "lifecycle": "bundled",
+      "market_installable": false,
+      "legacy_root_id": "xcagi-erp-domain-bridge",
+      "members": [
+        "xcagi-planner-bridge",
+        "xcagi-erp-domain-bridge",
+        "xcagi-workflow-visualization-bridge",
+        "xcagi-approval-bridge",
+        "xcagi-lan-license-bridge",
+        "xcagi-model-payment-bridge",
+        "xcagi-neuro-bus-bridge",
+        "xcagi-office-employee-pack-bridge",
+        "xcagi-customer-service-bridge",
+        "xcagi-core-workflow-employees",
+        "xcagi-planner-excel-tools"
+      ],
+      "fixed_employee_mod_ids": ["xcagi-core-workflow-employees"],
+      "compatibility": "legacy bridge ids remain valid for internal routes and providers"
+    }
+  },
+  "legacy_classification": {
+    "system_mod_ids": [
+      "xcagi-planner-bridge",
+      "xcagi-erp-domain-bridge",
+      "xcagi-workflow-visualization-bridge",
+      "xcagi-approval-bridge",
+      "xcagi-lan-license-bridge",
+      "xcagi-model-payment-bridge",
+      "xcagi-neuro-bus-bridge",
+      "xcagi-office-employee-pack-bridge",
+      "xcagi-customer-service-bridge",
+      "xcagi-core-workflow-employees",
+      "xcagi-planner-excel-tools"
+    ],
+    "industry_mod_ids": ["attendance-industry", "coating-industry"],
+    "custom_mod_ids": ["taiyangniao-pro", "sz-qsm-pro"],
+    "legacy_employee_mod_ids": ["wechat-contacts-ai-employee", "lan-gate-ai-employee"]
+  },
+  "compatibility": {
+    "canonical_aliases": {
+      "xcagi-erp": "xcagi-erp-domain-bridge"
+    }
+  }
+}

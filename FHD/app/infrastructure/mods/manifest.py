@@ -11,6 +11,7 @@ from typing import Any
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .artifact_constants import ARTIFACT_MOD, normalize_artifact
+from .mod_levels import canonical_mod_id, descriptor_for_manifest
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,20 @@ class ModMetadata:
     # 例如 entity/query_title/starter_pack 等，未声明时由 industry 字段推导。
     ui_labels: dict[str, Any] = field(default_factory=dict)
     ui_starter_pack: list[dict[str, Any]] = field(default_factory=list)
+    # Mod 分层 SSOT：L1 宿主核心 / L2 系统 / L3 行业或定制 / L4 员工。
+    # 旧 manifest 没有这些字段时由 mod_levels 兼容表推导，保证迁移期间仍可加载。
+    mod_level: int = 0
+    mod_kind: str = ""
+    parent_mod_id: str = ""
+    parent_mod_ids: tuple[str, ...] = field(default_factory=tuple)
+    lifecycle: str = "legacy"
+    market_installable: bool = False
+    employee_mode: str = ""
+    fixed_employees: tuple[str, ...] = field(default_factory=tuple)
+    employee_slots: tuple[str, ...] = field(default_factory=tuple)
+    composite_owner: str = ""
+    internal_component: bool = False
+    legacy_layer: bool = False
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], mod_path: str = "") -> "ModMetadata":
@@ -121,6 +136,8 @@ class ModMetadata:
             else []
         )
 
+        layer = descriptor_for_manifest(data)
+
         return cls(
             id=data.get("id", ""),
             name=data.get("name", ""),
@@ -145,6 +162,18 @@ class ModMetadata:
             industry=industry_block,
             ui_labels=ui_labels,
             ui_starter_pack=ui_starter_pack,
+            mod_level=layer.level,
+            mod_kind=layer.kind,
+            parent_mod_id=layer.parent_mod_id,
+            parent_mod_ids=layer.parent_mod_ids,
+            lifecycle=layer.lifecycle,
+            market_installable=layer.market_installable,
+            employee_mode=layer.employee_mode,
+            fixed_employees=layer.fixed_employees,
+            employee_slots=layer.employee_slots,
+            composite_owner=layer.composite_owner,
+            internal_component=layer.internal_component,
+            legacy_layer=layer.legacy,
         )
 
 
@@ -210,6 +239,17 @@ def validate_dependencies(metadata: ModMetadata, loaded_mods: list[str]) -> bool
                 metadata.id,
                 dep_id,
                 version_spec,
+            )
+            return False
+    for parent_id in metadata.parent_mod_ids:
+        canonical_parent = canonical_mod_id(parent_id)
+        if canonical_parent in {"xcagi-host-core", "xcagi", "xcagi-erp"}:
+            continue
+        if canonical_parent not in loaded_mods:
+            logger.warning(
+                "Mod %s parent %s is not loaded",
+                metadata.id,
+                canonical_parent,
             )
             return False
     return True

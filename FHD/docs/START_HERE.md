@@ -38,7 +38,7 @@
 | 1 | [`QUICK_START.md`](QUICK_START.md) | 5 分钟跑通宿主 + MOD |
 | 2 | [`guides/快速启动说明.md`](guides/快速启动说明.md) | 桌面 / Docker 命令速查 |
 | 3 | [`guides/PRODUCT_USER_FLOW.md`](guides/PRODUCT_USER_FLOW.md) | 安装 → 首启 → 行业 MOD → 日常使用 |
-| 4 | [`DELIVERABLE_PRODUCT.md`](DELIVERABLE_PRODUCT.md) | 交付物清单与验收 API |
+| 4 | [`DELIVERABLE_PRODUCT.md`](DELIVERABLE_PRODUCT.md) · [`customer/ACCEPTANCE_GENERIC_1.0-A.md`](customer/ACCEPTANCE_GENERIC_1.0-A.md) | 交付物清单与验收 API；**1.0-A 首样板=通用** |
 | 5 | [`guides/RELEASE_TWO_SKUS.md`](guides/RELEASE_TWO_SKUS.md) | enterprise 为当前主发版；personal 仅兼容 / 冻结 |
 | 6 | [`guides/DESKTOP_DATABASE_DELIVERY.md`](guides/DESKTOP_DATABASE_DELIVERY.md) | 桌面 SQLite 交付 |
 | 7 | [`guides/DEPLOYMENT_GUIDE.md`](guides/DEPLOYMENT_GUIDE.md) | 生产部署 |

@@ -22,6 +22,11 @@ from app.application.mod_store_catalog_app import (
     normalize_package_zip_path,
     sync_modstore_library_to_local,
 )
+from app.infrastructure.mods.mod_store_layering import (
+    market_catalog_row_allowed,
+    mod_layer_fields,
+    validate_market_package,
+)
 from app.shell.mods_catalog import list_mod_items
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -149,6 +154,7 @@ def _item_to_mod_info(d: dict[str, Any]) -> dict[str, Any]:
         "dependencies": {},
         "source": "local",
         "catalog_base_url": catalog_base_url(),
+        **mod_layer_fields(d, mid),
     }
 
 
@@ -202,6 +208,7 @@ def _remote_to_mod_info(d: dict[str, Any], installed_ids: set[str]) -> dict[str,
             d.get("store_collection") or commerce.get("collection") or ""
         ).strip(),
         "public_listing": bool(d.get("public_listing")),
+        **mod_layer_fields(d, mid),
     }
     if not row_out["store_collection"]:
         row_out["store_collection"] = catalog_store_collection(row_out)
@@ -217,6 +224,8 @@ async def _remote_rows() -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     try:
         async for row in iter_catalog_packages():
+            if not market_catalog_row_allowed(row):
+                continue
             info = _remote_to_mod_info(row, installed_ids)
             mid = str(info.get("id") or "").strip()
             if not mid:
@@ -252,6 +261,8 @@ async def _map_market_catalog_page(
             continue
         row = market_item_to_package_row(raw)
         if not row or not is_public_catalog_row(row):
+            continue
+        if not market_catalog_row_allowed(row):
             continue
         info = _remote_to_mod_info(row, installed_ids)
         hint = collection_hint or str((row.get("commerce") or {}).get("collection") or "").strip()
@@ -424,30 +435,17 @@ async def _install_from_catalog(
             Path(tmp_path),
         )
         normalized_path = _normalize_package_zip(tmp_path)
-        from app.infrastructure.mods.artifact_constants import ARTIFACT_EMPLOYEE_PACK
-        from app.infrastructure.mods.artifact_package import peek_artifact
+        rejection = validate_market_package(normalized_path, pkg_id)
+        if rejection:
+            message, data = rejection
+            return ModStoreInstallResult(success=False, message=message, data=data)
 
-        if peek_artifact(normalized_path) == ARTIFACT_EMPLOYEE_PACK:
-            from app.infrastructure.mods.employee_registry import get_employee_registry
+        from app.infrastructure.mods.employee_registry import get_employee_registry
 
-            ok, message = get_employee_registry().install_from_package(
-                normalized_path, verify_signature=False
-            )
-            return ModStoreInstallResult(success=bool(ok), message=message, data=None)
-
-        from app.infrastructure.mods.mod_manager import get_mod_manager
-
-        ok, message, metadata = get_mod_manager().install_mod_package(
-            normalized_path,
-            verify_signature=False,
-            activate=activate,
+        ok, message = get_employee_registry().install_from_package(
+            normalized_path, verify_signature=False
         )
-        data = (
-            dataclasses.asdict(metadata)
-            if metadata and dataclasses.is_dataclass(metadata)
-            else None
-        )
-        return ModStoreInstallResult(success=bool(ok), message=message, data=data)
+        return ModStoreInstallResult(success=bool(ok), message=message, data=None)
     finally:
         for p in {tmp_path, normalized_path}:
             try:
@@ -463,6 +461,7 @@ async def mod_store_catalog() -> ModStoreCatalogResponse:
     return ModStoreCatalogResponse(
         data=ModStoreCatalogPayload(installed=installed, available=rows, indexed_count=len(rows))
     )
+
 
 
 @router.get("/market-catalog", response_model=ModStoreMarketCatalogResponse)
@@ -667,7 +666,7 @@ async def mod_store_install(request: Request) -> ModStoreInstallResult:
 
 @router.post("/install-industry-seed", response_model=ModStoreInstallResult)
 async def mod_store_install_industry_seed(request: Request) -> ModStoreInstallResult:
-    """L2：从 industry-seeds 池安装所选行业中性 Mod；池缺失时 Catalog 兜底。"""
+    """L3：只从内置 industry-seeds 池安装所选行业 Mod，不走市场下载。"""
     payload = await _request_payload(request)
     raw = _safe_text(
         payload.get("industry_id") or payload.get("mod_id") or payload.get("industryId")

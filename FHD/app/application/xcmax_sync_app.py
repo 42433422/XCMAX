@@ -33,6 +33,7 @@ def record_change(
 
 
 def apply_inbox(limit: int = 200, **kwargs: Any) -> Any:
+    from app.services import private_mod_delivery_applier  # noqa: F401
     from app.services.xcmax_sync_service import apply_inbox as _apply
 
     return _apply(limit=limit, **kwargs)

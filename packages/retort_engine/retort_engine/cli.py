@@ -48,6 +48,7 @@ from retort_engine.external_process_adjudication import (
 from retort_engine.heterogeneous_absorption_replay import (
     build_heterogeneous_absorption_replay,
 )
+from retort_engine.metric_search import EvalSpec, MetricSearchConfig, run_metric_search
 from retort_engine.multi_project_absorption_replay import (
     build_multi_project_absorption_replay,
 )
