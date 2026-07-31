@@ -411,4 +411,96 @@ describe('PersyKnowledgeView', () => {
     await flushPromises()
     expect(wrapper.find('#persy-text').exists()).toBe(true)
   })
+
+  it('rejects pending memory, resets graph, and asks about a selected node', async () => {
+    mocks.rejectMemory.mockResolvedValue({
+      success: true,
+      memory: { ...pendingMemory, status: 'rejected' },
+    })
+    const wrapper = mount(PersyKnowledgeView, { global: { plugins: [createPinia()] } })
+    await flushPromises()
+
+    const memoryTab = wrapper.findAll('.view-switch button').find((button) =>
+      button.text().includes('记忆'),
+    )
+    await memoryTab!.trigger('click')
+    await wrapper.get('button[aria-label="忽略记忆"]').trigger('click')
+    await flushPromises()
+    expect(mocks.rejectMemory).toHaveBeenCalledWith(
+      'persy-knowledge',
+      'mem-1',
+      'user_rejected_from_persy',
+    )
+
+    const graphTab = wrapper.findAll('.view-switch button').find((button) =>
+      button.text().includes('图谱'),
+    )
+    await graphTab!.trigger('click')
+    await flushPromises()
+    await wrapper.get('button[aria-label="复位图谱"]').trigger('click')
+    const graph = wrapper.getComponent({ name: 'PersyKnowledgeGraphStub' })
+    await graph.vm.$emit('selectNode', 'memory:mem-1')
+    await flushPromises()
+    const ask = wrapper.findAll('button').find((button) => button.text().includes('围绕此节点提问'))
+    expect(ask).toBeTruthy()
+    await ask!.trigger('click')
+    await flushPromises()
+    expect((wrapper.get('input[aria-label="向 Persy 提问"]').element as HTMLInputElement).value).toContain(
+      '用户的偏好是下午沟通',
+    )
+  })
+
+  it('archives a published public document from the source list', async () => {
+    const { isAdminConsoleSpa } = await import('@/utils/adminConsoleUrl')
+    vi.mocked(isAdminConsoleSpa).mockReturnValue(true)
+    const published = {
+      document_id: 'public-live-1',
+      tenant_id: 'public',
+      source: 'public-live.md',
+      metadata: { publication_status: 'published' },
+    }
+    mocks.omniscient.mockResolvedValue({
+      success: true,
+      document_count: 1,
+      chunk_count: 1,
+      dataset_count: 1,
+      datasets: {
+        'persy-knowledge': {
+          document_count: 1,
+          chunk_count: 1,
+          documents: [published],
+        },
+      },
+    })
+    mocks.status.mockResolvedValue({
+      success: true,
+      dataset_id: 'persy-knowledge',
+      document_count: 1,
+      chunk_count: 1,
+      documents: [published],
+    })
+    mocks.setDocumentPublication.mockResolvedValue({
+      success: true,
+      publication_status: 'archived',
+    })
+    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('资料已过期需要修订')
+
+    const wrapper = mount(PersyKnowledgeView, { global: { plugins: [createPinia()] } })
+    await flushPromises()
+    const sourceTab = wrapper.findAll('.view-switch button').find((button) =>
+      button.text().includes('来源'),
+    )
+    await sourceTab!.trigger('click')
+    await flushPromises()
+    await wrapper.get('button[aria-label="下线公开资料"]').trigger('click')
+    await flushPromises()
+    expect(mocks.setDocumentPublication).toHaveBeenCalledWith(
+      'persy-knowledge',
+      'public-live-1',
+      'archived',
+      '资料已过期需要修订',
+      'published',
+    )
+    prompt.mockRestore()
+  })
 })
