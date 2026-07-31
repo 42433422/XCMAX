@@ -1,4 +1,5 @@
 """Shipment label output path helpers (extracted for arch-fitness size gate)."""
+
 from __future__ import annotations
 
 import os
@@ -24,9 +25,6 @@ def _current_label_owner_user_id() -> int | None:
         return None
 
 
-
-
-
 def _current_label_tenant_id() -> int | None:
     try:
         from app.infrastructure.tenant_scope import current_tenant_id
@@ -34,9 +32,6 @@ def _current_label_tenant_id() -> int | None:
         return current_tenant_id()
     except (ImportError, TypeError, ValueError, AttributeError):
         return None
-
-
-
 
 
 def _positive_scope_id(value: Any, *, fallback: str) -> str:
@@ -49,9 +44,6 @@ def _positive_scope_id(value: Any, *, fallback: str) -> str:
     return str(normalized) if normalized > 0 else fallback
 
 
-
-
-
 def _safe_label_run_id(value: str | None) -> str:
     raw = str(value or "").strip()
     if not raw:
@@ -59,9 +51,6 @@ def _safe_label_run_id(value: str | None) -> str:
     # A run id is an opaque directory component, never an input path.
     cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", raw).strip("._-")
     return cleaned[:96] or uuid.uuid4().hex
-
-
-
 
 
 def get_shipment_label_output_dir(
@@ -121,6 +110,3 @@ def get_shipment_label_output_dir(
         / label_run_id
     )
     return str(output_dir), label_run_id
-
-
-

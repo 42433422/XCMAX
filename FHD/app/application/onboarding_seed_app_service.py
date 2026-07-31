@@ -80,9 +80,7 @@ def _ensure_product(
     )
     if existing is None:
         existing = (
-            db.query(Product)
-            .filter(Product.tenant_id == tenant_id, Product.name == name)
-            .first()
+            db.query(Product).filter(Product.tenant_id == tenant_id, Product.name == name).first()
         )
     if existing:
         # 补齐型号/单价，避免旧种子缺字段导致查价/开单失败
@@ -126,9 +124,7 @@ def _ensure_product(
 
 def _demo_chat_phrases(*, customer_name: str, print_unit: str, model_number: str) -> dict[str, str]:
     return {
-        "ai_prompt": (
-            f"请列出当前租户下的演示客户「{customer_name}」并一句话总结。"
-        ),
+        "ai_prompt": (f"请列出当前租户下的演示客户「{customer_name}」并一句话总结。"),
         "price_list": f"打印{print_unit}的价格表",
         "shipment": f"打印{print_unit}发货单，编号{model_number}，规格28，一共3桶",
         "product_query": f"查一下{model_number}的价格",
@@ -183,8 +179,7 @@ def seed_onboarding_demo_data(*, tenant_id: int, industry_id: str = "通用") ->
             contact_person = existing_customer.contact_person or "演示联系人"
             contact_phone = existing_customer.contact_phone or "13800000000"
             contact_address = (
-                existing_customer.contact_address
-                or f"{profile.industry_id} · 首启演示地址"
+                existing_customer.contact_address or f"{profile.industry_id} · 首启演示地址"
             )
         else:
             row = Customer(

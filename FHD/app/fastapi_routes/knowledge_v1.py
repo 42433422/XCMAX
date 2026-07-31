@@ -4,6 +4,7 @@ graphs, and user/tenant memory review. Dataset actions continue through the
 unified Agent runtime so permissions, audit records, and run telemetry remain
 consistent with the rest of XCAGI.
 """
+
 from __future__ import annotations
 
 import json
@@ -1255,7 +1256,6 @@ def update_dataset_document_publication(
         cast("dict[str, Any]", _public_dataset_payload(payload)),
         status_code=status_code,
     )
-
 @router.get("/status", response_model=StatusResponse)
 def status(request: Request) -> StatusResponse:
     snap = _knowledge_runtime_snapshot(request)

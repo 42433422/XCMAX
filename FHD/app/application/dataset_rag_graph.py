@@ -1,4 +1,5 @@
 """Dataset RAG knowledge-graph payload helpers (extracted for source-governance)."""
+
 from __future__ import annotations
 
 import hashlib
@@ -359,4 +360,3 @@ def _public_graph_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
         for key, value in dict(metadata or {}).items()
         if not str(key).startswith("_") and str(key) not in {"file_path"}
     }
-

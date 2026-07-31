@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["mod-store"])
 
+
 async def _private_mod_context(request: Request) -> dict[str, Any]:
     """读取当前账号可见的客户私有 Mod，严格复用企业 entitlement。"""
     from app.enterprise.mod_entitlements import (
@@ -145,12 +146,16 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
         projects.append(
             {
                 "mod_id": mod_id,
-                "name": _safe_text(row.get("name") or (delivery or {}).get("customer_brand") or mod_id),
+                "name": _safe_text(
+                    row.get("name") or (delivery or {}).get("customer_brand") or mod_id
+                ),
                 "description": _safe_text(row.get("description") or (delivery or {}).get("notes")),
                 "installed": bool(row),
                 "current_version": local_version,
                 "latest_version": latest_version,
-                "update_available": bool(latest_version and is_newer_version(latest_version, local_version)),
+                "update_available": bool(
+                    latest_version and is_newer_version(latest_version, local_version)
+                ),
                 "update_source": "private_mod_sync" if remote else "unavailable",
                 "business_modules": modules,
                 "ai_employees": employees,
@@ -239,7 +244,11 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
     return ModStoreSimpleResponse(
         success=True,
         message="交付状态已更新",
-        data={"mod_id": mod_id, "tracks": project.get("tracks", {}), "overall_status": overall_status(project)},
+        data={
+            "mod_id": mod_id,
+            "tracks": project.get("tracks", {}),
+            "overall_status": overall_status(project),
+        },
     )
 
 
@@ -280,5 +289,3 @@ async def mod_store_private_mod_update(request: Request) -> ModStoreInstallResul
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-
-

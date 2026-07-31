@@ -31,8 +31,6 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
-
-
 def collect_user_feedback_samples(memory_path: str | Path | None = None) -> list[LearningSample]:
     """Collect reviewer-backed intent samples from user memory feedback history."""
 

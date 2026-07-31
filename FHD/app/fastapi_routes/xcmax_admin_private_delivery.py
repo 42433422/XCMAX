@@ -13,6 +13,7 @@ from app.fastapi_routes.xcmax_admin import (
 
 router = APIRouter(tags=["xcmax-admin"])
 
+
 @router.get("/admin/market/users/{user_id}/private-delivery", response_model=None)
 async def admin_get_user_private_delivery(request: Request, user_id: int):
     """管理端只读查看客户私有 Mod 的双轨交付状态与确认/返工记录。"""
@@ -34,9 +35,9 @@ async def admin_get_user_private_delivery(request: Request, user_id: int):
     if isinstance(upstream, JSONResponse):
         return upstream
     raw_data = upstream.get("data") if isinstance(upstream, dict) else {}
-    raw_mod_ids = (
-        upstream.get("mod_ids") if isinstance(upstream, dict) else None
-    ) or (raw_data.get("mod_ids") if isinstance(raw_data, dict) else None)
+    raw_mod_ids = (upstream.get("mod_ids") if isinstance(upstream, dict) else None) or (
+        raw_data.get("mod_ids") if isinstance(raw_data, dict) else None
+    )
     mod_ids = _clean_string_list(raw_mod_ids)
     names: dict[str, str] = {}
     for mod_id in mod_ids:
@@ -52,7 +53,9 @@ async def admin_get_user_private_delivery(request: Request, user_id: int):
         projects.append(
             {
                 **project,
-                "name": str(project.get("name") or names.get(project.get("mod_id"), project.get("mod_id"))),
+                "name": str(
+                    project.get("name") or names.get(project.get("mod_id"), project.get("mod_id"))
+                ),
                 "overall_status": status,
                 "overall_label": {
                     "production": "制作中",
@@ -79,4 +82,3 @@ async def admin_get_user_private_delivery(request: Request, user_id: int):
             "read_only": True,
         },
     }
-

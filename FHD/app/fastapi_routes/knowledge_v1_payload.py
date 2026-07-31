@@ -1,4 +1,5 @@
 """Knowledge payload sanitizers (extracted for source-governance)."""
+
 from __future__ import annotations
 
 import json
@@ -48,4 +49,3 @@ def _public_dataset_payload(value: Any) -> Any:
     if isinstance(value, list):
         return [_public_dataset_payload(item) for item in value]
     return value
-

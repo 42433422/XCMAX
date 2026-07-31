@@ -41,7 +41,6 @@ from app.utils.path_utils import get_app_data_dir, get_base_dir, get_resource_pa
 logger = logging.getLogger(__name__)
 
 
-
 class SimpleLabelGenerator:
     """简单的标签生成器，使用 PIL 直接绘制标签图片"""
 

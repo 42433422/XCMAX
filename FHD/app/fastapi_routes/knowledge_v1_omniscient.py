@@ -1,4 +1,5 @@
 """Omniscient knowledge routes (extracted from knowledge_v1 for source-governance)."""
+
 from __future__ import annotations
 
 from typing import Any, cast
@@ -110,4 +111,3 @@ def omniscient_query(req: QueryRequest, request: Request) -> dict[str, Any]:
         "omniscient": True,
         "dataset_hits": len({str(c.get("dataset_id") or "") for c in top if c.get("dataset_id")}),
     }
-

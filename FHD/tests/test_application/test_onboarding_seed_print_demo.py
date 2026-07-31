@@ -12,7 +12,13 @@ from app.application.onboarding_seed_app_service import (
 
 
 def test_seed_onboarding_creates_purchase_unit_and_phrases() -> None:
-    customer = MagicMock(id=1, customer_name="XC 演示客户", contact_person="张三", contact_phone="1", contact_address="a")
+    customer = MagicMock(
+        id=1,
+        customer_name="XC 演示客户",
+        contact_person="张三",
+        contact_phone="1",
+        contact_address="a",
+    )
     product = MagicMock(id=2, name="XC 演示产品", model_number=PRINT_DEMO_MODEL, price=12.5)
     unit = MagicMock(id=3, unit_name="XC 演示客户")
     print_unit = MagicMock(id=4, unit_name=PRINT_DEMO_UNIT_NAME)

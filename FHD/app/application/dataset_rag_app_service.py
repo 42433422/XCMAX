@@ -407,7 +407,6 @@ class DatasetRagApplicationService:
             access_context=access_context,
         )
 
-
     def diff_versions(
         self,
         *,
@@ -830,9 +829,7 @@ class DatasetRagApplicationService:
             chunks = list(state.chunks) if state is not None else []
             index_snapshot = dict(state.index or {}) if state is not None else {}
         include_public_scope = bool(
-            include_public
-            and tenant_key
-            and tenant_key != PUBLIC_KNOWLEDGE_TENANT_ID
+            include_public and tenant_key and tenant_key != PUBLIC_KNOWLEDGE_TENANT_ID
         )
         candidate_limit = max(50, max(1, min(int(top_k), 50)) * 4)
         vector_candidates = self._query_vector_index_candidates(
@@ -858,9 +855,7 @@ class DatasetRagApplicationService:
             if public_candidates is None:
                 vector_candidates = None
             else:
-                vector_candidates = _deduplicate_chunks(
-                    [*vector_candidates, *public_candidates]
-                )
+                vector_candidates = _deduplicate_chunks([*vector_candidates, *public_candidates])
         used_vector_backend = vector_candidates is not None
         if vector_candidates is not None:
             chunks = vector_candidates
@@ -897,9 +892,7 @@ class DatasetRagApplicationService:
                 "answer": "",
                 "tenant_id": tenant_key,
                 "include_public": include_public_scope,
-                "visible_tenant_ids": _visible_tenant_ids(
-                    tenant_key, include_public_scope
-                ),
+                "visible_tenant_ids": _visible_tenant_ids(tenant_key, include_public_scope),
                 "version": str(version or ""),
                 "vector_backend_used": used_vector_backend,
                 "index": index_snapshot,
@@ -916,9 +909,7 @@ class DatasetRagApplicationService:
             "chunks": [_chunk_to_dict(c, public=True) for c in top],
             "tenant_id": tenant_key,
             "include_public": include_public_scope,
-            "visible_tenant_ids": _visible_tenant_ids(
-                tenant_key, include_public_scope
-            ),
+            "visible_tenant_ids": _visible_tenant_ids(tenant_key, include_public_scope),
             "version": str(version or ""),
             "metadata_filter": metadata_filter or {},
             "rerank": bool(rerank),
@@ -2072,7 +2063,14 @@ def _chunk_to_dict(chunk: RetrievedChunk, *, public: bool = False) -> dict[str, 
     metadata = dict(chunk.metadata or {})
     retrieval_method = str(chunk.source or "")
     source = str(metadata.get("source") or chunk.source or "")
-    if retrieval_method in {"hybrid", "vector", "bm25", "hybrid+rerank", "vector+rerank", "bm25+rerank"}:
+    if retrieval_method in {
+        "hybrid",
+        "vector",
+        "bm25",
+        "hybrid+rerank",
+        "vector+rerank",
+        "bm25+rerank",
+    }:
         metadata.setdefault("retrieval_method", retrieval_method)
     if public:
         metadata = {key: value for key, value in metadata.items() if not str(key).startswith("_")}

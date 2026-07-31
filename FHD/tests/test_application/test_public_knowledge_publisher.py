@@ -122,15 +122,13 @@ def test_publish_replaces_public_documents_and_preserves_private_knowledge(
     )
     assert public_status["document_count"] == 13
     assert {document["tenant_id"] for document in public_status["documents"]} == {"public"}
-    assert {
-        document["metadata"]["knowledge_owner"] for document in public_status["documents"]
-    } == {PUBLIC_OWNER_ID}
+    assert {document["metadata"]["knowledge_owner"] for document in public_status["documents"]} == {
+        PUBLIC_OWNER_ID
+    }
     assert {
         document["metadata"]["publication_status"] for document in public_status["documents"]
     } == {"published"}
-    assert all(
-        document["metadata"]["reply_excerpt"] for document in public_status["documents"]
-    )
+    assert all(document["metadata"]["reply_excerpt"] for document in public_status["documents"])
     industry_document = next(
         document
         for document in public_status["documents"]

@@ -463,7 +463,6 @@ async def mod_store_catalog() -> ModStoreCatalogResponse:
     )
 
 
-
 @router.get("/market-catalog", response_model=ModStoreMarketCatalogResponse)
 async def mod_store_market_catalog(
     q: str | None = Query(None),

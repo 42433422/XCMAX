@@ -39,13 +39,18 @@ def test_private_mod_state_is_account_scoped(monkeypatch, tmp_path):
     other_account = delivery.project_state("market:8", "customer-mod")
 
     assert other_account["tracks"]["business"]["status"] == "production"
-    assert delivery.project_state("market:7", "customer-mod")["tracks"]["business"]["status"] == "testing"
+    assert (
+        delivery.project_state("market:7", "customer-mod")["tracks"]["business"]["status"]
+        == "testing"
+    )
 
 
 def test_private_mod_delivery_snapshot_round_trips_for_management_view(monkeypatch, tmp_path):
     _use_temp_state(monkeypatch, tmp_path)
 
-    delivery.set_track_status("market:7", "customer-mod", "employees", "rework", note="补充回归用例")
+    delivery.set_track_status(
+        "market:7", "customer-mod", "employees", "rework", note="补充回归用例"
+    )
     snapshot = delivery.export_account_state("market:7")
     delivery.apply_account_state("market:8", snapshot)
 

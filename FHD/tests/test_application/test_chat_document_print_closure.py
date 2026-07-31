@@ -47,9 +47,7 @@ def test_handle_price_list_export_writes_app_data_shipment_outputs(tmp_path, mon
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
 
     mock_svc = MagicMock()
-    mock_svc.get_all_products.return_value = [
-        {"model_number": "A1", "name": "产品A", "price": 10}
-    ]
+    mock_svc.get_all_products.return_value = [{"model_number": "A1", "name": "产品A", "price": 10}]
 
     with (
         patch("app.application.get_product_app_service", return_value=mock_svc),

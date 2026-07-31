@@ -320,9 +320,7 @@ class FileSystemTemplateStore(TemplateStorePort):
         seen_basenames: set[str] = set()
         for tpl in templates:
             path = str(tpl.get("path") or "").strip()
-            path_key = (
-                os.path.normcase(os.path.abspath(path)) if path else str(tpl.get("id") or "")
-            )
+            path_key = os.path.normcase(os.path.abspath(path)) if path else str(tpl.get("id") or "")
             if path_key in seen_paths:
                 continue
             basename = str(tpl.get("filename") or (os.path.basename(path) if path else "")).strip()

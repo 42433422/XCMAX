@@ -23,6 +23,7 @@ _UNDERSPECIFIED_REQUESTS = frozenset(
     }
 )
 
+
 def _requires_clarification_before_execution(
     message: str,
     context: dict[str, Any] | None = None,

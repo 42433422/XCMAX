@@ -147,11 +147,7 @@ def account_projects(
     names: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """读取某个账号的私有 Mod 项目状态，不为只读查询写入默认项目。"""
-    targets = {
-        str(mod_id or "").strip()
-        for mod_id in (mod_ids or [])
-        if str(mod_id or "").strip()
-    }
+    targets = {str(mod_id or "").strip() for mod_id in (mod_ids or []) if str(mod_id or "").strip()}
     with _STATE_LOCK:
         state = _read_state()
         scope = state.get("accounts", {}).get(scope_key, {})
@@ -379,7 +375,9 @@ async def update_private_mod_from_library(
         from app.infrastructure.mods.package import ModPackage
 
         with tempfile.TemporaryDirectory(prefix="xcagi-private-mod-check-") as check_dir:
-            _, manifest = ModPackage.extract_package(str(tmp_path), check_dir, verify_signature=False)
+            _, manifest = ModPackage.extract_package(
+                str(tmp_path), check_dir, verify_signature=False
+            )
         manifest_id = str(manifest.get("id") or "").strip()
         manifest_version = str(manifest.get("version") or "").strip()
         if manifest_id != mid:

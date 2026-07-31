@@ -1,4 +1,5 @@
 """Auth MFA HTTP routes (extracted for source-governance)."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Body, Request
@@ -8,6 +9,7 @@ from app.http.error_codes import INVALID_INPUT, UNAUTHORIZED, error_envelope
 from app.infrastructure.auth.dependencies import resolve_session_user
 
 router = APIRouter(tags=["auth"])
+
 
 @router.post("/api/auth/mfa/setup")
 def auth_mfa_setup(request: Request):
@@ -79,4 +81,3 @@ def auth_mfa_disable(request: Request, body: dict = Body(default_factory=dict)):
         u.totp_secret = None
         db.commit()
     return {"success": True, "message": "MFA 已关闭"}
-

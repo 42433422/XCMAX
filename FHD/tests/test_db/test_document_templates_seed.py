@@ -58,7 +58,9 @@ def test_ensure_initial_document_templates_inserts_and_skips(
         GENERIC_EXCEL_SEED_SPECS,
     )
 
-    all_keys = {str(s["template_key"]) for s in (*CORE_DOCUMENT_SEED_SPECS, *GENERIC_EXCEL_SEED_SPECS)}
+    all_keys = {
+        str(s["template_key"]) for s in (*CORE_DOCUMENT_SEED_SPECS, *GENERIC_EXCEL_SEED_SPECS)
+    }
     known_keys: set[str] = set()
 
     db = MagicMock()
