@@ -240,71 +240,83 @@
     border: 1px solid #e2e8f0;
 }
 
+/* Trae/Cursor 风格：无框、左侧色条、融入消息流 */
 .thinking-panel {
-    margin-top: 8px;
-    border-top: 1px dashed #d1d5db;
-    padding-top: 8px;
+    margin-top: 6px;
+    padding: 2px 0 2px 10px;
+    border-left: 2px solid #9ca3af;
+    border-top: 0;
 }
 
 .thinking-panel summary {
     cursor: pointer;
-    font-size: 12px;
-    color: #374151;
-    font-weight: 600;
+    font-size: 11px;
+    color: #6b7280;
+    font-weight: 500;
+    list-style: none;
+    display: inline-block;
 }
+.thinking-panel summary::before { content: '▸ '; }
+.thinking-panel[open] summary::before { content: '▾ '; }
+.thinking-panel summary::-webkit-details-marker { display: none; }
 
 .thinking-panel pre {
-    margin: 8px 0 0;
-    padding: 8px 10px;
-    background: #f8fafc;
-    border: 1px solid #e5e7eb;
-    border-radius: 10px;
-    font-size: 12px;
+    margin: 4px 0 0;
+    padding: 4px 6px;
+    background: rgba(127, 127, 127, 0.05);
+    border: 0;
+    border-radius: 3px;
+    font-size: 11px;
     line-height: 1.5;
-    color: #111827;
+    color: #4b5563;
     white-space: pre-wrap;
     word-break: break-word;
+    max-height: 160px;
+    overflow: auto;
 }
 
 .todo-panel {
-    margin-top: 8px;
-    padding: 8px 10px;
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
-    border-radius: 10px;
+    margin-top: 6px;
+    padding: 2px 0 2px 10px;
+    background: transparent;
+    border: 0;
+    border-left: 2px solid #10b981;
+    border-radius: 0;
 }
 
 .todo-panel .todo-title {
-    font-size: 12px;
-    font-weight: 600;
-    color: #1f2937;
-    margin-bottom: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #065f46;
+    margin-bottom: 2px;
 }
 
 .todo-panel ul {
     margin: 0;
-    padding-left: 18px;
+    padding-left: 16px;
 }
 
 .todo-panel li {
-    font-size: 12px;
-    line-height: 1.5;
-    color: #374151;
+    font-size: 11px;
+    line-height: 1.6;
+    color: #4b5563;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .trace-panel {
-    margin-top: 8px;
-    padding: 8px 10px;
-    border: 1px solid #dbeafe;
-    background: #eff6ff;
-    border-radius: 12px;
+    margin-top: 6px;
+    padding: 2px 0 2px 10px;
+    border: 0;
+    background: transparent;
+    border-left: 2px solid #3b82f6;
+    border-radius: 0;
 }
 
 .trace-title {
-    font-size: 12px;
-    font-weight: 600;
-    color: #1e3a8a;
-    margin-bottom: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #1e40af;
+    margin-bottom: 2px;
 }
 
 .trace-stages {
