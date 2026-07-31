@@ -343,6 +343,20 @@ function sanitizeBackendProxyEnv(
       delete next[key]
     }
   }
+  // Chromium OTA bypass does not apply to the Python backend. Without NO_PROXY,
+  // httpx sends market SSE (xiu-ci.com) through Clash/HTTP_PROXY and gets 502,
+  // which surfaces as 流式对话首包超时.
+  const bypass = OTA_PROXY_BYPASS_RULES.split(',')
+    .map(s => s.trim())
+    .filter(s => s && s !== '<local>')
+  const existing = String(next.NO_PROXY || next.no_proxy || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+  const merged = Array.from(new Set([...existing, ...bypass, '::1']))
+  const joined = merged.join(',')
+  next.NO_PROXY = joined
+  next.no_proxy = joined
   return next
 }
 
