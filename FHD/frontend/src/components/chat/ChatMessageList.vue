@@ -47,6 +47,10 @@
             <li v-for="(step, tIdx) in msg.todoSteps" :key="tIdx">{{ step }}</li>
           </ul>
         </div>
+        <AgentRunTrace
+          v-if="msg.role === 'ai' && msg.agentRunTrace && msg.agentRunTrace.phases.length"
+          :trace="msg.agentRunTrace"
+        />
         <ChatApprovalInlineCard
           v-if="msg.role === 'ai' && msg.approvalCard && msg.approvalCard.status === 'pending'"
           :card="msg.approvalCard"
@@ -118,6 +122,7 @@ import type { ChatMessage } from '@/composables/useChatMessages'
 import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown } from '@/utils/sanitizeHtml'
 import { aiMarkdownSourceFromContent } from '@/utils/chatBubbleDisplay'
 import ChatApprovalInlineCard from '@/components/chat/ChatApprovalInlineCard.vue'
+import AgentRunTrace from '@/components/chat/AgentRunTrace.vue'
 
 useI18n()
 

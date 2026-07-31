@@ -9,7 +9,7 @@ import {
   buildChatMessagesKey,
   buildChatSessionMetaKey,
 } from '@/utils/chatStorageKeys'
-import { asRecord, asArray, asString, asBoolean } from '@/utils/typeGuards'
+import { asRecord, asArray, asString, asBoolean, asNumber } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
@@ -211,6 +211,7 @@ export function useChatMessages(sessionId: Ref<string>) {
     if (asArray(row.todoSteps).length) return true
     if (asArray(row.nodeResults).length) return true
     if (row.contextSummary != null && String(row.contextSummary).trim()) return true
+    if (asArray((asRecord(row.agentRunTrace)).phases).length) return true
     return false
   }
 
@@ -266,6 +267,19 @@ export function useChatMessages(sessionId: Ref<string>) {
     const contextSummary = asString(row.contextSummary).trim()
     if (contextSummary) {
       extras.contextSummary = contextSummary
+    }
+
+    const trace = asRecord(row.agentRunTrace)
+    if (asArray(trace.phases).length) {
+      extras.agentRunTrace = {
+        run_id: asString(trace.run_id),
+        intent: asString(trace.intent),
+        status: asString(trace.status) as never,
+        ...(trace.total_duration_ms != null ? { total_duration_ms: asNumber(trace.total_duration_ms, 0) } : {}),
+        ...(trace.last_event_id ? { last_event_id: asString(trace.last_event_id) } : {}),
+        ...(trace.terminal ? { terminal: true } : {}),
+        phases: asArray(trace.phases).map((raw) => asRecord(raw)),
+      } as never
     }
 
     return extras

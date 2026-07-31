@@ -1,4 +1,4 @@
-import { ref, computed, watch, onMounted, onBeforeUnmount, type Ref } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, onUnmounted, type Ref } from 'vue'
 import { useTutorialStore } from '@/stores/tutorial'
 import { useModsStore } from '@/stores/mods'
 import {
@@ -31,7 +31,7 @@ import { useChatExcelContext } from './useChatExcelContext'
 import { useChatRequest } from './useChatRequest'
 import { useChatResponseAttach } from './useChatResponseAttach'
 import { useChatSessionHistory } from './useChatSessionHistory'
-import { useAgentRunEventSync } from './useAgentRunEvents'
+import { useAgentRunEventSync, extractAgentRunId } from './useAgentRunEvents'
 import type { UseChatViewOptions } from './useChatView'
 import type { ChatAutoAction, ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
@@ -222,12 +222,55 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     attachWorkflowTraceToLastAiMessage,
     attachApprovalCardToLastAiMessage,
     attachContextSummaryToLastAiMessage,
+    attachAgentRunTraceToLastAiMessage,
     syncTaskFromChatResponse,
   } = responseAttach
 
-  const { syncAgentRunFromPayload } = useAgentRunEventSync({
+  const { syncAgentRunFromPayload, syncAgentRunEvents } = useAgentRunEventSync({
     upsertTask,
     getLastAiMessageRef,
+  })
+
+  /* -------- AgentRun trace 流式轮询（done 后增量更新直到 terminal） -------- */
+  const tracePollingTimers = new Map<string, ReturnType<typeof setInterval>>()
+
+  function stopTracePolling(runId: string): void {
+    const id = String(runId || '').trim()
+    const t = id ? tracePollingTimers.get(id) : undefined
+    if (t) {
+      clearInterval(t)
+      tracePollingTimers.delete(id)
+    }
+  }
+
+  function startTracePolling(runId: string): void {
+    const id = String(runId || '').trim()
+    if (!id) return
+    if (tracePollingTimers.has(id)) return
+    let ticks = 0
+    const maxTicks = 10 // 最多 8s（800ms × 10）
+    const timer = setInterval(async () => {
+      ticks += 1
+      try {
+        await syncAgentRunEvents(id, '')
+        attachAgentRunTraceToLastAiMessage()
+      } catch {
+        // 轮询失败静默忽略，下次重试
+      }
+      // 检查是否 terminal 或超时
+      const lastAi = [...messages.value].reverse().find((m) => m?.role === 'ai')
+      if (lastAi?.agentRunTrace?.terminal || ticks >= maxTicks) {
+        stopTracePolling(id)
+      }
+    }, 800)
+    tracePollingTimers.set(id, timer)
+  }
+
+  /** 组件卸载时清理所有轮询 */
+  onUnmounted(() => {
+    for (const id of tracePollingTimers.keys()) {
+      stopTracePolling(id)
+    }
   })
 
   const chatRequest = useChatRequest({
@@ -1267,6 +1310,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         attachTodoStepsToLastAiMessage(wrap)
         attachWorkflowTraceToLastAiMessage(wrap)
         attachApprovalCardToLastAiMessage(wrap)
+        attachAgentRunTraceToLastAiMessage()
+        // 启动流式轮询：done 后增量拉 events 更新 trace 直到 terminal
+        startTracePolling(extractAgentRunId(wrap))
         if (wrap.task) {
           showTaskConfirm(wrap.task)
           emitAssistantPush({
@@ -1373,6 +1419,10 @@ export function useChatOrchestration(options: UseChatViewOptions) {
           attachWorkflowTraceToLastAiMessage(lastOk)
           attachApprovalCardToLastAiMessage(lastOk)
         }
+        attachAgentRunTraceToLastAiMessage()
+        // 启动流式轮询：done 后增量拉 events 更新 trace 直到 terminal
+        const batchRunId = extractAgentRunId(lastOk || results[results.length - 1])
+        if (batchRunId) startTracePolling(batchRunId)
         const lastTask = [...results].reverse().find((p) => p.task)
         if (lastTask?.task) {
           showTaskConfirm(lastTask.task)
@@ -1414,6 +1464,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       attachTodoStepsToLastAiMessage(data)
       attachWorkflowTraceToLastAiMessage(data)
       attachApprovalCardToLastAiMessage(data)
+      attachAgentRunTraceToLastAiMessage()
+      // 启动流式轮询：done 后增量拉 events 更新 trace 直到 terminal
+      startTracePolling(extractAgentRunId(data))
 
       if (data.task) {
         showTaskConfirm(data.task)
