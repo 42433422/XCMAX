@@ -346,6 +346,8 @@ export function sanitizeBackendProxyEnv(
   // Desktop backend talks to xiu-ci.com for chat SSE. Clash/HTTP_PROXY often
   // returns 502 HTML for that stream and the UI shows 首包超时. Chromium OTA
   // already has its own PAC bypass; the Python child must not inherit proxies.
+  // Note: Clash TUN (utun + 198.18.0.0/16) still intercepts at OS route level —
+  // env sanitize cannot bypass TUN; prefer DIRECT rule for xiu-ci.com.
   for (const key of [
     'ALL_PROXY',
     'all_proxy',
@@ -863,6 +865,9 @@ async function startBackend(): Promise<void> {
       XCAGI_API_HOST: DESKTOP_BACKEND_BIND_HOST,
       XCAGI_UVICORN_RELOAD: '0',
       XCAGI_GLOBAL_RATE_LIMIT: '0',
+      // Market primary (xiaomi) often failovers before first delta; give headroom.
+      XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC:
+        process.env.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC || '45',
       LOG_LEVEL: process.env.LOG_LEVEL || (app.isPackaged ? 'WARNING' : 'INFO'),
       XCAGI_DESKTOP_FAST_START: '1',
       ...backendEditionEnv(),
