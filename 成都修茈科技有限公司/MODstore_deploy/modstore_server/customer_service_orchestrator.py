@@ -236,9 +236,7 @@ def ensure_session(
         for candidate in candidates:
             previous = json_loads(candidate.context_json, {})
             previous_team_id = (
-                str(previous.get("team_id") or "").strip()
-                if isinstance(previous, dict)
-                else ""
+                str(previous.get("team_id") or "").strip() if isinstance(previous, dict) else ""
             )
             if (
                 isinstance(previous, dict)
@@ -639,9 +637,7 @@ def handle_customer_message(
                     "还不会结案。可继续补充截图或具体页面。"
                 )
         else:
-            xiaoc_reply = _xiaoc_general_reply(
-                issue_text, user=reply_user, db=db, ticketed=True
-            )
+            xiaoc_reply = _xiaoc_general_reply(issue_text, user=reply_user, db=db, ticketed=True)
             if xiaoc_reply:
                 reply = xiaoc_reply
         # 工单摘要同步为真实问题，避免侧栏/详情只剩「提交工单」
@@ -2118,6 +2114,7 @@ def apply_customer_ticket_incident_progress(
         team_rows=team_rows,
         summary_hint=summary_hint,
     )
+
 
 def ticket_lifecycle_payload(
     status: str | None = None,

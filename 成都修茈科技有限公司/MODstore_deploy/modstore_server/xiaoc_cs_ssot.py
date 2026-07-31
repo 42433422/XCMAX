@@ -25,6 +25,7 @@ _DENY_PRIVATE_LABELS = (INTERNAL_DATASET_ID, "user_*", "desktop_private", "tenan
 
 _VISITOR_ID_RE = re.compile(r"^v_[A-Za-z0-9_-]{8,64}$")
 
+
 @dataclass(frozen=True)
 class VisitorIdentity:
     """小C 对话对象（注入 system prompt，不落敏感明文）。"""
@@ -52,11 +53,13 @@ class VisitorIdentity:
             "email_hint": self.email_hint,
         }
 
+
 def sanitize_visitor_id(raw: Optional[str]) -> str:
     v = (raw or "").strip()
     if not v or not _VISITOR_ID_RE.match(v):
         return ""
     return v
+
 
 def sanitize_visitor_label(raw: Optional[str], *, max_len: int = 32) -> str:
     label = re.sub(r"\s+", " ", (raw or "").strip())
@@ -65,6 +68,7 @@ def sanitize_visitor_label(raw: Optional[str], *, max_len: int = 32) -> str:
     # 去掉控制字符
     label = "".join(ch for ch in label if ch.isprintable())
     return label[:max_len]
+
 
 def mask_email(email: Optional[str]) -> str:
     e = (email or "").strip()
@@ -81,6 +85,7 @@ def mask_email(email: Optional[str]) -> str:
         head = local[0] + "***" + local[-1]
     return f"{head}@{domain}"
 
+
 def identity_from_guest(
     *,
     visitor_id: str = "",
@@ -96,12 +101,14 @@ def identity_from_guest(
         visitor_id=vid,
     )
 
+
 def _account_role_of(user: Any) -> str:
     if bool(getattr(user, "is_admin", False)):
         return "admin"
     if bool(getattr(user, "is_enterprise", False)):
         return "enterprise"
     return "user"
+
 
 def _membership_label_for_plan(plan_id: str) -> str:
     """套餐展示名（与 payment_common 会员档对齐；无套餐=普通用户）。"""
@@ -127,6 +134,7 @@ def _membership_label_for_plan(plan_id: str) -> str:
     except Exception:  # noqa: BLE001
         pass
     return pid
+
 
 def active_plan_id_for_user(db: Any, user_id: int) -> str:
     """读取 user_plans 当前生效套餐（账号 SSOT）。"""
@@ -156,6 +164,7 @@ def active_plan_id_for_user(db: Any, user_id: int) -> str:
     except Exception:  # noqa: BLE001
         logger.debug("active_plan_id_for_user failed", exc_info=True)
         return ""
+
 
 def identity_from_user(
     user: Any,
@@ -202,6 +211,7 @@ def identity_from_user(
         email_hint=mask_email(email),
     )
 
+
 def resolve_user_identity(
     user: Any,
     *,
@@ -211,6 +221,7 @@ def resolve_user_identity(
 ) -> VisitorIdentity:
     """已登录用户身份 SSOT：档案 + 管理员/企业旗标 + 当前会员套餐。"""
     return identity_from_user(user, source=source, visitor_id=visitor_id, db=db)
+
 
 def format_visitor_block(identity: Optional[VisitorIdentity]) -> str:
     if identity is None:
@@ -238,6 +249,7 @@ def format_visitor_block(identity: Optional[VisitorIdentity]) -> str:
         "【当前对话对象】" + "；".join(parts) + "。可自然称呼并按会员/角色调整话术（如权益说明），"
         "勿复读整段 ID/内部字段，勿向访客复述敏感信息。"
     )
+
 
 # ─── 权限矩阵（SSOT，代码即契约）────────────────────────────────────
 # external = 官网 / 未登录公开入口（corp-chat、官网浮窗）→ 仅公开库
@@ -395,6 +407,7 @@ XIAOC_PERMISSIONS: Dict[str, Dict[str, Any]] = {
     },
 }
 
+
 def permission_policy(*, mode: str = "admin") -> Dict[str, Any]:
     key = {
         "corp": "external",
@@ -427,11 +440,13 @@ def permission_policy(*, mode: str = "admin") -> Dict[str, Any]:
     }
     return policy
 
+
 def _format_permission_block(mode: str) -> str:
     p = permission_policy(mode=mode)
     allowed = "；".join(p.get("allowed") or [])
     denied = "；".join(p.get("denied") or [])
     return f"【权限契约·{p.get('label')}】\n" f"允许：{allowed}\n" f"禁止：{denied}"
+
 
 XIAOC_CORE_PERSONA = """你是「XC AGI 数字管家」，叫小C，是这个平台的老熟人。
 
@@ -492,6 +507,7 @@ XIAOC_MARKET_CS_DUTIES = """你是市场侧客服入口的小C（与管理端小
 - 若下方提供了「当前对话对象」，可自然称呼，勿复读 ID/内部字段
 """
 
+
 def xiaoc_system_prompt(*, mode: str = "admin") -> str:
     if mode == "corp":
         base = XIAOC_CORE_PERSONA + "\n" + XIAOC_CORP_DUTIES
@@ -502,6 +518,7 @@ def xiaoc_system_prompt(*, mode: str = "admin") -> str:
     base = XIAOC_CORE_PERSONA + "\n" + XIAOC_ADMIN_DUTIES
     return base + "\n\n" + _format_permission_block("admin")
 
+
 def _dataset_label(dataset_id: str) -> str:
     did = (dataset_id or "").strip()
     if did == PUBLIC_DATASET_ID:
@@ -510,6 +527,7 @@ def _dataset_label(dataset_id: str) -> str:
         return "内部库"
     return did or "知识库"
 
+
 def is_private_dataset_id(dataset_id: str) -> bool:
     did = (dataset_id or "").strip().lower()
     if not did:
@@ -517,6 +535,7 @@ def is_private_dataset_id(dataset_id: str) -> bool:
     if did in {"desktop_private", "tenant_private"}:
         return True
     return did.startswith(_PRIVATE_DATASET_PREFIXES)
+
 
 def dataset_allowed_for_mode(dataset_id: str, *, mode: str = "admin") -> bool:
     """Web 小C 硬边界：非 admin 禁内部库；所有 Web 模式禁客户私有/桌面库。"""
@@ -530,6 +549,7 @@ def dataset_allowed_for_mode(dataset_id: str, *, mode: str = "admin") -> bool:
         (permission_policy(mode=key).get("knowledge") or {}).get("datasets", {}).get("read") or []
     )
     return did in allowed
+
 
 def format_knowledge_block(
     chunks: List[Dict[str, Any]],
@@ -555,6 +575,7 @@ def format_knowledge_block(
     if len(lines) <= 1:
         return ""
     return "\n".join(lines)
+
 
 def _http_retrieve(
     query: str, *, top_k: int, dataset_id: str = PUBLIC_DATASET_ID
@@ -601,6 +622,7 @@ def _http_retrieve(
         return []
     chunks = data.get("chunks") if isinstance(data, dict) else None
     return list(chunks) if isinstance(chunks, list) else []
+
 
 def _local_retrieve(
     query: str, *, top_k: int, dataset_id: str = PUBLIC_DATASET_ID
@@ -654,6 +676,7 @@ def _local_retrieve(
             continue
     return []
 
+
 def retrieve_dataset_knowledge(
     query: str, *, dataset_id: str, top_k: int = 5
 ) -> List[Dict[str, Any]]:
@@ -668,9 +691,11 @@ def retrieve_dataset_knowledge(
         return chunks
     return _local_retrieve(q, top_k=k, dataset_id=did)
 
+
 def retrieve_persy_knowledge(query: str, *, top_k: int = 5) -> List[Dict[str, Any]]:
     """兼容旧调用：等同公开库检索。"""
     return retrieve_dataset_knowledge(query, dataset_id=PUBLIC_DATASET_ID, top_k=top_k)
+
 
 def retrieve_knowledge_for_mode(
     query: str, *, mode: str = "admin", top_k: int = 5
@@ -701,7 +726,9 @@ def retrieve_knowledge_for_mode(
                 return out
     return out
 
+
 _is_published_public_chunk = is_published_public_chunk
+
 
 def knowledge_block_for_query(query: str, *, top_k: int = 5, mode: str = "external") -> str:
     """按 mode 组装知识库摘录块（默认偏保守：仅公开库）。"""
@@ -721,6 +748,7 @@ def knowledge_block_for_query(query: str, *, top_k: int = 5, mode: str = "extern
         if block:
             parts.append(block)
     return "\n\n".join(parts)
+
 
 def last_user_text(messages: Optional[List[Any]]) -> str:
     if not messages:
@@ -743,6 +771,7 @@ def last_user_text(messages: Optional[List[Any]]) -> str:
             return " ".join(p for p in parts if p).strip()
         return str(content or "").strip()
     return ""
+
 
 __all__ = [
     "PUBLIC_DATASET_ID",

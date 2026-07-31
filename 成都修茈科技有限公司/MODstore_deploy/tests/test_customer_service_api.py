@@ -259,9 +259,7 @@ def test_customer_service_channel_chat_accepts_internal_key_without_csrf(client,
     assert "email_hint" not in data["session"]["context"]
 
 
-def test_customer_service_channel_chat_uses_llm_and_reuses_external_session(
-    client, monkeypatch
-):
+def test_customer_service_channel_chat_uses_llm_and_reuses_external_session(client, monkeypatch):
     from modstore_server import customer_service_orchestrator
 
     monkeypatch.setenv("MODSTORE_DISABLE_CSRF", "0")

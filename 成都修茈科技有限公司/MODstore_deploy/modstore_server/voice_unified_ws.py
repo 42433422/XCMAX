@@ -35,9 +35,7 @@ def _extract_funasr_text(msg: dict[str, Any]) -> str:
     sents = msg.get("stamp_sents")
     if isinstance(sents, list) and sents:
         return "".join(
-            str(s.get("text_seg") or "").replace(" ", "")
-            for s in sents
-            if isinstance(s, dict)
+            str(s.get("text_seg") or "").replace(" ", "") for s in sents if isinstance(s, dict)
         ).strip()
     return ""
 
@@ -151,13 +149,9 @@ async def voice_unified_ws(
         wav = pcm16le_to_wav_bytes(blob, sample_rate=16000)
         text, err, _meta = await transcribe_mimo_asr_async(wav, mime_type="audio/wav")
         if err or not text:
-            await _send_json(
-                ws, {"type": "error", "message": f"云端 ASR 失败：{err or 'empty'}"}
-            )
+            await _send_json(ws, {"type": "error", "message": f"云端 ASR 失败：{err or 'empty'}"})
             return
-        await _send_json(
-            ws, {"type": "asr_final", "text": text, "segment_mode": "offline"}
-        )
+        await _send_json(ws, {"type": "asr_final", "text": text, "segment_mode": "offline"})
 
     async def run_llm_turn(body: dict[str, Any], *, turn_id: str) -> None:
         nonlocal cancel, active_turn_id
@@ -165,9 +159,7 @@ async def voice_unified_ws(
         provider = str(body.get("provider") or "").strip()
         model = str(body.get("model") or "").strip()
         if not text or not provider or not model:
-            await _send_json(
-                ws, {"type": "error", "message": "utterance 缺少 text/provider/model"}
-            )
+            await _send_json(ws, {"type": "error", "message": "utterance 缺少 text/provider/model"})
             return
         system = str(body.get("system") or "").strip()
         history = body.get("messages") if isinstance(body.get("messages"), list) else []
@@ -267,11 +259,7 @@ async def voice_unified_ws(
                             continue
                         pending = pending_finalize.get(tid, "")
                         pending_finalize[tid] = final_text
-                        if (
-                            pending
-                            and pending != final_text
-                            and len(final_text) - len(pending) > 3
-                        ):
+                        if pending and pending != final_text and len(final_text) - len(pending) > 3:
                             retry_body = {
                                 **body,
                                 "type": "end_utterance",
@@ -282,13 +270,10 @@ async def voice_unified_ws(
 
                     if mtype in ("end_utterance", "utterance", "utterance_start"):
                         turn_id = (
-                            str(body.get("turn_id") or "").strip()
-                            or f"t{int(time.time() * 1000)}"
+                            str(body.get("turn_id") or "").strip() or f"t{int(time.time() * 1000)}"
                         )
                         if mtype == "utterance_start":
-                            pending_finalize[turn_id] = str(
-                                body.get("text") or ""
-                            ).strip()
+                            pending_finalize[turn_id] = str(body.get("text") or "").strip()
                         await run_llm_turn(body, turn_id=turn_id)
                         continue
                     if isinstance(body, dict) and "is_speaking" in body:
@@ -311,11 +296,7 @@ async def voice_unified_ws(
                 if isinstance(raw, bytes):
                     continue
                 try:
-                    msg = (
-                        json.loads(raw)
-                        if isinstance(raw, str)
-                        else json.loads(raw.decode())
-                    )
+                    msg = json.loads(raw) if isinstance(raw, str) else json.loads(raw.decode())
                 except Exception:
                     continue
                 text = _extract_funasr_text(msg)

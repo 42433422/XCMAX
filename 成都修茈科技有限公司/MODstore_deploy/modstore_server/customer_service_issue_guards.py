@@ -1,8 +1,10 @@
 """Customer-service issue/privilege guard helpers (extracted for source-governance)."""
+
 from __future__ import annotations
 
 import re
 from typing import Any
+
 
 def _looks_like_forbidden_privilege_request(user_text: str) -> bool:
     """用户是否在索要管理员/提权等客服绝不能代办的权限。"""
@@ -96,5 +98,3 @@ def _looks_like_product_issue(user_text: str) -> bool:
         "坏了",
     )
     return any(x in t for x in defect_marks)
-
-

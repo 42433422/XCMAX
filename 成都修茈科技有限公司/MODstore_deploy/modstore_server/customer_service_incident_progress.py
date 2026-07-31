@@ -1,4 +1,5 @@
 """Customer-service incident progress application (extracted for source-governance)."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -13,6 +14,7 @@ from modstore_server.models_cs import (
     CustomerServiceMessage,
     CustomerServiceTicket,
 )
+
 
 def _summarize_incident_team_rows(team_rows: list[Dict[str, Any]]) -> str:
     """把 incident team / 员工执行行压缩成用户可读的一句进度。"""
@@ -32,8 +34,6 @@ def _summarize_incident_team_rows(team_rows: list[Dict[str, Any]]) -> str:
         else:
             bits.append(f"{role}（{emp}）未完成")
     return "；".join(bits[:6]) if bits else "值班员工已接手"
-
-
 
 
 def apply_customer_ticket_incident_progress(
@@ -195,7 +195,3 @@ def apply_customer_ticket_incident_progress(
         "action_id": int(action.id or 0),
         "team_ok": bool(team_ok),
     }
-
-
-
-
