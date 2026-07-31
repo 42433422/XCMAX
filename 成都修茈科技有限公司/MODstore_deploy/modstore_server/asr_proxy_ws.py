@@ -1,10 +1,12 @@
-"""ASR WebSocket 代理：前端 → 本服务 → FunASR 服务端。
+"""ASR WebSocket 代理：前端 → 本服务 → FunASR 或小米 MiMo ASR。
 
-路径 ``/api/asr/funasr`` 接受前端 WebSocket 连接，将音频流转发到 FunASR
-服务端（默认 ``ws://127.0.0.1:10095``），并将识别结果回传前端。
+路径 ``/api/asr/funasr`` 保持不变（前端 FunASRBackend 仍连此路径）。
 
-FunASR 服务端需独立部署（Docker），参见 ``docs/runbooks/funasr-deploy.md``。
-若 FunASR 未启动，前端会自动降级到浏览器端 Whisper 或 Chrome Web Speech API。
+环境变量：
+- ``MODSTORE_ASR_BACKEND``: ``mimo`` | ``funasr`` | ``auto``（默认 ``auto``）
+  - ``mimo``：始终走小米 ``mimo-v2.5-asr``
+  - ``funasr``：始终走本地 FunASR
+  - ``auto``：优先 FunASR，不可达且已配 MiMo 密钥时回退云端 ASR
 """
 
 from __future__ import annotations
@@ -29,6 +31,15 @@ FUNASR_USE_SSL = os.getenv("FUNASR_USE_SSL", "1").strip().lower() not in (
     "no",
     "off",
 )
+
+
+def _asr_backend_pref() -> str:
+    raw = (os.getenv("MODSTORE_ASR_BACKEND") or "auto").strip().lower()
+    if raw in {"mimo", "xiaomi", "cloud"}:
+        return "mimo"
+    if raw in {"funasr", "local"}:
+        return "funasr"
+    return "auto"
 
 
 def _funasr_scheme() -> str:
@@ -78,7 +89,9 @@ async def _connect_funasr_parallel(funasr_urls: list[str], ssl_ctx):
     if len(funasr_urls) == 1:
         return await _try_connect_funasr(funasr_urls[0], ssl_ctx)
 
-    tasks = [asyncio.create_task(_try_connect_funasr(url, ssl_ctx)) for url in funasr_urls]
+    tasks = [
+        asyncio.create_task(_try_connect_funasr(url, ssl_ctx)) for url in funasr_urls
+    ]
     try:
         while tasks:
             done, pending = await asyncio.wait(
@@ -99,6 +112,111 @@ async def _connect_funasr_parallel(funasr_urls: list[str], ssl_ctx):
     return None
 
 
+async def _proxy_to_mimo(client_ws: WebSocket) -> None:
+    """缓冲前端 PCM，在停说时调用 MiMo ASR，并以 FunASR 兼容 JSON 回传。"""
+    from modstore_server.mimo_asr_service import (
+        is_configured,
+        pcm16le_to_wav_bytes,
+        transcribe_mimo_asr_async,
+    )
+
+    if not is_configured():
+        try:
+            await client_ws.send_text(
+                json.dumps(
+                    {
+                        "type": "error",
+                        "message": "未配置小米 ASR 密钥（MIMO/XIAOMI_API_KEY）",
+                    }
+                )
+            )
+        except Exception:
+            pass
+        return
+
+    try:
+        await client_ws.send_text(json.dumps({"type": "connected", "backend": "mimo"}))
+    except Exception:
+        return
+
+    pcm_chunks: list[bytes] = []
+    sample_rate = 16000
+    recognizing = False
+
+    async def finalize_utterance() -> None:
+        nonlocal pcm_chunks, recognizing
+        if recognizing:
+            return
+        blob = b"".join(pcm_chunks)
+        pcm_chunks = []
+        if len(blob) < 3200:  # <100ms @16k mono s16le
+            return
+        recognizing = True
+        try:
+            wav = pcm16le_to_wav_bytes(blob, sample_rate=sample_rate)
+            text, err, meta = await transcribe_mimo_asr_async(
+                wav, mime_type="audio/wav"
+            )
+            if err or not text:
+                logger.warning("mimo-asr failed: %s meta=%s", err, meta)
+                try:
+                    await client_ws.send_text(
+                        json.dumps(
+                            {
+                                "type": "error",
+                                "message": f"云端 ASR 失败：{err or 'empty'}",
+                            }
+                        )
+                    )
+                except Exception:
+                    pass
+                return
+            # FunASRBackend 认 mode 含 offline / 2pass-offline
+            payload = {
+                "mode": "2pass-offline",
+                "text": text,
+                "is_final": True,
+                "backend": "mimo",
+            }
+            await client_ws.send_text(json.dumps(payload, ensure_ascii=False))
+        finally:
+            recognizing = False
+
+    try:
+        while True:
+            msg = await client_ws.receive()
+            if "bytes" in msg and msg["bytes"] is not None:
+                pcm_chunks.append(bytes(msg["bytes"]))
+                continue
+            if "text" not in msg:
+                continue
+            raw = msg["text"]
+            try:
+                body = json.loads(raw) if isinstance(raw, str) else {}
+            except Exception:
+                continue
+            if not isinstance(body, dict):
+                continue
+            fs = body.get("audio_fs") or body.get("sample_rate")
+            if fs:
+                try:
+                    sample_rate = int(fs)
+                except Exception:
+                    pass
+            if body.get("is_speaking") is False:
+                await finalize_utterance()
+    except WebSocketDisconnect:
+        await finalize_utterance()
+    except Exception as exc:
+        logger.info("mimo asr proxy error: %s", exc)
+        try:
+            await client_ws.send_text(
+                json.dumps({"type": "error", "message": str(exc)})
+            )
+        except Exception:
+            pass
+
+
 async def _proxy_to_funasr(client_ws: WebSocket) -> None:
     import ssl as _ssl
 
@@ -113,7 +231,9 @@ async def _proxy_to_funasr(client_ws: WebSocket) -> None:
     if connect_result is None:
         logger.warning("FunASR 不可达，已尝试: %s", funasr_urls)
         try:
-            await client_ws.send_text(json.dumps({"type": "error", "message": "FunASR 服务未启动"}))
+            await client_ws.send_text(
+                json.dumps({"type": "error", "message": "FunASR 服务未启动"})
+            )
         except Exception:
             pass
         return
@@ -122,7 +242,9 @@ async def _proxy_to_funasr(client_ws: WebSocket) -> None:
     logger.info("FunASR connected via %s", funasr_url)
     try:
         try:
-            await client_ws.send_text(json.dumps({"type": "connected"}))
+            await client_ws.send_text(
+                json.dumps({"type": "connected", "backend": "funasr"})
+            )
         except Exception:
             return
 
@@ -236,6 +358,54 @@ async def _proxy_to_funasr(client_ws: WebSocket) -> None:
             pass
 
 
+async def _funasr_reachable() -> bool:
+    import ssl as _ssl
+
+    funasr_urls = _detect_funasr_host()
+    ssl_ctx = None
+    if FUNASR_USE_SSL:
+        ssl_ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = _ssl.CERT_NONE
+    connect_result = await _connect_funasr_parallel(funasr_urls, ssl_ctx)
+    if connect_result is None:
+        return False
+    try:
+        await connect_result[1].close()
+    except Exception:
+        pass
+    return True
+
+
+async def _dispatch_asr_proxy(client_ws: WebSocket) -> None:
+    pref = _asr_backend_pref()
+    from modstore_server.mimo_asr_service import is_configured as mimo_ready
+
+    if pref == "mimo":
+        logger.info("ASR backend=mimo (forced)")
+        await _proxy_to_mimo(client_ws)
+        return
+
+    if pref == "funasr":
+        await _proxy_to_funasr(client_ws)
+        return
+
+    # auto: FunASR 可达则本地，否则云端 MiMo
+    if await _funasr_reachable():
+        await _proxy_to_funasr(client_ws)
+        return
+    if mimo_ready():
+        logger.info("ASR auto: FunASR down, using mimo-v2.5-asr")
+        await _proxy_to_mimo(client_ws)
+        return
+    try:
+        await client_ws.send_text(
+            json.dumps({"type": "error", "message": "FunASR 服务未启动"})
+        )
+    except Exception:
+        pass
+
+
 def _ws_bearer_token(ws: WebSocket, query_token: str) -> str:
     t = (query_token or "").strip()
     if t:
@@ -255,7 +425,9 @@ async def asr_funasr_ws(
     token = _ws_bearer_token(ws, token)
     if not token:
         try:
-            await ws.send_text(json.dumps({"type": "error", "message": "请先登录后再使用语音识别"}))
+            await ws.send_text(
+                json.dumps({"type": "error", "message": "请先登录后再使用语音识别"})
+            )
         except Exception:
             pass
         await ws.close()
@@ -280,4 +452,4 @@ async def asr_funasr_ws(
         await ws.close()
         return
 
-    await _proxy_to_funasr(ws)
+    await _dispatch_asr_proxy(ws)

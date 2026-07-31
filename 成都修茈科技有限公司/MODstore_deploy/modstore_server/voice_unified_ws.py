@@ -16,6 +16,7 @@ from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from modstore_server.asr_proxy_ws import (
     FUNASR_USE_SSL,
+    _asr_backend_pref,
     _connect_funasr_parallel,
     _detect_funasr_host,
 )
@@ -34,7 +35,9 @@ def _extract_funasr_text(msg: dict[str, Any]) -> str:
     sents = msg.get("stamp_sents")
     if isinstance(sents, list) and sents:
         return "".join(
-            str(s.get("text_seg") or "").replace(" ", "") for s in sents if isinstance(s, dict)
+            str(s.get("text_seg") or "").replace(" ", "")
+            for s in sents
+            if isinstance(s, dict)
         ).strip()
     return ""
 
@@ -74,31 +77,51 @@ async def voice_unified_ws(
 
     import ssl as _ssl
 
-    funasr_urls = _detect_funasr_host()
-    ssl_ctx = None
-    if FUNASR_USE_SSL:
-        ssl_ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = _ssl.CERT_NONE
+    from modstore_server.mimo_asr_service import (
+        is_configured as mimo_asr_ready,
+        pcm16le_to_wav_bytes,
+        transcribe_mimo_asr_async,
+    )
 
-    connect_result = await _connect_funasr_parallel(funasr_urls, ssl_ctx)
-    if connect_result is None:
-        await _send_json(ws, {"type": "error", "message": "FunASR 服务未启动"})
+    asr_pref = _asr_backend_pref()
+    use_mimo = asr_pref == "mimo"
+    funasr_ws = None
+    _funasr_url = ""
+    if not use_mimo:
+        funasr_urls = _detect_funasr_host()
+        ssl_ctx = None
+        if FUNASR_USE_SSL:
+            ssl_ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
+            ssl_ctx.check_hostname = False
+            ssl_ctx.verify_mode = _ssl.CERT_NONE
+        connect_result = await _connect_funasr_parallel(funasr_urls, ssl_ctx)
+        if connect_result is not None:
+            _funasr_url, funasr_ws = connect_result
+            logger.info("unified voice: FunASR via %s", _funasr_url)
+        elif asr_pref == "auto" and mimo_asr_ready():
+            use_mimo = True
+            logger.info("unified voice: FunASR down, fallback mimo-v2.5-asr")
+        else:
+            await _send_json(ws, {"type": "error", "message": "FunASR 服务未启动"})
+            await ws.close()
+            return
+    if use_mimo and not mimo_asr_ready():
+        await _send_json(ws, {"type": "error", "message": "未配置小米 ASR 密钥"})
         await ws.close()
         return
-
-    _funasr_url, funasr_ws = connect_result
-    logger.info("unified voice: FunASR via %s", _funasr_url)
+    if use_mimo:
+        logger.info("unified voice: ASR backend=mimo")
 
     cancel = asyncio.Event()
     turn_lock = asyncio.Lock()
     session_sent = False
     active_turn_id = ""
     pending_finalize: dict[str, str] = {}
+    mimo_pcm_chunks: list[bytes] = []
 
     async def ensure_funasr_session() -> None:
         nonlocal session_sent
-        if session_sent:
+        if use_mimo or funasr_ws is None or session_sent:
             return
         await funasr_ws.send(
             json.dumps(
@@ -119,13 +142,32 @@ async def voice_unified_ws(
         )
         session_sent = True
 
+    async def finalize_mimo_asr() -> None:
+        nonlocal mimo_pcm_chunks
+        blob = b"".join(mimo_pcm_chunks)
+        mimo_pcm_chunks = []
+        if len(blob) < 3200:
+            return
+        wav = pcm16le_to_wav_bytes(blob, sample_rate=16000)
+        text, err, _meta = await transcribe_mimo_asr_async(wav, mime_type="audio/wav")
+        if err or not text:
+            await _send_json(
+                ws, {"type": "error", "message": f"云端 ASR 失败：{err or 'empty'}"}
+            )
+            return
+        await _send_json(
+            ws, {"type": "asr_final", "text": text, "segment_mode": "offline"}
+        )
+
     async def run_llm_turn(body: dict[str, Any], *, turn_id: str) -> None:
         nonlocal cancel, active_turn_id
         text = str(body.get("text") or "").strip()
         provider = str(body.get("provider") or "").strip()
         model = str(body.get("model") or "").strip()
         if not text or not provider or not model:
-            await _send_json(ws, {"type": "error", "message": "utterance 缺少 text/provider/model"})
+            await _send_json(
+                ws, {"type": "error", "message": "utterance 缺少 text/provider/model"}
+            )
             return
         system = str(body.get("system") or "").strip()
         history = body.get("messages") if isinstance(body.get("messages"), list) else []
@@ -190,8 +232,11 @@ async def voice_unified_ws(
                 if msg.get("type") == "websocket.disconnect":
                     break
                 if "bytes" in msg and msg["bytes"]:
-                    await ensure_funasr_session()
-                    await funasr_ws.send(msg["bytes"])
+                    if use_mimo:
+                        mimo_pcm_chunks.append(bytes(msg["bytes"]))
+                    else:
+                        await ensure_funasr_session()
+                        await funasr_ws.send(msg["bytes"])
                 elif "text" in msg and msg["text"]:
                     try:
                         body = json.loads(msg["text"])
@@ -206,11 +251,14 @@ async def voice_unified_ws(
                         await _send_json(ws, {"type": "cancelled"})
                         continue
                     if mtype == "speech_end":
-                        await ensure_funasr_session()
-                        try:
-                            await funasr_ws.send(json.dumps({"is_speaking": False}))
-                        except Exception:
-                            pass
+                        if use_mimo:
+                            await finalize_mimo_asr()
+                        else:
+                            await ensure_funasr_session()
+                            try:
+                                await funasr_ws.send(json.dumps({"is_speaking": False}))
+                            except Exception:
+                                pass
                         continue
                     if mtype == "utterance_finalize":
                         tid = str(body.get("turn_id") or active_turn_id).strip()
@@ -219,34 +267,55 @@ async def voice_unified_ws(
                             continue
                         pending = pending_finalize.get(tid, "")
                         pending_finalize[tid] = final_text
-                        if pending and pending != final_text and len(final_text) - len(pending) > 3:
-                            retry_body = {**body, "type": "end_utterance", "text": final_text}
+                        if (
+                            pending
+                            and pending != final_text
+                            and len(final_text) - len(pending) > 3
+                        ):
+                            retry_body = {
+                                **body,
+                                "type": "end_utterance",
+                                "text": final_text,
+                            }
                             await run_llm_turn(retry_body, turn_id=tid)
                         continue
 
                     if mtype in ("end_utterance", "utterance", "utterance_start"):
                         turn_id = (
-                            str(body.get("turn_id") or "").strip() or f"t{int(time.time() * 1000)}"
+                            str(body.get("turn_id") or "").strip()
+                            or f"t{int(time.time() * 1000)}"
                         )
                         if mtype == "utterance_start":
-                            pending_finalize[turn_id] = str(body.get("text") or "").strip()
+                            pending_finalize[turn_id] = str(
+                                body.get("text") or ""
+                            ).strip()
                         await run_llm_turn(body, turn_id=turn_id)
                         continue
                     if isinstance(body, dict) and "is_speaking" in body:
-                        await ensure_funasr_session()
-                        await funasr_ws.send(json.dumps(body))
+                        if use_mimo:
+                            if body.get("is_speaking") is False:
+                                await finalize_mimo_asr()
+                        else:
+                            await ensure_funasr_session()
+                            await funasr_ws.send(json.dumps(body))
         except WebSocketDisconnect:
             pass
         except Exception as exc:
             logger.info("unified client_to_funasr: %s", exc)
 
     async def funasr_to_client() -> None:
+        if use_mimo or funasr_ws is None:
+            return
         try:
             async for raw in funasr_ws:
                 if isinstance(raw, bytes):
                     continue
                 try:
-                    msg = json.loads(raw) if isinstance(raw, str) else json.loads(raw.decode())
+                    msg = (
+                        json.loads(raw)
+                        if isinstance(raw, str)
+                        else json.loads(raw.decode())
+                    )
                 except Exception:
                     continue
                 text = _extract_funasr_text(msg)
@@ -271,17 +340,27 @@ async def voice_unified_ws(
             logger.info("unified funasr_to_client: %s", exc)
 
     try:
-        await _send_json(ws, {"type": "connected", "health": True})
+        await _send_json(
+            ws,
+            {
+                "type": "connected",
+                "health": True,
+                "asr_backend": "mimo" if use_mimo else "funasr",
+            },
+        )
         t1 = asyncio.create_task(client_to_funasr())
-        t2 = asyncio.create_task(funasr_to_client())
-        await asyncio.wait([t1, t2], return_when=asyncio.FIRST_COMPLETED)
-        for t in (t1, t2):
+        tasks = [t1]
+        if not use_mimo:
+            tasks.append(asyncio.create_task(funasr_to_client()))
+        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for t in tasks:
             if not t.done():
                 t.cancel()
     except WebSocketDisconnect:
         cancel.set()
     finally:
-        try:
-            await funasr_ws.close()
-        except Exception:
-            pass
+        if funasr_ws is not None:
+            try:
+                await funasr_ws.close()
+            except Exception:
+                pass
