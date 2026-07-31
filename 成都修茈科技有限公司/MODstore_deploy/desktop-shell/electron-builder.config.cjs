@@ -32,8 +32,8 @@ const productLabel = productSku === 'enterprise' ? 'Enterprise' : 'Personal'
 module.exports = {
   appId: 'com.xiuci.xcagi.desktop',
   productName: 'XCAGI',
-  artifactName: `XCAGI-${productLabel}-Setup-1.0.0.0-\${arch}.\${ext}`,
-  publish: [{ provider: 'generic', url: `https://xiu-ci.com/xcagi-v1.0.0.0/${productSku}/` }],
+  artifactName: `XCAGI-${productLabel}-Setup-1.0.0.1-\${arch}.\${ext}`,
+  publish: [{ provider: 'generic', url: `https://xiu-ci.com/xcagi-v1.0.0.1/${productSku}/` }],
   directories: { output: 'dist' },
   files: ['main.js', 'preload.js', 'package.json'],
   win: {

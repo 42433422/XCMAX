@@ -1,7 +1,7 @@
 param(
   [ValidateSet('pre', 'post')]
   [string]$Phase = 'pre',
-  [string]$Version = '1.0.0.0',
+  [string]$Version = '1.0.0.1',
   [ValidateSet('personal', 'enterprise', 'all')]
   [string]$ProductSku = 'all'
 )

@@ -21,14 +21,15 @@ cl = CosS3Client(
     )
 )
 b = os.environ["COS_BUCKET"]
+# 仅 enterprise 仍在上传；personal/offline 已冻结（见 specs/product-lines-3-plus-2.md）
+prefix = os.environ.get("COS_PREFIX", "xcagi-v1.0.0.1")
 files = [
-    ("personal", "XCAGI-Personal-Setup-8.0.0-x64.exe"),
-    ("offline", "XCAGI-Offline-Setup-8.0.0-x64.exe"),
-    ("enterprise", "XCAGI-Enterprise-Setup-8.0.0-x64.exe"),
+    ("enterprise", "XCAGI-Enterprise-Setup-1.0.0.1-x64.exe"),
 ]
 done_n = 0
+total_n = len(files)
 for edition, fn in files:
-    key = f"xcagi-v8.0.0/{edition}/{fn}"
+    key = f"{prefix}/{edition}/{fn}"
     target = Path(f"/var/www/update/releases/stable/{edition}/{fn}").stat().st_size
     objs = [
         x
@@ -54,5 +55,5 @@ for edition, fn in files:
         print(f"{edition}: {pct:.1f}% ({done // 1024 // 1024}MB/{target // 1024 // 1024}MB)")
     else:
         print(f"{edition}: 等待中")
-print(f"SUMMARY: {done_n}/3 完成")
+print(f"SUMMARY: {done_n}/{total_n} 完成")
 PY

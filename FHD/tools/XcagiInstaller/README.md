@@ -5,10 +5,10 @@
 ## 正式打包
 
 ```powershell
-powershell -File scripts/package/build-all-skus.ps1 -Version 1.0.0.0
+powershell -File scripts/package/build-all-skus.ps1 -Version 1.0.0.1
 ```
 
-输出：`release/xcagi-v1.0.0.0/{personal,enterprise}/XCAGI-*-Setup-1.0.0.0-x64.exe`
+输出：`release/xcagi-v1.0.0.1/{personal,enterprise}/XCAGI-*-Setup-1.0.0.1-x64.exe`
 
 ## 本地调试（不内嵌）
 

@@ -20,9 +20,8 @@ upload() {
 }
 
 rm -f "$DONE"
-upload personal  XCAGI-Personal-Setup-8.0.0-x64.exe
-upload offline   XCAGI-Offline-Setup-8.0.0-x64.exe
-upload enterprise XCAGI-Enterprise-Setup-8.0.0-x64.exe
+# personal/offline SKU 已冻结（见 specs/product-lines-3-plus-2.md），仅上传 enterprise
+upload enterprise XCAGI-Enterprise-Setup-1.0.0.1-x64.exe
 
 bash /root/成都修茈科技有限公司/deploy/scripts/list-xcagi-cos.sh
 echo "=== upload-all finished $(date -Iseconds) ===" | tee "$DONE"

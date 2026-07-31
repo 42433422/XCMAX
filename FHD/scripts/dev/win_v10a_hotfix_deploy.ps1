@@ -34,7 +34,7 @@ function Wait-HttpJson {
 
 if (-not $DeployOnly) {
   Write-Step 'build enterprise backend (SkipFrontend)'
-  & (Join-Path $FhdRoot 'scripts\package\build-backend.ps1') -Version '1.0.0.0' -SkipFrontend -ProductSku enterprise
+  & (Join-Path $FhdRoot 'scripts\package\build-backend.ps1') -Version '1.0.0.1' -SkipFrontend -ProductSku enterprise
   if ($LASTEXITCODE -ne 0) { throw 'build-backend.ps1 failed' }
 }
 

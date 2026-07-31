@@ -11,7 +11,7 @@
 #   SKIP_BUILD=1 bash FHD/scripts/package/stage-sunbird-delivery.sh
 set -euo pipefail
 
-VERSION="${VERSION:-1.0.0.0}"
+VERSION="${VERSION:-1.0.0.1}"
 VERSION="${VERSION#v}"
 VERSION="${VERSION#V}"
 USE_CI=0

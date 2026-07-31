@@ -46,7 +46,7 @@
 powershell -ExecutionPolicy Bypass -File scripts/dev/adcdfg_acceptance.ps1
 
 # 构建通用壳桌面
-powershell -File scripts/package/build-installer.ps1 -Version 1.0.0.0
+powershell -File scripts/package/build-installer.ps1 -Version 1.0.0.1
 
 # API：装齐 generic 包
 curl -X POST http://127.0.0.1:5000/api/mod-store/bootstrap-edition-pack?edition=generic

@@ -136,7 +136,16 @@ vi.mock('./useChatRequest', () => ({
   }),
 }))
 vi.mock('./useChatResponseAttach', () => ({
-  useChatResponseAttach: () => ({}),
+  useChatResponseAttach: () => ({
+    getLastAiMessageRef: vi.fn(),
+    attachThinkingStepsToLastAiMessage: vi.fn(),
+    attachTodoStepsToLastAiMessage: vi.fn(),
+    attachWorkflowTraceToLastAiMessage: vi.fn(),
+    attachApprovalCardToLastAiMessage: vi.fn(),
+    attachContextSummaryToLastAiMessage: vi.fn(),
+    attachAgentRunTraceToLastAiMessage: vi.fn(),
+    syncTaskFromChatResponse: vi.fn(),
+  }),
 }))
 vi.mock('./useChatSessionHistory', () => ({
   useChatSessionHistory: () => ({

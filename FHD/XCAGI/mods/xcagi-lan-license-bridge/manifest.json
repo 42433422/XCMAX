@@ -1,7 +1,7 @@
 {
   "id": "xcagi-lan-license-bridge",
   "name": "局域网授权桥接 Mod",
-  "version": "1.0.0.0",
+  "version": "1.0.0.1",
   "author": "成都修茈科技有限公司",
   "description": "LAN API 门面（J）+ 授权页（K/O 物理视图）。LicenseGuard 与 DB 仍在宿主。",
   "dependencies": {

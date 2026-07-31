@@ -38,7 +38,7 @@ _APP_FILING_APPROVED = (
 _ANDROID_MIN_VERSION = int(os.environ.get("XCAGI_ANDROID_MIN_VERSION_CODE", "10") or "10")
 _ANDROID_LATEST_VERSION = int(os.environ.get("XCAGI_ANDROID_LATEST_VERSION_CODE", "10") or "10")
 _ANDROID_LATEST_NAME = (
-    os.environ.get("XCAGI_ANDROID_LATEST_VERSION_NAME", "1.0.0.0").strip() or "1.0.0.0"
+    os.environ.get("XCAGI_ANDROID_LATEST_VERSION_NAME", "1.0.0.1").strip() or "1.0.0.1"
 )
 _ANDROID_FORCE_UPDATE = os.environ.get("XCAGI_ANDROID_FORCE_UPDATE", "").strip() in (
     "1",

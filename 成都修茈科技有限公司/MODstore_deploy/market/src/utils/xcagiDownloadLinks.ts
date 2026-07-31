@@ -4,8 +4,8 @@ export type XcagiDownloadPlatform = 'win' | 'mac' | 'android'
 export type XcagiMacArch = 'x64' | 'arm64'
 
 // 对外稳定产品版本与 VERSION.md 一致；工具链内部三段版本不用于官网下载文件名。
-export const DEFAULT_XCAGI_DOWNLOAD_VERSION = '1.0.0.0'
-export const DEFAULT_XCAGI_ANDROID_VERSION = '1.0.0.0'
+export const DEFAULT_XCAGI_DOWNLOAD_VERSION = '1.0.0.1'
+export const DEFAULT_XCAGI_ANDROID_VERSION = '1.0.0.1'
 
 // 官方下载清单 manifest.json URL（CI 自动生成，含 SHA256 + size）
 // 失败时降级到 normalizeXcagiDownloadBase + xcagiDownloadUrl 静态生成

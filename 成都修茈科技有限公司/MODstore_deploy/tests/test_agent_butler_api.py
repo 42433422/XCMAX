@@ -372,7 +372,7 @@ class TestButlerSystemPrompt:
 
         with patch(
             "modstore_server.release_train.snapshot_public",
-            return_value={"current": "1.0.0.0", "product_version": "1.0.0.0", "day_index": 1},
+            return_value={"current": "1.0.0.0", "product_version": "1.0.0.1", "day_index": 1},
         ):
             brief = _execute_admin_readonly_tool(
                 "get_ops_update_brief", {"limit": 2}, user=admin, db=db

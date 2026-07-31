@@ -1647,7 +1647,7 @@ const ReleaseTrain = (() => {
   function enrichSnapshot(raw) {
     if (!raw || typeof raw !== 'object') return null;
     if (raw.is_installer_day !== undefined && raw.is_major_day !== undefined) return raw;
-    const cur = String(raw.current || '1.0.0.0');
+    const cur = String(raw.current || '1.0.0.1');
     const dayIndex = Number(raw.day_index || 0);
     const parts = cur.split('.').map((p) => parseInt(p, 10));
     const d = Number.isFinite(parts[3]) ? parts[3] : 0;

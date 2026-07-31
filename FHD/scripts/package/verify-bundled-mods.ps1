@@ -27,7 +27,7 @@ foreach ($item in @($parsedIds)) {
 $erpMod = 'xcagi-erp-domain-bridge'
 
 if (-not $UnpackedDir) {
-  $ver = '1.0.0.0'
+  $ver = '1.0.0.1'
   if ($env:XCAGI_VERIFY_VERSION) { $ver = $env:XCAGI_VERIFY_VERSION }
   $UnpackedDir = Join-Path $Root "release\xcagi-v$ver\$ProductSku\win-unpacked\resources\backend\_internal\mods"
 }

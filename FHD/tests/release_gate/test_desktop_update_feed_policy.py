@@ -20,12 +20,12 @@ def test_macos_update_feed_is_generated_from_zip(tmp_path: Path) -> None:
         pytest.skip("node is required for desktop updater policy test")
 
     generator = REPO_ROOT / "scripts" / "package" / "generate-update-metadata.mjs"
-    update_zip = tmp_path / "XCAGI-Enterprise-1.0.0.0-mac-arm64.zip"
+    update_zip = tmp_path / "XCAGI-Enterprise-1.0.0.1-mac-arm64.zip"
     update_zip.write_bytes(b"signed-app-archive-fixture")
     env = {
         **os.environ,
         "XCAGI_BUILD_SHA": "a" * 40,
-        "XCAGI_PRODUCT_VERSION": "1.0.0.0",
+        "XCAGI_PRODUCT_VERSION": "1.0.0.1",
         "XCAGI_RELEASE_MEDIA_JSON": (
             '[{"posterUrl":"https://cdn.example.com/a.webp",'
             '"videoUrl":"https://cdn.example.com/a.mp4","caption":"demo"}]'
@@ -55,7 +55,7 @@ def test_macos_update_feed_rejects_dmg(tmp_path: Path) -> None:
         pytest.skip("node is required for desktop updater policy test")
 
     generator = REPO_ROOT / "scripts" / "package" / "generate-update-metadata.mjs"
-    dmg = tmp_path / "XCAGI-Enterprise-1.0.0.0-mac-arm64.dmg"
+    dmg = tmp_path / "XCAGI-Enterprise-1.0.0.1-mac-arm64.dmg"
     dmg.write_bytes(b"dmg-fixture")
     result = subprocess.run(
         [node, str(generator), str(dmg), "1.0.0", "mac"],
@@ -164,7 +164,7 @@ def test_update_metadata_requires_full_build_sha(tmp_path: Path) -> None:
         pytest.skip("node is required for desktop updater policy test")
 
     generator = REPO_ROOT / "scripts" / "package" / "generate-update-metadata.mjs"
-    update_zip = tmp_path / "XCAGI-Enterprise-1.0.0.0-mac-arm64.zip"
+    update_zip = tmp_path / "XCAGI-Enterprise-1.0.0.1-mac-arm64.zip"
     update_zip.write_bytes(b"signed-app-archive-fixture")
     env = {**os.environ}
     env.pop("XCAGI_BUILD_SHA", None)

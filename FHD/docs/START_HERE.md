@@ -1,6 +1,6 @@
 # XCAGI 日常入口（START HERE）
 
-> **稳定版本**：产品版本 `1.0.0.0`，工具链映射 `1.0.0`（全产品线锚点见 [`VERSION.md`](../VERSION.md)）
+> **稳定版本**：产品版本 `1.0.0.1`，工具链映射 `1.0.0`（全产品线锚点见 [`VERSION.md`](../VERSION.md)）
 > **公开文档站**：<https://docs.xiu-ci.com/>  
 > **仓根一键启动**：`make setup && make dev`（Windows：`make -f Makefile.win setup`）
 
@@ -119,7 +119,7 @@ python3 -m pytest tests/ --cov=app --cov-fail-under=35 -q
 cd frontend && npm run lint && npm run type-check && npm run type-check:build && npm run test:unit
 ```
 
-**CD 稳定版验证**：打 tag `FHD/v1.0.0.0` 后按 [`docs/deploy/RELEASE_CHECKLIST.md`](deploy/RELEASE_CHECKLIST.md) 验证 orchestrator（需对应发布 Secrets）。
+**CD 稳定版验证**：打 tag `FHD/v1.0.0.1` 后按 [`docs/deploy/RELEASE_CHECKLIST.md`](deploy/RELEASE_CHECKLIST.md) 验证 orchestrator（需对应发布 Secrets）。
 
 ---
 

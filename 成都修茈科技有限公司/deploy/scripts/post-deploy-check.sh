@@ -69,10 +69,10 @@ if [[ "${POST_DEPLOY_SKIP_PUBLIC:-}" != "1" ]]; then
   ok "public market assets are real JS (not EdgeOne HTML fallback)"
 fi
 
-# 3) COS 安装包目录
-EXE="/var/www/update/releases/stable/personal/XCAGI-Personal-Setup-8.0.0-x64.exe"
+# 3) COS 安装包目录（仅 enterprise，personal 已冻结）
+EXE="/var/www/update/releases/stable/enterprise/XCAGI-Enterprise-Setup-1.0.0.1-x64.exe"
 test -f "$EXE" || fail "missing $EXE"
-ok "COS/stable exe present"
+ok "COS/stable enterprise exe present"
 
 # 4) 依赖服务
 systemctl is-active --quiet modstore && ok "modstore active" || fail "modstore not active"

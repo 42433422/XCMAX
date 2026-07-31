@@ -23,7 +23,6 @@ const hostBridgeViews = [
   { name: 'ApprovalRulesView', modId: 'xcagi-approval-bridge', view: 'ApprovalRulesView', title: '审批' },
   { name: 'ApprovalWorkspaceView', modId: 'xcagi-approval-bridge', view: 'ApprovalWorkspaceView', title: '审批' },
   { name: 'BatchAnalyzeView', modId: 'xcagi-erp-domain-bridge', view: 'BatchAnalyzeView', title: 'ERP 业务页' },
-  { name: 'BusinessDockingView', modId: 'xcagi-erp-domain-bridge', view: 'BusinessDockingView', title: 'ERP 业务页' },
   { name: 'ChatDebugView', modId: 'xcagi-planner-bridge', view: 'ChatDebugView', title: 'Planner 页' },
   { name: 'LabelEditorView', modId: 'xcagi-erp-domain-bridge', view: 'LabelEditorView', title: 'ERP 业务页' },
   { name: 'TemplatePreviewView', modId: 'xcagi-erp-domain-bridge', view: 'TemplatePreviewView', title: 'ERP 业务页' },

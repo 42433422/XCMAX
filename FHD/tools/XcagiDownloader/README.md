@@ -10,7 +10,7 @@ dotnet publish .\XcagiDownloader.csproj -c Release -r win-x64 --self-contained t
   -p:PublishSingleFile=true `
   -p:IncludeNativeLibrariesForSelfExtract=true `
   -p:EnableCompressionInSingleFile=true `
-  -o ..\..\release\xcagi-v1.0.0.0\enterprise\tools
+  -o ..\..\release\xcagi-v1.0.0.1\enterprise\tools
 ```
 
 Windows 安装流水线会在 `scripts/package/build-installer.ps1` 末尾自动执行上述发布（输出到 `release/xcagi-v{version}/{personal|enterprise}/tools/XcagiDownloader.exe`）。
@@ -33,12 +33,12 @@ Windows 安装流水线会在 `scripts/package/build-installer.ps1` 末尾自动
 客户只需把官方 stable 目录 mirror 到内网 HTTP(S) 服务，例如：
 
 - `https://intranet.example/xcagi/releases/stable/latest.yml`
-- `https://intranet.example/xcagi/releases/stable/XCAGI-Enterprise-Setup-1.0.0.0-x64.exe`
+- `https://intranet.example/xcagi/releases/stable/XCAGI-Enterprise-Setup-1.0.0.1-x64.exe`
 - （可选）同目录 `*.blockmap` 供主程序 electron-updater 差分更新；下载器只用 yml + Setup。
 
 可直接把 **Base URL** 设为与你环境一致的版本化入口，例如：
 
-- `https://intranet.example/xcagi-v1.0.0.0/enterprise`
+- `https://intranet.example/xcagi-v1.0.0.1/enterprise`
 
 ## NSIS / electron-builder 静默安装（IT 脚本）
 

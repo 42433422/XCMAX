@@ -2,7 +2,7 @@
 # 上传 release/xcagi-v{version}/{personal,enterprise}/ 桌面制品至 update 服务器。
 set -euo pipefail
 
-VERSION="${1:-1.0.0.0}"
+VERSION="${1:-1.0.0.1}"
 SKU="${2:-all}"
 VERSION="${VERSION#v}"
 VERSION="${VERSION#V}"

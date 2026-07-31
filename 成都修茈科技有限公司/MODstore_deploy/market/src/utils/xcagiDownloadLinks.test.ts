@@ -19,31 +19,31 @@ describe('xcagiDownloadLinks', () => {
     vi.unstubAllGlobals()
   })
 
-  it('defaults to the stable 1.0.0.0 dual-SKU release root', () => {
-    expect(normalizeXcagiDownloadBase(undefined)).toBe('https://xiu-ci.com/xcagi-v1.0.0.0')
+  it('defaults to the stable 1.0.0.1 dual-SKU release root', () => {
+    expect(normalizeXcagiDownloadBase(undefined)).toBe('https://xiu-ci.com/xcagi-v1.0.0.1')
   })
 
   it('exposes the official manifest URL pinned to the stable version', () => {
-    expect(OFFICIAL_MANIFEST_URL).toBe('https://xiu-ci.com/xcagi-v1.0.0.0/manifest.json')
+    expect(OFFICIAL_MANIFEST_URL).toBe('https://xiu-ci.com/xcagi-v1.0.0.1/manifest.json')
   })
 
   it('builds personal and enterprise Windows URLs without offline SKU', () => {
     const base = normalizeXcagiDownloadBase('https://xiu-ci.com/releases/stable/')
 
     expect(xcagiDownloadUrl('personal', 'win', base)).toBe(
-      'https://xiu-ci.com/releases/stable/personal/XCAGI-Personal-Setup-1.0.0.0-x64.exe',
+      'https://xiu-ci.com/releases/stable/personal/XCAGI-Personal-Setup-1.0.0.1-x64.exe',
     )
     expect(xcagiDownloadUrl('enterprise', 'win', base)).toBe(
-      'https://xiu-ci.com/releases/stable/enterprise/XCAGI-Enterprise-Setup-1.0.0.0-x64.exe',
+      'https://xiu-ci.com/releases/stable/enterprise/XCAGI-Enterprise-Setup-1.0.0.1-x64.exe',
     )
     expect(xcagiDownloadUrl('personal', 'win', base)).not.toContain('offline')
     expect(xcagiDownloadUrl('enterprise', 'win', base)).not.toContain('offline')
   })
 
-  it('uses the stable Android 1.0.0.0 artifact names', () => {
-    expect(xcagiDownloadFileName('personal', 'android')).toBe('XCAGI-Personal-Android-1.0.0.0.apk')
+  it('uses the stable Android 1.0.0.1 artifact names', () => {
+    expect(xcagiDownloadFileName('personal', 'android')).toBe('XCAGI-Personal-Android-1.0.0.1.apk')
     expect(xcagiDownloadFileName('enterprise', 'android')).toBe(
-      'XCAGI-Enterprise-Android-1.0.0.0.apk',
+      'XCAGI-Enterprise-Android-1.0.0.1.apk',
     )
   })
 
@@ -92,7 +92,7 @@ describe('xcagiDownloadLinks', () => {
 
 const mockManifest: XcagiDownloadManifest = {
   schema: 'xcagi.download_manifest/v1',
-  version: '1.0.0.0',
+  version: '1.0.0.1',
   generated_at: '2026-07-07T15:00:00Z',
   git_sha: 'abc123def456',
   channels: {
@@ -100,8 +100,8 @@ const mockManifest: XcagiDownloadManifest = {
       base_url: 'https://xiu-ci.com/releases/stable',
       personal: {
         win: {
-          url: 'https://xiu-ci.com/releases/stable/personal/XCAGI-Personal-Setup-1.0.0.0-x64.exe',
-          filename: 'XCAGI-Personal-Setup-1.0.0.0-x64.exe',
+          url: 'https://xiu-ci.com/releases/stable/personal/XCAGI-Personal-Setup-1.0.0.1-x64.exe',
+          filename: 'XCAGI-Personal-Setup-1.0.0.1-x64.exe',
           sha256: 'aaaa',
           size: 1000,
           platform_label: 'Windows x64',
@@ -109,8 +109,8 @@ const mockManifest: XcagiDownloadManifest = {
       },
       enterprise: {
         win: {
-          url: 'https://xiu-ci.com/releases/stable/enterprise/XCAGI-Enterprise-Setup-1.0.0.0-x64.exe',
-          filename: 'XCAGI-Enterprise-Setup-1.0.0.0-x64.exe',
+          url: 'https://xiu-ci.com/releases/stable/enterprise/XCAGI-Enterprise-Setup-1.0.0.1-x64.exe',
+          filename: 'XCAGI-Enterprise-Setup-1.0.0.1-x64.exe',
           sha256: 'bbbb',
           size: 1100,
           platform_label: 'Windows x64',
@@ -118,19 +118,19 @@ const mockManifest: XcagiDownloadManifest = {
       },
     },
     official_download: {
-      base_url: 'https://xiu-ci.com/xcagi-v1.0.0.0',
+      base_url: 'https://xiu-ci.com/xcagi-v1.0.0.1',
       personal: {
         win: {
-          url: 'https://xiu-ci.com/xcagi-v1.0.0.0/personal/XCAGI-Personal-Setup-1.0.0.0-x64.exe',
-          filename: 'XCAGI-Personal-Setup-1.0.0.0-x64.exe',
+          url: 'https://xiu-ci.com/xcagi-v1.0.0.1/personal/XCAGI-Personal-Setup-1.0.0.1-x64.exe',
+          filename: 'XCAGI-Personal-Setup-1.0.0.1-x64.exe',
           sha256: 'aaaa',
           size: 1000,
           platform_label: 'Windows x64',
         },
         mac: [
           {
-            url: 'https://xiu-ci.com/xcagi-v1.0.0.0/personal/XCAGI-Personal-1.0.0.0-mac-arm64.dmg',
-            filename: 'XCAGI-Personal-1.0.0.0-mac-arm64.dmg',
+            url: 'https://xiu-ci.com/xcagi-v1.0.0.1/personal/XCAGI-Personal-1.0.0.1-mac-arm64.dmg',
+            filename: 'XCAGI-Personal-1.0.0.1-mac-arm64.dmg',
             sha256: 'cccc',
             size: 2000,
             arch: 'arm64',
@@ -140,8 +140,8 @@ const mockManifest: XcagiDownloadManifest = {
       },
       enterprise: {
         win: {
-          url: 'https://xiu-ci.com/xcagi-v1.0.0.0/enterprise/XCAGI-Enterprise-Setup-1.0.0.0-x64.exe',
-          filename: 'XCAGI-Enterprise-Setup-1.0.0.0-x64.exe',
+          url: 'https://xiu-ci.com/xcagi-v1.0.0.1/enterprise/XCAGI-Enterprise-Setup-1.0.0.1-x64.exe',
+          filename: 'XCAGI-Enterprise-Setup-1.0.0.1-x64.exe',
           sha256: 'bbbb',
           size: 1100,
           platform_label: 'Windows x64',
@@ -164,7 +164,7 @@ describe('fetchDownloadManifest', () => {
     })))
     const m = await fetchDownloadManifest('https://example.com/manifest.json', { force: true })
     expect(m).not.toBeNull()
-    expect(m?.version).toBe('1.0.0.0')
+    expect(m?.version).toBe('1.0.0.1')
     expect(m?.channels.official_download.personal?.win?.sha256).toBe('aaaa')
   })
 
@@ -178,7 +178,7 @@ describe('fetchDownloadManifest', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
       status: 200,
-      json: async () => ({ schema: 'wrong', version: '1.0.0.0' }),
+      json: async () => ({ schema: 'wrong', version: '1.0.0.1' }),
     })))
     const m = await fetchDownloadManifest('https://example.com/manifest.json', { force: true })
     expect(m).toBeNull()
@@ -197,7 +197,7 @@ describe('findManifestEntry', () => {
   it('finds Windows entry for personal SKU', () => {
     const entry = findManifestEntry(mockManifest, 'personal', 'win')
     expect(entry).not.toBeNull()
-    expect(entry?.filename).toBe('XCAGI-Personal-Setup-1.0.0.0-x64.exe')
+    expect(entry?.filename).toBe('XCAGI-Personal-Setup-1.0.0.1-x64.exe')
     expect(entry?.sha256).toBe('aaaa')
   })
 
@@ -226,7 +226,7 @@ describe('resolveDownloadEntry', () => {
     })))
     const entry = await resolveDownloadEntry('enterprise', 'win')
     expect(entry.url).toBe(
-      'https://xiu-ci.com/xcagi-v1.0.0.0/enterprise/XCAGI-Enterprise-Setup-1.0.0.0-x64.exe',
+      'https://xiu-ci.com/xcagi-v1.0.0.1/enterprise/XCAGI-Enterprise-Setup-1.0.0.1-x64.exe',
     )
     expect(entry.sha256).toBe('bbbb')
     expect(entry.size).toBe(1100)
@@ -239,7 +239,7 @@ describe('resolveDownloadEntry', () => {
     const mod = await import('./xcagiDownloadLinks')
     const entry = await mod.resolveDownloadEntry('personal', 'win')
     expect(entry.url).toBe(
-      'https://xiu-ci.com/xcagi-v1.0.0.0/personal/XCAGI-Personal-Setup-1.0.0.0-x64.exe',
+      'https://xiu-ci.com/xcagi-v1.0.0.1/personal/XCAGI-Personal-Setup-1.0.0.1-x64.exe',
     )
     expect(entry.sha256).toBe('')
     expect(entry.size).toBe(0)

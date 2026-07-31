@@ -2,7 +2,7 @@
 
 ## 页面行为（`SoftwareDownloadView.vue`）
 
-- 构建时注入 `VITE_XCAGI_DOWNLOAD_VERSION`（默认 `1.0.0.0`）、`VITE_XCAGI_DOWNLOAD_BASE_URL`。
+- 构建时注入 `VITE_XCAGI_DOWNLOAD_VERSION`（默认 `1.0.0.1`）、`VITE_XCAGI_DOWNLOAD_BASE_URL`。
 - 下载页只展示 **企业版** 安装包；普通浏览器点击 Windows / macOS / Android：通过隐藏 `<a download>` 跳转到
   `{BASE}/enterprise/{XCAGI-Enterprise-Setup|*-mac-x64.dmg|XCAGI-Enterprise-Android-*.apk}`。
 - Electron 桌面壳内点击 Windows / macOS 安装包时，优先调用 `window.xcagiDesktop.downloadFile()`，由主进程弹原生保存对话框并写入用户 Downloads；用户取消则停止，IPC 失败才回退浏览器下载。
@@ -14,9 +14,9 @@
 COS 桶 `xiuci-website-1374207682`（成都）对象前缀：
 
 ```
-xcagi-v1.0.0.0/enterprise/XCAGI-Enterprise-Setup-1.0.0.0-x64.exe
-xcagi-v1.0.0.0/enterprise/XCAGI-Enterprise-1.0.0.0-mac-x64.dmg
-xcagi-v1.0.0.0/enterprise/XCAGI-Enterprise-1.0.0.0-mac-arm64.dmg
+xcagi-v1.0.0.1/enterprise/XCAGI-Enterprise-Setup-1.0.0.1-x64.exe
+xcagi-v1.0.0.1/enterprise/XCAGI-Enterprise-1.0.0.1-mac-x64.dmg
+xcagi-v1.0.0.1/enterprise/XCAGI-Enterprise-1.0.0.1-mac-arm64.dmg
 ```
 
 下载页会按访客 Mac 架构（Apple Silicon / Intel）自动选择对应 `.dmg`；测试可用 `?macArch=arm64` 或 `?macArch=x64`。
@@ -24,10 +24,10 @@ xcagi-v1.0.0.0/enterprise/XCAGI-Enterprise-1.0.0.0-mac-arm64.dmg
 公网下载基址（market 构建注入）：
 
 ```
-https://xiu-ci.com/xcagi-v1.0.0.0
+https://xiu-ci.com/xcagi-v1.0.0.1
 ```
 
-nginx（`xiu-ci.com`）将 `/xcagi-v1.0.0.0/` alias 到本机安装包目录：
+nginx（`xiu-ci.com`）将 `/xcagi-v1.0.0.1/` alias 到本机安装包目录：
 
 ```
 /var/www/update/releases/stable/enterprise/
@@ -39,13 +39,13 @@ nginx（`xiu-ci.com`）将 `/xcagi-v1.0.0.0/` alias 到本机安装包目录：
 
 ```bash
 # 域名 DNS 未切到本机时，HTTPS 会失败或 403（旧 IP）
-curl -sI https://update.xcagi.com/releases/stable/enterprise/XCAGI-Enterprise-Setup-1.0.0.0-x64.exe
+curl -sI https://update.xcagi.com/releases/stable/enterprise/XCAGI-Enterprise-Setup-1.0.0.1-x64.exe
 
 # 本机文件（Host 或 IP 直链，HTTP）
-curl -sI -H "Host: update.xcagi.com" http://119.27.178.147/releases/stable/enterprise/XCAGI-Enterprise-Setup-1.0.0.0-x64.exe
+curl -sI -H "Host: update.xcagi.com" http://119.27.178.147/releases/stable/enterprise/XCAGI-Enterprise-Setup-1.0.0.1-x64.exe
 
 # 临时 HTTPS（xiu-ci.com 同机 alias，已配置）
-curl -sI https://xiu-ci.com/xcagi-v1.0.0.0/enterprise/XCAGI-Enterprise-Setup-1.0.0.0-x64.exe
+curl -sI https://xiu-ci.com/xcagi-v1.0.0.1/enterprise/XCAGI-Enterprise-Setup-1.0.0.1-x64.exe
 ```
 
 ## 下载慢（~100 KB/s、约 212MB 仍会很慢）
@@ -57,7 +57,7 @@ curl -sI https://xiu-ci.com/xcagi-v1.0.0.0/enterprise/XCAGI-Enterprise-Setup-1.0
 
 1. **DNS**：`update.xcagi.com` A 记录 → `119.27.178.147`（勿指向欠费/旧机 `170.33.12.185`）。
 2. **HTTPS（update 子域）**：`certbot certonly --nginx -d update.xcagi.com` 或扩展现有 `xiu-ci.com` 配置后 `nginx -t && systemctl reload nginx`。
-3. **前端**：生产 `.env` 设 `VITE_XCAGI_DOWNLOAD_VERSION=1.0.0.0`、`VITE_XCAGI_DOWNLOAD_BASE_URL=https://xiu-ci.com/xcagi-v1.0.0.0`。
+3. **前端**：生产 `.env` 设 `VITE_XCAGI_DOWNLOAD_VERSION=1.0.0.1`、`VITE_XCAGI_DOWNLOAD_BASE_URL=https://xiu-ci.com/xcagi-v1.0.0.1`。
 4. **重建 market**（见下）。
 
 发版全流程见主仓 `FHD/docs/guides/RELEASE_TWO_SKUS.md`；当前官网下载页只展示企业版，个人版作为冻结兼容线不对客户展示。
@@ -81,7 +81,7 @@ cd market && npm ci && npm run build
 
 | 变更类型 | 只动 | 部署后检查 |
 |----------|------|------------|
-| COS / 安装包加速 | `/var/www/update/`、`deploy/nginx/snippets/xcagi-cos-alias.inc.conf` | `curl -sI https://xiu-ci.com/xcagi-v8.1.0/personal/...` 与 `.../enterprise/...` |
+| COS / 安装包加速 | `/var/www/update/`、`deploy/nginx/snippets/xcagi-cos-alias.inc.conf` | `curl -sI https://xiu-ci.com/xcagi-v1.0.0.1/enterprise/...`（personal 已冻结） |
 | MODstore 工作台 | `MODstore_deploy/market/dist`、`deploy/nginx/snippets/market-static.inc.conf` | `bash deploy/scripts/post-deploy-check.sh` + 浏览器只开 `https://xiu-ci.com/market/` |
 
 **禁止**：将官网根目录 `index.html`（含 `site-header`、`./main.js`）复制到 `market/dist/`。  

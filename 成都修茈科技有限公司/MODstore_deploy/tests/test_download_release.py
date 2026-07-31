@@ -11,9 +11,9 @@ def test_public_subset_preserves_enterprise_release_identity() -> None:
         {"version": "10.0.0", "platforms": ["Windows", "macOS"]},
     ]
     release = {
-        "version_lock": "1.0.0.0",
-        "download_version": "1.0.0.0",
-        "android_version": "1.0.0.0",
+        "version_lock": "1.0.0.1",
+        "download_version": "1.0.0.1",
+        "android_version": "1.0.0.1",
         "android_git_sha": android_sha,
         "release_ready": True,
         "active_skus": ["enterprise"],
@@ -33,6 +33,6 @@ def test_public_subset_preserves_enterprise_release_identity() -> None:
     assert public["primary_sku"] == "enterprise"
     assert public["git_sha"] == desktop_sha
     assert public["android_git_sha"] == android_sha
-    assert public["manifest_url"] == "https://xiu-ci.com/xcagi-v1.0.0.0/manifest.json"
+    assert public["manifest_url"] == "https://xiu-ci.com/xcagi-v1.0.0.1/manifest.json"
     assert public["auto_update_base"] == "https://xiu-ci.com/releases/stable"
     assert public["release_history"] == history

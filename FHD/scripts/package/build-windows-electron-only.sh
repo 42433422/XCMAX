@@ -3,7 +3,7 @@
 # 仅用于诊断的薄壳；完整内嵌后端请使用正式构建链。
 set -euo pipefail
 
-VERSION="${1:-1.0.0.0}"
+VERSION="${1:-1.0.0.1}"
 SKU="${2:-enterprise}"
 VERSION="${VERSION#v}"
 VERSION="${VERSION#V}"

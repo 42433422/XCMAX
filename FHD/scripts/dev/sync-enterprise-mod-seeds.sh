@@ -79,7 +79,7 @@ ensure_host_foundation_seed() {
 {
   "id": "xcagi-host-foundation-employee",
   "name": "宿主基础能力（预装员工）",
-  "version": "1.0.0.0",
+  "version": "1.0.0.1",
   "author": "成都修茈科技有限公司",
   "description": "以员工包交付的通用宿主底座：安装后自动写入对话/ERP/审批/客服等 bridge Mod。",
   "artifact": "employee_pack",

@@ -8,10 +8,10 @@ on:
       version:
         description: "Release version"
         required: true
-        default: "1.0.0.0"
+        default: "1.0.0.1"
         type: choice
         options:
-          - "1.0.0.0"
+          - "1.0.0.1"
       verify_only:
         description: "Verify already-published public artifacts without rebuilding or uploading"
         required: true
@@ -341,7 +341,7 @@ jobs:
           raw="${raw#FHD/}"
           raw="${raw#v}"
           raw="${raw#V}"
-          version="${raw:-1.0.0.0}"
+          version="${raw:-1.0.0.1}"
           mkdir -p "release/xcagi-v${version}"
           BASE="${RUNNER_TEMP}/artifacts"
           sku=enterprise
@@ -372,7 +372,7 @@ jobs:
           raw="${raw#FHD/}"
           raw="${raw#v}"
           raw="${raw#V}"
-          version="${raw:-1.0.0.0}"
+          version="${raw:-1.0.0.1}"
           for metadata in "release/xcagi-v${version}/enterprise"/latest*.yml; do
             test -f "$metadata"
             python scripts/dev/sign_update_metadata.py "$metadata"
@@ -385,7 +385,7 @@ jobs:
           raw="${raw#FHD/}"
           raw="${raw#v}"
           raw="${raw#V}"
-          version="${raw:-1.0.0.0}"
+          version="${raw:-1.0.0.1}"
           android_version="$(jq -er '.android_version' config/download_release.json)"
           android_git_sha="$(jq -er '.android_git_sha' config/download_release.json)"
           python scripts/package/generate-download-manifest.py \
@@ -423,7 +423,7 @@ jobs:
           SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
           raw="${{ github.event.inputs.version || github.ref_name }}"
           raw="${raw#FHD/}"; raw="${raw#v}"; raw="${raw#V}"
-          version="${raw:-1.0.0.0}"
+          version="${raw:-1.0.0.1}"
           sku=enterprise
           src_dir="${GITHUB_WORKSPACE}/FHD/release/xcagi-v${version}/${sku}"
           test -d "$src_dir"

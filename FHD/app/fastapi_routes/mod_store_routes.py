@@ -464,6 +464,409 @@ async def mod_store_catalog() -> ModStoreCatalogResponse:
         data=ModStoreCatalogPayload(installed=installed, available=rows, indexed_count=len(rows))
     )
 
+async def _private_mod_context(request: Request) -> dict[str, Any]:
+    """读取**当前登录账号**可见的客户私有 Mod。
+
+    规则（customer_delivery SSOT）：
+    - 只暴露 ``legacy_mod_id``，不含 ``industry_mod_id``
+    - 必须以当前会话 ``entitled_mod_ids`` 为准，禁止把交付清单里其它客户的定制包一并列出
+    - 无会话 / 无权益 → 空列表（生产员工交付线不是全局客户目录）
+    - 定制线通道身份取 sessions.market_user_id，写入 scope=market:{id}，与管理端对齐
+    """
+    from app.enterprise.mod_entitlements import (
+        enterprise_mod_filter_active,
+        load_session_private_delivery_binding,
+        sync_entitlements_from_request,
+    )
+    from app.infrastructure.auth.dependencies import session_id_from_request
+    from app.mod_sdk.customer_delivery import (
+        list_account_custom_mod_ids,
+        list_industry_mod_ids_from_delivery,
+    )
+
+    account_custom = list_account_custom_mod_ids()
+    industry_packs = list_industry_mod_ids_from_delivery()
+    sid = session_id_from_request(request) or ""
+
+    binding: dict[str, Any] = {
+        "mod_ids": set(),
+        "market_user_id": None,
+        "username": "",
+        "company_brand": "",
+    }
+    if sid:
+        # 企业 SKU：尽量向市场刷新；平台壳 generic 也按 sessions 行隔离。
+        if enterprise_mod_filter_active():
+            await sync_entitlements_from_request(request)
+        binding = load_session_private_delivery_binding(sid)
+
+    entitled = {
+        mid
+        for mid in (binding.get("mod_ids") or set())
+        if str(mid).strip() in account_custom and str(mid).strip() not in industry_packs
+    }
+    return {
+        "mod_ids": entitled,
+        "market_user_id": binding.get("market_user_id"),
+        "username": str(binding.get("username") or binding.get("company_brand") or "").strip(),
+    }
+
+
+def _enterprise_delivery_scope(context: dict[str, Any], mod_ids: set[str] | None = None) -> str:
+    """企业端定制线写/读 scope：必须 market:{uid}，禁止静默落入 local:*。"""
+    from app.services.private_mod_delivery import (
+        account_scope,
+        merge_orphan_local_delivery_into_market,
+    )
+
+    try:
+        uid = int(context.get("market_user_id") or 0)
+    except (TypeError, ValueError):
+        uid = 0
+    if uid <= 0:
+        raise HTTPException(
+            status_code=401,
+            detail="企业端定制线缺少市场账号身份（sessions.market_user_id），请重新登录企业账号",
+        )
+    scope = account_scope(uid, _safe_text(context.get("username")))
+    merge_orphan_local_delivery_into_market(scope, mod_ids or context.get("mod_ids") or set())
+    return scope
+
+
+def _schedule_delivery_outbox_push() -> None:
+    """企业端 best-effort 后台推送同步 outbox（失败只记日志，不阻塞交付主流程）。"""
+    import asyncio
+
+    def _push() -> None:
+        try:
+            from app.application.xcmax_sync_app import push_outbox
+
+            result = push_outbox(
+                remote_host=os.environ.get("XCMAX_REMOTE_HOST", "119.27.178.147"),
+                remote_port=int(os.environ.get("XCMAX_REMOTE_PORT", "9999")),
+            )
+            logger.info("private Mod delivery outbox push: %s", result)
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("private Mod delivery outbox push failed: %s", exc)
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        _push()
+        return
+    loop.run_in_executor(None, _push)
+
+
+def _private_mod_local_rows(mod_ids: set[str]) -> dict[str, dict[str, Any]]:
+    from app.infrastructure.mods.mod_manager import get_mod_manager
+
+    rows: dict[str, dict[str, Any]] = {}
+    for row in get_mod_manager().list_all_mods():
+        mid = str(row.get("id") or "").strip()
+        if mid in mod_ids:
+            rows[mid] = row
+    return rows
+
+
+def _private_mod_items(row: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    modules: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in row.get("menu") or []:
+        if not isinstance(item, dict):
+            continue
+        label = _safe_text(item.get("label") or item.get("name") or item.get("id"))
+        if label and label not in seen:
+            seen.add(label)
+            modules.append({"id": _safe_text(item.get("id") or label), "label": label})
+    for item in row.get("menu_overrides") or []:
+        if not isinstance(item, dict) or item.get("hidden"):
+            continue
+        label = _safe_text(item.get("label") or item.get("key"))
+        if label and label not in seen:
+            seen.add(label)
+            modules.append({"id": _safe_text(item.get("key") or label), "label": label})
+    employees = [
+        {
+            "id": _safe_text(item.get("id")),
+            "label": _safe_text(item.get("label") or item.get("id")),
+            "summary": _safe_text(item.get("panel_summary") or item.get("summary")),
+        }
+        for item in (row.get("workflow_employees") or [])
+        if isinstance(item, dict) and _safe_text(item.get("id") or item.get("label"))
+    ]
+    return modules, employees
+
+
+def _private_mod_declared_nodes(
+    mod_id: str,
+    row: dict[str, Any],
+) -> dict[str, list[dict[str, Any]]]:
+    """优先 customer_delivery SSOT 双轨节点，空则回退 manifest menu / workflow_employees。"""
+    from app.mod_sdk.customer_delivery import track_nodes_for_custom_mod
+
+    declared = track_nodes_for_custom_mod(mod_id)
+    modules = list(declared.get("modules") or [])
+    employees = list(declared.get("employees") or [])
+    if not modules and not employees:
+        fallback_modules, fallback_employees = _private_mod_items(row)
+        modules = fallback_modules
+        employees = fallback_employees
+    return {"modules": modules, "employees": employees}
+
+
+@router.get("/private-delivery", response_model=ModStoreSimpleResponse)
+async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse:
+    """生产员工专用：客户私有 Mod 双轨交付状态与私有更新信息。"""
+    from app.mod_sdk.customer_delivery import delivery_for_account_custom_mod
+    from app.services.private_mod_delivery import (
+        HAPPY_PATH,
+        STAGES,
+        STAGE_LABELS,
+        TRACKS,
+        attach_track_nodes,
+        fetch_private_mod_library,
+        is_newer_version,
+        load_stage_flow_from_ssot,
+        overall_status,
+        project_state,
+        stage_label,
+    )
+
+    context = await _private_mod_context(request)
+    mod_ids = context["mod_ids"]
+    local_rows = _private_mod_local_rows(mod_ids)
+    remote_rows: list[dict[str, Any]] = []
+    remote_error = ""
+    try:
+        from app.fastapi_routes.market_account import resolve_valid_market_access_token
+        from app.infrastructure.auth.dependencies import session_id_from_request
+
+        sid = session_id_from_request(request)
+        token = await resolve_valid_market_access_token(sid) if sid else ""
+        if token:
+            remote_rows = await fetch_private_mod_library(token)
+        elif mod_ids:
+            remote_error = "未检测到市场登录凭证"
+    except RECOVERABLE_ERRORS as exc:
+        remote_error = str(exc)[:240]
+        logger.warning("private Mod update check failed: %s", exc)
+    remote_by_id = {
+        _safe_text(row.get("id")): row
+        for row in remote_rows
+        if _safe_text(row.get("id")) in mod_ids
+    }
+    scope = _enterprise_delivery_scope(context, mod_ids)
+    projects: list[dict[str, Any]] = []
+    for mod_id in sorted(mod_ids):
+        row = local_rows.get(mod_id, {})
+        remote = remote_by_id.get(mod_id, {})
+        delivery = delivery_for_account_custom_mod(mod_id)
+        local_version = _safe_text(row.get("version"))
+        latest_version = _safe_text(remote.get("version"))
+        project = project_state(
+            scope,
+            mod_id,
+            name=_safe_text(row.get("name") or (delivery or {}).get("customer_brand") or mod_id),
+            version=local_version,
+        )
+        modules, employees = _private_mod_items(row)
+        declared = _private_mod_declared_nodes(mod_id, row)
+        track_nodes = attach_track_nodes(project, declared)
+        projects.append(
+            {
+                "mod_id": mod_id,
+                "name": _safe_text(row.get("name") or (delivery or {}).get("customer_brand") or mod_id),
+                "description": _safe_text(row.get("description") or (delivery or {}).get("notes")),
+                "installed": bool(row),
+                "current_version": local_version,
+                "latest_version": latest_version,
+                "update_available": bool(latest_version and is_newer_version(latest_version, local_version)),
+                "update_source": "private_mod_sync" if remote else "unavailable",
+                "business_modules": modules,
+                "ai_employees": employees,
+                "track_nodes": track_nodes,
+                "tracks": project.get("tracks", {}),
+                "overall_status": overall_status(project),
+                "overall_label": {
+                    "production": "制作中",
+                    "testing": "测试中",
+                    "rework": "返工中",
+                    "acceptance": "验收中",
+                    "partial": "部分交付",
+                    "delivered": "私有 Mod 已交付",
+                }.get(overall_status(project), "制作中"),
+                "stage_labels": {
+                    "modules": {s: stage_label("modules", s) for s in STAGES},
+                    "business": {s: stage_label("modules", s) for s in STAGES},
+                    "employees": {s: stage_label("employees", s) for s in STAGES},
+                },
+            }
+        )
+    return ModStoreSimpleResponse(
+        success=True,
+        data={
+            "projects": projects,
+            "tracks": TRACKS,
+            "stages": STAGES,
+            "happy_path": list(HAPPY_PATH),
+            "stage_flow": load_stage_flow_from_ssot(),
+            "stage_labels": STAGE_LABELS,
+            "update_count": sum(1 for p in projects if p["update_available"]),
+            "remote_error": remote_error,
+            "requires_login": bool(mod_ids and not remote_rows and remote_error),
+        },
+    )
+
+
+@router.post("/private-delivery/status", response_model=ModStoreSimpleResponse)
+async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleResponse:
+    payload = await _request_payload(request)
+    mod_id = _safe_text(payload.get("mod_id"))
+    track = _safe_text(payload.get("track"))
+    status = _safe_text(payload.get("status"))
+    node_id = _safe_text(payload.get("node_id"))
+    note = _safe_text(payload.get("note") or payload.get("problem") or payload.get("description"))
+    if not mod_id or not track or not status:
+        raise HTTPException(status_code=400, detail="缺少 mod_id、track 或 status")
+    context = await _private_mod_context(request)
+    if mod_id not in context["mod_ids"]:
+        raise HTTPException(status_code=403, detail="当前账号未授权该客户私有 Mod")
+    # 返工必须写明问题，并走现有客服变更工单（不新造工单系统）
+    rework_ticket: dict[str, Any] | None = None
+    if status == "rework":
+        if len(note) < 4:
+            raise HTTPException(status_code=400, detail="转返工须填写问题说明（至少 4 个字）")
+        try:
+            uid = int(context.get("market_user_id") or 0)
+        except (TypeError, ValueError):
+            uid = 0
+        if uid <= 0:
+            raise HTTPException(status_code=401, detail="转返工须已绑定市场账号身份")
+        from app.services.user_cs_change_request import create_change_request
+
+        node_label = node_id or track
+        try:
+            rework_ticket = create_change_request(
+                uid,
+                change_type="bug_fix",
+                title=f"定制交付返工 · {mod_id} · {node_label}",
+                description=(
+                    f"来源：企业端私有交付返工\n"
+                    f"Mod：{mod_id}\n"
+                    f"轨道：{track}\n"
+                    f"节点：{node_id or '整轨'}\n"
+                    f"问题：{note}"
+                ),
+                priority=_safe_text(payload.get("priority")) or "normal",
+                username=_safe_text(context.get("username")),
+                source="private_mod_rework",
+            )
+            ticket_no = _safe_text(rework_ticket.get("ticket_no") or rework_ticket.get("id"))
+            if ticket_no:
+                note = f"[客服工单 {ticket_no}] {note}"
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    from app.services.private_mod_delivery import set_track_status
+
+    local = _private_mod_local_rows({mod_id}).get(mod_id, {})
+    scope_key = _enterprise_delivery_scope(context, {mod_id})
+    try:
+        project = set_track_status(
+            scope_key,
+            mod_id,
+            track,
+            status,
+            note=note,
+            name=_safe_text(local.get("name") or mod_id),
+            version=_safe_text(local.get("version")),
+            node_id=node_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # 企业端出队 + best-effort 后台推送：进度不滞留本机等管理端手动拉
+    uid = int(context.get("market_user_id") or 0)
+    if uid > 0:
+        try:
+            from app.application.xcmax_sync_app import record_change
+            from app.services.private_mod_delivery import export_account_state
+
+            record_change(
+                "private_mod_delivery",
+                str(uid),
+                "update",
+                {
+                    "market_user_id": str(uid),
+                    "username": _safe_text(context.get("username")),
+                    **export_account_state(scope_key),
+                },
+                actor="customer",
+            )
+            _schedule_delivery_outbox_push()
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("private Mod delivery sync enqueue failed user=%s: %s", uid, exc)
+    from app.services.private_mod_delivery import overall_status
+
+    data: dict[str, Any] = {
+        "mod_id": mod_id,
+        "tracks": project.get("tracks", {}),
+        "overall_status": overall_status(project),
+    }
+    if rework_ticket:
+        data["rework_ticket"] = {
+            "id": _safe_text(rework_ticket.get("id")),
+            "ticket_no": _safe_text(rework_ticket.get("ticket_no")),
+            "status": _safe_text(rework_ticket.get("status")),
+            "change_type": _safe_text(rework_ticket.get("change_type")),
+            "source": "private_mod_rework",
+        }
+    return ModStoreSimpleResponse(
+        success=True,
+        message="交付状态已更新" + (f"；已开客服工单 {data['rework_ticket']['ticket_no']}" if rework_ticket else ""),
+        data=data,
+    )
+
+
+@router.post("/private-mod/update", response_model=ModStoreInstallResult)
+async def mod_store_private_mod_update(request: Request) -> ModStoreInstallResult:
+    payload = await _request_payload(request)
+    mod_id = _safe_text(payload.get("mod_id"))
+    expected_version = _safe_text(payload.get("latest_version") or payload.get("version"))
+    if not mod_id:
+        raise HTTPException(status_code=400, detail="缺少 mod_id")
+    context = await _private_mod_context(request)
+    if mod_id not in context["mod_ids"]:
+        raise HTTPException(status_code=403, detail="当前账号未授权该客户私有 Mod")
+    try:
+        from app.fastapi_routes.market_account import resolve_valid_market_access_token
+        from app.infrastructure.auth.dependencies import session_id_from_request
+        from app.services.private_mod_delivery import update_private_mod_from_library
+
+        sid = session_id_from_request(request)
+        token = await resolve_valid_market_access_token(sid) if sid else ""
+        if not token:
+            raise PermissionError("缺少市场登录凭证，无法更新客户私有 Mod")
+        data = await update_private_mod_from_library(
+            mod_id,
+            token,
+            expected_version=expected_version,
+        )
+        return ModStoreInstallResult(
+            success=bool(data.get("success")),
+            message=str(data.get("message") or "私有 Mod 更新完成"),
+            data=data,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+
 
 @router.get("/market-catalog", response_model=ModStoreMarketCatalogResponse)
 async def mod_store_market_catalog(

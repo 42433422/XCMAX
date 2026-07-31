@@ -3,7 +3,7 @@
 # 等价于 build-installer.ps1 -SkipUiInstaller（跳过 WPF 外壳，保留 NSIS + 内嵌后端）。
 set -euo pipefail
 
-VERSION="${1:-1.0.0.0}"
+VERSION="${1:-1.0.0.1}"
 SKU="${2:-enterprise}"
 VERSION="${VERSION#v}"
 VERSION="${VERSION#V}"

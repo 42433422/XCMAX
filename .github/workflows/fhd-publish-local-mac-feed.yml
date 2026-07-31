@@ -9,14 +9,14 @@ on:
       version:
         description: Product version (four-part)
         required: true
-        default: "1.0.0.0"
+        default: "1.0.0.1"
       build_sha:
         description: Full 40-char git SHA embedded in build-info
         required: true
       zip_name:
         description: Enterprise macOS ZIP filename already on the update host
         required: true
-        default: "XCAGI-Enterprise-1.0.0.0-mac-arm64.zip"
+        default: "XCAGI-Enterprise-1.0.0.1-mac-arm64.zip"
       zip_sha512:
         description: Base64 sha512 of the ZIP (openssl dgst -sha512 -binary | base64)
         required: true

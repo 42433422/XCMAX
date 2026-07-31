@@ -17,13 +17,13 @@
 3. 环境变量仍为：
 
 ```env
-VITE_XCAGI_DOWNLOAD_VERSION=1.0.0.0
-VITE_XCAGI_DOWNLOAD_BASE_URL=https://xiu-ci.com/xcagi-v1.0.0.0
+VITE_XCAGI_DOWNLOAD_VERSION=1.0.0.1
+VITE_XCAGI_DOWNLOAD_BASE_URL=https://xiu-ci.com/xcagi-v1.0.0.1
 ```
 
 4. 重建并部署 market 前端
 
 ## Android 分发
 
-- 对外只提供签名后的 `XCAGI-Enterprise-Android-1.0.0.0.apk`
+- 对外只提供签名后的 `XCAGI-Enterprise-Android-1.0.0.1.apk`
 - 历史 `personal` applicationId 不再新增版本；恢复前必须先重新评审产品线规范

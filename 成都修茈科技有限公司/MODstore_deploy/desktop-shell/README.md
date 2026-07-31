@@ -3,7 +3,7 @@
 此目录保留 AI 员工商店 Web 壳兼容代码，但不再承担 XCAGI 稳定版安装包构建或发布。企业桌面稳定版的唯一发布入口是根仓 `Release Desktop`（源文件：`FHD/.github/workflows/release-desktop.yml`，发布文件：`.github/workflows/fhd-release-desktop.yml`）。
 
 - 精简客户端：Electron 外壳加载 XCAGI 工作台 Web 面（`XCAGI_DESKTOP_URL`，默认 `https://xiu-ci.com/market/`）。
-- 对外稳定产品版本为 `1.0.0.0`，Electron 工具链包版本为 `1.0.0`。
+- 对外稳定产品版本为 `1.0.0.1`，Electron 工具链包版本为 `1.0.0`。
 - 本地构建产物仅用于兼容性调试，不得上传到 `/releases/stable/`。
 - 桌面壳内点击安装包下载时走原生保存对话框，默认保存到用户 Downloads，不写安装目录或应用目录。
 - Windows 安装包为用户级安装（`asInvoker` + `allowElevation=false`），避免下载后安装时误触发管理员权限路径。

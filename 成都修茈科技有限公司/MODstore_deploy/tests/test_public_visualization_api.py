@@ -23,10 +23,10 @@ def _configure_sources(monkeypatch, tmp_path):
             (
                 _log_line("POST", "/api/llm/chat/stream", 200, "19"),
                 _log_line("POST", "/api/llm/chat/stream", 500, "19"),
-                _log_line("GET", "/xcagi-v1.0.0.0/XCAGI.exe", 200, "19"),
+                _log_line("GET", "/xcagi-v1.0.0.1/XCAGI.exe", 200, "19"),
                 _log_line("GET", "/downloads/kellai/KeLaiLai.dmg?from=home", 200, "19"),
-                _log_line("HEAD", "/xcagi-v1.0.0.0/XCAGI.apk", 200, "19"),
-                _log_line("GET", "/xcagi-v1.0.0.0/XCAGI.dmg", 206, "19"),
+                _log_line("HEAD", "/xcagi-v1.0.0.1/XCAGI.apk", 200, "19"),
+                _log_line("GET", "/xcagi-v1.0.0.1/XCAGI.dmg", 206, "19"),
                 _log_line("GET", "/releases/stable/update.zip", 200, "19"),
                 _log_line("GET", "/private/customer/acme", 200, "19", ip="198.51.100.77"),
             )
@@ -35,13 +35,13 @@ def _configure_sources(monkeypatch, tmp_path):
     )
     with gzip.open(rotated_log, "wt", encoding="utf-8") as handle:
         handle.write(_log_line("POST", "/api/llm/chat/stream", 200, "10"))
-        handle.write(_log_line("GET", "/xcagi-v1.0.0.0/XCAGI.apk", 200, "10"))
+        handle.write(_log_line("GET", "/xcagi-v1.0.0.1/XCAGI.apk", 200, "10"))
 
     manifest = tmp_path / "download-release.json"
     manifest.write_text(
         json.dumps(
             {
-                "version_lock": "1.0.0.0",
+                "version_lock": "1.0.0.1",
                 "release_ready": True,
                 "release_history": [
                     {"version": "1.0.0.0", "platforms": ["Windows", "macOS", "Android"]},
@@ -153,7 +153,7 @@ def test_live_aggregates_use_logs_and_release_manifest(monkeypatch, tmp_path):
     assert payload["downloads"]["daily"][0]["count"] == 1
     assert payload["downloads"]["daily"][-1]["count"] == 2
     assert payload["product"] == {
-        "stable_version": "1.0.0.0",
+        "stable_version": "1.0.0.1",
         "release_iterations": 2,
         "delivery_platforms": 3,
         "release_ready": True,

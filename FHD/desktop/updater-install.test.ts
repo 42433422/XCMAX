@@ -66,7 +66,7 @@ describe('updater install rollback contract', () => {
   })
 
   it('blocks quitAndInstall and cleans the marker when preparation fails', async () => {
-    const updater = await markDownloaded('1.0.0.0')
+    const updater = await markDownloaded('1.0.0.1')
     const cleanup = vi.fn(async () => undefined)
     await expect(
       updater.installUpdate(
@@ -81,7 +81,7 @@ describe('updater install rollback contract', () => {
   })
 
   it('cleans the marker when quitAndInstall throws synchronously', async () => {
-    const updater = await markDownloaded('1.0.0.0')
+    const updater = await markDownloaded('1.0.0.1')
     mocks.autoUpdater.quitAndInstall.mockImplementationOnce(() => {
       throw new Error('installer launch failed')
     })

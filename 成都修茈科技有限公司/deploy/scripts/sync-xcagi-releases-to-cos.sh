@@ -8,14 +8,14 @@
 #
 # 环境变量：
 #   COS_BUCKET   默认 xiuci-website-1374207682
-#   COS_PREFIX   默认 xcagi-v8.0.0（须与 VITE_XCAGI_DOWNLOAD_BASE_URL 路径一致）
+#   COS_PREFIX   默认 xcagi-v1.0.0.1（须与 VITE_XCAGI_DOWNLOAD_BASE_URL 路径一致）
 #   LOCAL_ROOT   默认 /var/www/update/releases/stable
 #   COS_REGION   默认 ap-chengdu
 
 set -euo pipefail
 
 COS_BUCKET="${COS_BUCKET:-xcagi-releases-1374207682}"
-COS_PREFIX="${COS_PREFIX:-xcagi-v8.0.0}"
+COS_PREFIX="${COS_PREFIX:-xcagi-v1.0.0.1}"
 LOCAL_ROOT="${LOCAL_ROOT:-/var/www/update/releases/stable}"
 COS_REGION="${COS_REGION:-ap-guangzhou}"
 
@@ -66,7 +66,7 @@ fi
 
 echo ""
 echo "OK. 请在腾讯云控制台："
-echo "  1) 确认 COS 对象：${cos_target}{personal,offline,enterprise}/"
+echo "  1) 确认 COS 对象：${cos_target}{enterprise}/（personal 已冻结）"
 echo "  2) 为 dl.xiu-ci.com 配置 CDN CNAME（勿再 A 记录到 CVM）"
-echo "  3) 验证：curl -sI https://dl.xiu-ci.com/${COS_PREFIX}/enterprise/XCAGI-Enterprise-Setup-8.0.0-x64.exe"
+echo "  3) 验证：curl -sI https://dl.xiu-ci.com/${COS_PREFIX}/enterprise/XCAGI-Enterprise-Setup-1.0.0.1-x64.exe"
 echo "详见：deploy/docs/runbooks/xcagi-download-cdn.md"

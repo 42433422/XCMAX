@@ -282,7 +282,7 @@ const EmpWfRadialGraph = (() => {
       label: '安装包推 COS\n回写下载版本 SSOT',
       kind: 'step',
       phase: 't2b',
-      desc: 'release/xcagi-v1.0.0.0/{personal,enterprise} → dl.xiu-ci.com · 回写 FHD/config/download_release.json.last_push + 官网 /download-release.json（下载页 fetch，无需重建即生效）· v10 锁恒 1.0.0.0 · 【跨轨桥接 研发→经营】产出供事件轨 O6 企业使用 / O5 交付编排 消费 OTA',
+      desc: 'release/xcagi-v1.0.0.1/{personal,enterprise} → dl.xiu-ci.com · 回写 FHD/config/download_release.json.last_push + 官网 /download-release.json（下载页 fetch，无需重建即生效）· v10 当前 1.0.0.1 · 【跨轨桥接 研发→经营】产出供事件轨 O6 企业使用 / O5 交付编排 消费 OTA',
     },
     { id: 'BR', label: '切日更分支 primary 模式', kind: 'step', phase: 't2b' },
     { id: 'P2W', label: 'P2 网站编码', kind: 'step', phase: 't3' },

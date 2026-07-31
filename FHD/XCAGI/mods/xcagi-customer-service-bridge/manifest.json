@@ -1,7 +1,7 @@
 {
   "id": "xcagi-customer-service-bridge",
   "name": "客服业务页桥接 Mod",
-  "version": "1.0.0.0",
+  "version": "1.0.0.1",
   "author": "成都修茈科技有限公司",
   "description": "里程碑 K/O（客服）：外部/内部客服页物理视图在 Mod 包；API 仍走宿主门面。",
   "primary": false,

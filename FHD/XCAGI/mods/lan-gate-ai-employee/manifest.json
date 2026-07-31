@@ -1,7 +1,7 @@
 {
   "id": "lan-gate-ai-employee",
   "name": "局域网授权 AI 员工",
-  "version": "1.0.0.0",
+  "version": "1.0.0.1",
   "author": "成都修茈科技有限公司",
   "description": "将宿主「局域网授权」作为可选 AI 员工上架：仅在 AI 市场下载安装，不在主侧栏固定展示；通过副窗工作流员工或全局授权弹窗进入 /lan-gate。License API 由 xcagi-lan-license-bridge 提供。",
   "primary": false,

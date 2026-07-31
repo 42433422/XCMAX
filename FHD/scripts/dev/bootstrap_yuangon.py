@@ -57,7 +57,7 @@ HANDOFF_HUB_DOCS: dict[str, str] = {
 ### handoff: mobile-android-release-officer → 本岗（iOS 岗专用）
 - **触发条件**：Flutter Android APK/AAB 产物就绪 + `verify_version_anchors.py` 绿
 - **输入**：`release-apk/` 产物路径、Flutter `pubspec.yaml` 版本锚点、smoke 通过报告
-- **门禁**：Android 发版未完成时 iOS 发版只允许 dry-run；产品版本必须与 1.0.0.0 SSOT 对齐
+- **门禁**：Android 发版未完成时 iOS 发版只允许 dry-run；产品版本必须与 1.0.0.1 SSOT 对齐
 - **当前状态**：`FHD/mobile-flutter-poc/` 是唯一移动实现；`release-ios.yml` 负责 Flutter iOS 构建、签名和上传
 """,
     "security-secrets-guard": """\
@@ -81,7 +81,7 @@ def _make_employee_yaml(pkg_id: str, mf: dict) -> str:
     area = identity.get("area", "")
     name = identity.get("name", mf.get("name", pkg_id))
     domain = identity.get("domain", mf.get("description", ""))
-    version = identity.get("version", mf.get("version", "1.0.0.0"))
+    version = identity.get("version", mf.get("version", "1.0.0.1"))
     owner = identity.get("owner", mf.get("author", "admin"))
     wp = v2.get("workspace_policy", {})
     scope_globs = wp.get("scope_globs", [])

@@ -131,8 +131,8 @@ def ssot_path() -> Path:
 def default_state() -> Dict[str, Any]:
     return {
         "epoch": "1.0.0.0",
-        "product_version": "1.0.0.0",
-        "current": "1.0.0.0",
+        "product_version": "1.0.0.1",
+        "current": "1.0.0.1",
         "started_at": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         "day_index": 0,
         "last_bump_at": None,
@@ -213,11 +213,11 @@ def save_state(state: Dict[str, Any], *, path: Optional[Path] = None) -> Path:
 
 def snapshot_public(state: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     st = dict(state or load_state())
-    current = str(st.get("current") or "1.0.0.0")
+    current = str(st.get("current") or "1.0.0.1")
     day_index = int(st.get("day_index") or 0)
     return {
         "epoch": str(st.get("epoch") or "1.0.0.0"),
-        "product_version": str(st.get("product_version") or "1.0.0.0"),
+        "product_version": str(st.get("product_version") or "1.0.0.1"),
         "current": current,
         "started_at": st.get("started_at"),
         "day_index": day_index,
@@ -348,8 +348,8 @@ def bump_release_train(
             "ok": True,
             "skipped": True,
             "reason": "MODSTORE_RELEASE_TRAIN_ENABLED=0",
-            "before": str(st.get("current") or "1.0.0.0"),
-            "after": str(st.get("current") or "1.0.0.0"),
+            "before": str(st.get("current") or "1.0.0.1"),
+            "after": str(st.get("current") or "1.0.0.1"),
             "kind": "daily",
             "day_index": int(st.get("day_index") or 0),
         }
@@ -505,7 +505,7 @@ def rollback_release_train(
     """
     p = ssot_path()
     cur = load_state(path=p)
-    before = str(cur.get("current") or "1.0.0.0")
+    before = str(cur.get("current") or "1.0.0.1")
 
     # committed 状态序列（仅 post_bump / rollback / init）：按时间正序
     hdir = history_dir(path=p)

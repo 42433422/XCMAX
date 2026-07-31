@@ -358,6 +358,88 @@ def restore_entitlements_from_session_row(session_id: str) -> bool:
         return False
 
 
+def load_entitled_client_mod_ids_for_session(session_id: str) -> set[str]:
+    """读取某会话已绑定的客户 Mod 权益（不依赖 enterprise SKU 过滤开关）。
+
+    平台壳可能以 generic SKU 运行，企业过滤关闭；生产员工私有交付仍须按账号隔离，
+    禁止回退到 ``customer_delivery.json`` 全量定制包列表。
+    """
+    return set(load_session_private_delivery_binding(session_id).get("mod_ids") or set())
+
+
+def load_session_private_delivery_binding(session_id: str) -> dict[str, Any]:
+    """定制线通道身份 + 权益：sessions 行为准，不依赖 enterprise 过滤缓存。
+
+    返回 ``{mod_ids, market_user_id, username, company_brand}``。
+    生产员工写交付状态必须用 ``market:{market_user_id}`` scope，才能和管理端
+    ``/admin/market/users/{id}/private-delivery`` 对齐。
+    """
+    sid = str(session_id or "").strip()
+    empty: dict[str, Any] = {
+        "mod_ids": set(),
+        "market_user_id": None,
+        "username": "",
+        "company_brand": "",
+    }
+    if not sid:
+        return empty
+
+    mod_ids: set[str] = set()
+    if enterprise_mod_filter_active():
+        cached = get_cached_entitled_client_mod_ids()
+        if cached:
+            mod_ids = set(cached)
+
+    market_user_id: int | None = None
+    username = ""
+    company_brand = ""
+    try:
+        from app.db.models.user import Session as UserSession
+
+        with _session_row_db_context() as db:
+            row = db.query(UserSession).filter(UserSession.session_id == sid).first()
+            if row is None:
+                return {
+                    "mod_ids": mod_ids,
+                    "market_user_id": _cached_market_user_id,
+                    "username": _cached_market_username or "",
+                    "company_brand": "",
+                }
+            if not mod_ids:
+                raw = getattr(row, "entitled_mod_ids_json", None) or "[]"
+                mod_ids = {str(x).strip() for x in json.loads(raw) if str(x).strip()}
+            mid = getattr(row, "market_user_id", None)
+            if mid is not None and str(mid).strip():
+                try:
+                    market_user_id = int(mid)
+                except (TypeError, ValueError):
+                    market_user_id = None
+            company_brand = str(getattr(row, "company_brand", None) or "").strip()
+            username = str(getattr(row, "impersonating_username", None) or "").strip()
+            if not username:
+                username = company_brand
+    except Exception:
+        logger.exception("load_session_private_delivery_binding failed")
+        return {
+            "mod_ids": mod_ids,
+            "market_user_id": _cached_market_user_id,
+            "username": _cached_market_username or "",
+            "company_brand": "",
+        }
+
+    if market_user_id is None:
+        market_user_id = _cached_market_user_id
+    if not username:
+        username = _cached_market_username or _session_username_for_entitlements(sid)
+
+    return {
+        "mod_ids": mod_ids,
+        "market_user_id": market_user_id,
+        "username": username,
+        "company_brand": company_brand,
+    }
+
+
 def _session_username_for_entitlements(session_id: str) -> str:
     sid = (session_id or "").strip()
     if not sid:

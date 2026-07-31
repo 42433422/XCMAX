@@ -1,7 +1,7 @@
 {
   "id": "xcagi-planner-bridge",
   "name": "XCAGI 对话 Planner 门面 Mod",
-  "version": "1.0.0.0",
+  "version": "1.0.0.1",
   "author": "成都修茈科技有限公司",
   "description": "Planner 对话/工具 API 门面（3d/B）+ 主对话与智能生态/智脑业务页（K/O+/P 物理视图）。",
   "primary": true,

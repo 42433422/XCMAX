@@ -134,12 +134,12 @@ class TestReleaseTrainSnapshot:
             "sys.modules",
             {
                 "modstore_server.release_train": MagicMock(
-                    snapshot_public=MagicMock(return_value={"current": "1.0.0.0"})
+                    snapshot_public=MagicMock(return_value={"current": "1.0.0.1"})
                 )
             },
         ):
             out = admin_routes._release_train_snapshot()
-        assert out["current"] == "1.0.0.0"
+        assert out["current"] == "1.0.0.1"
 
     def test_fallback_to_file(self, tmp_path: Path) -> None:
         cfg_dir = tmp_path / "FHD" / "config"
@@ -154,7 +154,7 @@ class TestReleaseTrainSnapshot:
     def test_file_missing_returns_default(self, tmp_path: Path) -> None:
         with patch.dict("os.environ", {"XCMAX_MONOREPO_ROOT": str(tmp_path)}):
             out = admin_routes._release_train_snapshot()
-        assert out["current"] == "1.0.0.0"
+        assert out["current"] == "1.0.0.1"
         assert out.get("note") == "ssot missing"
 
     def test_bad_json_returns_default(self, tmp_path: Path) -> None:
@@ -163,7 +163,7 @@ class TestReleaseTrainSnapshot:
         (cfg_dir / "release_train.json").write_text("not json")
         with patch.dict("os.environ", {"XCMAX_MONOREPO_ROOT": str(tmp_path)}):
             out = admin_routes._release_train_snapshot()
-        assert out["current"] == "1.0.0.0"
+        assert out["current"] == "1.0.0.1"
 
     def test_file_returns_non_dict_returns_default(self, tmp_path: Path) -> None:
         cfg_dir = tmp_path / "FHD" / "config"
@@ -171,7 +171,7 @@ class TestReleaseTrainSnapshot:
         (cfg_dir / "release_train.json").write_text(json.dumps([1, 2, 3]))
         with patch.dict("os.environ", {"XCMAX_MONOREPO_ROOT": str(tmp_path)}):
             out = admin_routes._release_train_snapshot()
-        assert out["current"] == "1.0.0.0"
+        assert out["current"] == "1.0.0.1"
 
     def test_no_monorepo_root_uses_path_relative(self, tmp_path: Path) -> None:
         with patch.dict("os.environ", {"XCMAX_MONOREPO_ROOT": ""}, clear=False):

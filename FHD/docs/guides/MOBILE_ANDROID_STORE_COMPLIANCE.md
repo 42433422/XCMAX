@@ -43,7 +43,7 @@
 
 环境变量（MODstore）：`XCAGI_ANDROID_MIN_VERSION_CODE`、`XCAGI_ANDROID_LATEST_VERSION_CODE`、`XCAGI_ANDROID_LATEST_VERSION_NAME`。
 
-## 真机验收（1.0.0.0）
+## 真机验收（1.0.0.1）
 
 1. 首次安装 → 隐私同意 → 登录 → 首页/对话/工作台
 2. 企业账号与管理员账号可登录；personal 账号不得进入企业工作台

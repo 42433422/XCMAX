@@ -664,6 +664,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         yield _sse_event_line({"type": "token", "text": response_text})
         yield _sse_event_line({"type": "done", "result": business_payload})
         return
+
     ok_read, read_req = _ensure_chat_db_read_authorized(
         request,
         message=body.message,

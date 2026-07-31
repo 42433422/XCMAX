@@ -22,7 +22,7 @@
 
 ## 方式 A：桌面安装包（推荐客户）
 
-1. 运行供应商提供的 **XCAGI Setup 1.0.0.0**（generic 壳）。
+1. 运行供应商提供的 **XCAGI Setup 1.0.0.1**（generic 壳）。
 2. 首次启动：若提示装 Mod 包，在 **扩展市场** 点 **一键装齐通用包**。
 3. 验证：浏览器或壳内打开 → **智能对话** 可用；`GET http://127.0.0.1:5000/api/platform-shell/deliverable-status` 中 `"deliverable": true`。
 
@@ -102,7 +102,7 @@ curl -X POST "http://127.0.0.1:5000/api/mod-store/bootstrap-edition-pack?edition
 ```powershell
 powershell -File scripts/dev/adcdfg_acceptance.ps1
 powershell -File scripts/dev/deliverable_smoke.ps1
-powershell -File scripts/package/build-all-skus.ps1 -Version 1.0.0.0
+powershell -File scripts/package/build-all-skus.ps1 -Version 1.0.0.1
 ```
 
 完整清单：[DELIVERABLE_PRODUCT.md](DELIVERABLE_PRODUCT.md)

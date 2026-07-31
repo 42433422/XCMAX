@@ -14,7 +14,7 @@ if [[ ! -f "$CRED_FILE" ]]; then
   COS_SECRET_KEY=你的SecretKey
   COS_BUCKET=xcagi-releases-1374207682
   COS_REGION=ap-guangzhou
-  COS_PREFIX=xcagi-v8.0.0
+  COS_PREFIX=xcagi-v1.0.0.1
 
 密钥：腾讯云控制台 → 访问管理 → API 密钥管理 → 新建（仅需 COS 读写该桶）
 
@@ -34,5 +34,5 @@ python3 "$PY"
 
 echo ""
 echo "上传完成后，在 CDN 控制台对 dl.xiu-ci.com 提交「缓存预热」："
-echo "  /xcagi-v8.0.0/enterprise/XCAGI-Enterprise-Setup-8.0.0-x64.exe"
-echo "  （personal / offline 同理）"
+echo "  /xcagi-v1.0.0.1/enterprise/XCAGI-Enterprise-Setup-1.0.0.1-x64.exe"
+echo "  （personal 已冻结，仅 enterprise 上传）"

@@ -17,7 +17,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$AcceptanceBaseUrl = 'https://xiu-ci.com/xcagi-v1.0.0.0/acceptance'
+$AcceptanceBaseUrl = 'https://xiu-ci.com/xcagi-v1.0.0.1/acceptance'
 $TutorialExcelUrl = "$AcceptanceBaseUrl/xcagi-tutorial-dept-employee.xlsx"
 $AttendanceInputUrl = "$AcceptanceBaseUrl/sunbird-attendance-input.xlsx"
 $AttendanceTemplateUrl = "$AcceptanceBaseUrl/sunbird-attendance-template.xlsx"

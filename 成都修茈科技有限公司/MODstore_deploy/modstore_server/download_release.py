@@ -1,7 +1,7 @@
 """官网下载版本 SSOT 读写 + installer 日推送回写。
 
 单一真相源：``FHD/config/download_release.json``（可用 ``MODSTORE_DOWNLOAD_RELEASE_JSON`` 覆盖）。
-- 稳定产品版本、下载版本和 Android versionName 统一为 ``1.0.0.0``（见 ``FHD/VERSION.md``）。
+- 稳定产品版本、下载版本和 Android versionName 统一为 ``1.0.0.1``（见 ``FHD/VERSION.md``）。
 - installer/major 日：P5 构建 → P6 推 COS → 调用 :func:`record_installer_push` 回写 ``last_push``，
   并刷新 market SPA 运行时读取的公开清单 ``market/public/download-release.json``（下载页 fetch 后无需重建即生效）。
 
@@ -71,10 +71,10 @@ def load_release(*, path: Optional[Path] = None) -> Dict[str, Any]:
         # 兜底：与稳定版本 SSOT 默认一致
         return {
             "schema": "xcagi.download_release/v1",
-            "version_lock": "1.0.0.0",
-            "marketing_version": "1.0.0.0",
-            "download_version": "1.0.0.0",
-            "android_version": "1.0.0.0",
+            "version_lock": "1.0.0.1",
+            "marketing_version": "1.0.0.1",
+            "download_version": "1.0.0.1",
+            "android_version": "1.0.0.1",
             "release_ready": False,
             "win_installer_mb": 212,
             "cos_base_url": "https://dl.xiu-ci.com",
@@ -92,11 +92,11 @@ def save_release(rel: Dict[str, Any], *, path: Optional[Path] = None) -> Path:
 def public_subset(rel: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """市场 SPA 运行时读取的公开子集（/download-release.json）。"""
     r = rel or load_release()
-    dv = str(r.get("download_version") or "1.0.0.0")
+    dv = str(r.get("download_version") or "1.0.0.1")
     base = str(r.get("cos_base_url") or "https://dl.xiu-ci.com").rstrip("/")
     out: Dict[str, Any] = {
         "schema": "xcagi.download_release.public/v1",
-        "version_lock": str(r.get("version_lock") or "1.0.0.0"),
+        "version_lock": str(r.get("version_lock") or "1.0.0.1"),
         "download_version": dv,
         "android_version": str(r.get("android_version") or dv),
         "android_git_sha": str(r.get("android_git_sha") or ""),

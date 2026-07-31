@@ -31,7 +31,7 @@ def test_cvm_upload_prefers_resumable_rsync_and_retains_partial() -> None:
 def test_tarball_push_does_not_scp_optional_image_archive(tmp_path: Path) -> None:
     out_dir = tmp_path / "dist"
     out_dir.mkdir()
-    artifact = out_dir / "fhd-full-1.0.0.0-test.tar.gz"
+    artifact = out_dir / "fhd-full-1.0.0.1-test.tar.gz"
     artifact.write_bytes(b"server-release")
     (out_dir / "fhd-api-image.tar.gz").write_bytes(b"optional-image")
     (out_dir / "fhd-manifest.json").write_text(
@@ -39,7 +39,7 @@ def test_tarball_push_does_not_scp_optional_image_archive(tmp_path: Path) -> Non
             {
                 "artifact": artifact.name,
                 "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
-                "version": "1.0.0.0",
+                "version": "1.0.0.1",
                 "git_sha": "test-sha",
                 "deploy_mode": "tarball",
                 "admin_console_sha256": "a" * 64,
@@ -108,7 +108,7 @@ def test_tarball_apply_ignores_optional_image_digest_but_verifies_artifact(
 ) -> None:
     out_dir = tmp_path / "dist"
     out_dir.mkdir()
-    artifact = out_dir / "fhd-full-1.0.0.0-test.tar.gz"
+    artifact = out_dir / "fhd-full-1.0.0.1-test.tar.gz"
     artifact.write_bytes(b"server-release")
     artifact_sha = hashlib.sha256(artifact.read_bytes()).hexdigest()
     (out_dir / "fhd-manifest.json").write_text(
@@ -116,7 +116,7 @@ def test_tarball_apply_ignores_optional_image_digest_but_verifies_artifact(
             {
                 "artifact": artifact.name,
                 "sha256": artifact_sha,
-                "version": "1.0.0.0",
+                "version": "1.0.0.1",
                 "git_sha": "b" * 40,
                 "deploy_mode": "tarball",
                 "image": "ghcr.io/example/fhd-api",

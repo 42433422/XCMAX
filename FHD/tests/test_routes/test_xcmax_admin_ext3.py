@@ -693,7 +693,7 @@ class TestGetReleaseTrain:
     async def test_returns_snapshot(self, client: TestClient):
         with patch(
             "app.fastapi_routes.xcmax_admin._release_train_snapshot",
-            return_value={"epoch": "1.0.0.0", "current": "1.0.0.0"},
+            return_value={"epoch": "1.0.0.0", "current": "1.0.0.1"},
         ):
             response = client.get("/api/xcmax/release-train")
         assert response.status_code == 200

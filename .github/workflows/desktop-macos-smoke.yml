@@ -97,6 +97,6 @@ jobs:
       - name: Build personal SKU (${{ matrix.arch }}) smoke
         run: |
           chmod +x scripts/package/build-installer.sh scripts/dev/mac_deliverable_smoke.sh
-          scripts/package/build-installer.sh 1.0.0.0 personal
+          scripts/package/build-installer.sh 1.0.0.1 personal
       - name: Deliverable smoke
         run: bash scripts/dev/mac_deliverable_smoke.sh

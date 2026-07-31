@@ -308,6 +308,7 @@ vi.mock('./useChatResponseAttach', () => ({
     attachWorkflowTraceToLastAiMessage: mockAttachWorkflowTrace,
     attachApprovalCardToLastAiMessage: mockAttachApprovalCard,
     attachContextSummaryToLastAiMessage: mockAttachContextSummary,
+    attachAgentRunTraceToLastAiMessage: vi.fn(),
     syncTaskFromChatResponse: mockSyncTaskFromChatResponse,
   }),
 }))

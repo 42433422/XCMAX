@@ -4,7 +4,7 @@
 - ``GET  /api/admin/release-train/history``    —— 历史快照列表（容灾/回滚选择/可视化）
 - ``POST /api/admin/release-train/rollback``   —— 回退到上一/指定版本/步数（回修）
 
-回滚只处理内部构建列车，不触碰对外稳定产品版本 ``1.0.0.0``，也不改 ``FHD/VERSION.md``。
+回滚只处理内部构建列车，不触碰对外稳定产品版本 ``1.0.0.1``，也不改 ``FHD/VERSION.md``。
 """
 
 from __future__ import annotations

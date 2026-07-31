@@ -30,19 +30,19 @@ BUILD_INFO_SCRIPT = FHD_ROOT / "scripts" / "package" / "generate-desktop-build-i
 
 
 def _generate(tmp_path: Path, *, include_enterprise_mac: bool = True) -> tuple[dict, dict]:
-    release_root = tmp_path / "release" / "xcagi-v1.0.0.0"
+    release_root = tmp_path / "release" / "xcagi-v1.0.0.1"
     enterprise = release_root / "enterprise"
     personal = release_root / "personal"
     enterprise.mkdir(parents=True)
     personal.mkdir(parents=True)
 
-    (enterprise / "XCAGI-Enterprise-Setup-1.0.0.0-x64.exe").write_bytes(b"MZenterprise")
+    (enterprise / "XCAGI-Enterprise-Setup-1.0.0.1-x64.exe").write_bytes(b"MZenterprise")
     if include_enterprise_mac:
-        (enterprise / "XCAGI-Enterprise-1.0.0.0-mac-arm64.dmg").write_bytes(b"enterprise-dmg")
+        (enterprise / "XCAGI-Enterprise-1.0.0.1-mac-arm64.dmg").write_bytes(b"enterprise-dmg")
 
     # A stale/future-compatible personal directory must never leak into stable output.
-    (personal / "XCAGI-Personal-Setup-1.0.0.0-x64.exe").write_bytes(b"MZpersonal")
-    (personal / "XCAGI-Personal-1.0.0.0-mac-arm64.dmg").write_bytes(b"personal-dmg")
+    (personal / "XCAGI-Personal-Setup-1.0.0.1-x64.exe").write_bytes(b"MZpersonal")
+    (personal / "XCAGI-Personal-1.0.0.1-mac-arm64.dmg").write_bytes(b"personal-dmg")
 
     manifest_path = tmp_path / "manifest.json"
     release_path = tmp_path / "download-release.json"
@@ -51,15 +51,15 @@ def _generate(tmp_path: Path, *, include_enterprise_mac: bool = True) -> tuple[d
             sys.executable,
             str(SCRIPT),
             "--version",
-            "1.0.0.0",
+            "1.0.0.1",
             "--release-dir",
             str(tmp_path / "release"),
             "--release-subdir",
-            "xcagi-v1.0.0.0",
+            "xcagi-v1.0.0.1",
             "--git-sha",
             "abc123",
             "--android-version",
-            "1.0.0.0",
+            "1.0.0.1",
             "--android-git-sha",
             "a" * 40,
             "--output",
@@ -88,7 +88,7 @@ def test_stable_manifest_is_enterprise_only_even_when_personal_files_exist(tmp_p
     assert public_release["frozen_skus"] == ["personal"]
     assert public_release["primary_sku"] == "enterprise"
     assert public_release["win_installer_mb"] == 0
-    assert public_release["android_version"] == "1.0.0.0"
+    assert public_release["android_version"] == "1.0.0.1"
     assert public_release["android_git_sha"] == "a" * 40
 
 
@@ -160,7 +160,7 @@ def test_desktop_build_info_requires_and_preserves_full_git_identity(tmp_path: P
             sys.executable,
             str(BUILD_INFO_SCRIPT),
             "--version",
-            "1.0.0.0",
+            "1.0.0.1",
             "--git-sha",
             git_sha,
             "--output",
@@ -175,7 +175,7 @@ def test_desktop_build_info_requires_and_preserves_full_git_identity(tmp_path: P
     payload = json.loads(output.read_text())
     assert payload["schema_version"] == 1
     assert payload["gitSha"] == git_sha
-    assert payload["version"] == "1.0.0.0"
+    assert payload["version"] == "1.0.0.1"
     assert isinstance(payload.get("builtAt"), str) and payload["builtAt"].endswith("Z")
 
     rejected = subprocess.run(
@@ -183,7 +183,7 @@ def test_desktop_build_info_requires_and_preserves_full_git_identity(tmp_path: P
             sys.executable,
             str(BUILD_INFO_SCRIPT),
             "--version",
-            "1.0.0.0",
+            "1.0.0.1",
             "--git-sha",
             "dev",
             "--output",
@@ -211,8 +211,8 @@ def test_download_verifier_accepts_udif_trailer_and_propagates_failures(tmp_path
     web_root = tmp_path / "web"
     enterprise = web_root / "enterprise"
     enterprise.mkdir(parents=True)
-    exe = enterprise / "XCAGI-Enterprise-Setup-1.0.0.0-x64.exe"
-    dmg = enterprise / "XCAGI-Enterprise-1.0.0.0-mac-arm64.dmg"
+    exe = enterprise / "XCAGI-Enterprise-Setup-1.0.0.1-x64.exe"
+    dmg = enterprise / "XCAGI-Enterprise-1.0.0.1-mac-arm64.dmg"
     exe.write_bytes(b"MZ" + b"\0" * 1022)
     dmg.write_bytes(b"\0" * 512 + b"koly" + b"\0" * 508)
 
@@ -235,7 +235,7 @@ def test_download_verifier_accepts_udif_trailer_and_propagates_failures(tmp_path
     enterprise_entries = {"win": entry(exe), "mac": [entry(dmg)]}
     manifest = {
         "schema": "xcagi.download_manifest/v1",
-        "version": "1.0.0.0",
+        "version": "1.0.0.1",
         "release_ready": True,
         "active_skus": ["enterprise"],
         "frozen_skus": ["personal"],

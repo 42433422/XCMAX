@@ -667,7 +667,7 @@
           </div>
           <aside class="version-summary" aria-label="当前稳定版本">
             <span class="summary-label">Current stable release</span>
-            <p class="summary-version" id="summary-version">v1.0.0.0</p>
+            <p class="summary-version" id="summary-version">v1.0.0.1</p>
             <div class="summary-status">稳定版可下载</div>
             <div class="summary-meta">
               <span>发布日期<b id="summary-date">2026-07-13</b></span>
@@ -741,7 +741,7 @@
                 <div class="release-entry__head">
                   <div>
                     <div class="release-version-line">
-                      <h3>v1.0.0.0</h3><span class="release-channel">稳定版</span>
+                      <h3>v1.0.0.1</h3><span class="release-channel">稳定版</span>
                     </div>
                     <p class="release-title">企业版稳定发布基线</p>
                   </div>
@@ -780,7 +780,7 @@
 
         var fallbackHistory = [
           {
-            version: '1.0.0.0',
+            version: '1.0.0.1',
             date: '2026-07-13',
             title: '企业版稳定发布基线',
             channel: '稳定版',
@@ -980,7 +980,7 @@
             var entry = document.createElement('article')
             entry.className = 'release-entry'
             entry.setAttribute('data-era', presentation.era)
-            if (releaseVersion === '1.0.0.0') entry.className += ' is-current'
+            if (releaseVersion === '1.0.0.1') entry.className += ' is-current'
             if (releaseChannel.indexOf('里程碑') !== -1) entry.className += ' is-milestone'
             var head = document.createElement('div')
             head.className = 'release-entry__head'

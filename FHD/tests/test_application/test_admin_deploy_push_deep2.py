@@ -81,7 +81,7 @@ class TestLocalVersionDeep:
             side_effect=OSError("permission denied"),
         ):
             result = _local_version(tmp_path)
-        assert result == "1.0.0.0"
+        assert result == "1.0.0.1"
 
 
 # ── _read_local_manifest deep ────────────────────────────────────────────────

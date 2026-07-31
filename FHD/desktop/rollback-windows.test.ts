@@ -32,8 +32,8 @@ describe('Windows full application rollback helper', () => {
       applied: {
         appliedAt: '2026-07-16T00:00:00.000Z',
         reason: "window couldn't start",
-        fromVersion: '1.0.0.0',
-        toVersion: '1.0.0.0',
+        fromVersion: '1.0.0.1',
+        toVersion: '1.0.0.1',
       },
     }
     const script = buildWindowsRollbackScript(options)
@@ -84,8 +84,8 @@ describe('Windows full application rollback helper', () => {
       applied: {
         appliedAt: '2026-07-16T00:00:00.000Z',
         reason: 'integration test',
-        fromVersion: '1.0.0.0-new',
-        toVersion: '1.0.0.0-old',
+        fromVersion: '1.0.0.1-new',
+        toVersion: '1.0.0.1-old',
       },
     }
     const script = buildWindowsRollbackScript(options)

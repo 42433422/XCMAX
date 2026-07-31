@@ -4,7 +4,7 @@
 > AI Agent（Cursor、Claude、OpenClaw、自研程序…）通过 **MCP** 或 **REST API**
 > 调用 XCAGI 的业务能力，并以 **虚拟光标** 真实操作 XCAGI 前端页面。
 >
-> 稳定产品版本：`1.0.0.0`。
+> 稳定产品版本：`1.0.0.1`。
 
 ## 端点总览
 

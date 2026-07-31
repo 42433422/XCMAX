@@ -81,7 +81,7 @@ XCAGI-Enterprise-Setup-<version>-x64.exe
 ```bash
 gh workflow run fhd-release-desktop.yml \
   --repo 42433422/XCMAX \
-  -f version=1.0.0.0 \
+  -f version=1.0.0.1 \
   -f verify_only=false
 ```
 
@@ -99,7 +99,7 @@ gh workflow run fhd-release-desktop.yml \
 公开路径：
 
 ```text
-https://xiu-ci.com/xcagi-v1.0.0.0/enterprise/
+https://xiu-ci.com/xcagi-v1.0.0.1/enterprise/
 https://xiu-ci.com/releases/stable/enterprise/
 ```
 

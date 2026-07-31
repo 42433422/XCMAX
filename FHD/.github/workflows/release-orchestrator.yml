@@ -67,7 +67,7 @@ jobs:
           raw="${raw#FHD/}"
           raw="${raw#v}"
           raw="${raw#V}"
-          version="${raw:-1.0.0.0}"
+          version="${raw:-1.0.0.1}"
           case "${{ matrix.workflow }}" in
             fhd-release-desktop.yml|fhd-release-web.yml)
               gh workflow run "${{ matrix.workflow }}" --ref "${{ github.ref_name }}" -f "version=${version}"

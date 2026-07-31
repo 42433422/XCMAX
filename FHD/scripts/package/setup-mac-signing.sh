@@ -127,4 +127,4 @@ fi
 mv "${ENV_FILE}.tmp" "${ENV_FILE}"
 chmod 600 "${ENV_FILE}"
 echo "[ok] 写入 ${ENV_FILE}"
-echo "下一步: source ${ENV_FILE} && SKIP_BACKEND=1 PYTHON=${PY} scripts/package/build-installer.sh 1.0.0.0 enterprise"
+echo "下一步: source ${ENV_FILE} && SKIP_BACKEND=1 PYTHON=${PY} scripts/package/build-installer.sh 1.0.0.1 enterprise"

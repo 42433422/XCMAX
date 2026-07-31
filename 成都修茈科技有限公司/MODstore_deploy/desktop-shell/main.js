@@ -1,6 +1,6 @@
 'use strict'
 // XCAGI 桌面客户端（精简）：加载 XCAGI 工作台 Web 面，作为干净构建链的可安装产物。
-// 对外稳定产品版本 1.0.0.0；Electron package 使用工具链兼容版本 1.0.0。
+// 对外稳定产品版本 1.0.0.1；Electron package 使用工具链兼容版本 1.0.0。
 const { app, BrowserWindow, shell, Menu, ipcMain, dialog, session } = require('electron')
 const path = require('path')
 

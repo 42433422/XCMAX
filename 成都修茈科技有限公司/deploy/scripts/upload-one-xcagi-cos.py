@@ -9,7 +9,7 @@ from qcloud_cos import CosConfig, CosS3Client
 edition = sys.argv[1]
 filename = sys.argv[2]
 LOCAL = Path(f"/var/www/update/releases/stable/{edition}/{filename}")
-PREFIX = os.environ.get("COS_PREFIX", "xcagi-v8.0.0").strip("/")
+PREFIX = os.environ.get("COS_PREFIX", "xcagi-v1.0.0.1").strip("/")
 BUCKET = os.environ["COS_BUCKET"]
 REGION = os.environ["COS_REGION"]
 key = f"{PREFIX}/{edition}/{filename}"

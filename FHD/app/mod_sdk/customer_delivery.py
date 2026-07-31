@@ -1,4 +1,13 @@
-"""客户交付清单：行业包 ↔ 账号定制 Mod（legacy id）映射。"""
+"""客户交付清单 SSOT 加载器。
+
+真相源：``config/customer_delivery.json``（``docs/SSOT_INDEX.md`` · customer-delivery）。
+
+字段分工：
+- ``industry_mod_id``：通用行业包（如 attendance-industry）——不进生产员工私有交付
+- ``legacy_mod_id``：客户定制包（如 taiyangniao-pro）——生产员工入口
+- ``tracks.modules[]`` / ``tracks.employees[]``：双轨节点；节点各自有制作进度
+  （例：太阳鸟「考勤表转化」= 模块轨节点）
+"""
 
 from __future__ import annotations
 
@@ -7,6 +16,12 @@ from typing import Any, cast
 
 from app.mod_sdk.host_profile import resolve_fhd_config_dir
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+TRACK_MODULES = "modules"
+TRACK_EMPLOYEES = "employees"
+# 历史状态文件曾用 business 作为模块轨键
+TRACK_MODULES_LEGACY = "business"
+CANONICAL_TRACKS = (TRACK_MODULES, TRACK_EMPLOYEES)
 
 
 def _load_json(path):
@@ -26,6 +41,53 @@ def load_customer_delivery_document() -> dict[str, Any]:
         if doc and isinstance(doc.get("deliveries"), list):
             return cast("dict[str, Any]", doc)
     return {"schema_version": 1, "deliveries": []}
+
+
+def delivery_model() -> dict[str, Any]:
+    """双轨模型元数据（轨道定义 / 规则 / 阶段）。"""
+    raw = load_customer_delivery_document().get("delivery_model")
+    return dict(raw) if isinstance(raw, dict) else {}
+
+
+def normalize_track_id(track: str) -> str:
+    """把历史 ``business`` 归一为 ``modules``。"""
+    tid = str(track or "").strip()
+    if tid == TRACK_MODULES_LEGACY:
+        return TRACK_MODULES
+    return tid
+
+
+def track_nodes_for_custom_mod(mod_id: str) -> dict[str, list[dict[str, Any]]]:
+    """返回定制 Mod 在 SSOT 中声明的双轨节点；无声明则空列表（调用方可回退 manifest）。"""
+    row = delivery_for_account_custom_mod(mod_id)
+    empty: dict[str, list[dict[str, Any]]] = {TRACK_MODULES: [], TRACK_EMPLOYEES: []}
+    if not row:
+        return empty
+    tracks = row.get("tracks")
+    if not isinstance(tracks, dict):
+        return empty
+    out: dict[str, list[dict[str, Any]]] = {TRACK_MODULES: [], TRACK_EMPLOYEES: []}
+    for track in CANONICAL_TRACKS:
+        raw_nodes = tracks.get(track)
+        if track == TRACK_MODULES and not isinstance(raw_nodes, list):
+            raw_nodes = tracks.get(TRACK_MODULES_LEGACY)
+        if not isinstance(raw_nodes, list):
+            continue
+        for item in raw_nodes:
+            if not isinstance(item, dict):
+                continue
+            nid = str(item.get("id") or "").strip()
+            label = str(item.get("label") or nid).strip()
+            if not nid or not label:
+                continue
+            out[track].append(
+                {
+                    "id": nid,
+                    "label": label,
+                    "summary": str(item.get("summary") or "").strip(),
+                }
+            )
+    return out
 
 
 def deliveries_for_industry(industry_id: str) -> list[dict[str, Any]]:
@@ -101,6 +163,26 @@ def delivery_seed_package_for_mod(
     return dict(pkg) if isinstance(pkg, dict) and str(pkg.get("pkg_id") or "").strip() else None
 
 
+def list_account_custom_mod_ids() -> set[str]:
+    """客户交付清单中的账号定制 Mod（``legacy_mod_id``），不含通用行业包。"""
+    out: set[str] = set()
+    for row in list_customer_deliveries():
+        legacy = str(row.get("legacy_mod_id") or "").strip()
+        if legacy:
+            out.add(legacy)
+    return out
+
+
+def list_industry_mod_ids_from_delivery() -> set[str]:
+    """客户交付清单里关联的通用行业包 id（``industry_mod_id``）。"""
+    out: set[str] = set()
+    for row in list_customer_deliveries():
+        mid = str(row.get("industry_mod_id") or "").strip()
+        if mid:
+            out.add(mid)
+    return out
+
+
 def _entitled_matches_mod(mod_id: str, entitled: set[str]) -> bool:
     mid = str(mod_id or "").strip()
     if not mid or not entitled:
@@ -142,12 +224,21 @@ def label_for_account_custom_mod(mod_id: str, industry_id: str) -> str:
 
 
 __all__ = [
+    "CANONICAL_TRACKS",
+    "TRACK_EMPLOYEES",
+    "TRACK_MODULES",
+    "TRACK_MODULES_LEGACY",
     "account_custom_mod_ids_for_industry",
     "delivery_for_account_custom_mod",
+    "delivery_model",
     "deliveries_for_industry",
     "delivery_for_industry_mod",
     "delivery_seed_package_for_mod",
     "label_for_account_custom_mod",
+    "list_account_custom_mod_ids",
     "list_customer_deliveries",
+    "list_industry_mod_ids_from_delivery",
     "load_customer_delivery_document",
+    "normalize_track_id",
+    "track_nodes_for_custom_mod",
 ]

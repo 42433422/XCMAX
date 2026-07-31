@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="1.0.0.0"
-ANDROID_VERSION="1.0.0.0"
+VERSION="1.0.0.1"
+ANDROID_VERSION="1.0.0.1"
 APK_PATH=""
 SKIP_ZIP=0
 
 usage() {
   cat <<'USAGE'
-Usage: stage-release-packages.sh [--version <1.0.0.0>] [--android-version <1.0.0.0>] \
+Usage: stage-release-packages.sh [--version <1.0.0.1>] [--android-version <1.0.0.1>] \
   [--apk-path <path>] [--skip-zip]
 
 生成企业版移动发布目录（默认仅 Android）：
@@ -72,8 +72,8 @@ resolve_root() {
 resolve_version() {
   VERSION="$(normalize_version "$VERSION")"
   ANDROID_VERSION="$(normalize_version "$ANDROID_VERSION")"
-  [[ -n "$VERSION" ]] || VERSION="1.0.0.0"
-  [[ -n "$ANDROID_VERSION" ]] || ANDROID_VERSION="1.0.0.0"
+  [[ -n "$VERSION" ]] || VERSION="1.0.0.1"
+  [[ -n "$ANDROID_VERSION" ]] || ANDROID_VERSION="1.0.0.1"
 }
 
 resolve_apk() {

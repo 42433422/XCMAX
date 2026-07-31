@@ -1,7 +1,7 @@
 {
   "id": "wechat-contacts-ai-employee",
   "name": "微信触点 AI 员工",
-  "version": "1.0.0.0",
+  "version": "1.0.0.1",
   "author": "成都修茈科技有限公司",
   "description": "提供微信触点工作流员工与本地联系人同步能力；操作界面统一收口到「数据来源」。",
   "primary": false,

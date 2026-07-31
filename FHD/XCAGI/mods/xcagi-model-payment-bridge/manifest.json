@@ -1,7 +1,7 @@
 {
   "id": "xcagi-model-payment-bridge",
   "name": "模型付费桥接 Mod",
-  "version": "1.0.0.0",
+  "version": "1.0.0.1",
   "author": "成都修茈科技有限公司",
   "description": "模型付费 API 门面（J）+ 业务页（K/O+ 物理视图在 Mod 包）。",
   "dependencies": {

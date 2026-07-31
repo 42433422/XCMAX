@@ -1,15 +1,15 @@
-# XCAGI 1.0.0.0 企业版稳定发版指南
+# XCAGI 1.0.0.1 企业版稳定发版指南
 
 > 发布范围遵循 [`specs/product-lines-3-plus-2.md`](../../../specs/product-lines-3-plus-2.md)：当前稳定发布 SKU 只有 `enterprise`。`personal` 已冻结，不进入版本目标、销售口径、构建矩阵、上传目录、下载清单或验收门禁。历史文件名保留，是为了兼容旧链接与未来恢复入口。
 
-对外产品版本固定为 `1.0.0.0`，Electron 工具链版本映射为 `1.0.0`。
+对外产品版本固定为 `1.0.0.1`，Electron 工具链版本映射为 `1.0.0`。
 
 ## 1. 发版前安全自检
 
 ```powershell
 cd e:\XCMAX\FHD
 powershell -ExecutionPolicy Bypass -File scripts/package/pre-release-security.ps1 `
-  -Phase pre -Version 1.0.0.0 -ProductSku enterprise
+  -Phase pre -Version 1.0.0.1 -ProductSku enterprise
 ```
 
 ## 2. 构建企业版安装包
@@ -18,13 +18,13 @@ Windows 正式包必须包含 `win-unpacked/resources/backend/xcagi-backend.exe`
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/package/build-installer.ps1 `
-  -Version 1.0.0.0 -ProductSku enterprise -SkipUiInstaller
+  -Version 1.0.0.1 -ProductSku enterprise -SkipUiInstaller
 ```
 
 macOS 安装包：
 
 ```bash
-bash scripts/package/build-installer.sh 1.0.0.0 enterprise
+bash scripts/package/build-installer.sh 1.0.0.1 enterprise
 ```
 
 发布元数据必须使用 CI 中的 `XCAGI_UPDATE_ED25519_PRIVATE_KEY` 签名；私钥不得写入仓库。
@@ -32,7 +32,7 @@ bash scripts/package/build-installer.sh 1.0.0.0 enterprise
 ## 3. 构建后验收
 
 ```powershell
-$v = "1.0.0.0"
+$v = "1.0.0.1"
 powershell -File scripts/package/verify-bundled-mods.ps1 `
   -ProductSku enterprise `
   -UnpackedDir "release/xcagi-v$v/enterprise/win-unpacked/resources/backend/_internal/mods"
@@ -48,14 +48,14 @@ post 验收会硬性检查 Windows 后端 exe、`product-sku.json`、staged mods
 
 ```powershell
 powershell -File scripts/package/upload-release-skus.ps1 `
-  -Version 1.0.0.0 -ProductSku enterprise
+  -Version 1.0.0.1 -ProductSku enterprise
 ```
 
 正式目录只写入：
 
 ```text
 /var/www/update/releases/stable/enterprise/
-/var/www/xcagi-v1.0.0.0/enterprise/
+/var/www/xcagi-v1.0.0.1/enterprise/
 ```
 
 禁止把新制品写入 `/personal/`。个人版历史文件可以为兼容旧客户端保留，但不得出现在新的 `manifest.json` 或 `download-release.json` 中。
@@ -66,7 +66,7 @@ powershell -File scripts/package/upload-release-skus.ps1 `
 
 ```text
 https://xiu-ci.com/download-release.json
-https://xiu-ci.com/xcagi-v1.0.0.0/manifest.json
+https://xiu-ci.com/xcagi-v1.0.0.1/manifest.json
 ```
 
 `release_ready=true` 只在企业版 Windows 与 macOS 制品都完成上传、HTTP 200、大小、SHA256 和安装包 magic 校验后生成。下载页只展示企业版入口。

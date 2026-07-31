@@ -9,14 +9,14 @@ on:
       version:
         description: Product version (four-part)
         required: true
-        default: "1.0.0.0"
+        default: "1.0.0.1"
       source_run_id:
         description: Successful Release Desktop run containing the canonical macOS artifact
         required: true
       zip_name:
         description: Canonical enterprise macOS ZIP filename
         required: true
-        default: "XCAGI-Enterprise-1.0.0.0-mac-arm64.zip"
+        default: "XCAGI-Enterprise-1.0.0.1-mac-arm64.zip"
       build_sha:
         description: Optional buildSha override (40-char git sha); empty = use source run SHA
         required: false

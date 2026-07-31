@@ -14,7 +14,7 @@ except ImportError:
 
 BUCKET = os.environ.get("COS_BUCKET", "xcagi-releases-1374207682")
 REGION = os.environ.get("COS_REGION", "ap-guangzhou")
-PREFIX = os.environ.get("COS_PREFIX", "xcagi-v8.0.0").strip("/")
+PREFIX = os.environ.get("COS_PREFIX", "xcagi-v1.0.0.1").strip("/")
 LOCAL_ROOT = Path(os.environ.get("LOCAL_ROOT", "/var/www/update/releases/stable"))
 
 SECRET_ID = os.environ.get("COS_SECRET_ID") or os.environ.get("TENCENT_SECRET_ID")
@@ -66,4 +66,4 @@ for edition_dir in sorted(LOCAL_ROOT.iterdir()):
         uploaded += 1
 
 print(f"Done. {uploaded} object(s). Verify:")
-print(f"  curl -sI https://{BUCKET}.cos.{REGION}.myqcloud.com/{PREFIX}/enterprise/XCAGI-Enterprise-Setup-8.0.0-x64.exe")
+print(f"  curl -sI https://{BUCKET}.cos.{REGION}.myqcloud.com/{PREFIX}/enterprise/XCAGI-Enterprise-Setup-1.0.0.1-x64.exe")

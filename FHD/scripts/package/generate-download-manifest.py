@@ -7,7 +7,7 @@ Outputs an enterprise-only stable manifest with two channels:
 
 Manifest schema (verified by scripts/deploy/verify-download.sh):
 {
-  "version": "1.0.0.0",
+  "version": "1.0.0.1",
   "git_sha": "...",
   "generated_at": "ISO-8601",
   "channels": {
@@ -16,7 +16,7 @@ Manifest schema (verified by scripts/deploy/verify-download.sh):
       "enterprise": { ... }
     },
     "official_download": {
-      "base_url": "https://xiu-ci.com/xcagi-v1.0.0.0",
+      "base_url": "https://xiu-ci.com/xcagi-v1.0.0.1",
       ...
     }
   }
@@ -128,7 +128,7 @@ def main() -> int:
         "--release-dir", required=True, help="Root containing <release-subdir>/<sku>/"
     )
     parser.add_argument(
-        "--release-subdir", required=True, help="Subdirectory name like xcagi-v1.0.0.0"
+        "--release-subdir", required=True, help="Subdirectory name like xcagi-v1.0.0.1"
     )
     parser.add_argument("--git-sha", required=True)
     parser.add_argument(
