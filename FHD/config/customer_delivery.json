@@ -1,19 +1,27 @@
 {
-  "schema_version": 1,
-  "description": "客户交付清单 SSOT：客户品牌与合同/metadata 专用，不进 industry_baseline 通用配置",
-  "field_semantics": {
-    "industry_mod_id": "通用行业包 id（如 attendance-industry、coating-industry）。产品引导、行业能力、企业 entitlement 可含此项；不属于客户私有定制。",
-    "legacy_mod_id": "客户账号定制 Mod id（如 taiyangniao-pro、sz-qsm-pro）。客户品牌与合同交付主体。",
-    "customer_brand": "对外展示的客户品牌名",
-    "delivery_seed_package": "可选：该客户交付种子包元数据（花名册/侧库等）"
-  },
-  "private_mod_delivery": {
-    "ui": "生产员工 / PrivateModDeliveryPanel（AI 生态页内嵌）",
-    "api_context": "app.fastapi_routes.mod_store_routes._private_mod_context",
-    "include": ["legacy_mod_id"],
-    "exclude": ["industry_mod_id"],
-    "rule": "企业 entitlement 常同时下发行业包与定制包；生产员工私有交付只暴露 legacy_mod_id ∩ entitlement，严禁把 *-industry 通用行业包列进该入口。",
-    "frontend_guard": "PrivateModDeliveryPanel 额外过滤 mod_id 以 -industry 结尾的项作为兜底"
+  "schema_version": 2,
+  "description": "客户交付清单 SSOT：客户品牌 / 双轨节点 / 合同种子；不进 industry_baseline 通用配置",
+  "delivery_model": {
+    "tracks": {
+      "modules": {
+        "id": "modules",
+        "label": "业务模块",
+        "legacy_track_id": "business",
+        "summary": "侧栏入口、工作台、页面、表单与业务流程；轨道上每个模块是独立节点，各自有制作进度"
+      },
+      "employees": {
+        "id": "employees",
+        "label": "AI 员工",
+        "summary": "角色、提示词、工具与上岗验证；轨道上每个员工是独立节点，各自有制作进度"
+      }
+    },
+    "rules": [
+      "生产员工「私有交付」只暴露 legacy_mod_id（客户定制包），不含 industry_mod_id（通用行业包，如 attendance-industry）",
+      "模块轨与员工轨必须分开展示，禁止混在同一列表",
+      "轨道上的交付物以节点为单位展示进度；整轨状态由节点进度汇总",
+      "太阳鸟「考勤表转化」属于模块轨节点，不是通用考勤行业包，也不是 AI 员工"
+    ],
+    "stages": ["production", "testing", "rework", "acceptance", "delivered"]
   },
   "deliveries": [
     {
@@ -23,6 +31,32 @@
       "legacy_mod_id": "taiyangniao-pro",
       "customer_brand": "太阳鸟 PRO",
       "customer_name": "太阳鸟",
+      "tracks": {
+        "modules": [
+          {
+            "id": "attendance-convert",
+            "label": "考勤表转化",
+            "summary": "钉钉考勤表上传转换、模板映射与人员花名册对齐"
+          },
+          {
+            "id": "personnel",
+            "label": "人员管理",
+            "summary": "部门人员主数据（products 侧栏覆盖）"
+          },
+          {
+            "id": "department",
+            "label": "部门管理",
+            "summary": "组织部门主数据（customers 侧栏覆盖）"
+          }
+        ],
+        "employees": [
+          {
+            "id": "attendance_ai",
+            "label": "考勤ai助手",
+            "summary": "协助处理出勤记录、异常说明与排班相关问答"
+          }
+        ]
+      },
       "delivery_seed_package": {
         "pkg_id": "sunbird-delivery-seed",
         "version": "1.0.0",
@@ -30,7 +64,7 @@
         "apply": "sunbird_roster",
         "description": "太阳鸟交付种子：花名册、定制 Mod 侧库、考勤模板"
       },
-      "notes": "首家考勤客户定制实现；产品引导仅展示「考勤行业包」；生产员工只列 taiyangniao-pro"
+      "notes": "首家考勤客户定制；产品引导仅展示「考勤行业包」；生产员工私有交付展示本行 tracks 双轨节点"
     },
     {
       "delivery_id": "customer-qishimei",
@@ -39,7 +73,11 @@
       "legacy_mod_id": "sz-qsm-pro",
       "customer_brand": "奇士美 PRO",
       "customer_name": "奇士美",
-      "notes": "首家涂料客户定制实现；产品引导仅展示「涂料行业包」；生产员工只列 sz-qsm-pro"
+      "tracks": {
+        "modules": [],
+        "employees": []
+      },
+      "notes": "首家涂料客户定制；产品引导仅展示「涂料行业包」；tracks 为空时回退到定制 Mod manifest 的 menu / workflow_employees"
     }
   ]
 }
