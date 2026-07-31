@@ -3327,6 +3327,128 @@ def test_para_merge_resume_pins_rejected_branch_edge_cases():
         )
         is False
     )
+    assert (
+        para_merge_resume_pins_rejected_branch(
+            {
+                "detail": "hold-merge-label-failed-before-review",
+                "resume_from_clean_baseline": True,
+            }
+        )
+        is True
+    )
+    update_branch_detail = (
+        "devfleet/cursor/sub-1-225e80: Error: update-branch failed: Command failed: "
+        "gh pr update-branch 830 --repo 42433422/XCMAX\n"
+        "X Cannot update PR branch due to conflicts"
+    )
+    assert (
+        para_merge_resume_pins_rejected_branch(
+            {
+                "detail": update_branch_detail,
+                "resume_from_clean_baseline": False,
+            }
+        )
+        is False
+    )
+
+
+def test_reconcile_absorbed_para_merge_passes_base_ref_to_git_runner():
+    from pathlib import Path
+
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        reconcile_absorbed_para_merge_remediations,
+    )
+
+    policy_path = "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py"
+    captured_base_refs: list[str] = []
+    branch_ref = "origin/devfleet/cursor/sub-1-custom"
+    scope = "成都修茈科技有限公司/MODstore_deploy/modstore_server/"
+
+    def tracking_git(_root, *args: str):
+        if args[:2] == ("diff", "--name-only"):
+            captured_base_refs.append(args[2])
+        if args[:4] == ("diff", "--name-only", "origin/feat/base", branch_ref) and args[4] == "--":
+            return 0, "", ""
+        if (
+            args[:3] == ("diff", "--name-only", f"origin/feat/base...{branch_ref}")
+            and args[3] == "--"
+        ):
+            return 0, f"{policy_path}\n", ""
+        return 1, "", f"unexpected git args: {args}"
+
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-custom",
+                "detail": "changed-files-empty",
+                "kind": "automated_remediation",
+                "para_task_id": "task-custom",
+                "reason": "para_merge_conflict",
+                "task_id": "task-custom",
+            }
+        ],
+    }
+
+    reconcile_absorbed_para_merge_remediations(
+        memory,
+        base_branch="feat/base",
+        repo_root=Path("/tmp/repo"),
+        run_git=tracking_git,
+    )
+
+    assert captured_base_refs
+    assert all(ref.startswith("origin/feat/base") for ref in captured_base_refs)
+
+
+def test_reconcile_absorbed_para_merge_caches_git_assessment_per_branch():
+    from pathlib import Path
+
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        reconcile_absorbed_para_merge_remediations,
+    )
+
+    policy_path = "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py"
+    git_call_count = 0
+
+    def counting_git(root, *args: str):
+        nonlocal git_call_count
+        git_call_count += 1
+        return _absorbed_git_runner(policy_path, "shared", remaining_diff=f"{policy_path}\n")(
+            root, *args
+        )
+
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-shared",
+                "detail": "changed-files-empty",
+                "kind": "automated_remediation",
+                "para_task_id": "task-a",
+                "reason": "para_merge_conflict",
+                "task_id": "task-a",
+            },
+            {
+                "branch": "devfleet/cursor/sub-1-shared",
+                "detail": "devfleet/cursor/sub-1-shared: Error: PR #1011 closed without merge",
+                "kind": "automated_remediation",
+                "para_task_id": "task-b",
+                "reason": "para_merge_conflict",
+                "task_id": "task-b",
+            },
+        ],
+    }
+
+    result = reconcile_absorbed_para_merge_remediations(
+        memory,
+        repo_root=Path("/tmp/repo"),
+        run_git=counting_git,
+    )
+
+    assert result["closed_count"] == 0
+    assert len(memory["open_items"]) == 2
+    assert git_call_count == 1
 
 
 def test_reconcile_changed_files_empty_sets_no_clean_baseline_rewrite():
