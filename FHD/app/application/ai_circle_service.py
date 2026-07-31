@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import os
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -15,6 +17,42 @@ from app.db.session import get_db
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+# 桌面端员工调度风暴时，交流圈表曾膨胀到千万行导致闪退；硬上限 + 分钟指纹去重
+_DESKTOP_CIRCLE_MAX_ROWS = 5_000
+
+
+def _desktop_mode() -> bool:
+    return (os.environ.get("XCAGI_DESKTOP_MODE") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _prune_circle_posts_if_needed(db, *, keep: int = _DESKTOP_CIRCLE_MAX_ROWS) -> None:
+    """删除最旧行，把交流圈表压回 keep 条以内（桌面单用户场景）。"""
+    total = int(db.query(func.count(AiCirclePost.id)).scalar() or 0)
+    overflow = total - int(keep)
+    if overflow <= 0:
+        return
+    old_ids = [
+        int(r[0])
+        for r in db.query(AiCirclePost.id)
+        .order_by(AiCirclePost.id.asc())
+        .limit(overflow)
+        .all()
+    ]
+    if not old_ids:
+        return
+    db.query(AiCircleReaction).filter(AiCircleReaction.post_id.in_(old_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(AiCircleComment).filter(AiCircleComment.post_id.in_(old_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(AiCirclePost).filter(AiCirclePost.id.in_(old_ids)).delete(synchronize_session=False)
 
 
 def ensure_ai_circle_tables() -> None:
@@ -86,9 +124,25 @@ def record_employee_activity(
     if summary_text:
         details.append(f"结果：{summary_text}")
     body = state if not details else f"{state}\n" + "\n".join(details)
+    # 桌面：同一员工同一任务指纹每分钟最多一条，避免调度风暴把 SQLite 写爆闪退
+    if _desktop_mode():
+        minute = datetime.now(UTC).strftime("%Y%m%d%H%M")
+        digest = hashlib.sha1(
+            f"{employee}|{int(success)}|{int(blocked)}|{task_text}|{minute}".encode()
+        ).hexdigest()[:24]
+        source_ref = f"employee-run:{digest}"
+    else:
+        source_ref = f"employee-run:{uuid.uuid4().hex}"
     try:
         ensure_ai_circle_tables()
         with get_db() as db:
+            if (
+                db.query(AiCirclePost.id)
+                .filter(AiCirclePost.source_ref == source_ref)
+                .first()
+                is not None
+            ):
+                return
             db.add(
                 AiCirclePost(
                     author_kind="employee",
@@ -96,9 +150,11 @@ def record_employee_activity(
                     author_name=employee,
                     body=body,
                     source_type="employee_execution",
-                    source_ref=f"employee-run:{uuid.uuid4().hex}",
+                    source_ref=source_ref,
                 )
             )
+            if _desktop_mode():
+                _prune_circle_posts_if_needed(db)
     except RECOVERABLE_ERRORS:
         logger.warning("failed to persist AI circle employee event", exc_info=True)
 
