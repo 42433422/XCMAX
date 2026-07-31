@@ -326,6 +326,53 @@ export function readPackagedProductSku(): ProductSku | null {
   return null
 }
 
+<<<<<<< HEAD
+=======
+export function readJsonTextFile(filePath: string): string {
+  const buffer = fs.readFileSync(filePath)
+  let text: string
+  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
+    text = buffer.toString('utf16le')
+  } else {
+    text = buffer.toString('utf8')
+  }
+  return text.replace(/^\uFEFF/, '')
+}
+
+function sanitizeBackendProxyEnv(
+  env: NodeJS.ProcessEnv | Record<string, string | undefined>
+): Record<string, string | undefined> {
+  const next: Record<string, string | undefined> = { ...env }
+  for (const key of ['ALL_PROXY', 'all_proxy'] as const) {
+    const raw = String(next[key] || '').trim().toLowerCase()
+    if (
+      raw.startsWith('socks://') ||
+      raw.startsWith('socks4://') ||
+      raw.startsWith('socks5://') ||
+      raw.startsWith('socks5h://')
+    ) {
+      // Prefer HTTP_PROXY for backend httpx; SOCKS needs optional socksio.
+      delete next[key]
+    }
+  }
+  // Chromium OTA bypass does not apply to the Python backend. Without NO_PROXY,
+  // httpx sends market SSE (xiu-ci.com) through Clash/HTTP_PROXY and gets 502,
+  // which surfaces as 流式对话首包超时.
+  const bypass = OTA_PROXY_BYPASS_RULES.split(',')
+    .map(s => s.trim())
+    .filter(s => s && s !== '<local>')
+  const existing = String(next.NO_PROXY || next.no_proxy || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+  const merged = Array.from(new Set([...existing, ...bypass, '::1']))
+  const joined = merged.join(',')
+  next.NO_PROXY = joined
+  next.no_proxy = joined
+  return next
+}
+
+>>>>>>> ba02a5d6f (fix(desktop): bypass HTTP proxy for market LLM SSE)
 export function backendEditionEnv(): Record<string, string> {
   const sku = readPackagedProductSku()
   if (!sku) {
