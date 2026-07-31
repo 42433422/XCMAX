@@ -1,7 +1,7 @@
 """Application-facing private Mod delivery API (routes must not import app.services)."""
 from __future__ import annotations
 
-from app.services.private_mod_delivery import (
+from app.application.private_mod.delivery import (
     STAGE_LABELS,
     STAGES,
     TRACKS,

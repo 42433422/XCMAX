@@ -21,7 +21,7 @@ def _apply_private_mod_delivery(item: dict[str, Any]) -> None:
     if not entity_id:
         return
     try:
-        from app.services.private_mod_delivery import account_scope, apply_account_state
+        from app.application.private_mod.delivery import account_scope, apply_account_state
 
         apply_account_state(
             account_scope(int(entity_id), str(payload.get("username") or "")),

@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from typing import Any, Iterable
 
-from app.services.distillation_continuous_learning_models import (
+from app.application.distillation.continuous_learning_models import (
     BASE_DIR,
     LABEL_TO_ID,
     RESOLVED_TICKET_STATUSES,

@@ -71,7 +71,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-from app.services.distillation_continuous_learning_models import (
+from app.application.distillation.continuous_learning_models import (
     ID_TO_LABEL,
     INTENT_LABELS,
     LABEL_TO_ID,
@@ -124,7 +124,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 DISTILL_DIR = get_distillation_root_dir()
 CHECKPOINT_DIR = get_distillation_checkpoints_dir()
 LOG_DIR = get_distillation_logs_dir()
-from app.services.distillation_continuous_learning import (
+from app.application.distillation.continuous_learning import (
     normalize_intent_label,
 )
 
@@ -451,7 +451,7 @@ def main():
     parser.add_argument("--lr", type=float, default=2e-5, help="学习率")
     parser.add_argument("--max_length", type=int, default=64, help="最大序列长度")
     parser.add_argument("--output", type=str, default=None, help="输出目录")
-    from app.services.distillation_continuous_learning_cli import (
+    from app.application.distillation.continuous_learning_cli import (
         add_learning_arguments,
         maybe_prepare_continuous_learning,
     )

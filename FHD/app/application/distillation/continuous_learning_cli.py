@@ -7,7 +7,7 @@ import logging
 import os
 from typing import Any
 
-from app.services.distillation_continuous_learning import (
+from app.application.distillation.continuous_learning import (
     CONTINUOUS_LEARNING_DIR,
     CONTINUOUS_TRAINING_DATA_NAME,
     build_continuous_learning_corpus,

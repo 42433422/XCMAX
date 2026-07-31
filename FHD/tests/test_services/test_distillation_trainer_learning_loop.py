@@ -5,19 +5,19 @@ from __future__ import annotations
 import json
 from unittest.mock import patch
 
-from app.services.bert_intent_service import INTENT_LABELS as RUNTIME_INTENT_LABELS
-from app.services.distillation_continuous_learning import (
+from app.application.distillation.continuous_learning import (
     ContinuousLearningCorpus,
     LearningSample,
     build_continuous_learning_corpus,
     export_continuous_training_data,
 )
-from app.services.distillation_continuous_learning_collectors import (
+from app.application.distillation.continuous_learning_collectors import (
     collect_bug_fix_learning,
     collect_change_request_learning,
     collect_user_feedback_samples,
 )
-from app.services.distillation_continuous_learning_models import INTENT_LABELS
+from app.application.distillation.continuous_learning_models import INTENT_LABELS
+from app.services.bert_intent_service import INTENT_LABELS as RUNTIME_INTENT_LABELS
 from app.services.distillation_trainer import main
 
 

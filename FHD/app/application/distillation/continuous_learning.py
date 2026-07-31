@@ -1,10 +1,10 @@
 """Public exports for distillation continuous learning."""
 
-from app.services.distillation_continuous_learning_collectors import (
+from app.application.distillation.continuous_learning_collectors import (
     build_continuous_learning_corpus,
     export_continuous_training_data,
 )
-from app.services.distillation_continuous_learning_models import (
+from app.application.distillation.continuous_learning_models import (
     CONTINUOUS_LEARNING_DIR,
     CONTINUOUS_TRAINING_DATA_NAME,
     ContinuousLearningCorpus,
