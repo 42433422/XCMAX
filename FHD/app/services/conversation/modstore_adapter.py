@@ -921,8 +921,7 @@ class ModstorePlatformAdapter:
                             )
                             raise err
                     else:
-                        for payload_text in _iter_market_sse_data_payloads(response):
-                            yield payload_text
+                        yield from _iter_market_sse_data_payloads(response)
                         return
             if retry_next:
                 continue
