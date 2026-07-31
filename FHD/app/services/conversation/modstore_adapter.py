@@ -170,6 +170,43 @@ def _platform_stream_payload_to_openai_chunk(data: str) -> Dict[str, Any] | None
     return None
 
 
+def _httpx_sync_client(**kwargs: Any) -> httpx.Client:
+    """Desktop backend must ignore leaked HTTP(S)_PROXY; Clash TUN still applies OS-wide."""
+    kwargs.setdefault("trust_env", False)
+    return httpx.Client(**kwargs)
+
+
+def _iter_market_sse_data_payloads(response: Any) -> Iterator[str]:
+    """Yield market SSE data payloads; skip meta; surface content from ``done`` if needed."""
+    current_event = ""
+    for line in response.iter_lines():
+        line_text = (line or "").strip()
+        if not line_text:
+            continue
+        if line_text.startswith("event:"):
+            current_event = line_text[6:].strip().lower()
+            continue
+        if line_text.startswith("data:"):
+            line_text = line_text[5:].strip()
+        if line_text == "[DONE]":
+            break
+        if current_event == "meta":
+            continue
+        if current_event == "done":
+            # Some providers only put final text on ``done`` (no ``delta``). Skipping
+            # done previously made the OpenAI facade yield nothing → UI 首包超时.
+            try:
+                raw = json.loads(line_text)
+            except json.JSONDecodeError:
+                raw = None
+            if isinstance(raw, dict):
+                content = raw.get("content") or raw.get("text") or raw.get("delta") or ""
+                if content:
+                    yield json.dumps({"delta": str(content)}, ensure_ascii=False)
+            break
+        yield line_text
+
+
 class ModstorePlatformAdapter:
     """
     修茈市场平台代理适配器
@@ -430,6 +467,7 @@ class ModstorePlatformAdapter:
                 timeout=httpx.Timeout(self.timeout, connect=10.0),
                 limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
                 headers=self._build_headers(),
+                trust_env=False,
             )
         return self._client
 
@@ -517,7 +555,7 @@ class ModstorePlatformAdapter:
         catalog = self._cached_catalog()
         if catalog is None:
             try:
-                with httpx.Client(
+                with _httpx_sync_client(
                     timeout=httpx.Timeout(min(self.timeout, 15.0), connect=5.0),
                     headers=self._build_headers(),
                 ) as client:
@@ -854,7 +892,7 @@ class ModstorePlatformAdapter:
                 len(candidates),
             )
             retry_next = False
-            with httpx.Client(
+            with _httpx_sync_client(
                 timeout=httpx.Timeout(self.timeout, connect=10.0),
                 limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
                 headers=self._build_headers(),
@@ -883,21 +921,8 @@ class ModstorePlatformAdapter:
                             )
                             raise err
                     else:
-                        current_event = ""
-                        for line in response.iter_lines():
-                            line_text = (line or "").strip()
-                            if not line_text:
-                                continue
-                            if line_text.startswith("event:"):
-                                current_event = line_text[6:].strip().lower()
-                                continue
-                            if line_text.startswith("data:"):
-                                line_text = line_text[5:].strip()
-                            if line_text == "[DONE]":
-                                break
-                            if current_event in {"meta", "done"}:
-                                continue
-                            yield line_text
+                        for payload_text in _iter_market_sse_data_payloads(response):
+                            yield payload_text
                         return
             if retry_next:
                 continue

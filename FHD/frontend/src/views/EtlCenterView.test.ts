@@ -345,6 +345,10 @@ describe('EtlCenterView folder workflow', () => {
       upload_id: 'upload-houxuemei',
       target_type: 'auto',
     }))
+    // autoWrite 默认开启：preview_ready 后自动 execute 并切到 history tab。
+    // 切回 preview tab 才能验证候选版式与关联写入提示。
+    await buttonByText(wrapper, '核对写入')?.trigger('click')
+    await flushPromises()
     expect(wrapper.text()).toContain('目标')
     expect(wrapper.text()).toContain('发货记录')
     expect(wrapper.text()).toContain('已获取送货单版式候选：金汉武家私-发货单版式')
