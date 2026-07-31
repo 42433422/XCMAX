@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.application.private_mod import delivery as private_mod_delivery as delivery
+from app.application.private_mod import delivery
 
 
 def _use_temp_state(monkeypatch, tmp_path):
