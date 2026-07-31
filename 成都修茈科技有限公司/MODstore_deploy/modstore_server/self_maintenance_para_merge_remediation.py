@@ -137,12 +137,18 @@ def para_merge_resume_pins_rejected_branch(item: Mapping[str, Any]) -> bool:
 
     if not isinstance(item, Mapping):
         return False
+    detail = str(item.get("detail") or "")
+    if (
+        is_changed_files_empty_detail(detail)
+        or is_pr_closed_without_merge_detail(detail)
+        or is_update_branch_content_conflict_detail(detail)
+    ):
+        return False
+    if is_branch_preserving_para_merge_failure_detail(detail):
+        return True
     if item.get("resume_from_clean_baseline"):
         return False
-    detail = str(item.get("detail") or "")
-    if is_changed_files_empty_detail(detail) or is_pr_closed_without_merge_detail(detail):
-        return False
-    return is_branch_preserving_para_merge_failure_detail(detail)
+    return False
 
 
 def _normalize_repo_path(path: str) -> str:
@@ -281,6 +287,7 @@ def reconcile_absorbed_para_merge_remediations(
 
     base_ref = f"origin/{(base_branch or 'main').strip() or 'main'}"
     closed_task_ids: list[str] = []
+    assessment_cache: Dict[str, Dict[str, Any]] = {}
     for item in list(open_items):
         if not isinstance(item, dict):
             continue
@@ -295,12 +302,15 @@ def reconcile_absorbed_para_merge_remediations(
         if not empty_files and not closed_without_merge and not update_branch_conflict:
             continue
         rejected_branch = str(item.get("rejected_branch") or item.get("branch") or "").strip()
-        assessment = rejected_branch_production_delta_absorbed_by_main(
-            rejected_branch,
-            base_ref=base_ref,
-            repo_root=repo_root,
-            run_git=run_git,
-        )
+        cache_key = f"{base_ref}\0{rejected_branch}"
+        if cache_key not in assessment_cache:
+            assessment_cache[cache_key] = rejected_branch_production_delta_absorbed_by_main(
+                rejected_branch,
+                base_ref=base_ref,
+                repo_root=repo_root,
+                run_git=run_git,
+            )
+        assessment = assessment_cache[cache_key]
         if not assessment.get("absorbed"):
             continue
         task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
