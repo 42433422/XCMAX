@@ -166,7 +166,7 @@ describe('PrivateModDeliveryPanel', () => {
     expect(wrapper.text()).toContain('已是最新私有版本')
   })
 
-  it('surfaces save/update failures and network throw paths', async () => {
+  it('surfaces save-status failure message', async () => {
     mockApiFetch
       .mockResolvedValueOnce(
         okJson({
@@ -175,29 +175,17 @@ describe('PrivateModDeliveryPanel', () => {
         }),
       )
       .mockResolvedValueOnce(failJson(400, { message: 'status denied' }))
-      .mockResolvedValueOnce(
-        okJson({
-          projects: [sampleProject],
-          stages: ['production', 'testing', 'rework', 'acceptance', 'delivered'],
-        }),
-      )
-      .mockResolvedValueOnce(failJson(500, { error: 'update denied' }))
 
     const wrapper = mount(PrivateModDeliveryPanel)
     await flushPromises()
     await wrapper.get('select[aria-label="业务模块交付阶段"]').setValue('rework')
     await flushPromises()
     expect(wrapper.text()).toContain('status denied')
+  })
 
-    mockApiFetch
-      .mockResolvedValueOnce(
-        okJson({
-          projects: [sampleProject],
-          stages: ['production', 'testing', 'rework', 'acceptance', 'delivered'],
-        }),
-      )
-      .mockRejectedValueOnce(new Error('socket closed'))
-    await wrapper.get('.private-mod-center__refresh').trigger('click')
+  it('surfaces network throw when private delivery load fails hard', async () => {
+    mockApiFetch.mockRejectedValueOnce(new Error('socket closed'))
+    const wrapper = mount(PrivateModDeliveryPanel)
     await flushPromises()
     expect(wrapper.text()).toContain('socket closed')
   })

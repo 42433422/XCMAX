@@ -348,7 +348,7 @@ describe('PersyKnowledgeView', () => {
     prompt.mockRestore()
   })
 
-  it('deletes a source document after confirmation and supports onboarding actions', async () => {
+  it('deletes a source document after confirmation', async () => {
     const { isAdminConsoleSpa } = await import('@/utils/adminConsoleUrl')
     vi.mocked(isAdminConsoleSpa).mockReturnValue(true)
     const publicDoc = {
@@ -390,16 +390,25 @@ describe('PersyKnowledgeView', () => {
     await wrapper.get('button[aria-label="删除资料"]').trigger('click')
     await flushPromises()
     expect(mocks.deleteDocument).toHaveBeenCalledWith('persy-knowledge', 'public-doc-2')
+    expect(wrapper.text()).toMatch(/已删除|公开知识库|资料/)
 
+    confirm.mockRestore()
+  })
+
+  it('opens import drawer from graph onboarding actions', async () => {
+    const wrapper = mount(PersyKnowledgeView, { global: { plugins: [createPinia()] } })
+    await flushPromises()
+    const graphTab = wrapper.findAll('.view-switch button').find((button) =>
+      button.text().includes('图谱'),
+    )
+    await graphTab!.trigger('click')
+    await flushPromises()
     const graph = wrapper.getComponent({ name: 'PersyKnowledgeGraphStub' })
     await graph.vm.$emit('onboardingAction', 'upload')
     await flushPromises()
-    expect(wrapper.text()).toMatch(/导入|粘贴|资料/)
+    expect(wrapper.find('.import-drawer').exists()).toBe(true)
     await graph.vm.$emit('onboardingAction', 'paste')
-    await graph.vm.$emit('onboardingAction', 'chat')
-    await graph.vm.$emit('selectNode', 'persy:persy-knowledge')
     await flushPromises()
-
-    confirm.mockRestore()
+    expect(wrapper.find('#persy-text').exists()).toBe(true)
   })
 })
