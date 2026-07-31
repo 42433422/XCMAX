@@ -1005,4 +1005,38 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "output_format": {"type": "string", "enum": ["docx", "xlsx"]},
         },
     },
+    # ── ERP 数据对接中心（ETL）──────────────────────────────────────
+    # 后端经 invoke_erp_domain_handler(domain="etl", action=...) 派发至
+    # xcagi-erp-domain-bridge Mod 的 domain_handlers.py
+    ("erp_data_docking", "sources"): {
+        "type": "object",
+        "required": [],
+        "properties": {},
+    },
+    ("erp_data_docking", "preview"): {
+        "type": "object",
+        "required": ["file_body", "filename"],
+        "properties": {
+            "file_body": {"type": "string", "format": "byte", "description": "Excel/CSV 文件二进制（base64）"},
+            "filename": {"type": "string", "description": "原始文件名，用于识别扩展名"},
+            "target_entity": {
+                "type": "string",
+                "enum": ["products", "customers", "orders", "shipment-records", ""],
+                "description": "目标实体；空则自动推断",
+            },
+        },
+    },
+    ("erp_data_docking", "execute"): {
+        "type": "object",
+        "required": ["file_body", "filename"],
+        "properties": {
+            "file_body": {"type": "string", "format": "byte", "description": "Excel/CSV 文件二进制（base64）"},
+            "filename": {"type": "string"},
+            "target_entity": {
+                "type": "string",
+                "enum": ["products", "customers", "orders", "shipment-records", ""],
+            },
+            "sheet_name": {"type": "string", "description": "指定 sheet；空则取首个"},
+        },
+    },
 }

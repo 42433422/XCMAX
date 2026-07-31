@@ -450,7 +450,9 @@ def start_scheduler() -> None:
 
     _scheduler.add_job(
         dispatch_pending_incidents,
-        IntervalTrigger(seconds=max(15, _env_int("MODSTORE_INCIDENT_DISPATCH_PENDING_INTERVAL", 30))),
+        IntervalTrigger(
+            seconds=max(15, _env_int("MODSTORE_INCIDENT_DISPATCH_PENDING_INTERVAL", 30))
+        ),
         id="incident_dispatch_pending",
         replace_existing=True,
         misfire_grace_time=_cleanup_misfire_grace_time(),

@@ -24,10 +24,17 @@
       "host_prefix": "/api/wechat",
       "facade_prefix": "/api/mod/xcagi-erp-domain-bridge/wechat",
       "handler": "mod.domain_handlers"
+    },
+    {
+      "id": "etl",
+      "host_prefix": "/api/etl",
+      "facade_prefix": "/api/mod/xcagi-erp-domain-bridge/etl",
+      "handler": "mod.domain_handlers",
+      "note": "数据对接中心：Extract+Transform+Load，支持 Excel/CSV → products/customers/orders/shipment-records"
     }
   ],
   "delegate": "mod_domain_handlers",
-  "mod_domain_handlers": ["products", "shipment", "customers", "wechat"],
+  "mod_domain_handlers": ["products", "shipment", "customers", "wechat", "etl"],
   "products_via_service": true,
-  "note": "里程碑 G+：产品 CRUD 经 ProductsService；DB/Repository 仍在宿主。"
+  "note": "里程碑 G+：产品 CRUD 经 ProductsService；DB/Repository 仍在宿主。ETL 域经数据对接中心。"
 }

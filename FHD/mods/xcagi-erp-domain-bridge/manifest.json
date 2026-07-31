@@ -52,6 +52,12 @@
         "path": "/mod/xcagi-erp-domain-bridge/traditional-mode"
       },
       {
+        "id": "mod-erp-business-docking",
+        "label": "数据对接中心",
+        "icon": "fa-exchange",
+        "path": "/mod/xcagi-erp-domain-bridge/business-docking"
+      },
+      {
         "id": "mod-erp-data-sources",
         "label": "数据来源",
         "icon": "fa-database",
@@ -102,10 +108,6 @@
         "hidden": true
       },
       {
-        "key": "business-docking",
-        "hidden": true
-      },
-      {
         "key": "data-sources",
         "hidden": true
       },
@@ -138,7 +140,8 @@
       "products",
       "shipment",
       "customers",
-      "wechat"
+      "wechat",
+      "etl"
     ],
     "products_via_service": true,
     "customers_via_service": true,

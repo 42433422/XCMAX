@@ -33,7 +33,7 @@ def notify_software_delivery(
         "您的 XCAGI 企业版安装包与登录说明已就绪，请查收群内后续消息或联系专属客服获取下载链接。"
     )
     try:
-        from app.services.wechat_sender import send_wechat_message
+        from app.application.wechat_sender_app_service import send_wechat_message
 
         result = send_wechat_message(contact, text)
         ok = bool(result.get("success"))

@@ -8,7 +8,7 @@ from typing import Any
 MOD_SOURCE = "mod:xcagi-erp-domain-bridge"
 EXECUTION_PATH = "mod_domain_handler"
 
-MOD_DOMAIN_IDS = frozenset({"products", "shipment", "customers", "wechat"})
+MOD_DOMAIN_IDS = frozenset({"products", "shipment", "customers", "wechat", "etl"})
 
 
 def _tag(out: Any) -> Any:
@@ -300,6 +300,198 @@ def _wechat_tasks(**kw: Any) -> Any:
         return JSONResponse({"success": False, "message": f"查询失败：{str(e)}"}, status_code=500)
 
 
+# ── ETL 数据对接中心 ──────────────────────────────────────────
+
+ETL_SUPPORTED_SOURCES = ("excel", "csv", "manual")
+ETL_TARGET_ENTITIES = ("products", "customers", "orders", "shipment-records")
+
+
+def _etl_sources(**kw: Any) -> Any:
+    """返回数据对接中心支持的数据源类型与目标实体。"""
+    return _tag({
+        "success": True,
+        "data": {
+            "sources": ETL_SUPPORTED_SOURCES,
+            "targets": ETL_TARGET_ENTITIES,
+            "capabilities": ["extract", "transform", "load", "preview"],
+        },
+    })
+
+
+def _etl_preview(**kw: Any) -> Any:
+    """Extract + Transform 预览：解析文件并返回字段映射结果，不写库。"""
+    file_body = kw.get("file_body") or b""
+    filename = str(kw.get("filename") or "upload.xlsx")
+    target_entity = str(kw.get("target_entity") or "").strip()
+
+    if not file_body:
+        return _tag({"success": False, "message": "未提供文件内容"})
+
+    # 直接调 analyze-only 入口，避免 ingest_* 把模板写入 templates 表（preview 不应有副作用）
+    from app.fastapi_routes.document_templates_compat import run_archive_template_analyze
+
+    analyzed, _code = run_archive_template_analyze(
+        file_body=file_body,
+        filename=filename,
+        template_scope=target_entity,
+    )
+    if not analyzed.get("success"):
+        return _tag(analyzed)
+
+    fields = analyzed.get("fields") or []
+    preview_data = analyzed.get("preview_data") or {}
+    mapping = _infer_field_mapping(fields, target_entity)
+    return _tag({
+        "success": True,
+        "data": {
+            "filename": filename,
+            "fields": fields,
+            "preview_data": preview_data,
+            "field_mapping": mapping,
+            "target_entity": target_entity or mapping.get("_inferred_scope", ""),
+            "task_id": analyzed.get("task_id"),
+        },
+    })
+
+
+def _etl_execute(**kw: Any) -> Any:
+    """Extract + Transform + Load：解析文件、转换字段、写入目标实体表。"""
+    file_body = kw.get("file_body") or b""
+    filename = str(kw.get("filename") or "upload.xlsx")
+    target_entity = str(kw.get("target_entity") or "").strip()
+    sheet_name = str(kw.get("sheet_name") or "").strip() or None
+
+    if not file_body:
+        return _tag({"success": False, "message": "未提供文件内容"})
+
+    # 1. Extract：复用 shipment_excel_etl 的解析能力（发货单/业务单据）
+    if target_entity in ("orders", "shipment-records", ""):
+        from app.application.shipment_excel_etl_app_service import (
+            get_shipment_excel_etl_app_service,
+        )
+
+        svc = get_shipment_excel_etl_app_service()
+        result = svc.execute(
+            file_bytes=file_body,
+            filename=filename,
+            sheet_name=sheet_name,
+            skip_user_confirm=True,
+        )
+        return _tag(result)
+
+    # 2. Extract + Transform + Load：产品/客户走通用解析 → domain_handler 入库
+    from app.application.office_template_ingest_app_service import (
+        ingest_office_bytes_to_template_library,
+    )
+
+    analyzed, _ = ingest_office_bytes_to_template_library(
+        file_body=file_body,
+        filename=filename,
+        template_scope=target_entity,
+        source="etl_execute",
+    )
+    if not analyzed.get("success"):
+        return _tag(analyzed)
+
+    # ingest_* 返回结构：{"success": ..., "analyzed": {fields, preview_data, ...}, "task_id": ..., "template": {...}}
+    inner = analyzed.get("analyzed") or {}
+    fields = inner.get("fields") or analyzed.get("fields") or []
+    sample_rows = (inner.get("preview_data") or analyzed.get("preview_data") or {}).get("sample_rows") or []
+    loaded = _load_to_entity(target_entity or "products", fields, sample_rows, kw.get("request"))
+    return _tag({
+        "success": True,
+        "data": {
+            "filename": filename,
+            "target_entity": target_entity,
+            "fields_count": len(fields),
+            "rows_loaded": loaded,
+            "task_id": analyzed.get("task_id"),
+            "template_id": (analyzed.get("template") or {}).get("id"),
+        },
+    })
+
+
+_FIELD_EQUIVALENTS = {
+    "products": {
+        "name": ["产品名称", "名称", "品名", "entity_name"],
+        "model_number": ["型号", "产品型号", "产品编码", "model"],
+        "specification": ["规格", "规格型号", "spec"],
+        "price": ["单价", "价格", "price"],
+        "unit": ["单位", "计量单位"],
+    },
+    "customers": {
+        "customer_name": ["客户名称", "购买单位", "单位名称", "厂名", "entity_name"],
+        "contact_person": ["联系人", "联系人姓名"],
+        "contact_phone": ["联系电话", "电话", "手机号"],
+        "contact_address": ["地址", "联系地址"],
+    },
+}
+
+
+def _infer_field_mapping(fields: list, target_entity: str) -> dict:
+    """根据同义词表推断源列 → 目标字段的映射。"""
+    if not target_entity or target_entity not in _FIELD_EQUIVALENTS:
+        # 自动推断 scope
+        field_labels = {str(f.get("label") or f.get("name") or "").strip().lower() for f in fields}
+        for entity, equiv in _FIELD_EQUIVALENTS.items():
+            for _, aliases in equiv.items():
+                if any(str(a).lower() in field_labels for a in aliases):
+                    target_entity = entity
+                    break
+            if target_entity:
+                break
+        if not target_entity:
+            return {"_inferred_scope": ""}
+
+    equiv = _FIELD_EQUIVALENTS.get(target_entity, {})
+    mapping: dict[str, str] = {}
+    for target_field, aliases in equiv.items():
+        for f in fields:
+            label = str(f.get("label") or f.get("name") or "").strip().lower()
+            for alias in aliases:
+                if alias.lower() == label or alias.lower() in label:
+                    mapping[target_field] = str(f.get("label") or f.get("name") or "")
+                    break
+            if target_field in mapping:
+                break
+    mapping["_inferred_scope"] = target_entity
+    return mapping
+
+
+def _load_to_entity(entity: str, fields: list, sample_rows: list, request: Any) -> int:
+    """将解析后的数据行通过 domain_handler 写入目标实体表。"""
+    if not sample_rows:
+        return 0
+
+    mapping = _infer_field_mapping(fields, entity)
+    entity = mapping.get("_inferred_scope") or entity
+    count = 0
+
+    for row in sample_rows:
+        body: dict[str, Any] = {}
+        for target_field, source_label in mapping.items():
+            if target_field.startswith("_"):
+                continue
+            for key in (source_label, source_label.lower()):
+                if key in row:
+                    body[target_field] = row[key]
+                    break
+
+        if not body:
+            continue
+
+        try:
+            if entity == "products":
+                _products_add(request=request, body=body)
+            elif entity == "customers":
+                _customers_create(request=request, body=body)
+            count += 1
+        except Exception:
+            pass
+
+    return count
+
+
 _DISPATCH: dict[tuple[str, str], Any] = {
     ("products", "list"): _products_list,
     ("products", "get"): _products_get,
@@ -321,6 +513,10 @@ _DISPATCH: dict[tuple[str, str], Any] = {
     ("wechat", "contacts_list"): _wechat_contacts_list,
     ("wechat", "contact_get"): _wechat_contact_get,
     ("wechat", "tasks"): _wechat_tasks,
+    # ── ETL 数据对接中心 ──────────────────────────────────────────
+    ("etl", "sources"): _etl_sources,
+    ("etl", "preview"): _etl_preview,
+    ("etl", "execute"): _etl_execute,
 }
 
 

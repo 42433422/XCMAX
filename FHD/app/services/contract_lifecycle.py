@@ -69,7 +69,9 @@ def handle_esign_webhook(payload: dict[str, Any]) -> dict[str, Any]:
         doc = load_pipeline(uid)
         doc = transition_contract(doc, "signed", source="esign_webhook")
         block = get_contract_block(doc)
-        task = block.get("esign_task") if isinstance(block.get("esign_task"), dict) else {}
+        task = (
+            block.get("esign_task") if isinstance(block.get("esign_task"), dict) else {}
+        )
         task = dict(task)
         task["status"] = "signed"
         if payload.get("task_id"):
@@ -126,14 +128,18 @@ def notify_contract_expiry_items(
         push_status = "failed"
         error_message: str | None = None
         try:
-            from app.services.wechat_sender import send_wechat_message
+            from app.application.wechat_sender_app_service import send_wechat_message
 
-            result = send_wechat_message(contact, f"合同将于 {end_date} 到期，请及时续签。")
+            result = send_wechat_message(
+                contact, f"合同将于 {end_date} 到期，请及时续签。"
+            )
             if result.get("success"):
                 push_status = "success"
                 pushed += 1
             else:
-                error_message = str(result.get("message") or result.get("error") or "push failed")
+                error_message = str(
+                    result.get("message") or result.get("error") or "push failed"
+                )
                 failed += 1
         except RECOVERABLE_ERRORS as exc:
             error_message = str(exc)
@@ -149,7 +155,9 @@ def notify_contract_expiry_items(
     return {"notified": notified, "pushed": pushed, "failed": failed}
 
 
-def run_contract_expiry_scan(days_ahead: int = 30, dry_run: bool = True) -> dict[str, Any]:
+def run_contract_expiry_scan(
+    days_ahead: int = 30, dry_run: bool = True
+) -> dict[str, Any]:
     """扫描即将到期合同（operations-line API SSOT；原 contract_expiry_scheduler 已合并）。"""
     return {
         "scanned": 0,

@@ -1162,4 +1162,59 @@ _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "message": {"type": "string"},
         },
     },
+    # ── ERP 数据对接中心（ETL）──────────────────────────────────────
+    ("erp_data_docking", "sources"): {
+        "type": "object",
+        "required": ["success", "data"],
+        "properties": {
+            "success": {"type": "boolean"},
+            "message": {"type": "string"},
+            "data": {
+                "type": "object",
+                "properties": {
+                    "sources": {"type": "array", "items": {"type": "string"}},
+                    "targets": {"type": "array", "items": {"type": "string"}},
+                    "capabilities": {"type": "array", "items": {"type": "string"}},
+                },
+            },
+        },
+    },
+    ("erp_data_docking", "preview"): {
+        "type": "object",
+        "required": ["success"],
+        "properties": {
+            "success": {"type": "boolean"},
+            "message": {"type": "string"},
+            "data": {
+                "type": "object",
+                "properties": {
+                    "filename": {"type": "string"},
+                    "fields": {"type": "array"},
+                    "preview_data": {"type": "object"},
+                    "field_mapping": {"type": "object"},
+                    "target_entity": {"type": "string"},
+                    "task_id": {"type": "string"},
+                },
+            },
+        },
+    },
+    ("erp_data_docking", "execute"): {
+        "type": "object",
+        "required": ["success"],
+        "properties": {
+            "success": {"type": "boolean"},
+            "message": {"type": "string"},
+            "data": {
+                "type": "object",
+                "properties": {
+                    "filename": {"type": "string"},
+                    "target_entity": {"type": "string"},
+                    "fields_count": {"type": "integer"},
+                    "rows_loaded": {"type": "integer"},
+                    "task_id": {"type": "string"},
+                    "template_id": {"type": "integer"},
+                },
+            },
+        },
+    },
 }

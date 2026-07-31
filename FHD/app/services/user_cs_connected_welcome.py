@@ -29,7 +29,7 @@ def maybe_send_connected_welcome(
         "后续需求采集、合同与交付进度都会在此群同步，请随时 @ 我。"
     )
     try:
-        from app.services.wechat_sender import send_wechat_message
+        from app.application.wechat_sender_app_service import send_wechat_message
 
         result = send_wechat_message(contact, text)
         ok = bool(result.get("success"))

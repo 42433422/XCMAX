@@ -98,13 +98,19 @@ def neuro_degraded_reasons(neuro: object) -> list[str]:
     """Extract user-actionable degradation from the Neuro/LLM health payload."""
     if not isinstance(neuro, dict) or neuro.get("enabled") is False:
         return []
+    # 被动应用节点（DR active-peer）按设计跳过 NeuroBus 后台运行时，
+    # 不应因 NeuroBus 未运行而报 degraded。
+    from app.fastapi_app.node_role import passive_node_enabled
+
+    skip_bus_checks = passive_node_enabled()
     reasons: list[str] = []
     if neuro.get("error"):
         reasons.append("NEURO_HEALTH_UNAVAILABLE")
-    if neuro.get("status") not in (None, "healthy"):
-        reasons.append("NEURO_BUS_UNHEALTHY")
-    if neuro.get("running") is False:
-        reasons.append("NEURO_BUS_NOT_RUNNING")
+    if not skip_bus_checks:
+        if neuro.get("status") not in (None, "healthy"):
+            reasons.append("NEURO_BUS_UNHEALTHY")
+        if neuro.get("running") is False:
+            reasons.append("NEURO_BUS_NOT_RUNNING")
     cognition = neuro.get("cognition")
     if isinstance(cognition, dict):
         cognition_state = cognition.get("cognition")
