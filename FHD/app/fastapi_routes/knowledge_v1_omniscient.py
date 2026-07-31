@@ -6,7 +6,6 @@ from typing import Any, cast
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app.infrastructure.rag import is_rag_enabled
 from app.fastapi_routes.knowledge_v1 import (
     QueryRequest,
     _dataset_access_context_from_request,
@@ -14,6 +13,7 @@ from app.fastapi_routes.knowledge_v1 import (
     _knowledge_runtime_snapshot,
     _public_dataset_payload,
 )
+from app.infrastructure.rag import is_rag_enabled
 
 router = APIRouter(prefix="/api/knowledge/v1", tags=["knowledge-v1"])
 

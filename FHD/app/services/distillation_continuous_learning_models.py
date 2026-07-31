@@ -14,7 +14,8 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from app.utils.distillation_paths import get_distillation_root_dir
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
     from app.services.bert_intent_service import INTENT_LABELS as RUNTIME_INTENT_LABELS
@@ -73,6 +74,15 @@ ID_TO_LABEL = {idx: label for label, idx in LABEL_TO_ID.items()}
 LEARNING_STATUSES = {"candidate", "approved", "rejected"}
 TRAINABLE_STATUSES = {"approved"}
 RESOLVED_TICKET_STATUSES = {"resolved", "closed"}
+
+
+def _write_jsonl(path: str | Path, rows: Iterable[dict[str, Any]]) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("w", encoding="utf-8") as f:
+        for row in rows:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
 
 INTENT_ALIASES = {
     "customer_list": "customers",
@@ -296,7 +306,7 @@ class LearningSample:
         return data
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "LearningSample":
+    def from_dict(cls, data: dict[str, Any]) -> LearningSample:
         return cls(**{k: v for k, v in data.items() if k != "trainable"})
 
 

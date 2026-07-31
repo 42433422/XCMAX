@@ -57,7 +57,11 @@ _STRONG_ERP_TERMS = {
 
 from app.application.erp_domain_ontology_data import (
     ERP_DOMAINS as _ERP_DOMAINS,
+)
+from app.application.erp_domain_ontology_data import (
     ERP_ENTITIES as _ERP_ENTITIES,
+)
+from app.application.erp_domain_ontology_data import (
     ERP_RULES as _ERP_RULES,
 )
 

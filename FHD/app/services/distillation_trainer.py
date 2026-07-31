@@ -25,16 +25,11 @@
 """
 
 import argparse
-import hashlib
 import json
 import logging
 import os
-import re
 from collections import Counter
-from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from pathlib import Path
-from typing import Any, Iterable
 
 import torch
 from sklearn.metrics import accuracy_score, classification_report
@@ -74,13 +69,20 @@ try:
 except ImportError:
     AdamW = TorchAdamW
 
+logger = logging.getLogger(__name__)
+
+from app.services.distillation_continuous_learning_models import (
+    ID_TO_LABEL,
+    INTENT_LABELS,
+    LABEL_TO_ID,
+    _stable_id,
+)
 from app.utils.distillation_paths import (
     get_distillation_checkpoints_dir,
     get_distillation_logs_dir,
     get_distillation_root_dir,
     get_distillation_training_data_path,
 )
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 try:
     from app.services.bert_intent_service import INTENT_LABELS as RUNTIME_INTENT_LABELS
@@ -123,10 +125,6 @@ DISTILL_DIR = get_distillation_root_dir()
 CHECKPOINT_DIR = get_distillation_checkpoints_dir()
 LOG_DIR = get_distillation_logs_dir()
 from app.services.distillation_continuous_learning import (
-    CONTINUOUS_LEARNING_DIR,
-    CONTINUOUS_TRAINING_DATA_NAME,
-    build_continuous_learning_corpus,
-    export_continuous_training_data,
     normalize_intent_label,
 )
 

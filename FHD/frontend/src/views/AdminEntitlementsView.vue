@@ -348,10 +348,6 @@
         </section>
 
         <AdminPrivateDeliveryPanel :user-id="selectedUserId" />
-              </div>
-            </article>
-          </div>
-        </section>
 
         <div class="admin-mod-panel">
           <h4>已绑定客户 Mod</h4>

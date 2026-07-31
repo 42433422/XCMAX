@@ -3,27 +3,59 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections import Counter, defaultdict
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from app.infrastructure.rag import RetrievedChunk
+
 
 def _utc_now_iso() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
-_dataset_rag_app_service: DatasetRagApplicationService | None = None
-_dataset_rag_lock = threading.Lock()
+_GRAPH_TOPIC_METADATA_KEYS = frozenset(
+    {"topic", "topics", "tag", "tags", "entity", "entities", "keywords", "category", "doc_type"}
+)
+_GRAPH_TOPIC_STOPWORDS = frozenset(
+    {
+        "about",
+        "after",
+        "before",
+        "default",
+        "document",
+        "from",
+        "into",
+        "persy",
+        "that",
+        "their",
+        "this",
+        "with",
+        "以及",
+        "他们",
+        "内容",
+        "可以",
+        "如何",
+        "我们",
+        "文件",
+        "是否",
+        "知识",
+        "系统",
+        "资料",
+        "这个",
+        "这些",
+        "进行",
+        "需要",
+    }
+)
 
-
-def _clean_key(value: str, *, default: str) -> str:
-    cleaned = "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in value.strip())
-    return cleaned.strip("._-") or default
 
 def _build_knowledge_graph_payload(
     *,
     dataset_id: str,
     tenant_id: str,
-    documents: list[DatasetDocument],
+    documents: list[Any],
     chunks: list[RetrievedChunk],
     limit: int,
 ) -> dict[str, Any]:

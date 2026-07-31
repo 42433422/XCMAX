@@ -4,6 +4,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
+_DATASET_METADATA_MAX_BYTES = 64 * 1024
+
+
 def _ensure_bounded_metadata(value: Any, *, max_bytes: int = _DATASET_METADATA_MAX_BYTES) -> None:
     def walk(item: Any, depth: int = 0) -> None:
         if depth > 8:

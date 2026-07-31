@@ -1,7 +1,10 @@
 """Dataset publication status helpers (extracted for source-governance)."""
 from __future__ import annotations
 
+import copy
+import uuid
 from typing import Any
+
 
 def set_document_publication_status(
     service,
@@ -13,6 +16,15 @@ def set_document_publication_status(
     expected_status: str | None = None,
     access_context: Any = None,
 ) -> dict[str, Any]:
+    from app.application.dataset_rag_app_service import (
+        DATASET_ADMIN_PERMISSION,
+        PUBLIC_KNOWLEDGE_TENANT_ID,
+        _clean_key,
+        _coerce_access_context,
+        _ensure_dataset_permission,
+        _utc_now_iso,
+    )
+
     dataset_key = _clean_key(dataset_id, default="default")
     doc_key = document_id.strip()
     next_status = str(publication_status or "").strip().lower()

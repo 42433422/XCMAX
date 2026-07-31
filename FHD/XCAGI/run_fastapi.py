@@ -281,7 +281,7 @@ def main(argv: list[str] | None = None) -> None:
         from app.utils.proxy_env import sanitize_socks_all_proxy
 
         sanitize_socks_all_proxy()
-    except Exception:
+    except (OSError, RuntimeError, ValueError, TypeError, AttributeError):
         pass
 
     if args.desktop or args.data_dir or args.migrate_only:

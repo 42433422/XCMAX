@@ -6,33 +6,31 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any
-
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from typing import Any, Iterable
 
 from app.services.distillation_continuous_learning_models import (
-    CONTINUOUS_LEARNING_DIR,
-    CONTINUOUS_TRAINING_DATA_NAME,
+    BASE_DIR,
+    LABEL_TO_ID,
+    RESOLVED_TICKET_STATUSES,
     ContinuousLearningCorpus,
     KnowledgeUnit,
     LearningSample,
     _coerce_dict,
     _coerce_float,
     _load_jsonish_rows,
+    _normalize_text,
     _now_iso,
+    _row_text,
+    _stable_id,
+    _write_jsonl,
     infer_intent_label,
     normalize_intent_label,
 )
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 
-def _write_jsonl(path: str | Path, rows: Iterable[dict[str, Any]]) -> None:
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with target.open("w", encoding="utf-8") as f:
-        for row in rows:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
 def collect_user_feedback_samples(memory_path: str | Path | None = None) -> list[LearningSample]:

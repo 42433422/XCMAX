@@ -7,10 +7,10 @@ from unittest.mock import patch
 
 from app.services.bert_intent_service import INTENT_LABELS as RUNTIME_INTENT_LABELS
 from app.services.distillation_continuous_learning import (
-    build_continuous_learning_corpus,
-    export_continuous_training_data,
     ContinuousLearningCorpus,
     LearningSample,
+    build_continuous_learning_corpus,
+    export_continuous_training_data,
 )
 from app.services.distillation_continuous_learning_collectors import (
     collect_bug_fix_learning,

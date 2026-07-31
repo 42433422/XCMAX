@@ -91,10 +91,9 @@ def _private_mod_items(row: dict[str, Any]) -> tuple[list[dict[str, Any]], list[
 @router.get("/private-delivery", response_model=ModStoreSimpleResponse)
 async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse:
     """生产员工专用：客户私有 Mod 双轨交付状态与私有更新信息。"""
-    from app.mod_sdk.customer_delivery import delivery_for_account_custom_mod
-    from app.services.private_mod_delivery import (
-        STAGES,
+    from app.application.private_mod_delivery import (
         STAGE_LABELS,
+        STAGES,
         TRACKS,
         account_scope,
         fetch_private_mod_library,
@@ -103,6 +102,7 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
         project_state,
         stage_label,
     )
+    from app.mod_sdk.customer_delivery import delivery_for_account_custom_mod
 
     context = await _private_mod_context(request)
     mod_ids = context["mod_ids"]
@@ -195,7 +195,7 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
     context = await _private_mod_context(request)
     if mod_id not in context["mod_ids"]:
         raise HTTPException(status_code=403, detail="当前账号未授权该客户私有 Mod")
-    from app.services.private_mod_delivery import account_scope, set_track_status
+    from app.application.private_mod_delivery import account_scope, set_track_status
 
     local = _private_mod_local_rows({mod_id}).get(mod_id, {})
     scope_key = account_scope(context.get("market_user_id"), context.get("username"))
@@ -218,8 +218,8 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
         uid = 0
     if uid > 0:
         try:
+            from app.application.private_mod_delivery import export_account_state
             from app.application.xcmax_sync_app import record_change
-            from app.services.private_mod_delivery import export_account_state
 
             record_change(
                 "private_mod_delivery",
@@ -234,7 +234,7 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
             )
         except RECOVERABLE_ERRORS as exc:
             logger.warning("private Mod delivery sync enqueue failed user=%s: %s", uid, exc)
-    from app.services.private_mod_delivery import overall_status
+    from app.application.private_mod_delivery import overall_status
 
     return ModStoreSimpleResponse(
         success=True,
@@ -254,9 +254,9 @@ async def mod_store_private_mod_update(request: Request) -> ModStoreInstallResul
     if mod_id not in context["mod_ids"]:
         raise HTTPException(status_code=403, detail="当前账号未授权该客户私有 Mod")
     try:
+        from app.application.private_mod_delivery import update_private_mod_from_library
         from app.fastapi_routes.market_account import resolve_valid_market_access_token
         from app.infrastructure.auth.dependencies import session_id_from_request
-        from app.services.private_mod_delivery import update_private_mod_from_library
 
         sid = session_id_from_request(request)
         token = await resolve_valid_market_access_token(sid) if sid else ""

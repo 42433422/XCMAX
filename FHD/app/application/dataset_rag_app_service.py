@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import copy
 import hashlib
 import json
 import os
 import re
 import threading
 import uuid
-from collections import Counter, defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -2165,16 +2163,8 @@ _GRAPH_TOPIC_STOPWORDS = frozenset(
 
 from app.application.dataset_rag_graph import (
     _build_knowledge_graph_payload,
-    _select_graph_chunks,
-    _extract_graph_topics,
-    _graph_topic_candidates,
-    _graph_chunk_node_id,
-    _graph_source_label,
-    _graph_knowledge_label,
-    _graph_excerpt,
-    _clean_graph_label,
-    _public_graph_metadata,
 )
+
 
 def _embedding_metadata(
     embedder: Callable[[str], list[float]] | None,

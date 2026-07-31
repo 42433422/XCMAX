@@ -38,8 +38,8 @@ def _ensure_auth_session_validate_route(app: FastAPI) -> None:
 def register_essential_compat_routes(app: FastAPI) -> None:
     """CI/E2E 在跳过完整 legacy 栈时仍须可用的最小 API（避免 payment_sot 等重依赖）。"""
     try:
-        from app.fastapi_routes.domains.auth.routes import router as legacy_auth_router
         from app.fastapi_routes.domains.auth.mfa_routes import router as auth_mfa_router
+        from app.fastapi_routes.domains.auth.routes import router as legacy_auth_router
 
         app.include_router(legacy_auth_router)
         app.include_router(auth_mfa_router)

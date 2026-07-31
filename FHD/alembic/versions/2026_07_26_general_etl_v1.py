@@ -8,15 +8,16 @@ Create Date: 2026-07-26
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Sequence, Union
+from typing import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "2026_07_26_general_etl_v1"
-down_revision: Union[str, Sequence[str], None] = "2026_07_24_shipment_etl_fingerprints"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "2026_07_24_shipment_etl_fingerprints"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def _tenant_owner_columns() -> list[sa.Column]:
