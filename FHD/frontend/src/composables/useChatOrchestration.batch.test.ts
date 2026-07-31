@@ -257,10 +257,11 @@ describe('useChatOrchestration batch/json', () => {
     expect(requestChatByModeWithTimeout).toHaveBeenCalled()
     expect(addAndSaveMessage).toHaveBeenCalledWith('请确认', 'ai', undefined, expect.any(Object))
     expect(agentListEvents).toHaveBeenCalledWith('run_1', {})
+    // workflow_confirmation_required 路径会创建一个 queued 状态的 workflow 任务（id=pending_workflow_id）
     expect(upsertTask).toHaveBeenCalledWith(expect.objectContaining({
-      id: 'agent_run_1',
-      source: 'agent',
-      status: 'success',
+      id: 'wf-2',
+      source: 'workflow',
+      status: 'queued',
     }))
   })
 })

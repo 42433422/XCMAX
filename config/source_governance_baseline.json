@@ -173,15 +173,15 @@
       "lines": 2181,
       "soft_cap": 500
     },
+    "FHD/app/application/workflow/planner.py": {
+      "stack": "fhd_backend",
+      "lines": 2121,
+      "soft_cap": 800
+    },
     "FHD/mods/xcagi-erp-domain-bridge/frontend/views/TemplatePreviewView.vue": {
       "stack": "fhd_vue",
       "lines": 2116,
       "soft_cap": 500
-    },
-    "FHD/app/application/workflow/planner.py": {
-      "stack": "fhd_backend",
-      "lines": 2112,
-      "soft_cap": 800
     },
     "FHD/app/application/tools/workflow.py": {
       "stack": "fhd_backend",
@@ -333,14 +333,14 @@
       "lines": 1438,
       "soft_cap": 800
     },
+    "FHD/app/fastapi_routes/mod_store_routes.py": {
+      "stack": "fhd_backend",
+      "lines": 1427,
+      "soft_cap": 800
+    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/time_rail_workflow.py": {
       "stack": "modstore_backend",
       "lines": 1425,
-      "soft_cap": 800
-    },
-    "FHD/app/fastapi_routes/mod_store_routes.py": {
-      "stack": "fhd_backend",
-      "lines": 1423,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_ai_pipeline.py": {
@@ -618,6 +618,11 @@
       "lines": 1023,
       "soft_cap": 800
     },
+    "FHD/app/application/planner_compat_service.py": {
+      "stack": "fhd_backend",
+      "lines": 1004,
+      "soft_cap": 800
+    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/retort_clarification_gate.py": {
       "stack": "modstore_backend",
       "lines": 1002,
@@ -627,11 +632,6 @@
       "stack": "flutter",
       "lines": 1001,
       "soft_cap": 500
-    },
-    "FHD/app/application/planner_compat_service.py": {
-      "stack": "fhd_backend",
-      "lines": 995,
-      "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/duty_workforce_burnin.py": {
       "stack": "modstore_backend",

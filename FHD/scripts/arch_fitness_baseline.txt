@@ -220,13 +220,14 @@
 [giant-file] app/application/shipment_template_resolve.py
 [giant-file] app/services/shipment_number_mode_service.py
 # 2026-07-31 PR #1133: Persy 统一记忆图谱 + ETL + mod_store_routes 历史违规
+# 2026-07-31 ruff format 后行号偏移：517→518, 621→622, 745→750, 770→775, 792→797, 808→813, 843→849
 [giant-file] app/application/normal_chat_dispatch.py
 [giant-file] app/enterprise/mod_entitlements.py
 [giant-file] app/services/private_mod_delivery.py
-[routes->services] app/fastapi_routes/mod_store_routes.py:517
-[routes->services] app/fastapi_routes/mod_store_routes.py:621
-[routes->services] app/fastapi_routes/mod_store_routes.py:770
-[routes->services] app/fastapi_routes/mod_store_routes.py:808
-[routes->services] app/fastapi_routes/mod_store_routes.py:745
-[routes->services] app/fastapi_routes/mod_store_routes.py:843
-[routes->services] app/fastapi_routes/mod_store_routes.py:792
+[routes->services] app/fastapi_routes/mod_store_routes.py:518
+[routes->services] app/fastapi_routes/mod_store_routes.py:622
+[routes->services] app/fastapi_routes/mod_store_routes.py:775
+[routes->services] app/fastapi_routes/mod_store_routes.py:813
+[routes->services] app/fastapi_routes/mod_store_routes.py:750
+[routes->services] app/fastapi_routes/mod_store_routes.py:849
+[routes->services] app/fastapi_routes/mod_store_routes.py:797

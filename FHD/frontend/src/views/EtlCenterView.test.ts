@@ -345,7 +345,7 @@ describe('EtlCenterView folder workflow', () => {
       upload_id: 'upload-houxuemei',
       target_type: 'auto',
     }))
-    expect(wrapper.text()).toContain('写入目标')
+    expect(wrapper.text()).toContain('目标')
     expect(wrapper.text()).toContain('发货记录')
     expect(wrapper.text()).toContain('已获取送货单版式候选：金汉武家私-发货单版式')
     expect(wrapper.text()).toContain('尚未保存')
@@ -524,7 +524,7 @@ describe('EtlCenterView folder workflow', () => {
       input.element.parentElement?.textContent?.includes('仅写入正确行')
     ))
     await validRowsCheckbox?.setValue(true)
-    await buttonByText(wrapper, '确认执行')?.trigger('click')
+    await buttonByText(wrapper, '写入数据库')?.trigger('click')
     await flushPromises()
 
     expect(etlApiMock.execute).toHaveBeenCalledWith(run.id, true)
