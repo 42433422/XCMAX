@@ -3,6 +3,10 @@ import agentRunsApi from '@/api/agentRuns'
 import type { TaskItem } from './useChatPersistence'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { normalizeTaskDisplayText } from '@/utils/chatTaskLabels'
+import {
+  buildAgentRunTraceFromEvents,
+  isTrivialChatTrace,
+} from '@/utils/agentRunTraceModel'
 
 type UpsertTask = (
   item: Partial<TaskItem> & { id: string; title: string; source: TaskItem['source']; type: string },
@@ -139,11 +143,9 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
         lastEventByRunId.set(normalizedRunId, last.event_id)
       }
       if (!accumulated.length) return
-      // 纯闲聊适配器：无 tool 事件时不要灌进「智能任务」侧栏（用户会看到假编排噪音）
-      const hasToolWork = accumulated.some((event) =>
-        String(event.event_type || '').startsWith('tool.'),
-      )
-      if (!hasToolWork) return
+      // 闲聊无工具、或单次成功只读工具：不灌「智能任务」侧栏 / 气泡剧场
+      const previewTrace = buildAgentRunTraceFromEvents(accumulated, normalizedRunId)
+      if (isTrivialChatTrace(previewTrace)) return
       options.upsertTask(buildAgentRunTaskUpdate({
         runId: normalizedRunId,
         userText,
@@ -151,10 +153,14 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
         messageRef: options.getLastAiMessageRef?.() || '',
       }))
     } catch {
+      const fallbackEvents = eventsByRunId.get(normalizedRunId) || []
+      if (!fallbackEvents.length) return
+      const previewTrace = buildAgentRunTraceFromEvents(fallbackEvents, normalizedRunId)
+      if (isTrivialChatTrace(previewTrace)) return
       options.upsertTask(buildAgentRunTaskUpdate({
         runId: normalizedRunId,
         userText,
-        events: eventsByRunId.get(normalizedRunId) || [],
+        events: fallbackEvents,
         messageRef: options.getLastAiMessageRef?.() || '',
       }))
     }
