@@ -267,8 +267,6 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
     def __init__(self):
         # 模板/外部资源统一放在 XCAGI/resources 下，避免依赖项目外目录
         # 兼容期：如果 resources 下不存在，再回退到 XCAGI/AI助手/uploads（仍在项目内）
-        from app.utils.path_utils import get_resource_path
-
         resources_template_dir = get_resource_path("ai_assistant", "uploads")
         legacy_template_dir = os.path.join(get_base_dir(), "AI助手", "uploads")
         self.template_dir = (
