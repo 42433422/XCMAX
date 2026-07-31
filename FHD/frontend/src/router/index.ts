@@ -170,7 +170,7 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
     {
       path: '/business-docking',
       name: 'business-docking',
-      component: () => import('../views/BusinessDockingView.vue'),
+      component: () => import('../views/EtlCenterView.vue'),
       meta: { title: '数据对接中心' },
     },
     {

@@ -83,15 +83,25 @@ function isRetiredMaterialsListMenuItem(item: ResolvedSidebarMenuItem): boolean 
 }
 
 /**
- * Model service lives in Settings; keep stale Mod/runtime menu rows from
- * recreating a duplicate primary-nav entry.
- * 数据对接中心（business-docking）归 ERP 侧栏，不再并入对话入口。
+ * Model service stays in Settings. Mod 里的旧「业务对接」页已退役，勿再进侧栏；
+ * 宿主「数据对接中心」(key=business-docking → EtlCenter) 仍由 core/industry 槽位展示。
  */
 function isConsolidatedCapabilityMenuItem(item: ResolvedSidebarMenuItem): boolean {
   const key = normalizeModSidebarNavKey(String(item.key || '').trim())
-  if (key === 'model-payment' || key === 'mod-model-payment') return true
+  if (
+    key === 'model-payment' ||
+    key === 'mod-model-payment' ||
+    key === 'mod-erp-business-docking'
+  ) {
+    return true
+  }
   const path = String(item.path || '').trim().split('?')[0].split('#')[0]
-  return path === '/model-payment' || path.endsWith('/model-payment')
+  return (
+    path === '/model-payment' ||
+    path.endsWith('/model-payment') ||
+    path === '/mod/xcagi-erp-domain-bridge/business-docking' ||
+    path.endsWith('/mod/xcagi-erp-domain-bridge/business-docking')
+  )
 }
 
 const hostKeysFromPath = new Set([

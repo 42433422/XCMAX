@@ -68,6 +68,11 @@ DEFAULT_PERMISSIONS = [
     {"name": "查看企业知识", "code": "dataset.read", "module": "knowledge"},
     {"name": "管理企业知识", "code": "dataset.write", "module": "knowledge"},
     {"name": "跨租户管理知识", "code": "dataset.admin", "module": "knowledge"},
+    {"name": "查看数据对接", "code": "etl.read", "module": "etl"},
+    {"name": "管理 ETL 模板", "code": "etl.template.manage", "module": "etl"},
+    {"name": "执行 ETL", "code": "etl.execute", "module": "etl"},
+    {"name": "撤销 ETL", "code": "etl.rollback", "module": "etl"},
+    {"name": "管理 ETL 目标", "code": "etl.target.manage", "module": "etl"},
 ]
 
 DEFAULT_ROLES = [
@@ -80,6 +85,7 @@ DEFAULT_ROLES = [
             "shipment.view",
             "material.view",
             "dataset.read",
+            "etl.read",
         ],
     },
     {
@@ -98,6 +104,9 @@ DEFAULT_ROLES = [
             "print.label",
             "dataset.read",
             "dataset.write",
+            "etl.read",
+            "etl.template.manage",
+            "etl.execute",
         ],
     },
     {
@@ -120,6 +129,11 @@ DEFAULT_ROLES = [
             "dataset.read",
             "dataset.write",
             "dataset.admin",
+            "etl.read",
+            "etl.template.manage",
+            "etl.execute",
+            "etl.rollback",
+            "etl.target.manage",
         ],
     },
 ]
