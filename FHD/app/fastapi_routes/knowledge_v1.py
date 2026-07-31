@@ -5,6 +5,7 @@ unified Agent runtime so permissions, audit records, and run telemetry remain
 consistent with the rest of XCAGI.
 """
 from __future__ import annotations
+
 import json
 import logging
 import re
@@ -12,10 +13,12 @@ import threading
 import uuid
 from pathlib import Path
 from typing import Any, Literal, cast
+
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi import Query as FastAPIQuery
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
+
 from app.infrastructure.rag import (
     HybridRetriever,
     RetrievedChunk,
@@ -1253,7 +1256,6 @@ def update_dataset_document_publication(
         status_code=status_code,
     )
 
-
 @router.get("/status", response_model=StatusResponse)
 def status(request: Request) -> StatusResponse:
     snap = _knowledge_runtime_snapshot(request)
@@ -1268,8 +1270,6 @@ def status(request: Request) -> StatusResponse:
         semantic_embedding_available=bool(snap["semantic_embedding_available"]),
         recommended_dataset_id=str(snap["recommended_dataset_id"]),
     )
-
-
 @router.get("/health")
 def health(request: Request) -> dict[str, Any]:
     snap = _knowledge_runtime_snapshot(request)
