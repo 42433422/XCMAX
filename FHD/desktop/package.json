@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@electron/notarize": "3.1.1",
+    "@noble/hashes": "^1.8.0",
     "@types/node": "25.6.0",
     "@vitest/coverage-v8": "^3.2.6",
     "electron": "41.3.0",
@@ -32,6 +33,7 @@
     "vitest": "^3.2.6"
   },
   "overrides": {
+    "@noble/hashes": "1.8.0",
     "brace-expansion@^1.0.0": "1.1.16",
     "brace-expansion@^2.0.0": "2.1.2",
     "brace-expansion@>=5.0.0": "5.0.8",
