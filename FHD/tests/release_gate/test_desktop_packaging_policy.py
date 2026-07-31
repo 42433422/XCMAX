@@ -49,6 +49,8 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
     assert "admin-console" not in ps_backend or "不构建 admin-console" in ps_backend
     assert 'Push-Location (Join-Path $Root "admin-console")' not in ps_backend
     assert "templates/admin-vue-dist" not in spec
+    assert "app/application/agent_orchestrator/tool_spec_data/input_schemas.json" in spec
+    assert "app/application/agent_orchestrator/tool_spec_data/output_schemas.json" in spec
     assert "admin-console" not in ps_sync
     assert "does not include admin-vue-dist" in ps_sync
     assert "vue-dist gate" in sh_backend
