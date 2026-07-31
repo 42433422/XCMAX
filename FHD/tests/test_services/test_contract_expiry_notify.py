@@ -34,7 +34,7 @@ def test_notify_dry_run_no_push(mock_load, mock_save, items):
     "app.infrastructure.persistence.contract_expiry_notification_repository.get_contract_expiry_notification_repository"
 )
 @patch("app.services.user_cs_intake_notice._primary_contact_name", return_value="wx-contact")
-@patch("app.services.wechat_sender.send_wechat_message")
+@patch("app.application.wechat_sender_app_service.send_wechat_message")
 @patch("app.services.user_cs_pipeline.save_pipeline")
 @patch("app.services.user_cs_pipeline.load_pipeline")
 def test_notify_push_success(

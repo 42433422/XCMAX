@@ -33,7 +33,7 @@ class TestMaybeSendConnectedWelcome:
         assert result["sent"] is False
         assert "未找到" in result["error"]
 
-    @patch("app.services.wechat_sender.send_wechat_message")
+    @patch("app.application.wechat_sender_app_service.send_wechat_message")
     @patch("app.services.user_cs_intake_notice._primary_contact_name")
     @patch("app.services.user_cs_pipeline.load_pipeline")
     @patch("app.services.user_cs_pipeline.save_pipeline")
@@ -47,7 +47,7 @@ class TestMaybeSendConnectedWelcome:
         result = maybe_send_connected_welcome(1)
         assert result["sent"] is True
 
-    @patch("app.services.wechat_sender.send_wechat_message")
+    @patch("app.application.wechat_sender_app_service.send_wechat_message")
     @patch("app.services.user_cs_intake_notice._primary_contact_name")
     @patch("app.services.user_cs_pipeline.load_pipeline")
     def test_send_failure(self, mock_load, mock_contact, mock_auto):
@@ -57,7 +57,7 @@ class TestMaybeSendConnectedWelcome:
         result = maybe_send_connected_welcome(1)
         assert result["sent"] is False
 
-    @patch("app.services.wechat_sender.send_wechat_message")
+    @patch("app.application.wechat_sender_app_service.send_wechat_message")
     @patch("app.services.user_cs_intake_notice._primary_contact_name")
     @patch("app.services.user_cs_pipeline.load_pipeline")
     def test_send_exception(self, mock_load, mock_contact, mock_auto):
@@ -68,7 +68,7 @@ class TestMaybeSendConnectedWelcome:
         assert result["sent"] is False
         assert "network error" in result["error"]
 
-    @patch("app.services.wechat_sender.send_wechat_message")
+    @patch("app.application.wechat_sender_app_service.send_wechat_message")
     @patch("app.services.user_cs_intake_notice._primary_contact_name")
     @patch("app.services.user_cs_pipeline.load_pipeline")
     @patch("app.services.user_cs_pipeline.save_pipeline")
@@ -82,7 +82,7 @@ class TestMaybeSendConnectedWelcome:
         result = maybe_send_connected_welcome(1, force=True)
         assert result["sent"] is True
 
-    @patch("app.services.wechat_sender.send_wechat_message")
+    @patch("app.application.wechat_sender_app_service.send_wechat_message")
     @patch("app.services.user_cs_intake_notice._primary_contact_name")
     @patch("app.services.user_cs_pipeline.load_pipeline")
     @patch("app.services.user_cs_pipeline.save_pipeline")
@@ -97,7 +97,7 @@ class TestMaybeSendConnectedWelcome:
         saved_doc = mock_save.call_args[0][0]
         assert saved_doc["stage"] == "connected"
 
-    @patch("app.services.wechat_sender.send_wechat_message")
+    @patch("app.application.wechat_sender_app_service.send_wechat_message")
     @patch("app.services.user_cs_intake_notice._primary_contact_name")
     @patch("app.services.user_cs_pipeline.load_pipeline")
     @patch("app.services.user_cs_pipeline.save_pipeline")

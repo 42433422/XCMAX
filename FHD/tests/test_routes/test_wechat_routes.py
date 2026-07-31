@@ -35,13 +35,13 @@ class TestSendWechatViaAutomation:
             assert "安全校验" in result["message"]
 
     def test_automation_success(self):
-        with patch("app.services.wechat_sender.send_wechat_message") as mock_send:
+        with patch("app.application.wechat_sender_app_service.send_wechat_message") as mock_send:
             mock_send.return_value = {"success": True, "message": "已发送给 张三"}
             result = routes._send_wechat_via_automation("张三", "test msg")
             assert result["success"] is True
 
     def test_automation_fail_non_windows(self):
-        with patch("app.services.wechat_sender.send_wechat_message") as mock_send:
+        with patch("app.application.wechat_sender_app_service.send_wechat_message") as mock_send:
             mock_send.return_value = {
                 "success": False,
                 "message": "wechat automation mod not installed and CV fallback is Windows-only",

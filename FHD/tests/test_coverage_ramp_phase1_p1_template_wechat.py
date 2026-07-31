@@ -165,7 +165,7 @@ def test_wechat_tasks(mock_get: MagicMock, wechat_client: TestClient) -> None:
     assert r.json()["total"] == 0
 
 
-@patch("app.services.wechat_sender.send_wechat_message")
+@patch("app.application.wechat_sender_app_service.send_wechat_message")
 @patch("app.services.wechat_passive_group_monitor.assert_safe_outbound_group_reply")
 def test_send_wechat_via_automation_success(mock_safe: MagicMock, mock_auto: MagicMock) -> None:
     from app.fastapi_routes.domains.wechat import routes as wechat_routes

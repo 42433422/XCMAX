@@ -63,7 +63,7 @@ def test_wechat_starred_messages_group_with_market_user(
     mock_feed.return_value = []
     out = wechat_routes.wechat_starred_messages(type="group", sync=True, market_user_id=99, limit=3)
     assert out["success"] is True
-    mock_live.assert_called_once_with(99, message_limit=80, mode="feed")
+    mock_live.assert_called_once_with(market_user_id=99, message_limit=80, mode="feed")
 
 
 @patch("app.services.wechat_group_customer_bridge._latest_context_message")

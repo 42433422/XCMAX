@@ -574,7 +574,7 @@ class TestNotifySoftwareDelivery:
     @patch("app.services.user_cs_pipeline.save_pipeline")
     @patch("app.services.user_cs_pipeline.load_pipeline")
     @patch("app.services.user_cs_intake_notice._primary_contact_name")
-    @patch("app.services.wechat_sender.send_wechat_message")
+    @patch("app.application.wechat_sender_app_service.send_wechat_message")
     def test_send_success(self, mock_auto, mock_contact, mock_load, mock_save):
         mock_load.return_value = {}
         mock_contact.return_value = "张三"
@@ -585,7 +585,7 @@ class TestNotifySoftwareDelivery:
         result = notify_software_delivery(1)
         assert result["success"] is True
 
-    @patch("app.services.wechat_sender.send_wechat_message")
+    @patch("app.application.wechat_sender_app_service.send_wechat_message")
     @patch("app.services.user_cs_intake_notice._primary_contact_name")
     @patch("app.services.user_cs_pipeline.load_pipeline")
     def test_send_failure(self, mock_load, mock_contact, mock_auto):
@@ -595,7 +595,7 @@ class TestNotifySoftwareDelivery:
         result = notify_software_delivery(1)
         assert result["success"] is False
 
-    @patch("app.services.wechat_sender.send_wechat_message")
+    @patch("app.application.wechat_sender_app_service.send_wechat_message")
     @patch("app.services.user_cs_intake_notice._primary_contact_name")
     @patch("app.services.user_cs_pipeline.load_pipeline")
     def test_send_exception(self, mock_load, mock_contact, mock_auto):
