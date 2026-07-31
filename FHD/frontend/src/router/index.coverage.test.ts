@@ -323,9 +323,9 @@ describe('router/index 覆盖率补齐', () => {
       expect(router.currentRoute.value.name).toBe('materials')
     })
 
-    it('/business-docking 重定向到 template-preview', async () => {
+    it('/business-docking 进入数据对接中心', async () => {
       await router.push('/business-docking')
-      expect(router.currentRoute.value.name).toBe('template-preview')
+      expect(router.currentRoute.value.name).toBe('business-docking')
     })
 
     it('/model-payment 重定向到 settings 带 section query', async () => {
