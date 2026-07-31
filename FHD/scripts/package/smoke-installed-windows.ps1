@@ -59,15 +59,36 @@ function Get-EnvelopeData {
 
 function Wait-XcagiReady {
   $deadline = (Get-Date).AddSeconds($ReadyTimeoutSeconds)
+  $healthOk = $false
   while ((Get-Date) -lt $deadline) {
     try {
       $resp = Invoke-WebRequest -Uri ($BaseUrl.TrimEnd('/') + '/api/health') -UseBasicParsing -TimeoutSec 2
-      if ($resp.StatusCode -eq 200) { return }
+      if ($resp.StatusCode -eq 200) { $healthOk = $true }
     } catch {
       Start-Sleep -Seconds 2
+      continue
     }
+    if (-not $healthOk) {
+      Start-Sleep -Seconds 2
+      continue
+    }
+    # 桌面冷启：health 先通，Mod/路由还在后台装载；必须等 readyForUi 再做业务冒烟
+    try {
+      $status = Invoke-XcagiJson '/api/desktop/status'
+      if ($status.readyForUi -and $status.modsReady) {
+        Write-Host "ready: readyForUi=$($status.readyForUi);modsReady=$($status.modsReady);storageMode=$($status.storageMode)"
+        return
+      }
+      Write-Host "waiting: readyForUi=$($status.readyForUi);modsReady=$($status.modsReady)"
+    } catch {
+      Write-Host "waiting: desktop-status not ready yet ($($_.Exception.Message))"
+    }
+    Start-Sleep -Seconds 3
   }
-  throw "Backend did not become ready: $BaseUrl/api/health"
+  if (-not $healthOk) {
+    throw "Backend did not become ready: $BaseUrl/api/health"
+  }
+  throw "Desktop did not become readyForUi/modsReady within ${ReadyTimeoutSeconds}s"
 }
 
 function Invoke-Check {
