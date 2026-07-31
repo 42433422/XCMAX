@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from app.db.base import Base
 from app.db.models.memory_graph import (
     EdgeType,
     MemoryNode,
@@ -9,8 +10,6 @@ from app.db.models.memory_graph import (
     MemoryNodeType,
     TypedEdge,
 )
-
-from app.db.base import Base
 
 
 def test_memory_node_creation():

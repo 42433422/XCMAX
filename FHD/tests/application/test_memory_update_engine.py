@@ -4,10 +4,10 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+from app.application.memory_update_engine import MemoryUpdateEngine, UpdateDecision
 from app.db.base import Base
 from app.db.models.memory_graph import MemoryNodeStatus, MemoryNodeType
 from app.infrastructure.memory_graph_store import MemoryGraphStore
-from app.application.memory_update_engine import MemoryUpdateEngine, UpdateDecision
 
 
 @pytest.fixture()

@@ -7,10 +7,10 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+from app.application.memory_graph_app_service import MemoryGraphAppService
+from app.application.memory_update_engine import MemoryUpdateEngine
 from app.db.base import Base
 from app.infrastructure.memory_graph_store import MemoryGraphStore
-from app.application.memory_update_engine import MemoryUpdateEngine
-from app.application.memory_graph_app_service import MemoryGraphAppService
 from scripts.dev.migrate_trae_memory_to_persy import TraeMemoryMigrator
 
 
