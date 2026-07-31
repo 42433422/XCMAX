@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.services.conversation.modstore_adapter import (
+    _iter_market_sse_data_payloads,
     _normalize_stream_choice,
     _platform_stream_payload_to_openai_chunk,
     _strip_bearer_prefix,
@@ -47,3 +48,36 @@ class TestModstoreAdapterHelpers:
     def test_platform_stream_error_raises(self) -> None:
         with pytest.raises(ValueError, match="boom"):
             _platform_stream_payload_to_openai_chunk('{"type":"error","message":"boom"}')
+
+    def test_iter_market_sse_skips_meta_and_surfaces_done_content(self) -> None:
+        class _Resp:
+            def iter_lines(self):
+                return iter(
+                    [
+                        "event: meta",
+                        'data: {"ok": true, "provider": "xiaomi"}',
+                        "event: done",
+                        'data: {"ok": true, "content": "最终回复"}',
+                    ]
+                )
+
+        payloads = list(_iter_market_sse_data_payloads(_Resp()))
+        assert len(payloads) == 1
+        assert "最终回复" in payloads[0]
+
+    def test_iter_market_sse_yields_delta(self) -> None:
+        class _Resp:
+            def iter_lines(self):
+                return iter(
+                    [
+                        "event: delta",
+                        'data: {"delta": "hello"}',
+                        "event: done",
+                        'data: {"ok": true, "content": "hello"}',
+                    ]
+                )
+
+        payloads = list(_iter_market_sse_data_payloads(_Resp()))
+        assert payloads[0] == '{"delta": "hello"}'
+        # done content also yielded when present (after delta)
+        assert any("hello" in p for p in payloads[1:])

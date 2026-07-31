@@ -529,7 +529,10 @@ def _xcagi_guarded_planner_stream_events(
     first_token_timeout = min(_xcagi_stream_first_token_timeout_seconds(), total_timeout)
     idle_notice_seconds = _xcagi_stream_idle_notice_seconds()
     started_at = time.monotonic()
-    first_event_seen = False
+    # Market SSE often spends >20s on meta/failover before the first delta. Acknowledge
+    # immediately so the UI shows idle notices instead of a hard 首包超时.
+    first_event_seen = True
+    yield {"type": "token", "text": "", "ephemeral": True, "phase": "connecting"}
 
     while True:
         elapsed = time.monotonic() - started_at
