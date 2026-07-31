@@ -1516,10 +1516,14 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     if (!task || task.type !== 'agent_run' || !runId) return
     await controlAgentRun(runId, 'pause', dbGate.getModeScopedUserId(isProMode.value))
   }
+
   async function resumeTaskById(id: string): Promise<void> {
     const task = taskList.value.find((item) => item.id === id)
     const runId = asString(task?.payload?.agentRunId).trim()
-    if (!task || task.ty
+    if (!task || task.type !== 'agent_run' || !runId) return
+    await controlAgentRun(runId, 'resume', dbGate.getModeScopedUserId(isProMode.value))
+  }
+
   async function checkPendingShipmentPrintFromTaskCard() {
     return runPendingShipmentPrintCheck({
       currentTask,
@@ -1534,13 +1538,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       failTask,
       syncTaskListEntry,
     })
-  }
-: 'failed',
-        stage: '打印任务未完成',
-        error: failureText,
-        summary: '发货单未标记已打印；请重新生成后再提交打印。',
-      })
-    }
   }
 
 
