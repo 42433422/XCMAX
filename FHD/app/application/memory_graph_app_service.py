@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.application.memory_link_service import MemoryLinkService
 from app.application.memory_update_engine import MemoryUpdateEngine
 from app.db.models.memory_graph import MemoryNode, MemoryNodeType
 from app.infrastructure.memory_graph_store import MemoryGraphStore
@@ -19,9 +20,12 @@ class MemoryGraphAppService:
         self,
         store: MemoryGraphStore,
         update_engine: MemoryUpdateEngine,
+        link_service: MemoryLinkService | None = None,
     ) -> None:
         self._store = store
         self._update_engine = update_engine
+        # 默认构造 link_service，保持向后兼容；显式传 None 可禁用双向链接
+        self._link_service = link_service if link_service is not None else MemoryLinkService(store)
 
     def ingest_engineering(
         self,
@@ -64,6 +68,10 @@ class MemoryGraphAppService:
             self._store.supersede_node(
                 decision.existing_node_id, node.node_id, context=decision.reason
             )
+
+        # 节点创建后自动同步双向链接（[[...]] 语法）
+        if self._link_service is not None:
+            self._link_service.sync_links(node.node_id, content)
 
         return {
             "success": True,
