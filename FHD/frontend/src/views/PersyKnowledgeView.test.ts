@@ -439,7 +439,13 @@ describe('PersyKnowledgeView', () => {
     await flushPromises()
     await wrapper.get('button[aria-label="复位图谱"]').trigger('click')
     const graph = wrapper.getComponent({ name: 'PersyKnowledgeGraphStub' })
-    await graph.vm.$emit('selectNode', 'memory:mem-1')
+    await graph.vm.$emit('selectNode', {
+      id: 'memory:mem-1',
+      label: pendingMemory.statement,
+      type: 'memory',
+      summary: pendingMemory.statement,
+      metadata: { memory_id: 'mem-1', status: 'pending', scope: 'user' },
+    })
     await flushPromises()
     const ask = wrapper.findAll('button').find((button) => button.text().includes('围绕此节点提问'))
     expect(ask).toBeTruthy()
