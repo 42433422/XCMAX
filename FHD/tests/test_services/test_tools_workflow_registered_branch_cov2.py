@@ -742,15 +742,46 @@ class TestBusinessDbRouter:
             )
         assert result["success"] is True
 
-    def test_write_products_unsupported_op(self):
-        result = _registered_router_business_db(
-            "write",
-            {"entity": "products", "operation": "delete", "payload": {}},
-            {},
-            "admin",
-            "",
-        )
-        assert result["success"] is False
+    def test_write_products_create_separates_labeled_name_and_model(self):
+        with patch("app.services.get_products_service") as mock_get:
+            mock_get.return_value.create_product.return_value = {
+                "success": True,
+                "product_id": 19,
+            }
+            result = _registered_router_business_db(
+                "write",
+                {
+                    "entity": "products",
+                    "operation": "create",
+                    "payload": {
+                        "name_or_model": "CODX验收临时色漆 CODX-ETL-0730",
+                        "unit_name": "金汉武家私",
+                    },
+                },
+                {},
+                "normal",
+                "新增产品：CODX验收临时色漆 型号：CODX-ETL-0730 到 客户：金汉武家私 写入数据库",
+            )
+        assert result["success"] is True
+        create_payload = mock_get.return_value.create_product.call_args.args[0]
+        assert create_payload["name"] == "CODX验收临时色漆"
+        assert create_payload["model_number"] == "CODX-ETL-0730"
+
+    def test_write_products_delete(self):
+        with patch("app.services.get_products_service") as mock_get:
+            mock_get.return_value.delete_product.return_value = {
+                "success": True,
+                "message": "产品删除成功",
+            }
+            result = _registered_router_business_db(
+                "write",
+                {"entity": "products", "operation": "delete", "payload": {"id": 19}},
+                {},
+                "admin",
+                "",
+            )
+        assert result["success"] is True
+        mock_get.return_value.delete_product.assert_called_once_with(19)
 
     def test_write_materials_create(self):
         with patch("app.application.get_material_application_service") as mock_get:

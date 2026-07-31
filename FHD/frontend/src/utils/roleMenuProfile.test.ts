@@ -8,6 +8,7 @@ describe('roleMenuProfile', () => {
     expect(profile.role).toBe('enterprise-user')
     expect(canShowCoreMenuKey(profile, 'chat')).toBe(true)
     expect(canShowCoreMenuKey(profile, 'persy-knowledge')).toBe(true)
+    expect(canShowCoreMenuKey(profile, 'business-docking')).toBe(true)
     expect(canShowCoreMenuKey(profile, 'mod-store')).toBe(true)
     expect(canShowCoreMenuKey(profile, 'employee-workflow')).toBe(true)
     expect(canShowCoreMenuKey(profile, 'workflow-employee-space')).toBe(true)

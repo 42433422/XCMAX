@@ -148,6 +148,42 @@ describe('useChatRequest', () => {
     expect(deps.plannerWriteUnlockResumeDraft.value).toBe('') // should be cleared
   })
 
+  it('binds workflow confirmation to the durable agent run', () => {
+    const { body } = request.buildPlannerChatRequestPayload('确认', {
+      workflowConfirmation: {
+        action: 'confirm',
+        agent_run_id: 'run_123',
+        plan_id: 'plan_123',
+        approved_step_id: 'write_product',
+      },
+    })
+    const ctx = body.context as Record<string, unknown>
+    expect(ctx.workflow_confirmation).toEqual({
+      action: 'confirm',
+      agent_run_id: 'run_123',
+      plan_id: 'plan_123',
+      approved_step_id: 'write_product',
+    })
+  })
+
+  it('binds approval submission to the exact durable agent run', () => {
+    const { body } = request.buildPlannerChatRequestPayload('确认', {
+      workflowConfirmation: {
+        action: 'submit_approval',
+        agent_run_id: 'run_delete_198',
+        plan_id: 'plan_delete_198',
+        approved_step_id: 'delete_product_198',
+      },
+    })
+    const ctx = body.context as Record<string, unknown>
+    expect(ctx.workflow_confirmation).toEqual({
+      action: 'submit_approval',
+      agent_run_id: 'run_delete_198',
+      plan_id: 'plan_delete_198',
+      approved_step_id: 'delete_product_198',
+    })
+  })
+
   it('buildPlannerChatRequestPayload with fromWriteUnlock and empty draft', () => {
     const deps = makeDeps()
     deps.plannerWriteUnlockResumeDraft.value = ''
@@ -230,6 +266,8 @@ describe('useChatRequest', () => {
     expect(request.resolveChatTimeoutMs('导入数据库')).toBe(90000)
     expect(request.resolveChatTimeoutMs('批量excel上传')).toBe(90000)
     expect(request.resolveChatTimeoutMs('执行工作流')).toBe(90000)
+    expect(request.resolveChatTimeoutMs('只读查询产品型号 9803')).toBe(90000)
+    expect(request.resolveChatTimeoutMs('查询客户七彩乐园')).toBe(90000)
   })
 
   it('resolveChatTimeoutMs returns 30000 for simple tasks', () => {

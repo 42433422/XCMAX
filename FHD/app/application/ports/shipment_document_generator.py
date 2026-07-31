@@ -19,5 +19,8 @@ class ShipmentDocumentGeneratorPort(ABC):
         date: str | None = None,
         template_name: str | None = None,
         order_number: str | None = None,
+        owner_user_id: int | None = None,
+        tenant_id: int | None = None,
+        run_id: str | None = None,
     ) -> dict[str, Any]:
         raise NotImplementedError

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import uuid
 from collections.abc import Callable
 from datetime import datetime
@@ -519,6 +520,18 @@ def _registered_router_shipment_orders(
 
         svc = get_shipment_app_service()
 
+    # ``owner_user_id`` is created only from ``request.state.user_id`` by the
+    # HTTP entrypoint.  Do not infer it from the generic AgentRun ``user_id``:
+    # that value intentionally supports legacy headers/body input and is not a
+    # trustworthy authority for a personal ETL template.
+    try:
+        owner_value = runtime_context.get("owner_user_id")
+        owner_user_id = int(owner_value) if owner_value is not None else None
+    except (TypeError, ValueError):
+        owner_user_id = None
+    if owner_user_id is not None and owner_user_id <= 0:
+        owner_user_id = None
+
     if action == "generate":
         unit_name = str(params.get("unit_name") or params.get("purchase_unit") or "").strip()
         products = params.get("products") or params.get("items") or []
@@ -543,6 +556,8 @@ def _registered_router_shipment_orders(
             )
         if params.get("order_number"):
             gen_kwargs["order_number"] = params.get("order_number")
+        if owner_user_id is not None:
+            gen_kwargs["owner_user_id"] = owner_user_id
         return cast("dict[Any, Any]", svc.generate_shipment_document(**gen_kwargs))
 
     if action == "generate_batch":
@@ -575,6 +590,8 @@ def _registered_router_shipment_orders(
                     batch_kwargs["template_name"] = shipment.get("template_name")
                 if shipment.get("template_id"):
                     batch_kwargs["template_id"] = shipment.get("template_id")
+                if owner_user_id is not None:
+                    batch_kwargs["owner_user_id"] = owner_user_id
                 result = svc.generate_shipment_document(**batch_kwargs)
                 if result.get("success"):
                     ok_count += 1
@@ -1259,6 +1276,16 @@ def _registered_router_print(
             int(params.get("copies") or 1),
         )
     if action == "print_document":
+        # Only the HTTP print endpoint may enter this branch: it has already
+        # consumed an owner-bound generated-document capability.  Direct
+        # workflow/tool calls have no equivalent trustworthy click/owner proof
+        # and must use ``POST /api/print/document`` instead.
+        if str(runtime_context.get("service_source") or "") != "fastapi_print_route":
+            return {
+                "success": False,
+                "error_code": "PRINT_CAPABILITY_ROUTE_REQUIRED",
+                "message": "请通过已生成发货单的打印按钮提交，不能直接调用打印工具",
+            }
         return svc.print_document(
             str(params.get("file_path") or "").strip(),
             params.get("printer_name"),
@@ -1469,86 +1496,9 @@ def _normalize_business_db_entity(raw: Any, user_message: str = "") -> str:
     return ""
 
 
-def _registered_router_business_db(
-    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
-) -> dict:
-    entity = _normalize_business_db_entity(params.get("entity"), user_message)
-    if not entity:
-        return {
-            "success": False,
-            "message": "缺少或不支持的 entity；允许 customers/products/materials/shipment_records。",
-            "allowed_entities": ["customers", "products", "materials", "shipment_records"],
-        }
-
-    if any(k in params for k in ("sql", "raw_sql", "query_sql")):
-        return {
-            "success": False,
-            "message": "business_db 不接受任意 SQL，请使用 entity/operation/payload。",
-        }
-
-    if action in ("read", "query", "list"):
-        read_params = dict(params)
-        read_params.setdefault("keyword", params.get("keyword") or params.get("query") or "")
-        if entity == "customers":
-            return _registered_router_customers(
-                "query", read_params, runtime_context, profile, user_message
-            )
-        if entity == "products":
-            return _registered_router_products(
-                "query", read_params, runtime_context, profile, user_message
-            )
-        if entity == "materials":
-            return _registered_router_materials(
-                "query", read_params, runtime_context, profile, user_message
-            )
-        if entity == "shipment_records":
-            return _registered_router_shipment_records(
-                "query", read_params, runtime_context, profile, user_message
-            )
-
-    if action != "write":
-        return {"success": False, "message": f"未注册的 business_db 动作: {action}"}
-
-    operation = str(params.get("operation") or params.get("op") or "create").strip().lower()
-    payload = params.get("payload")
-    if not isinstance(payload, dict):
-        return {"success": False, "message": "business_db.write 需要 dict payload。"}
-
-    if entity == "customers":
-        if operation in ("create", "ensure_exists", "upsert"):
-            router_action = (
-                "ensure_exists" if operation in ("ensure_exists", "upsert") else "create"
-            )
-            return _registered_router_customers(
-                router_action, payload, runtime_context, profile, user_message
-            )
-        return {"success": False, "message": "customers 仅支持 create/ensure_exists/upsert。"}
-
-    if entity == "products":
-        if operation == "create":
-            return _registered_router_products(
-                "create", payload, runtime_context, profile, user_message
-            )
-        return {"success": False, "message": "products 当前仅支持 create；查询请用 read。"}
-
-    if entity == "materials":
-        if operation in ("create", "update", "delete", "batch_delete"):
-            return _registered_router_materials(
-                operation, payload, runtime_context, profile, user_message
-            )
-        return {"success": False, "message": "materials 支持 create/update/delete/batch_delete。"}
-
-    if entity == "shipment_records":
-        if operation in ("update", "delete"):
-            return _registered_router_shipment_records(
-                operation, payload, runtime_context, profile, user_message
-            )
-        return {
-            "success": False,
-            "message": "shipment_records 支持 update/delete；生成发货单请用 shipment_generate。",
-        }
-
-    return {"success": False, "message": f"不支持的 entity: {entity}"}
+from app.infrastructure.tools_workflow_business_db import (
+    _registered_router_business_db,
+)
 
 
 def _registered_router_dataset_rag(

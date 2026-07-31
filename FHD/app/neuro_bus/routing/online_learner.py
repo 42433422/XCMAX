@@ -13,6 +13,8 @@ from typing import Any
 
 from app.neuro_bus.routing.policy_nn import (
     get_policy,
+    policy_manifest_write_path,
+    policy_write_dir,
     save_policy_state_dict,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -28,11 +30,13 @@ except ImportError:  # pragma: no cover
 
 
 def _manifest_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "resources" / "routing_policies" / "manifest.json"
+    """The manifest mutated by online learning, never the bundled seed."""
+    return policy_manifest_write_path()
 
 
 def _policies_dir() -> Path:
-    return Path(__file__).resolve().parents[3] / "resources" / "routing_policies"
+    """The writable learned-policy directory for this runtime."""
+    return policy_write_dir()
 
 
 class OnlineLearner:

@@ -322,6 +322,15 @@ class TestLooksLikeExplicitWorkflowToolIntent:
             is True
         )
 
+    def test_db_modify_action_returns_true(self):
+        """数据库 + 修改 + 产品 → True。"""
+        assert (
+            AIChatApplicationService._looks_like_explicit_workflow_tool_intent(
+                "把数据库中产品ID 198 的名称修改为验收产品"
+            )
+            is True
+        )
+
     def test_employee_let_keyword_returns_true(self):
         """让 + 员工 → True。"""
         assert (
@@ -830,6 +839,30 @@ class TestFormatWorkflowToolSuccessLine:
         result = svc._format_workflow_tool_success_line(item, {})
         assert "found 3 items" in result[0]
 
+    def test_products_query_lists_actual_rows(self):
+        svc = _make_svc()
+        item = SimpleNamespace(
+            node_id="query_product",
+            tool_id="products",
+            action="query",
+            output={
+                "success": True,
+                "data": [
+                    {
+                        "id": 198,
+                        "model_number": "CODX-ETL-0730B",
+                        "name": "CODX验收临时色漆",
+                        "unit": "金汉武家私",
+                        "price": "0.00",
+                    }
+                ],
+            },
+        )
+        result = svc._format_workflow_tool_success_line(item, {})
+        assert "产品查询 1 条" in result[0]
+        assert "CODX-ETL-0730B" in result[1]
+        assert "金汉武家私" in result[1]
+
     def test_other_tool_no_message(self):
         svc = _make_svc()
         item = SimpleNamespace(
@@ -938,6 +971,19 @@ class TestFormatAgentRunResponse:
         result = svc._format_agent_run_response(plan, agent_run, user_message="find products")
         assert "autoAction" in result
         assert result["autoAction"]["type"] == "show_products_float"
+
+    def test_products_query_auto_action_uses_model_number_param(self):
+        svc = _make_svc()
+        plan = _make_plan()
+        step = _make_step(tool_id="products", action="query", status="completed")
+        step.params = {"model_number": "CODX-ETL-0730B"}
+        agent_run = _make_agent_run(status="completed", steps=[step])
+        result = svc._format_agent_run_response(
+            plan,
+            agent_run,
+            user_message="查询型号 CODX-ETL-0730B 的产品",
+        )
+        assert result["autoAction"]["query"] == "CODX-ETL-0730B"
 
     def test_no_thinking_steps_no_todo(self):
         svc = _make_svc()
@@ -1692,8 +1738,8 @@ class TestExecuteProModeTools:
             {"text": "generate shipment", "data": {}},
             "this is a very long original message for testing",
         )
-        assert "toolCall" in result
-        assert result["toolCall"]["tool_id"] == "shipment_generate"
+        assert result["task"]["type"] == "shipment_generate"
+        assert "toolCall" not in result
 
     def test_shipment_generate_with_all_slots(self):
         svc = _make_svc()
@@ -1705,9 +1751,11 @@ class TestExecuteProModeTools:
             {"text": "gen", "data": {}},
             "hi",
         )
-        assert "toolCall" in result
-        params = result["toolCall"]["params"]
-        assert "ACME" in params["order_text"]
+        assert result["task"]["type"] == "shipment_generate"
+        params = result["task"]["payload"]["params"]
+        assert params["unit_name"] == "ACME"
+        assert params["products"][0]["model_number"] == "M1"
+        assert "toolCall" not in result
 
     def test_shipment_generate_with_products_list(self):
         svc = _make_svc()
@@ -1720,7 +1768,8 @@ class TestExecuteProModeTools:
             {"text": "gen", "data": {}},
             "hi",
         )
-        assert "toolCall" in result
+        assert result["task"]["type"] == "shipment_generate"
+        assert "toolCall" not in result
 
     def test_shipment_generate_fallback_to_ai_text(self):
         svc = _make_svc()
@@ -1732,7 +1781,8 @@ class TestExecuteProModeTools:
             {"text": "ai response text", "data": {}},
             "",
         )
-        assert result["toolCall"]["params"]["order_text"] == "ai response text"
+        assert "task" not in result
+        assert "订单信息不完整" in result["response"]
 
     def test_other_tool_pro_mode(self):
         svc = _make_svc()
@@ -1761,8 +1811,9 @@ class TestExecuteProModeTools:
                 {"text": "gen", "data": {}},
                 "long original message here",
             )
-        assert result["toolCall"]["params"]["unit_name"] == "Parsed"
-        assert result["toolCall"]["params"]["products"][0]["model"] == "X1"
+        assert result["task"]["payload"]["params"]["unit_name"] == "Parsed"
+        assert result["task"]["payload"]["params"]["products"][0]["model"] == "X1"
+        assert "toolCall" not in result
 
     def test_shipment_generate_parse_error_falls_back(self):
         svc = _make_svc()
@@ -1778,7 +1829,8 @@ class TestExecuteProModeTools:
                 {"text": "gen", "data": {}},
                 "hi",
             )
-        assert "toolCall" in result
+        assert result["task"]["type"] == "shipment_generate"
+        assert "toolCall" not in result
 
 
 # ---------------------------------------------------------------------------
@@ -3223,6 +3275,7 @@ class TestTryHandleDynamicWorkflow:
         mock_agent_run = _make_agent_run(status="completed")
         with patch("app.application.agent_orchestrator.AgentOrchestrator") as mock_cls:
             mock_inst = mock_cls.return_value
+            mock_inst.get_run.return_value = _make_agent_run(status="waiting_user")
             mock_inst.continue_run.return_value = mock_agent_run
             with patch.object(
                 svc,
@@ -3449,11 +3502,15 @@ class TestExecuteNormalModeTools:
 
     def test_shipment_generate(self):
         svc = _make_svc()
-        svc._execute_shipment_generate = Mock(return_value={"success": True, "shipment": True})
+        svc._execute_shipment_generate = Mock()
+        svc._build_shipment_confirmation_preview = Mock(
+            return_value={"success": True, "shipment_preview": True}
+        )
         result = svc._execute_normal_mode_tools(
             {"data": {}}, "shipment_generate", {}, {"text": "gen"}, {}
         )
-        assert result["shipment"] is True
+        assert result["shipment_preview"] is True
+        svc._execute_shipment_generate.assert_not_called()
 
     def test_shipments_query(self):
         svc = _make_svc()

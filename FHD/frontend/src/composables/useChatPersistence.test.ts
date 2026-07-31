@@ -170,6 +170,7 @@ describe('useChatPersistence', () => {
 
     it('returns null for non-product queries', () => {
       expect(extractLikelyProductQueryKeyword('出货单')).toBeNull()
+      expect(extractLikelyProductQueryKeyword('查询金汉武家私最近的发货记录')).toBeNull()
       expect(extractLikelyProductQueryKeyword('打印标签')).toBeNull()
     })
 

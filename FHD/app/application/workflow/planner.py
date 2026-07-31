@@ -9,6 +9,20 @@ from typing import Any, cast
 
 import httpx
 
+from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+from app.application.workflow.planner_business_intent import (
+    _clean_db_slot_value,
+    _explicit_mutation_kind,
+    _extract_business_db_read_keyword,
+    _extract_business_db_write_node,
+    _extract_explicit_product_mutation_node,
+    _extract_named_slot,
+    _infer_business_db_entity,
+    _looks_like_business_db_write,
+    _requires_clarification_before_execution,
+    _validate_explicit_mutation_alignment,
+)
+from app.application.workflow.planner_llm_support import PlannerLlmSupportMixin
 from app.services import get_ai_conversation_service
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import ensure_fhd_repo_on_syspath
@@ -26,6 +40,10 @@ _DB_WRITE_KEYWORDS = frozenset(
         "添加",
         "创建",
         "写入",
+        "更新",
+        "修改",
+        "删除",
+        "移除",
         "加入数据库",
         "添加到数据库",
         "保存到数据库",
@@ -33,210 +51,14 @@ _DB_WRITE_KEYWORDS = frozenset(
     }
 )
 
-
-def _clean_db_slot_value(value: str) -> str:
-    text = str(value or "").strip(" \t\r\n，,。；;：:")
-    for token in (
-        "到数据库",
-        "写入数据库",
-        "加入数据库",
-        "添加到数据库",
-        "保存到数据库",
-        "入库",
-        "数据库",
-    ):
-        text = text.replace(token, "")
-    text = re.sub(r"^(新增|添加|创建|写入|保存|客户|单位|购买单位|产品|商品)\s*", "", text)
-    text = re.sub(r"\s*(客户|单位|购买单位|产品|商品)$", "", text)
-    return text.strip(" \t\r\n，,。；;：:")
-
-
-def _extract_named_slot(message: str, patterns: tuple[str, ...]) -> str:
-    for pattern in patterns:
-        match = re.search(pattern, message, flags=re.I)
-        if match:
-            value = _clean_db_slot_value(match.group(1))
-            if value:
-                return value
-    quoted = re.search(r"[「“\"']([^」”\"']+)[」”\"']", message)
-    if quoted:
-        return _clean_db_slot_value(quoted.group(1))
-    return ""
-
-
-def _looks_like_business_db_write(message: str, lower: str) -> bool:
-    if not any(k in message for k in _DB_WRITE_KEYWORDS) and not any(
-        k in lower for k in ("add", "create", "insert", "upsert")
-    ):
-        return False
-    return (
-        any(k in message for k in ("数据库", "入库", "写库"))
-        or "db" in lower
-        or "database" in lower
-    )
-
-
-def _infer_business_db_entity(message: str) -> str:
-    if any(k in message for k in ("产品", "商品")):
-        return "products"
-    if any(k in message for k in ("客户", "单位", "购买单位")):
-        return "customers"
-    if any(k in message for k in ("原材料", "物料")):
-        return "materials"
-    if any(k in message for k in ("出货", "发货", "发货单")):
-        return "shipment_records"
-    return "products"
-
-
-def _extract_business_db_write_node(message: str) -> WorkflowNode | None:
-    entity = _infer_business_db_entity(message)
-    if entity == "customers":
-        unit_name = _extract_named_slot(
-            message,
-            (
-                r"(?:客户|单位|购买单位)\s*[:：是为]?\s*([^\s，,。；;]+)",
-                r"(?:新增|添加|创建|写入|保存)\s*([^\s，,。；;]+)\s*(?:客户|单位)",
-            ),
-        )
-        if not unit_name:
-            return None
-        return WorkflowNode(
-            node_id="write_business_customer",
-            tool_id="business_db",
-            action="write",
-            params={
-                "entity": "customers",
-                "operation": "upsert",
-                "payload": {"unit_name": unit_name, "customer_name": unit_name},
-            },
-            risk="medium",
-            description=f"写入客户 {unit_name}",
-            idempotent=True,
-        )
-
-    if entity == "products":
-        product_name = _extract_named_slot(
-            message,
-            (
-                r"(?:产品|商品)\s*[:：是为]?\s*([^\s，,。；;]+)",
-                r"(?:新增|添加|创建|写入|保存)\s*([^\s，,。；;]+)\s*(?:产品|商品)",
-            ),
-        )
-        unit_name = _extract_named_slot(
-            message,
-            (
-                r"(?:客户|单位|购买单位)\s*[:：是为]?\s*([^\s，,。；;]+)",
-                r"(?:给|到|为)\s*([^\s，,。；;]+)\s*(?:客户|单位)?",
-            ),
-        )
-        if not product_name or not unit_name:
-            return None
-        model_match = re.search(r"(?:型号|model)\s*[:：]?\s*([A-Za-z0-9._-]+)", message, re.I)
-        payload: dict[str, Any] = {
-            "name_or_model": product_name,
-            "product_name": product_name,
-            "unit_name": unit_name,
-        }
-        if model_match:
-            payload["model_number"] = model_match.group(1).strip().upper()
-        return WorkflowNode(
-            node_id="write_business_product",
-            tool_id="business_db",
-            action="write",
-            params={"entity": "products", "operation": "create", "payload": payload},
-            risk="medium",
-            description=f"写入产品 {product_name}",
-            idempotent=False,
-        )
-
-    return None
-
-
-def _extract_business_db_read_keyword(message: str, entity: str) -> str:
-    quoted = re.search(r"[「“\"']([^」”\"']+)[」”\"']", message)
-    if quoted:
-        return _clean_db_slot_value(quoted.group(1))
-
-    if entity == "products":
-        slot = _extract_named_slot(
-            message,
-            (
-                r"(?:产品|商品|型号|model)\s*[:：的]?\s*([A-Za-z0-9._-]+|[^\s，,。；;]+)",
-                r"(?:查|查询|读取|读)\s*(?:数据库|db|database)?\s*(?:产品|商品)?\s*([A-Za-z0-9._-]+)",
-            ),
-        )
-        if slot:
-            return slot
-        model = re.search(r"\b[A-Za-z0-9][A-Za-z0-9._-]{1,}\b", message)
-        if model:
-            return model.group(0).strip()
-
-    if entity == "customers":
-        slot = _extract_named_slot(
-            message,
-            (
-                r"(?:客户|单位|购买单位)\s*[:：的]?\s*([^\s，,。；;]+)",
-                r"(?:查|查询|读取|读)\s*(?:数据库|db|database)?\s*(?:客户|单位)?\s*([^\s，,。；;]+)",
-            ),
-        )
-        if slot:
-            return slot
-
-    if entity == "materials":
-        slot = _extract_named_slot(
-            message,
-            (
-                r"(?:原材料|物料|材料)\s*[:：的]?\s*([^\s，,。；;]+)",
-                r"(?:查|查询|读取|读)\s*(?:数据库|db|database)?\s*(?:原材料|物料|材料)?\s*([^\s，,。；;]+)",
-            ),
-        )
-        if slot:
-            return slot
-
-    cleaned = str(message or "").strip()
-    for token in (
-        "查询数据库",
-        "读取数据库",
-        "查数据库",
-        "读数据库",
-        "数据库",
-        "database",
-        "查库",
-        "读库",
-        "查询",
-        "读取",
-        "查",
-        "读",
-        "产品",
-        "商品",
-        "客户",
-        "单位",
-        "购买单位",
-        "原材料",
-        "物料",
-        "材料",
-    ):
-        cleaned = cleaned.replace(token, " ")
-    cleaned = re.sub(r"\s+", " ", cleaned).strip(" \t\r\n，,。；;：:")
-    return cleaned or str(message or "").strip()
-
-
 def get_tool_registry() -> dict[str, Any]:
-    """
-    返回工作流工具注册表，供 ai_chat_app_service 使用。
-    覆盖报价、主数据、出货、模板与微信辅助等能力，与意图层 tool_key 对齐。
-    """
+    """返回工作流工具注册表（报价/主数据/出货/模板/微信），供 ai_chat_app_service 使用。"""
     from app.services.tools_execution.registry import get_workflow_tool_registry
 
     return get_workflow_tool_registry()
 
-
 def execute_tool(tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
-    """
-    执行指定工具（支持 execute_registered_workflow_tool 注入的 _action）。
-
-    与 get_tool_registry 中的工具 id 一致。
-    """
+    """执行指定工具（支持 _action 注入）。"""
     logger.info("execute_tool called: tool_name=%s, params=%s", tool_name, params)
 
     merged = dict(params or {})
@@ -272,7 +94,6 @@ def execute_tool(tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
         "message": f"未知工具或动作: {tool_name}.{action}",
         "error_code": "unknown_tool_action",
     }
-
 
 def _execute_price_list_tool(params: dict[str, Any]) -> dict[str, Any]:
     """执行价格表导出工具"""
@@ -325,7 +146,6 @@ def _execute_price_list_tool(params: dict[str, Any]) -> dict[str, Any]:
             "message": "导出处理失败，请稍后重试",
             "error_code": "export_failed",
         }
-
 
 def _execute_products_tool(params: dict[str, Any]) -> dict[str, Any]:
     """执行产品查询工具"""
@@ -388,7 +208,6 @@ def _execute_products_tool(params: dict[str, Any]) -> dict[str, Any]:
         logger.error("产品查询运行时错误: %s", e)
         return {"success": False, "message": "查询失败，请稍后重试", "error_code": "query_failed"}
 
-
 def _execute_customers_tool(params: dict[str, Any]) -> dict[str, Any]:
     """执行客户查询工具"""
     try:
@@ -420,7 +239,6 @@ def _execute_customers_tool(params: dict[str, Any]) -> dict[str, Any]:
     except RuntimeError as e:
         logger.error("客户查询运行时错误: %s", e)
         return {"success": False, "message": "查询失败，请稍后重试", "error_code": "query_failed"}
-
 
 def _execute_customers_ensure_exists_tool(params: dict[str, Any]) -> dict[str, Any]:
     """创建客户（单位）如不存在。"""
@@ -476,7 +294,6 @@ def _execute_customers_ensure_exists_tool(params: dict[str, Any]) -> dict[str, A
             "error_code": "create_failed",
             "created": False,
         }
-
 
 def _execute_shipment_generate_tool(params: dict[str, Any]) -> dict[str, Any]:
     try:
@@ -549,7 +366,6 @@ def _execute_shipment_generate_tool(params: dict[str, Any]) -> dict[str, Any]:
             "error_code": "generation_failed",
         }
 
-
 def _execute_shipment_records_tool(params: dict[str, Any]) -> dict[str, Any]:
     try:
         from app.bootstrap import get_shipment_app_service
@@ -576,7 +392,6 @@ def _execute_shipment_records_tool(params: dict[str, Any]) -> dict[str, Any]:
     except RuntimeError as e:
         logger.error("出货记录查询运行时错误: %s", e)
         return {"success": False, "message": "查询失败，请稍后重试", "error_code": "query_failed"}
-
 
 def _execute_materials_tool(params: dict[str, Any]) -> dict[str, Any]:
     try:
@@ -610,15 +425,12 @@ def _execute_materials_tool(params: dict[str, Any]) -> dict[str, Any]:
         logger.error("原材料查询运行时错误: %s", e)
         return {"success": False, "message": "查询失败，请稍后重试", "error_code": "query_failed"}
 
-
 def _execute_print_label_tool(params: dict[str, Any]) -> dict[str, Any]:
     try:
-        import os
-
         from app.infrastructure.documents.shipment_document_generator_impl import (
             SimpleLabelGenerator,
+            get_shipment_label_output_dir,
         )
-        from app.utils.path_utils import get_resource_path
 
         products = params.get("products")
         if not isinstance(products, list) or not products:
@@ -628,12 +440,19 @@ def _execute_print_label_tool(params: dict[str, Any]) -> dict[str, Any]:
                 "error_code": "missing_products",
             }
 
-        labels_dir = get_resource_path("ai_assistant", "商标导出")
-        os.makedirs(labels_dir, exist_ok=True)
+        # Label images are runtime business artifacts.  Never write them into
+        # packaged resources; the helper derives tenant/owner context from the
+        # authenticated request and gives this invocation a fresh run scope.
+        labels_dir, label_run_id = get_shipment_label_output_dir()
         order_number = str(params.get("order_number") or params.get("doc_name") or "LABEL").strip()
         gen = SimpleLabelGenerator(labels_dir)
         labels = gen.generate_labels_for_order(order_number=order_number, products=products)
-        return {"success": True, "data": labels, "message": f"已生成 {len(labels)} 张标签"}
+        return {
+            "success": True,
+            "data": labels,
+            "label_run_id": label_run_id,
+            "message": f"已生成 {len(labels)} 张标签",
+        }
     except ImportError as e:
         logger.error("标签生成服务导入失败: %s", e)
         return {
@@ -662,7 +481,6 @@ def _execute_print_label_tool(params: dict[str, Any]) -> dict[str, Any]:
             "message": "生成失败，请稍后重试",
             "error_code": "generation_failed",
         }
-
 
 def _execute_excel_decompose_tool(params: dict[str, Any]) -> dict[str, Any]:
     try:
@@ -704,11 +522,9 @@ def _execute_excel_decompose_tool(params: dict[str, Any]) -> dict[str, Any]:
             "error_code": "decomposition_failed",
         }
 
-
 def _execute_template_extract_tool(params: dict[str, Any]) -> dict[str, Any]:
     """与 excel_decompose 共用模板分解能力。"""
     return _execute_excel_decompose_tool(params)
-
 
 def _execute_wechat_preview_tool(params: dict[str, Any]) -> dict[str, Any]:
     try:
@@ -739,7 +555,6 @@ def _execute_wechat_preview_tool(params: dict[str, Any]) -> dict[str, Any]:
     except RuntimeError as e:
         logger.error("微信联系人查询运行时错误: %s", e)
         return {"success": False, "message": "查询失败，请稍后重试", "error_code": "query_failed"}
-
 
 def _execute_excel_schema_tool(params: dict[str, Any]) -> dict[str, Any]:
     """分析 Excel 文件的表结构。"""
@@ -824,7 +639,6 @@ def _execute_excel_schema_tool(params: dict[str, Any]) -> dict[str, Any]:
             "message": "分析失败，请稍后重试",
             "error_code": "analysis_failed",
         }
-
 
 def _execute_excel_analysis_tool(params: dict[str, Any]) -> dict[str, Any]:
     """读取/查询/聚合 Excel 数据。"""
@@ -918,7 +732,6 @@ def _execute_excel_analysis_tool(params: dict[str, Any]) -> dict[str, Any]:
             "message": "分析失败，请稍后重试",
             "error_code": "analysis_failed",
         }
-
 
 def _execute_import_excel_tool(params: dict[str, Any]) -> dict[str, Any]:
     """将 Excel 数据导入数据库。"""
@@ -1156,30 +969,25 @@ def _execute_import_excel_tool(params: dict[str, Any]) -> dict[str, Any]:
             "error_code": "import_failed",
         }
 
-
 def _execute_employee_list_tool(params: dict[str, Any]) -> dict[str, Any]:
     from app.application.facades.tools_facade import execute_registered_workflow_tool
 
     return execute_registered_workflow_tool("employee", "list", params)
-
 
 def _execute_employee_execute_tool(params: dict[str, Any]) -> dict[str, Any]:
     from app.application.facades.tools_facade import execute_registered_workflow_tool
 
     return execute_registered_workflow_tool("employee", "execute", params)
 
-
 def _execute_business_db_read_tool(params: dict[str, Any]) -> dict[str, Any]:
     from app.application.facades.tools_facade import execute_registered_workflow_tool
 
     return execute_registered_workflow_tool("business_db", "read", params)
 
-
 def _execute_business_db_write_tool(params: dict[str, Any]) -> dict[str, Any]:
     from app.application.facades.tools_facade import execute_registered_workflow_tool
 
     return execute_registered_workflow_tool("business_db", "write", params)
-
 
 # 与 get_tool_registry / execute_tool 默认 action 对齐；(tool_id, action) -> 实现函数
 _WORKFLOW_TOOL_HANDLERS: dict[tuple[str, str], Callable[[dict[str, Any]], dict[str, Any]]] = {
@@ -1204,7 +1012,6 @@ _WORKFLOW_TOOL_HANDLERS: dict[tuple[str, str], Callable[[dict[str, Any]], dict[s
     ("business_db", "write"): _execute_business_db_write_tool,
 }
 
-
 def _get_planner_http_client() -> httpx.Client:
     global _planner_http_client
     if _planner_http_client is None:
@@ -1214,7 +1021,6 @@ def _get_planner_http_client() -> httpx.Client:
             trust_env=False,
         )
     return _planner_http_client
-
 
 def _filter_tool_registry_for_profile(
     tool_registry: dict[str, Any],
@@ -1253,8 +1059,7 @@ def _filter_tool_registry_for_profile(
         filtered[tool_id] = new_spec
     return filtered
 
-
-class LLMWorkflowPlanner:
+class LLMWorkflowPlanner(PlannerLlmSupportMixin):
     def __init__(self) -> None:
         self._ai_service = get_ai_conversation_service()
 
@@ -1267,12 +1072,73 @@ class LLMWorkflowPlanner:
     ) -> PlanGraph:
         context = dict(context or {})
         plan_id = uuid.uuid4().hex
-
         from app.application.normal_chat_dispatch import resolve_tool_execution_profile
 
         profile = resolve_tool_execution_profile(context)
         registry_for_plan = _filter_tool_registry_for_profile(tool_registry, profile)
-
+        if _requires_clarification_before_execution(message, context):
+            return PlanGraph(
+                plan_id=plan_id,
+                intent="clarification_required",
+                todo_steps=["请用户补充目标、对象和期望结果"],
+                nodes=[],
+                risk_level="low",
+                metadata={
+                    "planner": "safety_clarification_gate",
+                    "planner_mode": "guarded",
+                    "degraded": False,
+                    "reason": "underspecified_request",
+                    "execution_policy": "blocked_no_safe_action",
+                    "goal": message,
+                    "completion_criteria": ["用户提供可执行目标与必要参数"],
+                },
+            )
+        explicit_product_node = _extract_explicit_product_mutation_node(message)
+        if explicit_product_node is not None:
+            product_tool = registry_for_plan.get(explicit_product_node.tool_id)
+            actions = (
+                product_tool.get("actions")
+                if isinstance(product_tool, dict) and isinstance(product_tool.get("actions"), dict)
+                else {}
+            )
+            if explicit_product_node.action in actions:
+                return PlanGraph(
+                    plan_id=plan_id,
+                    intent=f"{explicit_product_node.action}_product",
+                    todo_steps=[
+                        explicit_product_node.description,
+                        "核验数据库写入结果",
+                    ],
+                    nodes=[explicit_product_node],
+                    risk_level=explicit_product_node.risk,
+                    metadata={
+                        "planner": "explicit_mutation_guard",
+                        "planner_mode": "guarded",
+                        "degraded": False,
+                        "goal": message,
+                        "completion_criteria": [
+                            (
+                                f"{explicit_product_node.tool_id}."
+                                f"{explicit_product_node.action} 返回成功回执"
+                            )
+                        ],
+                    },
+                )
+            return PlanGraph(
+                plan_id=plan_id,
+                intent="clarification_required",
+                todo_steps=["等待所需的产品写入工具可用"],
+                nodes=[],
+                risk_level=explicit_product_node.risk,
+                metadata={
+                    "planner": "explicit_mutation_guard",
+                    "planner_mode": "guarded",
+                    "degraded": False,
+                    "reason": "required_mutation_tool_unavailable",
+                    "execution_policy": "blocked_no_safe_action",
+                    "goal": message,
+                },
+            )
         # 专业模式 ReAct/CoT 前：拉取用户记忆 RAG 命中摘要，注入到 context（只放摘要文本）。
         # 目的：让规划器在“选择工具/补全关键 params”时更贴近用户习惯，但避免把全量历史注入 prompt。
         try:
@@ -1303,17 +1169,44 @@ class LLMWorkflowPlanner:
             logger.debug("Memory v2 服务不可用（不阻断主流程）")
         except RECOVERABLE_ERRORS as e:
             logger.warning("Memory v2 不可用（不阻断主流程）: %s", e)
-
         from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 
-        return finalize_planned_graph(
-            self._plan_with_react_multiagent(plan_id, user_id, message, registry_for_plan, context),
+        react_planned = self._plan_with_react_multiagent(
+            plan_id=plan_id,
+            user_id=user_id,
+            message=message,
+            tool_registry=registry_for_plan,
+            context=context,
+        )
+
+        def _validate_planned(planned: PlanGraph) -> str | None:
+            err = validate_plan_graph(planned)
+            if err is None:
+                err = _validate_explicit_mutation_alignment(message, planned)
+            return err
+
+        result = finalize_planned_graph(
+            react_planned,
             plan_id=plan_id,
             context=context,
-            validate=validate_plan_graph,
-            fallback_factory=lambda: self._fallback_plan(plan_id, message, registry_for_plan),
+            validate=_validate_planned,
+            fallback_factory=lambda: self._fallback_plan(
+                plan_id,
+                message,
+                registry_for_plan,
+                degraded_reason="llm_unavailable_or_invalid_plan",
+            ),
             warn=logger.warning,
         )
+        if react_planned is not None and result is react_planned:
+            result.metadata.update(
+                {
+                    "planner_mode": "autonomous",
+                    "degraded": False,
+                    "goal": message,
+                }
+            )
+        return result
 
     def _plan_with_react_multiagent(
         self,
@@ -1341,7 +1234,31 @@ class LLMWorkflowPlanner:
         )
         if candidate is None:
             return None
-
+        candidate_error = validate_plan_graph(candidate)
+        if candidate_error is None:
+            candidate_error = self._validate_required_params(candidate, tool_registry)
+        if candidate_error is None:
+            candidate_error = _validate_explicit_mutation_alignment(message, candidate)
+        single_pass = (
+            str(context.get("source") or "").strip().lower() == "normal"
+            or str(context.get("ui_surface") or "").strip().lower() == "normal"
+            or str(context.get("tool_execution_profile") or "").strip().lower() == "normal"
+        )
+        if single_pass:
+            if candidate_error is not None:
+                logger.warning(
+                    "普通对话 LLM 计划校验失败，立即进入受控降级: %s",
+                    candidate_error,
+                )
+                return None
+            candidate.metadata.update(
+                {
+                    "planning_strategy": "single_pass",
+                    "planning_passes": 1,
+                    "tool_probe_mode": "executor_owned",
+                }
+            )
+            return candidate
         # 1) 抽取 probe：只探测 low-risk + idempotent 的节点
         runtime_context_for_probe = dict(context or {})
         runtime_context_for_probe["message"] = str(message or "")
@@ -1360,12 +1277,10 @@ class LLMWorkflowPlanner:
             meta = actions.get(act)
             if not isinstance(meta, dict):
                 continue
-
             risk = str(meta.get("risk") or "").strip().lower()
             idempotent = bool(meta.get("idempotent", False))
             if risk != "low" or not idempotent:
                 continue
-
             # 只对“查询类/列举类”探测，避免意义不明的 view/info 探测
             if act not in (
                 "query",
@@ -1546,6 +1461,8 @@ class LLMWorkflowPlanner:
         err = validate_plan_graph(final_plan)
         if err is None:
             err = self._validate_required_params(final_plan, tool_registry)
+        if err is None:
+            err = _validate_explicit_mutation_alignment(message, final_plan)
 
         if err is None:
             return final_plan
@@ -1565,35 +1482,11 @@ class LLMWorkflowPlanner:
             if err2 is None:
                 err2 = self._validate_required_params(repaired, tool_registry)
             if err2 is None:
+                err2 = _validate_explicit_mutation_alignment(message, repaired)
+            if err2 is None:
                 return repaired
 
         logger.warning("CriticAgent 修复失败（回退 fallback）: %s", err)
-        return None
-
-    @staticmethod
-    def _validate_required_params(plan: PlanGraph, tool_registry: dict[str, Any]) -> str | None:
-        """检查节点 params 是否满足 tool_registry 的 required_params。"""
-        for node in plan.nodes or []:
-            tool_spec = (tool_registry or {}).get(str(node.tool_id) or "")
-            if not isinstance(tool_spec, dict):
-                continue
-            actions = tool_spec.get("actions") or {}
-            if not isinstance(actions, dict):
-                continue
-            action_meta = actions.get(str(node.action) or "")
-            if not isinstance(action_meta, dict):
-                continue
-            required_params = action_meta.get("required_params") or []
-            if not isinstance(required_params, list):
-                required_params = []
-            params = node.params or {}
-            for key in required_params:
-                if (
-                    key not in params
-                    or params.get(key) is None
-                    or str(params.get(key)).strip() == ""
-                ):
-                    return f"节点 {node.node_id} 缺少 required_params: {key}"
         return None
 
     def _critic_repair_with_llm(
@@ -1607,10 +1500,6 @@ class LLMWorkflowPlanner:
         invalid_plan: PlanGraph,
     ) -> PlanGraph | None:
         """CriticAgent：LLM 修复无效 PlanGraph（只重试一次）。"""
-        api_key = getattr(self._ai_service, "api_key", "") or ""
-        if not api_key:
-            return None
-
         try:
             tool_specs = []
             for tool_id, spec in tool_registry.items():
@@ -1619,12 +1508,15 @@ class LLMWorkflowPlanner:
                 for action_name, action_meta in actions.items():
                     if not isinstance(action_meta, dict):
                         continue
+                    contract = get_tool_action_spec(str(tool_id), str(action_name))
                     action_specs.append(
                         {
                             "action": action_name,
                             "risk": action_meta.get("risk", "low"),
                             "idempotent": bool(action_meta.get("idempotent", False)),
                             "required_params": action_meta.get("required_params", []),
+                            "verification": (contract.verification if contract is not None else {}),
+                            "rollback": contract.rollback if contract is not None else {},
                         }
                     )
                 tool_specs.append(
@@ -1674,6 +1566,7 @@ class LLMWorkflowPlanner:
                 "output_schema": {
                     "intent": "string",
                     "todo_steps": ["string"],
+                    "completion_criteria": ["可由工具回执验证的条件"],
                     "risk_level": "low|medium|high",
                     "nodes": [
                         {
@@ -1695,23 +1588,16 @@ class LLMWorkflowPlanner:
                 {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
             ]
 
-            from app.infrastructure.llm.providers.credentials import default_chat_completions_url
-
-            api_url = getattr(self._ai_service, "api_url", "") or default_chat_completions_url()
-            response = _get_planner_http_client().post(
-                api_url,
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json={
-                    "model": getattr(self._ai_service, "model", "") or "deepseek-chat",
-                    "messages": messages,
-                    "temperature": 0.2,
-                    "max_tokens": 1000,
-                },
+            response_data = self._request_llm_completion(
+                messages,
+                context=context,
+                temperature=0.2,
+                max_tokens=1000,
             )
-            if response.status_code >= 400:
+            if response_data is None:
                 return None
+            planner_route = str(response_data.get("_xcagi_planner_route") or "unknown")
 
-            response_data = response.json()
             raw = (
                 (response_data.get("choices") or [{}])[0]
                 .get("message", {})
@@ -1725,7 +1611,11 @@ class LLMWorkflowPlanner:
             raw = self._strip_json_code_fence(raw)
             if not raw:
                 return None
-            parsed = json.loads(raw)
+            from app.infrastructure.llm.structured_output import extract_json
+
+            parsed = extract_json(raw)
+            if parsed is None:
+                return None
 
             nodes: list[WorkflowNode] = []
             for idx, node in enumerate(parsed.get("nodes", []), start=1):
@@ -1750,7 +1640,21 @@ class LLMWorkflowPlanner:
                 ],
                 nodes=nodes,
                 risk_level=str(parsed.get("risk_level") or invalid_plan.risk_level or "low"),
-                metadata={"planner": "critic_repair", "message": message},
+                metadata={
+                    "planner": "critic_repair",
+                    "planner_mode": "autonomous",
+                    "llm_route": planner_route,
+                    "degraded": False,
+                    "message": message,
+                    "goal": message,
+                    "completion_criteria": [
+                        str(item)
+                        for item in (parsed.get("completion_criteria") or [])
+                        if str(item).strip()
+                    ],
+                    "repair_policy": {"mode": "llm", "max_attempts": 2},
+                    "controller": {"mode": "llm", "max_cycles": 3},
+                },
             )
         except (ValueError, TypeError) as e:
             logger.debug("CriticAgent 修复参数错误: %s", e)
@@ -1773,12 +1677,15 @@ class LLMWorkflowPlanner:
                 actions = spec.get("actions", {})
                 action_specs = []
                 for action_name, action_meta in actions.items():
+                    contract = get_tool_action_spec(str(tool_id), str(action_name))
                     action_specs.append(
                         {
                             "action": action_name,
                             "risk": action_meta.get("risk", "low"),
                             "idempotent": bool(action_meta.get("idempotent", False)),
                             "required_params": action_meta.get("required_params", []),
+                            "verification": (contract.verification if contract is not None else {}),
+                            "rollback": contract.rollback if contract is not None else {},
                         }
                     )
                 tool_specs.append(
@@ -1802,6 +1709,8 @@ class LLMWorkflowPlanner:
                     "如果步骤有依赖，写到 depends_on。",
                     "todo_steps 要贴合用户语义，不要模板化。",
                     "risk_level 按节点最高风险确定。",
+                    "如果目标、对象或关键参数不足以确定安全动作，intent 必须为 clarification_required，"
+                    "nodes 必须为空；不得猜测对象、编造参数或为了有步骤而选择无关查询。",
                     "员工相关意图：若用户只是问有哪些员工，使用 employee.list；若明确指定 employee_id/pack_id 并要求执行，使用 employee.execute 并填写 task；不知道员工 ID 时先 list，不要编造。",
                     "数据库相关意图：读数据库/查库使用 business_db.read，并填写 entity；写入/新增/更新/删除/入库才使用 business_db.write，并填写 entity、operation、payload。",
                     "business_db 只能访问 customers/products/materials/shipment_records；禁止生成 sql/raw_sql/query_sql 或任意 SQL。",
@@ -1823,6 +1732,7 @@ class LLMWorkflowPlanner:
                 "output_schema": {
                     "intent": "string",
                     "todo_steps": ["string"],
+                    "completion_criteria": ["可由工具回执验证的条件"],
                     "risk_level": "low|medium|high",
                     "nodes": [
                         {
@@ -1843,30 +1753,15 @@ class LLMWorkflowPlanner:
                 {"role": "system", "content": "你是工作流规划器，只输出可执行 JSON。"},
                 {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
             ]
-            api_key = getattr(self._ai_service, "api_key", "") or ""
-            from app.infrastructure.llm.providers.credentials import default_chat_completions_url
-
-            api_url = getattr(self._ai_service, "api_url", "") or default_chat_completions_url()
-            model = getattr(self._ai_service, "model", "") or "deepseek-chat"
-            if not api_key:
-                return None
-
-            response = _get_planner_http_client().post(
-                api_url,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "temperature": 0.1,
-                    "max_tokens": 1200,
-                },
+            response_data = self._request_llm_completion(
+                messages,
+                context=context,
+                temperature=0.1,
+                max_tokens=1200,
             )
-            if response.status_code >= 400:
+            if response_data is None:
                 return None
-            response_data = response.json()
+            planner_route = str(response_data.get("_xcagi_planner_route") or "unknown")
             raw = (
                 (response_data.get("choices") or [{}])[0]
                 .get("message", {})
@@ -1875,8 +1770,11 @@ class LLMWorkflowPlanner:
             )
             if not raw:
                 return None
-            raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-            parsed = json.loads(raw)
+            from app.infrastructure.llm.structured_output import extract_json
+
+            parsed = extract_json(raw)
+            if parsed is None:
+                return None
 
             nodes: list[WorkflowNode] = []
             for idx, node in enumerate(parsed.get("nodes", []), start=1):
@@ -1934,7 +1832,18 @@ class LLMWorkflowPlanner:
                 risk_level=str(parsed.get("risk_level") or "low"),
                 metadata={
                     "planner": "llm",
+                    "planner_mode": "autonomous",
+                    "llm_route": planner_route,
+                    "degraded": False,
                     "message": message,
+                    "goal": message,
+                    "completion_criteria": [
+                        str(item)
+                        for item in (parsed.get("completion_criteria") or [])
+                        if str(item).strip()
+                    ],
+                    "repair_policy": {"mode": "llm", "max_attempts": 2},
+                    "controller": {"mode": "llm", "max_cycles": 3},
                     "user_memory_rag_summary": user_memory_rag_summary,
                     "memory_v2_summary": memory_v2_summary,
                     "tool_probe_outputs": tool_probe_outputs,
@@ -1952,14 +1861,26 @@ class LLMWorkflowPlanner:
         plan_id: str,
         message: str,
         tool_registry: dict[str, Any],
+        degraded_reason: str = "llm_unavailable_or_invalid_plan",
     ) -> PlanGraph:
         lower = (message or "").lower()
         nodes: list[WorkflowNode] = []
         todo = ["理解用户目标", "执行可用工具", "输出执行结果"]
         intent = "generic_workflow"
 
+        explicit_mutation = _explicit_mutation_kind(message)
+        explicit_product_mutation = explicit_mutation in {"update", "delete"}
+        if explicit_product_mutation and "products" in tool_registry:
+            mutation_node = _extract_explicit_product_mutation_node(message)
+            if mutation_node is not None:
+                intent = f"{explicit_mutation}_product"
+                todo = [mutation_node.description, "核验数据库写入结果"]
+                nodes.append(mutation_node)
+
         if (
-            any(k in message for k in ("员工", "employee", "调用", "交给"))
+            not nodes
+            and not explicit_product_mutation
+            and any(k in message for k in ("员工", "employee", "调用", "交给"))
             and "employee" in tool_registry
         ):
             intent = "employee_dispatch"
@@ -2005,6 +1926,7 @@ class LLMWorkflowPlanner:
 
         if (
             not nodes
+            and not explicit_product_mutation
             and _looks_like_business_db_write(message, lower)
             and "business_db" in tool_registry
         ):
@@ -2014,9 +1936,13 @@ class LLMWorkflowPlanner:
                 todo = ["识别业务实体与写入字段", "通过受控业务服务写入数据库", "返回写入结果"]
                 nodes.append(node)
 
-        if not nodes and (
-            any(k in lower for k in ("db", "database"))
-            or any(k in message for k in ("数据库", "查数据库", "读数据库"))
+        if (
+            not nodes
+            and not explicit_product_mutation
+            and (
+                any(k in lower for k in ("db", "database"))
+                or any(k in message for k in ("数据库", "查数据库", "读数据库"))
+            )
         ):
             if "business_db" in tool_registry:
                 intent = "business_db_read"
@@ -2034,8 +1960,13 @@ class LLMWorkflowPlanner:
                     )
                 )
 
-        if not nodes and (
-            ("添加" in message or "新增" in message or "create" in lower) and ("产品" in message)
+        if (
+            not nodes
+            and not explicit_product_mutation
+            and (
+                ("添加" in message or "新增" in message or "create" in lower)
+                and ("产品" in message)
+            )
         ):
             intent = "add_product_to_unit"
             todo = [
@@ -2069,32 +2000,56 @@ class LLMWorkflowPlanner:
                     )
                 )
 
-        if not nodes:
-            # 兜底：挑一个低风险查询，避免空图
-            if "products" in tool_registry:
+        explicit_query = any(
+            key in message for key in ("查询", "查一下", "查下", "搜索", "检索", "列出", "库存")
+        ) or any(key in lower for key in ("query", "search", "lookup", "list"))
+        if not nodes and explicit_query:
+            # 降级只允许执行用户明确要求的低风险查询；不能把普通对话
+            # 猜成产品或客户操作。
+            entity = _infer_business_db_entity(message)
+            keyword = _extract_business_db_read_keyword(message, entity)
+            has_product_object = any(key in message for key in ("产品", "商品", "型号"))
+            has_customer_object = any(key in message for key in ("客户", "单位", "购买单位"))
+            if has_product_object and "products" in tool_registry:
                 nodes.append(
                     WorkflowNode(
                         node_id="query_products",
                         tool_id="products",
                         action="query",
-                        params={"keyword": message},
+                        params={"keyword": keyword},
                         risk="low",
                         description="查询相关产品",
                         idempotent=True,
                     )
                 )
-            elif "customers" in tool_registry:
+            elif has_customer_object and "customers" in tool_registry:
                 nodes.append(
                     WorkflowNode(
                         node_id="query_customers",
                         tool_id="customers",
                         action="query",
-                        params={"keyword": message},
+                        params={"keyword": keyword},
                         risk="low",
                         description="查询相关客户",
                         idempotent=True,
                     )
                 )
+            elif entity in {"materials", "shipment_records"} and "business_db" in tool_registry:
+                nodes.append(
+                    WorkflowNode(
+                        node_id="read_business_db",
+                        tool_id="business_db",
+                        action="read",
+                        params={"entity": entity, "keyword": keyword},
+                        risk="low",
+                        description="读取受控业务数据库",
+                        idempotent=True,
+                    )
+                )
+
+        if not nodes:
+            intent = "clarification_required"
+            todo = ["等待模型恢复或用户补充明确的业务对象与动作"]
 
         risk = "low"
         if any(node.risk == "high" for node in nodes):
@@ -2108,5 +2063,14 @@ class LLMWorkflowPlanner:
             todo_steps=todo,
             nodes=nodes,
             risk_level=risk,
-            metadata={"planner": "fallback", "message": message},
+            metadata={
+                "planner": "degraded_rule",
+                "planner_mode": "degraded",
+                "degraded": True,
+                "degraded_reason": degraded_reason,
+                "goal": message,
+                "execution_policy": (
+                    "explicit_low_risk_only" if nodes else "blocked_no_safe_action"
+                ),
+            },
         )

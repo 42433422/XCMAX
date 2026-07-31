@@ -16,14 +16,22 @@ __all__ = [
 ]
 
 
-def run_archive_tools_execute(body: dict | None) -> tuple[dict, int]:
+def run_archive_tools_execute(
+    body: dict | None,
+    *,
+    owner_user_id: int | None = None,
+) -> tuple[dict, int]:
     """
     Execute a workflow-tool payload and unpack the legacy JSON response shape.
 
     The public HTTP route still has to preserve the old response contract, but
     callers should import this facade instead of the removed historical route shim.
     """
-    raw = execute_tool_from_payload(body or {})
+    # ``owner_user_id`` is intentionally an out-of-band, route-injected value.
+    # It must never be reconstructed from the legacy JSON body or request
+    # headers: shipment template selection is private to the authenticated ETL
+    # template owner.
+    raw = execute_tool_from_payload(body or {}, owner_user_id=owner_user_id)
 
     if isinstance(raw, tuple):
         resp = raw[0]

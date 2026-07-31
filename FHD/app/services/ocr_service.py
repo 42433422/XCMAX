@@ -18,6 +18,10 @@ from typing import Any
 import numpy as np
 
 from app.infrastructure.ocr_analysis import OCRAnalysisMixin
+from app.infrastructure.ocr_text_blocks import (
+    recognize_macos_vision_blocks,
+    recognize_tesseract_blocks,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -35,6 +39,7 @@ function run(argv) {
   const request = $.VNRecognizeTextRequest.alloc.init;
   request.recognitionLevel = $.VNRequestTextRecognitionLevelAccurate;
   request.usesLanguageCorrection = true;
+  request.recognitionLanguages = $(['zh-Hans', 'en-US']);
   const handler = $.VNImageRequestHandler.alloc.initWithCIImageOptions(
     image, $.NSDictionary.dictionary
   );
@@ -185,6 +190,16 @@ class OCRService(OCRAnalysisMixin):
             if tmp_path:
                 Path(tmp_path).unlink(missing_ok=True)
 
+    def _recognize_macos_vision_blocks(self, image_array: np.ndarray) -> list[dict[str, Any]]:
+        if not self.macos_vision_available:
+            return []
+        return recognize_macos_vision_blocks(image_array)
+
+    def _recognize_tesseract_blocks(self, image_array: np.ndarray) -> list[dict[str, Any]]:
+        if not self.tesseract_available:
+            return []
+        return recognize_tesseract_blocks(image_array)
+
     def recognize(self, image) -> str:
         """
         识别图像中的文字
@@ -259,6 +274,12 @@ class OCRService(OCRAnalysisMixin):
 
         if self.reader is not None:
             return self._easyocr_text_blocks(image_array)
+
+        if getattr(self, "macos_vision_available", False):
+            return self._recognize_macos_vision_blocks(image_array)
+
+        if self.tesseract_available:
+            return self._recognize_tesseract_blocks(image_array)
 
         return []
 

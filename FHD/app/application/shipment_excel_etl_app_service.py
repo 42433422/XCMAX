@@ -766,13 +766,9 @@ def note_fingerprint(note: dict[str, Any]) -> str:
 
 def _fingerprint_store_path() -> Path:
     """兼容旧测试 monkeypatch；真实幂等改走 SQLite。"""
-    try:
-        from app.utils.path_utils import get_data_dir
+    from app.application.shipment_excel_etl_security import etl_runtime_data_dir
 
-        root = Path(get_data_dir())
-    except RECOVERABLE_ERRORS:
-        root = Path.cwd() / "data"
-    root.mkdir(parents=True, exist_ok=True)
+    root = etl_runtime_data_dir()
     return root / "shipment_etl_fingerprints.json"
 
 

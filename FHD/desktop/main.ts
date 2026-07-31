@@ -24,6 +24,7 @@ import {
   getUpdateStatus,
   installUpdate,
   readLocalBuildSha,
+  readLocalBuildVersion,
   runUpdateCheckWithDirectNet,
 } from './updater'
 import {
@@ -37,6 +38,19 @@ import {
   type RollbackTriggerResult,
 } from './rollback'
 import { terminateChildProcess, waitForChildExit } from './backend-lifecycle'
+import {
+  buildBackendEditionEnv,
+  buildDesktopBackendEnv,
+  desktopChatTransportEnv,
+  resolveDesktopUserDataPath,
+} from './backend-environment'
+export {
+  buildBackendEditionEnv,
+  buildDesktopBackendEnv,
+  desktopChatTransportEnv,
+  resolveDesktopUserDataPath,
+} from './backend-environment'
+import { runBackendMigrationProcess } from './backend-migration'
 import { clampWindowBounds, readWindowState, writeWindowState } from './window-state'
 import { AutonomyController } from './autonomy/controller'
 import { DesktopAutonomyAdapter } from './autonomy/desktop-adapter'
@@ -188,10 +202,10 @@ export async function applyOtaProxyBypass(): Promise<void> {
   })
 }
 
-// 与 paths.py / 安装器太阳鸟种子目录一致（勿用 package.json 默认 xcagi-desktop）
-// 注：单测环境通过 XCAGI_DESKTOP_TEST=1 跳过 bootstrap()，但模块顶层仍有副作用，
-// 测试中通过 vi.mock('electron') 替换 app，故下列两行在测试环境下也安全。
-app.setPath('userData', path.join(app.getPath('appData'), 'XCAGI'))
+// 与 paths.py / 安装器太阳鸟种子目录一致（勿用 package.json 默认 xcagi-desktop）。
+// 验收探针可通过 XCAGI_DESKTOP_ACCEPTANCE_PROBE=1 使用临时 userData，
+// 避免冷启候选包时污染用户当前安装实例的数据目录。
+app.setPath('userData', resolveDesktopUserDataPath(app.getPath('appData')))
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 // 系统代理（如 127.0.0.1:7890）未运行时，仍须直连更新站拉取 OTA 元数据与安装包。
 app.commandLine.appendSwitch(
@@ -327,51 +341,19 @@ export function readJsonTextFile(filePath: string): string {
   return text.replace(/^\uFEFF/, '')
 }
 
-function sanitizeBackendProxyEnv(
-  env: NodeJS.ProcessEnv | Record<string, string | undefined>
-): Record<string, string | undefined> {
-  const next: Record<string, string | undefined> = { ...env }
-  for (const key of ['ALL_PROXY', 'all_proxy'] as const) {
-    const raw = String(next[key] || '').trim().toLowerCase()
-    if (
-      raw.startsWith('socks://') ||
-      raw.startsWith('socks4://') ||
-      raw.startsWith('socks5://') ||
-      raw.startsWith('socks5h://')
-    ) {
-      // Prefer HTTP_PROXY for backend httpx; SOCKS needs optional socksio.
-      delete next[key]
-    }
-  }
-  return next
-}
-
+/**
+ * Packaged desktop chat uses the request-scoped market session token.  Some
+ * upstream model gateways accept a native SSE connection but buffer its first
+ * delta for an unbounded period.  The compatibility client can instead call
+ * the same authenticated non-stream endpoint and adapt its completed reply
+ * back to desktop SSE.  Keep native streaming available as an explicit
+ * operator override, and leave development behaviour untouched.
+ */
 export function backendEditionEnv(): Record<string, string> {
-  const sku = readPackagedProductSku()
-  if (!sku) {
-    // dev 模式未指定 SKU：默认 generic，与前端 generic 构建产物一致。
-    // 显式注入 XCAGI_PRODUCT_SKU=generic 覆盖 XCAGI/.env 中可能的 enterprise 设置，
-    // 避免前后端 SKU 不一致导致路由守卫误触发 admin 跳转。
-    return {
-      XCAGI_PRODUCT_SKU: 'generic',
-      XCAGI_GENERIC_EDITION: '1',
-      XCAGI_PLATFORM_SHELL: '1',
-      XCAGI_DEFAULT_EDITION: 'generic'
-    }
-  }
-  const edition = SKU_RUNTIME_EDITION[sku]
-  const env: Record<string, string> = {
-    XCAGI_PRODUCT_SKU: sku,
-    XCAGI_PLATFORM_SHELL: sku === 'enterprise' ? '0' : '1',
-    XCAGI_DEFAULT_EDITION: edition,
-    XCAGI_EDITION: edition
-  }
-  if (edition === 'minimal') {
-    env.XCAGI_MINIMAL_EDITION = '1'
-  } else if (edition === 'generic') {
-    env.XCAGI_GENERIC_EDITION = '1'
-  }
-  return env
+  return buildBackendEditionEnv(
+    readPackagedProductSku(),
+    process.env.FHD_ETL_CENTER_ENABLED,
+  )
 }
 
 let mainWindow: BrowserWindow | null = null
@@ -381,6 +363,7 @@ let backendProcess: ChildProcessWithoutNullStreams | null = null
 let backendLogStream: fs.WriteStream | null = null
 let tray: Tray | null = null
 let restartCount = 0
+let autonomyRestartInProgress = false
 let backendShutdownComplete = false
 let backendShutdownPromise: Promise<void> | null = null
 
@@ -668,6 +651,8 @@ const startupMarks: DesktopStartupMarks = {}
 
 export function readPackagedAppVersion(): string {
   if (!app.isPackaged) return 'dev'
+  const buildVersion = readLocalBuildVersion()
+  if (buildVersion) return buildVersion
   const candidates = [
     path.join(process.resourcesPath, 'backend', 'version.txt'),
     path.join(process.resourcesPath, 'product-sku.json')
@@ -684,6 +669,12 @@ export function readPackagedAppVersion(): string {
     }
   }
   return app.getVersion()
+}
+
+/** Exact product version passed from the desktop shell to its local backend. */
+export function readDesktopRuntimeVersion(): string {
+  if (app.isPackaged) return readPackagedAppVersion()
+  return String(process.env.XCAGI_VERSION || '').trim() || '1.0.0.0'
 }
 
 /** 前端 hash 变更时须清 Electron 缓存，避免旧 index-*.js 引用已不存在的 chunk。 */
@@ -816,9 +807,9 @@ async function startBackend(): Promise<void> {
   backendProcess = spawn(executable.command, executable.args, {
     cwd: executable.cwd,
     env: {
-      ...sanitizeBackendProxyEnv(process.env),
-      XCAGI_DESKTOP_MODE: '1',
-      XCAGI_DATA_DIR: app.getPath('userData'),
+      ...buildDesktopBackendEnv(process.env, app.getPath('userData')),
+      ...desktopChatTransportEnv(),
+      XCAGI_VERSION: readDesktopRuntimeVersion(),
       XCAGI_API_HOST: DESKTOP_BACKEND_BIND_HOST,
       XCAGI_UVICORN_RELOAD: '0',
       XCAGI_GLOBAL_RATE_LIMIT: '0',
@@ -846,6 +837,14 @@ async function startBackend(): Promise<void> {
     writeBackendLog(`[exit] backend process exited code=${code} uptime=${uptimeMs}ms\n`)
     backendProcess = null
     if (app.isQuitting) {
+      return
+    }
+    if (autonomyRestartInProgress) {
+      // The controller deliberately stopped this process and will synchronously
+      // launch the replacement.  Do not count it as a crash or schedule a
+      // second restart that could corrupt the crash-frequency signal.
+      autonomyRestartInProgress = false
+      writeBackendLog('[autonomy] planned backend restart exit acknowledged\n')
       return
     }
     // 通知自治控制器 backend 退出（控制器据此追踪崩溃频率，5min ≥3 次则自动回滚）
@@ -896,59 +895,30 @@ async function triggerRollbackSafe(reason: string): Promise<RollbackTriggerResul
   }
 }
 
-function runBackendMigration(): Promise<string> {
+function runBackendMigration(options: {
+  attachToRollback?: boolean
+  ifNeeded?: boolean
+} = {}): Promise<string> {
   const executable = backendExecutable()
-  return new Promise((resolve, reject) => {
-    const child = spawn(executable.command, [...executable.args, '--migrate-only', '--backup'], {
-      cwd: executable.cwd,
-      env: {
-        ...sanitizeBackendProxyEnv(process.env),
-        XCAGI_DESKTOP_MODE: '1',
-        XCAGI_DATA_DIR: app.getPath('userData'),
-        XCAGI_UVICORN_RELOAD: '0',
-        XCAGI_GLOBAL_RATE_LIMIT: '0',
-        ...backendEditionEnv(),
-        PYTHONUTF8: '1'
-      },
-      windowsHide: true
-    })
-    let stderr = ''
-    let stdout = ''
-    let databaseBackupPath = ''
-    let backupAttachError: unknown
-    child.stderr.on('data', data => {
-      stderr += String(data)
-      process.stderr.write(`[xcagi-migrate] ${data}`)
-    })
-    child.stdout.on('data', data => {
-      stdout += String(data)
-      process.stdout.write(`[xcagi-migrate] ${data}`)
-      if (!databaseBackupPath) {
-        const match = stdout.match(/^XCAGI_MIGRATION_BACKUP=(.+)$/m)
-        const candidate = match?.[1]?.trim() || ''
-        if (candidate) {
-          try {
-            attachDatabaseBackupToRollback(candidate)
-            databaseBackupPath = candidate
-          } catch (error) {
-            backupAttachError = error
-            child.kill()
-          }
-        }
-      }
-    })
-    child.on('error', reject)
-    child.on('exit', code => {
-      if (backupAttachError) {
-        reject(backupAttachError)
-        return
-      }
-      if (code === 0) {
-        resolve(databaseBackupPath)
-      } else {
-        reject(new Error(`数据库迁移失败（code=${code}）: ${stderr}`))
-      }
-    })
+  const args = [...executable.args, '--migrate-only', '--backup']
+  if (options.ifNeeded) args.push('--if-needed')
+  return runBackendMigrationProcess({
+    command: executable.command,
+    args,
+    cwd: executable.cwd,
+    env: {
+      ...buildDesktopBackendEnv(process.env, app.getPath('userData')),
+      XCAGI_VERSION: readDesktopRuntimeVersion(),
+      XCAGI_UVICORN_RELOAD: '0',
+      XCAGI_GLOBAL_RATE_LIMIT: '0',
+      XCAGI_SKIP_DESKTOP_RECOVERY_CHECK: '1',
+      ...backendEditionEnv(),
+      PYTHONUTF8: '1',
+    },
+    attachBackup:
+      options.attachToRollback === false ? undefined : attachDatabaseBackupToRollback,
+    onStdout: data => process.stdout.write(`[xcagi-migrate] ${data}`),
+    onStderr: data => process.stderr.write(`[xcagi-migrate] ${data}`),
   })
 }
 
@@ -1252,26 +1222,24 @@ async function createWindow(): Promise<void> {
       .catch(() => undefined)
   }
 
-  const loadMainApplication = async (): Promise<void> => {
-    if (!mainWindow) {
-      throw new Error('主窗口在应用加载前已关闭')
-    }
-    try {
-      updateSplashProgress(92, '正在打开主界面…')
-      await mainWindow.loadURL(desktopInitialUrl(), {
-        extraHeaders: 'Cache-Control: no-cache\r\n'
-      })
-      tagDesktopWebContents(mainWindow)
-      if (process.platform === 'darwin') {
-        ensureMacWindowInWorkArea(mainWindow)
-      }
-      mainWindow.focus()
-    } catch (error) {
-      console.error('[xcagi-desktop] load main application failed', error)
-      throw error
-    }
-  }
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (mainWindow) tagDesktopWebContents(mainWindow)
+  })
 
+  configureUpdater(mainWindow)
+}
+
+function beginMainApplicationReadiness(): void {
+  const loadMainApplication = async (): Promise<void> => {
+    if (!mainWindow) throw new Error('主窗口在应用加载前已关闭')
+    updateSplashProgress(92, '正在打开主界面…')
+    await mainWindow.loadURL(desktopInitialUrl(), {
+      extraHeaders: 'Cache-Control: no-cache\r\n'
+    })
+    tagDesktopWebContents(mainWindow)
+    if (process.platform === 'darwin') ensureMacWindowInWorkArea(mainWindow)
+    mainWindow.focus()
+  }
   const splashStarted = Date.now()
   const splashBudgetMs = packagedBackendHealthTimeoutMs()
   let splashPhase: 'boot' | 'routes' | 'done' = 'boot'
@@ -1317,10 +1285,6 @@ async function createWindow(): Promise<void> {
     })
     .finally(() => clearInterval(splashTicker))
 
-  mainWindow.webContents.on('did-finish-load', () => {
-    if (mainWindow) tagDesktopWebContents(mainWindow)
-  })
-
   void waitForBackendStatus(DEFAULT_PORT).then(status => {
     console.info(
       '[xcagi-desktop] startup',
@@ -1331,8 +1295,6 @@ async function createWindow(): Promise<void> {
     )
     void showDbRecoveryDialogIfNeeded(status)
   })
-
-  configureUpdater(mainWindow)
 }
 
 async function waitForMainApplicationReady(): Promise<void> {
@@ -1583,7 +1545,9 @@ function bootstrap(): void {
       try {
         // 先出 Splash，再并行拉起后端，避免用户长时间无窗口反馈
         await createWindow()
-        updateSplashProgress(12, '正在连接本地服务…')
+        updateSplashProgress(12, '正在检查本地数据…')
+        await runBackendMigration({ attachToRollback: false, ifNeeded: true })
+        updateSplashProgress(18, '正在连接本地服务…')
         await startBackend()
         if (!backendProcess) {
           // 端口被占或后端可执行文件缺失，startBackend 已弹错误框
@@ -1602,6 +1566,7 @@ function bootstrap(): void {
           app.quit()
           return
         }
+        beginMainApplicationReadiness()
         if (pendingRollback) {
           await waitForMainApplicationReady()
           await waitForPostUpdateStartupStability()
@@ -1620,17 +1585,33 @@ function bootstrap(): void {
             },
             restartCountRef: () => restartCount,
             port: DEFAULT_PORT,
-            appVersion: app.getVersion(),
+            appVersion: readDesktopRuntimeVersion(),
             buildSha: readLocalBuildSha(),
-            configPath: null,
+            // Python desktop runtime creates and consumes this profile under the
+            // same Electron userData directory (desktop_runtime/database_profile.py).
+            configPath: path.join(app.getPath('userData'), 'config', 'database.json'),
             // Phase 1：注入 backend 重启 / 版本回滚闭包（与 main.ts 现有逻辑共存）
             // restartBackend 调用 startBackend()；backend exit 时 backendProcess 已被清空，可直接 spawn
-            restartBackend: async () => { await startBackend() },
+            restartBackend: async () => {
+              if (backendProcess) {
+                autonomyRestartInProgress = true
+                await stopBackend()
+              }
+              await startBackend()
+              return Boolean(backendProcess)
+            },
             // triggerRollback 复用现有 triggerRollbackSafe 吞错语义
-            triggerRollback: async () => { await triggerRollbackSafe('autonomy_controller_triggered') },
-            // knownGoodConfigContent 当前为 null（main.ts 暂无配置文件概念，repair_config 自动拒绝）
-            knownGoodConfigContent: null,
+            triggerRollback: async () => {
+              const result = await triggerRollbackSafe('autonomy_controller_triggered')
+              return Boolean(result?.scheduled)
+            },
           })
+          const configFingerprint = adapter.captureKnownGoodConfigSnapshot()
+          writeBackendLog(
+            configFingerprint
+              ? `[autonomy] captured known-good database profile fingerprint=${configFingerprint}\n`
+              : '[autonomy] no valid database profile snapshot available; config repair remains disabled\n',
+          )
           autonomyController = new AutonomyController(
             adapter,
             [backendCrashPolicy, degradedRemediationPolicy, updateRollbackPolicy],
@@ -1668,7 +1649,7 @@ function bootstrap(): void {
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        void createWindow()
+        void createWindow().then(() => beginMainApplicationReadiness())
       }
     })
   }

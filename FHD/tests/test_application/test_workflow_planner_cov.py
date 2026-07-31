@@ -551,12 +551,13 @@ class TestFallbackPlan:
         result = planner._fallback_plan("pid", "添加新产品到客户单位", _SAMPLE_REGISTRY)
         assert result.intent == "add_product_to_unit"
 
-    def test_fallback_default_query_products(self) -> None:
+    def test_fallback_default_requires_clarification(self) -> None:
         planner = self._make_planner()
         result = planner._fallback_plan("pid", "帮我看看", _SAMPLE_REGISTRY)
-        assert any(n.tool_id == "products" for n in result.nodes)
+        assert result.intent == "clarification_required"
+        assert result.nodes == []
 
-    def test_fallback_no_products_falls_to_customers(self) -> None:
+    def test_fallback_no_products_does_not_guess_customers(self) -> None:
         planner = self._make_planner()
         reg = {
             "customers": {
@@ -573,7 +574,8 @@ class TestFallbackPlan:
             }
         }
         result = planner._fallback_plan("pid", "帮我看看", reg)
-        assert any(n.tool_id == "customers" for n in result.nodes)
+        assert result.intent == "clarification_required"
+        assert result.nodes == []
 
     def test_fallback_risk_level_high_when_node_is_high(self) -> None:
         planner = self._make_planner()

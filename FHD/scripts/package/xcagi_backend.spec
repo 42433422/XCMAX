@@ -67,6 +67,7 @@ except Exception:
 hiddenimports = []
 for module in [
     "appdirs",
+    "keyring",
     "app.desktop_runtime",
     "app.fastapi_app",
     "app.fastapi_routes",
@@ -130,6 +131,22 @@ for module in ["pypdf", "reportlab"]:
         hiddenimports.extend(collect_submodules(module))
     except Exception:
         pass
+
+# General ETL accepts scanned PDFs.  pypdfium2 carries the PDFium native
+# runtime used to render pages before OCR, so it must remain in frozen builds.
+for module in ["pypdfium2"]:
+    try:
+        hiddenimports.extend(collect_submodules(module))
+    except Exception:
+        pass
+    try:
+        datas.extend(collect_data_files(module, include_py_files=False))
+    except Exception:
+        pass
+    try:
+        binaries.extend(collect_dynamic_libs(module))
+    except Exception:
+        pass
     try:
         datas.extend(collect_data_files(module, include_py_files=False))
     except Exception:
@@ -157,7 +174,6 @@ desktop_excludes = [
     "grpc",
     "h5py",
     "jedi",
-    "keyring",
     "langchain",
     "librosa",
     "lightgbm",
@@ -175,7 +191,6 @@ desktop_excludes = [
     "prophet",
     "pygame",
     "pyarrow",
-    "pypdfium2",
     "pytest",
     "scipy",
     "selenium",

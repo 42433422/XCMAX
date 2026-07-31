@@ -41,6 +41,25 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+_DESKTOP_STREAM_FIRST_RESPONSE_TIMEOUT_SECONDS = 75.0
+
+
+class _XcagiStreamFirstResponseTimeout(TimeoutError):
+    """The upstream model never produced an event within the first-response budget.
+
+    This is deliberately distinct from a total request timeout.  The SSE
+    serializer can therefore give the desktop a stable, actionable error code
+    instead of presenting an upstream quota or provider failure as a generic
+    "first packet" problem.
+    """
+
+    def __init__(self, timeout: float) -> None:
+        self.timeout = timeout
+        super().__init__(
+            f"模型服务在>{int(timeout)} 秒内未返回可处理结果。请稍后重试或切换可用模型。"
+        )
+
+
 _CHAT_DB_READ_GRACE_SEC = 5 * 60
 _chat_db_read_grace_lock = threading.Lock()
 _chat_db_read_grace_until: dict[str, float] = {}
@@ -212,7 +231,89 @@ def _market_connection_label() -> str:
         return "修茈市场"
 
 
+def _model_provider_error_detail() -> dict[str, str]:
+    """Return the safe, stable public shape for non-quota provider failures.
+
+    Platform adapters intentionally retain upstream bodies in exceptions for
+    diagnostics.  Those bodies must not be copied into desktop SSE because
+    they can contain opaque provider details or credential-adjacent metadata.
+    """
+
+    return {
+        "code": "MODEL_PROVIDER_ERROR",
+        "message": "模型服务暂时不可用，请稍后重试或切换可用模型。",
+    }
+
+
+def _market_429_error_detail(
+    exc: BaseException, *, force_429: bool = False
+) -> dict[str, str] | None:
+    """Translate a provider-side 429 into a safe, actionable chat error."""
+
+    raw_parts = [str(exc)]
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    try:
+        response_text = str(getattr(response, "text", "") or "")
+    except RuntimeError:  # pragma: no cover - unread streaming response
+        response_text = ""
+    if response_text:
+        raw_parts.append(response_text[:500])
+    raw = " ".join(raw_parts).lower()
+    is_429 = force_429 or status_code == 429 or bool(re.search(r"(?<!\d)429(?!\d)", raw))
+    if not is_429:
+        return None
+
+    quota_markers = (
+        "quota exhausted",
+        "quota_exhausted",
+        "insufficient quota",
+        "insufficient_quota",
+        "配额",
+        "额度",
+        "余额不足",
+    )
+    if any(marker in raw for marker in quota_markers):
+        return {
+            "code": "MODEL_QUOTA_EXHAUSTED",
+            "message": "模型服务配额已用尽，请在「模型支付」充值或切换可用模型后重试。",
+        }
+    return {
+        "code": "MODEL_RATE_LIMITED",
+        "message": "模型服务请求过于频繁，请稍后重试。",
+    }
+
+
+def _xcagi_chat_error_event(exc: HTTPException) -> dict[str, Any]:
+    """Serialize a chat exception for SSE without losing a stable error code."""
+
+    raw_detail = exc.detail
+    if isinstance(raw_detail, dict):
+        message = str(raw_detail.get("message") or "对话处理失败")
+        code = str(raw_detail.get("code") or "").strip()
+    else:
+        message = str(raw_detail)
+        code = ""
+    payload: dict[str, Any] = {
+        "type": "error",
+        "message": message,
+        "status_code": exc.status_code,
+    }
+    if code:
+        payload["code"] = code
+        payload["error_code"] = code
+    return payload
+
+
 def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
+    if isinstance(exc, _XcagiStreamFirstResponseTimeout):
+        return HTTPException(
+            status_code=504,
+            detail={
+                "code": "MODEL_FIRST_RESPONSE_TIMEOUT",
+                "message": str(exc),
+            },
+        )
     if isinstance(exc, TimeoutError):
         msg = str(exc).strip() or "大模型响应超时，请稍后重试。"
         return HTTPException(status_code=504, detail=msg)
@@ -224,6 +325,9 @@ def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
                 status_code=503,
                 detail=f"无法连接修茈平台 LLM（{_market_connection_label()}）",
             )
+        market_429 = _market_429_error_detail(exc)
+        if market_429 is not None:
+            return HTTPException(status_code=429, detail=market_429)
         if isinstance(exc, httpx.HTTPError):
             return HTTPException(status_code=502, detail="修茈平台 LLM 请求失败")
     except ImportError:
@@ -231,11 +335,20 @@ def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
     if isinstance(exc, AuthenticationError):
         return HTTPException(status_code=401, detail=f"大模型鉴权失败: {exc}")
     if isinstance(exc, RateLimitError):
-        return HTTPException(status_code=429, detail=f"大模型限流: {exc}")
+        return HTTPException(
+            status_code=429,
+            detail=_market_429_error_detail(exc, force_429=True),
+        )
     if isinstance(exc, APIConnectionError):
-        return HTTPException(status_code=503, detail=f"无法连接大模型服务: {exc}")
+        return HTTPException(
+            status_code=503,
+            detail={
+                "code": "MODEL_PROVIDER_UNAVAILABLE",
+                "message": "模型服务暂时不可用，请稍后重试。",
+            },
+        )
     if isinstance(exc, APIError):
-        return HTTPException(status_code=502, detail=f"大模型接口错误: {exc}")
+        return HTTPException(status_code=502, detail=_model_provider_error_detail())
     if isinstance(exc, UnsupportedMultimodalModelError):
         return HTTPException(status_code=422, detail=str(exc))
     if isinstance(exc, EmptyMultimodalResponseError):
@@ -244,13 +357,16 @@ def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
         return HTTPException(status_code=503, detail=str(exc))
     if isinstance(exc, ValueError):
         msg = str(exc).strip()
+        market_429 = _market_429_error_detail(exc)
+        if market_429 is not None:
+            return HTTPException(status_code=429, detail=market_429)
         if "余额不足" in msg or "402" in msg:
             return HTTPException(
                 status_code=402,
                 detail="修茈市场模型余额不足，请在「模型支付」充值后重试。",
             )
         if "平台错误" in msg:
-            return HTTPException(status_code=502, detail=msg)
+            return HTTPException(status_code=502, detail=_model_provider_error_detail())
     logger.exception("xcagi ai chat compat unexpected error")
     return HTTPException(status_code=500, detail=f"对话处理失败: {exc}")
 
@@ -462,11 +578,25 @@ def _xcagi_chat_timeout_seconds() -> float:
 
 
 def _xcagi_stream_first_token_timeout_seconds() -> float:
-    raw = os.environ.get("XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC", "20").strip()
+    desktop_mode = (os.environ.get("XCAGI_DESKTOP_MODE") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    default = _DESKTOP_STREAM_FIRST_RESPONSE_TIMEOUT_SECONDS if desktop_mode else 20.0
+    raw = os.environ.get("XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC", "").strip()
     try:
-        value = float(raw)
+        value = float(raw) if raw else default
     except ValueError:
-        value = 20.0
+        value = default
+    # Older packaged backends can inherit the previous 20s value from the
+    # Electron parent.  In desktop mode that is not a meaningful explicit
+    # override: non-native market calls only emit their synthetic SSE chunk
+    # after a completed response.  Upgrade the stale budget while preserving
+    # deliberately tuned values above it.
+    if desktop_mode and value <= 20.0:
+        value = _DESKTOP_STREAM_FIRST_RESPONSE_TIMEOUT_SECONDS
     return max(3.0, min(value, 120.0))
 
 
@@ -537,9 +667,7 @@ def _xcagi_guarded_planner_stream_events(
         except queue.Empty:
             elapsed_int = int(time.monotonic() - started_at)
             if not first_event_seen:
-                raise TimeoutError(
-                    f"流式对话首包超时（>{int(first_token_timeout)} 秒）。模型服务暂未返回首个分片，请稍后重试。"
-                )
+                raise _XcagiStreamFirstResponseTimeout(first_token_timeout)
             yield {
                 "type": "token",
                 "text": f"\n（仍在处理中，已等待 {elapsed_int} 秒，请稍候…）\n",
@@ -551,8 +679,7 @@ def _xcagi_guarded_planner_stream_events(
             return
         if isinstance(item, BaseException):
             exc = _xcagi_chat_http_exc(item)
-            detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
-            yield {"type": "error", "message": detail, "status_code": exc.status_code}
+            yield _xcagi_chat_error_event(exc)
             return
 
         first_event_seen = True
@@ -596,153 +723,7 @@ def strip_planner_stream_markers(merged: str) -> tuple[str, str | None]:
     return cleaned, thinking
 
 
-async def _xcagi_planner_stream_bytes_async(
-    request: Request, body: XcagiCompatChatBody, *, ai_tier: str
-):
-    """Async generator wrapper around _xcagi_planner_stream_bytes.
-
-    Runs the sync generator in a background thread and feeds items through an
-    asyncio.Queue so the event loop is NEVER blocked.  This avoids the
-    Starlette BaseHTTPMiddleware / anyio thread-pool deadlock that occurs when
-    a sync StreamingResponse generator is iterated via iterate_in_threadpool
-    while the middleware task-group is still open.
-    """
-    _SENTINEL = object()
-    async_q: asyncio.Queue = asyncio.Queue(maxsize=128)
-    loop = asyncio.get_running_loop()
-
-    def _feed_queue() -> None:
-        try:
-            for chunk in _xcagi_planner_stream_bytes(request, body, ai_tier=ai_tier):
-                asyncio.run_coroutine_threadsafe(async_q.put(chunk), loop).result(timeout=120)
-        except BaseException as exc:  # noqa: BLE001
-            err_msg = str(exc).strip() or exc.__class__.__name__
-            err_line = _sse_event_line({"type": "error", "message": err_msg})
-            try:
-                asyncio.run_coroutine_threadsafe(async_q.put(err_line), loop).result(timeout=5)
-            except RECOVERABLE_ERRORS:
-                pass
-        finally:
-            asyncio.run_coroutine_threadsafe(async_q.put(_SENTINEL), loop).result(timeout=5)
-
-    thread = threading.Thread(target=_feed_queue, daemon=True, name="xcagi-stream-async-bridge")
-    thread.start()
-
-    while True:
-        item = await async_q.get()
-        if item is _SENTINEL:
-            break
-        yield item
-
-
-def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, ai_tier: str):
-    m = (body.mode or "").strip().lower()
-    if m in ("online", "offline"):
-        set_llm_mode(m)
-    runtime_context, _ = _merge_runtime_context_with_message_paths(body.context, body.message)
-    runtime_context = runtime_context_with_tier(runtime_context, ai_tier)
-    ok_read, read_req = _ensure_chat_db_read_authorized(
-        request,
-        message=body.message,
-        provided_token=body.db_read_token,
-    )
-    if not ok_read and read_req:
-        yield _sse_event_line(
-            {"type": "token", "text": f"[需要授权: {read_req.get('token_description')}]"}
-        )
-        yield _sse_event_line(
-            {
-                "type": "requires_token",
-                "token_name": read_req.get("token_name"),
-                "token_description": read_req.get("token_description"),
-            }
-        )
-        return
-    if ok_read and _message_requires_db_read_token(body.message):
-        runtime_context["chat_db_read_authorized"] = True
-    intr = planner_workflow_interrupt_reply(body.message)
-    if intr is not None:
-        cleared = runtime_context_after_workflow_interrupt(runtime_context)
-        yield _sse_event_line({"type": "token", "text": intr})
-        payload = _xcagi_compat_reply_payload(intr, runtime_context_update=cleared)
-        payload = attach_chat_trace_run(
-            payload,
-            message=body.message,
-            runtime_context=cleared,
-            user_id=body.user_id,
-            source=body.source,
-            channel="compat_chat_stream",
-        )
-        yield _sse_event_line(
-            {
-                "type": "done",
-                "result": payload,
-            }
-        )
-        return
-    vector_error = _ensure_vector_index_if_needed(body.message, runtime_context)
-    if vector_error:
-        yield _sse_event_line({"type": "error", "message": vector_error})
-        return
-    workspace_root = os.environ.get("WORKSPACE_ROOT", os.getcwd())
-    llm_client = create_modstore_openai_client_from_request(request)
-    reply_parts: list[str] = []
-    try:
-        halted_for_write_token = False
-        for ev in _xcagi_guarded_planner_stream_events(
-            body,
-            runtime_context=runtime_context,
-            workspace_root=workspace_root,
-            client=llm_client,
-        ):
-            et = ev.get("type")
-            if et == "error":
-                yield _sse_event_line(ev)
-                return
-            if et == "token":
-                text = str(ev.get("text") or "")
-                if not ev.get("ephemeral"):
-                    reply_parts.append(text)
-                yield _sse_event_line(ev)
-            elif et == "requires_token":
-                yield _sse_event_line(ev)
-                halted_for_write_token = True
-                break
-            elif et == "done":
-                continue
-            else:
-                yield _sse_event_line(ev)
-        if halted_for_write_token:
-            return
-        merged = "".join(reply_parts)
-        if not merged.strip():
-            msg = (
-                "模型服务已完成请求，但没有返回可显示的正文。"
-                "若附带图片，请确认当前账号已启用视觉模型，或上传文字更清晰的截图。"
-            )
-            yield _sse_event_line({"type": "error", "message": msg})
-            return
-        thinking = _thinking_steps_from_planner_stream_text(merged)
-        if thinking:
-            done_reply: str | dict = {"response": merged, "thinking_steps": thinking}
-        else:
-            done_reply = merged
-        payload = _xcagi_compat_reply_payload(done_reply)
-        payload = attach_chat_trace_run(
-            payload,
-            message=body.message,
-            runtime_context=runtime_context,
-            user_id=body.user_id,
-            source=body.source,
-            channel="compat_chat_stream",
-        )
-        yield _sse_event_line({"type": "done", "result": payload})
-    except RECOVERABLE_ERRORS as e:
-        exc = _xcagi_chat_http_exc(e)
-        yield _sse_event_line(
-            {
-                "type": "error",
-                "message": exc.detail if isinstance(exc.detail, str) else str(exc.detail),
-                "status_code": exc.status_code,
-            }
-        )
+from app.fastapi_routes.domains.conversation.streaming import (
+    _xcagi_planner_stream_bytes,
+    _xcagi_planner_stream_bytes_async,
+)

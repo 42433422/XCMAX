@@ -9,6 +9,7 @@ mixed results), compat_chat_stream_async.
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -1090,6 +1091,12 @@ class TestExecuteCompatChatBatch:
 
 
 class TestCompatChatStreamAsync:
+    @staticmethod
+    def _event(chunk: bytes) -> dict[str, Any]:
+        text = chunk.decode("utf-8")
+        assert text.startswith("data: ")
+        return json.loads(text[6:].strip())
+
     @pytest.mark.asyncio
     async def test_stream_yields_chunks(self):
         body = XcagiCompatChatBody(message="hi")
@@ -1109,7 +1116,17 @@ class TestCompatChatStreamAsync:
             chunks = []
             async for chunk in compat_chat_stream_async(request, body):
                 chunks.append(chunk)
-            assert chunks == [b"chunk1", b"chunk2"]
+            assert self._event(chunks[0]) == {
+                "type": "tool_progress",
+                "label": "正在识别需求",
+                "phase": "intent_recognition",
+            }
+            assert self._event(chunks[1]) == {
+                "type": "tool_progress",
+                "label": "正在连接模型服务",
+                "phase": "model_connect",
+            }
+            assert chunks[2:] == [b"chunk1", b"chunk2"]
 
     @pytest.mark.asyncio
     async def test_stream_with_explicit_ai_tier(self):
@@ -1129,7 +1146,228 @@ class TestCompatChatStreamAsync:
             chunks = []
             async for chunk in compat_chat_stream_async(request, body, ai_tier="p2"):
                 chunks.append(chunk)
-            assert chunks == [b"data"]
+            assert self._event(chunks[0])["phase"] == "intent_recognition"
+            assert self._event(chunks[1])["phase"] == "model_connect"
+            assert chunks[2:] == [b"data"]
             # Verify ai_tier was passed through
             _, kwargs = mock_planner_stream.call_args
             assert kwargs.get("ai_tier") == "p2"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("source,mode", [("normal", "basic"), ("pro", "professional")])
+    async def test_shipment_phrase_returns_confirmation_without_llm_or_execution(
+        self, source: str, mode: str
+    ):
+        """The exact desktop stream path must only issue a preview card.
+
+        This is intentionally tested for both profiles because the stream
+        endpoint is shared.  The task remains an unexecuted shipment_generate
+        request; no print or database write is allowed here.
+        """
+
+        body = XcagiCompatChatBody(
+            message="打印侯雪梅发货单，编号9803，规格28，3桶",
+            source=source,
+            mode=mode,
+        )
+        request = _make_request()
+        preview = {
+            "success": True,
+            "message": "已识别订单，请确认执行",
+            "response": '已识别订单，请点击"确认执行"生成发货单。',
+            "task": {
+                "type": "shipment_generate",
+                "title": "发货单预览",
+                "payload": {"tool_id": "shipment_generate", "action": "执行"},
+            },
+        }
+
+        with (
+            patch(
+                "app.application.normal_chat_dispatch.route_normal_mode_message",
+                return_value={"intent": "shipment", "slots": {}},
+            ),
+            patch(
+                "app.application.normal_chat_dispatch.run_normal_slot_shipment_preview",
+                return_value=preview,
+            ) as preview_fn,
+            patch(
+                "app.application.planner_compat_service._xcagi_planner_stream_bytes_async",
+                side_effect=AssertionError("shipment preview must not invoke the LLM stream"),
+            ) as stream_fn,
+        ):
+            chunks = []
+            async for chunk in compat_chat_stream_async(request, body):
+                chunks.append(chunk)
+
+        assert preview_fn.call_args.args == (body.message,)
+        stream_fn.assert_not_called()
+        events = [self._event(chunk) for chunk in chunks]
+        assert events == [
+            {
+                "type": "tool_progress",
+                "label": "正在识别需求",
+                "phase": "intent_recognition",
+            },
+            {"type": "token", "text": preview["response"]},
+            {"type": "done", "result": preview},
+        ]
+        assert events[-1]["result"]["task"]["type"] == "shipment_generate"
+        assert "print" not in events[-1]["result"]
+
+    @pytest.mark.asyncio
+    async def test_shipment_preview_uses_request_state_owner_not_client_session_id(self):
+        body = XcagiCompatChatBody(
+            message="打印金汉武发货单，编号9803，规格28，3桶",
+            user_id="999999",
+        )
+        request = _make_request()
+        request.state.user_id = 42
+        preview = {"success": True, "response": "已识别订单", "task": {"type": "shipment_generate"}}
+
+        with (
+            patch(
+                "app.application.normal_chat_dispatch.route_normal_mode_message",
+                return_value={"intent": "shipment", "slots": {}},
+            ),
+            patch(
+                "app.application.normal_chat_dispatch.run_normal_slot_shipment_preview",
+                return_value=preview,
+            ) as preview_fn,
+        ):
+            chunks = []
+            async for chunk in compat_chat_stream_async(request, body):
+                chunks.append(chunk)
+
+        assert preview_fn.call_args.args == (body.message,)
+        assert preview_fn.call_args.kwargs["authenticated_owner_user_id"] == 42
+        assert [self._event(chunk)["type"] for chunk in chunks] == [
+            "tool_progress",
+            "token",
+            "done",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_shipment_preview_keeps_request_state_tenant_after_stream_starts(self):
+        """ETL evidence remains tenant-scoped after middleware has unwound.
+
+        A streaming generator cannot rely on the request ContextVar that an
+        outer ``BaseHTTPMiddleware`` has already reset.  The public stream
+        wrapper must restore the server-authenticated tenant for the local
+        shipment preview read, without accepting a tenant from the body.
+        """
+
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        body = XcagiCompatChatBody(message="打印金汉武发货单，编号9803，规格28，3桶")
+        request = _make_request()
+        request.state.user_id = 42
+        request.state.tenant_id = 17
+        preview = {"success": True, "response": "已识别订单", "task": {"type": "shipment_generate"}}
+        observed_tenants: list[int | None] = []
+        tenant_before_stream = current_tenant_id()
+
+        def build_preview(*_args, **_kwargs):
+            observed_tenants.append(current_tenant_id())
+            return preview
+
+        with (
+            patch(
+                "app.application.normal_chat_dispatch.route_normal_mode_message",
+                return_value={"intent": "shipment", "slots": {}},
+            ),
+            patch(
+                "app.application.normal_chat_dispatch.run_normal_slot_shipment_preview",
+                side_effect=build_preview,
+            ),
+        ):
+            chunks = []
+            async for chunk in compat_chat_stream_async(request, body):
+                chunks.append(chunk)
+
+        assert observed_tenants == [17]
+        assert current_tenant_id() == tenant_before_stream
+        assert [self._event(chunk)["type"] for chunk in chunks] == [
+            "tool_progress",
+            "token",
+            "done",
+        ]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("message", "intent", "builder_name", "response"),
+        [
+            (
+                "有哪些客户？",
+                "customers_query",
+                "build_customers_query_response_dict",
+                "共找到 2 位客户：\n- 甲公司",
+            ),
+            ("查产品", "product_query", "build_product_query_response_dict", "已打开产品副窗。"),
+        ],
+    )
+    async def test_read_only_business_query_bypasses_llm_when_provider_is_unavailable(
+        self, message: str, intent: str, builder_name: str, response: str
+    ):
+        """客户/产品读取走本地槽位，绝不因模型配额耗尽而失败。"""
+
+        body = XcagiCompatChatBody(message=message)
+        request = _make_request()
+        payload = {"success": True, "response": response, "data": {"intent": intent}}
+
+        with (
+            patch(
+                "app.application.normal_chat_dispatch.route_normal_mode_message",
+                return_value={"intent": intent, "slots": {"keyword": ""}},
+            ),
+            patch(
+                f"app.application.normal_chat_dispatch.{builder_name}",
+                return_value=payload,
+            ) as builder,
+            patch(
+                "app.application.planner_compat_service._xcagi_planner_stream_bytes_async",
+                side_effect=AssertionError(
+                    "read-only business query must not invoke the LLM stream"
+                ),
+            ) as stream_fn,
+        ):
+            chunks = []
+            async for chunk in compat_chat_stream_async(request, body):
+                chunks.append(chunk)
+
+        builder.assert_called_once()
+        stream_fn.assert_not_called()
+        assert [self._event(chunk) for chunk in chunks] == [
+            {
+                "type": "tool_progress",
+                "label": "正在识别需求",
+                "phase": "intent_recognition",
+            },
+            {"type": "token", "text": response},
+            {"type": "done", "result": payload},
+        ]
+
+    @pytest.mark.asyncio
+    async def test_raw_database_phrase_does_not_bypass_existing_read_token_guard(self):
+        """快捷只覆盖受控客户/产品读取，不能偷跑原始数据库读取。"""
+
+        body = XcagiCompatChatBody(message="查客户数据库", system_prompt="test")
+        request = _make_request()
+
+        async def mock_stream(*args, **kwargs):
+            yield b"normal-path"
+
+        with (
+            patch(
+                "app.application.planner_compat_service._xcagi_planner_stream_bytes_async",
+                return_value=mock_stream(),
+            ) as stream_fn,
+        ):
+            chunks = []
+            async for chunk in compat_chat_stream_async(request, body):
+                chunks.append(chunk)
+
+        stream_fn.assert_called_once()
+        assert self._event(chunks[0])["phase"] == "intent_recognition"
+        assert self._event(chunks[1])["phase"] == "model_connect"
+        assert chunks[2:] == [b"normal-path"]

@@ -59,6 +59,8 @@
     "openShipmentRecords": "打开出货记录",
     "jumpToMessage": "定位消息",
     "retryTask": "重试",
+    "pauseTask": "暂停",
+    "resumeTask": "继续",
     "assistantPush": "助手推送",
     "newMessage": "新消息",
     "assistantPushHint": "可在顶部副窗继续处理并保持聊天",

@@ -43,6 +43,12 @@ from .static_mounts import (
 )
 
 logger = logging.getLogger(__name__)
+_DEFAULT_APP_VERSION = "1.0.0.0"
+
+
+def _runtime_app_version() -> str:
+    """Use the desktop shell's immutable build identity when it is available."""
+    return (os.environ.get("XCAGI_VERSION") or _DEFAULT_APP_VERSION).strip() or _DEFAULT_APP_VERSION
 
 
 def create_fastapi_app(
@@ -51,6 +57,7 @@ def create_fastapi_app(
     enable_docs: bool = True,
 ) -> FastAPI:
     global _app_singleton
+    runtime_version = _runtime_app_version()
     if config_object is None:
         config_object = get_config("default")
 
@@ -83,6 +90,7 @@ def create_fastapi_app(
         redoc_url="/redoc" if enable_docs else None,
         lifespan=lifespan,
     )
+    app.version = runtime_version
 
     app.state.config = config_object
 
@@ -143,7 +151,7 @@ def create_fastapi_app(
     try:
         from app.utils.metrics import init_metrics
 
-        init_metrics("XCAGI", os.environ.get("XCAGI_VERSION", "1.0.0.0"))
+        init_metrics("XCAGI", runtime_version)
     except RECOVERABLE_ERRORS as e:
         logger.warning("Prometheus init_metrics skipped: %s", e)
 

@@ -37,189 +37,33 @@ def _svc():
     return get_shipment_application_service_core()
 
 
-def _safe_shipment_export_path(result: dict[str, Any]) -> str | None:
-    from pathlib import Path
+def _authenticated_owner_user_id(request: Request) -> int | None:
+    """Return only the middleware-authenticated owner identity.
 
-    from app.infrastructure.workspace import resolve_existing_file_under_root
-    from app.utils.path_utils import get_data_dir
+    The old shipment compatibility endpoints accept a number of legacy body
+    and header fields for tracing.  They are never an authority for a private
+    ETL-derived document or a post-print state transition.  The middleware is
+    the single source of the authenticated owner identity.
+    """
 
-    filename = os.path.basename(str(result.get("filename") or ""))
-    if not re.fullmatch(r"shipment_records_[^/\\]{1,160}_\d{8}_\d{6}\.xlsx", filename):
-        return None
     try:
-        candidate = resolve_existing_file_under_root(
-            Path(get_data_dir()).resolve() / "exports", filename
-        )
-    except (OSError, ValueError):
+        raw_value = getattr(request.state, "user_id", None)
+        user_id = int(raw_value) if raw_value is not None else 0
+    except (AttributeError, TypeError, ValueError):
         return None
-    return str(candidate)
+    return user_id if user_id > 0 else None
 
 
-def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
-    final_output = getattr(run, "final_output", None)
-    node_outputs = dict((final_output or {}).get("node_outputs") or {})
-    output = dict(node_outputs.get(node_id) or {})
-    if not output:
-        for step in getattr(run, "steps", []) or []:
-            if str(getattr(step, "node_id", "")) == node_id:
-                output = dict(getattr(step, "output", {}) or {})
-                break
-    if not output:
-        output = {"success": getattr(run, "status", "") == "completed"}
-    if not output.get("success"):
-        output["message"] = "出货单操作失败"
-        output.pop("error", None)
-        output.pop("traceback", None)
-    run_id = str(getattr(run, "run_id", "") or "")
-    if run_id:
-        output["run_id"] = run_id
-        output["agent_run_id"] = run_id
-    output["agent_status"] = str(getattr(run, "status", "") or "")
-    return output
-
-
-def _shipment_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
-    return str(
-        request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
-        or payload.get("user_id")
-        or payload.get("userId")
-        or "shipment-route"
-    ).strip()
-
-
-def _run_shipment_records_agent(
-    *,
-    request: Request,
-    action: str,
-    params: dict[str, Any],
-    route_path: str,
-) -> dict[str, Any]:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.application.workflow_registry_app import get_workflow_tool_registry
-
-    registry = get_workflow_tool_registry()
-    action_meta = dict((registry.get("shipment_records") or {}).get("actions") or {}).get(action)
-    if not isinstance(action_meta, dict):
-        return {
-            "success": False,
-            "message": f"未注册的 shipment_records 动作: {action}",
-            "agent_status": "failed",
-        }
-
-    node_id = f"shipment_records_{action}"
-    user_id = _shipment_agent_user_id(request, params)
-    plan = PlanGraph(
-        plan_id=node_id,
-        intent=node_id,
-        todo_steps=[f"通过 AgentOrchestrator 执行 shipment_records.{action}"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id="shipment_records",
-                action=action,
-                params=dict(params or {}),
-                risk=str(action_meta.get("risk") or "medium"),
-                idempotent=bool(action_meta.get("idempotent", False)),
-                description=f"Execute shipment_records.{action} through the unified Agent runtime.",
-            )
-        ],
-        risk_level=str(action_meta.get("risk") or "medium"),
-        metadata={"source": "shipment_records_route", "route": route_path},
-    )
-    runtime_context = {
-        "source": "shipment_records_route",
-        "route": route_path,
-        "request_path": str(request.url.path),
-        "user_id": user_id,
-        "route_confirmed": True,
-        "service_source": "fastapi_shipment_records_route",
-    }
-    orchestrator = AgentOrchestrator()
-    run = orchestrator.start_run_from_plan(
-        user_id=user_id,
-        message=str(params.get("message") or f"Shipment records {action}"),
-        plan=plan,
-        runtime_context=runtime_context,
-    )
-    if run.status in {"waiting_user", "running"}:
-        continued = orchestrator.continue_run(
-            run.run_id,
-            approved_by=user_id or "shipment-route",
-            approved_step_id=node_id,
-            runtime_context=runtime_context,
-        )
-        if continued is not None:
-            run = continued
-    return _agent_node_output(run, node_id)
-
-
-def _run_shipment_orders_agent(
-    *,
-    request: Request,
-    action: str,
-    params: dict[str, Any],
-    route_path: str,
-) -> dict[str, Any]:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.application.workflow_registry_app import get_workflow_tool_registry
-
-    registry = get_workflow_tool_registry()
-    action_meta = dict((registry.get("shipment_orders") or {}).get("actions") or {}).get(action)
-    if not isinstance(action_meta, dict):
-        return {
-            "success": False,
-            "message": f"未注册的 shipment_orders 动作: {action}",
-            "agent_status": "failed",
-        }
-
-    node_id = f"shipment_orders_{action}"
-    user_id = _shipment_agent_user_id(request, params)
-    plan = PlanGraph(
-        plan_id=node_id,
-        intent=node_id,
-        todo_steps=[f"通过 AgentOrchestrator 执行 shipment_orders.{action}"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id="shipment_orders",
-                action=action,
-                params=dict(params or {}),
-                risk=str(action_meta.get("risk") or "high"),
-                idempotent=bool(action_meta.get("idempotent", False)),
-                description=f"Execute shipment_orders.{action} through the unified Agent runtime.",
-            )
-        ],
-        risk_level=str(action_meta.get("risk") or "high"),
-        metadata={"source": "shipment_orders_route", "route": route_path},
-    )
-    runtime_context = {
-        "source": "shipment_orders_route",
-        "route": route_path,
-        "request_path": str(request.url.path),
-        "user_id": user_id,
-        "route_confirmed": True,
-        "service_source": "fastapi_shipment_orders_route",
-    }
-    orchestrator = AgentOrchestrator()
-    run = orchestrator.start_run_from_plan(
-        user_id=user_id,
-        message=str(params.get("message") or f"Shipment orders {action}"),
-        plan=plan,
-        runtime_context=runtime_context,
-    )
-    if run.status in {"waiting_user", "running"}:
-        continued = orchestrator.continue_run(
-            run.run_id,
-            approved_by=user_id or "shipment-route",
-            approved_step_id=node_id,
-            runtime_context=runtime_context,
-        )
-        if continued is not None:
-            run = continued
-    return _agent_node_output(run, node_id)
+from app.fastapi_routes.shipment_order_agent_helpers import (
+    _agent_node_output,
+    _run_shipment_orders_agent,
+    _run_shipment_records_agent,
+    _safe_shipment_export_path,
+    _shipment_agent_user_id,
+    _shipment_batch_confirmation_preview,
+    _shipment_confirmation_preview,
+    _shipment_preview_order_text,
+)
 
 
 def _next_order_number_payload(suffix: str = "A") -> dict[str, Any]:
@@ -269,17 +113,23 @@ def orders_next_number_under_api(suffix: str = Query(default="A")):
 
 @router.post("/api/shipment/generate-batch")
 def shipment_generate_batch(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
-    """批量生成：兼容测试与旧前端字段（customer_name / items）。"""
+    """Preview a legacy batch; each document still needs an explicit click."""
     shipments = payload.get("shipments") or []
-    if not shipments:
+    if not isinstance(shipments, list) or not shipments:
         raise HTTPException(status_code=400, detail="shipments 不能为空")
-    result = _run_shipment_orders_agent(
-        request=request,
-        action="generate_batch",
-        params={"shipments": shipments},
-        route_path="/api/shipment/generate-batch",
-    )
-    return JSONResponse(jsonable_encoder(result), status_code=200)
+    try:
+        result = _shipment_batch_confirmation_preview(shipments)
+        return JSONResponse(jsonable_encoder(result), status_code=200)
+    except RECOVERABLE_ERRORS as e:
+        logger.exception("shipment batch preview: %s", e)
+        return JSONResponse(
+            {
+                "success": False,
+                "error_code": "shipment_preview_failed",
+                "message": "发货单预演失败",
+            },
+            status_code=500,
+        )
 
 
 @router.post("/api/shipment/generate")
@@ -291,56 +141,120 @@ def shipment_generate(request: Request, payload: dict[str, Any] = Body(default_f
         raise HTTPException(status_code=400, detail="单位名称不能为空")
     if not products:
         raise HTTPException(status_code=400, detail="产品列表不能为空")
+    if not isinstance(products, list) or not all(isinstance(product, dict) for product in products):
+        raise HTTPException(status_code=400, detail="产品列表条目必须是对象")
     try:
-        result = _run_shipment_orders_agent(
-            request=request,
-            action="generate",
-            params={"unit_name": unit_name, "products": products, "date": date},
-            route_path="/api/shipment/generate",
+        result = _shipment_confirmation_preview(
+            unit_name=unit_name,
+            products=products,
+            payload={**payload, "date": date},
+            compatibility_endpoint="/api/shipment/generate",
         )
-        return JSONResponse(result, status_code=200 if result.get("success") else 500)
+        return JSONResponse(jsonable_encoder(result), status_code=200)
     except RECOVERABLE_ERRORS as e:
-        logger.exception("shipment generate: %s", e)
+        logger.exception("shipment generate preview: %s", e)
         return JSONResponse(
-            {"success": False, "message": f"生成失败：{str(e)}"},
+            {
+                "success": False,
+                "error_code": "shipment_preview_failed",
+                "message": "发货单预演失败",
+            },
             status_code=500,
         )
 
 
 @router.post("/api/shipment/print")
 def shipment_print(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
-    file_path = payload.get("file_path")
+    """Mark a shipment printed only after a server-issued print receipt.
+
+    This historical endpoint never submits a physical print job itself.  Its
+    only remaining responsibility is the record-state transition after
+    ``/api/print/document`` has successfully spent the owner-bound document
+    capability.  A guessed local file path, legacy header, or JSON user id is
+    not sufficient authority to mark a shipment as printed.
+    """
+
+    file_path = str(payload.get("file_path") or "").strip()
     order_id = payload.get("order_id")
     printer_name = payload.get("printer_name")
+    post_print_receipt = payload.get("post_print_receipt")
 
     if not file_path:
         raise HTTPException(status_code=400, detail="文件路径不能为空")
-    if not os.path.exists(str(file_path)):
-        raise HTTPException(status_code=404, detail="文件不存在")
+    if not str(post_print_receipt or "").strip():
+        return JSONResponse(
+            {
+                "success": False,
+                "error_code": "PRINT_RECEIPT_REQUIRED",
+                "message": "缺少打印回执，不能直接更新打印状态",
+            },
+            status_code=409,
+        )
 
     try:
-        if order_id:
+        normalized_order_id: int | None = None
+        if order_id not in (None, ""):
             try:
-                int(order_id)
-            except RECOVERABLE_ERRORS:
+                normalized_order_id = int(order_id)
+            except (TypeError, ValueError):
                 raise HTTPException(status_code=400, detail="order_id 无效")
-        result = _run_shipment_orders_agent(
-            request=request,
-            action="print",
-            params={
-                "file_path": str(file_path),
-                "order_id": order_id,
-                "printer_name": printer_name,
-            },
-            route_path="/api/shipment/print",
+            if normalized_order_id <= 0:
+                raise HTTPException(status_code=400, detail="order_id 无效")
+
+        from app.application.print_authorization import consume_post_print_receipt
+
+        receipt = consume_post_print_receipt(
+            post_print_receipt,
+            owner_user_id=_authenticated_owner_user_id(request),
+            file_path=file_path,
+            order_id=normalized_order_id,
         )
-        return JSONResponse(result, status_code=200 if result.get("success") else 500)
+        if not receipt.get("success"):
+            error_code = str(receipt.get("error_code") or "")
+            status_code = 403 if error_code == "PRINT_RECEIPT_OWNER_MISMATCH" else 409
+            return JSONResponse(receipt, status_code=status_code)
+
+        # The receipt canonicalises the generated artifact path.  Use that
+        # value rather than a client spelling/symlink variant in the audit
+        # response.  No Agent auto-continue occurs on this route.
+        confirmed_file_path = str(receipt.get("file_path") or file_path)
+        receipt_order_id = receipt.get("order_id")
+        if normalized_order_id is None:
+            return JSONResponse(
+                {
+                    "success": True,
+                    "message": "发货单已打印，但未更新记录（缺少 order_id）",
+                    "printed_at": datetime.now().isoformat(),
+                    "file_path": confirmed_file_path,
+                    "updated": False,
+                    "warning": "缺少 order_id，已跳过数据库状态更新",
+                },
+                status_code=200,
+            )
+
+        result = dict(
+            _svc().mark_as_printed(
+                normalized_order_id,
+                printer_name=str(printer_name or ""),
+            )
+            or {}
+        )
+        result["file_path"] = confirmed_file_path
+        result["order_id"] = receipt_order_id or normalized_order_id
+        result.setdefault("updated", bool(result.get("success")))
+        return JSONResponse(
+            jsonable_encoder(result), status_code=200 if result.get("success") else 400
+        )
     except HTTPException:
         raise
     except RECOVERABLE_ERRORS as e:
-        logger.exception("shipment print: %s", e)
+        logger.exception("shipment printed-state update: %s", e)
         return JSONResponse(
-            {"success": False, "message": f"打印失败：{str(e)}"},
+            {
+                "success": False,
+                "error_code": "shipment_print_state_update_failed",
+                "message": "打印状态更新失败",
+            },
             status_code=500,
         )
 

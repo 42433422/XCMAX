@@ -44,6 +44,7 @@ vi.mock('@/composables/useModRoutes', async () => {
   }
 })
 vi.mock('@/constants/platformShellMode', () => ({
+  isEnterpriseProductSkuBuild: () => false,
   isPlatformShellModeEnabled: () => false,
   resolvePlatformShellMenuKeys: () => [],
   shouldExposeIndustrySidebar: () => false,
@@ -94,6 +95,11 @@ describe('useVisibleNavItems deep', () => {
       name: '智能对话',
       routeName: 'chat',
     })
+  })
+
+  it('hides enterprise ETL entry for a personal build', () => {
+    const { visibleNavItems } = useVisibleNavItems()
+    expect(visibleNavItems.value.map((item) => item.key)).not.toContain('business-docking')
   })
 
   it('each item has routeName and source', () => {

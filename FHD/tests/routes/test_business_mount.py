@@ -9,6 +9,7 @@ import pytest
 from fastapi import APIRouter, FastAPI
 
 from app.fastapi_routes.mounts import business as business_mount
+from app.fastapi_routes.openapi_route_compat import iter_effective_routes
 from app.fastapi_routes.registry import RouteRegistry
 
 
@@ -52,7 +53,23 @@ def test_register_business_routes_smoke() -> None:
     business_mount.register_business_routes(app, registry)
     assert len(registry.names()) >= 5
     assert "agent" in registry.names()
+    assert "system" in registry.names()
     assert "taiyangniao_attendance_compat" in registry.names()
+
+
+def test_register_business_routes_mounts_tools_execute_on_runtime_app() -> None:
+    registry = RouteRegistry()
+    app = FastAPI()
+
+    business_mount.register_business_routes(app, registry)
+    registry.apply(app)
+
+    route_methods = {
+        (getattr(route, "path", ""), method)
+        for route in iter_effective_routes(app.routes)
+        for method in (getattr(route, "methods", None) or set())
+    }
+    assert ("/api/tools/execute", "POST") in route_methods
 
 
 def test_mod_taiyangniao_pro_exposes_attendance_api_when_routes_registered(

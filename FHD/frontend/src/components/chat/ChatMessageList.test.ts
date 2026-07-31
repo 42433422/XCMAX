@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ChatMessageList from './ChatMessageList.vue'
+import type { ChatMessage } from '@/composables/useChatMessages'
 
-function mountList(showDiagnosticMetadata = false) {
+function mountList(showDiagnosticMetadata = false, messages?: ChatMessage[]) {
   return mount(ChatMessageList, {
     props: {
-      messages: [{
+      messages: messages || [{
         role: 'ai' as const,
         content: '系统显示 &amp;quot;正常&amp;quot;。',
         time: '07:25',
@@ -51,6 +52,16 @@ describe('ChatMessageList', () => {
     const wrapper = mountList(true)
     expect(wrapper.get('.context-summary').text()).toContain('已关联上下文')
     expect(wrapper.get('.thinking-panel').text()).toContain('internal chain')
-    expect(wrapper.get('.trace-panel').text()).toContain('internal_node')
+      expect(wrapper.get('.trace-panel').text()).toContain('internal_node')
+  })
+
+  it('does not render avatars for user messages', () => {
+    const wrapper = mountList(false, [{
+      role: 'user',
+      content: '帮我分析这个表格',
+      time: '07:26',
+    }])
+    expect(wrapper.find('.message-avatar').exists()).toBe(false)
+    expect(wrapper.get('.message.user .message-html').text()).toContain('帮我分析这个表格')
   })
 })

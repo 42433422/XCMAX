@@ -123,14 +123,29 @@ class AIChatWorkflowResponseMixin:
                 },
             },
         }
-        if success and any(
-            step.status == "completed" and step.tool_id == "products" and step.action == "query"
-            for step in getattr(agent_run, "steps", []) or []
-        ):
+        product_query_step = next(
+            (
+                step
+                for step in getattr(agent_run, "steps", []) or []
+                if step.status == "completed"
+                and step.tool_id == "products"
+                and step.action == "query"
+            ),
+            None,
+        )
+        if success and product_query_step is not None:
+            query_params = dict(getattr(product_query_step, "params", None) or {})
+            product_query = str(
+                query_params.get("model_number")
+                or query_params.get("keyword")
+                or query_params.get("product_name")
+                or user_message
+                or ""
+            ).strip()
             payload["autoAction"] = {
                 "type": "show_products_float",
                 "feature": "products",
-                "query": str(user_message or "").strip(),
+                "query": product_query,
             }
         return payload
 
@@ -228,6 +243,27 @@ class AIChatWorkflowResponseMixin:
                 suffix = f": {message}" if message else ""
                 line = f"- {item.node_id}: 成功（{entity}.{operation}{suffix}）"
             return [line, f"    · 结果预览: {preview}"] if preview else [line]
+
+        if item.tool_id == "products" and item.action in ("query", "list"):
+            rows = out.get("data")
+            rows = rows if isinstance(rows, list) else []
+            if not rows and message:
+                return [f"- {item.node_id}: 成功（{message}）"]
+            lines = [f"- {item.node_id}: 成功（产品查询 {len(rows)} 条）"]
+            for row in rows[:5]:
+                if not isinstance(row, dict):
+                    continue
+                product_id = row.get("id")
+                model_number = str(row.get("model_number") or "-").strip()
+                product_name = str(row.get("name") or row.get("product_name") or "-").strip()
+                unit_name = str(row.get("unit") or row.get("unit_name") or "-").strip()
+                price = row.get("price")
+                price_text = f"￥{price}" if price not in (None, "") else "未设置价格"
+                lines.append(
+                    f"    · ID {product_id or '-'} | {model_number} | "
+                    f"{product_name} | {unit_name} | {price_text}"
+                )
+            return lines
 
         if message:
             return [f"- {item.node_id}: 成功（{message}）"]

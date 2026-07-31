@@ -9,12 +9,13 @@ import {
   extractSessionIdForActiveMod,
 } from '@/utils/chatStorageKeys'
 import { isIndustryWelcomePlainText } from '@/constants/industryPresets'
+import { sanitizeChatBubblePlainText } from '@/utils/sanitizeHtml'
 
 /** 刷新后仍能把「分析 Excel」结果随 /api/ai/chat 的 context 带上，避免「加入数据库」落 LLM 空转 */
 export const EXCEL_ANALYSIS_STORAGE_PREFIX = 'xcagi_excel_analysis_ctx_'
 export const CHAT_TASK_PANEL_STORAGE_PREFIX = 'xcagi_chat_task_panel_'
 
-export type TaskStatus = 'queued' | 'running' | 'success' | 'failed' | 'cancelled'
+export type TaskStatus = 'queued' | 'running' | 'paused' | 'success' | 'failed' | 'cancelled'
 
 export interface TaskItem {
   id: string
@@ -156,7 +157,7 @@ export function extractLikelyProductQueryKeyword(raw: string): string | null {
   const t = String(raw || '').trim()
   if (t.length < 2 || t.length > 200) return null
   if (/^(什么|怎么|如何|为什么|能否|请|帮)/.test(t)) return null
-  if (/(出货单|发货单|订单列表|客户列表|工作流|批量|导入|上传|数据库|打印标签|打印\s|有哪些客户|今天.*单)/.test(t)) {
+  if (/(出货单|发货单|送货单|发货记录|出货记录|送货记录|业务记录|订单列表|客户列表|工作流|批量|导入|上传|数据库|打印标签|打印\s|有哪些客户|今天.*单)/.test(t)) {
     return null
   }
   const patterns: RegExp[] = [
@@ -237,11 +238,7 @@ export function clearPersistedTaskPanelState(sessionKey: string): void {
 export const TASK_HISTORY_LIMIT = 20
 
 export function toPlainText(raw: unknown): string {
-  return String(raw || '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/gi, ' ')
-    .trim()
+  return sanitizeChatBubblePlainText(raw)
 }
 
 export function isWelcomeMessage(msg: { role?: unknown; content?: unknown }): boolean {

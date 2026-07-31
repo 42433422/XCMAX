@@ -472,7 +472,12 @@ class TestPrintToolDeep:
                     parse_order_text_fn=_parse_order_text,
                 )
             )
-        assert result["success"] is True
+        # A raw local path is no longer sufficient for a physical print.  The
+        # protected route injects an authenticated owner and a one-click
+        # generated-document capability before this legacy dispatcher runs.
+        assert result["success"] is False
+        assert result["error_code"] == "PRINT_AUTH_REQUIRED"
+        mock_svc.print_document.assert_not_called()
 
     def test_test_printer(self):
         mock_svc = Mock()

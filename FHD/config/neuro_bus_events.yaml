@@ -30,19 +30,33 @@ streams:
         - { type: "run.created",           const: RUN_CREATED,           sla_tier: conscious }
         - { type: "run.completed",         const: RUN_COMPLETED,         sla_tier: conscious, terminal: true }
         - { type: "run.failed",            const: RUN_FAILED,            sla_tier: conscious, terminal: true }
+        - { type: "run.cancelled",         const: RUN_CANCELLED,         sla_tier: conscious, terminal: true }
+        - { type: "run.cancel_requested",  const: RUN_CANCEL_REQUESTED,  sla_tier: conscious }
+        - { type: "run.background_started", const: RUN_BACKGROUND_STARTED, sla_tier: conscious }
+        - { type: "run.paused",            const: RUN_PAUSED,            sla_tier: conscious }
+        - { type: "run.pause_requested",   const: RUN_PAUSE_REQUESTED,   sla_tier: conscious }
+        - { type: "run.queued",            const: RUN_QUEUED,            sla_tier: conscious }
+        - { type: "run.recovered",         const: RUN_RECOVERED,         sla_tier: conscious }
+        - { type: "run.resumed",           const: RUN_RESUMED,           sla_tier: conscious }
+        - { type: "run.retry_requested",   const: RUN_RETRY_REQUESTED,   sla_tier: conscious }
+        - { type: "run.verification_inconclusive", const: RUN_VERIFICATION_INCONCLUSIVE, sla_tier: conscious }
         - { type: "run.continue_ignored",  const: RUN_CONTINUE_IGNORED }
       planner:
         - { type: "planner.started",        const: PLANNER_STARTED }
         - { type: "planner.completed",      const: PLANNER_COMPLETED }
         - { type: "planner.blocked",        const: PLANNER_BLOCKED,      terminal: true }
+        - { type: "planner.degraded",       const: PLANNER_DEGRADED }
       step:
         - { type: "step.blocked",          const: STEP_BLOCKED }
         - { type: "step.waiting_user",      const: STEP_WAITING_USER }
         - { type: "step.approved",         const: STEP_APPROVED }
+        - { type: "step.params_normalized", const: STEP_PARAMS_NORMALIZED }
         - { type: "step.repair_applied",    const: STEP_REPAIR_APPLIED }
         - { type: "step.retry_scheduled",   const: STEP_RETRY_SCHEDULED }
         - { type: "step.llm_repair_requested", const: STEP_LLM_REPAIR_REQUESTED }
         - { type: "step.llm_repair_failed",    const: STEP_LLM_REPAIR_FAILED }
+        - { type: "step.recovered",             const: STEP_RECOVERED }
+        - { type: "step.recovery_confirmation_required", const: STEP_RECOVERY_CONFIRMATION_REQUIRED }
         - { type: "step.repair_rejected",  const: STEP_REPAIR_REJECTED }
       tool:
         - { type: "tool.started",          const: TOOL_STARTED }
@@ -65,6 +79,12 @@ streams:
         - { type: "budget.exceeded",       const: BUDGET_EXCEEDED,     terminal: true }
       observation:
         - { type: "observation.recorded",  const: OBSERVATION_RECORDED }
+      verification:
+        - { type: "verification.verified",     const: VERIFICATION_VERIFIED }
+        - { type: "verification.failed",       const: VERIFICATION_FAILED }
+        - { type: "verification.inconclusive", const: VERIFICATION_INCONCLUSIVE }
+      ledger:
+        - { type: "ledger.updated",         const: LEDGER_UPDATED }
       artifact:
         - { type: "artifact.attached",     const: ARTIFACT_ATTACHED }
       rag:

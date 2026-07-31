@@ -6,9 +6,10 @@
  *       NEURO_BUS_DLQ_FULL / NEURO_BUS_RATE_LIMIT
  *
  * 决策：按 kind 去重，每 kind 出一个动作：
- *   - disk_full → clear_cache (low)
+ *   - disk_full / disk_low → clear_cache (low)
  *   - config_fingerprint_changed → repair_config (medium)
- *   - port_in_use / LLM_RUNTIME_UNAVAILABLE / NEURO_BUS_* → escalate (high)
+ *   - NEURO_BUS_CIRCUIT_OPEN → restart_backend (medium, one attempt)
+ *   - port_in_use / LLM_RUNTIME_UNAVAILABLE / DLQ / rate-limit → escalate (high)
  */
 
 import type { Policy, Signal, Action, Diagnosis } from '../types.js'
@@ -28,6 +29,12 @@ const KIND_TO_ACTION: Record<string, { type: Action['type']; risk: Action['risk'
     max_attempts: 1,
     idempotency_key: 'repair_config:fingerprint_changed',
   },
+  disk_low: {
+    type: 'clear_cache',
+    risk: 'low',
+    max_attempts: 2,
+    idempotency_key: 'clear_cache:disk_low',
+  },
   port_in_use: {
     type: 'escalate',
     risk: 'high',
@@ -41,10 +48,10 @@ const KIND_TO_ACTION: Record<string, { type: Action['type']; risk: Action['risk'
     idempotency_key: 'escalate:llm_unavailable',
   },
   NEURO_BUS_CIRCUIT_OPEN: {
-    type: 'escalate',
-    risk: 'high',
+    type: 'restart_backend',
+    risk: 'medium',
     max_attempts: 1,
-    idempotency_key: 'escalate:neurobus_circuit',
+    idempotency_key: 'restart_backend:neurobus_circuit',
   },
   NEURO_BUS_DLQ_FULL: {
     type: 'escalate',
@@ -58,13 +65,7 @@ const KIND_TO_ACTION: Record<string, { type: Action['type']; risk: Action['risk'
     max_attempts: 1,
     idempotency_key: 'escalate:neurobus_rate_limit',
   },
-  // Phase 1 新增：非代码故障信号 → escalate（AI 不能直接修，必须人工介入）
-  disk_low: {
-    type: 'escalate',
-    risk: 'high',
-    max_attempts: 1,
-    idempotency_key: 'escalate:disk_low',
-  },
+  // 非代码/不可逆故障仍升级人工，不能把告警伪装成自动修复。
   db_corrupt: {
     type: 'escalate',
     risk: 'high',

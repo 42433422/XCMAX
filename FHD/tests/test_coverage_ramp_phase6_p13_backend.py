@@ -1588,13 +1588,12 @@ class TestLLMWorkflowPlannerFallback:
 
     def test_fallback_create_product_english(self) -> None:
         # The intent matcher requires the Chinese token "产品" — English-only
-        # input falls through to generic_workflow. We assert the actual
-        # contract so the behaviour is documented.
+        # input cannot be mapped to a safe business object without the model.
         planner = self._make_planner()
         reg = get_tool_registry()
         plan = planner._fallback_plan("p1", "create product", reg)
-        assert plan.intent == "generic_workflow"
-        assert len(plan.nodes) >= 1
+        assert plan.intent == "clarification_required"
+        assert plan.nodes == []
 
     def test_fallback_create_product_chinese(self) -> None:
         planner = self._make_planner()
@@ -1606,15 +1605,15 @@ class TestLLMWorkflowPlannerFallback:
         planner = self._make_planner()
         reg = get_tool_registry()
         plan = planner._fallback_plan("p1", "查询信息", reg)
-        assert plan.intent == "generic_workflow"
-        assert len(plan.nodes) >= 1
+        assert plan.intent == "clarification_required"
+        assert plan.nodes == []
 
     def test_fallback_no_products_in_registry(self) -> None:
         planner = self._make_planner()
         reg = {"customers": {"actions": {"query": {"risk": "low"}}}}
         plan = planner._fallback_plan("p1", "查询", reg)
-        assert len(plan.nodes) >= 1
-        assert plan.nodes[0].tool_id == "customers"
+        assert plan.intent == "clarification_required"
+        assert plan.nodes == []
 
     def test_fallback_empty_registry(self) -> None:
         planner = self._make_planner()
@@ -1973,7 +1972,8 @@ class TestLLMWorkflowPlannerPlan:
             ):
                 plan = planner.plan("u1", "msg", get_tool_registry())
                 # Should fall back to fallback plan
-                assert plan.intent in ("generic_workflow", "add_product_to_unit")
+                assert plan.intent == "clarification_required"
+                assert plan.nodes == []
 
     def test_plan_react_none_falls_back(self) -> None:
         with patch("app.application.workflow.planner.get_ai_conversation_service"):

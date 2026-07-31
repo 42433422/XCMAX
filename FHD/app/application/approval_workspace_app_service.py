@@ -136,7 +136,26 @@ def _has_pending_ai_workflow(request_no: str | None) -> bool:
     try:
         from app.application.workflow import get_approval_service
 
-        return bool(get_approval_service().get_pending_workflow(approval_request_id))
+        if get_approval_service().get_pending_workflow(approval_request_id):
+            return True
+        with get_db() as db:
+            req = (
+                db.query(ApprovalRequest)
+                .filter(ApprovalRequest.request_no == approval_request_id)
+                .first()
+            )
+            if not req:
+                return False
+            business_data = req.to_dict().get("business_data") or {}
+        agent_run_id = str(
+            business_data.get("agent_run_id") if isinstance(business_data, dict) else ""
+        ).strip()
+        if not agent_run_id:
+            return False
+        from app.application.agent_orchestrator import AgentOrchestrator
+
+        run = AgentOrchestrator().get_run(agent_run_id)
+        return bool(run and run.status == "waiting_user")
     except RECOVERABLE_ERRORS as exc:
         logger.warning(
             "check pending AI workflow failed request_no=%s: %s",
@@ -471,74 +490,9 @@ def _close_request_if_needed(
     return ApprovalStatus.IN_PROGRESS.value, next_node.id
 
 
-def _resume_pending_ai_workflow_after_approval(
-    *, request_no: str, opinion: str
-) -> dict[str, Any] | None:
-    """工作台审批通过后，继续执行由 AI 工作流创建的 pending workflow。"""
-    approval_request_id = str(request_no or "").strip()
-    if not approval_request_id:
-        return None
-    try:
-        from app.application.workflow import WorkflowEngine, get_approval_service
-        from app.fastapi_routes.domains.misc.helpers import _dispatch_tool_for_approval
-
-        approval_service = get_approval_service()
-        approved_in_memory = approval_service.approve(approval_request_id, opinion)
-        workflow_data = approval_service.get_pending_workflow(approval_request_id)
-        if not workflow_data:
-            return None
-
-        plan_obj = workflow_data.get("plan")
-        runtime_ctx = workflow_data.get("runtime_context", {})
-        if not plan_obj:
-            approval_service.remove_pending_workflow(approval_request_id)
-            return {
-                "workflow_executed": False,
-                "approval_request_id": approval_request_id,
-                "approved_in_memory": approved_in_memory,
-                "message": "审批已通过，但缺少可恢复的工作流计划",
-            }
-
-        engine = WorkflowEngine(tool_dispatcher=_dispatch_tool_for_approval)
-        run_result = engine.run(plan=plan_obj, runtime_context=runtime_ctx, max_retries=1)
-        approval_service.remove_pending_workflow(approval_request_id)
-        return {
-            "workflow_executed": True,
-            "approval_request_id": approval_request_id,
-            "approved_in_memory": approved_in_memory,
-            "success": bool(run_result.success),
-            "plan_id": getattr(plan_obj, "plan_id", ""),
-            "intent": getattr(plan_obj, "intent", ""),
-            "message": str(run_result.message or ""),
-            "nodes_executed": len(run_result.node_results or []),
-            "nodes_total": len(getattr(plan_obj, "nodes", []) or []),
-            "node_results": [
-                {
-                    "node_id": item.node_id,
-                    "tool_id": item.tool_id,
-                    "action": item.action,
-                    "success": bool(item.success),
-                    "error": str(item.error or "")[:240],
-                    "retries": int(getattr(item, "retries", 0) or 0),
-                    "retryable": bool(getattr(item, "retryable", True)),
-                    "recovery_hint": str(getattr(item, "recovery_hint", "") or "")[:240],
-                }
-                for item in (run_result.node_results or [])[:10]
-            ],
-        }
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning(
-            "resume pending AI workflow after approval failed request_no=%s: %s",
-            approval_request_id,
-            exc,
-            exc_info=True,
-        )
-        return {
-            "workflow_executed": False,
-            "approval_request_id": approval_request_id,
-            "success": False,
-            "message": f"审批已通过，但恢复 AI 工作流失败：{exc}",
-        }
+from app.application.approval_workflow_resume import (
+    _resume_pending_ai_workflow_after_approval,
+)
 
 
 def _drop_pending_ai_workflow_after_rejection(

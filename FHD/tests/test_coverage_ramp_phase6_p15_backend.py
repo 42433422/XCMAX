@@ -2729,7 +2729,9 @@ class TestTWRPrint:
                 "normal",
                 "",
             )
-            assert result["success"] is True
+            assert result["success"] is False
+            assert result["error_code"] == "PRINT_CAPABILITY_ROUTE_REQUIRED"
+            svc.print_document.assert_not_called()
 
     def test_print_test(self) -> None:
         with patch("app.services.get_printer_service") as mock_get:

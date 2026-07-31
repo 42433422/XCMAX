@@ -493,6 +493,26 @@ def test_agent_orchestrator_uses_tool_spec_risk_over_planner_claim():
     assert step.idempotent is False
 
 
+def test_agent_orchestrator_normalizes_tool_params_before_approval():
+    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
+    from app.application.workflow.types import WorkflowNode
+
+    node = WorkflowNode(
+        node_id="delete_product_198",
+        tool_id="products",
+        action="delete",
+        params={"id": "198"},
+        risk="low",
+        idempotent=True,
+    )
+
+    step = AgentOrchestrator._step_from_node(node)
+
+    assert step.params == {"id": 198}
+    assert step.risk == "high"
+    assert step.idempotent is False
+
+
 def test_agent_orchestrator_starts_from_existing_plan():
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository

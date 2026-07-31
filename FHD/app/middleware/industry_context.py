@@ -70,6 +70,18 @@ def _resolve_tenant_id(user: Any | None) -> int | None:
         return None
 
 
+def _resolve_user_id(user: Any | None) -> int | None:
+    """Expose the authenticated owner id to request-scoped domain services."""
+
+    if user is None:
+        return None
+    try:
+        value = getattr(user, "id", None)
+        return int(value) if value is not None and int(value) > 0 else None
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
 class IndustryContextMiddleware(BaseHTTPMiddleware):
     """每请求注入 ``request.state.industry_id`` 并设置请求 ContextVar。"""
 
@@ -84,11 +96,14 @@ class IndustryContextMiddleware(BaseHTTPMiddleware):
                 user = get_current_user(request)
                 industry_id = _resolve_industry_id(user)
                 tenant_id = _resolve_tenant_id(user)
+                user_id = _resolve_user_id(user)
             except RECOVERABLE_ERRORS:
                 industry_id = DEFAULT_INDUSTRY
                 tenant_id = None
+                user_id = None
             request.state.industry_id = industry_id
             request.state.tenant_id = tenant_id
+            request.state.user_id = user_id
             return await call_next(request)
         finally:
             reset_current_request(token)

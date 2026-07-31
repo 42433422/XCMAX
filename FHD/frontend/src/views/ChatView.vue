@@ -21,7 +21,7 @@
         @approval-confirm="confirmWorkflowFromCard"
         @approval-cancel="cancelWorkflowFromCard"
       />
-      <div v-if="isTaskPaneResizable && hasTaskPanelContent" class="chat-pane-handle-slot">
+      <div v-if="isTaskPaneResizable" class="chat-pane-handle-slot">
         <PaneResizeHandle
           orientation="vertical"
           label="调整任务面板宽度"
@@ -30,7 +30,6 @@
         />
       </div>
       <ChatTaskPanel
-        v-if="hasTaskPanelContent"
         :current-task="currentTask"
         :task-list="taskList"
         :filtered-task-list="filteredTaskList"
@@ -55,6 +54,7 @@
         @set-custom-order-number="setCustomOrderNumber"
         @shipment-download-click="handleShipmentDownloadClick"
         @start-print="startPrintFromTaskCard"
+        @check-print-status="checkPendingShipmentPrintFromTaskCard"
         @switch-view="emitSwitchView"
         @set-task-filter="setTaskFilter"
         @clear-task-history="clearTaskHistory"
@@ -62,6 +62,8 @@
         @open-shipment-records="openShipmentRecordsFromAuditTask"
         @jump-to-task-message="jumpToTaskMessage"
         @retry-task="retryTask"
+        @pause-task-by-id="pauseTaskById"
+        @resume-task-by-id="resumeTaskById"
         @cancel-task-by-id="cancelTaskById"
         @copy-assistant-push="copyAssistantPushContent"
         @open-assistant-float="openAssistantFloatFromTaskPanel"
@@ -278,6 +280,8 @@ const {
   setTaskFilter,
   clearTaskHistory,
   retryTask,
+  pauseTaskById,
+  resumeTaskById,
   cancelTaskById,
   jumpToTaskMessage,
   showHistoryPanel,
@@ -286,6 +290,7 @@ const {
   newConversation,
   handleShipmentDownloadClick,
   startPrintFromTaskCard,
+  checkPendingShipmentPrintFromTaskCard,
   copyAssistantPushContent,
   openAssistantFloatFromTaskPanel,
   syncProModeState,
@@ -397,6 +402,18 @@ const {
   sendDatabaseImportMessage: async (message: string) => {
     messageInput.value = message
     await sendMessage()
+  },
+  openEtlCenter: async (runIds: string[]) => {
+    try {
+      sessionStorage.setItem('xcagi_etl_pending_runs', JSON.stringify(runIds))
+    } catch {
+      /* sessionStorage unavailable */
+    }
+    const runId = runIds[0]
+    await router.push({
+      path: '/business-docking',
+      query: runId ? { run_id: runId } : {},
+    })
   },
 })
 

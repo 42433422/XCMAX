@@ -136,10 +136,12 @@ describe('degradedRemediationPolicy', () => {
     expect(plan.actions[0].type).toBe('escalate')
   })
 
-  it('NEURO_BUS_CIRCUIT_OPEN → escalate', () => {
+  it('NEURO_BUS_CIRCUIT_OPEN → restart_backend once', () => {
     const signals = [makeSignal('NEURO_BUS_CIRCUIT_OPEN', Date.now())]
     const plan = degradedRemediationPolicy.plan(signals)
-    expect(plan.actions[0].type).toBe('escalate')
+    expect(plan.actions[0].type).toBe('restart_backend')
+    expect(plan.actions[0].risk).toBe('medium')
+    expect(plan.actions[0].max_attempts).toBe(1)
   })
 
   it('NEURO_BUS_DLQ_FULL → escalate', () => {
@@ -152,6 +154,13 @@ describe('degradedRemediationPolicy', () => {
     const signals = [makeSignal('NEURO_BUS_RATE_LIMIT', Date.now())]
     const plan = degradedRemediationPolicy.plan(signals)
     expect(plan.actions[0].type).toBe('escalate')
+  })
+
+  it('disk_low → clear_cache (low)', () => {
+    const signals = [makeSignal('disk_low', Date.now())]
+    const plan = degradedRemediationPolicy.plan(signals)
+    expect(plan.actions[0].type).toBe('clear_cache')
+    expect(plan.actions[0].risk).toBe('low')
   })
 
   it('按 kind 去重：同 kind 多条信号只产出一个动作', () => {

@@ -9,8 +9,12 @@ import {
   buildChatMessagesKey,
   buildChatSessionMetaKey,
 } from '@/utils/chatStorageKeys'
-import { asRecord, asArray, asString, asBoolean } from '@/utils/typeGuards'
+import { asRecord, asArray, asString, asBoolean, asNumber } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
+import type {
+  OrchestrationEvidenceKind,
+  OrchestrationTraceStep,
+} from '@/types/orchestration'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
 const VOICE_PLAY_TIMEOUT_MS = 30_000
@@ -211,7 +215,97 @@ export function useChatMessages(sessionId: Ref<string>) {
     if (asArray(row.todoSteps).length) return true
     if (asArray(row.nodeResults).length) return true
     if (row.contextSummary != null && String(row.contextSummary).trim()) return true
+    if (asArray(row.orchestrationTrace).length) return true
     return false
+  }
+
+  function sanitizeOrchestrationTrace(raw: unknown): OrchestrationTraceStep[] {
+    const allowedKinds = new Set<OrchestrationEvidenceKind>([
+      'employee', 'print', 'database_write', 'database_read', 'tool',
+    ])
+    return asArray<Record<string, unknown>>(raw)
+      .map((row) => {
+        const evidence = asRecord(row.evidence)
+        const kind = asString(evidence.kind).trim() as OrchestrationEvidenceKind
+        const id = asString(row.id).trim() || asString(row.eventId).trim()
+        if (!id || !allowedKinds.has(kind)) return null
+        const databases = asArray<Record<string, unknown>>(evidence.databases).map((database) => ({
+          database_id: asString(database.database_id),
+          database_name: asString(database.database_name),
+          runtime_database: asString(database.runtime_database),
+          storage_mode: asString(database.storage_mode),
+          role: asString(database.role),
+          tables: asString(database.tables),
+          active_mod_id: asString(database.active_mod_id),
+        }))
+        const changes = asArray<Record<string, unknown>>(evidence.changes).map((change) => ({
+          database_id: asString(change.database_id),
+          database_name: asString(change.database_name),
+          runtime_database: asString(change.runtime_database),
+          entity: asString(change.entity),
+          operation: asString(change.operation),
+          label: asString(change.label),
+          counts: {
+            created: asNumber(asRecord(change.counts).created, 0),
+            updated: asNumber(asRecord(change.counts).updated, 0),
+            deleted: asNumber(asRecord(change.counts).deleted, 0),
+          },
+          items: asArray<Record<string, unknown>>(change.items).slice(0, 12).map((item) => {
+            const safe: Record<string, unknown> = {}
+            for (const key of ['id', 'name', 'product_name', 'model_number', 'product_code', 'unit', 'qty', 'quantity', 'change_type']) {
+              if (item[key] !== undefined && item[key] !== null) safe[key] = item[key]
+            }
+            return safe
+          }),
+          field_changes: asArray<Record<string, unknown>>(change.field_changes).slice(0, 20).map((field) => ({
+            field: asString(field.field),
+            before: asString(field.before),
+            after: asString(field.after),
+          })),
+        }))
+        const employees = asArray<Record<string, unknown>>(evidence.employees).map((employee) => ({
+          employee_id: asString(employee.employee_id),
+          employee_name: asString(employee.employee_name),
+          task: asString(employee.task),
+          status: asString(employee.status),
+        }))
+        const printRaw = asRecord(evidence.print)
+        return {
+          id,
+          eventId: asString(row.eventId),
+          firstEventId: asString(row.firstEventId),
+          eventType: asString(row.eventType),
+          createdAt: asString(row.createdAt),
+          stepId: asString(row.stepId),
+          nodeId: asString(row.nodeId),
+          status: asString(row.status) || 'observed',
+          message: asString(row.message),
+          evidence: {
+            schema_version: asString(evidence.schema_version),
+            kind,
+            label: asString(evidence.label),
+            status: asString(evidence.status),
+            tool_id: asString(evidence.tool_id),
+            action: asString(evidence.action),
+            databases,
+            changes,
+            employees,
+            ...(evidence.print ? {
+              print: {
+                kind: asString(printRaw.kind),
+                printer_name: asString(printRaw.printer_name),
+                copies: asNumber(printRaw.copies, 1),
+                template: asString(printRaw.template),
+                file_name: asString(printRaw.file_name),
+                job_id: asString(printRaw.job_id),
+              },
+            } : {}),
+            ...(asString(evidence.query) ? { query: asString(evidence.query) } : {}),
+            ...(evidence.result_count !== undefined ? { result_count: asNumber(evidence.result_count, 0) } : {}),
+          },
+        } as OrchestrationTraceStep
+      })
+      .filter((row): row is OrchestrationTraceStep => !!row)
   }
 
   function sanitizeMessageExtras(row: Record<string, unknown>): ChatMessageExtras {
@@ -268,6 +362,9 @@ export function useChatMessages(sessionId: Ref<string>) {
       extras.contextSummary = contextSummary
     }
 
+    const orchestrationTrace = sanitizeOrchestrationTrace(row.orchestrationTrace)
+    if (orchestrationTrace.length) extras.orchestrationTrace = orchestrationTrace
+
     return extras
   }
 
@@ -319,6 +416,7 @@ export function useChatMessages(sessionId: Ref<string>) {
         const streamingShell = asBoolean(row.streamingShell)
         const toolProgressLabel = asString(row.toolProgressLabel).trim()
         if (!hasMeaningfulContent(content) && !streamingShell && !toolProgressLabel) return null
+        const extras = sanitizeMessageExtras(row)
         return {
           role,
           content,
@@ -326,6 +424,7 @@ export function useChatMessages(sessionId: Ref<string>) {
             || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
           ...(streamingShell ? { streamingShell: true } : {}),
           ...(toolProgressLabel ? { toolProgressLabel } : {}),
+          ...extras,
         } as ChatMessage
       })
       .filter((m): m is ChatMessage => !!m)

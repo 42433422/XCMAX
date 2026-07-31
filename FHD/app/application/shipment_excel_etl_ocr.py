@@ -38,13 +38,13 @@ def _cluster_axis(values: list[float], *, threshold: float) -> list[float]:
     return [sum(c) / len(c) for c in clusters]
 
 
-def text_blocks_to_grid(
+def _text_blocks_to_grid_result(
     blocks: list[dict[str, Any]],
     *,
     row_threshold: float | None = None,
     col_threshold: float | None = None,
-) -> list[list[str]]:
-    """将带坐标文本块聚类为二维表格（行优先、列从左到右）。"""
+) -> tuple[list[list[str]], list[dict[str, Any]]]:
+    """Return the clustered grid plus auditable block-to-cell coordinates."""
     cleaned: list[dict[str, Any]] = []
     for raw in blocks or []:
         text = str(raw.get("text") or "").strip()
@@ -59,9 +59,9 @@ def text_blocks_to_grid(
             height = float(raw.get("height") or 0)
             cx = left + width / 2.0
             cy = float(raw.get("y_center") or (top + height / 2.0))
-        cleaned.append({"text": text, "cx": cx, "cy": cy})
+        cleaned.append({"text": text, "cx": cx, "cy": cy, "raw": raw})
     if not cleaned:
-        return []
+        return [], []
 
     ys = [b["cy"] for b in cleaned]
     xs = [b["cx"] for b in cleaned]
@@ -73,16 +73,63 @@ def text_blocks_to_grid(
     row_centers = _cluster_axis(ys, threshold=row_th)
     col_centers = _cluster_axis(xs, threshold=col_th)
     if not row_centers or not col_centers:
-        return []
+        return [], []
 
     grid: list[list[str]] = [["" for _ in col_centers] for _ in row_centers]
+    slots: dict[tuple[int, int], list[dict[str, Any]]] = {}
     for block in cleaned:
         r = min(range(len(row_centers)), key=lambda i: abs(row_centers[i] - block["cy"]))
         c = min(range(len(col_centers)), key=lambda i: abs(col_centers[i] - block["cx"]))
-        prev = grid[r][c]
-        grid[r][c] = f"{prev} {block['text']}".strip() if prev else block["text"]
-    # 去掉全空行
-    return [row for row in grid if any(str(cell).strip() for cell in row)]
+        slots.setdefault((r, c), []).append(block)
+
+    cells: list[dict[str, Any]] = []
+    for (row_index, column_index), parts in slots.items():
+        ordered = sorted(parts, key=lambda item: item["cx"])
+        text = " ".join(part["text"] for part in ordered).strip()
+        grid[row_index][column_index] = text
+        raw_parts = [part["raw"] for part in ordered]
+        confidences = [
+            float(raw.get("confidence", raw.get("score")))
+            for raw in raw_parts
+            if isinstance(raw.get("confidence", raw.get("score")), (int, float))
+        ]
+        lefts = [float(raw.get("left") or 0) for raw in raw_parts]
+        tops = [float(raw.get("top") or 0) for raw in raw_parts]
+        rights = [float(raw.get("left") or 0) + float(raw.get("width") or 0) for raw in raw_parts]
+        bottoms = [float(raw.get("top") or 0) + float(raw.get("height") or 0) for raw in raw_parts]
+        left = min(lefts, default=0.0)
+        top = min(tops, default=0.0)
+        right = max(rights, default=left)
+        bottom = max(bottoms, default=top)
+        cells.append(
+            {
+                "grid_row": row_index + 1,
+                "grid_column": column_index + 1,
+                "text": text,
+                "confidence": min(confidences) if confidences else None,
+                "left": left,
+                "top": top,
+                "width": max(0.0, right - left),
+                "height": max(0.0, bottom - top),
+                "center": [(left + right) / 2.0, (top + bottom) / 2.0],
+            }
+        )
+    return grid, cells
+
+
+def text_blocks_to_grid(
+    blocks: list[dict[str, Any]],
+    *,
+    row_threshold: float | None = None,
+    col_threshold: float | None = None,
+) -> list[list[str]]:
+    """将带坐标文本块聚类为二维表格（行优先、列从左到右）。"""
+    grid, _cells = _text_blocks_to_grid_result(
+        blocks,
+        row_threshold=row_threshold,
+        col_threshold=col_threshold,
+    )
+    return grid
 
 
 def grid_to_workbook_path(
@@ -120,6 +167,58 @@ def grid_to_workbook_path(
     return path
 
 
+def page_grids_to_workbook_path(
+    pages: list[dict[str, Any]],
+    *,
+    base_sheet_name: str = "OCR",
+) -> Path:
+    """把 OCR 多页结果写成逐页工作表，避免不同页面按相同坐标错误叠加。"""
+    from openpyxl import Workbook
+
+    # Always allocate the workbook ourselves.  The public OCR route may receive
+    # an output_path for legacy compatibility, but user input must never select
+    # the file opened by this writer.
+    path = Path(tempfile.mkstemp(prefix="etl_ocr_", suffix=".xlsx")[1]).resolve()
+    workbook = Workbook()
+    workbook.remove(workbook.active)
+    for index, page in enumerate(pages, start=1):
+        raw_name = f"{base_sheet_name[:24]}_P{index}"
+        worksheet = workbook.create_sheet(raw_name[:31])
+        page["sheet_name"] = worksheet.title
+        row_index = 1
+        for line in page.get("meta_lines") or []:
+            text = str(line or "").strip()
+            if text:
+                worksheet.cell(row_index, 1, text)
+                row_index += 1
+        page["data_start_row"] = row_index
+        for cell in page.get("grid_cells") or []:
+            cell["workbook_row"] = row_index + int(cell.get("grid_row") or 1) - 1
+            cell["workbook_column"] = int(cell.get("grid_column") or 1)
+        for row in page.get("grid") or []:
+            for column, value in enumerate(row, start=1):
+                worksheet.cell(row_index, column, value)
+            row_index += 1
+    if not workbook.worksheets:
+        workbook.create_sheet("OCR")
+    workbook.save(path)
+    workbook.close()
+    return path
+
+
+def _safe_ocr_block(raw: dict[str, Any]) -> dict[str, Any]:
+    """仅保留审计所需 OCR 证据，避免把后端对象或提示文本带入执行上下文。"""
+    result: dict[str, Any] = {"text": str(raw.get("text") or "").strip()}
+    for key in ("left", "top", "width", "height", "confidence", "score"):
+        value = raw.get(key)
+        if isinstance(value, (int, float)):
+            result[key] = float(value)
+    center = raw.get("center")
+    if isinstance(center, (tuple, list)) and len(center) >= 2:
+        result["center"] = [float(center[0]), float(center[1])]
+    return result
+
+
 def _load_image_arrays(path: Path) -> list[Any]:
     """返回可 OCR 的图像数组列表（PDF 多页）。"""
     suffix = path.suffix.lower()
@@ -137,13 +236,19 @@ def _load_image_arrays(path: Path) -> list[Any]:
             import pypdfium2 as pdfium
 
             pdf = pdfium.PdfDocument(str(path))
-            pages = []
-            max_pages = int(os.environ.get("FHD_EXCEL_ETL_OCR_MAX_PAGES") or 5)
-            for i in range(min(len(pdf), max(1, max_pages))):
-                page = pdf[i]
-                bitmap = page.render(scale=2).to_pil().convert("RGB")
-                pages.append(np.array(bitmap))
-            return pages
+            try:
+                pages = []
+                max_pages = int(os.environ.get("FHD_EXCEL_ETL_OCR_MAX_PAGES") or 5)
+                for i in range(min(len(pdf), max(1, max_pages))):
+                    page = pdf[i]
+                    try:
+                        bitmap = page.render(scale=2).to_pil().convert("RGB")
+                        pages.append(np.array(bitmap))
+                    finally:
+                        page.close()
+                return pages
+            finally:
+                pdf.close()
         except RECOVERABLE_ERRORS:
             logger.debug("pypdfium2 pdf render unavailable", exc_info=True)
         try:
@@ -163,11 +268,28 @@ def _guess_meta_lines(grid: list[list[str]]) -> list[str]:
     """把疑似抬头行抽成单列文本，便于 buyer regex。"""
     meta: list[str] = []
     for row in grid[:4]:
-        joined = " ".join(str(c).strip() for c in row if str(c).strip())
+        cells = [str(cell).strip() for cell in row if str(cell).strip()]
+        joined = " ".join(cells)
         if not joined:
             continue
-        if re.search(
-            r"客户|购货|收货|联系人|日期|单号|订单|buyer|customer|date|order", joined, re.I
+        header_tokens = sum(
+            bool(
+                re.fullmatch(
+                    r"(客户(?:名称)?|购货单位|产品(?:名称)?|品名|型号|规格|数量|单价|金额|"
+                    r"联系人|电话|地址|日期|单号|订单号|备注)",
+                    cell,
+                    re.I,
+                )
+            )
+            for cell in cells
+        )
+        if len(cells) >= 2 and header_tokens >= 2 and not re.search(r"[:：]", joined):
+            # A real column-header row is table structure, not document metadata.
+            continue
+        if (len(cells) == 1 or bool(re.search(r"[:：]", joined))) and re.search(
+            r"客户|购货|收货|联系人|日期|单号|订单|buyer|customer|date|order",
+            joined,
+            re.I,
         ):
             meta.append(joined)
     return meta[:3]
@@ -195,9 +317,48 @@ def ocr_source_to_workbook(
         ocr = get_ocr_service()
         images = _load_image_arrays(path)
         all_blocks: list[dict[str, Any]] = []
-        for img in images:
+        pages: list[dict[str, Any]] = []
+        for page_number, img in enumerate(images, start=1):
             blocks = ocr.recognize_text_blocks(img) or []
             all_blocks.extend(blocks)
+            grid, grid_cells = _text_blocks_to_grid_result(blocks)
+            if not grid:
+                continue
+            meta_lines = _guess_meta_lines(grid)
+            body = grid
+            body_row_indexes = list(range(1, len(grid) + 1))
+            if meta_lines:
+                selected = [
+                    (index, row)
+                    for index, row in enumerate(grid, start=1)
+                    if " ".join(str(c).strip() for c in row if str(c).strip()) not in meta_lines
+                ]
+                if selected:
+                    body_row_indexes = [index for index, _row in selected]
+                    body = [row for _index, row in selected]
+            row_remap = {
+                original_index: body_index
+                for body_index, original_index in enumerate(body_row_indexes, start=1)
+            }
+            body_cells = [
+                {
+                    **cell,
+                    "grid_row": row_remap[int(cell["grid_row"])],
+                }
+                for cell in grid_cells
+                if int(cell["grid_row"]) in row_remap
+            ]
+            pages.append(
+                {
+                    "page_number": page_number,
+                    "grid": body,
+                    "grid_cells": body_cells,
+                    "meta_lines": meta_lines,
+                    "blocks": [_safe_ocr_block(block) for block in blocks],
+                    "row_count": len(body),
+                    "col_count": max((len(row) for row in body), default=0),
+                }
+            )
         if not all_blocks:
             return {
                 "success": False,
@@ -205,36 +366,26 @@ def ocr_source_to_workbook(
                 "error_code": "ocr_empty",
                 "backend": getattr(ocr, "get_active_ocr_backend", lambda: "unknown")(),
             }
-        grid = text_blocks_to_grid(all_blocks)
-        if not grid:
+        if not pages:
             return {
                 "success": False,
                 "message": "OCR 文本无法聚类成表格",
                 "error_code": "ocr_grid_empty",
             }
-        meta_lines = _guess_meta_lines(grid)
-        # 去掉已抽到 meta 的重复首行，减少干扰
-        body = grid
-        if meta_lines:
-            body = [
-                row
-                for row in grid
-                if " ".join(str(c).strip() for c in row if str(c).strip()) not in meta_lines
-            ] or grid
-        xlsx = grid_to_workbook_path(
-            body,
-            output_path=output_path,
-            sheet_name=path.stem[:28] or "OCR",
-            meta_lines=meta_lines,
+        xlsx = page_grids_to_workbook_path(
+            pages,
+            base_sheet_name=path.stem[:24] or "OCR",
         )
+        meta_lines = [line for page in pages for line in page.get("meta_lines") or []]
         return {
             "success": True,
             "file_path": str(xlsx),
             "source_path": str(path),
             "block_count": len(all_blocks),
-            "row_count": len(body),
-            "col_count": max((len(r) for r in body), default=0),
+            "row_count": sum(int(page["row_count"]) for page in pages),
+            "col_count": max((int(page["col_count"]) for page in pages), default=0),
             "meta_lines": meta_lines,
+            "pages": pages,
             "message": f"OCR 已生成表格 {xlsx.name}",
         }
     except RECOVERABLE_ERRORS as exc:

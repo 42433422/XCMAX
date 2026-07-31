@@ -45,12 +45,20 @@ def verify_employee_run_result(
         if not payload and not payload.get("items") and not payload.get("summary"):
             return False, "员工输出为空"
     summary = str(payload.get("summary") or "").strip()
+    data_receipt = payload.get("data")
+    has_data_receipt = (
+        isinstance(data_receipt, dict)
+        and bool(data_receipt)
+        or isinstance(data_receipt, list)
+        and bool(data_receipt)
+    )
     if (
         require_non_empty
         and not summary
         and not payload.get("items")
         and not payload.get("sheets")
         and not outputs
+        and not has_data_receipt
     ):
-        return False, "缺少 summary/items/sheets"
+        return False, "缺少 summary/items/sheets/outputs/data"
     return True, "ok"

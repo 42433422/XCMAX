@@ -7,6 +7,7 @@ from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_spec import (
     build_tool_specs_v2,
     get_tool_action_spec,
+    normalize_tool_call_params,
     validate_tool_call,
     validate_tool_result,
     validate_tool_spec_fixtures,
@@ -453,6 +454,11 @@ def test_validate_tool_call_checks_schema_types() -> None:
     assert invalid.ok is False
     assert invalid.error_code == "schema_validation_failed"
     assert "payload" in invalid.message
+
+
+def test_normalize_tool_call_params_canonicalizes_unambiguous_scalars() -> None:
+    assert normalize_tool_call_params("products", "delete", {"id": "198"}) == {"id": 198}
+    assert normalize_tool_call_params("products", "delete", {"id": "198x"}) == {"id": "198x"}
 
 
 def test_validate_tool_call_rejects_invalid_document_format() -> None:

@@ -1,8 +1,8 @@
-"""Excel ETL 模板知识库（可学习，非送货单硬编码）。
+"""Excel ETL 兼容知识库（生产运行时只读，非送货单硬编码）。
 
 存储：
-- synonyms / meta_labels：字段同义词（seed + 用户可扩）
-- templates：表头指纹 → 列映射 / 写出版式 / target（运行中学会）
+- synonyms / meta_labels：共享只读字段同义词
+- templates：旧表头指纹兼容预设；新的确认结果写入个人 ETL 模板
 
 默认不读仓库内 YAML 版式；自定义可走 PROFILE_DIR 或本 KB。
 """
@@ -160,14 +160,19 @@ _SEED: dict[str, Any] = {
 def _kb_path() -> Path:
     override = str(os.environ.get("FHD_EXCEL_ETL_KB_PATH") or "").strip()
     if override:
-        return Path(override).expanduser().resolve()
-    try:
-        from app.utils.path_utils import get_data_dir
+        candidate = Path(override).expanduser()
+        # ``Path.resolve`` for a relative override would silently use the
+        # bundled desktop cwd.  Make this a deterministic configuration error.
+        if not candidate.is_absolute():
+            from app.application.shipment_excel_etl_security import (
+                ShipmentEtlRuntimeDataDirError,
+            )
 
-        root = Path(get_data_dir())
-    except RECOVERABLE_ERRORS:
-        root = Path.cwd() / "data"
-    root.mkdir(parents=True, exist_ok=True)
+            raise ShipmentEtlRuntimeDataDirError()
+        return candidate.resolve()
+    from app.application.shipment_excel_etl_security import etl_runtime_data_dir
+
+    root = etl_runtime_data_dir()
     return root / "excel_etl_kb.json"
 
 
@@ -228,8 +233,11 @@ class TemplateMemory:
 
 
 class ExcelEtlKnowledgeBase:
-    def __init__(self, path: Path | None = None) -> None:
+    def __init__(self, path: Path | None = None, *, mutable_for_tests: bool = False) -> None:
         self.path = path or _kb_path()
+        # 通用 ETL 上线后，全局知识库仅作为兼容种子读取。用户确认的学习结果
+        # 必须进入带 tenant_id + owner_user_id 的个人模板，不能再污染全局 JSON。
+        self._mutable_for_tests = mutable_for_tests
         self._data: dict[str, Any] = {}
         self.reload()
 
@@ -301,10 +309,12 @@ class ExcelEtlKnowledgeBase:
         return TemplateMemory.from_dict({**raw, "fingerprint": fp})
 
     def touch(self, fingerprint: str) -> TemplateMemory | None:
-        """命中记账：hit_count +1 并落盘。"""
+        """兼容只读查询；生产运行时不再把命中次数写回全局文件。"""
         mem = self.get_template(fingerprint)
         if mem is None:
             return None
+        if not self._mutable_for_tests:
+            return mem
         mem.hit_count = int(mem.hit_count) + 1
         with _LOCK:
             templates = self._data.setdefault("templates", {})
@@ -320,7 +330,7 @@ class ExcelEtlKnowledgeBase:
 
     def remember(self, memory: TemplateMemory) -> None:
         fp = str(memory.fingerprint or "").strip()
-        if not fp:
+        if not fp or not self._mutable_for_tests:
             return
         with _LOCK:
             templates = self._data.setdefault("templates", {})
@@ -334,6 +344,8 @@ class ExcelEtlKnowledgeBase:
             self.save()
 
     def forget(self, fingerprint: str) -> bool:
+        if not self._mutable_for_tests:
+            return False
         fp = str(fingerprint or "").strip()
         with _LOCK:
             templates = self._data.setdefault("templates", {})
@@ -356,7 +368,7 @@ def get_excel_etl_kb() -> ExcelEtlKnowledgeBase:
 
 def reset_excel_etl_kb_for_tests(path: Path | None = None) -> ExcelEtlKnowledgeBase:
     global _KB
-    _KB = ExcelEtlKnowledgeBase(path=path)
+    _KB = ExcelEtlKnowledgeBase(path=path, mutable_for_tests=True)
     return _KB
 
 

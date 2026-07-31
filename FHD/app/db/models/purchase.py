@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -36,9 +36,16 @@ class Supplier(TenantScopedMixin, Base):
 
 class PurchaseOrder(TenantScopedMixin, Base):
     __tablename__ = "purchase_orders"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "order_no",
+            name="uq_purchase_orders_tenant_order_no",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    order_no: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    order_no: Mapped[str] = mapped_column(String(50), nullable=False)
     supplier_id: Mapped[int] = mapped_column(Integer, ForeignKey("suppliers.id"), nullable=False)
     warehouse_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("warehouses.id"))
     order_date: Mapped[date] = mapped_column(Date, nullable=False)

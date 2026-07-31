@@ -13,7 +13,10 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 
 
-class AIChatInstantToolsMixin:
+from app.application.ai_chat.shipment_instant_tools import AIChatShipmentInstantToolsMixin
+
+
+class AIChatInstantToolsMixin(AIChatShipmentInstantToolsMixin):
     def _execute_pro_mode_tools(
         self,
         response_data: dict[str, Any],
@@ -72,31 +75,35 @@ class AIChatInstantToolsMixin:
 
             effective_products = parsed_products or products_list
             effective_unit_name = parsed_unit_name or unit_name
-            response_data["toolCall"] = {
-                "tool_id": tool_key,
-                "action": "执行",
-                "params": {
-                    "order_text": order_text,
-                    **parsed_params,
-                    **ai_result.get("data", {}),
-                    "products": effective_products,
+            if not effective_products and (model_number or slots.get("product_name")):
+                product_slot: dict[str, Any] = {}
+                if model_number:
+                    product_slot["model_number"] = model_number
+                product_name = str(slots.get("product_name") or "").strip()
+                if product_name:
+                    product_slot["name"] = product_name
+                if tin_spec not in (None, ""):
+                    product_slot["tin_spec"] = tin_spec
+                if quantity_tins not in (None, ""):
+                    product_slot["quantity_tins"] = quantity_tins
+                effective_products = [product_slot]
+            # A pro-mode shortcut is still a natural-language request, not an
+            # already-authorized document write.  Return the same explicit
+            # confirmation card as normal chat; only its button may call the
+            # legacy shipment execution endpoint.
+            return self._build_shipment_confirmation_preview(
+                response_data,
+                parsed_params,
+                ai_result,
+                slots=slots,
+                original_message=original_message,
+                order_text=order_text,
+                parsed_order={
+                    "success": bool(effective_unit_name and effective_products),
                     "unit_name": effective_unit_name,
-                    "template_id": slots.get("template_id") or parsed_params.get("template_id"),
-                    "template_name": (
-                        slots.get("template_name")
-                        or slots.get("template")
-                        or parsed_params.get("template_name")
-                        or parsed_params.get("template")
-                    ),
-                    "preferred_template": (
-                        slots.get("preferred_template")
-                        or slots.get("template")
-                        or parsed_params.get("preferred_template")
-                    ),
+                    "products": effective_products,
                 },
-            }
-            response_data["response"] = ai_result.get("text", "")
-            return response_data
+            )
         else:
             response_data["toolCall"] = {
                 "tool_id": tool_key,
@@ -117,10 +124,21 @@ class AIChatInstantToolsMixin:
         parsed_params: dict[str, Any],
         ai_result: dict[str, Any],
         result_data: dict[str, Any],
+        slots: dict[str, Any] | None = None,
+        original_message: str = "",
     ) -> dict[str, Any]:
         """执行普通模式工具"""
         if tool_key == "shipment_generate":
-            return self._execute_shipment_generate(response_data, parsed_params, ai_result)
+            # Public chat is preview-first.  Do not call the compatibility
+            # execution primitive here: only the task card's explicit click
+            # reaches the document-generation endpoint.
+            return self._build_shipment_confirmation_preview(
+                response_data,
+                parsed_params,
+                ai_result,
+                slots=slots,
+                original_message=original_message,
+            )
         elif tool_key == "shipments":
             return self._execute_shipments_query(response_data)
         else:
@@ -375,84 +393,3 @@ class AIChatInstantToolsMixin:
             return f"{qty_val}桶{model}规格{spec_val}"
 
         return ""
-
-    def _execute_shipment_generate(
-        self,
-        response_data: dict[str, Any],
-        parsed_params: dict[str, Any],
-        ai_result: dict[str, Any],
-    ) -> dict[str, Any]:
-        """执行发货单生成"""
-        try:
-            from app.application.facades.tools_facade import _parse_order_text
-            from app.bootstrap import get_shipment_app_service
-
-            order_text = parsed_params.get("order_text") or ai_result.get("text", "")
-            parsed = _parse_order_text(order_text)
-
-            if parsed.get("success"):
-                app_service = get_shipment_app_service()
-                doc_result = app_service.generate_shipment_document(
-                    unit_name=parsed.get("unit_name", ""),
-                    products=parsed.get("products") or [],
-                    template_name=(
-                        parsed_params.get("template_name") or parsed_params.get("template")
-                    ),
-                    template_id=parsed_params.get("template_id"),
-                    preferred_template=(
-                        parsed_params.get("preferred_template") or parsed_params.get("template")
-                    ),
-                    date=parsed_params.get("date"),
-                    order_number=parsed_params.get("order_number"),
-                    intent="shipment_generate",
-                    allow_products_from_db=True,
-                    raw_text=order_text,
-                )
-                response_data["data"]["data"] = {"document": doc_result}
-
-                if doc_result.get("success"):
-                    doc_name = doc_result.get("doc_name") or ""
-                    response_data["response"] = (
-                        f"已生成发货单：{doc_name}" if doc_name else "已生成发货单。"
-                    )
-                else:
-                    response_data["response"] = doc_result.get("message", "生成发货单失败")
-            else:
-                response_data["response"] = parsed.get("message", "订单解析失败")
-        except RECOVERABLE_ERRORS as tool_err:
-            logger.error("自动执行 shipment_generate 失败: %s", tool_err, exc_info=True)
-            response_data["response"] = f"生成发货单失败：{str(tool_err)}"
-
-        return response_data
-
-    def _execute_shipments_query(self, response_data: dict[str, Any]) -> dict[str, Any]:
-        """执行发货记录查询"""
-        try:
-            from app.bootstrap import get_shipment_app_service
-
-            app_service = get_shipment_app_service()
-            orders = app_service.get_orders(10) or []
-
-            lines = ["最新出货/订单记录（最近 10 条）："]
-            if not orders:
-                lines.append("暂无订单记录。")
-            else:
-                for o in orders[:10]:
-                    order_no = o.get("order_number") or o.get("order_no") or o.get("id") or ""
-                    customer = (
-                        o.get("customer_name") or o.get("unit_name") or o.get("purchase_unit") or ""
-                    )
-                    date = o.get("date") or o.get("created_at") or ""
-                    amount = (
-                        o.get("total_amount") or o.get("total_amount_yuan") or o.get("amount") or 0
-                    )
-                    status = o.get("status") or "已完成"
-                    lines.append(f"- {order_no} | {customer} | {date} | ¥{amount} | {status}")
-
-            response_data["response"] = "\n".join(lines)
-            response_data["data"]["data"] = {"orders": orders}
-            response_data.pop("toolCall", None)
-        except RECOVERABLE_ERRORS as tool_err:
-            logger.error("即时执行 shipments 失败：%s", tool_err, exc_info=True)
-
-        return response_data

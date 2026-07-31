@@ -34,6 +34,7 @@ from app.infrastructure.persistence.compat_db.writes import (
     products_pg_insert_row,
     products_pg_update_row,
 )
+from app.utils.agent_route_status import agent_route_http_status
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(tags=["xcagi-compat"])
@@ -72,21 +73,7 @@ def _products_compat_agent_user_id(request: Request, payload: dict[str, Any]) ->
 
 
 def _products_compat_status_code(result: dict[str, Any]) -> int:
-    if result.get("success"):
-        return 200
-    status_code = result.get("status_code")
-    if status_code is None:
-        parsed = 0
-    else:
-        try:
-            parsed = int(status_code)
-        except RECOVERABLE_ERRORS:
-            parsed = 0
-    if 400 <= parsed < 600:
-        return parsed
-    if str(result.get("error_code") or "") in {"tool_exception", "http_exception"}:
-        return 500
-    return 200
+    return agent_route_http_status(result, failure_status=200)
 
 
 def _normalize_products_create_payload(payload: dict[str, Any]) -> dict[str, Any]:

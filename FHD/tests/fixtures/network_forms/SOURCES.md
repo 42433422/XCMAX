@@ -11,6 +11,20 @@
 
 可选未入库：filesamples docx/pdf（体积大，脚本可再拉）。
 
+`document_eval_manifest.json` 为整单理解回归清单，覆盖 12 份采购单、送货单、
+报价单、发票、装箱单、考勤表和多工作表。清单只保存公开/脱敏样本的预期业务
+对象、最少单据数和必备字段角色；不保存任何用户文件内容。
+
+只读评测：
+
+```bash
+cd FHD
+.venv/bin/python scripts/evaluate_etl_document_corpus.py --llm auto
+```
+
+发布验收时使用 `--llm on --require-llm`，确保结果确实来自软件账号 LLM，而不是
+确定性降级候选。
+
 ## 测评口径
 
 对每个 xlsx 同时跑三条链路：

@@ -3,7 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 from app.application.agent_orchestrator.run_models import AgentStep
-from app.application.agent_orchestrator.tool_spec import validate_tool_call, validate_tool_result
+from app.application.agent_orchestrator.tool_spec import (
+    normalize_tool_call_params,
+    validate_tool_call,
+    validate_tool_result,
+)
 
 
 class AgentToolExecutor:
@@ -15,7 +19,7 @@ class AgentToolExecutor:
     ) -> dict[str, Any]:
         from app.application.facades.tools_facade import execute_registered_workflow_tool
 
-        params = dict(step.params or {})
+        params = normalize_tool_call_params(step.tool_id, step.action, step.params)
         validation = validate_tool_call(step.tool_id, step.action, params)
         if not validation.ok:
             return {

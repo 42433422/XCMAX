@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 
 from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_utils import get_app_data_dir
 from app.utils.secure_filename import secure_filename
 
 logger = logging.getLogger(__name__)
@@ -21,11 +22,15 @@ router = APIRouter(prefix="/api/upload", tags=["upload"])
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 MAX_CONTENT_LENGTH = 16 * 1024 * 1024
 
-UPLOAD_FOLDER = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-    "uploads",
-    "temp",
-)
+# Compatibility/test override.  A module-relative default would resolve below
+# PyInstaller's ``_MEIPASS`` (inside the signed macOS app bundle).
+UPLOAD_FOLDER: str | None = None
+
+
+def _upload_folder() -> str:
+    if UPLOAD_FOLDER:
+        return UPLOAD_FOLDER
+    return os.path.join(get_app_data_dir(), "uploads", "temp")
 
 
 def _allowed_file(filename: str) -> bool:
@@ -33,7 +38,7 @@ def _allowed_file(filename: str) -> bool:
 
 
 def _ensure_upload_folder() -> None:
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    os.makedirs(_upload_folder(), exist_ok=True)
 
 
 @router.post("/temp")
@@ -42,6 +47,7 @@ async def upload_temp(
 ):
     try:
         _ensure_upload_folder()
+        upload_folder = _upload_folder()
         if file is None:
             return JSONResponse({"success": False, "message": "没有上传文件"}, status_code=400)
         if not file.filename:
@@ -60,7 +66,7 @@ async def upload_temp(
         unique_id = uuid.uuid4().hex[:8]
         ext = original_filename.rsplit(".", 1)[1].lower() if "." in original_filename else "png"
         new_filename = f"{timestamp}_{unique_id}.{ext}"
-        file_path = os.path.join(UPLOAD_FOLDER, new_filename)
+        file_path = os.path.join(upload_folder, new_filename)
 
         content = await file.read()
         if len(content) > MAX_CONTENT_LENGTH:
@@ -92,13 +98,14 @@ async def upload_temp(
 @router.delete("/temp/{filename}")
 def delete_temp_file(filename: str, _user=Depends(get_logged_in_user)):
     try:
+        upload_folder = _upload_folder()
         base_name = os.path.basename(str(filename or "").replace("\\", "/"))
         safe_name = secure_filename(base_name)
         if not safe_name:
             return JSONResponse({"success": False, "message": "非法文件名"}, status_code=400)
-        file_path = os.path.join(UPLOAD_FOLDER, safe_name)
+        file_path = os.path.join(upload_folder, safe_name)
         file_path = os.path.normpath(file_path)
-        if not file_path.startswith(os.path.normpath(UPLOAD_FOLDER)):
+        if not file_path.startswith(os.path.normpath(upload_folder)):
             return JSONResponse({"success": False, "message": "非法路径"}, status_code=400)
         if not os.path.exists(file_path):
             return JSONResponse({"success": False, "message": "文件不存在"}, status_code=404)

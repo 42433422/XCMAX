@@ -12,6 +12,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.application import get_material_application_service
+from app.utils.agent_route_status import agent_route_http_status
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -157,9 +158,7 @@ def add_material(request: Request, data: dict[str, Any] = Body(default_factory=d
             params=data,
             route_path="/api/materials",
         )
-        status = 200 if result.get("success") else 400
-        if result.get("error_code") == "tool_exception":
-            status = 500
+        status = agent_route_http_status(result)
         return JSONResponse(jsonable_encoder(result), status_code=status)
     except RECOVERABLE_ERRORS as e:
         logger.error("添加原材料失败：%s", e)

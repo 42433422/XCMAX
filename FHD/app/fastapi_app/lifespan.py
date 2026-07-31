@@ -58,7 +58,24 @@ async def lifespan(app: FastAPI):
         _initialize_databases_async(app),
     )
 
+    try:
+        from app.application.etl.service import mark_interrupted_runs_on_startup
+
+        recovered = await asyncio.to_thread(mark_interrupted_runs_on_startup, engine)
+        if recovered:
+            logger.warning("ETL startup recovery marked %s in-flight run(s) interrupted", recovered)
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("ETL startup recovery skipped: %s", exc)
+
     mark_startup("lifespan_db_done")
+
+    try:
+        from app.application.agent_orchestrator import start_agent_run_runtime
+
+        recovery = await asyncio.to_thread(start_agent_run_runtime)
+        logger.info("AgentRun 后台执行器已启动: %s", recovery)
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("AgentRun 后台执行器启动失败: %s", exc)
 
     try:
         from app.application.desktop_admin_gate import purge_admin_sessions_on_desktop
@@ -109,6 +126,12 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("🛑 FastAPI 应用关闭中...")
+    try:
+        from app.application.agent_orchestrator import stop_agent_run_runtime
+
+        stop_agent_run_runtime()
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("AgentRun 后台执行器关闭失败: %s", exc)
     if fast_start:
         from app.fastapi_app.deferred_startup import cancel_deferred_heavy_startup
 

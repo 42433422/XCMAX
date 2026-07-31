@@ -1,5 +1,7 @@
 /** Cursor 式聊天气泡展示：剥离泄漏的工具参数 JSON，转为可读 chip。 */
 
+import { sanitizeChatBubblePlainText } from '@/utils/sanitizeHtml'
+
 export type ToolInvocationChip = {
   label: string
   detail?: string
@@ -15,17 +17,7 @@ const ACTION_LABELS: Record<string, string> = {
 }
 
 export function plainTextFromMessageContent(raw: string | undefined | null): string {
-  return String(raw || '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#34;/g, '"')
-    .replace(/&#39;/g, "'")
-    .trim()
+  return sanitizeChatBubblePlainText(raw)
 }
 
 function isToolInvocationObject(obj: Record<string, unknown>): boolean {
@@ -105,6 +97,16 @@ export function stripToolInvocationLeaks(src: string): string {
   return out
 }
 
+/** Remove model reasoning blocks before rendering, persistence, or TTS. */
+export function stripModelReasoningLeaks(src: string): string {
+  let out = String(src || '')
+  out = out.replace(/<think\b[^>]*>[\s\S]*?<\/think\s*>/gi, '\n')
+  out = out.replace(/^[\s\S]*?<\/think\s*>/i, '\n')
+  out = out.replace(/<think\b[^>]*>[\s\S]*$/i, '\n')
+  out = out.replace(/<\/?think\b[^>]*>/gi, '\n')
+  return out.replace(/\n{3,}/g, '\n\n').trim()
+}
+
 const STREAMING_PLACEHOLDER_RE = /^\.{2,3}$|^…$|^---$/
 
 export function isStreamingPlaceholderBody(raw: string | undefined | null): boolean {
@@ -113,16 +115,20 @@ export function isStreamingPlaceholderBody(raw: string | undefined | null): bool
 }
 
 export function hasVisibleChatBubbleBody(raw: string | undefined | null): boolean {
-  const plain = plainTextFromMessageContent(raw)
+  const plain = stripModelReasoningLeaks(
+    plainTextFromMessageContent(stripModelReasoningLeaks(String(raw || ''))),
+  )
   if (isStreamingPlaceholderBody(plain)) return false
-  return !!stripPlannerDisplayMarkers(stripToolInvocationLeaks(plain)).trim()
+  return !!stripPlannerDisplayMarkers(
+    stripToolInvocationLeaks(stripModelReasoningLeaks(plain)),
+  ).trim()
 }
 
 const PLANNER_DISPLAY_MARKERS: RegExp[] = [
   /\[正在调用工具:[^\]\n]+\]/g,
   /【正在调用工具:[^】\n]+】/g,
   /\[正在调用工具:[^\]\n]+(?!\])/g,
-  /【正在调用工具:[^】\n]+(?!\】)/g,
+  /【正在调用工具:[^】\n]+(?!】)/g,
   /\[工具已返回[^\]\n]*\]/g,
   /【工具已返回[^】\n]*】/g,
   /\[工具未成功[^\]\n]*\]/g,
@@ -131,7 +137,7 @@ const PLANNER_DISPLAY_MARKERS: RegExp[] = [
   /【需要授权:[^】\n]+】/g,
   /\[请提供令牌:[^\]\n]+\]/g,
   /【请提供令牌:[^】\n]+】/g,
-  /(?<![\[\【])正在调用工具:[^\s\]\】\n]{1,64}/g,
+  /(?<![[【])正在调用工具:[^\s\]】\n]{1,64}/g,
   /\[工具已返回[^\]\n]*(?!\])/g,
   /（仍在处理中，已等待 \d+ 秒，请稍候…）/g,
   /（正在将 Excel 导入数据库[^）]*）/g,
@@ -152,8 +158,12 @@ export function stripPlannerDisplayMarkers(src: string): string {
 
 /** MessageBody / 流式渲染用的 Markdown 源文本（从气泡 HTML 还原并清洗）。 */
 export function aiMarkdownSourceFromContent(raw: string | undefined | null): string {
-  const plain = plainTextFromMessageContent(raw)
-  return stripPlannerDisplayMarkers(stripToolInvocationLeaks(plain))
+  const plain = stripModelReasoningLeaks(
+    plainTextFromMessageContent(stripModelReasoningLeaks(String(raw || ''))),
+  )
+  return stripPlannerDisplayMarkers(
+    stripToolInvocationLeaks(stripModelReasoningLeaks(plain)),
+  )
 }
 
 export function countThinkingStepLines(steps: string | undefined | null): number {

@@ -124,6 +124,7 @@ class TestRouteNormalModeMessageCustomersQuery:
     def test_customer_keyword_有哪些客户(self):
         result = route_normal_mode_message("有哪些客户")
         assert result["intent"] == "customers_query"
+        assert result["slots"]["keyword"] == ""
 
     def test_customer_keyword_客户名单(self):
         result = route_normal_mode_message("客户名单")
@@ -276,11 +277,16 @@ class TestRouteNormalModeMessageProductQuery:
         result = route_normal_mode_message("检索")
         assert result["intent"] == "product_query"
 
-    def test_product_query_keyword_stripped_to_nonempty(self):
-        """'查询产品' 清理后 keyword='产品'。"""
+    def test_product_query_list_phrase_uses_empty_keyword(self):
+        """纯产品列表话术应展示产品库，而不是搜索名为“产品”的记录。"""
         result = route_normal_mode_message("查询产品")
         assert result["intent"] == "product_query"
-        assert result["slots"].get("keyword") == "产品"
+        assert result["slots"].get("keyword") == ""
+
+    def test_product_query_short_list_phrase_uses_empty_keyword(self):
+        result = route_normal_mode_message("查产品")
+        assert result["intent"] == "product_query"
+        assert result["slots"].get("keyword") == ""
 
     def test_product_query_with_model_signal(self):
         result = route_normal_mode_message("型号:A001")
@@ -779,15 +785,10 @@ class TestBuildCustomersQueryResponseDict:
 
     @staticmethod
     def _patch_customer_service(monkeypatch, mock_svc):
-        """通过 sys.modules 注入 fake 模块，避免触发 app.services 包循环导入。"""
-        import sys
-        import types
-
-        mock_cls = MagicMock(return_value=mock_svc)
-        fake_mod = types.ModuleType("app.services.customers_service")
-        fake_mod.CustomerService = mock_cls  # type: ignore[attr-defined]
-        monkeypatch.setitem(sys.modules, "app.services.customers_service", fake_mod)
-        return mock_cls
+        """替换与 ERP 路由同源的客户应用服务入口。"""
+        mock_get = MagicMock(return_value=mock_svc)
+        monkeypatch.setattr("app.bootstrap.get_customer_app_service", mock_get)
+        return mock_get
 
     def test_non_customers_query_returns_none(self):
         result = build_customers_query_response_dict({"intent": "shipment", "slots": {}})
@@ -796,7 +797,7 @@ class TestBuildCustomersQueryResponseDict:
     def test_with_keyword_no_customers(self, monkeypatch):
         route = {"intent": "customers_query", "slots": {"keyword": "不存在客户"}}
         mock_svc = MagicMock()
-        mock_svc.search.return_value = []
+        mock_svc.get_all.return_value = {"success": True, "data": [], "total": 0}
         self._patch_customer_service(monkeypatch, mock_svc)
         result = build_customers_query_response_dict(route)
         assert result["success"] is True
@@ -805,10 +806,14 @@ class TestBuildCustomersQueryResponseDict:
     def test_with_keyword_has_customers(self, monkeypatch):
         route = {"intent": "customers_query", "slots": {"keyword": "七彩"}}
         mock_svc = MagicMock()
-        mock_svc.search.return_value = [
-            {"customer_name": "七彩乐园", "contact_person": "张三"},
-            {"customer_name": "七彩集团", "contact_person": "李四"},
-        ]
+        mock_svc.get_all.return_value = {
+            "success": True,
+            "data": [
+                {"customer_name": "七彩乐园", "contact_person": "张三"},
+                {"customer_name": "七彩集团", "contact_person": "李四"},
+            ],
+            "total": 2,
+        }
         self._patch_customer_service(monkeypatch, mock_svc)
         result = build_customers_query_response_dict(route)
         assert result["success"] is True
@@ -817,7 +822,7 @@ class TestBuildCustomersQueryResponseDict:
     def test_no_keyword_uses_get_all_empty(self, monkeypatch):
         route = {"intent": "customers_query", "slots": {"keyword": ""}}
         mock_svc = MagicMock()
-        mock_svc.get_all.return_value = []
+        mock_svc.get_all.return_value = {"success": True, "data": [], "total": 0}
         self._patch_customer_service(monkeypatch, mock_svc)
         result = build_customers_query_response_dict(route)
         assert result["success"] is True
@@ -826,7 +831,11 @@ class TestBuildCustomersQueryResponseDict:
     def test_no_keyword_uses_get_all_with_customers(self, monkeypatch):
         route = {"intent": "customers_query", "slots": {"keyword": ""}}
         mock_svc = MagicMock()
-        mock_svc.get_all.return_value = [{"customer_name": "客户A", "contact_person": "联系人A"}]
+        mock_svc.get_all.return_value = {
+            "success": True,
+            "data": [{"customer_name": "客户A", "contact_person": "联系人A"}],
+            "total": 1,
+        }
         self._patch_customer_service(monkeypatch, mock_svc)
         result = build_customers_query_response_dict(route)
         assert result["success"] is True
@@ -835,7 +844,7 @@ class TestBuildCustomersQueryResponseDict:
     def test_customers_not_list_returns_empty(self, monkeypatch):
         route = {"intent": "customers_query", "slots": {"keyword": ""}}
         mock_svc = MagicMock()
-        mock_svc.get_all.return_value = "not a list"
+        mock_svc.get_all.return_value = {"success": True, "data": "not a list", "total": 0}
         self._patch_customer_service(monkeypatch, mock_svc)
         result = build_customers_query_response_dict(route)
         assert result["success"] is True
@@ -843,13 +852,9 @@ class TestBuildCustomersQueryResponseDict:
 
     def test_service_failure_returns_error(self, monkeypatch):
         route = {"intent": "customers_query", "slots": {"keyword": "x"}}
-        mock_cls = MagicMock(side_effect=RuntimeError("service down"))
-        import sys
-        import types
-
-        fake_mod = types.ModuleType("app.services.customers_service")
-        fake_mod.CustomerService = mock_cls  # type: ignore[attr-defined]
-        monkeypatch.setitem(sys.modules, "app.services.customers_service", fake_mod)
+        mock_svc = MagicMock()
+        mock_svc.get_all.side_effect = RuntimeError("service down")
+        self._patch_customer_service(monkeypatch, mock_svc)
         result = build_customers_query_response_dict(route)
         assert result["success"] is False
         assert "暂时不可用" in result["response"]
@@ -861,7 +866,7 @@ class TestBuildCustomersQueryResponseDict:
             {"customer_name": f"客户{i}", "contact_person": f"联系人{i}"} for i in range(15)
         ]
         mock_svc = MagicMock()
-        mock_svc.get_all.return_value = customers
+        mock_svc.get_all.return_value = {"success": True, "data": customers, "total": 15}
         self._patch_customer_service(monkeypatch, mock_svc)
         result = build_customers_query_response_dict(route)
         assert result["success"] is True

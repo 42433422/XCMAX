@@ -77,6 +77,7 @@ describe('platformShellMode constants', () => {
   it('SHELL_CORE_MENU_KEYS contains expected core keys', () => {
     expect(SHELL_CORE_MENU_KEYS.has('chat')).toBe(true)
     expect(SHELL_CORE_MENU_KEYS.has('persy-knowledge')).toBe(true)
+    expect(SHELL_CORE_MENU_KEYS.has('business-docking')).toBe(true)
     expect(SHELL_CORE_MENU_KEYS.has('settings')).toBe(true)
     expect(SHELL_CORE_MENU_KEYS.has('mod-store')).toBe(true)
     expect(SHELL_CORE_MENU_KEYS.has('login')).toBe(true)

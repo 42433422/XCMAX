@@ -43,6 +43,7 @@ server-api = [
     "scikit-learn>=1.3.0",
     "openai>=1.40.0",
     "tenacity>=8.2.0",
+    "keyring>=25.0.0",
     "prometheus_client>=0.19.0",
     "psutil>=5.9.0",
     "protobuf>=4.25.0",
@@ -164,6 +165,70 @@ ignore = [
 "app/application/neuro_commands/**" = ["F403", "F405", "F401", "F821"]
 "app/utils/__init__.py" = ["F403", "F405", "F401", "F821"]
 "app/legacy/**" = ["BLE001"]
+
+# These parent modules intentionally expose imported dependencies to extracted
+# compatibility modules through app.utils.mixin_module_sync.
+"app/application/agent_orchestrator/chat_trace.py" = ["F401"]
+"app/application/agent_orchestrator/orchestrator.py" = ["F401"]
+"app/application/ai_chat/shipment_instant_tools.py" = ["F401"]
+"app/application/ai_chat_helpers.py" = ["F401"]
+"app/application/etl/document_fallback.py" = ["F401"]
+"app/application/etl/document_understanding.py" = ["F401"]
+"app/application/etl/llm_assist.py" = ["F401"]
+"app/application/etl/llm_document_advice.py" = ["F401", "F821"]
+"app/application/etl/parser_regions.py" = ["F401"]
+"app/application/etl/service_preview.py" = ["F401"]
+"app/application/etl/service_preview_document_plan.py" = ["F401"]
+"app/application/etl/service_preview_materialization.py" = ["F401"]
+"app/application/etl/shipment_preview_fallback.py" = ["F401"]
+"app/application/etl/targets/orders.py" = ["F401"]
+"app/application/etl/targets/shipments.py" = ["F401"]
+"app/application/normal_chat_dispatch.py" = ["F401"]
+"app/application/planner_compat_service.py" = ["F401"]
+"app/application/print_authorization.py" = ["F401"]
+"app/application/shipment_template_resolve.py" = ["F401"]
+"app/application/workflow/planner.py" = ["F401"]
+"app/fastapi_routes/domains/conversation/helpers.py" = ["F401"]
+"app/fastapi_routes/domains/system/routes.py" = ["F401"]
+"app/fastapi_routes/shipment_orders.py" = ["F401"]
+"app/fastapi_routes/xcagi_compat_chat_helpers.py" = ["F401"]
+"app/infrastructure/documents/shipment_document_generator_impl.py" = ["F401", "BLE001"]
+"app/services/shipment_number_mode_service.py" = ["F401"]
+"app/infrastructure/shipment_number_resolution.py" = ["F401"]
+"app/services/tools_execution/order_parser.py" = ["F401", "BLE001"]
+"app/services/tools_workflow_registered.py" = ["F401"]
+"app/utils/print_cups_execution.py" = ["F401"]
+"app/utils/print_cups_status.py" = ["F401"]
+"app/utils/print_file_execution.py" = ["F401"]
+"app/utils/print_utils.py" = ["F401", "BLE001"]
+
+# Extracted functions resolve these globals from their public parent module at
+# invocation time so existing monkeypatch and host-injection boundaries remain stable.
+"app/application/agent_orchestrator/chat_trace_legacy_tools.py" = ["F821"]
+"app/application/agent_orchestrator/orchestrator_repair.py" = ["F821"]
+"app/application/ai_chat_agent_bridge.py" = ["F821"]
+"app/application/ai_chat_durable_workflow.py" = ["F821"]
+"app/application/ai_chat_single_payload.py" = ["F821"]
+"app/application/approval_workflow_resume.py" = ["F821"]
+"app/application/etl/llm_document_evidence.py" = ["F821"]
+"app/application/etl/llm_runtime.py" = ["F821"]
+"app/application/etl/llm_tabular_advice.py" = ["F821"]
+"app/application/etl/parser_region_execution.py" = ["F821"]
+"app/application/etl/parser_region_finalize.py" = ["F821"]
+"app/application/etl/preview_layout_candidates.py" = ["F821"]
+"app/application/normal_chat_actions.py" = ["F821"]
+"app/application/planner_compat_streaming.py" = ["F821"]
+"app/application/shipment_template_private_layout.py" = ["F821"]
+"app/application/workflow/planner_business_intent.py" = ["F821"]
+"app/application/workflow/planner_llm_support.py" = ["F821"]
+"app/fastapi_routes/domains/conversation/streaming.py" = ["F821"]
+"app/fastapi_routes/domains/system/agent_helpers.py" = ["F821"]
+"app/fastapi_routes/shipment_order_agent_helpers.py" = ["F821"]
+"app/fastapi_routes/xcagi_compat_error_helpers.py" = ["F821"]
+"app/infrastructure/documents/shipment_document_legacy_adapter.py" = ["F821"]
+"app/infrastructure/order_text_parser.py" = ["F821", "BLE001"]
+"app/infrastructure/tools_payload_print.py" = ["F821"]
+"app/infrastructure/tools_workflow_business_db.py" = ["F821"]
 "app/traditional_mode_fs.py" = ["BLE001"]
 # CI 自治脚本：网络/IO/LLM 调用全 fail-open（设计约束：不阻断主流程）
 "scripts/ci/ai_self_heal.py" = ["BLE001", "UP015"]
@@ -172,11 +237,8 @@ ignore = [
 # 顶层兜底 catch-all（已记录日志）：裸 except: 已统一改为 except Exception: 后由 BLE001 接管，
 # 这些 I/O / 文档生成 / 意图识别热路径的 catch-all 属合理设计，显式登记免噪。
 "app/utils/printer_automation.py" = ["BLE001"]
-"app/utils/print_utils.py" = ["BLE001"]
 "app/infrastructure/documents/sales_contract_generator.py" = ["BLE001"]
-"app/infrastructure/documents/shipment_document_generator_impl.py" = ["BLE001"]
 "app/services/deepseek_intent_service.py" = ["BLE001"]
-"app/services/tools_execution/order_parser.py" = ["BLE001"]
 "app/services/skills/label_template_generator/label_template_generator.py" = ["BLE001"]
 "resources/tools_legacy/**" = ["BLE001", "E722"]
 "app/infrastructure/gateways/product.py" = ["F822"]

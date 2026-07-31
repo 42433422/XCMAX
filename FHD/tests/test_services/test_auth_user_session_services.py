@@ -69,6 +69,20 @@ def test_auth_service_authenticate_unknown_user(mock_get_db, _audit):
     assert "用户名" in out["message"]
 
 
+@patch("app.services.auth_service.get_db")
+def test_enterprise_user_inherits_operator_permissions(mock_get_db):
+    mock_db = MagicMock()
+    role = MagicMock()
+    role.permissions = [MagicMock(code="etl.read"), MagicMock(code="etl.execute")]
+    mock_db.query.return_value.filter.return_value.first.return_value = role
+    mock_get_db.return_value = _db_cm(mock_db)
+    user = MagicMock(role="user", tier="enterprise")
+
+    permissions = AuthService().get_user_permissions(user)
+
+    assert permissions == ["etl.read", "etl.execute"]
+
+
 @patch("app.services.user_service.get_db")
 def test_user_service_create_user_duplicate(mock_get_db):
     mock_db = MagicMock()

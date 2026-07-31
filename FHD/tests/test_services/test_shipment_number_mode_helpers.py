@@ -12,6 +12,9 @@ class TestShipmentNumberModeHelpers:
         assert "家具" not in out
         assert len(out) > 0
 
+    def test_normalize_unit_name_strips_parenthetical_etl_alias(self):
+        assert ShipmentNumberModeService._normalize_unit_name("金汉武（宾驰）") == "金汉武"
+
     def test_normalize_empty(self):
         assert ShipmentNumberModeService._normalize_unit_name("") == ""
         assert ShipmentNumberModeService._normalize_unit_name("   ") == ""
@@ -26,6 +29,20 @@ class TestShipmentNumberModeHelpers:
         pool = ["成都七彩乐园家具有限公司", "蕊芯化工"]
         hit = svc._resolve_unit_alias("七彩乐园", pool)
         assert hit == "成都七彩乐园家具有限公司"
+
+    def test_resolve_unit_alias_accepts_short_and_parenthetical_etl_alias(self):
+        svc = ShipmentNumberModeService()
+        pool = ["金汉武家私"]
+
+        assert svc._resolve_unit_alias("金汉武", pool) == "金汉武家私"
+        assert svc._resolve_unit_alias("金汉武（宾驰）", pool) == "金汉武家私"
+
+    def test_resolve_unit_alias_rejects_longer_qualified_customer_name(self):
+        svc = ShipmentNumberModeService()
+        pool = ["金汉武家私"]
+
+        assert svc._resolve_unit_alias("金汉武鼎丰：国邦", pool) == ""
+        assert svc._resolve_unit_alias("金汉武三江源", pool) == ""
 
     def test_resolve_unit_alias_strips_qty_tail(self):
         svc = ShipmentNumberModeService()

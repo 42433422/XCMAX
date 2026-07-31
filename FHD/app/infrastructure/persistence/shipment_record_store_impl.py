@@ -80,7 +80,7 @@ class SQLAlchemyShipmentRecordStore(ShipmentRecordStorePort):
                 parsed_data=parsed_data_json,
             )
             db.add(record)
-            db.commit()
-            db.refresh(record)
+            db.flush()
+            record_id = int(record.id)
 
-        return {"success": True, "record_id": record.id}
+        return {"success": True, "record_id": record_id}

@@ -412,6 +412,40 @@ class TestUnifiedChatSinglePayload:
             result = unified_chat_single_payload("发货单", "user1", "127.0.0.1", "normal", None)
             assert result["success"] is True
 
+    def test_shipment_intent_passes_only_trusted_owner_to_preview_builder(self):
+        with (
+            patch("app.utils.ai_helpers.is_pro_source", return_value=False),
+            patch("app.utils.ai_helpers.is_professional_mode", return_value=False),
+            patch("app.utils.ai_helpers.is_qclaw_source", return_value=False),
+            patch(
+                "app.application.normal_chat_dispatch.route_normal_mode_message",
+                return_value={"intent": "shipment"},
+            ),
+            patch(
+                "app.application.facades.tools_facade._parse_order_text",
+                return_value={
+                    "success": True,
+                    "unit_name": "TestUnit",
+                    "products": [{"model_number": "M1"}],
+                },
+            ),
+            patch(
+                "app.application.ai_chat_helpers.build_shipment_preview_response_dict",
+                return_value={"success": True, "task": {"type": "shipment_generate"}},
+            ) as build_preview,
+        ):
+            result = unified_chat_single_payload(
+                "发货单",
+                "client-supplied-session",
+                "127.0.0.1",
+                "normal",
+                None,
+                authenticated_owner_user_id=42,
+            )
+
+        assert result["success"] is True
+        assert build_preview.call_args.kwargs["authenticated_owner_user_id"] == 42
+
     def test_shipment_intent_parse_fails(self):
         with (
             patch("app.utils.ai_helpers.is_pro_source", return_value=False),

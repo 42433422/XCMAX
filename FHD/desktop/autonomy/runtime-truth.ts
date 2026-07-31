@@ -22,6 +22,17 @@ export function diskUsagePercent(dirPath: string): number {
   }
 }
 
+/** 可用磁盘空间（MB）；采集失败时返回 undefined，不产生 disk_low 误报。 */
+export function diskFreeMegabytes(dirPath: string): number | undefined {
+  try {
+    const stat = fs.statfsSync(dirPath)
+    const bytes = stat.bavail * stat.bsize
+    return Math.max(0, Math.floor(bytes / (1024 * 1024)))
+  } catch {
+    return undefined
+  }
+}
+
 /** 计算配置文件指纹（md5 截断 12 位） */
 export function computeConfigFingerprint(configPath: string | null): string {
   if (!configPath) return ''
@@ -45,10 +56,16 @@ export function computeConfigFingerprint(configPath: string | null): string {
 export function resolveNeurobus(status: unknown): RuntimeTruthSnapshot['neurobus'] {
   if (!status || typeof status !== 'object') return undefined
   const s = status as Record<string, unknown>
+  const reliability = s.reliability && typeof s.reliability === 'object'
+    ? s.reliability as Record<string, unknown>
+    : {}
+  const dlq = s.dead_letter_queue && typeof s.dead_letter_queue === 'object'
+    ? s.dead_letter_queue as Record<string, unknown>
+    : {}
   return {
-    available: Boolean(s.available ?? false),
-    circuit_open: Boolean(s.circuit_open ?? false),
-    dlq_size: Number(s.dlq_size ?? 0),
+    available: Boolean(s.available ?? s.running ?? s.status === 'healthy'),
+    circuit_open: Boolean(s.circuit_open ?? reliability.circuit_open ?? false),
+    dlq_size: Number(s.dlq_size ?? s.current_size ?? dlq.current_size ?? 0),
   }
 }
 

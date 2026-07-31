@@ -182,6 +182,85 @@ describe('main — resolveDesktopBackendBindHost', () => {
   })
 })
 
+describe('main — resolveDesktopUserDataPath', () => {
+  const savedProbe = process.env.XCAGI_DESKTOP_ACCEPTANCE_PROBE
+  const savedTest = process.env.XCAGI_DESKTOP_TEST
+  const savedUserData = process.env.XCAGI_DESKTOP_USER_DATA_DIR
+
+  afterEach(() => {
+    if (savedProbe === undefined) delete process.env.XCAGI_DESKTOP_ACCEPTANCE_PROBE
+    else process.env.XCAGI_DESKTOP_ACCEPTANCE_PROBE = savedProbe
+    if (savedTest === undefined) delete process.env.XCAGI_DESKTOP_TEST
+    else process.env.XCAGI_DESKTOP_TEST = savedTest
+    if (savedUserData === undefined) delete process.env.XCAGI_DESKTOP_USER_DATA_DIR
+    else process.env.XCAGI_DESKTOP_USER_DATA_DIR = savedUserData
+  })
+
+  it('defaults to appData/XCAGI', async () => {
+    delete process.env.XCAGI_DESKTOP_ACCEPTANCE_PROBE
+    delete process.env.XCAGI_DESKTOP_TEST
+    delete process.env.XCAGI_DESKTOP_USER_DATA_DIR
+    const { resolveDesktopUserDataPath } = await import('./main.js')
+    expect(resolveDesktopUserDataPath('/tmp/app-data')).toBe('/tmp/app-data/XCAGI')
+  })
+
+  it('ignores userData override outside acceptance/test mode', async () => {
+    delete process.env.XCAGI_DESKTOP_ACCEPTANCE_PROBE
+    delete process.env.XCAGI_DESKTOP_TEST
+    process.env.XCAGI_DESKTOP_USER_DATA_DIR = '/tmp/xcagi-probe-user-data'
+    const { resolveDesktopUserDataPath } = await import('./main.js')
+    expect(resolveDesktopUserDataPath('/tmp/app-data')).toBe('/tmp/app-data/XCAGI')
+  })
+
+  it('uses an absolute override for acceptance probes', async () => {
+    process.env.XCAGI_DESKTOP_ACCEPTANCE_PROBE = '1'
+    delete process.env.XCAGI_DESKTOP_TEST
+    process.env.XCAGI_DESKTOP_USER_DATA_DIR = 'tmp/xcagi-probe-user-data'
+    const { resolveDesktopUserDataPath } = await import('./main.js')
+    expect(resolveDesktopUserDataPath('/tmp/app-data')).toBe(
+      path.resolve('tmp/xcagi-probe-user-data')
+    )
+  })
+})
+
+describe('main — buildDesktopBackendEnv', () => {
+  it('forces desktop SQLite instead of inherited DATABASE_URL', async () => {
+    const { buildDesktopBackendEnv } = await import('./main.js')
+    const env = buildDesktopBackendEnv(
+      {
+        DATABASE_URL: 'postgresql+psycopg://xcagi:xcagi@localhost:5432/xcagi',
+        VECTOR_DB_URL: 'postgresql+psycopg://xcagi:xcagi@localhost:5432/vector',
+      },
+      '/tmp/xcagi-user-data'
+    )
+
+    expect(env.XCAGI_DESKTOP_MODE).toBe('1')
+    expect(env.XCAGI_DATA_DIR).toBe('/tmp/xcagi-user-data')
+    expect(env.XCAGI_DESKTOP_DATA_DIR).toBe('/tmp/xcagi-user-data')
+    expect(env.DATABASE_PATH).toBe('/tmp/xcagi-user-data/data')
+    expect(env.DATABASE_URL).toBe('sqlite:////tmp/xcagi-user-data/data/xcagi.db')
+    expect(env.VECTOR_DB_URL).toBe('sqlite:////tmp/xcagi-user-data/data/xcagi.db')
+  })
+
+  it('keeps explicit desktop database overrides and strips unsupported SOCKS proxy env', async () => {
+    const { buildDesktopBackendEnv } = await import('./main.js')
+    const env = buildDesktopBackendEnv(
+      {
+        XCAGI_DESKTOP_DATABASE_URL: 'sqlite:////custom/xcagi.db',
+        XCAGI_DESKTOP_VECTOR_DB_URL: 'sqlite:////custom/vector.db',
+        HTTP_PROXY: 'http://127.0.0.1:7890',
+        ALL_PROXY: 'socks5://127.0.0.1:1080',
+      },
+      '/tmp/xcagi-user-data'
+    )
+
+    expect(env.DATABASE_URL).toBe('sqlite:////custom/xcagi.db')
+    expect(env.VECTOR_DB_URL).toBe('sqlite:////custom/vector.db')
+    expect(env.HTTP_PROXY).toBe('http://127.0.0.1:7890')
+    expect(env.ALL_PROXY).toBeUndefined()
+  })
+})
+
 describe('main — isPortAvailable', () => {
   it('returns true for a free port', async () => {
     const { isPortAvailable } = await import('./main.js')
@@ -283,6 +362,64 @@ describe('main — OTA proxy PAC', () => {
   })
 })
 
+describe('main — packaged chat transport defaults', () => {
+  const savedNativeStream = process.env.XCAGI_MODSTORE_USE_NATIVE_STREAM
+  const savedFirstTokenTimeout = process.env.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC
+
+  beforeEach(() => {
+    delete process.env.XCAGI_MODSTORE_USE_NATIVE_STREAM
+    delete process.env.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC
+    electronMocks.app.isPackaged = false
+  })
+
+  afterEach(() => {
+    if (savedNativeStream === undefined) delete process.env.XCAGI_MODSTORE_USE_NATIVE_STREAM
+    else process.env.XCAGI_MODSTORE_USE_NATIVE_STREAM = savedNativeStream
+    if (savedFirstTokenTimeout === undefined) delete process.env.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC
+    else process.env.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC = savedFirstTokenTimeout
+    electronMocks.app.isPackaged = false
+  })
+
+  it('uses non-native Modstore streaming with a 75s first-result budget in a package', async () => {
+    const { desktopChatTransportEnv } = await import('./main.js')
+    expect(desktopChatTransportEnv({}, true)).toEqual({
+      XCAGI_MODSTORE_USE_NATIVE_STREAM: '0',
+      XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC: '75',
+    })
+  })
+
+  it('upgrades an inherited legacy 20s first-result budget in a package', async () => {
+    const { desktopChatTransportEnv } = await import('./main.js')
+    expect(
+      desktopChatTransportEnv(
+        { XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC: '20' },
+        true,
+      ),
+    ).toEqual({
+      XCAGI_MODSTORE_USE_NATIVE_STREAM: '0',
+      XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC: '75',
+    })
+  })
+
+  it('preserves explicit operator overrides', async () => {
+    const { desktopChatTransportEnv } = await import('./main.js')
+    expect(
+      desktopChatTransportEnv(
+        {
+          XCAGI_MODSTORE_USE_NATIVE_STREAM: '1',
+          XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC: '75',
+        },
+        true,
+      ),
+    ).toEqual({})
+  })
+
+  it('does not alter source-development transport defaults', async () => {
+    const { desktopChatTransportEnv } = await import('./main.js')
+    expect(desktopChatTransportEnv({}, false)).toEqual({})
+  })
+})
+
 describe('main — ED25519_PUBLIC_KEY_PEM', () => {
   it('is a valid PEM-formatted Ed25519 public key', async () => {
     const { ED25519_PUBLIC_KEY_PEM } = await import('./main.js')
@@ -315,6 +452,7 @@ describe('main — desktopInitialUrl', () => {
 describe('main — readPackagedProductSku', () => {
   beforeEach(() => {
     delete process.env.XCAGI_PRODUCT_SKU
+    delete process.env.FHD_ETL_CENTER_ENABLED
     electronMocks.app.isPackaged = false
   })
 
@@ -400,6 +538,7 @@ describe('main — backendEditionEnv', () => {
     expect(env.XCAGI_GENERIC_EDITION).toBe('1')
     expect(env.XCAGI_PLATFORM_SHELL).toBe('1')
     expect(env.XCAGI_DEFAULT_EDITION).toBe('generic')
+    expect(env.FHD_ETL_CENTER_ENABLED).toBe('0')
   })
 
   it('returns full edition env for enterprise SKU', async () => {
@@ -410,6 +549,7 @@ describe('main — backendEditionEnv', () => {
     expect(env.XCAGI_PLATFORM_SHELL).toBe('0')
     expect(env.XCAGI_DEFAULT_EDITION).toBe('full')
     expect(env.XCAGI_EDITION).toBe('full')
+    expect(env.FHD_ETL_CENTER_ENABLED).toBe('1')
   })
 
   it('returns minimal edition env for personal SKU', async () => {
@@ -421,6 +561,14 @@ describe('main — backendEditionEnv', () => {
     expect(env.XCAGI_DEFAULT_EDITION).toBe('minimal')
     expect(env.XCAGI_EDITION).toBe('minimal')
     expect(env.XCAGI_MINIMAL_EDITION).toBe('1')
+    expect(env.FHD_ETL_CENTER_ENABLED).toBe('0')
+  })
+
+  it('allows staged rollout to override the enterprise ETL flag', async () => {
+    process.env.XCAGI_PRODUCT_SKU = 'enterprise'
+    process.env.FHD_ETL_CENTER_ENABLED = '0'
+    const { backendEditionEnv } = await import('./main.js')
+    expect(backendEditionEnv().FHD_ETL_CENTER_ENABLED).toBe('0')
   })
 })
 
@@ -514,6 +662,36 @@ describe('main — readPackagedAppVersion', () => {
     electronMocks.app.isPackaged = false
     const { readPackagedAppVersion } = await import('./main.js')
     expect(readPackagedAppVersion()).toBe('dev')
+  })
+
+  it('uses the packaged build-info product version for the backend runtime', async () => {
+    const savedResourcesPath = (process as { resourcesPath?: string }).resourcesPath
+    const tmpResources = path.join(
+      os.tmpdir(),
+      `xcagi-test-build-info-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    )
+    fs.mkdirSync(tmpResources, { recursive: true })
+    fs.writeFileSync(
+      path.join(tmpResources, 'build-info.json'),
+      JSON.stringify({ version: '1.0.2.4' }),
+      'utf8',
+    )
+    electronMocks.app.isPackaged = true
+    ;(process as { resourcesPath?: string }).resourcesPath = tmpResources
+
+    try {
+      const { readDesktopRuntimeVersion, readPackagedAppVersion } = await import('./main.js')
+      expect(readPackagedAppVersion()).toBe('1.0.2.4')
+      expect(readDesktopRuntimeVersion()).toBe('1.0.2.4')
+    } finally {
+      electronMocks.app.isPackaged = false
+      if (savedResourcesPath === undefined) {
+        delete (process as { resourcesPath?: string }).resourcesPath
+      } else {
+        ;(process as { resourcesPath?: string }).resourcesPath = savedResourcesPath
+      }
+      fs.rmSync(tmpResources, { recursive: true, force: true })
+    }
   })
 })
 

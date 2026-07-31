@@ -158,16 +158,198 @@ def _build_number_preview_items(unit_name: str, products) -> dict[str, Any]:
     }
 
 
+def _trusted_owner_id(value: Any) -> int | None:
+    """Accept only a server-provided positive owner id for ETL preview reads."""
+
+    try:
+        owner = int(value)
+    except (TypeError, ValueError):
+        return None
+    return owner if owner > 0 else None
+
+
+def _enrich_shipment_preview_from_etl(
+    unit_name: str,
+    products: list[dict[str, Any]],
+    *,
+    authenticated_owner_user_id: int | None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any] | None, list[str]]:
+    """Hydrate only the *display* side of a shipment confirmation card.
+
+    ETL preview rows remain owner-scoped, unexecuted evidence.  The original
+    natural-language product payload is deliberately left untouched because
+    the confirmed tool re-resolves it using the authenticated request owner.
+    This prevents display metadata from becoming a client-controlled write
+    parameter or changing strict number-mode behaviour.
+    """
+
+    owner = _trusted_owner_id(authenticated_owner_user_id)
+    display_products = [dict(product) for product in products if isinstance(product, dict)]
+    if owner is None or not display_products:
+        return display_products, [], None, []
+
+    try:
+        from app.application.etl.shipment_preview_fallback import (
+            find_latest_preview_layout_candidate,
+            resolve_preview_product_candidate,
+        )
+    except RECOVERABLE_ERRORS:
+        return display_products, [], None, []
+
+    evidence: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    for display_product in display_products:
+        product_name = str(
+            display_product.get("name") or display_product.get("product_name") or ""
+        ).strip()
+        if not product_name:
+            continue
+        try:
+            candidate = resolve_preview_product_candidate(
+                owner_user_id=owner,
+                unit_name=unit_name,
+                product_name=product_name,
+            )
+        except RECOVERABLE_ERRORS:
+            continue
+        if not isinstance(candidate, dict):
+            continue
+
+        # Show the proven model/price but do not modify `products` sent to the
+        # confirm endpoint.  The endpoint owns its own authenticated lookup.
+        if not str(
+            display_product.get("model_number") or display_product.get("model") or ""
+        ).strip():
+            model = str(candidate.get("model_number") or "").strip()
+            if model:
+                display_product["model_number"] = model
+        if display_product.get("unit_price") in (None, "") and display_product.get("price") in (
+            None,
+            "",
+        ):
+            if candidate.get("price") not in (None, ""):
+                display_product["unit_price"] = candidate.get("price")
+
+        source_specification = safe_float(candidate.get("specification"))
+        requested_specification = safe_float(
+            display_product.get("tin_spec") or display_product.get("specification")
+        )
+        if (
+            source_specification is not None
+            and requested_specification is not None
+            and abs(source_specification - requested_specification) > 1e-9
+        ):
+            warning = (
+                f"{product_name} 本次规格 {format_money(requested_specification)}kg/桶"
+                f"不同于历史记录 {format_money(source_specification)}kg/桶；"
+                "将只用于本次发货单，不会改写产品默认规格。"
+            )
+            if warning not in warnings:
+                warnings.append(warning)
+
+        provenance = candidate.get("provenance")
+        evidence.append(
+            {
+                "product_name": str(candidate.get("name") or product_name),
+                "model_number": str(candidate.get("model_number") or ""),
+                "unit_price": candidate.get("price"),
+                "source_date": candidate.get("source_date"),
+                "provenance": dict(provenance) if isinstance(provenance, dict) else {},
+            }
+        )
+
+    try:
+        layout = find_latest_preview_layout_candidate(
+            owner_user_id=owner,
+            unit_name=unit_name,
+        )
+    except RECOVERABLE_ERRORS:
+        layout = None
+    return display_products, evidence, layout if isinstance(layout, dict) else None, warnings
+
+
 def build_shipment_preview_response_dict(
-    unit_name: str, products, order_text: str
+    unit_name: str,
+    products,
+    order_text: str,
+    *,
+    order_number: str | None = None,
+    order_number_provenance: dict[str, Any] | None = None,
+    authenticated_owner_user_id: int | None = None,
 ) -> dict[str, Any]:
-    preview = _build_number_preview_items(unit_name, products)
+    """Build a confirmation-only shipment task.
+
+    A manually labelled document number is carried as data on the confirmation
+    payload, never executed at parse time.  The original natural-language text
+    remains present for audit/reparse on the confirmed endpoint.
+    """
+
+    manual_order_number = str(order_number or "").strip()
+    raw_products = [dict(product) for product in (products or []) if isinstance(product, dict)]
+    display_products, etl_product_evidence, etl_layout, etl_warnings = (
+        _enrich_shipment_preview_from_etl(
+            unit_name,
+            raw_products,
+            authenticated_owner_user_id=authenticated_owner_user_id,
+        )
+    )
+    # ``find_latest_preview_layout_candidate`` only returns a layout after its
+    # tenant + owner scoped lookup matched this requested unit.  Use its
+    # evidenced customer spelling on the *card* so an abbreviated chat input
+    # (for example ``金汉武``) is transparent to the user.  Keep the original
+    # parsed unit in ``params`` below: confirmation must re-resolve all ETL
+    # evidence from the authenticated request, never trust display metadata.
+    display_unit_name = (
+        str(etl_layout.get("customer_name") if isinstance(etl_layout, dict) else "").strip()
+        or str(unit_name or "").strip()
+    )
+    preview = _build_number_preview_items(display_unit_name, display_products)
     total_text = (
         f"，预估总价 ¥{format_money(preview['grand_total'])}"
         if preview.get("grand_total") is not None
         else ""
     )
+    order_number_text = f"，单号：{manual_order_number}" if manual_order_number else ""
     items = preview["items"]
+    params: dict[str, Any] = {
+        "order_text": order_text,
+        "unit_name": unit_name,
+        # Preserve only the natural-language parse as executable input.  The
+        # enriched ETL evidence is display-only and is re-read server-side on
+        # confirmation from tenant + owner scoped storage.
+        "products": raw_products,
+        "number_mode": True,
+    }
+    if manual_order_number:
+        params["order_number"] = manual_order_number
+        if isinstance(order_number_provenance, dict):
+            params["order_number_provenance"] = dict(order_number_provenance)
+    response_data: dict[str, Any] = {
+        "routing": "normal_slot_dispatch",
+        "intent": "shipment_preview",
+    }
+    if manual_order_number and isinstance(order_number_provenance, dict):
+        response_data["order_number_provenance"] = dict(order_number_provenance)
+    if etl_product_evidence or etl_layout:
+        response_data["etl_preview"] = {
+            "products": etl_product_evidence,
+            "layout": dict(etl_layout) if etl_layout else None,
+        }
+    description_suffix = ""
+    if display_unit_name and display_unit_name != str(unit_name or "").strip():
+        description_suffix += (
+            f" 已按当前用户的 ETL 预演将“{str(unit_name or '').strip()}”"
+            f"识别为“{display_unit_name}”，确认时会再次校验。"
+        )
+    if etl_product_evidence:
+        description_suffix += " 已按当前用户的 ETL 预演补全型号和单价，确认时会再次校验。"
+    if etl_layout:
+        description_suffix += (
+            f" 已识别发货单版式“{str(etl_layout.get('name') or '').strip()}”，"
+            "仅供本次确认生成使用。"
+        )
+    if etl_warnings:
+        description_suffix += " " + " ".join(etl_warnings)
     return {
         "success": True,
         "message": "已识别订单，请确认执行",
@@ -175,26 +357,21 @@ def build_shipment_preview_response_dict(
         "task": {
             "type": "shipment_generate",
             "title": "发货单预览",
-            "description": f"单位：{unit_name}，共 {len(products or [])} 项{total_text}。确认后将生成并可继续打印。",
+            "description": (
+                f"单位：{display_unit_name}，共 {len(raw_products)} 项{total_text}{order_number_text}。"
+                f"确认后将生成并可继续打印。{description_suffix}"
+            ),
             "items": items,
             "api_url": "/api/tools/execute",
             "method": "POST",
             "payload": {
                 "tool_id": "shipment_generate",
                 "action": "执行",
-                "params": {
-                    "order_text": order_text,
-                    "unit_name": unit_name,
-                    "products": products or [],
-                    "number_mode": True,
-                },
+                "params": params,
             },
             "switch_view": "orders",
         },
-        "data": {
-            "routing": "normal_slot_dispatch",
-            "intent": "shipment_preview",
-        },
+        "data": response_data,
     }
 
 
@@ -240,97 +417,6 @@ def normalize_batch_messages_payload(data: dict[str, Any]) -> list:
     return out
 
 
-def unified_chat_single_payload(
-    message: str,
-    requested_user_id: str,
-    remote_addr: str,
-    source: str,
-    mode: Any,
-    context: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    from app.utils.ai_helpers import is_pro_source, is_professional_mode, is_qclaw_source
-
-    if (is_pro_source(source) or is_professional_mode(mode)) and not is_qclaw_source(source):
-        return {
-            "success": False,
-            "message": "专业版请求禁止使用 /api/ai/unified_chat，请改用 /api/ai/chat",
-            "mode_guard": "normal_only",
-            "_http_status": 400,
-        }
-
-    text = str(message or "").strip()
-    excel_analysis = (context or {}).get("excel_analysis") if isinstance(context, dict) else None
-    if isinstance(excel_analysis, dict) and any(
-        k in text for k in ("数据库", "入库", "导入", "添加到库", "加入")
-    ):
-        from app.application import get_ai_chat_app_service
-
-        ai_chat_service = get_ai_chat_app_service()
-        result = ai_chat_service.process_chat(
-            user_id=_resolve_mode_scoped_user_id(requested_user_id, remote_addr, "normal"),
-            message=message,
-            context=context,
-            source="normal",
-            file_context={},
-        )
-        return result
-
-    from app.application.normal_chat_dispatch import (
-        build_product_query_response_dict,
-        route_normal_mode_message,
-    )
-
-    route_result = route_normal_mode_message(message)
-    route_intent = route_result.get("intent")
-
-    if route_intent == "shipment":
-        try:
-            from app.application.facades.tools_facade import _parse_order_text
-
-            parsed_retry = _parse_order_text(message)
-            if parsed_retry.get("success"):
-                body = build_shipment_preview_response_dict(
-                    parsed_retry.get("unit_name", ""),
-                    parsed_retry.get("products") or [],
-                    message,
-                )
-                return body
-
-            local_msg = parsed_retry.get("message", "订单信息不完整，请补充单位/桶数/型号/规格。")
-            return {
-                "success": True,
-                "message": "处理完成",
-                "response": local_msg,
-                "data": {
-                    "text": local_msg,
-                    "action": "followup",
-                    "data": {"parsed_data": parsed_retry},
-                },
-            }
-        except RECOVERABLE_ERRORS as local_parse_err:
-            logger.error("普通版本地编号解析异常：%s", local_parse_err, exc_info=True)
-            return {
-                "success": False,
-                "message": f"编号模式处理失败：{str(local_parse_err)}",
-                "_http_status": 500,
-            }
-
-    if route_intent == "product_query":
-        body = build_product_query_response_dict(route_result)
-        if body:
-            return body
-
-    return {
-        "success": True,
-        "message": "处理完成",
-        "response": (
-            "普通版里这是两套独立能力，请分开描述："
-            "① 发货单/开单：用编号或口语描述订单（说法里常带「发货单、开单、打印」等）。"
-            "② 产品库查询：查型号、价格（例如「查询七彩乐园的9803」），不会生成发货单。"
-        ),
-        "data": {
-            "text": "普通版：发货单开单 与 产品库查询 为两套独立能力，请分开描述。",
-            "action": "followup",
-            "data": {"mode": "normal_slot_dispatch"},
-        },
-    }
+from app.application.ai_chat_single_payload import (
+    unified_chat_single_payload,
+)

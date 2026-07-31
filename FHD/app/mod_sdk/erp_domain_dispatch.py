@@ -74,10 +74,12 @@ def _resolve_mod_path() -> tuple[str, str] | tuple[None, None]:
 def try_invoke_erp_domain_handler(
     domain: str,
     action: str,
+    *,
+    force: bool = False,
     **kwargs: Any,
 ) -> Any | None:
     """若 Mod 已注册该领域动作则返回结果，否则 None（走宿主路由）。"""
-    if not is_erp_domain_handlers_enabled():
+    if not force and not is_erp_domain_handlers_enabled():
         return None
 
     dom = str(domain or "").strip()
@@ -115,8 +117,8 @@ def try_invoke_erp_domain_handler(
 
 
 def invoke_erp_domain_handler(domain: str, action: str, **kwargs: Any) -> Any:
-    """Mod 门面路由用：优先 Mod handler，失败则抛给调用方 fallback。"""
-    out = try_invoke_erp_domain_handler(domain, action, **kwargs)
+    """Mod 门面路由用：门面已启用时强制解析自身 handler。"""
+    out = try_invoke_erp_domain_handler(domain, action, force=True, **kwargs)
     if out is not None:
         return out
     raise RuntimeError(f"erp domain handler missing: {domain}.{action}")

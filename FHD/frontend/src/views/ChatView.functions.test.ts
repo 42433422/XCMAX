@@ -565,11 +565,11 @@ describe('ChatView task panel layout', () => {
     resetMockRefs()
   })
 
-  it('does not reserve a wide empty task panel before any task exists', async () => {
+  it('keeps the task panel visible before any task exists', async () => {
     const { wrapper } = await mountChatView()
     expect((wrapper.vm as any).hasTaskPanelContent).toBe(false)
-    expect(wrapper.findComponent({ name: 'ChatTaskPanel' }).exists()).toBe(false)
-    expect(wrapper.find('.chat-pane-handle-slot').exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'ChatTaskPanel' }).exists()).toBe(true)
+    expect(wrapper.find('.chat-pane-handle-slot').exists()).toBe(true)
     wrapper.unmount()
   })
 })

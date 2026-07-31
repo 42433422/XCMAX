@@ -109,7 +109,13 @@ _SPECIAL_TEST_FIXTURES: dict[tuple[str, str], list[dict[str, Any]]] = {
         {
             "name": "delete_product",
             "input": {"id": 7},
-            "output": {"success": True, "message": "产品删除成功"},
+            "output": {
+                "success": True,
+                "message": "产品删除成功",
+                "record_id": 7,
+                "deleted": 1,
+                "data": {"id": 7, "exists_after": False},
+            },
         }
     ],
     ("products", "batch_create"): [
@@ -360,7 +366,10 @@ _SPECIAL_TEST_FIXTURES: dict[tuple[str, str], list[dict[str, Any]]] = {
             "input": {},
             "output": {
                 "success": True,
-                "data": [{"employee_id": "quote-agent", "name": "报价员工"}],
+                "data": {
+                    "employee_pack_tools": [{"employee_id": "quote-agent", "name": "报价员工"}],
+                    "installed_employee_pack_count": 1,
+                },
             },
         }
     ],

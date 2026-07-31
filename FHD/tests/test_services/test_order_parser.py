@@ -83,6 +83,91 @@ class TestParseOrderTextWithUnitName:
         result = _parse_order_text("打印一下张三的发货单 编号：ABC-123 规格20 5桶")
         assert isinstance(result, dict)
 
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "打印侯雪梅发货单，编号9803，规格28，3桶",
+            "开单 侯雪梅 编号9803 规格28 3桶",
+            "打单侯雪梅 型号9803 规格28 三桶",
+        ],
+    )
+    def test_delivery_natural_language_keeps_customer_and_product_slots(self, text):
+        result = _parse_order_text(text)
+        assert result["success"] is True
+        assert result["unit_name"] == "侯雪梅"
+        assert result["products"] == [
+            {
+                "name": "",
+                "model_number": "9803",
+                "quantity_tins": 3,
+                "tin_spec": 28.0,
+            }
+        ]
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "打印金汉武发货单，黑棕面用修色精，规格28，3桶",
+            "开单 金汉武，黑棕面用修色精，规格28，3桶",
+        ],
+    )
+    def test_delivery_natural_language_accepts_named_product_without_model(self, text):
+        result = _parse_order_text(text)
+
+        assert result == {
+            "success": True,
+            "unit_name": "金汉武",
+            "products": [
+                {
+                    "name": "黑棕面用修色精",
+                    "quantity_tins": 3,
+                    "tin_spec": 28.0,
+                }
+            ],
+        }
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "给金汉武家私打单：黑棕面用修色精，规格4，3桶，单价48元",
+            "给金汉武家私打印发货单：黑棕面用修色精，3桶，单价48元，规格4",
+        ],
+    )
+    def test_recipient_first_order_keeps_named_product_measurements_and_price(self, text):
+        result = _parse_order_text(text)
+
+        assert result == {
+            "success": True,
+            "unit_name": "金汉武家私",
+            "products": [
+                {
+                    "name": "黑棕面用修色精",
+                    "quantity_tins": 3,
+                    "tin_spec": 4.0,
+                    "unit_price": 48.0,
+                }
+            ],
+        }
+
+    def test_named_product_uses_labelled_number_as_document_number_not_model(self):
+        result = _parse_order_text("打印金汉武发货单，黑棕面用修色精，编号9803，规格28，3桶")
+
+        assert result["success"] is True
+        assert result["unit_name"] == "金汉武"
+        assert result["products"] == [
+            {
+                "name": "黑棕面用修色精",
+                "quantity_tins": 3,
+                "tin_spec": 28.0,
+            }
+        ]
+        assert result["order_number"] == "9803"
+        assert result["order_number_provenance"] == {
+            "kind": "explicit_document_number",
+            "label": "编号",
+            "value": "9803",
+        }
+
 
 class TestParseOrderTextBoxAndKg:
     def test_box_quantity(self):

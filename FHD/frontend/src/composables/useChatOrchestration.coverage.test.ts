@@ -121,6 +121,14 @@ const {
   },
 }))
 
+const authenticatedRequestInitMock = vi.hoisted(() => vi.fn().mockResolvedValue({
+  credentials: 'include',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-CSRF-Token': 'csrf-from-helper',
+  },
+}))
+
 // ── 可控 ref 状态（在 async vi.mock 工厂中赋值到 state） ──────
 let capturedExcelCallbacks: {
   onAnalyzed?: (e: unknown) => void
@@ -370,6 +378,9 @@ vi.mock('@/constants/coreWorkflowMod', () => ({
 }))
 vi.mock('@/fhd/dbTokenHeaders', () => ({
   FHD_DB_WRITE_UNLOCKED_EVENT: 'fhd:db-write-unlocked',
+}))
+vi.mock('@/utils/authenticatedRequest', () => ({
+  authenticatedRequestInit: authenticatedRequestInitMock,
 }))
 
 import { useChatOrchestration } from './useChatOrchestration'
@@ -850,7 +861,7 @@ describe('useChatOrchestration coverage – refetchTaskOrderNumber / setCustomOr
   })
 })
 
-describe('useChatOrchestration coverage – shouldAutoRunTask / scheduleAutoConfirmTask', () => {
+describe('useChatOrchestration coverage – confirmation gate', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorage.clear()
@@ -862,18 +873,38 @@ describe('useChatOrchestration coverage – shouldAutoRunTask / scheduleAutoConf
     vi.useRealTimers()
   })
 
-  it('showTaskConfirm excel_import 类型任务自动确认', () => {
+  it('ETL import preview never executes until the user explicitly confirms', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, message: '导入完成' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
     const api = createApi()
     api.showTaskConfirm({
       type: 'excel_import',
       completed: false,
-      api_url: '/api/import',
+      api_url: '/api/etl/runs/run-1/execute',
+      payload: { run_id: 'run-1' },
     })
     expect(api.currentTask.value).toBeTruthy()
-    vi.advanceTimersByTime(1)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(api.currentTask.value?.completed).not.toBe(true)
+
+    await api.confirmTask()
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/etl/runs/run-1/execute',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ run_id: 'run-1' }) }),
+    )
+    vi.unstubAllGlobals()
   })
 
-  it('showTaskConfirm tool_id 为 import_excel_to_database 时自动确认', () => {
+  it('legacy import tool payload also remains a preview until explicit confirmation', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, message: '导入完成' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
     const api = createApi()
     api.showTaskConfirm({
       type: 'custom',
@@ -881,7 +912,12 @@ describe('useChatOrchestration coverage – shouldAutoRunTask / scheduleAutoConf
       api_url: '/api/import',
       payload: { tool_id: 'import_excel_to_database' },
     })
-    vi.advanceTimersByTime(1)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    await api.confirmTask()
+    expect(fetchMock).toHaveBeenCalledOnce()
+    vi.unstubAllGlobals()
   })
 
   it('showTaskConfirm 已完成任务不自动确认', () => {
@@ -936,6 +972,63 @@ describe('useChatOrchestration coverage – showTaskConfirm shipment_generate', 
     })
     expect((api.currentTask.value as { customOrderNumber: string }).customOrderNumber).toBe('ORD-002')
   })
+
+  it('从 canonical payload.params.order_number 获取已存在单号、不补号但补全预览', () => {
+    const api = createApi()
+    api.showTaskConfirm({
+      type: 'shipment_generate',
+      completed: false,
+      api_url: '/api/test',
+      payload: { params: { order_number: '9803' } },
+    })
+    expect((api.currentTask.value as { customOrderNumber: string }).customOrderNumber).toBe('9803')
+    expect(mockHydrateTaskOrderNumber).not.toHaveBeenCalled()
+    expect(mockEnrichShipmentPreviewProducts).toHaveBeenCalled()
+  })
+
+  it('shipment preview carries its canonical payload only after the explicit click', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, message: '发货单已生成' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const api = createApi()
+    const payload = {
+      tool_id: 'shipment_generate',
+      action: '执行',
+      params: {
+        order_text: '打印金汉武发货单，黑棕面用修色精，规格28，3桶',
+        unit_name: '金汉武',
+        products: [
+          { name: '黑棕面用修色精', model_number: '方和', unit_price: 48, tin_spec: 28, quantity_tins: 3 },
+        ],
+      },
+    }
+    api.showTaskConfirm({
+      type: 'shipment_generate',
+      completed: false,
+      api_url: '/api/tools/execute',
+      method: 'POST',
+      payload,
+    })
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    await api.confirmTask()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/tools/execute',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(payload),
+        credentials: 'include',
+        headers: expect.objectContaining({ 'X-CSRF-Token': 'csrf-from-helper' }),
+      }),
+    )
+    expect(authenticatedRequestInitMock).toHaveBeenCalledWith('POST', {
+      'Content-Type': 'application/json',
+    })
+    vi.unstubAllGlobals()
+  })
 })
 
 describe('useChatOrchestration coverage – maybeCloseAssistantFloatForShipmentTask', () => {
@@ -988,7 +1081,10 @@ describe('useChatOrchestration coverage – confirmTask 各分支', () => {
       payload: {},
     })
     await api.confirmTask()
-    expect(fetch).toHaveBeenCalledWith('/api/get')
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/get',
+      expect.objectContaining({ credentials: 'include' }),
+    )
     expect(api.currentTask.value?.completed).toBe(true)
     vi.unstubAllGlobals()
   })
@@ -1149,7 +1245,7 @@ describe('useChatOrchestration coverage – confirmTask 各分支', () => {
     vi.unstubAllGlobals()
   })
 
-  it('shipment_generate 无 customOrderNumber 时先 hydrate', async () => {
+  it('shipment_generate 从 canonical payload 恢复单号时不 hydrate', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -1167,7 +1263,7 @@ describe('useChatOrchestration coverage – confirmTask 各分支', () => {
       payload: { params: { order_number: 'OLD' } },
     })
     await api.confirmTask()
-    expect(mockHydrateTaskOrderNumber).toHaveBeenCalled()
+    expect(mockHydrateTaskOrderNumber).not.toHaveBeenCalled()
     vi.unstubAllGlobals()
   })
 })

@@ -4,6 +4,7 @@ import {
   extractToolInvocationChips,
   formatToolInvocationChip,
   hasVisibleChatBubbleBody,
+  stripModelReasoningLeaks,
   stripPlannerDisplayMarkers,
   stripToolInvocationLeaks,
   tryParseToolInvocationJson,
@@ -73,5 +74,12 @@ describe('chatBubbleDisplay', () => {
     const raw = '结果【正在调用工具:excel.read】完成'
     expect(stripPlannerDisplayMarkers(raw)).not.toContain('【正在调用工具')
     expect(stripPlannerDisplayMarkers(raw)).toContain('结果')
+  })
+
+  it('strips complete and dangling model reasoning tags', () => {
+    expect(stripModelReasoningLeaks('<think>内部推理</think>\n最终答复')).toBe('最终答复')
+    expect(stripModelReasoningLeaks('正在查询数据...</think>\n最终答复')).toBe('最终答复')
+    expect(stripModelReasoningLeaks('<think>尚未结束的内部推理')).toBe('')
+    expect(aiMarkdownSourceFromContent('正在查询数据...</think>\n最终答复')).toBe('最终答复')
   })
 })

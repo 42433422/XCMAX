@@ -14,6 +14,7 @@ import {
   SANDBOX_MENU_KEYS,
   SETTINGS_MENU_ITEM,
 } from '@/constants/coreMenuCatalog'
+import { isEnterpriseProductSkuBuild } from '@/constants/platformShellMode'
 import { useAccountProfileStore } from '@/stores/accountProfile'
 import {
   isPlatformShellModeEnabled,
@@ -129,6 +130,10 @@ export function useVisibleNavItems() {
   )
 
   const isCoreNavHidden = (key: string) => {
+    // The legacy ERP bridge hid its old business-docking page to avoid a
+    // duplicate sidebar row.  The enterprise ETL center now owns that host
+    // route, so the stale Mod override must not hide the first-class entry.
+    if (key === 'business-docking' && isEnterpriseProductSkuBuild()) return false
     const override = coreMenuOverrides.value.get(key)
     if (override?.hidden !== true) return false
     return !keepHostNavKeyVisibleWhenModSidebarFacetSuppressed(
@@ -158,6 +163,7 @@ export function useVisibleNavItems() {
         return null
       }
       const override = coreMenuOverrides.value.get(item.key)
+      if (item.key === 'business-docking' && !isEnterpriseProductSkuBuild()) return null
       if (isCoreNavHidden(item.key)) return null
       const childKeys = [
         ...(item.children?.map((c) => c.key) || []),
@@ -215,6 +221,7 @@ export function useVisibleNavItems() {
     const shouldInjectIndustryDelivery = exposeIndustrySidebar.value
     if (!adminShell && shouldInjectIndustryDelivery) {
       for (const item of INDUSTRY_DELIVERY_CORE_ITEMS) {
+        if (item.key === 'business-docking' && !isEnterpriseProductSkuBuild()) continue
         const override = coreMenuOverrides.value.get(item.key)
         industryDelivery.push({
           ...item,

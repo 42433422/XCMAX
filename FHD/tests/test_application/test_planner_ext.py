@@ -221,7 +221,8 @@ class TestLLMWorkflowPlannerPlanExtended:
             patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
         ):
             result = planner.plan("u1", "生成发货单", get_tool_registry(), {})
-        assert result.intent in ("shipment_generate", "generic_workflow")
+        assert result.intent == "clarification_required"
+        assert result.metadata["execution_policy"] == "blocked_no_safe_action"
 
     def test_fallback_for_customers(self):
         planner = self._make_planner()
@@ -234,7 +235,8 @@ class TestLLMWorkflowPlannerPlanExtended:
             patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
         ):
             result = planner.plan("u1", "添加客户公司A", get_tool_registry(), {})
-        assert result.intent in ("add_customer", "ensure_customer", "generic_workflow")
+        assert result.intent == "clarification_required"
+        assert result.metadata["execution_policy"] == "blocked_no_safe_action"
 
 
 # ========================= _validate_required_params - extended ===========

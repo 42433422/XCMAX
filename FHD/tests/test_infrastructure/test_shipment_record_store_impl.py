@@ -21,10 +21,11 @@ def _mock_db_ctx(mock_db):
 def _setup_db_with_record(record_id=99):
     mock_db = MagicMock()
 
-    def _refresh(obj):
+    def _flush():
+        obj = mock_db.add.call_args[0][0]
         obj.id = record_id
 
-    mock_db.refresh.side_effect = _refresh
+    mock_db.flush.side_effect = _flush
     return mock_db
 
 
@@ -66,6 +67,9 @@ class TestRecordDocumentGeneration:
             )
         assert result["success"] is True
         assert result["record_id"] == 7
+        mock_db.flush.assert_called_once_with()
+        mock_db.commit.assert_not_called()
+        mock_db.refresh.assert_not_called()
 
     def test_empty_products_uses_defaults(self):
         mock_db = _setup_db_with_record(1)

@@ -8,7 +8,6 @@ Tests: ``set_service_registry(CustomServiceContainer(...))`` or ``reset_service_
 from __future__ import annotations
 
 import threading
-from pathlib import Path
 from typing import TYPE_CHECKING, Optional, cast
 
 if TYPE_CHECKING:
@@ -166,8 +165,12 @@ class ServiceContainer:
         def _factory() -> TemplateApplicationService:
             from app.application.template_app_service import TemplateApplicationService
             from app.infrastructure.templates.template_store_impl import FileSystemTemplateStore
+            from app.utils.path_utils import get_app_data_dir
 
-            base_dir = str(Path(__file__).resolve().parents[2])
+            # The default store is runtime state, never the PyInstaller resource
+            # directory.  Built-in templates remain discoverable through explicit
+            # read-only seed paths where needed.
+            base_dir = get_app_data_dir()
             return TemplateApplicationService(FileSystemTemplateStore(base_dir=base_dir))
 
         return cast(

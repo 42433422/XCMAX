@@ -117,9 +117,14 @@ if (Test-Path $backendSkuDir) {
 & "$PSScriptRoot\create-installer-assets.ps1"
 
 Push-Location (Join-Path $Root "desktop")
-if (-not (Test-Path "node_modules")) {
-  npm install
+if (Test-Path "node_modules") {
+  $nodeModulesItem = Get-Item -Force "node_modules"
+  if ((($nodeModulesItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+    throw "desktop/node_modules must be a physical directory for release packaging; refusing linked dependencies"
+  }
 }
+npm ci --no-audit --fund=false
+if ($LASTEXITCODE -ne 0) { throw "desktop npm ci failed; release packaging requires the committed lockfile tree" }
 npm run build
 if ($LASTEXITCODE -ne 0) { throw "desktop npm run build failed" }
 Assert-TextFileContains `
@@ -191,6 +196,9 @@ Pop-Location
 Assert-FileExists (Join-Path $outDir "win-unpacked\resources\app.asar") "Electron app.asar"
 Assert-FileExists (Join-Path $outDir "win-unpacked\resources\backend\xcagi-backend.exe") "Packaged backend executable"
 Assert-FileExists (Join-Path $outDir "win-unpacked\resources\product-sku.json") "Packaged product-sku.json"
+$asarVerifier = Join-Path $Root "desktop\build\verify-runtime-asar.cjs"
+& node $asarVerifier (Join-Path $outDir "win-unpacked\resources\app.asar")
+if ($LASTEXITCODE -ne 0) { throw "packaged Electron ASAR runtime dependency closure verification failed" }
 
 $nsisExe = Get-ChildItem $outDir -Filter "XCAGI-$label-Setup-*.exe" -File -ErrorAction SilentlyContinue |
   Sort-Object LastWriteTime -Descending |

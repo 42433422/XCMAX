@@ -153,8 +153,8 @@ def _reset_entitlements_cache() -> Iterator[None]:
 class TestAiAssistantBranches:
     """补充 ai_assistant 未覆盖分支。"""
 
-    def test_compat_ai_generate_success_without_doc_name_uses_basename(self) -> None:
-        """doc_name 缺失时使用 file_path 的 basename。"""
+    def test_compat_ai_generate_preview_never_returns_document_path(self) -> None:
+        """兼容入口只能返回确认卡，不能伪造或生成文档路径。"""
         client = _ai_assistant_client()
         with (
             patch("app.application.facades.tools_facade._parse_order_text") as mock_parse,
@@ -166,53 +166,40 @@ class TestAiAssistantBranches:
                 "products": [{"name": "漆", "quantity": 1, "price": 10}],
             }
             mock_svc = MagicMock()
-            mock_svc.generate_shipment_document.return_value = {
-                "success": True,
-                "file_path": "/tmp/shipment/bar.docx",
-                # doc_name 缺失 → 使用 basename
-                "order_number": "ORD-2",
-                "total_amount": 20.0,
-                "total_quantity": 2,
-            }
             mock_svc_get.return_value = mock_svc
             resp = client.post(
                 "/api/generate",
                 json={"order_text": "甲公司 漆 1 10"},
             )
         body = resp.json()
-        assert body["data"]["doc_name"] == "bar.docx"
-        assert body["data"]["download_url"] == "/api/shipment/download/bar.docx"
+        assert body["confirmation_required"] is True
+        assert body["data"]["compatibility_endpoint"] == "/api/generate"
+        assert "doc_name" not in body["data"]
+        mock_svc.generate_shipment_document.assert_not_called()
 
-    def test_compat_ai_generate_success_no_file_path_no_doc_name(self) -> None:
-        """file_path 和 doc_name 都缺失 → download_url 为 None。"""
+    def test_compat_ai_generate_preview_keeps_normalized_order_payload(self) -> None:
+        """确认卡保留确定性执行所需的原始订单和解析结果。"""
         client = _ai_assistant_client()
         with (
             patch("app.application.facades.tools_facade._parse_order_text") as mock_parse,
-            patch.object(ai_assistant, "_shipment_svc") as mock_svc_get,
         ):
             mock_parse.return_value = {
                 "success": True,
                 "unit_name": "甲公司",
                 "products": [{"name": "漆", "quantity": 1, "price": 10}],
             }
-            mock_svc = MagicMock()
-            mock_svc.generate_shipment_document.return_value = {
-                "success": True,
-                # 没有 file_path 也没有 doc_name
-                "order_number": "ORD-3",
-            }
-            mock_svc_get.return_value = mock_svc
             resp = client.post(
                 "/api/generate",
                 json={"order_text": "甲公司 漆 1 10"},
             )
         body = resp.json()
-        assert body["data"]["doc_name"] is None
-        assert body["data"]["download_url"] is None
-        assert body["data"]["file_path"] is None
+        params = body["task"]["payload"]["params"]
+        assert params["order_text"] == "甲公司 漆 1 10"
+        assert params["unit_name"] == "甲公司"
+        assert params["products"] == [{"name": "漆", "quantity": 1, "price": 10}]
 
-    def test_compat_ai_generate_template_name_passed_through(self) -> None:
-        """template_name 应透传到 service。"""
+    def test_compat_ai_generate_template_name_is_carried_to_confirmation(self) -> None:
+        """template_name 只进入确认卡，不会在请求阶段调用生成服务。"""
         client = _ai_assistant_client()
         with (
             patch("app.application.facades.tools_facade._parse_order_text") as mock_parse,
@@ -224,19 +211,14 @@ class TestAiAssistantBranches:
                 "products": [{"name": "漆", "quantity": 1, "price": 10}],
             }
             mock_svc = MagicMock()
-            mock_svc.generate_shipment_document.return_value = {
-                "success": True,
-                "file_path": "/tmp/x.docx",
-                "doc_name": "x.docx",
-            }
             mock_svc_get.return_value = mock_svc
-            client.post(
+            response = client.post(
                 "/api/generate",
                 json={"order_text": "甲公司 漆 1 10", "template_name": "custom-tpl"},
             )
-        # 验证 template_name 透传
-        call_kwargs = mock_svc.generate_shipment_document.call_args.kwargs
-        assert call_kwargs["template_name"] == "custom-tpl"
+        assert response.status_code == 200
+        assert response.json()["task"]["payload"]["params"]["template_name"] == "custom-tpl"
+        mock_svc.generate_shipment_document.assert_not_called()
 
     def test_compat_ai_generate_parse_success_no_unit_name_returns_400(self) -> None:
         """解析成功但 unit_name 为空 → 400。"""
@@ -368,9 +350,9 @@ class TestAiAssistantBranches:
                 "/api/print/foo.docx",
                 json={"printer_name": "HP-LaserJet"},
             )
-        assert resp.status_code == 200
-        call_kwargs = mock_svc.print_document.call_args.kwargs
-        assert call_kwargs["printer_name"] == "HP-LaserJet"
+        assert resp.status_code == 403
+        assert resp.json()["error_code"] == "PRINT_AUTH_REQUIRED"
+        mock_svc.print_document.assert_not_called()
 
     def test_compat_print_shipment_file_with_printer_field_fallback(self) -> None:
         """printer 字段作为 printer_name 的回退。"""
@@ -387,9 +369,9 @@ class TestAiAssistantBranches:
                 "/api/print/foo.docx",
                 json={"printer": "Canon-123"},  # 使用 printer 字段
             )
-        assert resp.status_code == 200
-        call_kwargs = mock_svc.print_document.call_args.kwargs
-        assert call_kwargs["printer_name"] == "Canon-123"
+        assert resp.status_code == 403
+        assert resp.json()["error_code"] == "PRINT_AUTH_REQUIRED"
+        mock_svc.print_document.assert_not_called()
 
     def test_compat_print_single_label_quantity_above_100_defaults_to_1(self) -> None:
         """quantity > 100 → 默认为 1。

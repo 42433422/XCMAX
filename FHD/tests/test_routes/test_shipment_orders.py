@@ -8,12 +8,24 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.application.print_authorization import (
+    _clear_print_authorizations_for_tests,
+    finish_document_print_capability,
+    issue_document_print_capability,
+    reserve_document_print_capability,
+)
 from app.fastapi_routes import shipment_orders
 
 
 @pytest.fixture
 def client() -> TestClient:
     app = FastAPI()
+
+    @app.middleware("http")
+    async def _authenticated_owner(request, call_next):
+        request.state.user_id = 41
+        return await call_next(request)
+
     app.include_router(shipment_orders.router)
     return TestClient(app, raise_server_exceptions=False)
 
@@ -24,6 +36,32 @@ def _mock_svc():
     mock = MagicMock()
     with patch.object(shipment_orders, "_svc", return_value=mock):
         yield mock
+
+
+@pytest.fixture(autouse=True)
+def _clear_print_authorizations():
+    _clear_print_authorizations_for_tests()
+    yield
+    _clear_print_authorizations_for_tests()
+
+
+def _post_print_receipt(path, *, owner_user_id: int = 41, order_id: int | None = None) -> str:
+    capability = issue_document_print_capability(
+        file_path=path,
+        owner_user_id=owner_user_id,
+        order_id=order_id,
+    )
+    assert capability is not None
+    reservation = reserve_document_print_capability(
+        capability["document_token"],
+        owner_user_id=owner_user_id,
+        file_path=path,
+        order_id=order_id,
+    )
+    assert reservation["success"] is True
+    receipt = finish_document_print_capability(reservation, print_succeeded=True)
+    assert receipt
+    return receipt
 
 
 # ---------------------------------------------------------------------------
@@ -70,15 +108,26 @@ class TestOrdersNextNumber:
 
 class TestShipmentGenerate:
     def test_success(self, client: TestClient, _mock_svc: MagicMock):
-        _mock_svc.generate_shipment_document.return_value = {
-            "success": True,
-            "file_path": "/tmp/out.xlsx",
-        }
         r = client.post(
             "/api/shipment/generate",
-            json={"unit_name": "测试单位", "products": [{"name": "A", "qty": 1}]},
+            json={
+                "unit_name": "测试单位",
+                "products": [{"name": "A", "qty": 1}],
+                # A legacy caller cannot grant access to another user's
+                # personal delivery layout through this preview endpoint.
+                "owner_user_id": 999,
+            },
         )
         assert r.status_code == 200
+        payload = r.json()
+        assert payload["success"] is True
+        assert payload["confirmation_required"] is True
+        assert payload["task"]["type"] == "shipment_generate"
+        assert payload["task"]["api_url"] == "/api/tools/execute"
+        assert payload["task"]["payload"]["params"]["unit_name"] == "测试单位"
+        assert payload["task"]["payload"]["params"]["products"] == [{"name": "A", "qty": 1}]
+        assert "owner_user_id" not in payload["task"]["payload"]["params"]
+        _mock_svc.generate_shipment_document.assert_not_called()
 
     def test_empty_unit_name(self, client: TestClient, _mock_svc: MagicMock):
         r = client.post("/api/shipment/generate", json={"unit_name": "", "products": []})
@@ -88,23 +137,30 @@ class TestShipmentGenerate:
         r = client.post("/api/shipment/generate", json={"unit_name": "单位", "products": []})
         assert r.status_code == 400
 
-    def test_service_error(self, client: TestClient, _mock_svc: MagicMock):
+    def test_preview_never_calls_generate_service(self, client: TestClient, _mock_svc: MagicMock):
         _mock_svc.generate_shipment_document.side_effect = Exception("DB error")
         r = client.post(
             "/api/shipment/generate", json={"unit_name": "单位", "products": [{"name": "A"}]}
         )
-        assert r.status_code == 500
+        assert r.status_code == 200
+        assert r.json()["confirmation_required"] is True
+        _mock_svc.generate_shipment_document.assert_not_called()
 
 
 class TestShipmentGenerateBatch:
     def test_success(self, client: TestClient, _mock_svc: MagicMock):
-        _mock_svc.generate_shipment_document.return_value = {"success": True}
         r = client.post(
             "/api/shipment/generate-batch",
             json={"shipments": [{"unit_name": "A", "products": [{"name": "X"}]}]},
         )
         assert r.status_code == 200
-        assert r.json()["data"]["processed"] == 1
+        payload = r.json()
+        assert payload["success"] is True
+        assert payload["confirmation_required"] is True
+        assert len(payload["tasks"]) == 1
+        assert payload["tasks"][0]["api_url"] == "/api/tools/execute"
+        assert payload["tasks"][0]["payload"]["tool_id"] == "shipment_generate"
+        _mock_svc.generate_shipment_document.assert_not_called()
 
     def test_empty_shipments(self, client: TestClient, _mock_svc: MagicMock):
         r = client.post("/api/shipment/generate-batch", json={"shipments": []})
@@ -113,19 +169,23 @@ class TestShipmentGenerateBatch:
     def test_invalid_entry(self, client: TestClient, _mock_svc: MagicMock):
         r = client.post("/api/shipment/generate-batch", json={"shipments": ["not_a_dict"]})
         assert r.status_code == 200
-        assert len(r.json()["data"]["errors"]) > 0
+        assert r.json()["success"] is False
+        assert r.json()["data"]["errors"][0]["error_code"] == "invalid_shipment_item"
+        _mock_svc.generate_shipment_document.assert_not_called()
 
     def test_missing_unit_name(self, client: TestClient, _mock_svc: MagicMock):
         r = client.post(
             "/api/shipment/generate-batch", json={"shipments": [{"products": [{"name": "X"}]}]}
         )
         assert r.status_code == 200
-        assert len(r.json()["data"]["errors"]) > 0
+        assert r.json()["data"]["errors"][0]["error_code"] == "shipment_unit_required"
+        _mock_svc.generate_shipment_document.assert_not_called()
 
     def test_missing_products(self, client: TestClient, _mock_svc: MagicMock):
         r = client.post("/api/shipment/generate-batch", json={"shipments": [{"unit_name": "A"}]})
         assert r.status_code == 200
-        assert len(r.json()["data"]["errors"]) > 0
+        assert r.json()["data"]["errors"][0]["error_code"] == "shipment_products_required"
+        _mock_svc.generate_shipment_document.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -140,29 +200,119 @@ class TestShipmentPrint:
 
     def test_file_not_found(self, client: TestClient, _mock_svc: MagicMock):
         r = client.post("/api/shipment/print", json={"file_path": "/nonexistent/file.xlsx"})
-        assert r.status_code == 404
+        assert r.status_code == 409
+        assert r.json()["error_code"] == "PRINT_RECEIPT_REQUIRED"
+        _mock_svc.mark_as_printed.assert_not_called()
 
     def test_with_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
         test_file = tmp_path / "test.xlsx"
         test_file.write_bytes(b"fake")
         _mock_svc.mark_as_printed.return_value = {"success": True}
-        r = client.post("/api/shipment/print", json={"file_path": str(test_file), "order_id": 1})
+        r = client.post(
+            "/api/shipment/print",
+            json={
+                "file_path": str(test_file),
+                "order_id": 1,
+                "post_print_receipt": _post_print_receipt(test_file, order_id=1),
+            },
+        )
         assert r.status_code == 200
+        assert r.json()["updated"] is True
+        _mock_svc.mark_as_printed.assert_called_once_with(1, printer_name="")
 
     def test_without_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
         test_file = tmp_path / "test.xlsx"
         test_file.write_bytes(b"fake")
-        r = client.post("/api/shipment/print", json={"file_path": str(test_file)})
+        r = client.post(
+            "/api/shipment/print",
+            json={
+                "file_path": str(test_file),
+                "post_print_receipt": _post_print_receipt(test_file),
+            },
+        )
         assert r.status_code == 200
         assert r.json()["updated"] is False
+        _mock_svc.mark_as_printed.assert_not_called()
+
+    def test_post_print_receipt_is_single_use(
+        self, client: TestClient, _mock_svc: MagicMock, tmp_path
+    ):
+        test_file = tmp_path / "test.xlsx"
+        test_file.write_bytes(b"fake")
+        _mock_svc.mark_as_printed.return_value = {"success": True}
+        receipt = _post_print_receipt(test_file, order_id=1)
+        body = {
+            "file_path": str(test_file),
+            "order_id": 1,
+            "post_print_receipt": receipt,
+        }
+
+        first = client.post("/api/shipment/print", json=body)
+        repeated = client.post("/api/shipment/print", json=body)
+
+        assert first.status_code == 200
+        assert repeated.status_code == 409
+        assert repeated.json()["error_code"] == "PRINT_RECEIPT_INVALID"
+        _mock_svc.mark_as_printed.assert_called_once_with(1, printer_name="")
+
+    def test_post_print_receipt_rejects_another_existing_file(
+        self, client: TestClient, _mock_svc: MagicMock, tmp_path
+    ):
+        issued_file = tmp_path / "issued.xlsx"
+        other_file = tmp_path / "other.xlsx"
+        issued_file.write_bytes(b"issued")
+        other_file.write_bytes(b"other")
+
+        r = client.post(
+            "/api/shipment/print",
+            json={
+                "file_path": str(other_file),
+                "order_id": 1,
+                "post_print_receipt": _post_print_receipt(issued_file, order_id=1),
+            },
+        )
+
+        assert r.status_code == 409
+        assert r.json()["error_code"] == "PRINT_RECEIPT_ARTIFACT_MISMATCH"
+        _mock_svc.mark_as_printed.assert_not_called()
 
     def test_invalid_order_id(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
         test_file = tmp_path / "test.xlsx"
         test_file.write_bytes(b"fake")
         r = client.post(
-            "/api/shipment/print", json={"file_path": str(test_file), "order_id": "abc"}
+            "/api/shipment/print",
+            json={
+                "file_path": str(test_file),
+                "order_id": "abc",
+                "post_print_receipt": "irrelevant-but-present",
+            },
         )
         assert r.status_code == 400
+
+    def test_rejects_forged_header_or_body_user_without_authenticated_owner(
+        self, _mock_svc: MagicMock, tmp_path
+    ):
+        test_file = tmp_path / "test.xlsx"
+        test_file.write_bytes(b"fake")
+        receipt = _post_print_receipt(test_file, owner_user_id=41, order_id=1)
+
+        app = FastAPI()
+        app.include_router(shipment_orders.router)
+        unauthenticated_client = TestClient(app, raise_server_exceptions=False)
+        r = unauthenticated_client.post(
+            "/api/shipment/print",
+            json={
+                "file_path": str(test_file),
+                "order_id": 1,
+                "post_print_receipt": receipt,
+                "user_id": 41,
+            },
+            headers={"X-User-Id": "41"},
+        )
+
+        assert r.status_code == 403
+        assert r.json()["error_code"] == "PRINT_RECEIPT_OWNER_MISMATCH"
+        _mock_svc.mark_as_printed.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

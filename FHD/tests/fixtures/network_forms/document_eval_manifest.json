@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "file": "form_采购订单_七彩乐园.xlsx",
+      "source_kind": "sanitized",
+      "expected_document_types": ["purchase_order"],
+      "minimum_documents": 1,
+      "required_header_roles": ["document_number", "supplier", "date"],
+      "required_column_roles": ["product_name", "quantity", "unit_price", "amount"]
+    },
+    {
+      "file": "form_送货单_星光贸易.xlsx",
+      "source_kind": "sanitized",
+      "expected_document_types": ["delivery_note"],
+      "minimum_documents": 1,
+      "required_header_roles": ["document_number", "customer", "date"],
+      "required_column_roles": ["product_name", "quantity"]
+    },
+    {
+      "file": "form_报价单_星光贸易.xlsx",
+      "source_kind": "sanitized",
+      "expected_document_types": ["quotation"],
+      "minimum_documents": 1,
+      "required_header_roles": ["customer"],
+      "required_column_roles": ["product_name", "unit_price"]
+    },
+    {
+      "file": "form_考勤统计_3月.xlsx",
+      "source_kind": "sanitized",
+      "expected_document_types": ["attendance"],
+      "minimum_documents": 1,
+      "required_header_roles": [],
+      "required_column_roles": ["employee_name", "department"]
+    },
+    {
+      "file": "net_delivery_order.xlsx",
+      "source_kind": "public",
+      "expected_document_types": ["delivery_note"],
+      "minimum_documents": 1,
+      "required_header_roles": ["document_number", "customer"],
+      "required_column_roles": ["product_name", "quantity"]
+    },
+    {
+      "file": "net_tax_invoice.xlsx",
+      "source_kind": "public",
+      "expected_document_types": ["invoice"],
+      "minimum_documents": 1,
+      "required_header_roles": ["document_number", "date", "customer"],
+      "required_column_roles": ["product_name", "quantity", "unit_price", "amount"]
+    },
+    {
+      "file": "net_invoice_sample2.xlsx",
+      "source_kind": "public",
+      "expected_document_types": ["generic_table"],
+      "minimum_documents": 1,
+      "required_header_roles": [],
+      "required_column_roles": []
+    },
+    {
+      "file": "net_PI_sample.xlsx",
+      "source_kind": "public",
+      "expected_document_types": ["quotation", "invoice"],
+      "minimum_documents": 1,
+      "required_header_roles": ["document_number", "date", "customer"],
+      "required_column_roles": ["product_name", "quantity", "unit_price", "amount"]
+    },
+    {
+      "file": "net_PL_sample.xlsx",
+      "source_kind": "public",
+      "expected_document_types": ["packing_list"],
+      "minimum_documents": 1,
+      "required_header_roles": ["document_number", "customer"],
+      "required_column_roles": ["product_model", "quantity"]
+    },
+    {
+      "file": "net_PackPlan_sample.xlsx",
+      "source_kind": "public",
+      "expected_document_types": ["packing_list"],
+      "minimum_documents": 1,
+      "required_header_roles": [],
+      "required_column_roles": ["product_name"]
+    },
+    {
+      "file": "net_sample1.xlsx",
+      "source_kind": "public",
+      "expected_document_types": ["generic_table"],
+      "minimum_documents": 1,
+      "required_header_roles": [],
+      "required_column_roles": []
+    },
+    {
+      "file": "net_sample3.xlsx",
+      "source_kind": "public",
+      "expected_document_types": ["generic_table"],
+      "minimum_documents": 2,
+      "required_header_roles": [],
+      "required_column_roles": []
+    }
+  ]
+}

@@ -335,7 +335,7 @@ def test_shipment_generate_validation_errors(shipment_client: TestClient) -> Non
     assert empty_products.status_code == 400
 
 
-def test_shipment_generate_service_failure(
+def test_shipment_generate_is_preview_only_even_if_service_would_fail(
     shipment_client: TestClient, mock_shipment_svc: MagicMock
 ) -> None:
     mock_shipment_svc.generate_shipment_document.return_value = {
@@ -346,11 +346,13 @@ def test_shipment_generate_service_failure(
         "/api/shipment/generate",
         json={"unit_name": "甲公司", "products": [{"name": "漆"}]},
     )
-    assert r.status_code == 500
-    assert r.json()["success"] is False
+    assert r.status_code == 200
+    assert r.json()["success"] is True
+    assert r.json()["confirmation_required"] is True
+    mock_shipment_svc.generate_shipment_document.assert_not_called()
 
 
-def test_shipment_generate_success(
+def test_shipment_generate_returns_tools_confirmation_card(
     shipment_client: TestClient, mock_shipment_svc: MagicMock
 ) -> None:
     r = shipment_client.post(
@@ -358,8 +360,12 @@ def test_shipment_generate_success(
         json={"unit_name": "甲公司", "products": [{"model_number": "9803"}]},
     )
     assert r.status_code == 200
-    assert r.json()["file_path"] == "/tmp/p41.xlsx"
-    mock_shipment_svc.generate_shipment_document.assert_called_once()
+    payload = r.json()
+    assert payload["success"] is True
+    assert payload["confirmation_required"] is True
+    assert payload["task"]["api_url"] == "/api/tools/execute"
+    assert payload["task"]["payload"]["tool_id"] == "shipment_generate"
+    mock_shipment_svc.generate_shipment_document.assert_not_called()
 
 
 def test_shipment_orders_latest_alias(

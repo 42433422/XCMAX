@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 
+from app.infrastructure.tools_payload_print import dispatch_legacy_print_payload
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -18,11 +19,18 @@ def dispatch_legacy_tool_payload(
     json_response_fn,
     hdr_getter,
     parse_order_text_fn,
+    owner_user_id: int | None = None,
 ):
     """返回与原先 elif 分支相同的 Werkzeug JSON Response。"""
     _j = json_response_fn
     _hdr = hdr_getter
     _parse_order_text = parse_order_text_fn
+    try:
+        trusted_owner_user_id = int(owner_user_id) if owner_user_id is not None else 0
+    except (TypeError, ValueError):
+        trusted_owner_user_id = 0
+    if trusted_owner_user_id <= 0:
+        trusted_owner_user_id = None
 
     if tool_id == "products":
         effective_action = action
@@ -546,6 +554,7 @@ def dispatch_legacy_tool_payload(
                 template_name=params.get("template_name") or params.get("template"),
                 template_id=params.get("template_id"),
                 preferred_template=params.get("preferred_template") or params.get("template"),
+                owner_user_id=trusted_owner_user_id,
             )
             return _j(payload, status_code)
 
@@ -553,32 +562,12 @@ def dispatch_legacy_tool_payload(
             logger.error("生成发货单失败：%s", e, exc_info=True)
             return _j({"success": False, "message": f"生成失败：{str(e)}"}, 500)
     elif tool_id == "print":
-        from app.services import get_printer_service
-
-        svc = get_printer_service()
-        if action == "view":
-            return _j({"success": True, "redirect": "/console?view=print"})
-        if action in ("list", "query"):
-            return _j(svc.get_printers(), 200)
-        if action == "print_label":
-            result = svc.print_label(
-                str(params.get("file_path") or "").strip(),
-                params.get("printer_name"),
-                int(params.get("copies") or 1),
-            )
-            return _j(result, 200)
-        if action == "print_document":
-            result = svc.print_document(
-                str(params.get("file_path") or "").strip(),
-                params.get("printer_name"),
-                bool(params.get("use_automation", False)),
-            )
-            return _j(result, 200)
-        if action == "test":
-            result = svc.test_printer(str(params.get("printer_name") or "").strip())
-            return _j(result, 200)
-        return _j({"success": True, "message": "标签打印"})
-
+        return dispatch_legacy_print_payload(
+            action,
+            params,
+            json_response_fn=_j,
+            owner_user_id=trusted_owner_user_id,
+        )
     elif tool_id == "printer_list":
         if action in ("list", "query"):
             from app.services import get_system_service

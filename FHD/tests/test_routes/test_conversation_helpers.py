@@ -225,9 +225,21 @@ class TestXcagiChatHttpExc:
         assert exc.status_code == 402
 
     def test_value_error_platform_error(self):
-        exc = helpers._xcagi_chat_http_exc(ValueError("平台错误"))
+        exc = helpers._xcagi_chat_http_exc(
+            ValueError('平台错误(502): {"authorization": "do-not-return-this"}')
+        )
         assert isinstance(exc, HTTPException)
         assert exc.status_code == 502
+        assert exc.detail == {
+            "code": "MODEL_PROVIDER_ERROR",
+            "message": "模型服务暂时不可用，请稍后重试或切换可用模型。",
+        }
+        assert "do-not-return-this" not in str(helpers._xcagi_chat_error_event(exc))
+
+    def test_first_response_timeout_uses_stable_sse_error_code(self):
+        exc = helpers._xcagi_chat_http_exc(helpers._XcagiStreamFirstResponseTimeout(75.0))
+        assert exc.status_code == 504
+        assert helpers._xcagi_chat_error_event(exc)["code"] == "MODEL_FIRST_RESPONSE_TIMEOUT"
 
     def test_generic_error(self):
         exc = helpers._xcagi_chat_http_exc(Exception("unknown"))
@@ -437,6 +449,15 @@ class TestXcagiStreamFirstTokenTimeoutSeconds:
     def test_invalid(self, monkeypatch):
         monkeypatch.setenv("XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC", "bad")
         assert helpers._xcagi_stream_first_token_timeout_seconds() == 20.0
+
+    def test_desktop_upgrades_missing_or_legacy_20_second_timeout(self, monkeypatch):
+        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+        monkeypatch.delenv("XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC", raising=False)
+        assert helpers._xcagi_stream_first_token_timeout_seconds() == 75.0
+        monkeypatch.setenv("XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC", "20")
+        assert helpers._xcagi_stream_first_token_timeout_seconds() == 75.0
+        monkeypatch.setenv("XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC", "30")
+        assert helpers._xcagi_stream_first_token_timeout_seconds() == 30.0
 
 
 # ---------------------------------------------------------------------------

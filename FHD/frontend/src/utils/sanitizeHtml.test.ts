@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   sanitizeChatBubbleHtml,
   sanitizeChatBubbleMarkdown,
+  sanitizeChatBubblePlainText,
   sanitizeTaskSummaryHtml,
 } from './sanitizeHtml';
 
@@ -46,6 +47,23 @@ describe('sanitizeChatBubbleMarkdown', () => {
     expect(out).not.toContain('<br>');
     expect(out).toContain('列表项');
     expect(out).toMatch(/<li[^>]*>/);
+  });
+});
+
+describe('sanitizeChatBubblePlainText', () => {
+  it('preserves line breaks while removing markup', () => {
+    expect(sanitizeChatBubblePlainText('<p>hello<br>world</p>')).toBe('hello\nworld');
+  });
+
+  it('removes encoded executable markup after legacy double decoding', () => {
+    const raw = '&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;safe';
+    const plain = sanitizeChatBubblePlainText(raw);
+    expect(plain).toBe('safe');
+    expect(plain).not.toContain('<script');
+  });
+
+  it('decodes legacy double-escaped text entities', () => {
+    expect(sanitizeChatBubblePlainText('&amp;quot;正常&amp;quot;')).toBe('"正常"');
   });
 });
 

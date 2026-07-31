@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import sys
-import types
+import json
+from datetime import datetime
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from app.application.normal_chat_dispatch import (
     build_customers_query_response_dict,
     build_inventory_alert_response_dict,
     build_label_print_response_dict,
     build_product_query_response_dict,
+    build_shipment_records_query_response_dict,
     resolve_tool_execution_profile,
     route_normal_mode_message,
     run_normal_slot_product_query_from_message,
@@ -56,6 +56,14 @@ def test_route_product_query_unit_model() -> None:
     assert rr["slots"].get("model_number") == "5003A"
 
 
+def test_route_shipment_records_query_with_unit_name() -> None:
+    rr = route_normal_mode_message("查询金汉武家私最近的发货记录")
+    assert rr == {
+        "intent": "shipment_records_query",
+        "slots": {"unit_name": "金汉武家私"},
+    }
+
+
 def test_route_unknown_greeting() -> None:
     assert route_normal_mode_message("你好呀")["intent"] == "unknown"
 
@@ -97,14 +105,13 @@ def test_build_product_query_wrong_intent() -> None:
     assert build_product_query_response_dict({"intent": "shipment"}) is None
 
 
-def test_build_customers_query_response_dict(monkeypatch: pytest.MonkeyPatch) -> None:
-    mock_cls = MagicMock()
-    mock_cls.return_value.search.return_value = [
-        {"customer_name": "甲公司", "contact_person": "张三"}
-    ]
-    fake_mod = types.ModuleType("app.services.customers_service")
-    fake_mod.CustomerService = mock_cls  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "app.services.customers_service", fake_mod)
+@patch("app.bootstrap.get_customer_app_service")
+def test_build_customers_query_response_dict(mock_get: MagicMock) -> None:
+    mock_get.return_value.get_all.return_value = {
+        "success": True,
+        "data": [{"customer_name": "甲公司", "contact_person": "张三"}],
+        "total": 1,
+    }
     rr = route_normal_mode_message("查甲公司客户")
     body = build_customers_query_response_dict(rr)
     assert body is not None
@@ -139,6 +146,49 @@ def test_build_label_print_missing_model() -> None:
     )
     assert body is not None
     assert body["success"] is False
+
+
+@patch("app.bootstrap.get_shipment_app_service")
+def test_build_shipment_records_query_response_dict(mock_get: MagicMock) -> None:
+    mock_get.return_value.get_shipment_records.return_value = [
+        {
+            "id": 1,
+            "purchase_unit": "金汉武家私",
+            "product_name": "PU全哑奶黄色面漆",
+            "model_number": "25-05021",
+            "quantity_kg": 50,
+            "quantity_tins": 2,
+            "amount": Decimal("850.00"),
+            "status": "pending",
+            "created_at": datetime(2026, 7, 30, 3, 0, 0),
+        },
+        {
+            "id": 2,
+            "purchase_unit": "金汉武家私",
+            "product_name": "全哑黑面漆",
+            "quantity_kg": 40,
+            "quantity_tins": 2,
+            "amount": 680,
+            "status": "pending",
+        },
+    ]
+
+    body = build_shipment_records_query_response_dict(
+        route_normal_mode_message("查询金汉武家私最近的发货记录")
+    )
+
+    mock_get.return_value.get_shipment_records.assert_called_once_with(
+        "金汉武家私",
+        limit=10,
+    )
+    assert body is not None
+    assert body["success"] is True
+    assert "2 条" in body["response"]
+    assert "PU全哑奶黄色面漆（25-05021）" in body["response"]
+    assert "￥1530.00" in body["response"]
+    assert body["data"]["intent"] == "shipment_records_query"
+    assert "autoAction" not in body
+    json.dumps(body, ensure_ascii=False)
 
 
 # ---------------------------------------------------------------------------

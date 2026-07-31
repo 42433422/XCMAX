@@ -95,7 +95,13 @@ def __getattr__(name: str):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
+from app.application.ai_chat_agent_bridge import AIChatAgentBridgeMixin
+from app.application.ai_chat_durable_workflow import AIChatDurableWorkflowMixin
+
+
 class AIChatApplicationService(
+    AIChatDurableWorkflowMixin,
+    AIChatAgentBridgeMixin,
     AIChatExcelImportMixin,
     AIChatWorkflowResponseMixin,
     AIChatInstantToolsMixin,
@@ -137,23 +143,6 @@ class AIChatApplicationService(
             "xcagi_pro",
         }
 
-    @staticmethod
-    def _merge_tool_runtime_context(
-        user_id: str,
-        message: str,
-        context: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        runtime_ctx: dict[str, Any] = {"user_id": user_id, "message": message}
-        if isinstance(context, dict):
-            for key in ("ui_surface", "intent_channel", "tool_execution_profile"):
-                if key in context and context[key] is not None:
-                    runtime_ctx[key] = context[key]
-            # 透传 Excel 分析上下文，支持自然语言按 sheet 入模板库
-            for key in ("excel_analysis", "last_excel_analysis_context"):
-                if key in context and isinstance(context[key], dict):
-                    runtime_ctx[key] = context[key]
-        return runtime_ctx
-
     def process_chat(
         self,
         user_id: str,
@@ -161,6 +150,7 @@ class AIChatApplicationService(
         context: dict[str, Any] | None = None,
         source: str | None = None,
         file_context: dict[str, Any] | None = None,
+        authenticated_owner_user_id: int | None = None,
     ) -> dict[str, Any]:
         """
         处理聊天请求
@@ -301,6 +291,7 @@ class AIChatApplicationService(
             source=source,
             context=ctx,
             file_context=file_context or {},
+            authenticated_owner_user_id=authenticated_owner_user_id,
         )
         if workflow_result is not None:
             return _finalize(workflow_result)
@@ -353,6 +344,12 @@ class AIChatApplicationService(
         # 向量已在 ctx 上注入；enriched_context 由 ctx 浅拷贝而来，无需再次检索。
         prepared_context = enriched_context
 
+        llm_owner_token = None
+        if authenticated_owner_user_id is not None:
+            from app.application.etl.llm_session_provider import bind_etl_llm_owner
+
+            llm_owner_token = bind_etl_llm_owner(authenticated_owner_user_id)
+
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
@@ -390,6 +387,10 @@ class AIChatApplicationService(
                     self._build_fallback_response(message, f"AI 服务暂时不可用：{error_msg[:100]}")
                 )
         finally:
+            if llm_owner_token is not None:
+                from app.application.etl.llm_session_provider import reset_etl_llm_owner
+
+                reset_etl_llm_owner(llm_owner_token)
             loop.close()
 
         logger.info(
@@ -607,8 +608,15 @@ class AIChatApplicationService(
         text = (message or "").strip().lower()
 
         fallback_responses = {
-            "greeting": "您好！我是 XCAGI 智能助手。😊\n\n⚠️ 当前 AI 服务暂时不可用，但我仍可以帮您：\n• 生成发货单\n• 查询产品库\n• 管理客户信息\n\n请尝试使用上述功能，或稍后再试。",
-            "default": f"抱歉，AI 助手暂时无法为您提供智能回复。\n\n原因：{error_reason}\n\n您可以：\n1. 稍后重试\n2. 使用其他功能（如产品查询、生成发货单）\n3. 联系管理员检查服务状态",
+            "greeting": (
+                "您好，XCAGI 智能助手的模型当前不可用，本轮没有生成回复，也没有执行任何业务操作。"
+                "请稍后重试，或使用界面中的确定性查询与单据功能。"
+            ),
+            "default": (
+                "抱歉，智能模型当前不可用，本轮没有执行任何推测性业务操作。\n\n"
+                f"原因：{error_reason}\n\n"
+                "请稍后重试；需要立即处理时，请明确选择界面中的确定性功能。"
+            ),
         }
 
         if any(k in text for k in ("你好", "您好", "hi", "hello", "嗨")):
@@ -627,6 +635,9 @@ class AIChatApplicationService(
                     "error_reason": error_reason,
                     "original_message": message[:100],
                     "fallback_mode": True,
+                    "degraded": True,
+                    "planner_mode": "blocked",
+                    "execution_performed": False,
                 },
             },
         }
@@ -722,6 +733,7 @@ class AIChatApplicationService(
         source: str | None,
         context: dict[str, Any],
         file_context: dict[str, Any],
+        authenticated_owner_user_id: int | None = None,
     ) -> dict[str, Any] | None:
         text = str(message or "").strip()
         if not text:
@@ -729,10 +741,21 @@ class AIChatApplicationService(
         explicit_workflow_tool_intent = self._looks_like_explicit_workflow_tool_intent(text)
         smart_workflow_intent = self._looks_like_smart_workflow_intent(text, context)
         has_pending_workflow = user_id in self._pending_workflows
+        confirmation_request = self._workflow_confirmation_request(context)
+        confirm_words = {"确认", "是", "好的", "继续", "执行", "ok", "yes"}
+        cancel_words = {"取消", "否", "不要", "停止", "no"}
+        bare_workflow_decision = (
+            text.lower() in confirm_words
+            or text in confirm_words
+            or text.lower() in cancel_words
+            or text in cancel_words
+        )
         if (
             not self._is_pro_source(source)
             and not smart_workflow_intent
             and not has_pending_workflow
+            and confirmation_request is None
+            and not bare_workflow_decision
         ):
             return None
 
@@ -742,6 +765,14 @@ class AIChatApplicationService(
             merged_file_ctx.update(context.get("file_context") or {})
         if isinstance(file_context, dict):
             merged_file_ctx.update(file_context)
+
+        if confirmation_request is not None:
+            return self._handle_durable_workflow_decision(
+                user_id=user_id,
+                confirmation=confirmation_request,
+                action=confirmation_request["action"],
+                authenticated_owner_user_id=authenticated_owner_user_id,
+            )
 
         import_intent = any(k in text for k in ("导入", "入库", "添加到数据库", "写入数据库"))
         if import_intent and (merged_file_ctx.get("suggested_use") == "unit_products_db"):
@@ -1151,20 +1182,32 @@ class AIChatApplicationService(
             build_inventory_alert_response_dict,
             build_label_print_response_dict,
             build_product_query_response_dict,
+            build_shipment_records_query_response_dict,
             resolve_tool_execution_profile,
             route_normal_mode_message,
             run_normal_slot_shipment_preview,
         )
 
         profile = resolve_tool_execution_profile(context if isinstance(context, dict) else {})
-        if profile == "normal" and not explicit_workflow_tool_intent:
+        if (
+            profile == "normal"
+            and not explicit_workflow_tool_intent
+            and (self._is_pro_source(source) or not smart_workflow_intent)
+        ):
             rr = route_normal_mode_message(text)
+            if rr.get("intent") == "shipment_records_query":
+                shipments = build_shipment_records_query_response_dict(rr)
+                if shipments:
+                    return shipments
             if rr.get("intent") == "product_query":
                 pq = build_product_query_response_dict(rr)
                 if pq:
                     return pq
             if rr.get("intent") == "shipment":
-                ship = run_normal_slot_shipment_preview(text)
+                ship = run_normal_slot_shipment_preview(
+                    text,
+                    authenticated_owner_user_id=authenticated_owner_user_id,
+                )
                 if ship.get("success"):
                     ship.pop("normal_slot_dispatch", None)
                     return ship
@@ -1186,8 +1229,6 @@ class AIChatApplicationService(
         # 处理混合模式下的确认/取消
         pending = self._pending_workflows.get(user_id)
         if pending:
-            confirm_words = {"确认", "是", "好的", "继续", "执行", "ok", "yes"}
-            cancel_words = {"取消", "否", "不要", "停止", "no"}
             if text.lower() in confirm_words or text in confirm_words:
                 plan = pending.get("plan")
                 runtime_ctx = pending.get("runtime_context", {})
@@ -1195,6 +1236,17 @@ class AIChatApplicationService(
                 approval_nodes = pending.get("approval_nodes", [])
 
                 if approval_required and approval_nodes:
+                    agent_run_id = str(pending.get("agent_run_id") or "").strip()
+                    if agent_run_id:
+                        return self._handle_durable_workflow_decision(
+                            user_id=user_id,
+                            confirmation={
+                                "agent_run_id": agent_run_id,
+                                "plan_id": str(getattr(plan, "plan_id", "") or ""),
+                            },
+                            action="submit_approval",
+                            authenticated_owner_user_id=authenticated_owner_user_id,
+                        )
                     for node_info in approval_nodes:
                         node = None
                         for n in plan.nodes:
@@ -1229,21 +1281,16 @@ class AIChatApplicationService(
 
                 agent_run_id = str(pending.get("agent_run_id") or "").strip()
                 if agent_run_id:
-                    from app.application.agent_orchestrator import AgentOrchestrator
-
-                    agent_run = AgentOrchestrator().continue_run(
-                        agent_run_id,
-                        approved_by=user_id,
-                        runtime_context=runtime_ctx,
-                    )
                     self._pending_workflows.pop(user_id, None)
-                    if agent_run is not None:
-                        return self._format_agent_run_response(
-                            plan,
-                            agent_run,
-                            thinking_steps=str(pending.get("thinking_steps") or ""),
-                            user_message=str(runtime_ctx.get("message") or ""),
-                        )
+                    return self._handle_durable_workflow_decision(
+                        user_id=user_id,
+                        confirmation={
+                            "agent_run_id": agent_run_id,
+                            "plan_id": str(getattr(plan, "plan_id", "") or ""),
+                        },
+                        action="confirm",
+                        authenticated_owner_user_id=authenticated_owner_user_id,
+                    )
 
                 run_result = self.workflow_engine.run(
                     plan=plan, runtime_context=runtime_ctx, max_retries=1
@@ -1255,7 +1302,18 @@ class AIChatApplicationService(
                     user_message=str(runtime_ctx.get("message") or ""),
                 )
             if text.lower() in cancel_words or text in cancel_words:
+                agent_run_id = str(pending.get("agent_run_id") or "").strip()
                 self._pending_workflows.pop(user_id, None)
+                if agent_run_id:
+                    return self._handle_durable_workflow_decision(
+                        user_id=user_id,
+                        confirmation={
+                            "agent_run_id": agent_run_id,
+                            "plan_id": str(getattr(pending.get("plan"), "plan_id", "") or ""),
+                        },
+                        action="cancel",
+                        authenticated_owner_user_id=authenticated_owner_user_id,
+                    )
                 return {
                     "success": True,
                     "message": "处理完成",
@@ -1266,6 +1324,16 @@ class AIChatApplicationService(
                         "data": {},
                     },
                 }
+
+        if bare_workflow_decision:
+            return self._handle_durable_workflow_decision(
+                user_id=user_id,
+                confirmation=None,
+                action=(
+                    "cancel" if text.lower() in cancel_words or text in cancel_words else "confirm"
+                ),
+                authenticated_owner_user_id=authenticated_owner_user_id,
+            )
 
         # 普通工具画像（含「普通界面 + 专业意图」）：未命中槽位时勿走 LLM 工作流规划，避免长时间阻塞在 plan()；
         # 交给下方主对话链路（DeepSeek 等），体验与普通聊天一致。
@@ -1289,7 +1357,7 @@ class AIChatApplicationService(
                 if parsed_quick.get("success"):
                     # 结构与 _build_tool_call_response 一致，避免把多余键摊进 toolCall.params
                     quick_ai = {
-                        "text": "已识别订单，正在生成发货单…",
+                        "text": "已识别订单，请确认生成发货单。",
                         "action": "tool_call",
                         "data": {
                             "tool_key": "shipment_generate",
@@ -1309,18 +1377,29 @@ class AIChatApplicationService(
         from app.application.facades.tools_facade import get_workflow_tool_registry
 
         tool_registry = get_workflow_tool_registry()
+        planner_context = dict(context or {})
+        planner_context["source"] = str(source or "").strip()
         plan = self.workflow_planner.plan(
             user_id=user_id,
             message=message,
             tool_registry=tool_registry,
-            context=context,
+            context=planner_context,
         )
 
         decision = self.risk_gate.evaluate(plan=plan, context=context)
         runtime_ctx = self._merge_tool_runtime_context(user_id, message, context)
+        if authenticated_owner_user_id is not None:
+            runtime_ctx["authenticated_owner_user_id"] = int(authenticated_owner_user_id)
         runtime_ctx["source"] = str(source or "").strip()
         runtime_ctx["workflow_trace_mode"] = "agent_orchestrator"
         runtime_ctx["dynamic_workflow"] = True
+        runtime_ctx["autonomy_mode"] = "llm_controller"
+        runtime_ctx["execution_verification_required"] = True
+        runtime_ctx["background_execution"] = self._should_background_agent_run(
+            plan,
+            runtime_ctx,
+            message,
+        )
         thinking_steps = self._build_workflow_thinking_steps(
             plan=plan, decision_reason=decision.reason
         )
@@ -1336,13 +1415,22 @@ class AIChatApplicationService(
         if not has_approval_requirement and not use_agentic:
             from app.application.agent_orchestrator import AgentOrchestrator
 
-            agent_run = AgentOrchestrator().start_run_from_plan(
-                user_id=user_id,
-                message=message,
-                plan=plan,
-                runtime_context=runtime_ctx,
-                auto_execute=True,
-            )
+            orchestrator = AgentOrchestrator()
+            if runtime_ctx["background_execution"]:
+                agent_run = orchestrator.submit_run_from_plan(
+                    user_id=user_id,
+                    message=message,
+                    plan=plan,
+                    runtime_context=runtime_ctx,
+                )
+            else:
+                agent_run = orchestrator.start_run_from_plan(
+                    user_id=user_id,
+                    message=message,
+                    plan=plan,
+                    runtime_context=runtime_ctx,
+                    auto_execute=True,
+                )
             if agent_run.status != "waiting_user":
                 return self._format_agent_run_response(
                     plan,
@@ -1403,7 +1491,7 @@ class AIChatApplicationService(
             }
 
         agent_run_id = ""
-        if decision.requires_confirmation and not has_approval_requirement:
+        if decision.requires_confirmation or has_approval_requirement:
             from app.application.agent_orchestrator import AgentOrchestrator
 
             agent_run = AgentOrchestrator().start_run_from_plan(
@@ -1414,6 +1502,20 @@ class AIChatApplicationService(
                 auto_execute=True,
             )
             if agent_run.status != "waiting_user":
+                if has_approval_requirement:
+                    return {
+                        "success": False,
+                        "message": "审批任务未进入等待状态",
+                        "response": "高风险任务未能建立可恢复的审批检查点，已拒绝执行。",
+                        "data": {
+                            "text": "高风险任务未能建立可恢复的审批检查点，已拒绝执行。",
+                            "action": "workflow_confirmation_invalid",
+                            "data": {
+                                "agent_run_id": agent_run.run_id,
+                                "agent_status": agent_run.status,
+                            },
+                        },
+                    }
                 return self._format_agent_run_response(
                     plan,
                     agent_run,
@@ -1450,6 +1552,8 @@ class AIChatApplicationService(
                 f"{approval_info if has_approval_requirement else ''}"
             )
             risk_inner = {
+                "run_id": agent_run_id,
+                "agent_run_id": agent_run_id,
                 "plan_id": plan.plan_id,
                 "intent": plan.intent,
                 "thinking_steps": thinking_steps,
@@ -1608,308 +1712,6 @@ class AIChatApplicationService(
                     return n
         return str(user_message or "").strip()
 
-    def _start_agentic_workflow_agent_run(
-        self,
-        *,
-        user_id: str,
-        message: str,
-        plan,
-        runtime_context: dict[str, Any],
-    ):
-        from app.application.agent_orchestrator.run_models import AgentRun
-        from app.application.agent_orchestrator.run_repository import get_agent_run_repository
-
-        repository = get_agent_run_repository()
-        run = AgentRun(
-            user_id=str(user_id or ""),
-            message=str(message or ""),
-            status="running",
-            plan_id=str(getattr(plan, "plan_id", "") or ""),
-            intent=str(getattr(plan, "intent", "") or "agentic_workflow"),
-            metadata={
-                "runtime_context": dict(runtime_context or {}),
-                "trace_mode": "agentic_loop_bridge",
-                "plan": {
-                    "todo_steps": list(getattr(plan, "todo_steps", []) or []),
-                    "risk_level": str(getattr(plan, "risk_level", "") or ""),
-                    "metadata": dict(getattr(plan, "metadata", {}) or {}),
-                },
-            },
-        )
-        run.add_event("run.created", "Agentic workflow run 已创建")
-        run.add_event(
-            "planner.completed",
-            "Agentic workflow 计划已接管",
-            {
-                "plan_id": run.plan_id,
-                "intent": run.intent,
-                "source": "workflow_engine.agentic_loop",
-            },
-        )
-        run.add_event(
-            "agentic_loop.started",
-            "Agentic workflow loop 开始执行",
-            {"observed": True},
-        )
-        return repository.save(run)
-
-    def _bridge_agentic_workflow_result_to_agent_run(
-        self,
-        *,
-        user_id: str,
-        message: str,
-        plan,
-        run_result,
-        runtime_context: dict[str, Any],
-        agent_run=None,
-    ):
-        from app.application.agent_orchestrator.run_models import (
-            AgentRun,
-            AgentStep,
-            ToolCall,
-            artifact_from_dict,
-        )
-        from app.application.agent_orchestrator.run_repository import get_agent_run_repository
-        from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
-
-        repository = get_agent_run_repository()
-        runtime_ctx = dict(runtime_context or {})
-        run = agent_run
-        if run is None:
-            run = AgentRun(
-                user_id=str(user_id or ""),
-                message=str(message or ""),
-                status="running",
-                plan_id=str(getattr(plan, "plan_id", "") or ""),
-                intent=str(getattr(plan, "intent", "") or "agentic_workflow"),
-                metadata={
-                    "runtime_context": dict(runtime_ctx),
-                    "trace_mode": "agentic_loop_bridge",
-                    "plan": {
-                        "todo_steps": list(getattr(plan, "todo_steps", []) or []),
-                        "risk_level": str(getattr(plan, "risk_level", "") or ""),
-                        "metadata": dict(getattr(plan, "metadata", {}) or {}),
-                    },
-                },
-            )
-            run.add_event("run.created", "Agentic workflow run 已创建")
-            run.add_event(
-                "planner.completed",
-                "Agentic workflow 计划已接管",
-                {
-                    "plan_id": run.plan_id,
-                    "intent": run.intent,
-                    "source": "workflow_engine.agentic_loop",
-                },
-            )
-            run.add_event(
-                "agentic_loop.started",
-                "Agentic workflow loop 开始执行",
-                {"observed": True},
-            )
-        run.metadata["runtime_context"] = dict(runtime_ctx)
-        run.metadata["trace_mode"] = "agentic_loop_bridge"
-        run.add_event(
-            "agentic_loop.completed",
-            str(getattr(run_result, "message", "") or "AgenticLoop 已完成"),
-            {"observed": True},
-        )
-
-        node_outputs: dict[str, Any] = {}
-        for result in getattr(run_result, "node_results", []) or []:
-            spec = get_tool_action_spec(result.tool_id, result.action)
-            status = "completed" if bool(getattr(result, "success", False)) else "failed"
-            step = AgentStep(
-                node_id=str(result.node_id or f"agent_{result.tool_id}_{result.action}"),
-                tool_id=str(result.tool_id or ""),
-                action=str(getattr(spec, "action", "") or result.action or ""),
-                params=dict(getattr(result, "params", {}) or {}),
-                risk=str(getattr(spec, "risk", "") or "medium"),
-                idempotent=bool(getattr(spec, "idempotent", False)),
-                description="agentic loop observed tool execution",
-                status=status,
-                output=dict(getattr(result, "output", {}) or {}),
-                error=str(getattr(result, "error", "") or ""),
-                started_at=str(getattr(result, "started_at", "") or ""),
-                finished_at=str(getattr(result, "finished_at", "") or ""),
-                duration_ms=int(getattr(result, "duration_ms", 0) or 0),
-            )
-            if status == "failed" and not step.error:
-                step.error = self._workflow_output_message(step.output) or "tool failed"
-            call = ToolCall(
-                step_id=step.step_id,
-                node_id=step.node_id,
-                tool_id=step.tool_id,
-                action=step.action,
-                params=dict(step.params or {}),
-                status="completed" if status == "completed" else "failed",
-                output=dict(step.output or {}),
-                error=step.error,
-                cost_units=int(getattr(spec, "cost_units", 0) or 0),
-                permission=str(getattr(spec, "permission", "") or ""),
-                started_at=step.started_at or "",
-                finished_at=step.finished_at or "",
-                duration_ms=step.duration_ms,
-                metadata={
-                    "observed": True,
-                    "trace_mode": "agentic_loop_bridge",
-                    "retryable": bool(getattr(result, "retryable", True)),
-                    "retries": int(getattr(result, "retries", 0) or 0),
-                    "recovery_hint": str(getattr(result, "recovery_hint", "") or ""),
-                },
-            )
-            run.steps.append(step)
-            run.tool_calls.append(call)
-            node_outputs[step.node_id] = step.output
-            run.add_event(
-                "tool.started",
-                f"观察到 agentic 工具 {step.tool_id}.{step.action}",
-                {
-                    "step_id": step.step_id,
-                    "node_id": step.node_id,
-                    "call_id": call.call_id,
-                    "cost_units": call.cost_units,
-                    "permission": call.permission,
-                    "observed": True,
-                },
-            )
-            run.add_event(
-                "tool.completed" if status == "completed" else "tool.failed",
-                f"记录 agentic 工具 {step.tool_id}.{step.action}",
-                {
-                    "step_id": step.step_id,
-                    "node_id": step.node_id,
-                    "call_id": call.call_id,
-                    "duration_ms": step.duration_ms,
-                    "cost_units": call.cost_units,
-                    "observed": True,
-                    "error": step.error,
-                },
-            )
-            for artifact_payload in self._iter_agentic_artifact_payloads(step.output):
-                artifact = artifact_from_dict(artifact_payload)
-                if not artifact.artifact_type:
-                    continue
-                artifact.source = artifact.source or f"{step.tool_id}.{step.action}"
-                artifact.metadata = {
-                    **dict(artifact.metadata or {}),
-                    "step_id": step.step_id,
-                    "call_id": call.call_id,
-                    "trace_mode": "agentic_loop_bridge",
-                }
-                run.artifacts.append(artifact)
-                run.add_event(
-                    "artifact.attached",
-                    f"Artifact 已附加: {artifact.artifact_type}",
-                    {
-                        "artifact_id": artifact.artifact_id,
-                        "artifact_type": artifact.artifact_type,
-                        "name": artifact.name,
-                        "source": artifact.source,
-                    },
-                )
-
-        cost_units_total = sum(int(call.cost_units or 0) for call in run.tool_calls)
-        run.metadata["tool_call_count"] = len(run.tool_calls)
-        run.metadata["cost_units_total"] = cost_units_total
-        run.metadata["artifact_count"] = len(run.artifacts)
-        run.final_output = {
-            "node_outputs": node_outputs,
-            "tool_calls": [call.to_dict() for call in run.tool_calls],
-            "artifacts": [artifact.to_dict() for artifact in run.artifacts],
-            "cost_units_total": cost_units_total,
-            "workflow_result": {
-                "success": bool(getattr(run_result, "success", False)),
-                "message": str(getattr(run_result, "message", "") or ""),
-                "workflow_status": dict(
-                    (getattr(run_result, "final_context", {}) or {}).get("workflow_status") or {}
-                ),
-            },
-        }
-        run.status = "completed" if bool(getattr(run_result, "success", False)) else "failed"
-        if run.status == "failed":
-            run.error = str(getattr(run_result, "message", "") or "Agentic workflow failed")
-            run.add_event("run.failed", run.error, run.final_output)
-        else:
-            run.add_event("run.completed", "Agentic workflow run 执行完成", run.final_output)
-        return repository.save(run)
-
-    @staticmethod
-    def _iter_agentic_artifact_payloads(output: dict[str, Any]) -> list[dict[str, Any]]:
-        if not isinstance(output, dict):
-            return []
-        artifacts = output.get("artifacts")
-        if artifacts is None:
-            artifacts = output.get("artifact")
-        if isinstance(artifacts, dict):
-            return [artifacts]
-        if isinstance(artifacts, list):
-            return [item for item in artifacts if isinstance(item, dict)]
-        return []
-
-    @staticmethod
-    def _agent_plan_can_auto_execute(plan) -> bool:
-        nodes = getattr(plan, "nodes", None)
-        if not isinstance(nodes, (list, tuple)) or not nodes:
-            return False
-        try:
-            from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
-        except RECOVERABLE_ERRORS:
-            return False
-        for node in nodes:
-            spec = get_tool_action_spec(getattr(node, "tool_id", ""), getattr(node, "action", ""))
-            risk = str(getattr(spec, "risk", "") or getattr(node, "risk", "") or "").lower()
-            idempotent = bool(getattr(spec, "idempotent", getattr(node, "idempotent", False)))
-            if risk != "low" or not idempotent:
-                return False
-        return True
-
-    def _dispatch_workflow_tool(
-        self, tool_id: str, action: str, params: dict[str, Any]
-    ) -> dict[str, Any]:
-        try:
-            from app.application.facades.tools_facade import execute_registered_workflow_tool
-
-            return execute_registered_workflow_tool(tool_id=tool_id, action=action, params=params)
-        except RECOVERABLE_ERRORS as err:
-            logger.error(
-                "workflow 工具调度失败 tool=%s action=%s err=%s",
-                tool_id,
-                action,
-                err,
-                exc_info=True,
-            )
-            return {"success": False, "message": str(err)}
-
-    def _handle_confirmation_flow(
-        self, user_id: str, message: str, file_context: dict[str, Any] | None
-    ) -> None:
-        """处理确认流程"""
-        if not file_context:
-            return
-
-        if message not in ("是", "好的", "确认", "yes", "ok", "好"):
-            return
-
-        saved_name = file_context.get("saved_name")
-        unit_name = file_context.get("unit_name_guess") or file_context.get("unit_name", "")
-        suggested_use = file_context.get("suggested_use", "")
-
-        if saved_name and suggested_use == "unit_products_db" and unit_name:
-            self.ai_service.set_pending_confirmation(
-                user_id,
-                {
-                    "type": "import_unit_products",
-                    "tool_key": "sqlite_import_unit_products",
-                    "params": {
-                        "saved_name": saved_name,
-                        "unit_name": unit_name,
-                    },
-                    "description": f"导入 {unit_name} 的产品",
-                },
-            )
-            logger.info("用户 %s 确认导入文件：%s -> %s", user_id, saved_name, unit_name)
-
     def _build_response(
         self, ai_result: dict[str, Any], source: str | None, original_message: str = ""
     ) -> dict[str, Any]:
@@ -1964,7 +1766,13 @@ class AIChatApplicationService(
             )
         else:
             response_data = self._execute_normal_mode_tools(
-                response_data, tool_key, parsed_params, ai_result, result_data
+                response_data,
+                tool_key,
+                parsed_params,
+                ai_result,
+                result_data,
+                slots=slots,
+                original_message=original_message,
             )
 
         return response_data

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { checkBeforeAction, isEnabled, type Tier, type GateResult } from '../cross-tier-gate.js'
+import { checkBeforeAction, isEnabled, requiresRemoteState, type Tier, type GateResult } from '../cross-tier-gate.js'
 
 describe('cross-tier-gate', () => {
   describe('checkBeforeAction — fail-closed', () => {
@@ -9,7 +9,7 @@ describe('cross-tier-gate', () => {
       expect(result.reasons).toEqual(['remote_state unavailable, fail-closed'])
     })
 
-    it('denies when tier is desktop and remoteState is null regardless of action', () => {
+    it('keeps checkBeforeAction fail-closed when it is explicitly invoked', () => {
       expect(checkBeforeAction('desktop', 'rollback_version', null).allow).toBe(false)
       expect(checkBeforeAction('desktop', 'clear_cache', null).allow).toBe(false)
     })
@@ -28,6 +28,17 @@ describe('cross-tier-gate', () => {
       expect(checkBeforeAction('desktop', 'rollback_version', {}).allow).toBe(true)
       expect(checkBeforeAction('server', 'rollback_to_last_tarball', {}).allow).toBe(true)
       expect(checkBeforeAction('ci', 'cvm-push-release', {}).allow).toBe(true)
+    })
+  })
+
+  describe('requiresRemoteState', () => {
+    it('requires a remote snapshot only for cross-tier actions', () => {
+      expect(requiresRemoteState('rollback_version')).toBe(true)
+      expect(requiresRemoteState('rollback_to_last_tarball')).toBe(true)
+      expect(requiresRemoteState('cvm-push-release')).toBe(true)
+      expect(requiresRemoteState('clear_cache')).toBe(false)
+      expect(requiresRemoteState('repair_config')).toBe(false)
+      expect(requiresRemoteState('restart_backend')).toBe(false)
     })
   })
 

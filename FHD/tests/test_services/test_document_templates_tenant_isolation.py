@@ -75,15 +75,22 @@ def templates_db(monkeypatch):
 
 
 class TestTemplatesTenantWhereSql:
-    def test_no_tenant_sees_only_system_null(self):
+    def test_no_tenant_fail_closed(self):
         sql, bind = templates_tenant_where_sql()
-        assert sql == "tenant_id IS NULL"
+        assert sql == "1 = 0"
         assert bind == {}
 
-    def test_tenant_sees_own_and_system_null(self):
+    def test_strict_equals_current(self):
         with tenant_scope(7):
             sql, bind = templates_tenant_where_sql()
         assert "tenant_id = :tenant_id" in sql
+        assert "IS NULL" not in sql
+        assert bind == {"tenant_id": 7}
+
+    def test_legacy_null_visible(self, monkeypatch):
+        monkeypatch.setenv("XCAGI_TENANT_ALLOW_LEGACY_NULL_VISIBLE", "1")
+        with tenant_scope(7):
+            sql, bind = templates_tenant_where_sql()
         assert "IS NULL" in sql
         assert bind == {"tenant_id": 7}
 
@@ -105,21 +112,63 @@ class TestTemplatesTenantIdForInsert:
 
 
 class TestDbTemplatesIsolation:
-    def test_tenant_sees_own_plus_system_null(self, templates_db, tmp_path):
+    def test_tenant_sees_only_own(self, templates_db, tmp_path):
+        store = FileSystemTemplateStore(str(tmp_path))
+        with tenant_scope(1):
+            names = {t["name"] for t in store._db_templates()}
+        assert names == {"tenant1-tpl"}
+
+        with tenant_scope(2):
+            names = {t["name"] for t in store._db_templates()}
+        assert names == {"tenant2-tpl"}
+
+    def test_no_tenant_sees_none(self, templates_db, tmp_path):
+        store = FileSystemTemplateStore(str(tmp_path))
+        assert store._db_templates() == []
+
+    def test_legacy_null_opt_in(self, templates_db, tmp_path, monkeypatch):
+        monkeypatch.setenv("XCAGI_TENANT_ALLOW_LEGACY_NULL_VISIBLE", "1")
         store = FileSystemTemplateStore(str(tmp_path))
         with tenant_scope(1):
             names = {t["name"] for t in store._db_templates()}
         assert names == {"tenant1-tpl", "legacy-null"}
 
-        with tenant_scope(2):
-            names = {t["name"] for t in store._db_templates()}
-        assert names == {"tenant2-tpl", "legacy-null"}
-        assert "tenant1-tpl" not in names
-
-    def test_no_tenant_sees_only_system_null(self, templates_db, tmp_path):
+    def test_db_template_id_cannot_cross_tenant(self, templates_db, tmp_path):
+        own = tmp_path / "tenant1.xlsx"
+        foreign = tmp_path / "tenant2.xlsx"
+        own.write_bytes(b"xlsx")
+        foreign.write_bytes(b"xlsx")
+        with templates_db.begin() as conn:
+            conn.execute(
+                text("UPDATE templates SET original_file_path = :path WHERE id = 1"),
+                {"path": str(own)},
+            )
+            conn.execute(
+                text("UPDATE templates SET original_file_path = :path WHERE id = 2"),
+                {"path": str(foreign)},
+            )
         store = FileSystemTemplateStore(str(tmp_path))
-        names = {t["name"] for t in store._db_templates()}
-        assert names == {"legacy-null"}
+        with tenant_scope(1):
+            assert store.resolve_template_file("db:1") == str(own)
+            assert store.resolve_template_file("db:2") is None
+
+    def test_legacy_etl_promotion_is_hidden_fail_closed(self, templates_db, tmp_path):
+        private = tmp_path / "old-private-layout.xlsx"
+        private.write_bytes(b"xlsx")
+        with templates_db.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE templates SET original_file_path = :path, analyzed_data = :data WHERE id = 1"
+                ),
+                {
+                    "path": str(private),
+                    "data": '{"source":"etl_shipment_template"}',
+                },
+            )
+        store = FileSystemTemplateStore(str(tmp_path))
+        with tenant_scope(1):
+            assert store._db_templates() == []
+            assert store.resolve_template_file("db:1") is None
 
 
 class TestDiscoveryDirectoriesTenantPrivate:

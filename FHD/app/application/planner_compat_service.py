@@ -31,6 +31,8 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
     _ensure_vector_index_if_needed,
     _merge_runtime_context_with_message_paths,
     _message_requires_db_read_token,
+    _sse_event_line,
+    _xcagi_chat_error_event,
     _xcagi_chat_http_exc,
     _xcagi_chat_timeout_error_payload,
     _xcagi_chat_timeout_seconds,
@@ -43,6 +45,34 @@ from app.services.conversation.modstore_adapter import create_modstore_openai_cl
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+def _authenticated_owner_user_id(request: Request) -> int | None:
+    """Read the authenticated owner only from server-populated request state."""
+    try:
+        value = getattr(request.state, "user_id", None)
+        owner = int(value)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return owner if owner > 0 else None
+
+
+def _authenticated_tenant_id(request: Request) -> int | None:
+    """Read the tenant only from server-populated request state."""
+    try:
+        value = getattr(request.state, "tenant_id", None)
+        tenant = int(value)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return tenant if tenant > 0 else None
+
+
+from app.application.planner_compat_streaming import (
+    _compat_chat_stream_with_tenant_scope,
+    _stream_read_only_business_query_payload,
+    _stream_shipment_preview_payload,
+    compat_chat_stream_async,
+)
 
 
 def _request_session_candidates(request: Request) -> list[str]:
@@ -332,10 +362,11 @@ async def _execute_ai_chat_mainline(
     *,
     message: str | None = None,
     kitten_extra: dict[str, Any] | None = None,
+    authenticated_owner_user_id: int | None = None,
 ) -> dict[str, Any]:
-    from app.application.ai_chat_app_service import AIChatApplicationService
+    from app.application.ai_chat_app_service import get_ai_chat_app_service
 
-    service = AIChatApplicationService()
+    service = get_ai_chat_app_service()
     file_context = runtime_context.get("file_context")
     if not isinstance(file_context, dict):
         file_context = runtime_context.get("file_analysis")
@@ -350,6 +381,7 @@ async def _execute_ai_chat_mainline(
         context=dict(runtime_context or {}),
         source=getattr(body, "source", None),
         file_context=file_context,
+        authenticated_owner_user_id=authenticated_owner_user_id,
     )
     if not isinstance(payload, dict):
         payload = _xcagi_compat_reply_payload(str(payload))
@@ -456,6 +488,7 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> di
                     body,
                     planner_runtime_context,
                     kitten_extra=kitten_extra or None,
+                    authenticated_owner_user_id=_authenticated_owner_user_id(request),
                 ),
                 timeout=timeout,
             )
@@ -726,16 +759,19 @@ async def execute_compat_chat_batch(
             except RECOVERABLE_ERRORS as e:
                 if not _legacy_chat_fallback_allowed(planner_runtime_context):
                     err = _xcagi_chat_http_exc(e)
+                    error_event = _xcagi_chat_error_event(err)
+                    error_message = str(error_event["message"])
                     results.append(
                         {
                             "success": False,
-                            "message": (
-                                err.detail if isinstance(err.detail, str) else str(err.detail)
-                            ),
-                            "response": err.detail
-                            if isinstance(err.detail, str)
-                            else str(err.detail),
-                            "data": {"error": str(e)},
+                            "message": error_message,
+                            "response": error_message,
+                            "error_code": error_event.get("error_code"),
+                            "data": {
+                                "error": error_message,
+                                "status_code": err.status_code,
+                                "error_code": error_event.get("error_code"),
+                            },
                         }
                     )
                     continue
@@ -851,9 +887,15 @@ async def execute_compat_chat_batch(
                 )
         except RECOVERABLE_ERRORS as e:
             err = _xcagi_chat_http_exc(e)
+            error_event = _xcagi_chat_error_event(err)
             payload = {
                 "success": False,
-                "message": err.detail if isinstance(err.detail, str) else str(err.detail),
+                "message": str(error_event["message"]),
+                "error_code": error_event.get("error_code"),
+                "data": {
+                    "status_code": err.status_code,
+                    "error_code": error_event.get("error_code"),
+                },
             }
             if pre_run is not None:
                 results.append(
@@ -912,50 +954,3 @@ def _resolve_chat_user_id(request: Request, body: XcagiCompatChatBody) -> str:
     except Exception:  # noqa: BLE001
         pass
     return "1"
-
-
-async def compat_chat_stream_async(
-    request: Request, body: XcagiCompatChatBody, *, ai_tier: str | None = None
-):
-    # 注入 persona system_prompt（前端没传时用 persona 系统生成去客服腔 prompt）
-    if not body.system_prompt and body.message:
-        try:
-            from app.services.conversation.manager import get_ai_conversation_service
-
-            svc = get_ai_conversation_service()
-            persona_svc = getattr(svc, "persona_service", None)
-            logger.info(
-                "persona_inject check: has_persona=%s msg=%s",
-                persona_svc is not None,
-                body.message[:50],
-            )
-            if persona_svc is not None:
-                user_id = _resolve_chat_user_id(request, body)
-                ctx = body.context or {}
-                # 单一真相源 + 自动派生：优先用前端传的 industry；
-                # 没传则从 session account_kind 派生（admin → 管理端，其他 → 通用）
-                industry = ctx.get("industry") if isinstance(ctx, dict) else None
-                if not industry:
-                    industry = _derive_industry_from_session(request)
-                history = _recent_history(svc, user_id)
-                logger.info(
-                    "persona_inject ctx=%s industry=%s history_len=%d",
-                    _summarize_context_for_log(ctx),
-                    industry,
-                    len(history),
-                )
-                prompt, _params = await persona_svc.build_prompt_from_message(
-                    user_id=user_id,
-                    message=body.message,
-                    history=history,
-                    industry=industry,
-                    context_prompt="",
-                )
-                body.system_prompt = prompt
-                logger.info("persona_inject OK: prompt_len=%d", len(prompt))
-        except Exception as e:  # noqa: BLE001  # persona 注入为尽力而为，失败不应中断流式响应
-            logger.warning("persona_inject FAIL: %s", e, exc_info=True)
-
-    tier = ai_tier or resolve_ai_tier(request)
-    async for chunk in _xcagi_planner_stream_bytes_async(request, body, ai_tier=tier):
-        yield chunk

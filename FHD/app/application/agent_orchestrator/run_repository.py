@@ -23,6 +23,8 @@ class AgentRunRepository(Protocol):
 
     def list_recent(self, *, user_id: str | None = None, limit: int = 50) -> list[AgentRun]: ...
 
+    def list_by_status(self, statuses: set[str], *, limit: int = 1000) -> list[AgentRun]: ...
+
     def list_events(self, run_id: str, *, after_event_id: str | None = None) -> list[RunEvent]: ...
 
     def clear(self) -> None: ...
@@ -50,6 +52,13 @@ class InMemoryAgentRunRepository:
         if user_id is not None:
             runs = [run for run in runs if run.user_id == user_id]
         runs.sort(key=lambda run: run.updated_at, reverse=True)
+        return [copy.deepcopy(run) for run in runs[: max(0, int(limit))]]
+
+    def list_by_status(self, statuses: set[str], *, limit: int = 1000) -> list[AgentRun]:
+        wanted = {str(status) for status in statuses}
+        with self._lock:
+            runs = [run for run in self._runs.values() if run.status in wanted]
+        runs.sort(key=lambda run: run.updated_at)
         return [copy.deepcopy(run) for run in runs[: max(0, int(limit))]]
 
     def list_events(self, run_id: str, *, after_event_id: str | None = None) -> list[RunEvent]:
@@ -131,6 +140,23 @@ class SQLAlchemyAgentRunRepository:
                 query = query.filter(AgentRunRecord.user_id == str(user_id))
             records = (
                 query.order_by(AgentRunRecord.updated_at.desc()).limit(max(0, int(limit))).all()
+            )
+            return [run for record in records if (run := self._record_to_run(record)) is not None]
+
+    def list_by_status(self, statuses: set[str], *, limit: int = 1000) -> list[AgentRun]:
+        self._ensure_schema()
+        wanted = sorted({str(status) for status in statuses if str(status)})
+        if not wanted:
+            return []
+        with self._session_scope(read_only=True) as db:
+            from app.db.models.agent import AgentRunRecord
+
+            records = (
+                db.query(AgentRunRecord)
+                .filter(AgentRunRecord.status.in_(wanted))
+                .order_by(AgentRunRecord.updated_at.asc())
+                .limit(max(0, int(limit)))
+                .all()
             )
             return [run for record in records if (run := self._record_to_run(record)) is not None]
 

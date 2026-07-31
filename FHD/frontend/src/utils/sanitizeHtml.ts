@@ -70,6 +70,12 @@ const CHAT_BUBBLE_CONFIG: Config = {
   ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i
 }
 
+const CHAT_PLAIN_TEXT_CONFIG: Config = {
+  ALLOWED_TAGS: ['br'],
+  ALLOWED_ATTR: [],
+  RETURN_DOM_FRAGMENT: true,
+}
+
 /** AI 气泡：Markdown → HTML 后再消毒；允许代码块复制按钮与图片等 Markdown 产物 */
 const CHAT_MARKDOWN_CONFIG: Config = {
   ...CHAT_BUBBLE_CONFIG,
@@ -137,6 +143,41 @@ export function sanitizeChatBubbleHtml(raw: string | undefined | null): string {
   const dirty = String(raw ?? '')
   if (!dirty) return ''
   return DOMPurify.sanitize(dirty, CHAT_BUBBLE_CONFIG)
+}
+
+function sanitizedFragmentText(raw: string): string {
+  const fragment = DOMPurify.sanitize(raw, CHAT_PLAIN_TEXT_CONFIG) as unknown as DocumentFragment
+  const parts: string[] = []
+
+  const visit = (node: Node) => {
+    if (node.nodeType === 3) {
+      parts.push(node.textContent || '')
+      return
+    }
+    if (node.nodeName === 'BR') {
+      parts.push('\n')
+      return
+    }
+    node.childNodes.forEach(visit)
+  }
+
+  fragment.childNodes.forEach(visit)
+  return parts.join('')
+}
+
+/**
+ * Convert restored chat HTML to text through DOMPurify.
+ * Re-sanitize until stable to support legacy messages with nested entity escaping.
+ */
+export function sanitizeChatBubblePlainText(raw: unknown): string {
+  const dirty = String(raw ?? '')
+  if (!dirty) return ''
+  let plain = dirty
+  while (true) {
+    const next = sanitizedFragmentText(plain)
+    if (next === plain) return next.replace(/\u00a0/g, ' ').trim()
+    plain = next
+  }
 }
 
 /** 助手回复：按 Markdown 渲染后再消毒（表格、列表、粗体等）。 */

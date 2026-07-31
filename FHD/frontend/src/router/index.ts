@@ -185,7 +185,9 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
     },
     {
       path: '/business-docking',
-      redirect: { name: 'template-preview' },
+      name: 'business-docking',
+      component: () => import('../views/EtlCenterView.vue'),
+      meta: { title: '数据对接中心' },
     },
     {
       path: '/orders/create',
@@ -669,33 +671,6 @@ router.beforeEach(async (to, _from, next) => {
     next(resolvePlannerChatHomePath());
     return;
   }
-
-  // 干净通用版：禁用 Mod 页 redirect，宿主 /products 等走 frontend/src/views/*
-  // if (
-  //   readErpDomainModFacadeEnabled() &&
-  //   to.name &&
-  //   !to.meta?.mod &&
-  //   !to.meta?.publicAccess
-  // ) {
-  //   const modPage = resolveHostBusinessPageRedirect(String(to.name));
-  //   if (modPage && to.path !== modPage.split('?')[0]) {
-  //     next({ path: modPage, query: to.query, hash: to.hash });
-  //     return;
-  //   }
-  // }
-
-  // if (
-  //   readCoreWorkflowModPagesEnabled() &&
-  //   to.name &&
-  //   !to.meta?.mod &&
-  //   !to.meta?.publicAccess
-  // ) {
-  //   const wfPage = resolveWorkflowPageRedirectForRouteName(String(to.name));
-  //   if (wfPage && to.path !== wfPage.split('?')[0]) {
-  //     next({ path: wfPage, query: to.query, hash: to.hash });
-  //     return;
-  //   }
-  // }
 
   // SSOT：桌面壳禁止 admin（须早于 requiresAdminAccount / 管理端客服侧，避免企业构建内 /admin/entitlements 可达）
   if (!to.meta?.publicAccess && isDesktopShell() && !isAdminConsoleSpa()) {

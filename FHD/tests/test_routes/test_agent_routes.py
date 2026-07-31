@@ -51,6 +51,7 @@ def test_create_get_and_list_agent_run() -> None:
                 "message": "查数据库产品 XG-5003",
                 "user_id": "u1",
                 "runtime_context": {"source": "route-test"},
+                "background": False,
             },
         )
 
@@ -108,6 +109,7 @@ def test_continue_waiting_agent_run() -> None:
                 "message": "请把客户 星光贸易 写入数据库",
                 "user_id": "u1",
                 "runtime_context": {"source": "route-continue-test"},
+                "background": False,
             },
         )
         assert create_response.status_code == 202
@@ -118,7 +120,7 @@ def test_continue_waiting_agent_run() -> None:
         mock_execute.return_value = {"success": True, "message": "客户已写入"}
         continue_response = client.post(
             f"/api/agent/runs/{waiting['run_id']}/continue",
-            json={"approved_by": "tester"},
+            json={"approved_by": "tester", "background": False},
         )
 
     assert continue_response.status_code == 200
@@ -161,3 +163,19 @@ def test_get_agent_run_returns_404_for_missing_run() -> None:
     events_response = client.get("/api/agent/runs/run_missing/events")
     assert events_response.status_code == 404
     assert events_response.json()["success"] is False
+
+
+def test_list_agent_tool_contracts_includes_verification_and_rollback() -> None:
+    response = _client().get("/api/agent/tools/contracts")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["schema_version"] == "2.1"
+    business_read = next(
+        item
+        for item in payload["data"]
+        if item["tool_id"] == "business_db" and item["action"] == "read"
+    )
+    assert business_read["verification"]["verifier"] == "query_receipt"
+    assert business_read["rollback"]["strategy"] == "none"

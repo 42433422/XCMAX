@@ -12,7 +12,9 @@ the module is loaded.
 
 import importlib.util
 import sys
+from contextlib import nullcontext
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import fastapi  # real fastapi must be available
@@ -36,6 +38,13 @@ _RECOVERABLE = (
 
 
 def _build_stubs() -> dict:
+    fhd_root = Path(__file__).resolve().parents[2]
+
+    def package_stub(name: str, relative_path: str) -> ModuleType:
+        module = ModuleType(name)
+        module.__path__ = [str(fhd_root / relative_path)]
+        return module
+
     tier_mod = MagicMock()
     tier_mod.assert_p2_elevated_claim_or_raise = MagicMock()
     tier_mod.resolve_ai_tier = MagicMock(return_value="standard")
@@ -83,10 +92,12 @@ def _build_stubs() -> dict:
 
     operational_errors_mod = MagicMock()
     operational_errors_mod.RECOVERABLE_ERRORS = _RECOVERABLE
+    tenant_scope_mod = MagicMock()
+    tenant_scope_mod.tenant_scope = MagicMock(side_effect=lambda _tenant: nullcontext())
 
     stubs = {
-        "app": MagicMock(),
-        "app.application": MagicMock(),
+        "app": package_stub("app", "app"),
+        "app.application": package_stub("app.application", "app/application"),
         "app.application.agent_orchestrator": MagicMock(),
         "app.application.agent_orchestrator.chat_trace": chat_trace_mod,
         "app.domain": MagicMock(),
@@ -95,7 +106,8 @@ def _build_stubs() -> dict:
         "app.domain.context": MagicMock(),
         "app.domain.context.session_context": session_ctx_mod,
         "app.fastapi_routes.xcagi_compat_chat_helpers": helpers_mod,
-        "app.infrastructure": MagicMock(),
+        "app.infrastructure": package_stub("app.infrastructure", "app/infrastructure"),
+        "app.infrastructure.tenant_scope": tenant_scope_mod,
         "app.infrastructure.llm": MagicMock(),
         "app.infrastructure.llm.client": llm_client_mod,
         "app.legacy": MagicMock(),
@@ -104,7 +116,7 @@ def _build_stubs() -> dict:
         "app.services": MagicMock(),
         "app.services.conversation": MagicMock(),
         "app.services.conversation.modstore_adapter": modstore_mod,
-        "app.utils": MagicMock(),
+        "app.utils": package_stub("app.utils", "app/utils"),
         "app.utils.operational_errors": operational_errors_mod,
     }
     return stubs
@@ -168,6 +180,7 @@ _legacy_requires_token_payload = _pcs._legacy_requires_token_payload
 execute_compat_chat = _pcs.execute_compat_chat
 execute_compat_chat_batch = _pcs.execute_compat_chat_batch
 compat_chat_stream_async = _pcs.compat_chat_stream_async
+_compat_stream_source = _real_pcs_module or _pcs
 
 MOD = "app.application.planner_compat_service"
 
@@ -1077,7 +1090,9 @@ async def test_stream_user_id_from_header():
 
     with (
         patch.object(_pcs, "resolve_ai_tier", return_value="standard"),
-        patch.object(_pcs, "_xcagi_planner_stream_bytes_async", side_effect=_fake_stream),
+        patch.object(
+            _compat_stream_source, "_xcagi_planner_stream_bytes_async", side_effect=_fake_stream
+        ),
     ):
         # persona_service=None so inject is skipped; just go straight to stream
         conv_mod = MagicMock()
@@ -1089,7 +1104,9 @@ async def test_stream_user_id_from_header():
             async for chunk in compat_chat_stream_async(req, body):
                 chunks.append(chunk)
 
-    assert chunks == [b"chunk"]
+    assert b'"phase": "intent_recognition"' in chunks[0]
+    assert b'"phase": "model_connect"' in chunks[1]
+    assert chunks[2:] == [b"chunk"]
 
 
 # ===========================================================================
@@ -1125,13 +1142,17 @@ async def test_stream_persona_industry_from_ctx():
     with (
         patch.dict(sys.modules, {"app.services.conversation.manager": conv_mod}),
         patch.object(_pcs, "resolve_ai_tier", return_value="standard"),
-        patch.object(_pcs, "_xcagi_planner_stream_bytes_async", side_effect=_fake_stream),
+        patch.object(
+            _compat_stream_source, "_xcagi_planner_stream_bytes_async", side_effect=_fake_stream
+        ),
     ):
         chunks = []
         async for chunk in compat_chat_stream_async(req, body):
             chunks.append(chunk)
 
-    assert chunks == [b"persona-chunk"]
+    assert b'"phase": "intent_recognition"' in chunks[0]
+    assert b'"phase": "model_connect"' in chunks[1]
+    assert chunks[2:] == [b"persona-chunk"]
     assert body.system_prompt == "system prompt text"
 
 
@@ -1181,13 +1202,17 @@ async def test_stream_persona_industry_from_derive():
             },
         ),
         patch.object(_pcs, "resolve_ai_tier", return_value="standard"),
-        patch.object(_pcs, "_xcagi_planner_stream_bytes_async", side_effect=_fake_stream),
+        patch.object(
+            _compat_stream_source, "_xcagi_planner_stream_bytes_async", side_effect=_fake_stream
+        ),
     ):
         chunks = []
         async for chunk in compat_chat_stream_async(req, body):
             chunks.append(chunk)
 
-    assert chunks == [b"derived-chunk"]
+    assert b'"phase": "intent_recognition"' in chunks[0]
+    assert b'"phase": "model_connect"' in chunks[1]
+    assert chunks[2:] == [b"derived-chunk"]
     assert body.system_prompt == "derived prompt"
 
 

@@ -37,6 +37,9 @@ class DatasetEvents:
     DATASET_INGESTED = "dataset.ingested"
     DATASET_INGEST_FAILED = "dataset.ingest_failed"
 
+class LedgerEvents:
+    LEDGER_UPDATED = "ledger.updated"
+
 class LLMEvents:
     LLM_COMPLETED = "llm.completed"
     LLM_FAILED = "llm.failed"
@@ -52,6 +55,7 @@ class PlannerEvents:
     PLANNER_STARTED = "planner.started"
     PLANNER_COMPLETED = "planner.completed"
     PLANNER_BLOCKED = "planner.blocked"  # terminal
+    PLANNER_DEGRADED = "planner.degraded"
 
 class RagEvents:
     RAG_RETRIEVED = "rag.retrieved"
@@ -61,22 +65,40 @@ class RunEvents:
     RUN_CREATED = "run.created"  # sla_tier=conscious
     RUN_COMPLETED = "run.completed"  # terminal
     RUN_FAILED = "run.failed"  # terminal
+    RUN_CANCELLED = "run.cancelled"  # terminal
+    RUN_CANCEL_REQUESTED = "run.cancel_requested"  # sla_tier=conscious
+    RUN_BACKGROUND_STARTED = "run.background_started"  # sla_tier=conscious
+    RUN_PAUSED = "run.paused"  # sla_tier=conscious
+    RUN_PAUSE_REQUESTED = "run.pause_requested"  # sla_tier=conscious
+    RUN_QUEUED = "run.queued"  # sla_tier=conscious
+    RUN_RECOVERED = "run.recovered"  # sla_tier=conscious
+    RUN_RESUMED = "run.resumed"  # sla_tier=conscious
+    RUN_RETRY_REQUESTED = "run.retry_requested"  # sla_tier=conscious
+    RUN_VERIFICATION_INCONCLUSIVE = "run.verification_inconclusive"  # sla_tier=conscious
     RUN_CONTINUE_IGNORED = "run.continue_ignored"
 
 class StepEvents:
     STEP_BLOCKED = "step.blocked"
     STEP_WAITING_USER = "step.waiting_user"
     STEP_APPROVED = "step.approved"
+    STEP_PARAMS_NORMALIZED = "step.params_normalized"
     STEP_REPAIR_APPLIED = "step.repair_applied"
     STEP_RETRY_SCHEDULED = "step.retry_scheduled"
     STEP_LLM_REPAIR_REQUESTED = "step.llm_repair_requested"
     STEP_LLM_REPAIR_FAILED = "step.llm_repair_failed"
+    STEP_RECOVERED = "step.recovered"
+    STEP_RECOVERY_CONFIRMATION_REQUIRED = "step.recovery_confirmation_required"
     STEP_REPAIR_REJECTED = "step.repair_rejected"
 
 class ToolEvents:
     TOOL_STARTED = "tool.started"
     TOOL_COMPLETED = "tool.completed"
     TOOL_FAILED = "tool.failed"
+
+class VerificationEvents:
+    VERIFICATION_VERIFIED = "verification.verified"
+    VERIFICATION_FAILED = "verification.failed"
+    VERIFICATION_INCONCLUSIVE = "verification.inconclusive"
 
 # ─── Stream: neuro_bus ──────────────────────────────────────────
 
@@ -248,6 +270,7 @@ ALL_EVENT_TYPES: frozenset[str] = frozenset({
     "inventory.stock_in",
     "inventory.stock_out",
     "inventory.transfer",
+    "ledger.updated",
     "llm.completed",
     "llm.failed",
     "material.created",
@@ -282,6 +305,7 @@ ALL_EVENT_TYPES: frozenset[str] = frozenset({
     "payment.refunded",
     "planner.blocked",
     "planner.completed",
+    "planner.degraded",
     "planner.started",
     "print.job_completed",
     "print.job_failed",
@@ -297,10 +321,20 @@ ALL_EVENT_TYPES: frozenset[str] = frozenset({
     "product.updated",
     "rag.failed",
     "rag.retrieved",
+    "run.background_started",
+    "run.cancel_requested",
+    "run.cancelled",
     "run.completed",
     "run.continue_ignored",
     "run.created",
     "run.failed",
+    "run.pause_requested",
+    "run.paused",
+    "run.queued",
+    "run.recovered",
+    "run.resumed",
+    "run.retry_requested",
+    "run.verification_inconclusive",
     "shipment.cancelled",
     "shipment.created",
     "shipment.deleted",
@@ -312,6 +346,9 @@ ALL_EVENT_TYPES: frozenset[str] = frozenset({
     "step.blocked",
     "step.llm_repair_failed",
     "step.llm_repair_requested",
+    "step.params_normalized",
+    "step.recovered",
+    "step.recovery_confirmation_required",
     "step.repair_applied",
     "step.repair_rejected",
     "step.retry_scheduled",
@@ -319,6 +356,9 @@ ALL_EVENT_TYPES: frozenset[str] = frozenset({
     "tool.completed",
     "tool.failed",
     "tool.started",
+    "verification.failed",
+    "verification.inconclusive",
+    "verification.verified",
     "wechat.contact_added",
     "wechat.contact_updated",
     "wechat.login_status_changed",
@@ -342,6 +382,7 @@ AGENT_RUN_EVENT_TYPES: frozenset[str] = frozenset({
     "budget.exceeded",
     "dataset.ingest_failed",
     "dataset.ingested",
+    "ledger.updated",
     "llm.completed",
     "llm.failed",
     "memory.failed",
@@ -349,17 +390,31 @@ AGENT_RUN_EVENT_TYPES: frozenset[str] = frozenset({
     "observation.recorded",
     "planner.blocked",
     "planner.completed",
+    "planner.degraded",
     "planner.started",
     "rag.failed",
     "rag.retrieved",
+    "run.background_started",
+    "run.cancel_requested",
+    "run.cancelled",
     "run.completed",
     "run.continue_ignored",
     "run.created",
     "run.failed",
+    "run.pause_requested",
+    "run.paused",
+    "run.queued",
+    "run.recovered",
+    "run.resumed",
+    "run.retry_requested",
+    "run.verification_inconclusive",
     "step.approved",
     "step.blocked",
     "step.llm_repair_failed",
     "step.llm_repair_requested",
+    "step.params_normalized",
+    "step.recovered",
+    "step.recovery_confirmation_required",
     "step.repair_applied",
     "step.repair_rejected",
     "step.retry_scheduled",
@@ -367,18 +422,22 @@ AGENT_RUN_EVENT_TYPES: frozenset[str] = frozenset({
     "tool.completed",
     "tool.failed",
     "tool.started",
+    "verification.failed",
+    "verification.inconclusive",
+    "verification.verified",
 })
 
 TERMINAL_AGENT_RUN_EVENT_TYPES: frozenset[str] = frozenset({
     "budget.exceeded",
     "planner.blocked",
+    "run.cancelled",
     "run.completed",
     "run.failed",
 })
 
-EventType = Literal["ai.context_updated", "ai.conversation_ended", "ai.conversation_started", "ai.feedback_received", "ai.intent_recognized", "ai.response_generated", "artifact.attached", "auth.login_failed", "auth.password_changed", "auth.permission_granted", "auth.permission_revoked", "auth.token_refreshed", "auth.user_login", "auth.user_logout", "auth.user_registered", "billing.debit_failed", "billing.debited", "billing.insufficient_balance", "billing.record_failed", "billing.recorded", "billing.refund_failed", "billing.refund_pending", "billing.refund_recorded", "billing.refunded", "budget.exceeded", "conversation.assigned", "conversation.created", "conversation.ended", "conversation.exported", "conversation.message_added", "conversation.tagged", "customer.credit_limit_changed", "customer.deactivated", "customer.preference_updated", "customer.purchase_unit_bound", "customer.registered", "customer.updated", "dataset.ingest_failed", "dataset.ingested", "http.request.completed", "http.request.failed", "http.request.started", "inventory.check_completed", "inventory.low_stock_alert", "inventory.stock_changed", "inventory.stock_in", "inventory.stock_out", "inventory.transfer", "llm.completed", "llm.failed", "material.created", "material.low_stock_alert", "material.stock_in", "material.stock_out", "material.supplier_changed", "material.updated", "memory.failed", "memory.recalled", "observation.recorded", "ocr.batch_completed", "ocr.result_validated", "ocr.task_completed", "ocr.task_failed", "ocr.task_started", "ocr.task_submitted", "order.cancelled", "order.fulfilled", "order.item_updated", "order.paid", "order.payment_failed", "order.refunded", "order.shipped", "order.status_changed", "order.submitted", "payment.completed", "payment.created", "payment.failed", "payment.method_changed", "payment.notification_sent", "payment.refunded", "planner.blocked", "planner.completed", "planner.started", "print.job_completed", "print.job_failed", "print.job_started", "print.job_submitted", "print.label_requested", "print.printer_status_changed", "product.cache_invalidated", "product.created", "product.deleted", "product.imported", "product.price_changed", "product.updated", "rag.failed", "rag.retrieved", "run.completed", "run.continue_ignored", "run.created", "run.failed", "shipment.cancelled", "shipment.created", "shipment.deleted", "shipment.exported", "shipment.inventory_deducted", "shipment.item_added", "shipment.printed", "step.approved", "step.blocked", "step.llm_repair_failed", "step.llm_repair_requested", "step.repair_applied", "step.repair_rejected", "step.retry_scheduled", "step.waiting_user", "tool.completed", "tool.failed", "tool.started", "wechat.contact_added", "wechat.contact_updated", "wechat.login_status_changed", "wechat.message_received", "wechat.message_sent", "wechat.task_completed", "wechat.task_created"]
+EventType = Literal["ai.context_updated", "ai.conversation_ended", "ai.conversation_started", "ai.feedback_received", "ai.intent_recognized", "ai.response_generated", "artifact.attached", "auth.login_failed", "auth.password_changed", "auth.permission_granted", "auth.permission_revoked", "auth.token_refreshed", "auth.user_login", "auth.user_logout", "auth.user_registered", "billing.debit_failed", "billing.debited", "billing.insufficient_balance", "billing.record_failed", "billing.recorded", "billing.refund_failed", "billing.refund_pending", "billing.refund_recorded", "billing.refunded", "budget.exceeded", "conversation.assigned", "conversation.created", "conversation.ended", "conversation.exported", "conversation.message_added", "conversation.tagged", "customer.credit_limit_changed", "customer.deactivated", "customer.preference_updated", "customer.purchase_unit_bound", "customer.registered", "customer.updated", "dataset.ingest_failed", "dataset.ingested", "http.request.completed", "http.request.failed", "http.request.started", "inventory.check_completed", "inventory.low_stock_alert", "inventory.stock_changed", "inventory.stock_in", "inventory.stock_out", "inventory.transfer", "ledger.updated", "llm.completed", "llm.failed", "material.created", "material.low_stock_alert", "material.stock_in", "material.stock_out", "material.supplier_changed", "material.updated", "memory.failed", "memory.recalled", "observation.recorded", "ocr.batch_completed", "ocr.result_validated", "ocr.task_completed", "ocr.task_failed", "ocr.task_started", "ocr.task_submitted", "order.cancelled", "order.fulfilled", "order.item_updated", "order.paid", "order.payment_failed", "order.refunded", "order.shipped", "order.status_changed", "order.submitted", "payment.completed", "payment.created", "payment.failed", "payment.method_changed", "payment.notification_sent", "payment.refunded", "planner.blocked", "planner.completed", "planner.degraded", "planner.started", "print.job_completed", "print.job_failed", "print.job_started", "print.job_submitted", "print.label_requested", "print.printer_status_changed", "product.cache_invalidated", "product.created", "product.deleted", "product.imported", "product.price_changed", "product.updated", "rag.failed", "rag.retrieved", "run.background_started", "run.cancel_requested", "run.cancelled", "run.completed", "run.continue_ignored", "run.created", "run.failed", "run.pause_requested", "run.paused", "run.queued", "run.recovered", "run.resumed", "run.retry_requested", "run.verification_inconclusive", "shipment.cancelled", "shipment.created", "shipment.deleted", "shipment.exported", "shipment.inventory_deducted", "shipment.item_added", "shipment.printed", "step.approved", "step.blocked", "step.llm_repair_failed", "step.llm_repair_requested", "step.params_normalized", "step.recovered", "step.recovery_confirmation_required", "step.repair_applied", "step.repair_rejected", "step.retry_scheduled", "step.waiting_user", "tool.completed", "tool.failed", "tool.started", "verification.failed", "verification.inconclusive", "verification.verified", "wechat.contact_added", "wechat.contact_updated", "wechat.login_status_changed", "wechat.message_received", "wechat.message_sent", "wechat.task_completed", "wechat.task_created"]
 
-AgentRunEventType = Literal["artifact.attached", "billing.debit_failed", "billing.debited", "billing.insufficient_balance", "billing.record_failed", "billing.recorded", "billing.refund_failed", "billing.refund_pending", "billing.refund_recorded", "billing.refunded", "budget.exceeded", "dataset.ingest_failed", "dataset.ingested", "llm.completed", "llm.failed", "memory.failed", "memory.recalled", "observation.recorded", "planner.blocked", "planner.completed", "planner.started", "rag.failed", "rag.retrieved", "run.completed", "run.continue_ignored", "run.created", "run.failed", "step.approved", "step.blocked", "step.llm_repair_failed", "step.llm_repair_requested", "step.repair_applied", "step.repair_rejected", "step.retry_scheduled", "step.waiting_user", "tool.completed", "tool.failed", "tool.started"]
+AgentRunEventType = Literal["artifact.attached", "billing.debit_failed", "billing.debited", "billing.insufficient_balance", "billing.record_failed", "billing.recorded", "billing.refund_failed", "billing.refund_pending", "billing.refund_recorded", "billing.refunded", "budget.exceeded", "dataset.ingest_failed", "dataset.ingested", "ledger.updated", "llm.completed", "llm.failed", "memory.failed", "memory.recalled", "observation.recorded", "planner.blocked", "planner.completed", "planner.degraded", "planner.started", "rag.failed", "rag.retrieved", "run.background_started", "run.cancel_requested", "run.cancelled", "run.completed", "run.continue_ignored", "run.created", "run.failed", "run.pause_requested", "run.paused", "run.queued", "run.recovered", "run.resumed", "run.retry_requested", "run.verification_inconclusive", "step.approved", "step.blocked", "step.llm_repair_failed", "step.llm_repair_requested", "step.params_normalized", "step.recovered", "step.recovery_confirmation_required", "step.repair_applied", "step.repair_rejected", "step.retry_scheduled", "step.waiting_user", "tool.completed", "tool.failed", "tool.started", "verification.failed", "verification.inconclusive", "verification.verified"]
 
 def is_known_event_type(s: str) -> bool:
     """Return True if s is a registered event type across all three streams."""

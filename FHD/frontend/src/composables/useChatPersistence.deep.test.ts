@@ -58,6 +58,8 @@ describe('useChatPersistence deep branches', () => {
   it('extractLikelyProductQueryKeyword rejects blocked intents', () => {
     expect(extractLikelyProductQueryKeyword('什么价格')).toBeNull()
     expect(extractLikelyProductQueryKeyword('帮我导出出货单')).toBeNull()
+    expect(extractLikelyProductQueryKeyword('查询金汉武家私最近的发货记录')).toBeNull()
+    expect(extractLikelyProductQueryKeyword('查询宏运家具的送货记录')).toBeNull()
     expect(extractLikelyProductQueryKeyword('x')).toBeNull()
   })
 

@@ -69,16 +69,14 @@ function isRetiredMaterialsListMenuItem(item: ResolvedSidebarMenuItem): boolean 
 }
 
 /**
- * These capabilities remain available from their canonical surfaces:
- * model service lives in Settings, while business docking is launched from Chat.
- * Keep stale Mod/runtime menu rows from recreating duplicate primary navigation.
+ * Model service remains in Settings.  Business docking now has a first-class
+ * enterprise host entry, so only stale Mod/runtime rows are suppressed here.
  */
 function isConsolidatedCapabilityMenuItem(item: ResolvedSidebarMenuItem): boolean {
   const key = normalizeModSidebarNavKey(String(item.key || '').trim())
   if (
     key === 'model-payment' ||
     key === 'mod-model-payment' ||
-    key === 'business-docking' ||
     key === 'mod-erp-business-docking'
   ) return true
   const path = String(item.path || '').trim().split('?')[0].split('#')[0]

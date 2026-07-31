@@ -389,6 +389,36 @@ class TestCallLlmApi:
         assert notify.call_args.kwargs["token_count"] == 5
 
     @pytest.mark.asyncio
+    async def test_prefers_request_bound_software_account_provider(self):
+        svc = _ConcreteApi()
+        mock_provider = MagicMock()
+        mock_provider.provider_id = "modstore"
+        mock_provider.owner_user_id = 42
+        mock_provider.chat_completion = AsyncMock(
+            return_value={
+                "choices": [{"message": {"content": "account reply"}}],
+                "model": "mimo-v2.5-pro",
+                "usage": {"total_tokens": 4},
+            }
+        )
+
+        with (
+            patch(
+                "app.application.etl.llm_session_provider.current_owner_market_provider",
+                return_value=mock_provider,
+            ),
+            patch(
+                "app.infrastructure.llm.providers.registry.get_active_provider",
+                side_effect=AssertionError("local provider must not be selected"),
+            ),
+        ):
+            result = await svc.call_llm_api([{"role": "user", "content": "hi"}])
+
+        assert result is not None
+        assert result["choices"][0]["message"]["content"] == "account reply"
+        mock_provider.chat_completion.assert_awaited_once()
+
+    @pytest.mark.asyncio
     async def test_handles_exception(self):
         svc = _ConcreteApi()
         with patch(

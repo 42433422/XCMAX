@@ -69,10 +69,11 @@ describe('mergeSidebarMenuItems', () => {
     expect(merged.map((item) => item.key)).toEqual(['materials'])
   })
 
-  it('keeps model service in settings and business docking in chat, not primary navigation', () => {
+  it('keeps the host ETL entry and drops stale model/ETL Mod entries', () => {
     const merged = mergeSidebarMenuItems(
       [
         { key: 'chat', name: '智能对话', iconClass: 'fa-comments-o' },
+        { key: 'business-docking', name: '数据对接中心', iconClass: 'fa-exchange' },
         { key: 'settings', name: '系统设置', iconClass: 'fa-cog' },
       ],
       [
@@ -95,7 +96,11 @@ describe('mergeSidebarMenuItems', () => {
       [],
       [],
     )
-    expect(merged.map((item) => item.key)).toEqual(['chat', 'settings'])
+    expect(merged.map((item) => item.key)).toEqual([
+      'chat',
+      'business-docking',
+      'settings',
+    ])
   })
 
   it('drops mod item when key uses erroneous mod-mod- prefix', () => {

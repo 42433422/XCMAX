@@ -10,6 +10,7 @@ RunStatus = Literal[
     "planning",
     "running",
     "retrying",
+    "paused",
     "waiting_user",
     "blocked",
     "completed",

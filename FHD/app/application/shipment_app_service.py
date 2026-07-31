@@ -592,6 +592,7 @@ class ShipmentApplicationService:
         order_number: str | None = None,
         template_id: str | None = None,
         preferred_template: str | None = None,
+        owner_user_id: int | None = None,
         intent: str = "shipment_generate",
         allow_products_from_db: bool = False,
         strict_template: bool | None = None,
@@ -642,6 +643,7 @@ class ShipmentApplicationService:
                 template_name=template_name,
                 preferred=preferred_template,
                 unit_name=unit_name,
+                owner_user_id=owner_user_id,
                 intent=intent,
                 strict=strict,
                 log_usage=False,
@@ -674,13 +676,32 @@ class ShipmentApplicationService:
                     "file_path": None,
                 }
 
-        result = self._document_generator.generate(
-            unit_name=unit_name,
-            products=product_rows,
-            date=date,
-            template_name=resolved_template,
-            order_number=order_number,
-        )
+        try:
+            result = self._document_generator.generate(
+                unit_name=unit_name,
+                products=product_rows,
+                date=date,
+                template_name=resolved_template,
+                order_number=order_number,
+                # This id comes from the authenticated route/service caller, not
+                # from a template or parsed natural-language parameter.  The
+                # document adapter uses it to isolate generated label artifacts.
+                owner_user_id=owner_user_id,
+            )
+        finally:
+            # ``etl-preview:`` layouts are intentionally one-use artifacts.
+            # The generator is synchronous, so the source workbook can be
+            # removed immediately after it has been consumed, even on failure.
+            cleanup_path = str(template_meta.get("_cleanup_path") or "").strip()
+            if cleanup_path:
+                try:
+                    from app.application.etl.shipment_preview_fallback import (
+                        cleanup_ephemeral_preview_layout,
+                    )
+
+                    cleanup_ephemeral_preview_layout(cleanup_path)
+                except RECOVERABLE_ERRORS:
+                    logger.debug("清理 ETL 预演临时发货单版式失败", exc_info=True)
         if isinstance(result, dict):
             result["products_source"] = products_source
             if template_meta:
@@ -694,6 +715,8 @@ class ShipmentApplicationService:
                     "score": template_meta.get("score"),
                     "error_code": template_meta.get("error_code"),
                     "ok": template_meta.get("ok"),
+                    "warning": template_meta.get("warning"),
+                    "provenance": template_meta.get("provenance"),
                 }
                 if result.get("success") and template_meta.get("template_id"):
                     try:
@@ -727,6 +750,27 @@ class ShipmentApplicationService:
             except RECOVERABLE_ERRORS:
                 # 记录写入失败不影响文档生成返回
                 pass
+        if result.get("success"):
+            # A generated document is not printable merely because a client
+            # knows its local path.  Bind the one-click print capability to the
+            # authenticated owner that selected the personal template.  Calls
+            # without that trusted owner retain document generation/download
+            # compatibility, but deliberately receive no physical-print grant.
+            try:
+                from app.application.print_authorization import issue_document_print_capability
+
+                authorization = issue_document_print_capability(
+                    file_path=result.get("file_path") or result.get("filepath"),
+                    owner_user_id=owner_user_id,
+                    order_id=result.get("order_id") or result.get("record_id"),
+                )
+                if authorization:
+                    result["print_authorization"] = authorization
+            except RECOVERABLE_ERRORS:
+                # Printing remains fail-closed: a capability creation problem
+                # must never make an arbitrary path printable, nor invalidate
+                # an already-generated business document.
+                logger.exception("failed to issue generated shipment print capability")
         return result
 
 

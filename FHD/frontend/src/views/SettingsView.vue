@@ -964,6 +964,7 @@ import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
 import adminAuditApi, { type AuditLogEntry } from '@/api/adminAudit';
 import { setAppLocale } from '@/i18n';
 import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards';
+import { useHostFoundationStatus } from '@/composables/useHostFoundationStatus';
 
 const { t, te, locale } = useI18n();
 const appLocale = ref<'zh-CN' | 'en-US'>((locale.value === 'en-US' ? 'en-US' : 'zh-CN'));
@@ -1660,10 +1661,11 @@ const modsStore = useModsStore();
 const { clientModsUiOff, loadError, isLoaded, mods, modRoutes, activeModId } = storeToRefs(modsStore);
 
 const MODEL_PAYMENT_BRIDGE_ID = 'xcagi-model-payment-bridge';
-
-const modelPaymentBridgeInstalled = computed(() =>
-  mods.value.some((m) => String(m.id || '').trim() === MODEL_PAYMENT_BRIDGE_ID),
-);
+const {
+  hostBridgeInstalledCount,
+  modelPaymentBridgeInstalled,
+  refreshHostFoundationStatus,
+} = useHostFoundationStatus(mods, expectedHostBridgeModIds, MODEL_PAYMENT_BRIDGE_ID);
 
 function openSettingsExtensions() {
   const el = document.querySelector('[data-tutorial-id="settings-extensions"]');
@@ -1690,11 +1692,6 @@ const hostBridgeMods = computed(() => {
       if (t !== 0) return t;
       return String(a.name || aid).localeCompare(String(b.name || bid), 'zh-CN');
     });
-});
-
-const hostBridgeInstalledCount = computed(() => {
-  const ids = new Set(mods.value.map((m) => String(m.id || '').trim()));
-  return expectedHostBridgeModIds().filter((id) => ids.has(id)).length;
 });
 
 const hostBridgeExpectedCount = computed(() => expectedHostBridgeModIds().length);
@@ -2377,6 +2374,7 @@ onMounted(async () => {
       accountUsername: uname,
     });
   }
+  await refreshHostFoundationStatus();
   sidebarThemePreset.value = readStoredSidebarTheme();
   applySidebarTheme(sidebarThemePreset.value);
   await industryStore.initialize();
@@ -2398,6 +2396,7 @@ onActivated(() => {
     loadMemoryV2();
     loadPersyProfile();
   });
+  void refreshHostFoundationStatus();
 });
 
 watch(memoryV2UserId, () => {

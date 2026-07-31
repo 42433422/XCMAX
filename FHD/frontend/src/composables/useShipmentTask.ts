@@ -36,6 +36,14 @@ export interface ShipmentTask {
     }
   }
   completed?: boolean
+  /** The document was accepted by CUPS but physical completion is still unconfirmed. */
+  printPending?: boolean
+  /** Opaque owner-bound token used only to recheck a submitted CUPS job. */
+  printJobToken?: string
+  printTrackingAvailable?: boolean
+  printStatusChecking?: boolean
+  printCompleted?: boolean
+  printTerminal?: boolean
   customOrderNumber?: string
   items?: unknown[]
   order_number?: string
@@ -74,8 +82,11 @@ export function useShipmentTask(
     purchaseUnit: string
     orderId: number | null
     labelPaths: string[]
+    /** One-click server capability returned with this generated document. */
+    printToken?: string
     /** 右侧任务列表中「发货单生成」条目的 id，用于生成后衔接打印再标为 100% */
     taskListId?: string
+    pendingPrintJobToken?: string
   } | null>(null)
 
   async function handleModifyCommand(message: string): Promise<boolean> {
@@ -207,7 +218,7 @@ export function useShipmentTask(
   }: {
     model: string
     unitName?: string
-  }): Promise<{ name?: string; unit_price?: number; tin_spec?: number } | null> {
+  }): Promise<{ model_number?: string; name?: string; unit_price?: number; tin_spec?: number } | null> {
     const normalizedModel = normalizeModel(model)
     if (!normalizedModel) return null
 
@@ -233,6 +244,7 @@ export function useShipmentTask(
         if (!best) continue
 
         return {
+          model_number: asString(best.model_number || best.model).trim(),
           name: asString(best.name || best.product_name).trim(),
           unit_price: toNumber(best.price ?? best.unit_price) ?? undefined,
           tin_spec: toNumber(best.tin_spec ?? best.specification ?? best.spec) ?? undefined
@@ -291,7 +303,7 @@ export function useShipmentTask(
     ).trim()
 
     const nextItems = products.map((p) => {
-      const model = normalizeModel(p?.model_number || p?.型号 || p?.name || '')
+      const model = normalizeModel(p?.model_number || p?.型号 || '')
       const old = oldByModel[model] || {}
       const qty = Number(p?.quantity_tins ?? p?.quantity ?? old['桶数'] ?? 1) || 1
       const spec = Number(p?.tin_spec ?? p?.spec ?? old['规格'] ?? 10) || 10
@@ -369,25 +381,47 @@ export function useShipmentTask(
       : []
     if (!currentProducts.length) return
 
+    // A server shipment card can contain owner-scoped ETL evidence that is
+    // intentionally display-only: the executable payload remains the
+    // original natural-language parse. Once the server supplied complete
+    // display rows, never rebuild them from that raw payload or replace them
+    // with a stale product-master lookup in the client.
+    const serverItems = Array.isArray(task?.items) ? task.items : []
+    const hasAuthoritativeServerItems =
+      serverItems.length === currentProducts.length &&
+      serverItems.length > 0 &&
+      serverItems.every((item) => {
+        const row = asRecord(item)
+        const model = asString(row['型号'] || row.model_number).trim()
+        const price = toNumber(row['单价'] ?? row.unit_price ?? row.price)
+        return !!model && model !== '-' && price !== null
+      })
+    if (hasAuthoritativeServerItems) return
+
     const unitName = String(task?.payload?.params?.unit_name || '').trim()
     let changed = false
     const nextProducts: ShipmentProduct[] = []
 
     for (const rawProduct of currentProducts) {
       const product: ShipmentProduct = { ...(rawProduct || {}) }
-      const model = normalizeModel(product?.model_number || product?.型号 || product?.name || '')
+      const model = normalizeModel(product?.model_number || product?.型号 || '')
       const name = String(product?.name || product?.product_name || '').trim()
+      const lookup = model || normalizeModel(name)
       const price = toNumber(product?.unit_price ?? product?.price)
       const needsName = !name || name === '-'
       const needsPrice = price === null
 
-      if (!model || (!needsName && !needsPrice)) {
+      if (!lookup || (!needsName && !needsPrice)) {
         nextProducts.push(product)
         continue
       }
 
-      const productMeta = await fetchProductMetaForPreview({ model, unitName })
+      const productMeta = await fetchProductMetaForPreview({ model: lookup, unitName })
       if (productMeta) {
+        if (!model && productMeta.model_number) {
+          product.model_number = productMeta.model_number
+          changed = true
+        }
         if (needsName && productMeta?.name) {
           product.name = productMeta.name
           product.product_name = productMeta.name
@@ -446,6 +480,7 @@ export function useShipmentTask(
       task?.order_number ||
       task?.data?.order_number ||
       task?.document?.order_number ||
+      task?.payload?.params?.order_number ||
       ''
     ).trim()
     if (explicitOrderNo) return explicitOrderNo
