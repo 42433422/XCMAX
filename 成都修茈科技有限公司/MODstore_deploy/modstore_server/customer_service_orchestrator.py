@@ -17,6 +17,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy.orm import Session
 
 from modstore_server.customer_service_issue_guards import (
+    GREETING_RE,
     _looks_like_forbidden_privilege_request,
     _looks_like_product_issue,
     _refuse_forbidden_privilege_reply,
@@ -45,11 +46,6 @@ CATALOG_RE = re.compile(r"(?:商品\s*ID|catalog[_ -]?id|商品)[:：\s#]*([0-9]
 LLM_PROVIDER_RE = re.compile(r"(?:厂商|provider)\s*[:：]\s*([a-z0-9_-]+)", re.I)
 LLM_MODEL_RE = re.compile(r"(?:模型|model)\s*[:：]\s*(\S+)", re.I)
 LLM_SLASH_RE = re.compile(r"\b([a-z0-9_-]{2,32})\s*/\s*([^\s,，。]{1,120})", re.I)
-GREETING_RE = re.compile(
-    r"^(你好|您好|嗨|哈喽|hello|hi|hey|在吗|早上好|上午好|下午好|晚上好|你好呀|您好呀)"
-    r"[!！。.?？~\s]*$",
-    re.I,
-)
 ESCALATE_RE = re.compile(
     r"转人工|人工客服|提交工单|创建工单|升级处理|要工单|找人工|处理不了|没解决",
 )

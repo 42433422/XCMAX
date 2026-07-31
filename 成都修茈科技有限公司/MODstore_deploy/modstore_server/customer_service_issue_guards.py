@@ -5,6 +5,12 @@ from __future__ import annotations
 import re
 from typing import Any
 
+GREETING_RE = re.compile(
+    r"^(你好|您好|嗨|哈喽|hello|hi|hey|在吗|早上好|上午好|下午好|晚上好|你好呀|您好呀)"
+    r"[!！。.?？~\s]*$",
+    re.I,
+)
+
 
 def is_greeting(text: str) -> bool:
     return bool(GREETING_RE.match((text or "").strip()))
