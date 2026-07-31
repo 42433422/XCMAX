@@ -393,6 +393,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin';
+import AdminPrivateDeliveryPanel from '@/components/privateMod/AdminPrivateDeliveryPanel.vue';
 import { appAlert } from '@/utils/appDialog';
 import { apiFetch } from '@/utils/apiBase';
 import { INDUSTRY_PRESET_IDS } from '@/constants/industryPresets';
