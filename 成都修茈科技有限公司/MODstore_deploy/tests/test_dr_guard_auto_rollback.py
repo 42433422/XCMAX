@@ -108,20 +108,22 @@ def test_auto_rollback_closure_rolls_back_and_stages_review(
 
     from modstore_server.release_train import bump_release_train
 
-    bump_release_train(digest_day="2026-06-01")  # 1.0.0.0 -> 1.0.0.1
-    bump_release_train(digest_day="2026-06-02")  # -> 1.0.0.2
+    # default_state.current = "1.0.0.1"（与 VERSION.md 对齐），
+    # 因此两次 bump 序列为 1.0.0.1 -> 1.0.0.2 -> 1.0.0.3，rollback 一步回到 1.0.0.2。
+    bump_release_train(digest_day="2026-06-01")  # 1.0.0.1 -> 1.0.0.2
+    bump_release_train(digest_day="2026-06-02")  # -> 1.0.0.3
 
     from modstore_server.auto_rollback import auto_rollback_on_gate_failure
 
     out = auto_rollback_on_gate_failure(
         gate="FASTGATE",
-        release_train="1.0.0.2",
+        release_train="1.0.0.3",
         release_kind="installer",
         reason="staging/health smoke failed",
     )
     assert out["ok"] is True
     assert out["rollback"]["ok"] is True
-    assert out["rollback"]["after"] == "1.0.0.1"
+    assert out["rollback"]["after"] == "1.0.0.2"
     assert out["alert"]["published"] is True
     assert out["staged_change"]["ok"] is True
 
