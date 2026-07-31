@@ -645,6 +645,23 @@ function modInstallText(modId: string) {
   return version ? `已安装 v${version}` : '已安装';
 }
 
+function normalizeLocalCatalogRows(raw: Record<string, unknown>): LocalModRow[] {
+  const data = (raw?.data && typeof raw.data === 'object' ? raw.data : raw) as Record<string, unknown>;
+  const installed = Array.isArray(data.installed) ? data.installed : [];
+  const available = Array.isArray(data.available) ? data.available : [];
+  const byId = new Map<string, LocalModRow>();
+  for (const row of [...available, ...installed]) {
+    if (!row || typeof row !== 'object') continue;
+    const r = row as LocalModRow;
+    const id = String(r.id || '').trim();
+    if (!id) continue;
+    const prev = byId.get(id) || {};
+    const installedFlag = Boolean(prev.is_installed || r.is_installed || installed.includes(row));
+    byId.set(id, { ...prev, ...r, id, is_installed: installedFlag });
+  }
+  return Array.from(byId.values()).filter((row) => row.is_installed);
+}
+
 async function refreshLocalStatus() {
   localStatusLoading.value = true;
   localStatusError.value = '';
