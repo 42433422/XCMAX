@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
 
-from modstore_server.customer_service_tools import audit, build_action, json_dumps
+from modstore_server.customer_service_tools import audit, build_action, json_dumps, json_loads
 from modstore_server.models_cs import (
     CustomerServiceAction,
     CustomerServiceDecision,

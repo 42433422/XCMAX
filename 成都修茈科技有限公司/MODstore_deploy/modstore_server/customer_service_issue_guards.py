@@ -6,6 +6,10 @@ import re
 from typing import Any
 
 
+def is_greeting(text: str) -> bool:
+    return bool(GREETING_RE.match((text or "").strip()))
+
+
 def _looks_like_forbidden_privilege_request(user_text: str) -> bool:
     """用户是否在索要管理员/提权等客服绝不能代办的权限。"""
     t = re.sub(r"\s+", "", (user_text or "").strip().lower())

@@ -20,6 +20,7 @@ from modstore_server.customer_service_issue_guards import (
     _looks_like_forbidden_privilege_request,
     _looks_like_product_issue,
     _refuse_forbidden_privilege_reply,
+    is_greeting,
 )
 from modstore_server.customer_service_tools import (
     audit,
@@ -781,10 +782,6 @@ def extract_fields(text: str, context: Dict[str, Any]) -> Dict[str, Any]:
             data.setdefault("provider", sl.group(1).lower())
             data.setdefault("model", sl.group(2).strip())
     return data
-
-
-def is_greeting(text: str) -> bool:
-    return bool(GREETING_RE.match((text or "").strip()))
 
 
 def wants_ticket_escalation(text: str) -> bool:
