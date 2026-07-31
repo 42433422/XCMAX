@@ -16,11 +16,6 @@ def merge_persy_recall(
     dataset_access_context_from_request: Callable[..., Any],
     persy_memory_service: Callable[[], Any],
 ) -> dict[str, Any]:
-    payload: dict[str, Any],
-    *,
-    request: Request,
-    params: dict[str, Any],
-) -> dict[str, Any]:
     from app.application.erp_domain_ontology import (
         query_erp_ontology,
         summarize_erp_ontology_chunks,
