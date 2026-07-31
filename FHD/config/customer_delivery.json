@@ -18,6 +18,7 @@
     "rules": [
       "生产员工「私有交付」只暴露当前登录账号会话 entitled_mod_ids ∩ legacy_mod_id，不含 industry_mod_id（通用行业包）",
       "禁止把 customer_delivery.json 里其它客户的定制包写进本账号交付线（即使平台壳为 generic SKU、企业 Mod 过滤关闭）",
+      "企业端写进度必须落 market:{sessions.market_user_id}；禁止静默写入 local:*（管理端按市场用户 id 只读对齐）",
       "模块轨与员工轨必须分开展示，禁止混在同一列表",
       "轨道上的交付物以节点为单位展示进度；整轨状态由节点进度汇总",
       "每个节点的阶段是流程，不是自由枚举：只能按 stage_flow.transitions 推进或转入返工，禁止跨阶段跳跃",

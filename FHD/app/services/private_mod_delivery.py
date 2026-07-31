@@ -154,6 +154,78 @@ def account_scope(market_user_id: int | None = None, username: str = "") -> str:
     return f"local:{name}" if name else "local:default"
 
 
+def merge_orphan_local_delivery_into_market(
+    market_scope: str,
+    mod_ids: set[str] | list[str] | tuple[str, ...] | None = None,
+) -> None:
+    """把误写入 ``local:default`` 的定制进度合并进 ``market:{id}``（定制线通道修复）。"""
+    target = str(market_scope or "").strip()
+    if not target.startswith("market:"):
+        return
+    wanted = {str(x).strip() for x in (mod_ids or []) if str(x).strip()}
+    with _STATE_LOCK:
+        state = _read_state()
+        accounts = state.setdefault("accounts", {})
+        orphan = accounts.get("local:default")
+        if not isinstance(orphan, dict):
+            return
+        orphan_projects = orphan.get("projects")
+        if not isinstance(orphan_projects, dict) or not orphan_projects:
+            return
+        scope = accounts.setdefault(target, {})
+        if not isinstance(scope.get("projects"), dict):
+            scope["projects"] = {}
+        changed = False
+        for raw_id, incoming in list(orphan_projects.items()):
+            mid = str(raw_id or "").strip()
+            if not mid or (wanted and mid not in wanted):
+                continue
+            if not isinstance(incoming, dict):
+                continue
+            if mid.endswith("-industry"):
+                orphan_projects.pop(mid, None)
+                changed = True
+                continue
+            existing = scope["projects"].get(mid)
+            if not isinstance(existing, dict):
+                scope["projects"][mid] = json.loads(json.dumps(incoming, ensure_ascii=False))
+                changed = True
+            else:
+                src_tracks = incoming.get("tracks") if isinstance(incoming.get("tracks"), dict) else {}
+                dst_tracks = existing.setdefault("tracks", {})
+                if not isinstance(dst_tracks, dict):
+                    existing["tracks"] = {}
+                    dst_tracks = existing["tracks"]
+                existing["tracks"] = _migrate_tracks(dst_tracks)
+                dst_tracks = existing["tracks"]
+                for track, src_row in src_tracks.items():
+                    track_id = normalize_track(str(track))
+                    if track_id not in TRACKS or not isinstance(src_row, dict):
+                        continue
+                    dst_row = dst_tracks.setdefault(track_id, _default_track())
+                    src_nodes = src_row.get("nodes") if isinstance(src_row.get("nodes"), dict) else {}
+                    dst_nodes = dst_row.setdefault("nodes", {})
+                    if not isinstance(dst_nodes, dict):
+                        dst_row["nodes"] = {}
+                        dst_nodes = dst_row["nodes"]
+                    for nid, nrow in src_nodes.items():
+                        node_id = str(nid or "").strip()
+                        if not node_id or not isinstance(nrow, dict):
+                            continue
+                        cur = dst_nodes.get(node_id) if isinstance(dst_nodes.get(node_id), dict) else None
+                        if cur is None or str(cur.get("status") or "production") == "production":
+                            dst_nodes[node_id] = json.loads(json.dumps(nrow, ensure_ascii=False))
+                            changed = True
+                    dst_row["status"] = _rollup_track_status(dst_row)
+                existing["tracks"] = _migrate_tracks(existing.get("tracks") or {})
+            orphan_projects.pop(mid, None)
+            changed = True
+        if changed:
+            if not orphan_projects:
+                accounts.pop("local:default", None)
+            _write_state(state)
+
+
 def normalize_track(track: str) -> str:
     tid = str(track or "").strip()
     return TRACK_ALIAS.get(tid, tid)
@@ -701,6 +773,7 @@ __all__ = [
     "fetch_private_mod_library",
     "is_newer_version",
     "load_stage_flow_from_ssot",
+    "merge_orphan_local_delivery_into_market",
     "normalize_track",
     "overall_status",
     "project_state",
