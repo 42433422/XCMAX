@@ -75,8 +75,8 @@ async def voice_unified_ws(
 
     import ssl as _ssl
 
+    from modstore_server.mimo_asr_service import is_configured as mimo_asr_ready
     from modstore_server.mimo_asr_service import (
-        is_configured as mimo_asr_ready,
         pcm16le_to_wav_bytes,
         transcribe_mimo_asr_async,
     )

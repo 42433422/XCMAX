@@ -1,6 +1,6 @@
 from modstore_server.mimo_asr_service import (
-    pcm16le_to_wav_bytes,
     estimate_pcm_duration_ms,
+    pcm16le_to_wav_bytes,
 )
 
 

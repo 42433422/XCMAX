@@ -16,6 +16,11 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
 
+from modstore_server.customer_service_issue_guards import (
+    _looks_like_forbidden_privilege_request,
+    _looks_like_product_issue,
+    _refuse_forbidden_privilege_reply,
+)
 from modstore_server.customer_service_tools import (
     audit,
     build_action,
@@ -32,12 +37,6 @@ from modstore_server.models_cs import (
     CustomerServiceSession,
     CustomerServiceStandard,
     CustomerServiceTicket,
-)
-
-from modstore_server.customer_service_issue_guards import (
-    _looks_like_forbidden_privilege_request,
-    _looks_like_product_issue,
-    _refuse_forbidden_privilege_reply,
 )
 
 ORDER_RE = re.compile(r"(?:订单号|order[_ -]?no|订单)[:：\s]*([A-Za-z0-9_-]{6,64})", re.I)
