@@ -900,7 +900,10 @@ def test_submit_revalidation_dedupes_and_failure_persist(monkeypatch):
     assert "run-ok" not in support.SUBMITTED
 
     monkeypatch.setattr(
-        svc, "_revalidate_existing_rows", MagicMock(side_effect=RuntimeError("again")), raising=False
+        svc,
+        "_revalidate_existing_rows",
+        MagicMock(side_effect=RuntimeError("again")),
+        raising=False,
     )
     monkeypatch.setattr(
         svc, "_owned_run", MagicMock(side_effect=RuntimeError("persist failed")), raising=False
