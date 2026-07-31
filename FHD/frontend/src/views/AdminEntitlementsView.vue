@@ -350,8 +350,8 @@
         <section class="admin-private-delivery" aria-label="客户定制交付状态">
           <header class="admin-private-delivery__head">
             <div>
-              <h4>客户定制交付状态</h4>
-              <p class="muted">只读查看业务模块和 AI 员工的阶段、确认记录与返工记录。</p>
+              <h4>客户定制清单与交付状态</h4>
+              <p class="muted">只读查看定制清单（业务模块 / AI 员工）每个节点的阶段、确认记录与返工工单；行业通用包不在此列。</p>
             </div>
             <button
               type="button"
@@ -389,6 +389,23 @@
                   <small v-if="deliveryTrack(project, track.key)?.updated_at" class="muted">
                     最近更新：{{ formatDeliveryTime(deliveryTrack(project, track.key)?.updated_at) }}
                   </small>
+                  <ul v-if="deliveryNodes(project, track.key).length" class="admin-private-delivery__nodes">
+                    <li
+                      v-for="node in deliveryNodes(project, track.key)"
+                      :key="node.id"
+                      :data-status="node.status || 'production'"
+                    >
+                      <div class="admin-private-delivery__node-head">
+                        <strong>{{ node.label || node.id }}</strong>
+                        <span
+                          class="admin-private-delivery__node-status"
+                          :data-status="node.status || 'production'"
+                        >{{ deliveryNodeStatusLabel(node) }}</span>
+                      </div>
+                      <small v-if="deliveryNodeNote(node)">{{ deliveryNodeNote(node) }}</small>
+                    </li>
+                  </ul>
+                  <small v-else class="muted">该轨道未声明定制清单节点</small>
                   <ul v-if="deliveryTimeline(project, track.key).length" class="admin-private-delivery__timeline">
                     <li v-for="event in deliveryTimeline(project, track.key)" :key="`${event.at}:${event.status}`">
                       <span>{{ event.status_label }}</span>
@@ -502,7 +519,7 @@ type EntitlementEmployeePreview = {
   modName: string;
   summary: string;
 };
-type PrivateDeliveryTrackKey = 'business' | 'employees';
+type PrivateDeliveryTrackKey = 'modules' | 'business' | 'employees';
 type PrivateDeliveryEvent = {
   status?: string;
   status_label?: string;
@@ -514,12 +531,22 @@ type PrivateDeliveryTrack = {
   updated_at?: string;
   timeline?: PrivateDeliveryEvent[];
 };
+type PrivateDeliveryNode = {
+  id: string;
+  label?: string;
+  summary?: string;
+  status?: string;
+  status_label?: string;
+  updated_at?: string;
+  timeline?: PrivateDeliveryEvent[];
+};
 type PrivateDeliveryProject = {
   mod_id: string;
   name: string;
   overall_status?: string;
   overall_label?: string;
   tracks?: Partial<Record<PrivateDeliveryTrackKey, PrivateDeliveryTrack>>;
+  track_nodes?: Partial<Record<'modules' | 'employees', PrivateDeliveryNode[]>>;
   stage_labels?: Partial<Record<PrivateDeliveryTrackKey, Record<string, string>>>;
 };
 
@@ -587,7 +614,7 @@ const ACCOUNT_TIER_OPTIONS: { value: string; label: string }[] = [
 ];
 const BUDGET_RANGE_OPTIONS = ['1–5 万', '5–10 万', '10–50 万', '50–100 万'];
 const DELIVERY_TRACKS: { key: PrivateDeliveryTrackKey; label: string }[] = [
-  { key: 'business', label: '业务模块' },
+  { key: 'modules', label: '业务模块' },
   { key: 'employees', label: 'AI 员工' },
 ];
 const DELIVERY_STAGE_LABELS: Record<string, string> = {
@@ -733,13 +760,39 @@ function modInstallText(modId: string) {
 }
 
 function deliveryTrack(project: PrivateDeliveryProject, key: PrivateDeliveryTrackKey) {
+  if (key === 'modules') return project.tracks?.modules || project.tracks?.business || null;
   return project.tracks?.[key] || null;
 }
 
 function deliveryStageLabel(project: PrivateDeliveryProject, key: PrivateDeliveryTrackKey) {
   const track = deliveryTrack(project, key);
   const status = String(track?.status || 'production');
-  return project.stage_labels?.[key]?.[status] || DELIVERY_STAGE_LABELS[status] || status;
+  return (
+    project.stage_labels?.[key]?.[status]
+    || (key === 'modules' ? project.stage_labels?.business?.[status] : undefined)
+    || DELIVERY_STAGE_LABELS[status]
+    || status
+  );
+}
+
+function deliveryNodes(project: PrivateDeliveryProject, key: PrivateDeliveryTrackKey): PrivateDeliveryNode[] {
+  const canonical = key === 'business' ? 'modules' : key;
+  const nodes = project.track_nodes?.[canonical as 'modules' | 'employees'];
+  return Array.isArray(nodes) ? nodes : [];
+}
+
+function deliveryNodeStatusLabel(node: PrivateDeliveryNode) {
+  const status = String(node.status || 'production');
+  return node.status_label || DELIVERY_STAGE_LABELS[status] || status;
+}
+
+function deliveryNodeNote(node: PrivateDeliveryNode): string {
+  const timeline = Array.isArray(node.timeline) ? node.timeline : [];
+  for (let i = timeline.length - 1; i >= 0; i -= 1) {
+    const note = String(timeline[i]?.note || '').trim();
+    if (note) return note;
+  }
+  return '';
 }
 
 function deliveryTimeline(project: PrivateDeliveryProject, key: PrivateDeliveryTrackKey) {
@@ -1770,6 +1823,68 @@ onMounted(async () => {
   display: block;
   margin-top: 5px;
   font-size: 11px;
+}
+
+.admin-private-delivery__nodes {
+  display: grid;
+  gap: 6px;
+  margin: 9px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-private-delivery__nodes li {
+  padding: 7px 9px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.admin-private-delivery__nodes li[data-status='rework'] {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.admin-private-delivery__node-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.admin-private-delivery__node-status {
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #166534;
+  background: #dcfce7;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.admin-private-delivery__node-status[data-status='testing'],
+.admin-private-delivery__node-status[data-status='acceptance'] {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.admin-private-delivery__node-status[data-status='production'] {
+  color: #475569;
+  background: #e2e8f0;
+}
+
+.admin-private-delivery__node-status[data-status='rework'] {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.admin-private-delivery__nodes li > small {
+  display: block;
+  margin-top: 4px;
+  color: #9a3412;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .admin-private-delivery__timeline {

@@ -1106,13 +1106,19 @@ async def admin_get_user_private_delivery(request: Request, user_id: int):
     gate = _require_market_admin_session(request)
     if gate is not None:
         return gate
-    from app.mod_sdk.customer_delivery import delivery_for_account_custom_mod
+    from app.mod_sdk.customer_delivery import (
+        delivery_for_account_custom_mod,
+        track_nodes_for_custom_mod,
+    )
     from app.services.private_mod_delivery import (
+        HAPPY_PATH,
         STAGES,
         STAGE_LABELS,
         TRACKS,
         account_projects,
         account_scope,
+        attach_track_nodes,
+        load_stage_flow_from_ssot,
         overall_status,
         stage_label,
     )
@@ -1124,22 +1130,30 @@ async def admin_get_user_private_delivery(request: Request, user_id: int):
     raw_mod_ids = (
         upstream.get("mod_ids") if isinstance(upstream, dict) else None
     ) or (raw_data.get("mod_ids") if isinstance(raw_data, dict) else None)
-    mod_ids = _clean_string_list(raw_mod_ids)
-    names: dict[str, str] = {}
-    for mod_id in mod_ids:
+    entitled_mod_ids = _clean_string_list(raw_mod_ids)
+    # 口径：管理端只看「定制清单」（customer_delivery.legacy_mod_id），行业包不算交付项目
+    custom_deliveries: dict[str, dict[str, Any]] = {}
+    for mod_id in entitled_mod_ids:
         delivery = delivery_for_account_custom_mod(mod_id)
         if delivery:
-            names[mod_id] = str(
-                delivery.get("customer_brand") or delivery.get("customer_name") or mod_id
-            ).strip()
+            custom_deliveries[mod_id] = delivery
+    names = {
+        mod_id: str(row.get("customer_brand") or row.get("customer_name") or mod_id).strip()
+        for mod_id, row in custom_deliveries.items()
+    }
 
     projects = []
-    for project in account_projects(account_scope(user_id), mod_ids, names=names):
+    for project in account_projects(account_scope(user_id), list(custom_deliveries), names=names):
+        mod_id = str(project.get("mod_id") or "")
         status = overall_status(project)
+        delivery = custom_deliveries.get(mod_id, {})
         projects.append(
             {
                 **project,
-                "name": str(project.get("name") or names.get(project.get("mod_id"), project.get("mod_id"))),
+                "name": str(project.get("name") or names.get(mod_id, mod_id)),
+                "customer_name": str(delivery.get("customer_name") or "").strip(),
+                "industry_id": str(delivery.get("industry_id") or "").strip(),
+                "track_nodes": attach_track_nodes(project, track_nodes_for_custom_mod(mod_id)),
                 "overall_status": status,
                 "overall_label": {
                     "production": "制作中",
@@ -1162,7 +1176,10 @@ async def admin_get_user_private_delivery(request: Request, user_id: int):
             "projects": projects,
             "tracks": TRACKS,
             "stages": STAGES,
+            "happy_path": list(HAPPY_PATH),
+            "stage_flow": load_stage_flow_from_ssot(),
             "stage_labels": STAGE_LABELS,
+            "excluded_mod_ids": [m for m in entitled_mod_ids if m not in custom_deliveries],
             "read_only": True,
         },
     }

@@ -250,6 +250,52 @@ describe('AdminEntitlementsView', () => {
     expect(panel.text()).toContain('补充回归用例')
   })
 
+  it('shows per-node delivery checklist with rework ticket note', async () => {
+    mockListUsers.mockResolvedValue({
+      users: [{ id: 29, username: 'sunbird', is_enterprise: true, mod_ids: ['taiyangniao-pro'] }],
+    })
+    mockListUserMods.mockResolvedValue({ mod_ids: ['taiyangniao-pro'] })
+    mockGetUserPrivateDelivery.mockResolvedValue({
+      data: {
+        projects: [
+          {
+            mod_id: 'taiyangniao-pro',
+            name: '太阳鸟 PRO',
+            overall_status: 'rework',
+            overall_label: '返工中',
+            tracks: {
+              modules: { status: 'rework', timeline: [] },
+              employees: { status: 'production', timeline: [] },
+            },
+            track_nodes: {
+              modules: [
+                {
+                  id: 'attendance-convert',
+                  label: '考勤表转化',
+                  status: 'rework',
+                  status_label: '返工中',
+                  timeline: [
+                    { status: 'rework', at: '2026-07-31T05:00:00Z', note: '[客服工单 CR-29-0001] 部门列错位' },
+                  ],
+                },
+              ],
+              employees: [],
+            },
+          },
+        ],
+      },
+    })
+    const wrapper = mountComponent()
+    await flushPromises()
+    await wrapper.find('.admin-user-card').trigger('click')
+    await flushPromises()
+    const nodes = wrapper.find('.admin-private-delivery__nodes')
+    expect(nodes.exists()).toBe(true)
+    expect(nodes.text()).toContain('考勤表转化')
+    expect(nodes.text()).toContain('返工中')
+    expect(nodes.text()).toContain('[客服工单 CR-29-0001] 部门列错位')
+  })
+
   it('shows "尚未绑定客户 Mod" when user has no mods', async () => {
     mockListUsers.mockResolvedValue({
       users: [{ id: 1, username: 'testuser', mod_ids: [] }],
