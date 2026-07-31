@@ -984,6 +984,10 @@ async function loadOpenapi() {
 }
 
 onMounted(() => {
+  // 生产员工私有交付页只挂面板，跳过智脑控制台重型拉取，避免本机大库时卡死/杀渲染进程
+  if (activeTab.value === 'private-mod') {
+    return
+  }
   void initBrainAgentSession()
   activityLines.value = []
   pushActivity('智脑控制台已就绪')

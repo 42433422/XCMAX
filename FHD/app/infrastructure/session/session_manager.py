@@ -75,13 +75,24 @@ class SessionManager:
         return user
 
     def validate_session(self, session_id: str):
+        """校验会话。SQLite 高并发偶发 result 解码失败时降级为无会话，避免 /api/auth/me 500。"""
+        try:
+            return self._validate_session_once(session_id)
+        except IndexError:
+            # SQLAlchemy resultproxy：桌面 SQLite 下偶发 tuple index out of range
+            try:
+                return self._validate_session_once(session_id, use_joinedload=False)
+            except Exception:
+                return None
+        except Exception:
+            return None
+
+    def _validate_session_once(self, session_id: str, *, use_joinedload: bool = True):
         with get_host_db() as db:
-            user_session = (
-                db.query(UserSession)
-                .options(joinedload(UserSession.user))
-                .filter(UserSession.session_id == session_id)
-                .first()
-            )
+            query = db.query(UserSession).filter(UserSession.session_id == session_id)
+            if use_joinedload:
+                query = query.options(joinedload(UserSession.user))
+            user_session = query.first()
 
             if not user_session:
                 return None
@@ -91,7 +102,10 @@ class SessionManager:
                 db.commit()
                 return None
 
-            return self._detach_user_for_response(user_session.user)
+            user = user_session.user
+            if user is None and not use_joinedload:
+                user = db.query(User).filter(User.id == user_session.user_id).first()
+            return self._detach_user_for_response(user)
 
     def get_session_info(self, session_id: str):
         with get_host_db() as db:

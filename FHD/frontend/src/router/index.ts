@@ -135,6 +135,12 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
       meta: { title: '智脑集成' },
     },
     {
+      path: '/private-mod-delivery',
+      name: 'private-mod-delivery',
+      component: () => import('../views/PrivateModDeliveryView.vue'),
+      meta: { title: '生产员工 · 私有交付' },
+    },
+    {
       path: '/project-factory',
       name: 'project-factory',
       component: () => import('../views/ProjectFactoryView.vue'),

@@ -21,7 +21,7 @@
         <button
           class="app-launcher app-launcher--production"
           type="button"
-          @click="goShellPage('brain', { focus: 'private-mod' })"
+          @click="goShellPage('private-mod-delivery')"
         >
           <span class="app-launcher-icon app-launcher-icon--production" aria-hidden="true">
             <ProductionEmployeeLauncherIcon />
