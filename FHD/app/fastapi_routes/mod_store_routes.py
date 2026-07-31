@@ -464,6 +464,7 @@ async def mod_store_catalog() -> ModStoreCatalogResponse:
         data=ModStoreCatalogPayload(installed=installed, available=rows, indexed_count=len(rows))
     )
 
+
 async def _private_mod_context(request: Request) -> dict[str, Any]:
     """读取**当前登录账号**可见的客户私有 Mod。
 
@@ -675,12 +676,16 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
         projects.append(
             {
                 "mod_id": mod_id,
-                "name": _safe_text(row.get("name") or (delivery or {}).get("customer_brand") or mod_id),
+                "name": _safe_text(
+                    row.get("name") or (delivery or {}).get("customer_brand") or mod_id
+                ),
                 "description": _safe_text(row.get("description") or (delivery or {}).get("notes")),
                 "installed": bool(row),
                 "current_version": local_version,
                 "latest_version": latest_version,
-                "update_available": bool(latest_version and is_newer_version(latest_version, local_version)),
+                "update_available": bool(
+                    latest_version and is_newer_version(latest_version, local_version)
+                ),
                 "update_source": "private_mod_sync" if remote else "unavailable",
                 "business_modules": modules,
                 "ai_employees": employees,
@@ -822,7 +827,8 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
         }
     return ModStoreSimpleResponse(
         success=True,
-        message="交付状态已更新" + (f"；已开客服工单 {data['rework_ticket']['ticket_no']}" if rework_ticket else ""),
+        message="交付状态已更新"
+        + (f"；已开客服工单 {data['rework_ticket']['ticket_no']}" if rework_ticket else ""),
         data=data,
     )
 
@@ -864,8 +870,6 @@ async def mod_store_private_mod_update(request: Request) -> ModStoreInstallResul
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-
-
 
 
 @router.get("/market-catalog", response_model=ModStoreMarketCatalogResponse)

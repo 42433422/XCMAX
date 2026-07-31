@@ -524,9 +524,7 @@ class WorkflowEngine:
                 ("keyword", "unit_name", "customer_name", "name"),
             ):
                 merged_params.pop("keyword", None)
-                logger.info(
-                    "工作流 customers.query 无检索词，按全量列表执行（不注入用户原话）"
-                )
+                logger.info("工作流 customers.query 无检索词，按全量列表执行（不注入用户原话）")
 
     @staticmethod
     def _elapsed_ms(started_perf: float) -> int:

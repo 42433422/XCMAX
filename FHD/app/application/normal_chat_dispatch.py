@@ -449,14 +449,12 @@ def build_customers_query_response_dict(
         if not isinstance(customers, list):
             customers = []
         total = (
-            int(result.get("total") or len(customers)) if isinstance(result, dict) else len(customers)
+            int(result.get("total") or len(customers))
+            if isinstance(result, dict)
+            else len(customers)
         )
         if not customers:
-            msg = (
-                f"没有查到与「{keyword}」匹配的客户。"
-                if keyword
-                else "当前客户库暂无数据。"
-            )
+            msg = f"没有查到与「{keyword}」匹配的客户。" if keyword else "当前客户库暂无数据。"
         else:
             lines = [
                 f"- {c.get('customer_name', '')} {c.get('contact_person', '')}".rstrip()
