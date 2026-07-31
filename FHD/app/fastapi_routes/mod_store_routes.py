@@ -534,6 +534,30 @@ def _enterprise_delivery_scope(context: dict[str, Any], mod_ids: set[str] | None
     return scope
 
 
+def _schedule_delivery_outbox_push() -> None:
+    """企业端 best-effort 后台推送同步 outbox（失败只记日志，不阻塞交付主流程）。"""
+    import asyncio
+
+    def _push() -> None:
+        try:
+            from app.application.xcmax_sync_app import push_outbox
+
+            result = push_outbox(
+                remote_host=os.environ.get("XCMAX_REMOTE_HOST", "119.27.178.147"),
+                remote_port=int(os.environ.get("XCMAX_REMOTE_PORT", "9999")),
+            )
+            logger.info("private Mod delivery outbox push: %s", result)
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("private Mod delivery outbox push failed: %s", exc)
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        _push()
+        return
+    loop.run_in_executor(None, _push)
+
+
 def _private_mod_local_rows(mod_ids: set[str]) -> dict[str, dict[str, Any]]:
     from app.infrastructure.mods.mod_manager import get_mod_manager
 
@@ -761,7 +785,7 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    # 企业端出队：供管理端后续拉取；此处不代替管理端进程，也不自动 push
+    # 企业端出队 + best-effort 后台推送：进度不滞留本机等管理端手动拉
     uid = int(context.get("market_user_id") or 0)
     if uid > 0:
         try:
@@ -779,6 +803,7 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
                 },
                 actor="customer",
             )
+            _schedule_delivery_outbox_push()
         except RECOVERABLE_ERRORS as exc:
             logger.warning("private Mod delivery sync enqueue failed user=%s: %s", uid, exc)
     from app.services.private_mod_delivery import overall_status
