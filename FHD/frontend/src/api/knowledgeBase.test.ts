@@ -221,4 +221,54 @@ describe('knowledgeBaseApi', () => {
       },
     )
   })
+
+  it('covers health, catalogs, version ops, rebuild, reject, and omniscient query', async () => {
+    await knowledgeBaseApi.health()
+    await knowledgeBaseApi.listDatasets()
+    await knowledgeBaseApi.omniscient()
+    await knowledgeBaseApi.omniscientQuery({ query: 'platform issue', topK: 5 })
+    await knowledgeBaseApi.diffVersions('persy-knowledge', {
+      leftVersion: 'v1',
+      rightVersion: 'v2',
+      tenantId: 'tenant-a',
+    })
+    await knowledgeBaseApi.rollbackVersion('persy-knowledge', {
+      version: 'v1',
+      tenantId: 'tenant-a',
+    })
+    await knowledgeBaseApi.rebuildIndex('persy-knowledge', { tenantId: 'tenant-a' })
+    await knowledgeBaseApi.rejectMemory('persy-knowledge', 'mem / 2', '噪声')
+    await knowledgeBaseApi.graph('persy-knowledge', Number.NaN)
+
+    expect(mocks.api.get).toHaveBeenCalledWith('/api/knowledge/v1/health')
+    expect(mocks.api.get).toHaveBeenCalledWith('/api/knowledge/v1/datasets')
+    expect(mocks.api.get).toHaveBeenCalledWith('/api/knowledge/v1/omniscient')
+    expect(mocks.api.post).toHaveBeenCalledWith(
+      '/api/knowledge/v1/omniscient/query',
+      expect.objectContaining({ query: 'platform issue', top_k: 5 }),
+    )
+    expect(mocks.api.post).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy-knowledge/versions/diff',
+      expect.objectContaining({
+        left_version: 'v1',
+        right_version: 'v2',
+        tenant_id: 'tenant-a',
+      }),
+    )
+    expect(mocks.api.post).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy-knowledge/versions/rollback',
+      { version: 'v1', tenant_id: 'tenant-a' },
+    )
+    expect(mocks.api.post).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy-knowledge/index/rebuild',
+      { tenant_id: 'tenant-a' },
+    )
+    expect(mocks.api.post).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy-knowledge/memories/mem%20%2F%202/reject',
+      { reason: '噪声' },
+    )
+    expect(mocks.api.get).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy-knowledge/graph?limit=80',
+    )
+  })
 })

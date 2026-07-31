@@ -347,4 +347,59 @@ describe('PersyKnowledgeView', () => {
     )
     prompt.mockRestore()
   })
+
+  it('deletes a source document after confirmation and supports onboarding actions', async () => {
+    const { isAdminConsoleSpa } = await import('@/utils/adminConsoleUrl')
+    vi.mocked(isAdminConsoleSpa).mockReturnValue(true)
+    const publicDoc = {
+      document_id: 'public-doc-2',
+      tenant_id: 'public',
+      source: 'public-doc.md',
+      metadata: { publication_status: 'published' },
+    }
+    mocks.omniscient.mockResolvedValue({
+      success: true,
+      document_count: 1,
+      chunk_count: 1,
+      dataset_count: 1,
+      datasets: {
+        'persy-knowledge': {
+          document_count: 1,
+          chunk_count: 1,
+          documents: [publicDoc],
+        },
+      },
+    })
+    mocks.status.mockResolvedValue({
+      success: true,
+      dataset_id: 'persy-knowledge',
+      document_count: 1,
+      chunk_count: 1,
+      documents: [publicDoc],
+    })
+    mocks.deleteDocument.mockResolvedValue({ success: true })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    const wrapper = mount(PersyKnowledgeView, { global: { plugins: [createPinia()] } })
+    await flushPromises()
+    const sourceTab = wrapper.findAll('.view-switch button').find((button) =>
+      button.text().includes('来源'),
+    )
+    await sourceTab!.trigger('click')
+    await flushPromises()
+    await wrapper.get('button[aria-label="删除资料"]').trigger('click')
+    await flushPromises()
+    expect(mocks.deleteDocument).toHaveBeenCalledWith('persy-knowledge', 'public-doc-2')
+
+    const graph = wrapper.getComponent({ name: 'PersyKnowledgeGraphStub' })
+    await graph.vm.$emit('onboardingAction', 'upload')
+    await flushPromises()
+    expect(wrapper.text()).toMatch(/导入|粘贴|资料/)
+    await graph.vm.$emit('onboardingAction', 'paste')
+    await graph.vm.$emit('onboardingAction', 'chat')
+    await graph.vm.$emit('selectNode', 'persy:persy-knowledge')
+    await flushPromises()
+
+    confirm.mockRestore()
+  })
 })

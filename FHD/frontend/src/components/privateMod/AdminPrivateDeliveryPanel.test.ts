@@ -93,4 +93,34 @@ describe('AdminPrivateDeliveryPanel', () => {
     await flushPromises()
     expect(mockGetUserPrivateDelivery).toHaveBeenCalledWith(2)
   })
+
+  it('covers custom stage labels, empty timestamps, and non-Error failures', async () => {
+    mockGetUserPrivateDelivery.mockResolvedValueOnce({
+      data: {
+        projects: [
+          {
+            mod_id: 'm1',
+            name: 'Mod A',
+            overall_status: 'partial',
+            overall_label: '部分完成',
+            stage_labels: { business: { production: '定制制作中' } },
+            tracks: {
+              business: { status: 'production', timeline: [{ status: 'custom-x' }] },
+              employees: { status: 'unknown-stage', timeline: [] },
+            },
+          },
+        ],
+      },
+    })
+    const wrapper = mount(AdminPrivateDeliveryPanel, { props: { userId: 4 } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('定制制作中')
+    expect(wrapper.text()).toContain('unknown-stage')
+    expect(wrapper.text()).toContain('—')
+
+    mockGetUserPrivateDelivery.mockRejectedValueOnce('plain-failure')
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('客户交付状态读取失败：plain-failure')
+  })
 })
