@@ -5,13 +5,7 @@ import os
 from datetime import datetime
 from typing import Any
 
-from app.infrastructure.documents.shipment_label_paths import (
-    _current_label_owner_user_id,
-    _current_label_tenant_id,
-    _positive_scope_id,
-    _safe_label_run_id,
-    get_shipment_label_output_dir,
-)
+from app.infrastructure.documents.shipment_label_paths import get_shipment_label_output_dir
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 try:
@@ -283,10 +277,15 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
         self.output_dir = os.path.join(get_app_data_dir(), "shipment_outputs")
         os.makedirs(self.output_dir, exist_ok=True)
 
-    def _load_products_from_main_db(self) -> list[dict[str, Any]]:
+    def _load_products_from_main_db(self, *, unit_name: str) -> list[dict[str, Any]]:
+        """Load active products for the resolved customer unit."""
         products: list[dict[str, Any]] = []
         with get_db() as db:
-            rows = db.query(Product).filter(Product.is_active == 1).all()
+            rows = (
+                db.query(Product)
+                .filter(Product.is_active == 1, Product.unit == str(unit_name or "").strip())
+                .all()
+            )
             for p in rows:
                 products.append(
                     {
@@ -309,6 +308,9 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
         date: str | None = None,
         template_name: str | None = None,
         order_number: str | None = None,
+        owner_user_id: int | None = None,
+        tenant_id: int | None = None,
+        run_id: str | None = None,
     ) -> dict[str, Any]:
         # 1) 统一单位名来源：purchase_units 主库
         resolved = resolve_purchase_unit(unit_name)
@@ -335,7 +337,7 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
         )
 
         # 4) 产品匹配（仅主库 products）
-        db_products = self._load_products_from_main_db()
+        db_products = self._load_products_from_main_db(unit_name=resolved.unit_name)
         parsed_products: list[dict[str, Any]] = prepare_parsed_products(
             input_products=products,
             db_products=db_products,
@@ -411,8 +413,12 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
             total_amount = getattr(doc, "total_amount", None)
             total_quantity = getattr(doc, "total_quantity", None)
 
-        # 6) 生成标签图片
-        labels_dir = get_resource_path("ai_assistant", "商标导出")
+        # 6) 生成标签图片（用户数据目录，按租户/所有者/run 隔离）
+        labels_dir, label_run_id = get_shipment_label_output_dir(
+            tenant_id=tenant_id,
+            owner_user_id=owner_user_id,
+            run_id=run_id,
+        )
         label_generator = SimpleLabelGenerator(labels_dir)
         generated_labels = label_generator.generate_labels_for_order(
             order_number=order_number or filename.replace(".xlsx", ""), products=parsed_products
@@ -430,4 +436,5 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
             "unit_id": resolved.id,
             "parsed_products": parsed_products,
             "labels": generated_labels,
+            "label_run_id": label_run_id,
         }

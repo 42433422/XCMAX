@@ -2169,6 +2169,7 @@ class TestModsRoutesBranches:
         """?all=1 参数应正常返回。"""
         app = _build_mods_app()
         mock_mm = MagicMock()
+        mock_mm.list_public_mods = None
         mock_mm._mods_scan_fingerprint.return_value = "fp-1"
         mock_mm.list_all_mods.return_value = [{"id": "m1", "name": "Mod1"}]
         with (
@@ -2192,6 +2193,7 @@ class TestModsRoutesBranches:
         """/api/mods/ 也应正常返回。"""
         app = _build_mods_app()
         mock_mm = MagicMock()
+        mock_mm.list_public_mods = None
         mock_mm._mods_scan_fingerprint.return_value = "fp-1"
         mock_mm.list_all_mods.return_value = []
         with (
@@ -2214,6 +2216,7 @@ class TestModsRoutesBranches:
         """If-None-Match 匹配 → 返回 304。"""
         app = _build_mods_app()
         mock_mm = MagicMock()
+        mock_mm.list_public_mods = None
         mock_mm._mods_scan_fingerprint.return_value = "fp-1"
         mock_mm.list_all_mods.return_value = []
         with (
@@ -2238,6 +2241,7 @@ class TestModsRoutesBranches:
         """If-None-Match 不匹配 → 返回 200。"""
         app = _build_mods_app()
         mock_mm = MagicMock()
+        mock_mm.list_public_mods = None
         mock_mm._mods_scan_fingerprint.return_value = "fp-1"
         mock_mm.list_all_mods.return_value = []
         with (

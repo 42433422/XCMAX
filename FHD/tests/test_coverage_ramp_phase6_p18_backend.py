@@ -3265,7 +3265,8 @@ class TestIndustrySeedInstallFallback:
         assert result["success"] is True
 
     @pytest.mark.asyncio
-    async def test_seed_failure_pool_missing_catalog_success(self, monkeypatch):
+    async def test_seed_failure_pool_missing_no_catalog_fallback(self, monkeypatch):
+        """Catalog network fallback removed; seed failure is returned as-is."""
         mock_result = {
             "success": False,
             "mod_id": "x",
@@ -3281,19 +3282,17 @@ class TestIndustrySeedInstallFallback:
             "app.mod_sdk.industry_seed.deactivate_other_open_industry_mods",
             lambda keep, **kw: [],
         )
-        mock_catalog = MagicMock()
-        mock_catalog.success = True
-        mock_catalog.message = "ok"
         with patch(
             "app.fastapi_routes.mod_store_routes._install_from_catalog",
-            new=AsyncMock(return_value=mock_catalog),
-        ):
+            new=AsyncMock(),
+        ) as mock_catalog:
             result = await industry_seed_mod.install_industry_seed_with_fallback("涂料")
-        assert result["success"] is True
-        assert result["status"] == "catalog"
+        assert result["success"] is False
+        assert result["status"] == "pool_missing"
+        mock_catalog.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_seed_failure_pool_missing_catalog_failure(self, monkeypatch):
+    async def test_seed_failure_not_in_pool_no_catalog_fallback(self, monkeypatch):
         mock_result = {
             "success": False,
             "mod_id": "x",
@@ -3305,16 +3304,14 @@ class TestIndustrySeedInstallFallback:
             "app.mod_sdk.industry_seed.seed_industry_mod",
             lambda iid: mock_result,
         )
-        mock_catalog = MagicMock()
-        mock_catalog.success = False
-        mock_catalog.message = "catalog fail"
         with patch(
             "app.fastapi_routes.mod_store_routes._install_from_catalog",
-            new=AsyncMock(return_value=mock_catalog),
-        ):
+            new=AsyncMock(),
+        ) as mock_catalog:
             result = await industry_seed_mod.install_industry_seed_with_fallback("涂料")
         assert result["success"] is False
-        assert result["status"] == "catalog_failed"
+        assert result["status"] == "not_in_pool"
+        mock_catalog.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_seed_failure_invalid_no_catalog(self, monkeypatch):
@@ -3334,7 +3331,7 @@ class TestIndustrySeedInstallFallback:
         assert result["status"] == "invalid"
 
     @pytest.mark.asyncio
-    async def test_catalog_raises_recoverable(self, monkeypatch):
+    async def test_catalog_not_invoked_on_seed_failure(self, monkeypatch):
         mock_result = {
             "success": False,
             "mod_id": "x",
@@ -3349,10 +3346,11 @@ class TestIndustrySeedInstallFallback:
         with patch(
             "app.fastapi_routes.mod_store_routes._install_from_catalog",
             new=AsyncMock(side_effect=RuntimeError("catalog err")),
-        ):
+        ) as mock_catalog:
             result = await industry_seed_mod.install_industry_seed_with_fallback("涂料")
         assert result["success"] is False
-        assert result["status"] == "catalog_failed"
+        assert result["status"] == "pool_missing"
+        mock_catalog.assert_not_called()
 
 
 # ===========================================================================

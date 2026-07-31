@@ -344,7 +344,7 @@ import { ApiError } from '@/api'
 import chatApi from '@/api/chat'
 import PaneResizeHandle from '@/components/PaneResizeHandle.vue'
 import PrivateModDeliveryPanel from '@/components/privateMod/PrivateModDeliveryPanel.vue'
-import BrainAgentHeader from '../components/BrainAgentHeader.vue'
+import BrainAgentHeader from './BrainAgentHeader.vue'
 import { useResizablePane } from '@/composables/useResizablePane'
 import { apiFetch } from '@/utils/apiBase'
 import {

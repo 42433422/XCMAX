@@ -1564,6 +1564,7 @@ def test_loading_status_recoverable_error() -> None:
 def test_list_mods_happy_path() -> None:
     app = _build_mods_app()
     mock_mm = MagicMock()
+    mock_mm.list_public_mods = None  # fall through to list_all_mods (avoid MagicMock JSON)
     mock_mm._mods_scan_fingerprint.return_value = "fp-1"
     mock_mm.list_all_mods.return_value = [{"id": "m1"}, {"id": "m2"}]
     with (
@@ -1588,6 +1589,7 @@ def test_list_mods_happy_path() -> None:
 def test_list_mods_etag_304() -> None:
     app = _build_mods_app()
     mock_mm = MagicMock()
+    mock_mm.list_public_mods = None
     mock_mm._mods_scan_fingerprint.return_value = "fp-1"
     mock_mm.list_all_mods.return_value = []
     import hashlib

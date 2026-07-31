@@ -276,7 +276,7 @@ def test_build_continuous_learning_corpus_combines_sources(tmp_path):
 
     with (
         patch(
-            "app.services.distillation_trainer.collect_distillation_log_samples",
+            "app.application.distillation.continuous_learning_collectors.collect_distillation_log_samples",
             return_value=[
                 LearningSample(
                     text="模板预览",
@@ -288,11 +288,11 @@ def test_build_continuous_learning_corpus_combines_sources(tmp_path):
             ],
         ),
         patch(
-            "app.services.distillation_trainer.collect_change_request_learning",
+            "app.application.distillation.continuous_learning_collectors.collect_change_request_learning",
             return_value=([], []),
         ),
         patch(
-            "app.services.distillation_trainer.collect_bug_fix_learning",
+            "app.application.distillation.continuous_learning_collectors.collect_bug_fix_learning",
             return_value=([], []),
         ),
     ):

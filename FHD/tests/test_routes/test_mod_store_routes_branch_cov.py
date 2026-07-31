@@ -205,6 +205,14 @@ _ensure_stub(
     "app.infrastructure.mods.artifact_package",
     {"peek_artifact": MagicMock(return_value="mod")},
 )
+_ensure_stub(
+    "app.infrastructure.mods.mod_store_layering",
+    {
+        "validate_market_package": MagicMock(return_value=None),
+        "mod_layer_fields": MagicMock(return_value={}),
+        "market_catalog_row_allowed": MagicMock(return_value=True),
+    },
+)
 
 # ---------------------------------------------------------------------------
 # Import the module under test (AFTER stubs are in place)
@@ -498,7 +506,7 @@ class TestInstallFromCatalog:
         assert result.data == {"id": "aux-pack"}
 
     def test_aux_employee_pack_fail_falls_through_to_catalog(self):
-        """Branch: is_aux_employee_pack_mod_id=True, ok=False → falls through."""
+        """Branch: is_aux_employee_pack_mod_id=True, ok=False → falls through to registry."""
         old_aux = sys.modules["app.mod_sdk.host_foundation"].is_aux_employee_pack_mod_id
         old_seed = sys.modules[
             "app.mod_sdk.host_foundation"
@@ -510,25 +518,18 @@ class TestInstallFromCatalog:
             "app.mod_sdk.host_foundation"
         ].install_aux_employee_pack_from_repo_seed = MagicMock(return_value=(False, "seed failed"))
         try:
-            with patch.object(
-                _mod, "catalog_get_json", AsyncMock(return_value={"versions": [{"version": "2.0"}]})
+            with (
+                patch.object(
+                    _mod,
+                    "catalog_get_json",
+                    AsyncMock(return_value={"versions": [{"version": "2.0"}]}),
+                ),
+                patch.object(_mod, "catalog_download_to", AsyncMock()),
+                patch.object(_mod, "validate_market_package", return_value=None),
+                patch("app.infrastructure.mods.employee_registry.get_employee_registry") as mock_reg,
             ):
-                with patch.object(_mod, "catalog_download_to", AsyncMock()):
-                    with patch(
-                        "app.infrastructure.mods.artifact_package.peek_artifact",
-                        return_value="mod",
-                    ):
-                        with patch(
-                            "app.infrastructure.mods.mod_manager.get_mod_manager"
-                        ) as mock_mgr:
-                            mock_mgr.return_value.install_mod_package.return_value = (
-                                True,
-                                "ok",
-                                None,
-                            )
-                            result = _sync(
-                                _mod._install_from_catalog("aux-pack", "", activate=True)
-                            )
+                mock_reg.return_value.install_from_package.return_value = (True, "ok")
+                result = _sync(_mod._install_from_catalog("aux-pack", "", activate=True))
         finally:
             sys.modules["app.mod_sdk.host_foundation"].is_aux_employee_pack_mod_id = old_aux
             sys.modules[
@@ -552,13 +553,10 @@ class TestInstallFromCatalog:
                 AsyncMock(return_value={"versions": [{"version": "3.5"}]}),
             ),
             patch.object(_mod, "catalog_download_to", AsyncMock()),
-            patch(
-                "app.infrastructure.mods.artifact_package.peek_artifact",
-                return_value="mod",
-            ),
-            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mgr,
+            patch.object(_mod, "validate_market_package", return_value=None),
+            patch("app.infrastructure.mods.employee_registry.get_employee_registry") as mock_reg,
         ):
-            mock_mgr.return_value.install_mod_package.return_value = (True, "ok", None)
+            mock_reg.return_value.install_from_package.return_value = (True, "ok")
             result = _sync(_mod._install_from_catalog("my-mod", "", activate=True))
         assert result.success is True
 
@@ -571,13 +569,10 @@ class TestInstallFromCatalog:
                 AsyncMock(return_value={"versions": ["4.0"]}),
             ),
             patch.object(_mod, "catalog_download_to", AsyncMock()),
-            patch(
-                "app.infrastructure.mods.artifact_package.peek_artifact",
-                return_value="mod",
-            ),
-            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mgr,
+            patch.object(_mod, "validate_market_package", return_value=None),
+            patch("app.infrastructure.mods.employee_registry.get_employee_registry") as mock_reg,
         ):
-            mock_mgr.return_value.install_mod_package.return_value = (True, "ok", None)
+            mock_reg.return_value.install_from_package.return_value = (True, "ok")
             result = _sync(_mod._install_from_catalog("my-mod", "", activate=True))
         assert result.success is True
 
@@ -594,13 +589,10 @@ class TestInstallFromCatalog:
         assert "version" in exc_info.value.detail
 
     def test_employee_pack_artifact_installs_via_registry(self):
-        """Branch: peek_artifact == ARTIFACT_EMPLOYEE_PACK → install via employee_registry."""
+        """Catalog install goes through validate_market_package then employee_registry."""
         with (
             patch.object(_mod, "catalog_download_to", AsyncMock()),
-            patch(
-                "app.infrastructure.mods.artifact_package.peek_artifact",
-                return_value="employee_pack",
-            ),
+            patch.object(_mod, "validate_market_package", return_value=None),
             patch("app.infrastructure.mods.employee_registry.get_employee_registry") as mock_reg,
         ):
             mock_reg.return_value.install_from_package.return_value = (True, "emp installed")
@@ -608,55 +600,54 @@ class TestInstallFromCatalog:
         assert result.success is True
         assert result.message == "emp installed"
 
-    def test_mod_artifact_installs_via_mod_manager_with_metadata(self):
-        """Branch: mod artifact → install via mod_manager with dataclass metadata."""
-        metadata = MagicMock()
+    def test_mod_artifact_rejected_by_market_validation(self):
+        """Non-employee_pack market packages are rejected (no mod_manager install)."""
         with (
             patch.object(_mod, "catalog_download_to", AsyncMock()),
-            patch(
-                "app.infrastructure.mods.artifact_package.peek_artifact",
-                return_value="mod",
+            patch.object(
+                _mod,
+                "validate_market_package",
+                return_value=(
+                    "当前市场仅允许安装 AI 员工包；系统、行业和定制 Mod 不允许从市场安装",
+                    {"id": "my-mod", "artifact": "mod"},
+                ),
             ),
-            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mgr,
-            patch("dataclasses.is_dataclass", return_value=True),
-            patch("dataclasses.asdict", return_value={"meta": "data"}),
+            patch("app.infrastructure.mods.employee_registry.get_employee_registry") as mock_reg,
         ):
-            mock_mgr.return_value.install_mod_package.return_value = (True, "ok", metadata)
             result = _sync(_mod._install_from_catalog("my-mod", "1.0", activate=True))
-        assert result.success is True
-        assert result.data == {"meta": "data"}
+        assert result.success is False
+        assert "员工包" in result.message
+        mock_reg.assert_not_called()
 
-    def test_mod_artifact_installs_via_mod_manager_without_metadata(self):
-        """Branch: mod artifact → install via mod_manager, metadata is None."""
+    def test_mod_artifact_rejected_without_registry_install(self):
+        """Rejected catalog packages leave data payload and skip registry install."""
         with (
             patch.object(_mod, "catalog_download_to", AsyncMock()),
-            patch(
-                "app.infrastructure.mods.artifact_package.peek_artifact",
-                return_value="mod",
+            patch.object(
+                _mod,
+                "validate_market_package",
+                return_value=("blocked", {"id": "my-mod", "artifact": "mod"}),
             ),
-            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mgr,
+            patch("app.infrastructure.mods.employee_registry.get_employee_registry") as mock_reg,
         ):
-            mock_mgr.return_value.install_mod_package.return_value = (True, "ok", None)
             result = _sync(_mod._install_from_catalog("my-mod", "1.0", activate=False))
-        assert result.success is True
-        assert result.data is None
+        assert result.success is False
+        assert result.data == {"id": "my-mod", "artifact": "mod"}
+        mock_reg.assert_not_called()
 
     def test_finally_cleans_up_temp_files(self):
         """Branch: finally block deletes temp files."""
         with (
             patch.object(_mod, "catalog_download_to", AsyncMock()),
-            patch(
-                "app.infrastructure.mods.artifact_package.peek_artifact",
-                return_value="mod",
-            ),
-            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mgr,
+            patch.object(_mod, "validate_market_package", return_value=None),
+            patch("app.infrastructure.mods.employee_registry.get_employee_registry") as mock_reg,
             patch("tempfile.NamedTemporaryFile") as mock_tmp,
             patch("os.path.exists", return_value=True),
             patch("os.unlink") as mock_unlink,
         ):
             mock_tmp.return_value.name = "/tmp/fake.zip"
             mock_tmp.return_value.close = MagicMock()
-            mock_mgr.return_value.install_mod_package.return_value = (True, "ok", None)
+            mock_reg.return_value.install_from_package.return_value = (True, "ok")
             result = _sync(_mod._install_from_catalog("my-mod", "1.0"))
         assert result.success is True
         mock_unlink.assert_called()
@@ -665,18 +656,15 @@ class TestInstallFromCatalog:
         """Branch: finally block OSError on unlink is swallowed."""
         with (
             patch.object(_mod, "catalog_download_to", AsyncMock()),
-            patch(
-                "app.infrastructure.mods.artifact_package.peek_artifact",
-                return_value="mod",
-            ),
-            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as mock_mgr,
+            patch.object(_mod, "validate_market_package", return_value=None),
+            patch("app.infrastructure.mods.employee_registry.get_employee_registry") as mock_reg,
             patch("tempfile.NamedTemporaryFile") as mock_tmp,
             patch("os.path.exists", return_value=True),
             patch("os.unlink", side_effect=OSError("permission denied")),
         ):
             mock_tmp.return_value.name = "/tmp/fake.zip"
             mock_tmp.return_value.close = MagicMock()
-            mock_mgr.return_value.install_mod_package.return_value = (True, "ok", None)
+            mock_reg.return_value.install_from_package.return_value = (True, "ok")
             result = _sync(_mod._install_from_catalog("my-mod", "1.0"))
         # Should not raise despite OSError in cleanup
         assert result.success is True

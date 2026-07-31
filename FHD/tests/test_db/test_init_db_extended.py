@@ -291,8 +291,11 @@ class TestResolveAuthBootstrapEngine:
 # _seed_default_admin_user
 # ---------------------------------------------------------------------------
 class TestSeedDefaultAdminUser:
-    def test_seeds_admin_when_no_users(self, sqlite_engine):
+    def test_seeds_admin_when_no_users(self, sqlite_engine, monkeypatch):
         from app.db.init_db import _seed_default_admin_user
+
+        monkeypatch.setenv("ADMIN_USERNAME", "admin")
+        monkeypatch.setenv("ADMIN_PASSWORD", "secure-admin-pass")
 
         # Create users table
         with sqlite_engine.begin() as conn:
@@ -320,7 +323,11 @@ class TestSeedDefaultAdminUser:
 
         with sqlite_engine.connect() as conn:
             count = conn.execute(text("SELECT COUNT(*) FROM users")).scalar()
+            row = conn.execute(
+                text("SELECT username, role FROM users WHERE username = 'admin'")
+            ).one()
         assert count == 1
+        assert row == ("admin", "admin")
 
     def test_skips_if_users_exist(self, sqlite_engine):
         from app.db.init_db import _seed_default_admin_user
@@ -361,8 +368,7 @@ class TestSeedDefaultAdminUser:
     def test_skips_if_empty_credentials(self, sqlite_engine, monkeypatch):
         from app.db.init_db import _seed_default_admin_user
 
-        # The function falls back to "admin"/"admin123" when env vars are empty,
-        # so it will still seed. Test that it seeds with default credentials.
+        # Hardened bootstrap: no default password seed when credentials are empty.
         monkeypatch.setenv("ADMIN_USERNAME", "")
         monkeypatch.setenv("ADMIN_PASSWORD", "")
 
@@ -391,8 +397,7 @@ class TestSeedDefaultAdminUser:
 
         with sqlite_engine.connect() as conn:
             count = conn.execute(text("SELECT COUNT(*) FROM users")).scalar()
-        # Empty string is falsy, so defaults "admin"/"admin123" are used
-        assert count == 1
+        assert count == 0
 
 
 # ---------------------------------------------------------------------------

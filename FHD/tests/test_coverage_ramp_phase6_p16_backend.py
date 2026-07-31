@@ -345,6 +345,8 @@ class TestInitDbAuthBootstrap:
     def test_ensure_sqlite_auth_bootstrap_creates_tables(self, sqlite_engine, monkeypatch):
         from app.db.init_db import ensure_sqlite_auth_bootstrap
 
+        monkeypatch.setenv("ADMIN_USERNAME", "admin")
+        monkeypatch.setenv("ADMIN_PASSWORD", "secure-admin-pass")
         # Force resolve to use our engine
         monkeypatch.setattr(
             "app.db.init_db._resolve_auth_bootstrap_engine",

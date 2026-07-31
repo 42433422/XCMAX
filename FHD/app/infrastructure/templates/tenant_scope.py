@@ -9,6 +9,7 @@ from app.infrastructure.tenant_scope import (
     TenantScopeError,
     current_tenant_id,
     tenant_id_for_write,
+    tenant_legacy_null_visible,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -26,19 +27,17 @@ def ensure_templates_tenant_column() -> None:
 
 
 def templates_tenant_where_sql(*, table_alias: str = "") -> tuple[str, dict[str, Any]]:
-    """返回 ``(sql_fragment, bind)``。
-
-    约定：``tenant_id IS NULL`` 表示系统/开箱种子，对所有上下文可见；
-    租户私有模板仅本租户可见。无租户时只暴露系统模板，不泄露任何租户数据。
-    """
+    """返回 ``(sql_fragment, bind)``；无租户时 fail-closed ``1=0``。"""
     prefix = f"{table_alias}." if table_alias else ""
     tid = current_tenant_id()
     if tid is None:
-        return f"{prefix}tenant_id IS NULL", {}
-    return (
-        f"({prefix}tenant_id = :tenant_id OR {prefix}tenant_id IS NULL)",
-        {"tenant_id": int(tid)},
-    )
+        return "1 = 0", {}
+    if tenant_legacy_null_visible():
+        return (
+            f"({prefix}tenant_id = :tenant_id OR {prefix}tenant_id IS NULL)",
+            {"tenant_id": int(tid)},
+        )
+    return f"{prefix}tenant_id = :tenant_id", {"tenant_id": int(tid)}
 
 
 def templates_tenant_id_for_insert() -> int:
