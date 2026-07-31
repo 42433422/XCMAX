@@ -469,6 +469,7 @@ class ModstorePlatformAdapter:
                 timeout=httpx.Timeout(self.timeout, connect=10.0),
                 limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
                 headers=self._build_headers(),
+                trust_env=False,
             )
         return self._client
 
@@ -556,7 +557,7 @@ class ModstorePlatformAdapter:
         catalog = self._cached_catalog()
         if catalog is None:
             try:
-                with httpx.Client(
+                with _httpx_sync_client(
                     timeout=httpx.Timeout(min(self.timeout, 15.0), connect=5.0),
                     headers=self._build_headers(),
                 ) as client:
