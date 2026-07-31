@@ -123,4 +123,37 @@ describe('AdminPrivateDeliveryPanel', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('客户交付状态读取失败：plain-failure')
   })
+
+  it('clears projects when API returns a non-array payload', async () => {
+    mockGetUserPrivateDelivery.mockResolvedValueOnce({ data: { projects: null } })
+    const wrapper = mount(AdminPrivateDeliveryPanel, { props: { userId: 8 } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('该用户还没有客户私有 Mod 交付状态')
+  })
+
+  it('uses event status_label when provided and formats empty updated_at', async () => {
+    mockGetUserPrivateDelivery.mockResolvedValueOnce({
+      data: {
+        projects: [
+          {
+            mod_id: 'm2',
+            name: 'Mod B',
+            overall_label: '制作中',
+            tracks: {
+              business: {
+                status: 'production',
+                updated_at: '   ',
+                timeline: [{ status: 'production', status_label: '自定义标签', at: '' }],
+              },
+            },
+          },
+        ],
+      },
+    })
+    const wrapper = mount(AdminPrivateDeliveryPanel, { props: { userId: 11 } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('自定义标签')
+    expect(wrapper.text()).toContain('—')
+  })
+
 })

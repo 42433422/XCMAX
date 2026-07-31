@@ -189,4 +189,21 @@ describe('PrivateModDeliveryPanel', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('socket closed')
   })
+
+  it('surfaces update failure when private mod update endpoint rejects', async () => {
+    mockApiFetch
+      .mockResolvedValueOnce(
+        okJson({
+          projects: [sampleProject],
+          stages: ['production', 'testing', 'rework', 'acceptance', 'delivered'],
+        }),
+      )
+      .mockResolvedValueOnce(failJson(500, { detail: 'update denied' }))
+    const wrapper = mount(PrivateModDeliveryPanel)
+    await flushPromises()
+    await wrapper.get('.private-mod-center__update').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('update denied')
+  })
+
 })
