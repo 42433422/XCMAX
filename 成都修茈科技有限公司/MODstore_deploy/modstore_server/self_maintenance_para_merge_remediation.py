@@ -36,6 +36,12 @@ _PR_CLOSED_WITHOUT_MERGE_MARKERS = ("closed without merge",)
 # merge_worker.mjs throws when update-branch leaves zero PR changed files.
 _CHANGED_FILES_EMPTY_MARKERS = ("changed-files-empty",)
 _MODSTORE_SERVER_SCOPE = "成都修茈科技有限公司/MODstore_deploy/modstore_server/"
+_ABSORPTION_ELIGIBLE_REASONS = frozenset(
+    {
+        "para_ai_review_rejected",
+        "para_merge_conflict",
+    }
+)
 
 
 def _strip_error_prefix(text: str) -> str:
@@ -87,9 +93,10 @@ def para_merge_conflict_continues_on_rejected_branch(detail: str) -> bool:
 def resume_from_clean_baseline_for_para_merge(reason: str, detail: str) -> bool:
     """Whether automated remediation must restart from the configured clean base."""
 
-    if reason == "para_merge_conflict" and (
+    if reason in _ABSORPTION_ELIGIBLE_REASONS and (
         is_branch_preserving_para_merge_failure_detail(detail)
         or is_changed_files_empty_detail(detail)
+        or is_pr_closed_without_merge_detail(detail)
     ):
         return False
     return True
@@ -269,7 +276,7 @@ def reconcile_absorbed_para_merge_remediations(
             continue
         if item.get("kind") != "automated_remediation":
             continue
-        if str(item.get("reason") or "").strip() != "para_merge_conflict":
+        if str(item.get("reason") or "").strip() not in _ABSORPTION_ELIGIBLE_REASONS:
             continue
         detail = str(item.get("detail") or "")
         empty_files = is_changed_files_empty_detail(detail)
