@@ -339,25 +339,24 @@ export function readJsonTextFile(filePath: string): string {
   return text.replace(/^\uFEFF/, '')
 }
 
-function sanitizeBackendProxyEnv(
+export function sanitizeBackendProxyEnv(
   env: NodeJS.ProcessEnv | Record<string, string | undefined>
 ): Record<string, string | undefined> {
   const next: Record<string, string | undefined> = { ...env }
-  for (const key of ['ALL_PROXY', 'all_proxy'] as const) {
-    const raw = String(next[key] || '').trim().toLowerCase()
-    if (
-      raw.startsWith('socks://') ||
-      raw.startsWith('socks4://') ||
-      raw.startsWith('socks5://') ||
-      raw.startsWith('socks5h://')
-    ) {
-      // Prefer HTTP_PROXY for backend httpx; SOCKS needs optional socksio.
-      delete next[key]
-    }
+  // Desktop backend talks to xiu-ci.com for chat SSE. Clash/HTTP_PROXY often
+  // returns 502 HTML for that stream and the UI shows 首包超时. Chromium OTA
+  // already has its own PAC bypass; the Python child must not inherit proxies.
+  for (const key of [
+    'ALL_PROXY',
+    'all_proxy',
+    'HTTP_PROXY',
+    'HTTPS_PROXY',
+    'http_proxy',
+    'https_proxy',
+    'XCMAX_CLI_PROXY',
+  ] as const) {
+    delete next[key]
   }
-  // Chromium OTA bypass does not apply to the Python backend. Without NO_PROXY,
-  // httpx sends market SSE (xiu-ci.com) through Clash/HTTP_PROXY and gets 502,
-  // which surfaces as 流式对话首包超时.
   const bypass = OTA_PROXY_BYPASS_RULES.split(',')
     .map(s => s.trim())
     .filter(s => s && s !== '<local>')
