@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -19,6 +20,22 @@ from app.db.models.memory_graph import (
     MemoryNodeType,
 )
 from app.infrastructure.memory_graph_store import MemoryGraphStore
+from app.infrastructure.rag import get_default_embedder, is_rag_enabled
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
+
+
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    """计算两个向量的余弦相似度；长度不一致或零向量返回 0。"""
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b))
+    na = sum(x * x for x in a) ** 0.5
+    nb = sum(x * x for x in b) ** 0.5
+    if na == 0 or nb == 0:
+        return 0.0
+    return dot / (na * nb)
 
 
 class MemoryGraphAppService:
@@ -116,7 +133,90 @@ class MemoryGraphAppService:
         node_type: MemoryNodeType | None = None,
         top_k: int = 10,
     ) -> list[dict[str, Any]]:
-        # Phase 1: 简单关键词匹配（Phase 3 升级为 HybridRetriever 语义检索）
+        """搜索记忆：先尝试语义检索，无结果时降级为关键词匹配。
+
+        降级链：
+            1. 若 ``is_rag_enabled()`` 为 True 且 embedder 可用 → 语义检索（cosine）
+            2. 若语义检索无结果，或 RAG/embedder 不可用 → 关键词匹配（标题/内容子串）
+        """
+        semantic_results = self._semantic_search(
+            query=query,
+            scope=scope,
+            scope_id=scope_id,
+            node_type=node_type,
+            top_k=top_k,
+        )
+        if semantic_results:
+            return semantic_results
+        return self._keyword_search(
+            query=query,
+            scope=scope,
+            scope_id=scope_id,
+            node_type=node_type,
+            top_k=top_k,
+        )
+
+    def _semantic_search(
+        self,
+        *,
+        query: str,
+        scope: str,
+        scope_id: str,
+        node_type: MemoryNodeType | None,
+        top_k: int,
+    ) -> list[dict[str, Any]]:
+        """基于 embedder 的语义检索；任何环节不可用时返回空列表（让上层降级）。"""
+        if not is_rag_enabled():
+            return []
+        try:
+            embedder = get_default_embedder()
+        except RECOVERABLE_ERRORS as e:
+            logger.debug("[MemoryGraph] embedder 加载失败，降级关键词: %s", e)
+            return []
+        if embedder is None:
+            return []
+
+        nodes = self._store.list_active_nodes(scope=scope, scope_id=scope_id, node_type=node_type)
+        if not nodes:
+            return []
+
+        try:
+            query_vec = embedder(query)
+        except RECOVERABLE_ERRORS as e:
+            logger.warning("[MemoryGraph] 查询向量计算失败，降级关键词: %s", e)
+            return []
+
+        # 编码每个节点的 title + content，与查询向量计算 cosine
+        scored: list[tuple[float, MemoryNode]] = []
+        for node in nodes:
+            text = f"{node.title}\n{node.content or ''}"
+            try:
+                node_vec = embedder(text)
+            except RECOVERABLE_ERRORS as e:
+                logger.debug("[MemoryGraph] 节点向量计算失败 node=%s: %s", node.node_id, e)
+                continue
+            sim = _cosine_similarity(query_vec, node_vec)
+            if sim > 0:
+                scored.append((sim * node.metadata_weight, node))
+
+        if not scored:
+            return []
+        scored.sort(key=lambda x: x[0], reverse=True)
+        top = scored[:top_k]
+        for _, node in top:
+            self._store.record_recall(node.node_id)
+        return [self._node_to_dict(n) for _, n in top]
+
+    def _keyword_search(
+        self,
+        *,
+        query: str,
+        scope: str,
+        scope_id: str,
+        node_type: MemoryNodeType | None,
+        top_k: int,
+    ) -> list[dict[str, Any]]:
+        """关键词匹配：标题命中 1.0 分，内容命中 0.5 分。"""
         nodes = self._store.list_active_nodes(scope=scope, scope_id=scope_id, node_type=node_type)
         query_lower = query.lower()
         scored: list[tuple[float, MemoryNode]] = []
