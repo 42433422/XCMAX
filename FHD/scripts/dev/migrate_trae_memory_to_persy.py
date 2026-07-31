@@ -1,14 +1,19 @@
 """Migrate Trae memory to Persy Unified Memory Graph.
 
 读取 ~/.trae-cn/memory/ 下的 project_memory.md 和 user_profile.md，
-解析为 constraint/convention/lesson/preference 节点写入 Persy。
+解析为 constraint/convention/lesson 节点写入 Persy。
 
 用法:
+    # dry-run 预览
     python scripts/dev/migrate_trae_memory_to_persy.py \
         --memory-root ~/.trae-cn/memory/projects/<project-dir>/ \
-        --persy-api http://localhost:8000/api/knowledge/v2 \
         --scope project --scope-id XCMAX \
         --dry-run
+
+    # 实际迁移（默认写入 ./persy_memory.db）
+    python scripts/dev/migrate_trae_memory_to_persy.py \
+        --memory-root ~/.trae-cn/memory/projects/<project-dir>/ \
+        --scope project --scope-id XCMAX
 """
 
 from __future__ import annotations
@@ -18,8 +23,13 @@ import re
 import sys
 from pathlib import Path
 
-from app.application.memory_graph_app_service import MemoryGraphAppService
-from app.db.models.memory_graph import MemoryNodeType
+# 将 FHD 根目录加入 sys.path，使 app.* / resources.* 可导入（与 tests/conftest.py 同模式）。
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from app.application.memory_graph_app_service import MemoryGraphAppService  # noqa: E402
+from app.db.models.memory_graph import MemoryNodeType  # noqa: E402
 
 _SECTION_PATTERN = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 
@@ -109,6 +119,11 @@ def main() -> int:
     parser.add_argument("--persy-api", default="http://localhost:8000/api/knowledge/v2")
     parser.add_argument("--scope", default="project")
     parser.add_argument("--scope-id", required=True)
+    parser.add_argument(
+        "--db-url",
+        default="sqlite:///persy_memory.db",
+        help="Persy SQLite DB URL (default: sqlite:///persy_memory.db)",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -122,12 +137,51 @@ def main() -> int:
     for section, items in sections.items():
         print(f"  {section}: {len(items)} items")
 
+    type_mapping = {
+        "Hard Constraints": "constraint",
+        "Engineering Conventions": "convention",
+        "Lessons Learned": "lesson",
+    }
+
     if args.dry_run:
         print("[migrate] dry-run 模式，不实际写入")
+        for section, items in sections.items():
+            type_key = type_mapping.get(section)
+            if type_key:
+                print(f"  → 将迁移 {len(items)} 条到 {type_key}")
+        total = sum(len(items) for s, items in sections.items() if type_mapping.get(s))
+        print(f"[migrate] dry-run 预计迁移 {total} 条记忆")
         return 0
 
-    print("[migrate] 注意：需在 Persy 服务运行时通过 HTTP API 迁移")
-    print("[migrate] 或在 Python 进程内直接调用 app_service")
+    # 实际迁移：在进程内构造 MemoryGraphAppService，直接写入 SQLite。
+    # 不复用 app.db.SessionLocal（默认连 PostgreSQL），用独立 engine 指向 persy_memory.db。
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.application.memory_update_engine import MemoryUpdateEngine
+    from app.db.base import Base
+    from app.db.models.memory_graph import MemoryNode, TypedEdge
+    from app.infrastructure.memory_graph_store import MemoryGraphStore
+
+    print(f"[migrate] 使用 DB: {args.db_url}")
+    engine = create_engine(args.db_url, connect_args={"check_same_thread": False})
+    # 仅创建记忆图谱相关表，避免 Base.metadata 中其他模型表污染独立 DB。
+    Base.metadata.create_all(
+        engine, tables=[MemoryNode.__table__, TypedEdge.__table__], checkfirst=True
+    )
+    session = Session(engine)
+    store = MemoryGraphStore(session)
+    update_engine = MemoryUpdateEngine(store)
+    app_service = MemoryGraphAppService(store=store, update_engine=update_engine)
+
+    counts = migrator.migrate(app_service, dry_run=False)
+    total = sum(counts.values())
+    print(f"[migrate] 迁移完成：共 {total} 条")
+    for type_key, count in counts.items():
+        print(f"  {type_key}: {count}")
+
+    session.close()
+    engine.dispose()
     return 0
 
 
