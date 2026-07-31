@@ -24,6 +24,14 @@ from app.db.models.approval import (
     ApprovalRequest,
 )
 from app.db.models.customer import Customer
+from app.db.models.etl import (
+    EtlRun,
+    EtlRunRow,
+    EtlTargetConfig,
+    EtlTemplate,
+    EtlTemplateVersion,
+    EtlUpload,
+)
 from app.db.models.finance import FinancialTransaction
 from app.db.models.inventory import (
     InventoryLedger,
@@ -74,6 +82,12 @@ __all__ = [
     "ShipmentRecord",
     "ShipmentEtlImportFingerprint",
     "Customer",
+    "EtlUpload",
+    "EtlTemplate",
+    "EtlTemplateVersion",
+    "EtlRun",
+    "EtlRunRow",
+    "EtlTargetConfig",
     "FinancialTransaction",
     "User",
     "UserSession",

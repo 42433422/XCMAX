@@ -16,6 +16,8 @@ import shutil
 import sqlite3
 import sys
 from collections.abc import Iterable, Sequence
+
+from app.db.etl_bootstrap import ensure_sqlite_etl_bootstrap
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -1224,6 +1226,11 @@ def ensure_runtime_auth_bootstrap(
             swallow_errors=swallow_errors,
         )
         ensure_mobile_push_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
+        ensure_sqlite_etl_bootstrap(
             engine,
             database_url=url,
             swallow_errors=swallow_errors,
