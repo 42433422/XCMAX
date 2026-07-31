@@ -143,7 +143,7 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
     const events = asArray<AgentRunEvent>(payload.agentEvents)
     if (!events.length) return
     const trace = buildAgentRunTraceFromEvents(events, runId)
-    // 闲聊适配器也会造 run.created→planner→run.completed，无工具时挂轨迹只会吓人（Legacy/计划图）
+    // 闲聊无工具 / 单次成功只读工具：气泡只保留答案正文，不挂智能任务时间线与计划图
     if (isTrivialChatTrace(trace)) {
       for (let i = messages.value.length - 1; i >= 0; i -= 1) {
         const msg = messages.value[i]

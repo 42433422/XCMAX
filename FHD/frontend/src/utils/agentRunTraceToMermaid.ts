@@ -16,6 +16,7 @@
  */
 
 import type { AgentRunTraceData, TracePhase } from './agentRunTraceModel'
+import { shouldShowAgentRunPlanGraph } from './agentRunTraceModel'
 
 const NODE_SHAPE: Record<TracePhase['kind'], (id: string, label: string) => string> = {
   planner: (id, label) => `${id}([${label}])`,
@@ -59,6 +60,8 @@ function nodeLabel(phase: TracePhase): string {
  */
 export function traceToMermaid(trace: AgentRunTraceData | null | undefined): string {
   if (!trace || !trace.phases.length) return ''
+  // 单工具 / trivial：不生成图（避免「执行计划图太丑」抢视线）
+  if (!shouldShowAgentRunPlanGraph(trace)) return ''
 
   const lines: string[] = ['flowchart TD']
 

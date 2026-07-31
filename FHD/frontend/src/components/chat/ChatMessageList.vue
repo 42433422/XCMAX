@@ -48,7 +48,7 @@
           </ul>
         </div>
         <AgentRunTrace
-          v-if="msg.role === 'ai' && msg.agentRunTrace && msg.agentRunTrace.phases.length"
+          v-if="msg.role === 'ai' && msg.agentRunTrace && !isTrivialChatTrace(msg.agentRunTrace)"
           :trace="msg.agentRunTrace"
         />
         <ChatApprovalInlineCard
@@ -123,6 +123,7 @@ import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown } from '@/utils/sani
 import { aiMarkdownSourceFromContent } from '@/utils/chatBubbleDisplay'
 import ChatApprovalInlineCard from '@/components/chat/ChatApprovalInlineCard.vue'
 import AgentRunTrace from '@/components/chat/AgentRunTrace.vue'
+import { isTrivialChatTrace } from '@/utils/agentRunTraceModel'
 
 useI18n()
 

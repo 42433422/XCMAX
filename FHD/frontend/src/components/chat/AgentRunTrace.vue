@@ -72,8 +72,8 @@
       </div>
     </div>
 
-    <!-- mermaid 计划图：仅有工具步骤时才有意义 -->
-    <details v-if="mermaidSource && hasToolPhases" class="art-mermaid" @toggle="onMermaidToggle">
+    <!-- mermaid：仅多工具复杂链路；单工具默认不展示（难看且无信息量） -->
+    <details v-if="showPlanGraph && mermaidSource" class="art-mermaid" @toggle="onMermaidToggle">
       <summary>查看执行计划图</summary>
       <div ref="mermaidHostRef" class="mermaid-host" v-html="mermaidSvg"></div>
     </details>
@@ -89,6 +89,7 @@ import type {
   TraceToolPhase,
   TraceRunPhase,
 } from '@/utils/agentRunTraceModel'
+import { shouldShowAgentRunPlanGraph } from '@/utils/agentRunTraceModel'
 import { traceToMermaid } from '@/utils/agentRunTraceToMermaid'
 import {
   getToolPermission,
@@ -117,7 +118,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 const statusLabel = computed(() => STATUS_LABELS[props.trace.status] || props.trace.status)
 
-const hasToolPhases = computed(() => props.trace.phases.some((p) => p.kind === 'tool'))
+const showPlanGraph = computed(() => shouldShowAgentRunPlanGraph(props.trace))
 
 const durationLabel = computed(() => {
   const ms = props.trace.total_duration_ms

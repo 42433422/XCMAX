@@ -160,15 +160,47 @@ function safeOutputPreview(data: Record<string, unknown>): string | undefined {
   }
 }
 
-function friendlyPhaseTitle(raw: unknown, fallback: string): string {
-  const normalized = normalizeTaskDisplayText(raw)
-  return normalized || fallback
+/** 追踪通道内部文案：对办公用户无信息量，统一回落友好 fallback。 */
+function isTracePlumbingTitle(text: string): boolean {
+  return /进入\s*.*追踪|追踪完成|AgentRun|Legacy\s+planner/i.test(text)
 }
 
-/** 纯闲聊适配器轨迹（无工具）：对用户只是噪音，不应挂到气泡上。 */
+function friendlyPhaseTitle(raw: unknown, fallback: string): string {
+  const normalized = normalizeTaskDisplayText(raw)
+  if (!normalized || isTracePlumbingTitle(normalized)) return fallback
+  return normalized
+}
+
+function toolPhasesOf(trace: AgentRunTraceData): TraceToolPhase[] {
+  return trace.phases.filter((p): p is TraceToolPhase => p.kind === 'tool')
+}
+
+/**
+ * 气泡上不应展示的轨迹（答案正文为主）：
+ * - 无工具（闲聊适配器假编排）
+ * - 单次只读工具且无审批/重试/失败（如 customers.query）——完整「智能任务」剧场抢视线
+ */
 export function isTrivialChatTrace(trace: AgentRunTraceData | null | undefined): boolean {
   if (!trace || !trace.phases.length) return true
-  return !trace.phases.some((p) => p.kind === 'tool')
+  const tools = toolPhasesOf(trace)
+  if (tools.length === 0) return true
+  if (tools.length > 1) return false
+  if (trace.status === 'failed' || trace.status === 'waiting' || trace.status === 'blocked') {
+    return false
+  }
+  const t = tools[0]
+  if (t.waiting_approval || t.retries > 0) return false
+  if (t.status === 'failed' || t.status === 'blocked' || t.status === 'waiting') return false
+  // 单工具成功或进行中：不挂气泡时间线 / 计划图
+  return t.status === 'success' || t.status === 'running'
+}
+
+/** 执行计划图：仅多工具/复杂链路才有信息量；单工具默认不展示。 */
+export function shouldShowAgentRunPlanGraph(
+  trace: AgentRunTraceData | null | undefined,
+): boolean {
+  if (!trace || isTrivialChatTrace(trace)) return false
+  return toolPhasesOf(trace).length >= 2
 }
 
 /**
@@ -385,6 +417,9 @@ export function buildAgentRunTraceFromEvents(
       status = 'success'
       terminal = true
       totalDurationMs = pickNumber(data, 'duration_ms', 'total_duration_ms')
+      // chat_payload 的可读文本已在气泡正文渲染；再塞 final_output 会造成名单双份
+      const finalPreview =
+        data.chat_payload != null ? undefined : safeOutputPreview(data)
       phases.push({
         kind: 'run',
         status: 'success',
@@ -392,7 +427,7 @@ export function buildAgentRunTraceFromEvents(
         started_at: asString(ev.created_at),
         duration_ms: totalDurationMs,
         title: friendlyPhaseTitle(ev.message, '执行完成'),
-        final_output_preview: safeOutputPreview(data),
+        final_output_preview: finalPreview,
       } as TraceRunPhase)
       continue
     }
@@ -448,7 +483,9 @@ export function buildAgentRunTraceFromEvents(
     for (const p of phases) {
       if (p.kind === 'planner' && p.status === 'running') {
         p.status = status === 'failed' ? 'failed' : 'success'
-        if (!p.title || /已创建$/.test(p.title)) p.title = '执行计划已生成'
+        if (!p.title || /已创建$/.test(p.title) || isTracePlumbingTitle(p.title)) {
+          p.title = '执行计划已生成'
+        }
       }
     }
   }
