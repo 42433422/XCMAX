@@ -3538,6 +3538,67 @@ def test_reconcile_absorbed_para_merge_closes_pr_closed_even_when_resume_flag_fa
     assert memory["open_items"] == []
 
 
+def test_is_update_branch_content_conflict_detail_matches_merge_worker_error():
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        is_update_branch_content_conflict_detail,
+    )
+
+    detail = (
+        "devfleet/cursor/sub-1-225e80: Error: update-branch failed: Command failed: "
+        "gh pr update-branch 830 --repo 42433422/XCMAX\n"
+        "X Cannot update PR branch due to conflicts"
+    )
+    assert is_update_branch_content_conflict_detail(detail) is True
+    assert is_update_branch_content_conflict_detail("risk-label-failed-after-review") is False
+
+
+def test_reconcile_absorbed_para_merge_closes_update_branch_content_conflict_open_item():
+    from pathlib import Path
+
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        reconcile_absorbed_para_merge_remediations,
+    )
+
+    policy_path = "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py"
+    detail = (
+        "devfleet/cursor/sub-1-225e80: Error: update-branch failed: Command failed: "
+        "gh pr update-branch 830 --repo 42433422/XCMAX\n"
+        "X Cannot update PR branch due to conflicts"
+    )
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-225e80",
+                "detail": detail,
+                "kind": "automated_remediation",
+                "para_task_id": "task-update-branch",
+                "reason": "para_merge_conflict",
+                "resume_from_clean_baseline": True,
+                "run_id": "run-update-branch",
+                "task_id": "task-update-branch",
+            }
+        ],
+    }
+
+    result = reconcile_absorbed_para_merge_remediations(
+        memory,
+        repo_root=Path("/tmp/repo"),
+        run_git=_absorbed_git_runner(policy_path, "225e80"),
+    )
+
+    assert result == {
+        "changed": True,
+        "closed_count": 1,
+        "closed_task_ids": ["task-update-branch"],
+    }
+    assert memory["open_items"] == []
+    assert memory["closed_items"][0]["resolution_reason"] == (
+        "rejected_branch_production_delta_absorbed_by_main"
+    )
+    assert _resume_review_qa_candidate(memory) is None
+
+
 def test_reconcile_absorbed_para_merge_closes_ai_review_pr_closed_open_item():
     from pathlib import Path
 

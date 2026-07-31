@@ -122,6 +122,16 @@ def is_changed_files_empty_detail(detail: str) -> bool:
     return False
 
 
+def is_update_branch_content_conflict_detail(detail: str) -> bool:
+    """True when gh pr update-branch failed due to content conflicts with main."""
+
+    for candidate in operational_merge_reason_candidates(detail):
+        lowered = candidate.lower()
+        if any(marker in lowered for marker in _GIT_CONTENT_CONFLICT_MARKERS):
+            return True
+    return False
+
+
 def para_merge_resume_pins_rejected_branch(item: Mapping[str, Any]) -> bool:
     """Whether a para_merge remediation should continue on the rejected branch."""
 
@@ -281,7 +291,8 @@ def reconcile_absorbed_para_merge_remediations(
         detail = str(item.get("detail") or "")
         empty_files = is_changed_files_empty_detail(detail)
         closed_without_merge = is_pr_closed_without_merge_detail(detail)
-        if not empty_files and not closed_without_merge:
+        update_branch_conflict = is_update_branch_content_conflict_detail(detail)
+        if not empty_files and not closed_without_merge and not update_branch_conflict:
             continue
         rejected_branch = str(item.get("rejected_branch") or item.get("branch") or "").strip()
         assessment = rejected_branch_production_delta_absorbed_by_main(
@@ -393,6 +404,7 @@ __all__ = [
     "is_branch_preserving_para_merge_failure_detail",
     "is_changed_files_empty_detail",
     "is_pr_closed_without_merge_detail",
+    "is_update_branch_content_conflict_detail",
     "para_merge_resume_pins_rejected_branch",
     "operational_merge_reason_candidates",
     "para_merge_conflict_continues_on_rejected_branch",
