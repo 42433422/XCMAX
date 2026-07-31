@@ -104,6 +104,34 @@ def test_private_mod_node_progress_rolls_up_track(monkeypatch, tmp_path):
     assert attached["modules"][0]["next_stages"] == []
     assert attached["modules"][1]["next_stages"] == ["acceptance", "rework"]
     assert attached["employees"][0]["status"] == "production"
+    assert "timeline" in attached["modules"][0]
+
+
+def test_private_mod_rework_note_surfaces_on_attached_node(monkeypatch, tmp_path):
+    _use_temp_state(monkeypatch, tmp_path)
+    delivery.set_node_status(
+        "market:7",
+        "taiyangniao-pro",
+        "modules",
+        "attendance-convert",
+        "testing",
+    )
+    delivery.set_node_status(
+        "market:7",
+        "taiyangniao-pro",
+        "modules",
+        "attendance-convert",
+        "rework",
+        note="[客服工单 CR-7-0001] 部门列错位",
+    )
+    project = delivery.project_state("market:7", "taiyangniao-pro")
+    attached = delivery.attach_track_nodes(
+        project,
+        {"modules": [{"id": "attendance-convert", "label": "考勤表转化"}], "employees": []},
+    )
+    assert attached["modules"][0]["status"] == "rework"
+    assert attached["modules"][0]["timeline"][-1]["note"].startswith("[客服工单")
+    assert "rework" in attached["modules"][0]["next_stages"] or attached["modules"][0]["next_stages"] == ["testing"]
 
 
 def test_private_mod_stage_transition_rejects_skip(monkeypatch, tmp_path):

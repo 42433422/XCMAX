@@ -124,18 +124,56 @@
                     class="private-mod-node__action"
                     :class="{ 'private-mod-node__action--rework': next === 'rework' }"
                     :disabled="savingStatus === `${project.mod_id}:${rail.id}:${node.id}`"
-                    @click="advanceNode(project, rail.id, node.id, next)"
+                    @click="onAdvanceClick(project, rail.id, node, next)"
                   >
                     {{ nextActionLabel(project, rail.id, node.status, next) }}
                   </button>
                   <span v-if="!(node.next_stages || []).length" class="private-mod-node__done">流程已结束</span>
                 </div>
+                <p v-if="node.status === 'rework' && lastReworkNote(node)" class="private-mod-node__ticket">
+                  {{ lastReworkNote(node) }}
+                </p>
               </li>
             </ol>
             <div v-else class="private-mod-track__empty">{{ rail.empty }}</div>
           </section>
         </div>
       </article>
+    </div>
+
+    <div
+      v-if="reworkDialog.open"
+      class="private-mod-rework-mask"
+      role="dialog"
+      aria-modal="true"
+      aria-label="填写返工问题"
+      @click.self="closeReworkDialog"
+    >
+      <form class="private-mod-rework" @submit.prevent="submitRework">
+        <header>
+          <h4>转返工 · 填写问题</h4>
+          <p>问题会开成客服变更工单（bug_fix），不另建工单系统。</p>
+        </header>
+        <div class="private-mod-rework__meta">
+          <span>{{ reworkDialog.projectName }}</span>
+          <code>{{ reworkDialog.nodeLabel }}</code>
+        </div>
+        <label class="private-mod-rework__label" for="private-mod-rework-problem">问题说明</label>
+        <textarea
+          id="private-mod-rework-problem"
+          v-model="reworkDialog.problem"
+          rows="5"
+          maxlength="2000"
+          placeholder="例如：考勤表转化后部门列错位，样例文件已附……"
+          required
+        />
+        <footer class="private-mod-rework__footer">
+          <button type="button" class="private-mod-rework__cancel" @click="closeReworkDialog">取消</button>
+          <button type="submit" class="private-mod-node__action private-mod-node__action--rework" :disabled="!!savingStatus">
+            {{ savingStatus ? '提交中…' : '开单并转返工' }}
+          </button>
+        </footer>
+      </form>
     </div>
   </section>
 </template>
@@ -183,9 +221,67 @@ const updating = ref('')
 const savingStatus = ref('')
 const error = ref('')
 const remoteError = ref('')
+const reworkDialog = ref({
+  open: false,
+  project: null,
+  track: '',
+  nodeId: '',
+  projectName: '',
+  nodeLabel: '',
+  problem: '',
+})
 
 function responseMessage(body, fallback) {
   return String(body?.detail || body?.message || body?.error || fallback).trim() || fallback
+}
+
+function lastReworkNote(node) {
+  const timeline = Array.isArray(node?.timeline) ? node.timeline : []
+  for (let i = timeline.length - 1; i >= 0; i -= 1) {
+    const row = timeline[i]
+    if (row && row.status === 'rework' && row.note) return String(row.note)
+  }
+  return ''
+}
+
+function onAdvanceClick(project, track, node, status) {
+  if (status === 'rework') {
+    reworkDialog.value = {
+      open: true,
+      project,
+      track,
+      nodeId: node.id,
+      projectName: project.name || project.mod_id,
+      nodeLabel: node.label || node.id,
+      problem: '',
+    }
+    return
+  }
+  advanceNode(project, track, node.id, status)
+}
+
+function closeReworkDialog() {
+  reworkDialog.value = {
+    open: false,
+    project: null,
+    track: '',
+    nodeId: '',
+    projectName: '',
+    nodeLabel: '',
+    problem: '',
+  }
+}
+
+async function submitRework() {
+  const dlg = reworkDialog.value
+  const problem = String(dlg.problem || '').trim()
+  if (problem.length < 4) {
+    error.value = '转返工须填写问题说明（至少 4 个字）'
+    return
+  }
+  if (!dlg.project) return
+  await advanceNode(dlg.project, dlg.track, dlg.nodeId, 'rework', problem)
+  if (!error.value) closeReworkDialog()
 }
 
 function nodesOf(project, track) {
@@ -280,7 +376,7 @@ function stageLabel(project, track, stage) {
   )
 }
 
-async function advanceNode(project, track, nodeId, status) {
+async function advanceNode(project, track, nodeId, status, note = '') {
   if (!status || !nodeId) return
   const key = `${project.mod_id}:${track}:${nodeId}`
   savingStatus.value = key
@@ -294,6 +390,7 @@ async function advanceNode(project, track, nodeId, status) {
         track,
         node_id: nodeId,
         status,
+        note: note || undefined,
       }),
       timeoutMs: 30_000,
     })
@@ -513,7 +610,78 @@ onMounted(loadDelivery)
 .private-mod-node__pip[data-rework='true'][data-active='true'] { color: #b45309; background: #ffedd5; box-shadow: inset 0 0 0 1px #fdba74; }
 .private-mod-node__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .private-mod-node__done { color: #059669; font-size: 12px; font-weight: 700; align-self: center; }
+.private-mod-node__ticket {
+  margin: 10px 0 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 12px;
+  line-height: 1.45;
+}
 .private-mod-track__empty { margin-top: 13px; color: #94a3b8; font-size: 12px; }
+.private-mod-rework-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(15, 23, 42, .45);
+}
+.private-mod-rework {
+  width: min(520px, 100%);
+  border-radius: 16px;
+  padding: 18px;
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, .25);
+}
+.private-mod-rework h4 { margin: 0; font-size: 18px; }
+.private-mod-rework header p { margin: 6px 0 0; color: #64748b; font-size: 12px; line-height: 1.5; }
+.private-mod-rework__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  color: #475569;
+  font-size: 12px;
+}
+.private-mod-rework__meta code { color: #0f172a; }
+.private-mod-rework__label {
+  display: block;
+  margin-top: 14px;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+.private-mod-rework textarea {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 10px 12px;
+  resize: vertical;
+  font: inherit;
+  color: #0f172a;
+  box-sizing: border-box;
+}
+.private-mod-rework__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+.private-mod-rework__cancel {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: #fff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
 
 @media (max-width: 1100px) {
   .private-mod-project__tracks,

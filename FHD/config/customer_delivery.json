@@ -22,6 +22,7 @@
       "模块轨与员工轨必须分开展示，禁止混在同一列表",
       "轨道上的交付物以节点为单位展示进度；整轨状态由节点进度汇总",
       "每个节点的阶段是流程，不是自由枚举：只能按 stage_flow.transitions 推进或转入返工，禁止跨阶段跳跃",
+      "转返工必须填写问题说明，并开现有客服变更工单（user_cs_change_request · bug_fix · source=private_mod_rework），禁止另建工单系统",
       "太阳鸟「考勤表转化」属于模块轨节点，不是通用考勤行业包，也不是 AI 员工"
     ],
     "stages": ["production", "testing", "rework", "acceptance", "delivered"],

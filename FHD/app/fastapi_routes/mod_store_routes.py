@@ -600,7 +600,6 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
         STAGES,
         STAGE_LABELS,
         TRACKS,
-        account_scope,
         attach_track_nodes,
         fetch_private_mod_library,
         is_newer_version,
@@ -703,11 +702,48 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
     track = _safe_text(payload.get("track"))
     status = _safe_text(payload.get("status"))
     node_id = _safe_text(payload.get("node_id"))
+    note = _safe_text(payload.get("note") or payload.get("problem") or payload.get("description"))
     if not mod_id or not track or not status:
         raise HTTPException(status_code=400, detail="缺少 mod_id、track 或 status")
     context = await _private_mod_context(request)
     if mod_id not in context["mod_ids"]:
         raise HTTPException(status_code=403, detail="当前账号未授权该客户私有 Mod")
+    # 返工必须写明问题，并走现有客服变更工单（不新造工单系统）
+    rework_ticket: dict[str, Any] | None = None
+    if status == "rework":
+        if len(note) < 4:
+            raise HTTPException(status_code=400, detail="转返工须填写问题说明（至少 4 个字）")
+        try:
+            uid = int(context.get("market_user_id") or 0)
+        except (TypeError, ValueError):
+            uid = 0
+        if uid <= 0:
+            raise HTTPException(status_code=401, detail="转返工须已绑定市场账号身份")
+        from app.services.user_cs_change_request import create_change_request
+
+        node_label = node_id or track
+        try:
+            rework_ticket = create_change_request(
+                uid,
+                change_type="bug_fix",
+                title=f"定制交付返工 · {mod_id} · {node_label}",
+                description=(
+                    f"来源：企业端私有交付返工\n"
+                    f"Mod：{mod_id}\n"
+                    f"轨道：{track}\n"
+                    f"节点：{node_id or '整轨'}\n"
+                    f"问题：{note}"
+                ),
+                priority=_safe_text(payload.get("priority")) or "normal",
+                username=_safe_text(context.get("username")),
+                source="private_mod_rework",
+            )
+            ticket_no = _safe_text(rework_ticket.get("ticket_no") or rework_ticket.get("id"))
+            if ticket_no:
+                note = f"[客服工单 {ticket_no}] {note}"
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     from app.services.private_mod_delivery import set_track_status
 
     local = _private_mod_local_rows({mod_id}).get(mod_id, {})
@@ -718,7 +754,7 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
             mod_id,
             track,
             status,
-            note=_safe_text(payload.get("note")),
+            note=note,
             name=_safe_text(local.get("name") or mod_id),
             version=_safe_text(local.get("version")),
             node_id=node_id,
@@ -747,10 +783,23 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
             logger.warning("private Mod delivery sync enqueue failed user=%s: %s", uid, exc)
     from app.services.private_mod_delivery import overall_status
 
+    data: dict[str, Any] = {
+        "mod_id": mod_id,
+        "tracks": project.get("tracks", {}),
+        "overall_status": overall_status(project),
+    }
+    if rework_ticket:
+        data["rework_ticket"] = {
+            "id": _safe_text(rework_ticket.get("id")),
+            "ticket_no": _safe_text(rework_ticket.get("ticket_no")),
+            "status": _safe_text(rework_ticket.get("status")),
+            "change_type": _safe_text(rework_ticket.get("change_type")),
+            "source": "private_mod_rework",
+        }
     return ModStoreSimpleResponse(
         success=True,
-        message="交付状态已更新",
-        data={"mod_id": mod_id, "tracks": project.get("tracks", {}), "overall_status": overall_status(project)},
+        message="交付状态已更新" + (f"；已开客服工单 {data['rework_ticket']['ticket_no']}" if rework_ticket else ""),
+        data=data,
     )
 
 
