@@ -19,6 +19,7 @@
  */
 
 import type { AgentRunEvent } from '@/api/agentRuns'
+import { normalizeTaskDisplayText } from '@/utils/chatTaskLabels'
 import { asString, asNumber, asRecord } from '@/utils/typeGuards'
 
 export type TracePhaseKind = 'planner' | 'tool' | 'run'
@@ -134,6 +135,17 @@ function safeParamsJson(data: Record<string, unknown>): string | undefined {
 }
 
 function safeOutputPreview(data: Record<string, unknown>): string | undefined {
+  // legacy_chat_adapter 终态会塞整包 chat_payload，展示成 JSON 像乱码；只取可读摘要。
+  if (data.chat_payload != null && data.output_preview == null && data.output == null) {
+    const chat = asRecord(data.chat_payload)
+    const nested = asRecord(chat.data)
+    const text =
+      asString(nested.text).trim() ||
+      asString(nested.response).trim() ||
+      asString(chat.response).trim() ||
+      asString(chat.message).trim()
+    return text ? truncate(text, 240) : undefined
+  }
   const raw =
     data.output_preview ??
     data.output ??
@@ -146,6 +158,17 @@ function safeOutputPreview(data: Record<string, unknown>): string | undefined {
   } catch {
     return undefined
   }
+}
+
+function friendlyPhaseTitle(raw: unknown, fallback: string): string {
+  const normalized = normalizeTaskDisplayText(raw)
+  return normalized || fallback
+}
+
+/** 纯闲聊适配器轨迹（无工具）：对用户只是噪音，不应挂到气泡上。 */
+export function isTrivialChatTrace(trace: AgentRunTraceData | null | undefined): boolean {
+  if (!trace || !trace.phases.length) return true
+  return !trace.phases.some((p) => p.kind === 'tool')
 }
 
 /**
@@ -186,13 +209,23 @@ export function buildAgentRunTraceFromEvents(
 
     // PlannerPhase
     if (type === 'planner.started') {
-      phases.push({
-        kind: 'planner',
-        status: 'running',
-        started_event_id: asString(ev.event_id),
-        started_at: asString(ev.created_at),
-        title: asString(ev.message).trim() || '正在生成执行计划',
-      } as TracePlannerPhase)
+      const openPlanner = [...phases].reverse().find(
+        (p) => p.kind === 'planner' && p.status === 'running',
+      ) as TracePlannerPhase | undefined
+      const title = friendlyPhaseTitle(ev.message, '正在生成执行计划')
+      if (openPlanner) {
+        openPlanner.title = title
+        openPlanner.started_event_id = asString(ev.event_id) || openPlanner.started_event_id
+        openPlanner.started_at = asString(ev.created_at) || openPlanner.started_at
+      } else {
+        phases.push({
+          kind: 'planner',
+          status: 'running',
+          started_event_id: asString(ev.event_id),
+          started_at: asString(ev.created_at),
+          title,
+        } as TracePlannerPhase)
+      }
       status = 'running'
       continue
     }
@@ -358,7 +391,7 @@ export function buildAgentRunTraceFromEvents(
         started_event_id: asString(ev.event_id),
         started_at: asString(ev.created_at),
         duration_ms: totalDurationMs,
-        title: asString(ev.message).trim() || '执行完成',
+        title: friendlyPhaseTitle(ev.message, '执行完成'),
         final_output_preview: safeOutputPreview(data),
       } as TraceRunPhase)
       continue
@@ -367,14 +400,15 @@ export function buildAgentRunTraceFromEvents(
       status = 'failed'
       terminal = true
       totalDurationMs = pickNumber(data, 'duration_ms', 'total_duration_ms')
+      const failFallback = type === 'run.continue_ignored' ? '执行已中止' : '执行失败'
       phases.push({
         kind: 'run',
         status: 'failed',
         started_event_id: asString(ev.event_id),
         started_at: asString(ev.created_at),
         duration_ms: totalDurationMs,
-        title: asString(ev.message).trim() || (type === 'run.continue_ignored' ? '执行已中止' : '执行失败'),
-        error: asString(ev.message).trim() || asString(data.error).trim(),
+        title: friendlyPhaseTitle(ev.message, failFallback),
+        error: friendlyPhaseTitle(ev.message, asString(data.error).trim() || failFallback),
         detail: asString(data.error).trim() || undefined,
       } as TraceRunPhase)
       continue
@@ -393,14 +427,14 @@ export function buildAgentRunTraceFromEvents(
       continue
     }
     if (type === 'run.created') {
-      // 仅作为起点；若前面没 planner.started，加一个占位
+      // 仅占位；随后 planner.started 会合并到同一 phase，避免「已创建 + 开始执行」双行噪音
       if (!phases.some((p) => p.kind === 'planner')) {
         phases.push({
           kind: 'planner',
           status: 'running',
           started_event_id: asString(ev.event_id),
           started_at: asString(ev.created_at),
-          title: asString(ev.message).trim() || '智能任务已创建',
+          title: friendlyPhaseTitle(ev.message, '智能任务已创建'),
         } as TracePlannerPhase)
       }
       continue
@@ -409,9 +443,20 @@ export function buildAgentRunTraceFromEvents(
     // 其余（llm/rag/memory/artifact/dataset/billing）不单独成 phase，避免噪音
   }
 
+  // 终态后若仍有未关闭的 planner 占位（仅 run.created、无 started），收成成功/失败
+  if (terminal) {
+    for (const p of phases) {
+      if (p.kind === 'planner' && p.status === 'running') {
+        p.status = status === 'failed' ? 'failed' : 'success'
+        if (!p.title || /已创建$/.test(p.title)) p.title = '执行计划已生成'
+      }
+    }
+  }
+
   return {
     run_id: runId,
-    intent: intent || truncate(runId, 12),
+    // 没有业务 intent 时不要拿 run_id 当标题（用户会看到 run_8a03… 像乱码）
+    intent: intent || '',
     status,
     total_duration_ms: totalDurationMs,
     phases,

@@ -4,7 +4,7 @@ import type { TaskItem } from './useChatPersistence'
 import type { ChatPlannerPayload } from '@/types/chat'
 import type { AgentRunEvent } from '@/api/agentRuns'
 import { parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
-import { buildAgentRunTraceFromEvents } from '@/utils/agentRunTraceModel'
+import { buildAgentRunTraceFromEvents, isTrivialChatTrace } from '@/utils/agentRunTraceModel'
 import { asRecord, asArray, asString, asNumber, asBoolean } from '@/utils/typeGuards'
 
 export interface UseChatResponseAttachDeps {
@@ -143,6 +143,17 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
     const events = asArray<AgentRunEvent>(payload.agentEvents)
     if (!events.length) return
     const trace = buildAgentRunTraceFromEvents(events, runId)
+    // 闲聊适配器也会造 run.created→planner→run.completed，无工具时挂轨迹只会吓人（Legacy/计划图）
+    if (isTrivialChatTrace(trace)) {
+      for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+        const msg = messages.value[i]
+        if (msg?.role === 'ai') {
+          delete msg.agentRunTrace
+          break
+        }
+      }
+      return
+    }
     for (let i = messages.value.length - 1; i >= 0; i -= 1) {
       const msg = messages.value[i]
       if (msg?.role === 'ai') {

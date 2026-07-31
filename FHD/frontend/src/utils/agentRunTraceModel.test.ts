@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentRunEvent } from '@/api/agentRuns'
-import { buildAgentRunTraceFromEvents } from './agentRunTraceModel'
+import { buildAgentRunTraceFromEvents, isTrivialChatTrace } from './agentRunTraceModel'
 
 function ev(
   event_type: AgentRunEvent['event_type'],
@@ -240,5 +240,41 @@ describe('buildAgentRunTraceFromEvents', () => {
     ]
     const trace = buildAgentRunTraceFromEvents(events, 'run_intent')
     expect(trace.intent).toBe('shipment_query')
+  })
+
+  it('merges legacy run.created + planner.started into one planner phase and humanizes titles', () => {
+    const events: AgentRunEvent[] = [
+      ev('run.created', { message: 'Legacy planner run 已创建' }),
+      ev('planner.started', { message: 'Legacy planner 开始执行' }),
+      ev('planner.completed', { message: 'Legacy planner 执行完成' }),
+      ev('run.completed', {
+        message: 'Legacy planner run 执行完成',
+        data: {
+          chat_payload: { success: true, response: '你好', data: { text: '你好' } },
+        },
+      }),
+    ]
+    const trace = buildAgentRunTraceFromEvents(events, 'run_8a030abbf09e43409a7e50205dc5fd18')
+    expect(trace.phases.filter((p) => p.kind === 'planner')).toHaveLength(1)
+    expect(trace.phases[0].title).toBe('执行计划已生成')
+    expect(trace.phases[0].status).toBe('success')
+    const run = trace.phases.find((p) => p.kind === 'run')
+    expect(run?.title).toBe('智能任务 执行完成')
+    if (run?.kind === 'run') {
+      expect(run.final_output_preview).toBe('你好')
+    }
+    expect(trace.intent).toBe('')
+    expect(isTrivialChatTrace(trace)).toBe(true)
+  })
+
+  it('isTrivialChatTrace is false when tools ran', () => {
+    const events: AgentRunEvent[] = [
+      ev('planner.completed'),
+      ev('tool.started', { data: { node_id: 'n1', tool_id: 't1' } }),
+      ev('tool.completed', { data: { node_id: 'n1' } }),
+      ev('run.completed'),
+    ]
+    const trace = buildAgentRunTraceFromEvents(events, 'run_tools')
+    expect(isTrivialChatTrace(trace)).toBe(false)
   })
 })

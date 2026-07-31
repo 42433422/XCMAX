@@ -139,6 +139,11 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
         lastEventByRunId.set(normalizedRunId, last.event_id)
       }
       if (!accumulated.length) return
+      // 纯闲聊适配器：无 tool 事件时不要灌进「智能任务」侧栏（用户会看到假编排噪音）
+      const hasToolWork = accumulated.some((event) =>
+        String(event.event_type || '').startsWith('tool.'),
+      )
+      if (!hasToolWork) return
       options.upsertTask(buildAgentRunTaskUpdate({
         runId: normalizedRunId,
         userText,

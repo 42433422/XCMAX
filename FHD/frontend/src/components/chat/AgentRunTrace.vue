@@ -4,6 +4,7 @@
     <div class="art-head">
       <span class="art-dot" aria-hidden="true"></span>
       <span v-if="trace.intent" class="art-intent">{{ trace.intent }}</span>
+      <span v-else class="art-intent">智能任务</span>
       <span class="art-status">{{ statusLabel }}</span>
       <span v-if="durationLabel" class="art-dur">{{ durationLabel }}</span>
       <span v-if="!trace.terminal" class="art-pulse" aria-hidden="true"></span>
@@ -71,8 +72,8 @@
       </div>
     </div>
 
-    <!-- mermaid 计划图（折叠入口极轻量） -->
-    <details v-if="mermaidSource" class="art-mermaid" @toggle="onMermaidToggle">
+    <!-- mermaid 计划图：仅有工具步骤时才有意义 -->
+    <details v-if="mermaidSource && hasToolPhases" class="art-mermaid" @toggle="onMermaidToggle">
       <summary>查看执行计划图</summary>
       <div ref="mermaidHostRef" class="mermaid-host" v-html="mermaidSvg"></div>
     </details>
@@ -115,6 +116,8 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 const statusLabel = computed(() => STATUS_LABELS[props.trace.status] || props.trace.status)
+
+const hasToolPhases = computed(() => props.trace.phases.some((p) => p.kind === 'tool'))
 
 const durationLabel = computed(() => {
   const ms = props.trace.total_duration_ms
