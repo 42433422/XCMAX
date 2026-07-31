@@ -449,7 +449,6 @@ type EntitlementEmployeePreview = {
   modName: string;
   summary: string;
 };
-
 const users = ref<AdminUser[]>([]);
 const assignableMods = ref<AssignableMod[]>([]);
 const selectedUserId = ref<number | null>(null);
@@ -466,11 +465,9 @@ const localStatusError = ref('');
 const installedMods = ref<LocalModRow[]>([]);
 const syncStatus = ref<Record<string, unknown> | null>(null);
 const forcePushingEntitlements = ref(false);
-
 // 用户钱包余额（远端 market /api/admin/wallets，按 user_id 索引）
 const walletMap = ref<Map<number, WalletRow>>(new Map());
 const walletLoadError = ref('');
-
 // 用户账号体系（本地持久化，按 username 合并远端用户列表）
 const userProfiles = ref<Record<string, LocalProfile>>({});
 const profileEditing = ref<{
@@ -497,7 +494,6 @@ const creditForm = ref({
   amount: 100,
   description: '后台加款',
 });
-
 const TIER_OPTIONS: { value: string; label: string }[] = [
   { value: 'personal', label: '个人' },
   { value: 'enterprise', label: '企业' },
@@ -510,7 +506,6 @@ const ACCOUNT_TIER_OPTIONS: { value: string; label: string }[] = [
   { value: 'ultra', label: 'Ultra' },
 ];
 const BUDGET_RANGE_OPTIONS = ['1–5 万', '5–10 万', '10–50 万', '50–100 万'];
-
 function resolveTier(u: AdminUser): string {
   return u.tier || (u.is_admin ? 'admin' : u.is_enterprise ? 'enterprise' : 'personal');
 }
