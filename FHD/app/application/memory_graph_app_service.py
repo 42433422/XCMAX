@@ -48,6 +48,8 @@ class MemoryGraphAppService:
         scope: str,
         scope_id: str,
         tags: list[str] | None = None,
+        source: str = "trae",
+        source_policy: str = "auto_active",
     ) -> dict[str, Any]:
         decision = self._update_engine.evaluate(
             type=type,
@@ -71,8 +73,8 @@ class MemoryGraphAppService:
             content=content,
             scope=scope,
             scope_id=scope_id,
-            source="trae",
-            source_policy="auto_active",
+            source=source,
+            source_policy=source_policy,
             tags=tags,
         )
 
