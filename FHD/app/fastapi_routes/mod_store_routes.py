@@ -472,11 +472,11 @@ async def _private_mod_context(request: Request) -> dict[str, Any]:
     - 只暴露 ``legacy_mod_id``，不含 ``industry_mod_id``
     - 必须以当前会话 ``entitled_mod_ids`` 为准，禁止把交付清单里其它客户的定制包一并列出
     - 无会话 / 无权益 → 空列表（生产员工交付线不是全局客户目录）
+    - 定制线通道身份取 sessions.market_user_id，写入 scope=market:{id}，与管理端对齐
     """
     from app.enterprise.mod_entitlements import (
         enterprise_mod_filter_active,
-        get_cached_market_identity,
-        load_entitled_client_mod_ids_for_session,
+        load_session_private_delivery_binding,
         sync_entitlements_from_request,
     )
     from app.infrastructure.auth.dependencies import session_id_from_request
@@ -489,24 +489,49 @@ async def _private_mod_context(request: Request) -> dict[str, Any]:
     industry_packs = list_industry_mod_ids_from_delivery()
     sid = session_id_from_request(request) or ""
 
-    entitled: set[str] = set()
+    binding: dict[str, Any] = {
+        "mod_ids": set(),
+        "market_user_id": None,
+        "username": "",
+        "company_brand": "",
+    }
     if sid:
         # 企业 SKU：尽量向市场刷新；平台壳 generic 也按 sessions 行隔离。
         if enterprise_mod_filter_active():
             await sync_entitlements_from_request(request)
-        entitled = load_entitled_client_mod_ids_for_session(sid)
+        binding = load_session_private_delivery_binding(sid)
 
     entitled = {
         mid
-        for mid in entitled
-        if mid in account_custom and mid not in industry_packs
+        for mid in (binding.get("mod_ids") or set())
+        if str(mid).strip() in account_custom and str(mid).strip() not in industry_packs
     }
-    market_user_id, username = get_cached_market_identity()
     return {
         "mod_ids": entitled,
-        "market_user_id": market_user_id,
-        "username": username,
+        "market_user_id": binding.get("market_user_id"),
+        "username": str(binding.get("username") or binding.get("company_brand") or "").strip(),
     }
+
+
+def _enterprise_delivery_scope(context: dict[str, Any], mod_ids: set[str] | None = None) -> str:
+    """企业端定制线写/读 scope：必须 market:{uid}，禁止静默落入 local:*。"""
+    from app.services.private_mod_delivery import (
+        account_scope,
+        merge_orphan_local_delivery_into_market,
+    )
+
+    try:
+        uid = int(context.get("market_user_id") or 0)
+    except (TypeError, ValueError):
+        uid = 0
+    if uid <= 0:
+        raise HTTPException(
+            status_code=401,
+            detail="企业端定制线缺少市场账号身份（sessions.market_user_id），请重新登录企业账号",
+        )
+    scope = account_scope(uid, _safe_text(context.get("username")))
+    merge_orphan_local_delivery_into_market(scope, mod_ids or context.get("mod_ids") or set())
+    return scope
 
 
 def _private_mod_local_rows(mod_ids: set[str]) -> dict[str, dict[str, Any]]:
@@ -608,7 +633,7 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
         for row in remote_rows
         if _safe_text(row.get("id")) in mod_ids
     }
-    scope = account_scope(context.get("market_user_id"), context.get("username"))
+    scope = _enterprise_delivery_scope(context, mod_ids)
     projects: list[dict[str, Any]] = []
     for mod_id in sorted(mod_ids):
         row = local_rows.get(mod_id, {})
@@ -683,10 +708,10 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
     context = await _private_mod_context(request)
     if mod_id not in context["mod_ids"]:
         raise HTTPException(status_code=403, detail="当前账号未授权该客户私有 Mod")
-    from app.services.private_mod_delivery import account_scope, set_track_status
+    from app.services.private_mod_delivery import set_track_status
 
     local = _private_mod_local_rows({mod_id}).get(mod_id, {})
-    scope_key = account_scope(context.get("market_user_id"), context.get("username"))
+    scope_key = _enterprise_delivery_scope(context, {mod_id})
     try:
         project = set_track_status(
             scope_key,
@@ -700,11 +725,8 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    market_user_id = context.get("market_user_id")
-    try:
-        uid = int(market_user_id or 0)
-    except (TypeError, ValueError):
-        uid = 0
+    # 企业端出队：供管理端后续拉取；此处不代替管理端进程，也不自动 push
+    uid = int(context.get("market_user_id") or 0)
     if uid > 0:
         try:
             from app.application.xcmax_sync_app import record_change

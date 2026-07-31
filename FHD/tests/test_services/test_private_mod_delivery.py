@@ -144,6 +144,25 @@ def test_private_mod_delivery_snapshot_round_trips_for_management_view(monkeypat
     assert projects[0]["tracks"]["employees"]["timeline"][-1]["note"] == "补充回归用例"
 
 
+def test_merge_orphan_local_delivery_into_market_scope(monkeypatch, tmp_path):
+    _use_temp_state(monkeypatch, tmp_path)
+    # 模拟企业端曾误写入 local:default
+    delivery.set_node_status(
+        "local:default",
+        "taiyangniao-pro",
+        "modules",
+        "attendance-convert",
+        "testing",
+    )
+    delivery.merge_orphan_local_delivery_into_market("market:29", {"taiyangniao-pro"})
+    market = delivery.project_state("market:29", "taiyangniao-pro")
+    assert market["tracks"]["modules"]["nodes"]["attendance-convert"]["status"] == "testing"
+    orphan = delivery.account_projects("local:default", ["taiyangniao-pro"])
+    assert orphan[0]["tracks"]["modules"].get("nodes", {}) == {} or "attendance-convert" not in (
+        orphan[0]["tracks"]["modules"].get("nodes") or {}
+    )
+
+
 def test_private_mod_version_comparison_handles_common_versions():
     assert delivery.is_newer_version("v1.10.0", "1.9.9") is True
     assert delivery.is_newer_version("1.2.0", "v1.2.0") is False
