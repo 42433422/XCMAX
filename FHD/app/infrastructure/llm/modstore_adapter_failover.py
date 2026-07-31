@@ -37,6 +37,7 @@ def _fetch_llm_status_sync(self) -> dict[str, Any] | None:
         with httpx.Client(
             timeout=httpx.Timeout(min(self.timeout, 15.0), connect=5.0),
             headers=self._build_headers(),
+            trust_env=False,
         ) as client:
             response = client.get(f"{self.platform_url}/api/llm/status")
             if _response_status_code(response) >= 400:
@@ -52,6 +53,7 @@ def _fetch_resolve_chat_default_sync(self) -> dict[str, Any] | None:
         with httpx.Client(
             timeout=httpx.Timeout(min(self.timeout, 15.0), connect=5.0),
             headers=self._build_headers(),
+            trust_env=False,
         ) as client:
             response = client.get(f"{self.platform_url}/api/llm/resolve-chat-default")
             if _response_status_code(response) >= 400:
@@ -70,6 +72,7 @@ def _ensure_catalog_sync(self) -> dict[str, Any] | None:
         with httpx.Client(
             timeout=httpx.Timeout(min(self.timeout, 15.0), connect=5.0),
             headers=self._build_headers(),
+            trust_env=False,
         ) as client:
             response = client.get(f"{self.platform_url}/api/llm/catalog")
             if _response_status_code(response) >= 400:
@@ -127,6 +130,7 @@ def _post_market_chat_sync(
         timeout=httpx.Timeout(self.timeout, connect=10.0),
         limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
         headers=self._build_headers(),
+        trust_env=False,
     ) as client:
         response = client.post(url, json=payload)
         latency_ms = (time.perf_counter() - t0) * 1000.0
