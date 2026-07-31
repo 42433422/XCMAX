@@ -823,6 +823,8 @@ async function startBackend(): Promise<void> {
     XCAGI_GLOBAL_RATE_LIMIT: '0',
     LOG_LEVEL: process.env.LOG_LEVEL || (app.isPackaged ? 'WARNING' : 'INFO'),
     XCAGI_DESKTOP_FAST_START: '1',
+    // 桌面默认关闭员工 cron，避免交流圈/调度风暴写爆本地库闪退
+    XCAGI_EMPLOYEE_SCHEDULER: process.env.XCAGI_EMPLOYEE_SCHEDULER || '0',
     ...backendEditionEnv(),
     PYTHONUTF8: '1'
   }
