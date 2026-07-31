@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "2026_07_27_etl_folder_batches"
-down_revision: str | Sequence[str] | None = "2026_07_27_po_tenant_unique"
+down_revision: str | Sequence[str] | None = "2026_07_26_general_etl_v1"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
