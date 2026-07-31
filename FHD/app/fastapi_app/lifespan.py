@@ -40,6 +40,17 @@ def _desktop_fast_start_enabled() -> bool:
     return raw not in {"0", "false", "off", "no"}
 
 
+def _memory_graph_enabled() -> bool:
+    """Persy 记忆图谱定时任务是否启用（衰减 + 缓存刷新）。
+
+    默认启用（``XCAGI_MEMORY_GRAPH_ENABLED=1``）。设为 ``0/false/off/no`` 关闭。
+    """
+    import os
+
+    raw = os.environ.get("XCAGI_MEMORY_GRAPH_ENABLED", "1").strip().lower()
+    return raw not in {"0", "false", "off", "no"}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI 应用生命周期管理"""
@@ -103,6 +114,9 @@ async def lifespan(app: FastAPI):
             except RECOVERABLE_ERRORS as exc:
                 logger.warning("⚠️ 桌面端定时备份调度器启动失败: %s", exc)
 
+    # Persy 记忆图谱定时任务（衰减 + 缓存刷新）——轻量任务，fast_start / 完整启动都挂
+    await _init_memory_graph_async(app)
+
     mark_startup("lifespan_ready")
     logger.info("✅ FastAPI 应用启动完成%s", "（重服务后台加载）" if fast_start else "")
 
@@ -150,6 +164,12 @@ async def lifespan(app: FastAPI):
             logger.warning("⚠️ HealthMonitor 关闭失败: %s", hm_err)
     except RECOVERABLE_ERRORS as e:
         logger.warning("⚠️ 神经总线关闭失败: %s", e)
+    # 取消 Persy 记忆图谱定时任务（衰减 + 缓存刷新）
+    for task_attr in ("memory_decay_task", "memory_cache_refresh_task"):
+        task = getattr(app.state, task_attr, None)
+        if task is not None and not task.done():
+            task.cancel()
+            logger.info("✅ 已取消 Persy 定时任务: %s", task_attr)
 
 
 async def _initialize_databases_async(app: FastAPI):
@@ -370,6 +390,32 @@ async def _init_mobile_relay_desktop_async(app: FastAPI):
             logger.info("✅ 移动端云中继轮询已启动")
     except RECOVERABLE_ERRORS as e:
         logger.warning("⚠️ 移动端云中继轮询启动失败: %s", e)
+
+
+async def _init_memory_graph_async(app: FastAPI):
+    """启动 Persy 记忆图谱定时任务（权重衰减 24h + 缓存刷新 30min）。
+
+    用 ``XCAGI_MEMORY_GRAPH_ENABLED`` 环境变量控制是否启动（默认启用）。
+    全程 try/except 包裹，避免 Persy 未配置或 DB 不可达时阻断应用启动。
+    """
+    if not _memory_graph_enabled():
+        logger.info("Persy 记忆图谱定时任务未启用（XCAGI_MEMORY_GRAPH_ENABLED=0）")
+        return
+    try:
+        from app.fastapi_routes.knowledge_v2 import get_default_app_service
+        from app.tasks.memory_graph_tasks import (
+            run_memory_cache_refresh_task,
+            run_memory_decay_task,
+        )
+
+        app_service = get_default_app_service()
+        app.state.memory_decay_task = asyncio.create_task(run_memory_decay_task(app_service))
+        app.state.memory_cache_refresh_task = asyncio.create_task(
+            run_memory_cache_refresh_task(app_service)
+        )
+        logger.info("✅ Persy 记忆图谱定时任务已启动（衰减 24h / 缓存刷新 30min）")
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("⚠️ Persy 记忆图谱定时任务启动失败（不影响主流程）: %s", exc)
 
 
 async def _init_mods_async(app: FastAPI):
