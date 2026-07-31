@@ -24,7 +24,9 @@ def _parse_node_type(value: str | None) -> MemoryNodeType | None:
 
 
 class IngestNodeRequest(BaseModel):
-    type: str = Field(..., description="constraint|convention|lesson|episodic|preference|entity|doc|artifact")
+    type: str = Field(
+        ..., description="constraint|convention|lesson|episodic|preference|entity|doc|artifact"
+    )
     title: str = Field(..., min_length=1, max_length=160)
     content: str = Field("", max_length=5_000_000)
     scope: str = Field("tenant", max_length=20)

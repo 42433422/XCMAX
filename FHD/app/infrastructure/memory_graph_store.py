@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Sequence
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -45,9 +44,7 @@ class MemoryGraphStore:
         confidence: float = 0.0,
     ) -> MemoryNode:
         status = (
-            MemoryNodeStatus.ACTIVE
-            if source_policy == "auto_active"
-            else MemoryNodeStatus.PENDING
+            MemoryNodeStatus.ACTIVE if source_policy == "auto_active" else MemoryNodeStatus.PENDING
         )
         node = MemoryNode(
             type=type,

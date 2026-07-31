@@ -73,17 +73,13 @@ class MemoryGraphAppService:
             "message": decision.reason,
         }
 
-    def get_active_constraints(
-        self, *, scope: str, scope_id: str
-    ) -> list[dict[str, Any]]:
+    def get_active_constraints(self, *, scope: str, scope_id: str) -> list[dict[str, Any]]:
         nodes = self._store.list_active_nodes(
             scope=scope, scope_id=scope_id, node_type=MemoryNodeType.CONSTRAINT
         )
         return [self._node_to_dict(n) for n in nodes]
 
-    def get_active_conventions(
-        self, *, scope: str, scope_id: str
-    ) -> list[dict[str, Any]]:
+    def get_active_conventions(self, *, scope: str, scope_id: str) -> list[dict[str, Any]]:
         nodes = self._store.list_active_nodes(
             scope=scope, scope_id=scope_id, node_type=MemoryNodeType.CONVENTION
         )
@@ -99,9 +95,7 @@ class MemoryGraphAppService:
         top_k: int = 10,
     ) -> list[dict[str, Any]]:
         # Phase 1: 简单关键词匹配（Phase 3 升级为 HybridRetriever 语义检索）
-        nodes = self._store.list_active_nodes(
-            scope=scope, scope_id=scope_id, node_type=node_type
-        )
+        nodes = self._store.list_active_nodes(scope=scope, scope_id=scope_id, node_type=node_type)
         query_lower = query.lower()
         scored: list[tuple[float, MemoryNode]] = []
         for node in nodes:

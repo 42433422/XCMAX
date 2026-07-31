@@ -17,11 +17,9 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from typing import Any
 
 from app.application.memory_graph_app_service import MemoryGraphAppService
 from app.db.models.memory_graph import MemoryNodeType
-
 
 _SECTION_PATTERN = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 
@@ -53,9 +51,7 @@ class TraeMemoryMigrator:
                     sections[current_section].append(item)
         return sections
 
-    def migrate(
-        self, app_service: MemoryGraphAppService, dry_run: bool = False
-    ) -> dict[str, int]:
+    def migrate(self, app_service: MemoryGraphAppService, dry_run: bool = False) -> dict[str, int]:
         sections = self.parse_project_memory()
         type_mapping = {
             "Hard Constraints": MemoryNodeType.CONSTRAINT,
@@ -99,9 +95,7 @@ class TraeMemoryMigrator:
             if candidate.exists():
                 return candidate
         for project_dir in (
-            (self._root / "projects").iterdir()
-            if (self._root / "projects").exists()
-            else []
+            (self._root / "projects").iterdir() if (self._root / "projects").exists() else []
         ):
             pm = project_dir / "project_memory.md"
             if pm.exists():

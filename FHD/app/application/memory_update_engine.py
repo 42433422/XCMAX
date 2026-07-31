@@ -45,9 +45,7 @@ class MemoryUpdateEngine:
         scope: str,
         scope_id: str,
     ) -> UpdateDecision:
-        candidates = self._store.list_active_nodes(
-            scope=scope, scope_id=scope_id, node_type=type
-        )
+        candidates = self._store.list_active_nodes(scope=scope, scope_id=scope_id, node_type=type)
         if not candidates:
             return UpdateDecision(action="ADD", reason="无现有同类记忆")
 
@@ -78,9 +76,7 @@ class MemoryUpdateEngine:
 
         return UpdateDecision(action="ADD", reason=f"相似度低（{best_score:.2f}）")
 
-    def _similarity(
-        self, new_title: str, new_content: str, existing: MemoryNode
-    ) -> float:
+    def _similarity(self, new_title: str, new_content: str, existing: MemoryNode) -> float:
         title_sim = SequenceMatcher(None, new_title.lower(), existing.title.lower()).ratio()
         content_sim = SequenceMatcher(
             None, new_content.lower()[:500], (existing.content or "").lower()[:500]
