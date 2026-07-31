@@ -203,6 +203,15 @@ def apply_customer_ticket_incident_progress(
     }
 
 
+TICKET_LIFECYCLE_STEPS: tuple[tuple[int, str], ...] = (
+    (1, "已收到"),
+    (2, "处理中"),
+    (3, "有结果"),
+    (4, "待补充"),
+    (5, "已完成"),
+)
+
+
 def ticket_lifecycle_stage(
     status: str | None = None,
     decision_status: str | None = None,
