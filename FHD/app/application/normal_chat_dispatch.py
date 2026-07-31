@@ -58,11 +58,37 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
     )
     if any(k in text for k in customer_keywords):
         keyword_match = re.search(
-            r"(?:查询|查找|找到|搜索)?\s*([^\s，,。]{2,})\s*(?:的)?(?:客户|购买单位)", text
+            r"(?:查询|查找|找到|搜索)?\s*([^\s，,。？?]{2,})\s*(?:的)?(?:客户|购买单位)", text
         )
+        keyword = (keyword_match.group(1) if keyword_match else "").strip()
+        # 「有哪些客户 / 客户名单」等泛问：不要把「有哪些」当成客户名去模糊搜
+        generic_list_ask = any(
+            p in text
+            for p in (
+                "有哪些客户",
+                "哪些客户",
+                "客户名单",
+                "客户列表",
+                "全部客户",
+                "所有客户",
+                "客户信息",
+            )
+        ) and ("的客户" not in text)
+        if generic_list_ask or keyword in {
+            "有哪些",
+            "哪些",
+            "全部",
+            "所有",
+            "查询",
+            "查找",
+            "看看",
+            "名单",
+            "列表",
+        }:
+            keyword = ""
         return {
             "intent": "customers_query",
-            "slots": {"keyword": (keyword_match.group(1) if keyword_match else "").strip()},
+            "slots": {"keyword": keyword},
         }
 
     # 库存预警
@@ -326,26 +352,128 @@ def run_normal_slot_product_query_from_message(message: str) -> dict[str, Any]:
     return body
 
 
-def build_customers_query_response_dict(route_result: dict[str, Any]) -> dict[str, Any] | None:
+def _request_tenant_id(request: Any | None) -> int | None:
+    """从 request.state 读 tenant_id（流式响应中 ContextVar 可能已被中间件 finally 清掉）。"""
+    if request is None:
+        return None
+    try:
+        value = getattr(getattr(request, "state", None), "tenant_id", None)
+        return int(value) if value is not None else None
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
+def try_normal_slot_read_payload(
+    message: str,
+    *,
+    request: Any | None = None,
+) -> dict[str, Any] | None:
+    """普通版只读槽位（客户/产品/库存/标签）：命中则返回可直接回复的 payload。
+
+    流式对话与 JSON 主线共用，避免「有哪些客户」走 LLM 编造「没有数据」。
+    StreamingResponse 迭代时 IndustryContextMiddleware 可能已 reset 请求 ContextVar，
+    因此这里显式恢复 request + tenant，避免租户 fail-closed 读空。
+    """
+    text = str(message or "").strip()
+    if not text:
+        return None
+
+    req_token = None
+    if request is not None:
+        try:
+            from app.infrastructure.request_context import set_current_request
+
+            req_token = set_current_request(request)
+        except Exception:  # noqa: BLE001
+            req_token = None
+
+    try:
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        with tenant_scope(_request_tenant_id(request)):
+            rr = route_normal_mode_message(text)
+            intent = str(rr.get("intent") or "").strip()
+            if intent == "customers_query":
+                payload = build_customers_query_response_dict(rr, request=request)
+            elif intent == "product_query":
+                payload = build_product_query_response_dict(rr)
+            elif intent == "inventory_alert":
+                payload = build_inventory_alert_response_dict(rr)
+            elif intent == "label_print":
+                payload = build_label_print_response_dict(rr)
+            else:
+                return None
+    finally:
+        if req_token is not None:
+            try:
+                from app.infrastructure.request_context import reset_current_request
+
+                reset_current_request(req_token)
+            except Exception:  # noqa: BLE001
+                pass
+
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("success") is False and not payload.get("response"):
+        return None
+    return payload
+
+
+def build_customers_query_response_dict(
+    route_result: dict[str, Any],
+    *,
+    request: Any | None = None,
+) -> dict[str, Any] | None:
     """客户查询槽位响应。"""
     if route_result.get("intent") != "customers_query":
         return None
     keyword = str((route_result.get("slots") or {}).get("keyword") or "").strip()
     try:
-        from app.services.customers_service import CustomerService
+        # 与 GET /api/customers 同源：优先 erp domain handler（桌面 REST 实际路径），
+        # 再回退 facade。勿只走 facade——流式 ContextVar 丢失时会 fail-closed 读空，
+        # 而 domain handler 与 UI 客户列表一致。
+        from app.infrastructure.tenant_scope import tenant_scope
+        from app.mod_sdk.erp_domain_dispatch import try_invoke_erp_domain_handler
+        from app.mod_sdk.erp_customers_facade import customers_list as customers_list_via_service
 
-        svc = CustomerService()
-        customers = svc.search(keyword=keyword) if keyword else svc.get_all()
+        with tenant_scope(_request_tenant_id(request)):
+            result = try_invoke_erp_domain_handler(
+                "customers",
+                "list",
+                request=request,
+                page=1,
+                per_page=50,
+                keyword=keyword or None,
+            )
+            if result is None:
+                result = customers_list_via_service(
+                    request,
+                    page=1,
+                    per_page=50,
+                    keyword=keyword or None,
+                )
+        if isinstance(result, dict) and result.get("success") is False:
+            msg = str(result.get("message") or result.get("response") or "客户查询失败")
+            return {
+                "success": False,
+                "response": msg,
+                "data": {"intent": "customers_query"},
+                "normal_slot_dispatch": True,
+            }
+        customers = result.get("data", []) if isinstance(result, dict) else []
         if not isinstance(customers, list):
             customers = []
         if not customers:
             msg = f"未找到关键词「{keyword}」相关的客户。" if keyword else "暂无客户数据。"
         else:
             lines = [
-                f"- {c.get('customer_name', '')} {c.get('contact_person', '')}"
+                f"- {c.get('customer_name', '')} {c.get('contact_person', '')}".rstrip()
                 for c in customers[:10]
             ]
-            msg = f"共找到 {len(customers)} 位客户：\n" + "\n".join(lines)
+            total = int(result.get("total") or len(customers)) if isinstance(result, dict) else len(customers)
+            msg = f"共找到 {total} 位客户：\n" + "\n".join(lines)
+            if total > 10:
+                msg += f"\n…其余 {total - 10} 位请到「客户管理」查看"
         return {
             "success": True,
             "response": msg,

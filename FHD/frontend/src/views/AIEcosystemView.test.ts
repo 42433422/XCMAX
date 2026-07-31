@@ -33,6 +33,9 @@ async function mountView() {
         KittenLauncherIcon: { template: '<i class="icon-kitten" />' },
         ProductionEmployeeLauncherIcon: { template: '<i class="icon-prod" />' },
         ModStoreLauncherIcon: { template: '<i class="icon-modstore" />' },
+        PrivateModDeliveryPanel: { template: '<div class="stub-private-mod" />' },
+        KittenAnalyzerView: true,
+        AIOpenPanel: true,
       },
     },
   })
@@ -67,7 +70,7 @@ describe('AIEcosystemView.vue', () => {
     expect(descs).toHaveLength(4)
     expect(descs[0].text()).toContain('可视化 AI 员工')
     expect(descs[1].text()).toContain('MCP/API')
-    expect(descs[2].text()).toContain('生产 AI 员工')
+    expect(descs[2].text()).toContain('客户私有 Mod')
     expect(descs[3].text()).toContain('MOD 扩展')
   })
 
@@ -125,11 +128,25 @@ describe('AIEcosystemView.vue', () => {
     }
   })
 
-  it('navigates to brain shell page when production launcher clicked', async () => {
+  it('opens private mod delivery panel when production launcher clicked', async () => {
     const { wrapper, router } = await mountView()
     const pushSpy = vi.spyOn(router, 'push')
     await wrapper.find('.app-launcher--production').trigger('click')
-    expect(pushSpy).toHaveBeenCalledWith({ name: 'brain' })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.ecosystem-home').exists()).toBe(false)
+    expect(wrapper.find('.production-embed').exists()).toBe(true)
+    expect(wrapper.find('.production-embed__eyebrow').text()).toBe('生产员工')
+    expect(pushSpy).not.toHaveBeenCalled()
+  })
+
+  it('returns to ecosystem home from production embed back button', async () => {
+    const { wrapper } = await mountView()
+    await wrapper.find('.app-launcher--production').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.production-embed').exists()).toBe(true)
+    await wrapper.find('.production-embed__back').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.ecosystem-home').exists()).toBe(true)
   })
 
   it('navigates to mod-store shell page when modstore launcher clicked', async () => {
@@ -137,15 +154,6 @@ describe('AIEcosystemView.vue', () => {
     const pushSpy = vi.spyOn(router, 'push')
     await wrapper.find('.app-launcher--modstore').trigger('click')
     expect(pushSpy).toHaveBeenCalledWith({ name: 'mod-store' })
-  })
-
-  it('uses mod path redirect when planner mod pages enabled (brain)', async () => {
-    vi.mocked(resolvePlannerPageRedirectForRouteName).mockReturnValue('/mod/brain')
-    const { wrapper, router } = await mountView()
-    const pushSpy = vi.spyOn(router, 'push')
-    await wrapper.find('.app-launcher--production').trigger('click')
-    expect(pushSpy).toHaveBeenCalledWith('/mod/brain')
-    expect(pushSpy).not.toHaveBeenCalledWith({ name: 'brain' })
   })
 
   it('uses mod path redirect when planner mod pages enabled (mod-store)', async () => {
