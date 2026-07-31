@@ -97,6 +97,7 @@ describe('useAgentRunEvents', () => {
     }))
   })
 
+<<<<<<< HEAD
   it('keeps prior tool evidence when later polling returns only terminal events', async () => {
     agentRunsApiMock.listEvents
       .mockResolvedValueOnce({
