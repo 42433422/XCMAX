@@ -1,9 +1,3 @@
-from modstore_server.customer_service_issue_guards import (
-    _looks_like_forbidden_privilege_request,
-    _looks_like_product_issue,
-    _refuse_forbidden_privilege_reply,
-)
-
 """独立 AI 客服编排层。
 
 对话优先：寒暄 / 一般咨询只回复不建单；规则 + LLM 识别意图后，
@@ -38,6 +32,12 @@ from modstore_server.models_cs import (
     CustomerServiceSession,
     CustomerServiceStandard,
     CustomerServiceTicket,
+)
+
+from modstore_server.customer_service_issue_guards import (
+    _looks_like_forbidden_privilege_request,
+    _looks_like_product_issue,
+    _refuse_forbidden_privilege_reply,
 )
 
 ORDER_RE = re.compile(r"(?:订单号|order[_ -]?no|订单)[:：\s]*([A-Za-z0-9_-]{6,64})", re.I)
@@ -2098,11 +2098,26 @@ def _summarize_incident_team_rows(team_rows: list[Dict[str, Any]]) -> str:
 
 
 def apply_customer_ticket_incident_progress(
+    db: Session,
+    *,
+    ticket_id: int,
+    event_id: int = 0,
+    team_ok: bool = False,
+    team_rows: Optional[list[Dict[str, Any]]] = None,
+    summary_hint: str = "",
+) -> Dict[str, Any]:
     from modstore_server.customer_service_incident_progress import (
         apply_customer_ticket_incident_progress as _impl,
     )
 
-    return _impl()
+    return _impl(
+        db,
+        ticket_id=ticket_id,
+        event_id=event_id,
+        team_ok=team_ok,
+        team_rows=team_rows,
+        summary_hint=summary_hint,
+    )
 
 def ticket_lifecycle_payload(
     status: str | None = None,

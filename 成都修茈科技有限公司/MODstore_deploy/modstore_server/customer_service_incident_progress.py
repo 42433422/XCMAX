@@ -1,7 +1,40 @@
 """Customer-service incident progress application (extracted for source-governance)."""
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
+
+from sqlalchemy.orm import Session
+
+from modstore_server.customer_service_tools import audit, build_action, json_dumps
+from modstore_server.models_cs import (
+    CustomerServiceAction,
+    CustomerServiceDecision,
+    CustomerServiceMessage,
+    CustomerServiceTicket,
+)
+
+def _summarize_incident_team_rows(team_rows: list[Dict[str, Any]]) -> str:
+    """把 incident team / 员工执行行压缩成用户可读的一句进度。"""
+    bits: list[str] = []
+    role_cn = {"scout": "排查", "fix": "修复", "verify": "验证"}
+    for row in team_rows or []:
+        if not isinstance(row, dict):
+            continue
+        role = role_cn.get(str(row.get("role") or "").strip(), str(row.get("role") or "执行"))
+        emp = str(row.get("employee_id") or "").strip() or "值班员工"
+        ok = bool(row.get("ok"))
+        status = str(row.get("status") or "").strip()
+        if ok:
+            bits.append(f"{role}（{emp}）已完成")
+        elif status:
+            bits.append(f"{role}（{emp}）未完成（{status}）")
+        else:
+            bits.append(f"{role}（{emp}）未完成")
+    return "；".join(bits[:6]) if bits else "值班员工已接手"
+
+
+
 
 def apply_customer_ticket_incident_progress(
     db: Session,
@@ -162,5 +195,7 @@ def apply_customer_ticket_incident_progress(
         "action_id": int(action.id or 0),
         "team_ok": bool(team_ok),
     }
+
+
 
 
