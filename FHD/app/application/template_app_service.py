@@ -100,6 +100,21 @@ class TemplateApplicationService:
             "dict[str, Any]", self._template_service.decompose_template(file_path, template_type)
         )
 
+    def get_default_for_type(self, template_type: str) -> dict[str, Any] | None:
+        """按业务类型取当前可用默认模板（含开箱种子与 legacy 回退）。"""
+        result = self._template_service.get_default_for_type(template_type)
+        if result is None:
+            return None
+        return cast("dict[str, Any]", result)
+
+    def save_template_file(
+        self, source_name: str, target_name: str, overwrite: bool = False
+    ) -> dict[str, Any]:
+        return cast(
+            "dict[str, Any]",
+            self._template_service.save_template_file(source_name, target_name, overwrite),
+        )
+
 
 from app.neuro_bus.neuro_application_instrumentation import instrument_application_service_class
 

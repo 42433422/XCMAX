@@ -56,7 +56,10 @@ class TestInferTemplateType:
         assert store._infer_template_type_from_filename("原材料清单.xlsx") == "原材料"
 
     def test_product(self, store):
-        assert store._infer_template_type_from_filename("产品价格表.xlsx") == "产品"
+        assert store._infer_template_type_from_filename("产品目录.xlsx") == "产品目录"
+
+    def test_price_list_filename(self, store):
+        assert store._infer_template_type_from_filename("产品价格表.xlsx") == "价格表"
 
     def test_shipment_records(self, store):
         assert store._infer_template_type_from_filename("出货记录.xlsx") == "出货记录"
@@ -174,12 +177,24 @@ class TestDiscoverWordTemplates:
         filenames = [t["filename"] for t in templates]
         assert "合同模板.docx" in filenames
 
-    def test_price_list_rename(self, tmp_path):
+    def test_price_list_skipped_from_fs_scan(self, tmp_path):
+        # 价目表由 DB 种子托管，fs_scan 不应再扫出一条
         (tmp_path / "price_list_default.docx").write_bytes(b"PK")
+        (tmp_path / "合同模板.docx").write_bytes(b"PK")
         store = FileSystemTemplateStore(str(tmp_path))
         templates = store._discover_word_templates()
-        if templates:
-            assert templates[0]["name"] == "产品价格表（Word 价目）"
+        filenames = [t["filename"] for t in templates]
+        assert "price_list_default.docx" not in filenames
+        assert "合同模板.docx" in filenames
+
+    def test_shipment_alias_skipped_from_fs_scan(self, tmp_path):
+        (tmp_path / "templates").mkdir()
+        (tmp_path / "templates" / "尹玉华1.xlsx").write_bytes(b"PK")
+        (tmp_path / "templates" / "发货单模板.xlsx").write_bytes(b"PK")
+        store = FileSystemTemplateStore(str(tmp_path))
+        filenames = [t["filename"] for t in store._discover_excel_templates()]
+        assert "尹玉华1.xlsx" not in filenames
+        assert "发货单模板.xlsx" in filenames
 
     def test_skips_temp_files(self, tmp_path):
         (tmp_path / "~$temp.docx").write_bytes(b"temp")

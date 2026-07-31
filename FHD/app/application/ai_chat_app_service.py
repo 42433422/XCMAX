@@ -27,12 +27,6 @@ from typing import Any
 
 import httpx  # noqa: F401 - compatibility patch point for legacy tests/callers
 
-from app.di.registry import get_service_registry
-from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import resolve_fhd_repo_root
-
-logger = logging.getLogger(__name__)
-
 from app.application.ai_chat.excel_import_pipeline import AIChatExcelImportMixin
 from app.application.ai_chat.excel_import_policy import (
     _EXCEL_IMPORT_MEASURE_UNIT_TOKENS as _EXCEL_IMPORT_MEASURE_UNIT_TOKENS,
@@ -43,6 +37,12 @@ from app.application.ai_chat.excel_import_policy import (
 )
 from app.application.ai_chat.instant_tools import AIChatInstantToolsMixin
 from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+from app.application.price_list_intent import build_price_list_chat_reply
+from app.di.registry import get_service_registry
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_utils import resolve_fhd_repo_root
+
+logger = logging.getLogger(__name__)
 
 
 def _import_workflow_components():
@@ -1181,76 +1181,7 @@ class AIChatApplicationService(
                 if lp:
                     return lp
             if rr.get("intent") == "price_list":
-                customer_name_match = re.search(
-                    r"([^\s，,。]{2,}(?:有限公司|集团有限公司|实业有限公司|公司\s|单位|客户|厂|店))",
-                    text,
-                )
-                keyword_match = re.search(r"[的的]\s*([^\s，,。]+)", text)
-                slots = {}
-                if customer_name_match:
-                    slots["customer_name"] = customer_name_match.group(1)
-                if keyword_match:
-                    slots["keyword"] = keyword_match.group(1)
-
-                if not slots.get("customer_name"):
-                    return {
-                        "success": False,
-                        "message": "缺少客户名称",
-                        "response": "请告诉我您要生成哪家客户的价格表？例如：「打印某某公司的价格表」",
-                    }
-
-                # 直接调用价格表生成 API，而不是返回 tool_call
-                try:
-                    fhd_root = resolve_fhd_repo_root(anchor=Path(__file__).resolve())
-                    from app.application.tools import handle_price_list_export
-
-                    logger.info("价格表生成 - FHD根目录: %s", fhd_root)
-
-                    result = handle_price_list_export(
-                        {
-                            "customer_name": slots.get("customer_name", ""),
-                            "keyword": slots.get("keyword"),
-                            "export_date": None,
-                        },
-                        workspace_root=str(fhd_root) if fhd_root else None,
-                    )
-
-                    logger.info("价格表生成结果: %s", result)
-
-                    if result.get("success"):
-                        product_count = len(result.get("products", []))
-                        file_path = result.get("file_path", "")
-                        filename = (
-                            file_path.split("/")[-1].split("\\")[-1] if file_path else "价格表.docx"
-                        )
-
-                        return {
-                            "success": True,
-                            "message": result.get("message", "价格表已生成"),
-                            "response": f"好的，价格表已生成成功！\n\n{result.get('message', '')}\n\n📄 文件名：{filename}\n💡 已在右侧任务面板中添加下载和打印按钮。",
-                            "data": {
-                                "file_path": file_path,
-                                "download_url": result.get("download_url"),
-                                "filename": filename,
-                                "product_count": product_count,
-                                "intent": "price_list",
-                                "action": "tool_call",
-                                "tool_key": "price_list",
-                            },
-                        }
-                    else:
-                        return {
-                            "success": False,
-                            "message": result.get("error", "价格表生成失败"),
-                            "response": f"抱歉，价格表生成失败：{result.get('error', '未知错误')}",
-                        }
-                except RECOVERABLE_ERRORS as e:
-                    logger.error("价格表生成异常：%s", e, exc_info=True)
-                    return {
-                        "success": False,
-                        "message": f"价格表生成异常：{str(e)}",
-                        "response": f"抱歉，价格表生成时出现错误：{str(e)}",
-                    }
+                return build_price_list_chat_reply(rr)
 
         # 处理混合模式下的确认/取消
         pending = self._pending_workflows.get(user_id)

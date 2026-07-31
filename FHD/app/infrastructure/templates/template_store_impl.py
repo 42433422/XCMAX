@@ -24,10 +24,27 @@ class FileSystemTemplateStore(TemplateStorePort):
     - **兼容来源**: 固定文件名（发货单模板.xlsx / 尹玉华132.xlsx），用于老模板与测试
     """
 
+    # 兼容别名 / 已由 DB 种子托管的文件：不进 fs_scan，避免模板库重复噪音
+    _FS_SCAN_SKIP_NAMES = frozenset(
+        {
+            "尹玉华1.xlsx",
+            "尹玉华132.xlsx",
+            "price_list_default.docx",
+        }
+    )
+    _FS_SCAN_SKIP_NAMES_CF = frozenset(n.casefold() for n in _FS_SCAN_SKIP_NAMES)
+
     def __init__(self, base_dir: str):
         self._base_dir = base_dir
         self._template_dir = os.path.join(base_dir, "templates")
         os.makedirs(self._template_dir, exist_ok=True)
+
+    @classmethod
+    def _should_skip_fs_scan_entry(cls, entry: str) -> bool:
+        name = (entry or "").strip()
+        if not name or name.startswith("~$"):
+            return True
+        return name.casefold() in cls._FS_SCAN_SKIP_NAMES_CF
 
     def _legacy_templates(self) -> list[dict]:
         common = [
@@ -58,17 +75,26 @@ class FileSystemTemplateStore(TemplateStorePort):
 
     def _infer_template_type_from_filename(self, filename: str) -> str:
         name = (filename or "").lower()
+        # 先匹配更具体的业务表，避免「出货记录」被「出货」误收成发货单
         if "考勤" in name:
             return "考勤记录"
-        if "客户" in name:
-            return "客户"
-        if "原材料" in name or "材料" in name:
-            return "原材料"
-        if "产品" in name:
-            return "产品"
+        if "销售报表" in name or "销售" in name and "报表" in name:
+            return "销售报表"
+        if "汇总统计" in name or "汇总" in name:
+            return "汇总统计"
+        if "出货明细" in name:
+            return "出货明细"
         if "出货记录" in name:
             return "出货记录"
-        if "发货" in name or "出货单" in name:
+        if "客户" in name:
+            return "客户"
+        if "原材料" in name or ("材料" in name and "原" in name):
+            return "原材料"
+        if "价目" in name or "价格表" in name:
+            return "价格表"
+        if "产品目录" in name or "产品" in name:
+            return "产品目录"
+        if "发货" in name or "出货单" in name or "送货单" in name:
             return "发货单"
         return "Excel"
 
@@ -112,7 +138,7 @@ class FileSystemTemplateStore(TemplateStorePort):
             try:
                 for entry in os.listdir(folder):
                     lower = entry.lower()
-                    if lower.startswith("~$"):
+                    if self._should_skip_fs_scan_entry(entry):
                         continue
                     if not (lower.endswith(".xlsx") or lower.endswith(".xls")):
                         continue
@@ -155,7 +181,7 @@ class FileSystemTemplateStore(TemplateStorePort):
             try:
                 for entry in os.listdir(folder):
                     lower = entry.lower()
-                    if lower.startswith("~$"):
+                    if self._should_skip_fs_scan_entry(entry):
                         continue
                     if not lower.endswith(".docx"):
                         continue
@@ -167,8 +193,6 @@ class FileSystemTemplateStore(TemplateStorePort):
                         continue
                     seen_paths.add(norm_path)
                     base_name = os.path.splitext(entry)[0]
-                    if lower == "price_list_default.docx":
-                        base_name = "产品价格表（Word 价目）"
                     templates.append(
                         {
                             "id": f"fs:{entry}",
@@ -263,15 +287,24 @@ class FileSystemTemplateStore(TemplateStorePort):
         templates.extend(self._discover_word_templates())
         templates.extend([t for t in self._legacy_templates() if t.get("exists")])
 
-        # 按文件路径去重，避免 legacy 与 fs_scan 重复展示
+        # 路径去重 + 同名文件优先保留 DB（避免 fs_scan 盖过正式种子名）
         deduped: list[dict] = []
-        seen = set()
+        seen_paths: set[str] = set()
+        seen_basenames: set[str] = set()
         for tpl in templates:
             path = str(tpl.get("path") or "").strip()
-            key = os.path.normcase(os.path.abspath(path)) if path else str(tpl.get("id") or "")
-            if key in seen:
+            path_key = (
+                os.path.normcase(os.path.abspath(path)) if path else str(tpl.get("id") or "")
+            )
+            if path_key in seen_paths:
                 continue
-            seen.add(key)
+            basename = str(tpl.get("filename") or (os.path.basename(path) if path else "")).strip()
+            basename_key = basename.casefold() if basename else ""
+            if basename_key and basename_key in seen_basenames and tpl.get("source") != "db":
+                continue
+            seen_paths.add(path_key)
+            if basename_key:
+                seen_basenames.add(basename_key)
             deduped.append(tpl)
         return deduped
 

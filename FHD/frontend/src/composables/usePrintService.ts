@@ -142,22 +142,23 @@ export function usePrintService() {
       summary.shipmentPrinted = docResult.success
 
       if (!docResult.success) {
-        summary.logs.push(`发货单打印失败：${docResult.message}`)
+        summary.logs.push(`单据打印失败：${docResult.message}`)
       }
 
-      const markResult = await markAsPrinted(filePath, orderId)
-      summary.shipmentMarked = markResult.success
-
-      if (!markResult.success) {
-        summary.logs.push(`打印状态更新失败：${markResult.message}`)
-      }
-
-      if (!orderId) {
-        summary.logs.push('打印状态未落库：缺少记录ID')
+      // Word 价目等无 orderId 的单据：只要求物理打印成功，不把「未落库」算失败
+      if (orderId) {
+        const markResult = await markAsPrinted(filePath, orderId)
+        summary.shipmentMarked = markResult.success
+        if (!markResult.success) {
+          summary.logs.push(`打印状态更新失败：${markResult.message}`)
+        }
+      } else {
+        summary.shipmentMarked = true
       }
     }
 
-    const shipmentOk = !filePath || (summary.shipmentPrinted && summary.shipmentMarked)
+    const shipmentOk =
+      !filePath || (summary.shipmentPrinted && (orderId ? summary.shipmentMarked : true))
     const labelsOk = labelPaths.length === 0 || summary.labelFailed === 0
     summary.success = labelsOk && shipmentOk
     summary.message =
@@ -175,11 +176,16 @@ export function usePrintService() {
   ): string {
     const parts = ['打印执行完成']
 
-    parts.push(`标签：${summary.labelSuccess}/${labelCount || 0} 成功`)
+    if (labelCount > 0) {
+      parts.push(`标签：${summary.labelSuccess}/${labelCount || 0} 成功`)
+    }
 
     if (filePath) {
-      parts.push(`发货单：${summary.shipmentPrinted ? '已发送打印' : '失败'}`)
-      parts.push(`状态：${summary.shipmentMarked ? '已标记已打印' : '未更新'}`)
+      parts.push(`单据：${summary.shipmentPrinted ? '已发送打印' : '失败'}`)
+      // 仅在真正走了落库标记路径时展示状态（有标签的发货单场景）
+      if (labelCount > 0 || summary.logs.some((l) => l.includes('打印状态'))) {
+        parts.push(`状态：${summary.shipmentMarked ? '已标记已打印' : '未更新'}`)
+      }
     }
 
     if (summary.logs.length) {

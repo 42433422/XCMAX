@@ -199,6 +199,15 @@ def _initialize_databases_sync(app: FastAPI):
                 init_wechat_tasks_table()
                 init_template_tables()
 
+        try:
+            from app.db.seeds.document_templates_seed import (
+                ensure_initial_document_templates,
+            )
+
+            ensure_initial_document_templates()
+        except RECOVERABLE_ERRORS as seed_tpl_exc:
+            logger.warning("初始单据模板种子跳过: %s", seed_tpl_exc)
+
         init_distillation_tables(engine)
         init_extract_logs_tables(engine)
         ensure_product_query_indexes(engine)

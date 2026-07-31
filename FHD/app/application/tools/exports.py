@@ -8,13 +8,20 @@
 from __future__ import annotations
 
 import logging
-import tempfile
+import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_price_list_filename(customer_name: str) -> str:
+    raw = re.sub(r'[\\/:*?"<>|]+', "_", customer_name).strip() or "客户"
+    return f"价格表_{raw}.docx"
 
 
 def handle_price_list_export(
@@ -31,11 +38,12 @@ def handle_price_list_export(
             export_date: str | None, # 报价日期
             template_slug: str | None,
         }
-        workspace_root: 仓库根路径（用于查找模板）
+        workspace_root: 保留兼容参数（模板解析不依赖此路径写盘）
 
     返回:
-        {success: bool, file_path: str | None, message: str, ...}
+        {success: bool, file_path: str | None, download_url: str | None, message: str, ...}
     """
+    _ = workspace_root  # 兼容旧调用方；落盘统一走 get_app_data_dir()/shipment_outputs
     customer_name = str(params.get("customer_name") or "").strip()
     keyword = str(params.get("keyword") or "").strip() or None
     export_date = str(params.get("export_date") or "").strip() or None
@@ -74,21 +82,20 @@ def handle_price_list_export(
         logger.error("price_list_export: 生成 Word 失败: %s", e)
         return {"success": False, "message": f"价格表生成失败: {e}"}
 
-    # 3. 写入临时文件
+    # 3. 写入与 /api/shipment/download 同源目录
     try:
-        suffix = f"价格表_{customer_name}.docx"
-        out_dir = (
-            Path(workspace_root) / "shipment_outputs"
-            if workspace_root
-            else Path(tempfile.gettempdir())
-        )
+        suffix = _safe_price_list_filename(customer_name)
+        out_dir = Path(get_app_data_dir()) / "shipment_outputs"
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / suffix
         out_path.write_bytes(doc_bytes)
+        download_url = f"/api/shipment/download/{quote(suffix, safe='')}"
         return {
             "success": True,
             "file_path": str(out_path),
             "filename": suffix,
+            "doc_name": suffix,
+            "download_url": download_url,
             "message": f"价格表已生成：{suffix}",
             "customer_name": customer_name,
             "product_count": len(products),

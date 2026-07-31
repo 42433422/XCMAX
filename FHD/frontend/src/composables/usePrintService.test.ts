@@ -228,17 +228,33 @@ describe('usePrintService', () => {
         } as Response)
       const summary = await service.executePrintTask(['/label.pdf'], '/doc.pdf', 1)
       expect(summary.shipmentPrinted).toBe(false)
-      expect(summary.logs).toContainEqual(expect.stringContaining('发货单打印失败'))
+      expect(summary.logs).toContainEqual(expect.stringContaining('单据打印失败'))
     })
 
-    it('logs warning when orderId is missing', async () => {
+    it('succeeds for document-only print without orderId (price list)', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true, updated: true }),
+      } as Response)
+      const summary = await service.executePrintTask([], '/price-list.docx')
+      expect(summary.shipmentPrinted).toBe(true)
+      expect(summary.success).toBe(true)
+      expect(summary.logs.some((l) => l.includes('缺少记录ID'))).toBe(false)
+      // 无 orderId 时不调用 /api/shipment/print 落库
+      const urls = fetchSpy.mock.calls.map((c) => String(c[0]))
+      expect(urls.every((u) => !u.includes('/api/shipment/print'))).toBe(true)
+    })
+
+    it('does not fail overall when orderId is missing but print succeeds', async () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValue({
         ok: true,
         status: 200,
         json: async () => ({ success: true, updated: true }),
       } as Response)
       const summary = await service.executePrintTask(['/label.pdf'], '/doc.pdf')
-      expect(summary.logs).toContainEqual(expect.stringContaining('缺少记录ID'))
+      expect(summary.success).toBe(true)
+      expect(summary.logs.some((l) => l.includes('缺少记录ID'))).toBe(false)
     })
 
     it('succeeds with no label paths', async () => {
@@ -287,6 +303,21 @@ describe('usePrintService', () => {
       const msg = service.buildPrintSummaryMessage(summary, 1, '/doc.pdf')
       expect(msg).toContain('已发送打印')
       expect(msg).toContain('已标记已打印')
+    })
+
+    it('omits mark status for document-only price list print', () => {
+      const summary = {
+        labelSuccess: 0,
+        labelFailed: 0,
+        shipmentPrinted: true,
+        shipmentMarked: true,
+        logs: [],
+        success: true,
+        message: '打印完成',
+      }
+      const msg = service.buildPrintSummaryMessage(summary, 0, '/price.docx')
+      expect(msg).toContain('单据：已发送打印')
+      expect(msg).not.toContain('已标记已打印')
     })
 
     it('includes log details when present', () => {
