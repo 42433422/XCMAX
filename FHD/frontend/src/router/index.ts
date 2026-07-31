@@ -169,7 +169,9 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
     },
     {
       path: '/business-docking',
-      redirect: { name: 'template-preview' },
+      name: 'business-docking',
+      component: () => import('../views/BusinessDockingView.vue'),
+      meta: { title: '数据对接中心' },
     },
     {
       path: '/orders/create',
