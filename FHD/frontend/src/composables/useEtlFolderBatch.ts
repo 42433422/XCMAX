@@ -22,6 +22,7 @@ export type BatchFileStatus =
   | 'queued'
   | 'previewing'
   | 'preview_ready'
+  | 'executing'
   | 'completed'
   | 'failed'
   | 'interrupted'
@@ -45,13 +46,23 @@ type EtlFolderBatchOptions = {
   busy: Ref<boolean>
   pageError: Ref<string>
   router: Router
+  /** 默认 true：解析就绪后自动写入业务库，而非停在预演确认。 */
+  autoWriteEnabled: Ref<boolean>
+  markAutoWrite: (runId: string) => void
+  tryAutoWrite: (run: EtlRun) => Promise<void>
   syncDraft: () => void
   schedulePoll: () => void
   loadRows: () => Promise<void>
 }
 
-const TERMINAL_STATUSES = new Set<BatchFileStatus>([
+const PARSE_DONE_STATUSES = new Set<BatchFileStatus>([
   'preview_ready',
+  'completed',
+  'failed',
+  'interrupted',
+])
+
+const WRITE_TERMINAL_STATUSES = new Set<BatchFileStatus>([
   'completed',
   'failed',
   'interrupted',
@@ -70,11 +81,12 @@ export function batchFileStatusLabel(status: BatchFileStatus) {
   return ({
     waiting: '等待上传',
     uploading: '上传中',
-    creating: '创建预演',
+    creating: '创建任务',
     queued: '已排队',
-    previewing: '预演中',
-    preview_ready: '待确认',
-    completed: '已完成',
+    previewing: '解析中',
+    preview_ready: '待写入',
+    executing: '写入中',
+    completed: '已写入',
     failed: '失败',
     interrupted: '已中断',
   } as Record<BatchFileStatus, string>)[status]
@@ -114,8 +126,12 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
   const incompatibleFiles = computed(
     () => ['auto', 'knowledge'].includes(options.targetType.value) ? [] : knowledgeOnlyFiles.value,
   )
+  function terminalStatuses() {
+    return options.autoWriteEnabled.value ? WRITE_TERMINAL_STATUSES : PARSE_DONE_STATUSES
+  }
+
   const batchFinishedCount = computed(
-    () => selectedFiles.value.filter((item) => TERMINAL_STATUSES.has(item.status)).length,
+    () => selectedFiles.value.filter((item) => terminalStatuses().has(item.status)).length,
   )
   const batchFailedCount = computed(
     () => selectedFiles.value.filter((item) => item.status === 'failed').length,
@@ -141,10 +157,16 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
     if (options.busy.value) {
       return `正在提交 ${batchSubmittedCount.value}/${selectedFiles.value.length}…`
     }
-    if (selectedFiles.value.length > 1) {
-      return `批量上传并创建 ${selectedFiles.value.length} 个预演`
+    if (options.autoWriteEnabled.value) {
+      if (selectedFiles.value.length > 1) {
+        return `批量上传并写入 ${selectedFiles.value.length} 个文件`
+      }
+      return '上传并写入数据库'
     }
-    return '上传并开始预演'
+    if (selectedFiles.value.length > 1) {
+      return `批量上传并解析 ${selectedFiles.value.length} 个文件`
+    }
+    return '上传并解析'
   })
 
   function applyFileSelection(files: Iterable<File>) {
@@ -200,7 +222,7 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
       const run = byId.get(item.runId)
       if (!run) continue
       item.status = run.status as BatchFileStatus
-      item.progress = TERMINAL_STATUSES.has(item.status)
+      item.progress = terminalStatuses().has(item.status)
         ? 100
         : Math.max(item.progress, run.progress)
       item.message = run.error?.message || ''
@@ -217,7 +239,7 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
   function scheduleBatchPoll() {
     if (batchPollTimer) clearTimeout(batchPollTimer)
     const pending = selectedFiles.value.some(
-      (item) => item.runId && !TERMINAL_STATUSES.has(item.status),
+      (item) => item.runId && !terminalStatuses().has(item.status),
     )
     if (!pending || !batchId.value) return
     batchPollTimer = setTimeout(async () => {
@@ -225,10 +247,15 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
         const limit = Math.min(500, Math.max(50, selectedFiles.value.length))
         const latest = await etlApi.runs(limit, batchId.value)
         mergeBatchRuns(latest)
+        if (options.autoWriteEnabled.value) {
+          for (const run of latest) {
+            if (run.status === 'preview_ready') await options.tryAutoWrite(run)
+          }
+        }
       } catch (error) {
         options.pageError.value = error instanceof Error
           ? error.message
-          : '读取文件夹预演进度失败'
+          : '读取文件夹写入进度失败'
       }
       scheduleBatchPoll()
     }, 1500)
@@ -267,11 +294,12 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
             item.runId = run.id
             item.status = run.status as BatchFileStatus
             item.progress = Math.max(40, run.progress)
+            if (options.autoWriteEnabled.value) options.markAutoWrite(run.id)
             createdRuns.push(run)
           } catch (error) {
             item.status = 'failed'
             item.progress = 100
-            item.message = error instanceof Error ? error.message : '创建预演失败'
+            item.message = error instanceof Error ? error.message : '创建导入任务失败'
           }
         }
       }
@@ -297,13 +325,15 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
           query: { run_id: createdRuns[0].id },
         })
         if (selectedFiles.value.length === 1) {
-          // The desktop normally receives a queued run, but small workbooks
-          // can finish before the create-preview response returns. In that
-          // case surface the preview and its safe companion actions now
-          // instead of leaving the user on the upload tab until a refresh.
-          options.activeTab.value = tabForRunStatus(createdRuns[0].status)
-          if (createdRuns[0].status === 'preview_ready') await options.loadRows()
-          options.schedulePoll()
+          // Small workbooks may finish parse before the create response returns.
+          // Auto-write continues into execute; otherwise surface the review tab.
+          if (createdRuns[0].status === 'preview_ready' && options.autoWriteEnabled.value) {
+            await options.tryAutoWrite(createdRuns[0])
+          } else {
+            options.activeTab.value = tabForRunStatus(createdRuns[0].status)
+            if (createdRuns[0].status === 'preview_ready') await options.loadRows()
+            options.schedulePoll()
+          }
         } else {
           scheduleBatchPoll()
         }
