@@ -466,26 +466,38 @@ async def mod_store_catalog() -> ModStoreCatalogResponse:
 
 
 async def _private_mod_context(request: Request) -> dict[str, Any]:
-    """读取当前账号可见的客户私有 Mod，严格复用企业 entitlement。"""
+    """读取当前账号可见的客户私有 Mod，严格复用企业 entitlement。
+
+    仅暴露客户定制 ``legacy_mod_id``（如 taiyangniao-pro），
+    不含通用行业包（如 attendance-industry）。
+    """
     from app.enterprise.mod_entitlements import (
         enterprise_mod_filter_active,
         get_cached_entitled_client_mod_ids,
         get_cached_market_identity,
         sync_entitlements_from_request,
     )
+    from app.mod_sdk.customer_delivery import (
+        list_account_custom_mod_ids,
+        list_industry_mod_ids_from_delivery,
+    )
 
+    account_custom = list_account_custom_mod_ids()
+    industry_packs = list_industry_mod_ids_from_delivery()
     if enterprise_mod_filter_active():
         await sync_entitlements_from_request(request)
         entitled = get_cached_entitled_client_mod_ids() or set()
-    else:
-        # 非企业开发环境只从本地交付清单暴露客户 Mod，生产企业版仍以 entitlement 为准。
-        from app.mod_sdk.customer_delivery import list_customer_deliveries
-
+        # 企业权益里常同时下发行业包 + 定制包；生产员工只看定制包。
         entitled = {
-            str(row.get("legacy_mod_id") or "").strip()
-            for row in list_customer_deliveries()
-            if str(row.get("legacy_mod_id") or "").strip()
+            str(x).strip()
+            for x in entitled
+            if str(x).strip()
+            and str(x).strip() in account_custom
+            and str(x).strip() not in industry_packs
         }
+    else:
+        # 非企业开发环境只从本地交付清单暴露客户定制 Mod。
+        entitled = set(account_custom)
     market_user_id, username = get_cached_market_identity()
     return {
         "mod_ids": {str(x).strip() for x in entitled if str(x).strip()},
