@@ -57,6 +57,15 @@ from app.db.models.workflow import (
 )
 from app.infrastructure.persona.models import PersonaEventLogModel, PersonaProfileModel
 
+# Persy 统一记忆图谱（Phase 1，MemoryNode + TypedEdge）
+from app.db.models.memory_graph import (
+    EdgeType,
+    MemoryNode,
+    MemoryNodeStatus,
+    MemoryNodeType,
+    TypedEdge,
+)
+
 # 所有模型映射完成后安装全局多租户过滤事件（继承 TenantScopedMixin 的业务模型自动隔离）。
 from app.db import tenant_filter as _tenant_filter  # noqa: E402,F401
 
@@ -113,4 +122,9 @@ __all__ = [
     "WorkflowDefinition",
     "WorkflowRun",
     "WorkflowRunStep",
+    "MemoryNode",
+    "TypedEdge",
+    "MemoryNodeType",
+    "MemoryNodeStatus",
+    "EdgeType",
 ]
