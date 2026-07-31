@@ -1,22 +1,40 @@
 """
-蒸馏训练脚本 - 微调 BERT 模型用于意图识别
+蒸馏训练脚本 - 微调 BERT 模型用于意图识别并沉淀业务 know-how
 
-使用收集的蒸馏数据微调 chinese-bert-wwm-ext 模型。
+使用收集的蒸馏数据微调 chinese-bert-wwm-ext 模型；也可以从用户反馈、
+客服变更工单、bug 修复记录中构建持续学习候选集，经审核后进入训练集。
 
 使用方法：
     python -m app.services.distillation_trainer --data distillation/training_data.jsonl --epochs 3
+    python -m app.services.distillation_trainer --learn-from-defaults --review-only
+    python -m app.services.distillation_trainer --data distillation/training_data.jsonl
+        --learn-from-feedback app/user_memory/memory_store.json
 
 模型输出：
     distillation/checkpoints/best.pt
     distillation/checkpoints/last.pt
     distillation/checkpoints/vocab.json
+
+持续学习输出：
+    distillation/continuous_learning/candidate_samples.jsonl
+    distillation/continuous_learning/review_queue.jsonl
+    distillation/continuous_learning/approved_samples.jsonl
+    distillation/continuous_learning/industry_knowhow.jsonl
+    distillation/continuous_learning/training_data.continuous.jsonl
+    distillation/continuous_learning/manifest.json
 """
 
 import argparse
+import hashlib
 import json
 import logging
 import os
+import re
+from collections import Counter
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Iterable
 
 import torch
 from sklearn.metrics import accuracy_score, classification_report
@@ -62,40 +80,55 @@ from app.utils.distillation_paths import (
     get_distillation_root_dir,
     get_distillation_training_data_path,
 )
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+try:
+    from app.services.bert_intent_service import INTENT_LABELS as RUNTIME_INTENT_LABELS
+except ImportError:
+    RUNTIME_INTENT_LABELS = [
+        "shipment_generate",
+        "customers",
+        "products",
+        "shipments",
+        "wechat_send",
+        "print_label",
+        "upload_file",
+        "materials",
+        "shipment_template",
+        "template_extract",
+        "business_docking",
+        "template_preview",
+        "shipment_records",
+        "wechat",
+        "printer_list",
+        "settings",
+        "tools_table",
+        "other_tools",
+        "ai_ecosystem",
+        "excel_decompose",
+        "show_images",
+        "show_videos",
+        "greet",
+        "goodbye",
+        "help",
+        "negation",
+        "customer_export",
+        "customer_edit",
+        "customer_supplement",
+        "unk",
+    ]
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DISTILL_DIR = get_distillation_root_dir()
 CHECKPOINT_DIR = get_distillation_checkpoints_dir()
 LOG_DIR = get_distillation_logs_dir()
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
-
-INTENT_LABELS = [
-    "shipment_generate",
-    "customers",
-    "products",
-    "shipments",
-    "wechat_send",
-    "print_label",
-    "upload_file",
-    "materials",
-    "shipment_template",
-    "excel_decompose",
-    "show_images",
-    "show_videos",
-    "greet",
-    "goodbye",
-    "help",
-    "negation",
-    "customer_export",
-    "customer_edit",
-    "customer_supplement",
-    "unk",
-]
-
-LABEL_TO_ID = {label: idx for idx, label in enumerate(INTENT_LABELS)}
-ID_TO_LABEL = {idx: label for label, idx in LABEL_TO_ID.items()}
+from app.services.distillation_continuous_learning import (
+    CONTINUOUS_LEARNING_DIR,
+    CONTINUOUS_TRAINING_DATA_NAME,
+    build_continuous_learning_corpus,
+    export_continuous_training_data,
+    normalize_intent_label,
+)
 
 
 class DistillationDataset(Dataset):
@@ -176,9 +209,12 @@ class DistillationTrainer:
         if data_path.endswith(".jsonl"):
             with open(data_path, encoding="utf-8") as f:
                 for line in f:
+                    if not line.strip():
+                        continue
                     data = json.loads(line)
                     text = data.get("text", "")
-                    label = data.get("label", "unk")
+                    raw_label = data.get("label", "unk")
+                    label = normalize_intent_label(raw_label, default="")
 
                     if label in LABEL_TO_ID:
                         texts.append(text)
@@ -189,7 +225,7 @@ class DistillationTrainer:
                 for line in f:
                     parts = line.strip().split("\t")
                     if len(parts) >= 2:
-                        label = parts[1]
+                        label = normalize_intent_label(parts[1], default="")
                         if label in LABEL_TO_ID:
                             texts.append(parts[0])
                             labels.append(LABEL_TO_ID[label])
@@ -199,7 +235,13 @@ class DistillationTrainer:
 
     def prepare_data(self, texts: list[str], labels: list[int], val_ratio: float = 0.2):
         """准备训练和验证数据"""
-        if len(set(labels)) >= 10 and len(texts) > 100:
+        label_counts = Counter(labels)
+        can_stratify = (
+            len(label_counts) >= 10
+            and len(texts) > 100
+            and min(label_counts.values(), default=0) >= 2
+        )
+        if can_stratify:
             train_texts, val_texts, train_labels, val_labels = train_test_split(
                 texts, labels, test_size=val_ratio, random_state=42, stratify=labels
             )
@@ -223,6 +265,8 @@ class DistillationTrainer:
         self.model = BertForSequenceClassification.from_pretrained(
             self.model_name,
             num_labels=self.num_labels,
+            id2label=ID_TO_LABEL,
+            label2id=LABEL_TO_ID,
         )
         self.model.to(self.device)
 
@@ -301,6 +345,7 @@ class DistillationTrainer:
             "num_labels": self.num_labels,
             "id2label": ID_TO_LABEL,
             "label2id": LABEL_TO_ID,
+            "label_set_sha256": _stable_id(*INTENT_LABELS),
             "max_length": self.max_length,
             "epoch": epoch,
             "best": best,
@@ -309,6 +354,14 @@ class DistillationTrainer:
 
         with open(os.path.join(path, "train_config.json"), "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
+
+        with open(os.path.join(path, "intent_labels.json"), "w", encoding="utf-8") as f:
+            json.dump(
+                {"labels": INTENT_LABELS, "id2label": ID_TO_LABEL, "label2id": LABEL_TO_ID},
+                f,
+                ensure_ascii=False,
+                indent=2,
+            )
 
         vocab_path = os.path.join(CHECKPOINT_DIR, "vocab.json")
         with open(vocab_path, "w", encoding="utf-8") as f:
@@ -400,6 +453,12 @@ def main():
     parser.add_argument("--lr", type=float, default=2e-5, help="学习率")
     parser.add_argument("--max_length", type=int, default=64, help="最大序列长度")
     parser.add_argument("--output", type=str, default=None, help="输出目录")
+    from app.services.distillation_continuous_learning_cli import (
+        add_learning_arguments,
+        maybe_prepare_continuous_learning,
+    )
+
+    add_learning_arguments(parser)
 
     args = parser.parse_args()
 
@@ -407,10 +466,15 @@ def main():
     if data_path is None:
         data_path = get_distillation_training_data_path()
 
+    data_path, early_payload = maybe_prepare_continuous_learning(args, data_path=data_path)
+    if early_payload is not None:
+        return early_payload
+
     if not os.path.exists(data_path):
         logger.error("训练数据不存在: %s", data_path)
         logger.info(
-            "请先运行数据采集脚本: python -m app.services.distillation_data_collector --generate --collect"
+            "请先运行数据采集脚本，或使用 --learn-from-defaults/"
+            "--learn-from-feedback 构建持续学习语料"
         )
         return
 
@@ -429,7 +493,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 # NEURO-DDD: 为 Services 层类添加 instrumentation
 from app.neuro_bus.neuro_service_instrumentation import instrument_service_layer_class

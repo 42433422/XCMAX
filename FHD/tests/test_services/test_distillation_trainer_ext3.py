@@ -219,7 +219,9 @@ class TestDistillationTrainerSaveCheckpoint:
 
 class TestDistillationTrainerConstants:
     def test_intent_labels_count(self):
-        assert len(INTENT_LABELS) == 20
+        assert len(INTENT_LABELS) >= 28
+        assert "business_docking" in INTENT_LABELS
+        assert INTENT_LABELS[-1] == "unk"
 
     def test_label_to_id_consistency(self):
         for label, idx in LABEL_TO_ID.items():
