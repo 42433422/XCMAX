@@ -21,6 +21,13 @@ from modstore_server.models_cs import (
     CustomerServiceTicket,
 )
 
+ISSUE_DOMAINS = frozenset({"platform", "software", "custom"})
+ISSUE_DOMAIN_LABELS = {
+    "platform": "平台",
+    "software": "软件",
+    "custom": "客户定制",
+}
+
 
 def _summarize_incident_team_rows(team_rows: list[Dict[str, Any]]) -> str:
     """把 incident team / 员工执行行压缩成用户可读的一句进度。"""

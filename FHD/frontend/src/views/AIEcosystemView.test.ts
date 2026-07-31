@@ -136,7 +136,7 @@ describe('AIEcosystemView.vue', () => {
     const { wrapper, router } = await mountView()
     const pushSpy = vi.spyOn(router, 'push')
     await wrapper.find('.app-launcher--modstore').trigger('click')
-    expect(pushSpy).toHaveBeenCalledWith({ name: 'mod-store' })
+    expect(pushSpy).toHaveBeenCalledWith({ name: 'mod-store', query: {} })
   })
 
   it('uses mod path redirect when planner mod pages enabled (brain)', async () => {
@@ -153,6 +153,6 @@ describe('AIEcosystemView.vue', () => {
     const { wrapper, router } = await mountView()
     const pushSpy = vi.spyOn(router, 'push')
     await wrapper.find('.app-launcher--modstore').trigger('click')
-    expect(pushSpy).toHaveBeenCalledWith('/mod/store')
+    expect(pushSpy).toHaveBeenCalledWith({ path: '/mod/store', query: {} })
   })
 })
