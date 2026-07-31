@@ -2,7 +2,7 @@
   <div class="page-view" id="view-business-docking">
     <div class="page-content">
       <div class="page-header">
-        <h2>业务对接</h2>
+        <h2>数据对接中心</h2>
         <p class="muted">上传旧业务 Excel，先校对 sheet 列表与网格映射效果</p>
       </div>
 

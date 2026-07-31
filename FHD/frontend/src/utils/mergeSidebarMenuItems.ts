@@ -69,25 +69,15 @@ function isRetiredMaterialsListMenuItem(item: ResolvedSidebarMenuItem): boolean 
 }
 
 /**
- * These capabilities remain available from their canonical surfaces:
- * model service lives in Settings, while business docking is launched from Chat.
- * Keep stale Mod/runtime menu rows from recreating duplicate primary navigation.
+ * Model service lives in Settings; keep stale Mod/runtime menu rows from
+ * recreating a duplicate primary-nav entry.
+ * 数据对接中心（business-docking）归 ERP 侧栏，不再并入对话入口。
  */
 function isConsolidatedCapabilityMenuItem(item: ResolvedSidebarMenuItem): boolean {
   const key = normalizeModSidebarNavKey(String(item.key || '').trim())
-  if (
-    key === 'model-payment' ||
-    key === 'mod-model-payment' ||
-    key === 'business-docking' ||
-    key === 'mod-erp-business-docking'
-  ) return true
+  if (key === 'model-payment' || key === 'mod-model-payment') return true
   const path = String(item.path || '').trim().split('?')[0].split('#')[0]
-  return (
-    path === '/model-payment' ||
-    path.endsWith('/model-payment') ||
-    path === '/business-docking' ||
-    path.endsWith('/business-docking')
-  )
+  return path === '/model-payment' || path.endsWith('/model-payment')
 }
 
 const hostKeysFromPath = new Set([
@@ -101,6 +91,7 @@ const hostKeysFromPath = new Set([
   'shipment-records',
   'materials',
   'traditional-mode',
+  'business-docking',
   'data-sources',
   'print',
   'printer-list',
