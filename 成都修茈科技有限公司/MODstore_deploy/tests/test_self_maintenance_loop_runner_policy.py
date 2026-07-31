@@ -1676,6 +1676,70 @@ def test_resume_candidate_rebuilds_structured_review_rejection_from_clean_base(
     assert _resume_dispatch_context(result, _resume_steps(result)) == (None, None)
 
 
+def test_code_task_text_surfaces_structured_review_blocking_findings():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/trae/current-review",
+                "kind": "automated_remediation",
+                "reason": "structured_review_blocking_findings",
+                "run_id": "run-current",
+                "structured_gate": {
+                    "failed_dimensions": ["business_logic"],
+                    "reason": "structured_review_blocking_findings",
+                    "review": {
+                        "blocking_findings": [
+                            "business_logic=missing regression test for scheduler gating"
+                        ],
+                        "max_severity": "medium",
+                    },
+                },
+                "task_id": "task-current",
+            }
+        ],
+        "recent_runs": [],
+    }
+    candidate = _resume_review_qa_candidate(memory)
+    prompt = _code_task_text("run-review-remediation", {"gaps": []}, memory, candidate)
+
+    assert "=== STRUCTURED REVIEW/QA REMEDIATION ===" in prompt
+    assert "structured_review_blocking_findings" in prompt
+    assert "missing regression test for scheduler gating" in prompt
+    assert "business_logic" in prompt
+
+
+def test_code_task_text_surfaces_structured_qa_blocking_findings_from_last_decision():
+    memory = {
+        "last_policy_decision": {
+            "reason": "structured_qa_blocking_findings",
+            "structured_gate": {
+                "qa": {
+                    "blocking_findings": ["focused pytest command did not exit 0"],
+                    "target_branch_available": True,
+                    "verdict": "FAIL",
+                },
+                "reason": "structured_qa_blocking_findings",
+            },
+        },
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-qa",
+                "kind": "automated_remediation",
+                "reason": "structured_qa_blocking_findings",
+                "run_id": "run-qa",
+                "task_id": "task-qa",
+            }
+        ],
+        "recent_runs": [],
+    }
+    candidate = _resume_review_qa_candidate(memory)
+    prompt = _code_task_text("run-qa-remediation", {"gaps": []}, memory, candidate)
+
+    assert "=== STRUCTURED REVIEW/QA REMEDIATION ===" in prompt
+    assert "structured_qa_blocking_findings" in prompt
+    assert "focused pytest command did not exit 0" in prompt
+
+
 def test_resume_review_qa_candidate_continues_score_remediation_on_existing_task():
     memory = {
         "open_items": [
