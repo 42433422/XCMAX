@@ -49,6 +49,63 @@ class TestSendWechatViaAutomation:
             result = routes._send_wechat_via_automation("张三", "test msg")
             assert result["success"] is False
 
+    def test_windows_cv_drive_chain_success(self):
+        """Verify the Windows CV fallback driving chain end-to-end (mocked)."""
+        from app.application import wechat_sender_app_service
+
+        fake_send = MagicMock(return_value={"status": "success", "message": "ok"})
+        fake_module = MagicMock(search_and_send_by_cv=fake_send)
+        with (
+            patch(
+                "app.services.wechat_passive_group_monitor.assert_safe_outbound_group_reply",
+                return_value="hello",
+            ),
+            patch("sys.platform", "win32"),
+            patch.dict(
+                "sys.modules",
+                {
+                    "resources.wechat_cv.wechat_cv_send": fake_module,
+                    "resources.wechat_cv": MagicMock(
+                        search_and_send_by_cv=fake_send,
+                        wechat_cv_send=fake_module,
+                    ),
+                    "resources": MagicMock(),
+                },
+            ),
+        ):
+            out = wechat_sender_app_service.send_wechat_message("张三", "hello")
+        assert out["success"] is True
+        assert "已发送给 张三" in out["message"]
+        fake_send.assert_called_once_with("张三", "hello", delay=1.0, use_ocr=True)
+
+    def test_windows_cv_drive_chain_failure(self):
+        """Verify the Windows CV fallback reports failure when CV returns non-success."""
+        from app.application import wechat_sender_app_service
+
+        fake_send = MagicMock(return_value={"status": "error", "message": "联系人未找到"})
+        fake_module = MagicMock(search_and_send_by_cv=fake_send)
+        with (
+            patch(
+                "app.services.wechat_passive_group_monitor.assert_safe_outbound_group_reply",
+                return_value="hello",
+            ),
+            patch("sys.platform", "win32"),
+            patch.dict(
+                "sys.modules",
+                {
+                    "resources.wechat_cv.wechat_cv_send": fake_module,
+                    "resources.wechat_cv": MagicMock(
+                        search_and_send_by_cv=fake_send,
+                        wechat_cv_send=fake_module,
+                    ),
+                    "resources": MagicMock(),
+                },
+            ),
+        ):
+            out = wechat_sender_app_service.send_wechat_message("张三", "hello")
+        assert out["success"] is False
+        assert "联系人未找到" in out["message"]
+
 
 # ---------------------------------------------------------------------------
 # wechat_tasks  (lazy: from app.application import get_wechat_task_app_service)

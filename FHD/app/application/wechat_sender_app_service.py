@@ -41,12 +41,7 @@ def send_wechat_message(contact_name: str, message: str) -> Dict[str, Any]:
         }
 
     try:
-        from app.utils.path_utils import get_resource_path
-
-        sys_path = get_resource_path("wechat-decrypt")
-        if sys_path not in sys.path:
-            sys.path.insert(0, sys_path)
-
+        # FHD/ 已通过 app 包加载进入 sys.path，resources.wechat_cv 可直接导入。
         from resources.wechat_cv.wechat_cv_send import search_and_send_by_cv
 
         result = search_and_send_by_cv(contact_name, message, delay=1.0, use_ocr=True)
