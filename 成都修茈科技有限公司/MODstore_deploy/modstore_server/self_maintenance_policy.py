@@ -371,18 +371,20 @@ def loop_memory_requires_executable_change(
                         "production change from the clean base"
                     ),
                 }
-            if item.get(
-                "kind"
-            ) == "automated_remediation" and _reason_requires_executable_code_remediation(
-                str(item.get("reason") or "")
-            ):
-                return {
-                    "required": True,
-                    "reason": (
-                        "structured review/QA hold requires focused modstore_server "
-                        "production change"
-                    ),
-                }
+            if item.get("kind") == "automated_remediation":
+                from modstore_server.self_maintenance_remediation_lineage import (
+                    normalize_automated_remediation_reason,
+                )
+
+                normalized_reason = normalize_automated_remediation_reason(mem, item)
+                if _reason_requires_executable_code_remediation(normalized_reason):
+                    return {
+                        "required": True,
+                        "reason": (
+                            "structured review/QA hold requires focused modstore_server "
+                            "production change"
+                        ),
+                    }
             text = json.dumps(item, ensure_ascii=False).lower()
             if any(
                 marker in text
