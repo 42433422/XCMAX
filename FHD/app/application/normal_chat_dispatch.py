@@ -47,7 +47,7 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
     model_signal = bool(re.search(r"(?:型号|编号)\s*[:：]?\s*([0-9A-Za-z-]{2,})", text))
     unit_model_signal = bool(re.search(r"([^\s，,。]{2,})\s*的\s*([0-9A-Za-z-]{2,})", text))
     # 客户/购买单位：实体路由到 Agent 工具 customers.query。
-    # 禁止用正则把问句前缀抽成客户名 keyword（会答成「未找到关键词「查看我有多少个」」）。
+    # 禁止用正则把问句前缀抽成客户名 keyword（空泛计数/列表问法必须 keyword=""）。
     # 指名检索由 Agent 在工具参数里填 keyword；此处只负责选工具。
     customer_entity_markers = ("客户", "购买单位", "买家")
     if any(k in text for k in customer_entity_markers):
@@ -392,7 +392,7 @@ def build_customers_query_response_dict(
 ) -> dict[str, Any] | None:
     """客户查询：确定性调用 customers.query（ERP list），按 Agent 工具结果作答。
 
-    无 LLM 时也可直接 tool-call 读库；禁止把用户原话当 keyword，禁止槽位腔「未找到关键词」。
+    无 LLM 时也可直接 tool-call 读库；禁止把用户原话当 keyword，空结果用中性「暂无/不匹配」文案。
     """
     if route_result.get("intent") != "customers_query":
         return None
