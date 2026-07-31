@@ -14,30 +14,69 @@ import {
 import { useChatTaskList } from './useChatTaskList'
 import { useChatMessages } from './useChatMessages'
 import { useShipmentTask, type ShipmentTask } from './useShipmentTask'
+import { useShipmentExecution } from './useShipmentExecution'
 import { usePrintService } from './usePrintService'
-import { checkPendingShipmentPrintFromTaskCard as runPendingShipmentPrintCheck } from './checkPendingShipmentPrintFromTaskCard'
 import { useExcelAnalysis } from './useExcelAnalysis'
 import { isStartPrintMessage, detectRuntimeModeCommand } from '../utils/textParser'
 import chatApi, { parseChatStreamErrorResponse } from '../api/chat'
 import productsApi from '../api/products'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { readPlannerSseResponse, isChatStreamEnabled, type PlannerSseEvent } from '@/utils/chatSseStream'
-import { fetchShipmentRecordsForUnit, summarizeShipmentRecordsForAudit } from '@/utils/shipmentMgmtPostPrint'
 import { isCoreWorkflowModInstalled } from '@/constants/coreWorkflowMod'
-import { dispatchCoreWorkflowModRun } from '@/workflow/coreWorkflowDispatcher'
 import { FHD_DB_WRITE_UNLOCKED_EVENT } from '@/fhd/dbTokenHeaders'
 import { useChatWorkflowPanel } from './useChatWorkflowPanel'
 import { useChatDbTokenGate } from './useChatDbTokenGate'
 import { useChatExcelContext } from './useChatExcelContext'
 import { useChatRequest } from './useChatRequest'
+import type { WorkflowConfirmationRequest } from './useChatRequest'
 import { useChatResponseAttach } from './useChatResponseAttach'
 import { useChatSessionHistory } from './useChatSessionHistory'
 import { useAgentRunEventSync } from './useAgentRunEvents'
-import { syncPriceListTaskToShipmentExecution } from './usePriceListPrintTask'
-import { asAutoAction, asPlannerPayload, asShipmentTask, errorMessage, getXcagiWindow, type DynamicShipmentTask } from './useChatOrchestrationHelpers'
 import type { UseChatViewOptions } from './useChatView'
-import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
+import type { ChatAutoAction, ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
+import { stripModelReasoningLeaks } from '@/utils/chatBubbleDisplay'
+
+type XcagiChatWindow = Window & {
+  __VUE_CHAT_FILL__?: (value: string) => boolean
+  setWorkModeFromChat?: (enabled: boolean) => void
+  setMonitorModeFromChat?: (enabled: boolean) => void
+  refreshWorkModeMonitorList?: () => void
+  legacyAutoActionHandler?: (action: ChatAutoAction, userMessage: string) => void
+  isProTaskAcquisitionMessage?: (message: string) => boolean
+  jarvisSendMessage?: (message: string) => void
+}
+
+type DynamicShipmentTask = ShipmentTask & Record<string, unknown>
+
+function getXcagiWindow(): XcagiChatWindow {
+  return window as XcagiChatWindow
+}
+
+function asShipmentTask(value: unknown): DynamicShipmentTask {
+  const row = asRecord(value)
+  return {
+    ...row,
+    type: asString(row.type),
+  } as DynamicShipmentTask
+}
+
+function asPlannerPayload(value: unknown): ChatPlannerPayload {
+  return asRecord(value) as ChatPlannerPayload
+}
+
+function asAutoAction(value: unknown): ChatAutoAction {
+  return asRecord(value) as ChatAutoAction
+}
+
+function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof Error ? err.message : asString(err, fallback)
+}
+
+function isDatabaseTokenRequirement(tokenName?: unknown, tokenDescription?: unknown): boolean {
+  const raw = `${String(tokenName || '')} ${String(tokenDescription || '')}`.toUpperCase()
+  return /DB_(READ|WRITE)_TOKEN|DATABASE TOKEN|数据库.*令牌|一级|二级|写入令牌|查看令牌/.test(raw)
+}
 
 export function useChatOrchestration(options: UseChatViewOptions) {
   const tutorialStore = useTutorialStore()
@@ -106,8 +145,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     upsertTask,
     finishTask,
     failTask,
-    cancelTaskById,
-    retryTask,
+    cancelTaskById: cancelLocalTaskById,
+    retryTask: retryLocalTask,
     toggleTaskExpanded,
     setTaskFilter,
     clearTaskHistory,
@@ -179,6 +218,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   })
   const {
     getLastAiMessageRef,
+    attachOrchestrationTraceToLastAiMessage,
     attachThinkingStepsToLastAiMessage,
     attachTodoStepsToLastAiMessage,
     attachWorkflowTraceToLastAiMessage,
@@ -187,10 +227,51 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     syncTaskFromChatResponse,
   } = responseAttach
 
-  const { syncAgentRunFromPayload } = useAgentRunEventSync({
+  const {
+    syncAgentRunFromPayload,
+    restoreAgentRuns,
+    controlAgentRun,
+    dispose: disposeAgentRunSync,
+  } = useAgentRunEventSync({
     upsertTask,
+    getTasks: () => taskList.value,
     getLastAiMessageRef,
+    attachOrchestrationTrace: attachOrchestrationTraceToLastAiMessage,
   })
+
+  async function pauseTaskById(id: string): Promise<void> {
+    const task = taskList.value.find((item) => item.id === id)
+    const runId = asString(task?.payload?.agentRunId).trim()
+    if (!task || task.type !== 'agent_run' || !runId) return
+    await controlAgentRun(runId, 'pause', dbGate.getModeScopedUserId(isProMode.value))
+  }
+
+  async function resumeTaskById(id: string): Promise<void> {
+    const task = taskList.value.find((item) => item.id === id)
+    const runId = asString(task?.payload?.agentRunId).trim()
+    if (!task || task.type !== 'agent_run' || !runId) return
+    await controlAgentRun(runId, 'resume', dbGate.getModeScopedUserId(isProMode.value))
+  }
+
+  async function cancelTaskById(id: string): Promise<void> {
+    const task = taskList.value.find((item) => item.id === id)
+    const runId = asString(task?.payload?.agentRunId).trim()
+    if (task?.type === 'agent_run' && runId) {
+      await controlAgentRun(runId, 'cancel', dbGate.getModeScopedUserId(isProMode.value))
+      return
+    }
+    cancelLocalTaskById(id)
+  }
+
+  async function retryTask(id: string): Promise<void> {
+    const task = taskList.value.find((item) => item.id === id)
+    const runId = asString(task?.payload?.agentRunId).trim()
+    if (task?.type === 'agent_run' && runId) {
+      await controlAgentRun(runId, 'retry', dbGate.getModeScopedUserId(isProMode.value))
+      return
+    }
+    retryLocalTask(id)
+  }
 
   const chatRequest = useChatRequest({
     messages,
@@ -395,152 +476,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     currentTask.value ? getTaskTableItems(currentTask.value) : []
   )
   const taskOrderNumber = computed(() => getTaskOrderNumber(currentTask.value))
-  /** 出货管理 AI 员工：打印成功后拉取出货记录、统计与审计，并提示保存（导出）/推送 */
-  async function runShipmentMgmtAfterPrintSuccess(ctx: {
-    purchaseUnit: string
-    orderId: number | null
-    filePath: string
-    labelCount: number
-  }): Promise<void> {
-    const enabled = readWorkflowEmployeeEnabledMap()
-    if (!enabled.shipment_mgmt) return
-    const unit = String(ctx.purchaseUnit || '').trim()
-    if (!unit) return
-
-    const rows = await fetchShipmentRecordsForUnit(unit)
-    const summary = summarizeShipmentRecordsForAudit(rows, unit, ctx.orderId)
-    dispatchCoreWorkflowModRun(isCoreWorkflowModInstalled(modsStore.modsForUi), 'shipment_mgmt', {
-      action: 'audit_summary',
-      purchaseUnit: unit,
-      orderId: ctx.orderId,
-      headline: summary.headline,
-    })
-    const fullText = summary.detailLines.join('\n')
-    const at = Date.now()
-
-    await addAndSaveMessage(`【出货管理 · 打印后审计】\n${fullText}`, 'ai')
-    const auditMsgRef = getLastAiMessageRef()
-
-    try {
-      window.dispatchEvent(new CustomEvent('xcagi:shipment-record-updated'))
-    } catch {
-      /* ignore */
-    }
-
-    if (taskList.value.some((t) => t.id === 'workflow_emp_shipment_mgmt')) {
-      upsertWorkflowEmployeeTask('shipment_mgmt', {
-        lastShipmentAudit: {
-          at,
-          line: summary.headline,
-          detail: fullText,
-        },
-      })
-    }
-
-    emitAssistantPush({
-      title: '出货管理 · 打印后审计',
-      description: `${summary.headline}。建议打开出货记录核对，按需导出 Excel 再推送同事。`,
-      feature: 'shipment',
-    })
-
-    upsertTask({
-      id: createTaskId('shipment_audit'),
-      type: 'shipment_audit_hint',
-      source: 'system',
-      title: '出货记录 · 打印后审计建议',
-      status: 'success',
-      progress: 100,
-      summary: fullText,
-      messageRef: auditMsgRef,
-      payload: {
-        purchaseUnit: unit,
-        suggestView: 'shipment-records',
-        labelCount: ctx.labelCount,
-        filePath: ctx.filePath,
-      },
-    })
-  }
-
-  async function handleStartPrintCommand(message: string): Promise<boolean> {
-    if (!isStartPrintMessage(message)) return false
-    const printTaskId = createTaskId('print')
-    upsertTask({
-      id: printTaskId,
-      type: 'print',
-      source: 'print',
-      title: '打印任务',
-      status: 'running',
-      progress: 20
-    })
-
-    const context = lastShipmentExecution.value
-    if (!context) {
-      await addAndSaveMessage('暂无可打印任务。请先生成发货单或价格表，再发送"开始打印"。', 'ai')
-      return true
-    }
-
-    const labelPaths = Array.isArray(context.labelPaths) ? context.labelPaths : []
-    const filePath = context.filePath || ''
-    const purchaseUnit = String(context.purchaseUnit || '').trim()
-    const orderId = context.orderId
-
-    if (!labelPaths.length && !filePath) {
-      await addAndSaveMessage('最近一次任务未包含可打印文件。请重新生成单据后再试。', 'ai')
-      return true
-    }
-
-    const summary = await executePrintTask(labelPaths, filePath, orderId ?? undefined, purchaseUnit)
-    const resultText = buildPrintSummaryMessage(summary, labelPaths.length, filePath, purchaseUnit)
-    await addAndSaveMessage(resultText, 'ai')
-    upsertTask({
-      id: printTaskId,
-      type: 'print',
-      source: 'print',
-      title: '打印任务',
-      status: summary.success ? 'success' : 'failed',
-      progress: 100,
-      summary: resultText,
-      error: summary.success ? '' : (summary.message || '打印失败'),
-      messageRef: getLastAiMessageRef()
-    })
-    const shipmentListId = String(context?.taskListId || '').trim()
-    if (shipmentListId) {
-      if (summary.success) {
-        upsertTask({
-          id: shipmentListId,
-          type: 'shipment',
-          source: 'shipment',
-          title: '发货单生成任务',
-          status: 'success',
-          progress: 100,
-          stage: '',
-          summary: `已生成并打印。${resultText.replace(/\s+/g, ' ').slice(0, 240)}`,
-          messageRef: getLastAiMessageRef()
-        })
-      } else {
-        upsertTask({
-          id: shipmentListId,
-          type: 'shipment',
-          source: 'shipment',
-          title: '发货单生成任务',
-          status: 'failed',
-          stage: '打印失败',
-          error: summary.message || '打印失败',
-          summary: '发货单文档已生成，打印未成功。可重试「开始打印」。'
-        })
-      }
-    }
-    if (summary.success) {
-      await runShipmentMgmtAfterPrintSuccess({
-        purchaseUnit,
-        orderId,
-        filePath,
-        labelCount: labelPaths.length,
-      })
-    }
-    return true
-  }
-
   function applyProRuntimeMode(actionType: string, enabled: boolean): boolean {
     if (!isProMode.value) return false
     const shouldEnable = enabled !== false
@@ -607,18 +542,11 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
   function shouldAutoRunTask(task: ShipmentTask | null): boolean {
     if (!task || task.completed) return false
-    const taskType = String(task.type || '').trim().toLowerCase()
-    if (taskType === 'excel_import') return true
-    if (taskType.includes('excel') && taskType.includes('import')) return true
-
-    const toolId = String(
-      task.payload?.tool_id
-      || task.payload?.params?.tool_id
-      || task.tool_id
-      || ''
-    ).trim().toLowerCase()
-    if (toolId === 'import_excel_to_database' || toolId === 'excel_import') return true
-    if (toolId.includes('excel') && toolId.includes('import')) return true
+    // V1 data docking is preview-first: imports and all other executable task
+    // cards require an explicit click.  In particular, do not turn an ETL
+    // preview into a database write merely because its type contains “excel”.
+    // Read-only navigation/light actions are handled by their own UI actions,
+    // not by this execution path.
     return false
   }
 
@@ -640,13 +568,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       scheduleAutoConfirmTask(nextTask)
     }
 
-    if (syncPriceListTaskToShipmentExecution(nextTask, {
-      lastShipmentExecution,
-      buildShipmentDownloadUrl,
-    })) {
-      return
-    }
-
     if (nextTask.type !== 'shipment_generate' || nextTask.completed) return
 
     const existingOrderNo = String(
@@ -654,16 +575,20 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       || nextTask.order_number
       || nextTask.data?.order_number
       || nextTask.document?.order_number
+      || nextTask.payload?.params?.order_number
       || ''
     ).trim()
 
     if (existingOrderNo) {
       nextTask.customOrderNumber = existingOrderNo
-      return
+    } else {
+      nextTask.customOrderNumber = ''
+      hydrateTaskOrderNumber(nextTask).catch(() => { })
     }
 
-    nextTask.customOrderNumber = ''
-    hydrateTaskOrderNumber(nextTask).catch(() => { })
+    // A supplied order number means we must not allocate another one, not that
+    // the preview is already enriched.  Keep the server-authoritative ETL
+    // fields intact while allowing incomplete fallback cards to be completed.
     enrichShipmentPreviewProducts(nextTask).catch(() => { })
   }
 
@@ -717,234 +642,30 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   })
   const { readWorkflowEmployeeEnabledMap, upsertWorkflowEmployeeTask } = workflowPanel
 
-  /** 出货管理 AI 员工：打印成功后拉取出货记录、统计与审计，并提示保存（导出）/推送 */
-  function buildTaskCompletedDescription(successMsg: string, data: unknown): string {
-    const row = asRecord(data)
-    const nestedData = asRecord(row.data)
-    const document = asRecord(row.document || nestedData.document)
-    const parts = [successMsg || '任务执行成功']
-    const docName = row.doc_name || nestedData.doc_name || document.filename
-    const orderNo = row.order_number || nestedData.order_number || document.order_number
-    const filePath = row.file_path || nestedData.file_path || document.filepath
-    const labels = asArray(row.labels).length ? asArray(row.labels) : asArray(nestedData.labels)
-    if (docName) parts.push(`文档：${docName}`)
-    if (orderNo) parts.push(`单号：${orderNo}`)
-    if (typeof row.record_id !== 'undefined' && row.record_id !== null) parts.push(`记录ID：${row.record_id}`)
-    if (typeof row.order_id !== 'undefined' && row.order_id !== null) parts.push(`订单ID：${row.order_id}`)
-    if (labels.length) parts.push(`标签：${labels.length} 张`)
-    if (filePath) parts.push(`路径：${filePath}`)
-    return parts.join('；')
-  }
-
-  function buildShipmentDownloadUrl(data: unknown): string {
-    const row = asRecord(data)
-    const nestedData = asRecord(row.data)
-    const document = asRecord(row.document || nestedData.document)
-    const directUrl = row.downloadUrl || row.download_url || nestedData.download_url || nestedData.downloadUrl
-    if (directUrl && typeof directUrl === 'string') return directUrl
-
-    const docName =
-      row.doc_name ||
-      nestedData.doc_name ||
-      row.filename ||
-      nestedData.filename ||
-      document.filename
-    if (!docName || typeof docName !== 'string') return ''
-
-    return `/api/shipment/download/${encodeURIComponent(docName)}`
-  }
-
-  function normalizeRecordId(value: unknown): number | null {
-    if (value === null || value === undefined || value === '') return null
-    const n = Number(value)
-    if (!Number.isFinite(n)) return null
-    const normalized = Math.trunc(n)
-    return normalized > 0 ? normalized : null
-  }
-
-  function extractShipmentExecutionContext(data: unknown) {
-    const row = asRecord(data)
-    const nestedData = asRecord(row.data)
-    const document = asRecord(row.document || nestedData.document)
-    const filePath = asString(row.file_path || nestedData.file_path || document.filepath)
-    const purchaseUnit = String(
-      row.purchase_unit
-      ?? nestedData.purchase_unit
-      ?? document.purchase_unit
-      ?? ''
-    ).trim()
-    const orderId = normalizeRecordId(
-      row.order_id
-      ?? row.record_id
-      ?? nestedData.order_id
-      ?? nestedData.record_id
-      ?? document.order_id
-      ?? document.record_id
-    )
-    const labelsRaw = asArray(row.labels).length ? asArray(row.labels) : asArray(nestedData.labels)
-
-    const labelPaths: string[] = []
-    labelsRaw.forEach((label: unknown) => {
-      if (typeof label === 'string' && label.trim()) {
-        labelPaths.push(label.trim())
-        return
-      }
-      if (label && typeof label === 'object') {
-        const labelRow = asRecord(label)
-        const p =
-          labelRow.file_path ||
-          labelRow.path ||
-          labelRow.filePath ||
-          labelRow.filepath ||
-          ''
-        if (typeof p === 'string' && p.trim()) {
-          labelPaths.push(p.trim())
-        }
-      }
-    })
-
-    return {
-      filePath,
-      purchaseUnit,
-      orderId,
-      labelPaths: Array.from(new Set(labelPaths))
-    }
-  }
-
-  async function confirmTask(): Promise<void> {
-    if (!currentTask.value || isExecuting.value) return
-
-    const task = currentTask.value
-    const apiUrl = task.api_url
-    const method = (task.method || 'POST').toUpperCase()
-    const payload = { ...(task.payload || {}) }
-
-    if (task?.type === 'shipment_generate') {
-      if (!String(task?.customOrderNumber || '').trim()) {
-        await hydrateTaskOrderNumber(task)
-      }
-      const customOrderNumber = String(task?.customOrderNumber || '').trim()
-      payload.params = { ...(payload.params || {}) }
-      if (customOrderNumber) {
-        payload.params.order_number = customOrderNumber
-      } else if (Object.prototype.hasOwnProperty.call(payload.params, 'order_number')) {
-        delete payload.params.order_number
-      }
-    }
-
-    if (!apiUrl) {
-      await addAndSaveMessage('任务执行失败：缺少 API 地址', 'ai')
-      currentTask.value = null
-      return
-    }
-
-    isExecuting.value = true
-    let keepTaskCard = false
-    let shipmentTaskId = ''
-    if (task?.type === 'shipment_generate') {
-      shipmentTaskId = createTaskId('shipment')
-      upsertTask({
-        id: shipmentTaskId,
-        type: 'shipment',
-        source: 'shipment',
-        title: '发货单生成任务',
-        status: 'running',
-        progress: 20
-      })
-    }
-
-    try {
-      let result
-      if (method === 'GET') {
-        result = await fetch(apiUrl)
-      } else {
-        result = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        })
-      }
-
-      const data = asRecord(await result.json().catch(() => ({})))
-
-      if (data?.requires_token) {
-        handleChatRequiresToken(
-          asString(data.token_name),
-          asString(data.token_description || data.message),
-          [],
-        )
-        const tokenMsg = String(data.message || data.token_description || '当前操作需要二级数据库写入令牌').trim()
-        await addAndSaveMessage('[提示] ' + tokenMsg, 'ai')
-        keepTaskCard = true
-        currentTask.value = {
-          ...task,
-          description: `${tokenMsg}（已弹出令牌输入框，输入后请再次点击确认执行）`,
-        }
-        return
-      }
-
-      if (result.ok) {
-        const successMsg = String(data.message || data.msg || '任务执行成功')
-        const shipmentDocUrl =
-          task?.type === 'shipment_generate' ? buildShipmentDownloadUrl(data) : ''
-        await addAndSaveMessage('[成功] ' + successMsg, 'ai', {
-          ...(shipmentDocUrl ? { shipmentDownloadUrl: shipmentDocUrl } : {})
-        })
-        if (task?.type === 'shipment_generate') {
-          lastShipmentExecution.value = {
-            ...extractShipmentExecutionContext(data),
-            ...(shipmentTaskId ? { taskListId: shipmentTaskId } : {})
-          }
-          if (shipmentTaskId) {
-            upsertTask({
-              id: shipmentTaskId,
-              type: 'shipment',
-              source: 'shipment',
-              title: '发货单生成任务',
-              status: 'running',
-              progress: 70,
-              stage: '发货单已生成，待打印',
-              summary: buildTaskCompletedDescription(successMsg, data),
-              messageRef: getLastAiMessageRef()
-            })
-          }
-        }
-        currentTask.value = {
-          ...task,
-          title: `${task.title || '任务'}（已完成）`,
-          description: buildTaskCompletedDescription(successMsg, data),
-          order_number:
-            asString(data.order_number) ||
-            asString(asRecord(data.data).order_number) ||
-            asString(asRecord(data.document).order_number),
-          downloadUrl: task?.type === 'shipment_generate' ? buildShipmentDownloadUrl(data) : '',
-          completed: true
-        }
-        keepTaskCard = true
-
-        if (task.switch_view) {
-          handleAutoAction({ type: task.switch_view })
-        }
-      } else {
-        const errMsg = String(data.message || data.msg || data.error || `执行失败 (HTTP ${result.status})`)
-        await addAndSaveMessage('[失败] 任务执行失败：' + errMsg, 'ai')
-        if (shipmentTaskId) {
-          failTask(shipmentTaskId, errMsg)
-        }
-      }
-    } catch (e: unknown) {
-      const msg = errorMessage(e, '网络错误')
-      await addAndSaveMessage('[失败] 任务执行失败：' + msg, 'ai')
-      if (shipmentTaskId) {
-        failTask(shipmentTaskId, msg)
-      }
-    } finally {
-      isExecuting.value = false
-      if (!keepTaskCard) {
-        currentTask.value = null
-      }
-    }
-  }
+  const {
+    runShipmentMgmtAfterPrintSuccess,
+    handleStartPrintCommand,
+    confirmTask,
+  } = useShipmentExecution({
+    currentTask,
+    isExecuting,
+    lastShipmentExecution,
+    taskList,
+    coreWorkflowInstalled: () => isCoreWorkflowModInstalled(modsStore.modsForUi),
+    addAndSaveMessage,
+    createTaskId,
+    upsertTask,
+    failTask,
+    getLastAiMessageRef,
+    emitAssistantPush,
+    readWorkflowEmployeeEnabledMap,
+    upsertShipmentWorkflowEmployeeTask: upsertWorkflowEmployeeTask,
+    executePrintTask,
+    buildPrintSummaryMessage,
+    hydrateTaskOrderNumber,
+    handleChatRequiresToken,
+    handleAutoAction,
+  })
 
   function cancelTask() {
     currentTask.value = null
@@ -1040,7 +761,10 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
   async function executeRemoteChatRound(
     remoteMessages: string[],
-    opts?: { fromWriteUnlock?: boolean }
+    opts?: {
+      fromWriteUnlock?: boolean
+      workflowConfirmation?: WorkflowConfirmationRequest
+    }
   ) {
     if (!remoteMessages.length) return
     if (!opts?.fromWriteUnlock) {
@@ -1178,7 +902,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       }
       try {
         const { body } = buildPlannerChatRequestPayload(primaryForStream, {
-          fromWriteUnlock: !!opts?.fromWriteUnlock
+          fromWriteUnlock: !!opts?.fromWriteUnlock,
+          workflowConfirmation: opts?.workflowConfirmation,
         })
         const res = await chatApi.sendChatStream(
           { ...body, message: String(body.message || primaryForStream) } as ChatRequest &
@@ -1191,8 +916,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         await readPlannerSseResponse(res, (ev: PlannerSseEvent) => {
           if (ev.type === 'token') {
             streamPlain += ev.text || ''
-            applyPlainTextToMessageIndex(msgIndex, streamPlain)
-            flushTtsFromStream(streamPlain, false)
+            const visibleStream = stripModelReasoningLeaks(streamPlain)
+            applyPlainTextToMessageIndex(msgIndex, visibleStream)
+            flushTtsFromStream(visibleStream, false)
             setLoadingProgress('正在生成回复…')
           } else if (ev.type === 'done') {
             doneResult = ev.result
@@ -1218,7 +944,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
           throw new Error(sseError)
         }
         const donePayload = asPlannerPayload(doneResult)
-        const finalText = String(donePayload.response ?? streamPlain).trim() || streamPlain || '（无内容）'
+        const finalText = stripModelReasoningLeaks(
+          String(donePayload.response ?? streamPlain).trim() || streamPlain,
+        ) || '（无内容）'
         applyPlainTextToMessageIndex(msgIndex, finalText)
         // 后端 done 事件可能带一段非 token 的尾部文本（比如总结段），统一再做一次兜底朗读
         if (ttsShouldSpeakThisMessage && ttsEnabled.value) {
@@ -1299,7 +1027,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       let rawData: unknown
       if (remoteMessages.length === 1) {
         rawData = await requestChatByModeWithTimeout(remoteMessages[0], timeoutMs, {
-          fromWriteUnlock: !!opts?.fromWriteUnlock
+          fromWriteUnlock: !!opts?.fromWriteUnlock,
+          workflowConfirmation: opts?.workflowConfirmation,
         })
       } else {
         rawData = await requestChatByModeBatchWithTimeout(remoteMessages, timeoutMs)
@@ -1402,6 +1131,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       if (!data.task && (data?.autoAction?.type === 'show_products_float' || data?.autoAction?.type === 'show_products')) {
         currentTask.value = null
       }
+
       if (data.autoAction) {
         handleAutoAction(data.autoAction, primaryText)
       }
@@ -1412,32 +1142,100 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       await addAndSaveMessage('处理失败: ' + (data.message || '未知错误'), 'ai')
     }
   }
+
   async function confirmWorkflowFromCard() {
+    let confirmation: WorkflowConfirmationRequest | undefined
+    let approvalCardMissingRun = false
     for (let i = messages.value.length - 1; i >= 0; i -= 1) {
       const msg = messages.value[i]
       if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
-        msg.approvalCard = { ...msg.approvalCard, status: 'confirmed' }
+        const runId = asString(
+          msg.approvalCard.agent_run_id || msg.approvalCard.run_id,
+        ).trim()
+        if (runId) {
+          confirmation = {
+            action: msg.approvalCard.approval_required ? 'submit_approval' : 'confirm',
+            agent_run_id: runId,
+            plan_id: asString(msg.approvalCard.plan_id).trim(),
+            approved_step_id: asString(msg.approvalCard.blocking_nodes?.[0]).trim(),
+          }
+        } else {
+          approvalCardMissingRun = true
+        }
+        if (confirmation) {
+          msg.approvalCard = { ...msg.approvalCard, status: 'confirmed' }
+        }
         break
       }
     }
-    await sendMessage('确认')
+    if (!confirmation) {
+      await addAndSaveMessage(
+        approvalCardMissingRun
+          ? '该操作卡片缺少持久化任务标识，已拒绝执行。请重新发起原操作。'
+          : '没有可确认的待执行任务。',
+        'ai',
+      )
+      return
+    }
+    await sendMessage('确认', { workflowConfirmation: confirmation })
   }
+
   async function cancelWorkflowFromCard() {
+    let confirmation: WorkflowConfirmationRequest | undefined
+    let approvalCardMissingRun = false
     for (let i = messages.value.length - 1; i >= 0; i -= 1) {
       const msg = messages.value[i]
       if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
-        msg.approvalCard = { ...msg.approvalCard, status: 'cancelled' }
+        const runId = asString(
+          msg.approvalCard.agent_run_id || msg.approvalCard.run_id,
+        ).trim()
+        if (runId) {
+          confirmation = {
+            action: 'cancel',
+            agent_run_id: runId,
+            plan_id: asString(msg.approvalCard.plan_id).trim(),
+            approved_step_id: asString(msg.approvalCard.blocking_nodes?.[0]).trim(),
+          }
+        } else {
+          approvalCardMissingRun = true
+        }
+        if (confirmation) {
+          msg.approvalCard = { ...msg.approvalCard, status: 'cancelled' }
+        }
         break
       }
     }
-    await sendMessage('取消')
+    if (!confirmation) {
+      await addAndSaveMessage(
+        approvalCardMissingRun
+          ? '该操作卡片缺少持久化任务标识，无法安全取消。请重新发起原操作。'
+          : '没有可取消的待执行任务。',
+        'ai',
+      )
+      return
+    }
+    await sendMessage('取消', { workflowConfirmation: confirmation })
   }
-  async function sendMessage(message: string) {
+
+  async function sendMessage(
+    message: string,
+    opts?: { workflowConfirmation?: WorkflowConfirmationRequest },
+  ) {
     await addAndSaveMessage(message, 'user')
+
+    if (opts?.workflowConfirmation) {
+      await executeRemoteChatRound([message], {
+        workflowConfirmation: opts.workflowConfirmation,
+      })
+      return
+    }
+
     const modeHandled = await tryHandleRuntimeModeCommand(message)
     if (modeHandled) return
+
     const previewModified = await handleShipmentModify(message)
     if (previewModified) return
+
     const xcagiWindow = getXcagiWindow()
     if (
       isProMode.value &&
@@ -1448,8 +1246,10 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       xcagiWindow.jarvisSendMessage(message)
       return
     }
+
     const printHandled = await handleStartPrintCommand(message)
     if (printHandled) return
+
     const debounceMs = getChatBatchDebounceMs()
     if (debounceMs <= 0) {
       await executeRemoteChatRound([message])
@@ -1462,9 +1262,172 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   function handleShipmentDownloadClick() {
     addAndSaveMessage('发货单已开始下载。是否现在执行打印？可点击"开始打印"按钮或直接发送"开始打印"。', 'ai')
   }
+
   async function startPrintFromTaskCard() {
     await handleStartPrintCommand('开始打印')
   }
+
+  async function checkPendingShipmentPrintFromTaskCard() {
+    const task = currentTask.value
+    const context = lastShipmentExecution.value
+    const jobToken = String(task?.printJobToken || context?.pendingPrintJobToken || '').trim()
+    if (!task || task.type !== 'shipment_generate' || !task.printPending || !jobToken) {
+      await addAndSaveMessage('没有可查询的待确认打印任务。请重新生成发货单后再打印。', 'ai')
+      return
+    }
+    if (task.printStatusChecking) return
+
+    currentTask.value = { ...task, printStatusChecking: true }
+    const statusTaskId = createTaskId('print_status')
+    upsertTask({
+      id: statusTaskId,
+      type: 'print',
+      source: 'print',
+      title: '打印状态检查',
+      status: 'running',
+      progress: 70,
+      stage: '正在查询 macOS CUPS',
+    })
+
+    const result = await checkDocumentPrintJob(jobToken)
+    const shipmentListId = String(context?.taskListId || '').trim()
+    const filePath = String(context?.filePath || '').trim()
+    const orderId = context?.orderId ?? undefined
+
+    if (result.success && result.printCompleted) {
+      const markResult = await markAsPrinted(filePath, orderId, result.postPrintReceipt)
+      if (markResult.success) {
+        const successText = 'macOS CUPS 已确认发货单打印完成，已更新发货记录打印状态。'
+        await addAndSaveMessage(successText, 'ai')
+        currentTask.value = {
+          ...task,
+          printPending: false,
+          printStatusChecking: false,
+          printCompleted: true,
+          printTerminal: false,
+          printJobToken: undefined,
+          description: `${String(task.description || '').trim()}\n${successText}`.trim(),
+        }
+        if (lastShipmentExecution.value) {
+          lastShipmentExecution.value = {
+            ...lastShipmentExecution.value,
+            pendingPrintJobToken: undefined,
+          }
+        }
+        upsertTask({
+          id: statusTaskId,
+          type: 'print',
+          source: 'print',
+          title: '打印状态检查',
+          status: 'success',
+          progress: 100,
+          summary: successText,
+          messageRef: getLastAiMessageRef(),
+        })
+        if (shipmentListId) {
+          upsertTask({
+            id: shipmentListId,
+            type: 'shipment',
+            source: 'shipment',
+            title: '发货单生成任务',
+            status: 'success',
+            progress: 100,
+            summary: successText,
+            messageRef: getLastAiMessageRef(),
+          })
+        }
+        await runShipmentMgmtAfterPrintSuccess({
+          purchaseUnit: String(context?.purchaseUnit || '').trim(),
+          orderId: context?.orderId ?? null,
+          filePath,
+          labelCount: Array.isArray(context?.labelPaths) ? context.labelPaths.length : 0,
+        })
+        return
+      }
+
+      const failureText = `macOS CUPS 已确认打印完成，但发货记录未更新：${markResult.message}。请重新生成发货单后再处理。`
+      await addAndSaveMessage(failureText, 'ai')
+      currentTask.value = {
+        ...task,
+        printPending: false,
+        printStatusChecking: false,
+        printTerminal: true,
+        description: `${String(task.description || '').trim()}\n${failureText}`.trim(),
+      }
+      upsertTask({
+        id: statusTaskId,
+        type: 'print',
+        source: 'print',
+        title: '打印状态检查',
+        status: 'failed',
+        progress: 100,
+        error: failureText,
+        messageRef: getLastAiMessageRef(),
+      })
+      return
+    }
+
+    if (result.success && result.printPending) {
+      const pendingText = 'macOS CUPS 仍在等待打印机完成；未标记已打印，可稍后再次点击“检查打印状态”。'
+      await addAndSaveMessage(pendingText, 'ai')
+      currentTask.value = {
+        ...task,
+        printPending: true,
+        printStatusChecking: false,
+        description: `${String(task.description || '').trim()}\n${pendingText}`.trim(),
+      }
+      upsertTask({
+        id: statusTaskId,
+        type: 'print',
+        source: 'print',
+        title: '打印状态检查',
+        status: 'running',
+        progress: 85,
+        stage: '等待打印机完成',
+        summary: pendingText,
+        messageRef: getLastAiMessageRef(),
+      })
+      return
+    }
+
+    const terminal = ['aborted', 'unknown'].includes(String(result.printState || '').toLowerCase())
+    const failureText = terminal
+      ? `打印任务无法完成：${result.message}。请重新生成发货单后再打印。`
+      : `暂时无法查询打印状态：${result.message}。可稍后再次点击“检查打印状态”。`
+    await addAndSaveMessage(failureText, 'ai')
+    currentTask.value = {
+      ...task,
+      printPending: !terminal,
+      printStatusChecking: false,
+      printTerminal: terminal,
+      description: `${String(task.description || '').trim()}\n${failureText}`.trim(),
+    }
+    upsertTask({
+      id: statusTaskId,
+      type: 'print',
+      source: 'print',
+      title: '打印状态检查',
+      status: terminal ? 'failed' : 'running',
+      progress: terminal ? 100 : 85,
+      stage: terminal ? '打印任务已中止' : '等待再次检查',
+      error: terminal ? failureText : '',
+      summary: failureText,
+      messageRef: getLastAiMessageRef(),
+    })
+    if (terminal && shipmentListId) {
+      upsertTask({
+        id: shipmentListId,
+        type: 'shipment',
+        source: 'shipment',
+        title: '发货单生成任务',
+        status: 'failed',
+        stage: '打印任务未完成',
+        error: failureText,
+        summary: '发货单未标记已打印；请重新生成后再提交打印。',
+      })
+    }
+  }
+
   async function copyAssistantPushContent() {
     const title = String(latestAssistantPush.value?.title || '').trim()
     const desc = String(latestAssistantPush.value?.description || '').trim()
@@ -1479,20 +1442,27 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       pushCopied.value = false
     }
   }
+
   function openAssistantFloatFromTaskPanel() {
     const detail = latestAssistantPush.value || {}
     window.dispatchEvent(new CustomEvent('xcagi:open-assistant-float', { detail }))
   }
+
   async function syncSessionMessages(): Promise<void> {
     try {
       await syncFromServer()
     } finally {
       applyPersistedTaskPanelStateForSession(String(sessionId.value || '').trim() || 'default')
+      await restoreAgentRuns(dbGate.getModeScopedUserId(isProMode.value))
     }
   }
+
   executeRemoteChatRoundRef.fn = executeRemoteChatRound
+
   registerHistoryModWatch(showHistoryPanel)
+
   workflowPanel.registerWorkflowPanelWatchers(persistTaskPanelStateForSession, currentTask)
+
   onMounted(() => {
     const sid = String(sessionId.value || '').trim() || 'default'
     if (!lastExcelAnalysisContext.value) {
@@ -1506,40 +1476,12 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     window.addEventListener(FHD_DB_WRITE_UNLOCKED_EVENT, dbGate.onDbWriteUnlockedForChatRetry)
     workflowPanel.mountWorkflowPanel()
   })
+
   onBeforeUnmount(() => {
     window.removeEventListener(FHD_DB_WRITE_UNLOCKED_EVENT, dbGate.onDbWriteUnlockedForChatRetry)
     workflowPanel.unmountWorkflowPanel()
+    disposeAgentRunSync()
   })
-  async function pauseTaskById(id: string): Promise<void> {
-    const task = taskList.value.find((item) => item.id === id)
-    const runId = asString(task?.payload?.agentRunId).trim()
-    if (!task || task.type !== 'agent_run' || !runId) return
-    await controlAgentRun(runId, 'pause', dbGate.getModeScopedUserId(isProMode.value))
-  }
-
-  async function resumeTaskById(id: string): Promise<void> {
-    const task = taskList.value.find((item) => item.id === id)
-    const runId = asString(task?.payload?.agentRunId).trim()
-    if (!task || task.type !== 'agent_run' || !runId) return
-    await controlAgentRun(runId, 'resume', dbGate.getModeScopedUserId(isProMode.value))
-  }
-
-  async function checkPendingShipmentPrintFromTaskCard() {
-    return runPendingShipmentPrintCheck({
-      currentTask,
-      lastShipmentExecution,
-      addAndSaveMessage,
-      createTaskId,
-      upsertTask,
-      checkDocumentPrintJob,
-      markAsPrinted,
-      getLastAiMessageRef,
-      completeTask,
-      failTask,
-      syncTaskListEntry,
-    } as Parameters<typeof runPendingShipmentPrintCheck>[0])
-  }
-
 
   return {
     messages,
@@ -1594,6 +1536,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     newConversation,
     handleShipmentDownloadClick,
     startPrintFromTaskCard,
+    checkPendingShipmentPrintFromTaskCard,
     copyAssistantPushContent,
     openAssistantFloatFromTaskPanel,
     syncSessionMessages,
@@ -1602,12 +1545,11 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     toggleTaskExpanded,
     setTaskFilter,
     clearTaskHistory,
-    pauseTaskById,
-    resumeTaskById,
     cancelTaskById,
     retryTask,
+    pauseTaskById,
+    resumeTaskById,
     jumpToTaskMessage,
-    checkPendingShipmentPrintFromTaskCard,
     handleAutoAction,
     isStartPrintMessage,
     ttsEnabled,
