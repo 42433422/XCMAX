@@ -17,7 +17,7 @@
           <span class="app-launcher-name">AIOPEN 开放智控</span>
           <span class="app-launcher-desc">企业级 AI Agent 接入平台，基于 MCP/API 标准协议，提供远程 UI 操控与白名单业务接口开放</span>
         </button>
-        <button class="app-launcher app-launcher--production" type="button" @click="openProductionEmployee">
+        <button class="app-launcher app-launcher--production" type="button" @click="enterAnalyzer('production')">
           <span class="app-launcher-icon app-launcher-icon--production" aria-hidden="true">
             <ProductionEmployeeLauncherIcon />
           </span>
@@ -41,6 +41,17 @@
 
     <KittenAnalyzerView v-else-if="activeApp === 'kitten'" @back="exitAnalyzer" />
 
+    <div v-else-if="activeApp === 'production'" class="production-embed">
+      <header class="production-embed__header">
+        <button type="button" class="production-embed__back" @click="exitAnalyzer">返回 AI 生态</button>
+        <div>
+          <div class="production-embed__eyebrow">生产员工</div>
+          <h1>客户私有 Mod 生产中心</h1>
+        </div>
+      </header>
+      <PrivateModDeliveryPanel />
+    </div>
+
     <AIOpenPanel v-else @back="exitAnalyzer" />
   </div>
 </template>
@@ -58,6 +69,9 @@ const router = useRouter()
 
 const KittenAnalyzerView = defineAsyncComponent(() => import('@/components/kitten/KittenAnalyzerView.vue'))
 const AIOpenPanel = defineAsyncComponent(() => import('@/components/aiopen/AIOpenPanel.vue'))
+const PrivateModDeliveryPanel = defineAsyncComponent(
+  () => import('@/components/privateMod/PrivateModDeliveryPanel.vue'),
+)
 
 const inAnalyzer = ref(false)
 const activeApp = ref('kitten')
@@ -69,15 +83,6 @@ const goShellPage = (name, query = {}) => {
     return
   }
   router.push({ name, query })
-}
-
-/** 优先轻量私有交付页；旧包未注册该路由时回退智脑「客户定制」页签，避免空白。 */
-const openProductionEmployee = () => {
-  if (router.hasRoute('private-mod-delivery')) {
-    router.push({ path: '/private-mod-delivery' })
-    return
-  }
-  goShellPage('brain', { focus: 'private-mod' })
 }
 
 const enterAnalyzer = (appKey = 'kitten') => {
@@ -191,5 +196,44 @@ const exitAnalyzer = () => {
 .app-launcher-desc {
   font-size: 13px;
   color: #64748b;
+}
+.production-embed {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #f8fafc;
+}
+.production-embed__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: 20px 24px 0;
+  box-sizing: border-box;
+}
+.production-embed__back {
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  padding: 8px 12px;
+  background: #fff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.production-embed__eyebrow {
+  color: #d97706;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.production-embed__header h1 {
+  margin: 4px 0 0;
+  color: #172554;
+  font-size: 22px;
+  font-weight: 700;
 }
 </style>

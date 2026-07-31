@@ -692,7 +692,10 @@ export function readFrontendCacheKey(): string {
   const base = readPackagedAppVersion()
   const indexCandidates = [
     path.join(process.resourcesPath, 'backend', '_internal', 'templates', 'vue-dist', 'index.html'),
-    path.join(process.resourcesPath, 'frontend', 'index.html')
+    path.join(process.resourcesPath, 'frontend', 'index.html'),
+    // 源码 npm run dev：resourcesPath 无打包前端，须盯本地 vue-dist，否则换包不清缓存
+    path.join(__dirname, '..', '..', 'templates', 'vue-dist', 'index.html'),
+    path.join(__dirname, '..', 'templates', 'vue-dist', 'index.html'),
   ]
   for (const indexPath of indexCandidates) {
     try {
