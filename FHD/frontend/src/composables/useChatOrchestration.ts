@@ -1537,7 +1537,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       completeTask,
       failTask,
       syncTaskListEntry,
-    })
+    } as Parameters<typeof runPendingShipmentPrintCheck>[0])
   }
 
 

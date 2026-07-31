@@ -1,6 +1,22 @@
 /** Extracted from useChatOrchestration for source-governance. */
 
-export async function checkPendingShipmentPrintFromTaskCard(deps: Record<string, any>) {
+type RefLike<T> = { value: T }
+
+type PendingPrintDeps = {
+  currentTask: RefLike<Record<string, unknown> | null | undefined>
+  lastShipmentExecution: RefLike<Record<string, unknown> | null | undefined>
+  addAndSaveMessage: (content: string, role: string) => Promise<void> | void
+  createTaskId: (prefix: string) => string
+  upsertTask: (task: Record<string, unknown>) => void
+  checkDocumentPrintJob: (token: string) => Promise<Record<string, unknown>>
+  markAsPrinted: (...args: unknown[]) => Promise<Record<string, unknown>>
+  getLastAiMessageRef: () => { content?: string } | null | undefined
+  completeTask: (...args: unknown[]) => void
+  failTask: (...args: unknown[]) => void
+  syncTaskListEntry: (...args: unknown[]) => void
+}
+
+export async function checkPendingShipmentPrintFromTaskCard(deps: PendingPrintDeps) {
   const {
     currentTask,
     lastShipmentExecution,
@@ -15,8 +31,8 @@ export async function checkPendingShipmentPrintFromTaskCard(deps: Record<string,
     syncTaskListEntry,
   } = deps
 
-  const task = currentTask.value
-  const context = lastShipmentExecution.value
+  const task = currentTask.value as Record<string, unknown> | null | undefined
+  const context = lastShipmentExecution.value as Record<string, unknown> | null | undefined
   const jobToken = String(task?.printJobToken || context?.pendingPrintJobToken || '').trim()
   if (!task || task.type !== 'shipment_generate' || !task.printPending || !jobToken) {
     await addAndSaveMessage('没有可查询的待确认打印任务。请重新生成发货单后再打印。', 'ai')
