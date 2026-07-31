@@ -18,7 +18,11 @@
           <span class="app-launcher-name">AIOPEN 开放智控</span>
           <span class="app-launcher-desc">企业级 AI Agent 接入平台，基于 MCP/API 标准协议，提供远程 UI 操控与白名单业务接口开放</span>
         </button>
-        <button class="app-launcher app-launcher--production" type="button" @click="goShellPage('brain', { focus: 'private-mod' })">
+        <button
+          class="app-launcher app-launcher--production"
+          type="button"
+          @click="goShellPage('private-mod-delivery')"
+        >
           <span class="app-launcher-icon app-launcher-icon--production" aria-hidden="true">
             <ProductionEmployeeLauncherIcon />
           </span>
