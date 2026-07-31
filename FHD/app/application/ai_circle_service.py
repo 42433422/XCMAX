@@ -124,12 +124,10 @@ def record_employee_activity(
     if summary_text:
         details.append(f"结果：{summary_text}")
     body = state if not details else f"{state}\n" + "\n".join(details)
-    # 桌面：同一员工同一任务指纹每分钟最多一条，避免调度风暴把 SQLite 写爆闪退
+    # 桌面：每员工每分钟最多一条（忽略任务文案差异），挡住协作风暴写库闪退
     if _desktop_mode():
         minute = datetime.now(UTC).strftime("%Y%m%d%H%M")
-        digest = hashlib.sha1(
-            f"{employee}|{int(success)}|{int(blocked)}|{task_text}|{minute}".encode()
-        ).hexdigest()[:24]
+        digest = hashlib.sha1(f"{employee}|{minute}".encode()).hexdigest()[:24]
         source_ref = f"employee-run:{digest}"
     else:
         source_ref = f"employee-run:{uuid.uuid4().hex}"
