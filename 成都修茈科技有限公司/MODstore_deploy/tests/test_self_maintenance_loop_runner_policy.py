@@ -1676,6 +1676,70 @@ def test_resume_candidate_rebuilds_structured_review_rejection_from_clean_base(
     assert _resume_dispatch_context(result, _resume_steps(result)) == (None, None)
 
 
+def test_code_task_text_surfaces_structured_review_blocking_findings():
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/trae/current-review",
+                "kind": "automated_remediation",
+                "reason": "structured_review_blocking_findings",
+                "run_id": "run-current",
+                "structured_gate": {
+                    "failed_dimensions": ["business_logic"],
+                    "reason": "structured_review_blocking_findings",
+                    "review": {
+                        "blocking_findings": [
+                            "business_logic=missing regression test for scheduler gating"
+                        ],
+                        "max_severity": "medium",
+                    },
+                },
+                "task_id": "task-current",
+            }
+        ],
+        "recent_runs": [],
+    }
+    candidate = _resume_review_qa_candidate(memory)
+    prompt = _code_task_text("run-review-remediation", {"gaps": []}, memory, candidate)
+
+    assert "=== STRUCTURED REVIEW/QA REMEDIATION ===" in prompt
+    assert "structured_review_blocking_findings" in prompt
+    assert "missing regression test for scheduler gating" in prompt
+    assert "business_logic" in prompt
+
+
+def test_code_task_text_surfaces_structured_qa_blocking_findings_from_last_decision():
+    memory = {
+        "last_policy_decision": {
+            "reason": "structured_qa_blocking_findings",
+            "structured_gate": {
+                "qa": {
+                    "blocking_findings": ["focused pytest command did not exit 0"],
+                    "target_branch_available": True,
+                    "verdict": "FAIL",
+                },
+                "reason": "structured_qa_blocking_findings",
+            },
+        },
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-qa",
+                "kind": "automated_remediation",
+                "reason": "structured_qa_blocking_findings",
+                "run_id": "run-qa",
+                "task_id": "task-qa",
+            }
+        ],
+        "recent_runs": [],
+    }
+    candidate = _resume_review_qa_candidate(memory)
+    prompt = _code_task_text("run-qa-remediation", {"gaps": []}, memory, candidate)
+
+    assert "=== STRUCTURED REVIEW/QA REMEDIATION ===" in prompt
+    assert "structured_qa_blocking_findings" in prompt
+    assert "focused pytest command did not exit 0" in prompt
+
+
 def test_resume_review_qa_candidate_continues_score_remediation_on_existing_task():
     memory = {
         "open_items": [
@@ -3106,6 +3170,51 @@ def test_reconcile_risk_label_failure_continues_on_rejected_branch():
     assert "risk-label-failed-after-review" in prompt
 
 
+def test_reconcile_dispatch_failed_branch_preserving_continues_on_rejected_branch():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-864d41",
+                "para_task_id": "task-dispatch-failed",
+                "run_id": "run-dispatch-failed",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "dispatch_failed",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-864d41",
+            "detail": (
+                "bot merge checks failed or unavailable: Command failed: gh pr checks 979 "
+                "--watch --fail-fast --interval 10 --repo 42433422/XCMAX"
+            ),
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["reason"] == "para_merge_task_failed"
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is False
+    candidate = _resume_review_qa_candidate(memory)
+    assert candidate["continue_existing_code_task"] is True
+    assert _resume_dispatch_context(candidate, _resume_steps(candidate)) == (
+        None,
+        "devfleet/cursor/sub-1-864d41",
+    )
+    prompt = _code_task_text("run-dispatch-failed-retry", {"gaps": []}, memory, candidate)
+    assert "Continue on the rejected branch as the mutable base" in prompt
+    assert "bot merge checks failed or unavailable" in prompt
+
+
 def test_reconcile_bot_merge_checks_unavailable_continues_on_rejected_branch():
     memory = {
         "closed_items": [],
@@ -3253,6 +3362,13 @@ def test_para_merge_remediation_branch_preserving_helpers():
     assert (
         resume_from_clean_baseline_for_para_merge(
             "para_merge_conflict",
+            "bot merge checks failed or unavailable: gh pr checks 813",
+        )
+        is False
+    )
+    assert (
+        resume_from_clean_baseline_for_para_merge(
+            "para_merge_task_failed",
             "bot merge checks failed or unavailable: gh pr checks 813",
         )
         is False
@@ -3849,6 +3965,48 @@ def test_resume_from_clean_baseline_false_for_ai_review_pr_closed_without_merge(
         )
         is True
     )
+
+
+def test_resume_from_clean_baseline_true_for_ai_review_indeterminate_veto():
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        resume_from_clean_baseline_for_para_merge,
+    )
+
+    detail = "devfleet/cursor/sub-1-d0a091: indeterminate-review"
+    assert resume_from_clean_baseline_for_para_merge("para_ai_review_rejected", detail) is True
+
+
+def test_reconcile_ai_review_indeterminate_veto_sets_clean_baseline_restart():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-d0a091",
+                "para_task_id": "task-ai-indeterminate",
+                "run_id": "run-ai-indeterminate",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-d0a091",
+            "detail": "devfleet/cursor/sub-1-d0a091: indeterminate-review",
+            "source": "ai-review-veto",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["reason"] == "para_ai_review_rejected"
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is True
 
 
 def test_terminal_merge_remediation_prompt_mentions_closed_pr_and_main_supersession():

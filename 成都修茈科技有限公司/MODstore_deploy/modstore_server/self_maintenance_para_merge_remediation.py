@@ -93,7 +93,14 @@ def para_merge_conflict_continues_on_rejected_branch(detail: str) -> bool:
 def resume_from_clean_baseline_for_para_merge(reason: str, detail: str) -> bool:
     """Whether automated remediation must restart from the configured clean base."""
 
-    if reason in _ABSORPTION_ELIGIBLE_REASONS and (
+    normalized = str(reason or "").strip()
+    if normalized == "para_ai_review_rejected":
+        # AI review vetoes always restart from the clean base unless merge-worker
+        # already proved the rejected branch has no remaining executable delta.
+        if is_changed_files_empty_detail(detail) or is_pr_closed_without_merge_detail(detail):
+            return False
+        return True
+    if normalized.startswith("para_merge_") and (
         is_branch_preserving_para_merge_failure_detail(detail)
         or is_changed_files_empty_detail(detail)
         or is_pr_closed_without_merge_detail(detail)
