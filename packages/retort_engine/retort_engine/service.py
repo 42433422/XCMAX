@@ -96,6 +96,11 @@ class RetortService:
     def self_evolve(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self.llm_service.self_evolve(payload)
 
+    def metric_search(self, payload: dict[str, Any]) -> dict[str, Any]:
+        from retort_engine.core import RetortService as CoreRetortService
+
+        return CoreRetortService().metric_search(payload)
+
     def absorb(self, payload: dict[str, Any]) -> dict[str, Any]:
         return run_absorption(
             own_project=str(

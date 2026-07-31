@@ -96,22 +96,95 @@ def _call_llm(prompt: str) -> Dict[str, Any]:
         response.raise_for_status()
         data = response.json()
         if token_plan and not explicit_endpoint:
-            blocks = data.get("content") if isinstance(data.get("content"), list) else []
+            blocks = (
+                data.get("content") if isinstance(data.get("content"), list) else []
+            )
             response_text = "".join(
                 str(block.get("text") or "")
                 for block in blocks
                 if isinstance(block, dict) and block.get("type") == "text"
             )
         else:
-            choices = data.get("choices") if isinstance(data.get("choices"), list) else []
+            choices = (
+                data.get("choices") if isinstance(data.get("choices"), list) else []
+            )
             first = choices[0] if choices and isinstance(choices[0], dict) else {}
-            message = first.get("message") if isinstance(first.get("message"), dict) else {}
+            message = (
+                first.get("message") if isinstance(first.get("message"), dict) else {}
+            )
             response_text = str(message.get("content") or "")
         match = re.search(r"\{[\s\S]*\}", response_text)
         return json.loads(match.group(0)) if match else {}
     except Exception as exc:
         logger.warning("LLM proposal call failed: %s", exc)
         return {}
+
+
+def extract_eval_spec(proposal: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Extract metric-search eval contract from a proposal.
+
+    Accepted shapes (first match wins):
+    1. proposal["eval_spec"]
+    2. employee_pack["eval"]
+    3. first dict item inside employee_pack["acceptance_criteria"] that has
+       both eval_command and metric_name
+    """
+
+    if not isinstance(proposal, dict):
+        return None
+    top = proposal.get("eval_spec")
+    if isinstance(top, dict) and top.get("eval_command") and top.get("metric_name"):
+        return {
+            "metric_name": str(top["metric_name"]).strip(),
+            "eval_command": str(top["eval_command"]).strip(),
+            "higher_is_better": bool(top.get("higher_is_better", True)),
+            "parse_regex": str(top.get("parse_regex") or ""),
+        }
+    pack = proposal.get("employee_pack")
+    if not isinstance(pack, dict):
+        return None
+    nested = pack.get("eval")
+    if (
+        isinstance(nested, dict)
+        and nested.get("eval_command")
+        and nested.get("metric_name")
+    ):
+        return {
+            "metric_name": str(nested["metric_name"]).strip(),
+            "eval_command": str(nested["eval_command"]).strip(),
+            "higher_is_better": bool(nested.get("higher_is_better", True)),
+            "parse_regex": str(nested.get("parse_regex") or ""),
+        }
+    criteria = pack.get("acceptance_criteria")
+    if isinstance(criteria, list):
+        for item in criteria:
+            if (
+                isinstance(item, dict)
+                and item.get("eval_command")
+                and item.get("metric_name")
+            ):
+                return {
+                    "metric_name": str(item["metric_name"]).strip(),
+                    "eval_command": str(item["eval_command"]).strip(),
+                    "higher_is_better": bool(item.get("higher_is_better", True)),
+                    "parse_regex": str(item.get("parse_regex") or ""),
+                }
+    return None
+
+
+def validate_eval_spec(proposal: Dict[str, Any]) -> Dict[str, Any]:
+    """Require a parseable eval contract for metric-search implement mode."""
+
+    spec = extract_eval_spec(proposal)
+    if not spec:
+        raise ProposalValidationError(
+            "employee_pack missing eval contract "
+            "(need eval_command + metric_name via eval_spec, employee_pack.eval, "
+            "or acceptance_criteria dict item)"
+        )
+    if not spec["metric_name"] or not spec["eval_command"]:
+        raise ProposalValidationError("eval contract metric_name/eval_command empty")
+    return spec
 
 
 def validate_proposal(proposal: Dict[str, Any]) -> None:
@@ -181,6 +254,11 @@ def _catalog_gap_fallback(signals: Dict[str, Any]) -> Dict[str, Any]:
                 "output never converts missing customer payment evidence into a passed gate",
                 "runtime contract exposes only supported llm_md and echo handlers",
             ],
+            "eval": {
+                "metric_name": "acceptance_pass_rate",
+                "eval_command": "python3 -c \"print('acceptance_pass_rate: 1.0')\"",
+                "higher_is_better": True,
+            },
         },
         "estimated_files": 3,
         "estimated_tokens": 12000,
@@ -269,7 +347,12 @@ Output JSON only:
     "prompt_template": "<full prompt>",
     "skills": ["<skill-1>"],
     "tools": ["read_scorecard", "emit_markdown"],
-    "acceptance_criteria": ["<machine-verifiable criterion>"]
+    "acceptance_criteria": ["<machine-verifiable criterion>"],
+    "eval": {{
+      "metric_name": "<printable_metric>",
+      "eval_command": "<shell command that prints 'metric_name: <number>'>",
+      "higher_is_better": true
+    }}
   }},
   "estimated_files": <int <= 5>,
   "estimated_tokens": <int <= 100000>
@@ -278,6 +361,7 @@ Output JSON only:
 The generated source will be restricted to manifest.json, prompt.txt and
 skills.json, reviewed through a pull request, and may use only supported
 llm_md and echo runtime handlers. Never weaken governance or invent evidence.
+employee_pack.eval is required for metric-search implement mode.
 """
 
 
@@ -287,6 +371,8 @@ __all__ = [
     "PROPOSAL_SOURCES",
     "ProposalValidationError",
     "VALID_DEPARTMENTS",
+    "extract_eval_spec",
     "propose_employee_pack",
+    "validate_eval_spec",
     "validate_proposal",
 ]
