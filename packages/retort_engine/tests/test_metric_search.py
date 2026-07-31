@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from retort_engine.metric_search import (
     EvalSpec,
     MetricSearchConfig,
@@ -25,7 +24,9 @@ def test_parse_metric_from_output() -> None:
 def test_solution_tree_best_first_higher_is_better() -> None:
     tree = SolutionTree("score", higher_is_better=True)
     tree.add(
-        SolutionNode("root", None, "scored", "score", metric_value=0.5, created_from="r")
+        SolutionNode(
+            "root", None, "scored", "score", metric_value=0.5, created_from="r"
+        )
     )
     tree.add(
         SolutionNode("a", "root", "scored", "score", metric_value=0.8, created_from="a")
@@ -41,13 +42,19 @@ def test_solution_tree_best_first_higher_is_better() -> None:
 def test_solution_tree_lower_is_better() -> None:
     tree = SolutionTree("latency", higher_is_better=False)
     tree.add(
-        SolutionNode("root", None, "scored", "latency", metric_value=10.0, created_from="r")
+        SolutionNode(
+            "root", None, "scored", "latency", metric_value=10.0, created_from="r"
+        )
     )
     tree.add(
-        SolutionNode("a", "root", "scored", "latency", metric_value=4.0, created_from="a")
+        SolutionNode(
+            "a", "root", "scored", "latency", metric_value=4.0, created_from="a"
+        )
     )
     tree.add(
-        SolutionNode("b", "root", "scored", "latency", metric_value=7.0, created_from="b")
+        SolutionNode(
+            "b", "root", "scored", "latency", metric_value=7.0, created_from="b"
+        )
     )
     assert tree.best_node().node_id == "a"
 
@@ -101,7 +108,9 @@ def test_run_metric_search_synthetic_tree_and_budget(
     assert float(report["best_score"]) > 0.40
     tree_path = Path(report["tree_path"])
     assert tree_path.is_file()
-    assert (tmp_path / ".retort" / "metric_search" / "testsynth" / "report.json").is_file()
+    assert (
+        tmp_path / ".retort" / "metric_search" / "testsynth" / "report.json"
+    ).is_file()
 
 
 def test_run_metric_search_stops_at_max_nodes(tmp_path: Path) -> None:
