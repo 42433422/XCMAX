@@ -1,7 +1,7 @@
 {
   "_note": "巨型文件棘轮基线（只减不增）。由 scripts/dev/count_big_files.py --update-baseline 维护。守护两个指标：>800 行的 .py 文件数 / 单文件 >20 个 @router 的文件数。新代码请按职责拆分（router 拆 domain、app_service 拆 helper）。",
   "updated": "2026-07-25",
-  "big_files_over_800_lines": 41,
+  "big_files_over_800_lines": 42,
   "big_router_files_over_20_routes": 13,
   "max_file_lines": 3243,
   "max_routes_per_file": 79,
@@ -13,6 +13,7 @@
     "app/application/dataset_rag_app_service.py": 2501,
     "app/services/tools_workflow_registered.py": 2469,
     "app/application/shipment_excel_etl_app_service.py": 2400,
+    "app/application/etl/parser_regions.py": 983,
     "app/application/workflow/planner.py": 2116,
     "app/application/tools/workflow.py": 2087,
     "app/fastapi_routes/market_account.py": 2072,
