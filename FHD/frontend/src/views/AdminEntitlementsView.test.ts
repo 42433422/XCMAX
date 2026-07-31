@@ -17,6 +17,14 @@ const mockGetUserProfiles = vi.fn().mockResolvedValue({ data: {} })
 const mockSetUserProfile = vi.fn().mockResolvedValue({ success: true })
 const mockForcePushUserEntitlements = vi.fn().mockResolvedValue({ data: { push: { sent: 1, failed: 0 } } })
 
+vi.mock('@/components/privateMod/AdminPrivateDeliveryPanel.vue', () => ({
+  default: {
+    name: 'AdminPrivateDeliveryPanel',
+    props: ['userId'],
+    template: '<div class="admin-private-delivery-stub" />',
+  },
+}))
+
 vi.mock('@/api/xcmaxAdmin', () => ({
   xcmaxAdminApi: {
     listUsers: () => mockListUsers(),
