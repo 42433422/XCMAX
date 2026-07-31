@@ -366,6 +366,9 @@ async def cs_ssot_retrieve(
         top_k = 5
     top_k = max(1, min(top_k, 12))
     dataset_id = str(body.get("dataset_id") or "persy-knowledge").strip() or "persy-knowledge"
+    allowed_datasets = {"persy-knowledge", "xiaoc-internal"}
+    if dataset_id not in allowed_datasets:
+        raise HTTPException(status_code=403, detail="dataset is not allowed for cs ssot")
 
     from app.application.dataset_rag_app_service import (
         DATASET_ADMIN_PERMISSION,
@@ -381,6 +384,7 @@ async def cs_ssot_retrieve(
         is_admin=True,
     )
     candidate_k = min(50, max(12, top_k * 3))
+<<<<<<< HEAD
     result = get_dataset_rag_app_service().query(
         dataset_id=dataset_id,
         query=query,
@@ -388,6 +392,27 @@ async def cs_ssot_retrieve(
         rerank=True,
         access_context=access,
     )
+=======
+    query_kwargs: dict[str, Any] = {
+        "dataset_id": dataset_id,
+        "query": query,
+        "top_k": candidate_k,
+        "rerank": True,
+        "access_context": access,
+    }
+    if dataset_id == "persy-knowledge":
+        query_kwargs.update(
+            {
+                "tenant_id": "public",
+                "metadata_filter": {
+                    "audience": "public",
+                    "publication_status": "published",
+                    "knowledge_owner": "chengdu-xiuci-technology",
+                },
+            }
+        )
+    result = get_dataset_rag_app_service().query(**query_kwargs)
+>>>>>>> resolve/codex/repair-module-linkage-20260728
     chunks = result.get("chunks") if isinstance(result, dict) else []
     if not isinstance(chunks, list):
         chunks = []

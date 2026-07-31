@@ -43,7 +43,12 @@ class RbacAppService:
             logger.warning("Tenant directory unavailable: %s", exc)
             raise DatabaseError(
                 ErrorCode.DB_QUERY_FAILED,
+<<<<<<< HEAD
                 "企业目录暂时不可用，请检查管理数据库连接",
+=======
+                "企业目录暂时不可用",
+                detail={"reason": type(exc).__name__},
+>>>>>>> resolve/codex/repair-module-linkage-20260728
             ) from exc
 
     def list_data_scopes(self, tenant_id: str | None) -> list[dict[str, Any]]:

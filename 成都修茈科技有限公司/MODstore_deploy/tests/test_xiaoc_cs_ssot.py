@@ -149,6 +149,58 @@ class TestXiaocPersona:
         ):
             assert retrieve_knowledge_for_mode("公司产品", mode="external") == []
 
+<<<<<<< HEAD
+=======
+    def test_local_public_retrieval_queries_public_published_scope(self, monkeypatch, tmp_path):
+        import sys
+        import types
+
+        from modstore_server.xiaoc_cs_ssot import PUBLIC_DATASET_ID, _local_retrieve
+
+        fhd_root = tmp_path / "FHD"
+        (fhd_root / "app").mkdir(parents=True)
+        monkeypatch.setenv("XCAGI_FHD_ROOT", str(fhd_root))
+
+        calls = []
+
+        class _Access:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+        class _Service:
+            def query(self, **kwargs):
+                calls.append(kwargs)
+                return {"chunks": [{"text": "public hit", "metadata": {}}]}
+
+        app_pkg = types.ModuleType("app")
+        app_pkg.__path__ = []
+        application_pkg = types.ModuleType("app.application")
+        application_pkg.__path__ = []
+        rag_module = types.ModuleType("app.application.dataset_rag_app_service")
+        rag_module.DATASET_ADMIN_PERMISSION = "dataset.admin"
+        rag_module.DATASET_READ_PERMISSION = "dataset.read"
+        rag_module.DatasetAccessContext = _Access
+        rag_module.get_dataset_rag_app_service = lambda: _Service()
+        monkeypatch.setitem(sys.modules, "app", app_pkg)
+        monkeypatch.setitem(sys.modules, "app.application", application_pkg)
+        monkeypatch.setitem(
+            sys.modules,
+            "app.application.dataset_rag_app_service",
+            rag_module,
+        )
+
+        out = _local_retrieve("报价", top_k=3, dataset_id=PUBLIC_DATASET_ID)
+
+        assert out == [{"text": "public hit", "metadata": {}}]
+        assert calls
+        assert calls[0]["tenant_id"] == "public"
+        assert calls[0]["metadata_filter"] == {
+            "audience": "public",
+            "publication_status": "published",
+            "knowledge_owner": "chengdu-xiuci-technology",
+        }
+
+>>>>>>> resolve/codex/repair-module-linkage-20260728
 
 class TestKnowledgeFormat:
     def test_format_knowledge_block(self):

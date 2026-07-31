@@ -701,8 +701,14 @@ def _seed_default_admin_user(real_engine: Engine) -> None:
     if int(n or 0) != 0:
         return
 
+<<<<<<< HEAD
     username = (os.environ.get("ADMIN_USERNAME") or "").strip()
     password = (os.environ.get("ADMIN_PASSWORD") or "").strip()
+=======
+    defaults = ("admin", "admin123") if real_engine.dialect.name == "sqlite" else ("", "")
+    username = (os.environ.get("ADMIN_USERNAME") or defaults[0]).strip()
+    password = (os.environ.get("ADMIN_PASSWORD") or defaults[1]).strip()
+>>>>>>> resolve/codex/repair-module-linkage-20260728
     display_name = (os.environ.get("ADMIN_DISPLAY_NAME") or "管理员").strip() or "管理员"
     if not username or not password:
         logger.warning("auth bootstrap: users 为空但未配置 ADMIN_USERNAME/ADMIN_PASSWORD，跳过种子")
@@ -1311,8 +1317,12 @@ def ensure_postgresql_auth_bootstrap(
     """空 PostgreSQL 库在未跑 Alembic 时缺少 users/sessions，登录会抛出异常并带上 error_id。
 
     幂等创建最小表结构；仅在 ``users`` 表无任何行时写入管理员（优先 ``ADMIN_*`` 环境变量，
+<<<<<<< HEAD
     未显式配置凭据时不创建默认管理员，避免生产空库出现公开默认口令。
     业务表仍应通过 ``alembic upgrade head`` 补齐。
+=======
+    未显式配置凭据时不创建默认管理员，避免生产空库出现公开默认口令；业务表仍应通过 ``alembic upgrade head`` 补齐。
+>>>>>>> resolve/codex/repair-module-linkage-20260728
     """
     from sqlalchemy import inspect, text
 

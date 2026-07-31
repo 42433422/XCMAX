@@ -4,6 +4,7 @@
 |---------|------------|--------|
 | fastapi | >=0.115 | pyproject.toml |
 | uvicorn[standard] | >=0.27 | pyproject.toml |
+| apscheduler | >=3.10 | pyproject.toml |
 | python-multipart | >=0.0.6 | pyproject.toml |
 | httpx | >=0.27 | pyproject.toml |
 | sqlalchemy | >=2.0 | pyproject.toml |
@@ -13,6 +14,7 @@
 | python-dotenv | >=1.0 | pyproject.toml |
 | python-alipay-sdk | >=3.4 | pyproject.toml |
 | python-pptx | >=0.6.23 | pyproject.toml |
+| Pillow | >=10.0 | pyproject.toml |
 | PyYAML | >=6.0 | pyproject.toml |
 | cryptography | >=42.0 | pyproject.toml |
 | prometheus-client | >=0.20 | pyproject.toml |

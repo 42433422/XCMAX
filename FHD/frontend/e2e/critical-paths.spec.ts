@@ -1,4 +1,4 @@
-import { test, expect, type Route } from '@playwright/test';
+import { test, expect, type Page, type Route } from '@playwright/test';
 import {
   E2E_PASSWORD,
   E2E_USER,
@@ -8,6 +8,27 @@ import {
   isFullStack,
   loginBrowserSession,
 } from './helpers';
+
+async function loginThroughUiToOrders(page: Page): Promise<void> {
+  await page.goto('/login?redirect=%2Forders', {
+    waitUntil: 'domcontentloaded',
+    timeout: 30_000,
+  });
+  await page.locator('#lv-username').fill(E2E_USER);
+  await page.locator('#lv-password').fill(E2E_PASSWORD);
+  const loginResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' && /\/api\/auth\/login(?:\?|$)/.test(response.url()),
+    { timeout: 30_000 }
+  );
+  await page.locator('.login-submit').click();
+  const loginResponse = await loginResponsePromise;
+  const loginText = await loginResponse.text();
+  expect(loginResponse.status(), loginText).toBe(200);
+  expect(JSON.parse(loginText || '{}')?.success, loginText).toBe(true);
+  await expect(page).toHaveURL(/\/orders(?:[?#]|$)/, { timeout: 25_000 });
+  await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
+}
 
 test.describe('P0 critical paths', () => {
   test.beforeEach(async ({ page }) => {
@@ -164,27 +185,9 @@ test.describe('P0 critical paths', () => {
       // Browser-side fetches need an HTTP origin; about:blank cannot resolve /api/* URLs.
       await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
     } else {
-      // Establish the browser-side enterprise session cache through the real
-      // login UI. API cookies alone can leave a deep link waiting on redundant
-      // remote validation in slower CI environments.
-      await page.goto('/login?redirect=%2Forders', {
-        waitUntil: 'domcontentloaded',
-        timeout: 30_000,
-      });
-      await page.locator('#lv-username').fill(E2E_USER);
-      await page.locator('#lv-password').fill(E2E_PASSWORD);
-      const loginResponsePromise = page.waitForResponse(
-        (response) =>
-          response.request().method() === 'POST' && /\/api\/auth\/login(?:\?|$)/.test(response.url()),
-        { timeout: 30_000 }
-      );
-      await page.locator('.login-submit').click();
-      const loginResponse = await loginResponsePromise;
-      const loginText = await loginResponse.text();
-      expect(loginResponse.status(), loginText).toBe(200);
-      expect(JSON.parse(loginText || '{}')?.success, loginText).toBe(true);
-      await expect(page).toHaveURL(/\/orders(?:[?#]|$)/, { timeout: 25_000 });
-      await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
+      // Real login warms the browser-side enterprise session cache before
+      // Agent-backed CRUD work, keeping deep-link page mounting deterministic.
+      await loginThroughUiToOrders(page);
     }
 
     const createResp = await fetchJson('/api/orders', {
@@ -279,29 +282,7 @@ test.describe('P0 critical paths', () => {
       };
     };
 
-    // Establish this page's session through the real login UI. Reusing only a
-    // cookie leaves the browser-side enterprise session cache cold, so a deep
-    // link can block on redundant remote validation while the Agent-backed
-    // order work is settling. Login marks that cache valid without weakening
-    // any auth, route, or CRUD assertion.
-    await page.goto('/login?redirect=%2Forders', {
-      waitUntil: 'domcontentloaded',
-      timeout: 30_000,
-    });
-    await page.locator('#lv-username').fill(E2E_USER);
-    await page.locator('#lv-password').fill(E2E_PASSWORD);
-    const loginResponsePromise = page.waitForResponse(
-      (response) =>
-        response.request().method() === 'POST' && /\/api\/auth\/login(?:\?|$)/.test(response.url()),
-      { timeout: 30_000 }
-    );
-    await page.locator('.login-submit').click();
-    const loginResponse = await loginResponsePromise;
-    const loginText = await loginResponse.text();
-    expect(loginResponse.status(), loginText).toBe(200);
-    expect(JSON.parse(loginText || '{}')?.success, loginText).toBe(true);
-    await expect(page).toHaveURL(/\/orders(?:[?#]|$)/, { timeout: 25_000 });
-    await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
+    await loginThroughUiToOrders(page);
     await page.goto('/materials', { waitUntil: 'domcontentloaded', timeout: 30_000 });
     await expect(page).toHaveURL(/\/materials(?:[?#]|$)/);
     try {

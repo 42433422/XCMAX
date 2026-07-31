@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
 from app.application.rbac_app_service import get_rbac_app_service
-from app.errors import AppError
+from app.errors import AppError, DatabaseError
 from app.infrastructure.auth.dependencies import require_permission
 from app.infrastructure.auth.tenant_context import resolve_tenant_id
 from app.schemas.rbac_schema import PermissionCreate, RoleCreate, RoleUpdate, UserRoleAssign
@@ -43,6 +43,18 @@ def rbac_tenants_list(_user=Depends(_require_admin)):
     """列出活跃租户（平台管理员）。"""
     try:
         return {"success": True, "data": get_rbac_app_service().list_tenants()}
+<<<<<<< HEAD
+=======
+    except DatabaseError as exc:
+        logger.warning("RBAC tenant directory degraded: %s", exc)
+        return {
+            "success": True,
+            "data": [],
+            "degraded": True,
+            "message": exc.message,
+            "error_code": exc.code.value,
+        }
+>>>>>>> resolve/codex/repair-module-linkage-20260728
     except AppError as exc:
         return _handle_app_error(exc)
 
