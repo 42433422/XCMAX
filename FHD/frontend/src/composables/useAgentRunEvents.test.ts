@@ -84,4 +84,20 @@ describe('useAgentRunEvents', () => {
       messageRef: '5',
     }))
   })
+
+  it('skips task panel upsert for trivial legacy chat with no tools', async () => {
+    agentRunsApiMock.listEvents.mockResolvedValueOnce({
+      success: true,
+      data: [
+        { event_id: 'evt_1', run_id: 'run_chat', event_type: 'run.created', message: 'Legacy planner run 已创建' },
+        { event_id: 'evt_2', run_id: 'run_chat', event_type: 'planner.started' },
+        { event_id: 'evt_3', run_id: 'run_chat', event_type: 'planner.completed' },
+        { event_id: 'evt_4', run_id: 'run_chat', event_type: 'run.completed', message: 'Legacy planner run 执行完成' },
+      ],
+    })
+    const upsertTask = vi.fn()
+    const sync = useAgentRunEventSync({ upsertTask })
+    await sync.syncAgentRunFromPayload({ data: { run_id: 'run_chat' } }, '你可以做什么')
+    expect(upsertTask).not.toHaveBeenCalled()
+  })
 })

@@ -114,6 +114,8 @@ export function buildAgentRunTaskUpdate(params: {
 
 export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
   const lastEventByRunId = new Map<string, string>()
+  /** 累积 events（按 runId），保证流式轮询时 trace 不丢历史 */
+  const eventsByRunId = new Map<string, AgentRunEvent[]>()
 
   async function syncAgentRunEvents(runId: string, userText = ''): Promise<void> {
     const normalizedRunId = String(runId || '').trim()
@@ -124,23 +126,35 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
         normalizedRunId,
         afterEventId ? { after_event_id: afterEventId } : {},
       )
-      const events = Array.isArray(response?.data) ? response.data : []
-      if (!events.length) return
-      const last = events[events.length - 1]
+      const fresh = Array.isArray(response?.data) ? response.data : []
+      // 累积：第一次全量，后续增量追加
+      const accumulated = afterEventId
+        ? [...(eventsByRunId.get(normalizedRunId) || []), ...fresh]
+        : fresh
+      if (accumulated.length) {
+        eventsByRunId.set(normalizedRunId, accumulated)
+      }
+      const last = accumulated[accumulated.length - 1]
       if (last?.event_id) {
         lastEventByRunId.set(normalizedRunId, last.event_id)
       }
+      if (!accumulated.length) return
+      // 纯闲聊适配器：无 tool 事件时不要灌进「智能任务」侧栏（用户会看到假编排噪音）
+      const hasToolWork = accumulated.some((event) =>
+        String(event.event_type || '').startsWith('tool.'),
+      )
+      if (!hasToolWork) return
       options.upsertTask(buildAgentRunTaskUpdate({
         runId: normalizedRunId,
         userText,
-        events,
+        events: accumulated,
         messageRef: options.getLastAiMessageRef?.() || '',
       }))
     } catch {
       options.upsertTask(buildAgentRunTaskUpdate({
         runId: normalizedRunId,
         userText,
-        events: [],
+        events: eventsByRunId.get(normalizedRunId) || [],
         messageRef: options.getLastAiMessageRef?.() || '',
       }))
     }
