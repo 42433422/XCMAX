@@ -526,7 +526,9 @@ class TestInstallFromCatalog:
                 ),
                 patch.object(_mod, "catalog_download_to", AsyncMock()),
                 patch.object(_mod, "validate_market_package", return_value=None),
-                patch("app.infrastructure.mods.employee_registry.get_employee_registry") as mock_reg,
+                patch(
+                    "app.infrastructure.mods.employee_registry.get_employee_registry"
+                ) as mock_reg,
             ):
                 mock_reg.return_value.install_from_package.return_value = (True, "ok")
                 result = _sync(_mod._install_from_catalog("aux-pack", "", activate=True))
