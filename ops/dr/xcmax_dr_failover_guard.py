@@ -260,10 +260,8 @@ def main() -> int:
     primary_ssh_ok = tcp_probe(primary_ip, 22)
     addresses = authoritative_addresses(domain)
     status = status_values(status_command)
-    standby_ready = (
-        status.get("wal_in_recovery") == "t"
-        and status.get("wal_pg16_in_recovery") == "t"
-    )
+    # PostgreSQL 10 支付库已于 2026-07-31 退役，standby 就绪只看 PG16。
+    standby_ready = status.get("wal_pg16_in_recovery") == "t"
     fence_ready = valid_fence_proof(fence_path, primary_ip, now)
     decision = decide(
         enabled=enabled,

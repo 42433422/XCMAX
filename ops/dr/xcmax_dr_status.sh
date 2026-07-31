@@ -5,7 +5,7 @@ set -euo pipefail
 
 DR_ROOT="${OPS_DR_ROOT:-/srv/xcmax-dr}"
 STATE="${OPS_DR_STATE:-/var/lib/xcmax-dr}"
-CONTAINER="${OPS_DR_WAL_CONTAINER:-xcmax-dr-postgres10}"
+# PostgreSQL 10 支付库已于 2026-07-31 退役，仅保留 PG16 standby 检查。
 PG16_CONTAINER="${OPS_DR_WAL_PG16_CONTAINER:-xcmax-dr-postgres16-wal}"
 
 printf 'archive_latest=%s\n' "$(readlink -f "$DR_ROOT/archive/latest" 2>/dev/null || true)"
@@ -41,24 +41,6 @@ except (OSError, json.JSONDecodeError):
 for key in ("checked_at", "consecutive", "reason", "fence_ready"):
     print(f"failover_{key}={doc.get(key, '')}")
 PY
-fi
-
-if docker inspect "$CONTAINER" >/dev/null 2>&1 &&
-  [[ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER")" == "true" ]]; then
-  recovery="$(
-    docker exec -u postgres "$CONTAINER" \
-      psql -U postgres -d postgres -Atqc "SELECT pg_is_in_recovery()"
-  )"
-  replay_lsn="$(
-    docker exec -u postgres "$CONTAINER" \
-      psql -U postgres -d postgres -Atqc \
-      "SELECT COALESCE(pg_last_wal_replay_lsn()::text, '')"
-  )"
-  printf 'wal_container=running\n'
-  printf 'wal_in_recovery=%s\n' "$recovery"
-  printf 'wal_replay_lsn=%s\n' "$replay_lsn"
-else
-  printf 'wal_container=stopped\n'
 fi
 
 if docker inspect "$PG16_CONTAINER" >/dev/null 2>&1 &&
