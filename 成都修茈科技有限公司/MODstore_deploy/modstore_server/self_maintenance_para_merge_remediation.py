@@ -137,6 +137,10 @@ def para_merge_resume_pins_rejected_branch(item: Mapping[str, Any]) -> bool:
 
     if not isinstance(item, Mapping):
         return False
+    # Explicit clean-baseline restart must win over branch-preserving detail heuristics
+    # (stale open_items may still carry resume_from_clean_baseline=True).
+    if item.get("resume_from_clean_baseline"):
+        return False
     detail = str(item.get("detail") or "")
     if (
         is_changed_files_empty_detail(detail)
@@ -144,11 +148,7 @@ def para_merge_resume_pins_rejected_branch(item: Mapping[str, Any]) -> bool:
         or is_update_branch_content_conflict_detail(detail)
     ):
         return False
-    if is_branch_preserving_para_merge_failure_detail(detail):
-        return True
-    if item.get("resume_from_clean_baseline"):
-        return False
-    return False
+    return is_branch_preserving_para_merge_failure_detail(detail)
 
 
 def _normalize_repo_path(path: str) -> str:
