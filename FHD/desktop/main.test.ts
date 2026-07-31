@@ -294,9 +294,13 @@ describe('main — OTA proxy PAC', () => {
     expect(env.HTTPS_PROXY).toBeUndefined()
     expect(env.XCMAX_CLI_PROXY).toBeUndefined()
     expect(String(env.NO_PROXY)).toContain('xiu-ci.com')
+    expect(String(env.NO_PROXY)).toContain('119.27.178.147')
     expect(String(env.NO_PROXY)).toContain('127.0.0.1')
     expect(String(env.NO_PROXY)).toContain('example.com')
     expect(env.no_proxy).toBe(env.NO_PROXY)
+    expect(env.XCAGI_MARKET_FALLBACK_PROXY).toBe('http://127.0.0.1:7890')
+    expect(env.XCAGI_MARKET_CONNECT_TIMEOUT).toBe('20')
+    expect(env.XCAGI_MARKET_CONNECT_ATTEMPTS).toBe('3')
   })
 })
 

@@ -170,9 +170,52 @@ def _platform_stream_payload_to_openai_chunk(data: str) -> Dict[str, Any] | None
     return None
 
 
+def _market_connect_timeout() -> float:
+    """TLS to xiu-ci.com via Clash TUN often needs >10s; keep configurable."""
+    try:
+        return max(5.0, float(os.environ.get("XCAGI_MARKET_CONNECT_TIMEOUT", "20")))
+    except ValueError:
+        return 20.0
+
+
+def _market_connect_attempts() -> int:
+    try:
+        return max(1, min(int(os.environ.get("XCAGI_MARKET_CONNECT_ATTEMPTS", "3")), 6))
+    except ValueError:
+        return 3
+
+
+def _market_fallback_proxy() -> str | None:
+    """Optional local Clash HTTP proxy used only after direct ConnectError."""
+    raw = (os.environ.get("XCAGI_MARKET_FALLBACK_PROXY") or "").strip()
+    return raw or None
+
+
+_MARKET_TRANSPORT_ERRORS = (
+    httpx.ConnectError,
+    httpx.ConnectTimeout,
+    httpx.RemoteProtocolError,
+)
+
+
+def _iter_market_transport_plans() -> Iterator[tuple[str | None, int, int]]:
+    """Yield (proxy_or_None, attempt_idx, attempts_per_proxy) for flaky TUN/TLS."""
+    attempts = _market_connect_attempts()
+    proxies: list[str | None] = [None]
+    fallback = _market_fallback_proxy()
+    if fallback:
+        proxies.append(fallback)
+    for proxy in proxies:
+        for attempt in range(1, attempts + 1):
+            yield proxy, attempt, attempts
+
+
 def _httpx_sync_client(**kwargs: Any) -> httpx.Client:
     """Desktop backend must ignore leaked HTTP(S)_PROXY; Clash TUN still applies OS-wide."""
     kwargs.setdefault("trust_env", False)
+    proxy = kwargs.pop("proxy", None)
+    if proxy:
+        kwargs["proxy"] = proxy
     return httpx.Client(**kwargs)
 
 
@@ -464,7 +507,7 @@ class ModstorePlatformAdapter:
         """获取HTTP客户端"""
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(
-                timeout=httpx.Timeout(self.timeout, connect=10.0),
+                timeout=httpx.Timeout(self.timeout, connect=_market_connect_timeout()),
                 limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
                 headers=self._build_headers(),
                 trust_env=False,
@@ -892,39 +935,59 @@ class ModstorePlatformAdapter:
                 len(candidates),
             )
             retry_next = False
-            with _httpx_sync_client(
-                timeout=httpx.Timeout(self.timeout, connect=10.0),
-                limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
-                headers=self._build_headers(),
-            ) as client:
-                with client.stream("POST", url, json=payload) as response:
-                    status_code = _response_status_code(response)
-                    if status_code >= 400:
-                        error_text = response.read().decode("utf-8", errors="ignore")[:500]
-                        err = ValueError(f"平台错误({status_code}): {error_text}")
-                        if idx + 1 < len(candidates) and is_market_chat_failoverable(
-                            status_code, error_text
-                        ):
-                            logger.warning(
-                                "[Modstream] 流式换模 %s/%s -> %s",
-                                prov,
-                                mdl,
-                                candidates[idx + 1],
-                            )
-                            last_error = err
-                            retry_next = True
-                        else:
-                            logger.error(
-                                "[Modstream] 平台同步流式返回错误 %s: %s",
-                                status_code,
-                                error_text,
-                            )
-                            raise err
-                    else:
-                        yield from _iter_market_sse_data_payloads(response)
-                        return
+            transport_error: Exception | None = None
+            for proxy, attempt, attempts in _iter_market_transport_plans():
+                client_kwargs: Dict[str, Any] = {
+                    "timeout": httpx.Timeout(self.timeout, connect=_market_connect_timeout()),
+                    "limits": httpx.Limits(max_keepalive_connections=10, max_connections=30),
+                    "headers": self._build_headers(),
+                }
+                if proxy:
+                    client_kwargs["proxy"] = proxy
+                try:
+                    with _httpx_sync_client(**client_kwargs) as client:
+                        with client.stream("POST", url, json=payload) as response:
+                            status_code = _response_status_code(response)
+                            if status_code >= 400:
+                                error_text = response.read().decode("utf-8", errors="ignore")[
+                                    :500
+                                ]
+                                err = ValueError(f"平台错误({status_code}): {error_text}")
+                                if idx + 1 < len(candidates) and is_market_chat_failoverable(
+                                    status_code, error_text
+                                ):
+                                    logger.warning(
+                                        "[Modstream] 流式换模 %s/%s -> %s",
+                                        prov,
+                                        mdl,
+                                        candidates[idx + 1],
+                                    )
+                                    last_error = err
+                                    retry_next = True
+                                    break
+                                logger.error(
+                                    "[Modstream] 平台同步流式返回错误 %s: %s",
+                                    status_code,
+                                    error_text,
+                                )
+                                raise err
+                            yield from _iter_market_sse_data_payloads(response)
+                            return
+                except _MARKET_TRANSPORT_ERRORS as exc:
+                    transport_error = exc
+                    logger.warning(
+                        "[Modstream] 传输失败 proxy=%s attempt=%s/%s: %s",
+                        proxy or "direct",
+                        attempt,
+                        attempts,
+                        exc,
+                    )
+                    time.sleep(min(0.4 * attempt, 1.5))
+                    continue
             if retry_next:
                 continue
+            if transport_error is not None:
+                raise transport_error
         if last_error is not None:
             raise last_error
         raise ValueError("平台流式聊天失败且无可用备用模型")

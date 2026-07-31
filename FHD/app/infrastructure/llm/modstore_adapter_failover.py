@@ -32,10 +32,17 @@ def _failover_enabled(self) -> bool:
     return raw not in {"0", "false", "no", "off"}
 
 
+def _market_connect_timeout() -> float:
+    try:
+        return max(5.0, float(os.environ.get("XCAGI_MARKET_CONNECT_TIMEOUT", "20")))
+    except ValueError:
+        return 20.0
+
+
 def _fetch_llm_status_sync(self) -> dict[str, Any] | None:
     try:
         with httpx.Client(
-            timeout=httpx.Timeout(min(self.timeout, 15.0), connect=5.0),
+            timeout=httpx.Timeout(min(self.timeout, 15.0), connect=_market_connect_timeout()),
             headers=self._build_headers(),
             trust_env=False,
         ) as client:
@@ -51,7 +58,7 @@ def _fetch_llm_status_sync(self) -> dict[str, Any] | None:
 def _fetch_resolve_chat_default_sync(self) -> dict[str, Any] | None:
     try:
         with httpx.Client(
-            timeout=httpx.Timeout(min(self.timeout, 15.0), connect=5.0),
+            timeout=httpx.Timeout(min(self.timeout, 15.0), connect=_market_connect_timeout()),
             headers=self._build_headers(),
             trust_env=False,
         ) as client:
@@ -70,7 +77,7 @@ def _ensure_catalog_sync(self) -> dict[str, Any] | None:
         return catalog
     try:
         with httpx.Client(
-            timeout=httpx.Timeout(min(self.timeout, 15.0), connect=5.0),
+            timeout=httpx.Timeout(min(self.timeout, 15.0), connect=_market_connect_timeout()),
             headers=self._build_headers(),
             trust_env=False,
         ) as client:
@@ -126,26 +133,43 @@ def _post_market_chat_sync(
     if self.user_id:
         payload["user_id"] = self.user_id
     t0 = time.perf_counter()
-    with httpx.Client(
-        timeout=httpx.Timeout(self.timeout, connect=10.0),
-        limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
-        headers=self._build_headers(),
-        trust_env=False,
-    ) as client:
-        response = client.post(url, json=payload)
-        latency_ms = (time.perf_counter() - t0) * 1000.0
-        status_code = _response_status_code(response)
-        if status_code >= 400:
-            error_text = response.text[:500]
-            logger.error(
-                "[Modstore] 平台同步返回错误 %s provider=%s/%s: %s",
-                status_code,
-                provider,
-                model,
-                error_text,
+    connect_timeout = _market_connect_timeout()
+    last_exc: Exception | None = None
+    for attempt in range(1, 4):
+        try:
+            with httpx.Client(
+                timeout=httpx.Timeout(self.timeout, connect=connect_timeout),
+                limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
+                headers=self._build_headers(),
+                trust_env=False,
+            ) as client:
+                response = client.post(url, json=payload)
+                latency_ms = (time.perf_counter() - t0) * 1000.0
+                status_code = _response_status_code(response)
+                if status_code >= 400:
+                    error_text = response.text[:500]
+                    logger.error(
+                        "[Modstore] 平台同步返回错误 %s provider=%s/%s: %s",
+                        status_code,
+                        provider,
+                        model,
+                        error_text,
+                    )
+                    raise ValueError(f"平台错误({status_code}): {error_text}")
+                result = response.json()
+            break
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.RemoteProtocolError) as exc:
+            last_exc = exc
+            logger.warning(
+                "[Modstore] 同步传输失败 attempt=%s/3: %s",
+                attempt,
+                exc,
             )
-            raise ValueError(f"平台错误({status_code}): {error_text}")
-        result = response.json()
+            time.sleep(min(0.4 * attempt, 1.5))
+            continue
+    else:
+        assert last_exc is not None
+        raise last_exc
 
     used_provider = str(result.get("provider") or provider)
     used_model = str(result.get("model") or model)

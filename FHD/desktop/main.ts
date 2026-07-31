@@ -50,7 +50,7 @@ const POST_UPDATE_STABILITY_MS = 5_000
 
 /** OTA / 更新站直连绕过（setProxy 用逗号；commandLine 用分号）。 */
 export const OTA_PROXY_BYPASS_RULES =
-  'xiu-ci.com,*.xiu-ci.com,update.xcagi.com,*.update.xcagi.com,localhost,127.0.0.1,<local>'
+  'xiu-ci.com,*.xiu-ci.com,119.27.178.147,update.xcagi.com,*.update.xcagi.com,localhost,127.0.0.1,<local>'
 
 export function readWindowsInternetProxy(): string | null {
   if (process.platform !== 'win32') {
@@ -92,6 +92,7 @@ export function buildOtaPacScript(proxyServer: string): string {
   return `
 function FindProxyForURL(url, host) {
   if (host === 'xiu-ci.com' || dnsDomainIs(host, '.xiu-ci.com') ||
+      host === '119.27.178.147' ||
       host === 'update.xcagi.com' || dnsDomainIs(host, '.update.xcagi.com') ||
       host === 'localhost' || host === '127.0.0.1') {
     return 'DIRECT';
@@ -336,6 +337,11 @@ export function sanitizeBackendProxyEnv(
   // already has its own PAC bypass; the Python child must not inherit proxies.
   // Note: Clash TUN (utun + 198.18.0.0/16) still intercepts at OS route level —
   // env sanitize cannot bypass TUN; prefer DIRECT rule for xiu-ci.com.
+  // Keep a copy for optional market ConnectError fallback (Python trust_env=False
+  // + XCAGI_MARKET_FALLBACK_PROXY), without re-enabling global HTTP(S)_PROXY.
+  const fallbackProxy =
+    String(next.XCAGI_MARKET_FALLBACK_PROXY || '').trim() ||
+    String(next.HTTPS_PROXY || next.https_proxy || next.HTTP_PROXY || next.http_proxy || '').trim()
   for (const key of [
     'ALL_PROXY',
     'all_proxy',
@@ -347,6 +353,11 @@ export function sanitizeBackendProxyEnv(
   ] as const) {
     delete next[key]
   }
+  if (fallbackProxy) {
+    next.XCAGI_MARKET_FALLBACK_PROXY = fallbackProxy
+  }
+  next.XCAGI_MARKET_CONNECT_TIMEOUT = String(next.XCAGI_MARKET_CONNECT_TIMEOUT || '20')
+  next.XCAGI_MARKET_CONNECT_ATTEMPTS = String(next.XCAGI_MARKET_CONNECT_ATTEMPTS || '3')
   const bypass = OTA_PROXY_BYPASS_RULES.split(',')
     .map(s => s.trim())
     .filter(s => s && s !== '<local>')

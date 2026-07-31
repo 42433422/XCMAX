@@ -6,6 +6,9 @@ import pytest
 
 from app.services.conversation.modstore_adapter import (
     _iter_market_sse_data_payloads,
+    _iter_market_transport_plans,
+    _market_connect_attempts,
+    _market_connect_timeout,
     _normalize_stream_choice,
     _platform_stream_payload_to_openai_chunk,
     _strip_bearer_prefix,
@@ -81,3 +84,23 @@ class TestModstoreAdapterHelpers:
         assert payloads[0] == '{"delta": "hello"}'
         # done content also yielded when present (after delta)
         assert any("hello" in p for p in payloads[1:])
+
+    def test_market_connect_timeout_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("XCAGI_MARKET_CONNECT_TIMEOUT", raising=False)
+        assert _market_connect_timeout() == 20.0
+        monkeypatch.setenv("XCAGI_MARKET_CONNECT_TIMEOUT", "8")
+        assert _market_connect_timeout() == 8.0
+
+    def test_iter_market_transport_plans_includes_fallback(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("XCAGI_MARKET_CONNECT_ATTEMPTS", "2")
+        monkeypatch.setenv("XCAGI_MARKET_FALLBACK_PROXY", "http://127.0.0.1:7890")
+        plans = list(_iter_market_transport_plans())
+        assert plans == [
+            (None, 1, 2),
+            (None, 2, 2),
+            ("http://127.0.0.1:7890", 1, 2),
+            ("http://127.0.0.1:7890", 2, 2),
+        ]
+        assert _market_connect_attempts() == 2
