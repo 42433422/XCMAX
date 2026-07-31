@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 _BUSINESS_ENTITIES = ["customers", "products", "materials", "shipment_records"]
-
 _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ("business_db", "read"): {
         "type": "object",

@@ -196,6 +196,12 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     )
     _mount(
         registry,
+        "knowledge_v1_omniscient",
+        lambda: __import__("app.fastapi_routes.knowledge_v1_omniscient", fromlist=["router"]).router,
+        priority=13,
+    )
+    _mount(
+        registry,
         "etl",
         lambda: __import__("app.fastapi_routes.etl", fromlist=["router"]).router,
         priority=13,

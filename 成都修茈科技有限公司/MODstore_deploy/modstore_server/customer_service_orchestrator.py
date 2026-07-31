@@ -1,3 +1,9 @@
+from modstore_server.customer_service_issue_guards import (
+    _looks_like_forbidden_privilege_request,
+    _looks_like_product_issue,
+    _refuse_forbidden_privilege_reply,
+)
+
 """独立 AI 客服编排层。
 
 对话优先：寒暄 / 一般咨询只回复不建单；规则 + LLM 识别意图后，
@@ -1637,100 +1643,6 @@ def _summarize_user_issue(user_text: str, *, max_len: int = 48) -> str:
     return t
 
 
-def _looks_like_forbidden_privilege_request(user_text: str) -> bool:
-    """用户是否在索要管理员/提权等客服绝不能代办的权限。"""
-    t = re.sub(r"\s+", "", (user_text or "").strip().lower())
-    if len(t) < 4:
-        return False
-    marks = (
-        "管理员权限",
-        "给我管理员",
-        "开通管理员",
-        "设为管理员",
-        "设置管理员",
-        "升级管理员",
-        "变成管理员",
-        "改成管理员",
-        "超级管理员",
-        "要admin",
-        "给我admin",
-        "开通admin",
-        "admin权限",
-        "root权限",
-        "提权",
-        "给我权限后台",
-        "开放后台权限",
-        "给我后台权限",
-        "is_admin",
-        "升为管理员",
-    )
-    return any(x in t for x in marks)
-
-
-def _refuse_forbidden_privilege_reply(user_text: str) -> str:
-    """明确拒答：不承诺、不建提权动作、不派员工改权限。"""
-    _ = user_text
-    return (
-        "我是小C。这个请求我不能办理："
-        "客服与 AI 员工都无法为账号开通管理员或其它提权。"
-        "管理员权限只能由平台运营在后台按合规流程配置。"
-        "如果你遇到的是具体功能问题（比如页面打不开、显示异常），"
-        "直接说现象和页面，我可以帮你登记排查；但不会、也不能改你的账号权限。"
-    )
-
-
-def _looks_like_product_issue(user_text: str) -> bool:
-    """缺陷/界面故障语义：LLM 主判；此处仅作不可用/误判 general 时的兜底。"""
-    t = (user_text or "").strip()
-    if len(t) < 4 or is_greeting(t):
-        return False
-    if _looks_like_forbidden_privilege_request(t):
-        return False
-    # 不用 _is_escalate_only（其定义在后）；纯升级短句直接排除
-    if re.fullmatch(
-        r"(请)?(帮我)?(提交工单|创建工单|转人工|人工客服|升级处理|要工单|找人工)"
-        r"(吧|一下|处理|核查)?[.!！。]?",
-        t,
-    ):
-        return False
-    defect_marks = (
-        "看不清",
-        "看不见",
-        "看不清字",
-        "浅色",
-        "深色",
-        "对比度",
-        "自选模型",
-        "打不开",
-        "进不去",
-        "报错",
-        "白屏",
-        "黑屏",
-        "闪退",
-        "卡住",
-        "加载失败",
-        "加载不出来",
-        "加载不出",
-        "打不开网页",
-        "打不开网站",
-        "首页",
-        "官网",
-        "没反应",
-        "用不了",
-        "点不了",
-        "点了没用",
-        "按钮无效",
-        "显示异常",
-        "文字看不见",
-        "界面",
-        "崩了",
-        "bug",
-        "故障",
-        "坏了",
-    )
-    return any(x in t for x in defect_marks)
-
-
 def _looks_like_concrete_issue(user_text: str) -> bool:
     """用户是否已描述具体问题（而非空话/寒暄）。"""
     t = (user_text or "").strip()
@@ -2186,165 +2098,11 @@ def _summarize_incident_team_rows(team_rows: list[Dict[str, Any]]) -> str:
 
 
 def apply_customer_ticket_incident_progress(
-    db: Session,
-    *,
-    ticket_id: int,
-    event_id: int = 0,
-    team_ok: bool = False,
-    team_rows: Optional[list[Dict[str, Any]]] = None,
-    summary_hint: str = "",
-) -> Dict[str, Any]:
-    """把 AI 员工 / incident team 执行结果回写到已有客服工单。
-
-    复用现有 ``CustomerServiceMessage`` / ``CustomerServiceAction`` / ``audit``，
-    不新建旁路表：推进到「有结果」（processing+approved），全员成功时可结案。
-    """
-    ticket = (
-        db.query(CustomerServiceTicket).filter(CustomerServiceTicket.id == int(ticket_id)).first()
+    from modstore_server.customer_service_incident_progress import (
+        apply_customer_ticket_incident_progress as _impl,
     )
-    if not ticket:
-        return {"ok": False, "reason": "ticket_not_found"}
 
-    rows = [r for r in (team_rows or []) if isinstance(r, dict)]
-    progress = _summarize_incident_team_rows(rows)
-    hint = str(summary_hint or ticket.summary or ticket.title or "").strip()[:120]
-    if team_ok:
-        reply = (
-            f"我是小C。工单「{hint or ticket.ticket_no}」值班员工已完成排查修复并验证通过。"
-            f"进展：{progress}。如仍复现请再补充截图。"
-        )
-    else:
-        reply = (
-            f"我是小C。工单「{hint or ticket.ticket_no}」已有员工处理进展："
-            f"{progress}。我们会继续跟进，也可继续补充截图或具体页面。"
-        )
-
-    action = build_action(
-        db,
-        ticket_id=int(ticket.id),
-        user_id=int(ticket.user_id or 0),
-        action_type="employee.dispatch",
-        target_type="incident_team",
-        target_id=str(event_id or "")[:240],
-        request={
-            "event_id": int(event_id or 0),
-            "team_ok": bool(team_ok),
-            "roles": [
-                {
-                    "role": r.get("role"),
-                    "employee_id": r.get("employee_id"),
-                    "ok": bool(r.get("ok")),
-                    "status": r.get("status"),
-                }
-                for r in rows[:8]
-            ],
-        },
-    )
-    # 回写本身成功即 completed；员工修复是否通过放 result，避免用户侧「转交失败」红字
-    action.status = "completed"
-    action.result_json = json_dumps(
-        {
-            "ok": bool(team_ok),
-            "progress": progress,
-            "event_id": int(event_id or 0),
-            "team_ok": bool(team_ok),
-        }
-    )
-    action.error = ""
-    db.flush()
-
-    # 有员工结论 → decision_status=approved 进入「有结果」；仅全员成功才结案
-    ticket.decision_status = "approved"
-    if team_ok:
-        ticket.status = "resolved"
-        ticket.closed_at = datetime.now(timezone.utc)
-    else:
-        ticket.status = "processing"
-        ticket.closed_at = None
-    ticket.updated_at = datetime.now(timezone.utc)
-
-    ev = json_loads(ticket.evidence_json, {})
-    if not isinstance(ev, dict):
-        ev = {}
-    reports = list(ev.get("employee_reports") or [])
-    reports.append(
-        {
-            "type": "incident_team",
-            "event_id": int(event_id or 0),
-            "team_ok": bool(team_ok),
-            "progress": progress[:500],
-            "at": datetime.now(timezone.utc).isoformat(),
-        }
-    )
-    ev["employee_reports"] = reports[-20:]
-    ticket.evidence_json = json_dumps(ev)
-
-    assistant_msg = CustomerServiceMessage(
-        session_id=int(ticket.session_id),
-        ticket_id=int(ticket.id),
-        user_id=int(ticket.user_id or 0),
-        role="assistant",
-        content=reply,
-        payload_json=json_dumps(
-            {
-                "ticket": ticket_payload(ticket),
-                "cards": [
-                    {
-                        "type": "ticket",
-                        "title": ticket.title,
-                        "ticket_no": ticket.ticket_no,
-                        "status": ticket.status,
-                        "intent": ticket.intent,
-                        **ticket_lifecycle_payload(ticket.status, ticket.decision_status),
-                    }
-                ],
-                "employee_progress": {
-                    "event_id": int(event_id or 0),
-                    "team_ok": bool(team_ok),
-                    "progress": progress,
-                },
-            }
-        ),
-    )
-    db.add(assistant_msg)
-    audit(
-        db,
-        event_type="employee_progress",
-        session_id=int(ticket.session_id),
-        ticket_id=int(ticket.id),
-        actor_type="system",
-        detail={
-            "event_id": int(event_id or 0),
-            "team_ok": bool(team_ok),
-            "progress": progress[:500],
-            "action_id": int(action.id or 0),
-        },
-    )
-    enqueue_customer_service_event(
-        db,
-        "customer_service.employee_progress",
-        f"{ticket.ticket_no}:progress:{event_id or action.id}",
-        {
-            "ticket_id": int(ticket.id),
-            "ticket_no": ticket.ticket_no,
-            "event_id": int(event_id or 0),
-            "team_ok": bool(team_ok),
-            "lifecycle_stage": ticket_lifecycle_stage(ticket.status, ticket.decision_status),
-        },
-    )
-    db.flush()
-    return {
-        "ok": True,
-        "ticket_id": int(ticket.id),
-        "lifecycle_stage": ticket_lifecycle_stage(ticket.status, ticket.decision_status),
-        "lifecycle_label": ticket_lifecycle_payload(ticket.status, ticket.decision_status).get(
-            "lifecycle_label"
-        ),
-        "message_id": int(assistant_msg.id or 0),
-        "action_id": int(action.id or 0),
-        "team_ok": bool(team_ok),
-    }
-
+    return _impl()
 
 def ticket_lifecycle_payload(
     status: str | None = None,

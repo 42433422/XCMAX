@@ -1,13 +1,10 @@
 """Persy knowledge API.
-
 This boundary owns governed document ingestion, hybrid retrieval, knowledge
 graphs, and user/tenant memory review. Dataset actions continue through the
 unified Agent runtime so permissions, audit records, and run telemetry remain
 consistent with the rest of XCAGI.
 """
-
 from __future__ import annotations
-
 import json
 import logging
 import re
@@ -15,12 +12,10 @@ import threading
 import uuid
 from pathlib import Path
 from typing import Any, Literal, cast
-
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi import Query as FastAPIQuery
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
-
 from app.infrastructure.rag import (
     HybridRetriever,
     RetrievedChunk,
@@ -34,6 +29,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/knowledge/v1", tags=["knowledge-v1"])
 
+from app.fastapi_routes.knowledge_v1_payload import (
+    _ensure_bounded_metadata,
+    _public_dataset_payload,
+)
+
 _DATASET_UPLOAD_EXTENSIONS = frozenset(
     {".pdf", ".docx", ".xlsx", ".xls", ".txt", ".md", ".csv", ".json", ".log"}
 )
@@ -42,49 +42,6 @@ _DATASET_INLINE_MAX_CHARS = 5_000_000
 _DATASET_METADATA_MAX_BYTES = 64 * 1024
 _PERSY_DATASET_ID = "persy-knowledge"
 _PUBLIC_KNOWLEDGE_TENANT_ID = "public"
-
-
-def _ensure_bounded_metadata(value: Any, *, max_bytes: int = _DATASET_METADATA_MAX_BYTES) -> None:
-    def walk(item: Any, depth: int = 0) -> None:
-        if depth > 8:
-            raise ValueError("metadata nesting exceeds 8 levels")
-        if isinstance(item, dict):
-            if len(item) > 200:
-                raise ValueError("metadata has too many fields")
-            for key, child in item.items():
-                if len(str(key)) > 200:
-                    raise ValueError("metadata key is too long")
-                walk(child, depth + 1)
-        elif isinstance(item, (list, tuple)):
-            if len(item) > 1000:
-                raise ValueError("metadata list is too long")
-            for child in item:
-                walk(child, depth + 1)
-
-    walk(value)
-    try:
-        encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str).encode(
-            "utf-8"
-        )
-    except (TypeError, ValueError) as exc:
-        raise ValueError("metadata must be JSON serializable") from exc
-    if len(encoded) > max_bytes:
-        raise ValueError(f"metadata cannot exceed {max_bytes} bytes")
-
-
-def _public_dataset_payload(value: Any) -> Any:
-    """Remove local storage details from HTTP responses without changing service internals."""
-
-    if isinstance(value, dict):
-        return {
-            str(key): _public_dataset_payload(item)
-            for key, item in value.items()
-            if not str(key).startswith("_")
-            and str(key) not in {"storage_path", "file_path", "vector_index_path"}
-        }
-    if isinstance(value, list):
-        return [_public_dataset_payload(item) for item in value]
-    return value
 
 
 class IngestRequest(BaseModel):
@@ -441,112 +398,15 @@ def _merge_persy_recall(
     request: Request,
     params: dict[str, Any],
 ) -> dict[str, Any]:
-    from app.application.erp_domain_ontology import (
-        query_erp_ontology,
-        summarize_erp_ontology_chunks,
+    from app.fastapi_routes.knowledge_v1_persy_recall import merge_persy_recall
+
+    return merge_persy_recall(
+        payload,
+        request=request,
+        params=params,
+        dataset_access_context_from_request=_dataset_access_context_from_request,
+        persy_memory_service=_persy_memory_service,
     )
-
-    if str(params.get("dataset_id") or "") != _PERSY_DATASET_ID or not payload.get("success"):
-        return payload
-    query_text = str(params.get("query") or "").strip()
-    if not query_text:
-        return payload
-    memory_result = _persy_memory_service().query(
-        access_context=_dataset_access_context_from_request(request),
-        query=query_text,
-        top_k=max(1, min(int(params.get("top_k") or 5), 20)),
-        reinforce=True,
-    )
-    result = dict(payload)
-    result["persy_memory"] = {
-        "available": bool(memory_result.get("success")),
-        "count": len(memory_result.get("chunks") or []),
-        "retriever": str(memory_result.get("retriever") or ""),
-    }
-    if not memory_result.get("success"):
-        result["persy_memory"]["error_code"] = str(memory_result.get("error_code") or "")
-        memory_chunks: list[dict[str, Any]] = []
-    else:
-        memory_chunks = [
-            dict(chunk) for chunk in memory_result.get("chunks", []) if isinstance(chunk, dict)
-        ]
-
-    knowledge_chunks = [
-        dict(chunk) for chunk in payload.get("chunks", []) if isinstance(chunk, dict)
-    ]
-    erp_result = query_erp_ontology(
-        query_text,
-        top_k=max(1, min(int(params.get("top_k") or 5), 12)),
-    )
-    erp_chunks = [dict(chunk) for chunk in erp_result.get("chunks", []) if isinstance(chunk, dict)]
-    result["erp_ontology"] = {
-        "available": bool(erp_result.get("success")),
-        "count": len(erp_chunks),
-        "retriever": str(erp_result.get("retriever") or ""),
-        "ontology_version": str(erp_result.get("ontology_version") or ""),
-    }
-    seen: set[str] = set()
-    merged_chunks: list[dict[str, Any]] = []
-    for chunk in sorted(
-        [*memory_chunks, *erp_chunks, *knowledge_chunks],
-        key=lambda item: float(item.get("score") or 0.0),
-        reverse=True,
-    ):
-        metadata = chunk.get("metadata") if isinstance(chunk.get("metadata"), dict) else {}
-        fingerprint = str(
-            metadata.get("memory_id")
-            or metadata.get("erp_ontology_id")
-            or metadata.get("document_id")
-            or f"{chunk.get('source')}:{chunk.get('chunk_index')}:{chunk.get('text')}"
-        )
-        if fingerprint in seen:
-            continue
-        seen.add(fingerprint)
-        merged_chunks.append(chunk)
-    result["chunks"] = merged_chunks[: max(2, min(int(params.get("top_k") or 5) * 2, 40))]
-
-    citations = [
-        dict(citation) for citation in payload.get("citations", []) if isinstance(citation, dict)
-    ]
-    for chunk in memory_chunks:
-        memory_metadata = chunk.get("metadata") if isinstance(chunk.get("metadata"), dict) else {}
-        citations.append(
-            {
-                "index": len(citations) + 1,
-                "source": "对话记忆",
-                "text": str(chunk.get("text") or ""),
-                "score": chunk.get("score"),
-                "memory_id": memory_metadata.get("memory_id"),
-            }
-        )
-    for chunk in erp_chunks:
-        erp_metadata = chunk.get("metadata") if isinstance(chunk.get("metadata"), dict) else {}
-        citations.append(
-            {
-                "index": len(citations) + 1,
-                "source": "ERP 领域本体",
-                "text": str(chunk.get("text") or ""),
-                "score": chunk.get("score"),
-                "erp_ontology_id": erp_metadata.get("erp_ontology_id"),
-                "symbolic_expression": erp_metadata.get("symbolic_expression"),
-            }
-        )
-    result["citations"] = citations
-
-    if (memory_chunks or erp_chunks) and params.get("include_answer", True):
-        memory_summary = "；".join(
-            str(chunk.get("text") or "").strip()[:180]
-            for chunk in memory_chunks[:3]
-            if str(chunk.get("text") or "").strip()
-        )
-        erp_summary = summarize_erp_ontology_chunks(erp_chunks)
-        knowledge_answer = str(payload.get("answer") or "").strip()
-        memory_answer = f"已确认的长期记忆：{memory_summary}。" if memory_summary else ""
-        erp_answer = f"ERP 领域规则：{erp_summary}。" if erp_summary else ""
-        result["answer"] = "\n\n".join(
-            part for part in (erp_answer, memory_answer, knowledge_answer) if part
-        )
-    return result
 
 
 def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
@@ -1414,97 +1274,3 @@ def status(request: Request) -> StatusResponse:
 def health(request: Request) -> dict[str, Any]:
     snap = _knowledge_runtime_snapshot(request)
     return {"success": True, **snap}
-
-
-@router.get("/omniscient")
-def omniscient_overview(request: Request) -> dict[str, Any]:
-    """Admin/full-knowledge overview across all governed datasets."""
-    from app.application.dataset_rag_app_service import get_dataset_rag_app_service
-
-    access = _dataset_access_context_from_request(request)
-    if not _dataset_admin_access(access):
-        return cast(
-            "dict[str, Any]",
-            JSONResponse(
-                {
-                    "success": False,
-                    "error_code": "dataset_admin_required",
-                    "message": "全知知识视图仅限管理员",
-                },
-                status_code=403,
-            ),
-        )
-    overview = get_dataset_rag_app_service().status(access_context=access)
-    snap = _knowledge_runtime_snapshot(request)
-    datasets = overview.get("datasets") if isinstance(overview, dict) else {}
-    return cast(
-        "dict[str, Any]",
-        _public_dataset_payload(
-            {
-                "success": True,
-                "omniscient": True,
-                "rag_enabled": snap["rag_enabled"],
-                "embedder_available": snap["embedder_available"],
-                "semantic_embedding_available": snap["semantic_embedding_available"],
-                "recommended_dataset_id": snap["recommended_dataset_id"],
-                "dataset_count": snap["dataset_count"],
-                "document_count": snap["dataset_document_count"],
-                "chunk_count": snap["dataset_chunk_count"],
-                "datasets": datasets if isinstance(datasets, dict) else {},
-                "is_admin": bool(getattr(access, "is_admin", False)) if access else False,
-            }
-        ),
-    )
-
-
-@router.post("/omniscient/query")
-def omniscient_query(req: QueryRequest, request: Request) -> dict[str, Any]:
-    """Query across all datasets visible to the caller (admin = full platform)."""
-    from app.application.dataset_rag_app_service import get_dataset_rag_app_service
-
-    access = _dataset_access_context_from_request(request)
-    if not _dataset_admin_access(access):
-        return cast(
-            "dict[str, Any]",
-            JSONResponse(
-                {
-                    "success": False,
-                    "error_code": "dataset_admin_required",
-                    "message": "全知知识检索仅限管理员",
-                },
-                status_code=403,
-            ),
-        )
-    service = get_dataset_rag_app_service()
-    overview = service.status(access_context=access)
-    datasets = overview.get("datasets") if isinstance(overview, dict) else {}
-    merged: list[dict[str, Any]] = []
-    if isinstance(datasets, dict):
-        per_ds = max(1, min(int(req.top_k), 20))
-        for dataset_id in datasets:
-            result = service.query(
-                dataset_id=str(dataset_id),
-                query=req.query,
-                top_k=per_ds,
-                access_context=access,
-                rerank=True,
-            )
-            if not result.get("success"):
-                continue
-            for chunk in result.get("chunks") or []:
-                if not isinstance(chunk, dict):
-                    continue
-                item = dict(chunk)
-                item["dataset_id"] = str(dataset_id)
-                merged.append(item)
-    merged.sort(key=lambda item: float(item.get("score") or 0.0), reverse=True)
-    top = merged[: max(1, min(int(req.top_k), 50))]
-    return {
-        "success": True,
-        "query": req.query,
-        "chunks": top,
-        "citations": [],
-        "rag_enabled": is_rag_enabled(),
-        "omniscient": True,
-        "dataset_hits": len({str(c.get("dataset_id") or "") for c in top if c.get("dataset_id")}),
-    }

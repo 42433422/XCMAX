@@ -41,7 +41,6 @@ import {
 import { buildRoleMenuProfile, canShowCoreMenuKey } from '@/utils/roleMenuProfile';
 import { isClientErpSidebarContext } from '@/constants/genericModPack';
 const isSandbox = new URLSearchParams(window.location.search).has('sandbox');
-
 const SANDBOX_ALLOWED = new Set([
   'login',
   'login-help',
@@ -55,9 +54,7 @@ const SANDBOX_ALLOWED = new Set([
   'chat-debug',
   'tools',
 ]);
-
 const DEFAULT_DUTY_ROSTER_GRAPH_VIEW = 'department';
-
 function normalizeDutyRosterGraphView(raw: unknown): string {
   const token = String(Array.isArray(raw) ? raw[0] : raw || '').trim().toLowerCase();
   if (token === 'department' || token === 'dept' || token === '六部门') return 'department';
@@ -66,7 +63,6 @@ function normalizeDutyRosterGraphView(raw: unknown): string {
   if (token === 'client' || token === 'workshop' || token === '车间' || token === '客户端车间') return 'client';
   return DEFAULT_DUTY_ROSTER_GRAPH_VIEW;
 }
-
 const allRoutes: RouteRecordRaw[] = [
   {
     path: '/index.html',
@@ -121,7 +117,6 @@ const allRoutes: RouteRecordRaw[] = [
     meta: { title: '局域网授权', publicAccess: true, hideChrome: true }
   },
 ];
-
 /** minimal 构建：Vite 静态剔除下列宿主 ERP/审批等业务路由（勿改为动态 import 独立 chunk） */
 if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
   allRoutes.push(
@@ -318,7 +313,6 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
     },
   );
 }
-
 allRoutes.push(
   {
     path: '/onboarding',
