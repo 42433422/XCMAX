@@ -25,9 +25,13 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
+from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.application.memory_graph_app_service import MemoryGraphAppService
 from app.db.models.memory_graph import EdgeType, MemoryNodeType
@@ -39,13 +43,56 @@ logger = logging.getLogger(__name__)
 _mcp = MCPServer("persy-memory")
 _app_service: MemoryGraphAppService | None = None
 
+# 独立 engine：当配置 PERSY_DB_URL 时，MCP server 用独立 DB（如 SQLite persy_memory.db），
+# 不依赖应用 SessionLocal（由 DATABASE_URL 决定，默认本机 PostgreSQL）。
+_independent_engine: Engine | None = None
+_independent_session_factory: sessionmaker | None = None
+
+
+def _get_independent_session() -> Session:
+    """用 PERSY_DB_URL 构造独立 engine，不依赖应用 SessionLocal。
+
+    默认 ``sqlite:///persy_memory.db``（相对工作目录）。仅创建 memory_graph 两张表
+    （``persy_memory_nodes`` / ``persy_memory_edges``），避免触碰应用其他业务表。
+    """
+    global _independent_engine, _independent_session_factory
+    db_url = os.environ.get("PERSY_DB_URL", "sqlite:///persy_memory.db")
+    if _independent_engine is None:
+        connect_args: dict[str, Any] = {}
+        if db_url.startswith("sqlite"):
+            connect_args = {"check_same_thread": False}
+        _independent_engine = create_engine(db_url, connect_args=connect_args)
+        # 仅创建 memory_graph 两张表（checkfirst 保证已存在时跳过）
+        from app.db.models.memory_graph import MemoryNode, TypedEdge
+
+        MemoryNode.__table__.create(_independent_engine, checkfirst=True)
+        TypedEdge.__table__.create(_independent_engine, checkfirst=True)
+        _independent_session_factory = sessionmaker(bind=_independent_engine)
+        logger.info("[Persy MCP] 独立 engine 已构造: %s", db_url)
+    return _independent_session_factory()
+
 
 def _get_svc() -> MemoryGraphAppService:
-    """获取当前绑定的 app_service；未绑定时回退到 get_default_app_service。"""
-    if _app_service is None:
-        # 兜底：未调用 build_server 就直接调用 tool（罕见，但保持健壮）
-        return get_default_app_service()
-    return _app_service
+    """获取当前绑定的 app_service。
+
+    优先级：
+        1. 模块级 ``_app_service``（build_server 显式注入或 PERSY_DB_URL 构造）。
+        2. 若设置了 ``PERSY_DB_URL``：用独立 engine 构造 app_service。
+        3. 否则回退到 ``get_default_app_service()``（应用 SessionLocal）。
+    """
+    if _app_service is not None:
+        return _app_service
+    if os.environ.get("PERSY_DB_URL"):
+        # 用独立 engine 构造 app_service
+        session = _get_independent_session()
+        from app.application.memory_update_engine import MemoryUpdateEngine
+        from app.infrastructure.memory_graph_store import MemoryGraphStore
+
+        store = MemoryGraphStore(session)
+        update_engine = MemoryUpdateEngine(store)
+        return MemoryGraphAppService(store=store, update_engine=update_engine)
+    # 兜底：未调用 build_server 就直接调用 tool（罕见，但保持健壮）
+    return get_default_app_service()
 
 
 def _parse_node_type(value: str) -> MemoryNodeType | None:
@@ -266,14 +313,27 @@ def build_server(app_service: MemoryGraphAppService | None = None) -> MCPServer:
     """构造并返回 MCPServer 单例。
 
     Args:
-        app_service: 注入的 AppService；为 None 时使用 ``get_default_app_service()``。
+        app_service: 注入的 AppService。优先级：
+            1. 显式传入的 app_service。
+            2. 设置了 ``PERSY_DB_URL`` 时用独立 engine 构造。
+            3. 上述都不满足时使用 ``get_default_app_service()``（应用 SessionLocal）。
 
     Returns:
         模块级 ``MCPServer`` 单例，所有 tool 已注册。
     """
     global _app_service
     if app_service is None:
-        app_service = get_default_app_service()
+        if os.environ.get("PERSY_DB_URL"):
+            # 用独立 engine 构造（persy_memory.db 等）
+            session = _get_independent_session()
+            from app.application.memory_update_engine import MemoryUpdateEngine
+            from app.infrastructure.memory_graph_store import MemoryGraphStore
+
+            store = MemoryGraphStore(session)
+            update_engine = MemoryUpdateEngine(store)
+            app_service = MemoryGraphAppService(store=store, update_engine=update_engine)
+        else:
+            app_service = get_default_app_service()
     _app_service = app_service
     return _mcp
 

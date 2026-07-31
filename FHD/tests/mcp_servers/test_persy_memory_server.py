@@ -255,10 +255,14 @@ def test_check_conflicts_tool_returns_edges_when_present(server_with_mock, mock_
     assert "A 与 B 矛盾" in result[0]["context"]
 
 
-def test_build_server_uses_default_app_service_when_none():
-    """build_server(app_service=None) 应使用 get_default_app_service。"""
+def test_build_server_uses_default_app_service_when_none(monkeypatch):
+    """build_server(app_service=None) 应使用 get_default_app_service。
+
+    必须显式清除 PERSY_DB_URL，否则会走独立 engine 分支。
+    """
     from mcp_servers.persy_memory import server as server_module
 
+    monkeypatch.delenv("PERSY_DB_URL", raising=False)
     captured = {}
 
     def fake_default():
@@ -273,3 +277,145 @@ def test_build_server_uses_default_app_service_when_none():
         assert srv is not None
     finally:
         server_module.get_default_app_service = original
+
+
+def _reset_independent_engine() -> None:
+    """重置 server 模块的独立 engine 单例（测试隔离用）。"""
+    from mcp_servers.persy_memory import server as server_module
+
+    server_module._independent_engine = None
+    server_module._independent_session_factory = None
+
+
+def test_get_independent_session_creates_engine_with_persy_db_url(monkeypatch, tmp_path):
+    """设置 PERSY_DB_URL 时应用独立 engine 构造 session。"""
+    from mcp_servers.persy_memory import server as server_module
+
+    db_file = tmp_path / "test_persy.db"
+    monkeypatch.setenv("PERSY_DB_URL", f"sqlite:///{db_file}")
+    _reset_independent_engine()
+    try:
+        session = server_module._get_independent_session()
+        # engine 已构造
+        assert server_module._independent_engine is not None
+        assert server_module._independent_session_factory is not None
+        # 表已创建（可查询不报错）
+        from sqlalchemy import inspect
+
+        inspector = inspect(server_module._independent_engine)
+        table_names = set(inspector.get_table_names())
+        assert "persy_memory_nodes" in table_names
+        assert "persy_memory_edges" in table_names
+        # 第二次调用复用同一 engine
+        session2 = server_module._get_independent_session()
+        assert session2 is not None
+    finally:
+        _reset_independent_engine()
+
+
+def test_get_svc_uses_independent_engine_when_persy_db_url_set(monkeypatch, tmp_path):
+    """设置 PERSY_DB_URL 时 _get_svc 用独立 engine 构造 app_service。"""
+    from mcp_servers.persy_memory import server as server_module
+
+    db_file = tmp_path / "test_persy.db"
+    monkeypatch.setenv("PERSY_DB_URL", f"sqlite:///{db_file}")
+    # 清空模块级 _app_service，强制走 PERSY_DB_URL 分支
+    original_app_service = server_module._app_service
+    server_module._app_service = None
+    _reset_independent_engine()
+    try:
+        svc = server_module._get_svc()
+        # 应返回 MemoryGraphAppService 实例（非 mock）
+        from app.application.memory_graph_app_service import MemoryGraphAppService
+
+        assert isinstance(svc, MemoryGraphAppService)
+        # engine 已构造
+        assert server_module._independent_engine is not None
+    finally:
+        server_module._app_service = original_app_service
+        _reset_independent_engine()
+
+
+def test_get_svc_falls_back_to_default_when_no_persy_db_url(monkeypatch):
+    """不设置 PERSY_DB_URL 时 _get_svc 回退到 get_default_app_service。"""
+    from mcp_servers.persy_memory import server as server_module
+
+    monkeypatch.delenv("PERSY_DB_URL", raising=False)
+    original_app_service = server_module._app_service
+    server_module._app_service = None
+    captured = {}
+
+    def fake_default():
+        captured["called"] = True
+        return MagicMock()
+
+    original_default = server_module.get_default_app_service
+    server_module.get_default_app_service = fake_default
+    try:
+        svc = server_module._get_svc()
+        assert captured["called"] is True
+        assert svc is not None
+    finally:
+        server_module._app_service = original_app_service
+        server_module.get_default_app_service = original_default
+
+
+def test_build_server_uses_independent_engine_when_persy_db_url_set(monkeypatch, tmp_path):
+    """build_server(app_service=None) 在 PERSY_DB_URL 设置时用独立 engine。"""
+    from mcp_servers.persy_memory import server as server_module
+
+    db_file = tmp_path / "test_persy.db"
+    monkeypatch.setenv("PERSY_DB_URL", f"sqlite:///{db_file}")
+    original_app_service = server_module._app_service
+    _reset_independent_engine()
+    try:
+        srv = server_module.build_server(app_service=None)
+        assert srv is not None
+        # _app_service 应为 MemoryGraphAppService 实例（独立 engine 构造）
+        from app.application.memory_graph_app_service import MemoryGraphAppService
+
+        assert isinstance(server_module._app_service, MemoryGraphAppService)
+        assert server_module._independent_engine is not None
+    finally:
+        server_module._app_service = original_app_service
+        _reset_independent_engine()
+
+
+def test_build_server_reads_real_persy_memory_db(monkeypatch):
+    """验证 MCP server 能读取真实 persy_memory.db 中的 61 个节点。
+
+    仅当仓库根存在 persy_memory.db 时运行（CI 无此文件时跳过）。
+    迁移数据：scope=project scope_id=XCMAX，共 61 个 ACTIVE 节点
+    （24 constraint + 20 convention + 17 lesson）。
+    """
+    import os
+
+    from mcp_servers.persy_memory import server as server_module
+
+    db_path = os.path.join(os.getcwd(), "persy_memory.db")
+    if not os.path.exists(db_path):
+        pytest.skip("persy_memory.db 不存在（仅在已迁移环境运行）")
+
+    monkeypatch.setenv("PERSY_DB_URL", f"sqlite:///{db_path}")
+    original_app_service = server_module._app_service
+    _reset_independent_engine()
+    try:
+        server_module.build_server(app_service=None)
+        # 读取 active constraint + convention（lesson 不在 active 接口返回）
+        constraints = server_module._tool_call_get_active_constraints(
+            scope="project", scope_id="XCMAX"
+        )
+        conventions = server_module._tool_call_get_active_conventions(
+            scope="project", scope_id="XCMAX"
+        )
+        # 24 constraint + 20 convention = 44
+        assert len(constraints) == 24, f"期望 24 个 constraint，实际 {len(constraints)}"
+        assert len(conventions) == 20, f"期望 20 个 convention，实际 {len(conventions)}"
+        # search_memory 也能查到节点
+        results = server_module._tool_call_search_memory(
+            query="ruff", scope="project", scope_id="XCMAX", top_k=5
+        )
+        assert isinstance(results, list)
+    finally:
+        server_module._app_service = original_app_service
+        _reset_independent_engine()
