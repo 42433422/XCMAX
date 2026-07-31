@@ -11,6 +11,15 @@ def _use_temp_state(monkeypatch, tmp_path):
     return state_path
 
 
+def _advance(scope, mod_id, track, *statuses, note=""):
+    project = None
+    for status in statuses:
+        project = delivery.set_track_status(
+            scope, mod_id, track, status, note=note if status == statuses[-1] else ""
+        )
+    return project
+
+
 def test_private_mod_tracks_are_independent(monkeypatch, tmp_path):
     _use_temp_state(monkeypatch, tmp_path)
 
@@ -19,14 +28,20 @@ def test_private_mod_tracks_are_independent(monkeypatch, tmp_path):
     assert project["tracks"]["employees"]["status"] == "production"
     assert delivery.overall_status(project) == "production"
 
-    project = delivery.set_track_status(
-        "market:7", "customer-mod", "modules", "delivered", note="侧栏验收通过"
+    project = _advance(
+        "market:7",
+        "customer-mod",
+        "modules",
+        "testing",
+        "acceptance",
+        "delivered",
+        note="侧栏验收通过",
     )
     assert project["tracks"]["modules"]["status"] == "delivered"
     assert project["tracks"]["employees"]["status"] == "production"
     assert delivery.overall_status(project) == "partial"
 
-    project = delivery.set_track_status("market:7", "customer-mod", "employees", "acceptance")
+    project = _advance("market:7", "customer-mod", "employees", "testing", "acceptance")
     assert project["tracks"]["employees"]["status"] == "acceptance"
     assert delivery.overall_status(project) == "acceptance"
     assert delivery.stage_label("employees", "delivered") == "已上岗"
@@ -41,6 +56,21 @@ def test_private_mod_business_alias_maps_to_modules(monkeypatch, tmp_path):
 
 def test_private_mod_node_progress_rolls_up_track(monkeypatch, tmp_path):
     _use_temp_state(monkeypatch, tmp_path)
+    delivery.set_node_status(
+        "market:7",
+        "taiyangniao-pro",
+        "modules",
+        "attendance-convert",
+        "testing",
+        note="进入测试",
+    )
+    delivery.set_node_status(
+        "market:7",
+        "taiyangniao-pro",
+        "modules",
+        "attendance-convert",
+        "acceptance",
+    )
     delivery.set_node_status(
         "market:7",
         "taiyangniao-pro",
@@ -71,8 +101,25 @@ def test_private_mod_node_progress_rolls_up_track(monkeypatch, tmp_path):
         },
     )
     assert attached["modules"][0]["status"] == "delivered"
-    assert attached["modules"][0]["label"] == "考勤表转化"
+    assert attached["modules"][0]["next_stages"] == []
+    assert attached["modules"][1]["next_stages"] == ["acceptance", "rework"]
     assert attached["employees"][0]["status"] == "production"
+
+
+def test_private_mod_stage_transition_rejects_skip(monkeypatch, tmp_path):
+    _use_temp_state(monkeypatch, tmp_path)
+    try:
+        delivery.set_node_status(
+            "market:7",
+            "taiyangniao-pro",
+            "modules",
+            "attendance-convert",
+            "delivered",
+        )
+        raise AssertionError("should reject skip")
+    except ValueError as exc:
+        assert "不可从" in str(exc)
+
 
 
 def test_private_mod_state_is_account_scoped(monkeypatch, tmp_path):
@@ -88,7 +135,7 @@ def test_private_mod_state_is_account_scoped(monkeypatch, tmp_path):
 def test_private_mod_delivery_snapshot_round_trips_for_management_view(monkeypatch, tmp_path):
     _use_temp_state(monkeypatch, tmp_path)
 
-    delivery.set_track_status("market:7", "customer-mod", "employees", "rework", note="补充回归用例")
+    _advance("market:7", "customer-mod", "employees", "testing", "rework", note="补充回归用例")
     snapshot = delivery.export_account_state("market:7")
     delivery.apply_account_state("market:8", snapshot)
 

@@ -571,6 +571,7 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
     """生产员工专用：客户私有 Mod 双轨交付状态与私有更新信息。"""
     from app.mod_sdk.customer_delivery import delivery_for_account_custom_mod
     from app.services.private_mod_delivery import (
+        HAPPY_PATH,
         STAGES,
         STAGE_LABELS,
         TRACKS,
@@ -578,6 +579,7 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
         attach_track_nodes,
         fetch_private_mod_library,
         is_newer_version,
+        load_stage_flow_from_ssot,
         overall_status,
         project_state,
         stage_label,
@@ -659,6 +661,8 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
             "projects": projects,
             "tracks": TRACKS,
             "stages": STAGES,
+            "happy_path": list(HAPPY_PATH),
+            "stage_flow": load_stage_flow_from_ssot(),
             "stage_labels": STAGE_LABELS,
             "update_count": sum(1 for p in projects if p["update_available"]),
             "remote_error": remote_error,
