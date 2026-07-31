@@ -329,6 +329,8 @@ describe('EtlCenterView folder workflow', () => {
       sha256: 'source-hash',
     })
     etlApiMock.preview.mockResolvedValue(shipment)
+    // autoWriteEnabled 默认开启：preview_ready 后会自动调用 execute 写入业务库。
+    etlApiMock.execute.mockResolvedValue({ ...shipment, status: 'executing', stage: 'executing' })
     const wrapper = await mountView()
     const input = wrapper.find('input[type="file"][multiple]')
     const source = new File(['data'], '侯雪梅.xlsx', {
@@ -349,7 +351,7 @@ describe('EtlCenterView folder workflow', () => {
     expect(wrapper.text()).toContain('尚未保存')
     expect(wrapper.text()).toContain('要同时补全客户库和产品库？')
     expect(buttonByText(wrapper, '导入客户及产品')).toBeTruthy()
-    expect(etlApiMock.execute).not.toHaveBeenCalled()
+    expect(etlApiMock.execute).toHaveBeenCalled()
     wrapper.unmount()
   })
 
@@ -426,7 +428,7 @@ describe('EtlCenterView folder workflow', () => {
     expect(wrapper.text()).toContain('华东批次 · 2 个可处理文件')
     expect(wrapper.text()).toContain('华东批次/客户/customers.csv')
     expect(wrapper.text()).toContain('华东批次/产品/products.csv')
-    expect(wrapper.text()).toContain('批量上传并创建 2 个预演')
+    expect(wrapper.text()).toContain('批量上传并写入 2 个文件')
     wrapper.unmount()
   })
 
@@ -450,7 +452,7 @@ describe('EtlCenterView folder workflow', () => {
     Object.defineProperty(input.element, 'files', { value: files })
     await input.trigger('change')
     const start = wrapper.findAll('button').find((button) => (
-      button.text().includes('批量上传并创建 2 个预演')
+      button.text().includes('批量上传并写入 2 个文件')
     ))
     await start?.trigger('click')
     await flushPromises()
@@ -479,7 +481,7 @@ describe('EtlCenterView folder workflow', () => {
     expect(wrapper.text()).toContain('客户 → 产品关系')
     expect(wrapper.text()).toContain('OCR 第 2 页 · 表格行 7')
     expect(wrapper.text()).toContain('默认阻断整批')
-    expect(buttonByText(wrapper, '确认执行')?.attributes('disabled')).toBeDefined()
+    expect(buttonByText(wrapper, '写入数据库')?.attributes('disabled')).toBeDefined()
 
     await buttonByText(wrapper, '字段映射')?.trigger('click')
     const transformSelect = wrapper.find('tbody select')
@@ -833,7 +835,7 @@ describe('EtlCenterView folder workflow', () => {
     })
     expect(etlApiMock.execute).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('客户及产品导入任务已创建')
-    expect(wrapper.text()).toContain('不会写入客户库或产品库')
+    expect(wrapper.text()).toContain('已从同一上传文件创建客户及产品导入任务')
     expect(wrapper.text()).toContain('正在规划客户与产品附表')
     wrapper.unmount()
   })
