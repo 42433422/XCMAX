@@ -43,7 +43,44 @@ class SearchRequest(BaseModel):
     top_k: int = Field(10, ge=1, le=50)
 
 
-def create_v2_router(app_service: MemoryGraphAppService) -> APIRouter:
+# 模块级单例：lazy 初始化，避免在 import 时即创建 DB 连接。
+_app_service_singleton: MemoryGraphAppService | None = None
+
+
+def get_default_app_service() -> MemoryGraphAppService:
+    """懒构造默认的 MemoryGraphAppService。
+
+    供 ``create_v2_router(app_service=None)`` 在主应用装配时使用：
+    复用应用全局 SessionLocal，确保与 v1 路由看到同一数据库。
+    """
+    global _app_service_singleton
+    if _app_service_singleton is not None:
+        return _app_service_singleton
+
+    # 延迟导入，避免在模块加载阶段触发 DB 引擎构造。
+    from app.application.memory_update_engine import MemoryUpdateEngine
+    from app.db import SessionLocal
+    from app.infrastructure.memory_graph_store import MemoryGraphStore
+
+    store = MemoryGraphStore(SessionLocal())
+    update_engine = MemoryUpdateEngine(store)
+    _app_service_singleton = MemoryGraphAppService(store=store, update_engine=update_engine)
+    return _app_service_singleton
+
+
+def reset_default_app_service() -> None:
+    """重置单例，仅用于测试。"""
+    global _app_service_singleton
+    _app_service_singleton = None
+
+
+def create_v2_router(app_service: MemoryGraphAppService | None = None) -> APIRouter:
+    """构造 v2 路由器。
+
+    ``app_service`` 为 None 时使用 ``get_default_app_service()`` 懒初始化，
+    使主应用可在不显式注入依赖的情况下挂载 v2 路由。
+    """
+    service = app_service if app_service is not None else get_default_app_service()
     router = APIRouter(prefix="/api/knowledge/v2", tags=["knowledge-v2"])
 
     @router.get("/health")
@@ -59,7 +96,7 @@ def create_v2_router(app_service: MemoryGraphAppService) -> APIRouter:
                 "error_code": "invalid_node_type",
                 "message": f"unknown type: {req.type}",
             }
-        result = app_service.ingest_engineering(
+        result = service.ingest_engineering(
             type=node_type,
             title=req.title,
             content=req.content,
@@ -77,21 +114,21 @@ def create_v2_router(app_service: MemoryGraphAppService) -> APIRouter:
     ) -> dict[str, Any]:
         node_type = _parse_node_type(type)
         if node_type == MemoryNodeType.CONSTRAINT:
-            nodes = app_service.get_active_constraints(scope=scope, scope_id=scope_id)
+            nodes = service.get_active_constraints(scope=scope, scope_id=scope_id)
         elif node_type == MemoryNodeType.CONVENTION:
-            nodes = app_service.get_active_conventions(scope=scope, scope_id=scope_id)
+            nodes = service.get_active_conventions(scope=scope, scope_id=scope_id)
         else:
             # Phase 1: 只支持 constraint/convention，其他类型后续扩展
             nodes = []
             if node_type is None:
-                nodes = app_service.get_active_constraints(scope=scope, scope_id=scope_id)
-                nodes += app_service.get_active_conventions(scope=scope, scope_id=scope_id)
+                nodes = service.get_active_constraints(scope=scope, scope_id=scope_id)
+                nodes += service.get_active_conventions(scope=scope, scope_id=scope_id)
         return {"count": len(nodes), "nodes": nodes}
 
     @router.post("/search")
     def search(req: SearchRequest) -> dict[str, Any]:
         node_type = _parse_node_type(req.type)
-        results = app_service.search_memory(
+        results = service.search_memory(
             query=req.query,
             scope=req.scope,
             scope_id=req.scope_id,

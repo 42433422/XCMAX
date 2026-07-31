@@ -179,6 +179,14 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     )
     _mount(
         registry,
+        "knowledge_v2",
+        lambda: __import__(
+            "app.fastapi_routes.knowledge_v2", fromlist=["create_v2_router"]
+        ).create_v2_router(),
+        priority=14,
+    )
+    _mount(
+        registry,
         "taiyangniao_attendance_compat",
         _load_taiyangniao_attendance_compat_router,
         priority=14,
