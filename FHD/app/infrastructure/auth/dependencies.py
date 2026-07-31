@@ -92,13 +92,19 @@ def session_id_from_request(request: Request) -> str:
     x_sid = x_sid_raw.strip() if isinstance(x_sid_raw, str) else ""
     if x_sid:
         return x_sid
+    cookie_name = (os.environ.get("SESSION_COOKIE_NAME") or "session_id").strip()
+    cookie_raw = cookies.get(cookie_name) or ""
+    cookie_sid = cookie_raw.strip() if isinstance(cookie_raw, str) else ""
     auth_raw = headers.get("Authorization") or ""
     auth = auth_raw if isinstance(auth_raw, str) else ""
     if auth.startswith("Bearer "):
-        return auth[7:].strip()
-    cookie_name = (os.environ.get("SESSION_COOKIE_NAME") or "session_id").strip()
-    cookie_raw = cookies.get(cookie_name) or ""
-    return cookie_raw.strip() if isinstance(cookie_raw, str) else ""
+        bearer = auth[7:].strip()
+        # 桌面智能对话会附带市场 Authorization: Bearer，不能盖掉本地 session_id Cookie，
+        # 否则 IndustryContext 租户为空 → ORM fail-closed → customers.query 假阴性「暂无数据」。
+        if cookie_sid:
+            return cookie_sid
+        return bearer
+    return cookie_sid
 
 
 def resolve_session_user(request: Request) -> Any | None:
