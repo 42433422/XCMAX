@@ -7,6 +7,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+# CI 环境可能未安装 mcp 包（MCP server 仅在 Trae IDE 环境运行）
+pytest.importorskip("mcp")
+
 
 @pytest.fixture()
 def mock_app_service():

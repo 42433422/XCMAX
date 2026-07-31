@@ -16,3 +16,4 @@ types-openpyxl
 celery-types
 safety>=3.0
 bandit>=1.7
+mcp>=2.0
