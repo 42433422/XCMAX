@@ -7,7 +7,13 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
 
-from modstore_server.customer_service_tools import audit, build_action, json_dumps, json_loads
+from modstore_server.customer_service_tools import (
+    audit,
+    build_action,
+    enqueue_customer_service_event,
+    json_dumps,
+    json_loads,
+)
 from modstore_server.models_cs import (
     CustomerServiceAction,
     CustomerServiceDecision,
@@ -194,4 +200,79 @@ def apply_customer_ticket_incident_progress(
         "message_id": int(assistant_msg.id or 0),
         "action_id": int(action.id or 0),
         "team_ok": bool(team_ok),
+    }
+
+
+def ticket_lifecycle_stage(
+    status: str | None = None,
+    decision_status: str | None = None,
+) -> int:
+    """用户侧五阶段：1已收到 → 2处理中 → 3有结果 → 4待补充 → 5已完成。"""
+    s = str(status or "").strip().lower()
+    d = str(decision_status or "").strip().lower()
+    if s in {"resolved", "closed", "done", "rejected"}:
+        return 5
+    if s == "waiting_user" or d == "needs_more_info":
+        return 4
+    if s in {"open", "pending", "queued"}:
+        return 1
+    if s == "processing":
+        if d in {"approved", "rejected"}:
+            return 3
+        return 2
+    if d in {"approved", "rejected"}:
+        return 3
+    return 1
+
+
+def ticket_lifecycle_payload(
+    status: str | None = None,
+    decision_status: str | None = None,
+) -> Dict[str, Any]:
+    stage = ticket_lifecycle_stage(status, decision_status)
+    label = next((name for num, name in TICKET_LIFECYCLE_STEPS if num == stage), "已收到")
+    return {
+        "lifecycle_stage": stage,
+        "lifecycle_label": label,
+        "lifecycle_steps": [
+            {
+                "stage": num,
+                "label": name,
+                "state": ("done" if num < stage else "current" if num == stage else "todo"),
+            }
+            for num, name in TICKET_LIFECYCLE_STEPS
+        ],
+    }
+
+
+def ticket_payload(row: CustomerServiceTicket) -> Dict[str, Any]:
+    life = ticket_lifecycle_payload(row.status, row.decision_status)
+    evidence = json_loads(row.evidence_json, {})
+    if not isinstance(evidence, dict):
+        evidence = {}
+    domain = str(evidence.get("issue_domain") or "").strip().lower()
+    if domain not in ISSUE_DOMAINS:
+        domain = ""
+    return {
+        "id": row.id,
+        "session_id": row.session_id,
+        "ticket_no": row.ticket_no,
+        "title": row.title,
+        "intent": row.intent,
+        "issue_domain": domain or None,
+        "issue_domain_label": evidence.get("issue_domain_label")
+        or ISSUE_DOMAIN_LABELS.get(domain)
+        or None,
+        "subject_type": row.subject_type,
+        "subject_id": row.subject_id,
+        "status": row.status,
+        "priority": row.priority,
+        "evidence": evidence,
+        "summary": row.summary,
+        "decision_status": row.decision_status,
+        "automation_level": row.automation_level,
+        "created_at": row.created_at.isoformat() if row.created_at else "",
+        "updated_at": row.updated_at.isoformat() if row.updated_at else "",
+        "closed_at": row.closed_at.isoformat() if row.closed_at else "",
+        **life,
     }
