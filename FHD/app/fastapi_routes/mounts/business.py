@@ -23,6 +23,7 @@ _DESKTOP_REQUIRED_ROUTES = {
     "workspace_prefs",
     "business_bridge",
     "mod_store",
+    "etl",
 }
 
 
@@ -184,6 +185,20 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
             "app.fastapi_routes.knowledge_v2", fromlist=["create_v2_router"]
         ).create_v2_router(),
         priority=14,
+    )
+    _mount(
+        registry,
+        "etl",
+        lambda: __import__("app.fastapi_routes.etl", fromlist=["router"]).router,
+        priority=15,
+        required_in_ci=True,
+    )
+    _mount(
+        registry,
+        "etl_targets",
+        lambda: __import__("app.fastapi_routes.etl_targets", fromlist=["router"]).router,
+        priority=15,
+        required_in_ci=True,
     )
     _mount(
         registry,

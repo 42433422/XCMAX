@@ -322,7 +322,7 @@ describe('router/index 覆盖率补齐', () => {
       expect(router.currentRoute.value.name).toBe('materials')
     })
 
-    it('/business-docking 进入数据对接中心', async () => {
+    it('/business-docking 进入 ETL 数据对接中心', async () => {
       await router.push('/business-docking')
       expect(router.currentRoute.value.name).toBe('business-docking')
     })
