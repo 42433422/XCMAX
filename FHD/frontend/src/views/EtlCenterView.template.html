@@ -3,7 +3,7 @@
       <div>
         <span class="etl-eyebrow">企业版 · 通用 ETL</span>
         <h1>数据对接中心</h1>
-        <p>文件先预演、再确认。AI 只给建议，最终写入由确定性规则和你的确认控制。</p>
+        <p>上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。</p>
       </div>
       <div class="etl-hero__limits">
         <span>支持整文件夹</span>
@@ -101,15 +101,15 @@
             </select>
           </label>
           <div v-if="targetType === 'auto'" class="etl-target-scope-note">
-            <strong>先识别单据类型，再创建预演</strong>
+            <strong>先识别单据类型，再真实写入</strong>
             <span>
-              送货单会自动选择“发货记录”；识别结果只决定预演目标，确认前不会写库。
+              送货单会自动选择“发货记录”；识别结果决定写入目标，解析通过后写入业务库。
             </span>
           </div>
           <div v-else-if="targetType === 'customer_products'" class="etl-target-scope-note">
             <strong>一次关联写入客户库和产品库</strong>
             <span>
-              先创建或复用购买单位，再将每个产品挂到同名购买单位下；一次预演、一次确认、可整次撤销。
+              先创建或复用购买单位，再将每个产品挂到同名购买单位下；一次解析、一次写入、可整次撤销。
             </span>
           </div>
           <div v-else-if="['customers', 'products'].includes(targetType)" class="etl-target-scope-note">
@@ -120,7 +120,7 @@
             导入模板
             <select v-model="templateSelection" :disabled="busy" aria-label="导入模板">
               <option value="">
-                {{ targetType === 'auto' ? '智能识别（或选择个人模板）' : '自动识别（预演后可保存为个人模板）' }}
+                {{ targetType === 'auto' ? '智能识别（或选择个人模板）' : '自动识别（写入后可保存为个人模板）' }}
               </option>
               <optgroup v-if="compatibleTemplates.length" label="我的个人模板">
                 <option
@@ -142,7 +142,7 @@
               </optgroup>
             </select>
             <small v-if="!compatibleTemplates.length">
-              暂无个人模板；完成一次预演并保存后会显示在这里。
+              暂无个人模板；完成一次导入并保存后会显示在这里。
             </small>
             <small v-if="selectedCompatibilityPreset">
               将固定使用“{{ selectedCompatibilityPreset.label }}”解析；它是只读预设，不会跨用户保存业务数据。
@@ -181,7 +181,7 @@
           </div>
           <div class="etl-form-actions">
             <span v-if="selectedFiles.length">
-              {{ selectedFiles.length }} 个文件将分别预演，确认前不会写库
+              {{ selectedFiles.length }} 个文件将分别解析并写入业务库
             </span>
             <button
               type="button"
@@ -199,7 +199,7 @@
           <div>
             <strong>{{ selectionFolderName ? `文件夹：${selectionFolderName}` : '本次文件清单' }}</strong>
             <span>
-              {{ batchFinishedCount }}/{{ selectedFiles.length }} 已完成预演 ·
+              {{ batchFinishedCount }}/{{ selectedFiles.length }} 已完成 ·
               {{ batchFailedCount }} 个失败
             </span>
           </div>
@@ -241,7 +241,7 @@
       </details>
       <p v-if="capabilities?.compatibility_presets?.length" class="etl-compat-note">
         已获取 {{ capabilities.compatibility_presets.length }} 个旧 YAML/知识库兼容预设，可在“导入模板”中选择；
-        预演确认后可保存为仅自己可见的个人模板。
+        写入完成后可保存为仅自己可见的个人模板。
       </p>
 
       <form v-if="showWebhookForm" class="etl-webhook-form" @submit.prevent="saveWebhook">
@@ -275,7 +275,7 @@
           保存并重新校验
         </button>
       </div>
-      <div v-if="!currentRun" class="etl-empty">请先在“上传文件”中创建预演。</div>
+      <div v-if="!currentRun" class="etl-empty">请先在“上传文件”中创建导入任务。</div>
       <div v-else class="etl-mapping-table-wrap">
         <table class="etl-table etl-mapping-table">
           <thead>
@@ -348,7 +348,7 @@
     <section v-else-if="activeTab === 'preview'" class="etl-panel" data-tutorial-anchor="business-dock-results">
       <div class="etl-panel__title">
         <div>
-          <h2>预演与确认</h2>
+          <h2>核对与写入</h2>
           <p>重复数据默认跳过；更新只会使用模板中明确允许的字段。</p>
         </div>
         <div class="etl-actions">
@@ -359,7 +359,7 @@
             :disabled="busy"
             @click="previewCustomerProductsFromShipment"
           >
-            {{ linkedCustomerProductPreview ? '查看客户及产品预演' : '预演客户及产品' }}
+            {{ linkedCustomerProductPreview ? '查看客户及产品导入' : '导入客户及产品' }}
           </button>
           <button
             v-if="currentRun?.target_type === 'shipment_records'"
@@ -379,14 +379,14 @@
             :disabled="!canExecute || busy"
             @click="executeCurrentRun"
           >
-            确认执行
+            写入数据库
           </button>
         </div>
       </div>
-      <div v-if="!currentRun" class="etl-empty">暂无预演任务。</div>
+      <div v-if="!currentRun" class="etl-empty">暂无导入任务。</div>
       <template v-else>
         <div v-if="customerProductPreviewMessage" class="etl-target-scope-note">
-          <strong>客户及产品预演已创建</strong>
+          <strong>客户及产品导入任务已创建</strong>
           <span>{{ customerProductPreviewMessage }}</span>
         </div>
         <div v-if="['queued', 'previewing'].includes(currentRun.status)" class="etl-progress-card">
@@ -395,7 +395,7 @@
             <span>{{ currentRun.progress }}%</span>
           </div>
           <progress :value="currentRun.progress" max="100"></progress>
-          <p>后台只在解析和预演；未点击“确认执行”前不会写入业务数据。</p>
+          <p>正在解析文件；解析通过后将自动写入业务库。</p>
         </div>
         <div class="etl-business-context">
           <div>
@@ -456,15 +456,14 @@
           v-if="currentRun.target_type === 'shipment_records'"
           class="etl-target-scope-note"
         >
-          <strong>{{ linkedCustomerProductPreview ? '已自动规划客户库和产品库预演' : '要同时补全客户库和产品库？' }}</strong>
+          <strong>{{ linkedCustomerProductPreview ? '已自动规划客户库和产品库导入' : '要同时补全客户库和产品库？' }}</strong>
           <span>
             <template v-if="linkedCustomerProductPreview">
-              同一上传文件的客户及产品预演状态：{{ statusLabel(String(linkedCustomerProductPreview.status || 'queued')) }}。
-              读取历史出货、报价等安全附表；点击“查看客户及产品预演”可核对结果。它不会写入任何客户或产品。
+              同一上传文件的客户及产品导入状态：{{ statusLabel(String(linkedCustomerProductPreview.status || 'queued')) }}。
+              读取历史出货、报价等安全附表；点击“查看客户及产品导入”可核对结果。
             </template>
             <template v-else>
-              当前任务只预演发货记录。可从同一上传文件创建“客户及产品”预演，读取历史出货、报价等安全附表；
-              这一步不会写入任何客户或产品，仍需你在新预演中确认执行。
+              当前任务只写入发货记录。可从同一上传文件创建“客户及产品”导入，读取历史出货、报价等安全附表后写入客户库与产品库。
             </template>
           </span>
         </div>
@@ -482,7 +481,7 @@
             <ul>
               <li v-for="region in detectedRegions" :key="String(region.id)">
                 {{ String(region.sheet || '') }} · 第 {{ Number(region.header_row || 0) }} 行表头 ·
-                {{ region.status === 'selected' ? '纳入本次预演' : '已排除' }}
+                {{ region.status === 'selected' ? '纳入本次导入' : '已排除' }}
                 <template v-if="region.customer_name"> · 客户 {{ String(region.customer_name) }}</template>
               </li>
             </ul>
@@ -491,7 +490,7 @@
         <div v-if="workbookSheetPlan.length" class="etl-target-scope-note" data-testid="workbook-sheet-plan">
           <strong>工作簿附表规划 · 已检查 {{ workbookSheetPlan.length }} 个工作表</strong>
           <span>
-            送货单、历史出货和报价会按各自角色预演；回款、对账等表不会被当作客户或产品写入。
+            送货单、历史出货和报价会按各自角色导入；回款、对账等表不会被当作客户或产品写入。
           </span>
           <span v-if="latestRecordSelection" class="etl-sheet-plan-latest">
             {{ latestRecordSelectionText(latestRecordSelection) }}
@@ -670,7 +669,7 @@
               class="etl-secondary"
               :disabled="busy"
               @click="retryRun"
-            >重新预演</button>
+            >重新导入</button>
             <button
               v-if="['completed', 'failed', 'interrupted'].includes(currentRun.status) && currentRun.summary.executed > 0 && currentRun.reversible && currentRun.rollback_status !== 'completed'"
               type="button"
