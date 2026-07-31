@@ -3851,6 +3851,48 @@ def test_resume_from_clean_baseline_false_for_ai_review_pr_closed_without_merge(
     )
 
 
+def test_resume_from_clean_baseline_true_for_ai_review_indeterminate_veto():
+    from modstore_server.self_maintenance_para_merge_remediation import (
+        resume_from_clean_baseline_for_para_merge,
+    )
+
+    detail = "devfleet/cursor/sub-1-d0a091: indeterminate-review"
+    assert resume_from_clean_baseline_for_para_merge("para_ai_review_rejected", detail) is True
+
+
+def test_reconcile_ai_review_indeterminate_veto_sets_clean_baseline_restart():
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-d0a091",
+                "para_task_id": "task-ai-indeterminate",
+                "run_id": "run-ai-indeterminate",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-d0a091",
+            "detail": "devfleet/cursor/sub-1-d0a091: indeterminate-review",
+            "source": "ai-review-veto",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result["remediation_added"] == 1
+    assert memory["open_items"][0]["reason"] == "para_ai_review_rejected"
+    assert memory["open_items"][0]["resume_from_clean_baseline"] is True
+
+
 def test_terminal_merge_remediation_prompt_mentions_closed_pr_and_main_supersession():
     from modstore_server.self_maintenance_remediation_prompts import (
         external_merge_remediation_prompt,
