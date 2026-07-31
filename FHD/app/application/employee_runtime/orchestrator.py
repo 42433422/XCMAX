@@ -16,6 +16,7 @@ from app.application.employee_runtime.loader import (
     list_installed_pack_records,
     parse_employee_config_v2,
 )
+from app.application.employee_runtime.duty_graph_bridge import report_employee_orchestration
 from app.application.workflow.engine import WorkflowEngine
 from app.application.workflow.types import PlanGraph, WorkflowNode
 from app.domain.employee.collaboration_graph import CollaborationGraph
@@ -104,9 +105,18 @@ def _employee_dispatcher(
 class EmployeeOrchestrator:
     """本地员工依赖图编排器。"""
 
-    def __init__(self, graph: CollaborationGraph | None = None) -> None:
+    def __init__(
+        self,
+        graph: CollaborationGraph | None = None,
+        *,
+        parallel_ready_max_workers: int = 4,
+    ) -> None:
         self.graph = graph or build_global_collaboration_graph()
-        self._engine = WorkflowEngine(tool_dispatcher=lambda **kw: _employee_dispatcher(**kw))
+        self.parallel_ready_max_workers = max(1, int(parallel_ready_max_workers or 1))
+        self._engine = WorkflowEngine(
+            tool_dispatcher=lambda **kw: _employee_dispatcher(**kw),
+            parallel_ready_max_workers=self.parallel_ready_max_workers,
+        )
 
     def depends_on(
         self, employee_id: str, manifest: dict[str, Any], config: dict[str, Any]
@@ -200,6 +210,12 @@ class EmployeeOrchestrator:
         ctx.setdefault("task", task)
         ctx.setdefault("employee_id", employee_id)
         run = self._engine._run_batch(plan, ctx)
+        report_employee_orchestration(
+            employee_id,
+            run,
+            plan_id=plan.plan_id,
+            parallel_workers=self.parallel_ready_max_workers,
+        )
         return {
             "skipped": False,
             "employee_id": employee_id,
@@ -207,6 +223,7 @@ class EmployeeOrchestrator:
             "success": run.success,
             "message": run.message,
             "node_outputs": (run.final_context or {}).get("node_outputs") or {},
+            "parallel_workers": self.parallel_ready_max_workers,
             "node_results": [
                 {
                     "node_id": nr.node_id,

@@ -289,3 +289,31 @@ def test_employee_template_renders_agent_handler():
     assert "agent_runner" in src
     assert "SYSTEM_PROMPT =" in src
     assert "cfg['system_prompt'] or SYSTEM_PROMPT" in src
+
+def test_agent_runner_max_rounds_not_success(tmp_path, monkeypatch):
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    from modstore_server.mod_employee_agent_runner import EmployeeAgentRunner
+
+    async def _always_tool_call(_messages, max_tokens=1500):
+        return {
+            "ok": True,
+            "content": '{"thought":"t","tool":"probe_mod_host","tool_input":{}}',
+        }
+
+    ctx = {"employee_id": "test-emp", "employee_capabilities": ["probe_mod_host"]}
+    runner = EmployeeAgentRunner(ctx, max_rounds=1, workspace_root=str(tmp_path))
+
+    with patch.object(runner, "_call_llm", new=AsyncMock(side_effect=_always_tool_call)):
+        with patch.object(
+            runner,
+            "_dispatch_tool",
+            new=AsyncMock(return_value={"ok": True, "summary": "x"}),
+        ):
+            result = asyncio.run(runner.run("ping"))
+
+    assert result.get("ok") is False
+    assert result.get("exit_status") == "max_rounds"
+    assert result.get("max_iterations_reached") is True
+    assert result.get("error")

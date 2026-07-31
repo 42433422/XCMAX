@@ -33,6 +33,7 @@ from app.application.employee_runtime.loader import (
     resolve_pack_dir,
 )
 from app.application.employee_runtime.memory import EmployeeMemoryManager, MemoryContext
+from app.application.employee_runtime.result_verifier import verify_employee_run_result
 from app.application.employee_runtime.risk_gate import gate_action_or_block
 from app.domain.employee.memory_scope import MemoryScope
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -382,16 +383,34 @@ class EmployeeAgent:
             )
             duration_ms = round((time.perf_counter() - t0) * 1000, 3)
             ok = _ex._handlers_execution_ok(result)
+            verified_ok, _verify_reason = verify_employee_run_result(
+                employee_id,
+                {"result": result} if isinstance(result, dict) else {},
+            )
+            task_success = bool(ok and verified_ok)
+            audit_success = task_success
+            billing_success = True
+            handoff_success = True
+            outputs = result.get("outputs") if isinstance(result, dict) else None
+            if isinstance(outputs, list):
+                for item in outputs:
+                    if not isinstance(item, dict):
+                        continue
+                    child = item.get("output") if isinstance(item.get("output"), dict) else item
+                    if isinstance(child, dict) and str(child.get("error_code") or "") == "tool_billing_blocked":
+                        billing_success = False
+                        task_success = False
+            success = task_success
 
             from app.application.employee_runtime.metrics import record_employee_run
 
             record_employee_run(
                 employee_id,
-                success=ok,
+                success=success,
                 task=task,
                 summary=self._summarize(result),
             )
-            if not ok:
+            if not success:
                 try:
                     from app.application.employee_runtime.triggers import (
                         publish_employee_task_failed,
@@ -411,13 +430,17 @@ class EmployeeAgent:
                 self._summarize(result),
                 user_id=user_id,
                 session_id=session_id,
-                success=ok,
+                success=success,
             )
             return {
                 "employee_id": employee_id,
                 "pack": {"id": pack["pack_id"], "version": pack.get("version")},
                 "duration_ms": duration_ms,
-                "success": ok,
+                "success": success,
+                "task_success": task_success,
+                "audit_success": audit_success,
+                "billing_success": billing_success,
+                "handoff_success": handoff_success,
                 "result": result,
                 "executed_at": datetime.now(UTC).isoformat(),
                 "source": "employee_runtime.local",

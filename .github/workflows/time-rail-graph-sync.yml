@@ -1,0 +1,23 @@
+name: time-rail-graph-sync
+
+on:
+  pull_request:
+    paths:
+      - 'docs/xcagi-dashboard/emp-wf-radial-graph.js'
+      - 'FHD/scripts/dev/sync_time_rail_workflow_graph.py'
+      - 'FHD/scripts/dev/extract_time_rail_graph.mjs'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/xcagi-dashboard/emp-wf-radial-graph.js'
+
+jobs:
+  check-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify time rail graph JSON is in sync
+        run: python3 FHD/scripts/dev/sync_time_rail_workflow_graph.py --check

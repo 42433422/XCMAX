@@ -7041,6 +7041,61 @@ def record_self_maintenance_heartbeat(
     return record
 
 
+
+def para_readiness_status() -> Dict[str, Any]:
+    """Para 配置就绪（只读 env，不改生产）。"""
+    api_base = os.environ.get("MODSTORE_PARA_API_BASE", "").strip()
+    device_id = os.environ.get("MODSTORE_PARA_DEVICE_ID", "").strip()
+    repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
+    branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
+    gaps: List[str] = []
+    if not api_base:
+        gaps.append("missing MODSTORE_PARA_API_BASE")
+    if not device_id:
+        gaps.append("missing MODSTORE_PARA_DEVICE_ID")
+    if not repo_url:
+        gaps.append("missing MODSTORE_PARA_REPO_URL")
+    if not branch:
+        gaps.append("missing MODSTORE_PARA_BRANCH")
+    return {
+        "ready": not gaps,
+        "gaps": gaps,
+        "api_base": api_base,
+        "device_id": device_id,
+        "repo_url": repo_url,
+        "branch": branch,
+    }
+
+
+def ledger_success_summary(*, scan_limit: int = 343) -> Dict[str, Any]:
+    """从 loop ledger 汇总成功率（非仪表盘硬编码 0/343）。"""
+    rows = _read_ledger(limit=max(50, min(int(scan_limit or 343), 5000)))
+    starts = 0
+    completes = 0
+    failures = 0
+    for row in rows:
+        phase = str(row.get("phase") or "")
+        status = str(row.get("status") or row.get("action") or "").lower()
+        if phase == "start":
+            starts += 1
+        elif phase == "complete":
+            if status in {"failed", "error"}:
+                failures += 1
+            else:
+                completes += 1
+    denom = starts or max(completes + failures, 1)
+    rate = round(completes / denom, 4) if denom else 0.0
+    return {
+        "scan_limit": scan_limit,
+        "ledger_rows_scanned": len(rows),
+        "starts": starts,
+        "completes": completes,
+        "failures": failures,
+        "success_rate": rate,
+        "note": "derived from self-maintenance ledger rows, not a fixed 0/343 constant",
+    }
+
+
 def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
     """Return the runtime-consumed self-maintenance loop state.
 
@@ -8562,6 +8617,8 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
                 "MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_DRY_RUN"
             ),
         },
+        "para_readiness": para_readiness_status(),
+        "ledger_success": ledger_success_summary(),
         "l4_closure": {
             "target": "L4",
             "auto_dispatch_deploy": _auto_dispatch_deploy_enabled(),

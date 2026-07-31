@@ -2091,11 +2091,11 @@
           <div class="gap-card">
             <span class="gap-pri p0">P0 · BLOCKED</span>
             <div class="gap-name">信任度（敢放手）</div>
-            <div class="gap-desc">self-maintenance loop 0/343 成功率，<code>missing_para_api_base_or_device_id</code> 阻断 +
+            <div class="gap-desc">self-maintenance loop ledger 成功率（读 runtime status / ledger，而非固定 0/343 常量），<code>missing_para_api_base_or_device_id</code> 阻断 +
               medium_risk 未配置 <code>allow_medium_risk=True</code>。loop ledger 缺失（343 次尝试 0
               次成功，失败原因未持久化）。战略层虽已建立决策账本，但执行层 loop 不通就无法被信任放手。</div>
             <div class="gap-loop sell">self_maintenance_loop_runner · 60min incident cooldown</div>
-            <div class="gap-resolved" style="color:var(--red)">0/343 — 需先实现 loop ledger + Para 配置</div>
+            <div class="gap-resolved" style="color:var(--red)">ledger 口径 — 以 self-maintenance runtime status 与 ledger_success 为准</div>
             <a class="gap-fix-link"
               href="file:///Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py">→
               self_maintenance_loop_runner.py</a>
@@ -2266,12 +2266,12 @@
           <div class="gap-card">
             <span class="gap-pri p0">P0 · BLOCKED</span>
             <div class="gap-name">self-maintenance loop 信任度建立</div>
-            <div class="gap-desc">loop 0/343 成功率 → 战略层虽建立决策账本，但执行层 loop 不通无法被信任放手。需先：(1) 实现 loop ledger（343
+            <div class="gap-desc">loop ledger 成功率 → 战略层虽建立决策账本，执行层以 ledger 行与 Para readiness 观测为准。需先：(1) 读 loop ledger（非固定 343
               次失败原因持久化）；(2) 修复 <code>missing_para_api_base_or_device_id</code> Para 配置；(3) 配置
               <code>allow_medium_risk=True</code> 或 <code>manifest.autonomy.medium_self_approve=true</code>；(4) 跑通 10
               次成功闭环后战略层才敢自动 dispatch 给 loop。</div>
             <div class="gap-loop sell">self_maintenance_loop_runner · loop ledger</div>
-            <div class="gap-resolved" style="color:var(--red)">0/343 — 阻塞战略层 dispatch</div>
+            <div class="gap-resolved" style="color:var(--red)">ledger/Para readiness — 阻塞项见 runtime status，非硬编码比例</div>
             <a class="gap-fix-link"
               href="file:///Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner.py">→
               self_maintenance_loop_runner.py</a>

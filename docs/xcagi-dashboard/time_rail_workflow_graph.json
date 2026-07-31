@@ -341,10 +341,10 @@
     },
     {
       "id": "CANARY",
-      "label": "单机发布\nCVM tarball+compose",
+      "label": "灰度发布\nstaging→canary 10%→prod",
       "kind": "step",
       "phase": "t3",
-      "desc": "生产唯一路径：119.27.178.147 上 tarball/compose；fhd-ci-cd → cvm-push-release → fhd-auto-update.sh（无 K8s/canary/blue-green）"
+      "desc": "XCAGI_DEPLOY_STRATEGY=canary（默认）：先 staging 验证 → 金丝雀 10% 流量 + HPA 自动扩缩 → 校验通过再推进 production（rolling/canary/blue-green 可选）"
     },
     {
       "id": "P6",
