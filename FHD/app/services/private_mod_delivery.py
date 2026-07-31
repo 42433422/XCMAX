@@ -22,10 +22,16 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+# 与 customer_delivery.json delivery_model.tracks 对齐；business 为历史别名
 TRACKS: dict[str, dict[str, str]] = {
-    "business": {"label": "业务模块", "delivered_label": "已交付"},
-    "employees": {"label": "AI 员工", "delivered_label": "已上岗"},
+    "modules": {
+        "label": "业务模块",
+        "delivered_label": "已交付",
+        "legacy_ids": ["business"],
+    },
+    "employees": {"label": "AI 员工", "delivered_label": "已上岗", "legacy_ids": []},
 }
+TRACK_ALIAS = {"business": "modules"}
 
 STAGES: tuple[str, ...] = ("production", "testing", "rework", "acceptance", "delivered")
 STAGE_LABELS: dict[str, str] = {
@@ -91,8 +97,72 @@ def account_scope(market_user_id: int | None = None, username: str = "") -> str:
     return f"local:{name}" if name else "local:default"
 
 
-def _default_track() -> dict[str, Any]:
+def normalize_track(track: str) -> str:
+    tid = str(track or "").strip()
+    return TRACK_ALIAS.get(tid, tid)
+
+
+def _default_node() -> dict[str, Any]:
     return {"status": "production", "timeline": [], "updated_at": _now_iso()}
+
+
+def _default_track() -> dict[str, Any]:
+    return {
+        "status": "production",
+        "timeline": [],
+        "nodes": {},
+        "updated_at": _now_iso(),
+    }
+
+
+def _rollup_track_status(track_row: dict[str, Any]) -> str:
+    nodes = track_row.get("nodes") if isinstance(track_row.get("nodes"), dict) else {}
+    if not nodes:
+        return str(track_row.get("status") or "production")
+    statuses = [str((row or {}).get("status") or "production") for row in nodes.values() if isinstance(row, dict)]
+    if not statuses:
+        return str(track_row.get("status") or "production")
+    if all(s == "delivered" for s in statuses):
+        return "delivered"
+    if any(s == "rework" for s in statuses):
+        return "rework"
+    if any(s == "acceptance" for s in statuses):
+        return "acceptance"
+    if any(s == "testing" for s in statuses):
+        return "testing"
+    if any(s == "delivered" for s in statuses):
+        return "partial"
+    return "production"
+
+
+def _migrate_tracks(tracks: dict[str, Any]) -> dict[str, Any]:
+    """把历史 business 轨迁到 modules，并保证 nodes 容器存在。"""
+    if not isinstance(tracks, dict):
+        return {}
+    if "business" in tracks and "modules" not in tracks:
+        tracks["modules"] = tracks.pop("business")
+    elif "business" in tracks and "modules" in tracks:
+        legacy = tracks.pop("business")
+        current = tracks["modules"]
+        if isinstance(legacy, dict) and isinstance(current, dict):
+            legacy_nodes = legacy.get("nodes") if isinstance(legacy.get("nodes"), dict) else {}
+            current_nodes = current.setdefault("nodes", {})
+            if isinstance(current_nodes, dict):
+                for nid, nrow in legacy_nodes.items():
+                    current_nodes.setdefault(nid, nrow)
+    for track in TRACKS:
+        row = tracks.setdefault(track, _default_track())
+        if not isinstance(row, dict):
+            tracks[track] = _default_track()
+            continue
+        row.setdefault("status", "production")
+        row.setdefault("timeline", [])
+        nodes = row.setdefault("nodes", {})
+        if not isinstance(nodes, dict):
+            row["nodes"] = {}
+        row.setdefault("updated_at", _now_iso())
+        row["status"] = _rollup_track_status(row)
+    return tracks
 
 
 def _ensure_project(
@@ -112,14 +182,10 @@ def _ensure_project(
     if version:
         project["last_seen_version"] = version
     tracks = project.setdefault("tracks", {})
-    for track in TRACKS:
-        current = tracks.setdefault(track, _default_track())
-        if not isinstance(current, dict):
-            tracks[track] = _default_track()
-        else:
-            current.setdefault("status", "production")
-            current.setdefault("timeline", [])
-            current.setdefault("updated_at", _now_iso())
+    if not isinstance(tracks, dict):
+        tracks = {}
+        project["tracks"] = tracks
+    project["tracks"] = _migrate_tracks(tracks)
     project.setdefault("updated_at", _now_iso())
     return project
 
@@ -213,15 +279,30 @@ def apply_account_state(scope_key: str, snapshot: dict[str, Any]) -> None:
                 version=str(incoming.get("last_seen_version") or ""),
             )
             incoming_tracks = incoming.get("tracks")
+            if isinstance(incoming_tracks, dict):
+                incoming_tracks = _migrate_tracks(dict(incoming_tracks))
             for track in TRACKS:
                 row = incoming_tracks.get(track) if isinstance(incoming_tracks, dict) else None
                 if not isinstance(row, dict):
                     continue
+                nodes_in = row.get("nodes") if isinstance(row.get("nodes"), dict) else {}
+                nodes_out: dict[str, Any] = {}
+                for nid, nrow in nodes_in.items():
+                    node_id = str(nid or "").strip()
+                    if not node_id or not isinstance(nrow, dict):
+                        continue
+                    nodes_out[node_id] = {
+                        "status": str(nrow.get("status") or "production"),
+                        "timeline": list(nrow.get("timeline") or [])[-30:],
+                        "updated_at": str(nrow.get("updated_at") or ""),
+                    }
                 project["tracks"][track] = {
                     "status": str(row.get("status") or "production"),
                     "timeline": list(row.get("timeline") or [])[-30:],
+                    "nodes": nodes_out,
                     "updated_at": str(row.get("updated_at") or ""),
                 }
+                project["tracks"][track]["status"] = _rollup_track_status(project["tracks"][track])
             if incoming.get("updated_at"):
                 project["updated_at"] = str(incoming["updated_at"])
             projects[mod_id] = project
@@ -237,11 +318,25 @@ def set_track_status(
     note: str = "",
     name: str = "",
     version: str = "",
+    node_id: str = "",
 ) -> dict[str, Any]:
+    track = normalize_track(track)
     if track not in TRACKS:
         raise ValueError(f"未知交付轨道: {track}")
     if status not in STAGES:
         raise ValueError(f"未知交付阶段: {status}")
+    nid = str(node_id or "").strip()
+    if nid:
+        return set_node_status(
+            scope_key,
+            mod_id,
+            track,
+            nid,
+            status,
+            note=note,
+            name=name,
+            version=version,
+        )
     with _STATE_LOCK:
         state = _read_state()
         accounts = state.setdefault("accounts", {})
@@ -256,13 +351,106 @@ def set_track_status(
             if str(note or "").strip():
                 event["note"] = str(note).strip()[:500]
             row["timeline"] = [*timeline, event][-30:]
+            # 整轨手动改状态时，同步尚未单独推进的节点
+            nodes = row.get("nodes") if isinstance(row.get("nodes"), dict) else {}
+            for node in nodes.values():
+                if isinstance(node, dict) and node.get("status") != status:
+                    node["status"] = status
+                    node["updated_at"] = row["updated_at"]
         project["updated_at"] = _now_iso()
         _write_state(state)
         return json.loads(json.dumps(project, ensure_ascii=False))
 
 
+def set_node_status(
+    scope_key: str,
+    mod_id: str,
+    track: str,
+    node_id: str,
+    status: str,
+    *,
+    note: str = "",
+    name: str = "",
+    version: str = "",
+) -> dict[str, Any]:
+    track = normalize_track(track)
+    nid = str(node_id or "").strip()
+    if track not in TRACKS:
+        raise ValueError(f"未知交付轨道: {track}")
+    if not nid:
+        raise ValueError("缺少 node_id")
+    if status not in STAGES:
+        raise ValueError(f"未知交付阶段: {status}")
+    with _STATE_LOCK:
+        state = _read_state()
+        accounts = state.setdefault("accounts", {})
+        scope = accounts.setdefault(scope_key, {})
+        project = _ensure_project(scope, mod_id, name=name, version=version)
+        track_row = project["tracks"][track]
+        nodes = track_row.setdefault("nodes", {})
+        if not isinstance(nodes, dict):
+            nodes = {}
+            track_row["nodes"] = nodes
+        node = nodes.setdefault(nid, _default_node())
+        if not isinstance(node, dict):
+            node = _default_node()
+            nodes[nid] = node
+        if node.get("status") != status:
+            node["status"] = status
+            node["updated_at"] = _now_iso()
+            timeline = list(node.get("timeline") or [])
+            event = {"status": status, "at": node["updated_at"]}
+            if str(note or "").strip():
+                event["note"] = str(note).strip()[:500]
+            node["timeline"] = [*timeline, event][-30:]
+        track_row["status"] = _rollup_track_status(track_row)
+        track_row["updated_at"] = _now_iso()
+        project["updated_at"] = _now_iso()
+        _write_state(state)
+        return json.loads(json.dumps(project, ensure_ascii=False))
+
+
+def attach_track_nodes(
+    project: dict[str, Any],
+    declared: dict[str, list[dict[str, Any]]],
+) -> dict[str, list[dict[str, Any]]]:
+    """把 SSOT/manifest 声明的节点与本地进度合并，供生产员工面板渲染。"""
+    tracks = project.get("tracks") if isinstance(project.get("tracks"), dict) else {}
+    tracks = _migrate_tracks(dict(tracks))
+    out: dict[str, list[dict[str, Any]]] = {"modules": [], "employees": []}
+    for track in TRACKS:
+        track_row = tracks.get(track) if isinstance(tracks.get(track), dict) else {}
+        node_state = track_row.get("nodes") if isinstance(track_row.get("nodes"), dict) else {}
+        declared_nodes = declared.get(track) if isinstance(declared.get(track), list) else []
+        merged: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for item in declared_nodes:
+            if not isinstance(item, dict):
+                continue
+            nid = str(item.get("id") or "").strip()
+            label = str(item.get("label") or nid).strip()
+            if not nid or nid in seen:
+                continue
+            seen.add(nid)
+            state = node_state.get(nid) if isinstance(node_state.get(nid), dict) else {}
+            status = str(state.get("status") or "production")
+            merged.append(
+                {
+                    "id": nid,
+                    "label": label,
+                    "summary": str(item.get("summary") or "").strip(),
+                    "status": status,
+                    "status_label": stage_label(track, status),
+                    "updated_at": str(state.get("updated_at") or ""),
+                }
+            )
+        out[track] = merged
+    return out
+
+
 def overall_status(project: dict[str, Any]) -> str:
     tracks = project.get("tracks") if isinstance(project.get("tracks"), dict) else {}
+    tracks = _migrate_tracks(dict(tracks))
     statuses = [str((tracks.get(k) or {}).get("status") or "production") for k in TRACKS]
     if all(status == "delivered" for status in statuses):
         return "delivered"
@@ -272,12 +460,15 @@ def overall_status(project: dict[str, Any]) -> str:
         return "acceptance"
     if any(status == "testing" for status in statuses):
         return "testing"
-    if any(status == "delivered" for status in statuses):
+    if any(status in {"delivered", "partial"} for status in statuses):
         return "partial"
     return "production"
 
 
 def stage_label(track: str, status: str) -> str:
+    track = normalize_track(track)
+    if status == "partial":
+        return "部分完成"
     if track == "employees" and status == "delivered":
         return TRACKS[track]["delivered_label"]
     return STAGE_LABELS.get(status, status)
@@ -427,11 +618,14 @@ __all__ = [
     "account_projects",
     "account_scope",
     "apply_account_state",
+    "attach_track_nodes",
     "export_account_state",
     "fetch_private_mod_library",
     "is_newer_version",
+    "normalize_track",
     "overall_status",
     "project_state",
+    "set_node_status",
     "set_track_status",
     "stage_label",
     "update_private_mod_from_library",

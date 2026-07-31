@@ -546,6 +546,23 @@ def _private_mod_items(row: dict[str, Any]) -> tuple[list[dict[str, Any]], list[
     return modules, employees
 
 
+def _private_mod_declared_nodes(
+    mod_id: str,
+    row: dict[str, Any],
+) -> dict[str, list[dict[str, Any]]]:
+    """优先 customer_delivery SSOT 双轨节点，空则回退 manifest menu / workflow_employees。"""
+    from app.mod_sdk.customer_delivery import track_nodes_for_custom_mod
+
+    declared = track_nodes_for_custom_mod(mod_id)
+    modules = list(declared.get("modules") or [])
+    employees = list(declared.get("employees") or [])
+    if not modules and not employees:
+        fallback_modules, fallback_employees = _private_mod_items(row)
+        modules = fallback_modules
+        employees = fallback_employees
+    return {"modules": modules, "employees": employees}
+
+
 @router.get("/private-delivery", response_model=ModStoreSimpleResponse)
 async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse:
     """生产员工专用：客户私有 Mod 双轨交付状态与私有更新信息。"""
@@ -555,6 +572,7 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
         STAGE_LABELS,
         TRACKS,
         account_scope,
+        attach_track_nodes,
         fetch_private_mod_library,
         is_newer_version,
         overall_status,
@@ -600,6 +618,8 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
             version=local_version,
         )
         modules, employees = _private_mod_items(row)
+        declared = _private_mod_declared_nodes(mod_id, row)
+        track_nodes = attach_track_nodes(project, declared)
         projects.append(
             {
                 "mod_id": mod_id,
@@ -612,6 +632,7 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
                 "update_source": "private_mod_sync" if remote else "unavailable",
                 "business_modules": modules,
                 "ai_employees": employees,
+                "track_nodes": track_nodes,
                 "tracks": project.get("tracks", {}),
                 "overall_status": overall_status(project),
                 "overall_label": {
@@ -623,7 +644,8 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
                     "delivered": "私有 Mod 已交付",
                 }.get(overall_status(project), "制作中"),
                 "stage_labels": {
-                    "business": {s: stage_label("business", s) for s in STAGES},
+                    "modules": {s: stage_label("modules", s) for s in STAGES},
+                    "business": {s: stage_label("modules", s) for s in STAGES},
                     "employees": {s: stage_label("employees", s) for s in STAGES},
                 },
             }
@@ -648,6 +670,7 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
     mod_id = _safe_text(payload.get("mod_id"))
     track = _safe_text(payload.get("track"))
     status = _safe_text(payload.get("status"))
+    node_id = _safe_text(payload.get("node_id"))
     if not mod_id or not track or not status:
         raise HTTPException(status_code=400, detail="缺少 mod_id、track 或 status")
     context = await _private_mod_context(request)
@@ -666,6 +689,7 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
             note=_safe_text(payload.get("note")),
             name=_safe_text(local.get("name") or mod_id),
             version=_safe_text(local.get("version")),
+            node_id=node_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
