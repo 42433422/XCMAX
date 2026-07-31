@@ -1,4 +1,14 @@
-"""客户交付清单：行业包 ↔ 账号定制 Mod（legacy id）映射。"""
+"""客户交付清单 SSOT 加载器。
+
+真相源：``config/customer_delivery.json``（已登记 ``docs/SSOT_INDEX.md`` · customer-delivery）。
+
+字段分工：
+- ``industry_mod_id``：通用行业包（如 attendance-industry）
+- ``legacy_mod_id``：客户定制包（如 taiyangniao-pro）
+
+生产员工私有交付只暴露 ``legacy_mod_id ∩ entitlement``，见清单内
+``private_mod_delivery`` 段；勿把行业包塞进该入口。
+"""
 
 from __future__ import annotations
 

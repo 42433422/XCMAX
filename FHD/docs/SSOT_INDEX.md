@@ -1,7 +1,7 @@
 # SSOT 索引（唯一真相源登记表）
 
 > **本文件为 SSOT 索引的 SSOT**。任何文档声称 SSOT 必须在此登记。
-> 最后更新：2026-07-24
+> 最后更新：2026-07-31
 
 ## 登记规则
 
@@ -41,6 +41,7 @@
 | customer-ticket-bus（客服工单闭环） | [architecture/CUSTOMER_TICKET_BUS_SSOT.md](architecture/CUSTOMER_TICKET_BUS_SSOT.md) | 客服工单总线/告警闭环的唯一事实源：MODstore incident_bus + incident_team 与入场边界 |
 | deployment-modes（AI 部署模式） | [../config/deployment_modes.yaml](../config/deployment_modes.yaml) | 三档部署模式唯一真相源：绝对安全、安全、性能；统一内网/外网、手机局域网直连与移动端超级员工 LAN 优先策略 |
 | database-storage（数据库存储） | [../config/database_storage_modes.yaml](../config/database_storage_modes.yaml) | SQLite/PG 存储模式唯一真相源：桌面 database.json profile、SQLite→PostgreSQL 同步计划、重启生效策略 |
+| customer-delivery（客户私有交付） | [../config/customer_delivery.json](../config/customer_delivery.json) | 客户品牌 / `legacy_mod_id`（定制包）与 `industry_mod_id`（通用行业包）分工；**生产员工私有交付只列 `legacy_mod_id ∩ entitlement`，禁止把 `*-industry` 行业包塞进该入口** |
 
 ## 机器注册表（ssot.yaml）
 
