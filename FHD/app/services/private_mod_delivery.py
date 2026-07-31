@@ -573,6 +573,7 @@ def attach_track_nodes(
             state = node_state.get(nid) if isinstance(node_state.get(nid), dict) else {}
             status = str(state.get("status") or "production")
             next_stages = allowed_next_stages(status)
+            timeline = list(state.get("timeline") or [])[-30:]
             merged.append(
                 {
                     "id": nid,
@@ -586,6 +587,7 @@ def attach_track_nodes(
                         s: stage_label(track, s) for s in next_stages
                     },
                     "happy_path": list(HAPPY_PATH),
+                    "timeline": timeline,
                     "updated_at": str(state.get("updated_at") or ""),
                 }
             )
