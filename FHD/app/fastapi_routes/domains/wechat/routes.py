@@ -22,7 +22,7 @@ def _send_wechat_via_automation(contact_name: str, message: str) -> dict:
     真实 RPA 驱动由可选的 xcagi-wechat-automation Mod 提供；未安装时本函数仍可
     通过 wechat_cv_send 完成发送（仅 Windows）。
     """
-    from app.services.wechat_sender import send_wechat_message
+    from app.application.wechat_sender_app_service import send_wechat_message
 
     return send_wechat_message(contact_name, message)
 
@@ -85,14 +85,14 @@ def wechat_starred_messages(
 ):
     """星标/绑定群聊最近一条上下文消息，供内部客服「客户微信摘要」。"""
     try:
-        from app.services.wechat_group_customer_bridge import (
+        from app.application.wechat_group_customer_app import (
             build_starred_group_feed,
             sync_group_messages,
         )
 
         if type.strip().lower() == "group":
             if sync and market_user_id is not None:
-                from app.services.wechat_group_customer_bridge import (
+                from app.application.wechat_group_customer_app import (
                     sync_bound_groups_from_live_wechat,
                 )
 
@@ -119,9 +119,9 @@ def wechat_starred_messages(
             if cid is None:
                 continue
             messages = service.get_contact_context(int(cid))
-            from app.services.wechat_group_customer_bridge import _latest_context_message
+            from app.application.wechat_group_customer_app import latest_context_message
 
-            last = _latest_context_message(messages)
+            last = latest_context_message(messages)
             if not last:
                 continue
             text = _wechat_message_text(last)
@@ -157,7 +157,7 @@ def wechat_groups_sync_messages(
     data = body or {}
     uid = market_user_id if market_user_id is not None else data.get("market_user_id")
     try:
-        from app.services.wechat_group_customer_bridge import sync_group_messages
+        from app.application.wechat_group_customer_app import sync_group_messages
 
         force_refresh = data.get("force_refresh")
         if force_refresh is None:
@@ -191,7 +191,7 @@ def wechat_groups_list(
 ):
     """列出已导入的微信群（供管理员绑定企业客户）。"""
     try:
-        from app.services.wechat_group_customer_bridge import list_group_contacts
+        from app.application.wechat_group_customer_app import list_group_contacts
 
         rows = list_group_contacts(keyword=keyword or None, limit=limit)
         return {"success": True, "data": rows, "total": len(rows)}
@@ -274,7 +274,7 @@ def wechat_contact_context_api(contact_id: int, refresh: bool = False):
         service = get_wechat_contact_app_service()
         if refresh:
             try:
-                from app.services.wechat_decrypt_autoconfig import (
+                from app.application.wechat_decrypt_app_service import (
                     prepare_wechat_message_db_for_read,
                 )
 
