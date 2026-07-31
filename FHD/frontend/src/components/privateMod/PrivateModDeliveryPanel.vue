@@ -4,7 +4,10 @@
       <div>
         <div class="private-mod-center__eyebrow">客户定制交付</div>
         <h3>私有 Mod 生产中心</h3>
-        <p>模块轨与员工轨分开推进；每条轨道上的节点各自显示制作进度。通用行业包不在此列表。</p>
+        <p>
+          模块轨与员工轨分开推进。每个节点是一条有先后约束的流程：
+          制作 → 测试 → 验收 → 交付；不通过只能转返工，不能跨阶段跳跃。
+        </p>
       </div>
       <button type="button" class="private-mod-center__refresh" :disabled="loading || updating" @click="loadDelivery">
         {{ loading ? '同步中…' : '刷新私有状态' }}
@@ -69,6 +72,19 @@
             </header>
             <p class="private-mod-track__summary">{{ rail.summary }}</p>
 
+            <ol class="private-mod-flow" aria-label="主流程阶段">
+              <li
+                v-for="(step, stepIndex) in happyPath"
+                :key="step"
+                class="private-mod-flow__step"
+                :data-done="flowStepDone(project, rail.id, step)"
+              >
+                <span class="private-mod-flow__num">{{ String(stepIndex + 1).padStart(2, '0') }}</span>
+                <span class="private-mod-flow__name">{{ stageLabel(project, rail.id, step) }}</span>
+                <small>{{ stageGoal(step) }}</small>
+              </li>
+            </ol>
+
             <ol v-if="nodesOf(project, rail.id).length" class="private-mod-rail" :aria-label="`${rail.label}节点`">
               <li
                 v-for="(node, index) in nodesOf(project, rail.id)"
@@ -76,22 +92,44 @@
                 class="private-mod-node"
                 :data-status="node.status"
               >
-                <div class="private-mod-node__index" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</div>
-                <div class="private-mod-node__body">
-                  <div class="private-mod-node__title">{{ node.label }}</div>
-                  <small v-if="node.summary">{{ node.summary }}</small>
+                <div class="private-mod-node__top">
+                  <div class="private-mod-node__index" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</div>
+                  <div class="private-mod-node__body">
+                    <div class="private-mod-node__title">{{ node.label }}</div>
+                    <small v-if="node.summary">{{ node.summary }}</small>
+                  </div>
+                  <span class="private-mod-node__badge">{{ node.status_label || stageLabel(project, rail.id, node.status) }}</span>
                 </div>
-                <select
-                  class="private-mod-track__select"
-                  :value="node.status || 'production'"
-                  :disabled="savingStatus === `${project.mod_id}:${rail.id}:${node.id}`"
-                  :aria-label="`${node.label}进度`"
-                  @change="saveNodeStatus(project, rail.id, node.id, $event)"
-                >
-                  <option v-for="stage in stages" :key="stage" :value="stage">
-                    {{ stageLabel(project, rail.id, stage) }}
-                  </option>
-                </select>
+
+                <div class="private-mod-node__pipeline" aria-hidden="true">
+                  <span
+                    v-for="step in happyPath"
+                    :key="`${node.id}-${step}`"
+                    class="private-mod-node__pip"
+                    :data-active="pipelineActive(node, step)"
+                    :data-done="pipelineDone(node, step)"
+                    :data-rework="node.status === 'rework'"
+                  >{{ stageLabel(project, rail.id, step) }}</span>
+                </div>
+
+                <p class="private-mod-node__goal">
+                  目标：{{ node.goal || stageGoal(node.status) || '按流程推进到下一阶段' }}
+                </p>
+
+                <div class="private-mod-node__actions">
+                  <button
+                    v-for="next in (node.next_stages || [])"
+                    :key="`${node.id}-${next}`"
+                    type="button"
+                    class="private-mod-node__action"
+                    :class="{ 'private-mod-node__action--rework': next === 'rework' }"
+                    :disabled="savingStatus === `${project.mod_id}:${rail.id}:${node.id}`"
+                    @click="advanceNode(project, rail.id, node.id, next)"
+                  >
+                    {{ nextActionLabel(project, rail.id, node.status, next) }}
+                  </button>
+                  <span v-if="!(node.next_stages || []).length" class="private-mod-node__done">流程已结束</span>
+                </div>
               </li>
             </ol>
             <div v-else class="private-mod-track__empty">{{ rail.empty }}</div>
@@ -107,7 +145,8 @@ import { onMounted, ref } from 'vue'
 import { apiFetch } from '@/utils/apiBase'
 
 const projects = ref([])
-const stages = ref(['production', 'testing', 'rework', 'acceptance', 'delivered'])
+const happyPath = ref(['production', 'testing', 'acceptance', 'delivered'])
+const stageFlow = ref({})
 const defaultStageLabels = {
   production: '制作中',
   testing: '测试中',
@@ -116,19 +155,26 @@ const defaultStageLabels = {
   delivered: '已交付',
   partial: '部分完成',
 }
+const defaultGoals = {
+  production: '完成开发与自测，进入可测状态',
+  testing: '用例通过；不通过则返工',
+  rework: '修复问题后重回测试',
+  acceptance: '生产/客户验收通过后交付',
+  delivered: '节点交付完成，流程结束',
+}
 const trackRails = [
   {
     id: 'modules',
     kicker: '交付轨道 01 · 模块',
     label: '业务模块',
-    summary: '每个模块节点独立显示制作进度（例如太阳鸟「考勤表转化」）。',
+    summary: '每个模块节点走完整交付流程（例：太阳鸟「考勤表转化」）。',
     empty: '当前定制包未声明模块节点。',
   },
   {
     id: 'employees',
     kicker: '交付轨道 02 · 员工',
     label: 'AI 员工',
-    summary: '每个员工节点独立显示制作 / 测试 / 上岗进度。',
+    summary: '每个员工节点独立走制作 / 测试 / 验收 / 上岗流程。',
     empty: '当前定制包未声明员工节点。',
   },
 ]
@@ -144,23 +190,46 @@ function responseMessage(body, fallback) {
 
 function nodesOf(project, track) {
   const nodes = project?.track_nodes?.[track]
-  if (Array.isArray(nodes) && nodes.length) return nodes
-  // 兼容旧字段
-  if (track === 'modules' && Array.isArray(project?.business_modules)) {
-    return project.business_modules.map((item) => ({
-      ...item,
-      status: 'production',
-      status_label: '制作中',
-    }))
-  }
-  if (track === 'employees' && Array.isArray(project?.ai_employees)) {
-    return project.ai_employees.map((item) => ({
-      ...item,
-      status: 'production',
-      status_label: '制作中',
-    }))
-  }
-  return []
+  return Array.isArray(nodes) ? nodes : []
+}
+
+function stageGoal(stage) {
+  const fromApi = stageFlow.value?.[stage]?.goal
+  return String(fromApi || defaultGoals[stage] || '').trim()
+}
+
+function happyIndex(status) {
+  const idx = happyPath.value.indexOf(status === 'rework' ? 'testing' : status)
+  return idx
+}
+
+function pipelineDone(node, step) {
+  const cur = String(node?.status || 'production')
+  if (cur === 'delivered') return true
+  if (cur === 'rework') return happyIndex('production') >= happyPath.value.indexOf(step) && step === 'production'
+  const curIdx = happyIndex(cur)
+  const stepIdx = happyPath.value.indexOf(step)
+  return curIdx > stepIdx
+}
+
+function pipelineActive(node, step) {
+  const cur = String(node?.status || 'production')
+  if (cur === 'rework') return step === 'testing'
+  return cur === step
+}
+
+function flowStepDone(project, track, step) {
+  const nodes = nodesOf(project, track)
+  if (!nodes.length) return false
+  return nodes.every((node) => pipelineDone(node, step) || pipelineActive(node, step) && ['acceptance', 'delivered'].includes(node.status))
+}
+
+function nextActionLabel(project, track, current, next) {
+  const curLabel = stageLabel(project, track, current)
+  const nextLabel = stageLabel(project, track, next)
+  if (next === 'rework') return `转返工`
+  if (current === 'rework' && next === 'testing') return `返工完成，重回测试`
+  return `推进到${nextLabel}`
 }
 
 async function loadDelivery() {
@@ -180,9 +249,12 @@ async function loadDelivery() {
         return true
       },
     )
-    stages.value = Array.isArray(body?.data?.stages) && body.data.stages.length
-      ? body.data.stages
-      : stages.value
+    if (Array.isArray(body?.data?.happy_path) && body.data.happy_path.length) {
+      happyPath.value = body.data.happy_path
+    }
+    if (body?.data?.stage_flow && typeof body.data.stage_flow === 'object') {
+      stageFlow.value = body.data.stage_flow
+    }
     remoteError.value = String(body?.data?.remote_error || '').trim()
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : '私有 Mod 状态读取失败'
@@ -198,16 +270,17 @@ function trackStatus(project, track) {
 
 function stageLabel(project, track, stage) {
   const canonical = track === 'business' ? 'modules' : track
+  const fromFlow = stageFlow.value?.[stage]?.label
   return String(
-    project?.stage_labels?.[canonical]?.[stage]
+    fromFlow
+      || project?.stage_labels?.[canonical]?.[stage]
       || project?.stage_labels?.business?.[stage]
       || defaultStageLabels[stage]
       || stage,
   )
 }
 
-async function saveNodeStatus(project, track, nodeId, event) {
-  const status = String(event?.target?.value || '').trim()
+async function advanceNode(project, track, nodeId, status) {
   if (!status || !nodeId) return
   const key = `${project.mod_id}:${track}:${nodeId}`
   savingStatus.value = key
@@ -226,11 +299,11 @@ async function saveNodeStatus(project, track, nodeId, event) {
     })
     const body = await response.json().catch(() => ({}))
     if (!response.ok || body?.success !== true) {
-      throw new Error(responseMessage(body, `节点进度更新失败（HTTP ${response.status}）`))
+      throw new Error(responseMessage(body, `流程推进失败（HTTP ${response.status}）`))
     }
     await loadDelivery()
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '节点进度更新失败'
+    error.value = cause instanceof Error ? cause.message : '流程推进失败'
   } finally {
     savingStatus.value = ''
   }
@@ -273,7 +346,7 @@ onMounted(loadDelivery)
 .private-mod-center__header,
 .private-mod-project__header,
 .private-mod-track__header,
-.private-mod-node {
+.private-mod-node__top {
   display: flex;
   gap: 12px;
   align-items: flex-start;
@@ -298,14 +371,16 @@ onMounted(loadDelivery)
 .private-mod-track h5 { font-size: 16px; }
 .private-mod-center__header p,
 .private-mod-project__description,
-.private-mod-track__summary {
+.private-mod-track__summary,
+.private-mod-node__goal {
   margin: 8px 0 0;
   color: #64748b;
   font-size: 13px;
   line-height: 1.55;
 }
 .private-mod-center__refresh,
-.private-mod-center__update {
+.private-mod-center__update,
+.private-mod-node__action {
   border: 0;
   border-radius: 10px;
   padding: 10px 14px;
@@ -316,7 +391,9 @@ onMounted(loadDelivery)
   cursor: pointer;
 }
 .private-mod-center__refresh:disabled,
-.private-mod-center__update:disabled { opacity: .55; cursor: wait; }
+.private-mod-center__update:disabled,
+.private-mod-node__action:disabled { opacity: .55; cursor: wait; }
+.private-mod-node__action--rework { background: #b45309; }
 .private-mod-center__notice,
 .private-mod-center__empty {
   margin-top: 16px;
@@ -345,7 +422,8 @@ onMounted(loadDelivery)
 .private-mod-project__meta code { color: #475569; }
 .private-mod-project__overall,
 .private-mod-project__latest,
-.private-mod-track__rollup {
+.private-mod-track__rollup,
+.private-mod-node__badge {
   border-radius: 999px;
   padding: 4px 9px;
   background: #ecfdf5;
@@ -358,10 +436,10 @@ onMounted(loadDelivery)
 .private-mod-track__rollup[data-status='testing'],
 .private-mod-track__rollup[data-status='acceptance'],
 .private-mod-node[data-status='testing'],
-.private-mod-node[data-status='acceptance'] { color: #92400e; background: #fef3c7; }
+.private-mod-node[data-status='acceptance'] .private-mod-node__badge { color: #92400e; background: #fef3c7; }
 .private-mod-project__overall[data-status='rework'],
 .private-mod-track__rollup[data-status='rework'],
-.private-mod-node[data-status='rework'] { color: #b91c1c; background: #fee2e2; }
+.private-mod-node[data-status='rework'] .private-mod-node__badge { color: #b91c1c; background: #fee2e2; }
 .private-mod-project__update { display: flex; align-items: center; gap: 10px; color: #92400e; font-size: 12px; font-weight: 700; }
 .private-mod-project__latest { font-size: 12px; }
 .private-mod-project__description { margin-top: 12px; }
@@ -369,18 +447,34 @@ onMounted(loadDelivery)
 .private-mod-track { border-radius: 13px; padding: 15px; background: #f8fafc; }
 .private-mod-track--modules { border: 1px solid #dbeafe; }
 .private-mod-track--employees { border: 1px solid #ede9fe; }
-.private-mod-track__select { min-width: 92px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 7px 8px; color: #334155; background: #fff; font-size: 12px; }
+.private-mod-flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.private-mod-flow__step {
+  border-radius: 10px;
+  padding: 10px;
+  background: #fff;
+  border: 1px dashed #cbd5e1;
+}
+.private-mod-flow__step[data-done='true'] { border-style: solid; border-color: #86efac; background: #f0fdf4; }
+.private-mod-flow__num { display: block; color: #94a3b8; font-size: 11px; font-weight: 700; }
+.private-mod-flow__name { display: block; margin-top: 4px; color: #0f172a; font-size: 13px; font-weight: 700; }
+.private-mod-flow__step small { display: block; margin-top: 4px; color: #64748b; font-size: 11px; line-height: 1.4; }
 .private-mod-rail {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   margin: 14px 0 0;
   padding: 0;
   list-style: none;
 }
 .private-mod-node {
-  align-items: center;
-  border-radius: 10px;
-  padding: 10px 12px;
+  border-radius: 12px;
+  padding: 12px;
   background: #fff;
   border: 1px solid #e2e8f0;
 }
@@ -399,14 +493,38 @@ onMounted(loadDelivery)
 .private-mod-node__body { flex: 1 1 auto; min-width: 0; }
 .private-mod-node__title { color: #0f172a; font-size: 13px; font-weight: 700; }
 .private-mod-node small { display: block; margin-top: 3px; color: #64748b; font-size: 11px; line-height: 1.45; }
+.private-mod-node__pipeline {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 12px;
+}
+.private-mod-node__pip {
+  border-radius: 8px;
+  padding: 6px 4px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  background: #f1f5f9;
+}
+.private-mod-node__pip[data-done='true'] { color: #047857; background: #d1fae5; }
+.private-mod-node__pip[data-active='true'] { color: #1d4ed8; background: #dbeafe; box-shadow: inset 0 0 0 1px #93c5fd; }
+.private-mod-node__pip[data-rework='true'][data-active='true'] { color: #b45309; background: #ffedd5; box-shadow: inset 0 0 0 1px #fdba74; }
+.private-mod-node__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.private-mod-node__done { color: #059669; font-size: 12px; font-weight: 700; align-self: center; }
 .private-mod-track__empty { margin-top: 13px; color: #94a3b8; font-size: 12px; }
 
+@media (max-width: 1100px) {
+  .private-mod-project__tracks,
+  .private-mod-flow,
+  .private-mod-node__pipeline { grid-template-columns: 1fr 1fr; }
+}
 @media (max-width: 900px) {
   .private-mod-center { padding: 18px 14px 30px; }
   .private-mod-center__header,
   .private-mod-project__header { flex-direction: column; }
   .private-mod-project__tracks { grid-template-columns: 1fr; }
   .private-mod-project__update { align-items: flex-start; flex-direction: column; }
-  .private-mod-node { flex-wrap: wrap; }
 }
 </style>

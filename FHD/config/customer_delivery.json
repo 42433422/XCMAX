@@ -20,9 +20,38 @@
       "禁止把 customer_delivery.json 里其它客户的定制包写进本账号交付线（即使平台壳为 generic SKU、企业 Mod 过滤关闭）",
       "模块轨与员工轨必须分开展示，禁止混在同一列表",
       "轨道上的交付物以节点为单位展示进度；整轨状态由节点进度汇总",
+      "每个节点的阶段是流程，不是自由枚举：只能按 stage_flow.transitions 推进或转入返工，禁止跨阶段跳跃",
       "太阳鸟「考勤表转化」属于模块轨节点，不是通用考勤行业包，也不是 AI 员工"
     ],
-    "stages": ["production", "testing", "rework", "acceptance", "delivered"]
+    "stages": ["production", "testing", "rework", "acceptance", "delivered"],
+    "happy_path": ["production", "testing", "acceptance", "delivered"],
+    "stage_flow": {
+      "production": {
+        "label": "制作中",
+        "goal": "完成开发与自测，进入可测状态",
+        "next": ["testing"]
+      },
+      "testing": {
+        "label": "测试中",
+        "goal": "用例通过；不通过则返工",
+        "next": ["acceptance", "rework"]
+      },
+      "rework": {
+        "label": "返工中",
+        "goal": "修复问题后重回测试",
+        "next": ["testing"]
+      },
+      "acceptance": {
+        "label": "验收中",
+        "goal": "生产/客户验收通过后交付",
+        "next": ["delivered", "rework"]
+      },
+      "delivered": {
+        "label": "已交付",
+        "goal": "节点交付完成，流程结束",
+        "next": []
+      }
+    }
   },
   "deliveries": [
     {

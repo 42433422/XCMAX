@@ -34,6 +34,7 @@ TRACKS: dict[str, dict[str, str]] = {
 TRACK_ALIAS = {"business": "modules"}
 
 STAGES: tuple[str, ...] = ("production", "testing", "rework", "acceptance", "delivered")
+HAPPY_PATH: tuple[str, ...] = ("production", "testing", "acceptance", "delivered")
 STAGE_LABELS: dict[str, str] = {
     "production": "制作中",
     "testing": "测试中",
@@ -41,6 +42,62 @@ STAGE_LABELS: dict[str, str] = {
     "acceptance": "验收中",
     "delivered": "已交付",
 }
+STAGE_GOALS: dict[str, str] = {
+    "production": "完成开发与自测，进入可测状态",
+    "testing": "用例通过；不通过则返工",
+    "rework": "修复问题后重回测试",
+    "acceptance": "生产/客户验收通过后交付",
+    "delivered": "节点交付完成，流程结束",
+}
+# 阶段是流程：只允许下列跃迁，禁止跨阶段跳跃
+STAGE_TRANSITIONS: dict[str, tuple[str, ...]] = {
+    "production": ("testing",),
+    "testing": ("acceptance", "rework"),
+    "rework": ("testing",),
+    "acceptance": ("delivered", "rework"),
+    "delivered": (),
+}
+
+
+def allowed_next_stages(current: str) -> list[str]:
+    cur = str(current or "production").strip() or "production"
+    return list(STAGE_TRANSITIONS.get(cur, ()))
+
+
+def assert_stage_transition(current: str, target: str) -> None:
+    cur = str(current or "production").strip() or "production"
+    nxt = str(target or "").strip()
+    if cur == nxt:
+        return
+    allowed = STAGE_TRANSITIONS.get(cur, ())
+    if nxt not in allowed:
+        cur_label = STAGE_LABELS.get(cur, cur)
+        nxt_label = STAGE_LABELS.get(nxt, nxt)
+        allow_txt = "、".join(STAGE_LABELS.get(x, x) for x in allowed) or "无（已结束）"
+        raise ValueError(
+            f"阶段不可从「{cur_label}」直接切换到「{nxt_label}」。下一步只能：{allow_txt}"
+        )
+
+
+def stage_goal(status: str) -> str:
+    return STAGE_GOALS.get(str(status or "").strip(), "")
+
+
+def load_stage_flow_from_ssot() -> dict[str, Any]:
+    """优先读 customer_delivery.json 的 stage_flow；失败则用内置常量。"""
+    try:
+        from app.mod_sdk.customer_delivery import delivery_model
+
+        model = delivery_model() or {}
+        flow = model.get("stage_flow")
+        if isinstance(flow, dict) and flow:
+            return flow
+    except RECOVERABLE_ERRORS:
+        pass
+    return {
+        key: {"label": STAGE_LABELS[key], "goal": STAGE_GOALS[key], "next": list(vals)}
+        for key, vals in STAGE_TRANSITIONS.items()
+    }
 
 _STATE_LOCK = RLock()
 _VERSION_TOKEN = re.compile(r"\d+|[A-Za-z]+")
@@ -343,6 +400,8 @@ def set_track_status(
         scope = accounts.setdefault(scope_key, {})
         project = _ensure_project(scope, mod_id, name=name, version=version)
         row = project["tracks"][track]
+        current = str(row.get("status") or "production")
+        assert_stage_transition(current, status)
         if row.get("status") != status:
             row["status"] = status
             row["updated_at"] = _now_iso()
@@ -351,10 +410,15 @@ def set_track_status(
             if str(note or "").strip():
                 event["note"] = str(note).strip()[:500]
             row["timeline"] = [*timeline, event][-30:]
-            # 整轨手动改状态时，同步尚未单独推进的节点
+            # 整轨推进只同步「当前可跃迁到目标」的节点，禁止强行改写其它节点
             nodes = row.get("nodes") if isinstance(row.get("nodes"), dict) else {}
             for node in nodes.values():
-                if isinstance(node, dict) and node.get("status") != status:
+                if not isinstance(node, dict):
+                    continue
+                node_cur = str(node.get("status") or "production")
+                if node_cur == status:
+                    continue
+                if status in STAGE_TRANSITIONS.get(node_cur, ()):
                     node["status"] = status
                     node["updated_at"] = row["updated_at"]
         project["updated_at"] = _now_iso()
@@ -395,6 +459,8 @@ def set_node_status(
         if not isinstance(node, dict):
             node = _default_node()
             nodes[nid] = node
+        current = str(node.get("status") or "production")
+        assert_stage_transition(current, status)
         if node.get("status") != status:
             node["status"] = status
             node["updated_at"] = _now_iso()
@@ -434,6 +500,7 @@ def attach_track_nodes(
             seen.add(nid)
             state = node_state.get(nid) if isinstance(node_state.get(nid), dict) else {}
             status = str(state.get("status") or "production")
+            next_stages = allowed_next_stages(status)
             merged.append(
                 {
                     "id": nid,
@@ -441,6 +508,12 @@ def attach_track_nodes(
                     "summary": str(item.get("summary") or "").strip(),
                     "status": status,
                     "status_label": stage_label(track, status),
+                    "goal": stage_goal(status),
+                    "next_stages": next_stages,
+                    "next_stage_labels": {
+                        s: stage_label(track, s) for s in next_stages
+                    },
+                    "happy_path": list(HAPPY_PATH),
                     "updated_at": str(state.get("updated_at") or ""),
                 }
             )
@@ -612,21 +685,28 @@ async def update_private_mod_from_library(
 
 
 __all__ = [
+    "HAPPY_PATH",
     "STAGES",
+    "STAGE_GOALS",
     "STAGE_LABELS",
+    "STAGE_TRANSITIONS",
     "TRACKS",
     "account_projects",
     "account_scope",
+    "allowed_next_stages",
     "apply_account_state",
+    "assert_stage_transition",
     "attach_track_nodes",
     "export_account_state",
     "fetch_private_mod_library",
     "is_newer_version",
+    "load_stage_flow_from_ssot",
     "normalize_track",
     "overall_status",
     "project_state",
     "set_node_status",
     "set_track_status",
+    "stage_goal",
     "stage_label",
     "update_private_mod_from_library",
     "version_key",
