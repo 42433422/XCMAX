@@ -21,7 +21,7 @@
         <button
           class="app-launcher app-launcher--production"
           type="button"
-          @click="goShellPage('private-mod-delivery')"
+          @click="openProductionEmployee"
         >
           <span class="app-launcher-icon app-launcher-icon--production" aria-hidden="true">
             <ProductionEmployeeLauncherIcon />
@@ -74,6 +74,15 @@ const goShellPage = (name, query = {}) => {
     return
   }
   router.push({ name, query })
+}
+
+/** 优先轻量私有交付页；旧包未注册该路由时回退智脑「客户定制」页签，避免空白。 */
+const openProductionEmployee = () => {
+  if (router.hasRoute('private-mod-delivery')) {
+    router.push({ path: '/private-mod-delivery' })
+    return
+  }
+  goShellPage('brain', { focus: 'private-mod' })
 }
 
 const enterAnalyzer = (appKey = 'kitten') => {

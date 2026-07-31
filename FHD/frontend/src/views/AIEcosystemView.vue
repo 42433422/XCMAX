@@ -17,7 +17,7 @@
           <span class="app-launcher-name">AIOPEN 开放智控</span>
           <span class="app-launcher-desc">企业级 AI Agent 接入平台，基于 MCP/API 标准协议，提供远程 UI 操控与白名单业务接口开放</span>
         </button>
-        <button class="app-launcher app-launcher--production" type="button" @click="goShellPage('private-mod-delivery')">
+        <button class="app-launcher app-launcher--production" type="button" @click="openProductionEmployee">
           <span class="app-launcher-icon app-launcher-icon--production" aria-hidden="true">
             <ProductionEmployeeLauncherIcon />
           </span>
@@ -69,6 +69,15 @@ const goShellPage = (name, query = {}) => {
     return
   }
   router.push({ name, query })
+}
+
+/** 优先轻量私有交付页；旧包未注册该路由时回退智脑「客户定制」页签，避免空白。 */
+const openProductionEmployee = () => {
+  if (router.hasRoute('private-mod-delivery')) {
+    router.push({ path: '/private-mod-delivery' })
+    return
+  }
+  goShellPage('brain', { focus: 'private-mod' })
 }
 
 const enterAnalyzer = (appKey = 'kitten') => {
