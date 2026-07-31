@@ -1457,10 +1457,18 @@ class LLMWorkflowPlanner:
                                 str(message or "")
                             )
                             if isinstance(cust_slots, dict):
-                                params.update(cust_slots)
+                                # 仅采纳非空、且非整句原话的检索词；空 keyword = 全量列表
+                                extracted_kw = str(
+                                    cust_slots.get("keyword")
+                                    or cust_slots.get("customer_name")
+                                    or ""
+                                ).strip()
+                                msg_trim = str(message or "").strip()
+                                if extracted_kw and extracted_kw != msg_trim:
+                                    params["keyword"] = extracted_kw
                         except (ImportError, RuntimeError):
-                            if not params.get("keyword"):
-                                params["keyword"] = str(message or "").strip()[:80]
+                            # 无槽位时保持 keyword 空，走全量列表（禁止把原话当客户名）
+                            params.pop("keyword", None)
 
                 from app.application.facades.tools_facade import execute_registered_workflow_tool
 
@@ -1780,7 +1788,8 @@ class LLMWorkflowPlanner:
                     "员工相关意图：若用户只是问有哪些员工，使用 employee.list；若明确指定 employee_id/pack_id 并要求执行，使用 employee.execute 并填写 task；不知道员工 ID 时先 list，不要编造。",
                     "数据库相关意图：读数据库/查库使用 business_db.read，并填写 entity；写入/新增/更新/删除/入库才使用 business_db.write，并填写 entity、operation、payload。",
                     "business_db 只能访问 customers/products/materials/shipment_records；禁止生成 sql/raw_sql/query_sql 或任意 SQL。",
-                    "对 products.query / customers.query：必须在 params 填入 keyword 或 model_number 等检索词，"
+                    "对 products.query：必须在 params 填入 keyword 或 model_number 等检索词；"
+                    "对 customers.query：列表/计数问法可不填 keyword（空=全部客户）；指名查询再填 keyword，"
                     "从用户话中提取（如「七彩乐园的9803」→ keyword 含单位+型号），禁止留空对象 {}。",
                     "如果 context 中包含 tool_probe_outputs 且其中 success=true，请优先使用其中 data_preview 的信息来补全 nodes.params。",
                     "如果 context 中包含 memory_v2.summary，只能把其中已确认 active 记忆用于补全偏好、客户别名、产品习惯或任务上下文；禁止使用未确认候选或编造记忆。",

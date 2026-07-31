@@ -518,15 +518,13 @@ class WorkflowEngine:
                     user_msg[:80],
                 )
         elif node.tool_id == "customers" and node.action == "query":
+            # keyword 为空 = 列表/计数（Agent 列出全部客户），禁止把用户原话当客户名。
             if not self._has_non_empty_param(
                 merged_params,
                 ("keyword", "unit_name", "customer_name", "name"),
             ):
-                merged_params["keyword"] = user_msg
-                logger.info(
-                    "工作流 customers.query 参数为空，已注入用户原话作为 keyword: %s",
-                    user_msg[:80],
-                )
+                merged_params.pop("keyword", None)
+                logger.info("工作流 customers.query 无检索词，按全量列表执行（不注入用户原话）")
 
     @staticmethod
     def _elapsed_ms(started_perf: float) -> int:
