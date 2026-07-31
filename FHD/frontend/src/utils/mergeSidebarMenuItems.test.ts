@@ -43,7 +43,7 @@ describe('mergeSidebarMenuItems', () => {
     expect(merged.map((item) => item.key)).toEqual(['materials'])
   })
 
-  it('keeps model service in settings and business docking in chat, not primary navigation', () => {
+  it('keeps model service in settings but keeps 数据对接中心 in primary navigation', () => {
     const merged = mergeSidebarMenuItems(
       [
         { key: 'chat', name: '智能对话', iconClass: 'fa-comments-o' },
@@ -59,7 +59,7 @@ describe('mergeSidebarMenuItems', () => {
         },
         {
           key: 'mod-erp-business-docking',
-          name: '业务对接',
+          name: '数据对接中心',
           iconClass: 'fa-exchange',
           modId: 'xcagi-erp-domain-bridge',
           path: '/mod/xcagi-erp-domain-bridge/business-docking',
@@ -69,7 +69,7 @@ describe('mergeSidebarMenuItems', () => {
       [],
       [],
     )
-    expect(merged.map((item) => item.key)).toEqual(['chat', 'settings'])
+    expect(merged.map((item) => item.key)).toEqual(['chat', 'settings', 'mod-erp-business-docking'])
   })
 
   it('drops mod item when key uses erroneous mod-mod- prefix', () => {
