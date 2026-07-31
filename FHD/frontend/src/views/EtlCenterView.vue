@@ -28,7 +28,7 @@ const router = useRouter()
 const tabs: Array<{ id: TabId; step: string; label: string }> = [
   { id: 'upload', step: '1', label: '上传文件' },
   { id: 'mapping', step: '2', label: '字段映射' },
-  { id: 'preview', step: '3', label: '预演确认' },
+  { id: 'preview', step: '3', label: '核对写入' },
   { id: 'history', step: '4', label: '运行历史' },
 ]
 
@@ -46,6 +46,9 @@ const rowTotal = ref(0)
 const rowActionFilter = ref('')
 const busy = ref(false)
 const pageError = ref('')
+/** 上传解析就绪后直接写入业务库（真实导入，不是停在预演）。 */
+const autoWriteEnabled = ref(true)
+const pendingAutoWriteIds = ref(new Set<string>())
 const validRowsOnly = ref(false)
 const editableMappings = ref<EtlFieldMapping[]>([])
 const mappingUiTransform = reactive<Record<string, string>>({})
@@ -60,6 +63,51 @@ const shipmentTemplateMessage = ref('')
 const customerProductPreviewMessage = ref('')
 const selectedShipmentTemplateRegionId = ref('')
 let pollTimer: ReturnType<typeof setTimeout> | null = null
+const autoWriteInFlight = new Set<string>()
+
+function markAutoWrite(runId: string) {
+  pendingAutoWriteIds.value = new Set([...pendingAutoWriteIds.value, runId])
+}
+
+async function tryAutoWrite(run: EtlRun) {
+  if (!autoWriteEnabled.value) return
+  if (!pendingAutoWriteIds.value.has(run.id)) return
+  if (run.status !== 'preview_ready') return
+  if (autoWriteInFlight.has(run.id)) return
+  autoWriteInFlight.add(run.id)
+  const nextPending = new Set(pendingAutoWriteIds.value)
+  nextPending.delete(run.id)
+  pendingAutoWriteIds.value = nextPending
+  const writable = (run.summary.new || 0) + (run.summary.update || 0)
+  if (writable <= 0) {
+    autoWriteInFlight.delete(run.id)
+    currentRun.value = run
+    syncDraft()
+    activeTab.value = 'preview'
+    await loadRows()
+    pageError.value = '解析完成，但没有可写入行（全部跳过或错误）。请核对后手动写入。'
+    return
+  }
+  busy.value = true
+  pageError.value = ''
+  try {
+    const onlyValid = (run.summary.error || 0) > 0
+    validRowsOnly.value = onlyValid
+    currentRun.value = await etlApi.execute(run.id, onlyValid)
+    activeTab.value = 'history'
+    await refreshRuns()
+    schedulePoll()
+  } catch (error) {
+    pageError.value = error instanceof Error ? error.message : '自动写入失败'
+    currentRun.value = await etlApi.run(run.id).catch(() => run)
+    syncDraft()
+    activeTab.value = 'preview'
+    if (currentRun.value?.status === 'preview_ready') await loadRows()
+  } finally {
+    autoWriteInFlight.delete(run.id)
+    busy.value = false
+  }
+}
 
 const {
   templateSelection,
@@ -103,6 +151,9 @@ const {
   busy,
   pageError,
   router,
+  autoWriteEnabled,
+  markAutoWrite,
+  tryAutoWrite,
   syncDraft,
   schedulePoll,
   loadRows,
@@ -273,8 +324,15 @@ function schedulePoll() {
       currentRun.value = await etlApi.run(currentRun.value.id)
       syncDraft()
       if (currentRun.value.status === 'preview_ready') {
-        activeTab.value = 'preview'
-        await loadRows()
+        if (autoWriteEnabled.value && pendingAutoWriteIds.value.has(currentRun.value.id)) {
+          await tryAutoWrite(currentRun.value)
+        } else {
+          activeTab.value = 'preview'
+          await loadRows()
+          await refreshRuns()
+        }
+      } else if (currentRun.value.status === 'completed') {
+        activeTab.value = 'history'
         await refreshRuns()
       }
     } catch (error) {
@@ -470,21 +528,21 @@ async function previewCustomerProductsFromShipment() {
       if (!runs.value.some((run) => run.id === customerProductRun.id)) {
         runs.value = [customerProductRun, ...runs.value]
       }
-      customerProductPreviewMessage.value = '这是同一上传文件自动建立的客户及产品预演；尚未执行，不会写入客户库或产品库。'
+      customerProductPreviewMessage.value = '这是同一上传文件自动建立的客户及产品导入任务；尚未执行，不会写入客户库或产品库。'
       syncDraft()
       activeTab.value = tabForRunStatus(customerProductRun.status)
       if (customerProductRun.status === 'preview_ready') await loadRows()
       await router.replace({ path: '/business-docking', query: { run_id: customerProductRun.id } })
       schedulePoll()
     } catch (error) {
-      pageError.value = error instanceof Error ? error.message : '读取关联客户及产品预演失败'
+      pageError.value = error instanceof Error ? error.message : '读取关联客户及产品任务失败'
     } finally {
       busy.value = false
     }
     return
   }
   if (!sourceRun.upload_id) {
-    pageError.value = '原始上传文件不可用，无法创建客户及产品预演。请重新上传该工作簿。'
+    pageError.value = '原始上传文件不可用，无法创建客户及产品导入。请重新上传该工作簿。'
     return
   }
   busy.value = true
@@ -509,16 +567,21 @@ async function previewCustomerProductsFromShipment() {
       customerProductRun,
       ...retainedRuns.filter((run) => run.id !== customerProductRun.id),
     ]
-    customerProductPreviewMessage.value = '已从同一上传文件创建客户及产品预演；请先核对附表规划与行级结果，点击“确认执行”前不会写入客户库或产品库。'
+    customerProductPreviewMessage.value = '已从同一上传文件创建客户及产品导入任务；请核对后点击“写入数据库”。'
+    if (autoWriteEnabled.value) markAutoWrite(customerProductRun.id)
     syncDraft()
     activeTab.value = 'preview'
     await router.replace({
       path: '/business-docking',
       query: { run_id: customerProductRun.id },
     })
-    schedulePoll()
+    if (customerProductRun.status === 'preview_ready' && autoWriteEnabled.value) {
+      await tryAutoWrite(customerProductRun)
+    } else {
+      schedulePoll()
+    }
   } catch (error) {
-    pageError.value = error instanceof Error ? error.message : '创建客户及产品预演失败'
+    pageError.value = error instanceof Error ? error.message : '创建客户及产品导入失败'
   } finally {
     busy.value = false
   }
@@ -635,10 +698,10 @@ function actionReason(action: string) {
   return action === 'skip' ? '重复数据，默认不写入' : '无差异'
 }
 function stageLabel(stage: string) {
-  return ({ queued: '等待后台任务', parsing: '解析文件', validating: '转换与校验', preview_ready: '预演完成', executing: '执行写入' } as Record<string, string>)[stage] || stage
+  return ({ queued: '等待后台任务', parsing: '解析文件', validating: '转换与校验', preview_ready: '解析完成', executing: '执行写入' } as Record<string, string>)[stage] || stage
 }
 function statusLabel(status: string) {
-  return ({ queued: '排队中', previewing: '预演中', preview_ready: '待确认', executing: '执行中', completed: '已完成', failed: '失败', interrupted: '已中断' } as Record<string, string>)[status] || status
+  return ({ queued: '排队中', previewing: '解析中', preview_ready: '待写入', executing: '写入中', completed: '已写入', failed: '失败', interrupted: '已中断' } as Record<string, string>)[status] || status
 }
 function sheetRoleLabel(role: unknown) {
   return ({
@@ -651,7 +714,7 @@ function sheetRoleLabel(role: unknown) {
 }
 function sheetPlanStatusLabel(status: unknown) {
   return ({
-    included: '纳入预演',
+    included: '纳入本次导入',
     reviewed: '已读取，仅作参考',
     excluded: '已排除',
   } as Record<string, string>)[String(status || '')] || '已检查'
