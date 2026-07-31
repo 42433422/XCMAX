@@ -316,13 +316,16 @@ describe('main — OTA proxy PAC', () => {
     const env = sanitizeBackendProxyEnv({
       HTTP_PROXY: 'http://127.0.0.1:7890',
       HTTPS_PROXY: 'http://127.0.0.1:7890',
+      XCMAX_CLI_PROXY: 'http://127.0.0.1:7890',
       NO_PROXY: 'example.com',
     })
+    expect(env.HTTP_PROXY).toBeUndefined()
+    expect(env.HTTPS_PROXY).toBeUndefined()
+    expect(env.XCMAX_CLI_PROXY).toBeUndefined()
     expect(String(env.NO_PROXY)).toContain('xiu-ci.com')
     expect(String(env.NO_PROXY)).toContain('127.0.0.1')
     expect(String(env.NO_PROXY)).toContain('example.com')
     expect(env.no_proxy).toBe(env.NO_PROXY)
-    expect(env.HTTP_PROXY).toBe('http://127.0.0.1:7890')
   })
 })
 
