@@ -466,17 +466,20 @@ async def mod_store_catalog() -> ModStoreCatalogResponse:
 
 
 async def _private_mod_context(request: Request) -> dict[str, Any]:
-    """读取当前账号可见的客户私有 Mod，严格复用企业 entitlement。
+    """读取**当前登录账号**可见的客户私有 Mod。
 
-    仅暴露客户定制 ``legacy_mod_id``（如 taiyangniao-pro），
-    不含通用行业包（如 attendance-industry）。
+    规则（customer_delivery SSOT）：
+    - 只暴露 ``legacy_mod_id``，不含 ``industry_mod_id``
+    - 必须以当前会话 ``entitled_mod_ids`` 为准，禁止把交付清单里其它客户的定制包一并列出
+    - 无会话 / 无权益 → 空列表（生产员工交付线不是全局客户目录）
     """
     from app.enterprise.mod_entitlements import (
         enterprise_mod_filter_active,
-        get_cached_entitled_client_mod_ids,
         get_cached_market_identity,
+        load_entitled_client_mod_ids_for_session,
         sync_entitlements_from_request,
     )
+    from app.infrastructure.auth.dependencies import session_id_from_request
     from app.mod_sdk.customer_delivery import (
         list_account_custom_mod_ids,
         list_industry_mod_ids_from_delivery,
@@ -484,23 +487,23 @@ async def _private_mod_context(request: Request) -> dict[str, Any]:
 
     account_custom = list_account_custom_mod_ids()
     industry_packs = list_industry_mod_ids_from_delivery()
-    if enterprise_mod_filter_active():
-        await sync_entitlements_from_request(request)
-        entitled = get_cached_entitled_client_mod_ids() or set()
-        # 企业权益里常同时下发行业包 + 定制包；生产员工只看定制包。
-        entitled = {
-            str(x).strip()
-            for x in entitled
-            if str(x).strip()
-            and str(x).strip() in account_custom
-            and str(x).strip() not in industry_packs
-        }
-    else:
-        # 非企业开发环境只从本地交付清单暴露客户定制 Mod。
-        entitled = set(account_custom)
+    sid = session_id_from_request(request) or ""
+
+    entitled: set[str] = set()
+    if sid:
+        # 企业 SKU：尽量向市场刷新；平台壳 generic 也按 sessions 行隔离。
+        if enterprise_mod_filter_active():
+            await sync_entitlements_from_request(request)
+        entitled = load_entitled_client_mod_ids_for_session(sid)
+
+    entitled = {
+        mid
+        for mid in entitled
+        if mid in account_custom and mid not in industry_packs
+    }
     market_user_id, username = get_cached_market_identity()
     return {
-        "mod_ids": {str(x).strip() for x in entitled if str(x).strip()},
+        "mod_ids": entitled,
         "market_user_id": market_user_id,
         "username": username,
     }

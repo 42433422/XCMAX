@@ -358,6 +358,33 @@ def restore_entitlements_from_session_row(session_id: str) -> bool:
         return False
 
 
+def load_entitled_client_mod_ids_for_session(session_id: str) -> set[str]:
+    """读取某会话已绑定的客户 Mod 权益（不依赖 enterprise SKU 过滤开关）。
+
+    平台壳可能以 generic SKU 运行，企业过滤关闭；生产员工私有交付仍须按账号隔离，
+    禁止回退到 ``customer_delivery.json`` 全量定制包列表。
+    """
+    sid = str(session_id or "").strip()
+    if not sid:
+        return set()
+    if enterprise_mod_filter_active():
+        cached = get_cached_entitled_client_mod_ids()
+        if cached:
+            return set(cached)
+    try:
+        from app.db.models.user import Session as UserSession
+
+        with _session_row_db_context() as db:
+            row = db.query(UserSession).filter(UserSession.session_id == sid).first()
+            if row is None:
+                return set()
+            raw = getattr(row, "entitled_mod_ids_json", None) or "[]"
+            return {str(x).strip() for x in json.loads(raw) if str(x).strip()}
+    except Exception:
+        logger.exception("load_entitled_client_mod_ids_for_session failed")
+        return set()
+
+
 def _session_username_for_entitlements(session_id: str) -> str:
     sid = (session_id or "").strip()
     if not sid:
