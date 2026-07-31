@@ -93,7 +93,7 @@ export const INDUSTRY_DELIVERY_CORE_ITEMS: CoreMenuCatalogItem[] = [
   { key: 'orders', name: '业务单据', iconClass: 'fa-file-text-o' },
   { key: 'shipment-records', name: '业务记录', iconClass: 'fa-industry' },
   { key: 'materials', name: '资源库', iconClass: 'fa-archive' },
-  { key: 'business-docking', name: '数据对接中心', iconClass: 'fa-exchange' },
+  { key: 'business-docking', name: '数据对接中心', iconClass: 'fa-exchange', description: 'Excel ETL：预演、确认并写入业务数据' },
   { key: 'data-sources', name: '数据来源', iconClass: 'fa-database' },
   { key: 'print', name: '模板与打印', iconClass: 'fa-print' },
   { key: 'printer-list', name: '打印机列表', iconClass: 'fa-print' },

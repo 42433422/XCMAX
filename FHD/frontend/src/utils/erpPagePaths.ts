@@ -14,7 +14,7 @@ const HOST_PATH_TO_MOD: Record<string, string> = {
   '/materials': '/materials',
   '/materials-list': '/materials',
   '/traditional-mode': '/traditional-mode',
-  '/business-docking': '/business-docking',
+  // 数据对接中心 = 宿主 EtlCenter（/api/etl）；勿再映射到已退役的业务对接/模板库
   '/data-sources': '/data-sources',
   '/print': '/print',
   '/printer-list': '/printer-list',
@@ -35,7 +35,6 @@ const HOST_ROUTE_NAME_TO_MOD: Record<string, string> = {
   materials: '/materials',
   'materials-list': '/materials',
   'traditional-mode': '/traditional-mode',
-  'business-docking': '/business-docking',
   'data-sources': '/data-sources',
   print: '/print',
   'printer-list': '/printer-list',

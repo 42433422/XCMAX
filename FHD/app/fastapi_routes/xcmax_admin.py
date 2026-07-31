@@ -813,7 +813,7 @@ CORE_MODULES = [
     },
     {
         "module_id": "business-docking",
-        "display_name": "业务对接",
+        "display_name": "数据对接中心",
         "route": "/business-docking",
         "source": "core",
         "sync_scope": "none",
