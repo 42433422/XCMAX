@@ -3334,7 +3334,7 @@ def test_para_merge_resume_pins_rejected_branch_edge_cases():
                 "resume_from_clean_baseline": True,
             }
         )
-        is True
+        is False
     )
     update_branch_detail = (
         "devfleet/cursor/sub-1-225e80: Error: update-branch failed: Command failed: "
@@ -3350,6 +3350,30 @@ def test_para_merge_resume_pins_rejected_branch_edge_cases():
         )
         is False
     )
+
+
+def test_resume_review_qa_candidate_respects_resume_from_clean_baseline_over_branch_preserving():
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-hold",
+                "detail": "hold-merge-label-failed-before-review",
+                "kind": "automated_remediation",
+                "para_task_id": "task-hold",
+                "reason": "para_merge_conflict",
+                "resume_from_clean_baseline": True,
+                "task_id": "task-hold",
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    candidate = _resume_review_qa_candidate(memory)
+    assert candidate is not None
+    assert candidate["failed_steps"] == ["code"]
+    assert "continue_existing_code_task" not in candidate
+    assert _resume_dispatch_context(candidate, _resume_steps(candidate)) == (None, None)
 
 
 def test_reconcile_absorbed_para_merge_passes_base_ref_to_git_runner():
