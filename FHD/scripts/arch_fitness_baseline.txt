@@ -219,3 +219,14 @@
 # 2026-07-25 PR #616: 发货模版解析 / 编号模式服务略超 500，后续拆分
 [giant-file] app/application/shipment_template_resolve.py
 [giant-file] app/services/shipment_number_mode_service.py
+# 2026-07-31 PR #1133: Persy 统一记忆图谱 + ETL + mod_store_routes 历史违规
+[giant-file] app/application/normal_chat_dispatch.py
+[giant-file] app/enterprise/mod_entitlements.py
+[giant-file] app/services/private_mod_delivery.py
+[routes->services] app/fastapi_routes/mod_store_routes.py:517
+[routes->services] app/fastapi_routes/mod_store_routes.py:621
+[routes->services] app/fastapi_routes/mod_store_routes.py:770
+[routes->services] app/fastapi_routes/mod_store_routes.py:808
+[routes->services] app/fastapi_routes/mod_store_routes.py:745
+[routes->services] app/fastapi_routes/mod_store_routes.py:843
+[routes->services] app/fastapi_routes/mod_store_routes.py:792
