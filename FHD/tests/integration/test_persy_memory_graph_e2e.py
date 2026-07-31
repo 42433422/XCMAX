@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, update
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -14,6 +15,7 @@ from app.application.memory_link_service import MemoryLinkService
 from app.application.memory_update_engine import MemoryUpdateEngine
 from app.db.base import Base
 from app.db.models.memory_graph import EdgeType, MemoryNode, MemoryNodeStatus, MemoryNodeType
+from app.infrastructure.memory_cache import MemoryCacheService
 from app.infrastructure.memory_graph_store import MemoryGraphStore
 from scripts.dev.migrate_persy_to_memory_graph import PersyDataMigrator
 from scripts.dev.migrate_trae_memory_to_persy import TraeMemoryMigrator
@@ -287,3 +289,236 @@ def test_full_lifecycle(app_service, tmp_path):
     assert ruff_backlinks[0]["source_node_id"] == ref_result["node_id"]
     assert ruff_backlinks[0]["type"] == "relates_to"
     assert ruff_backlinks[0]["bidirectional"] is True
+
+
+# =============================================================================
+# Phase 3 端到端测试：衰减归档 + 语义检索升级 + 离线缓存 + 完整生命周期
+# =============================================================================
+
+
+def _set_node_age(app_service: MemoryGraphAppService, node_id: str, days_ago: int) -> None:
+    """把节点的 created_at / last_recalled_at 调整为 days_ago 天前，模拟历史节点。"""
+    past = datetime.now(UTC) - timedelta(days=days_ago)
+    session = app_service._store._session  # noqa: SLF001
+    session.execute(
+        update(MemoryNode)
+        .where(MemoryNode.node_id == node_id)
+        .values(
+            temporal_t_created=past,
+            metadata_created_at=past,
+            metadata_last_recalled_at=None,
+        )
+    )
+    session.commit()
+
+
+def _set_node_decay_params(
+    app_service: MemoryGraphAppService,
+    node_id: str,
+    *,
+    half_life_days: int,
+    min_weight: float,
+    recall_count: int = 0,
+) -> None:
+    """覆盖节点的衰减参数与召回计数。"""
+    session = app_service._store._session  # noqa: SLF001
+    values = {
+        "metadata_decay_half_life_days": half_life_days,
+        "metadata_decay_min_weight": min_weight,
+        "metadata_recall_count": recall_count,
+    }
+    if recall_count > 0:
+        # last_recalled_at 也设为很久以前，确保 age 大
+        values["metadata_last_recalled_at"] = datetime.now(UTC) - timedelta(days=200)
+    session.execute(update(MemoryNode).where(MemoryNode.node_id == node_id).values(**values))
+    session.commit()
+
+
+def test_decay_and_archive_flow(app_service):
+    """衰减 + 自动归档端到端：旧低权重节点应被归档，新节点保留。"""
+    from app.application.memory_decay_service import MemoryDecayService
+
+    # 新节点（age=0）→ 高权重 → 保留
+    fresh = app_service.ingest_engineering(
+        type=MemoryNodeType.CONSTRAINT,
+        title="新约束",
+        content="新约束内容",
+        scope="project",
+        scope_id="XCMAX",
+    )
+    # 旧 + 低权重 + 无召回 → 应被归档
+    stale = app_service.ingest_engineering(
+        type=MemoryNodeType.CONSTRAINT,
+        title="旧约束",
+        content="旧约束内容",
+        scope="project",
+        scope_id="XCMAX",
+    )
+    _set_node_age(app_service, stale["node_id"], days_ago=200)
+    _set_node_decay_params(
+        app_service,
+        stale["node_id"],
+        half_life_days=10,
+        min_weight=0.05,
+        recall_count=0,
+    )
+
+    decay_svc = MemoryDecayService(app_service._store)  # noqa: SLF001
+    result = decay_svc.run_maintenance(scope="project", scope_id="XCMAX")
+
+    assert result["processed"] == 2
+    assert result["archived"] == 1
+
+    # 验证 fresh 仍 active，stale 已 archived
+    fresh_node = app_service._store.get_node(fresh["node_id"])  # noqa: SLF001
+    stale_node = app_service._store.get_node(stale["node_id"])  # noqa: SLF001
+    assert fresh_node.status == MemoryNodeStatus.ACTIVE
+    assert stale_node.status == MemoryNodeStatus.ARCHIVED
+    assert stale_node.temporal_t_expired is not None
+
+
+def test_semantic_search_upgrade(app_service):
+    """search_memory 在 RAG 启用/关闭时都不应报错。"""
+    app_service.ingest_engineering(
+        type=MemoryNodeType.CONSTRAINT,
+        title="Ruff 唯一格式化工具",
+        content="禁止 black/isort 与 Ruff 冲突",
+        scope="project",
+        scope_id="XCMAX",
+    )
+    app_service.ingest_engineering(
+        type=MemoryNodeType.CONVENTION,
+        title="备份脚本路径",
+        content="FHD/scripts/backup/",
+        scope="project",
+        scope_id="XCMAX",
+    )
+
+    # RAG 关闭：关键词匹配
+    from unittest.mock import patch
+
+    with patch("app.application.memory_graph_app_service.is_rag_enabled", return_value=False):
+        results = app_service.search_memory(query="ruff", scope="project", scope_id="XCMAX")
+    assert len(results) >= 1
+    assert any("Ruff" in r["title"] for r in results)
+
+    # RAG 启用但 embedder None：仍降级为关键词
+    with (
+        patch("app.application.memory_graph_app_service.is_rag_enabled", return_value=True),
+        patch(
+            "app.application.memory_graph_app_service.get_default_embedder",
+            return_value=None,
+        ),
+    ):
+        results = app_service.search_memory(query="备份", scope="project", scope_id="XCMAX")
+    assert len(results) >= 1
+    assert any("备份" in r["title"] for r in results)
+
+
+def test_cache_offline_flow(app_service, tmp_path):
+    """缓存离线流程：refresh → 模拟 Persy 不可用 → 缓存仍可读。"""
+    import json
+
+    app_service.ingest_engineering(
+        type=MemoryNodeType.CONSTRAINT,
+        title="离线约束 1",
+        content="约束内容",
+        scope="project",
+        scope_id="XCMAX",
+    )
+    app_service.ingest_engineering(
+        type=MemoryNodeType.CONVENTION,
+        title="离线约定 1",
+        content="约定内容",
+        scope="project",
+        scope_id="XCMAX",
+    )
+
+    cache = MemoryCacheService(cache_path=tmp_path / "persy-cache.json")
+    count = cache.refresh(app_service=app_service, scope="project", scope_id="XCMAX")
+    assert count == 2
+    assert cache.is_available() is True
+
+    # 模拟 Persy 不可用：把 persy_available 标记为 False
+    data = json.loads((tmp_path / "persy-cache.json").read_text(encoding="utf-8"))
+    data["persy_available"] = False
+    (tmp_path / "persy-cache.json").write_text(
+        json.dumps(data, ensure_ascii=False), encoding="utf-8"
+    )
+
+    offline_data = cache.load()
+    assert offline_data["persy_available"] is False
+    assert len(offline_data["nodes"]) == 2
+    titles = [n["title"] for n in offline_data["nodes"]]
+    assert "离线约束 1" in titles
+    assert "离线约定 1" in titles
+
+
+def test_full_phase3_lifecycle(app_service, tmp_path):
+    """Phase 3 完整生命周期：迁移 Trae memory → 衰减 → 搜索 → 导出 → 缓存。"""
+    from app.application.memory_decay_service import MemoryDecayService
+
+    # 1. 迁移 Trae project_memory.md
+    project_dir = tmp_path / "projects" / "XCMAX"
+    project_dir.mkdir(parents=True)
+    (project_dir / "project_memory.md").write_text(
+        """# Project Memory
+
+## Hard Constraints
+- Ruff 唯一格式化工具：禁止 black/isort
+
+## Engineering Conventions
+- 备份脚本路径：FHD/scripts/backup/
+""",
+        encoding="utf-8",
+    )
+    migrator = TraeMemoryMigrator(memory_root=tmp_path, scope="project", scope_id="XCMAX")
+    migration_result = migrator.migrate(app_service)
+    assert migration_result["constraint"] == 1
+    assert migration_result["convention"] == 1
+
+    # 2. 衰减维护（无归档，节点都是新建的）
+    decay_svc = MemoryDecayService(app_service._store)  # noqa: SLF001
+    decay_result = decay_svc.run_maintenance(scope="project", scope_id="XCMAX")
+    assert decay_result["processed"] == 2
+    assert decay_result["archived"] == 0
+
+    # 3. 搜索（关键词降级，因为测试环境 RAG 可能未启用）
+    results = app_service.search_memory(query="Ruff", scope="project", scope_id="XCMAX")
+    assert len(results) >= 1
+    assert any("Ruff" in r["title"] for r in results)
+
+    # 4. 导出 Markdown
+    export_service = MemoryExportService(app_service._store)  # noqa: SLF001
+    md = export_service.export_scope(scope="project", scope_id="XCMAX")
+    assert "## constraint (1)" in md
+    assert "Ruff 唯一格式化工具" in md
+    assert "## convention (1)" in md
+
+    # 5. 缓存到本地
+    cache = MemoryCacheService(cache_path=tmp_path / "persy-cache.json")
+    cache_count = cache.refresh(app_service=app_service, scope="project", scope_id="XCMAX")
+    assert cache_count == 2
+    assert cache.is_available() is True
+
+    # 6. 降级队列：写入 + 排空
+    cache.write_queue(
+        {
+            "op": "ingest",
+            "type": "lesson",
+            "title": "Phase 3 教训",
+            "content": "衰减归档需要 half_life 与 recall_count 配合",
+            "scope": "project",
+            "scope_id": "XCMAX",
+            "tags": ["phase3"],
+        }
+    )
+    synced = cache.drain_queue(app_service=app_service)
+    assert synced == 1
+
+    # 验证 lesson 节点已同步到 Persy
+    lessons = app_service._store.list_active_nodes(  # noqa: SLF001
+        scope="project", scope_id="XCMAX", node_type=MemoryNodeType.LESSON
+    )
+    assert len(lessons) == 1
+    assert lessons[0].title == "Phase 3 教训"
