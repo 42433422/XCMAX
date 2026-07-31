@@ -6,8 +6,8 @@
           <span></span>
         </span>
         <div>
-          <div class="brain-kicker">{{ adminOmniscient ? 'Omniscient Console' : 'Persy Cognitive Map' }}</div>
-          <strong>{{ adminOmniscient ? '全知知识网络' : '企业知识网络' }}</strong>
+          <div class="brain-kicker">{{ adminOmniscient ? 'Knowledge Control Plane' : 'Persy Cognitive Map' }}</div>
+          <strong>{{ knowledgeConsoleTitle }}</strong>
         </div>
       </div>
 
@@ -28,7 +28,7 @@
 
       <div class="toolbar-actions">
         <label
-          v-if="adminOmniscient && datasetOptions.length"
+          v-if="adminOmniscient && datasetOptions.length > 1"
           class="dataset-switch"
           title="知识空间"
         >
@@ -105,28 +105,70 @@
       </div>
     </header>
 
-    <section
-      v-if="adminOmniscient && omniscient"
-      class="omniscient-strip"
-      aria-label="全知总览"
-    >
-      <div>
-        <strong>{{ omniscient.document_count || 0 }}</strong>
-        <span>全库文档</span>
+    <section v-if="adminOmniscient" class="knowledge-scope-bar" aria-label="知识库范围">
+      <div class="knowledge-scope-switch" role="tablist" aria-label="公开和私有知识库">
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="knowledgeScope === 'public'"
+          :class="{ active: knowledgeScope === 'public' }"
+          @click="switchKnowledgeScope('public')"
+        >
+          <i class="fa fa-globe" aria-hidden="true"></i>
+          公开知识库
+          <strong>{{ publicDocumentCount }}</strong>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="knowledgeScope === 'private'"
+          :class="{ active: knowledgeScope === 'private' }"
+          @click="switchKnowledgeScope('private')"
+        >
+          <i class="fa fa-lock" aria-hidden="true"></i>
+          企业私有库
+          <strong>{{ privateDocumentCount }}</strong>
+        </button>
       </div>
-      <div>
-        <strong>{{ omniscient.chunk_count || 0 }}</strong>
-        <span>切片</span>
+
+      <label v-if="knowledgeScope === 'private'" class="tenant-scope-field">
+        <span>企业</span>
+        <select v-model="privateTenantId" @change="applyKnowledgeScope">
+          <option value="" disabled>选择企业</option>
+          <option v-for="tenant in privateTenantOptions" :key="tenant.id" :value="tenant.id">
+            {{ tenant.name }} · {{ tenant.documentCount }} 文档
+          </option>
+        </select>
+      </label>
+      <p
+        v-if="knowledgeScope === 'private' && tenantDirectoryError"
+        class="tenant-directory-error"
+        role="alert"
+      >
+        {{ tenantDirectoryError }}
+      </p>
+
+      <div class="scope-stat">
+        <strong>{{ documentCount }}</strong>
+        <span>当前文档</span>
       </div>
-      <div>
-        <strong>{{ omniscient.dataset_count || 0 }}</strong>
-        <span>知识空间</span>
+      <div class="scope-stat">
+        <strong>{{ chunkCount }}</strong>
+        <span>当前切片</span>
       </div>
-      <div>
-        <strong>{{ semanticAvailable ? '语义' : '关键词' }}</strong>
-        <span>召回</span>
+      <div v-if="knowledgeScope === 'public'" class="scope-stat">
+        <strong>{{ publishedPublicCount }}</strong>
+        <span>已发布</span>
       </div>
-      <p v-if="omniscientHint" class="omniscient-strip__hint">{{ omniscientHint }}</p>
+      <div v-if="knowledgeScope === 'public'" class="scope-stat">
+        <strong>{{ draftPublicCount }}</strong>
+        <span>待发布</span>
+      </div>
+      <div v-else class="scope-stat">
+        <strong>{{ privateTenantCount }}</strong>
+        <span>企业目录</span>
+      </div>
+      <p class="knowledge-scope-hint">{{ activeScopeHint }}</p>
     </section>
 
     <div class="brain-workspace">
@@ -296,7 +338,10 @@
                 </span>
                 <span class="source-row__main">
                   <strong>{{ doc.source || '未命名资料' }}</strong>
-                  <span>{{ parserLabel(doc.parser) }} · {{ numberText(doc.text_length) }} 字符</span>
+                  <span>
+                    {{ documentScopeLabel(doc) }} · {{ parserLabel(doc.parser) }} ·
+                    {{ numberText(doc.text_length) }} 字符
+                  </span>
                 </span>
                 <span class="source-row__metric">
                   <strong>{{ numberText(doc.chunk_count) }}</strong>
@@ -305,20 +350,43 @@
                 <span class="source-row__version">{{ doc.version_label || versionLabel(doc.version) }}</span>
                 <i class="fa fa-angle-right" aria-hidden="true"></i>
               </button>
-              <button
-                v-if="doc.document_id"
-                type="button"
-                class="source-row__delete"
-                :disabled="deletingDocumentId === doc.document_id"
-                title="删除资料"
-                aria-label="删除资料"
-                @click="deleteDocument(doc)"
-              >
-                <i
-                  :class="deletingDocumentId === doc.document_id ? 'fa fa-circle-o-notch fa-spin' : 'fa fa-trash-o'"
-                  aria-hidden="true"
-                ></i>
-              </button>
+              <div class="source-row__actions">
+                <button
+                  v-if="adminOmniscient && String(doc.tenant_id || '') === 'public' && doc.document_id"
+                  type="button"
+                  class="source-row__publication"
+                  :class="{ published: documentPublicationStatus(doc) === 'published' }"
+                  :disabled="publishingDocumentId === doc.document_id"
+                  :title="documentPublicationStatus(doc) === 'published' ? '下线公开资料' : '发布公开资料'"
+                  :aria-label="documentPublicationStatus(doc) === 'published' ? '下线公开资料' : '发布公开资料'"
+                  @click="setDocumentPublication(doc)"
+                >
+                  <i
+                    :class="
+                      publishingDocumentId === doc.document_id
+                        ? 'fa fa-circle-o-notch fa-spin'
+                        : documentPublicationStatus(doc) === 'published'
+                          ? 'fa fa-eye-slash'
+                          : 'fa fa-cloud-upload'
+                    "
+                    aria-hidden="true"
+                  ></i>
+                </button>
+                <button
+                  v-if="doc.document_id"
+                  type="button"
+                  class="source-row__delete"
+                  :disabled="deletingDocumentId === doc.document_id"
+                  title="删除资料"
+                  aria-label="删除资料"
+                  @click="deleteDocument(doc)"
+                >
+                  <i
+                    :class="deletingDocumentId === doc.document_id ? 'fa fa-circle-o-notch fa-spin' : 'fa fa-trash-o'"
+                    aria-hidden="true"
+                  ></i>
+                </button>
+              </div>
             </div>
           </div>
           <div v-else class="view-empty">
@@ -545,6 +613,14 @@
           </div>
 
           <div class="import-body">
+            <div v-if="adminOmniscient" class="import-target" :class="`import-target--${knowledgeScope}`">
+              <i :class="knowledgeScope === 'public' ? 'fa fa-globe' : 'fa fa-lock'" aria-hidden="true"></i>
+              <span>
+                <strong>{{ knowledgeScope === 'public' ? '发布到公开知识库' : '写入企业私有库' }}</strong>
+                <small>{{ importTargetDescription }}</small>
+              </span>
+            </div>
+
             <label class="field-label" for="persy-source">名称</label>
             <input
               id="persy-source"
@@ -649,6 +725,7 @@ import {
   type KnowledgeGraphNode,
   type KnowledgeGraphResponse,
   type KnowledgeOmniscientOverview,
+  type KnowledgeTenant,
   type PersyMemoryRecord,
   type PersyMemoryValue,
 } from '@/api/knowledgeBase'
@@ -656,6 +733,7 @@ import {
 type ViewMode = 'graph' | 'memories' | 'cards' | 'sources'
 type ImportMode = 'file' | 'text'
 type InspectorTab = 'node' | 'recall'
+type KnowledgeScopeMode = 'public' | 'private'
 
 const industryStore = useIndustryStore()
 const isAttendanceIndustry = computed(
@@ -678,9 +756,12 @@ const knowledgeTextPlaceholder = computed(() =>
 const activeDatasetId = ref(PERSY_KNOWLEDGE_DATASET_ID)
 const datasetIdInput = ref(PERSY_KNOWLEDGE_DATASET_ID)
 const adminOmniscient = computed(() => isAdminConsoleSpa())
+const knowledgeScope = ref<KnowledgeScopeMode>('public')
+const privateTenantId = ref('')
+const tenantDirectory = ref<KnowledgeTenant[]>([])
+const tenantDirectoryError = ref('')
 const omniscient = ref<KnowledgeOmniscientOverview | null>(null)
 const rebuildingIndex = ref(false)
-const omniscientQueryEnabled = ref(true)
 const datasetOptions = computed(() => {
   const map = omniscient.value?.datasets || {}
   const rows = Object.entries(map).map(([id, item]) => ({
@@ -693,22 +774,6 @@ const datasetOptions = computed(() => {
     rows.unshift({ id: PERSY_KNOWLEDGE_DATASET_ID, label: `${PERSY_KNOWLEDGE_DATASET_ID} · 0 文档`, docs: 0 })
   }
   return rows
-})
-const omniscientHint = computed(() => {
-  if (!adminOmniscient.value || !omniscient.value) return ''
-  const persyDocs = Number(omniscient.value.datasets?.[PERSY_KNOWLEDGE_DATASET_ID]?.document_count || 0)
-  const total = Number(omniscient.value.document_count || 0)
-  const activeExpected = Number(
-    omniscient.value.datasets?.[activeDatasetId.value]?.document_count || 0,
-  )
-  if (total <= 0) return '全库仍空：请导入文档或等待员工/对话入库'
-  if (persyDocs <= 0 && activeDatasetId.value === PERSY_KNOWLEDGE_DATASET_ID) {
-    return `Persy 空间为空，已推荐查看 ${omniscient.value.recommended_dataset_id || '存量空间'}（全库 ${total} 文档）`
-  }
-  if (activeExpected > 0 && documentCount.value <= 0 && !loadingStatus.value && !loadingGraph.value) {
-    return `当前空间全库计 ${activeExpected} 文档，但图谱未加载到内容：请点刷新，或切换空间后再切回`
-  }
-  return ''
 })
 const status = ref<KnowledgeBaseStatus | null>(null)
 const graph = ref<KnowledgeGraphResponse | null>(null)
@@ -732,6 +797,7 @@ const querying = ref(false)
 const mutatingMemory = ref(false)
 const memoryEditing = ref(false)
 const deletingDocumentId = ref('')
+const publishingDocumentId = ref('')
 const source = ref('Persy 系统资料')
 const documentText = ref('')
 const queryText = ref('')
@@ -751,12 +817,14 @@ const memoryDraftSubject = ref('')
 const memoryDraftPredicate = ref('')
 const memoryDraftObject = ref('')
 
-const viewModes: Array<{ value: ViewMode; label: string; icon: string }> = [
+const viewModes = computed<Array<{ value: ViewMode; label: string; icon: string }>>(() => [
   { value: 'graph', label: '图谱', icon: 'fa-share-alt' },
-  { value: 'memories', label: '记忆', icon: 'fa-history' },
+  ...(!adminOmniscient.value
+    ? [{ value: 'memories' as ViewMode, label: '记忆', icon: 'fa-history' }]
+    : []),
   { value: 'cards', label: '卡片', icon: 'fa-th-large' },
   { value: 'sources', label: '来源', icon: 'fa-files-o' },
-]
+])
 
 const legendItems = [
   { type: 'topic', label: '主题', color: '#2f6f8f' },
@@ -769,6 +837,89 @@ const legendItems = [
 const documentCount = computed(() => status.value?.document_count ?? 0)
 const chunkCount = computed(() => status.value?.chunk_count ?? 0)
 const documents = computed<KnowledgeBaseDocument[]>(() => status.value?.documents ?? [])
+const allDatasetDocuments = computed<KnowledgeBaseDocument[]>(() => {
+  const rows = omniscient.value?.datasets?.[activeDatasetId.value]?.documents
+  return Array.isArray(rows) ? rows : []
+})
+const publicDocuments = computed(() =>
+  allDatasetDocuments.value.filter((doc) => String(doc.tenant_id || '') === 'public'),
+)
+const privateDocuments = computed(() =>
+  allDatasetDocuments.value.filter((doc) => String(doc.tenant_id || '') !== 'public'),
+)
+const publicDocumentCount = computed(() => publicDocuments.value.length)
+const privateDocumentCount = computed(() => privateDocuments.value.length)
+const publishedPublicCount = computed(
+  () =>
+    publicDocuments.value.filter((doc) => documentPublicationStatus(doc) === 'published').length,
+)
+const draftPublicCount = computed(() => publicDocumentCount.value - publishedPublicCount.value)
+const privateTenantOptions = computed(() => {
+  const counts = new Map<string, number>()
+  for (const doc of privateDocuments.value) {
+    const tenantId = String(doc.tenant_id || '').trim()
+    if (!tenantId) continue
+    counts.set(tenantId, (counts.get(tenantId) || 0) + 1)
+  }
+  const options = new Map<
+    string,
+    { id: string; name: string; code: string; documentCount: number }
+  >()
+  for (const tenant of tenantDirectory.value) {
+    const id = String(tenant.tenant_id || tenant.id || '').trim()
+    if (!id) continue
+    const code = String(tenant.code || '').trim()
+    options.set(id, {
+      id,
+      name: String(tenant.name || code || `企业 ${id}`),
+      code,
+      documentCount: counts.get(id) || 0,
+    })
+  }
+  for (const [id, documentCount] of counts.entries()) {
+    if (options.has(id)) continue
+    options.set(id, {
+      id,
+      name: `未登记企业 ${id}`,
+      code: '',
+      documentCount,
+    })
+  }
+  return [...options.values()].sort(
+    (left, right) =>
+      left.name.localeCompare(right.name, 'zh-CN') ||
+      left.id.localeCompare(right.id),
+  )
+})
+const privateTenantCount = computed(() => privateTenantOptions.value.length)
+const selectedKnowledgeTenantId = computed(() => {
+  if (!adminOmniscient.value) return ''
+  return knowledgeScope.value === 'public' ? 'public' : privateTenantId.value.trim()
+})
+const scopeReady = computed(
+  () => !adminOmniscient.value || knowledgeScope.value === 'public' || Boolean(privateTenantId.value.trim()),
+)
+const knowledgeConsoleTitle = computed(() => {
+  if (!adminOmniscient.value) return '企业知识网络'
+  return knowledgeScope.value === 'public' ? '公开知识库' : '企业私有知识库'
+})
+const activeScopeHint = computed(() => {
+  if (knowledgeScope.value === 'public') {
+    if (!documentCount.value) return '公开库为空，导入资料后先进入待发布状态'
+    return `${publishedPublicCount.value} 份已上线，${draftPublicCount.value} 份待审核发布`
+  }
+  if (!privateTenantId.value.trim()) return '从企业目录选择租户后管理其私有资料'
+  return documentCount.value
+    ? `仅 ${privateTenantId.value.trim()} 可读取，其他企业不可见`
+    : `当前企业暂无私有资料，可直接导入到 ${privateTenantId.value.trim()}`
+})
+const importTargetDescription = computed(() =>
+  knowledgeScope.value === 'public'
+    ? '导入后保存为草稿，审核发布后全部企业可检索'
+    : privateTenantId.value.trim()
+      ? `仅 ${privateTenantId.value.trim()} 可检索`
+      : '请先从企业目录选择租户',
+)
 const graphNodeCount = computed(
   () => graph.value?.nodes.filter((node) => node.type !== 'core').length ?? 0,
 )
@@ -980,6 +1131,22 @@ function parserLabel(value: unknown): string {
   return parser || '文本'
 }
 
+function documentPublicationStatus(doc: KnowledgeBaseDocument): 'draft' | 'published' | 'archived' {
+  const status = String(doc.metadata?.publication_status || 'draft').trim().toLowerCase()
+  if (status === 'published' || status === 'archived') return status
+  return 'draft'
+}
+
+function documentScopeLabel(doc: KnowledgeBaseDocument): string {
+  if (String(doc.tenant_id || '') === 'public') {
+    const status = documentPublicationStatus(doc)
+    if (status === 'published') return '公开 · 已发布'
+    if (status === 'archived') return '公开 · 已下线'
+    return '公开 · 待发布'
+  }
+  return `企业私有 · ${String(doc.tenant_id || '当前企业')}`
+}
+
 function nodeTypeLabel(type: string): string {
   return (
     {
@@ -1030,7 +1197,10 @@ async function refreshStatus(
   const includeDocuments = options.includeDocuments === true || viewMode.value === 'sources'
   loadingStatus.value = true
   try {
-    const next = await knowledgeBaseApi.status(datasetId, { includeDocuments })
+    const next = await knowledgeBaseApi.status(datasetId, {
+      includeDocuments,
+      tenantId: selectedKnowledgeTenantId.value,
+    })
     if (token !== refreshEpoch || datasetId !== activeDatasetId.value) return
     status.value = next
   } finally {
@@ -1043,7 +1213,9 @@ async function refreshGraph(expectedDatasetId?: string, epoch?: number): Promise
   const token = epoch ?? refreshEpoch
   loadingGraph.value = true
   try {
-    const nextGraph = await knowledgeBaseApi.graph(datasetId)
+    const nextGraph = await knowledgeBaseApi.graph(datasetId, 80, {
+      tenantId: selectedKnowledgeTenantId.value,
+    })
     if (token !== refreshEpoch || datasetId !== activeDatasetId.value) return
     if (!nextGraph.success) throw new Error(nextGraph.message || '知识图谱加载失败')
     graph.value = nextGraph
@@ -1060,7 +1232,7 @@ async function refreshGraph(expectedDatasetId?: string, epoch?: number): Promise
 async function refreshMemories(expectedDatasetId?: string, epoch?: number): Promise<void> {
   const datasetId = expectedDatasetId || activeDatasetId.value
   const token = epoch ?? refreshEpoch
-  if (datasetId !== PERSY_KNOWLEDGE_DATASET_ID) {
+  if (adminOmniscient.value || datasetId !== PERSY_KNOWLEDGE_DATASET_ID) {
     if (token === refreshEpoch && datasetId === activeDatasetId.value) memories.value = []
     return
   }
@@ -1085,29 +1257,43 @@ async function loadOmniscientOverview(): Promise<boolean> {
   try {
     const overview = await knowledgeBaseApi.omniscient()
     omniscient.value = overview
-    const recommended = normalizeKnowledgeDatasetId(overview.recommended_dataset_id)
-    const persyDocs = Number(overview.datasets?.[PERSY_KNOWLEDGE_DATASET_ID]?.document_count || 0)
-    if (
-      persyDocs <= 0 &&
-      recommended &&
-      recommended !== activeDatasetId.value &&
-      Number(overview.datasets?.[recommended]?.document_count || 0) > 0
-    ) {
-      activeDatasetId.value = recommended
-      datasetIdInput.value = recommended
-      return true
-    }
   } catch (error) {
     console.warn('[PersyKnowledge] omniscient overview failed', error)
   }
   return false
 }
 
+async function loadTenantDirectory(): Promise<void> {
+  if (!adminOmniscient.value) {
+    tenantDirectory.value = []
+    tenantDirectoryError.value = ''
+    return
+  }
+  tenantDirectoryError.value = ''
+  try {
+    const result = await knowledgeBaseApi.tenants()
+    if (!result.success) throw new Error(result.message || '企业目录加载失败')
+    tenantDirectory.value = Array.isArray(result.data)
+      ? result.data.filter((tenant) => tenant.is_active !== false)
+      : []
+  } catch (error) {
+    tenantDirectory.value = []
+    tenantDirectoryError.value =
+      error instanceof Error ? error.message : '企业目录加载失败，请检查管理数据库'
+  }
+}
+
 async function rebuildActiveIndex(): Promise<void> {
   if (!adminOmniscient.value || rebuildingIndex.value) return
+  if (!scopeReady.value) {
+    pageError.value = '请先从企业目录选择租户'
+    return
+  }
   rebuildingIndex.value = true
   try {
-    await knowledgeBaseApi.rebuildIndex(activeDatasetId.value)
+    await knowledgeBaseApi.rebuildIndex(activeDatasetId.value, {
+      tenantId: selectedKnowledgeTenantId.value,
+    })
     await refreshAll()
   } catch (error) {
     console.warn('[PersyKnowledge] rebuild failed', error)
@@ -1117,6 +1303,24 @@ async function rebuildActiveIndex(): Promise<void> {
 }
 
 async function refreshDatasetViews(epoch: number, datasetId: string): Promise<void> {
+  if (!scopeReady.value) {
+    status.value = {
+      success: true,
+      dataset_id: datasetId,
+      document_count: 0,
+      chunk_count: 0,
+      documents: [],
+    }
+    graph.value = {
+      success: true,
+      dataset_id: datasetId,
+      tenant_id: '',
+      nodes: [],
+      edges: [],
+    }
+    memories.value = []
+    return
+  }
   const results = await Promise.allSettled([
     refreshStatus(datasetId, epoch),
     refreshGraph(datasetId, epoch),
@@ -1130,12 +1334,19 @@ async function refreshDatasetViews(epoch: number, datasetId: string): Promise<vo
 async function refreshAll(): Promise<void> {
   pageError.value = ''
   const epoch = ++refreshEpoch
-  await loadOmniscientOverview()
+  await Promise.all([loadOmniscientOverview(), loadTenantDirectory()])
   if (epoch !== refreshEpoch) return
+  if (!privateTenantId.value && privateTenantOptions.value.length) {
+    privateTenantId.value = privateTenantOptions.value[0].id
+  }
   const datasetId = activeDatasetId.value
   await refreshDatasetViews(epoch, datasetId)
   if (epoch !== refreshEpoch || !adminOmniscient.value || !omniscient.value) return
-  const expected = Number(omniscient.value.datasets?.[datasetId]?.document_count || 0)
+  const expected = adminOmniscient.value
+    ? allDatasetDocuments.value.filter(
+        (doc) => String(doc.tenant_id || '') === selectedKnowledgeTenantId.value,
+      ).length
+    : Number(omniscient.value.datasets?.[datasetId]?.document_count || 0)
   const loadedDocs = Number(status.value?.document_count || 0)
   const loadedNodes = Number(
     graph.value?.nodes?.filter((node) => node.type !== 'core' && node.type !== 'onboarding')
@@ -1157,7 +1368,30 @@ async function applyDataset(): Promise<void> {
   await refreshAll()
 }
 
+async function switchKnowledgeScope(scope: KnowledgeScopeMode): Promise<void> {
+  if (knowledgeScope.value === scope) return
+  knowledgeScope.value = scope
+  if (scope === 'private' && !privateTenantId.value && privateTenantOptions.value.length) {
+    privateTenantId.value = privateTenantOptions.value[0].id
+  }
+  await applyKnowledgeScope()
+}
+
+async function applyKnowledgeScope(): Promise<void> {
+  answerText.value = ''
+  lastQuery.value = ''
+  resultChunks.value = []
+  queryMessage.value = ''
+  queryError.value = ''
+  selectedNode.value = null
+  await refreshAll()
+}
+
 function openImport(mode: ImportMode): void {
+  if (adminOmniscient.value && !scopeReady.value) {
+    pageError.value = '请先从企业目录选择租户'
+    return
+  }
   importMode.value = mode
   ingestError.value = ''
   ingestMessage.value = ''
@@ -1182,6 +1416,27 @@ async function ingestDocument(): Promise<void> {
     ingestError.value = '请输入资料内容'
     return
   }
+  if (adminOmniscient.value && !scopeReady.value) {
+    ingestError.value = '请先从企业目录选择租户'
+    return
+  }
+  const tenantId = selectedKnowledgeTenantId.value
+  const scopeMetadata =
+    adminOmniscient.value && knowledgeScope.value === 'public'
+      ? {
+          audience: 'public',
+          visibility: 'public',
+          publication_status: 'draft',
+          entrypoint: 'admin_public_knowledge',
+        }
+      : {
+          audience: 'tenant',
+          visibility: 'private',
+          publication_status: 'active',
+          entrypoint: adminOmniscient.value
+            ? 'admin_private_knowledge'
+            : 'persy_knowledge_view',
+        }
   ingesting.value = true
   try {
     const result =
@@ -1190,19 +1445,25 @@ async function ingestDocument(): Promise<void> {
             datasetId: activeDatasetId.value,
             source: source.value.trim() || selectedFile.value.name,
             file: selectedFile.value,
+            tenantId,
+            metadata: scopeMetadata,
           })
         : await knowledgeBaseApi.ingestDocument({
             datasetId: activeDatasetId.value,
             source: source.value.trim() || 'Persy 手工资料',
             text,
+            tenantId,
             metadata: {
               scope: 'persy',
-              entrypoint: 'persy_knowledge_view',
+              ...scopeMetadata,
             },
           })
     if (!result.success) throw new Error(result.message || '资料入库失败')
     const chunks = result.chunk_count ?? result.document?.chunk_count ?? 0
-    ingestMessage.value = `已形成 ${chunks} 个知识节点`
+    ingestMessage.value =
+      adminOmniscient.value && knowledgeScope.value === 'public'
+        ? `公开资料草稿已保存，形成 ${chunks} 个知识节点，审核发布后对企业生效`
+        : `已形成 ${chunks} 个知识节点`
     documentText.value = ''
     clearSelectedFile()
     importOpen.value = false
@@ -1286,6 +1547,10 @@ async function queryKnowledge(): Promise<void> {
     queryError.value = '请输入问题'
     return
   }
+  if (adminOmniscient.value && !scopeReady.value) {
+    queryError.value = '请先从企业目录选择租户'
+    return
+  }
   querying.value = true
   try {
     const boundedTopK = Math.max(1, Math.min(Number(topK.value) || 6, 20))
@@ -1294,22 +1559,23 @@ async function queryKnowledge(): Promise<void> {
     let knowledgeFailure: unknown = null
     let memoryFailure: unknown = null
     try {
-      knowledge =
-        adminOmniscient.value && omniscientQueryEnabled.value
-          ? await knowledgeBaseApi.omniscientQuery({
-              query,
-              topK: boundedTopK,
-            })
-          : await knowledgeBaseApi.query({
-              datasetId: activeDatasetId.value,
-              query,
-              topK: boundedTopK,
-              rerank: rerank.value,
-            })
+      knowledge = await knowledgeBaseApi.query({
+        datasetId: activeDatasetId.value,
+        query,
+        topK: boundedTopK,
+        rerank: rerank.value,
+        tenantId: selectedKnowledgeTenantId.value,
+        includePublic: !adminOmniscient.value,
+        metadataFilter:
+          adminOmniscient.value && knowledgeScope.value === 'public'
+            ? { publication_status: 'published' }
+            : {},
+      })
     } catch (error) {
       knowledgeFailure = error
     }
     if (
+      !adminOmniscient.value &&
       activeDatasetId.value === PERSY_KNOWLEDGE_DATASET_ID &&
       knowledge?.persy_memory === undefined
     ) {
@@ -1512,6 +1778,45 @@ function selectDocument(doc: KnowledgeBaseDocument): void {
   if (node) selectNode(node)
 }
 
+async function setDocumentPublication(doc: KnowledgeBaseDocument): Promise<void> {
+  const documentId = String(doc.document_id || '')
+  if (!documentId || publishingDocumentId.value) return
+  const isPublished = documentPublicationStatus(doc) === 'published'
+  const nextStatus = isPublished ? 'archived' : 'published'
+  const actionLabel = isPublished ? '下线' : '发布'
+  const reason = window.prompt(
+    `请输入${actionLabel}公开资料“${doc.source || '未命名资料'}”的原因（至少 4 个字符）`,
+    isPublished ? '资料已过期或需要修订' : '内容已完成审核，可以公开检索',
+  )?.trim()
+  if (!reason) return
+  if (reason.length < 4) {
+    pageError.value = '发布原因至少需要 4 个字符'
+    return
+  }
+
+  publishingDocumentId.value = documentId
+  ingestMessage.value = ''
+  pageError.value = ''
+  try {
+    const result = await knowledgeBaseApi.setDocumentPublication(
+      activeDatasetId.value,
+      documentId,
+      nextStatus,
+      reason,
+      documentPublicationStatus(doc),
+    )
+    if (!result.success) throw new Error(result.message || `${actionLabel}资料失败`)
+    ingestMessage.value = isPublished
+      ? '公开资料已下线，企业检索将不再召回'
+      : '公开资料已发布，企业检索现在可以召回'
+    await refreshAll()
+  } catch (error) {
+    pageError.value = errorText(error)
+  } finally {
+    publishingDocumentId.value = ''
+  }
+}
+
 async function deleteDocument(doc: KnowledgeBaseDocument): Promise<void> {
   const documentId = String(doc.document_id || '')
   if (
@@ -1584,38 +1889,121 @@ onMounted(() => {
   background: rgba(255, 255, 255, 0.94);
 }
 
-.omniscient-strip {
+.knowledge-scope-bar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 18px;
-  padding: 10px 16px;
+  gap: 14px;
+  min-height: 58px;
+  padding: 8px 16px;
   border-bottom: 1px solid #d5e3db;
-  background: linear-gradient(90deg, #eef6f2, #f7faf8);
+  background: #f7faf8;
 }
 
-.omniscient-strip > div {
+.knowledge-scope-switch {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid #ccd8d2;
+  border-radius: 8px;
+  background: #eaf0ed;
+}
+
+.knowledge-scope-switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 6px;
+  color: #56665e;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.knowledge-scope-switch button.active {
+  color: #17372d;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(23, 33, 29, 0.13);
+}
+
+.knowledge-scope-switch button strong {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 5px;
+  color: #24695a;
+  background: #e2f1eb;
+  font-size: 10px;
+}
+
+.tenant-scope-field {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 190px);
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: #5f7067;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tenant-scope-field select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid #c6d3cc;
+  border-radius: 7px;
+  outline: 0;
+  color: #1f2d27;
+  background: #ffffff;
+  font: inherit;
+}
+
+.tenant-scope-field select:focus {
+  border-color: #4e8e77;
+  box-shadow: 0 0 0 3px rgba(78, 142, 119, 0.12);
+}
+
+.tenant-directory-error {
+  margin: 0;
+  color: #a12622;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.scope-stat {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 72px;
+  min-width: 58px;
 }
 
-.omniscient-strip strong {
-  font-size: 18px;
+.scope-stat strong {
+  font-size: 16px;
   line-height: 1.1;
   color: #1f3d32;
 }
 
-.omniscient-strip span,
-.omniscient-strip__hint {
+.scope-stat span,
+.knowledge-scope-hint {
   font-size: 12px;
   color: #5f7369;
 }
 
-.omniscient-strip__hint {
+.knowledge-scope-hint {
   flex: 1 1 220px;
   margin: 0;
+  line-height: 1.45;
 }
 
 .dataset-switch {
@@ -2645,6 +3033,7 @@ onMounted(() => {
 }
 
 .memory-action,
+.source-row__publication,
 .source-row__delete {
   display: inline-flex;
   align-items: center;
@@ -2664,6 +3053,7 @@ onMounted(() => {
 }
 
 .memory-action:disabled,
+.source-row__publication:disabled,
 .source-row__delete:disabled {
   cursor: not-allowed;
   opacity: 0.5;
@@ -2680,7 +3070,7 @@ onMounted(() => {
 
 .source-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 38px;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
   width: 100%;
@@ -2710,6 +3100,21 @@ onMounted(() => {
 
 .source-row__delete {
   color: #943a34;
+}
+
+.source-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 4px;
+}
+
+.source-row__publication {
+  color: #216557;
+}
+
+.source-row__publication.published {
+  color: #8a5a1f;
 }
 
 .source-row__icon {
@@ -2830,6 +3235,46 @@ onMounted(() => {
   min-height: 0;
   overflow: auto;
   padding: 18px 20px;
+}
+
+.import-target {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 11px 12px;
+  border: 1px solid #bcd5ca;
+  border-radius: 7px;
+  color: #245a4d;
+  background: #edf7f2;
+}
+
+.import-target--private {
+  border-color: #c7d3df;
+  color: #304c68;
+  background: #f0f4f8;
+}
+
+.import-target > i {
+  width: 20px;
+  text-align: center;
+}
+
+.import-target > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.import-target strong {
+  font-size: 12px;
+}
+
+.import-target small {
+  color: #66776e;
+  font-size: 10px;
+  line-height: 1.4;
 }
 
 .field-label {
@@ -3045,6 +3490,14 @@ onMounted(() => {
   .brain-workspace {
     grid-template-columns: minmax(0, 1fr) 292px;
   }
+
+  .knowledge-scope-bar {
+    flex-wrap: wrap;
+  }
+
+  .knowledge-scope-hint {
+    flex-basis: 100%;
+  }
 }
 
 @media (max-width: 767px) {
@@ -3086,6 +3539,36 @@ onMounted(() => {
     gap: 4px;
     min-height: 30px;
     padding: 0 8px;
+  }
+
+  .knowledge-scope-bar {
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .knowledge-scope-switch {
+    width: 100%;
+  }
+
+  .knowledge-scope-switch button {
+    min-width: 0;
+    flex: 1 1 50%;
+    justify-content: center;
+    padding: 0 7px;
+  }
+
+  .tenant-scope-field {
+    width: 100%;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .scope-stat {
+    display: none;
+  }
+
+  .knowledge-scope-hint {
+    flex-basis: auto;
+    font-size: 10px;
   }
 
   .toolbar-actions {

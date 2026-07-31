@@ -116,7 +116,7 @@ class TestMarketBaseUrl:
 
             os.environ.pop("XCAGI_MARKET_BASE_URL", None)
             url = ma._market_base_url()
-        assert "127.0.0.1:8765" in url
+        assert "127.0.0.1:8788" in url
 
     def test_env_override(self) -> None:
         with patch.dict("os.environ", {"XCAGI_MARKET_BASE_URL": "https://market.test/"}):
@@ -129,7 +129,7 @@ class TestMarketBaseUrl:
     def test_empty_env_falls_back_to_default(self) -> None:
         with patch.dict("os.environ", {"XCAGI_MARKET_BASE_URL": ""}):
             url = ma._market_base_url()
-        assert "127.0.0.1:8765" in url
+        assert "127.0.0.1:8788" in url
 
 
 class TestMarketHttpConfig:

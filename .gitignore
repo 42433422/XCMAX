@@ -168,3 +168,6 @@ FHD/docs/evidence/e2e/m01-mac-local-*/**/*cookies*.txt
 FHD/docs/evidence/e2e/m01-mac-local-*/**/*login-tries*.txt
 FHD/docs/evidence/e2e/m01-mac-local-*/**/*admin-login*.json
 FHD/docs/evidence/e2e/m01-mac-local-*/**/*enterprise-login*.json
+
+# Governed public knowledge publisher rollback snapshots are local runtime artifacts.
+FHD/dataset_rag/backups/

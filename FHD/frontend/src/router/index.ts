@@ -32,8 +32,11 @@ import {
 import { isDesktopShell } from '@/utils/desktopShell';
 import { ADMIN_HOST_ROUTE_RECORDS } from '@admin-console-inject/adminHostRoutes';
 import {
+  ADMIN_OPERATOR_ATTENDANCE_MOD_IDS,
   ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES,
+  ADMIN_OPERATOR_HIDDEN_MOD_IDS,
   ADMIN_OPERATOR_HOME_ROUTE,
+  ADMIN_OPERATOR_ROUTE_NAMES,
 } from '@/constants/adminOperatorNav';
 import { buildRoleMenuProfile, canShowCoreMenuKey } from '@/utils/roleMenuProfile';
 import { isClientErpSidebarContext } from '@/constants/genericModPack';
@@ -456,7 +459,17 @@ function filterPlatformShellRoutes(routes: RouteRecordRaw[]): RouteRecordRaw[] {
 }
 
 function resolveInitialRoutes(): RouteRecordRaw[] {
-  if (isAdminConsoleSpa()) return allRoutes;
+  if (isAdminConsoleSpa()) {
+    const adminRoutes = allRoutes.filter((route) => {
+      const name = String(route.name || '')
+      return Boolean(name && ADMIN_OPERATOR_ROUTE_NAMES.has(name))
+    })
+    adminRoutes.push({
+      path: '/:pathMatch(.*)*',
+      redirect: { name: ADMIN_OPERATOR_HOME_ROUTE },
+    })
+    return adminRoutes
+  }
   if (isSandbox) return filterSandboxRoutes(allRoutes);
   if (isPlatformShellModeEnabled()) return filterPlatformShellRoutes(allRoutes);
   return allRoutes;
@@ -496,8 +509,25 @@ router.beforeEach(async (to, _from, next) => {
 
   if (
     isAdminConsoleSpa() &&
+    to.name === 'mod-landing'
+  ) {
+    const modId = String(to.params.modId || '').trim()
+    if (
+      ADMIN_OPERATOR_HIDDEN_MOD_IDS.has(modId) ||
+      ADMIN_OPERATOR_ATTENDANCE_MOD_IDS.has(modId)
+    ) {
+      next({ name: ADMIN_OPERATOR_HOME_ROUTE, replace: true })
+      return
+    }
+  }
+
+  if (
+    isAdminConsoleSpa() &&
     to.name &&
-    ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES.has(String(to.name))
+    (
+      ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES.has(String(to.name)) ||
+      !ADMIN_OPERATOR_ROUTE_NAMES.has(String(to.name))
+    )
   ) {
     next({ name: ADMIN_OPERATOR_HOME_ROUTE, replace: true });
     return;

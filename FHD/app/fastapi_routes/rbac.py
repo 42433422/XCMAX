@@ -41,7 +41,10 @@ def _handle_app_error(err: AppError) -> JSONResponse:
 @router.get("/tenants")
 def rbac_tenants_list(_user=Depends(_require_admin)):
     """列出活跃租户（平台管理员）。"""
-    return {"success": True, "data": get_rbac_app_service().list_tenants()}
+    try:
+        return {"success": True, "data": get_rbac_app_service().list_tenants()}
+    except AppError as exc:
+        return _handle_app_error(exc)
 
 
 @router.get("/tenants/{tenant_id}/data-scopes")

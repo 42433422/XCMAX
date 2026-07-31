@@ -257,10 +257,17 @@ async def auth_session_validate(request: Request):
             status_code=200,
         )
 
+    user = resolve_session_user(request)
+    session_meta = _session_meta_for_response(request, user)
+    account_kind = str(session_meta.get("account_kind") or "").strip().lower()
+    is_admin_session = account_kind == "admin" or str(
+        getattr(user, "role", "") or ""
+    ).strip().lower() in {"admin", "super_admin"}
+
     try:
         from app.mod_sdk.product_skus import resolve_product_sku
 
-        if resolve_product_sku() == "enterprise":
+        if resolve_product_sku() == "enterprise" and not is_admin_session:
             from app.fastapi_routes.market_account import resolve_valid_market_access_token
 
             market_tok = await resolve_valid_market_access_token(session_id)
@@ -282,23 +289,22 @@ async def auth_session_validate(request: Request):
         logger.exception("enterprise market session check on validate failed")
 
     entitled_mod_ids: list[str] = []
-    try:
-        from app.enterprise.mod_entitlements import (
-            get_cached_entitled_client_mod_ids,
-            sync_entitlements_for_session,
-        )
+    if not is_admin_session:
+        try:
+            from app.enterprise.mod_entitlements import (
+                get_cached_entitled_client_mod_ids,
+                sync_entitlements_for_session,
+            )
 
-        entitled = await sync_entitlements_for_session(session_id)
-        if entitled:
-            entitled_mod_ids = sorted(entitled)
-        else:
-            cached = get_cached_entitled_client_mod_ids()
-            if cached is not None:
-                entitled_mod_ids = sorted(cached)
-    except INFRA_TRANSIENT:
-        logger.exception("sync enterprise entitlements on validate failed")
-    user = resolve_session_user(request)
-    session_meta = _session_meta_for_response(request, user)
+            entitled = await sync_entitlements_for_session(session_id)
+            if entitled:
+                entitled_mod_ids = sorted(entitled)
+            else:
+                cached = get_cached_entitled_client_mod_ids()
+                if cached is not None:
+                    entitled_mod_ids = sorted(cached)
+        except INFRA_TRANSIENT:
+            logger.exception("sync enterprise entitlements on validate failed")
     payload: dict[str, Any] = {"success": True, "valid": True, "data": session_info}
     if entitled_mod_ids:
         payload["entitled_mod_ids"] = entitled_mod_ids
@@ -765,18 +771,40 @@ async def auth_login(request: Request, body: dict = Body(default_factory=dict)):
         body.get("account_kind"),
         default="enterprise" if sku == "enterprise" else "personal",
     )
-    result, err = await run_market_first_login(
-        username=username,
-        password=password,
-        account_kind=account_kind,
-        market_result=None,
-        auth_app_service=auth_app_service,
-        sku=sku,
-        jit_create_fn=_jit_create_local_user_for_enterprise,
-        market_user_email_from_raw=_market_user_email_from_raw,
-        login_market_fn=login_market_with_password,
-        totp_code=str(body.get("totp_code") or "").strip() or None,
-    )
+    totp_code = str(body.get("totp_code") or "").strip() or None
+    if account_kind == "admin":
+        result = auth_app_service.login(
+            username,
+            password,
+            totp_code=totp_code,
+            enforce_mfa=True,
+        )
+        if result.get("success") and str((result.get("user") or {}).get("role") or "") != "admin":
+            auth_app_service.session_manager.delete_session(str(result.get("session_id") or ""))
+            result = {
+                "success": False,
+                "message": "该账号不是本地管理员账号",
+                "error": {
+                    "code": "ACCOUNT_KIND_MISMATCH",
+                    "message": "该账号不是本地管理员账号",
+                },
+            }
+        if result.get("success"):
+            result["account_kind"] = "admin"
+        err = None
+    else:
+        result, err = await run_market_first_login(
+            username=username,
+            password=password,
+            account_kind=account_kind,
+            market_result=None,
+            auth_app_service=auth_app_service,
+            sku=sku,
+            jit_create_fn=_jit_create_local_user_for_enterprise,
+            market_user_email_from_raw=_market_user_email_from_raw,
+            login_market_fn=login_market_with_password,
+            totp_code=totp_code,
+        )
     if err:
         auth_login_duration_seconds.labels(auth_method="password").observe(
             time.perf_counter() - login_start

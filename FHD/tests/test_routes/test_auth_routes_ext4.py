@@ -349,6 +349,49 @@ class TestAuthSessionValidate:
         assert result["entitled_mod_ids"] == ["mod1", "mod2"]
 
     @pytest.mark.asyncio
+    async def test_admin_session_skips_market_and_entitlement_checks(self):
+        from app.fastapi_routes.domains.auth.routes import auth_session_validate
+
+        request = MagicMock()
+        market_check = AsyncMock()
+        entitlement_sync = AsyncMock()
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                return_value="admin-sid",
+            ),
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
+            patch(
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                new=market_check,
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.sync_entitlements_for_session",
+                new=entitlement_sync,
+            ),
+            patch(
+                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                return_value=MagicMock(role="admin"),
+            ),
+            patch(
+                "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
+                return_value={"account_kind": "admin"},
+            ),
+        ):
+            mock_service = MagicMock()
+            mock_service.session_manager.get_session_info.return_value = {"user_id": 1}
+            mock_get.return_value = mock_service
+            result = await auth_session_validate(request)
+
+        assert isinstance(result, dict)
+        assert result["success"] is True
+        assert result["valid"] is True
+        assert result["account_kind"] == "admin"
+        market_check.assert_not_awaited()
+        entitlement_sync.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_enterprise_cached_entitlements(self):
         from app.fastapi_routes.domains.auth.routes import auth_session_validate
 

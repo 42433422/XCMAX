@@ -41,7 +41,10 @@ import {
   ADMIN_OPERATOR_AUX_MENU_ITEMS,
   ADMIN_OPERATOR_MENU_ITEMS,
   ADMIN_OPERATOR_ATTENDANCE_MOD_IDS,
+  ADMIN_OPERATOR_ERP_MOD_MENU_ALLOWLIST,
+  ADMIN_OPERATOR_HIDDEN_HOST_KEYS,
   ADMIN_OPERATOR_HIDDEN_MOD_IDS,
+  ADMIN_OPERATOR_VISIBLE_CORE_KEYS,
 } from '@/constants/adminOperatorNav'
 
 export type VisibleNavSource = 'core' | 'mod' | 'trailing' | 'settings' | 'child'
@@ -145,6 +148,15 @@ export function useVisibleNavItems() {
         }))
       : []
     const baseCore = CORE_MENU_ITEMS_BASE.map((item) => {
+      if (
+        adminShell &&
+        (
+          ADMIN_OPERATOR_HIDDEN_HOST_KEYS.has(item.key) ||
+          !ADMIN_OPERATOR_VISIBLE_CORE_KEYS.has(item.key)
+        )
+      ) {
+        return null
+      }
       const override = coreMenuOverrides.value.get(item.key)
       if (isCoreNavHidden(item.key)) return null
       const childKeys = [
@@ -265,7 +277,7 @@ export function useVisibleNavItems() {
         const modId = String(item.modId || '').trim()
         if (modId && ADMIN_OPERATOR_HIDDEN_MOD_IDS.has(modId)) return false
         if (modId && ADMIN_OPERATOR_ATTENDANCE_MOD_IDS.has(modId)) return false
-        return true
+        return ADMIN_OPERATOR_ERP_MOD_MENU_ALLOWLIST.has(navKey)
       })
       .map((item) => ({
         key: item.key,

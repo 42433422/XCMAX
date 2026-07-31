@@ -7,6 +7,7 @@ import type { useModsStore } from '@/stores/mods'
 import { buildLoginLocation } from '@/utils/startupRedirect'
 import { clearHostPackSkippedSession } from '@/utils/hostPackOnboardingGate'
 import { asRecord, asArray, asString } from '@/utils/typeGuards'
+import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 
 export type StartupAuthResult = {
   ok: boolean
@@ -22,6 +23,7 @@ export function useStartupAuth(options: {
   const { router, modsStore, dismissStartupSplashImmediate } = options
 
   async function syncMarketTokensFromSession() {
+    if (isAdminConsoleSpa()) return
     try {
       const handoff = await fetchSessionMarketHandoff()
       persistMarketTokensFromHandoff(handoff)

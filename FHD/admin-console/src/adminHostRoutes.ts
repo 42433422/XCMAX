@@ -1,7 +1,5 @@
 import type { RouteRecordRaw } from 'vue-router'
 import XCmaxAdminView from './views/XCmaxAdminView.vue'
-import AutomationPolicyView from './views/AutomationPolicyView.vue'
-import DutyTimeArchitectureView from './views/DutyTimeArchitectureView.vue'
 import DutyRosterGraphView from './views/DutyRosterGraphView.vue'
 import ServerFunctionsView from './views/ServerFunctionsView.vue'
 import ApprovalHubView from './views/ApprovalHubView.vue'
@@ -21,18 +19,6 @@ export const ADMIN_HOST_ROUTE_RECORDS: RouteRecordRaw[] = [
     name: 'founder-autonomy',
     component: FounderAutonomyView,
     meta: { title: '创始人自治驾驶舱', requiresAdminAccount: true, hostAdmin: true },
-  },
-  {
-    path: '/automation-policy',
-    name: 'automation-policy',
-    component: AutomationPolicyView,
-    meta: { title: '自动化方针', requiresAdminAccount: true, hostAdmin: true },
-  },
-  {
-    path: '/duty-time-architecture',
-    name: 'duty-time-architecture',
-    component: DutyTimeArchitectureView,
-    meta: { title: '同时完成时间架构', requiresAdminAccount: true, hostAdmin: true },
   },
   {
     path: '/duty-roster-graph',

@@ -23,6 +23,8 @@ class TestXiaocPersona:
         assert "小茈" not in text
         assert "官网" in text
         assert "禁止" in text
+        assert "联合发布的独立产品品牌" in text
+        assert "已经自动打通" in text
 
     def test_permission_policy_external_no_tools(self):
         from modstore_server.xiaoc_cs_ssot import permission_policy
@@ -80,11 +82,30 @@ class TestXiaocPersona:
 
         def _corp_retrieve(query, *, dataset_id, top_k=5):
             corp_calls.append(dataset_id)
-            return [{"text": "public-hit", "source": "faq.md"}]
+            return [
+                {
+                    "text": "public-hit",
+                    "source": "faq.md",
+                    "metadata": {
+                        "audience": "public",
+                        "publication_status": "published",
+                        "knowledge_owner": "chengdu-xiuci-technology",
+                    },
+                }
+            ]
 
         def _admin_retrieve(query, *, dataset_id, top_k=5):
             admin_calls.append(dataset_id)
-            return [{"text": f"hit-{dataset_id}", "source": "t.md"}]
+            metadata = (
+                {
+                    "audience": "public",
+                    "publication_status": "published",
+                    "knowledge_owner": "chengdu-xiuci-technology",
+                }
+                if dataset_id == PUBLIC_DATASET_ID
+                else {}
+            )
+            return [{"text": f"hit-{dataset_id}", "source": "t.md", "metadata": metadata}]
 
         with patch(
             "modstore_server.xiaoc_cs_ssot.retrieve_dataset_knowledge",
@@ -113,6 +134,20 @@ class TestXiaocPersona:
         }
         assert "公开库" in block
         assert "内部库" not in block
+
+    def test_external_retrieval_rejects_unpublished_public_chunks(self):
+        from modstore_server.xiaoc_cs_ssot import retrieve_knowledge_for_mode
+
+        dirty = {
+            "text": "Generated contract",
+            "source": "contract.docx",
+            "metadata": {"tenant_id": "eval-user"},
+        }
+        with patch(
+            "modstore_server.xiaoc_cs_ssot.retrieve_dataset_knowledge",
+            return_value=[dirty],
+        ):
+            assert retrieve_knowledge_for_mode("公司产品", mode="external") == []
 
 
 class TestKnowledgeFormat:

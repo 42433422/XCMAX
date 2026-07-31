@@ -792,6 +792,7 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "metadata_filter": {"type": "object"},
             "rerank": {"type": "boolean"},
             "include_answer": {"type": "boolean"},
+            "include_public": {"type": "boolean"},
         },
     },
     ("dataset_rag", "ingest_document"): {

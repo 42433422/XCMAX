@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -103,6 +104,7 @@ class DatasetRebuildJob:
 DATASET_READ_PERMISSION = "dataset.read"
 DATASET_WRITE_PERMISSION = "dataset.write"
 DATASET_ADMIN_PERMISSION = "dataset.admin"
+PUBLIC_KNOWLEDGE_TENANT_ID = "public"
 REBUILD_TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
 
 
@@ -179,6 +181,7 @@ class DatasetRagApplicationService:
         )
         self._rebuild_workers_enabled = bool(rebuild_workers_enabled)
         self._datasets: dict[str, _DatasetState] = {}
+        self._storage_signature: tuple[int, int, int] | None = None
         self._load_persisted_state()
         if self._rebuild_workers_enabled:
             self._schedule_rebuild_jobs()
@@ -244,6 +247,7 @@ class DatasetRagApplicationService:
             base_metadata.update(extract_metadata)
             base_metadata["tenant_id"] = tenant_key
             with self._lock:
+                self._reload_external_state_locked()
                 state = self._datasets.setdefault(dataset_key, _DatasetState(dataset_key))
                 document_version = self._resolve_document_version(
                     state,
@@ -298,6 +302,8 @@ class DatasetRagApplicationService:
             ]
 
             with self._lock:
+                self._reload_external_state_locked()
+                state = self._datasets.setdefault(dataset_key, _DatasetState(dataset_key))
                 state.documents[doc_id] = document
                 state.chunks = [
                     c
@@ -342,6 +348,7 @@ class DatasetRagApplicationService:
         if denied is not None:
             return denied
         with self._lock:
+            self._reload_external_state_locked()
             state = self._datasets.get(dataset_key)
             if state is None or doc_key not in state.documents:
                 return {
@@ -378,6 +385,145 @@ class DatasetRagApplicationService:
             "deleted_chunks": before - len(state.chunks),
         }
 
+    def set_document_publication_status(
+        self,
+        dataset_id: str,
+        document_id: str,
+        publication_status: str,
+        *,
+        reason: str,
+        expected_status: str | None = None,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        dataset_key = _clean_key(dataset_id, default="default")
+        doc_key = document_id.strip()
+        next_status = str(publication_status or "").strip().lower()
+        change_reason = str(reason or "").strip()
+        expected = str(expected_status or "").strip().lower()
+        context = _coerce_access_context(access_context)
+        denied = _ensure_dataset_permission(
+            context,
+            DATASET_ADMIN_PERMISSION,
+            dataset_id=dataset_key,
+        )
+        if denied is not None:
+            return denied
+        if next_status not in {"draft", "published", "archived"}:
+            return {
+                "success": False,
+                "dataset_id": dataset_key,
+                "document_id": doc_key,
+                "error_code": "dataset_publication_status_invalid",
+                "message": "publication status must be draft, published, or archived",
+            }
+        if len(change_reason) < 4:
+            return {
+                "success": False,
+                "dataset_id": dataset_key,
+                "document_id": doc_key,
+                "error_code": "dataset_publication_reason_required",
+                "message": "publication reason must contain at least 4 characters",
+            }
+
+        with self._lock:
+            self._reload_external_state_locked()
+            state = self._datasets.get(dataset_key)
+            document = state.documents.get(doc_key) if state is not None else None
+            if document is None:
+                return {
+                    "success": False,
+                    "dataset_id": dataset_key,
+                    "document_id": doc_key,
+                    "error_code": "dataset_document_not_found",
+                    "message": "document not found",
+                }
+            if document.tenant_id != PUBLIC_KNOWLEDGE_TENANT_ID:
+                return {
+                    "success": False,
+                    "dataset_id": dataset_key,
+                    "document_id": doc_key,
+                    "error_code": "dataset_publication_scope_invalid",
+                    "message": "only public-tenant documents have a publication lifecycle",
+                }
+
+            previous_status = str(document.metadata.get("publication_status") or "draft")
+            if expected and previous_status != expected:
+                return {
+                    "success": False,
+                    "dataset_id": dataset_key,
+                    "document_id": doc_key,
+                    "error_code": "dataset_publication_conflict",
+                    "message": "publication status changed; refresh before retrying",
+                    "expected_status": expected,
+                    "publication_status": previous_status,
+                }
+            actor_id = str(context.actor_id if context is not None else "")
+            changed_at = _utc_now_iso()
+            change_id = uuid.uuid4().hex
+            history = document.metadata.get("publication_history")
+            history_rows = list(history) if isinstance(history, list) else []
+            history_rows.append(
+                {
+                    "change_id": change_id,
+                    "from": previous_status,
+                    "to": next_status,
+                    "reason": change_reason,
+                    "actor_id": actor_id,
+                    "changed_at": changed_at,
+                }
+            )
+            history_rows = history_rows[-100:]
+            publication_metadata = {
+                "audience": "public",
+                "visibility": "public",
+                "publication_status": next_status,
+                "publication_updated_at": changed_at,
+                "publication_updated_by": actor_id,
+                "publication_change_id": change_id,
+                "publication_reason": change_reason,
+                "publication_history": history_rows,
+            }
+            previous_document_metadata = copy.deepcopy(document.metadata)
+            previous_chunk_metadata = [
+                (chunk, copy.deepcopy(chunk.metadata))
+                for chunk in state.chunks
+                if isinstance(chunk.metadata, dict)
+                and str(chunk.metadata.get("document_id") or "") == doc_key
+            ]
+            document.metadata.update(publication_metadata)
+            for chunk in state.chunks:
+                metadata = chunk.metadata if isinstance(chunk.metadata, dict) else {}
+                if str(metadata.get("document_id") or "") != doc_key:
+                    continue
+                metadata.update(publication_metadata)
+                chunk.metadata = metadata
+            self._sync_vector_index_locked(state)
+            if str(state.index.get("vector_backend_sync_status") or "") == "failed":
+                document.metadata = previous_document_metadata
+                for chunk, metadata in previous_chunk_metadata:
+                    chunk.metadata = metadata
+                self._sync_vector_index_locked(state)
+                self._refresh_index_metadata(state)
+                return {
+                    "success": False,
+                    "dataset_id": dataset_key,
+                    "document_id": doc_key,
+                    "error_code": "dataset_publication_vector_sync_failed",
+                    "message": "vector index synchronization failed; publication was not changed",
+                }
+            self._refresh_index_metadata(state)
+            self._persist_locked()
+
+        return {
+            "success": True,
+            "dataset_id": dataset_key,
+            "document_id": doc_key,
+            "previous_status": previous_status,
+            "publication_status": next_status,
+            "change_id": change_id,
+            "document": copy.deepcopy(document.to_dict()),
+        }
+
     def diff_versions(
         self,
         *,
@@ -400,6 +546,7 @@ class DatasetRagApplicationService:
         if denied is not None:
             return denied
         with self._lock:
+            self._reload_external_state_locked()
             state = self._datasets.get(dataset_key)
             if state is None:
                 return {
@@ -486,6 +633,7 @@ class DatasetRagApplicationService:
         if denied is not None:
             return denied
         with self._lock:
+            self._reload_external_state_locked()
             state = self._datasets.get(dataset_key)
             if state is None:
                 return {
@@ -561,6 +709,7 @@ class DatasetRagApplicationService:
         )
         starts: list[tuple[str, str]] = []
         with self._lock:
+            self._reload_external_state_locked()
             state = self._datasets.get(dataset_key)
             if state is None:
                 return {
@@ -602,6 +751,7 @@ class DatasetRagApplicationService:
         if denied is not None:
             return denied
         with self._lock:
+            self._reload_external_state_locked()
             state = self._datasets.get(dataset_key)
             job = state.rebuild_jobs.get(job_id) if state is not None else None
             if job is None:
@@ -653,6 +803,7 @@ class DatasetRagApplicationService:
         limit = max_jobs if max_jobs is not None else 1000
         while len(drained) < max(0, int(limit)):
             with self._lock:
+                self._reload_external_state_locked()
                 next_job = self._claim_next_rebuild_jobs_locked(limit=1)
                 self._persist_locked()
             if not next_job:
@@ -685,6 +836,7 @@ class DatasetRagApplicationService:
         if denied is not None:
             return denied
         with self._lock:
+            self._reload_external_state_locked()
             state = self._datasets.get(dataset_key)
             job = state.rebuild_jobs.get(job_id) if state is not None else None
             if job is None:
@@ -727,6 +879,7 @@ class DatasetRagApplicationService:
         if denied is not None:
             return denied
         with self._lock:
+            self._reload_external_state_locked()
             if dataset_id.strip():
                 dataset_key = _clean_key(dataset_id, default="default")
                 state = self._datasets.get(dataset_key)
@@ -765,6 +918,7 @@ class DatasetRagApplicationService:
         version: str | int = "",
         metadata_filter: dict[str, Any] | None = None,
         rerank: bool = False,
+        include_public: bool = False,
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         dataset_key = _clean_key(dataset_id, default="default")
@@ -787,28 +941,67 @@ class DatasetRagApplicationService:
                 "chunks": [],
             }
         with self._lock:
+            self._reload_external_state_locked()
             state = self._datasets.get(dataset_key)
             chunks = list(state.chunks) if state is not None else []
             index_snapshot = dict(state.index or {}) if state is not None else {}
+        include_public_scope = bool(
+            include_public
+            and tenant_key
+            and tenant_key != PUBLIC_KNOWLEDGE_TENANT_ID
+        )
+        candidate_limit = max(50, max(1, min(int(top_k), 50)) * 4)
         vector_candidates = self._query_vector_index_candidates(
             dataset_id=dataset_key,
             query=query_text,
-            top_k=max(50, max(1, min(int(top_k), 50)) * 4),
+            top_k=candidate_limit,
             tenant_id=tenant_key,
             version=version,
             metadata_filter=metadata_filter or {},
         )
+        if vector_candidates is not None and include_public_scope:
+            public_candidates = self._query_vector_index_candidates(
+                dataset_id=dataset_key,
+                query=query_text,
+                top_k=candidate_limit,
+                tenant_id=PUBLIC_KNOWLEDGE_TENANT_ID,
+                version=version,
+                metadata_filter={
+                    **(metadata_filter or {}),
+                    "publication_status": "published",
+                },
+            )
+            if public_candidates is None:
+                vector_candidates = None
+            else:
+                vector_candidates = _deduplicate_chunks(
+                    [*vector_candidates, *public_candidates]
+                )
         used_vector_backend = vector_candidates is not None
         if vector_candidates is not None:
             chunks = vector_candidates
             index_snapshot["query_backend"] = self._vector_index_backend_name()
         else:
-            chunks = _filter_chunks(
+            private_chunks = _filter_chunks(
                 chunks,
                 tenant_id=tenant_key,
                 version=version,
                 metadata_filter=metadata_filter or {},
             )
+            public_chunks = (
+                _filter_chunks(
+                    chunks,
+                    tenant_id=PUBLIC_KNOWLEDGE_TENANT_ID,
+                    version=version,
+                    metadata_filter={
+                        **(metadata_filter or {}),
+                        "publication_status": "published",
+                    },
+                )
+                if include_public_scope
+                else []
+            )
+            chunks = _deduplicate_chunks([*private_chunks, *public_chunks])
             index_snapshot["query_backend"] = "in_memory_hybrid"
         if not chunks:
             return {
@@ -819,6 +1012,10 @@ class DatasetRagApplicationService:
                 "citations": [],
                 "answer": "",
                 "tenant_id": tenant_key,
+                "include_public": include_public_scope,
+                "visible_tenant_ids": _visible_tenant_ids(
+                    tenant_key, include_public_scope
+                ),
                 "version": str(version or ""),
                 "vector_backend_used": used_vector_backend,
                 "index": index_snapshot,
@@ -834,6 +1031,10 @@ class DatasetRagApplicationService:
             "query": query_text,
             "chunks": [_chunk_to_dict(c, public=True) for c in top],
             "tenant_id": tenant_key,
+            "include_public": include_public_scope,
+            "visible_tenant_ids": _visible_tenant_ids(
+                tenant_key, include_public_scope
+            ),
             "version": str(version or ""),
             "metadata_filter": metadata_filter or {},
             "rerank": bool(rerank),
@@ -864,6 +1065,7 @@ class DatasetRagApplicationService:
             return denied
 
         with self._lock:
+            self._reload_external_state_locked()
             state = self._datasets.get(dataset_key)
             if state is None:
                 documents: list[DatasetDocument] = []
@@ -900,6 +1102,7 @@ class DatasetRagApplicationService:
         version: str | int = "",
         metadata_filter: dict[str, Any] | None = None,
         rerank: bool = False,
+        include_public: bool = False,
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         result = self.query(
@@ -910,6 +1113,7 @@ class DatasetRagApplicationService:
             version=version,
             metadata_filter=metadata_filter,
             rerank=rerank,
+            include_public=include_public,
             access_context=access_context,
         )
         if not result.get("success") or not result.get("chunks"):
@@ -1110,11 +1314,13 @@ class DatasetRagApplicationService:
     def _load_persisted_state(self) -> None:
         try:
             if not self._storage_path.exists():
+                self._datasets = {}
+                self._storage_signature = None
                 return
             raw = json.loads(self._storage_path.read_text(encoding="utf-8"))
             datasets = raw.get("datasets") if isinstance(raw, dict) else {}
             if not isinstance(datasets, dict):
-                return
+                raise ValueError("dataset storage must contain a datasets object")
             loaded: dict[str, _DatasetState] = {}
             for dataset_id, payload in datasets.items():
                 if not isinstance(payload, dict):
@@ -1160,8 +1366,24 @@ class DatasetRagApplicationService:
                 self._refresh_index_metadata(state)
                 loaded[str(dataset_id)] = state
             self._datasets = loaded
+            self._storage_signature = self._current_storage_signature()
         except RECOVERABLE_ERRORS:
-            self._datasets = {}
+            return
+
+    def _current_storage_signature(self) -> tuple[int, int, int] | None:
+        try:
+            stat = self._storage_path.stat()
+            return (int(stat.st_mtime_ns), int(stat.st_size), int(stat.st_ino))
+        except FileNotFoundError:
+            return None
+
+    def _reload_external_state_locked(self) -> bool:
+        signature = self._current_storage_signature()
+        if signature == self._storage_signature:
+            return False
+        previous_signature = self._storage_signature
+        self._load_persisted_state()
+        return self._storage_signature != previous_signature
 
     def _persist_locked(self) -> None:
         payload = {
@@ -1183,8 +1405,21 @@ class DatasetRagApplicationService:
         }
         self._storage_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self._storage_path.with_suffix(self._storage_path.suffix + ".tmp")
-        tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        encoded = json.dumps(payload, ensure_ascii=False, indent=2)
+        with open(tmp_path, "w", encoding="utf-8") as handle:
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
         tmp_path.replace(self._storage_path)
+        try:
+            directory_fd = os.open(self._storage_path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        except OSError:
+            pass
+        self._storage_signature = self._current_storage_signature()
 
     @staticmethod
     def _renumber_chunks(state: _DatasetState) -> None:
@@ -1951,12 +2186,16 @@ def _rebuild_job_from_dict(data: dict[str, Any]) -> DatasetRebuildJob:
 
 def _chunk_to_dict(chunk: RetrievedChunk, *, public: bool = False) -> dict[str, Any]:
     metadata = dict(chunk.metadata or {})
+    retrieval_method = str(chunk.source or "")
+    source = str(metadata.get("source") or chunk.source or "")
+    if retrieval_method in {"hybrid", "vector", "bm25", "hybrid+rerank", "vector+rerank", "bm25+rerank"}:
+        metadata.setdefault("retrieval_method", retrieval_method)
     if public:
         metadata = {key: value for key, value in metadata.items() if not str(key).startswith("_")}
     return {
         "text": chunk.text,
         "score": chunk.score,
-        "source": chunk.source,
+        "source": source,
         "chunk_index": chunk.chunk_index,
         "char_start": chunk.char_start,
         "char_end": chunk.char_end,
@@ -2420,6 +2659,30 @@ def _filter_chunks(
     ]
 
 
+def _deduplicate_chunks(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+    seen: set[tuple[str, int, str]] = set()
+    result: list[RetrievedChunk] = []
+    for chunk in chunks:
+        metadata = chunk.metadata or {}
+        key = (
+            str(metadata.get("document_id") or chunk.source or ""),
+            int(chunk.chunk_index or 0),
+            str(metadata.get("tenant_id") or ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(chunk)
+    return result
+
+
+def _visible_tenant_ids(tenant_id: str, include_public: bool) -> list[str]:
+    visible = [tenant_id] if tenant_id else []
+    if include_public and PUBLIC_KNOWLEDGE_TENANT_ID not in visible:
+        visible.append(PUBLIC_KNOWLEDGE_TENANT_ID)
+    return visible
+
+
 def _metadata_matches(chunk: RetrievedChunk, metadata_filter: dict[str, Any]) -> bool:
     metadata = dict(chunk.metadata or {})
     metadata.setdefault("source", chunk.source)
@@ -2474,8 +2737,15 @@ def _rerank_chunks(
 
 
 def _tokenize_for_rerank(text: str) -> list[str]:
-    cleaned = "".join(ch.lower() if ch.isalnum() else " " for ch in text)
-    return [part for part in cleaned.split() if part]
+    tokens: list[str] = []
+    for part in re.split(r"([\u4e00-\u9fff])", text):
+        if not part:
+            continue
+        if re.fullmatch(r"[\u4e00-\u9fff]", part):
+            tokens.append(part)
+        else:
+            tokens.extend(re.findall(r"[A-Za-z0-9]+", part.lower()))
+    return tokens
 
 
 def _utc_now_iso() -> str:

@@ -14,7 +14,7 @@ import re
 import threading
 import uuid
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi import Query as FastAPIQuery
@@ -41,6 +41,7 @@ _DATASET_UPLOAD_MAX_BYTES = 25 * 1024 * 1024
 _DATASET_INLINE_MAX_CHARS = 5_000_000
 _DATASET_METADATA_MAX_BYTES = 64 * 1024
 _PERSY_DATASET_ID = "persy-knowledge"
+_PUBLIC_KNOWLEDGE_TENANT_ID = "public"
 
 
 def _ensure_bounded_metadata(value: Any, *, max_bytes: int = _DATASET_METADATA_MAX_BYTES) -> None:
@@ -182,12 +183,22 @@ class DatasetQueryRequest(BaseModel):
     )
     metadata_filter: dict[str, Any] = Field(default_factory=dict)
     rerank: bool = Field(False, description="apply cross-encoder reranking with safe fallback")
+    include_public: bool = Field(
+        True,
+        description="include published public knowledge with the caller tenant scope",
+    )
 
     @field_validator("metadata_filter")
     @classmethod
     def validate_metadata_filter(cls, value: dict[str, Any]) -> dict[str, Any]:
         _ensure_bounded_metadata(value)
         return value
+
+
+class DatasetPublicationRequest(BaseModel):
+    status: Literal["draft", "published", "archived"]
+    reason: str = Field(..., min_length=4, max_length=500)
+    expected_status: Literal["draft", "published", "archived"] | None = None
 
 
 class DatasetVersionDiffRequest(BaseModel):
@@ -331,7 +342,7 @@ def _dataset_read_tenant_scope(access: Any | None) -> str:
     """
 
     if access is None:
-        return ""
+        return _PUBLIC_KNOWLEDGE_TENANT_ID
     if bool(getattr(access, "is_admin", False)):
         return ""
     permissions = getattr(access, "permissions", None) or ()
@@ -343,6 +354,29 @@ def _dataset_read_tenant_scope(access: Any | None) -> str:
     except Exception:  # noqa: BLE001 - keep read path resilient
         pass
     return str(getattr(access, "tenant_id", "") or "")
+
+
+def _dataset_admin_access(access: Any | None) -> bool:
+    if access is None:
+        return False
+    if bool(getattr(access, "is_admin", False)):
+        return True
+    permissions = getattr(access, "permissions", None) or ()
+    return "dataset.admin" in permissions or "*" in permissions
+
+
+def _private_scope_requires_auth(tenant_id: str, access: Any | None) -> JSONResponse | None:
+    requested = str(tenant_id or "").strip()
+    if access is not None or not requested or requested == _PUBLIC_KNOWLEDGE_TENANT_ID:
+        return None
+    return JSONResponse(
+        {
+            "success": False,
+            "error_code": "dataset_auth_required",
+            "message": "企业私有知识需要登录后访问",
+        },
+        status_code=401,
+    )
 
 
 def _persy_memory_service():
@@ -564,6 +598,36 @@ def _run_dataset_rag_agent(
 
     data = dict(params or {})
     access_payload = _dataset_access_payload_from_request(request)
+    if not access_payload:
+        if action == "query":
+            requested_tenant = str(data.get("tenant_id") or "").strip()
+            if requested_tenant and requested_tenant != _PUBLIC_KNOWLEDGE_TENANT_ID:
+                return JSONResponse(
+                    {
+                        "success": False,
+                        "error_code": "dataset_auth_required",
+                        "message": "企业私有知识需要登录后访问",
+                    },
+                    status_code=401,
+                )
+            data["tenant_id"] = _PUBLIC_KNOWLEDGE_TENANT_ID
+            data["include_public"] = False
+            metadata_filter = (
+                dict(data.get("metadata_filter"))
+                if isinstance(data.get("metadata_filter"), dict)
+                else {}
+            )
+            metadata_filter["publication_status"] = "published"
+            data["metadata_filter"] = metadata_filter
+        else:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error_code": "dataset_auth_required",
+                    "message": "知识库写入和治理需要登录",
+                },
+                status_code=401,
+            )
     if access_payload:
         data["access_context"] = access_payload
         if access_payload.get("tenant_id"):
@@ -804,6 +868,7 @@ async def upload_dataset_document(
     version: str = Form(""),
     version_label: str = Form(""),
     chunk_strategy: str = Form("semantic"),
+    metadata_json: str = Form("{}"),
 ) -> JSONResponse:
     raw_name = Path(str(file.filename or "document")).name
     suffix = Path(raw_name).suffix.lower()
@@ -826,10 +891,25 @@ async def upload_dataset_document(
         )
     if any(
         len(str(value or "")) > limit
-        for value, limit in ((tenant_id, 160), (version, 80), (version_label, 120))
+        for value, limit in (
+            (tenant_id, 160),
+            (version, 80),
+            (version_label, 120),
+            (metadata_json, _DATASET_METADATA_MAX_BYTES),
+        )
     ):
         return JSONResponse(
             {"success": False, "message": "上传参数过长"},
+            status_code=400,
+        )
+    try:
+        parsed_metadata = json.loads(metadata_json or "{}")
+        if not isinstance(parsed_metadata, dict):
+            raise ValueError("资料元数据必须是 JSON 对象")
+        _ensure_bounded_metadata(parsed_metadata)
+    except (json.JSONDecodeError, ValueError) as exc:
+        return JSONResponse(
+            {"success": False, "message": f"资料元数据无效: {exc}"},
             status_code=400,
         )
 
@@ -869,6 +949,7 @@ async def upload_dataset_document(
             "chunk_size": 500,
             "chunk_overlap": 50,
             "metadata": {
+                **parsed_metadata,
                 "original_file_name": original_name,
                 "upload_size_bytes": size,
                 "entrypoint": "persy_knowledge_upload",
@@ -905,6 +986,7 @@ def query_dataset(
             "version": req.version,
             "metadata_filter": req.metadata_filter,
             "rerank": req.rerank,
+            "include_public": req.include_public,
         },
     )
 
@@ -913,11 +995,13 @@ def query_dataset(
 def dataset_status_all(request: Request) -> dict[str, Any]:
     from app.application.dataset_rag_app_service import get_dataset_rag_app_service
 
+    access = _dataset_access_context_from_request(request)
     return cast(
         "dict[str, Any]",
         _public_dataset_payload(
             get_dataset_rag_app_service().status(
-                access_context=_dataset_access_context_from_request(request),
+                tenant_id=_dataset_read_tenant_scope(access),
+                access_context=access,
             )
         ),
     )
@@ -927,6 +1011,11 @@ def dataset_status_all(request: Request) -> dict[str, Any]:
 def dataset_status(
     dataset_id: str,
     request: Request,
+    tenant_id: str = FastAPIQuery(
+        "",
+        max_length=160,
+        description="Admin-only explicit tenant scope; regular users remain session-scoped",
+    ),
     include_documents: bool = FastAPIQuery(
         True,
         description="When false, omit document rows (counts/index only) for lighter graph HUD loads",
@@ -935,12 +1024,15 @@ def dataset_status(
     from app.application.dataset_rag_app_service import get_dataset_rag_app_service
 
     access = _dataset_access_context_from_request(request)
+    denied = _private_scope_requires_auth(tenant_id, access)
+    if denied is not None:
+        return denied
     return cast(
         "dict[str, Any]",
         _public_dataset_payload(
             get_dataset_rag_app_service().status(
                 dataset_id,
-                tenant_id=_dataset_read_tenant_scope(access),
+                tenant_id=tenant_id.strip() or _dataset_read_tenant_scope(access),
                 access_context=access,
                 include_documents=bool(include_documents),
             )
@@ -953,6 +1045,11 @@ def dataset_graph(
     dataset_id: str,
     request: Request,
     limit: int = FastAPIQuery(80, ge=20, le=240),
+    tenant_id: str = FastAPIQuery(
+        "",
+        max_length=160,
+        description="Admin-only explicit tenant scope; regular users remain session-scoped",
+    ),
 ) -> dict[str, Any]:
     from app.application.dataset_rag_app_service import get_dataset_rag_app_service
     from app.application.erp_domain_ontology import (
@@ -962,7 +1059,10 @@ def dataset_graph(
     from app.application.persy_memory_app_service import merge_memory_graph
 
     access = _dataset_access_context_from_request(request)
-    tenant_id = _dataset_read_tenant_scope(access)
+    denied = _private_scope_requires_auth(tenant_id, access)
+    if denied is not None:
+        return denied
+    tenant_id = tenant_id.strip() or _dataset_read_tenant_scope(access)
     memory_graph: dict[str, Any] = {"success": True, "nodes": [], "edges": [], "stats": {}}
     erp_graph: dict[str, Any] = {"success": True, "nodes": [], "edges": [], "stats": {}}
     graph_limit = limit
@@ -1229,6 +1329,71 @@ def delete_dataset_document(dataset_id: str, document_id: str, request: Request)
     )
 
 
+@router.patch("/datasets/{dataset_id}/documents/{document_id}/publication")
+def update_dataset_document_publication(
+    dataset_id: str,
+    document_id: str,
+    req: DatasetPublicationRequest,
+    request: Request,
+) -> JSONResponse:
+    from app.application.dataset_rag_app_service import get_dataset_rag_app_service
+
+    access = _dataset_access_context_from_request(request)
+    if not _dataset_admin_access(access):
+        return JSONResponse(
+            {
+                "success": False,
+                "error_code": "dataset_permission_denied",
+                "message": "dataset.admin permission is required",
+                "required_permission": "dataset.admin",
+            },
+            status_code=403,
+        )
+    payload = get_dataset_rag_app_service().set_document_publication_status(
+        dataset_id,
+        document_id,
+        req.status,
+        reason=req.reason,
+        expected_status=req.expected_status,
+        access_context=access,
+    )
+    error_code = str(payload.get("error_code") or "")
+    status_code = 200
+    if not payload.get("success"):
+        if error_code == "dataset_permission_denied":
+            status_code = 403
+        elif error_code == "dataset_document_not_found":
+            status_code = 404
+        elif error_code == "dataset_publication_conflict":
+            status_code = 409
+        else:
+            status_code = 400
+    try:
+        from app.utils import audit_logger
+
+        audit_logger.audit_log(
+            "knowledge_publication_change",
+            str(getattr(access, "actor_id", "") or ""),
+            str(getattr(getattr(request, "client", None), "host", "") or ""),
+            {
+                "dataset_id": dataset_id,
+                "document_id": document_id,
+                "target_status": req.status,
+                "expected_status": req.expected_status,
+                "reason": req.reason,
+                "previous_status": payload.get("previous_status"),
+                "error_code": error_code,
+            },
+            success=bool(payload.get("success")),
+        )
+    except Exception:  # noqa: BLE001 - publication result must still be returned
+        logger.exception("knowledge publication audit failed")
+    return JSONResponse(
+        cast("dict[str, Any]", _public_dataset_payload(payload)),
+        status_code=status_code,
+    )
+
+
 @router.get("/status", response_model=StatusResponse)
 def status(request: Request) -> StatusResponse:
     snap = _knowledge_runtime_snapshot(request)
@@ -1257,6 +1422,18 @@ def omniscient_overview(request: Request) -> dict[str, Any]:
     from app.application.dataset_rag_app_service import get_dataset_rag_app_service
 
     access = _dataset_access_context_from_request(request)
+    if not _dataset_admin_access(access):
+        return cast(
+            "dict[str, Any]",
+            JSONResponse(
+                {
+                    "success": False,
+                    "error_code": "dataset_admin_required",
+                    "message": "全知知识视图仅限管理员",
+                },
+                status_code=403,
+            ),
+        )
     overview = get_dataset_rag_app_service().status(access_context=access)
     snap = _knowledge_runtime_snapshot(request)
     datasets = overview.get("datasets") if isinstance(overview, dict) else {}
@@ -1286,6 +1463,18 @@ def omniscient_query(req: QueryRequest, request: Request) -> dict[str, Any]:
     from app.application.dataset_rag_app_service import get_dataset_rag_app_service
 
     access = _dataset_access_context_from_request(request)
+    if not _dataset_admin_access(access):
+        return cast(
+            "dict[str, Any]",
+            JSONResponse(
+                {
+                    "success": False,
+                    "error_code": "dataset_admin_required",
+                    "message": "全知知识检索仅限管理员",
+                },
+                status_code=403,
+            ),
+        )
     service = get_dataset_rag_app_service()
     overview = service.status(access_context=access)
     datasets = overview.get("datasets") if isinstance(overview, dict) else {}

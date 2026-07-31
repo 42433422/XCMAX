@@ -1,9 +1,15 @@
 /** Vue / Element Plus plugin bundle for Vite. */
 
 import vue from '@vitejs/plugin-vue'
+import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const viteDir = path.dirname(fileURLToPath(import.meta.url))
+const i18nResourceGlob = path.resolve(viteDir, '../src/i18n/locales/**/*.json')
 
 /**
  * @param {object} opts
@@ -13,6 +19,10 @@ import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 export function createVitePlugins({ staticCopyPlugin, xcmaxPublicApiPrefix = '' }) {
   return [
     vue(),
+    VueI18nPlugin({
+      include: [i18nResourceGlob],
+      runtimeOnly: true,
+    }),
     AutoImport({
       resolvers: [ElementPlusResolver()],
       dts: false,

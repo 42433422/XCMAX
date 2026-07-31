@@ -456,6 +456,7 @@ describe('LoginView functions – tryAutoLogin', () => {
       'autouser',
       'autopass',
       'enterprise',
+      '',
     )
   })
 

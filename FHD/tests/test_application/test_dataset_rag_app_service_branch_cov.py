@@ -1010,10 +1010,9 @@ class TestTokenizeForRerankBoundary:
         assert "hello" in result
         assert "world" in result
 
-    def test_chinese_chars_preserved_as_alnum(self):
-        # Python's str.isalnum() returns True for CJK characters
+    def test_chinese_chars_are_split_for_rerank(self):
         result = _tokenize_for_rerank("hello你好world")
-        assert result == ["hello你好world"]
+        assert result == ["hello", "你", "好", "world"]
 
     def test_special_chars_become_spaces(self):
         result = _tokenize_for_rerank("hello, world")
