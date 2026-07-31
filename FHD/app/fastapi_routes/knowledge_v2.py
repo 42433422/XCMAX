@@ -125,6 +125,53 @@ def create_v2_router(app_service: MemoryGraphAppService | None = None) -> APIRou
                 nodes += service.get_active_conventions(scope=scope, scope_id=scope_id)
         return {"count": len(nodes), "nodes": nodes}
 
+    @router.get("/nodes/{node_id}")
+    def get_node(node_id: str) -> dict[str, Any]:
+        node = service.get_node(node_id)
+        if node is None:
+            return {
+                "success": False,
+                "error_code": "node_not_found",
+                "message": f"node {node_id} not found",
+            }
+        return {"success": True, "node": node}
+
+    @router.get("/nodes/{node_id}/backlinks")
+    def get_backlinks(node_id: str) -> dict[str, Any]:
+        backlinks = service.list_backlinks(node_id)
+        return {"count": len(backlinks), "backlinks": backlinks}
+
+    @router.get("/export")
+    def export(
+        scope: str = Query(...),
+        scope_id: str = Query(...),
+        type: str | None = Query(None),
+        format: str = Query("markdown"),
+    ) -> dict[str, Any]:
+        if format != "markdown":
+            return {
+                "success": False,
+                "error_code": "unsupported_format",
+                "message": f"format {format} not supported, only 'markdown'",
+            }
+        node_type = _parse_node_type(type)
+        markdown = service.export_scope(scope=scope, scope_id=scope_id, node_type=node_type)
+        return {
+            "success": True,
+            "format": "markdown",
+            "scope": scope,
+            "scope_id": scope_id,
+            "markdown": markdown,
+        }
+
+    @router.post("/nodes/{node_id}/confirm")
+    def confirm_node(node_id: str) -> dict[str, Any]:
+        return service.confirm_node(node_id)
+
+    @router.post("/nodes/{node_id}/reject")
+    def reject_node(node_id: str, reason: str = Query("")) -> dict[str, Any]:
+        return service.reject_node(node_id, reason=reason)
+
     @router.post("/search")
     def search(req: SearchRequest) -> dict[str, Any]:
         node_type = _parse_node_type(req.type)

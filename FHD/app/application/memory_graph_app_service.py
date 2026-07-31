@@ -5,11 +5,19 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
+from sqlalchemy import update
+
+from app.application.memory_export_service import MemoryExportService
 from app.application.memory_link_service import MemoryLinkService
 from app.application.memory_update_engine import MemoryUpdateEngine
-from app.db.models.memory_graph import MemoryNode, MemoryNodeType
+from app.db.models.memory_graph import (
+    MemoryNode,
+    MemoryNodeStatus,
+    MemoryNodeType,
+)
 from app.infrastructure.memory_graph_store import MemoryGraphStore
 
 
@@ -21,11 +29,15 @@ class MemoryGraphAppService:
         store: MemoryGraphStore,
         update_engine: MemoryUpdateEngine,
         link_service: MemoryLinkService | None = None,
+        export_service: MemoryExportService | None = None,
     ) -> None:
         self._store = store
         self._update_engine = update_engine
         # 默认构造 link_service，保持向后兼容；显式传 None 可禁用双向链接
         self._link_service = link_service if link_service is not None else MemoryLinkService(store)
+        self._export_service = (
+            export_service if export_service is not None else MemoryExportService(store)
+        )
 
     def ingest_engineering(
         self,
@@ -116,6 +128,91 @@ class MemoryGraphAppService:
         for _, node in scored[:top_k]:
             self._store.record_recall(node.node_id)
         return [self._node_to_dict(n) for _, n in scored[:top_k]]
+
+    def get_node(self, node_id: str) -> dict[str, Any] | None:
+        """获取单个节点详情；不存在返回 None。"""
+        node = self._store.get_node(node_id)
+        if node is None:
+            return None
+        return self._node_to_dict(node)
+
+    def list_backlinks(self, node_id: str) -> list[dict[str, Any]]:
+        """列出指向 node_id 的所有有效反向边（含 source 节点摘要）。"""
+        edges = self._store.list_backlinks(node_id)
+        result: list[dict[str, Any]] = []
+        for edge in edges:
+            source = self._store.get_node(edge.source_node_id)
+            result.append(
+                {
+                    "edge_id": edge.edge_id,
+                    "source_node_id": edge.source_node_id,
+                    "source_title": source.title if source else None,
+                    "source_type": source.type.value if source else None,
+                    "type": edge.type.value if hasattr(edge.type, "value") else str(edge.type),
+                    "bidirectional": edge.bidirectional,
+                    "context": edge.context,
+                }
+            )
+        return result
+
+    def export_node(self, node_id: str) -> str:
+        """导出单个节点为 Markdown。"""
+        return self._export_service.export_node(node_id)
+
+    def export_scope(
+        self,
+        scope: str,
+        scope_id: str,
+        node_type: MemoryNodeType | None = None,
+    ) -> str:
+        """按 scope 导出所有 active 节点为 Markdown。"""
+        return self._export_service.export_scope(scope, scope_id, node_type)
+
+    def confirm_node(self, node_id: str) -> dict[str, Any]:
+        """确认 pending 记忆：状态置为 active。"""
+        return self._set_node_status(node_id, MemoryNodeStatus.ACTIVE, "confirmed")
+
+    def reject_node(self, node_id: str, *, reason: str = "") -> dict[str, Any]:
+        """拒绝 pending 记忆：状态置为 rejected。"""
+        return self._set_node_status(node_id, MemoryNodeStatus.REJECTED, "rejected", reason=reason)
+
+    def _set_node_status(
+        self,
+        node_id: str,
+        status: MemoryNodeStatus,
+        action_label: str,
+        *,
+        reason: str = "",
+    ) -> dict[str, Any]:
+        node = self._store.get_node(node_id)
+        if node is None:
+            return {"success": False, "error_code": "node_not_found", "message": "节点不存在"}
+        if node.status == MemoryNodeStatus.DELETED:
+            return {"success": False, "error_code": "invalid_state", "message": "节点已删除"}
+        # 必须在 commit 前捕获旧状态：SQLAlchemy 默认 expire_on_commit=True，
+        # commit 后访问 node.status 会触发重新加载，返回新值。
+        previous_status = node.status.value if hasattr(node.status, "value") else str(node.status)
+        now = datetime.now(UTC)
+        values: dict[str, Any] = {
+            "status": status,
+            "metadata_updated_at": now,
+        }
+        if status == MemoryNodeStatus.ACTIVE:
+            values["temporal_t_valid_start"] = now
+        elif status == MemoryNodeStatus.REJECTED:
+            values["temporal_t_valid_end"] = now
+        self._store._session.execute(  # noqa: SLF001 - store 暴露的 update 接口暂未封装此操作
+            update(MemoryNode).where(MemoryNode.node_id == node_id).values(**values)
+        )
+        self._store._session.commit()  # noqa: SLF001
+        return {
+            "success": True,
+            "action": action_label,
+            "node_id": node_id,
+            "previous_status": previous_status,
+            "new_status": status.value,
+            "reason": reason,
+        }
 
     def _node_to_dict(self, node: MemoryNode) -> dict[str, Any]:
         return {
