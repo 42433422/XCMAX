@@ -31,6 +31,8 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+from app.fastapi_routes.admin_duty_graph_api import router as admin_duty_graph_router
+
 router = APIRouter(prefix="/api/xcmax", tags=["xcmax-admin"])
 
 REMOTE_HOST = os.environ.get("XCMAX_REMOTE_HOST", "119.27.178.147")
@@ -1824,6 +1826,10 @@ async def local_employee_execute(
     """管理端本机员工执行入口：绕开远端代理，直接调用 FHD employee_runtime。"""
     from app.application.auth_permission_resolver import require_allowed
     from app.application.employee_runtime.executor import execute_employee_task_local
+    from app.application.employee_runtime.observed_run import (
+        begin_observed_employee_run,
+        finish_observed_employee_run,
+    )
     from app.application.employee_runtime.result_verifier import (
         verify_employee_run_result,
     )
@@ -1871,6 +1877,12 @@ async def local_employee_execute(
         user_id = 0
     retry_max = max(1, min(int(body.get("retry_max") or 3), 5))
     tenant_id = meta.get("tenant_id")
+    agent_run_id = begin_observed_employee_run(
+        user_id=str(user_id or 0),
+        employee_id=pid,
+        task=task,
+        runtime_context={"session_id": sid, "tenant_id": tenant_id},
+    )
     run_id = create_employee_run_log(
         employee_id=pid,
         input_payload={"task": task, **payload},
@@ -1898,10 +1910,16 @@ async def local_employee_execute(
                 attempts=attempt,
                 verified=True,
             )
+            finish_observed_employee_run(
+                agent_run_id,
+                success=True,
+                output=result if isinstance(result, dict) else {},
+            )
             return {
                 "success": True,
                 "source": "local",
                 "run_id": run_id,
+                "agent_run_id": agent_run_id,
                 "attempts": attempt,
                 "data": result,
             }
@@ -1914,10 +1932,17 @@ async def local_employee_execute(
         attempts=retry_max,
         verified=False,
     )
+    finish_observed_employee_run(
+        agent_run_id,
+        success=False,
+        output=result if isinstance(result, dict) else {},
+        error=last_error,
+    )
     return {
         "success": False,
         "source": "local",
         "run_id": run_id,
+        "agent_run_id": agent_run_id,
         "attempts": retry_max,
         "message": last_error,
         "data": result,
@@ -3121,3 +3146,5 @@ async def admin_token_usage(request: Request):
             status_code=401,
         )
     return await asyncio.to_thread(_build_token_usage_summary)
+
+router.include_router(admin_duty_graph_router)

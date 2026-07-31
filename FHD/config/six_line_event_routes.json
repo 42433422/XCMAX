@@ -7,18 +7,66 @@
     "incident": "异常事件经 incident_bus 派发 或 写入 incident_outbox"
   },
   "step_catalog": {
-    "O1": { "title": "获客引流", "six_line": "ops_acquisition" },
-    "O2": { "title": "企业商机 / 项目档案", "six_line": "ops_acquisition" },
-    "O3": { "title": "报价 / 合同", "six_line": "ops_acquisition" },
-    "O4": { "title": "收费", "six_line": "ops_acquisition" },
-    "O5": { "title": "软件交付编排", "six_line": "ops_acquisition" },
-    "O6": { "title": "企业使用（交叉）", "six_line": "ops_acquisition" },
-    "O7": { "title": "变更 / 反馈 → 制作线", "six_line": "ops_acquisition" },
-    "O8": { "title": "里程碑签收 / 进度汇报", "six_line": "ops_acquisition" },
-    "O9": { "title": "单据 / 开票", "six_line": "ops_acquisition" },
-    "O10": { "title": "对账报表", "six_line": "ops_acquisition" },
-    "B3": { "title": "生态产品交付回传", "six_line": "ops_partner" },
-    "B5": { "title": "生态分润 & 联合对账", "six_line": "ops_partner" }
+    "O1": {
+      "title": "获客引流",
+      "six_line": "ops_acquisition"
+    },
+    "O2": {
+      "title": "企业商机 / 项目档案",
+      "six_line": "ops_acquisition"
+    },
+    "O3": {
+      "title": "报价 / 合同",
+      "six_line": "ops_acquisition"
+    },
+    "O4": {
+      "title": "收费",
+      "six_line": "ops_acquisition"
+    },
+    "O5": {
+      "title": "软件交付编排",
+      "six_line": "ops_acquisition"
+    },
+    "O6": {
+      "title": "企业使用（交叉）",
+      "six_line": "ops_acquisition"
+    },
+    "O7": {
+      "title": "变更 / 反馈 → 制作线",
+      "six_line": "ops_acquisition"
+    },
+    "O8": {
+      "title": "里程碑签收 / 进度汇报",
+      "six_line": "ops_acquisition"
+    },
+    "O9": {
+      "title": "单据 / 开票",
+      "six_line": "ops_acquisition"
+    },
+    "O10": {
+      "title": "对账报表",
+      "six_line": "ops_acquisition"
+    },
+    "B3": {
+      "title": "生态产品交付回传",
+      "six_line": "ops_partner"
+    },
+    "B5": {
+      "title": "生态分润 & 联合对账",
+      "six_line": "ops_partner"
+    },
+    "B1": {
+      "title": "投资方/生态伙伴接入",
+      "six_line": "ops_partner"
+    },
+    "B2": {
+      "title": "联合 Catalog",
+      "six_line": "ops_partner"
+    },
+    "B4": {
+      "title": "投资方只读 Portal",
+      "six_line": "ops_partner"
+    }
   },
   "operations_line": [
     {
@@ -26,12 +74,17 @@
       "step_id": "O1",
       "line_step": "O1",
       "six_line": "ops_acquisition",
-      "status_in": ["progress", "completed"],
+      "status_in": [
+        "progress",
+        "completed"
+      ],
       "action": "digest_backlog",
       "dispatch_line": "P-W",
       "list_kind": "updates",
       "priority": "P2",
-      "triggers": ["leads.intake"],
+      "triggers": [
+        "leads.intake"
+      ],
       "event_type": "ops.acquisition.lead.captured"
     },
     {
@@ -39,12 +92,17 @@
       "step_id": "O2",
       "line_step": "O2",
       "six_line": "ops_acquisition",
-      "status_in": ["progress", "completed"],
+      "status_in": [
+        "progress",
+        "completed"
+      ],
       "action": "digest_backlog",
       "dispatch_line": "P-S",
       "list_kind": "updates",
       "priority": "P2",
-      "triggers": ["crm.opportunity.created"],
+      "triggers": [
+        "crm.opportunity.created"
+      ],
       "event_type": "ops.acquisition.opportunity.created"
     },
     {
@@ -52,12 +110,18 @@
       "step_id": "O3",
       "line_step": "O3",
       "six_line": "ops_acquisition",
-      "status_in": ["progress", "completed", "blocked"],
+      "status_in": [
+        "progress",
+        "completed",
+        "blocked"
+      ],
       "action": "digest_backlog",
       "dispatch_line": "P-S",
       "list_kind": "updates",
       "priority": "P2",
-      "triggers": ["crm.contract.signed"],
+      "triggers": [
+        "crm.contract.signed"
+      ],
       "event_type": "ops.acquisition.contract.signed"
     },
     {
@@ -65,24 +129,35 @@
       "step_id": "O4",
       "line_step": "O4",
       "six_line": "ops_acquisition",
-      "status_in": ["anomaly", "failed"],
+      "status_in": [
+        "anomaly",
+        "failed"
+      ],
       "action": "incident",
       "priority": "P0",
       "event_type": "payment.anomaly",
       "also_incident": "payment.anomaly",
-      "triggers": ["payment.callback", "reconcile.mismatch"]
+      "triggers": [
+        "payment.callback",
+        "reconcile.mismatch"
+      ]
     },
     {
       "id": "oa-o5-delivery-orchestration",
       "step_id": "O5",
       "line_step": "O5",
       "six_line": "ops_acquisition",
-      "status_in": ["progress", "blocked"],
+      "status_in": [
+        "progress",
+        "blocked"
+      ],
       "action": "digest_backlog",
       "dispatch_line": "P-S",
       "list_kind": "patches",
       "priority": "P1",
-      "triggers": ["delivery.orchestration.started"],
+      "triggers": [
+        "delivery.orchestration.started"
+      ],
       "event_type": "ops.acquisition.delivery.orchestrated"
     },
     {
@@ -90,24 +165,35 @@
       "step_id": "O6",
       "line_step": "O6",
       "six_line": "ops_acquisition",
-      "status_in": ["anomaly"],
+      "status_in": [
+        "anomaly"
+      ],
       "action": "incident",
       "priority": "P1",
       "event_type": "ops.usage.anomaly",
-      "triggers": ["telemetry.usage.spike"]
+      "triggers": [
+        "telemetry.usage.spike"
+      ]
     },
     {
       "id": "oa-o7-feedback",
       "step_id": "O7",
       "line_step": "O7",
       "six_line": "ops_acquisition",
-      "status_in": ["progress", "completed", "submitted"],
+      "status_in": [
+        "progress",
+        "completed",
+        "submitted"
+      ],
       "action": "digest_backlog",
       "dispatch_line": "P-S",
       "list_kind": "patches",
       "priority": "P1",
       "also_incident": "ops.change_request.submitted",
-      "triggers": ["customer.feedback", "change_request.submitted"],
+      "triggers": [
+        "customer.feedback",
+        "change_request.submitted"
+      ],
       "event_type": "ops.change_request.submitted"
     },
     {
@@ -115,12 +201,16 @@
       "step_id": "O8",
       "line_step": "O8",
       "six_line": "ops_acquisition",
-      "status_in": ["completed"],
+      "status_in": [
+        "completed"
+      ],
       "action": "digest_backlog",
       "dispatch_line": "P-S",
       "list_kind": "updates",
       "priority": "P2",
-      "triggers": ["milestone.signed"],
+      "triggers": [
+        "milestone.signed"
+      ],
       "event_type": "ops.acquisition.milestone.signed"
     },
     {
@@ -128,23 +218,33 @@
       "step_id": "O9",
       "line_step": "O9",
       "six_line": "ops_acquisition",
-      "status_in": ["anomaly", "failed"],
+      "status_in": [
+        "anomaly",
+        "failed"
+      ],
       "action": "incident",
       "priority": "P1",
       "event_type": "finance.invoice.failed",
-      "triggers": ["invoice.issue.failed"]
+      "triggers": [
+        "invoice.issue.failed"
+      ]
     },
     {
       "id": "oa-o10-reconcile",
       "step_id": "O10",
       "line_step": "O10",
       "six_line": "ops_acquisition",
-      "status_in": ["completed", "anomaly"],
+      "status_in": [
+        "completed",
+        "anomaly"
+      ],
       "action": "digest_backlog",
       "dispatch_line": "P-S",
       "list_kind": "updates",
       "priority": "P2",
-      "triggers": ["reconcile.report.ready"],
+      "triggers": [
+        "reconcile.report.ready"
+      ],
       "event_type": "ops.acquisition.reconcile.ready"
     },
     {
@@ -152,12 +252,17 @@
       "step_id": "B3",
       "line_step": "B3",
       "six_line": "ops_partner",
-      "status_in": ["progress", "blocked"],
+      "status_in": [
+        "progress",
+        "blocked"
+      ],
       "action": "digest_backlog",
       "dispatch_line": "P-S",
       "list_kind": "patches",
       "priority": "P2",
-      "triggers": ["partner.delivery.returned"],
+      "triggers": [
+        "partner.delivery.returned"
+      ],
       "event_type": "ops.partner.delivery.returned"
     },
     {
@@ -165,11 +270,73 @@
       "step_id": "B5",
       "line_step": "B5",
       "six_line": "ops_partner",
-      "status_in": ["anomaly", "failed"],
+      "status_in": [
+        "anomaly",
+        "failed"
+      ],
       "action": "incident",
       "priority": "P1",
       "event_type": "partner.settlement.anomaly",
-      "triggers": ["partner.settlement.mismatch"]
+      "triggers": [
+        "partner.settlement.mismatch"
+      ]
+    },
+    {
+      "id": "ob-b1-b1",
+      "step_id": "B1",
+      "line_step": "B1",
+      "six_line": "ops_partner",
+      "status_in": [
+        "progress",
+        "completed"
+      ],
+      "action": "digest_backlog",
+      "dispatch_line": "P-W",
+      "list_kind": "updates",
+      "priority": "P2",
+      "triggers": [
+        "partner.onboarding.started"
+      ],
+      "event_type": "ops.partner.onboarding.started",
+      "title": "投资方/生态伙伴接入"
+    },
+    {
+      "id": "ob-b2-b2",
+      "step_id": "B2",
+      "line_step": "B2",
+      "six_line": "ops_partner",
+      "status_in": [
+        "progress",
+        "completed"
+      ],
+      "action": "digest_backlog",
+      "dispatch_line": "P-W",
+      "list_kind": "updates",
+      "priority": "P2",
+      "triggers": [
+        "partner.catalog.sync"
+      ],
+      "event_type": "ops.partner.catalog.sync",
+      "title": "联合 Catalog"
+    },
+    {
+      "id": "ob-b4-b4",
+      "step_id": "B4",
+      "line_step": "B4",
+      "six_line": "ops_partner",
+      "status_in": [
+        "progress",
+        "completed"
+      ],
+      "action": "digest_backlog",
+      "dispatch_line": "P-W",
+      "list_kind": "updates",
+      "priority": "P2",
+      "triggers": [
+        "partner.portal.readonly"
+      ],
+      "event_type": "ops.partner.portal.readonly",
+      "title": "投资方只读 Portal"
     }
   ],
   "cross_line": [

@@ -160,6 +160,9 @@ class TestRunEmployeeAgentLoop:
             max_iterations=2,
         )
         assert result["max_iterations_reached"] is True
+        assert result["ok"] is False
+        assert result.get("exit_status") == "max_iterations"
+        assert result.get("error")
 
     @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-4")
     @patch("app.infrastructure.llm.client.get_openai_compatible_client")

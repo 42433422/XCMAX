@@ -269,7 +269,8 @@ def run_employee_agent_loop(
 
     return {
         "handler": "agent",
-        "ok": True,
+        "ok": False,
+        "error": "已达到最大迭代次数，未能完成任务",
         "output": "（已达到最大迭代次数，返回当前进展）",
         "rounds": rounds,
         "tool_calls": tool_trace,

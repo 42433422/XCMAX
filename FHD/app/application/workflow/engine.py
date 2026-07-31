@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from typing import Any
 
@@ -29,8 +30,9 @@ def _get_sync_http_client() -> httpx.Client:
 
 
 class WorkflowEngine:
-    def __init__(self, tool_dispatcher) -> None:
+    def __init__(self, tool_dispatcher, *, parallel_ready_max_workers: int = 4) -> None:
         self._dispatch = tool_dispatcher
+        self.parallel_ready_max_workers = max(1, int(parallel_ready_max_workers or 1))
 
     def run(
         self,
@@ -52,46 +54,32 @@ class WorkflowEngine:
         plan: PlanGraph,
         runtime_context: dict[str, Any] | None = None,
         max_retries: int = 1,
+        *,
+        executed_seed: set[str] | None = None,
+        node_results_seed: list[NodeExecutionResult] | None = None,
+        outputs_seed: dict[str, Any] | None = None,
     ) -> WorkflowRunResult:
         runtime_context = dict(runtime_context or {})
-        node_results: list[NodeExecutionResult] = []
-        executed: set[str] = set()
+        node_results: list[NodeExecutionResult] = list(node_results_seed or [])
+        executed: set[str] = set(executed_seed or [])
+        outputs: dict[str, Any] = dict(outputs_seed or {})
+        runtime_context.setdefault("node_outputs", outputs)
+        if outputs:
+            runtime_context["node_outputs"] = outputs
 
-        pending: dict[str, WorkflowNode] = {node.node_id: node for node in plan.nodes}
+        pending: dict[str, WorkflowNode] = {
+            node.node_id: node for node in plan.nodes if node.node_id not in executed
+        }
         stalled_rounds = 0
 
         while pending:
-            progressed = False
-            for node_id in list(pending.keys()):
-                node = pending[node_id]
+            ready: list[WorkflowNode] = []
+            for node_id, node in list(pending.items()):
                 if any(dep not in executed for dep in node.depends_on):
                     continue
+                ready.append(node)
 
-                result = self._run_node(node, runtime_context, max_retries=max_retries)
-                node_results.append(result)
-                executed.add(node_id)
-                pending.pop(node_id, None)
-                progressed = True
-
-                runtime_context.setdefault("node_outputs", {})
-                runtime_context["node_outputs"][node_id] = result.output
-                self._append_node_trace(runtime_context, result)
-                if not result.success:
-                    runtime_context["workflow_status"] = {
-                        "state": "failed",
-                        "failed_node_id": node_id,
-                        "message": result.error,
-                        "recovery_hint": result.recovery_hint,
-                    }
-                    return WorkflowRunResult(
-                        plan_id=plan.plan_id,
-                        success=False,
-                        node_results=node_results,
-                        final_context=runtime_context,
-                        message=f"节点 {node_id} 执行失败: {result.error}",
-                    )
-
-            if not progressed:
+            if not ready:
                 stalled_rounds += 1
                 if stalled_rounds > 1:
                     unresolved = ",".join(pending.keys())
@@ -107,6 +95,58 @@ class WorkflowEngine:
                         final_context=runtime_context,
                         message=f"工作流依赖无法继续解析: {unresolved}",
                     )
+                continue
+
+            stalled_rounds = 0
+            workers = min(self.parallel_ready_max_workers, len(ready))
+
+            def _run_one(node: WorkflowNode) -> tuple[WorkflowNode, NodeExecutionResult]:
+                return node, self._run_node(node, runtime_context, max_retries=max_retries)
+
+            if workers <= 1:
+                batch_results = [_run_one(node) for node in ready]
+            else:
+                batch_results = []
+                with ThreadPoolExecutor(max_workers=workers) as pool:
+                    futures = {pool.submit(_run_one, node): node for node in ready}
+                    for fut in as_completed(futures):
+                        batch_results.append(fut.result())
+
+            for node, result in batch_results:
+                node_results.append(result)
+                pending.pop(node.node_id, None)
+                runtime_context.setdefault("node_outputs", {})
+                runtime_context["node_outputs"][node.node_id] = result.output
+                outputs[node.node_id] = result.output
+                self._append_node_trace(runtime_context, result)
+                if not result.success:
+                    runtime_context["workflow_status"] = {
+                        "state": "failed",
+                        "failed_node_id": node.node_id,
+                        "message": result.error,
+                        "recovery_hint": result.recovery_hint,
+                        "executed_nodes": list(executed),
+                    }
+                    self.persist_checkpoint(
+                        plan,
+                        runtime_context,
+                        executed=executed,
+                        node_results=node_results,
+                    )
+                    return WorkflowRunResult(
+                        plan_id=plan.plan_id,
+                        success=False,
+                        node_results=node_results,
+                        final_context=runtime_context,
+                        message=f"节点 {node.node_id} 执行失败: {result.error}",
+                    )
+                executed.add(node.node_id)
+                self.persist_checkpoint(
+                    plan,
+                    runtime_context,
+                    executed=executed,
+                    node_results=node_results,
+                )
 
         runtime_context["workflow_status"] = {
             "state": "completed",
@@ -119,6 +159,80 @@ class WorkflowEngine:
             node_results=node_results,
             final_context=runtime_context,
             message="工作流执行完成",
+        )
+
+
+    @staticmethod
+    def _checkpoint_key(plan_id: str) -> str:
+        return f"workflow_checkpoint:{plan_id}"
+
+    def persist_checkpoint(
+        self,
+        plan: PlanGraph,
+        runtime_context: dict[str, Any],
+        *,
+        executed: set[str],
+        node_results: list[NodeExecutionResult],
+    ) -> dict[str, Any]:
+        payload = {
+            "plan_id": plan.plan_id,
+            "executed": sorted(executed),
+            "node_results": [
+                {
+                    "node_id": nr.node_id,
+                    "success": nr.success,
+                    "tool_id": nr.tool_id,
+                    "action": nr.action,
+                    "error": nr.error,
+                    "output": nr.output,
+                }
+                for nr in node_results
+            ],
+            "node_outputs": dict((runtime_context or {}).get("node_outputs") or {}),
+            "updated_at": datetime.now(UTC).isoformat(),
+        }
+        runtime_context[self._checkpoint_key(plan.plan_id)] = payload
+        return payload
+
+    @staticmethod
+    def load_checkpoint(runtime_context: dict[str, Any] | None, plan_id: str) -> dict[str, Any] | None:
+        ctx = runtime_context if isinstance(runtime_context, dict) else {}
+        raw = ctx.get(f"workflow_checkpoint:{plan_id}")
+        return raw if isinstance(raw, dict) else None
+
+    def resume(
+        self,
+        plan: PlanGraph,
+        runtime_context: dict[str, Any] | None = None,
+        *,
+        max_retries: int = 1,
+    ) -> WorkflowRunResult:
+        ctx = dict(runtime_context or {})
+        ckpt = self.load_checkpoint(ctx, plan.plan_id) or {}
+        executed = set(str(x) for x in (ckpt.get("executed") or []))
+        outputs = dict(ckpt.get("node_outputs") or {})
+        seeded_results: list[NodeExecutionResult] = []
+        for item in ckpt.get("node_results") or []:
+            if not isinstance(item, dict):
+                continue
+            seeded_results.append(
+                NodeExecutionResult(
+                    node_id=str(item.get("node_id") or ""),
+                    tool_id=str(item.get("tool_id") or ""),
+                    action=str(item.get("action") or ""),
+                    success=bool(item.get("success")),
+                    output=dict(item.get("output") or {}),
+                    error=str(item.get("error") or ""),
+                )
+            )
+        ctx.setdefault("node_outputs", outputs)
+        return self._run_batch(
+            plan,
+            ctx,
+            max_retries,
+            executed_seed=executed,
+            node_results_seed=seeded_results,
+            outputs_seed=outputs,
         )
 
     def _run_agentic_loop(

@@ -22,6 +22,8 @@ AgentStepStatus = Literal[
     "running",
     "retrying",
     "waiting_user",
+    "blocked",
+    "cancelled",
     "completed",
     "failed",
     "skipped",

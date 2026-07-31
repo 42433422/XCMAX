@@ -774,11 +774,13 @@ class EmployeeAgentRunner:
             or "已达到最大轮次，请查看工具调用日志"
         )
         return {
-            "ok": True,
+            "ok": False,
             "summary": str(final),
             "rounds": self.max_rounds,
             "tool_calls": tool_calls_log,
-            "error": None,
+            "error": "已达到最大工具调用轮次，未能完成任务",
+            "exit_status": "max_rounds",
+            "max_iterations_reached": True,
         }
 
     # ── private: tool dispatch ────────────────────────────────────────────────

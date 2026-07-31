@@ -133,3 +133,33 @@ def list_agent_run_events(
     except RECOVERABLE_ERRORS as exc:
         logger.exception("list agent run events failed: %s", exc)
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+
+
+@router.post("/api/agent/runs/{run_id}/cancel", response_model=None)
+def cancel_agent_run(run_id: str) -> dict[str, Any] | JSONResponse:
+    try:
+        run = AgentOrchestrator().cancel_run(run_id)
+        if run is None:
+            return JSONResponse(
+                {"success": False, "message": "agent run 不存在"},
+                status_code=404,
+            )
+        return JSONResponse(_success(run.to_dict()))
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("cancel agent run failed: %s", exc)
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+
+
+@router.post("/api/agent/runs/{run_id}/pause", response_model=None)
+def pause_agent_run(run_id: str) -> dict[str, Any] | JSONResponse:
+    try:
+        run = AgentOrchestrator().pause_run(run_id)
+        if run is None:
+            return JSONResponse(
+                {"success": False, "message": "agent run 不存在"},
+                status_code=404,
+            )
+        return JSONResponse(_success(run.to_dict()))
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("pause agent run failed: %s", exc)
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)

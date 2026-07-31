@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.application.employee_runtime.exit_status import (
+    extract_exit_status,
+    is_failure_exit_status,
+    is_max_iterations_reached,
+)
+
 
 def verify_employee_run_result(
     employee_id: str,
@@ -30,6 +36,14 @@ def verify_employee_run_result(
     payload = nested if isinstance(nested, dict) else data
     if payload.get("ok") is False:
         return False, str(payload.get("error") or payload.get("summary") or "员工结果返回 ok=false")
+
+    exit_status = extract_exit_status(data)
+    if is_failure_exit_status(exit_status):
+        return False, f"员工退出状态失败: {exit_status}"
+    if is_max_iterations_reached(data):
+        return False, str(data.get("error") or "已达到最大迭代/轮次")
+    if is_max_iterations_reached(payload if isinstance(payload, dict) else None):
+        return False, str((payload or {}).get("error") or "已达到最大迭代/轮次")
     outputs = payload.get("outputs")
     if isinstance(outputs, list):
         for item in outputs:

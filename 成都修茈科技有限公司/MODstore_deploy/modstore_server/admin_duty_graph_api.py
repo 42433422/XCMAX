@@ -7,6 +7,7 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import (
     Any,
     Dict,
@@ -976,6 +977,37 @@ def get_duty_graph_run(
     sf = get_session_factory()
     with sf() as session:
         return _serialize_run(session, run_id)
+
+
+def _local_status_jsonl_path() -> Path:
+    raw = str(os.environ.get("MODSTORE_DUTY_GRAPH_LOCAL_STATUS_JSONL") or "").strip()
+    if raw:
+        return Path(raw)
+    runtime = str(os.environ.get("MODSTORE_RUNTIME_DIR") or "").strip()
+    if runtime:
+        return Path(runtime) / "duty_graph_local_status.jsonl"
+    return Path.cwd() / "data" / "duty_graph_local_status.jsonl"
+
+
+@router.post("/duty-graph/local-status")
+def duty_graph_local_status(
+    body: Dict[str, Any] = Body(default_factory=dict),
+    admin_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """接收 FHD/桌面本机员工执行状态回写（append-only jsonl，不改拓扑 SSOT）。"""
+    _ = admin_user
+    payload = dict(body or {})
+    payload.setdefault("received_at", datetime.now(timezone.utc).isoformat())
+    path = _local_status_jsonl_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(_json_dumps(payload) + "\n")
+    return {
+        "ok": True,
+        "path": str(path),
+        "employee_id": _as_str(payload.get("employee_id")),
+        "success": bool(payload.get("success")),
+    }
 
 
 @router.get("/duty-graph/health")

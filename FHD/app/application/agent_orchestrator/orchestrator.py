@@ -175,6 +175,44 @@ class AgentOrchestrator:
     def list_events(self, run_id: str, *, after_event_id: str | None = None) -> list[RunEvent]:
         return self._repo.list_events(run_id, after_event_id=after_event_id)
 
+
+    def cancel_run(self, run_id: str) -> AgentRun | None:
+        run = self._repo.get(run_id)
+        if run is None:
+            return None
+        if run.status in {"completed", "failed", "cancelled"}:
+            run.add_event(
+                "run.cancel_rejected",
+                "运行已处于终态，无法取消",
+                {"status": run.status},
+            )
+            return self._repo.save(run)
+        run.status = "cancelled"
+        run.error = run.error or "cancelled by user"
+        for step in run.steps:
+            if step.status not in {"completed", "failed", "skipped"}:
+                step.status = "cancelled"
+        run.add_event("run.cancelled", "Agent run 已取消")
+        return self._repo.save(run)
+
+    def pause_run(self, run_id: str) -> AgentRun | None:
+        run = self._repo.get(run_id)
+        if run is None:
+            return None
+        if run.status in {"completed", "failed", "cancelled"}:
+            run.add_event(
+                "run.pause_rejected",
+                "运行已结束，无法暂停",
+                {"status": run.status},
+            )
+            return self._repo.save(run)
+        run.status = "blocked"
+        for step in run.steps:
+            if step.status in {"pending", "running", "retrying", "waiting_user"}:
+                step.status = "blocked"
+        run.add_event("run.paused", "Agent run 已暂停")
+        return self._repo.save(run)
+
     def _plan(self, run: AgentRun, *, runtime_context: dict[str, Any]) -> PlanGraph:
         from app.application.agent_orchestrator.multimodal_planner import (
             build_multimodal_autonomous_plan,
