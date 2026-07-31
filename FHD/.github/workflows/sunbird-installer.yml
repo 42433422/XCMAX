@@ -51,6 +51,23 @@ jobs:
         run: |
           $v = "${{ github.event.inputs.version }}".TrimStart('v','V')
           scripts/package/build-sunbird-installer.ps1 -Version $v
+      - name: Stage sunbird installer for upload
+        if: success()
+        shell: pwsh
+        run: |
+          $v = "${{ github.event.inputs.version }}".TrimStart('v','V')
+          $src = "release/xcagi-v$v/sunbird"
+          $dst = "build/ci-sunbird-artifact"
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Get-ChildItem $src -Filter "*.exe" -File | Where-Object { $_.Name -like "*Setup*" } | Copy-Item -Destination $dst -Force
+          if (-not (Get-ChildItem $dst -Filter "*.exe")) { throw "No sunbird Setup exe in $src" }
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: sunbird-installer
+          path: FHD/build/ci-sunbird-artifact/**
+          if-no-files-found: error
+          retention-days: 14
       - name: Install and smoke Sunbird package
         shell: pwsh
         run: |
@@ -107,16 +124,3 @@ jobs:
             -UseInstalledBackend `
             -ReadyTimeoutSeconds 240 `
             -MinHostFoundationCount 6
-      - name: Stage sunbird installer for upload
-        shell: pwsh
-        run: |
-          $v = "${{ github.event.inputs.version }}".TrimStart('v','V')
-          $src = "release/xcagi-v$v/sunbird"
-          $dst = "build/ci-sunbird-artifact"
-          New-Item -ItemType Directory -Force -Path $dst | Out-Null
-          Get-ChildItem $src -Filter "*.exe" -File | Where-Object { $_.Name -like "*Setup*" } | Copy-Item -Destination $dst -Force
-          if (-not (Get-ChildItem $dst -Filter "*.exe")) { throw "No sunbird Setup exe in $src" }
-      - uses: actions/upload-artifact@v4
-        with:
-          name: sunbird-installer
-          path: FHD/build/ci-sunbird-artifact/**
