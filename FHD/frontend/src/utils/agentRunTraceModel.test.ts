@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentRunEvent } from '@/api/agentRuns'
-import { buildAgentRunTraceFromEvents, isTrivialChatTrace } from './agentRunTraceModel'
+import {
+  buildAgentRunTraceFromEvents,
+  isTrivialChatTrace,
+  shouldShowAgentRunPlanGraph,
+} from './agentRunTraceModel'
 
 function ev(
   event_type: AgentRunEvent['event_type'],
@@ -261,20 +265,59 @@ describe('buildAgentRunTraceFromEvents', () => {
     const run = trace.phases.find((p) => p.kind === 'run')
     expect(run?.title).toBe('智能任务 执行完成')
     if (run?.kind === 'run') {
-      expect(run.final_output_preview).toBe('你好')
+      // chat_payload 答案已在气泡正文，不再双份塞进 trace
+      expect(run.final_output_preview).toBeUndefined()
     }
     expect(trace.intent).toBe('')
     expect(isTrivialChatTrace(trace)).toBe(true)
   })
 
-  it('isTrivialChatTrace is false when tools ran', () => {
+  it('isTrivialChatTrace is true for single successful read-only tool (customers.query)', () => {
+    const events: AgentRunEvent[] = [
+      ev('run.created', { message: 'Legacy planner 工具调用已进入 AgentRun 追踪' }),
+      ev('tool.started', { data: { node_id: 'n1', tool_id: 'customers', action: 'query' } }),
+      ev('tool.completed', { data: { node_id: 'n1', tool_id: 'customers' } }),
+      ev('run.completed', {
+        message: 'Legacy planner 工具调用追踪完成',
+        data: {
+          chat_payload: {
+            success: true,
+            data: { text: '当前共有 20 位客户：\n- A' },
+          },
+        },
+      }),
+    ]
+    const trace = buildAgentRunTraceFromEvents(events, 'run_customers')
+    expect(isTrivialChatTrace(trace)).toBe(true)
+    expect(shouldShowAgentRunPlanGraph(trace)).toBe(false)
+    const run = trace.phases.find((p) => p.kind === 'run')
+    if (run?.kind === 'run') {
+      expect(run.final_output_preview).toBeUndefined()
+    }
+  })
+
+  it('isTrivialChatTrace is false for multi-tool runs (plan graph eligible)', () => {
     const events: AgentRunEvent[] = [
       ev('planner.completed'),
       ev('tool.started', { data: { node_id: 'n1', tool_id: 't1' } }),
       ev('tool.completed', { data: { node_id: 'n1' } }),
+      ev('tool.started', { data: { node_id: 'n2', tool_id: 't2' } }),
+      ev('tool.completed', { data: { node_id: 'n2' } }),
       ev('run.completed'),
     ]
     const trace = buildAgentRunTraceFromEvents(events, 'run_tools')
     expect(isTrivialChatTrace(trace)).toBe(false)
+    expect(shouldShowAgentRunPlanGraph(trace)).toBe(true)
+  })
+
+  it('isTrivialChatTrace is false when single tool fails', () => {
+    const events: AgentRunEvent[] = [
+      ev('tool.started', { data: { node_id: 'n1', tool_id: 't1' } }),
+      ev('tool.failed', { data: { node_id: 'n1', error: 'boom' }, message: '失败' }),
+      ev('run.failed'),
+    ]
+    const trace = buildAgentRunTraceFromEvents(events, 'run_fail_tool')
+    expect(isTrivialChatTrace(trace)).toBe(false)
+    expect(shouldShowAgentRunPlanGraph(trace)).toBe(false)
   })
 })
