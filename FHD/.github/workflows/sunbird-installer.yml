@@ -1,17 +1,22 @@
 # CI SSOT: edit this file, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Sunbird Installer
 
+# Unsigned enterprise Windows installer for Mac-parity hotfix delivery.
+# Official Release Desktop remains blocked without SSL.com signing secrets;
+# this path builds on windows-latest and publishes a distinctly named exe.
+
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version"
+        description: "Product version (SSOT four-part)"
         required: true
-        default: "1.0.0.1"
-      source_ref:
-        description: "Git ref with sunbird build scripts"
+        default: "1.0.0.0"
+      publish_cvm:
+        description: "Upload exe to CVM public download paths"
         required: true
-        default: "feat/enterprise-deploy-maturity"
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -26,10 +31,10 @@ jobs:
     env:
       PYTHONUTF8: "1"
       PYTHONIOENCODING: utf-8
+      # Explicitly do NOT require Authenticode for this hotfix lane.
+      XCAGI_REQUIRE_WINDOWS_SIGNING: "0"
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.source_ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -41,82 +46,77 @@ jobs:
           cache-dependency-path: |
             FHD/frontend/package-lock.json
             FHD/desktop/package-lock.json
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "8.0.x"
-      - name: Install Python deps for seed build
-        run: python -m pip install "openpyxl>=3.1"
-      - name: Build Sunbird custom installer
+      - name: Build Windows enterprise installer (unsigned hotfix)
+        shell: pwsh
+        env:
+          XCAGI_BUILD_SHA: ${{ github.sha }}
+        run: |
+          $v = "${{ github.event.inputs.version }}".TrimStart('v','V')
+          scripts/package/build-installer.ps1 -Version $v -ProductSku enterprise -SkipUiInstaller
+      - name: Rename artifact for mac-align hotfix channel
         shell: pwsh
         run: |
           $v = "${{ github.event.inputs.version }}".TrimStart('v','V')
-          scripts/package/build-sunbird-installer.ps1 -Version $v
-      - name: Install and smoke Sunbird package
-        shell: pwsh
-        run: |
-          $v = "${{ github.event.inputs.version }}".TrimStart('v','V')
-          $installer = "release/xcagi-v$v/sunbird/太阳鸟-Setup-$v-x64.exe"
-          if (-not (Test-Path $installer)) { throw "Sunbird installer missing: $installer" }
-          $installerPath = (Resolve-Path $installer).Path
-          $installDir = Join-Path $env:RUNNER_TEMP "XCAGI-Sunbird"
-          $cacheDir = Join-Path $env:LOCALAPPDATA "XCAGI\installer-cache"
-          Remove-Item $cacheDir -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item $installDir -Recurse -Force -ErrorAction SilentlyContinue
-          $proc = Start-Process `
-            -FilePath $installerPath `
-            -ArgumentList @('--silent', '--install-dir', $installDir, '--sunbird-seed') `
-            -Wait `
-            -PassThru
-          if ($proc.ExitCode -ne 0) {
-            Get-Content (Join-Path $env:TEMP "xcagi-installer-silent.log") -ErrorAction SilentlyContinue
-            Write-Host "installer=$installerPath"
-            Get-Item $installerPath | Select-Object FullName, Length, LastWriteTimeUtc | Format-List
-            Get-FileHash $installerPath -Algorithm SHA256 | Format-List
-            if (Test-Path $cacheDir) {
-              Write-Host "installer cache:"
-              Get-ChildItem $cacheDir -Force | Select-Object FullName, Length, LastWriteTimeUtc | Format-List
-            }
-            if (Test-Path $installDir) {
-              Write-Host "install dir sample:"
-              Get-ChildItem $installDir -Recurse -Force -ErrorAction SilentlyContinue |
-                Select-Object -First 80 FullName, Length, LastWriteTimeUtc |
-                Format-List
-            }
-            throw "Silent install failed: exit=$($proc.ExitCode)"
-          }
-          Get-Content (Join-Path $env:TEMP "xcagi-installer-silent.log") -ErrorAction SilentlyContinue
-          $exe = Join-Path $installDir "XCAGI.exe"
-          scripts/package/smoke-installed-windows.ps1 `
-            -InstalledExe $exe `
-            -RestartApp `
-            -ReadyTimeoutSeconds 240 `
-            -RequiredModIds @(
-              'xcagi-planner-bridge',
-              'xcagi-core-workflow-employees',
-              'xcagi-office-employee-pack-bridge',
-              'wechat-contacts-ai-employee',
-              'attendance-industry'
-            )
-      - name: Sunbird acceptance
-        shell: pwsh
-        run: |
-          $installDir = Join-Path $env:RUNNER_TEMP "XCAGI-Sunbird"
-          $exe = Join-Path $installDir "XCAGI.exe"
-          scripts/package/acceptance-sunbird-windows.ps1 `
-            -InstalledExe $exe `
-            -UseInstalledBackend `
-            -ReadyTimeoutSeconds 240 `
-            -MinHostFoundationCount 6
-      - name: Stage sunbird installer for upload
-        shell: pwsh
-        run: |
-          $v = "${{ github.event.inputs.version }}".TrimStart('v','V')
-          $src = "release/xcagi-v$v/sunbird"
-          $dst = "build/ci-sunbird-artifact"
-          New-Item -ItemType Directory -Force -Path $dst | Out-Null
-          Get-ChildItem $src -Filter "*.exe" -File | Where-Object { $_.Name -like "*Setup*" } | Copy-Item -Destination $dst -Force
-          if (-not (Get-ChildItem $dst -Filter "*.exe")) { throw "No sunbird Setup exe in $src" }
+          $dir = "release/xcagi-v$v/enterprise"
+          $src = Join-Path $dir "XCAGI-Enterprise-Setup-$v-x64.exe"
+          if (-not (Test-Path $src)) { throw "Installer missing: $src" }
+          $dst = Join-Path $dir "XCAGI-Enterprise-Setup-$v-x64-macalign.exe"
+          Copy-Item -Force $src $dst
+          Get-FileHash $dst -Algorithm SHA256 | Format-List
+          Get-Item $dst | Select-Object FullName, Length, LastWriteTimeUtc | Format-List
+          "SHA256=$((Get-FileHash $dst -Algorithm SHA256).Hash)" | Out-File -Encoding utf8 (Join-Path $dir "XCAGI-Enterprise-Setup-$v-x64-macalign.exe.sha256")
+          @"
+          WINDOWS MAC-ALIGN HOTFIX
+          ProductVersion: $v
+          Build SHA: ${{ github.sha }}
+          File: XCAGI-Enterprise-Setup-$v-x64-macalign.exe
+          Authenticode: unsigned (hotfix lane; SSL.com secrets unavailable)
+          Contains Mac-parity chat/desktop fixes from this ref.
+          "@ | Out-File -Encoding utf8 (Join-Path $dir "MACALIGN-HOTFIX.txt")
       - uses: actions/upload-artifact@v4
         with:
-          name: sunbird-installer
-          path: FHD/build/ci-sunbird-artifact/**
+          name: xcagi-windows-macalign-hotfix
+          path: |
+            FHD/release/xcagi-v*/enterprise/XCAGI-Enterprise-Setup-*-macalign.exe
+            FHD/release/xcagi-v*/enterprise/XCAGI-Enterprise-Setup-*-macalign.exe.sha256
+            FHD/release/xcagi-v*/enterprise/MACALIGN-HOTFIX.txt
+            FHD/release/xcagi-v*/enterprise/latest.yml
+      - name: Publish mac-align hotfix to CVM
+        if: ${{ github.event.inputs.publish_cvm == 'true' }}
+        working-directory: .
+        shell: bash
+        env:
+          DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
+            echo "::error::publish_cvm=true but SERVER_SSH_KEY/FHD_PUSH_SSH_KEY missing"
+            exit 1
+          fi
+          HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
+          v="${{ github.event.inputs.version }}"
+          v="${v#v}"; v="${v#V}"
+          src="FHD/release/xcagi-v${v}/enterprise"
+          test -f "${src}/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe"
+          mkdir -p ~/.ssh
+          printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
+          chmod 600 ~/.ssh/id_ci
+          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15)
+          for dest in \
+            "/var/www/xcagi-v${v}" \
+            "/var/www/xcagi-v${v}/enterprise" \
+            "/var/www/update/releases/stable/enterprise" \
+            "/var/www/html/xcagi-hotfixes"
+          do
+            ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p '$dest'"
+            scp "${SSH_OPTS[@]}" \
+              "${src}/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe" \
+              "${src}/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe.sha256" \
+              "${src}/MACALIGN-HOTFIX.txt" \
+              "root@${HOST}:${dest}/"
+          done
+          echo "Published:"
+          echo "  https://xiu-ci.com/xcagi-v${v}/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe"
+          echo "  https://xiu-ci.com/xcagi-v${v}/enterprise/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe"
+          echo "  https://xiu-ci.com/releases/stable/enterprise/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe"
