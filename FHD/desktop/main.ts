@@ -536,7 +536,8 @@ function initializeLocalCrashReporting(): void {
 
 function packagedBackendHealthTimeoutMs(): number {
   if (!app.isPackaged) {
-    return 60_000
+    // 本机大库 / deferred 路由挂载时，dev 60s 不够，易卡在闪屏「启动失败」
+    return 180_000
   }
   // 首次启动：Alembic、Mod 种子、太阳鸟花名册等可能超过 60s
   return process.platform === 'win32' ? 180_000 : 120_000
@@ -725,7 +726,7 @@ export function markFrontendCacheCleared(): void {
 }
 
 /** 分阶段就绪：TCP 后即可出窗；desktop/status 软等待，不阻塞 60s 全量 Mod。 */
-async function waitForBackendStatus(port: number, timeoutMs = 15_000): Promise<Record<string, unknown> | null> {
+async function waitForBackendStatus(port: number, timeoutMs = 60_000): Promise<Record<string, unknown> | null> {
   const started = Date.now()
   while (Date.now() - started <= timeoutMs) {
     try {
@@ -813,20 +814,23 @@ async function startBackend(): Promise<void> {
   startupMarks.backendSpawnMs = Date.now()
   writeBackendLog(`[spawn] ${executable.command} ${executable.args.join(' ')}\n`)
   writeBackendLog(`[cwd] ${executable.cwd}\n`)
+  const backendEnv: NodeJS.ProcessEnv = {
+    ...sanitizeBackendProxyEnv(process.env),
+    XCAGI_DESKTOP_MODE: '1',
+    XCAGI_DATA_DIR: app.getPath('userData'),
+    XCAGI_API_HOST: DESKTOP_BACKEND_BIND_HOST,
+    XCAGI_UVICORN_RELOAD: '0',
+    XCAGI_GLOBAL_RATE_LIMIT: '0',
+    LOG_LEVEL: process.env.LOG_LEVEL || (app.isPackaged ? 'WARNING' : 'INFO'),
+    XCAGI_DESKTOP_FAST_START: '1',
+    ...backendEditionEnv(),
+    PYTHONUTF8: '1'
+  }
+  // 父进程（IDE/代理）常残留 DATABASE_URL=postgres；桌面必须用 userData SQLite
+  delete backendEnv.DATABASE_URL
   backendProcess = spawn(executable.command, executable.args, {
     cwd: executable.cwd,
-    env: {
-      ...sanitizeBackendProxyEnv(process.env),
-      XCAGI_DESKTOP_MODE: '1',
-      XCAGI_DATA_DIR: app.getPath('userData'),
-      XCAGI_API_HOST: DESKTOP_BACKEND_BIND_HOST,
-      XCAGI_UVICORN_RELOAD: '0',
-      XCAGI_GLOBAL_RATE_LIMIT: '0',
-      LOG_LEVEL: process.env.LOG_LEVEL || (app.isPackaged ? 'WARNING' : 'INFO'),
-      XCAGI_DESKTOP_FAST_START: '1',
-      ...backendEditionEnv(),
-      PYTHONUTF8: '1'
-    },
+    env: backendEnv,
     windowsHide: true
   })
 
@@ -899,17 +903,19 @@ async function triggerRollbackSafe(reason: string): Promise<RollbackTriggerResul
 function runBackendMigration(): Promise<string> {
   const executable = backendExecutable()
   return new Promise((resolve, reject) => {
+    const migrateEnv: NodeJS.ProcessEnv = {
+      ...sanitizeBackendProxyEnv(process.env),
+      XCAGI_DESKTOP_MODE: '1',
+      XCAGI_DATA_DIR: app.getPath('userData'),
+      XCAGI_UVICORN_RELOAD: '0',
+      XCAGI_GLOBAL_RATE_LIMIT: '0',
+      ...backendEditionEnv(),
+      PYTHONUTF8: '1'
+    }
+    delete migrateEnv.DATABASE_URL
     const child = spawn(executable.command, [...executable.args, '--migrate-only', '--backup'], {
       cwd: executable.cwd,
-      env: {
-        ...sanitizeBackendProxyEnv(process.env),
-        XCAGI_DESKTOP_MODE: '1',
-        XCAGI_DATA_DIR: app.getPath('userData'),
-        XCAGI_UVICORN_RELOAD: '0',
-        XCAGI_GLOBAL_RATE_LIMIT: '0',
-        ...backendEditionEnv(),
-        PYTHONUTF8: '1'
-      },
+      env: migrateEnv,
       windowsHide: true
     })
     let stderr = ''
