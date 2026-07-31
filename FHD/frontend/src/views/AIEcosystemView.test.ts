@@ -125,11 +125,14 @@ describe('AIEcosystemView.vue', () => {
     }
   })
 
-  it('navigates to brain shell page when production launcher clicked', async () => {
+  it('embeds private delivery panel when production launcher clicked', async () => {
     const { wrapper, router } = await mountView()
     const pushSpy = vi.spyOn(router, 'push')
     await wrapper.find('.app-launcher--production').trigger('click')
-    expect(pushSpy).toHaveBeenCalledWith({ name: 'brain', query: { focus: 'private-mod' } })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.ecosystem-home').exists()).toBe(false)
+    expect(wrapper.find('.production-embed').exists()).toBe(true)
+    expect(pushSpy).not.toHaveBeenCalled()
   })
 
   it('navigates to mod-store shell page when modstore launcher clicked', async () => {
@@ -137,15 +140,6 @@ describe('AIEcosystemView.vue', () => {
     const pushSpy = vi.spyOn(router, 'push')
     await wrapper.find('.app-launcher--modstore').trigger('click')
     expect(pushSpy).toHaveBeenCalledWith({ name: 'mod-store', query: {} })
-  })
-
-  it('uses mod path redirect when planner mod pages enabled (brain)', async () => {
-    vi.mocked(resolvePlannerPageRedirectForRouteName).mockReturnValue('/mod/brain')
-    const { wrapper, router } = await mountView()
-    const pushSpy = vi.spyOn(router, 'push')
-    await wrapper.find('.app-launcher--production').trigger('click')
-    expect(pushSpy).toHaveBeenCalledWith({ path: '/mod/brain', query: { focus: 'private-mod' } })
-    expect(pushSpy).not.toHaveBeenCalledWith({ name: 'brain', query: { focus: 'private-mod' } })
   })
 
   it('uses mod path redirect when planner mod pages enabled (mod-store)', async () => {
