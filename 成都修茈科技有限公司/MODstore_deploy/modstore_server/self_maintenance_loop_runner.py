@@ -96,6 +96,7 @@ from .self_maintenance_remediation_prompts import (
     external_merge_remediation_prompt,
     external_review_remediation_prompt,
     qa_executor_retry_prompt,
+    structured_report_remediation_prompt,
 )
 from .self_maintenance_retry import close_successful_code_resume, is_transient_dispatch_failure
 from .self_maintenance_subprocess import run_cmd_excerpt as _run_cmd_excerpt
@@ -2583,6 +2584,7 @@ def _code_task_text(
     external_review_remediation = external_review_remediation_prompt(resume_candidate)
     external_merge_remediation = external_merge_remediation_prompt(resume_candidate)
     retort_scope_remediation = retort_remediation.retort_scope_remediation_prompt(resume_candidate)
+    structured_report_remediation = structured_report_remediation_prompt(memory, resume_candidate)
     score_remediation = ""
     if isinstance(selected_remediation, dict):
         merge_result = (
@@ -2717,6 +2719,7 @@ def _code_task_text(
         f"{external_review_remediation}"
         f"{external_merge_remediation}"
         f"{retort_scope_remediation}"
+        f"{structured_report_remediation}"
         f"\n\n=== HISTORICAL FIXES (MUST READ FIRST) ===\n{fix_digest}\n"
         f"\n=== SELF_EVOLUTION_CONTEXT JSON ===\n{evolution_context}"
     )
@@ -6407,6 +6410,9 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
         }
         if decision.get("detail"):
             remediation_item["detail"] = decision.get("detail")
+        structured_gate = decision.get("structured_gate")
+        if isinstance(structured_gate, dict):
+            remediation_item["structured_gate"] = structured_gate
         if decision.get("resume_from_clean_baseline"):
             remediation_item["resume_from_clean_baseline"] = True
         open_items.append(remediation_item)
