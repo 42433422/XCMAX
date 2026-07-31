@@ -131,26 +131,32 @@ class TestRouteNormalModeMessageCustomersQuery:
         assert result["intent"] == "customers_query"
         assert result["slots"]["keyword"] == ""
 
+    def test_customer_count_ask_查看我有多少个客户(self):
+        """计数问法：实体路由到 customers.query，keyword 必须为空（禁止把前缀当客户名）。"""
+        result = route_normal_mode_message("查看我有多少个客户")
+        assert result["intent"] == "customers_query"
+        assert result["slots"]["keyword"] == ""
+
     def test_customer_keyword_客户名单(self):
         result = route_normal_mode_message("客户名单")
         assert result["intent"] == "customers_query"
+        assert result["slots"]["keyword"] == ""
 
-    def test_customer_with_keyword_match(self):
-        """regex 贪婪匹配会包含 '的'，验证 keyword 非空即可。"""
+    def test_customer_named_ask_does_not_regex_extract_keyword(self):
+        """指名句也不再靠正则抽 keyword；由 Agent 工具参数决定过滤。"""
         result = route_normal_mode_message("七彩乐园的客户")
         assert result["intent"] == "customers_query"
-        assert result["slots"]["keyword"]  # 非空
+        assert result["slots"]["keyword"] == ""
 
     def test_customer_without_keyword_match_empty_slot(self):
         result = route_normal_mode_message("客户")
         assert result["intent"] == "customers_query"
         assert result["slots"]["keyword"] == ""
 
-    def test_customer_keyword_match_simple(self):
-        """无 '的' 时 keyword 应等于捕获组。"""
+    def test_customer_entity_route_keeps_keyword_empty(self):
         result = route_normal_mode_message("七彩乐园客户")
         assert result["intent"] == "customers_query"
-        assert result["slots"]["keyword"] == "七彩乐园"
+        assert result["slots"]["keyword"] == ""
 
     def test_try_normal_slot_read_payload_customers(self):
         from app.application.normal_chat_dispatch import try_normal_slot_read_payload
@@ -159,13 +165,14 @@ class TestRouteNormalModeMessageCustomersQuery:
             "app.application.normal_chat_dispatch.build_customers_query_response_dict",
             return_value={
                 "success": True,
-                "response": "共找到 2 位客户：\n- 甲\n- 乙",
+                "response": "当前共有 2 位客户：\n- 甲\n- 乙",
                 "data": {"intent": "customers_query", "customers": []},
+                "agent_tool_dispatch": True,
             },
         ):
             payload = try_normal_slot_read_payload("有哪些客户？")
         assert payload is not None
-        assert "共找到 2 位客户" in payload["response"]
+        assert "当前共有 2 位客户" in payload["response"]
 
     def test_try_normal_slot_read_payload_unknown(self):
         from app.application.normal_chat_dispatch import try_normal_slot_read_payload
@@ -832,7 +839,9 @@ class TestBuildCustomersQueryResponseDict:
         self._patch_customer_service(monkeypatch, mock_svc)
         result = build_customers_query_response_dict(route)
         assert result["success"] is True
-        assert "未找到" in result["response"]
+        assert "没有查到" in result["response"]
+        assert "未找到关键词" not in result["response"]
+        assert result["legacy_tool_records"][0]["tool_id"] == "customers"
 
     def test_with_keyword_has_customers(self, monkeypatch):
         route = {"intent": "customers_query", "slots": {"keyword": "七彩"}}
@@ -848,7 +857,8 @@ class TestBuildCustomersQueryResponseDict:
         self._patch_customer_service(monkeypatch, mock_svc)
         result = build_customers_query_response_dict(route)
         assert result["success"] is True
-        assert "共找到 2 位客户" in result["response"]
+        assert "当前共有 2 位客户" in result["response"]
+        assert result["agent_tool_dispatch"] is True
 
     def test_no_keyword_uses_get_all_empty(self, monkeypatch):
         route = {"intent": "customers_query", "slots": {"keyword": ""}}
@@ -857,7 +867,7 @@ class TestBuildCustomersQueryResponseDict:
         self._patch_customer_service(monkeypatch, mock_svc)
         result = build_customers_query_response_dict(route)
         assert result["success"] is True
-        assert "暂无客户数据" in result["response"]
+        assert "暂无数据" in result["response"]
 
     def test_no_keyword_uses_get_all_with_customers(self, monkeypatch):
         route = {"intent": "customers_query", "slots": {"keyword": ""}}
@@ -870,7 +880,8 @@ class TestBuildCustomersQueryResponseDict:
         self._patch_customer_service(monkeypatch, mock_svc)
         result = build_customers_query_response_dict(route)
         assert result["success"] is True
-        assert "共找到 1 位客户" in result["response"]
+        assert "当前共有 1 位客户" in result["response"]
+        assert result["legacy_tool_records"][0]["action"] == "query"
 
     def test_customers_not_list_returns_empty(self, monkeypatch):
         route = {"intent": "customers_query", "slots": {"keyword": ""}}
@@ -879,7 +890,7 @@ class TestBuildCustomersQueryResponseDict:
         self._patch_customer_service(monkeypatch, mock_svc)
         result = build_customers_query_response_dict(route)
         assert result["success"] is True
-        assert "暂无客户数据" in result["response"]
+        assert "暂无数据" in result["response"]
 
     def test_service_failure_returns_error(self, monkeypatch):
         route = {"intent": "customers_query", "slots": {"keyword": "x"}}
@@ -908,8 +919,9 @@ class TestBuildCustomersQueryResponseDict:
         result = build_customers_query_response_dict(route)
         assert result["success"] is True
         # 响应里只列前 10 个，但 data 里前 20 个
-        assert "共找到 15 位客户" in result["response"]
+        assert "当前共有 15 位客户" in result["response"]
         assert len(result["data"]["customers"]) == 15
+        assert "未找到关键词" not in result["response"]
 
 
 # ---------------------------------------------------------------------------

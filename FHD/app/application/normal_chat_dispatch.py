@@ -46,49 +46,14 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
     query_keywords = ("查询", "查一下", "查下", "查", "看看", "看下", "搜索", "找下", "找", "检索")
     model_signal = bool(re.search(r"(?:型号|编号)\s*[:：]?\s*([0-9A-Za-z-]{2,})", text))
     unit_model_signal = bool(re.search(r"([^\s，,。]{2,})\s*的\s*([0-9A-Za-z-]{2,})", text))
-    # 客户/购买单位查询
-    customer_keywords = (
-        "客户",
-        "购买单位",
-        "买家",
-        "客户列表",
-        "客户信息",
-        "有哪些客户",
-        "客户名单",
-    )
-    if any(k in text for k in customer_keywords):
-        keyword_match = re.search(
-            r"(?:查询|查找|找到|搜索)?\s*([^\s，,。？?]{2,})\s*(?:的)?(?:客户|购买单位)", text
-        )
-        keyword = (keyword_match.group(1) if keyword_match else "").strip()
-        # 「有哪些客户 / 客户名单」等泛问：不要把「有哪些」当成客户名去模糊搜
-        generic_list_ask = any(
-            p in text
-            for p in (
-                "有哪些客户",
-                "哪些客户",
-                "客户名单",
-                "客户列表",
-                "全部客户",
-                "所有客户",
-                "客户信息",
-            )
-        ) and ("的客户" not in text)
-        if generic_list_ask or keyword in {
-            "有哪些",
-            "哪些",
-            "全部",
-            "所有",
-            "查询",
-            "查找",
-            "看看",
-            "名单",
-            "列表",
-        }:
-            keyword = ""
+    # 客户/购买单位：实体路由到 Agent 工具 customers.query。
+    # 禁止用正则把问句前缀抽成客户名 keyword（会答成「未找到关键词「查看我有多少个」」）。
+    # 指名检索由 Agent 在工具参数里填 keyword；此处只负责选工具。
+    customer_entity_markers = ("客户", "购买单位", "买家")
+    if any(k in text for k in customer_entity_markers):
         return {
             "intent": "customers_query",
-            "slots": {"keyword": keyword},
+            "slots": {"keyword": ""},
         }
 
     # 库存预警
@@ -368,9 +333,10 @@ def try_normal_slot_read_payload(
     *,
     request: Any | None = None,
 ) -> dict[str, Any] | None:
-    """普通版只读槽位（客户/产品/库存/标签）：命中则返回可直接回复的 payload。
+    """普通版只读业务：命中则走确定性 Agent 工具（无 LLM 也可 tool-call）。
 
-    流式对话与 JSON 主线共用，避免「有哪些客户」走 LLM 编造「没有数据」。
+    客户类问题调用 customers.query（ERP list），写入 legacy_tool_records，
+    避免 LLM 编造「没有数据」，也避免正则把问句当客户名。
     StreamingResponse 迭代时 IndustryContextMiddleware 可能已 reset 请求 ContextVar，
     因此这里显式恢复 request + tenant，避免租户 fail-closed 读空。
     """
@@ -424,17 +390,24 @@ def build_customers_query_response_dict(
     *,
     request: Any | None = None,
 ) -> dict[str, Any] | None:
-    """客户查询槽位响应。"""
+    """客户查询：确定性调用 customers.query（ERP list），按 Agent 工具结果作答。
+
+    无 LLM 时也可直接 tool-call 读库；禁止把用户原话当 keyword，禁止槽位腔「未找到关键词」。
+    """
     if route_result.get("intent") != "customers_query":
         return None
+    # 仅当上游 Agent 已给出干净检索词时才过滤；默认列表/计数问法 keyword 为空。
     keyword = str((route_result.get("slots") or {}).get("keyword") or "").strip()
+    tool_params: dict[str, Any] = {"page": 1, "per_page": 50}
+    if keyword:
+        tool_params["keyword"] = keyword
     try:
         # 与 GET /api/customers 同源：优先 erp domain handler（桌面 REST 实际路径），
         # 再回退 facade。勿只走 facade——流式 ContextVar 丢失时会 fail-closed 读空，
         # 而 domain handler 与 UI 客户列表一致。
         from app.infrastructure.tenant_scope import tenant_scope
-        from app.mod_sdk.erp_domain_dispatch import try_invoke_erp_domain_handler
         from app.mod_sdk.erp_customers_facade import customers_list as customers_list_via_service
+        from app.mod_sdk.erp_domain_dispatch import try_invoke_erp_domain_handler
 
         with tenant_scope(_request_tenant_id(request)):
             result = try_invoke_erp_domain_handler(
@@ -453,39 +426,78 @@ def build_customers_query_response_dict(
                     keyword=keyword or None,
                 )
         if isinstance(result, dict) and result.get("success") is False:
-            msg = str(result.get("message") or result.get("response") or "客户查询失败")
+            msg = str(result.get("message") or result.get("response") or "客户查询工具执行失败")
+            tool_record = {
+                "tool_id": "customers",
+                "action": "query",
+                "params": tool_params,
+                "output": result if isinstance(result, dict) else {"success": False},
+                "tool_call_id": "tc-customers-query",
+            }
             return {
                 "success": False,
                 "response": msg,
-                "data": {"intent": "customers_query"},
+                "data": {
+                    "intent": "customers_query",
+                    "legacy_tool_records": [tool_record],
+                },
+                "legacy_tool_records": [tool_record],
+                "agent_tool_dispatch": True,
                 "normal_slot_dispatch": True,
             }
         customers = result.get("data", []) if isinstance(result, dict) else []
         if not isinstance(customers, list):
             customers = []
+        total = (
+            int(result.get("total") or len(customers)) if isinstance(result, dict) else len(customers)
+        )
         if not customers:
-            msg = f"未找到关键词「{keyword}」相关的客户。" if keyword else "暂无客户数据。"
+            msg = (
+                f"没有查到与「{keyword}」匹配的客户。"
+                if keyword
+                else "当前客户库暂无数据。"
+            )
         else:
             lines = [
                 f"- {c.get('customer_name', '')} {c.get('contact_person', '')}".rstrip()
                 for c in customers[:10]
             ]
-            total = int(result.get("total") or len(customers)) if isinstance(result, dict) else len(customers)
-            msg = f"共找到 {total} 位客户：\n" + "\n".join(lines)
+            msg = f"当前共有 {total} 位客户：\n" + "\n".join(lines)
             if total > 10:
                 msg += f"\n…其余 {total - 10} 位请到「客户管理」查看"
+        tool_output = {
+            "success": True,
+            "data": customers[:20],
+            "total": total,
+            "page": 1,
+            "per_page": 50,
+        }
+        tool_record = {
+            "tool_id": "customers",
+            "action": "query",
+            "params": tool_params,
+            "output": tool_output,
+            "tool_call_id": "tc-customers-query",
+        }
         return {
             "success": True,
             "response": msg,
-            "data": {"intent": "customers_query", "customers": customers[:20]},
+            "data": {
+                "intent": "customers_query",
+                "customers": customers[:20],
+                "legacy_tool_records": [tool_record],
+            },
+            "legacy_tool_records": [tool_record],
+            "agent_tool_dispatch": True,
             "normal_slot_dispatch": True,
         }
     except RECOVERABLE_ERRORS as e:
-        logger.warning("customers_query 失败: %s", e)
+        logger.warning("customers.query 工具失败: %s", e)
         return {
             "success": False,
-            "response": "客户查询服务暂时不可用，请稍后重试。",
+            "response": "客户查询工具暂时不可用，请稍后重试。",
             "data": {},
+            "agent_tool_dispatch": True,
             "normal_slot_dispatch": True,
         }
 
