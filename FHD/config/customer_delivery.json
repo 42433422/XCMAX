@@ -1,6 +1,20 @@
 {
   "schema_version": 1,
-  "description": "客户交付清单：客户品牌与合同/metadata 专用，不进 industry_baseline 通用配置",
+  "description": "客户交付清单 SSOT：客户品牌与合同/metadata 专用，不进 industry_baseline 通用配置",
+  "field_semantics": {
+    "industry_mod_id": "通用行业包 id（如 attendance-industry、coating-industry）。产品引导、行业能力、企业 entitlement 可含此项；不属于客户私有定制。",
+    "legacy_mod_id": "客户账号定制 Mod id（如 taiyangniao-pro、sz-qsm-pro）。客户品牌与合同交付主体。",
+    "customer_brand": "对外展示的客户品牌名",
+    "delivery_seed_package": "可选：该客户交付种子包元数据（花名册/侧库等）"
+  },
+  "private_mod_delivery": {
+    "ui": "生产员工 / PrivateModDeliveryPanel（AI 生态页内嵌）",
+    "api_context": "app.fastapi_routes.mod_store_routes._private_mod_context",
+    "include": ["legacy_mod_id"],
+    "exclude": ["industry_mod_id"],
+    "rule": "企业 entitlement 常同时下发行业包与定制包；生产员工私有交付只暴露 legacy_mod_id ∩ entitlement，严禁把 *-industry 通用行业包列进该入口。",
+    "frontend_guard": "PrivateModDeliveryPanel 额外过滤 mod_id 以 -industry 结尾的项作为兜底"
+  },
   "deliveries": [
     {
       "delivery_id": "customer-taiyangniao",
@@ -16,7 +30,7 @@
         "apply": "sunbird_roster",
         "description": "太阳鸟交付种子：花名册、定制 Mod 侧库、考勤模板"
       },
-      "notes": "首家考勤客户定制实现；产品引导仅展示「考勤行业包」"
+      "notes": "首家考勤客户定制实现；产品引导仅展示「考勤行业包」；生产员工只列 taiyangniao-pro"
     },
     {
       "delivery_id": "customer-qishimei",
@@ -25,7 +39,7 @@
       "legacy_mod_id": "sz-qsm-pro",
       "customer_brand": "奇士美 PRO",
       "customer_name": "奇士美",
-      "notes": "首家涂料客户定制实现；产品引导仅展示「涂料行业包」"
+      "notes": "首家涂料客户定制实现；产品引导仅展示「涂料行业包」；生产员工只列 sz-qsm-pro"
     }
   ]
 }

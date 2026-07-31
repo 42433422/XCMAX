@@ -240,6 +240,8 @@ mods/<mod_id>/
 
 `industry.id` 必须与 [`config/industry_baseline.json`](../../config/industry_baseline.json) 中 `industry_packages` 的键一致；`manifest.id` 必须与同条目的 `mod_id` 一致。
 
+客户品牌与账号定制包的映射 SSOT 见 [`config/customer_delivery.json`](../../config/customer_delivery.json)：`industry_mod_id` = 通用行业包，`legacy_mod_id` = 客户定制包。**生产员工私有交付只列 `legacy_mod_id`（∩ entitlement），不得把 `*-industry` 行业包列入该入口**（企业 entitlement 里两者常同时存在，属预期；入口过滤属口径，不是权益错误）。
+
 **脚手架（Wave 2）**：`bash scripts/dev/scaffold-industry-mod.sh <行业名> <mod-id> [显示名]` — 从 `coating-industry` 模板复制并校验 schema。
 
 ---
