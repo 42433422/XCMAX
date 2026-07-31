@@ -318,13 +318,24 @@ def run_normal_slot_product_query_from_message(message: str) -> dict[str, Any]:
 
 
 def _request_tenant_id(request: Any | None) -> int | None:
-    """从 request.state 读 tenant_id（流式响应中 ContextVar 可能已被中间件 finally 清掉）。"""
+    """从 request 取 tenant_id（流式响应中 ContextVar 可能已被中间件 finally 清掉）。
+
+    优先 ``request.state.tenant_id``；若为空再从 session Cookie 解析，避免市场 Bearer
+    曾盖掉本地会话时中间件写入 None 导致 ORM fail-closed。
+    """
     if request is None:
         return None
     try:
         value = getattr(getattr(request, "state", None), "tenant_id", None)
-        return int(value) if value is not None else None
+        if value is not None:
+            return int(value)
     except (TypeError, ValueError, AttributeError):
+        pass
+    try:
+        from app.infrastructure.auth.tenant_context import resolve_tenant_id
+
+        return resolve_tenant_id(request)
+    except Exception:  # noqa: BLE001
         return None
 
 

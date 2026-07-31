@@ -881,7 +881,10 @@ class TestBuildCustomersQueryResponseDict:
         result = build_customers_query_response_dict(route)
         assert result["success"] is True
         assert "当前共有 1 位客户" in result["response"]
+        assert "暂无数据" not in result["response"]
+        assert "关键词" not in result["response"]
         assert result["legacy_tool_records"][0]["action"] == "query"
+        assert result["legacy_tool_records"][0]["output"]["total"] == 1
 
     def test_customers_not_list_returns_empty(self, monkeypatch):
         route = {"intent": "customers_query", "slots": {"keyword": ""}}
