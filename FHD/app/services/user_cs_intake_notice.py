@@ -70,9 +70,7 @@ def maybe_send_intake_form_notice(
     if not contact:
         return {"sent": False, "error": "未找到微信群联系人"}
     form_url = build_intake_form_url(uid, brief=brief, client_name=contact)
-    text = build_intake_form_notice_message(
-        contact_name=contact, form_url=form_url, brief=brief
-    )
+    text = build_intake_form_notice_message(contact_name=contact, form_url=form_url, brief=brief)
     try:
         from app.application.wechat_sender_app_service import send_wechat_message
 
