@@ -271,4 +271,32 @@ describe('knowledgeBaseApi', () => {
       '/api/knowledge/v1/datasets/persy-knowledge/graph?limit=80',
     )
   })
+
+  it('applies omniscientQuery default topK and empty rollback/rebuild tenants', async () => {
+    await knowledgeBaseApi.omniscientQuery({ query: 'hello' })
+    await knowledgeBaseApi.rollbackVersion('persy-knowledge', { version: 'v9' })
+    await knowledgeBaseApi.rebuildIndex('persy-knowledge')
+    await knowledgeBaseApi.diffVersions('persy-knowledge')
+    await knowledgeBaseApi.deleteMemory('persy-knowledge', 'mem-x')
+    await knowledgeBaseApi.graph('persy-knowledge', 5)
+
+    expect(mocks.api.post).toHaveBeenCalledWith(
+      '/api/knowledge/v1/omniscient/query',
+      expect.objectContaining({ top_k: 8 }),
+    )
+    expect(mocks.api.post).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy-knowledge/versions/rollback',
+      { version: 'v9', tenant_id: '' },
+    )
+    expect(mocks.api.post).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy-knowledge/index/rebuild',
+      { tenant_id: '' },
+    )
+    expect(mocks.api.delete).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy-knowledge/memories/mem-x',
+    )
+    expect(mocks.api.get).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/persy-knowledge/graph?limit=20',
+    )
+  })
 })
