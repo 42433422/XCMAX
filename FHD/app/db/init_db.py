@@ -16,11 +16,10 @@ import shutil
 import sqlite3
 import sys
 from collections.abc import Iterable, Sequence
-
-from app.db.etl_bootstrap import ensure_sqlite_etl_bootstrap
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from app.db.etl_bootstrap import ensure_sqlite_etl_bootstrap
 from app.utils.external_sqlite import sqlite_conn
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
