@@ -23,12 +23,16 @@ _DESKTOP_CIRCLE_MAX_ROWS = 5_000
 
 
 def _desktop_mode() -> bool:
-    return (os.environ.get("XCAGI_DESKTOP_MODE") or "").strip().lower() in {
+    if (os.environ.get("XCAGI_DESKTOP_MODE") or "").strip().lower() in {
         "1",
         "true",
         "yes",
         "on",
-    }
+    }:
+        return True
+    # 兜底：部分子路径未继承 XCAGI_DESKTOP_MODE 时，仍按桌面数据目录判定
+    data_dir = (os.environ.get("XCAGI_DATA_DIR") or "").replace("\\", "/")
+    return "Application Support/XCAGI" in data_dir or data_dir.rstrip("/").endswith("/XCAGI")
 
 
 def _prune_circle_posts_if_needed(db, *, keep: int = _DESKTOP_CIRCLE_MAX_ROWS) -> None:
@@ -107,6 +111,10 @@ def record_employee_activity(
     summary: str = "",
 ) -> None:
     """Persist one post for one real employee execution; never synthesise idle posts."""
+    # 桌面：员工调度风暴曾把 ai_circle_posts 写到千万行导致闪退；桌面不再落库，
+    # 交流圈改走低频 MODstore 投影（employee_circle_sync）。
+    if _desktop_mode():
+        return
     employee = str(employee_id or "").strip()
     if not employee:
         return
@@ -124,23 +132,10 @@ def record_employee_activity(
     if summary_text:
         details.append(f"结果：{summary_text}")
     body = state if not details else f"{state}\n" + "\n".join(details)
-    # 桌面：每员工每分钟最多一条（忽略任务文案差异），挡住协作风暴写库闪退
-    if _desktop_mode():
-        minute = datetime.now(UTC).strftime("%Y%m%d%H%M")
-        digest = hashlib.sha1(f"{employee}|{minute}".encode()).hexdigest()[:24]
-        source_ref = f"employee-run:{digest}"
-    else:
-        source_ref = f"employee-run:{uuid.uuid4().hex}"
+    source_ref = f"employee-run:{uuid.uuid4().hex}"
     try:
         ensure_ai_circle_tables()
         with get_db() as db:
-            if (
-                db.query(AiCirclePost.id)
-                .filter(AiCirclePost.source_ref == source_ref)
-                .first()
-                is not None
-            ):
-                return
             db.add(
                 AiCirclePost(
                     author_kind="employee",
@@ -151,8 +146,6 @@ def record_employee_activity(
                     source_ref=source_ref,
                 )
             )
-            if _desktop_mode():
-                _prune_circle_posts_if_needed(db)
     except RECOVERABLE_ERRORS:
         logger.warning("failed to persist AI circle employee event", exc_info=True)
 
