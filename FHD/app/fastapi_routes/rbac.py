@@ -43,8 +43,6 @@ def rbac_tenants_list(_user=Depends(_require_admin)):
     """列出活跃租户（平台管理员）。"""
     try:
         return {"success": True, "data": get_rbac_app_service().list_tenants()}
-<<<<<<< HEAD
-=======
     except DatabaseError as exc:
         logger.warning("RBAC tenant directory degraded: %s", exc)
         return {
@@ -54,7 +52,6 @@ def rbac_tenants_list(_user=Depends(_require_admin)):
             "message": exc.message,
             "error_code": exc.code.value,
         }
->>>>>>> resolve/codex/repair-module-linkage-20260728
     except AppError as exc:
         return _handle_app_error(exc)
 

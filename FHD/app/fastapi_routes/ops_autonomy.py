@@ -384,15 +384,6 @@ async def cs_ssot_retrieve(
         is_admin=True,
     )
     candidate_k = min(50, max(12, top_k * 3))
-<<<<<<< HEAD
-    result = get_dataset_rag_app_service().query(
-        dataset_id=dataset_id,
-        query=query,
-        top_k=candidate_k,
-        rerank=True,
-        access_context=access,
-    )
-=======
     query_kwargs: dict[str, Any] = {
         "dataset_id": dataset_id,
         "query": query,
@@ -412,7 +403,6 @@ async def cs_ssot_retrieve(
             }
         )
     result = get_dataset_rag_app_service().query(**query_kwargs)
->>>>>>> resolve/codex/repair-module-linkage-20260728
     chunks = result.get("chunks") if isinstance(result, dict) else []
     if not isinstance(chunks, list):
         chunks = []

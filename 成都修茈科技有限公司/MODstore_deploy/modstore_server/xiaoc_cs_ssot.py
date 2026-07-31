@@ -1,15 +1,11 @@
 """小C 客服 SSOT：人设 + 知识库三档隔离检索。
 
-<<<<<<< HEAD
 SSOT 口径（2026-07）：
 - 大脑：管理端小C（MODstore butler）/ 官网 corp-chat
 - 公开库：persy-knowledge（官网/市场客服只读）
 - 内部库：xiaoc-internal（仅管理端小C 可读可写策略）
 - 客户私有库：仅企业桌面端；Web 小C 禁止触及
 - 客来来客服通过 external 模式接入公开库，不读取内部库或客户私有库
-=======
-公开库供官网/市场/客来来客服只读；内部库仅管理端小C；客户私有库仅企业桌面端。
->>>>>>> resolve/codex/repair-module-linkage-20260728
 """
 
 from __future__ import annotations
@@ -670,15 +666,6 @@ def _local_retrieve(
                 is_admin=True,
             )
             candidate_k = min(50, max(12, top_k * 3))
-<<<<<<< HEAD
-            result = get_dataset_rag_app_service().query(
-                dataset_id=dataset_id or PUBLIC_DATASET_ID,
-                query=query,
-                top_k=candidate_k,
-                rerank=True,
-                access_context=access,
-            )
-=======
             target_dataset_id = dataset_id or PUBLIC_DATASET_ID
             query_kwargs: Dict[str, Any] = {
                 "dataset_id": target_dataset_id,
@@ -690,7 +677,6 @@ def _local_retrieve(
             if target_dataset_id == PUBLIC_DATASET_ID:
                 query_kwargs.update(public_query_kwargs())
             result = get_dataset_rag_app_service().query(**query_kwargs)
->>>>>>> resolve/codex/repair-module-linkage-20260728
             chunks = result.get("chunks") if isinstance(result, dict) else []
             return list(chunks[:top_k]) if isinstance(chunks, list) else []
         except Exception as exc:  # noqa: BLE001
@@ -736,11 +722,7 @@ def retrieve_knowledge_for_mode(
             continue
         chunks = retrieve_dataset_knowledge(q, dataset_id=did, top_k=per_ds)
         if did == PUBLIC_DATASET_ID:
-<<<<<<< HEAD
-            chunks = [chunk for chunk in chunks if _is_published_public_chunk(chunk)]
-=======
             chunks = [chunk for chunk in chunks if is_published_public_chunk(chunk)]
->>>>>>> resolve/codex/repair-module-linkage-20260728
         for c in chunks:
             if not isinstance(c, dict):
                 continue
