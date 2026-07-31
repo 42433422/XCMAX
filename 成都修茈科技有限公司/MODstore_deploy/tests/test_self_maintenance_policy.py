@@ -185,6 +185,35 @@ def test_structured_review_qa_holds_require_executable_change(hold_reason: str):
     assert "structured review/QA hold" in requirement["reason"]
 
 
+def test_target_branch_unavailable_hold_does_not_require_executable_change():
+    branch = "devfleet/cursor/sub-1-target-ref"
+    memory = {
+        "last_policy_decision": {
+            "reason": "structured_qa_verdict_not_pass",
+            "structured_gate": {
+                "qa": {
+                    "blocking_findings": [f"target_branch_unavailable: origin/{branch}"],
+                    "target_branch_available": False,
+                }
+            },
+        },
+        "open_items": [
+            {
+                "branch": branch,
+                "kind": "automated_remediation",
+                "reason": "structured_qa_verdict_not_pass",
+                "run_id": "run-target-ref",
+                "task_id": "task-target-ref",
+            }
+        ],
+    }
+
+    requirement = loop_memory_requires_executable_change(memory)
+
+    assert requirement["required"] is False
+    assert "no executable-change requirement" in requirement["reason"]
+
+
 def test_report_only_protocol_holds_do_not_require_executable_change():
     memory = {
         "open_items": [
