@@ -143,7 +143,14 @@ async function loadDelivery() {
     if (!response.ok || body?.success !== true) {
       throw new Error(responseMessage(body, `私有 Mod 状态读取失败（HTTP ${response.status}）`))
     }
-    projects.value = Array.isArray(body?.data?.projects) ? body.data.projects : []
+    projects.value = (Array.isArray(body?.data?.projects) ? body.data.projects : []).filter(
+      (row) => {
+        const mid = String(row?.mod_id || '').trim()
+        // 通用行业包不属于客户私有交付（后端也会过滤；前端兜底）
+        if (!mid || mid.endsWith('-industry')) return false
+        return true
+      },
+    )
     stages.value = Array.isArray(body?.data?.stages) && body.data.stages.length
       ? body.data.stages
       : stages.value

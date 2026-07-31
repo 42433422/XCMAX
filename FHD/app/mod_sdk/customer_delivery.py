@@ -101,6 +101,26 @@ def delivery_seed_package_for_mod(
     return dict(pkg) if isinstance(pkg, dict) and str(pkg.get("pkg_id") or "").strip() else None
 
 
+def list_account_custom_mod_ids() -> set[str]:
+    """客户交付清单中的账号定制 Mod（``legacy_mod_id``），不含通用行业包。"""
+    out: set[str] = set()
+    for row in list_customer_deliveries():
+        legacy = str(row.get("legacy_mod_id") or "").strip()
+        if legacy:
+            out.add(legacy)
+    return out
+
+
+def list_industry_mod_ids_from_delivery() -> set[str]:
+    """客户交付清单里关联的通用行业包 id（``industry_mod_id``）。"""
+    out: set[str] = set()
+    for row in list_customer_deliveries():
+        mid = str(row.get("industry_mod_id") or "").strip()
+        if mid:
+            out.add(mid)
+    return out
+
+
 def _entitled_matches_mod(mod_id: str, entitled: set[str]) -> bool:
     mid = str(mod_id or "").strip()
     if not mid or not entitled:
@@ -148,6 +168,8 @@ __all__ = [
     "delivery_for_industry_mod",
     "delivery_seed_package_for_mod",
     "label_for_account_custom_mod",
+    "list_account_custom_mod_ids",
     "list_customer_deliveries",
+    "list_industry_mod_ids_from_delivery",
     "load_customer_delivery_document",
 ]
