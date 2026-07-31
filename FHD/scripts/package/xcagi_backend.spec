@@ -39,6 +39,10 @@ for item in [
     ".env.example",
     "alembic.ini",
     "scripts/backup",
+    # Chat/planner stream loads these via Path(__file__).with_name(...); PYZ
+    # modules alone leave the sibling JSON missing and return 500.
+    "app/application/agent_orchestrator/tool_spec_data/input_schemas.json",
+    "app/application/agent_orchestrator/tool_spec_data/output_schemas.json",
 ]:
     datas.extend(add_data(item))
 
