@@ -114,6 +114,14 @@ async def lifespan(app: FastAPI):
                 start_backup_scheduler()
             except RECOVERABLE_ERRORS as exc:
                 logger.warning("⚠️ 桌面端定时备份调度器启动失败: %s", exc)
+            try:
+                from app.desktop_runtime.sync_outbox_scheduler import (
+                    start_sync_outbox_scheduler,
+                )
+
+                start_sync_outbox_scheduler()
+            except RECOVERABLE_ERRORS as exc:
+                logger.warning("⚠️ 同步 outbox 补推调度器启动失败: %s", exc)
 
     mark_startup("lifespan_ready")
     logger.info("✅ FastAPI 应用启动完成%s", "（重服务后台加载）" if fast_start else "")
@@ -131,6 +139,12 @@ async def lifespan(app: FastAPI):
         stop_backup_scheduler()
     except RECOVERABLE_ERRORS as exc:
         logger.warning("⚠️ 桌面端定时备份调度器关闭失败: %s", exc)
+    try:
+        from app.desktop_runtime.sync_outbox_scheduler import stop_sync_outbox_scheduler
+
+        stop_sync_outbox_scheduler()
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("⚠️ 同步 outbox 补推调度器关闭失败: %s", exc)
     try:
         from app.application.employee_runtime.scheduler import stop_employee_scheduler
 

@@ -248,6 +248,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { installHostFoundation, installMod, installIndustrySeed, installCustomerDeliverySeed } from '@/api/modStore'
 import { autoOnboardWorkflowEmployeesFromMods } from '@/utils/workflowEmployeeOnboard'
+import { deliverySeedModIds } from '@/utils/deliverySeedPackages'
 import { queueWorkspacePrefsSync } from '@/utils/workspacePrefsApi'
 import { useModsStore } from '@/stores/mods'
 import { readBuildEdition } from '@/constants/genericModPack'
@@ -286,7 +287,6 @@ import { resolveCoreNavLabel } from '@/utils/coreNavLabel'
 import { patchWorkspacePrefs } from '@/utils/workspacePrefsApi'
 import { appAlert } from '@/utils/appDialog'
 import { productErrorMessage } from '@/utils/productErrorMessage'
-
 const route = useRoute()
 const router = useRouter()
 const flow = useProductFlow()
@@ -592,7 +592,7 @@ async function runBootstrap() {
         )
       }
     }
-    const customSeedIds = [...(baselinePlan.value?.account_custom_mod_ids || [])]
+    const customSeedIds = deliverySeedModIds(baselinePlan.value)
     for (const modId of customSeedIds) {
       try {
         const ir = await installCustomerDeliverySeed(modId, pickedIndustryId.value)

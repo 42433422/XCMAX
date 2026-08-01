@@ -498,3 +498,13 @@ def _audit_payload(row: CustomerServiceAuditLog) -> Dict[str, Any]:
         "detail": json_loads(row.detail_json, {}),
         "created_at": row.created_at.isoformat() if row.created_at else "",
     }
+
+
+from modstore_server.customer_service_delivery_api import (
+    _custom_delivery_evidence,
+)
+from modstore_server.customer_service_delivery_api import (  # noqa: F401
+    router as custom_delivery_router,
+)
+
+router.include_router(custom_delivery_router)

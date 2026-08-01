@@ -9,7 +9,6 @@ import os
 import tempfile
 import uuid
 from datetime import datetime, timezone
-from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
@@ -32,7 +31,7 @@ from modstore_server.employee_ai_scaffold import (
     normalize_editor_manifest_for_registry,
 )
 from modstore_server.llm_chat_proxy import chat_dispatch
-from modstore_server.llm_key_resolver import KNOWN_PROVIDERS, resolve_api_key, resolve_base_url
+from modstore_server.llm_key_resolver import resolve_api_key, resolve_base_url
 from modstore_server.mod_employee_impl_scaffold import (
     _fallback_employee_py,
     generate_mod_employee_impls_async,
@@ -70,6 +69,10 @@ from modstore_server.models import (
     WorkflowEdge,
     WorkflowNode,
     get_session_factory,
+)
+from modstore_server.workbench_delivery_bridge import (  # noqa: F401
+    get_workbench_session_snapshot,
+    start_workbench_session_for_user,
 )
 from modstore_server.workbench_research import build_research_context, fetch_web_search_context_pack
 from modstore_server.workbench_script_runner import run_script_agent_job, run_script_job
@@ -2651,8 +2654,6 @@ async def _run_pipeline(sid: str, user_id: int, payload: Dict[str, Any]) -> None
                 is_contract_doc_review_brief,
             )
             from modstore_server.employee_pipeline_routing import classify_employee_pipeline
-            from modstore_server.pdf_extract_runtime import is_pdf_generate
-            from modstore_server.txt_extract_runtime import is_txt_generate
 
             _routing_brief = extract_routing_brief(payload, fallback=brief)
             _emp_brief_lower = (_routing_brief or brief or "").lower()
@@ -4618,7 +4619,6 @@ async def create_workbench_session(
     request: Request,
     user: User = Depends(_get_current_user),
 ):
-    sid = uuid.uuid4().hex[:24]
     raw_files: List[Dict[str, Any]] = []
     content_type = request.headers.get("content-type", "")
     if content_type.lower().startswith("multipart/form-data"):
@@ -4648,28 +4648,7 @@ async def create_workbench_session(
     payload = body.model_dump()
     if raw_files:
         payload["_files"] = raw_files
-    async with _SESSION_LOCK:
-        WORKBENCH_SESSIONS[sid] = {
-            "id": sid,
-            "user_id": user.id,
-            "intent": body.intent,
-            "status": "running",
-            "steps": _default_steps(
-                body.intent,
-                body.execution_mode,
-                employee_target=str(getattr(body, "employee_target", None) or "pack_only"),
-            ),
-            "planning_record": _planning_record(payload),
-            "artifact": None,
-            "error": None,
-            "validate_warnings": None,
-            "sandbox_report": None,
-            "script_result": None,
-        }
-        _persist_workbench_session_unlocked(sid)
-    _task = asyncio.create_task(_run_pipeline(sid, user.id, payload))
-    _task.add_done_callback(_pipeline_task_failsafe(sid))
-    return {"session_id": sid, "status": "running"}
+    return await start_workbench_session_for_user(int(user.id), payload)
 
 
 @router.post("/script-sessions", summary="启动 AI + Python 文件处理任务")
@@ -4729,42 +4708,15 @@ async def get_workbench_session(
     session_id: str,
     user: User = Depends(_get_current_user),
 ):
-    async with _SESSION_LOCK:
-        _hydrate_workbench_session_unlocked(session_id)
-        sess = WORKBENCH_SESSIONS.get(session_id)
-    if not sess:
-        raise HTTPException(404, "会话不存在或已过期")
-    if sess.get("user_id") != user.id:
+    payload = await get_workbench_session_snapshot(session_id, int(user.id))
+    if payload is None:
+        async with _SESSION_LOCK:
+            _hydrate_workbench_session_unlocked(session_id)
+            exists = WORKBENCH_SESSIONS.get(session_id)
+        if not exists:
+            raise HTTPException(404, "会话不存在或已过期")
         raise HTTPException(403, "无权访问此会话")
-    return {
-        "id": sess["id"],
-        "intent": _canonical_workbench_intent(str(sess.get("intent") or "")),
-        "status": sess["status"],
-        "steps": sess["steps"],
-        "artifact": _enrich_artifact_skill_aliases(
-            dict(sess["artifact"]) if isinstance(sess.get("artifact"), dict) else None
-        ),
-        "planning_record": sess.get("planning_record"),
-        "error": sess.get("error"),
-        "validate_warnings": sess.get("validate_warnings"),
-        "script_result": (
-            {
-                "ok": (sess.get("script_result") or {}).get("ok"),
-                "stdout": (sess.get("script_result") or {}).get("stdout", ""),
-                "stderr": (sess.get("script_result") or {}).get("stderr", ""),
-                "outputs": [
-                    {
-                        "filename": o.get("filename"),
-                        "size": o.get("size"),
-                        "download_url": f"/api/workbench/sessions/{session_id}/files/{o.get('filename')}",
-                    }
-                    for o in ((sess.get("script_result") or {}).get("outputs") or [])
-                ],
-            }
-            if sess.get("script_result")
-            else None
-        ),
-    }
+    return payload
 
 
 @router.get("/sessions/{session_id}/files/{filename}", summary="下载脚本执行结果文件")

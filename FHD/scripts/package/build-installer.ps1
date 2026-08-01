@@ -119,6 +119,7 @@ if (Test-Path $backendSkuDir) {
 Push-Location (Join-Path $Root "desktop")
 if (-not (Test-Path "node_modules")) {
   npm install
+  if ($LASTEXITCODE -ne 0) { throw "desktop npm install failed" }
 }
 npm run build
 if ($LASTEXITCODE -ne 0) { throw "desktop npm run build failed" }

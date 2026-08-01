@@ -7,8 +7,20 @@ from typing import Any
 
 def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
     facts = payload.get("facts")
-    if not isinstance(facts, list) or not facts:
+    if not isinstance(facts, list):
         return _failed("facts must be a non-empty list", "missing_facts")
+    if not facts:
+        return {
+            "ok": True,
+            "status": "no_data",
+            "summary": "已只读查询知识文档数据源，当前没有可筛选的已验证事实；未写入知识库。",
+            "accepted_entries": [],
+            "rejected_entries": [],
+            "evidence": ["input.facts", "authoritative_empty_observation"],
+            "read_only": True,
+            "side_effects": [],
+            "no_effect": True,
+        }
 
     accepted: list[dict[str, str]] = []
     rejected: list[dict[str, Any]] = []
