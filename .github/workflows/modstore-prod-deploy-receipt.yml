@@ -96,11 +96,11 @@ jobs:
             echo "workflow_url=$(jq -r '.html_url // ""' <<<"$source_run")"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Checkout exact package source
+      - name: Checkout exact deployed source
         uses: actions/checkout@v4
         with:
-          ref: ${{ steps.source.outputs.package_source_sha }}
-          fetch-depth: 2
+          ref: ${{ steps.source.outputs.merge_sha }}
+          fetch-depth: 0
 
       - name: Record authenticated production receipt
         env:
@@ -187,9 +187,17 @@ jobs:
               for name in changed
               if name.endswith(".xcemp") and "/catalog_data/files/" in name
           }
-          catalog = json.loads((catalog_root / "packages.json").read_text(encoding="utf-8"))
+          catalog = json.loads(
+              subprocess.check_output(
+                  ["git", "show", f"{sha}:{catalog_root / 'packages.json'}"]
+              ).decode("utf-8")
+          )
           packages = [
-              {"id": str(row.get("id") or ""), "version": str(row.get("version") or "")}
+              {
+                  "id": str(row.get("id") or ""),
+                  "version": str(row.get("version") or ""),
+                  "stored_filename": str(row.get("stored_filename") or ""),
+              }
               for row in catalog.get("packages", [])
               if isinstance(row, dict)
               and str(row.get("artifact") or "").lower() == "employee_pack"
@@ -200,6 +208,70 @@ jobs:
           )
           print(f"changed employee packs: {len(packages)}")
           PY
+
+      - name: Publish changed employee packs to public MODstore
+        env:
+          MODSTORE_AUTO_PUBLISH_TOKEN: ${{ secrets.MODSTORE_AUTO_PUBLISH_TOKEN }}
+          MODSTORE_BASE_URL: ${{ vars.MODSTORE_BASE_URL || 'https://xiu-ci.com' }}
+          PACKAGE_SOURCE_SHA: ${{ steps.source.outputs.package_source_sha }}
+          SOURCE_WORKFLOW_ID: ${{ steps.source.outputs.workflow_id }}
+        run: |
+          set -euo pipefail
+          packages="${RUNNER_TEMP}/evolution-packages.json"
+          receipts="${RUNNER_TEMP}/evolution-publication-receipts"
+          test -f "$packages"
+          if [ "$(jq 'length' "$packages")" -eq 0 ]; then
+            echo "No changed employee packs require public publication."
+            exit 0
+          fi
+          test -n "${MODSTORE_AUTO_PUBLISH_TOKEN:-}" || {
+            echo "::error::MODSTORE_AUTO_PUBLISH_TOKEN is required"
+            exit 1
+          }
+          [[ "$PACKAGE_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::exact package source SHA is required"
+            exit 1
+          }
+          [[ "$SOURCE_WORKFLOW_ID" =~ ^[1-9][0-9]*$ ]] || {
+            echo "::error::exact source deployment workflow id is required"
+            exit 1
+          }
+          mkdir -p "$receipts"
+          source_archives="${RUNNER_TEMP}/evolution-source-archives"
+          mkdir -p "$source_archives"
+          while IFS= read -r package; do
+            package_id="$(jq -r '.id // ""' <<<"$package")"
+            version="$(jq -r '.version // ""' <<<"$package")"
+            stored_filename="$(jq -r '.stored_filename // ""' <<<"$package")"
+            test -n "$package_id" && test -n "$version" && test -n "$stored_filename"
+            [ "$stored_filename" = "$(basename "$stored_filename")" ] || {
+              echo "::error::unsafe stored filename"
+              exit 1
+            }
+            archive="成都修茈科技有限公司/MODstore_deploy/modstore_server/catalog_data/files/${stored_filename}"
+            test -f "$archive"
+            source_archive="${source_archives}/${stored_filename}"
+            git show "${PACKAGE_SOURCE_SHA}:${archive}" > "$source_archive"
+            cmp --silent "$source_archive" "$archive" || {
+              echo "::error::deployed employee pack differs from exact package source SHA"
+              exit 1
+            }
+            python FHD/scripts/dev/publish_modstore.py "$source_archive" \
+              --base-url "$MODSTORE_BASE_URL" \
+              --token "$MODSTORE_AUTO_PUBLISH_TOKEN" \
+              --source-repository "$GITHUB_REPOSITORY" \
+              --source-sha "$PACKAGE_SOURCE_SHA" \
+              --workflow-run-id "$SOURCE_WORKFLOW_ID" \
+              --receipt "${receipts}/${package_id}-${version}.receipt.json"
+          done < <(jq -c '.[]' "$packages")
+
+      - name: Upload public evolution publication receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: modstore-evolution-publication-receipts
+          path: ${{ runner.temp }}/evolution-publication-receipts/*.receipt.json
+          if-no-files-found: ignore
 
       - name: Record production MODstore evolution receipts
         env:
