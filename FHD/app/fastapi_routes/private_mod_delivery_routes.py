@@ -71,9 +71,7 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
                 token, "/api/customer-service/custom-deliveries"
             )
             custom_requests = [
-                dict(row)
-                for row in (request_rows.get("items") or [])
-                if isinstance(row, dict)
+                dict(row) for row in (request_rows.get("items") or []) if isinstance(row, dict)
             ]
         except RECOVERABLE_ERRORS as exc:
             request_error = str(exc)[:240]
@@ -103,12 +101,16 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
         projects.append(
             {
                 "mod_id": mod_id,
-                "name": _safe_text(row.get("name") or (delivery or {}).get("customer_brand") or mod_id),
+                "name": _safe_text(
+                    row.get("name") or (delivery or {}).get("customer_brand") or mod_id
+                ),
                 "description": _safe_text(row.get("description") or (delivery or {}).get("notes")),
                 "installed": bool(row),
                 "current_version": local_version,
                 "latest_version": latest_version,
-                "update_available": bool(latest_version and is_newer_version(latest_version, local_version)),
+                "update_available": bool(
+                    latest_version and is_newer_version(latest_version, local_version)
+                ),
                 "update_source": "private_mod_sync" if remote else "unavailable",
                 "business_modules": modules,
                 "ai_employees": employees,
@@ -181,7 +183,9 @@ async def mod_store_create_private_delivery_request(request: Request) -> ModStor
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except (ConnectionError, RuntimeError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return ModStoreSimpleResponse(success=True, message="定制需求已受理，生产员工已开始制作", data=data)
+    return ModStoreSimpleResponse(
+        success=True, message="定制需求已受理，生产员工已开始制作", data=data
+    )
 
 
 @router.post(
@@ -213,7 +217,9 @@ async def mod_store_decide_private_delivery_request(
         )
     except (ConnectionError, RuntimeError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    message = "已确认验收，可安装交付" if action == "accept" else "已转返工，生产员工已开始新一轮制作"
+    message = (
+        "已确认验收，可安装交付" if action == "accept" else "已转返工，生产员工已开始新一轮制作"
+    )
     return ModStoreSimpleResponse(success=True, message=message, data=data)
 
 

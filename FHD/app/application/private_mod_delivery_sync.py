@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.services.private_mod_delivery import account_scope, apply_account_state
+from app.application.private_mod_delivery_app import account_scope, apply_account_state
 from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)

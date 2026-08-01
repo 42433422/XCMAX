@@ -1100,7 +1100,6 @@ async def admin_list_user_mods(request: Request, user_id: int):
     return await _market_admin_proxy(request, "GET", f"/api/admin/users/{user_id}/mods")
 
 
-
 @router.post("/admin/market/users/{user_id}/mods/{mod_id}", response_model=None)
 async def admin_bind_user_mod(request: Request, user_id: int, mod_id: str):
     from app.application.session_account_meta import audit_admin_action

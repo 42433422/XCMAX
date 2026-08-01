@@ -840,8 +840,12 @@ def _apply_account_entitlements(item: dict[str, Any]) -> None:
             "apply_account_entitlements failed user=%s id=%s: %s", username, entity_id, exc
         )
 
-from app.services.private_mod_delivery_sync import apply_private_mod_delivery
+
+from app.application.private_mod_delivery_sync import apply_private_mod_delivery
+
 register_entity_applier("private_mod_delivery")(apply_private_mod_delivery)
+
+
 def apply_inbox(limit: int = 200) -> dict[str, Any]:
     """幂等地把 inbox 中 pending 的变更应用到本地。"""
     import sqlite3

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 import uuid
@@ -43,10 +42,7 @@ def _prune_circle_posts_if_needed(db, *, keep: int = _DESKTOP_CIRCLE_MAX_ROWS) -
         return
     old_ids = [
         int(r[0])
-        for r in db.query(AiCirclePost.id)
-        .order_by(AiCirclePost.id.asc())
-        .limit(overflow)
-        .all()
+        for r in db.query(AiCirclePost.id).order_by(AiCirclePost.id.asc()).limit(overflow).all()
     ]
     if not old_ids:
         return

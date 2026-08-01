@@ -43,9 +43,9 @@ async def admin_get_user_private_delivery(request: Request, user_id: int):
     if isinstance(upstream, JSONResponse):
         return upstream
     raw_data = upstream.get("data") if isinstance(upstream, dict) else {}
-    raw_mod_ids = (
-        upstream.get("mod_ids") if isinstance(upstream, dict) else None
-    ) or (raw_data.get("mod_ids") if isinstance(raw_data, dict) else None)
+    raw_mod_ids = (upstream.get("mod_ids") if isinstance(upstream, dict) else None) or (
+        raw_data.get("mod_ids") if isinstance(raw_data, dict) else None
+    )
     entitled_mod_ids = _clean_string_list(raw_mod_ids)
     # 口径：管理端只看「定制清单」（customer_delivery.legacy_mod_id），行业包不算交付项目
     custom_deliveries: dict[str, dict[str, Any]] = {}

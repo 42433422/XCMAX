@@ -1106,9 +1106,7 @@ class TestPrivateDeliveryRequests:
         assert remote.await_args.args[:2] == ("jwt", "/api/customer-service/custom-deliveries")
         assert remote.await_args.kwargs["payload"]["kind"] == "bundle"
 
-    def test_install_request_requires_market_login(
-        self, client: TestClient, monkeypatch
-    ) -> None:
+    def test_install_request_requires_market_login(self, client: TestClient, monkeypatch) -> None:
         monkeypatch.setattr(ms, "_private_delivery_market_token", AsyncMock(return_value=""))
 
         response = client.post(

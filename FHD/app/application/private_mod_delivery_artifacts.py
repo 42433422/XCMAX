@@ -193,6 +193,7 @@ async def install_custom_delivery_artifact(
         except OSError:
             pass
 
+
 __all__ = [
     "custom_delivery_remote_json",
     "fetch_private_mod_library",
@@ -278,7 +279,9 @@ async def update_private_mod_from_library(
         from app.infrastructure.mods.package import ModPackage
 
         with tempfile.TemporaryDirectory(prefix="xcagi-private-mod-check-") as check_dir:
-            _, manifest = ModPackage.extract_package(str(tmp_path), check_dir, verify_signature=False)
+            _, manifest = ModPackage.extract_package(
+                str(tmp_path), check_dir, verify_signature=False
+            )
         manifest_id = str(manifest.get("id") or "").strip()
         manifest_version = str(manifest.get("version") or "").strip()
         if manifest_id != mid:
