@@ -12,7 +12,7 @@ DEST_DIR="${E2E_AGENT_DEST_DIR:-/Users/a4243342/XCMAX-runtime/para-main-agent}"
 
 node --test "$ROOT/report_only_target_branch.test.mjs"
 
-for name in e2e-agent.mjs trae_failover.mjs; do
+for name in e2e-agent.mjs trae_failover.mjs e2e_agent_runtime_policy.mjs; do
   src="$ROOT/$name"
   dest="$DEST_DIR/$name"
   if [[ ! -f "$src" ]]; then
