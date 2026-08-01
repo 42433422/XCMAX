@@ -23,6 +23,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, Optional
 
+from apscheduler.triggers.interval import IntervalTrigger
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_RUNTIME_DIR = str(Path.home() / ".xcmax" / "modstore-daily")
@@ -530,6 +532,43 @@ def require_successful_storage_self_heal(result: Dict[str, Any]) -> Dict[str, An
     return result
 
 
+def register_storage_pressure_job(
+    scheduler: Any,
+    *,
+    track_job: Callable[[str, Callable[[], Dict[str, Any]]], Dict[str, Any]],
+    startup_probe: Callable[[str, Callable[[], Any]], bool],
+    misfire_grace_time: int,
+) -> None:
+    """Register the recurring guard without growing the legacy scheduler module."""
+
+    def _job() -> Dict[str, Any]:
+        result = track_job(
+            "storage_pressure_self_heal",
+            lambda: require_successful_storage_self_heal(run_storage_pressure_self_heal()),
+        )
+        logger.info(
+            "storage pressure guard: status=%s action=%s before_free=%s after_free=%s",
+            result.get("status"),
+            bool(result.get("action_taken")),
+            int((result.get("before") or {}).get("free_bytes") or 0),
+            int((result.get("after") or {}).get("free_bytes") or 0),
+        )
+        return result
+
+    scheduler.add_job(
+        _job,
+        IntervalTrigger(
+            minutes=_bounded_env_int("MODSTORE_STORAGE_SELF_HEAL_INTERVAL_MINUTES", 15, 1, 1440)
+        ),
+        id="storage_pressure_self_heal",
+        replace_existing=True,
+        misfire_grace_time=max(60, int(misfire_grace_time)),
+        coalesce=True,
+        max_instances=1,
+    )
+    startup_probe("storage_pressure_self_heal", _job)
+
+
 def get_storage_pressure_status(*, limit: int = 20) -> Dict[str, Any]:
     rows = _read_audit(limit=max(1, min(int(limit), 200)))
     latest = rows[-1] if rows else None
@@ -548,6 +587,7 @@ __all__ = [
     "get_storage_pressure_status",
     "pressure_reasons",
     "pressure_thresholds",
+    "register_storage_pressure_job",
     "recovery_verified",
     "require_successful_storage_self_heal",
     "run_storage_pressure_self_heal",

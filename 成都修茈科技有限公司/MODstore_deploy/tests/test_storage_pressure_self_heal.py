@@ -256,3 +256,40 @@ def test_operator_veto_blocks_cleanup_and_is_audited(monkeypatch: pytest.MonkeyP
 def test_unresolved_result_fails_scheduler_contract() -> None:
     with pytest.raises(RuntimeError, match="storage_self_heal_unresolved:pressure_persists"):
         self_heal.require_successful_storage_self_heal({"ok": False, "status": "pressure_persists"})
+
+
+def test_scheduler_registration_tracks_startup_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    registered: list[dict] = []
+    tracked: list[str] = []
+    probed: list[str] = []
+
+    class _Scheduler:
+        def add_job(self, fn, trigger, **kwargs):
+            registered.append({"fn": fn, "trigger": trigger, **kwargs})
+
+    monkeypatch.setattr(
+        self_heal,
+        "run_storage_pressure_self_heal",
+        lambda: {"ok": True, "status": "healthy_no_action", "action_taken": False},
+    )
+
+    def _track(job_id, fn):
+        tracked.append(job_id)
+        return fn()
+
+    def _probe(name, fn):
+        probed.append(name)
+        fn()
+        return True
+
+    self_heal.register_storage_pressure_job(
+        _Scheduler(),
+        track_job=_track,
+        startup_probe=_probe,
+        misfire_grace_time=3600,
+    )
+
+    assert registered[0]["id"] == "storage_pressure_self_heal"
+    assert registered[0]["max_instances"] == 1
+    assert tracked == ["storage_pressure_self_heal"]
+    assert probed == ["storage_pressure_self_heal"]
