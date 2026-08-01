@@ -106,12 +106,7 @@ def build_founder_autonomy_snapshot(
         for row in all_rows
         if not str(_as_dict(row).get("run_id") or "").strip()
         or str(_as_dict(row).get("run_id") or "").strip() in autonomous_run_ids
-        # A signed production callback with catalog, public-market, runtime,
-        # installability and council readback is self-authenticating evidence
-        # of the publish milestone. It must survive even when the package has
-        # no source-commit provenance and therefore emitted no start event.
-        # This exception is deliberately narrow: it does not make the receipt
-        # prove autonomous code generation, review or QA.
+        # A strong publish receipt proves only the independently attested MODstore milestone.
         or _is_strong_modstore_deployment(row)
     ]
 
