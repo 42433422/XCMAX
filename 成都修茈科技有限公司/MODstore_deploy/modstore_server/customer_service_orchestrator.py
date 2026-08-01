@@ -16,6 +16,7 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
 
+from modstore_server import custom_delivery_incident_policy as delivery_policy
 from modstore_server.customer_service_tools import (
     audit,
     build_action,
@@ -25,7 +26,6 @@ from modstore_server.customer_service_tools import (
     json_dumps,
     json_loads,
 )
-from modstore_server import custom_delivery_incident_policy as delivery_policy
 from modstore_server.models import User
 from modstore_server.models_cs import (
     CustomerServiceDecision,

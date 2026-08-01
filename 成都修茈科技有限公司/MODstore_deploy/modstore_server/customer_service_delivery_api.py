@@ -57,14 +57,17 @@ class CustomDeliveryInstallReceiptBody(BaseModel):
     receipt_token: str = Field(..., min_length=16, max_length=128)
 
 
-
 def _custom_delivery_evidence(ticket: CustomerServiceTicket) -> dict[str, Any]:
     evidence = json_loads(ticket.evidence_json, {})
     return evidence if isinstance(evidence, dict) else {}
 
 
 def _custom_delivery_brief(evidence: dict[str, Any], rework_note: str = "") -> str:
-    kind_labels = {"module": "定制业务模块", "employee": "定制 AI 员工", "bundle": "定制 Mod + AI 员工"}
+    kind_labels = {
+        "module": "定制业务模块",
+        "employee": "定制 AI 员工",
+        "bundle": "定制 Mod + AI 员工",
+    }
     parts = [
         f"交付类型：{kind_labels.get(str(evidence.get('kind') or ''), '客户定制')}",
         f"需求名称：{str(evidence.get('title') or '').strip()}",
@@ -123,7 +126,9 @@ def _custom_delivery_gate(snapshot: dict[str, Any]) -> tuple[bool, str]:
         if validation.get("ok") is not True:
             return False, "Mod 沙箱或员工可用性门未通过"
         return True, "Mod 产物和质量门已通过"
-    quality = snapshot.get("quality_report") if isinstance(snapshot.get("quality_report"), dict) else {}
+    quality = (
+        snapshot.get("quality_report") if isinstance(snapshot.get("quality_report"), dict) else {}
+    )
     if not artifact.get("pack_id"):
         return False, "AI 员工生产完成但缺少员工包 ID"
     if quality.get("critical_failed") is True or quality.get("runnable") is not True:
@@ -140,7 +145,9 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
     latest_snapshot: dict[str, Any] = {}
     for row in run_rows:
         sid = str(row.get("session_id") or "")
-        snapshot = await get_workbench_session_snapshot(sid, int(ticket.user_id or 0)) if sid else None
+        snapshot = (
+            await get_workbench_session_snapshot(sid, int(ticket.user_id or 0)) if sid else None
+        )
         item = dict(row)
         if snapshot:
             item["status"] = str(snapshot.get("status") or item.get("status") or "")
@@ -165,7 +172,9 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
         stage, label = "rework", "生产失败，待返工"
     elif str(latest_snapshot.get("status") or "") == "done":
         gate_ok, _ = _custom_delivery_gate(latest_snapshot)
-        stage, label = ("acceptance", "质量门通过，待您验收") if gate_ok else ("rework", "质量门未通过")
+        stage, label = (
+            ("acceptance", "质量门通过，待您验收") if gate_ok else ("rework", "质量门未通过")
+        )
     else:
         stage, label = "production", "生产员工制作中"
 
@@ -175,7 +184,9 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
         else (False, str(evidence.get("start_error") or ""))
     )
     artifacts: list[dict[str, str]] = []
-    artifact = latest_snapshot.get("artifact") if isinstance(latest_snapshot.get("artifact"), dict) else {}
+    artifact = (
+        latest_snapshot.get("artifact") if isinstance(latest_snapshot.get("artifact"), dict) else {}
+    )
     if artifact.get("mod_id"):
         artifacts.append({"kind": "module", "id": str(artifact["mod_id"])})
     if artifact.get("pack_id"):
@@ -236,7 +247,11 @@ async def create_custom_delivery(
         ),
         title=body.title.strip(),
         intent="custom_delivery",
-        subject_type={"module": "custom_module", "employee": "custom_employee", "bundle": "custom_bundle"}[body.kind],
+        subject_type={
+            "module": "custom_module",
+            "employee": "custom_employee",
+            "bundle": "custom_bundle",
+        }[body.kind],
         status="processing",
         priority="normal",
         evidence_json=json_dumps(evidence),
@@ -273,9 +288,7 @@ async def create_custom_delivery(
     db.commit()
 
     try:
-        run = await _start_custom_delivery_run(
-            user_id=int(user.id), evidence=evidence, attempt=1
-        )
+        run = await _start_custom_delivery_run(user_id=int(user.id), evidence=evidence, attempt=1)
         evidence["runs"] = [run]
     except Exception as exc:
         logger.exception("custom delivery production start failed ticket=%s", ticket.ticket_no)
@@ -315,7 +328,11 @@ async def list_custom_deliveries(
     q = db.query(CustomerServiceTicket).filter(CustomerServiceTicket.intent == "custom_delivery")
     if not user.is_admin:
         q = q.filter(CustomerServiceTicket.user_id == user.id)
-    rows = q.order_by(CustomerServiceTicket.updated_at.desc(), CustomerServiceTicket.id.desc()).limit(limit).all()
+    rows = (
+        q.order_by(CustomerServiceTicket.updated_at.desc(), CustomerServiceTicket.id.desc())
+        .limit(limit)
+        .all()
+    )
     return {"items": [await _custom_delivery_payload(row) for row in rows]}
 
 
@@ -388,7 +405,6 @@ async def download_custom_delivery_artifact(
     artifact_id = str(target.get("id") or "").strip()
     if artifact_kind == "module":
         from modman.store import build_mod_zip_bytes
-
         from modstore_server.mod_scaffold_runner import modstore_library_path
 
         artifact_path = modstore_library_path() / artifact_id
@@ -409,9 +425,7 @@ async def download_custom_delivery_artifact(
         if not manifest_path.is_file():
             raise HTTPException(404, "AI 员工产物已不在生产库")
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        raw = build_employee_pack_zip_for_library(
-            artifact_id, manifest, pack_dir=artifact_path
-        )
+        raw = build_employee_pack_zip_for_library(artifact_id, manifest, pack_dir=artifact_path)
         stream = BytesIO(raw)
         filename = f"{artifact_id}.xcemp"
     else:
@@ -457,8 +471,7 @@ async def record_custom_delivery_install(
     payload = await _custom_delivery_payload(ticket)
     artifacts = payload.get("custom_delivery", {}).get("artifacts", [])
     if not any(
-        r.get("kind") == body.artifact_kind and r.get("id") == body.artifact_id
-        for r in artifacts
+        r.get("kind") == body.artifact_kind and r.get("id") == body.artifact_id for r in artifacts
     ):
         raise HTTPException(409, "安装回执与本工单产物不匹配")
     grants = [r for r in evidence.get("download_grants", []) if isinstance(r, dict)]
@@ -479,7 +492,9 @@ async def record_custom_delivery_install(
     grant["used_at"] = datetime.now(timezone.utc).isoformat()
     evidence["download_grants"] = grants
     receipts = [r for r in evidence.get("install_receipts", []) if isinstance(r, dict)]
-    if not any(r.get("kind") == body.artifact_kind and r.get("id") == body.artifact_id for r in receipts):
+    if not any(
+        r.get("kind") == body.artifact_kind and r.get("id") == body.artifact_id for r in receipts
+    ):
         receipts.append(
             {
                 "kind": body.artifact_kind,

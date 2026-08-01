@@ -7,7 +7,10 @@ from typing import Any
 
 
 def is_delivery_managed(intent: str, evidence: dict[str, Any]) -> bool:
-    return intent == "custom_delivery" or str(evidence.get("delivery_managed_by") or "") == "custom_delivery"
+    return (
+        intent == "custom_delivery"
+        or str(evidence.get("delivery_managed_by") or "") == "custom_delivery"
+    )
 
 
 def success_reply(subject: str, progress: str, delivery_managed: bool) -> str:
