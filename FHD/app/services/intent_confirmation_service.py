@@ -3,10 +3,10 @@
 
 当识别到意图但缺失必要槽位时，自动追问用户补充
 
-进化状态闭环（2026-07-20）：
-  - intent == "unk"（未命中）时，记录为「能力提案」capability_proposal.jsonl
-  - 每周由 capability-proposal-to-issue.yml workflow 读取，创建 GitHub issue 并打
-    `ai-implement` 标签 → 触发 ai-issue-implement workflow 实现自主进化
+进化状态闭环：
+  - 仅当开放世界路由明确返回 ``skill_proposal`` 时记录能力缺口
+  - 已注册技能的 ``skill_candidate`` 只补齐槽位，不得误报为新能力
+  - 提案进入受控 issue 队列，经过治理门禁后才允许实现
 """
 
 import logging
@@ -233,27 +233,15 @@ class IntentConfirmationService(NeuroEventPublisherMixin):
             except Exception:  # noqa: BLE001
                 logger.debug("skill_route enrich failed", exc_info=True)
 
-            # 进化状态闭环：未命中意图 → 能力提案 → GitHub issue → ai-implement
-            try:
-                record_capability_proposal(
-                    raw_input=raw_input,
-                    reason="intent_unknown",
-                    context={
-                        "intent_result": {
-                            k: v
-                            for k, v in intent_result.items()
-                            if k in ("primary_intent", "tool_key", "deepseek_intent", "slots")
-                        },
-                        "skill_route": skill_route,
-                    },
-                )
-            except Exception:  # noqa: BLE001
-                logger.debug("capability_proposal record failed", exc_info=True)
-
             # 有高分技能候选时，引导补槽而非纯「未理解」
             if skill_route and skill_route.get("status") == "skill_candidate":
                 skill = skill_route.get("skill") or {}
-                required = list(skill.get("required_slots") or [])
+                required = [
+                    str(slot)
+                    for slot in (skill.get("required_slots") or [])
+                    if not slots.get(str(slot))
+                    or (isinstance(slots.get(str(slot)), str) and not slots[str(slot)].strip())
+                ]
                 title = str(skill.get("title") or skill.get("skill_id") or "该操作")
                 if required:
                     return {
@@ -287,6 +275,34 @@ class IntentConfirmationService(NeuroEventPublisherMixin):
             question = "抱歉，我没有理解您的意思。请告诉我您想做什么？"
             if skill_route and skill_route.get("status") == "skill_proposal":
                 proposal = skill_route.get("proposal") or {}
+                # 只有技能路由器确认的开放世界缺口才进入进化队列。槽位仅记录字段名，
+                # 避免联系人、电话等业务值进入后续远端 issue。
+                slot_names = sorted(str(key) for key in slots if str(key).strip())
+                try:
+                    record_capability_proposal(
+                        raw_input=raw_input,
+                        reason="skill_proposal",
+                        context={
+                            "intent_result": {
+                                "primary_intent": intent_result.get("primary_intent"),
+                                "tool_key": intent_result.get("tool_key"),
+                                "deepseek_intent": intent_result.get("deepseek_intent"),
+                                "slot_names": slot_names,
+                            },
+                            "skill_proposal": {
+                                key: proposal.get(key)
+                                for key in (
+                                    "proposed_skill_id",
+                                    "title",
+                                    "candidate_slots",
+                                    "rationale",
+                                    "status",
+                                )
+                            },
+                        },
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.debug("capability_proposal record failed", exc_info=True)
                 pid = str(proposal.get("proposed_skill_id") or "open")
                 question = (
                     f"这个需求还不在已注册技能里；我已记录为开放技能提案「{pid}」。"

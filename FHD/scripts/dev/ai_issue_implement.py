@@ -57,7 +57,7 @@ REPORT_DIR = FHD_ROOT / "test_reports"
 DEFAULT_ALLOWLIST_PATH = REPO_ROOT / "config" / "auto-implement-allowlist.yaml"
 MAX_CHANGED_FILES = 5  # 决策矩阵硬阈值
 BRANCH_PREFIX = "ai-impl"
-CONFIRM_KEYWORDS = ("确认", "confirm", "approved", "approve", "+1", "OK", "go")
+APPROVAL_COMMANDS = {"确认实现", "/approve-implementation"}
 SAFE_SOURCE_SUFFIXES = {".py", ".ts", ".vue", ".js", ".json", ".md", ".yml", ".yaml", ".sh"}
 MAX_GENERATED_FILE_BYTES = 200_000
 
@@ -233,38 +233,33 @@ def _allowlist_preauthorized(
 def _owner_confirmed(
     issue: dict[str, Any], comments: list[dict[str, Any]], repo: str
 ) -> tuple[bool, str]:
-    """决策矩阵要求：owner 评论「确认」才执行。
+    """Require an exact repository-owner approval command in a comment.
 
-    判定：
-      - issue author 视为 owner
-      - author 自己在评论中写「确认」/「confirm」/「approved」/「+1」/「OK」/「go」
-      - 不区分大小写
+    Issue bodies are untrusted implementation inputs and must never authorize
+    themselves.  Likewise, the issue author may be a bot and is not equivalent
+    to the repository owner.  GitHub's durable ``author_association=OWNER``
+    assertion plus an exact command is the authorization boundary.
     """
-    author = (issue.get("user") or {}).get("login") or ""
-    if not author:
-        return False, "issue.author 未解析到"
     for c in comments:
-        cauthor = (c.get("user") or {}).get("login") or ""
-        if cauthor != author:
+        if str(c.get("author_association") or "").strip().upper() != "OWNER":
             continue
         body = str(c.get("body") or "").strip().lower()
-        if any(kw.lower() in body for kw in CONFIRM_KEYWORDS):
-            return True, f"owner @{author} 已在评论中确认"
-    # issue 本身 body 含确认也算
-    body = str(issue.get("body") or "").strip().lower()
-    if any(kw in body for kw in CONFIRM_KEYWORDS):
-        return True, f"owner @{author} 在 issue body 中确认"
-    return False, f"owner @{author} 未在评论中确认（关键词：{CONFIRM_KEYWORDS}）"
+        if body not in {command.casefold() for command in APPROVAL_COMMANDS}:
+            continue
+        author = str((c.get("user") or {}).get("login") or "owner")
+        return True, f"repository owner @{author} issued exact approval command"
+    commands = ", ".join(sorted(APPROVAL_COMMANDS))
+    return False, f"repository owner 未提交精确批准命令（{commands}）"
 
 
 def _is_authorized(
     issue: dict[str, Any], comments: list[dict[str, Any]], repo: str
 ) -> tuple[bool, str, str]:
-    """授权：域预授权 allowlist 命中，或 owner 评论确认。
+    """授权：域预授权 allowlist 命中，或 repository owner 精确命令确认。
 
     返回 (authorized, reason, source)，source ∈ {"allowlist", "owner", ""}：
       - allowlist: 命中 config/auto-implement-allowlist.yaml:label_patterns，授权执行
-      - owner:     owner 评论「确认」，授权执行
+      - owner:     repository owner 精确评论命令，授权执行
 
     授权来源不决定代码风险；LLM 代码统一进入 risk:r2 独立审查。
     """
@@ -687,7 +682,8 @@ def run(args: argparse.Namespace) -> ImplementResult:
                 "body": (
                     "🤖 `ai-issue-implement` 已收到 `ai-implement` 标签。\n\n"
                     "未命中域预授权 allowlist（见 `config/auto-implement-allowlist.yaml`）。\n"
-                    "等待 owner 在本 issue 评论「确认」/「confirm」/「approved」后开始执行。\n\n"
+                    "等待 repository owner 在本 issue 单独评论 `确认实现` 或 "
+                    "`/approve-implementation` 后开始执行。\n\n"
                     "约束：预估变更 >5 文件时将自动拒做。"
                 )
             },
