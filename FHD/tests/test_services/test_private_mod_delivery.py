@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.services import private_mod_delivery as delivery
+from app.application import private_mod_delivery_app as delivery
 
 
 def _use_temp_state(monkeypatch, tmp_path):
@@ -131,7 +131,9 @@ def test_private_mod_rework_note_surfaces_on_attached_node(monkeypatch, tmp_path
     )
     assert attached["modules"][0]["status"] == "rework"
     assert attached["modules"][0]["timeline"][-1]["note"].startswith("[客服工单")
-    assert "rework" in attached["modules"][0]["next_stages"] or attached["modules"][0]["next_stages"] == ["testing"]
+    assert "rework" in attached["modules"][0]["next_stages"] or attached["modules"][0][
+        "next_stages"
+    ] == ["testing"]
 
 
 def test_private_mod_stage_transition_rejects_skip(monkeypatch, tmp_path):
@@ -149,7 +151,6 @@ def test_private_mod_stage_transition_rejects_skip(monkeypatch, tmp_path):
         assert "不可从" in str(exc)
 
 
-
 def test_private_mod_state_is_account_scoped(monkeypatch, tmp_path):
     _use_temp_state(monkeypatch, tmp_path)
 
@@ -157,7 +158,10 @@ def test_private_mod_state_is_account_scoped(monkeypatch, tmp_path):
     other_account = delivery.project_state("market:8", "customer-mod")
 
     assert other_account["tracks"]["modules"]["status"] == "production"
-    assert delivery.project_state("market:7", "customer-mod")["tracks"]["modules"]["status"] == "testing"
+    assert (
+        delivery.project_state("market:7", "customer-mod")["tracks"]["modules"]["status"]
+        == "testing"
+    )
 
 
 def test_private_mod_delivery_snapshot_round_trips_for_management_view(monkeypatch, tmp_path):

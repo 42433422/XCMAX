@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.services.private_mod_delivery_state import (
+from app.application.private_mod_delivery_state import (
     _STATE_LOCK,
     HAPPY_PATH,
     STAGE_LABELS,
@@ -171,9 +171,7 @@ def attach_track_nodes(
                     "status_label": stage_label(track, status),
                     "goal": stage_goal(status),
                     "next_stages": next_stages,
-                    "next_stage_labels": {
-                        s: stage_label(track, s) for s in next_stages
-                    },
+                    "next_stage_labels": {s: stage_label(track, s) for s in next_stages},
                     "happy_path": list(HAPPY_PATH),
                     "timeline": timeline,
                     "updated_at": str(state.get("updated_at") or ""),

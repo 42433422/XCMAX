@@ -90,6 +90,7 @@ def load_stage_flow_from_ssot() -> dict[str, Any]:
         for key, vals in STAGE_TRANSITIONS.items()
     }
 
+
 _STATE_LOCK = RLock()
 
 
@@ -181,7 +182,9 @@ def merge_orphan_local_delivery_into_market(
                 scope["projects"][mid] = json.loads(json.dumps(incoming, ensure_ascii=False))
                 changed = True
             else:
-                src_tracks = incoming.get("tracks") if isinstance(incoming.get("tracks"), dict) else {}
+                src_tracks = (
+                    incoming.get("tracks") if isinstance(incoming.get("tracks"), dict) else {}
+                )
                 dst_tracks = existing.setdefault("tracks", {})
                 if not isinstance(dst_tracks, dict):
                     existing["tracks"] = {}
@@ -193,7 +196,9 @@ def merge_orphan_local_delivery_into_market(
                     if track_id not in TRACKS or not isinstance(src_row, dict):
                         continue
                     dst_row = dst_tracks.setdefault(track_id, _default_track())
-                    src_nodes = src_row.get("nodes") if isinstance(src_row.get("nodes"), dict) else {}
+                    src_nodes = (
+                        src_row.get("nodes") if isinstance(src_row.get("nodes"), dict) else {}
+                    )
                     dst_nodes = dst_row.setdefault("nodes", {})
                     if not isinstance(dst_nodes, dict):
                         dst_row["nodes"] = {}
@@ -202,7 +207,11 @@ def merge_orphan_local_delivery_into_market(
                         node_id = str(nid or "").strip()
                         if not node_id or not isinstance(nrow, dict):
                             continue
-                        cur = dst_nodes.get(node_id) if isinstance(dst_nodes.get(node_id), dict) else None
+                        cur = (
+                            dst_nodes.get(node_id)
+                            if isinstance(dst_nodes.get(node_id), dict)
+                            else None
+                        )
                         if cur is None or str(cur.get("status") or "production") == "production":
                             dst_nodes[node_id] = json.loads(json.dumps(nrow, ensure_ascii=False))
                             changed = True
@@ -238,7 +247,11 @@ def _rollup_track_status(track_row: dict[str, Any]) -> str:
     nodes = track_row.get("nodes") if isinstance(track_row.get("nodes"), dict) else {}
     if not nodes:
         return str(track_row.get("status") or "production")
-    statuses = [str((row or {}).get("status") or "production") for row in nodes.values() if isinstance(row, dict)]
+    statuses = [
+        str((row or {}).get("status") or "production")
+        for row in nodes.values()
+        if isinstance(row, dict)
+    ]
     if not statuses:
         return str(track_row.get("status") or "production")
     if all(s == "delivered" for s in statuses):
@@ -332,11 +345,7 @@ def account_projects(
     names: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """读取某个账号的私有 Mod 项目状态，不为只读查询写入默认项目。"""
-    targets = {
-        str(mod_id or "").strip()
-        for mod_id in (mod_ids or [])
-        if str(mod_id or "").strip()
-    }
+    targets = {str(mod_id or "").strip() for mod_id in (mod_ids or []) if str(mod_id or "").strip()}
     with _STATE_LOCK:
         state = _read_state()
         scope = state.get("accounts", {}).get(scope_key, {})

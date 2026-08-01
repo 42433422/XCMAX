@@ -22,11 +22,15 @@ from app.application.mod_store_catalog_app import (
     normalize_package_zip_path,
     sync_modstore_library_to_local,
 )
-from app.fastapi_routes.private_mod_delivery_context import _private_delivery_market_token  # noqa: F401
+from app.fastapi_routes.private_mod_delivery_context import (
+    _private_delivery_market_token,  # noqa: F401
+)
 from app.shell.mods_catalog import list_mod_items
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["mod-store"])
+
 
 class ModStoreCatalogPayload(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -461,7 +465,6 @@ async def mod_store_catalog() -> ModStoreCatalogResponse:
     return ModStoreCatalogResponse(
         data=ModStoreCatalogPayload(installed=installed, available=rows, indexed_count=len(rows))
     )
-
 
 
 @router.get("/market-catalog", response_model=ModStoreMarketCatalogResponse)
@@ -1017,4 +1020,8 @@ async def mod_store_sync_modstore_library(request: Request) -> ModStoreSimpleRes
         raise HTTPException(status_code=400, detail=str(e)) from e
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
-router.include_router(__import__("app.fastapi_routes.private_mod_delivery_routes", fromlist=["router"]).router)
+
+
+router.include_router(
+    __import__("app.fastapi_routes.private_mod_delivery_routes", fromlist=["router"]).router
+)

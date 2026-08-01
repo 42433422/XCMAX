@@ -74,7 +74,10 @@ def load_session_private_delivery_binding(session_id: str) -> dict[str, Any]:
     if market_user_id is None:
         market_user_id = entitlements._cached_market_user_id
     if not username:
-        username = entitlements._cached_market_username or entitlements._session_username_for_entitlements(sid)
+        username = (
+            entitlements._cached_market_username
+            or entitlements._session_username_for_entitlements(sid)
+        )
     return {
         "mod_ids": mod_ids,
         "market_user_id": market_user_id,

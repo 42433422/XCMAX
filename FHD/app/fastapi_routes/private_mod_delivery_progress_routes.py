@@ -129,7 +129,8 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
         }
     return ModStoreSimpleResponse(
         success=True,
-        message="交付状态已更新" + (f"；已开客服工单 {data['rework_ticket']['ticket_no']}" if rework_ticket else ""),
+        message="交付状态已更新"
+        + (f"；已开客服工单 {data['rework_ticket']['ticket_no']}" if rework_ticket else ""),
         data=data,
     )
 

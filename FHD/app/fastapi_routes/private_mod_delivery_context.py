@@ -89,6 +89,7 @@ def _enterprise_delivery_scope(context: dict[str, Any], mod_ids: set[str] | None
 
 def _schedule_delivery_outbox_push() -> None:
     """企业端 best-effort 后台推送同步 outbox（失败只记日志，不阻塞交付主流程）。"""
+
     def _push() -> None:
         try:
             from app.application.xcmax_sync_app import push_outbox

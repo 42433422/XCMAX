@@ -358,7 +358,6 @@ def restore_entitlements_from_session_row(session_id: str) -> bool:
         return False
 
 
-
 def _session_username_for_entitlements(session_id: str) -> str:
     sid = (session_id or "").strip()
     if not sid:
