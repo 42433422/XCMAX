@@ -83,6 +83,7 @@ jobs:
             FHD/release/xcagi-v*/enterprise/latest.yml
       - name: Publish mac-align hotfix to CVM
         if: ${{ github.event.inputs.publish_cvm == 'true' }}
+        timeout-minutes: 60
         working-directory: .
         shell: bash
         env:
@@ -103,19 +104,56 @@ jobs:
           chmod 600 ~/.ssh/id_ci
           ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
           SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15)
-          for dest in \
-            "/var/www/xcagi-v${v}" \
-            "/var/www/xcagi-v${v}/enterprise" \
-            "/var/www/update/releases/stable/enterprise" \
+          remote_stage="/var/tmp/xcagi-macalign-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" "rm -rf '$remote_stage' && mkdir -p '$remote_stage'"
+          scp "${SSH_OPTS[@]}" \
+            "${src}/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe" \
+            "${src}/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe.sha256" \
+            "${src}/MACALIGN-HOTFIX.txt" \
+            "root@${HOST}:${remote_stage}/"
+
+          # Upload the large installer across the network once. Validate it in
+          # a non-public staging directory, then fan out through atomic local
+          # renames so download paths never expose a partially uploaded EXE.
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" "bash -s -- '$remote_stage' '$v'" <<'REMOTE_SCRIPT'
+          set -euo pipefail
+          stage="$1"
+          version="$2"
+          [[ "$stage" == /var/tmp/xcagi-macalign-* ]]
+          [[ "$version" =~ ^[0-9]+(\.[0-9]+){3}$ ]]
+
+          artifact="XCAGI-Enterprise-Setup-${version}-x64-macalign.exe"
+          checksum_file="${artifact}.sha256"
+          receipt="MACALIGN-HOTFIX.txt"
+          cleanup() { rm -rf -- "$stage"; }
+          trap cleanup EXIT
+
+          expected="$(grep -Eo '[A-Fa-f0-9]{64}' "$stage/$checksum_file" | head -n 1 | tr '[:upper:]' '[:lower:]')"
+          actual="$(sha256sum "$stage/$artifact" | awk '{print $1}')"
+          test -n "$expected"
+          test "$actual" = "$expected"
+
+          destinations=(
+            "/var/www/xcagi-v${version}"
+            "/var/www/xcagi-v${version}/enterprise"
+            "/var/www/update/releases/stable/enterprise"
             "/var/www/html/xcagi-hotfixes"
-          do
-            ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p '$dest'"
-            scp "${SSH_OPTS[@]}" \
-              "${src}/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe" \
-              "${src}/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe.sha256" \
-              "${src}/MACALIGN-HOTFIX.txt" \
-              "root@${HOST}:${dest}/"
+          )
+          for destination in "${destinations[@]}"; do
+            mkdir -p "$destination"
+            suffix=".part-$$"
+            cp -f "$stage/$artifact" "$destination/$artifact$suffix"
+            published="$(sha256sum "$destination/$artifact$suffix" | awk '{print $1}')"
+            test "$published" = "$expected"
+            chmod 0644 "$destination/$artifact$suffix"
+            mv -f "$destination/$artifact$suffix" "$destination/$artifact"
+            for metadata in "$checksum_file" "$receipt"; do
+              cp -f "$stage/$metadata" "$destination/$metadata$suffix"
+              chmod 0644 "$destination/$metadata$suffix"
+              mv -f "$destination/$metadata$suffix" "$destination/$metadata"
+            done
           done
+          REMOTE_SCRIPT
           echo "Published:"
           echo "  https://xiu-ci.com/xcagi-v${v}/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe"
           echo "  https://xiu-ci.com/xcagi-v${v}/enterprise/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe"
