@@ -43,7 +43,8 @@ def test_workflow_comment_trigger_requires_open_issue_owner_confirmation() -> No
         workflow = workflow_path.read_text(encoding="utf-8")
         assert "github.event.issue.state == 'open'" in workflow
         assert "github.event.comment.author_association == 'OWNER'" in workflow
-        assert "contains(github.event.comment.body, '确认')" in workflow
+        assert "github.event.comment.body == '确认实现'" in workflow
+        assert "github.event.comment.body == '/approve-implementation'" in workflow
         assert "target_branch:" in workflow
         assert "--base-branch" in workflow
 
@@ -79,62 +80,75 @@ class TestOwnerConfirmed:
     def test_no_comments_not_confirmed(self) -> None:
         ok, msg = _ai_impl._owner_confirmed(self._issue(), [], "owner/repo")
         assert ok is False
-        assert "未在评论中确认" in msg
+        assert "精确批准命令" in msg
 
     def test_other_user_comment_not_confirmed(self) -> None:
         issue = self._issue(login="owner")
-        comments = [{"user": {"login": "someone-else"}, "body": "确认"}]
+        comments = [
+            {
+                "user": {"login": "someone-else"},
+                "author_association": "CONTRIBUTOR",
+                "body": "确认实现",
+            }
+        ]
         ok, _ = _ai_impl._owner_confirmed(issue, comments, "owner/repo")
         assert ok is False
 
-    def test_owner_chinese_confirm_keyword(self) -> None:
-        issue = self._issue(login="owner")
-        comments = [{"user": {"login": "owner"}, "body": "确认，开始执行吧"}]
+    def test_repository_owner_chinese_exact_command(self) -> None:
+        issue = self._issue(login="github-actions[bot]")
+        comments = [
+            {
+                "user": {"login": "repo-owner"},
+                "author_association": "OWNER",
+                "body": "确认实现",
+            }
+        ]
         ok, msg = _ai_impl._owner_confirmed(issue, comments, "owner/repo")
         assert ok is True
-        assert "owner" in msg
+        assert "repo-owner" in msg
 
-    def test_owner_english_confirm(self) -> None:
+    def test_repository_owner_english_exact_command(self) -> None:
         issue = self._issue(login="alice")
-        comments = [{"user": {"login": "alice"}, "body": "approved, go ahead"}]
+        comments = [
+            {
+                "user": {"login": "alice"},
+                "author_association": "OWNER",
+                "body": "/APPROVE-IMPLEMENTATION",
+            }
+        ]
         ok, _ = _ai_impl._owner_confirmed(issue, comments, "alice/repo")
         assert ok is True
 
-    def test_owner_plus_one(self) -> None:
-        issue = self._issue(login="bob")
-        comments = [{"user": {"login": "bob"}, "body": "+1"}]
-        ok, _ = _ai_impl._owner_confirmed(issue, comments, "bob/repo")
-        assert ok is True
+    @pytest.mark.parametrize("body", ["确认", "已确认，请执行", "approved", "+1", "OK", "go"])
+    def test_ambiguous_owner_comment_does_not_authorize(self, body: str) -> None:
+        issue = self._issue(login="frank")
+        comments = [
+            {
+                "user": {"login": "frank"},
+                "author_association": "OWNER",
+                "body": body,
+            }
+        ]
+        ok, _ = _ai_impl._owner_confirmed(issue, comments, "frank/repo")
+        assert ok is False
 
-    def test_owner_ok_keyword(self) -> None:
-        issue = self._issue(login="carol")
-        comments = [{"user": {"login": "carol"}, "body": "OK"}]
-        ok, _ = _ai_impl._owner_confirmed(issue, comments, "carol/repo")
-        assert ok is True
-
-    def test_owner_go_keyword(self) -> None:
-        issue = self._issue(login="dan")
-        comments = [{"user": {"login": "dan"}, "body": "go"}]
-        ok, _ = _ai_impl._owner_confirmed(issue, comments, "dan/repo")
-        assert ok is True
-
-    def test_case_insensitive(self) -> None:
-        issue = self._issue(login="eve")
-        comments = [{"user": {"login": "eve"}, "body": "CONFIRM"}]
-        ok, _ = _ai_impl._owner_confirmed(issue, comments, "eve/repo")
-        assert ok is True
-
-    def test_issue_body_contains_confirm_keyword(self) -> None:
-        # issue 本身 body 含确认也算（owner 自己写的）
+    def test_issue_body_never_authorizes_itself(self) -> None:
         issue = self._issue(login="frank", body="已确认，请执行")
         ok, _ = _ai_impl._owner_confirmed(issue, [], "frank/repo")
-        assert ok is True
-
-    def test_no_author_not_confirmed(self) -> None:
-        issue = {"user": {}, "body": "确认"}
-        ok, msg = _ai_impl._owner_confirmed(issue, [], "owner/repo")
         assert ok is False
-        assert "未解析" in msg
+
+    def test_issue_author_is_not_repository_owner_proof(self) -> None:
+        issue = {"user": {"login": "owner"}, "body": "确认实现"}
+        comments = [
+            {
+                "user": {"login": "owner"},
+                "author_association": "NONE",
+                "body": "确认实现",
+            }
+        ]
+        ok, msg = _ai_impl._owner_confirmed(issue, comments, "owner/repo")
+        assert ok is False
+        assert "精确批准命令" in msg
 
 
 class TestAllowlistPreauthorized:
@@ -215,7 +229,13 @@ class TestIsAuthorized:
         try:
             ok, _, source = _ai_impl._is_authorized(
                 issue,
-                [{"user": {"login": "owner"}, "body": "确认"}],
+                [
+                    {
+                        "user": {"login": "owner"},
+                        "author_association": "OWNER",
+                        "body": "确认实现",
+                    }
+                ],
                 "owner/repo",
             )
             assert ok is True
@@ -250,7 +270,13 @@ class TestIsAuthorized:
         try:
             ok, _, source = _ai_impl._is_authorized(
                 issue,
-                [{"user": {"login": "owner"}, "body": "确认"}],
+                [
+                    {
+                        "user": {"login": "owner"},
+                        "author_association": "OWNER",
+                        "body": "确认实现",
+                    }
+                ],
                 "owner/repo",
             )
             assert ok is True

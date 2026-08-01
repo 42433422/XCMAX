@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import sys
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -42,6 +43,9 @@ def test_self_heal_workflow_carries_failure_branch_and_serializes_duplicates() -
         assert "concurrency:" in workflow
         assert "--head-repo" in workflow
         assert "github.event.workflow_run.head_repository.full_name" in workflow
+        assert "AI_SELF_HEAL_MAX_OPEN_INCIDENTS" in workflow
+        assert "AI_SELF_HEAL_MAX_OPEN_PER_WORKFLOW" in workflow
+        assert "AI_SELF_HEAL_MAX_RECENT_INCIDENTS" in workflow
 
 
 # =====================================================================
@@ -208,6 +212,32 @@ class TestComputeFingerprint:
             "[big-files-ratchet] 1 VIOLATION(S)\n##[error]Process completed with exit code 1.",
         )
 
+    def test_specific_error_normalizes_run_ids_and_digests(self) -> None:
+        first = [
+            heal.ErrorEntry(
+                "github-actions",
+                "EXIT_78",
+                "deploy failed",
+                "",
+                0,
+                "run_id=123 artifact 0123456789abcdef0123456789abcdef01234567 failed",
+            )
+        ]
+        second = [
+            heal.ErrorEntry(
+                "github-actions",
+                "EXIT_78",
+                "deploy failed",
+                "",
+                0,
+                "run_id=456 artifact fedcba9876543210fedcba9876543210fedcba98 failed",
+            )
+        ]
+
+        assert heal.canonical_fingerprint_evidence(
+            first, first[0].raw
+        ) == heal.canonical_fingerprint_evidence(second, second[0].raw)
+
 
 # =====================================================================
 # is_already_processed / record_fingerprint 测试
@@ -281,6 +311,91 @@ class TestFingerprintStore:
             )
             == ""
         )
+
+
+class TestIncidentBudget:
+    @staticmethod
+    def _response(items: list[dict], *, status_code: int = 200) -> MagicMock:
+        response = MagicMock()
+        response.status_code = status_code
+        response.json.return_value = items
+        return response
+
+    @staticmethod
+    def _issue(number: int, workflow: str = "CI/CD Pipeline") -> dict:
+        return {
+            "number": number,
+            "created_at": "2026-08-01T12:00:00Z",
+            "body": f"- Workflow: `{workflow}`\n",
+        }
+
+    def test_allows_creation_below_global_and_workflow_limits(self) -> None:
+        client = MagicMock()
+        client.get.return_value = self._response([self._issue(1)])
+
+        decision = heal.check_incident_budget(
+            "CI/CD Pipeline",
+            token="tok",
+            repo="a/b",
+            client=client,
+            now_ts=datetime(2026, 8, 1, 13, tzinfo=UTC).timestamp(),
+            max_open=20,
+            max_open_per_workflow=5,
+            max_recent=20,
+        )
+
+        assert decision.allowed is True
+        assert decision.reason == "within_budget"
+        assert decision.open_total == 1
+        assert decision.open_for_workflow == 1
+
+    def test_blocks_global_open_incident_storm(self) -> None:
+        client = MagicMock()
+        client.get.return_value = self._response([self._issue(i) for i in range(20)])
+
+        decision = heal.check_incident_budget(
+            "CI/CD Pipeline",
+            token="tok",
+            repo="a/b",
+            client=client,
+            max_open=20,
+            max_open_per_workflow=50,
+            max_recent=50,
+        )
+
+        assert decision.allowed is False
+        assert decision.reason == "global_open_incidents:20>=20"
+        assert decision.open_total == 20
+
+    def test_blocks_per_workflow_queue(self) -> None:
+        client = MagicMock()
+        client.get.return_value = self._response(
+            [self._issue(1, "Deploy"), self._issue(2, "Deploy")]
+        )
+
+        decision = heal.check_incident_budget(
+            "Deploy",
+            token="tok",
+            repo="a/b",
+            client=client,
+            max_open=20,
+            max_open_per_workflow=2,
+            max_recent=20,
+        )
+
+        assert decision.allowed is False
+        assert decision.reason == "workflow_open_incidents:2>=2"
+
+    def test_lookup_failure_fails_closed(self) -> None:
+        client = MagicMock()
+        client.get.side_effect = RuntimeError("github unavailable")
+
+        decision = heal.check_incident_budget(
+            "CI/CD Pipeline", token="tok", repo="a/b", client=client
+        )
+
+        assert decision.allowed is False
+        assert decision.reason == "budget_lookup_error:RuntimeError"
 
 
 # =====================================================================
@@ -665,11 +780,73 @@ class TestAutonomyRecursion:
 
 
 class TestMainFlow:
+    @pytest.fixture(autouse=True)
+    def _allow_incident_budget(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            heal,
+            "check_incident_budget",
+            lambda *args, **kwargs: heal.IncidentBudgetDecision(True, "within_budget"),
+        )
+
     def test_no_run_id_blocks(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("GITHUB_EVENT_PATH", raising=False)
         monkeypatch.delenv("GITHUB_RUN_ID", raising=False)
         rc = heal.main(["--branch", "feature/x"])
         assert rc == 2
+
+    def test_open_circuit_skips_llm_issue_and_dispatch(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        monkeypatch.setenv("GITHUB_TOKEN", "tok")
+        monkeypatch.setenv("GITHUB_REPOSITORY", "a/b")
+        monkeypatch.setattr(
+            heal,
+            "fetch_workflow_logs",
+            lambda *a, **k: "##[error]Process completed with exit code 1.",
+        )
+        monkeypatch.setattr(
+            heal,
+            "check_incident_budget",
+            lambda *a, **k: heal.IncidentBudgetDecision(
+                False,
+                "global_open_incidents:20>=20",
+                open_total=20,
+            ),
+        )
+        calls: list[str] = []
+        monkeypatch.setattr(
+            heal,
+            "call_llm",
+            lambda *a, **k: calls.append("llm"),
+        )
+        monkeypatch.setattr(
+            heal,
+            "create_remediation_issue",
+            lambda **kwargs: calls.append("issue") or "",
+        )
+        monkeypatch.setattr(
+            heal,
+            "dispatch_issue_implementation",
+            lambda *a, **k: calls.append("dispatch") or True,
+        )
+
+        rc = heal.main(
+            [
+                "--run-id",
+                "1",
+                "--workflow",
+                "CI/CD Pipeline",
+                "--branch",
+                "main",
+                "--store",
+                str(tmp_path / "fps.jsonl"),
+            ]
+        )
+
+        assert rc == 2
+        assert calls == []
 
     def test_empty_log_routes_incident_and_blocks(
         self,
