@@ -54,6 +54,12 @@ jobs:
       XCAGI_LLM_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
       XCAGI_LLM_BASE_URL: ${{ secrets.XCAGI_LLM_BASE_URL }}
       XCAGI_LLM_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
+      # Durable GitHub-side circuit breaker. Repository variables may tighten
+      # these bounds without changing code; missing/invalid values fail to defaults.
+      AI_SELF_HEAL_MAX_OPEN_INCIDENTS: ${{ vars.AI_SELF_HEAL_MAX_OPEN_INCIDENTS || '20' }}
+      AI_SELF_HEAL_MAX_OPEN_PER_WORKFLOW: ${{ vars.AI_SELF_HEAL_MAX_OPEN_PER_WORKFLOW || '5' }}
+      AI_SELF_HEAL_MAX_RECENT_INCIDENTS: ${{ vars.AI_SELF_HEAL_MAX_RECENT_INCIDENTS || '20' }}
+      AI_SELF_HEAL_INCIDENT_BUDGET_HOURS: ${{ vars.AI_SELF_HEAL_INCIDENT_BUDGET_HOURS || '24' }}
       # Approval ledger callback（fail-open client needs both）
       FHD_API_BASE_URL: https://xiu-ci.com/fhd-api
       AUTONOMY_WEBHOOK_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
