@@ -517,7 +517,9 @@ def start_scheduler() -> None:
         try:
             from modstore_server.file_retention_janitor import run_retention_janitor
 
-            r = run_retention_janitor()
+            r = run_retention_janitor(
+                notification_dry_run=_env_bool("MODSTORE_NOTIFICATION_RETENTION_DRY_RUN", False)
+            )
             logger.info(
                 "retention janitor done: dry_run=%s status=%s removed=%s released=%s ms=%.1f",
                 bool(r.get("dry_run")),
