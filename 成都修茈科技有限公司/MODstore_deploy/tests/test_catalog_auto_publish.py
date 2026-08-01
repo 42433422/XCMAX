@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import threading
 import uuid
 import zipfile
 
@@ -175,6 +176,82 @@ def test_publication_survives_vector_outage_and_idempotent_retry_recovers(
     assert second.json()["idempotent"] is True
     assert second.json()["semantic_indexed"] is True
     assert attempts == ["failed", "recovered"]
+
+
+def test_publication_bounds_slow_vector_index(client, monkeypatch, tmp_path) -> None:
+    pkg_id = f"vector-slow-{uuid.uuid4().hex[:12]}"
+    raw = _package(pkg_id)
+    digest = hashlib.sha256(raw).hexdigest()
+    monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
+    monkeypatch.setenv("MODSTORE_AUTO_PUBLISH_TOKEN", "auto-token-dedicated")
+    monkeypatch.setenv("MODSTORE_AUTO_PUBLISH_REPOSITORY", "owner/repo")
+    monkeypatch.setenv("MODSTORE_CATALOG_INDEX_TIMEOUT_SECONDS", "0.05")
+    monkeypatch.setattr(
+        "modstore_server.package_sandbox_audit.run_package_audit_async", _review_pass
+    )
+
+    started = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+    attempts: list[str] = []
+
+    def slow_index(**_kwargs):
+        attempts.append("started")
+        started.set()
+        release.wait(timeout=2)
+        finished.set()
+        return "indexed-late"
+
+    monkeypatch.setattr(
+        "modstore_server.api.catalog_public_routes.insert_embedding",
+        slow_index,
+    )
+    metadata = {
+        "id": pkg_id,
+        "version": "1.0.0",
+        "name": "Slow Vector Provider",
+        "artifact": "mod",
+        "public_listing": True,
+        "automation_provenance": {
+            "source_repository": "owner/repo",
+            "source_sha": "c" * 40,
+            "workflow_run_id": "789",
+            "package_sha256": digest,
+        },
+    }
+
+    response = client.post(
+        "/v1/packages",
+        headers={"Authorization": "Bearer auto-token-dedicated"},
+        data={"metadata": json.dumps(metadata)},
+        files={"file": (f"{pkg_id}-1.0.0.xcmod", raw, "application/zip")},
+    )
+
+    assert started.is_set()
+    assert response.status_code == 200, response.text
+    assert response.json()["semantic_indexed"] is False
+    assert client.get(f"/v1/packages/{pkg_id}/1.0.0").json()["sha256"] == digest
+
+    second_id = f"vector-concurrent-{uuid.uuid4().hex[:12]}"
+    second_raw = _package(second_id)
+    second_metadata = dict(metadata)
+    second_metadata["id"] = second_id
+    second_metadata["automation_provenance"] = {
+        **metadata["automation_provenance"],
+        "package_sha256": hashlib.sha256(second_raw).hexdigest(),
+    }
+    concurrent = client.post(
+        "/v1/packages",
+        headers={"Authorization": "Bearer auto-token-dedicated"},
+        data={"metadata": json.dumps(second_metadata)},
+        files={"file": (f"{second_id}-1.0.0.xcmod", second_raw, "application/zip")},
+    )
+    assert concurrent.status_code == 200, concurrent.text
+    assert concurrent.json()["semantic_indexed"] is False
+    assert attempts == ["started"]
+
+    release.set()
+    assert finished.wait(timeout=1)
 
 
 def test_direct_python_employee_does_not_require_workflow_heart() -> None:
