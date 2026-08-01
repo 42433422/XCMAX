@@ -12,7 +12,6 @@ import pytest
 
 from app.contexts.manifest import BOUNDED_CONTEXTS, BoundedContextMeta, contexts_by_id
 
-
 # ── BoundedContextMeta 结构验证 ──────────────────────────────
 
 
