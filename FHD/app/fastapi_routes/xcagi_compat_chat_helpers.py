@@ -2,6 +2,7 @@
 XCAGI 前端兼容 API — AI 聊天辅助函数与数据模型。
 供 xcagi_compat_chat / xcagi_compat_misc 等模块复用。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -35,6 +36,9 @@ from app.domain.ai.tier import runtime_context_with_tier
 from app.domain.context.session_context import (
     planner_workflow_interrupt_reply,
     runtime_context_after_workflow_interrupt,
+)
+from app.fastapi_routes.chat_stream_progress import (
+    thinking_steps_from_planner_stream_text as _thinking_steps_from_planner_stream_text,
 )
 from app.infrastructure.auth.db_token import effective_db_read_token
 from app.infrastructure.llm.client import set_mode as set_llm_mode
@@ -528,7 +532,12 @@ def _xcagi_guarded_planner_stream_events(
     idle_notice_seconds = _xcagi_stream_idle_notice_seconds()
     started_at = time.monotonic()
     first_event_seen = True
-    yield {"type": "tool_progress", "label": "模型服务", "text": "模型服务已接收任务，正在思考…", "phase": "accepted"}
+    yield {
+        "type": "tool_progress",
+        "label": "模型服务",
+        "text": "模型服务已接收任务，正在思考…",
+        "phase": "accepted",
+    }
 
     while True:
         elapsed = time.monotonic() - started_at
@@ -577,27 +586,6 @@ def _sse_payload_with_run_id(payload: dict[str, Any], run_id: str | None) -> dic
     enriched["run_id"] = run_id
     enriched["agent_run_id"] = run_id
     return enriched
-
-
-def _thinking_steps_from_planner_stream_text(merged: str) -> str | None:
-    if not (merged or "").strip():
-        return None
-    lines: list[str] = []
-    for m in re.finditer(r"\[正在调用工具:[^\]\n]+\]", merged):
-        s = m.group(0).strip()
-        if s and s not in lines:
-            lines.append(s)
-    for m in re.finditer(r"\[工具已返回[^\]\n]*\]|\[工具未成功[^\]\n]*\]", merged):
-        s = m.group(0).strip()
-        if s and s not in lines:
-            lines.append(s)
-    for m in re.finditer(r"\[需要授权:[^\]\n]+\]|\[请提供令牌:[^\]\n]+\]", merged):
-        s = m.group(0).strip()
-        if s and s not in lines:
-            lines.append(s)
-    if not lines:
-        return None
-    return "\n".join(lines)
 
 
 async def _xcagi_planner_stream_bytes_async(
@@ -761,7 +749,11 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 text = str(ev.get("text") or "")
                 if not ev.get("ephemeral"):
                     reply_parts.append(text)
-                outgoing_event = _sse_payload_with_run_id(ev, pre_run.run_id) if pre_run is not None and not run_receipt_sent else ev
+                outgoing_event = (
+                    _sse_payload_with_run_id(ev, pre_run.run_id)
+                    if pre_run is not None and not run_receipt_sent
+                    else ev
+                )
                 run_receipt_sent = run_receipt_sent or pre_run is not None
                 yield _sse_event_line(outgoing_event)
             elif et == "requires_token":

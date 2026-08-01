@@ -134,7 +134,6 @@ def _is_ai_workflow_request(req: ApprovalRequest) -> bool:
     return str(getattr(req, "business_type", "") or "").strip() == AI_WORKFLOW_BUSINESS_TYPE
 
 
-
 def _next_node(nodes: list[ApprovalFlowNode], current_order: int) -> ApprovalFlowNode | None:
     for n in nodes:
         if n.node_order > current_order:
@@ -458,7 +457,6 @@ def _close_request_if_needed(
     req.current_node_id = next_node.id
     req.current_node_order = next_node.node_order
     return ApprovalStatus.IN_PROGRESS.value, next_node.id
-
 
 
 def _approve_ai_workflow_request_without_node(

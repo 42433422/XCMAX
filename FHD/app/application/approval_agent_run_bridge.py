@@ -20,6 +20,8 @@ def _compat_durable_ai_workflow_link(request_no: str | None) -> dict[str, str]:
     if callable(resolver) and resolver is not _durable_ai_workflow_link:
         return resolver(request_no)
     return _durable_ai_workflow_link(request_no)
+
+
 def _durable_ai_workflow_link(request_no: str | None) -> dict[str, str]:
     """Resolve the AgentRun link persisted inside an AI approval request."""
 
@@ -236,4 +238,3 @@ def _drop_pending_ai_workflow_after_rejection(
             "success": False,
             "message": f"审批已拒绝，但清理 AI 工作流失败：{exc}",
         }
-

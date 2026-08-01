@@ -22,9 +22,19 @@ _MUTATION_COMPLETION_CLAIM_RE = re.compile(
     re.IGNORECASE,
 )
 _MUTATING_TOOL_ACTIONS = {
-    "create", "ensure_exists", "upsert", "update", "delete", "batch_delete",
-    "write", "import", "import_records", "import_delivery_notes", "submit",
-    "approve", "cancel",
+    "create",
+    "ensure_exists",
+    "upsert",
+    "update",
+    "delete",
+    "batch_delete",
+    "write",
+    "import",
+    "import_records",
+    "import_delivery_notes",
+    "submit",
+    "approve",
+    "cancel",
 }
 
 
@@ -67,7 +77,11 @@ def _business_context_present(message: str, runtime_context: dict[str, Any] | No
 def _verified_mutation_evidence(payload: dict[str, Any]) -> bool:
     for item in _iter_payload_dicts(payload):
         receipt = item.get("execution_receipt") or item.get("business_receipt")
-        if isinstance(receipt, dict) and receipt.get("executed") is True and receipt.get("verified") is True:
+        if (
+            isinstance(receipt, dict)
+            and receipt.get("executed") is True
+            and receipt.get("verified") is True
+        ):
             return True
     for record in _legacy_tool_records(payload):
         action = str(record.get("action") or "").strip().lower()
@@ -85,9 +99,14 @@ def apply_business_mutation_evidence_gate(
     metadata: dict[str, Any],
 ) -> bool:
     data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
-    response_text = " ".join(str(value or "") for value in (
-        payload.get("response"), payload.get("message"), data.get("text"),
-    ))
+    response_text = " ".join(
+        str(value or "")
+        for value in (
+            payload.get("response"),
+            payload.get("message"),
+            data.get("text"),
+        )
+    )
     blocked = bool(
         payload.get("success") is not False
         and _BUSINESS_MUTATION_VERB_RE.search(str(message or ""))
@@ -103,19 +122,31 @@ def apply_business_mutation_evidence_gate(
         "系统未把模型回复当成数据库变更结果，请从结构化任务卡重新执行。"
     )
     receipt = {
-        "domain": "business_data", "operation": "mutation", "status": "unverified",
-        "executed": False, "verified": False, "affected_rows": 0,
+        "domain": "business_data",
+        "operation": "mutation",
+        "status": "unverified",
+        "executed": False,
+        "verified": False,
+        "affected_rows": 0,
         "reason": "missing_verified_tool_receipt",
     }
-    payload.update({
-        "success": False, "message": safe_text, "response": safe_text,
-        "error_code": "unverified_business_mutation", "execution_receipt": receipt,
-    })
+    payload.update(
+        {
+            "success": False,
+            "message": safe_text,
+            "response": safe_text,
+            "error_code": "unverified_business_mutation",
+            "execution_receipt": receipt,
+        }
+    )
     if not data:
         data = {}
         payload["data"] = data
-    data.update({
-        "text": safe_text, "error_code": "unverified_business_mutation",
-        "execution_receipt": receipt,
-    })
+    data.update(
+        {
+            "text": safe_text,
+            "error_code": "unverified_business_mutation",
+            "execution_receipt": receipt,
+        }
+    )
     return True

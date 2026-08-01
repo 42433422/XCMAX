@@ -63,9 +63,7 @@ async def lifespan(app: FastAPI):
     try:
         from app.application.agent_orchestrator import AgentOrchestrator
 
-        interrupted_runs = await asyncio.to_thread(
-            AgentOrchestrator().reconcile_interrupted_runs
-        )
+        interrupted_runs = await asyncio.to_thread(AgentOrchestrator().reconcile_interrupted_runs)
         if interrupted_runs:
             logger.warning(
                 "reconciled %s AgentRun(s) interrupted by the previous app process",

@@ -30,7 +30,7 @@ from app.application.agent_orchestrator.run_repository import (
 )
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_spec import get_tool_action_spec, validate_tool_call
-from app.application.workflow.types import PlanGraph, WorkflowNode
+from app.application.workflow.types import PlanGraph
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -43,6 +43,7 @@ class AgentOrchestrator(AgentRunLifecycleMixin):
     ) -> None:
         self._repo = repository or get_agent_run_repository()
         self._tool_executor = tool_executor or AgentToolExecutor()
+
     def start_run(
         self,
         *,
@@ -68,6 +69,7 @@ class AgentOrchestrator(AgentRunLifecycleMixin):
             run.error = str(exc)
             run.add_event("run.failed", "Agent run 失败", {"error": str(exc)})
             return self._repo.save(run)
+
     def start_run_from_plan(
         self,
         *,
@@ -115,8 +117,10 @@ class AgentOrchestrator(AgentRunLifecycleMixin):
             run.error = str(exc)
             run.add_event("run.failed", "Agent run 失败", {"error": str(exc)})
             return self._repo.save(run)
+
     def get_run(self, run_id: str) -> AgentRun | None:
         return self._repo.get(run_id)
+
     def continue_run(
         self,
         run_id: str,
@@ -173,12 +177,14 @@ class AgentOrchestrator(AgentRunLifecycleMixin):
             approved_by=approved_by,
             runtime_context=runtime_context,
         )
+
     def _plan(self, run: AgentRun, *, runtime_context: dict[str, Any]) -> PlanGraph:
         from app.application.agent_orchestrator.multimodal_planner import (
             build_multimodal_autonomous_plan,
         )
         from app.application.workflow.planner import LLMWorkflowPlanner
         from app.services.tools_execution.registry import get_workflow_tool_registry
+
         run.status = "planning"
         run.add_event("planner.started", "开始生成 Agent 计划")
         self._repo.save(run)
@@ -210,55 +216,6 @@ class AgentOrchestrator(AgentRunLifecycleMixin):
             {"plan_id": plan.plan_id, "intent": plan.intent, "nodes": len(plan.nodes)},
         )
         return plan
-    def _apply_plan(self, run: AgentRun, plan: PlanGraph) -> None:
-        run.plan_id = plan.plan_id
-        run.intent = plan.intent
-        run.metadata["plan"] = {
-            "todo_steps": list(plan.todo_steps or []),
-            "risk_level": plan.risk_level,
-            "metadata": dict(plan.metadata or {}),
-        }
-        run.steps = [self._step_from_node(node) for node in plan.nodes]
-        self._apply_repair_policy(run, dict(plan.metadata or {}))
-        self._attach_artifacts_from_payload(
-            run,
-            getattr(plan, "metadata", {}) or {},
-            source="plan.metadata",
-        )
-        self._refresh_artifact_metadata(run)
-        run.status = "running" if run.steps else "blocked"
-        if not run.steps:
-            run.error = "planner returned no executable steps"
-            run.add_event("planner.blocked", "计划没有可执行节点")
-
-    @staticmethod
-    def _step_from_node(node: WorkflowNode) -> AgentStep:
-        spec = get_tool_action_spec(node.tool_id, node.action)
-        return AgentStep(
-            node_id=node.node_id,
-            tool_id=node.tool_id,
-            action=spec.action if spec is not None else node.action,
-            params=dict(node.params or {}),
-            risk=spec.risk if spec is not None else str(node.risk or "low"),
-            idempotent=bool(spec.idempotent) if spec is not None else bool(node.idempotent),
-            description=str(node.description or ""),
-            depends_on=list(node.depends_on or []),
-        )
-
-    @staticmethod
-    def _find_waiting_step(
-        run: AgentRun,
-        *,
-        approved_step_id: str = "",
-    ) -> AgentStep | None:
-        wanted = str(approved_step_id or "").strip()
-        for step in run.steps:
-            if step.status != "waiting_user":
-                continue
-            if wanted and wanted not in {step.step_id, step.node_id}:
-                continue
-            return step
-        return None
 
     def _execute_ready_steps(
         self,

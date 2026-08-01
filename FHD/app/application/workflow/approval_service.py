@@ -121,9 +121,7 @@ class ApprovalService:
                 "runtime_context": runtime_context or {},
                 "plan_id": plan_id,
                 "agent_run_id": durable_run_id,
-                "agent_step_id": str(
-                    (runtime_context or {}).get("agent_step_id") or ""
-                ).strip(),
+                "agent_step_id": str((runtime_context or {}).get("agent_step_id") or "").strip(),
                 "agent_node_id": str(
                     (runtime_context or {}).get("agent_node_id") or node.node_id
                 ).strip(),

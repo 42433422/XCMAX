@@ -1,6 +1,7 @@
 """
 Mod Manager - Core manager for scanning, loading, and managing mods
 """
+
 import importlib
 import importlib.util
 import json
@@ -22,6 +23,7 @@ from .artifact_package import (
     validate_employee_pack_manifest,
 )
 from .manifest import ModMetadata, parse_manifest, validate_dependencies
+from .mod_root_resolver import default_mods_root as _default_mods_root
 from .package import ModPackage, ModPackageError, ModSignatureError
 from .registry import get_mod_registry
 
@@ -29,70 +31,11 @@ logger = logging.getLogger(__name__)
 _MOD_API_FAILURE_RETRY_AT: dict[str, float] = {}
 _MOD_API_FAILURE_BACKOFF_SECONDS = 15.0
 
+
 def is_mods_disabled() -> bool:
     """为 true 时不加载任何 Mod（扩展蓝图、行业覆盖、Hooks 等），仅用核心与原始配置/数据库。"""
     v = (os.environ.get("XCAGI_DISABLE_MODS") or "").strip().lower()
     return v in {"1", "true", "yes", "on"}
-
-
-def _default_mods_root() -> str:
-    """
-    解析 mods 根目录。
-    源码树：app/infrastructure/mods/mod_manager.py；默认 mods 目录为 XCAGI/mods（由 run.py 设置 XCAGI_MODS_ROOT）
-    若包装进 site-packages，上一级不再是项目根，需回退到环境变量或从 cwd 向上查找。
-    """
-    logger.debug("[_default_mods_root] Resolving mods root, CWD: %s", os.getcwd())
-
-    env = (os.environ.get("XCAGI_MODS_ROOT") or os.environ.get("XCAGI_MODS_DIR") or "").strip()
-    if env:
-        p = os.path.abspath(env)
-        if os.path.isdir(p):
-            logger.debug("[_default_mods_root] Mods root from env: %s", p)
-            return p
-        logger.warning(
-            "[_default_mods_root] XCAGI_MODS_ROOT / XCAGI_MODS_DIR is set but not a directory: %s",
-            p,
-        )
-
-    file_here = os.path.abspath(__file__)
-    from_pkg_layout = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(file_here)))), "mods"
-    )
-    logger.debug(
-        "[_default_mods_root] Checking package-relative path: %s, exists: %s",
-        from_pkg_layout,
-        os.path.isdir(from_pkg_layout),
-    )
-    if os.path.isdir(from_pkg_layout):
-        logger.debug("[_default_mods_root] Mods root (next to app package): %s", from_pkg_layout)
-        return from_pkg_layout
-
-    cwd_mods = os.path.join(os.getcwd(), "mods")
-    logger.debug(
-        "[_default_mods_root] Checking CWD mods: %s, exists: %s", cwd_mods, os.path.isdir(cwd_mods)
-    )
-    if os.path.isdir(cwd_mods):
-        logger.debug("[_default_mods_root] Mods root (./mods from cwd): %s", cwd_mods)
-        return cwd_mods
-
-    cur = os.path.abspath(os.getcwd())
-    for i in range(8):
-        trial = os.path.join(cur, "mods")
-        logger.debug("[_default_mods_root] Walking up: %s, exists: %s", trial, os.path.isdir(trial))
-        if os.path.isdir(trial):
-            logger.debug("[_default_mods_root] Mods root (walk up from cwd): %s", trial)
-            return trial
-        parent = os.path.dirname(cur)
-        if parent == cur:
-            break
-        cur = parent
-
-    logger.warning(
-        "[_default_mods_root] No mods directory found; using package-relative path (may be empty): %s. "
-        "Set XCAGI_MODS_ROOT or run from project root.",
-        from_pkg_layout,
-    )
-    return from_pkg_layout
 
 
 def _repo_layout_mods_candidates() -> list[str]:
@@ -1344,7 +1287,6 @@ def _mod_allowed_for_api_load(mod_id: str, session_id: str | None = None) -> boo
     # SUNBIRD 等客户定制 Mod 现已是普通企业账号，完全由服务端 entitlement 决定可见性。
     # 不再因磁盘目录存在或已废弃的本地用户名判断而放行——否则未授权账号也能挂载客户包。
     return False
-
 
 
 def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:

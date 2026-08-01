@@ -5,10 +5,61 @@ from typing import Any
 
 from app.application.agent_orchestrator.budget import apply_ai_budget_metadata
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, RunEvent, utc_now_iso
+from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
 from app.application.workflow.types import PlanGraph, WorkflowNode
 
 
 class AgentRunLifecycleMixin:
+    def _apply_plan(self, run: AgentRun, plan: PlanGraph) -> None:
+        run.plan_id = plan.plan_id
+        run.intent = plan.intent
+        run.metadata["plan"] = {
+            "todo_steps": list(plan.todo_steps or []),
+            "risk_level": plan.risk_level,
+            "metadata": dict(plan.metadata or {}),
+        }
+        run.steps = [self._step_from_node(node) for node in plan.nodes]
+        self._apply_repair_policy(run, dict(plan.metadata or {}))
+        self._attach_artifacts_from_payload(
+            run,
+            getattr(plan, "metadata", {}) or {},
+            source="plan.metadata",
+        )
+        self._refresh_artifact_metadata(run)
+        run.status = "running" if run.steps else "blocked"
+        if not run.steps:
+            run.error = "planner returned no executable steps"
+            run.add_event("planner.blocked", "计划没有可执行节点")
+
+    @staticmethod
+    def _step_from_node(node: WorkflowNode) -> AgentStep:
+        spec = get_tool_action_spec(node.tool_id, node.action)
+        return AgentStep(
+            node_id=node.node_id,
+            tool_id=node.tool_id,
+            action=spec.action if spec is not None else node.action,
+            params=dict(node.params or {}),
+            risk=spec.risk if spec is not None else str(node.risk or "low"),
+            idempotent=bool(spec.idempotent) if spec is not None else bool(node.idempotent),
+            description=str(node.description or ""),
+            depends_on=list(node.depends_on or []),
+        )
+
+    @staticmethod
+    def _find_waiting_step(
+        run: AgentRun,
+        *,
+        approved_step_id: str = "",
+    ) -> AgentStep | None:
+        wanted = str(approved_step_id or "").strip()
+        for step in run.steps:
+            if step.status != "waiting_user":
+                continue
+            if wanted and wanted not in {step.step_id, step.node_id}:
+                continue
+            return step
+        return None
+
     def approve_run_step(
         self,
         run_id: str,
@@ -307,9 +358,7 @@ class AgentRunLifecycleMixin:
             plan=plan,
             runtime_context=dict(source.metadata.get("runtime_context") or {}),
             auto_execute=True,
-            approval_required_node_ids=list(
-                source.metadata.get("formal_approval_node_ids") or []
-            ),
+            approval_required_node_ids=list(source.metadata.get("formal_approval_node_ids") or []),
         )
         restarted.metadata["restarted_from_run_id"] = source.run_id
         restarted.metadata["restart_requested_by"] = str(requested_by or "")
@@ -317,4 +366,3 @@ class AgentRunLifecycleMixin:
 
     def list_events(self, run_id: str, *, after_event_id: str | None = None) -> list[RunEvent]:
         return self._repo.list_events(run_id, after_event_id=after_event_id)
-

@@ -12,6 +12,7 @@ AI 聊天应用服务
 服务端还可设 ``XCAGI_EXCEL_IMPORT_AI_DECIDES=1``（全局倾向 AI 路径）或
 ``XCAGI_DISABLE_PRO_EXCEL_IMPORT_SHORTCUT=1`` / ``context.excel_import_skip_deterministic_shortcut``（等价跳过捷径）。
 """
+
 import asyncio
 import json
 import logging
@@ -37,26 +38,12 @@ from app.application.ai_chat.excel_import_policy import (
 )
 from app.application.ai_chat.instant_tools import AIChatInstantToolsMixin
 from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
-
-
-def _import_workflow_components():
-    from app.application.workflow import (
-        HybridRiskGate,
-        LLMWorkflowPlanner,
-        WorkflowEngine,
-        get_approval_service,
-    )
-    return HybridRiskGate, LLMWorkflowPlanner, WorkflowEngine, get_approval_service
-def _import_ai_conversation_service():
-    from app.services import get_ai_conversation_service as _get
-
-    return _get
-
-
-def get_ai_conversation_service():
-    """Lazy re-export so unit tests can patch this module attribute."""
-    return _import_ai_conversation_service()()
-
+from app.application.ai_chat_service_imports import (
+    get_ai_conversation_service,
+)
+from app.application.ai_chat_service_imports import (
+    import_workflow_components as _import_workflow_components,
+)
 
 # 单测通过 ``patch("app.application.ai_chat_app_service.LLMWorkflowPlanner")`` 等方式
 # 替换工作流组件；这些符号不能在模块顶层 ``from app.application.workflow import``，
@@ -1269,7 +1256,9 @@ class AIChatApplicationService(
                     from app.application.ai_chat_agent_bridge import submit_pending_agent_approval
 
                     approval_payload, clear_pending = submit_pending_agent_approval(
-                        pending, user_id=user_id, approval_service=self.approval_service,
+                        pending,
+                        user_id=user_id,
+                        approval_service=self.approval_service,
                         enrich_confirmation_inner=_enrich_confirmation_inner,
                     )
                     if clear_pending:

@@ -14,21 +14,9 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
-def _registered_router_normal_slot_dispatch(
-    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
-) -> dict:
-    from app.application.normal_chat_dispatch import (
-        run_normal_slot_product_query_from_message,
-        run_normal_slot_shipment_preview,
-    )
-
-    if action == "product_query":
-        text = user_message or str(params.get("message") or "").strip()
-        return run_normal_slot_product_query_from_message(text)
-    if action == "shipment_preview":
-        order_text = str(params.get("order_text") or user_message or "").strip()
-        return run_normal_slot_shipment_preview(order_text)
-    return {"success": False, "message": f"未注册的 normal_slot_dispatch 动作: {action}"}
+from app.services.normal_slot_workflow_dispatch import (
+    registered_router_normal_slot_dispatch as _registered_router_normal_slot_dispatch,
+)
 
 
 def _registered_router_customers(
@@ -1516,11 +1504,18 @@ def _registered_router_business_db(
 
     if entity == "customers":
         if operation in ("create", "ensure_exists", "upsert", "update", "delete", "batch_delete"):
-            router_action = operation if operation in ("update", "delete", "batch_delete") else ("ensure_exists" if operation in ("ensure_exists", "upsert") else "create")
+            router_action = (
+                operation
+                if operation in ("update", "delete", "batch_delete")
+                else ("ensure_exists" if operation in ("ensure_exists", "upsert") else "create")
+            )
             return _registered_router_customers(
                 router_action, payload, runtime_context, profile, user_message
             )
-        return {"success": False, "message": "customers 支持 create/ensure_exists/upsert/update/delete/batch_delete。"}
+        return {
+            "success": False,
+            "message": "customers 支持 create/ensure_exists/upsert/update/delete/batch_delete。",
+        }
 
     if entity == "products":
         if operation == "create":
