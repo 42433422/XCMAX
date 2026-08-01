@@ -157,7 +157,10 @@ def test_local_runtime_installer_manifest_covers_autonomy_controllers() -> None:
         "MODstore_deploy/modstore_server/self_maintenance_loop_runner.py",
         "MODstore_deploy/modstore_server/workflow_scheduler.py",
         "FHD/app/application/employee_runtime/risk_gate.py",
+        "FHD/app/services/capability_proposal_recorder.py",
+        "FHD/app/services/intent_confirmation_service.py",
         "FHD/config/duty_employee_work_contracts.json",
+        "FHD/scripts/dev/capability_proposal_to_issue.py",
         "FHD/mods/_employees/seo-sitemap-curator/manifest.json",
     ):
         assert f'"{relative}"' in script
