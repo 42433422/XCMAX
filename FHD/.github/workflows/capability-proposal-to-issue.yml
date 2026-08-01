@@ -15,13 +15,17 @@ on:
         description: "单次最多创建 issue 数"
         required: false
         default: "5"
+  issue_comment:
+    types: [created]
 
 permissions:
+  actions: write
   issues: write
   contents: read
 
 jobs:
   create-issues:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -59,3 +63,46 @@ jobs:
           name: capability-proposal-log
           path: FHD/test_reports/capability_proposal.jsonl
           if-no-files-found: ignore
+
+  promote-approved-proposal:
+    if: |
+      github.event_name == 'issue_comment' &&
+      github.event.issue.state == 'open' &&
+      github.event.comment.author_association == 'OWNER' &&
+      (github.event.comment.body == '确认实现' ||
+       github.event.comment.body == '/approve-implementation') &&
+      contains(github.event.issue.labels.*.name, 'capability-proposal')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate owner approval and dispatch implementation
+        working-directory: FHD
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          APPROVAL_COMMENT_ID: ${{ github.event.comment.id }}
+        run: |
+          python scripts/dev/capability_proposal_promote.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --token "$GITHUB_TOKEN" \
+            --issue-number "$ISSUE_NUMBER" \
+            --comment-id "$APPROVAL_COMMENT_ID" \
+            --workflow-ref main \
+            --target-branch main \
+            --apply
+
+      - name: Upload promotion receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capability-promotion-${{ github.event.issue.number }}
+          path: FHD/test_reports/capability_promotion_*.json
+          if-no-files-found: error
