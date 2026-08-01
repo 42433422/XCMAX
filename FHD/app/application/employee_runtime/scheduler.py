@@ -458,6 +458,14 @@ def _scheduler_loop() -> None:
 
 def start_employee_scheduler() -> dict[str, Any]:
     global _started, _thread, _last_error
+    from app.application.employee_runtime.runtime_policy import (
+        desktop_admin_employee_runtime_disabled,
+    )
+
+    if desktop_admin_employee_runtime_disabled():
+        status = stop_employee_scheduler(timeout=0.2)
+        status["disabled_reason"] = "desktop_product_boundary"
+        return status
     with _lock:
         _ensure_jobs_locked()
         if _thread and _thread.is_alive():

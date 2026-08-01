@@ -44,13 +44,13 @@ def _default_mods_root() -> str:
     源码树：app/infrastructure/mods/mod_manager.py；默认 mods 目录为 XCAGI/mods（由 run.py 设置 XCAGI_MODS_ROOT）
     若包装进 site-packages，上一级不再是项目根，需回退到环境变量或从 cwd 向上查找。
     """
-    logger.info("[_default_mods_root] Resolving mods root, CWD: %s", os.getcwd())
+    logger.debug("[_default_mods_root] Resolving mods root, CWD: %s", os.getcwd())
 
     env = (os.environ.get("XCAGI_MODS_ROOT") or os.environ.get("XCAGI_MODS_DIR") or "").strip()
     if env:
         p = os.path.abspath(env)
         if os.path.isdir(p):
-            logger.info("[_default_mods_root] Mods root from env: %s", p)
+            logger.debug("[_default_mods_root] Mods root from env: %s", p)
             return p
         logger.warning(
             "[_default_mods_root] XCAGI_MODS_ROOT / XCAGI_MODS_DIR is set but not a directory: %s",
@@ -61,29 +61,29 @@ def _default_mods_root() -> str:
     from_pkg_layout = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(file_here)))), "mods"
     )
-    logger.info(
+    logger.debug(
         "[_default_mods_root] Checking package-relative path: %s, exists: %s",
         from_pkg_layout,
         os.path.isdir(from_pkg_layout),
     )
     if os.path.isdir(from_pkg_layout):
-        logger.info("[_default_mods_root] Mods root (next to app package): %s", from_pkg_layout)
+        logger.debug("[_default_mods_root] Mods root (next to app package): %s", from_pkg_layout)
         return from_pkg_layout
 
     cwd_mods = os.path.join(os.getcwd(), "mods")
-    logger.info(
+    logger.debug(
         "[_default_mods_root] Checking CWD mods: %s, exists: %s", cwd_mods, os.path.isdir(cwd_mods)
     )
     if os.path.isdir(cwd_mods):
-        logger.info("[_default_mods_root] Mods root (./mods from cwd): %s", cwd_mods)
+        logger.debug("[_default_mods_root] Mods root (./mods from cwd): %s", cwd_mods)
         return cwd_mods
 
     cur = os.path.abspath(os.getcwd())
     for i in range(8):
         trial = os.path.join(cur, "mods")
-        logger.info("[_default_mods_root] Walking up: %s, exists: %s", trial, os.path.isdir(trial))
+        logger.debug("[_default_mods_root] Walking up: %s, exists: %s", trial, os.path.isdir(trial))
         if os.path.isdir(trial):
-            logger.info("[_default_mods_root] Mods root (walk up from cwd): %s", trial)
+            logger.debug("[_default_mods_root] Mods root (walk up from cwd): %s", trial)
             return trial
         parent = os.path.dirname(cur)
         if parent == cur:
@@ -1162,6 +1162,13 @@ def load_employee_pack_routes(app, mod_manager: ModManager | None = None) -> Non
         mod_manager = get_mod_manager()
     if is_mods_disabled():
         return
+    from app.application.employee_runtime.runtime_policy import (
+        desktop_admin_employee_runtime_disabled,
+    )
+
+    if desktop_admin_employee_runtime_disabled():
+        logger.debug("desktop SKU skips admin employee_pack route registration")
+        return
     root = mod_manager.mods_root
     emp_root = os.path.join(root, "_employees")
     if not os.path.isdir(emp_root):
@@ -1342,6 +1349,20 @@ def _mod_allowed_for_api_load(mod_id: str, session_id: str | None = None) -> boo
     return False
 
 
+def _mod_is_installed_locally(manager: object, mod_id: str) -> bool:
+    """Resolve installation state without requiring every test/adapter to expose ModManager internals."""
+    resolver = getattr(manager, "resolve_mod_directory", None)
+    if callable(resolver):
+        return bool(resolver(mod_id))
+    mods_root = getattr(manager, "mods_root", None)
+    if mods_root:
+        from pathlib import Path
+
+        return (Path(str(mods_root)) / mod_id).is_dir()
+    # Third-party/test managers predating local resolution cannot prove absence.
+    return True
+
+
 def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
     """
     访问 /api/mod/{mod_id}/... 前确保 Mod 已 load 且 HTTP 路由已挂载。
@@ -1357,6 +1378,16 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
 
     mm = get_mod_manager()
     if mid not in mm._loaded_mods:
+        if not _mod_is_installed_locally(mm, mid):
+            _MOD_API_FAILURE_RETRY_AT.pop(mid, None)
+            from app.runtime_integrity import clear_runtime_issue
+
+            clear_runtime_issue(f"industry_mod:{mid}")
+            logger.debug(
+                "[ModManager] ensure_mod_api_ready: entitled mod %s is not installed; skip",
+                mid,
+            )
+            return False
         retry_at = _MOD_API_FAILURE_RETRY_AT.get(mid, 0.0)
         if retry_at > time.monotonic():
             logger.debug(
@@ -1434,20 +1465,14 @@ def _entitled_client_mod_ids_for_api_mount(session_id: str | None = None) -> lis
     except RECOVERABLE_ERRORS:
         pass
 
-    # Open onboarding industries are shipped as a read-only seed pool and only
-    # the industry selected by the user is copied into userData/mods. Market
-    # entitlements may list every open seed, but an unselected seed being
-    # absent from userData is expected state, not a runtime load failure.
+    # Entitlements are authorization records, not local installation records.
+    # Only installed mods may enter the API mount/load path; a later poll sees
+    # a newly installed directory immediately without creating failure loops.
     try:
-        from app.mod_sdk.industry_seed import open_industry_seed_mod_ids
-
-        open_seed_ids = set(open_industry_seed_mod_ids())
-        mods_root = Path(get_mod_manager().mods_root)
-        candidates = {
-            mid for mid in candidates if mid not in open_seed_ids or (mods_root / mid).is_dir()
-        }
+        manager = get_mod_manager()
+        candidates = {mid for mid in candidates if _mod_is_installed_locally(manager, mid)}
     except RECOVERABLE_ERRORS:
-        logger.debug("filter unselected open industry seeds skipped", exc_info=True)
+        logger.debug("filter locally uninstalled entitled mods skipped", exc_info=True)
 
     return sorted(candidates)
 

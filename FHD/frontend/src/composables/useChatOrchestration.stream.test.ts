@@ -6,6 +6,7 @@ const {
   handleChatRequiresToken,
   applyPlainTextToMessageIndex,
   pushStreamingAiShell,
+  patchMessageAtIndex,
   saveMessage,
   sendChatStream,
   readPlannerSseResponse,
@@ -14,6 +15,7 @@ const {
   handleChatRequiresToken: vi.fn(),
   applyPlainTextToMessageIndex: vi.fn(),
   pushStreamingAiShell: vi.fn(() => 0),
+  patchMessageAtIndex: vi.fn(),
   saveMessage: vi.fn().mockResolvedValue(undefined),
   sendChatStream: vi.fn(),
   readPlannerSseResponse: vi.fn(),
@@ -30,6 +32,7 @@ vi.mock('./useChatMessages', async () => {
       saveMessage,
       pushStreamingAiShell,
       applyPlainTextToMessageIndex,
+      patchMessageAtIndex,
       clearMessages: vi.fn(),
       loadMessages: vi.fn(),
       syncFromServer: vi.fn().mockResolvedValue(undefined),
@@ -173,6 +176,7 @@ vi.mock('./useChatRequest', () => ({
 vi.mock('./useChatResponseAttach', () => ({
   useChatResponseAttach: () => ({
     getLastAiMessageRef: vi.fn(),
+    attachApprovalCardToLastAiMessage: vi.fn(),
     attachThinkingStepsToLastAiMessage: vi.fn(),
     attachTodoStepsToLastAiMessage: vi.fn(),
     attachWorkflowTraceToLastAiMessage: vi.fn(),
@@ -242,6 +246,15 @@ describe('useChatOrchestration stream', () => {
     expect(applyPlainTextToMessageIndex).toHaveBeenCalled()
     expect(saveMessage).toHaveBeenCalledWith('ai', '你好')
     expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
+    expect(sendChatStream.mock.calls[0]?.[0]).toMatchObject({
+      software_capabilities: expect.objectContaining({ version: 1 }),
+      runtime_context: expect.objectContaining({
+        software_capabilities: expect.objectContaining({ version: 1 }),
+      }),
+    })
+    expect(patchMessageAtIndex).toHaveBeenCalledWith(0, expect.objectContaining({
+      executionProgress: expect.any(Array),
+    }))
   })
 
   it('sendMessage stream handles requires_token event', async () => {
@@ -260,6 +273,32 @@ describe('useChatOrchestration stream', () => {
     const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
     await api.sendMessage('hello')
     expect(applyPlainTextToMessageIndex).toHaveBeenCalledWith(0, expect.stringContaining('处理失败'))
+    expect(sendChatStream).toHaveBeenCalledTimes(2)
+  })
+
+  it('automatically reconnects once when the first stream request fails before any event', async () => {
+    sendChatStream
+      .mockResolvedValueOnce({ ok: false, status: 502 })
+      .mockResolvedValueOnce({ ok: true, body: {} })
+    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    await api.sendMessage('hello')
+    expect(sendChatStream).toHaveBeenCalledTimes(2)
+    expect(patchMessageAtIndex).toHaveBeenCalledWith(0, expect.objectContaining({
+      toolProgressLabel: expect.stringContaining('自动重连'),
+    }))
+    expect(saveMessage).toHaveBeenCalledWith('ai', '你好')
+  })
+
+  it('records visible tool progress from SSE events', async () => {
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
+      onEvent({ type: 'tool_progress', phase: 'query', label: '客户资料' })
+      onEvent({ type: 'done', result: { success: true, response: '完成' } })
+    })
+    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    await api.sendMessage('查询客户')
+    expect(patchMessageAtIndex).toHaveBeenCalledWith(0, expect.objectContaining({
+      toolProgressLabel: expect.stringContaining('客户资料'),
+    }))
   })
 
   it('sendMessage stream surfaces SSE error event', async () => {

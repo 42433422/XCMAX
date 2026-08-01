@@ -36,6 +36,12 @@ import { useAgentRunEventSync, extractAgentRunId } from './useAgentRunEvents'
 import type { UseChatViewOptions } from './useChatView'
 import type { ChatAutoAction, ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
+import {
+  buildChatSoftwareCapabilities,
+  resolveChatSoftwareRouteKey,
+} from '@/utils/chatCapabilityCatalog'
+import { openDocumentPreviewFromResult } from '@/state/documentPreviewPip'
+import type { ChatExecutionProgressItem } from '@/types/chat-ui'
 
 type XcagiChatWindow = Window & {
   __VUE_CHAT_FILL__?: (value: string) => boolean
@@ -97,6 +103,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     saveMessage,
     pushStreamingAiShell,
     applyPlainTextToMessageIndex,
+    patchMessageAtIndex,
     clearMessages,
     loadMessages,
     syncFromServer,
@@ -127,11 +134,20 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const orderNumberFetching = ref(false)
   const isLoading = ref(false)
   const isStreamingReply = ref(false)
+  let activeChatStreamController: AbortController | null = null
+  let streamAbortRequestedByUser = false
   const isExecuting = ref(false)
   const latestAssistantPush = ref<{ title: string; description: string } | null>(null)
   const proRuntimeTask = ref<{ title: string; statusText: string; statusClass: string; description: string } | null>(null)
   const chatMessagesRef = ref<HTMLElement | null>(null)
   let persistTaskPanelStateForSession: (targetSessionId?: string) => void = () => { }
+
+  function stopStreamingReply() {
+    if (!activeChatStreamController) return
+    streamAbortRequestedByUser = true
+    clearVoiceQueue()
+    activeChatStreamController.abort()
+  }
 
   const {
     taskList,
@@ -1067,6 +1083,19 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const type = String(autoAction.type || '')
     const actionQuery = String(autoAction.query || autoAction.keyword || userMessage || '').trim()
 
+    if (type === 'navigate') {
+      const routeKey = resolveChatSoftwareRouteKey(
+        autoAction.route_key || autoAction.view || autoAction.target,
+      )
+      if (routeKey) {
+        window.dispatchEvent(new CustomEvent('xcagi:switch-view', { detail: { view: routeKey } }))
+        window.dispatchEvent(new CustomEvent('auto-action', {
+          detail: { action: { ...autoAction, route_key: routeKey }, userMessage },
+        }))
+      }
+      return
+    }
+
     if (type === 'set_work_mode') {
       applyProRuntimeMode(type, autoAction.enabled !== false)
     } else if (type === 'show_monitor') {
@@ -1255,13 +1284,37 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       const baseS = resolveChatTimeoutMs(primaryForStream)
       const timeoutMsS = Math.min(120000, baseS)
       const controller = new AbortController()
+      activeChatStreamController = controller
+      streamAbortRequestedByUser = false
       const killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
       const msgIndex = pushStreamingAiShell()
+      const executionProgress: ChatExecutionProgressItem[] = []
+      const updateExecutionProgress = (
+        phase: string,
+        label: string,
+        status: ChatExecutionProgressItem['status'] = 'running',
+      ) => {
+        const previous = executionProgress[executionProgress.length - 1]
+        if (previous && previous.phase === phase && previous.label === label) {
+          previous.status = status
+          previous.at = new Date().toISOString()
+        } else {
+          if (previous?.status === 'running') previous.status = 'success'
+          executionProgress.push({ phase, label, status, at: new Date().toISOString() })
+          if (executionProgress.length > 12) executionProgress.splice(0, executionProgress.length - 12)
+        }
+        patchMessageAtIndex(msgIndex, {
+          toolProgressLabel: label,
+          executionProgress: executionProgress.map((item) => ({ ...item })),
+        })
+      }
+      updateExecutionProgress('accepted', '已接收任务，正在理解你的需求…')
       let streamPlain = ''
       let streamRunId = ''
       let streamReadFinished = false
       let doneResult: unknown = null
       let sseError: string | null = null
+      let receivedAnyStreamEvent = false
       // TTS 增量朗读：以句末标点为界把已稳定的前缀丢给语音队列，避免边生成边合成后半句卡顿或被重复打断
       let ttsSpokenOffset = 0
       const ttsShouldSpeakThisMessage = ttsEnabled.value
@@ -1292,15 +1345,14 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         const { body } = buildPlannerChatRequestPayload(primaryForStream, {
           fromWriteUnlock: !!opts?.fromWriteUnlock
         })
-        const res = await chatApi.sendChatStream(
-          { ...body, message: String(body.message || primaryForStream) } as ChatRequest &
-          Record<string, unknown>,
-          { signal: controller.signal },
-        )
-        if (!res.ok) {
-          throw new Error(await parseChatStreamErrorResponse(res))
+        const softwareCapabilities = buildChatSoftwareCapabilities()
+        body.software_capabilities = softwareCapabilities
+        body.runtime_context = {
+          ...asRecord(body.runtime_context),
+          software_capabilities: softwareCapabilities,
         }
-        await readPlannerSseResponse(res, (ev: PlannerSseEvent) => {
+        const handleStreamEvent = (ev: PlannerSseEvent) => {
+          receivedAnyStreamEvent = true
           const eventRunId = String(ev.run_id || ev.agent_run_id || '').trim()
           if (eventRunId) streamRunId = eventRunId
           if (ev.type === 'token') {
@@ -1308,7 +1360,15 @@ export function useChatOrchestration(options: UseChatViewOptions) {
             streamPlain += ev.text || ''
             applyPlainTextToMessageIndex(msgIndex, streamPlain)
             flushTtsFromStream(streamPlain, false)
+            updateExecutionProgress('generating', '正在生成回复…')
             setLoadingProgress('正在生成回复…')
+          } else if (ev.type === 'tool_progress') {
+            const rawLabel = String(ev.text || ev.label || ev.phase || '工具').trim()
+            const progressText = ev.phase === 'accepted'
+              ? rawLabel
+              : rawLabel ? `正在调用 ${rawLabel}…` : '正在调用工具…'
+            updateExecutionProgress(String(ev.phase || 'tool'), progressText)
+            setLoadingProgress(progressText)
           } else if (ev.type === 'done') {
             doneResult = ev.result
           } else if (ev.type === 'error') {
@@ -1317,6 +1377,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
             const tokenName = ev.token_name || ''
             const tokenDesc = ev.token_description || ''
             handleChatRequiresToken(tokenName, tokenDesc, remoteMessages)
+            updateExecutionProgress('authorization', `等待授权：${tokenDesc || tokenName || '授权信息'}`, 'waiting')
             streamPlain += `\n[需要授权：${tokenDesc || tokenName || '授权信息'}]\n`
             applyPlainTextToMessageIndex(msgIndex, streamPlain)
             flushTtsFromStream(streamPlain, false)
@@ -1328,13 +1389,40 @@ export function useChatOrchestration(options: UseChatViewOptions) {
               plannerWriteUnlockResumeDraft.value = streamPlain
             }
           }
-        })
+        }
+        const requestStreamOnce = async () => {
+          const res = await chatApi.sendChatStream(
+            { ...body, message: String(body.message || primaryForStream) } as ChatRequest &
+            Record<string, unknown>,
+            { signal: controller.signal },
+          )
+          if (!res.ok) {
+            const httpError = new Error(await parseChatStreamErrorResponse(res)) as Error & {
+              retryable?: boolean
+            }
+            httpError.retryable = res.status === 408 || res.status === 429 || res.status >= 500
+            throw httpError
+          }
+          await readPlannerSseResponse(res, handleStreamEvent)
+        }
+        try {
+          await requestStreamOnce()
+        } catch (firstError: unknown) {
+          const retryable = (firstError as { retryable?: boolean })?.retryable !== false
+          if (receivedAnyStreamEvent || controller.signal.aborted || !retryable) throw firstError
+          updateExecutionProgress('reconnect', '模型服务响应较慢，正在自动重连…', 'retrying')
+          setLoadingProgress('模型服务响应较慢，正在自动重连…')
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 600))
+          await requestStreamOnce()
+        }
         streamReadFinished = true
         if (sseError) {
           throw new Error(sseError)
         }
         const donePayload = asPlannerPayload(doneResult)
         const finalText = String(donePayload.response ?? streamPlain).trim() || streamPlain || '（无内容）'
+        updateExecutionProgress('completed', '任务已完成', 'success')
+        patchMessageAtIndex(msgIndex, { toolProgressLabel: undefined })
         applyPlainTextToMessageIndex(msgIndex, finalText)
         // 后端 done 事件可能带一段非 token 的尾部文本（比如总结段），统一再做一次兜底朗读
         if (ttsShouldSpeakThisMessage && ttsEnabled.value) {
@@ -1378,12 +1466,23 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         if (wrap.task) {
           maybeCloseAssistantFloatForShipmentTask(wrap.task, wrap.autoAction)
         }
+        openDocumentPreviewFromResult(wrap)
       } catch (err: unknown) {
         const isForegroundTimeout = err instanceof Error && err.name === 'AbortError'
+        if (isForegroundTimeout && streamAbortRequestedByUser) {
+          const partial = streamPlain.trim()
+          updateExecutionProgress('cancelled', '已停止生成', 'cancelled')
+          patchMessageAtIndex(msgIndex, { toolProgressLabel: undefined })
+          const stoppedText = partial || '（已停止生成）'
+          applyPlainTextToMessageIndex(msgIndex, stoppedText)
+          await saveMessage('ai', stoppedText)
+          return
+        }
         const shouldTrackInBackground = !!streamRunId
           && !streamReadFinished
           && (isForegroundTimeout || !sseError)
         if (shouldTrackInBackground) {
+          updateExecutionProgress('background', '前台等待结束，任务继续在后台执行', 'waiting')
           const partial = streamPlain.trim()
           const backgroundNotice = [
             partial,
@@ -1402,13 +1501,17 @@ export function useChatOrchestration(options: UseChatViewOptions) {
           isForegroundTimeout
             ? `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
             : errorMessage(err, '流式对话失败')
-        applyPlainTextToMessageIndex(msgIndex, `处理失败：${errText}`)
-        await saveMessage('ai', `处理失败：${errText}`)
+        updateExecutionProgress('failed', `处理失败：${errText}`, 'failed')
+        patchMessageAtIndex(msgIndex, { toolProgressLabel: undefined })
+        const failureText = `处理失败：${errText}\n\n上下文已保留，可重新发送或从右侧任务面板重试。`
+        applyPlainTextToMessageIndex(msgIndex, failureText)
+        await saveMessage('ai', failureText)
         if (streamRunId) {
           await syncAgentRunEvents(streamRunId, primaryForStream)
           attachAgentRunTraceToLastAiMessage()
         }
       } finally {
+        if (activeChatStreamController === controller) activeChatStreamController = null
         isStreamingReply.value = false
         window.clearTimeout(killTimer)
         isLoading.value = false
@@ -1818,6 +1921,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     scrollToBottom,
     syncProModeState: dbGate.syncProModeState,
     sendMessage,
+    stopStreamingReply,
     confirmWorkflowFromCard,
     cancelWorkflowFromCard,
     confirmTask,

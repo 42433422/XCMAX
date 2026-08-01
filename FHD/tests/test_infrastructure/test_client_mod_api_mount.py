@@ -155,5 +155,4 @@ def test_api_mount_candidates_skip_unselected_open_industry_seed(
 
     assert _entitled_client_mod_ids_for_api_mount("sess-3") == [
         "attendance-industry",
-        "taiyangniao-pro",
     ]

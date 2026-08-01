@@ -12,6 +12,16 @@ logger = logging.getLogger(__name__)
 
 def refresh_employee_pack_runtime(pack_id: str | None = None) -> dict[str, Any]:
     """安装/卸载员工包后刷新路由与工具 registry 缓存。"""
+    from app.application.employee_runtime.runtime_policy import (
+        desktop_admin_employee_runtime_disabled,
+        desktop_employee_runtime_status,
+    )
+
+    if desktop_admin_employee_runtime_disabled():
+        status = desktop_employee_runtime_status()
+        status["routes_reloaded"] = []
+        status["registered_tool_count"] = 0
+        return status
     from app.application.tools.workflow import invalidate_workflow_tool_registry
     from app.mod_sdk.employee_tool_registry import build_employee_tools_status
 
@@ -59,6 +69,15 @@ def refresh_employee_pack_runtime(pack_id: str | None = None) -> dict[str, Any]:
 
 def warm_employee_tool_registry() -> dict[str, Any]:
     """启动时扫描 mods/_employees 并预热工具注册表。"""
+    from app.application.employee_runtime.runtime_policy import (
+        desktop_admin_employee_runtime_disabled,
+        desktop_employee_runtime_status,
+    )
+
+    if desktop_admin_employee_runtime_disabled():
+        status = desktop_employee_runtime_status()
+        status["registered_tool_count"] = 0
+        return status
     from app.application.tools.workflow import get_workflow_tool_registry
     from app.mod_sdk.employee_tool_registry import build_employee_tools_status
 
