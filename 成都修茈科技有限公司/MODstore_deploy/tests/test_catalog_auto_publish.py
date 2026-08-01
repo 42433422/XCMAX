@@ -114,6 +114,69 @@ def test_auto_publish_is_public_verified_and_idempotent(client, monkeypatch, tmp
     assert second.json()["idempotent"] is True
 
 
+def test_publication_survives_vector_outage_and_idempotent_retry_recovers(
+    client, monkeypatch, tmp_path
+) -> None:
+    pkg_id = f"vector-outage-{uuid.uuid4().hex[:12]}"
+    raw = _package(pkg_id)
+    digest = hashlib.sha256(raw).hexdigest()
+    monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
+    monkeypatch.setenv("MODSTORE_AUTO_PUBLISH_TOKEN", "auto-token-dedicated")
+    monkeypatch.setenv("MODSTORE_AUTO_PUBLISH_REPOSITORY", "owner/repo")
+    monkeypatch.setattr(
+        "modstore_server.package_sandbox_audit.run_package_audit_async", _review_pass
+    )
+
+    attempts: list[str] = []
+
+    def unavailable_index(**_kwargs):
+        attempts.append("failed")
+        raise TimeoutError("embedding provider unavailable")
+
+    monkeypatch.setattr(
+        "modstore_server.api.catalog_public_routes.insert_embedding",
+        unavailable_index,
+    )
+    metadata = {
+        "id": pkg_id,
+        "version": "1.0.0",
+        "name": "Vector Outage",
+        "artifact": "mod",
+        "public_listing": True,
+        "automation_provenance": {
+            "source_repository": "owner/repo",
+            "source_sha": "b" * 40,
+            "workflow_run_id": "456",
+            "package_sha256": digest,
+        },
+    }
+
+    def upload():
+        return client.post(
+            "/v1/packages",
+            headers={"Authorization": "Bearer auto-token-dedicated"},
+            data={"metadata": json.dumps(metadata)},
+            files={"file": (f"{pkg_id}-1.0.0.xcmod", raw, "application/zip")},
+        )
+
+    first = upload()
+    assert first.status_code == 200, first.text
+    assert first.json()["idempotent"] is False
+    assert first.json()["semantic_indexed"] is False
+    assert attempts == ["failed"]
+    assert client.get(f"/v1/packages/{pkg_id}/1.0.0").json()["sha256"] == digest
+
+    monkeypatch.setattr(
+        "modstore_server.api.catalog_public_routes.insert_embedding",
+        lambda **_kwargs: attempts.append("recovered"),
+    )
+    second = upload()
+    assert second.status_code == 200, second.text
+    assert second.json()["idempotent"] is True
+    assert second.json()["semantic_indexed"] is True
+    assert attempts == ["failed", "recovered"]
+
+
 def test_direct_python_employee_does_not_require_workflow_heart() -> None:
     config = {
         "identity": {"id": "direct", "name": "Direct", "version": "1.0.0"},
