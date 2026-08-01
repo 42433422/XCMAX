@@ -558,6 +558,14 @@ def _schedule_delivery_outbox_push() -> None:
     loop.run_in_executor(None, _push)
 
 
+async def _private_delivery_market_token(request: Request) -> str:
+    from app.fastapi_routes.market_account import resolve_valid_market_access_token
+    from app.infrastructure.auth.dependencies import session_id_from_request
+
+    sid = session_id_from_request(request)
+    return await resolve_valid_market_access_token(sid) if sid else ""
+
+
 def _private_mod_local_rows(mod_ids: set[str]) -> dict[str, dict[str, Any]]:
     from app.infrastructure.mods.mod_manager import get_mod_manager
 
@@ -621,8 +629,8 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
     from app.mod_sdk.customer_delivery import delivery_for_account_custom_mod
     from app.services.private_mod_delivery import (
         HAPPY_PATH,
-        STAGES,
         STAGE_LABELS,
+        STAGES,
         TRACKS,
         attach_track_nodes,
         fetch_private_mod_library,
@@ -638,12 +646,11 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
     local_rows = _private_mod_local_rows(mod_ids)
     remote_rows: list[dict[str, Any]] = []
     remote_error = ""
+    request_error = ""
+    custom_requests: list[dict[str, Any]] = []
+    token = ""
     try:
-        from app.fastapi_routes.market_account import resolve_valid_market_access_token
-        from app.infrastructure.auth.dependencies import session_id_from_request
-
-        sid = session_id_from_request(request)
-        token = await resolve_valid_market_access_token(sid) if sid else ""
+        token = await _private_delivery_market_token(request)
         if token:
             remote_rows = await fetch_private_mod_library(token)
         elif mod_ids:
@@ -651,6 +658,21 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
     except RECOVERABLE_ERRORS as exc:
         remote_error = str(exc)[:240]
         logger.warning("private Mod update check failed: %s", exc)
+    if token:
+        try:
+            from app.services.private_mod_delivery import custom_delivery_remote_json
+
+            request_rows = await custom_delivery_remote_json(
+                token, "/api/customer-service/custom-deliveries"
+            )
+            custom_requests = [
+                dict(row)
+                for row in (request_rows.get("items") or [])
+                if isinstance(row, dict)
+            ]
+        except RECOVERABLE_ERRORS as exc:
+            request_error = str(exc)[:240]
+            logger.warning("custom delivery request sync failed: %s", exc)
     remote_by_id = {
         _safe_text(row.get("id")): row
         for row in remote_rows
@@ -714,8 +736,105 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
             "stage_labels": STAGE_LABELS,
             "update_count": sum(1 for p in projects if p["update_available"]),
             "remote_error": remote_error,
+            "request_error": request_error,
+            "requests": custom_requests,
             "requires_login": bool(mod_ids and not remote_rows and remote_error),
         },
+    )
+
+
+@router.post("/private-delivery/requests", response_model=ModStoreSimpleResponse)
+async def mod_store_create_private_delivery_request(request: Request) -> ModStoreSimpleResponse:
+    payload = await _request_payload(request)
+    kind = _safe_text(payload.get("kind"))
+    title = _safe_text(payload.get("title"))
+    requirements = _safe_text(payload.get("requirements"))
+    acceptance_criteria = _safe_text(payload.get("acceptance_criteria"))
+    if kind not in {"module", "employee", "bundle"}:
+        raise HTTPException(status_code=400, detail="kind 必须是 module、employee 或 bundle")
+    if len(title) < 2 or len(requirements) < 8 or len(acceptance_criteria) < 4:
+        raise HTTPException(status_code=400, detail="请完整填写需求名称、需求说明和验收标准")
+    token = await _private_delivery_market_token(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="请先登录并绑定修茈市场账号")
+    from app.services.private_mod_delivery import custom_delivery_remote_json
+
+    try:
+        data = await custom_delivery_remote_json(
+            token,
+            "/api/customer-service/custom-deliveries",
+            method="POST",
+            payload={
+                "kind": kind,
+                "title": title,
+                "requirements": requirements,
+                "acceptance_criteria": acceptance_criteria,
+                "suggested_id": _safe_text(payload.get("suggested_id")) or None,
+            },
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except (ConnectionError, RuntimeError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return ModStoreSimpleResponse(success=True, message="定制需求已受理，生产员工已开始制作", data=data)
+
+
+@router.post(
+    "/private-delivery/requests/{ticket_id}/decision",
+    response_model=ModStoreSimpleResponse,
+)
+async def mod_store_decide_private_delivery_request(
+    ticket_id: int,
+    request: Request,
+) -> ModStoreSimpleResponse:
+    payload = await _request_payload(request)
+    action = _safe_text(payload.get("action"))
+    note = _safe_text(payload.get("note"))
+    if action not in {"accept", "rework"}:
+        raise HTTPException(status_code=400, detail="action 必须是 accept 或 rework")
+    if action == "rework" and len(note) < 4:
+        raise HTTPException(status_code=400, detail="返工意见至少 4 个字")
+    token = await _private_delivery_market_token(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="请先登录并绑定修茈市场账号")
+    from app.services.private_mod_delivery import custom_delivery_remote_json
+
+    try:
+        data = await custom_delivery_remote_json(
+            token,
+            f"/api/customer-service/custom-deliveries/{int(ticket_id)}/decision",
+            method="POST",
+            payload={"action": action, "note": note},
+        )
+    except (ConnectionError, RuntimeError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    message = "已确认验收，可安装交付" if action == "accept" else "已转返工，生产员工已开始新一轮制作"
+    return ModStoreSimpleResponse(success=True, message=message, data=data)
+
+
+@router.post(
+    "/private-delivery/requests/{ticket_id}/install",
+    response_model=ModStoreSimpleResponse,
+)
+async def mod_store_install_private_delivery_request(
+    ticket_id: int,
+    request: Request,
+) -> ModStoreSimpleResponse:
+    payload = await _request_payload(request)
+    artifact_kind = _safe_text(payload.get("artifact_kind"))
+    token = await _private_delivery_market_token(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="请先登录并绑定修茈市场账号")
+    from app.services.private_mod_delivery import install_custom_delivery_artifact
+
+    try:
+        data = await install_custom_delivery_artifact(token, ticket_id, artifact_kind)
+    except (ConnectionError, LookupError, RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return ModStoreSimpleResponse(
+        success=True,
+        message=str(data.get("message") or "定制产物已安装"),
+        data=data,
     )
 
 

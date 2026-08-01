@@ -530,6 +530,154 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
         assert any("员工处理进展" in (m.content or "") for m in msgs)
 
 
+def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client, monkeypatch):
+    """定制交付不能因员工报告成功提前结案；必须质量门、验收和安装回执齐全。"""
+    from modstore_server import customer_service_api, workbench_api
+    from modstore_server.app import app
+    from modstore_server.customer_service_orchestrator import (
+        apply_customer_ticket_incident_progress,
+    )
+    from modstore_server.models import get_session_factory
+    from modstore_server.models_cs import CustomerServiceTicket
+
+    user = _make_user("custom_delivery")
+    state = {
+        "id": "wb-custom-1",
+        "intent": "mod",
+        "status": "running",
+        "steps": [{"id": "spec", "label": "理解需求", "status": "running"}],
+        "artifact": None,
+        "error": None,
+        "quality_report": None,
+        "sandbox_report": None,
+    }
+
+    async def fake_start(user_id, payload):
+        assert user_id == user.id
+        assert payload["intent"] == "mod"
+        return {"session_id": state["id"], "status": "running"}
+
+    async def fake_snapshot(session_id, user_id):
+        assert session_id == state["id"]
+        assert user_id == user.id
+        return dict(state)
+
+    monkeypatch.setattr(workbench_api, "start_workbench_session_for_user", fake_start)
+    monkeypatch.setattr(workbench_api, "get_workbench_session_snapshot", fake_snapshot)
+    monkeypatch.setattr(
+        customer_service_api,
+        "_schedule_customer_ticket_incident",
+        lambda payload: None,
+    )
+    app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+    try:
+        created = client.post(
+            "/api/customer-service/custom-deliveries",
+            json={
+                "kind": "bundle",
+                "title": "合同审核与审批员工",
+                "requirements": "解析合同并标记风险，再交由审批员工生成复核意见。",
+                "acceptance_criteria": "沙箱用例和员工真实执行门均通过。",
+                "suggested_id": "contract-review-private",
+            },
+        )
+        assert created.status_code == 200, created.text
+        body = created.json()
+        assert body["custom_delivery"]["stage"] == "production"
+        ticket_id = int(body["id"])
+
+        sf = get_session_factory()
+        with sf() as db:
+            progress = apply_customer_ticket_incident_progress(
+                db,
+                ticket_id=ticket_id,
+                event_id=71001,
+                team_ok=True,
+                team_rows=[
+                    {
+                        "role": "verify",
+                        "employee_id": "test-qa-runner",
+                        "ok": True,
+                        "status": "success",
+                    }
+                ],
+            )
+            db.commit()
+            assert progress["ok"] is True
+            row = db.query(CustomerServiceTicket).filter_by(id=ticket_id).first()
+            assert row.status == "processing"
+            assert row.closed_at is None
+
+        state.update(
+            {
+                "status": "done",
+                "steps": [
+                    {"id": "spec", "label": "理解需求", "status": "done"},
+                    {"id": "mod_sandbox", "label": "Mod 沙箱", "status": "done"},
+                    {"id": "complete", "label": "完成", "status": "done"},
+                ],
+                "artifact": {
+                    "mod_id": "contract-review-private",
+                    "validation_summary": {"ok": True},
+                },
+            }
+        )
+        listed = client.get("/api/customer-service/custom-deliveries")
+        assert listed.status_code == 200, listed.text
+        current = next(row for row in listed.json()["items"] if row["id"] == ticket_id)
+        assert current["custom_delivery"]["stage"] == "acceptance"
+        assert current["custom_delivery"]["gate_ok"] is True
+
+        accepted = client.post(
+            f"/api/customer-service/custom-deliveries/{ticket_id}/decision",
+            json={"action": "accept", "note": "验收通过"},
+        )
+        assert accepted.status_code == 200, accepted.text
+        assert accepted.json()["custom_delivery"]["stage"] == "delivering"
+
+        receipt_token = "pytest-download-receipt-token-73"
+        with sf() as db:
+            row = db.query(CustomerServiceTicket).filter_by(id=ticket_id).first()
+            evidence = customer_service_api._custom_delivery_evidence(row)
+            evidence["download_grants"] = [
+                {
+                    "token": receipt_token,
+                    "kind": "module",
+                    "id": "contract-review-private",
+                    "used": False,
+                }
+            ]
+            row.evidence_json = customer_service_api.json_dumps(evidence)
+            db.commit()
+
+        installed = client.post(
+            f"/api/customer-service/custom-deliveries/{ticket_id}/installed",
+            json={
+                "artifact_kind": "module",
+                "artifact_id": "contract-review-private",
+                "installed_version": "1.0.0",
+                "host": "XCAGI Desktop pytest",
+                "receipt_token": receipt_token,
+            },
+        )
+        assert installed.status_code == 200, installed.text
+        assert installed.json()["status"] == "resolved"
+        assert installed.json()["custom_delivery"]["stage"] == "delivered"
+        replayed = client.post(
+            f"/api/customer-service/custom-deliveries/{ticket_id}/installed",
+            json={
+                "artifact_kind": "module",
+                "artifact_id": "contract-review-private",
+                "installed_version": "1.0.0",
+                "host": "XCAGI Desktop pytest",
+                "receipt_token": receipt_token,
+            },
+        )
+        assert replayed.status_code == 409
+    finally:
+        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+
+
 def test_infer_intent_order_no_alone_is_not_refund():
     from modstore_server.customer_service_orchestrator import (
         infer_intent,
