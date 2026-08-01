@@ -7,8 +7,20 @@ from typing import Any
 
 def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
     entries = payload.get("entries")
-    if not isinstance(entries, list) or not entries:
+    if not isinstance(entries, list):
         return _failed("entries must be a non-empty list", "missing_entries")
+    if not entries:
+        return {
+            "ok": True,
+            "status": "no_data",
+            "summary": "已只读查询作者分润账本，当前没有可对账条目；未发起任何资金操作。",
+            "differences": [],
+            "invalid_entries": [],
+            "evidence": ["input.entries", "authoritative_empty_observation"],
+            "read_only": True,
+            "side_effects": [],
+            "no_effect": True,
+        }
 
     differences: list[dict[str, Any]] = []
     invalid: list[dict[str, Any]] = []
