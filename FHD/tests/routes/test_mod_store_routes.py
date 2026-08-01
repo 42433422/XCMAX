@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import app.fastapi_routes.mod_store_routes as ms
+import app.fastapi_routes.private_mod_delivery_routes as private_delivery_routes
 from app.fastapi_routes.mod_store_routes import router
 
 
@@ -1073,3 +1074,54 @@ class TestRequestPayload:
 
         result = asyncio.get_event_loop().run_until_complete(make_request())
         assert result == {}
+
+
+class TestPrivateDeliveryRequests:
+    def test_create_request_proxies_current_market_identity(
+        self, client: TestClient, monkeypatch
+    ) -> None:
+        from app.services import private_mod_delivery as delivery
+
+        remote = AsyncMock(
+            return_value={
+                "id": 73,
+                "ticket_no": "CD73",
+                "custom_delivery": {"stage": "production"},
+            }
+        )
+        monkeypatch.setattr(
+            private_delivery_routes,
+            "_private_delivery_market_token",
+            AsyncMock(return_value="jwt"),
+        )
+        monkeypatch.setattr(delivery, "custom_delivery_remote_json", remote)
+
+        response = client.post(
+            "/private-delivery/requests",
+            json={
+                "kind": "bundle",
+                "title": "合同审核闭环",
+                "requirements": "读取合同并生成审核结果和员工复核意见",
+                "acceptance_criteria": "沙箱与真实执行门通过",
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["custom_delivery"]["stage"] == "production"
+        assert remote.await_args.args[:2] == ("jwt", "/api/customer-service/custom-deliveries")
+        assert remote.await_args.kwargs["payload"]["kind"] == "bundle"
+
+    def test_install_request_requires_market_login(self, client: TestClient, monkeypatch) -> None:
+        monkeypatch.setattr(
+            private_delivery_routes,
+            "_private_delivery_market_token",
+            AsyncMock(return_value=""),
+        )
+
+        response = client.post(
+            "/private-delivery/requests/73/install",
+            json={"artifact_kind": "module"},
+        )
+
+        assert response.status_code == 401
+        assert "登录" in response.json()["detail"]

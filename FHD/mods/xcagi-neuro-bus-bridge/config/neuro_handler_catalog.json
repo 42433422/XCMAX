@@ -60,6 +60,7 @@
       "domain_id": "ai",
       "host_module": "app.neuro_bus.domains.ai_service_domain",
       "register_fn": "get_ai_service_domain",
+      "managed_by": "domain_registry",
       "optional": true
     },
     {

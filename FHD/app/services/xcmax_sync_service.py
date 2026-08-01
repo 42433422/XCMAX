@@ -35,7 +35,6 @@ from typing import Any
 from app.utils.operational_errors import OPERATIONAL_ERRORS
 
 logger = logging.getLogger(__name__)
-
 _NODE_ID = os.environ.get("XCMAX_NODE_ID", "local")
 _DEFAULT_URLOPEN = urllib.request.urlopen
 _DIRECT_HTTP_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -125,9 +124,7 @@ def _write_sync_meta(key: str, value: dict[str, Any]) -> None:
     conn.close()
 
 
-# ---------------------------------------------------------------------------
 # 公共变更记录入口（各业务路由均可调用）
-# ---------------------------------------------------------------------------
 
 
 def record_change(
@@ -164,9 +161,7 @@ def record_change(
         return -1
 
 
-# ---------------------------------------------------------------------------
 # 推送 outbox → 远端
-# ---------------------------------------------------------------------------
 
 
 def push_outbox(
@@ -840,6 +835,11 @@ def _apply_account_entitlements(item: dict[str, Any]) -> None:
         logger.warning(
             "apply_account_entitlements failed user=%s id=%s: %s", username, entity_id, exc
         )
+
+
+from app.application.private_mod_delivery_sync import apply_private_mod_delivery
+
+register_entity_applier("private_mod_delivery")(apply_private_mod_delivery)
 
 
 def apply_inbox(limit: int = 200) -> dict[str, Any]:

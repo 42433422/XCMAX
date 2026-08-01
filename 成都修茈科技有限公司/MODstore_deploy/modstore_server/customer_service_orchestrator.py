@@ -16,6 +16,7 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
 
+from modstore_server import custom_delivery_incident_policy as delivery_policy
 from modstore_server.customer_service_tools import (
     audit,
     build_action,
@@ -1996,14 +1997,15 @@ def apply_customer_ticket_incident_progress(
     if not ticket:
         return {"ok": False, "reason": "ticket_not_found"}
 
+    ev = json_loads(ticket.evidence_json, {})
+    if not isinstance(ev, dict):
+        ev = {}
+    delivery_managed = delivery_policy.is_delivery_managed(ticket.intent, ev)
     rows = [r for r in (team_rows or []) if isinstance(r, dict)]
     progress = _summarize_incident_team_rows(rows)
     hint = str(summary_hint or ticket.summary or ticket.title or "").strip()[:120]
     if team_ok:
-        reply = (
-            f"我是小C。工单「{hint or ticket.ticket_no}」值班员工已完成排查修复并验证通过。"
-            f"进展：{progress}。如仍复现请再补充截图。"
-        )
+        reply = delivery_policy.success_reply(hint or ticket.ticket_no, progress, delivery_managed)
     else:
         reply = (
             f"我是小C。工单「{hint or ticket.ticket_no}」已有员工处理进展："
@@ -2044,19 +2046,8 @@ def apply_customer_ticket_incident_progress(
     action.error = ""
     db.flush()
 
-    # 有员工结论 → decision_status=approved 进入「有结果」；仅全员成功才结案
-    ticket.decision_status = "approved"
-    if team_ok:
-        ticket.status = "resolved"
-        ticket.closed_at = datetime.now(timezone.utc)
-    else:
-        ticket.status = "processing"
-        ticket.closed_at = None
-    ticket.updated_at = datetime.now(timezone.utc)
+    delivery_policy.apply_ticket_outcome(ticket, team_ok, delivery_managed)
 
-    ev = json_loads(ticket.evidence_json, {})
-    if not isinstance(ev, dict):
-        ev = {}
     reports = list(ev.get("employee_reports") or [])
     reports.append(
         {
