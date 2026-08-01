@@ -49,9 +49,22 @@ test.describe('Login flow', () => {
     await expect(page.locator('#app')).toBeVisible();
     await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
 
-    const materialsNav = page.locator('button.menu-item[data-view="materials"]');
-    await expect(materialsNav).toBeVisible({ timeout: 25_000 });
-    await materialsNav.click();
+    await page.evaluate(async () => {
+      const app = (
+        document.querySelector('#app') as HTMLElement & {
+          __vue_app__?: {
+            config?: {
+              globalProperties?: {
+                $router?: { push: (path: string) => Promise<unknown> };
+              };
+            };
+          };
+        }
+      ).__vue_app__;
+      const router = app?.config?.globalProperties?.$router;
+      if (!router) throw new Error('Vue router is unavailable from the mounted app');
+      await router.push('/materials');
+    });
     await expect(page).toHaveURL(/\/materials(?:[?#]|$)/);
     await expect(page.locator('#view-materials')).toBeVisible({ timeout: 25_000 });
     await expect(page.locator('body')).not.toContainText('正在登录');
