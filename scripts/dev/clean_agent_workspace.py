@@ -5,12 +5,14 @@
 - 各处 .retort 运行时（保留 absorption_state.json）
 - .xcmax-logs / .xcmax-pids 陈旧文件
 - 常见 __pycache__ / .pytest_cache / *.pyc（仅仓库内浅层）
+- Para 执行器的陈旧任务克隆、超大日志和历史安装备份
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -19,6 +21,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 LOG_MAX_AGE_SEC = int(os.environ.get("XCMAX_CLEAN_LOG_MAX_AGE_SEC") or 7 * 24 * 3600)
 PID_MAX_AGE_SEC = int(os.environ.get("XCMAX_CLEAN_PID_MAX_AGE_SEC") or 2 * 24 * 3600)
+RUNTIME_WORKSPACE_MAX_AGE_SEC = int(
+    os.environ.get("XCMAX_CLEAN_RUNTIME_WORKSPACE_MAX_AGE_SEC") or 2 * 3600
+)
+RUNTIME_LOG_MAX_BYTES = int(
+    os.environ.get("XCMAX_CLEAN_RUNTIME_LOG_MAX_BYTES") or 16 * 1024 * 1024
+)
+RUNTIME_LOG_TAIL_BYTES = int(
+    os.environ.get("XCMAX_CLEAN_RUNTIME_LOG_TAIL_BYTES") or 4 * 1024 * 1024
+)
+RUNTIME_BACKUP_KEEP = int(os.environ.get("XCMAX_CLEAN_RUNTIME_BACKUP_KEEP") or 3)
+AGENT_RUNTIME_ROOT = Path.home() / "XCMAX-runtime" / "para-main-agent"
+_TASK_DIR_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-",
+    re.IGNORECASE,
+)
+_BACKUP_MARKERS = (".backup-", ".backup.", ".bak-", ".bak.")
 
 
 def _rm_tree(path: Path, removed: list[str]) -> None:
@@ -34,12 +52,16 @@ def _rm_tree(path: Path, removed: list[str]) -> None:
         removed.append(str(path))
 
 
-def _clean_retort(project: Path, removed: list[str], kept: list[str], errors: list[str]) -> None:
+def _clean_retort(
+    project: Path, removed: list[str], kept: list[str], errors: list[str]
+) -> None:
     try:
         sys.path.insert(0, str(ROOT / "packages" / "retort_engine"))
         from retort_engine.workspace_hygiene import clean_workspace
 
-        result = clean_workspace(project, keep_durable_state=True, purge_empty_runtime=True)
+        result = clean_workspace(
+            project, keep_durable_state=True, purge_empty_runtime=True
+        )
         removed.extend(result.get("removed") or [])
         kept.extend(result.get("kept") or [])
         errors.extend(result.get("errors") or [])
@@ -73,6 +95,87 @@ def _clean_aged_dir(path: Path, max_age: int, removed: list[str]) -> None:
         _rm_tree(item, removed)
 
 
+def _clean_agent_runtime_workspaces(
+    runtime_root: Path,
+    *,
+    max_age: int,
+    removed: list[str],
+    errors: list[str],
+) -> None:
+    workspace = runtime_root / "workspace"
+    if not workspace.is_dir():
+        return
+    now = time.time()
+    for item in workspace.iterdir():
+        if not item.is_dir() or not _TASK_DIR_RE.match(item.name):
+            continue
+        try:
+            if now - item.stat().st_mtime < max_age:
+                continue
+            _rm_tree(item, removed)
+        except OSError as exc:
+            errors.append(f"{item}: {exc}")
+
+
+def _trim_agent_runtime_logs(
+    runtime_root: Path,
+    *,
+    max_bytes: int,
+    tail_bytes: int,
+    removed: list[str],
+    errors: list[str],
+) -> None:
+    logs = runtime_root / "logs"
+    if not logs.is_dir():
+        return
+    bounded_tail = max(0, min(tail_bytes, max_bytes))
+    for path in logs.glob("*.log"):
+        try:
+            size = path.stat().st_size
+            if size <= max_bytes:
+                continue
+            with path.open("r+b") as stream:
+                stream.seek(max(0, size - bounded_tail))
+                tail = stream.read(bounded_tail)
+                stream.seek(0)
+                stream.write(tail)
+                stream.truncate()
+            removed.append(f"trimmed:{path}")
+        except OSError as exc:
+            errors.append(f"{path}: {exc}")
+
+
+def _prune_agent_runtime_backups(
+    runtime_root: Path,
+    *,
+    keep: int,
+    removed: list[str],
+    errors: list[str],
+) -> None:
+    if not runtime_root.is_dir():
+        return
+    groups: dict[str, list[Path]] = {}
+    for path in runtime_root.iterdir():
+        if not path.is_file():
+            continue
+        marker = next((value for value in _BACKUP_MARKERS if value in path.name), "")
+        if not marker:
+            continue
+        groups.setdefault(path.name.split(marker, 1)[0], []).append(path)
+    retain = max(0, keep)
+    for paths in groups.values():
+        try:
+            ordered = sorted(paths, key=lambda item: item.stat().st_mtime, reverse=True)
+        except OSError as exc:
+            errors.append(f"runtime_backup_sort: {exc}")
+            continue
+        for path in ordered[retain:]:
+            try:
+                _rm_tree(path, removed)
+            except OSError as exc:
+                errors.append(f"{path}: {exc}")
+
+
 def _is_git_tracked(path: Path) -> bool:
     try:
         import subprocess
@@ -91,7 +194,12 @@ def _is_git_tracked(path: Path) -> bool:
 def _clean_shallow_caches(removed: list[str]) -> None:
     names = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
     # 仅扫浅层，避免全仓 walk 过慢；跳过已被 git 跟踪的目录（少数历史误入库 pyc）
-    candidates = [ROOT, ROOT / "FHD", ROOT / "packages" / "retort_engine", ROOT / "成都修茈科技有限公司" / "MODstore_deploy"]
+    candidates = [
+        ROOT,
+        ROOT / "FHD",
+        ROOT / "packages" / "retort_engine",
+        ROOT / "成都修茈科技有限公司" / "MODstore_deploy",
+    ]
     for base in candidates:
         if not base.is_dir():
             continue
@@ -104,7 +212,9 @@ def _clean_shallow_caches(removed: list[str]) -> None:
                 continue
             if depth > 6:
                 continue
-            if _is_git_tracked(path) or any(_is_git_tracked(p) for p in path.rglob("*") if p.is_file()):
+            if _is_git_tracked(path) or any(
+                _is_git_tracked(p) for p in path.rglob("*") if p.is_file()
+            ):
                 continue
             _rm_tree(path, removed)
 
@@ -120,6 +230,25 @@ def main() -> int:
     _clean_aged_dir(ROOT / ".xcmax-logs", LOG_MAX_AGE_SEC, removed)
     _clean_aged_dir(ROOT / ".xcmax-pids", PID_MAX_AGE_SEC, removed)
     _clean_shallow_caches(removed)
+    _clean_agent_runtime_workspaces(
+        AGENT_RUNTIME_ROOT,
+        max_age=RUNTIME_WORKSPACE_MAX_AGE_SEC,
+        removed=removed,
+        errors=errors,
+    )
+    _trim_agent_runtime_logs(
+        AGENT_RUNTIME_ROOT,
+        max_bytes=RUNTIME_LOG_MAX_BYTES,
+        tail_bytes=RUNTIME_LOG_TAIL_BYTES,
+        removed=removed,
+        errors=errors,
+    )
+    _prune_agent_runtime_backups(
+        AGENT_RUNTIME_ROOT,
+        keep=RUNTIME_BACKUP_KEEP,
+        removed=removed,
+        errors=errors,
+    )
 
     # 去重
     removed = sorted(set(removed))
