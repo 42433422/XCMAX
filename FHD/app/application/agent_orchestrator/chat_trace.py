@@ -24,15 +24,21 @@ from app.application.agent_orchestrator.run_repository import (
     get_agent_run_repository,
 )
 from app.application.agent_orchestrator.trace_serialization import (
+    _MAX_TRACE_DICT_ITEMS as _MAX_TRACE_DICT_ITEMS,
+)
+from app.application.agent_orchestrator.trace_serialization import (
+    _MAX_TRACE_LIST_ITEMS as _MAX_TRACE_LIST_ITEMS,
+)
+from app.application.agent_orchestrator.trace_serialization import (
+    _MAX_TRACE_STRING_CHARS as _MAX_TRACE_STRING_CHARS,
+)
+from app.application.agent_orchestrator.trace_serialization import (
     trace_safe_value as _trace_safe_value,
 )
 from app.application.business_mutation_evidence import apply_business_mutation_evidence_gate
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-_MAX_TRACE_STRING_CHARS = 4000
-_MAX_TRACE_LIST_ITEMS = 20
-_MAX_TRACE_DICT_ITEMS = 40
 _LEGACY_EXECUTE_READ_DEFAULTS = {
     "business_db": ("read",),
     "customers": ("query",),

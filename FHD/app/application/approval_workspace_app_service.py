@@ -24,6 +24,9 @@ from app.application.approval_agent_run_bridge import (
     _has_pending_ai_workflow,
     _resume_pending_ai_workflow_after_approval,
 )
+from app.application.approval_agent_run_bridge import (
+    _durable_ai_workflow_link as _durable_ai_workflow_link,
+)
 from app.application.mobile_push_app_service import notify_mobile_user
 from app.db.models.approval import (
     ApprovalAction,
