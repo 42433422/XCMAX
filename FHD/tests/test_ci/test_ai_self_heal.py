@@ -25,11 +25,24 @@ import pytest
 
 # 把 FHD/scripts/ci 加入 sys.path 以便直接 import ai_self_heal 模块
 FHD_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = FHD_ROOT.parent
 CI_SCRIPTS = FHD_ROOT / "scripts" / "ci"
 if str(CI_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(CI_SCRIPTS))
 
 import ai_self_heal as heal  # noqa: E402
+
+
+def test_self_heal_workflow_carries_failure_branch_and_serializes_duplicates() -> None:
+    for workflow_path in (
+        FHD_ROOT / ".github" / "workflows" / "ai-self-heal.yml",
+        REPO_ROOT / ".github" / "workflows" / "fhd-ai-self-heal.yml",
+    ):
+        workflow = workflow_path.read_text(encoding="utf-8")
+        assert "concurrency:" in workflow
+        assert "--head-repo" in workflow
+        assert "github.event.workflow_run.head_repository.full_name" in workflow
+
 
 # =====================================================================
 # extract_errors 测试
@@ -154,6 +167,47 @@ class TestComputeFingerprint:
         fp2 = heal.compute_fingerprint("c/d", "wf", "job", "err")
         assert fp1 != fp2
 
+    def test_generic_exit_uses_stable_root_cause_context(self) -> None:
+        errors = [
+            heal.ErrorEntry(
+                "github-actions",
+                "EXIT_1",
+                "Process completed with exit code 1.",
+                "",
+                0,
+                "##[error]Process completed with exit code 1.",
+            )
+        ]
+        first = (
+            "2026-08-01T03:25:50.097Z [big-files-ratchet] 1 VIOLATION(S):\n"
+            "2026-08-01T03:25:50.098Z - app/a.py grew 100 → 120\n"
+            "2026-08-01T03:25:50.102Z ##[error]Process completed with exit code 1."
+        )
+        second = first.replace("03:25:50", "03:32:40")
+
+        assert heal.canonical_fingerprint_evidence(
+            errors, first
+        ) == heal.canonical_fingerprint_evidence(errors, second)
+
+    def test_generic_exit_different_root_causes_do_not_collide(self) -> None:
+        errors = [
+            heal.ErrorEntry(
+                "github-actions",
+                "EXIT_1",
+                "Process completed with exit code 1.",
+                "",
+                0,
+                "##[error]Process completed with exit code 1.",
+            )
+        ]
+
+        assert heal.canonical_fingerprint_evidence(
+            errors, "ERROR: coverage below threshold\n##[error]Process completed with exit code 1."
+        ) != heal.canonical_fingerprint_evidence(
+            errors,
+            "[big-files-ratchet] 1 VIOLATION(S)\n##[error]Process completed with exit code 1.",
+        )
+
 
 # =====================================================================
 # is_already_processed / record_fingerprint 测试
@@ -189,6 +243,44 @@ class TestFingerprintStore:
         assert rec["repo"] == "a/b"
         assert rec["workflow"] == "ci"
         assert "ts" in rec
+
+    def test_github_incident_is_durable_cross_runner_dedup(self) -> None:
+        client = MagicMock()
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = [
+            {
+                "html_url": "https://github.com/a/b/issues/9",
+                "body": "Correlation/Fingerprint: `same-fingerprint`",
+            }
+        ]
+        client.get.return_value = response
+
+        existing = heal.find_existing_remediation_issue(
+            "same-fingerprint",
+            token="tok",
+            repo="a/b",
+            client=client,
+            now_ts=1_800_000_000,
+        )
+
+        assert existing == "https://github.com/a/b/issues/9"
+        assert client.get.call_args.kwargs["params"]["labels"] == "auto-incident"
+        assert client.get.call_args.kwargs["params"]["state"] == "all"
+
+    def test_github_incident_lookup_fail_open(self) -> None:
+        client = MagicMock()
+        client.get.side_effect = RuntimeError("github unavailable")
+
+        assert (
+            heal.find_existing_remediation_issue(
+                "fingerprint",
+                token="tok",
+                repo="a/b",
+                client=client,
+            )
+            == ""
+        )
 
 
 # =====================================================================
@@ -369,13 +461,17 @@ class TestCreateRemediationIssue:
             "https://github.com/owner/repo/issues/505",
             token="tok",
             repo="owner/repo",
+            target_branch="feature/failing-ci",
             client=client,
         )
 
         assert ok is True
         assert client.post.call_args.kwargs["json"] == {
             "ref": "main",
-            "inputs": {"issue_number": "505"},
+            "inputs": {
+                "issue_number": "505",
+                "target_branch": "feature/failing-ci",
+            },
         }
 
     def test_no_repo_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -583,6 +679,7 @@ class TestMainFlow:
         monkeypatch.setenv("GITHUB_TOKEN", "tok")
         monkeypatch.setenv("GITHUB_REPOSITORY", "a/b")
         monkeypatch.setattr(heal, "fetch_workflow_logs", lambda *a, **k: "")
+        monkeypatch.setattr(heal, "find_existing_remediation_issue", lambda *a, **k: "")
         monkeypatch.setattr(
             heal,
             "create_remediation_issue",
@@ -608,6 +705,52 @@ class TestMainFlow:
         )
         assert rc == 2
         assert dispatched == ["https://github.com/a/b/issues/1"]
+
+    def test_durable_fingerprint_skips_duplicate_incident(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        monkeypatch.setenv("GITHUB_TOKEN", "tok")
+        monkeypatch.setenv("GITHUB_REPOSITORY", "a/b")
+        log = "app/foo.py:10:1: F401 'os' imported but unused\n"
+        monkeypatch.setattr(heal, "fetch_workflow_logs", lambda *a, **k: log)
+        monkeypatch.setattr(
+            heal,
+            "find_existing_remediation_issue",
+            lambda *a, **k: "https://github.com/a/b/issues/77",
+        )
+        created: list[object] = []
+        monkeypatch.setattr(
+            heal,
+            "create_remediation_issue",
+            lambda **kwargs: created.append(kwargs) or "",
+        )
+
+        rc = heal.main(
+            [
+                "--run-id",
+                "1",
+                "--workflow",
+                "ci",
+                "--branch",
+                "feature/x",
+                "--store",
+                str(tmp_path / "fps.jsonl"),
+            ]
+        )
+
+        assert rc == 0
+        assert created == []
+        assert heal.is_already_processed(
+            heal.compute_fingerprint(
+                "a/b",
+                "ci",
+                "feature/x",
+                "app/foo.py:10:1: F401 'os' imported but unused",
+            ),
+            store_path=tmp_path / "fps.jsonl",
+        )
 
     def test_dry_run_does_not_create_pr(
         self,
@@ -654,7 +797,7 @@ class TestMainFlow:
 
         # 预先记录相同指纹
         err_lines = ["app/foo.py:10:1: F401 'os' imported but unused"]
-        fp = heal.compute_fingerprint("a/b", "ci", "", "\n".join(err_lines))
+        fp = heal.compute_fingerprint("a/b", "ci", "main", "\n".join(err_lines))
         heal.record_fingerprint(fp, "https://existing/pr", store_path=store)
 
         called = {"create_pr": False}
