@@ -4648,8 +4648,6 @@ async def create_workbench_session(
     payload = body.model_dump()
     if raw_files:
         payload["_files"] = raw_files
-    from modstore_server.workbench_delivery_bridge import start_workbench_session_for_user
-
     return await start_workbench_session_for_user(int(user.id), payload)
 
 
@@ -4710,8 +4708,6 @@ async def get_workbench_session(
     session_id: str,
     user: User = Depends(_get_current_user),
 ):
-    from modstore_server.workbench_delivery_bridge import get_workbench_session_snapshot
-
     payload = await get_workbench_session_snapshot(session_id, int(user.id))
     if payload is None:
         async with _SESSION_LOCK:
