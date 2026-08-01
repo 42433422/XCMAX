@@ -52,6 +52,28 @@ def _request(package: Mapping[str, Any]) -> tuple[str, str]:
     return package_id, version
 
 
+def _live_market_listing(package_id: str, version: str) -> dict[str, Any]:
+    """Read the authoritative public-market row from the live database."""
+
+    from modstore_server.models import CatalogItem, get_session_factory
+
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        row = session.query(CatalogItem).filter(CatalogItem.pkg_id == package_id).first()
+        if row is None:
+            return {}
+        return {
+            "catalog_item_id": int(row.id),
+            "package_id": _text(row.pkg_id, 128).lower(),
+            "version": _text(row.version, 64),
+            "artifact": _text(row.artifact, 32).lower(),
+            "stored_filename": _text(row.stored_filename, 256),
+            "package_sha256": _text(row.sha256, 64).lower(),
+            "is_public": bool(row.is_public),
+            "compliance_status": _text(row.compliance_status, 32).lower(),
+        }
+
+
 def _archive_manifest(path: Path, package_id: str) -> dict[str, Any]:
     try:
         with zipfile.ZipFile(path) as archive:
@@ -76,8 +98,13 @@ def _archive_manifest(path: Path, package_id: str) -> dict[str, Any]:
     return manifest
 
 
-def verify_catalog_package(package_id: str, version: str) -> dict[str, Any]:
-    """Verify catalog identity, archive digest, manifest and executor contract."""
+def verify_catalog_package(
+    package_id: str,
+    version: str,
+    *,
+    market_lookup: Callable[[str, str], Mapping[str, Any]] = _live_market_listing,
+) -> dict[str, Any]:
+    """Verify static catalog, runtime contract, and the public market listing."""
 
     record = get_package(package_id, version)
     if not isinstance(record, dict):
@@ -125,6 +152,31 @@ def verify_catalog_package(package_id: str, version: str) -> dict[str, Any]:
     source_commit_sha = _text(record.get("source_commit_sha"), 64).lower()
     if source_commit_sha and not _COMMIT_RE.fullmatch(source_commit_sha):
         raise EvolutionDeploymentReceiptError("catalog_source_commit_invalid")
+
+    market = market_lookup(package_id, version)
+    if not isinstance(market, Mapping) or not market:
+        raise EvolutionDeploymentReceiptError("market_listing_not_found")
+    if (
+        _text(market.get("package_id"), 128).lower() != package_id
+        or _text(market.get("version"), 64) != version
+    ):
+        raise EvolutionDeploymentReceiptError("market_listing_identity_mismatch")
+    if _text(market.get("artifact"), 32).lower() != "employee_pack":
+        raise EvolutionDeploymentReceiptError("market_listing_artifact_mismatch")
+    if _text(market.get("package_sha256"), 64).lower() != digest:
+        raise EvolutionDeploymentReceiptError("market_listing_digest_mismatch")
+    if _text(market.get("stored_filename"), 256) != stored_filename:
+        raise EvolutionDeploymentReceiptError("market_listing_archive_mismatch")
+    if market.get("is_public") is not True:
+        raise EvolutionDeploymentReceiptError("market_listing_not_public")
+    if _text(market.get("compliance_status"), 32).lower() != "approved":
+        raise EvolutionDeploymentReceiptError("market_listing_not_approved")
+    try:
+        market_catalog_item_id = int(market.get("catalog_item_id"))
+    except (TypeError, ValueError) as exc:
+        raise EvolutionDeploymentReceiptError("market_listing_id_invalid") from exc
+    if market_catalog_item_id <= 0:
+        raise EvolutionDeploymentReceiptError("market_listing_id_invalid")
     return {
         "package_id": package_id,
         "version": version,
@@ -134,6 +186,8 @@ def verify_catalog_package(package_id: str, version: str) -> dict[str, Any]:
         "catalog_readback_verified": True,
         "installability_verified": True,
         "runtime_contract_verified": True,
+        "market_catalog_item_id": market_catalog_item_id,
+        "market_listing_verified": True,
     }
 
 
