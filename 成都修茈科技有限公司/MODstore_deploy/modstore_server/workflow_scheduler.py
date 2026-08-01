@@ -58,6 +58,7 @@ _REQUIRED_CORE_JOB_IDS = frozenset(
         "retention_janitor_daily",
         "scheduler_heartbeat",
         "self_evolution_metrics",
+        "storage_pressure_self_heal",
         "telemetry_backlog_scan",
         "time_rail_observability_sync",
     }
@@ -539,6 +540,15 @@ def start_scheduler() -> None:
         misfire_grace_time=_cleanup_misfire_grace_time(),
         coalesce=True,
         max_instances=1,
+    )
+
+    from modstore_server.storage_pressure_self_heal import register_storage_pressure_job
+
+    register_storage_pressure_job(
+        _scheduler,
+        track_job=_run_tracked_scheduler_job,
+        startup_probe=_run_scheduler_startup_probe,
+        misfire_grace_time=_cleanup_misfire_grace_time(),
     )
 
     def _incident_collect_pytest_cursor() -> None:
