@@ -70,12 +70,12 @@ from modstore_server.models import (
     WorkflowNode,
     get_session_factory,
 )
-from modstore_server.workbench_research import build_research_context, fetch_web_search_context_pack
-from modstore_server.workbench_script_runner import run_script_agent_job, run_script_job
 from modstore_server.workbench_delivery_bridge import (  # noqa: F401
     get_workbench_session_snapshot,
     start_workbench_session_for_user,
 )
+from modstore_server.workbench_research import build_research_context, fetch_web_search_context_pack
+from modstore_server.workbench_script_runner import run_script_agent_job, run_script_job
 from modstore_server.workflow_engine import run_workflow_sandbox
 from modstore_server.workflow_nl_graph import apply_nl_workflow_graph
 from modstore_server.workflow_sandbox_state import record_workflow_sandbox_run
@@ -2654,6 +2654,7 @@ async def _run_pipeline(sid: str, user_id: int, payload: Dict[str, Any]) -> None
                 is_contract_doc_review_brief,
             )
             from modstore_server.employee_pipeline_routing import classify_employee_pipeline
+
             _routing_brief = extract_routing_brief(payload, fallback=brief)
             _emp_brief_lower = (_routing_brief or brief or "").lower()
             _needs_llm_reasoning = is_contract_doc_review_brief(_routing_brief) or any(
@@ -4648,6 +4649,7 @@ async def create_workbench_session(
     if raw_files:
         payload["_files"] = raw_files
     from modstore_server.workbench_delivery_bridge import start_workbench_session_for_user
+
     return await start_workbench_session_for_user(int(user.id), payload)
 
 
@@ -4709,6 +4711,7 @@ async def get_workbench_session(
     user: User = Depends(_get_current_user),
 ):
     from modstore_server.workbench_delivery_bridge import get_workbench_session_snapshot
+
     payload = await get_workbench_session_snapshot(session_id, int(user.id))
     if payload is None:
         async with _SESSION_LOCK:

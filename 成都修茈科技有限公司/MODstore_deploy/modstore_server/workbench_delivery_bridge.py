@@ -63,19 +63,23 @@ async def get_workbench_session_snapshot(session_id: str, user_id: int) -> dict[
         "sandbox_report": session.get("sandbox_report"),
         "quality_report": session.get("quality_report"),
         "six_dimension_report": session.get("six_dimension_report"),
-        "script_result": {
-            "ok": script_result.get("ok"),
-            "stdout": script_result.get("stdout", ""),
-            "stderr": script_result.get("stderr", ""),
-            "outputs": [
-                {
-                    "filename": output.get("filename"),
-                    "size": output.get("size"),
-                    "download_url": f"/api/workbench/sessions/{session_id}/files/{output.get('filename')}",
-                }
-                for output in (script_result.get("outputs") or [])
-            ],
-        } if session.get("script_result") else None,
+        "script_result": (
+            {
+                "ok": script_result.get("ok"),
+                "stdout": script_result.get("stdout", ""),
+                "stderr": script_result.get("stderr", ""),
+                "outputs": [
+                    {
+                        "filename": output.get("filename"),
+                        "size": output.get("size"),
+                        "download_url": f"/api/workbench/sessions/{session_id}/files/{output.get('filename')}",
+                    }
+                    for output in (script_result.get("outputs") or [])
+                ],
+            }
+            if session.get("script_result")
+            else None
+        ),
     }
 
 
