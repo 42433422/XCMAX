@@ -147,6 +147,7 @@ def _build_issue_body(proposal: dict[str, Any]) -> str:
     ctx = proposal.get("context") or {}
     intent_ctx = ctx.get("intent_result") or {}
     skill_ctx = ctx.get("skill_proposal") or {}
+
     def safe_name(value: Any) -> str:
         text = str(value or "")
         return text if re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", text) else ""
@@ -193,6 +194,8 @@ def _build_issue_body(proposal: dict[str, Any]) -> str:
         "2. 用户原文与槽位值留在本地，不写入 GitHub。\n"
         "3. 先确认能力边界、风险、验收与回滚；满足受控实现策略后再进入实现队列。\n"
         "4. 实现、审核、合并、上架和部署收据必须分别留证。\n"
+        "5. 仓库所有者确认后，单独评论 `确认实现` 或 `/approve-implementation`；"
+        "系统将显式派发实现工作流，批准本身不能直接合并代码。\n"
     )
 
 
