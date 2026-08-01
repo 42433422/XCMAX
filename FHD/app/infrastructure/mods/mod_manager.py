@@ -1,7 +1,6 @@
 """
 Mod Manager - Core manager for scanning, loading, and managing mods
 """
-
 import importlib
 import importlib.util
 import json
@@ -14,9 +13,7 @@ import time
 import zipfile
 from pathlib import Path
 from typing import Any
-
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-
 from .artifact_constants import ARTIFACT_BUNDLE, ARTIFACT_EMPLOYEE_PACK, normalize_artifact
 from .artifact_package import (
     validate_bundle_manifest,
@@ -25,12 +22,9 @@ from .artifact_package import (
 from .manifest import ModMetadata, parse_manifest, validate_dependencies
 from .package import ModPackage, ModPackageError, ModSignatureError
 from .registry import get_mod_registry
-
 logger = logging.getLogger(__name__)
-
 _MOD_API_FAILURE_RETRY_AT: dict[str, float] = {}
 _MOD_API_FAILURE_BACKOFF_SECONDS = 15.0
-
 
 def is_mods_disabled() -> bool:
     """为 true 时不加载任何 Mod（扩展蓝图、行业覆盖、Hooks 等），仅用核心与原始配置/数据库。"""
@@ -1162,9 +1156,7 @@ def load_employee_pack_routes(app, mod_manager: ModManager | None = None) -> Non
         mod_manager = get_mod_manager()
     if is_mods_disabled():
         return
-    from app.application.employee_runtime.runtime_policy import (
-        desktop_admin_employee_runtime_disabled,
-    )
+    from app.application.employee_runtime.runtime_policy import desktop_admin_employee_runtime_disabled
 
     if desktop_admin_employee_runtime_disabled():
         logger.debug("desktop SKU skips admin employee_pack route registration")
@@ -1349,19 +1341,6 @@ def _mod_allowed_for_api_load(mod_id: str, session_id: str | None = None) -> boo
     return False
 
 
-def _mod_is_installed_locally(manager: object, mod_id: str) -> bool:
-    """Resolve installation state without requiring every test/adapter to expose ModManager internals."""
-    resolver = getattr(manager, "resolve_mod_directory", None)
-    if callable(resolver):
-        return bool(resolver(mod_id))
-    mods_root = getattr(manager, "mods_root", None)
-    if mods_root:
-        from pathlib import Path
-
-        return (Path(str(mods_root)) / mod_id).is_dir()
-    # Third-party/test managers predating local resolution cannot prove absence.
-    return True
-
 
 def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
     """
@@ -1378,15 +1357,9 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
 
     mm = get_mod_manager()
     if mid not in mm._loaded_mods:
-        if not _mod_is_installed_locally(mm, mid):
-            _MOD_API_FAILURE_RETRY_AT.pop(mid, None)
-            from app.runtime_integrity import clear_runtime_issue
+        from app.infrastructure.mods.mod_installation_policy import skip_uninstalled_mod_api
 
-            clear_runtime_issue(f"industry_mod:{mid}")
-            logger.debug(
-                "[ModManager] ensure_mod_api_ready: entitled mod %s is not installed; skip",
-                mid,
-            )
+        if skip_uninstalled_mod_api(mm, mid, _MOD_API_FAILURE_RETRY_AT):
             return False
         retry_at = _MOD_API_FAILURE_RETRY_AT.get(mid, 0.0)
         if retry_at > time.monotonic():
@@ -1469,8 +1442,10 @@ def _entitled_client_mod_ids_for_api_mount(session_id: str | None = None) -> lis
     # Only installed mods may enter the API mount/load path; a later poll sees
     # a newly installed directory immediately without creating failure loops.
     try:
+        from app.infrastructure.mods.mod_installation_policy import mod_is_installed_locally
+
         manager = get_mod_manager()
-        candidates = {mid for mid in candidates if _mod_is_installed_locally(manager, mid)}
+        candidates = {mid for mid in candidates if mod_is_installed_locally(manager, mid)}
     except RECOVERABLE_ERRORS:
         logger.debug("filter locally uninstalled entitled mods skipped", exc_info=True)
 

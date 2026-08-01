@@ -1,11 +1,8 @@
 """
 XCAGI 前端兼容 API — AI 聊天辅助函数与数据模型。
-
 供 xcagi_compat_chat / xcagi_compat_misc 等模块复用。
 """
-
 from __future__ import annotations
-
 import asyncio
 import hashlib
 import json
@@ -18,7 +15,6 @@ import time
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
-
 from fastapi import HTTPException, Request
 from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
@@ -529,15 +525,8 @@ def _xcagi_guarded_planner_stream_events(
     first_token_timeout = min(_xcagi_stream_first_token_timeout_seconds(), total_timeout)
     idle_notice_seconds = _xcagi_stream_idle_notice_seconds()
     started_at = time.monotonic()
-    # Connection acceptance is the transport first packet. Market routing may
-    # continue before visible text without being misreported as a failed stream.
     first_event_seen = True
-    yield {
-        "type": "tool_progress",
-        "label": "模型服务",
-        "text": "模型服务已接收任务，正在思考…",
-        "phase": "accepted",
-    }
+    yield {"type": "tool_progress", "label": "模型服务", "text": "模型服务已接收任务，正在思考…", "phase": "accepted"}
 
     while True:
         elapsed = time.monotonic() - started_at
@@ -770,12 +759,8 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 text = str(ev.get("text") or "")
                 if not ev.get("ephemeral"):
                     reply_parts.append(text)
-                outgoing_event = ev
-                if pre_run is not None and not run_receipt_sent:
-                    # Attach the durable receipt to the existing first token so
-                    # older clients keep exactly the same SSE event sequence.
-                    outgoing_event = _sse_payload_with_run_id(ev, pre_run.run_id)
-                    run_receipt_sent = True
+                outgoing_event = _sse_payload_with_run_id(ev, pre_run.run_id) if pre_run is not None and not run_receipt_sent else ev
+                run_receipt_sent = run_receipt_sent or pre_run is not None
                 yield _sse_event_line(outgoing_event)
             elif et == "requires_token":
                 if pre_run is not None:

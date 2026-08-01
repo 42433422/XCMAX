@@ -778,10 +778,7 @@ export function useKittenAnalyzer() {
       }
       const blob = await resp.blob()
       await assertKittenFileBlob(resp, blob, format === 'xlsx' ? '表格生成' : '文档生成')
-      const filename = getFilenameFromDisposition(
-        resp.headers.get('content-disposition'),
-        format === 'xlsx' ? `生成表格_${formatExportTimestamp()}.xlsx` : `生成文档_${formatExportTimestamp()}.docx`
-      )
+      const filename = getFilenameFromDisposition(resp.headers.get('content-disposition'), format === 'xlsx' ? `生成表格_${formatExportTimestamp()}.xlsx` : `生成文档_${formatExportTimestamp()}.docx`)
       openDocumentPreviewFromBlob(blob, filename, p)
       downloadBlob(blob, filename)
       addMessage('ai', `已生成并下载：<strong>${filename}</strong><br>（内容由模型起草，正式签署前请法务审核）`)

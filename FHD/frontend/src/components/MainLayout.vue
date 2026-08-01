@@ -124,11 +124,9 @@ import VirtualCursor from './VirtualCursor.vue'
 import OnboardingTutorial from './OnboardingTutorial.vue'
 import MobileBottomNav from './MobileBottomNav.vue'
 import { useOnboardingTutorialStore } from '@/stores/onboardingTutorial'
-import { useTutorialStore } from '@/stores/tutorial'
-import { setTutorialBuildContextFactory } from '@/stores/tutorial'
+import { setTutorialBuildContextFactory, useTutorialStore } from '@/stores/tutorial'
 import { useTutorialCatalog } from '@/composables/useTutorialCatalog'
 import { documentPreviewPip } from '@/state/documentPreviewPip'
-
 const props = defineProps({
   isProMode: {
     type: Boolean,
@@ -137,7 +135,6 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['toggle-pro-mode'])
-
 const route = useRoute()
 const router = useRouter()
 const onboardingTutorialStore = useOnboardingTutorialStore()

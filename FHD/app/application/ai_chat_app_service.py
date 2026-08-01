@@ -1,22 +1,17 @@
 """
 AI 聊天应用服务
-
 编排 AI 聊天业务逻辑：
 - 处理即时工具执行（products/customers/shipments/shipment_generate）
 - 构建统一响应格式
 - 处理确认流程
-
 说明：专业版下若请求已带 excel_analysis 且用户话术中命中「导入/入库」等关键词，
 ``_try_handle_dynamic_workflow`` 可能走「规则映射 + 写库」捷径（见 ``import_pipeline``）。
-
 **决策权**：默认由前端随请求附带 ``excel_import_ai_decides: true``，此时**不**走规则捷径，
 入库映射与执行交给主对话 / Planner 与工具链（与「AI 拥有决策权」一致）。若需恢复极速规则入库，
 可在设置中开启「Excel 入库走规则捷径」，或请求体 ``context.excel_import_use_deterministic_shortcut: true``。
-
 服务端还可设 ``XCAGI_EXCEL_IMPORT_AI_DECIDES=1``（全局倾向 AI 路径）或
 ``XCAGI_DISABLE_PRO_EXCEL_IMPORT_SHORTCUT=1`` / ``context.excel_import_skip_deterministic_shortcut``（等价跳过捷径）。
 """
-
 import asyncio
 import json
 import logging
@@ -24,15 +19,11 @@ import re
 import uuid
 from pathlib import Path
 from typing import Any
-
 import httpx  # noqa: F401 - compatibility patch point for legacy tests/callers
-
 from app.di.registry import get_service_registry
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import resolve_fhd_repo_root
-
 logger = logging.getLogger(__name__)
-
 from app.application.ai_chat.excel_import_pipeline import AIChatExcelImportMixin
 from app.application.ai_chat.excel_import_policy import (
     _EXCEL_IMPORT_MEASURE_UNIT_TOKENS as _EXCEL_IMPORT_MEASURE_UNIT_TOKENS,
@@ -43,8 +34,6 @@ from app.application.ai_chat.excel_import_policy import (
 )
 from app.application.ai_chat.instant_tools import AIChatInstantToolsMixin
 from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
-
-
 def _import_workflow_components():
     from app.application.workflow import (
         HybridRiskGate,
@@ -52,10 +41,7 @@ def _import_workflow_components():
         WorkflowEngine,
         get_approval_service,
     )
-
     return HybridRiskGate, LLMWorkflowPlanner, WorkflowEngine, get_approval_service
-
-
 def _import_ai_conversation_service():
     from app.services import get_ai_conversation_service as _get
 
@@ -241,11 +227,9 @@ class AIChatApplicationService(
         # Direct callers of AIChatApplicationService (outside the compat
         # routes) receive the same receipt-enforced behavior.  The route layer
         # also invokes this policy so legacy-mode deployments are protected.
-        from app.application.customer_mutation_agent import (
-            try_start_customer_mutation_agent_run,
-        )
+        from app.application.ai_chat_agent_bridge import try_customer_mutation
 
-        customer_mutation_payload = try_start_customer_mutation_agent_run(
+        customer_mutation_payload = try_customer_mutation(
             message,
             runtime_context=ctx,
             user_id=user_id,
@@ -1277,74 +1261,15 @@ class AIChatApplicationService(
                 approval_nodes = pending.get("approval_nodes", [])
 
                 if approval_required and approval_nodes:
-                    from app.application.agent_orchestrator import AgentOrchestrator
+                    from app.application.ai_chat_agent_bridge import submit_pending_agent_approval
 
-                    agent_run_id = str(pending.get("agent_run_id") or "").strip()
-                    if agent_run_id:
-                        agent_run, approval_request_ids = AgentOrchestrator().submit_run_for_approval(
-                            agent_run_id,
-                            requested_by=user_id,
-                        )
-                    else:
-                        # Compatibility for pre-AgentRun pending workflows created
-                        # before this process/version upgrade.
-                        approval_request_ids = []
-                        for node_info in approval_nodes:
-                            node = next(
-                                (
-                                    item
-                                    for item in plan.nodes
-                                    if item.node_id == node_info.get("node_id")
-                                ),
-                                None,
-                            )
-                            if node is None:
-                                continue
-                            request = self.approval_service.create_approval_request(
-                                plan_id=plan.plan_id,
-                                node=node,
-                                runtime_context=runtime_ctx,
-                                plan=plan,
-                            )
-                            if not bool(getattr(request, "persistence_confirmed", True)):
-                                continue
-                            request_id = str(getattr(request, "request_id", "") or "").strip()
-                            if request_id:
-                                approval_request_ids.append(request_id)
-                        agent_run = object() if approval_request_ids else None
-                    if agent_run_id:
-                        self._pending_workflows.pop(user_id, None)
-
-                    approval_inner = {
-                        "plan_id": plan.plan_id,
-                        "run_id": agent_run_id,
-                        "agent_run_id": agent_run_id,
-                        "approval_required": True,
-                        "approval_nodes": approval_nodes,
-                        "approval_request_ids": approval_request_ids,
-                    }
-                    submitted = bool(agent_run and approval_request_ids)
-                    response_text = (
-                        "已提交审批请求，请在审批中心处理；审批通过后任务会从当前步骤继续。"
-                        if submitted
-                        else "审批请求提交失败，持久化任务仍保留，可稍后重试。"
+                    approval_payload, clear_pending = submit_pending_agent_approval(
+                        pending, user_id=user_id, approval_service=self.approval_service,
+                        enrich_confirmation_inner=_enrich_confirmation_inner,
                     )
-                    return {
-                        "success": submitted,
-                        "message": "处理完成",
-                        "run_id": agent_run_id,
-                        "agent_run_id": agent_run_id,
-                        "response": response_text,
-                        "data": {
-                            "text": response_text,
-                            "action": "approval_pending",
-                            "run_id": agent_run_id,
-                            "agent_run_id": agent_run_id,
-                            "data": _enrich_confirmation_inner(
-                                approval_inner, action="approval_pending"
-                            ),
-                        },
-                    }
+                    if clear_pending:
+                        self._pending_workflows.pop(user_id, None)
+                    return approval_payload
 
                 agent_run_id = str(pending.get("agent_run_id") or "").strip()
                 if agent_run_id:
@@ -1450,9 +1375,7 @@ class AIChatApplicationService(
         )
 
         raw_approval_nodes = self.approval_service.get_approval_required_nodes(plan)
-        approval_required_nodes = (
-            raw_approval_nodes if isinstance(raw_approval_nodes, list) else []
-        )
+        approval_required_nodes = raw_approval_nodes if isinstance(raw_approval_nodes, list) else []
         has_approval_requirement = bool(approval_required_nodes)
         approval_info = ""
         if has_approval_requirement:

@@ -145,7 +145,6 @@
     </div>
   </div>
 </template>
-
 <script setup>
 import { TransitionGroup, computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -175,10 +174,9 @@ import { primeCsrfCookie } from '@/api/core'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import SidebarMenuItem from '@/components/SidebarMenuItem.vue'
 import DesktopAppUpdatePrompt from '@/components/DesktopAppUpdatePrompt.vue'
+import { useDesktopRuntimeStatus } from '@/composables/useDesktopRuntimeStatus'
 import packageJson from '../../package.json'
-
 const { imUnreadTotal } = useImUnreadBadge()
-
 const props = defineProps({
   activeView: {
     type: String,
@@ -189,9 +187,7 @@ const props = defineProps({
     default: false,
   },
 })
-
 const emit = defineEmits(['change-view', 'toggle-pro-mode'])
-
 const industryStore = useIndustryStore()
 const sidebarLayoutStore = useSidebarLayoutStore()
 const modsStore = useModsStore()
@@ -200,7 +196,6 @@ const { modsForUi } = storeToRefs(modsStore)
 const { isAdminAccount, displayBrand } = storeToRefs(accountProfileStore)
 const { menuItems, visibleNavItems: _visibleNavItems } = useVisibleNavItems()
 const { assistantSubtitle } = useIndustryUiText()
-
 function shortModLabel(name) {
   const s = String(name || '').trim()
   if (!s) return 'Mod'
@@ -235,12 +230,6 @@ const entitlementSyncStatus = ref(null)
 const entitlementSyncStatusError = ref('')
 const entitlementSyncLoading = ref(false)
 const entitlementSyncNoticeUntil = ref(0)
-const healthAppVersion = ref('')
-const desktopShellVersion = ref('')
-const runtimeHealth = ref(null)
-const desktopRuntimeStatus = ref(null)
-const systemStatusLoading = ref(true)
-const systemStatusError = ref('')
 let activeReorderPointerId = null
 let pressTimer = null
 let boundWindowPointerMove = null
@@ -251,7 +240,6 @@ let pendingDragPoint = null
 let adminDeployPollTimer = null
 let entitlementSyncPollTimer = null
 let entitlementSyncNoticeTimer = null
-let systemStatusPollTimer = null
 /** @type {{ key: string, midY: number }[]} */
 let menuHitCache = []
 
@@ -356,60 +344,13 @@ const shouldShowEntitlementSyncStatus = computed(() => {
   return Boolean(accountProfileStore.marketUserId || displayBrand.value)
 })
 
-const sidebarAppVersionText = computed(() => {
-  if (shouldShowAdminDeployStatus.value) return ''
-  const shellVersion = String(desktopShellVersion.value || packageJson.version || '').trim()
-  const backendVersion = String(healthAppVersion.value || '').trim()
-  if (shellVersion && backendVersion && shellVersion !== backendVersion) return '版本不一致'
-  return displayVersion(shellVersion || backendVersion)
-})
-
-const sidebarAppVersionTitle = computed(() => {
-  const shellVersion = String(desktopShellVersion.value || packageJson.version || '').trim()
-  const backendVersion = String(healthAppVersion.value || '').trim()
-  const gitSha = String(runtimeHealth.value?.build?.git_sha || '').trim()
-  return [
-    shellVersion ? `桌面/UI ${displayVersion(shellVersion)}` : '',
-    backendVersion ? `后端 ${displayVersion(backendVersion)}` : '',
-    gitSha ? `Git ${gitSha.slice(0, 12)}` : '',
-  ].filter(Boolean).join(' · ') || '当前应用版本未知'
-})
-
-const systemStatusTone = computed(() => {
-  if (systemStatusLoading.value && !runtimeHealth.value) return 'loading'
-  if (systemStatusError.value && !runtimeHealth.value) return 'offline'
-  const healthState = String(runtimeHealth.value?.status || '').toLowerCase()
-  const desktopState = String(desktopRuntimeStatus.value?.runtimeStatus || '').toLowerCase()
-  if (healthState === 'unhealthy' || desktopState === 'unhealthy') return 'offline'
-  if (desktopRuntimeStatus.value && desktopRuntimeStatus.value.readyForUi === false) return 'loading'
-  if (
-    healthState === 'degraded' ||
-    desktopState === 'degraded' ||
-    desktopRuntimeStatus.value?.degraded === true
-  ) return 'warning'
-  return 'online'
-})
-
-const systemStatusText = computed(() => {
-  const tone = systemStatusTone.value
-  if (tone === 'loading') return '系统启动中'
-  if (tone === 'offline') return '系统异常'
-  if (tone === 'warning') return '系统降级'
-  return '系统正常'
-})
-
-const systemStatusTitle = computed(() => {
-  const reasons = [
-    ...(Array.isArray(runtimeHealth.value?.degradedReasons)
-      ? runtimeHealth.value.degradedReasons
-      : []),
-    ...(Array.isArray(desktopRuntimeStatus.value?.degradedReasons)
-      ? desktopRuntimeStatus.value.degradedReasons
-      : []),
-  ].map((item) => String(item || '').trim()).filter(Boolean)
-  if (reasons.length) return `${systemStatusText.value}：${[...new Set(reasons)].join('；')}`
-  if (systemStatusError.value) return `${systemStatusText.value}：${systemStatusError.value}`
-  return systemStatusText.value
+const {
+  sidebarAppVersionText, sidebarAppVersionTitle, systemStatusTone, systemStatusText,
+  systemStatusTitle, startSystemStatusPolling, stopSystemStatusPolling,
+} = useDesktopRuntimeStatus({
+  shouldHideVersion: shouldShowAdminDeployStatus,
+  fallbackVersion: packageJson.version,
+  displayVersion,
 })
 
 const sidebarFooterMetaVisible = computed(
@@ -417,60 +358,6 @@ const sidebarFooterMetaVisible = computed(
     Boolean(sidebarAppVersionText.value) ||
     Boolean(primaryModChip.value && !isAdminConsoleSpa()),
 )
-
-async function refreshHealthAppVersion() {
-  if (shouldShowAdminDeployStatus.value) return
-  systemStatusLoading.value = true
-  systemStatusError.value = ''
-  try {
-    const [healthResult, desktopResult] = await Promise.allSettled([
-      fetch('/api/health?lite=true', { credentials: 'same-origin' }),
-      fetch('/api/desktop/status', { credentials: 'same-origin' }),
-    ])
-    if (healthResult.status !== 'fulfilled' || !healthResult.value.ok) {
-      throw new Error('后端健康检查不可达')
-    }
-    const health = await healthResult.value.json()
-    runtimeHealth.value = health && typeof health === 'object' ? health : null
-    healthAppVersion.value = String(health?.version || '').trim()
-    if (desktopResult.status === 'fulfilled' && desktopResult.value.ok) {
-      const desktop = await desktopResult.value.json()
-      desktopRuntimeStatus.value = desktop && typeof desktop === 'object' ? desktop : null
-    } else {
-      desktopRuntimeStatus.value = null
-      systemStatusError.value = '桌面运行时状态不可达'
-    }
-    if (window.xcagiDesktop?.getAppIdentity) {
-      try {
-        const identity = await window.xcagiDesktop.getAppIdentity()
-        desktopShellVersion.value = String(identity?.version || '').trim()
-      } catch {
-        desktopShellVersion.value = ''
-      }
-    }
-  } catch (error) {
-    runtimeHealth.value = null
-    desktopRuntimeStatus.value = null
-    systemStatusError.value = error instanceof Error ? error.message : String(error || '状态未知')
-  } finally {
-    systemStatusLoading.value = false
-  }
-}
-
-function startSystemStatusPolling() {
-  if (systemStatusPollTimer != null) return
-  void refreshHealthAppVersion()
-  systemStatusPollTimer = window.setInterval(() => {
-    void refreshHealthAppVersion()
-  }, 30_000)
-}
-
-function stopSystemStatusPolling() {
-  if (systemStatusPollTimer != null) {
-    window.clearInterval(systemStatusPollTimer)
-    systemStatusPollTimer = null
-  }
-}
 
 function displayVersion(value) {
   const text = String(value || '').trim()

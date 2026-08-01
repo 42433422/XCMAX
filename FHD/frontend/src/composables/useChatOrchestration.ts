@@ -18,7 +18,6 @@ import { usePrintService } from './usePrintService'
 import { useExcelAnalysis } from './useExcelAnalysis'
 import { isStartPrintMessage, detectRuntimeModeCommand } from '../utils/textParser'
 import chatApi, { parseChatStreamErrorResponse } from '../api/chat'
-import agentRunsApi, { type AgentRun } from '../api/agentRuns'
 import productsApi from '../api/products'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { readPlannerSseResponse, isChatStreamEnabled, type PlannerSseEvent } from '@/utils/chatSseStream'
@@ -33,6 +32,12 @@ import { useChatRequest } from './useChatRequest'
 import { useChatResponseAttach } from './useChatResponseAttach'
 import { useChatSessionHistory } from './useChatSessionHistory'
 import { useAgentRunEventSync } from './useAgentRunEvents'
+import { useChatAgentRunRuntime } from './useChatAgentRunRuntime'
+import {
+  asAutoAction, asPlannerPayload, asShipmentTask, buildShipmentDownloadUrl,
+  buildTaskCompletedDescription, errorMessage, extractShipmentExecutionContext,
+  getXcagiWindow, isDatabaseTokenRequirement, type DynamicShipmentTask,
+} from './chatOrchestrationUtils'
 import type { UseChatViewOptions } from './useChatView'
 import type { ChatAutoAction, ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
@@ -42,54 +47,11 @@ import {
 } from '@/utils/chatCapabilityCatalog'
 import { openDocumentPreviewFromResult } from '@/state/documentPreviewPip'
 import type { ChatExecutionProgressItem } from '@/types/chat-ui'
-
-type XcagiChatWindow = Window & {
-  __VUE_CHAT_FILL__?: (value: string) => boolean
-  setWorkModeFromChat?: (enabled: boolean) => void
-  setMonitorModeFromChat?: (enabled: boolean) => void
-  refreshWorkModeMonitorList?: () => void
-  legacyAutoActionHandler?: (action: ChatAutoAction, userMessage: string) => void
-  isProTaskAcquisitionMessage?: (message: string) => boolean
-  jarvisSendMessage?: (message: string) => void
-}
-
-type DynamicShipmentTask = ShipmentTask & Record<string, unknown>
-
-function getXcagiWindow(): XcagiChatWindow {
-  return window as XcagiChatWindow
-}
-
-function asShipmentTask(value: unknown): DynamicShipmentTask {
-  const row = asRecord(value)
-  return {
-    ...row,
-    type: asString(row.type),
-  } as DynamicShipmentTask
-}
-
-function asPlannerPayload(value: unknown): ChatPlannerPayload {
-  return asRecord(value) as ChatPlannerPayload
-}
-
-function asAutoAction(value: unknown): ChatAutoAction {
-  return asRecord(value) as ChatAutoAction
-}
-
-function errorMessage(err: unknown, fallback: string): string {
-  return err instanceof Error ? err.message : asString(err, fallback)
-}
-
-function isDatabaseTokenRequirement(tokenName?: unknown, tokenDescription?: unknown): boolean {
-  const raw = `${String(tokenName || '')} ${String(tokenDescription || '')}`.toUpperCase()
-  return /DB_(READ|WRITE)_TOKEN|DATABASE TOKEN|数据库.*令牌|一级|二级|写入令牌|查看令牌/.test(raw)
-}
-
 export function useChatOrchestration(options: UseChatViewOptions) {
   const tutorialStore = useTutorialStore()
   const modsStore = useModsStore()
   const { sessionId } = options
   const proIntentExperienceEnabled = options.proIntentExperienceEnabled
-
   const historyPersistence = useChatHistoryPersistence({
     sessionId,
     getActiveModId: () => String(modsStore.activeModId || ''),
@@ -248,89 +210,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     getLastAiMessageRef,
   })
 
-  /* -------- AgentRun trace 流式轮询（done 后增量更新直到 terminal） -------- */
-  const tracePollingTimers = new Map<string, ReturnType<typeof setTimeout>>()
-
-  function stopTracePolling(runId: string): void {
-    const id = String(runId || '').trim()
-    const t = id ? tracePollingTimers.get(id) : undefined
-    if (t) {
-      clearTimeout(t)
-      tracePollingTimers.delete(id)
-    }
-  }
-
-  function startTracePolling(runId: string, attachToCurrentMessage = true): void {
-    const id = String(runId || '').trim()
-    if (!id) return
-    if (tracePollingTimers.has(id)) return
-    let ticks = 0
-    const maxTicks = 150 // 2s × 150 = 5 分钟；重启后会再恢复未终态任务
-    const scheduleNext = () => {
-      const timer = setTimeout(async () => {
-        ticks += 1
-        let terminal = false
-        try {
-          terminal = await syncAgentRunEvents(id, '')
-          if (attachToCurrentMessage) attachAgentRunTraceToLastAiMessage()
-        } catch {
-          // 轮询失败静默忽略，下次重试
-        }
-        if (terminal || ticks >= maxTicks) {
-          stopTracePolling(id)
-          return
-        }
-        scheduleNext()
-      }, 2000)
-      tracePollingTimers.set(id, timer)
-    }
-    scheduleNext()
-  }
-
-  async function retryTask(id: string): Promise<void> {
-    const task = taskList.value.find((item) => item.id === id)
-    if (!task || task.type !== 'agent_run') {
-      retryTaskLocal(id)
-      return
-    }
-    const payload = asRecord(task.payload)
-    const runId = asString(payload.agentRunId || payload.run_id).trim()
-      || String(task.id || '').replace(/^agent_/, '')
-    if (!runId) {
-      await addAndSaveMessage('无法重试：任务缺少持久化 Run ID。', 'ai')
-      return
-    }
-    try {
-      const response = await agentRunsApi.restartRun(runId, {
-        requested_by: dbGate.getModeScopedUserId(resolveEffectiveProModeState()),
-      })
-      const restarted = response?.data
-      if (!response?.success || !restarted?.run_id) {
-        throw new Error(String(response?.message || '任务不能安全重启'))
-      }
-      await addAndSaveMessage(
-        `已创建新的安全重试任务。\n原任务：${runId}\n新任务：${restarted.run_id}`,
-        'ai',
-      )
-      await syncAgentRunEvents(restarted.run_id, restarted.message || task.title)
-      attachAgentRunTraceToLastAiMessage()
-      if (!['completed', 'failed', 'cancelled'].includes(restarted.status)) {
-        startTracePolling(restarted.run_id)
-      }
-    } catch (err: unknown) {
-      await addAndSaveMessage(
-        `无法自动重试：${errorMessage(err, '该任务可能已产生业务变更，请先人工复核。')}`,
-        'ai',
-      )
-    }
-  }
-
-  /** 组件卸载时清理所有轮询 */
-  onBeforeUnmount(() => {
-    for (const id of tracePollingTimers.keys()) {
-      stopTracePolling(id)
-    }
-  })
 
   const chatRequest = useChatRequest({
     messages,
@@ -360,6 +239,16 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     requestChatByModeBatchWithTimeout,
     resolveChatTimeoutMs,
   } = chatRequest
+
+  const {
+    retryTask, startTracePolling, confirmWorkflowFromCard,
+    cancelWorkflowFromCard, restoreAndPoll,
+  } = useChatAgentRunRuntime({
+    messages, taskList, retryTaskLocal, addAndSaveMessage, syncAgentRunEvents,
+    restoreRecentAgentRuns, attachAgentRunTraceToLastAiMessage,
+    getUserId: () => dbGate.getModeScopedUserId(resolveEffectiveProModeState()),
+    isLoading, setLoadingProgress, stopLoadingProgress, sendFallback: sendMessage,
+  })
 
   function generateSessionId(): string {
     return Date.now().toString(36) + Math.random().toString(36).substr(2)
@@ -848,94 +737,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   })
   const { readWorkflowEmployeeEnabledMap, upsertWorkflowEmployeeTask } = workflowPanel
 
-  /** 出货管理 AI 员工：打印成功后拉取出货记录、统计与审计，并提示保存（导出）/推送 */
-  function buildTaskCompletedDescription(successMsg: string, data: unknown): string {
-    const row = asRecord(data)
-    const nestedData = asRecord(row.data)
-    const document = asRecord(row.document || nestedData.document)
-    const parts = [successMsg || '任务执行成功']
-    const docName = row.doc_name || nestedData.doc_name || document.filename
-    const orderNo = row.order_number || nestedData.order_number || document.order_number
-    const filePath = row.file_path || nestedData.file_path || document.filepath
-    const labels = asArray(row.labels).length ? asArray(row.labels) : asArray(nestedData.labels)
-    if (docName) parts.push(`文档：${docName}`)
-    if (orderNo) parts.push(`单号：${orderNo}`)
-    if (typeof row.record_id !== 'undefined' && row.record_id !== null) parts.push(`记录ID：${row.record_id}`)
-    if (typeof row.order_id !== 'undefined' && row.order_id !== null) parts.push(`订单ID：${row.order_id}`)
-    if (labels.length) parts.push(`标签：${labels.length} 张`)
-    if (filePath) parts.push(`路径：${filePath}`)
-    return parts.join('；')
-  }
-
-  function buildShipmentDownloadUrl(data: unknown): string {
-    const row = asRecord(data)
-    const nestedData = asRecord(row.data)
-    const document = asRecord(row.document || nestedData.document)
-    const directUrl = row.download_url || nestedData.download_url
-    if (directUrl && typeof directUrl === 'string') return directUrl
-
-    const docName = row.doc_name || nestedData.doc_name || document.filename
-    if (!docName || typeof docName !== 'string') return ''
-
-    return `/api/shipment/download/${encodeURIComponent(docName)}`
-  }
-
-  function normalizeRecordId(value: unknown): number | null {
-    if (value === null || value === undefined || value === '') return null
-    const n = Number(value)
-    if (!Number.isFinite(n)) return null
-    const normalized = Math.trunc(n)
-    return normalized > 0 ? normalized : null
-  }
-
-  function extractShipmentExecutionContext(data: unknown) {
-    const row = asRecord(data)
-    const nestedData = asRecord(row.data)
-    const document = asRecord(row.document || nestedData.document)
-    const filePath = asString(row.file_path || nestedData.file_path || document.filepath)
-    const purchaseUnit = String(
-      row.purchase_unit
-      ?? nestedData.purchase_unit
-      ?? document.purchase_unit
-      ?? ''
-    ).trim()
-    const orderId = normalizeRecordId(
-      row.order_id
-      ?? row.record_id
-      ?? nestedData.order_id
-      ?? nestedData.record_id
-      ?? document.order_id
-      ?? document.record_id
-    )
-    const labelsRaw = asArray(row.labels).length ? asArray(row.labels) : asArray(nestedData.labels)
-
-    const labelPaths: string[] = []
-    labelsRaw.forEach((label: unknown) => {
-      if (typeof label === 'string' && label.trim()) {
-        labelPaths.push(label.trim())
-        return
-      }
-      if (label && typeof label === 'object') {
-        const labelRow = asRecord(label)
-        const p =
-          labelRow.file_path ||
-          labelRow.path ||
-          labelRow.filePath ||
-          labelRow.filepath ||
-          ''
-        if (typeof p === 'string' && p.trim()) {
-          labelPaths.push(p.trim())
-        }
-      }
-    })
-
-    return {
-      filePath,
-      purchaseUnit,
-      orderId,
-      labelPaths: Array.from(new Set(labelPaths))
-    }
-  }
 
   async function confirmTask(): Promise<void> {
     if (!currentTask.value || isExecuting.value) return
@@ -1656,124 +1457,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     }
   }
 
-  async function confirmWorkflowFromCard() {
-    let pendingCard: NonNullable<(typeof messages.value)[number]['approvalCard']> | undefined
-    let pendingMessage: (typeof messages.value)[number] | undefined
-    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
-      const msg = messages.value[i]
-      if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
-        pendingCard = msg.approvalCard
-        pendingMessage = msg
-        break
-      }
-    }
-    const runId = String(pendingCard?.agent_run_id || pendingCard?.run_id || '').trim()
-    if (runId && pendingCard?.approval_required && pendingMessage?.approvalCard) {
-      try {
-        isLoading.value = true
-        setLoadingProgress('正在提交正式审批...')
-        const response = await agentRunsApi.submitApproval(runId, {
-          requested_by: dbGate.getModeScopedUserId(resolveEffectiveProModeState()),
-        })
-        const requestIds = Array.isArray(response?.data?.approval_request_ids)
-          ? response.data.approval_request_ids.filter(Boolean)
-          : []
-        if (!response?.success || !requestIds.length) {
-          throw new Error(String(response?.message || '审批请求提交失败'))
-        }
-        pendingMessage.approvalCard = {
-          ...pendingMessage.approvalCard,
-          status: 'confirmed',
-          approval_request_ids: requestIds,
-        }
-        await addAndSaveMessage(
-          `审批已提交；审批中心通过后将继续原任务。\n审批单：${requestIds.join('、')}\n任务回执：${runId}`,
-          'ai',
-        )
-        await syncAgentRunEvents(runId, String(response.data?.run?.message || ''))
-        attachAgentRunTraceToLastAiMessage()
-        startTracePolling(runId)
-      } catch (err: unknown) {
-        await addAndSaveMessage(`提交审批失败：${errorMessage(err, '未知错误')}。原任务仍保留，可稍后重试。`, 'ai')
-      } finally {
-        isLoading.value = false
-        stopLoadingProgress()
-      }
-      return
-    }
-    if (runId && pendingMessage?.approvalCard) {
-      try {
-        isLoading.value = true
-        setLoadingProgress('正在执行已确认的业务步骤...')
-        const response = await agentRunsApi.continueRun(runId, {
-          approved_by: dbGate.getModeScopedUserId(resolveEffectiveProModeState()),
-        })
-        const run = response?.data as AgentRun | undefined
-        if (!response?.success || !run) {
-          throw new Error(String(response?.message || '任务继续执行失败'))
-        }
-        pendingMessage.approvalCard = { ...pendingMessage.approvalCard, status: 'confirmed' }
-        const steps = Array.isArray(run.steps) ? run.steps : []
-        const lastOutput = [...steps].reverse().find((step) => step?.output)?.output || {}
-        const detail = String(lastOutput.message || lastOutput.error || run.error || '').trim()
-        const text = run.status === 'completed'
-          ? `执行完成：${detail || '所有业务步骤均已完成并写入工具回执。'}\n任务回执：${run.run_id}`
-          : run.status === 'failed'
-            ? `执行失败：${detail || '业务工具未完成变更。'}\n任务回执：${run.run_id}`
-            : `已确认当前步骤，任务状态：${run.status}。\n任务回执：${run.run_id}`
-        await addAndSaveMessage(text, 'ai')
-        await syncAgentRunEvents(runId, String(run.message || ''))
-        attachAgentRunTraceToLastAiMessage()
-        if (!['completed', 'failed', 'cancelled'].includes(run.status)) startTracePolling(runId)
-      } catch (err: unknown) {
-        await addAndSaveMessage(`确认执行失败：${errorMessage(err, '未知错误')}。原任务仍保留，可稍后重试。`, 'ai')
-      } finally {
-        isLoading.value = false
-        stopLoadingProgress()
-      }
-      return
-    }
-    if (pendingMessage?.approvalCard) {
-      pendingMessage.approvalCard = { ...pendingMessage.approvalCard, status: 'confirmed' }
-    }
-    await sendMessage('确认')
-  }
-
-  async function cancelWorkflowFromCard() {
-    let pendingCard: NonNullable<(typeof messages.value)[number]['approvalCard']> | undefined
-    let pendingMessage: (typeof messages.value)[number] | undefined
-    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
-      const msg = messages.value[i]
-      if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
-        pendingCard = msg.approvalCard
-        pendingMessage = msg
-        break
-      }
-    }
-    const runId = String(pendingCard?.agent_run_id || pendingCard?.run_id || '').trim()
-    if (runId && pendingMessage?.approvalCard) {
-      try {
-        const response = await agentRunsApi.cancelRun(runId, {
-          cancelled_by: dbGate.getModeScopedUserId(resolveEffectiveProModeState()),
-        })
-        const run = response?.data as AgentRun | undefined
-        if (!response?.success || !run) {
-          throw new Error(String(response?.message || '任务取消失败'))
-        }
-        pendingMessage.approvalCard = { ...pendingMessage.approvalCard, status: 'cancelled' }
-        await addAndSaveMessage(`任务已取消，未执行后续业务变更。\n任务回执：${run.run_id}`, 'ai')
-        await syncAgentRunEvents(runId, String(run.message || ''))
-        attachAgentRunTraceToLastAiMessage()
-      } catch (err: unknown) {
-        await addAndSaveMessage(`取消失败：${errorMessage(err, '未知错误')}。原任务仍保留。`, 'ai')
-      }
-      return
-    }
-    if (pendingMessage?.approvalCard) {
-      pendingMessage.approvalCard = { ...pendingMessage.approvalCard, status: 'cancelled' }
-    }
-    await sendMessage('取消')
-  }
 
   async function sendMessage(message: string) {
     await addAndSaveMessage(message, 'user')
@@ -1860,11 +1543,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       if (first) linkedExcelSheet.value = first
     }
     window.addEventListener(FHD_DB_WRITE_UNLOCKED_EVENT, dbGate.onDbWriteUnlockedForChatRetry)
-    void restoreRecentAgentRuns(
-      dbGate.getModeScopedUserId(resolveEffectiveProModeState()),
-    ).then((activeRunIds) => {
-      for (const runId of activeRunIds) startTracePolling(runId, false)
-    })
+    void restoreAndPoll(dbGate.getModeScopedUserId(resolveEffectiveProModeState()))
     workflowPanel.mountWorkflowPanel()
   })
 

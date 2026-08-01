@@ -1516,18 +1516,11 @@ def _registered_router_business_db(
 
     if entity == "customers":
         if operation in ("create", "ensure_exists", "upsert", "update", "delete", "batch_delete"):
-            router_action = (
-                "ensure_exists" if operation in ("ensure_exists", "upsert") else "create"
-            )
-            if operation in ("update", "delete", "batch_delete"):
-                router_action = operation
+            router_action = operation if operation in ("update", "delete", "batch_delete") else ("ensure_exists" if operation in ("ensure_exists", "upsert") else "create")
             return _registered_router_customers(
                 router_action, payload, runtime_context, profile, user_message
             )
-        return {
-            "success": False,
-            "message": "customers 支持 create/ensure_exists/upsert/update/delete/batch_delete。",
-        }
+        return {"success": False, "message": "customers 支持 create/ensure_exists/upsert/update/delete/batch_delete。"}
 
     if entity == "products":
         if operation == "create":
