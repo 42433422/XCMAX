@@ -120,7 +120,7 @@ def sha256_file(path: Path) -> str:
 
 
 def read_package_manifest_from_zip(path: Path) -> Dict[str, Any] | None:
-    """Return the first top-level ``*/manifest.json`` found in a package zip.
+    """Return root ``manifest.json`` or the first top-level child manifest.
 
     ``.xcemp`` / ``.xcmod`` packages are zip files.  The catalog row metadata is
     only safe if it matches the manifest embedded in the archive; otherwise the
@@ -128,7 +128,7 @@ def read_package_manifest_from_zip(path: Path) -> Dict[str, Any] | None:
     """
     try:
         with zipfile.ZipFile(path) as zf:
-            manifest_names = [
+            manifest_names = (["manifest.json"] if "manifest.json" in zf.namelist() else []) + [
                 n for n in zf.namelist() if n.count("/") == 1 and n.endswith("/manifest.json")
             ]
             if not manifest_names:
@@ -149,7 +149,6 @@ def package_manifest_alignment_errors(record: Dict[str, Any], archive_path: Path
     """
     import logging as _logging
     import shutil as _shutil
-    import tempfile as _tmpfile
     import traceback as _tb
     import zipfile as _zipfile
 
@@ -223,7 +222,8 @@ def package_manifest_alignment_errors(record: Dict[str, Any], archive_path: Path
                     _tmp_path = archive_path.with_suffix(".xcemp.tmp")
                     with _zipfile.ZipFile(_tmp_path, "w", compression=_zipfile.ZIP_DEFLATED) as _zw:
                         _zw.writestr(
-                            _mf_key, json.dumps(inner, ensure_ascii=False, indent=2) + "\n"
+                            _mf_key,
+                            json.dumps(inner, ensure_ascii=False, indent=2) + "\n",
                         )
                         with _zipfile.ZipFile(archive_path, "r") as _zr:
                             for _n in _other_entries:
