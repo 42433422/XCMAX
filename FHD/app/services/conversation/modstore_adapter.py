@@ -170,6 +170,109 @@ def _platform_stream_payload_to_openai_chunk(data: str) -> Dict[str, Any] | None
     return None
 
 
+def _market_connect_timeout() -> float:
+    """TLS to xiu-ci.com via Clash TUN often needs >10s; keep configurable."""
+    try:
+        return max(5.0, float(os.environ.get("XCAGI_MARKET_CONNECT_TIMEOUT", "20")))
+    except ValueError:
+        return 20.0
+
+
+def _market_connect_attempts() -> int:
+    try:
+        return max(1, min(int(os.environ.get("XCAGI_MARKET_CONNECT_ATTEMPTS", "3")), 6))
+    except ValueError:
+        return 3
+
+
+def _market_fallback_proxy() -> str | None:
+    """Optional local Clash HTTP proxy used only after direct ConnectError."""
+    raw = (os.environ.get("XCAGI_MARKET_FALLBACK_PROXY") or "").strip()
+    return raw or None
+
+
+_MARKET_TRANSPORT_ERRORS = (
+    httpx.ConnectError,
+    httpx.ConnectTimeout,
+    httpx.RemoteProtocolError,
+)
+
+
+def _iter_market_transport_plans() -> Iterator[tuple[str | None, int, int]]:
+    """Yield (proxy_or_None, attempt_idx, attempts_per_proxy) for flaky TUN/TLS."""
+    attempts = _market_connect_attempts()
+    proxies: list[str | None] = [None]
+    fallback = _market_fallback_proxy()
+    if fallback:
+        proxies.append(fallback)
+    for proxy in proxies:
+        for attempt in range(1, attempts + 1):
+            yield proxy, attempt, attempts
+
+
+def _httpx_sync_client(**kwargs: Any) -> httpx.Client:
+    """Desktop backend must ignore leaked HTTP(S)_PROXY; Clash TUN still applies OS-wide."""
+    kwargs.setdefault("trust_env", False)
+    proxy = kwargs.pop("proxy", None)
+    if proxy:
+        kwargs["proxy"] = proxy
+    return httpx.Client(**kwargs)
+
+
+def _market_sse_payload_has_content(data: str) -> bool:
+    """True when a market SSE data payload carries visible delta content."""
+    try:
+        chunk = _platform_stream_payload_to_openai_chunk(data)
+    except ValueError:
+        return False
+    if not chunk:
+        return False
+    for choice in chunk.get("choices") or []:
+        if not isinstance(choice, dict):
+            continue
+        delta = choice.get("delta")
+        if isinstance(delta, dict) and delta.get("content"):
+            return True
+    return False
+
+
+def _iter_market_sse_data_payloads(response: Any) -> Iterator[str]:
+    """Yield market SSE data payloads; skip meta; surface content from ``done`` if needed."""
+    current_event = ""
+    saw_delta_content = False
+    for line in response.iter_lines():
+        line_text = (line or "").strip()
+        if not line_text:
+            continue
+        if line_text.startswith("event:"):
+            current_event = line_text[6:].strip().lower()
+            continue
+        if line_text.startswith("data:"):
+            line_text = line_text[5:].strip()
+        if line_text == "[DONE]":
+            break
+        if current_event == "meta":
+            continue
+        if current_event == "done":
+            # Some providers only put final text on ``done`` (no ``delta``). Skipping
+            # done previously made the OpenAI facade yield nothing → UI 首包超时.
+            # But the platform always attaches full text to ``done``; re-yielding it
+            # after content-bearing deltas duplicates the reply (UI: "2" → "22").
+            if not saw_delta_content:
+                try:
+                    raw = json.loads(line_text)
+                except json.JSONDecodeError:
+                    raw = None
+                if isinstance(raw, dict):
+                    content = raw.get("content") or raw.get("text") or raw.get("delta") or ""
+                    if content:
+                        yield json.dumps({"delta": str(content)}, ensure_ascii=False)
+            break
+        if _market_sse_payload_has_content(line_text):
+            saw_delta_content = True
+        yield line_text
+
+
 class ModstorePlatformAdapter:
     """
     修茈市场平台代理适配器
