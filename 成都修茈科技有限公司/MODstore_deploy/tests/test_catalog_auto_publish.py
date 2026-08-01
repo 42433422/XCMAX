@@ -41,9 +41,7 @@ async def _review_pass(*_args, **_kwargs):
     }
 
 
-def test_auto_publish_is_public_verified_and_idempotent(
-    client, monkeypatch, tmp_path
-) -> None:
+def test_auto_publish_is_public_verified_and_idempotent(client, monkeypatch, tmp_path) -> None:
     pkg_id = f"auto-listing-{uuid.uuid4().hex[:12]}"
     raw = _package(pkg_id)
     digest = hashlib.sha256(raw).hexdigest()

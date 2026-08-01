@@ -1,13 +1,10 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_mod_auto_publish_is_real_and_fail_closed() -> None:
-    workflow = (ROOT / "FHD/.github/workflows/mod-auto-publish.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (ROOT / "FHD/.github/workflows/mod-auto-publish.yml").read_text(encoding="utf-8")
     assert "MODSTORE_AUTO_PUBLISH_TOKEN" in workflow
     assert "publish_modstore.py" in workflow
     assert "|| true" not in workflow

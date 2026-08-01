@@ -45,10 +45,7 @@ router = APIRouter(prefix="/v1", tags=["catalog"])
 
 
 def _is_customer_delivery_seed(row: Dict[str, Any] | None) -> bool:
-    return (
-        str((row or {}).get("artifact") or "").strip().lower()
-        == "customer_delivery_seed"
-    )
+    return str((row or {}).get("artifact") or "").strip().lower() == "customer_delivery_seed"
 
 
 def _invalidate_catalog_list_caches(pkg_id: Any = None, version: Any = None) -> None:
@@ -89,9 +86,7 @@ def _require_upload(authorization: Optional[str]) -> None:
     _authorize_upload(authorization)
 
 
-def _validated_automation_provenance(
-    value: Any, *, package_sha256: str
-) -> Dict[str, str]:
+def _validated_automation_provenance(value: Any, *, package_sha256: str) -> Dict[str, str]:
     if not isinstance(value, dict):
         raise HTTPException(400, "自动上架必须提供 automation_provenance")
     repository = str(value.get("source_repository") or "").strip()
@@ -123,11 +118,7 @@ def _upsert_market_listing(saved: Dict[str, Any], *, public_listing: bool) -> No
     sf = get_session_factory()
     with sf() as db:
         upsert_catalog_item_from_xc_package_dict(db, saved, author_id=None)
-        row = (
-            db.query(CatalogItem)
-            .filter(CatalogItem.pkg_id == str(saved.get("id")))
-            .first()
-        )
+        row = db.query(CatalogItem).filter(CatalogItem.pkg_id == str(saved.get("id"))).first()
         if row and public_listing:
             row.is_public = True
             row.compliance_status = "approved"
@@ -181,9 +172,7 @@ def api_get_package(pkg_id: str, version: str):
     return r
 
 
-@router.get(
-    "/packages/by-id/{pkg_id}/versions", summary="同 id 下所有版本（含 draft/stable）"
-)
+@router.get("/packages/by-id/{pkg_id}/versions", summary="同 id 下所有版本（含 draft/stable）")
 def api_package_versions(pkg_id: str):
     pid = (pkg_id or "").strip()
     if not pid:
@@ -276,9 +265,7 @@ async def api_upload_package(
         raise HTTPException(400, "metadata 须为 JSON")
     if not isinstance(meta, dict):
         raise HTTPException(400, "metadata 须为对象")
-    if not (
-        str(meta.get("id") or "").strip() and str(meta.get("version") or "").strip()
-    ):
+    if not (str(meta.get("id") or "").strip() and str(meta.get("version") or "").strip()):
         raise HTTPException(400, "metadata 须含 id 与 version")
     rec: Dict[str, Any] = dict(meta)
     requested_public_listing = rec.pop("public_listing", False)
@@ -431,9 +418,7 @@ def api_search_semantic(
     if industry:
         filter_meta["industry"] = industry
 
-    results = query_similar(
-        q, limit=limit, filter_meta=filter_meta if filter_meta else None
-    )
+    results = query_similar(q, limit=limit, filter_meta=filter_meta if filter_meta else None)
     return {"results": results, "total": len(results)}
 
 
