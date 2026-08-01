@@ -1,0 +1,399 @@
+<section class="private-mod-center" aria-label="客户私有 Mod 生产中心">
+  <header class="private-mod-center__header">
+    <div>
+      <div class="private-mod-center__eyebrow">客户定制交付</div>
+      <h3>私有 Mod 生产中心</h3>
+      <p>
+        模块轨与员工轨分开推进。每个节点是一条有先后约束的流程： 制作 → 测试 → 验收 →
+        交付；不通过只能转返工，不能跨阶段跳跃。
+      </p>
+    </div>
+    <button
+      type="button"
+      class="private-mod-center__refresh"
+      :disabled="loading || updating"
+      @click="loadDelivery"
+    >
+      {{ loading ? '同步中…' : '刷新私有状态' }}
+    </button>
+  </header>
+
+  <div
+    v-if="error"
+    class="private-mod-center__notice private-mod-center__notice--error"
+    role="alert"
+  >
+    {{ error }}
+  </div>
+  <div v-else-if="remoteError" class="private-mod-center__notice private-mod-center__notice--muted">
+    私有版本检查暂不可用：{{ remoteError }}
+  </div>
+  <div v-if="requestError" class="private-mod-center__notice private-mod-center__notice--muted">
+    定制工单同步暂不可用：{{ requestError }}
+  </div>
+
+  <section class="private-mod-intake" aria-label="发起客户定制">
+    <header class="private-mod-intake__header">
+      <div>
+        <span class="private-mod-track__kicker">定制入口</span>
+        <h4>说明你要的模块或员工</h4>
+        <p>提交后生产员工会自动制作和测试；质量门通过后由你验收，安装成功才算交付。</p>
+      </div>
+      <button
+        type="button"
+        class="private-mod-intake__toggle"
+        @click="requestForm.open = !requestForm.open"
+      >
+        {{ requestForm.open ? '收起' : '发起定制' }}
+      </button>
+    </header>
+    <form
+      v-if="requestForm.open"
+      class="private-mod-intake__form"
+      @submit.prevent="submitCustomRequest"
+    >
+      <fieldset class="private-mod-intake__kinds">
+        <legend>交付类型</legend>
+        <label
+          v-for="item in requestKinds"
+          :key="item.id"
+          :data-active="requestForm.kind === item.id"
+        >
+          <input v-model="requestForm.kind" type="radio" name="custom-kind" :value="item.id" />
+          <strong>{{ item.label }}</strong>
+          <small>{{ item.summary }}</small>
+        </label>
+      </fieldset>
+      <div class="private-mod-intake__grid">
+        <label>
+          <span>需求名称</span>
+          <input
+            v-model="requestForm.title"
+            maxlength="128"
+            required
+            placeholder="例如：销售合同审核模块"
+          />
+        </label>
+        <label>
+          <span>期望 ID（可选）</span>
+          <input
+            v-model="requestForm.suggestedId"
+            maxlength="64"
+            placeholder="sales-contract-review"
+          />
+        </label>
+      </div>
+      <label>
+        <span>需求说明</span>
+        <textarea
+          v-model="requestForm.requirements"
+          rows="5"
+          maxlength="12000"
+          required
+          placeholder="输入使用人、输入数据、处理规则、输出结果以及异常处理……"
+        />
+      </label>
+      <label>
+        <span>验收标准</span>
+        <textarea
+          v-model="requestForm.acceptanceCriteria"
+          rows="3"
+          maxlength="6000"
+          required
+          placeholder="例如：用 20 份历史合同测试，金额/甲乙方/日期提取准确率≥95%，错误可定位并返工。"
+        />
+      </label>
+      <footer>
+        <span>工单、生产运行、验收与安装回执会绑定在同一条交付记录上。</span>
+        <button type="submit" class="private-mod-center__update" :disabled="submittingRequest">
+          {{ submittingRequest ? '正在受理…' : '提交并开始生产' }}
+        </button>
+      </footer>
+    </form>
+  </section>
+
+  <section v-if="requests.length" class="private-mod-requests" aria-label="定制交付工单">
+    <header class="private-mod-requests__header">
+      <div>
+        <span class="private-mod-track__kicker">交付进度</span>
+        <h4>我的定制生产</h4>
+      </div>
+      <span>{{ requests.length }} 条</span>
+    </header>
+    <article
+      v-for="item in requests"
+      :key="item.id"
+      class="private-mod-request"
+      :data-stage="customOf(item).stage"
+    >
+      <header>
+        <div>
+          <div class="private-mod-request__meta">
+            <code>{{ item.ticket_no }}</code>
+            <span>{{ kindLabel(customOf(item).kind) }}</span>
+          </div>
+          <h5>{{ item.title }}</h5>
+        </div>
+        <span class="private-mod-request__stage">{{ customOf(item).stage_label }}</span>
+      </header>
+      <p>{{ item.summary }}</p>
+      <ol v-if="latestRun(item)?.steps?.length" class="private-mod-request__steps">
+        <li v-for="step in latestRun(item).steps" :key="step.id" :data-status="step.status">
+          <span>{{ step.label }}</span>
+          <small>{{ stepMessage(step) }}</small>
+        </li>
+      </ol>
+      <div v-if="latestRun(item)?.error" class="private-mod-request__problem">
+        生产失败：{{ latestRun(item).error }}
+      </div>
+      <div
+        v-else-if="customOf(item).gate_message"
+        class="private-mod-request__gate"
+        :data-ok="customOf(item).gate_ok"
+      >
+        {{ customOf(item).gate_message }}
+      </div>
+
+      <div v-if="customOf(item).stage === 'acceptance'" class="private-mod-request__actions">
+        <button
+          type="button"
+          class="private-mod-center__update"
+          :disabled="!!requestBusy"
+          @click="decideRequest(item, 'accept')"
+        >
+          {{ requestBusy === `accept:${item.id}` ? '确认中…' : '确认验收' }}
+        </button>
+        <button
+          type="button"
+          class="private-mod-node__action private-mod-node__action--rework"
+          :disabled="!!requestBusy"
+          @click="toggleRequestRework(item)"
+        >
+          验收不通过
+        </button>
+      </div>
+      <div
+        v-if="customOf(item).stage === 'rework' || reworkRequestId === item.id"
+        class="private-mod-request__rework"
+      >
+        <textarea
+          v-model="requestReworkNotes[item.id]"
+          rows="3"
+          maxlength="4000"
+          placeholder="说明不符合验收标准的地方，生产员工会带着意见重做。"
+        />
+        <button
+          type="button"
+          class="private-mod-node__action private-mod-node__action--rework"
+          :disabled="!!requestBusy"
+          @click="decideRequest(item, 'rework')"
+        >
+          {{ requestBusy === `rework:${item.id}` ? '启动返工…' : '提交返工' }}
+        </button>
+      </div>
+      <div v-if="customOf(item).stage === 'delivering'" class="private-mod-request__delivery">
+        <div>验收已通过。安装成功后将自动回写交付回执并结案。</div>
+        <button
+          v-for="artifact in customOf(item).artifacts"
+          :key="`${item.id}:${artifact.kind}:${artifact.id}`"
+          type="button"
+          class="private-mod-center__update"
+          :disabled="!!requestBusy"
+          @click="installRequestArtifact(item, artifact)"
+        >
+          {{ requestBusy === `install:${item.id}:${artifact.kind}` ? '安装中…' :
+          `安装${artifact.kind === 'employee' ? ' AI 员工' : '私有 Mod'}` }}
+        </button>
+      </div>
+      <div v-if="customOf(item).stage === 'delivered'" class="private-mod-request__delivered">
+        产物已安装，交付回执已写入。
+      </div>
+    </article>
+  </section>
+
+  <div v-if="loading && !projects.length" class="private-mod-center__empty">
+    正在读取客户私有 Mod…
+  </div>
+  <div v-else-if="!projects.length" class="private-mod-center__empty">
+    当前还没有已安装的客户私有 Mod；可以从上方发起第一个定制。
+  </div>
+
+  <div v-else class="private-mod-center__projects">
+    <article v-for="project in projects" :key="project.mod_id" class="private-mod-project">
+      <header class="private-mod-project__header">
+        <div>
+          <h4>{{ project.name }}</h4>
+          <div class="private-mod-project__meta">
+            <code>{{ project.mod_id }}</code>
+            <span
+              >{{ project.current_version ? `当前 v${project.current_version}` : '尚未安装' }}</span
+            >
+            <span class="private-mod-project__overall" :data-status="project.overall_status">
+              {{ project.overall_label }}
+            </span>
+          </div>
+        </div>
+        <div v-if="project.update_available" class="private-mod-project__update">
+          <span>私有版本 v{{ project.latest_version }} 可更新</span>
+          <button
+            type="button"
+            class="private-mod-center__update"
+            :disabled="updating === project.mod_id"
+            @click="updateProject(project)"
+          >
+            {{ updating === project.mod_id ? '更新中…' : '更新私有 Mod' }}
+          </button>
+        </div>
+        <span v-else-if="project.latest_version" class="private-mod-project__latest"
+          >已是最新私有版本</span
+        >
+      </header>
+
+      <p v-if="project.description" class="private-mod-project__description">
+        {{ project.description }}
+      </p>
+
+      <div class="private-mod-project__tracks">
+        <section
+          v-for="rail in trackRails"
+          :key="rail.id"
+          class="private-mod-track"
+          :class="`private-mod-track--${rail.id}`"
+        >
+          <header class="private-mod-track__header">
+            <div>
+              <span class="private-mod-track__kicker">{{ rail.kicker }}</span>
+              <h5>{{ rail.label }}</h5>
+            </div>
+            <span class="private-mod-track__rollup" :data-status="trackStatus(project, rail.id)">
+              {{ stageLabel(project, rail.id, trackStatus(project, rail.id)) }}
+            </span>
+          </header>
+          <p class="private-mod-track__summary">{{ rail.summary }}</p>
+
+          <ol class="private-mod-flow" aria-label="主流程阶段">
+            <li
+              v-for="(step, stepIndex) in happyPath"
+              :key="step"
+              class="private-mod-flow__step"
+              :data-done="flowStepDone(project, rail.id, step)"
+            >
+              <span class="private-mod-flow__num"
+                >{{ String(stepIndex + 1).padStart(2, '0') }}</span
+              >
+              <span class="private-mod-flow__name">{{ stageLabel(project, rail.id, step) }}</span>
+              <small>{{ stageGoal(step) }}</small>
+            </li>
+          </ol>
+
+          <ol
+            v-if="nodesOf(project, rail.id).length"
+            class="private-mod-rail"
+            :aria-label="`${rail.label}节点`"
+          >
+            <li
+              v-for="(node, index) in nodesOf(project, rail.id)"
+              :key="node.id"
+              class="private-mod-node"
+              :data-status="node.status"
+            >
+              <div class="private-mod-node__top">
+                <div class="private-mod-node__index" aria-hidden="true">
+                  {{ String(index + 1).padStart(2, '0') }}
+                </div>
+                <div class="private-mod-node__body">
+                  <div class="private-mod-node__title">{{ node.label }}</div>
+                  <small v-if="node.summary">{{ node.summary }}</small>
+                </div>
+                <span class="private-mod-node__badge"
+                  >{{ node.status_label || stageLabel(project, rail.id, node.status) }}</span
+                >
+              </div>
+
+              <div class="private-mod-node__pipeline" aria-hidden="true">
+                <span
+                  v-for="step in happyPath"
+                  :key="`${node.id}-${step}`"
+                  class="private-mod-node__pip"
+                  :data-active="pipelineActive(node, step)"
+                  :data-done="pipelineDone(node, step)"
+                  :data-rework="node.status === 'rework'"
+                  >{{ stageLabel(project, rail.id, step) }}</span
+                >
+              </div>
+
+              <p class="private-mod-node__goal">
+                目标：{{ node.goal || stageGoal(node.status) || '按流程推进到下一阶段' }}
+              </p>
+
+              <div class="private-mod-node__actions">
+                <button
+                  v-for="next in node.next_stages || []"
+                  :key="`${node.id}-${next}`"
+                  type="button"
+                  class="private-mod-node__action"
+                  :class="{ 'private-mod-node__action--rework': next === 'rework' }"
+                  :disabled="savingStatus === `${project.mod_id}:${rail.id}:${node.id}`"
+                  @click="onAdvanceClick(project, rail.id, node, next)"
+                >
+                  {{ nextActionLabel(project, rail.id, node.status, next) }}
+                </button>
+                <span v-if="!(node.next_stages || []).length" class="private-mod-node__done"
+                  >流程已结束</span
+                >
+              </div>
+              <p
+                v-if="node.status === 'rework' && lastReworkNote(node)"
+                class="private-mod-node__ticket"
+              >
+                {{ lastReworkNote(node) }}
+              </p>
+            </li>
+          </ol>
+          <div v-else class="private-mod-track__empty">{{ rail.empty }}</div>
+        </section>
+      </div>
+    </article>
+  </div>
+
+  <div
+    v-if="reworkDialog.open"
+    class="private-mod-rework-mask"
+    role="dialog"
+    aria-modal="true"
+    aria-label="填写返工问题"
+    @click.self="closeReworkDialog"
+  >
+    <form class="private-mod-rework" @submit.prevent="submitRework">
+      <header>
+        <h4>转返工 · 填写问题</h4>
+        <p>问题会开成客服变更工单（bug_fix），不另建工单系统。</p>
+      </header>
+      <div class="private-mod-rework__meta">
+        <span>{{ reworkDialog.projectName }}</span>
+        <code>{{ reworkDialog.nodeLabel }}</code>
+      </div>
+      <label class="private-mod-rework__label" for="private-mod-rework-problem">问题说明</label>
+      <textarea
+        id="private-mod-rework-problem"
+        v-model="reworkDialog.problem"
+        rows="5"
+        maxlength="2000"
+        placeholder="例如：考勤表转化后部门列错位，样例文件已附……"
+        required
+      />
+      <footer class="private-mod-rework__footer">
+        <button type="button" class="private-mod-rework__cancel" @click="closeReworkDialog">
+          取消
+        </button>
+        <button
+          type="submit"
+          class="private-mod-node__action private-mod-node__action--rework"
+          :disabled="!!savingStatus"
+        >
+          {{ savingStatus ? '提交中…' : '开单并转返工' }}
+        </button>
+      </footer>
+    </form>
+  </div>
+</section>

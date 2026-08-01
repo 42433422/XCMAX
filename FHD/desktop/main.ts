@@ -38,6 +38,7 @@ import {
 } from './rollback'
 import { terminateChildProcess, waitForChildExit } from './backend-lifecycle'
 import { clampWindowBounds, readWindowState, writeWindowState } from './window-state'
+import { desktopBackendEnv } from './backend-env'
 import { AutonomyController } from './autonomy/controller'
 import { DesktopAutonomyAdapter } from './autonomy/desktop-adapter'
 import { backendCrashPolicy } from './autonomy/policies/backend-crash.policy'
@@ -536,8 +537,7 @@ function initializeLocalCrashReporting(): void {
 
 function packagedBackendHealthTimeoutMs(): number {
   if (!app.isPackaged) {
-    // 本机大库 / deferred 路由挂载时，dev 60s 不够，易卡在闪屏「启动失败」
-    return 180_000
+    return 60_000
   }
   // 首次启动：Alembic、Mod 种子、太阳鸟花名册等可能超过 60s
   return process.platform === 'win32' ? 180_000 : 120_000
@@ -692,10 +692,7 @@ export function readFrontendCacheKey(): string {
   const base = readPackagedAppVersion()
   const indexCandidates = [
     path.join(process.resourcesPath, 'backend', '_internal', 'templates', 'vue-dist', 'index.html'),
-    path.join(process.resourcesPath, 'frontend', 'index.html'),
-    // 源码 npm run dev：resourcesPath 无打包前端，须盯本地 vue-dist，否则换包不清缓存
-    path.join(__dirname, '..', '..', 'templates', 'vue-dist', 'index.html'),
-    path.join(__dirname, '..', 'templates', 'vue-dist', 'index.html'),
+    path.join(process.resourcesPath, 'frontend', 'index.html')
   ]
   for (const indexPath of indexCandidates) {
     try {
@@ -817,28 +814,22 @@ async function startBackend(): Promise<void> {
   startupMarks.backendSpawnMs = Date.now()
   writeBackendLog(`[spawn] ${executable.command} ${executable.args.join(' ')}\n`)
   writeBackendLog(`[cwd] ${executable.cwd}\n`)
-  const backendEnv: NodeJS.ProcessEnv = {
-    ...sanitizeBackendProxyEnv(process.env),
-    XCAGI_DESKTOP_MODE: '1',
-    XCAGI_DATA_DIR: app.getPath('userData'),
-    XCAGI_API_HOST: DESKTOP_BACKEND_BIND_HOST,
-    XCAGI_UVICORN_RELOAD: '0',
-    XCAGI_GLOBAL_RATE_LIMIT: '0',
-    LOG_LEVEL: process.env.LOG_LEVEL || (app.isPackaged ? 'WARNING' : 'INFO'),
-    XCAGI_DESKTOP_FAST_START: '1',
-    // 桌面默认关闭员工 cron，避免交流圈/调度风暴写爆本地库闪退
-    XCAGI_EMPLOYEE_SCHEDULER: process.env.XCAGI_EMPLOYEE_SCHEDULER || '0',
-    ...backendEditionEnv(),
-    PYTHONUTF8: '1'
-  }
-  // 父进程（IDE/代理）常残留 DATABASE_URL=postgres；桌面必须用 userData SQLite
-  delete backendEnv.DATABASE_URL
   backendProcess = spawn(executable.command, executable.args, {
     cwd: executable.cwd,
-    env: backendEnv,
+    env: desktopBackendEnv({
+      ...sanitizeBackendProxyEnv(process.env),
+      XCAGI_DESKTOP_MODE: '1',
+      XCAGI_DATA_DIR: app.getPath('userData'),
+      XCAGI_API_HOST: DESKTOP_BACKEND_BIND_HOST,
+      XCAGI_UVICORN_RELOAD: '0',
+      XCAGI_GLOBAL_RATE_LIMIT: '0',
+      LOG_LEVEL: process.env.LOG_LEVEL || (app.isPackaged ? 'WARNING' : 'INFO'),
+      XCAGI_DESKTOP_FAST_START: '1',
+      ...backendEditionEnv(),
+      PYTHONUTF8: '1'
+    }),
     windowsHide: true
   })
-
   backendProcess.stdout.on('data', data => {
     process.stdout.write(`[xcagi-backend] ${data}`)
     writeBackendLog(`[stdout] ${data}`)
@@ -908,19 +899,17 @@ async function triggerRollbackSafe(reason: string): Promise<RollbackTriggerResul
 function runBackendMigration(): Promise<string> {
   const executable = backendExecutable()
   return new Promise((resolve, reject) => {
-    const migrateEnv: NodeJS.ProcessEnv = {
-      ...sanitizeBackendProxyEnv(process.env),
-      XCAGI_DESKTOP_MODE: '1',
-      XCAGI_DATA_DIR: app.getPath('userData'),
-      XCAGI_UVICORN_RELOAD: '0',
-      XCAGI_GLOBAL_RATE_LIMIT: '0',
-      ...backendEditionEnv(),
-      PYTHONUTF8: '1'
-    }
-    delete migrateEnv.DATABASE_URL
     const child = spawn(executable.command, [...executable.args, '--migrate-only', '--backup'], {
       cwd: executable.cwd,
-      env: migrateEnv,
+      env: desktopBackendEnv({
+        ...sanitizeBackendProxyEnv(process.env),
+        XCAGI_DESKTOP_MODE: '1',
+        XCAGI_DATA_DIR: app.getPath('userData'),
+        XCAGI_UVICORN_RELOAD: '0',
+        XCAGI_GLOBAL_RATE_LIMIT: '0',
+        ...backendEditionEnv(),
+        PYTHONUTF8: '1'
+      }),
       windowsHide: true
     })
     let stderr = ''
