@@ -248,6 +248,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { installHostFoundation, installMod, installIndustrySeed, installCustomerDeliverySeed } from '@/api/modStore'
 import { autoOnboardWorkflowEmployeesFromMods } from '@/utils/workflowEmployeeOnboard'
+import { deliverySeedModIds } from '@/utils/deliverySeedPackages'
 import { queueWorkspacePrefsSync } from '@/utils/workspacePrefsApi'
 import { useModsStore } from '@/stores/mods'
 import { readBuildEdition } from '@/constants/genericModPack'
@@ -286,7 +287,6 @@ import { resolveCoreNavLabel } from '@/utils/coreNavLabel'
 import { patchWorkspacePrefs } from '@/utils/workspacePrefsApi'
 import { appAlert } from '@/utils/appDialog'
 import { productErrorMessage } from '@/utils/productErrorMessage'
-
 const route = useRoute()
 const router = useRouter()
 const flow = useProductFlow()
@@ -592,15 +592,7 @@ async function runBootstrap() {
         )
       }
     }
-    // 仅对配置了 delivery_seed_package 的账号定制 Mod 拉客户种子；
-    // 员工扩展（如 xcagi-core-workflow-employees）走 bundling / installMod，不走交付种子。
-    const customSeedIds = [
-      ...new Set(
-        (baselinePlan.value?.account_delivery_seed_packages || [])
-          .map((row) => String(row?.mod_id || '').trim())
-          .filter(Boolean),
-      ),
-    ]
+    const customSeedIds = deliverySeedModIds(baselinePlan.value)
     for (const modId of customSeedIds) {
       try {
         const ir = await installCustomerDeliverySeed(modId, pickedIndustryId.value)

@@ -9,7 +9,6 @@ import os
 import tempfile
 import uuid
 from datetime import datetime, timezone
-from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
@@ -32,7 +31,7 @@ from modstore_server.employee_ai_scaffold import (
     normalize_editor_manifest_for_registry,
 )
 from modstore_server.llm_chat_proxy import chat_dispatch
-from modstore_server.llm_key_resolver import KNOWN_PROVIDERS, resolve_api_key, resolve_base_url
+from modstore_server.llm_key_resolver import resolve_api_key, resolve_base_url
 from modstore_server.mod_employee_impl_scaffold import (
     _fallback_employee_py,
     generate_mod_employee_impls_async,
@@ -73,6 +72,10 @@ from modstore_server.models import (
 )
 from modstore_server.workbench_research import build_research_context, fetch_web_search_context_pack
 from modstore_server.workbench_script_runner import run_script_agent_job, run_script_job
+from modstore_server.workbench_delivery_bridge import (  # noqa: F401
+    get_workbench_session_snapshot,
+    start_workbench_session_for_user,
+)
 from modstore_server.workflow_engine import run_workflow_sandbox
 from modstore_server.workflow_nl_graph import apply_nl_workflow_graph
 from modstore_server.workflow_sandbox_state import record_workflow_sandbox_run
@@ -2651,9 +2654,6 @@ async def _run_pipeline(sid: str, user_id: int, payload: Dict[str, Any]) -> None
                 is_contract_doc_review_brief,
             )
             from modstore_server.employee_pipeline_routing import classify_employee_pipeline
-            from modstore_server.pdf_extract_runtime import is_pdf_generate
-            from modstore_server.txt_extract_runtime import is_txt_generate
-
             _routing_brief = extract_routing_brief(payload, fallback=brief)
             _emp_brief_lower = (_routing_brief or brief or "").lower()
             _needs_llm_reasoning = is_contract_doc_review_brief(_routing_brief) or any(
@@ -4647,46 +4647,8 @@ async def create_workbench_session(
     payload = body.model_dump()
     if raw_files:
         payload["_files"] = raw_files
+    from modstore_server.workbench_delivery_bridge import start_workbench_session_for_user
     return await start_workbench_session_for_user(int(user.id), payload)
-
-
-async def start_workbench_session_for_user(
-    user_id: int,
-    payload: Dict[str, Any],
-) -> Dict[str, str]:
-    """以已验证用户身份启动一次工作台生产。
-
-    HTTP 工作台和客户定制工单共用这个入口，以免产生两份会话
-    初始化逻辑。调用者必须先完成服务端用户身份校验。
-    """
-    body = _parse_workbench_session_create(dict(payload or {}))
-    normalized = body.model_dump()
-    raw_files = payload.get("_files") if isinstance(payload.get("_files"), list) else []
-    if raw_files:
-        normalized["_files"] = raw_files
-    sid = uuid.uuid4().hex[:24]
-    async with _SESSION_LOCK:
-        WORKBENCH_SESSIONS[sid] = {
-            "id": sid,
-            "user_id": int(user_id),
-            "intent": body.intent,
-            "status": "running",
-            "steps": _default_steps(
-                body.intent,
-                body.execution_mode,
-                employee_target=str(getattr(body, "employee_target", None) or "pack_only"),
-            ),
-            "planning_record": _planning_record(normalized),
-            "artifact": None,
-            "error": None,
-            "validate_warnings": None,
-            "sandbox_report": None,
-            "script_result": None,
-        }
-        _persist_workbench_session_unlocked(sid)
-    _task = asyncio.create_task(_run_pipeline(sid, int(user_id), normalized))
-    _task.add_done_callback(_pipeline_task_failsafe(sid))
-    return {"session_id": sid, "status": "running"}
 
 
 @router.post("/script-sessions", summary="启动 AI + Python 文件处理任务")
@@ -4746,6 +4708,7 @@ async def get_workbench_session(
     session_id: str,
     user: User = Depends(_get_current_user),
 ):
+    from modstore_server.workbench_delivery_bridge import get_workbench_session_snapshot
     payload = await get_workbench_session_snapshot(session_id, int(user.id))
     if payload is None:
         async with _SESSION_LOCK:
@@ -4755,52 +4718,6 @@ async def get_workbench_session(
             raise HTTPException(404, "会话不存在或已过期")
         raise HTTPException(403, "无权访问此会话")
     return payload
-
-
-async def get_workbench_session_snapshot(
-    session_id: str,
-    user_id: int,
-) -> Optional[Dict[str, Any]]:
-    """返回账号隔离的工作台快照，供定制交付控制面轮询。"""
-    async with _SESSION_LOCK:
-        _hydrate_workbench_session_unlocked(session_id)
-        sess = WORKBENCH_SESSIONS.get(session_id)
-    if not sess:
-        return None
-    if int(sess.get("user_id") or 0) != int(user_id):
-        return None
-    return {
-        "id": sess["id"],
-        "intent": _canonical_workbench_intent(str(sess.get("intent") or "")),
-        "status": sess["status"],
-        "steps": sess["steps"],
-        "artifact": _enrich_artifact_skill_aliases(
-            dict(sess["artifact"]) if isinstance(sess.get("artifact"), dict) else None
-        ),
-        "planning_record": sess.get("planning_record"),
-        "error": sess.get("error"),
-        "validate_warnings": sess.get("validate_warnings"),
-        "sandbox_report": sess.get("sandbox_report"),
-        "quality_report": sess.get("quality_report"),
-        "six_dimension_report": sess.get("six_dimension_report"),
-        "script_result": (
-            {
-                "ok": (sess.get("script_result") or {}).get("ok"),
-                "stdout": (sess.get("script_result") or {}).get("stdout", ""),
-                "stderr": (sess.get("script_result") or {}).get("stderr", ""),
-                "outputs": [
-                    {
-                        "filename": o.get("filename"),
-                        "size": o.get("size"),
-                        "download_url": f"/api/workbench/sessions/{session_id}/files/{o.get('filename')}",
-                    }
-                    for o in ((sess.get("script_result") or {}).get("outputs") or [])
-                ],
-            }
-            if sess.get("script_result")
-            else None
-        ),
-    }
 
 
 @router.get("/sessions/{session_id}/files/{filename}", summary="下载脚本执行结果文件")

@@ -346,79 +346,7 @@
             </p>
           </div>
         </section>
-
-        <section class="admin-private-delivery" aria-label="客户定制交付状态">
-          <header class="admin-private-delivery__head">
-            <div>
-              <h4>客户定制清单与交付状态</h4>
-              <p class="muted">只读查看定制清单（业务模块 / AI 员工）每个节点的阶段、确认记录与返工工单；行业通用包不在此列。</p>
-            </div>
-            <button
-              type="button"
-              class="btn btn-secondary btn-sm"
-              :disabled="privateDeliveryLoading"
-              @click="loadPrivateDelivery()"
-            >
-              {{ privateDeliveryLoading ? '读取中…' : '刷新交付状态' }}
-            </button>
-          </header>
-          <div v-if="privateDeliveryError" class="admin-entitlements-alert admin-entitlements-alert--soft" role="status">
-            {{ privateDeliveryError }}
-          </div>
-          <div v-else-if="privateDeliveryLoading" class="admin-private-delivery__empty muted">正在读取客户交付状态…</div>
-          <div v-else-if="!privateDeliveryProjects.length" class="admin-private-delivery__empty muted">
-            该用户还没有客户私有 Mod 交付状态。
-          </div>
-          <div v-else class="admin-private-delivery__projects">
-            <article v-for="project in privateDeliveryProjects" :key="project.mod_id" class="admin-private-delivery__project">
-              <header class="admin-private-delivery__project-head">
-                <div>
-                  <strong>{{ project.name }}</strong>
-                  <code>{{ project.mod_id }}</code>
-                </div>
-                <span class="admin-private-delivery__overall" :data-status="project.overall_status">
-                  {{ project.overall_label }}
-                </span>
-              </header>
-              <div class="admin-private-delivery__tracks">
-                <section v-for="track in DELIVERY_TRACKS" :key="track.key" class="admin-private-delivery__track">
-                  <div class="admin-private-delivery__track-head">
-                    <strong>{{ track.label }}</strong>
-                    <span>{{ deliveryStageLabel(project, track.key) }}</span>
-                  </div>
-                  <small v-if="deliveryTrack(project, track.key)?.updated_at" class="muted">
-                    最近更新：{{ formatDeliveryTime(deliveryTrack(project, track.key)?.updated_at) }}
-                  </small>
-                  <ul v-if="deliveryNodes(project, track.key).length" class="admin-private-delivery__nodes">
-                    <li
-                      v-for="node in deliveryNodes(project, track.key)"
-                      :key="node.id"
-                      :data-status="node.status || 'production'"
-                    >
-                      <div class="admin-private-delivery__node-head">
-                        <strong>{{ node.label || node.id }}</strong>
-                        <span
-                          class="admin-private-delivery__node-status"
-                          :data-status="node.status || 'production'"
-                        >{{ deliveryNodeStatusLabel(node) }}</span>
-                      </div>
-                      <small v-if="deliveryNodeNote(node)">{{ deliveryNodeNote(node) }}</small>
-                    </li>
-                  </ul>
-                  <small v-else class="muted">该轨道未声明定制清单节点</small>
-                  <ul v-if="deliveryTimeline(project, track.key).length" class="admin-private-delivery__timeline">
-                    <li v-for="event in deliveryTimeline(project, track.key)" :key="`${event.at}:${event.status}`">
-                      <span>{{ event.status_label }}</span>
-                      <small>{{ formatDeliveryTime(event.at) }}<template v-if="event.note"> · {{ event.note }}</template></small>
-                    </li>
-                  </ul>
-                  <small v-else class="muted">暂无确认或返工记录</small>
-                </section>
-              </div>
-            </article>
-          </div>
-        </section>
-
+        <AdminPrivateDeliveryPanel :user-id="selectedUserId" />
         <div class="admin-mod-panel">
           <h4>已绑定客户 Mod</h4>
           <div v-if="userModIds.length" class="admin-mod-chips">
@@ -463,6 +391,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin';
+import AdminPrivateDeliveryPanel from '@/components/privateMod/AdminPrivateDeliveryPanel.vue';
 import { appAlert } from '@/utils/appDialog';
 import { apiFetch } from '@/utils/apiBase';
 import { INDUSTRY_PRESET_IDS } from '@/constants/industryPresets';
@@ -519,36 +448,6 @@ type EntitlementEmployeePreview = {
   modName: string;
   summary: string;
 };
-type PrivateDeliveryTrackKey = 'modules' | 'business' | 'employees';
-type PrivateDeliveryEvent = {
-  status?: string;
-  status_label?: string;
-  at?: string;
-  note?: string;
-};
-type PrivateDeliveryTrack = {
-  status?: string;
-  updated_at?: string;
-  timeline?: PrivateDeliveryEvent[];
-};
-type PrivateDeliveryNode = {
-  id: string;
-  label?: string;
-  summary?: string;
-  status?: string;
-  status_label?: string;
-  updated_at?: string;
-  timeline?: PrivateDeliveryEvent[];
-};
-type PrivateDeliveryProject = {
-  mod_id: string;
-  name: string;
-  overall_status?: string;
-  overall_label?: string;
-  tracks?: Partial<Record<PrivateDeliveryTrackKey, PrivateDeliveryTrack>>;
-  track_nodes?: Partial<Record<'modules' | 'employees', PrivateDeliveryNode[]>>;
-  stage_labels?: Partial<Record<PrivateDeliveryTrackKey, Record<string, string>>>;
-};
 
 const users = ref<AdminUser[]>([]);
 const assignableMods = ref<AssignableMod[]>([]);
@@ -566,9 +465,6 @@ const localStatusError = ref('');
 const installedMods = ref<LocalModRow[]>([]);
 const syncStatus = ref<Record<string, unknown> | null>(null);
 const forcePushingEntitlements = ref(false);
-const privateDeliveryProjects = ref<PrivateDeliveryProject[]>([]);
-const privateDeliveryLoading = ref(false);
-const privateDeliveryError = ref('');
 
 // 用户钱包余额（远端 market /api/admin/wallets，按 user_id 索引）
 const walletMap = ref<Map<number, WalletRow>>(new Map());
@@ -613,17 +509,6 @@ const ACCOUNT_TIER_OPTIONS: { value: string; label: string }[] = [
   { value: 'ultra', label: 'Ultra' },
 ];
 const BUDGET_RANGE_OPTIONS = ['1–5 万', '5–10 万', '10–50 万', '50–100 万'];
-const DELIVERY_TRACKS: { key: PrivateDeliveryTrackKey; label: string }[] = [
-  { key: 'modules', label: '业务模块' },
-  { key: 'employees', label: 'AI 员工' },
-];
-const DELIVERY_STAGE_LABELS: Record<string, string> = {
-  production: '制作中',
-  testing: '测试中',
-  rework: '返工中',
-  acceptance: '验收中',
-  delivered: '已交付',
-};
 
 function resolveTier(u: AdminUser): string {
   return u.tier || (u.is_admin ? 'admin' : u.is_enterprise ? 'enterprise' : 'personal');
@@ -758,58 +643,6 @@ function modInstallText(modId: string) {
   const version = String(row.version || '').trim();
   return version ? `已安装 v${version}` : '已安装';
 }
-
-function deliveryTrack(project: PrivateDeliveryProject, key: PrivateDeliveryTrackKey) {
-  if (key === 'modules') return project.tracks?.modules || project.tracks?.business || null;
-  return project.tracks?.[key] || null;
-}
-
-function deliveryStageLabel(project: PrivateDeliveryProject, key: PrivateDeliveryTrackKey) {
-  const track = deliveryTrack(project, key);
-  const status = String(track?.status || 'production');
-  return (
-    project.stage_labels?.[key]?.[status]
-    || (key === 'modules' ? project.stage_labels?.business?.[status] : undefined)
-    || DELIVERY_STAGE_LABELS[status]
-    || status
-  );
-}
-
-function deliveryNodes(project: PrivateDeliveryProject, key: PrivateDeliveryTrackKey): PrivateDeliveryNode[] {
-  const canonical = key === 'business' ? 'modules' : key;
-  const nodes = project.track_nodes?.[canonical as 'modules' | 'employees'];
-  return Array.isArray(nodes) ? nodes : [];
-}
-
-function deliveryNodeStatusLabel(node: PrivateDeliveryNode) {
-  const status = String(node.status || 'production');
-  return node.status_label || DELIVERY_STAGE_LABELS[status] || status;
-}
-
-function deliveryNodeNote(node: PrivateDeliveryNode): string {
-  const timeline = Array.isArray(node.timeline) ? node.timeline : [];
-  for (let i = timeline.length - 1; i >= 0; i -= 1) {
-    const note = String(timeline[i]?.note || '').trim();
-    if (note) return note;
-  }
-  return '';
-}
-
-function deliveryTimeline(project: PrivateDeliveryProject, key: PrivateDeliveryTrackKey) {
-  const track = deliveryTrack(project, key);
-  return (track?.timeline || []).slice(-5).reverse().map((event) => ({
-    ...event,
-    status_label: event.status_label || DELIVERY_STAGE_LABELS[String(event.status || '')] || event.status || '状态变更',
-  }));
-}
-
-function formatDeliveryTime(value?: string) {
-  const raw = String(value || '').trim();
-  if (!raw) return '—';
-  const date = new Date(raw);
-  return Number.isNaN(date.getTime()) ? raw : date.toLocaleString();
-}
-
 function normalizeLocalCatalogRows(raw: Record<string, unknown>): LocalModRow[] {
   const data = (raw?.data && typeof raw.data === 'object' ? raw.data : raw) as Record<string, unknown>;
   const installed = Array.isArray(data.installed) ? data.installed : [];
@@ -852,23 +685,6 @@ async function refreshLocalStatus() {
     localStatusLoading.value = false;
   }
 }
-
-async function loadPrivateDelivery(userId = selectedUserId.value) {
-  if (!userId || typeof xcmaxAdminApi.getUserPrivateDelivery !== 'function') return;
-  privateDeliveryLoading.value = true;
-  privateDeliveryError.value = '';
-  try {
-    const res = await xcmaxAdminApi.getUserPrivateDelivery(userId);
-    const body = res as { data?: { projects?: PrivateDeliveryProject[] } };
-    privateDeliveryProjects.value = Array.isArray(body.data?.projects) ? body.data.projects : [];
-  } catch (e) {
-    privateDeliveryProjects.value = [];
-    privateDeliveryError.value = `客户交付状态读取失败：${e instanceof Error ? e.message : String(e)}`;
-  } finally {
-    privateDeliveryLoading.value = false;
-  }
-}
-
 async function loadUsers() {
   const res = await xcmaxAdminApi.listUsers();
   const data = res as { users?: AdminUser[]; data?: { users?: AdminUser[] } };
@@ -1086,8 +902,6 @@ async function forcePushSelectedEntitlements() {
 async function selectUser(u: AdminUser) {
   selectedUserId.value = u.id;
   modToBind.value = '';
-  privateDeliveryProjects.value = [];
-  privateDeliveryError.value = '';
   // 初始化等级/行业编辑态：无本地 profile 时按远端标志推断默认值
   profileEditing.value = {
     tier: u.tier || (u.is_admin ? 'admin' : u.is_enterprise ? 'enterprise' : 'personal'),
@@ -1104,7 +918,6 @@ async function selectUser(u: AdminUser) {
     userModIds.value = [...(u.mod_ids || [])];
     await appAlert(`加载用户 Mod 失败：${e instanceof Error ? e.message : String(e)}`);
   }
-  await loadPrivateDelivery(u.id);
 }
 
 async function saveProfile() {
@@ -1152,7 +965,6 @@ async function bindMod() {
     }
     modToBind.value = '';
     await loadUsers();
-    await loadPrivateDelivery();
     await appAlert('已绑定');
   } catch (e) {
     await appAlert(`绑定失败：${e instanceof Error ? e.message : String(e)}`);
@@ -1167,7 +979,6 @@ async function unbindMod(modId: string) {
     await xcmaxAdminApi.unbindUserMod(selectedUserId.value, modId);
     userModIds.value = userModIds.value.filter((id) => id !== modId);
     await loadUsers();
-    await loadPrivateDelivery();
   } catch (e) {
     await appAlert(`解绑失败：${e instanceof Error ? e.message : String(e)}`);
   }
@@ -1406,7 +1217,6 @@ onMounted(async () => {
 .admin-user-card--personal .admin-user-card__bar { background: #64748b; }
 .admin-user-card--enterprise .admin-user-card__bar { background: #1e3a5f; }
 .admin-user-card--admin .admin-user-card__bar { background: #92400e; }
-
 .admin-user-card__body {
   padding: 12px 14px 10px;
   display: flex;
@@ -1721,195 +1531,6 @@ onMounted(async () => {
   margin: 0;
   font-size: 12px;
 }
-
-.admin-private-delivery {
-  margin-bottom: 18px;
-  padding: 14px;
-  border: 1px solid #f1d6a8;
-  border-radius: 12px;
-  background: #fffaf0;
-}
-
-.admin-private-delivery__head,
-.admin-private-delivery__project-head,
-.admin-private-delivery__track-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.admin-private-delivery__head {
-  margin-bottom: 12px;
-}
-
-.admin-private-delivery__head h4 {
-  margin: 0 0 4px;
-  color: #92400e;
-}
-
-.admin-private-delivery__head p {
-  margin: 0;
-  font-size: 12px;
-}
-
-.admin-private-delivery__empty {
-  padding: 18px 10px;
-  text-align: center;
-  border: 1px dashed #e8c98f;
-  border-radius: 8px;
-}
-
-.admin-private-delivery__projects {
-  display: grid;
-  gap: 12px;
-}
-
-.admin-private-delivery__project {
-  padding: 12px;
-  border: 1px solid #ead9b8;
-  border-radius: 10px;
-  background: #fff;
-}
-
-.admin-private-delivery__project-head code {
-  display: block;
-  margin-top: 4px;
-  color: #64748b;
-  font-size: 11px;
-}
-
-.admin-private-delivery__overall {
-  padding: 4px 9px;
-  border-radius: 999px;
-  color: #166534;
-  background: #dcfce7;
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.admin-private-delivery__overall[data-status='partial'] {
-  color: #92400e;
-  background: #fef3c7;
-}
-
-.admin-private-delivery__overall[data-status='rework'] {
-  color: #b91c1c;
-  background: #fee2e2;
-}
-
-.admin-private-delivery__tracks {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.admin-private-delivery__track {
-  padding: 10px;
-  border: 1px solid #e8edf3;
-  border-radius: 8px;
-  background: #f8fafc;
-}
-
-.admin-private-delivery__track-head span {
-  color: #1d4ed8;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.admin-private-delivery__track > small {
-  display: block;
-  margin-top: 5px;
-  font-size: 11px;
-}
-
-.admin-private-delivery__nodes {
-  display: grid;
-  gap: 6px;
-  margin: 9px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.admin-private-delivery__nodes li {
-  padding: 7px 9px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #fff;
-}
-
-.admin-private-delivery__nodes li[data-status='rework'] {
-  border-color: #fecaca;
-  background: #fef2f2;
-}
-
-.admin-private-delivery__node-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 12px;
-}
-
-.admin-private-delivery__node-status {
-  padding: 2px 8px;
-  border-radius: 999px;
-  color: #166534;
-  background: #dcfce7;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.admin-private-delivery__node-status[data-status='testing'],
-.admin-private-delivery__node-status[data-status='acceptance'] {
-  color: #92400e;
-  background: #fef3c7;
-}
-
-.admin-private-delivery__node-status[data-status='production'] {
-  color: #475569;
-  background: #e2e8f0;
-}
-
-.admin-private-delivery__node-status[data-status='rework'] {
-  color: #b91c1c;
-  background: #fee2e2;
-}
-
-.admin-private-delivery__nodes li > small {
-  display: block;
-  margin-top: 4px;
-  color: #9a3412;
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.admin-private-delivery__timeline {
-  display: grid;
-  gap: 5px;
-  margin: 9px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.admin-private-delivery__timeline li {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  color: #334155;
-  font-size: 12px;
-}
-
-.admin-private-delivery__timeline small {
-  color: #94a3b8;
-  font-size: 10px;
-  text-align: right;
-}
-
 .admin-mod-chips {
   display: flex;
   flex-wrap: wrap;
@@ -1974,10 +1595,6 @@ onMounted(async () => {
 
   .admin-chain-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .admin-private-delivery__tracks {
-    grid-template-columns: 1fr;
   }
 
   .admin-entitlement-chain__intro {
