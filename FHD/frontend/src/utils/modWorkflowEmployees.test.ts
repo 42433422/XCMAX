@@ -8,6 +8,8 @@ import {
   isWorkflowPlaceholderEmployee,
   getActivePhoneAgentPollTarget,
   buildModWorkflowPanelMeta,
+  listPhoneAgentEmployeeIds,
+  resolvePhoneChannelForEmployee,
 } from './modWorkflowEmployees'
 
 describe('resolvePhoneAgentApiBase', () => {
@@ -224,5 +226,38 @@ describe('buildModWorkflowPanelMeta', () => {
     expect(meta.only.title).toBe('工作流 · L')
     expect(meta.only.summary).toContain('NM')
     expect(meta.only.summary).toContain('L')
+  })
+})
+
+describe('phone employee manifest helpers', () => {
+  const mods = [
+    {
+      id: 'phone-mod',
+      workflow_employees: [
+        { id: 'wechat', label: '微信员工', phone_agent_base_path: 'phone-agent' },
+        { id: 'device', label: '设备员工', phone_agent_api_base: '/api/device', phone_channel: 'adb' },
+        { id: 'real', label: '真机员工', phone_agent_api_base: '/api/real', phone_channel: 'real' },
+        { id: 'manual', label: '人工员工' },
+        { id: ' ', label: '无效员工', phone_agent_api_base: '/api/invalid' },
+      ],
+    },
+    {
+      id: 'duplicate-mod',
+      workflow_employees: [
+        { id: 'wechat', label: '重复员工', phone_agent_api_base: '/api/duplicate' },
+      ],
+    },
+  ]
+
+  it('normalizes device channels and defaults to wechat', () => {
+    expect(resolvePhoneChannelForEmployee(mods, 'device')).toBe('adb')
+    expect(resolvePhoneChannelForEmployee(mods, 'real')).toBe('adb')
+    expect(resolvePhoneChannelForEmployee(mods, 'wechat')).toBe('wechat')
+    expect(resolvePhoneChannelForEmployee(mods, 'missing')).toBe('wechat')
+  })
+
+  it('lists unique employees that expose a phone API', () => {
+    expect(listPhoneAgentEmployeeIds(mods)).toEqual(['wechat', 'device', 'real'])
+    expect(listPhoneAgentEmployeeIds(undefined)).toEqual([])
   })
 })

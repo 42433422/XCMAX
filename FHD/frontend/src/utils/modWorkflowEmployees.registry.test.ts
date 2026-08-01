@@ -100,4 +100,22 @@ describe('workflow registry mod/employee separation', () => {
     ])
     expect(filtered.map((m) => m.id)).toEqual(['taiyangniao-pro'])
   })
+
+  it('applies server registry exclusions, suffixes, prefixes, and manifest fallback', () => {
+    employeeRegistryRules.value = {
+      exclude_mod_ids: ['blocked-mod'],
+      exclude_id_suffixes: ['-private'],
+      workflow_employee_id_prefixes: ['workflow-'],
+    }
+
+    const filtered = filterWorkflowRegistrySourceMods([
+      { id: 'blocked-mod', workflow_employees: [{ id: 'blocked', label: '禁用' }] },
+      { id: 'account-private', workflow_employees: [{ id: 'private', label: '私有' }] },
+      { id: 'workflow-explicit' },
+      { id: 'manifest-fallback', workflow_employees: [{ id: 'fallback', label: '回退' }] },
+      { id: 'plain-mod' },
+    ])
+
+    expect(filtered.map((m) => m.id)).toEqual(['workflow-explicit', 'manifest-fallback'])
+  })
 })
