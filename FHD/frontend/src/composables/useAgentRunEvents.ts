@@ -3,6 +3,10 @@ import agentRunsApi from '@/api/agentRuns'
 import type { TaskItem } from './useChatPersistence'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { normalizeTaskDisplayText } from '@/utils/chatTaskLabels'
+import {
+  buildAgentRunTraceFromEvents,
+  isTrivialChatTrace,
+} from '@/utils/agentRunTraceModel'
 
 type UpsertTask = (
   item: Partial<TaskItem> & { id: string; title: string; source: TaskItem['source']; type: string },
@@ -147,16 +151,19 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
         normalizedRunId,
         afterEventId ? { after_event_id: afterEventId } : {},
       )
-      const events = Array.isArray(response?.data) ? response.data : []
-      if (!events.length) return
-      const last = events[events.length - 1]
+      const fresh = Array.isArray(response?.data) ? response.data : []
+      const accumulated = afterEventId
+        ? [...(eventsByRunId.get(normalizedRunId) || []), ...fresh]
+        : fresh
+      if (accumulated.length) eventsByRunId.set(normalizedRunId, accumulated)
+      const last = accumulated[accumulated.length - 1]
       if (last?.event_id) {
         lastEventByRunId.set(normalizedRunId, last.event_id)
       }
       if (!accumulated.length) return false
       // 闲聊无工具、或单次成功只读工具：不灌「智能任务」侧栏 / 气泡剧场
       const previewTrace = buildAgentRunTraceFromEvents(accumulated, normalizedRunId)
-      if (isTrivialChatTrace(previewTrace)) return previewTrace.terminal
+      if (isTrivialChatTrace(previewTrace) && previewTrace.terminal) return true
       const update = buildAgentRunTaskUpdate({
         runId: normalizedRunId,
         userText: userTextByRunId.get(normalizedRunId) || '',
@@ -169,7 +176,7 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
       const fallbackEvents = eventsByRunId.get(normalizedRunId) || []
       if (!fallbackEvents.length) return false
       const previewTrace = buildAgentRunTraceFromEvents(fallbackEvents, normalizedRunId)
-      if (isTrivialChatTrace(previewTrace)) return previewTrace.terminal
+      if (isTrivialChatTrace(previewTrace) && previewTrace.terminal) return true
       const update = buildAgentRunTaskUpdate({
         runId: normalizedRunId,
         userText: userTextByRunId.get(normalizedRunId) || '',
@@ -202,7 +209,7 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
         if (!trace.terminal) activeRunIds.push(runId)
         const restoredUserText = asString(run?.message).trim()
         if (restoredUserText) userTextByRunId.set(runId, restoredUserText)
-        if (isTrivialChatTrace(trace)) continue
+        if (isTrivialChatTrace(trace) && trace.terminal) continue
         eventsByRunId.set(runId, events)
         const last = events[events.length - 1]
         if (last?.event_id) lastEventByRunId.set(runId, last.event_id)

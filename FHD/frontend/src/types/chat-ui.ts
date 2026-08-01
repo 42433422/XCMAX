@@ -53,6 +53,7 @@ export interface UiChatMessage {
   toolProgressLabel?: string
   /** 每轮对话从接收、工具调用到完成/恢复的轻量执行时间线。 */
   executionProgress?: ChatExecutionProgressItem[]
+  agentRunTrace?: AgentRunTraceData
   downloadUrl?: string
   /** 发货单文档下载链接（与右侧任务卡一致，便于在对话内直接下载） */
   shipmentDownloadUrl?: string

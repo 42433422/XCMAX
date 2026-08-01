@@ -9,7 +9,7 @@ import {
   buildChatMessagesKey,
   buildChatSessionMetaKey,
 } from '@/utils/chatStorageKeys'
-import { asRecord, asArray, asString, asBoolean } from '@/utils/typeGuards'
+import { asRecord, asArray, asString, asBoolean, asNumber } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'

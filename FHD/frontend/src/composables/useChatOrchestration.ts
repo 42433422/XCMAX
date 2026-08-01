@@ -103,7 +103,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     saveMessage,
     pushStreamingAiShell,
     applyPlainTextToMessageIndex,
-    patchMessageAtIndex,
+    patchMessageAtIndex = () => {},
     clearMessages,
     loadMessages,
     syncFromServer,
@@ -239,6 +239,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     attachWorkflowTraceToLastAiMessage,
     attachApprovalCardToLastAiMessage,
     attachContextSummaryToLastAiMessage,
+    attachAgentRunTraceToLastAiMessage = () => {},
     syncTaskFromChatResponse,
   } = responseAttach
 
@@ -325,7 +326,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   }
 
   /** 组件卸载时清理所有轮询 */
-  onUnmounted(() => {
+  onBeforeUnmount(() => {
     for (const id of tracePollingTimers.keys()) {
       stopTracePolling(id)
     }
