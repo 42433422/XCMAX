@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""通用 mod 打包脚本：将任意 mod 目录打包为 .xcemp。
+"""通用 mod 打包脚本：将任意 mod 目录打包为 .xcmod / .xcemp。
 
 进化状态闭环（2026-07-20）：系统自己打包上架 MODstore 的「打包」环节。
 
@@ -10,7 +9,8 @@
     python scripts/build_mod.py --mod-id new-employee --out dist/employee_packs --sign
 
 输出：
-    dist/employee_packs/<mod_id>-<version>.xcemp
+    dist/employee_packs/<mod_id>-<version>.xcmod  (artifact=mod)
+    dist/employee_packs/<mod_id>-<version>.xcemp  (artifact=employee_pack)
     dist/employee_packs/<mod_id>-<version>.meta.json  (含 sha256、size、build_at)
 """
 
@@ -20,16 +20,16 @@ import argparse
 import hashlib
 import json
 import os
-import sys
+import re
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _resolve_src(mod_id: str | None, src: Path | None) -> Path:
@@ -65,8 +65,12 @@ def _validate_manifest(manifest: dict) -> list[str]:
     for k in ("id", "name", "version"):
         if not str(manifest.get(k) or "").strip():
             errs.append(f"manifest.{k} 缺失")
-    if str(manifest.get("artifact") or "").strip() not in ("employee_pack", "mod"):
+    if str(manifest.get("artifact") or "mod").strip() not in ("employee_pack", "mod"):
         errs.append("manifest.artifact 应为 employee_pack 或 mod")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", str(manifest.get("id") or "")):
+        errs.append("manifest.id 只能包含字母、数字、点、下划线和连字符")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,31}", str(manifest.get("version") or "")):
+        errs.append("manifest.version 格式无效")
     return errs
 
 
@@ -96,11 +100,12 @@ def build_xcemp(src: Path, out_dir: Path, *, sign: bool = False) -> tuple[Path, 
 
     mod_id = str(manifest.get("id") or src.name)
     version = str(manifest.get("version") or "1.0.0")
-    artifact = str(manifest.get("artifact") or "mod")
+    artifact = str(manifest.get("artifact") or "mod").strip()
 
     out_dir.mkdir(parents=True, exist_ok=True)
     safe_version = version.replace("/", "_")
-    out_path = out_dir / f"{mod_id}-{safe_version}.xcemp"
+    suffix = ".xcemp" if artifact == "employee_pack" else ".xcmod"
+    out_path = out_dir / f"{mod_id}-{safe_version}{suffix}"
 
     written: list[str] = []
     with zipfile.ZipFile(out_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
