@@ -46,7 +46,19 @@ def _make_handler(employee_id: str, binding: TriggerBinding):
         if not _event_matches_employee(event, employee_id):
             return
         payload = dict(getattr(event, "payload", None) or {})
-        payload.setdefault("trigger_event", getattr(event, "event_type", ""))
+        event_type = getattr(event, "event_type", "")
+        # A failed employee must never handle the failure event emitted by its
+        # own run. Without this guard, an on_error employee can recurse through
+        # failure -> event -> run -> failure until logs and audit storage fill.
+        origin_employee = str(payload.get("origin_employee_id") or "").strip()
+        if event_type == EVENT_TASK_FAILED and origin_employee == employee_id:
+            logger.debug("skip self task-failed trigger emp=%s", employee_id)
+            return
+        if event_type == EVENT_TASK_FAILED and payload.get("retryable") is False:
+            logger.debug("skip non-retryable task-failed trigger emp=%s", employee_id)
+            return
+
+        payload.setdefault("trigger_event", event_type)
         payload.setdefault("employee_id", employee_id)
         task = str(
             payload.get("task")
@@ -69,7 +81,7 @@ def _make_handler(employee_id: str, binding: TriggerBinding):
             logger.info(
                 "employee trigger handled emp=%s event=%s success=%s",
                 employee_id,
-                getattr(event, "event_type", ""),
+                event_type,
                 result.get("success"),
             )
         except RECOVERABLE_ERRORS:
@@ -164,6 +176,7 @@ def publish_employee_task_failed(
         from app.neuro_bus.events.base import NeuroEvent
 
         payload = dict(extra or {})
+        payload.setdefault("origin_employee_id", employee_id)
         payload.update(
             {
                 "employee_id": employee_id,
