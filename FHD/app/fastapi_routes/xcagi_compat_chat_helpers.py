@@ -3,6 +3,7 @@ XCAGI 前端兼容 API — AI 聊天辅助函数与数据模型。
 供 xcagi_compat_chat / xcagi_compat_misc 等模块复用。
 """
 from __future__ import annotations
+
 import asyncio
 import hashlib
 import json
@@ -15,6 +16,7 @@ import time
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
+
 from fastapi import HTTPException, Request
 from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field

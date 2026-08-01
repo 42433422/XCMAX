@@ -1,11 +1,12 @@
 from __future__ import annotations
+
 import logging
 from collections.abc import Iterator
 from typing import Any
 from uuid import uuid4
+
 from app.application.agent_orchestrator.artifact_ingestion import ingest_artifact_to_dataset
 from app.application.agent_orchestrator.budget import refresh_ai_budget_metadata
-from app.application.business_mutation_evidence import apply_business_mutation_evidence_gate
 from app.application.agent_orchestrator.run_models import (
     AgentArtifact,
     AgentRun,
@@ -22,7 +23,9 @@ from app.application.agent_orchestrator.run_repository import (
     AgentRunRepository,
     get_agent_run_repository,
 )
+from app.application.business_mutation_evidence import apply_business_mutation_evidence_gate
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 _MAX_TRACE_STRING_CHARS = 4000
 _MAX_TRACE_LIST_ITEMS = 20

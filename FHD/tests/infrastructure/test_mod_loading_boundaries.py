@@ -2,8 +2,8 @@ from types import SimpleNamespace
 
 
 def test_entitled_but_uninstalled_mod_does_not_enter_load_or_failure_loop(monkeypatch) -> None:
-    from app.infrastructure.mods import mod_manager as module
     from app import runtime_integrity
+    from app.infrastructure.mods import mod_manager as module
 
     load_calls: list[str] = []
     cleared: list[str] = []

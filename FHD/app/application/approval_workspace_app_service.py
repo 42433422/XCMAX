@@ -19,13 +19,12 @@ from fastapi import Body, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.application.mobile_push_app_service import notify_mobile_user
 from app.application.approval_agent_run_bridge import (
     _drop_pending_ai_workflow_after_rejection,
-    _durable_ai_workflow_link,
     _has_pending_ai_workflow,
     _resume_pending_ai_workflow_after_approval,
 )
+from app.application.mobile_push_app_service import notify_mobile_user
 from app.db.models.approval import (
     ApprovalAction,
     ApprovalFlow,

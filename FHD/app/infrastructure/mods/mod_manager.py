@@ -13,7 +13,9 @@ import time
 import zipfile
 from pathlib import Path
 from typing import Any
+
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 from .artifact_constants import ARTIFACT_BUNDLE, ARTIFACT_EMPLOYEE_PACK, normalize_artifact
 from .artifact_package import (
     validate_bundle_manifest,
@@ -22,6 +24,7 @@ from .artifact_package import (
 from .manifest import ModMetadata, parse_manifest, validate_dependencies
 from .package import ModPackage, ModPackageError, ModSignatureError
 from .registry import get_mod_registry
+
 logger = logging.getLogger(__name__)
 _MOD_API_FAILURE_RETRY_AT: dict[str, float] = {}
 _MOD_API_FAILURE_BACKOFF_SECONDS = 15.0
@@ -1156,7 +1159,9 @@ def load_employee_pack_routes(app, mod_manager: ModManager | None = None) -> Non
         mod_manager = get_mod_manager()
     if is_mods_disabled():
         return
-    from app.application.employee_runtime.runtime_policy import desktop_admin_employee_runtime_disabled
+    from app.application.employee_runtime.runtime_policy import (
+        desktop_admin_employee_runtime_disabled,
+    )
 
     if desktop_admin_employee_runtime_disabled():
         logger.debug("desktop SKU skips admin employee_pack route registration")

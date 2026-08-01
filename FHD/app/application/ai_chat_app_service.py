@@ -19,10 +19,13 @@ import re
 import uuid
 from pathlib import Path
 from typing import Any
+
 import httpx  # noqa: F401 - compatibility patch point for legacy tests/callers
+
 from app.di.registry import get_service_registry
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import resolve_fhd_repo_root
+
 logger = logging.getLogger(__name__)
 from app.application.ai_chat.excel_import_pipeline import AIChatExcelImportMixin
 from app.application.ai_chat.excel_import_policy import (
@@ -34,6 +37,8 @@ from app.application.ai_chat.excel_import_policy import (
 )
 from app.application.ai_chat.instant_tools import AIChatInstantToolsMixin
 from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+
+
 def _import_workflow_components():
     from app.application.workflow import (
         HybridRiskGate,
