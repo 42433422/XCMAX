@@ -1,8 +1,7 @@
 """能力提案记录器 — 进化状态闭环的「未命中 → 提案」环节。
 
-将未命中的用户意图记录到 ``test_reports/capability_proposal.jsonl``，
-每周由 ``capability-proposal-to-issue.yml`` workflow 读取，去重后创建 GitHub issue
-并打 ``ai-implement`` 标签 → 触发 ``ai-issue-implement.yml`` 自主实现。
+将开放世界技能路由确认的缺口记录到 ``test_reports/capability_proposal.jsonl``。
+受控中继读取待处理项并创建治理 issue；已注册技能缺槽不得进入本队列。
 
 设计原则：
   - 文件锁保证并发安全（modstore_server 多进程写）
@@ -19,6 +18,7 @@ import logging
 import os
 import threading
 import time
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -28,9 +28,32 @@ logger = logging.getLogger(__name__)
 # 写入路径：CI artifact 与本地可读
 _REPORT_DIR = Path(os.environ.get("CAPABILITY_PROPOSAL_DIR", "test_reports"))
 _PROPOSAL_FILE = _REPORT_DIR / "capability_proposal.jsonl"
+_PROCESSED_FILE = _REPORT_DIR / "capability_proposal_processed.jsonl"
 _DEDUP_WINDOW_SECONDS = 7 * 24 * 3600  # 7 天去重窗口
 
 _file_lock = threading.Lock()
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows 使用线程锁兜底
+    fcntl = None  # type: ignore[assignment]
+
+
+@contextmanager
+def _exclusive_file_lock():
+    """同进程线程锁 + POSIX 跨进程文件锁。"""
+    with _file_lock:
+        if fcntl is None:
+            yield
+            return
+        _REPORT_DIR.mkdir(parents=True, exist_ok=True)
+        lock_path = _REPORT_DIR / ".capability_proposal.lock"
+        with lock_path.open("a+", encoding="utf-8") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def _utc_now() -> str:
@@ -67,6 +90,8 @@ def _load_recent_keys(lookback_seconds: int = _DEDUP_WINDOW_SECONDS) -> set[str]
                     rec = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                if not isinstance(rec, dict):
+                    continue
                 ts = float(rec.get("ts_unix") or 0)
                 if ts < cutoff:
                     continue
@@ -75,6 +100,28 @@ def _load_recent_keys(lookback_seconds: int = _DEDUP_WINDOW_SECONDS) -> set[str]
                     keys.add(k)
     except OSError:
         logger.debug("load recent keys failed", exc_info=True)
+    return keys
+
+
+def _load_processed_keys() -> set[str]:
+    """加载已成功处理或明确忽略的提案键。"""
+    if not _PROCESSED_FILE.is_file():
+        return set()
+    keys: set[str] = set()
+    try:
+        with _PROCESSED_FILE.open("r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(record, dict):
+                    continue
+                key = record.get("dedup_key")
+                if isinstance(key, str) and key.strip():
+                    keys.add(key.strip())
+    except OSError:
+        logger.warning("load processed proposals failed", exc_info=True)
     return keys
 
 
@@ -106,7 +153,7 @@ def record_capability_proposal(
         norm_input = norm_input[:500] + "...(truncated)"
 
     key = _dedup_key(raw_input, reason)
-    with _file_lock:
+    with _exclusive_file_lock():
         recent = _load_recent_keys()
         if key in recent:
             return {"recorded": False, "reason": "duplicate", "dedup_key": key}
@@ -151,6 +198,7 @@ def list_pending_proposals(since_unix: float | None = None) -> list[dict[str, An
         return []
     out: list[dict[str, Any]] = []
     seen_keys: set[str] = set()
+    processed_keys = _load_processed_keys()
     try:
         with _PROPOSAL_FILE.open("r", encoding="utf-8") as f:
             for line in f:
@@ -161,9 +209,13 @@ def list_pending_proposals(since_unix: float | None = None) -> list[dict[str, An
                     rec = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                if not isinstance(rec, dict):
+                    continue
                 if since_unix is not None and float(rec.get("ts_unix") or 0) <= since_unix:
                     continue
                 k = rec.get("dedup_key")
+                if k in processed_keys:
+                    continue
                 if k in seen_keys:
                     continue
                 seen_keys.add(k)
@@ -175,23 +227,43 @@ def list_pending_proposals(since_unix: float | None = None) -> list[dict[str, An
     return out
 
 
-def mark_proposals_processed(dedup_keys: list[str]) -> int:
+def mark_proposals_processed(
+    dedup_keys: list[str],
+    *,
+    disposition: str = "processed",
+    issue_urls: dict[str, str] | None = None,
+) -> int:
     """将已创建 issue 的提案标记为已处理（追加到 processed 标记文件）。
 
-    简单实现：写入 processed 标记文件，list_pending_proposals 调用方可传入 since_unix
-    来跳过已处理。返回成功写入数量。
+    标记文件是追加式收据，``list_pending_proposals`` 会主动排除这些键。
+    同一键重复标记不会再次写入。返回本次新增收据数。
     """
     if not dedup_keys:
         return 0
-    marker = _REPORT_DIR / "capability_proposal_processed.jsonl"
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    n = 0
-    try:
-        with marker.open("a", encoding="utf-8") as f:
-            for k in dedup_keys:
-                f.write(json.dumps({"dedup_key": k, "ts": _utc_now()}) + "\n")
-                n += 1
-            f.flush()
-    except OSError:
-        logger.warning("mark processed failed", exc_info=True)
-    return n
+    normalized = list(dict.fromkeys(str(key).strip() for key in dedup_keys if str(key).strip()))
+    if not normalized:
+        return 0
+    with _exclusive_file_lock():
+        existing = _load_processed_keys()
+        new_keys = [key for key in normalized if key not in existing]
+        if not new_keys:
+            return 0
+        _PROCESSED_FILE.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with _PROCESSED_FILE.open("a", encoding="utf-8") as f:
+                for key in new_keys:
+                    record = {
+                        "dedup_key": key,
+                        "ts": _utc_now(),
+                        "disposition": disposition,
+                    }
+                    issue_url = str((issue_urls or {}).get(key) or "").strip()
+                    if issue_url:
+                        record["issue_url"] = issue_url
+                    f.write(json.dumps(record, ensure_ascii=False) + "\n")
+                f.flush()
+                os.fsync(f.fileno())
+        except OSError:
+            logger.warning("mark processed failed", exc_info=True)
+            return 0
+        return len(new_keys)
