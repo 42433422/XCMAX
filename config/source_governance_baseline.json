@@ -1,7 +1,7 @@
 {
   "_note": "Cross-stack source debt ratchet. Existing oversized files and exact-copy debt may only shrink; generated/derived roots are excluded.",
   "schema_version": 1,
-  "updated_at": "2026-07-31",
+  "updated_at": "2026-08-01",
   "oversized_files": {
     "成都修茈科技有限公司/MODstore_deploy/market/src/views/WorkbenchHomeView.vue": {
       "stack": "modstore_vue",
@@ -253,6 +253,11 @@
       "lines": 1770,
       "soft_cap": 500
     },
+    "FHD/desktop/main.ts": {
+      "stack": "electron",
+      "lines": 1726,
+      "soft_cap": 600
+    },
     "FHD/app/application/agent_orchestrator/chat_trace.py": {
       "stack": "fhd_backend",
       "lines": 1717,
@@ -262,11 +267,6 @@
       "stack": "fhd_vue",
       "lines": 1717,
       "soft_cap": 500
-    },
-    "FHD/desktop/main.ts": {
-      "stack": "electron",
-      "lines": 1715,
-      "soft_cap": 600
     },
     "FHD/frontend/src/views/ModStore.vue": {
       "stack": "fhd_vue",
@@ -498,6 +498,11 @@
       "lines": 1216,
       "soft_cap": 800
     },
+    "FHD/app/services/conversation/modstore_adapter.py": {
+      "stack": "fhd_backend",
+      "lines": 1197,
+      "soft_cap": 800
+    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_employee_agent_runner.py": {
       "stack": "modstore_backend",
       "lines": 1162,
@@ -512,11 +517,6 @@
       "stack": "flutter",
       "lines": 1141,
       "soft_cap": 500
-    },
-    "FHD/app/services/conversation/modstore_adapter.py": {
-      "stack": "fhd_backend",
-      "lines": 1137,
-      "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/market/src/views/PaymentCheckoutView.vue": {
       "stack": "modstore_vue",

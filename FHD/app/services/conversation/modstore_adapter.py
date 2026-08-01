@@ -949,9 +949,7 @@ class ModstorePlatformAdapter:
                         with client.stream("POST", url, json=payload) as response:
                             status_code = _response_status_code(response)
                             if status_code >= 400:
-                                error_text = response.read().decode("utf-8", errors="ignore")[
-                                    :500
-                                ]
+                                error_text = response.read().decode("utf-8", errors="ignore")[:500]
                                 err = ValueError(f"平台错误({status_code}): {error_text}")
                                 if idx + 1 < len(candidates) and is_market_chat_failoverable(
                                     status_code, error_text
