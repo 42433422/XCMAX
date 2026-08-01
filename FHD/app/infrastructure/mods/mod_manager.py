@@ -28,6 +28,7 @@ from .registry import get_mod_registry
 logger = logging.getLogger(__name__)
 _MOD_API_FAILURE_RETRY_AT: dict[str, float] = {}
 _MOD_API_FAILURE_BACKOFF_SECONDS = 15.0
+_MOD_API_MISSING_LOCAL: set[str] = set()
 
 
 def is_mods_disabled() -> bool:

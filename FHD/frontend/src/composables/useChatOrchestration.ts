@@ -84,6 +84,18 @@ function isDatabaseTokenRequirement(tokenName?: unknown, tokenDescription?: unkn
   return /DB_(READ|WRITE)_TOKEN|DATABASE TOKEN|数据库.*令牌|一级|二级|写入令牌|查看令牌/.test(raw)
 }
 
+/** SSE 结束事件偶尔会把完整回复重复一次；只收敛整段完全相同的回执。 */
+function collapseExactDuplicateReply(raw: string): string {
+  const text = String(raw || '').trim()
+  if (!text) return text
+  const half = text.length / 2
+  if (Number.isInteger(half) && text.slice(0, half) === text.slice(half)) {
+    return text.slice(0, half).trim()
+  }
+  const spacedDuplicate = /^([\s\S]+?)\s+\1$/.exec(text)
+  return spacedDuplicate ? spacedDuplicate[1].trim() : text
+}
+
 export function useChatOrchestration(options: UseChatViewOptions) {
   const tutorialStore = useTutorialStore()
   const modsStore = useModsStore()
