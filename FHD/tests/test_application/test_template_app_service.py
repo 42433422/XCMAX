@@ -35,9 +35,7 @@ class TestGetTemplates:
         svc = _svc(ts)
         out = svc.get_templates(category="all")
         assert len(out["templates"]) == len(STARTER_TEMPLATES)
-        assert {row["id"] for row in out["templates"]} == {
-            row["id"] for row in STARTER_TEMPLATES
-        }
+        assert {row["id"] for row in out["templates"]} == {row["id"] for row in STARTER_TEMPLATES}
         ts.list_templates.assert_called_once()
 
     def test_specific_category_filters(self) -> None:
