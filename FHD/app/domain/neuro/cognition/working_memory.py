@@ -14,6 +14,7 @@ Phase 2 用途：为 ``AttentionSelector`` 提供候选上下文，供 LLM 生�
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -23,6 +24,17 @@ logger = logging.getLogger(__name__)
 
 _SHORT_TERM_LIMIT = 8
 _LONG_TERM_TOPK = 3
+
+# 长期记忆召回服务提供者（由 application 组装注入，避免 domain→application 反向依赖）。
+# 注入点：app/application/user_memory_vector_app_service.py（模块导入时自注册，
+# callable 经 sys.modules 晚绑定，测试 patch get_user_memory_rag_app_service 仍生效）。
+_long_term_recall_provider: Callable[[], Any] | None = None
+
+
+def set_long_term_recall_provider(provider: Callable[[], Any] | None) -> None:
+    """注入长期记忆召回服务提供者（application→domain 组装）。"""
+    global _long_term_recall_provider
+    _long_term_recall_provider = provider
 
 
 @dataclass
@@ -166,12 +178,11 @@ class WorkingMemory:
         """从用户记忆向量索引召回相关条目。"""
         if not self._user_id:
             return []
+        provider = _long_term_recall_provider
+        if provider is None:
+            return []
         try:
-            from app.application.user_memory_vector_app_service import (
-                get_user_memory_rag_app_service,
-            )
-
-            svc = get_user_memory_rag_app_service()
+            svc = provider()
             result = svc.query(self._user_id, query, top_k=_LONG_TERM_TOPK)
         except RECOVERABLE_ERRORS:
             logger.debug("long-term recall skipped (user=%s)", self._user_id, exc_info=True)

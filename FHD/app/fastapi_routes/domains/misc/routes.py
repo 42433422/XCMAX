@@ -10,7 +10,11 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
-from app.domain.ai.tools_directory import get_tool_categories_payload, get_tools_payload
+from app.domain.ai.tools_directory import (
+    get_tool_categories_payload,
+    get_tools_payload,
+    register_workflow_tool_registry_provider,
+)
 from app.infrastructure.auth.db_token import (
     configured_db_write_token,
     effective_db_read_token,
@@ -21,6 +25,16 @@ from app.infrastructure.db.sync_engine import (
     switch_to_production_mode,
     switch_to_test_mode,
 )
+
+
+def _workflow_tool_registry_provider() -> list[dict]:
+    """组装注入：domain 工具目录经本门面惰性访问 application 层 workflow 注册表。"""
+    from app.application.tools.workflow import get_workflow_tool_registry
+
+    return get_workflow_tool_registry()
+
+
+register_workflow_tool_registry_provider(_workflow_tool_registry_provider)
 
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)

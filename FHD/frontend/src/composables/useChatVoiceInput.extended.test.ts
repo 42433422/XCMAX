@@ -225,9 +225,4 @@ describe('useChatVoiceInput - extended', () => {
     expect(api.voiceButtonIcon.value).toBe('fa-microphone')
     vi.useRealTimers()
   })
-
-  it('extractMimeExtension handles various MIME types', () => {
-    // This is an internal function, tested indirectly
-    expect(true).toBe(true)
-  })
 })

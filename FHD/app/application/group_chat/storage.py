@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import json
 import os
+import secrets
 import uuid
 from pathlib import Path
 from typing import Any
@@ -263,7 +265,9 @@ class AiGroupChatStorageMixin:
             return []
         rows: list[dict[str, Any]] = []
         saw_plaintext = False
+        saw_legacy_key = False
         cipher = self._message_cipher()
+        legacy_cipher = self._legacy_derived_cipher()
         for line in self._messages_path.read_text(encoding="utf-8").splitlines():
             raw = line.strip()
             if not raw:
@@ -271,7 +275,14 @@ class AiGroupChatStorageMixin:
             try:
                 if raw.startswith(self._ENCRYPTED_MESSAGE_PREFIX):
                     token = raw.removeprefix(self._ENCRYPTED_MESSAGE_PREFIX).encode("ascii")
-                    item = json.loads(cipher.decrypt(token).decode("utf-8"))
+                    try:
+                        item = json.loads(cipher.decrypt(token).decode("utf-8"))
+                    except InvalidToken:
+                        if legacy_cipher is None:
+                            raise
+                        # 旧派生密钥加密的历史消息：解密成功则标记重写（迁移到新密钥）
+                        item = json.loads(legacy_cipher.decrypt(token).decode("utf-8"))
+                        saw_legacy_key = True
                 else:
                     item = json.loads(raw)
                     saw_plaintext = True
@@ -279,7 +290,7 @@ class AiGroupChatStorageMixin:
                 continue
             if isinstance(item, dict):
                 rows.append(item)
-        if saw_plaintext:
+        if saw_plaintext or saw_legacy_key:
             self._rewrite_messages(rows)
         return rows
 
@@ -300,13 +311,76 @@ class AiGroupChatStorageMixin:
                 "on",
             }
             if data_dir:
-                # 桌面单机：按数据目录派生稳定密钥，避免缺 SECRET_KEY 时群聊读写 500
-                secret = f"xcagi-desktop-group-chat:{Path(data_dir).expanduser().resolve()}"
+                # 桌面单机：随机密钥持久化到数据目录（0600），稳定且不可预测
+                secret = AiGroupChatStorageMixin._desktop_data_dir_secret(data_dir)
             elif desktop:
-                secret = "xcagi-desktop-group-chat:default"
+                # 无数据目录的桌面兜底：进程级随机密钥（不持久化；绝不用可预测字面量）
+                secret = AiGroupChatStorageMixin._process_local_secret()
             else:
                 raise RuntimeError("SECRET_KEY is required for encrypted AI group-chat storage")
         digest = hashlib.sha256(secret.encode("utf-8")).digest()
+        return Fernet(base64.urlsafe_b64encode(digest))
+
+    _SECRET_FILE_NAME = ".group-chat-secret"
+    _process_secret: str | None = None
+
+    @staticmethod
+    def _desktop_data_dir_secret(data_dir: str) -> str:
+        """从数据目录读取/生成持久化随机密钥（0600）。
+
+        2026-08-01 前使用「可预测派生密钥」（data_dir 路径字面量 sha256），任何能猜到
+        路径的人都可离线解密群聊内容；现改为首次启动生成 secrets.token_urlsafe(32) 并
+        持久化。旧消息由 _legacy_derived_cipher 透明迁移（见 _read_messages）。
+        """
+        key_path = Path(data_dir).expanduser().resolve() / AiGroupChatStorageMixin._SECRET_FILE_NAME
+        try:
+            if key_path.is_file():
+                existing = key_path.read_text(encoding="utf-8").strip()
+                if existing:
+                    return existing
+            key_path.parent.mkdir(parents=True, exist_ok=True)
+            generated = secrets.token_urlsafe(32)
+            key_path.write_text(generated + "\n", encoding="utf-8")
+            with contextlib.suppress(OSError):
+                os.chmod(key_path, 0o600)
+            return generated
+        except OSError:
+            return AiGroupChatStorageMixin._process_local_secret()
+
+    @classmethod
+    def _process_local_secret(cls) -> str:
+        """进程级随机兜底密钥：本进程生命周期内稳定，重启后历史加密消息不可解密。"""
+        if cls._process_secret is None:
+            cls._process_secret = "process-local:" + secrets.token_urlsafe(32)
+        return cls._process_secret
+
+    @staticmethod
+    def _legacy_derived_cipher() -> Fernet | None:
+        """旧的「可预测派生密钥」解密器，仅用于读取并迁移 2026-08-01 前加密的历史消息。
+
+        禁止用于加密。配置了 SECRET_KEY 时返回 None（无 legacy 数据场景）。
+        """
+        if (
+            os.environ.get("SECRET_KEY", "").strip()
+            or os.environ.get("XCAGI_SECRET_KEY", "").strip()
+        ):
+            return None
+        data_dir = (
+            os.environ.get("XCAGI_DATA_DIR") or os.environ.get("XCAGI_DESKTOP_DATA_DIR") or ""
+        ).strip()
+        desktop = (os.environ.get("XCAGI_DESKTOP_MODE") or "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        if data_dir:
+            legacy = f"xcagi-desktop-group-chat:{Path(data_dir).expanduser().resolve()}"
+        elif desktop:
+            legacy = "xcagi-desktop-group-chat:default"
+        else:
+            return None
+        digest = hashlib.sha256(legacy.encode("utf-8")).digest()
         return Fernet(base64.urlsafe_b64encode(digest))
 
     def _encrypted_message_line(self, message: dict[str, Any]) -> str:

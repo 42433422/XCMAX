@@ -125,17 +125,6 @@ describe('useAiOpenCursor - extended', () => {
     localStorage.getItem = original
   })
 
-  it('wsUrl generates correct WebSocket URL', () => {
-    // wsUrl is internal but we can test it via connection behavior
-    // The mock returns http://127.0.0.1:5000, so ws should be ws://127.0.0.1:5000/api/aiopen/ws
-    expect(true).toBe(true)
-  })
-
-  it('executeCommand returns error for unknown action', async () => {
-    // executeCommand is internal; tested indirectly
-    expect(true).toBe(true)
-  })
-
   it('disconnect clears state', () => {
     aiopenCursorConnected.value = true
     aiopenCursorSessionId.value = 'test-session'

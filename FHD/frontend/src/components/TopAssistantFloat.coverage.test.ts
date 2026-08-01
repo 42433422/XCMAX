@@ -997,8 +997,7 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
     expect(wrapper.exists()).toBe(true)
     wrapper.unmount()
     await flushPromises()
-    // 卸载不报错即可
-    expect(true).toBe(true)
+    expect(wrapper.exists()).toBe(false)
   })
 
   // ===== 16. 工作流全景链接 =====

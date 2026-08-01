@@ -1,0 +1,5 @@
+{
+  "_note": "前端 src/**/*.coverage.test.ts 注水 stub 文件数棘轮（只降不升）。由 scripts/dev/count_frontend_coverage_stubs.py 维护：CI 跑 --check，数量增加即失败；--bump 仅在数量减少时更新。2026-08-01 初始基线 46（清理 35 处 expect(true) 空断言后上锁）。",
+  "updated": "2026-08-01",
+  "coverage_test_files": 46
+}

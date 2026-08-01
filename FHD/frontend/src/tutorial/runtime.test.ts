@@ -98,10 +98,14 @@ describe('dispatchAssistantTab', () => {
 
 describe('afterAssistantTabLayout', () => {
   it('invokes fn after nextTick + double rAF', async () => {
+    const fn = vi.fn()
     await new Promise<void>((resolve) => {
-      afterAssistantTabLayout(() => resolve())
+      afterAssistantTabLayout(() => {
+        fn()
+        resolve()
+      })
     })
-    expect(true).toBe(true)
+    expect(fn).toHaveBeenCalledTimes(1)
   })
 })
 
