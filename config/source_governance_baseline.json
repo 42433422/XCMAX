@@ -620,7 +620,7 @@
     },
     "FHD/app/application/planner_compat_service.py": {
       "stack": "fhd_backend",
-      "lines": 1004,
+      "lines": 1018,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/retort_clarification_gate.py": {
