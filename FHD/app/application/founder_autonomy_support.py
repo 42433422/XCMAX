@@ -123,6 +123,8 @@ def _is_strong_modstore_deployment(row: Any) -> bool:
         and data.get("ok") is True
         and data.get("dry_run") is False
         and data.get("catalog_readback_verified") is True
+        and data.get("market_listing_verified") is True
+        and _as_int(data.get("market_catalog_item_id")) > 0
         and data.get("installability_verified") is True
         and data.get("runtime_contract_verified") is True
         and data.get("strategic_council_verified") is True

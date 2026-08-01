@@ -106,6 +106,8 @@ def build_founder_autonomy_snapshot(
         for row in all_rows
         if not str(_as_dict(row).get("run_id") or "").strip()
         or str(_as_dict(row).get("run_id") or "").strip() in autonomous_run_ids
+        # A strong publish receipt proves only the independently attested MODstore milestone.
+        or _is_strong_modstore_deployment(row)
     ]
 
     active_gates = _as_dict(runtime.get("active_gates"))
