@@ -12,6 +12,7 @@
 | 方式 | 触发器 | 入口 |
 |------|--------|------|
 | 周期 | APScheduler `retention_janitor_daily`（每天 03:15） | `MODstore_deploy/modstore_server/workflow_scheduler.py` |
+| 存储压力 | APScheduler `storage_pressure_self_heal`（默认每 15 分钟） | 达阈值后自动执行受控真清理 |
 | 手动 | CLI | `python -m modstore_server.file_retention_janitor` |
 | 员工 | 员工大会 / 浮动管家发问「过期文件谁清理」 | 由 `retention-officer` 直接回答 |
 
@@ -60,6 +61,21 @@
 - SQLite 删除行后不会自动缩小文件；需要释放磁盘时，先停写入服务并完成备份，再执行
   `PRAGMA integrity_check`、`VACUUM`，随后复查行数与服务健康。
 
+### 存储压力自愈护栏
+
+- 默认在数据库所在盘可用空间低于 10 GiB，或已用率达到 90% 时触发。
+- 自动动作只能调用本文档已声明的文件与派生通知白名单；不执行通用 shell 删除。
+- 跨进程锁防止多实例重复清理，默认 60 分钟动作冷却防止失败循环。
+- 恢复阈值高于触发阈值（12 GiB / 低于等于 88%），避免在边界上反复报修复。
+- 每次观测、策略决定、动作回执和前后磁盘数据都追加到
+  `$MODSTORE_RUNTIME_DIR/storage_pressure_self_heal_runs.jsonl`；对外可从
+  `/api/scheduler/runtime` 的 `storage_pressure` 字段查询。
+- 该 JSONL 是两段滚动账本：单段默认上限 16 MiB，最多保留当前段和 `.1`
+  上一段，避免「监测磁盘的日志反而写满磁盘」。
+- 只有达到恢复阈值才标记 `recovered`。若仅删除 SQLite 行而磁盘空间未回收，
+  状态仍为 `pressure_persists`，同时写入调度失败和 `log.anomaly` incident。
+- `MODSTORE_STORAGE_SELF_HEAL_ENABLED=0` 是立即生效的人工 veto 通道。
+
 ## 5. 验收
 
 - 连续 7 个工作日 dry-run，没有**可操作** warning（目录不存在、无可删过期文件 → `success`）。
@@ -67,3 +83,6 @@
 - `database_retention.candidate_count` 与预演一致，`removed_count` 不超过硬上限，
   且支付/人工问题通知行数不变。
 - 员工大会回答「过期文件由谁清理」时，能直接引用最近一次执行流水。
+- 健康盘上定时任务只写 `healthy_no_action`，不删任何数据。
+- 故障注入必须同时覆盖：达阈值动作、冷却幂等、人工 veto、业务通知保护，
+  以及「已执行但压力未解除」不得标记成功。

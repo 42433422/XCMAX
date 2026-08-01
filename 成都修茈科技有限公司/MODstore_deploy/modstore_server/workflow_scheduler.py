@@ -58,6 +58,7 @@ _REQUIRED_CORE_JOB_IDS = frozenset(
         "retention_janitor_daily",
         "scheduler_heartbeat",
         "self_evolution_metrics",
+        "storage_pressure_self_heal",
         "telemetry_backlog_scan",
         "time_rail_observability_sync",
     }
@@ -539,6 +540,40 @@ def start_scheduler() -> None:
         misfire_grace_time=_cleanup_misfire_grace_time(),
         coalesce=True,
         max_instances=1,
+    )
+
+    def _storage_pressure_self_heal_job() -> None:
+        from modstore_server.storage_pressure_self_heal import (
+            require_successful_storage_self_heal,
+            run_storage_pressure_self_heal,
+        )
+
+        result = _run_tracked_scheduler_job(
+            "storage_pressure_self_heal",
+            lambda: require_successful_storage_self_heal(run_storage_pressure_self_heal()),
+        )
+        logger.info(
+            "storage pressure guard: status=%s action=%s before_free=%s after_free=%s",
+            result.get("status"),
+            bool(result.get("action_taken")),
+            int((result.get("before") or {}).get("free_bytes") or 0),
+            int((result.get("after") or {}).get("free_bytes") or 0),
+        )
+
+    _scheduler.add_job(
+        _storage_pressure_self_heal_job,
+        IntervalTrigger(
+            minutes=max(1, _env_int("MODSTORE_STORAGE_SELF_HEAL_INTERVAL_MINUTES", 15))
+        ),
+        id="storage_pressure_self_heal",
+        replace_existing=True,
+        misfire_grace_time=_cleanup_misfire_grace_time(),
+        coalesce=True,
+        max_instances=1,
+    )
+    _run_scheduler_startup_probe(
+        "storage_pressure_self_heal",
+        _storage_pressure_self_heal_job,
     )
 
     def _incident_collect_pytest_cursor() -> None:
