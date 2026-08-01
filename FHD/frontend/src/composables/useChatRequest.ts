@@ -204,40 +204,50 @@ export function useChatRequest(deps: UseChatRequestDeps) {
 
   async function requestChatByModeWithTimeout(
     message: string,
-    timeoutMs: number = 45000,
+    timeoutMs: number = 90_000,
     plannerOpts?: { fromWriteUnlock?: boolean }
   ): Promise<ChatPlannerPayload> {
     const controller = new AbortController()
+    let timeoutId: number | null = null
     const timeoutPromise = new Promise<never>((_, reject) => {
-      window.setTimeout(() => {
+      timeoutId = window.setTimeout(() => {
         controller.abort()
         reject(new Error(`请求超时（>${Math.floor(timeoutMs / 1000)}s），请检查后端是否可达或接口是否卡住`))
       }, timeoutMs)
     })
-    return Promise.race([
-      requestChatByMode(message, { signal: controller.signal }, plannerOpts),
-      timeoutPromise
-    ])
+    try {
+      return await Promise.race([
+        requestChatByMode(message, { signal: controller.signal }, plannerOpts),
+        timeoutPromise
+      ])
+    } finally {
+      if (timeoutId != null) window.clearTimeout(timeoutId)
+    }
   }
 
-  async function requestChatByModeBatchWithTimeout(batchTexts: string[], timeoutMs: number = 45000): Promise<ChatPlannerPayload> {
+  async function requestChatByModeBatchWithTimeout(batchTexts: string[], timeoutMs: number = 90_000): Promise<ChatPlannerPayload> {
     const controller = new AbortController()
+    let timeoutId: number | null = null
     const timeoutPromise = new Promise<never>((_, reject) => {
-      window.setTimeout(() => {
+      timeoutId = window.setTimeout(() => {
         controller.abort()
         reject(new Error(`批量请求超时（>${Math.floor(timeoutMs / 1000)}s），请检查后端是否可达或接口是否卡住`))
       }, timeoutMs)
     })
-    return Promise.race([
-      requestChatByModeBatch(batchTexts, { signal: controller.signal }),
-      timeoutPromise
-    ])
+    try {
+      return await Promise.race([
+        requestChatByModeBatch(batchTexts, { signal: controller.signal }),
+        timeoutPromise
+      ])
+    } finally {
+      if (timeoutId != null) window.clearTimeout(timeoutId)
+    }
   }
 
   function resolveChatTimeoutMs(message: string): number {
     const text = String(message || '').trim()
     const isComplexTask = /(导入|入库|数据库|工作流|执行|创建|新增|批量|excel|上传|加入数据库)/i.test(text)
-    return isComplexTask ? 90000 : 30000
+    return isComplexTask ? 180_000 : 90_000
   }
 
   function enqueueChatBatchMessage(

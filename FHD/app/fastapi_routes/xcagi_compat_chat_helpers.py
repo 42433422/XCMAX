@@ -529,7 +529,16 @@ def _xcagi_guarded_planner_stream_events(
     first_token_timeout = min(_xcagi_stream_first_token_timeout_seconds(), total_timeout)
     idle_notice_seconds = _xcagi_stream_idle_notice_seconds()
     started_at = time.monotonic()
-    first_event_seen = False
+    # Connection acceptance is the transport first packet.  A market provider
+    # may spend time routing before emitting visible text, which must not be
+    # misreported as a failed stream.
+    first_event_seen = True
+    yield {
+        "type": "tool_progress",
+        "label": "模型服务",
+        "text": "模型服务已接收任务，正在思考…",
+        "phase": "accepted",
+    }
 
     while True:
         elapsed = time.monotonic() - started_at

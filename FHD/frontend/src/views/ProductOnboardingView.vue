@@ -157,11 +157,21 @@
               <i class="fa" :class="bootstrapBusy ? 'fa-spinner fa-spin' : 'fa-download'"></i>
               {{ bootstrapBusy ? '正在装齐…' : '一键装齐' }}
             </button>
-            <button v-else type="button" class="btn primary" @click="finishOnboardingComplete">
-              完成并进入对话
+            <button
+              v-else
+              type="button"
+              class="btn primary"
+              :disabled="finishing"
+              @click="finishOnboardingComplete"
+            >
+              <i class="fa" :class="finishing ? 'fa-spinner fa-spin' : 'fa-check'"></i>
+              {{ finishing ? '正在进入智能对话…' : '完成并进入对话' }}
             </button>
-            <button type="button" class="btn link" @click="finishToChat">先进入对话</button>
+            <button type="button" class="btn link" :disabled="finishing" @click="finishToChat">先进入对话</button>
           </div>
+          <p v-if="finishing" class="finish-progress" role="status" aria-live="polite">
+            菜单已经准备好，正在打开智能对话…
+          </p>
           <details v-if="hostPackDetailGroups.length" class="host-pack-details">
             <summary>查看明细（可选）</summary>
             <p v-if="baselinePlan?.summary" class="lead muted">{{ baselinePlan.summary }}</p>
@@ -244,7 +254,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { installHostFoundation, installMod, installIndustrySeed, installCustomerDeliverySeed } from '@/api/modStore'
 import { autoOnboardWorkflowEmployeesFromMods } from '@/utils/workflowEmployeeOnboard'
@@ -392,6 +402,7 @@ const steps = PRODUCT_FLOW_STEPS.filter((s) => s.id !== 'done')
 const currentStep = ref(parseFlowStepQuery(route.query.step))
 const loading = ref(false)
 const bootstrapBusy = ref(false)
+const finishing = ref(false)
 const baselinePlan = ref(null)
 
 function startupAsset(fileName) {
@@ -742,15 +753,18 @@ function finishToChat() {
   finishHostPackFlow()
 }
 
-function finishOnboardingComplete() {
+async function finishOnboardingComplete() {
+  if (finishing.value) return
+  finishing.value = true
   queueWorkspacePrefsSync({
     product_flow_completed: true,
     onboarding_completed_at: new Date().toISOString(),
   })
   flow.markProductFlowCompleted()
   flow.markHostPackAcknowledged()
-  goStep('done')
-  finishToChat()
+  // 先让用户看到确定的进入状态；旧逻辑会同时跳转 done 和主页，造成路由竞争与卡顿感。
+  await nextTick()
+  finishHostPackFlow()
 }
 
 function skipEntireFlow() {

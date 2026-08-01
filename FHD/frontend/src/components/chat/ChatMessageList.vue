@@ -7,7 +7,12 @@
         :class="['message', msg.role]"
         :style="{ minHeight: messageHeights.get(idx) ? messageHeights.get(idx) + 'px' : 'auto' }"
       >
+        <ChatTypingIndicator
+          v-if="msg.role === 'ai' && msg.streamingShell"
+          label="正在思考…"
+        />
         <div
+          v-else
           class="message-html"
           v-html="
             msg.role === 'ai'
@@ -118,6 +123,7 @@ import type { ChatMessage } from '@/composables/useChatMessages'
 import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown } from '@/utils/sanitizeHtml'
 import { aiMarkdownSourceFromContent } from '@/utils/chatBubbleDisplay'
 import ChatApprovalInlineCard from '@/components/chat/ChatApprovalInlineCard.vue'
+import ChatTypingIndicator from '@/components/chat/ChatTypingIndicator.vue'
 
 useI18n()
 

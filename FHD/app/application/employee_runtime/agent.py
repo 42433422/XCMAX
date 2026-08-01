@@ -225,6 +225,21 @@ class EmployeeAgent:
         try:
             pack = load_employee_pack_from_disk(employee_id)
             manifest = pack.get("manifest") or {}
+            from app.mod_sdk.product_plane import employee_execution_block_reason
+
+            boundary_reason = employee_execution_block_reason(employee_id, manifest)
+            if boundary_reason:
+                return {
+                    "employee_id": employee_id,
+                    "pack": {"id": pack["pack_id"], "version": pack.get("version")},
+                    "duration_ms": round((time.perf_counter() - t0) * 1000, 3),
+                    "success": False,
+                    "blocked_by_product_plane": True,
+                    "error": boundary_reason,
+                    "error_code": "control_plane_employee_not_available",
+                    "retryable": False,
+                    "executed_at": datetime.now(UTC).isoformat(),
+                }
             pack_root = Path(str(pack.get("pack_dir") or resolve_pack_dir(employee_id) or ""))
             config = parse_employee_config_v2(manifest)
             actions_cfg = _ex._normalize_actions_cfg(config)
@@ -475,6 +490,9 @@ class EmployeeAgent:
             "pack": {"id": pack["pack_id"], "version": pack.get("version")},
             "duration_ms": round((time.perf_counter() - t0) * 1000, 3),
             "success": False,
+            "error": str(reasoning.get("error") or "employee cognition failed"),
+            "error_code": reasoning.get("error_code"),
+            "retryable": reasoning.get("retryable"),
             "result": {
                 "task": task,
                 "handlers": handler_list,

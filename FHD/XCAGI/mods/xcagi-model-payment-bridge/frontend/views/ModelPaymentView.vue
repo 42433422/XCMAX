@@ -218,7 +218,7 @@ import { swManager } from '@/utils/serviceWorker';
 const router = useRouter();
 
 const marketBase = String(
-  import.meta.env.VITE_MARKET_BASE || 'https://xiu-ci.com/market',
+  import.meta.env.VITE_MARKET_BASE || 'https://xiu-ci.com',
 ).replace(/\/$/, '');
 const plansUrlBase = String(
   import.meta.env.VITE_MARKET_PLANS_URL || `${marketBase}/plans`,
@@ -509,7 +509,7 @@ async function refreshMarketOverview(auth?: string, forceRefresh = false) {
   try {
     let data: MarketAccountOverviewData;
     try {
-      data = await fetchMarketAccountOverview(token);
+      data = await fetchMarketAccountOverview(token, forceRefresh);
     } catch (e) {
       if (!token && storedToken && shouldRetryOverviewWithStoredToken(e)) {
         token = storedToken;
@@ -616,6 +616,7 @@ function providersFromOverview(data: MarketAccountOverviewData | null): MarketLl
 }
 
 function formatMoney(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—';
   const n = Number(value);
   if (!Number.isFinite(n)) return '—';
   return n.toFixed(2);

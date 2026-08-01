@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 _MOD_API_FAILURE_RETRY_AT: dict[str, float] = {}
 _MOD_API_FAILURE_BACKOFF_SECONDS = 15.0
+_MOD_API_MISSING_LOCAL: set[str] = set()
 
 
 def is_mods_disabled() -> bool:
@@ -44,13 +45,13 @@ def _default_mods_root() -> str:
     源码树：app/infrastructure/mods/mod_manager.py；默认 mods 目录为 XCAGI/mods（由 run.py 设置 XCAGI_MODS_ROOT）
     若包装进 site-packages，上一级不再是项目根，需回退到环境变量或从 cwd 向上查找。
     """
-    logger.info("[_default_mods_root] Resolving mods root, CWD: %s", os.getcwd())
+    logger.debug("[_default_mods_root] Resolving mods root, CWD: %s", os.getcwd())
 
     env = (os.environ.get("XCAGI_MODS_ROOT") or os.environ.get("XCAGI_MODS_DIR") or "").strip()
     if env:
         p = os.path.abspath(env)
         if os.path.isdir(p):
-            logger.info("[_default_mods_root] Mods root from env: %s", p)
+            logger.debug("[_default_mods_root] Mods root from env: %s", p)
             return p
         logger.warning(
             "[_default_mods_root] XCAGI_MODS_ROOT / XCAGI_MODS_DIR is set but not a directory: %s",
@@ -61,29 +62,29 @@ def _default_mods_root() -> str:
     from_pkg_layout = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(file_here)))), "mods"
     )
-    logger.info(
+    logger.debug(
         "[_default_mods_root] Checking package-relative path: %s, exists: %s",
         from_pkg_layout,
         os.path.isdir(from_pkg_layout),
     )
     if os.path.isdir(from_pkg_layout):
-        logger.info("[_default_mods_root] Mods root (next to app package): %s", from_pkg_layout)
+        logger.debug("[_default_mods_root] Mods root (next to app package): %s", from_pkg_layout)
         return from_pkg_layout
 
     cwd_mods = os.path.join(os.getcwd(), "mods")
-    logger.info(
+    logger.debug(
         "[_default_mods_root] Checking CWD mods: %s, exists: %s", cwd_mods, os.path.isdir(cwd_mods)
     )
     if os.path.isdir(cwd_mods):
-        logger.info("[_default_mods_root] Mods root (./mods from cwd): %s", cwd_mods)
+        logger.debug("[_default_mods_root] Mods root (./mods from cwd): %s", cwd_mods)
         return cwd_mods
 
     cur = os.path.abspath(os.getcwd())
     for i in range(8):
         trial = os.path.join(cur, "mods")
-        logger.info("[_default_mods_root] Walking up: %s, exists: %s", trial, os.path.isdir(trial))
+        logger.debug("[_default_mods_root] Walking up: %s, exists: %s", trial, os.path.isdir(trial))
         if os.path.isdir(trial):
-            logger.info("[_default_mods_root] Mods root (walk up from cwd): %s", trial)
+            logger.debug("[_default_mods_root] Mods root (walk up from cwd): %s", trial)
             return trial
         parent = os.path.dirname(cur)
         if parent == cur:
@@ -1130,11 +1131,16 @@ def register_employee_pack_routes(
         return False
     if normalize_artifact(data) != ARTIFACT_EMPLOYEE_PACK:
         return False
+    from app.mod_sdk.product_plane import employee_pack_allowed_in_runtime
+
+    resolved_id = str(data.get("id") or pid).strip()
+    if not employee_pack_allowed_in_runtime(resolved_id, data):
+        logger.debug("skip control-plane employee route in enterprise client: %s", resolved_id)
+        return False
     backend = data.get("backend") or {}
     entry = str(backend.get("entry") or "").strip()
     if not entry:
         return False
-    resolved_id = str(data.get("id") or pid).strip()
     if not resolved_id:
         return False
     try:
@@ -1357,6 +1363,25 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
 
     mm = get_mod_manager()
     if mid not in mm._loaded_mods:
+        # Entitlement and local installation are separate states.  Do not
+        # repeatedly invoke the loader for an entitled MOD whose local path is
+        # absent; that only creates an authorization-polling retry loop.
+        if mm.resolve_mod_directory(mid) is None:
+            if mid not in _MOD_API_MISSING_LOCAL:
+                _MOD_API_MISSING_LOCAL.add(mid)
+                from app.runtime_integrity import record_runtime_issue
+
+                record_runtime_issue(
+                    f"industry_mod:{mid}",
+                    f"Industry MOD is entitled but not installed locally: {mid}",
+                    ttl_seconds=24 * 60 * 60,
+                )
+                logger.warning(
+                    "[ModManager] ensure_mod_api_ready: mod %s is entitled but not installed locally",
+                    mid,
+                )
+            return False
+        _MOD_API_MISSING_LOCAL.discard(mid)
         retry_at = _MOD_API_FAILURE_RETRY_AT.get(mid, 0.0)
         if retry_at > time.monotonic():
             logger.debug(
