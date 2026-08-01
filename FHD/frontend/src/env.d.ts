@@ -10,6 +10,7 @@ interface Window {
   xcagiDesktop?: {
     platform: NodeJS.Platform;
     versions: Record<string, string>;
+    getAppIdentity?: () => Promise<{ name?: string; version?: string; isPackaged?: boolean }>;
     getDataDir: () => Promise<string>;
     checkForUpdates: () => Promise<unknown>;
     getUpdateStatus?: () => Promise<{ type: string; data?: unknown } | null>;

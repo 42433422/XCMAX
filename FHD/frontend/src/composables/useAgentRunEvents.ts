@@ -13,7 +13,13 @@ export interface UseAgentRunEventSyncOptions {
   getLastAiMessageRef?: () => string
 }
 
-const TERMINAL_EVENT_TYPES = new Set(['run.completed', 'run.failed', 'planner.blocked'])
+const TERMINAL_EVENT_TYPES = new Set([
+  'run.completed',
+  'run.failed',
+  'run.cancelled',
+  'planner.blocked',
+  'budget.exceeded',
+])
 
 export function extractAgentRunId(payload: unknown): string {
   const root = asRecord(payload)
@@ -53,13 +59,18 @@ function eventLabel(event: AgentRunEvent): string {
     'step.blocked': '步骤依赖未满足',
     'run.completed': '智能任务执行完成',
     'run.failed': '智能任务执行失败',
+    'run.cancelled': '智能任务已取消',
+    'run.cancel_ignored': '任务已结束，无需重复取消',
+    'run.continue_ignored': '当前没有等待确认的步骤',
+    'budget.exceeded': '任务预算已超限',
   }
   return labels[type] || '执行状态已更新'
 }
 
 function statusFromEvents(events: AgentRunEvent[]): TaskItem['status'] {
   if (events.some((event) => event.event_type === 'run.completed')) return 'success'
-  if (events.some((event) => ['run.failed', 'tool.failed', 'planner.blocked', 'step.blocked'].includes(event.event_type))) {
+  if (events.some((event) => event.event_type === 'run.cancelled')) return 'cancelled'
+  if (events.some((event) => ['run.failed', 'tool.failed', 'planner.blocked', 'step.blocked', 'budget.exceeded'].includes(event.event_type))) {
     return 'failed'
   }
   if (events.some((event) => event.event_type === 'step.waiting_user')) return 'queued'
@@ -69,7 +80,8 @@ function statusFromEvents(events: AgentRunEvent[]): TaskItem['status'] {
 function progressFromEvents(events: AgentRunEvent[]): number {
   if (!events.length) return 5
   if (events.some((event) => event.event_type === 'run.completed')) return 100
-  if (events.some((event) => ['run.failed', 'planner.blocked'].includes(event.event_type))) return 100
+  if (events.some((event) => event.event_type === 'run.cancelled')) return 100
+  if (events.some((event) => ['run.failed', 'planner.blocked', 'budget.exceeded'].includes(event.event_type))) return 100
   if (events.some((event) => event.event_type === 'step.waiting_user')) return 85
   if (events.some((event) => event.event_type === 'tool.completed')) return 80
   if (events.some((event) => event.event_type === 'tool.started')) return 55
@@ -89,7 +101,7 @@ export function buildAgentRunTaskUpdate(params: {
   const status = statusFromEvents(events)
   const stage = last ? eventLabel(last) : '等待执行状态'
   const errorEvent = [...events].reverse().find((event) =>
-    ['run.failed', 'tool.failed', 'planner.blocked', 'step.blocked'].includes(event.event_type),
+    ['run.failed', 'tool.failed', 'planner.blocked', 'step.blocked', 'budget.exceeded'].includes(event.event_type),
   )
   const userTitle = asString(params.userText).trim().slice(0, 30)
   return {
@@ -107,17 +119,28 @@ export function buildAgentRunTaskUpdate(params: {
       agentRunId: params.runId,
       agentEvents: events,
       lastAgentEventId: asString(last?.event_id),
-      terminal: last ? TERMINAL_EVENT_TYPES.has(last.event_type) : false,
+      terminal: status === 'success' || status === 'failed' || status === 'cancelled'
+        || (last ? TERMINAL_EVENT_TYPES.has(last.event_type) : false),
     },
   }
 }
 
 export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
   const lastEventByRunId = new Map<string, string>()
+  /** 累积 events（按 runId），保证流式轮询时 trace 不丢历史 */
+  const eventsByRunId = new Map<string, AgentRunEvent[]>()
+  const userTextByRunId = new Map<string, string>()
+  const messageRefByRunId = new Map<string, string>()
 
-  async function syncAgentRunEvents(runId: string, userText = ''): Promise<void> {
+  async function syncAgentRunEvents(runId: string, userText = ''): Promise<boolean> {
     const normalizedRunId = String(runId || '').trim()
-    if (!normalizedRunId) return
+    if (!normalizedRunId) return false
+    const normalizedUserText = String(userText || '').trim()
+    if (normalizedUserText) {
+      userTextByRunId.set(normalizedRunId, normalizedUserText)
+      const messageRef = options.getLastAiMessageRef?.() || ''
+      if (messageRef) messageRefByRunId.set(normalizedRunId, messageRef)
+    }
     const afterEventId = lastEventByRunId.get(normalizedRunId)
     try {
       const response = await agentRunsApi.listEvents(
@@ -130,19 +153,31 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
       if (last?.event_id) {
         lastEventByRunId.set(normalizedRunId, last.event_id)
       }
-      options.upsertTask(buildAgentRunTaskUpdate({
+      if (!accumulated.length) return false
+      // 闲聊无工具、或单次成功只读工具：不灌「智能任务」侧栏 / 气泡剧场
+      const previewTrace = buildAgentRunTraceFromEvents(accumulated, normalizedRunId)
+      if (isTrivialChatTrace(previewTrace)) return previewTrace.terminal
+      const update = buildAgentRunTaskUpdate({
         runId: normalizedRunId,
-        userText,
-        events,
-        messageRef: options.getLastAiMessageRef?.() || '',
-      }))
+        userText: userTextByRunId.get(normalizedRunId) || '',
+        events: accumulated,
+        messageRef: messageRefByRunId.get(normalizedRunId) || '',
+      })
+      options.upsertTask(update)
+      return update.payload?.terminal === true
     } catch {
-      options.upsertTask(buildAgentRunTaskUpdate({
+      const fallbackEvents = eventsByRunId.get(normalizedRunId) || []
+      if (!fallbackEvents.length) return false
+      const previewTrace = buildAgentRunTraceFromEvents(fallbackEvents, normalizedRunId)
+      if (isTrivialChatTrace(previewTrace)) return previewTrace.terminal
+      const update = buildAgentRunTaskUpdate({
         runId: normalizedRunId,
-        userText,
-        events: [],
-        messageRef: options.getLastAiMessageRef?.() || '',
-      }))
+        userText: userTextByRunId.get(normalizedRunId) || '',
+        events: fallbackEvents,
+        messageRef: messageRefByRunId.get(normalizedRunId) || '',
+      })
+      options.upsertTask(update)
+      return update.payload?.terminal === true
     }
   }
 
@@ -152,8 +187,41 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
     await syncAgentRunEvents(runId, userText)
   }
 
+  async function restoreRecentAgentRuns(userId: string, limit = 20): Promise<string[]> {
+    const normalizedUserId = String(userId || '').trim()
+    if (!normalizedUserId) return []
+    const activeRunIds: string[] = []
+    try {
+      const response = await agentRunsApi.listRuns({ user_id: normalizedUserId, limit })
+      const runs = Array.isArray(response?.data) ? response.data : []
+      for (const run of runs) {
+        const runId = asString(run?.run_id).trim()
+        const events = asArray<AgentRunEvent>(run?.events)
+        if (!runId || !events.length) continue
+        const trace = buildAgentRunTraceFromEvents(events, runId)
+        if (!trace.terminal) activeRunIds.push(runId)
+        const restoredUserText = asString(run?.message).trim()
+        if (restoredUserText) userTextByRunId.set(runId, restoredUserText)
+        if (isTrivialChatTrace(trace)) continue
+        eventsByRunId.set(runId, events)
+        const last = events[events.length - 1]
+        if (last?.event_id) lastEventByRunId.set(runId, last.event_id)
+        options.upsertTask(buildAgentRunTaskUpdate({
+          runId,
+          userText: asString(run?.message),
+          events,
+        }))
+      }
+      return activeRunIds
+    } catch {
+      // Task recovery is best effort; persisted chat remains available.
+      return []
+    }
+  }
+
   return {
     syncAgentRunEvents,
     syncAgentRunFromPayload,
+    restoreRecentAgentRuns,
   }
 }

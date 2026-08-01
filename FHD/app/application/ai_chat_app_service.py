@@ -241,6 +241,19 @@ class AIChatApplicationService(
         # Direct callers of AIChatApplicationService (outside the compat
         # routes) receive the same receipt-enforced behavior.  The route layer
         # also invokes this policy so legacy-mode deployments are protected.
+        from app.application.customer_mutation_agent import (
+            try_start_customer_mutation_agent_run,
+        )
+
+        customer_mutation_payload = try_start_customer_mutation_agent_run(
+            message,
+            runtime_context=ctx,
+            user_id=user_id,
+            source=source,
+        )
+        if customer_mutation_payload is not None:
+            return _finalize(customer_mutation_payload)
+
         from app.application.chat_business_safety import try_handle_business_chat_action
 
         business_payload = try_handle_business_chat_action(
@@ -1264,32 +1277,69 @@ class AIChatApplicationService(
                 approval_nodes = pending.get("approval_nodes", [])
 
                 if approval_required and approval_nodes:
-                    for node_info in approval_nodes:
-                        node = None
-                        for n in plan.nodes:
-                            if n.node_id == node_info.get("node_id"):
-                                node = n
-                                break
-                        if node:
-                            self.approval_service.create_approval_request(
+                    from app.application.agent_orchestrator import AgentOrchestrator
+
+                    agent_run_id = str(pending.get("agent_run_id") or "").strip()
+                    if agent_run_id:
+                        agent_run, approval_request_ids = AgentOrchestrator().submit_run_for_approval(
+                            agent_run_id,
+                            requested_by=user_id,
+                        )
+                    else:
+                        # Compatibility for pre-AgentRun pending workflows created
+                        # before this process/version upgrade.
+                        approval_request_ids = []
+                        for node_info in approval_nodes:
+                            node = next(
+                                (
+                                    item
+                                    for item in plan.nodes
+                                    if item.node_id == node_info.get("node_id")
+                                ),
+                                None,
+                            )
+                            if node is None:
+                                continue
+                            request = self.approval_service.create_approval_request(
                                 plan_id=plan.plan_id,
                                 node=node,
                                 runtime_context=runtime_ctx,
                                 plan=plan,
                             )
+                            if not bool(getattr(request, "persistence_confirmed", True)):
+                                continue
+                            request_id = str(getattr(request, "request_id", "") or "").strip()
+                            if request_id:
+                                approval_request_ids.append(request_id)
+                        agent_run = object() if approval_request_ids else None
+                    if agent_run_id:
+                        self._pending_workflows.pop(user_id, None)
 
                     approval_inner = {
                         "plan_id": plan.plan_id,
+                        "run_id": agent_run_id,
+                        "agent_run_id": agent_run_id,
                         "approval_required": True,
                         "approval_nodes": approval_nodes,
+                        "approval_request_ids": approval_request_ids,
                     }
+                    submitted = bool(agent_run and approval_request_ids)
+                    response_text = (
+                        "已提交审批请求，请在审批中心处理；审批通过后任务会从当前步骤继续。"
+                        if submitted
+                        else "审批请求提交失败，持久化任务仍保留，可稍后重试。"
+                    )
                     return {
-                        "success": True,
+                        "success": submitted,
                         "message": "处理完成",
-                        "response": "已提交审批请求，请等待审批完成后继续。",
+                        "run_id": agent_run_id,
+                        "agent_run_id": agent_run_id,
+                        "response": response_text,
                         "data": {
-                            "text": "已提交审批请求，请等待审批完成后继续。",
+                            "text": response_text,
                             "action": "approval_pending",
+                            "run_id": agent_run_id,
+                            "agent_run_id": agent_run_id,
                             "data": _enrich_confirmation_inner(
                                 approval_inner, action="approval_pending"
                             ),
@@ -1384,6 +1434,11 @@ class AIChatApplicationService(
             tool_registry=tool_registry,
             context=context,
         )
+        from app.application.workflow.types import PlanGraph
+
+        if not isinstance(plan, PlanGraph):
+            logger.warning("workflow planner returned invalid plan type: %s", type(plan).__name__)
+            return None
 
         decision = self.risk_gate.evaluate(plan=plan, context=context)
         runtime_ctx = self._merge_tool_runtime_context(user_id, message, context)
@@ -1394,7 +1449,10 @@ class AIChatApplicationService(
             plan=plan, decision_reason=decision.reason
         )
 
-        approval_required_nodes = self.approval_service.get_approval_required_nodes(plan)
+        raw_approval_nodes = self.approval_service.get_approval_required_nodes(plan)
+        approval_required_nodes = (
+            raw_approval_nodes if isinstance(raw_approval_nodes, list) else []
+        )
         has_approval_requirement = bool(approval_required_nodes)
         approval_info = ""
         if has_approval_requirement:
@@ -1472,7 +1530,26 @@ class AIChatApplicationService(
             }
 
         agent_run_id = ""
-        if decision.requires_confirmation and not has_approval_requirement:
+        if has_approval_requirement:
+            from app.application.agent_orchestrator import AgentOrchestrator
+
+            agent_run = AgentOrchestrator().start_run_from_plan(
+                user_id=user_id,
+                message=message,
+                plan=plan,
+                runtime_context=runtime_ctx,
+                auto_execute=True,
+                approval_required_node_ids=[node.node_id for node in approval_required_nodes],
+            )
+            agent_run_id = agent_run.run_id
+            if agent_run.status in {"failed", "cancelled"}:
+                return self._format_agent_run_response(
+                    plan,
+                    agent_run,
+                    thinking_steps=thinking_steps,
+                    user_message=str(message or ""),
+                )
+        elif decision.requires_confirmation:
             from app.application.agent_orchestrator import AgentOrchestrator
 
             agent_run = AgentOrchestrator().start_run_from_plan(

@@ -30,7 +30,9 @@ streams:
         - { type: "run.created",           const: RUN_CREATED,           sla_tier: conscious }
         - { type: "run.completed",         const: RUN_COMPLETED,         sla_tier: conscious, terminal: true }
         - { type: "run.failed",            const: RUN_FAILED,            sla_tier: conscious, terminal: true }
-        - { type: "run.continue_ignored",  const: RUN_CONTINUE_IGNORED }
+        - { type: "run.continue_ignored",  const: RUN_CONTINUE_IGNORED, terminal: true }
+        - { type: "run.cancelled",         const: RUN_CANCELLED,        sla_tier: conscious, terminal: true }
+        - { type: "run.cancel_ignored",    const: RUN_CANCEL_IGNORED,   terminal: true }
       planner:
         - { type: "planner.started",        const: PLANNER_STARTED }
         - { type: "planner.completed",      const: PLANNER_COMPLETED }
