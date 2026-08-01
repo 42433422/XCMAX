@@ -344,6 +344,17 @@ async def _init_neuro_ddd_async(app: FastAPI):
 
 async def _init_employee_runtime_async(app: FastAPI):
     """Initialize local AI employee triggers and cron scheduler."""
+    from app.application.employee_runtime.runtime_policy import (
+        desktop_admin_employee_runtime_disabled,
+        desktop_employee_runtime_status,
+    )
+
+    if desktop_admin_employee_runtime_disabled():
+        disabled = desktop_employee_runtime_status()
+        app.state.employee_triggers = disabled
+        app.state.employee_scheduler = disabled
+        logger.info("桌面产品边界：跳过管理端员工触发器与本地调度器")
+        return
     if passive_node_enabled():
         logger.info("被动应用节点：跳过员工触发器与本地调度器")
         return

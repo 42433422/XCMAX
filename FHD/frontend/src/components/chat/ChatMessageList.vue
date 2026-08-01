@@ -15,6 +15,35 @@
               : sanitizeChatBubbleHtml(msg.content)
           "
         ></div>
+        <details
+          v-if="msg.role === 'ai' && (msg.toolProgressLabel || msg.executionProgress?.length)"
+          class="execution-timeline"
+          :open="!!msg.streamingShell"
+        >
+          <summary>
+            <i
+              v-if="msg.streamingShell"
+              class="fa fa-spinner fa-spin execution-timeline__spinner"
+              aria-hidden="true"
+            ></i>
+            <span class="execution-timeline__current">
+              {{ msg.toolProgressLabel || latestExecutionLabel(msg) }}
+            </span>
+            <span v-if="msg.executionProgress?.length" class="execution-timeline__count">
+              {{ msg.executionProgress.length }} 步
+            </span>
+          </summary>
+          <ol v-if="msg.executionProgress?.length" class="execution-timeline__list">
+            <li
+              v-for="(item, progressIndex) in msg.executionProgress"
+              :key="`${item.at}-${progressIndex}`"
+              :class="`is-${item.status}`"
+            >
+              <span class="execution-timeline__marker">{{ executionMarker(item.status) }}</span>
+              <span>{{ item.label }}</span>
+            </li>
+          </ol>
+        </details>
         <div
           v-if="msg.role === 'ai' && msg.shipmentDownloadUrl"
           class="message-shipment-actions"
@@ -148,6 +177,20 @@ defineEmits<{
 
 const messagesHostRef = ref<HTMLElement | null>(null)
 
+function latestExecutionLabel(message: ChatMessage): string {
+  const list = message.executionProgress || []
+  return list[list.length - 1]?.label || '查看执行过程'
+}
+
+function executionMarker(status: string): string {
+  if (status === 'success') return '✓'
+  if (status === 'failed') return '×'
+  if (status === 'cancelled') return '■'
+  if (status === 'waiting') return 'Ⅱ'
+  if (status === 'retrying') return '↻'
+  return '●'
+}
+
 watch(messagesHostRef, (el) => {
   const bag = props.chatMessagesRef
   if (!bag) return
@@ -174,4 +217,68 @@ watch(messagesHostRef, (el) => {
   color: var(--xc-color-primary, #0d47a1);
   font-size: 14px;
 }
+
+.execution-timeline {
+  margin: 8px 0 2px;
+  border-left: 2px solid #3b82f6;
+  padding-left: 10px;
+  color: #475569;
+  font-size: 12px;
+}
+
+.execution-timeline > summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 24px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.execution-timeline > summary::-webkit-details-marker { display: none; }
+
+.execution-timeline__spinner { color: #2563eb; }
+
+.execution-timeline__current {
+  min-width: 0;
+  overflow: hidden;
+  color: #334155;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.execution-timeline__count {
+  margin-left: auto;
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.execution-timeline__list {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 3px;
+  padding: 0;
+  list-style: none;
+}
+
+.execution-timeline__list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: #64748b;
+}
+
+.execution-timeline__marker {
+  width: 12px;
+  flex: 0 0 12px;
+  color: #3b82f6;
+  text-align: center;
+}
+
+.execution-timeline__list .is-success .execution-timeline__marker { color: #059669; }
+.execution-timeline__list .is-failed .execution-timeline__marker { color: #dc2626; }
+.execution-timeline__list .is-retrying .execution-timeline__marker,
+.execution-timeline__list .is-waiting .execution-timeline__marker { color: #d97706; }
+.execution-timeline__list .is-cancelled .execution-timeline__marker { color: #64748b; }
 </style>
