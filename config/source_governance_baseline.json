@@ -500,7 +500,7 @@
     },
     "FHD/app/services/conversation/modstore_adapter.py": {
       "stack": "fhd_backend",
-      "lines": 1197,
+      "lines": 1198,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_employee_agent_runner.py": {
@@ -735,7 +735,7 @@
     },
     "FHD/app/fastapi_routes/xcagi_compat_chat_helpers.py": {
       "stack": "fhd_backend",
-      "lines": 886,
+      "lines": 888,
       "soft_cap": 800
     },
     "FHD/app/application/persy_memory_app_service.py": {
