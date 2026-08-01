@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import app.fastapi_routes.mod_store_routes as ms
+import app.fastapi_routes.private_mod_delivery_routes as private_delivery_routes
 from app.fastapi_routes.mod_store_routes import router
 
 
@@ -1088,7 +1089,11 @@ class TestPrivateDeliveryRequests:
                 "custom_delivery": {"stage": "production"},
             }
         )
-        monkeypatch.setattr(ms, "_private_delivery_market_token", AsyncMock(return_value="jwt"))
+        monkeypatch.setattr(
+            private_delivery_routes,
+            "_private_delivery_market_token",
+            AsyncMock(return_value="jwt"),
+        )
         monkeypatch.setattr(delivery, "custom_delivery_remote_json", remote)
 
         response = client.post(
@@ -1107,7 +1112,11 @@ class TestPrivateDeliveryRequests:
         assert remote.await_args.kwargs["payload"]["kind"] == "bundle"
 
     def test_install_request_requires_market_login(self, client: TestClient, monkeypatch) -> None:
-        monkeypatch.setattr(ms, "_private_delivery_market_token", AsyncMock(return_value=""))
+        monkeypatch.setattr(
+            private_delivery_routes,
+            "_private_delivery_market_token",
+            AsyncMock(return_value=""),
+        )
 
         response = client.post(
             "/private-delivery/requests/73/install",

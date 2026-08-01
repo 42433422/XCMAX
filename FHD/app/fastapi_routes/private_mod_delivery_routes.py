@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from app.fastapi_routes.mod_store_routes import ModStoreSimpleResponse, _request_payload
 from app.fastapi_routes.private_mod_delivery_context import (
     _enterprise_delivery_scope,
+    _private_delivery_market_token,
     _private_mod_context,
     _private_mod_declared_nodes,
     _private_mod_items,
@@ -23,8 +24,6 @@ router = APIRouter(tags=["mod-store", "private-delivery"])
 
 
 async def _market_token(request: Request) -> str:
-    from app.fastapi_routes.mod_store_routes import _private_delivery_market_token
-
     return await _private_delivery_market_token(request)
 
 
