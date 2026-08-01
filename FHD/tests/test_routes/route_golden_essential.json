@@ -1,4 +1,5 @@
 [
+  "/admin/market/users/{user_id}/private-delivery",
   "/api/admin/ai-groups",
   "/api/admin/ai-groups/candidates",
   "/api/admin/ai-groups/{group_id}/members",

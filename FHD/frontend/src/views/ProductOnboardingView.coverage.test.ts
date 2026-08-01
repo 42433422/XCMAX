@@ -1102,21 +1102,20 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(mockContainer.appAlert).toHaveBeenCalled()
   })
 
-  it('runBootstrap：account_custom_mod_ids 时调用 installCustomerDeliverySeed', async () => {
+  it('runBootstrap：account_delivery_seed_packages 时调用 installCustomerDeliverySeed', async () => {
+    const seedBaseline = createBaselinePlan({
+      baseline_ready: false,
+      account_custom_mod_ids: ['custom-1', 'xcagi-core-workflow-employees'],
+      account_delivery_seed_packages: [{ mod_id: 'custom-1', pkg_id: 'seed-1', version: '1.0.0' }],
+    })
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
-      baseline: createBaselinePlan({
-        baseline_ready: false,
-        account_custom_mod_ids: ['custom-1'],
-      }),
+      baseline: seedBaseline,
     })
     await flushPromises()
     await flushPromises()
     mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(createBaselinePlan({
-        baseline_ready: false,
-        account_custom_mod_ids: ['custom-1'],
-      }))
+      .mockResolvedValueOnce(seedBaseline)
       .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: true }))
     mockContainer.installCustomerDeliverySeed.mockClear()
     const bootstrapBtn = wrapper.find('.btn.primary')
@@ -1125,23 +1124,26 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     expect(mockContainer.installCustomerDeliverySeed).toHaveBeenCalledWith('custom-1', expect.any(String))
+    expect(mockContainer.installCustomerDeliverySeed).not.toHaveBeenCalledWith(
+      'xcagi-core-workflow-employees',
+      expect.any(String),
+    )
   })
 
   it('runBootstrap：installCustomerDeliverySeed 返回 success=false 时记录错误', async () => {
+    const seedBaseline = createBaselinePlan({
+      baseline_ready: false,
+      account_custom_mod_ids: ['custom-1'],
+      account_delivery_seed_packages: [{ mod_id: 'custom-1', pkg_id: 'seed-1', version: '1.0.0' }],
+    })
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
-      baseline: createBaselinePlan({
-        baseline_ready: false,
-        account_custom_mod_ids: ['custom-1'],
-      }),
+      baseline: seedBaseline,
     })
     await flushPromises()
     await flushPromises()
     mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(createBaselinePlan({
-        baseline_ready: false,
-        account_custom_mod_ids: ['custom-1'],
-      }))
+      .mockResolvedValueOnce(seedBaseline)
       .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: false }))
     mockContainer.installCustomerDeliverySeed.mockResolvedValue({ success: false, message: '交付失败' })
     mockContainer.appAlert.mockClear()
@@ -1154,20 +1156,19 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
   })
 
   it('runBootstrap：installCustomerDeliverySeed 抛异常时记录错误', async () => {
+    const seedBaseline = createBaselinePlan({
+      baseline_ready: false,
+      account_custom_mod_ids: ['custom-1'],
+      account_delivery_seed_packages: [{ mod_id: 'custom-1', pkg_id: 'seed-1', version: '1.0.0' }],
+    })
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
-      baseline: createBaselinePlan({
-        baseline_ready: false,
-        account_custom_mod_ids: ['custom-1'],
-      }),
+      baseline: seedBaseline,
     })
     await flushPromises()
     await flushPromises()
     mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(createBaselinePlan({
-        baseline_ready: false,
-        account_custom_mod_ids: ['custom-1'],
-      }))
+      .mockResolvedValueOnce(seedBaseline)
       .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: false }))
     mockContainer.installCustomerDeliverySeed.mockRejectedValue(new Error('交付异常'))
     mockContainer.appAlert.mockClear()
