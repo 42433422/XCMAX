@@ -26,6 +26,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+_ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 
 
 def _utc_now() -> str:
@@ -92,6 +93,18 @@ def _exclude_path(rel: str) -> bool:
     return False
 
 
+def _write_reproducible_file(zf: zipfile.ZipFile, full: Path, rel: str) -> None:
+    """Write one file without host mtime, uid, umask, or walk-order drift."""
+
+    executable = bool(full.stat().st_mode & 0o111)
+    mode = 0o755 if executable else 0o644
+    info = zipfile.ZipInfo(rel, date_time=_ZIP_TIMESTAMP)
+    info.create_system = 3
+    info.compress_type = zipfile.ZIP_DEFLATED
+    info.external_attr = (0o100000 | mode) << 16
+    zf.writestr(info, full.read_bytes(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+
+
 def build_xcemp(src: Path, out_dir: Path, *, sign: bool = False) -> tuple[Path, dict]:
     manifest = _load_manifest(src)
     errs = _validate_manifest(manifest)
@@ -109,13 +122,14 @@ def build_xcemp(src: Path, out_dir: Path, *, sign: bool = False) -> tuple[Path, 
 
     written: list[str] = []
     with zipfile.ZipFile(out_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for root, _dirs, files in os.walk(src):
-            for name in files:
+        for root, dirs, files in os.walk(src):
+            dirs.sort()
+            for name in sorted(files):
                 full = Path(root) / name
                 rel = full.relative_to(src).as_posix()
                 if _exclude_path(rel):
                     continue
-                zf.write(full, arcname=rel)
+                _write_reproducible_file(zf, full, rel)
                 written.append(rel)
 
     # 计算 sha256

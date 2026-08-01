@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -9,6 +10,8 @@ import os
 import re
 import secrets
 import tempfile
+import threading
+from concurrent.futures import Future
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -44,10 +47,19 @@ from modstore_server.vector_store import insert_embedding, query_similar
 
 router = APIRouter(prefix="/v1", tags=["catalog"])
 logger = logging.getLogger(__name__)
+_semantic_index_lock = threading.Lock()
+_semantic_index_future: Future[bool] | None = None
 
 
 def _is_customer_delivery_seed(row: Dict[str, Any] | None) -> bool:
     return str((row or {}).get("artifact") or "").strip().lower() == "customer_delivery_seed"
+
+
+def _catalog_cache_scope() -> str:
+    """Separate cache entries for each configured catalog store root."""
+
+    path = str(packages_path().resolve())
+    return hashlib.sha1(path.encode()).hexdigest()[:12]
 
 
 def _invalidate_catalog_list_caches(pkg_id: Any = None, version: Any = None) -> None:
@@ -60,17 +72,21 @@ def _invalidate_catalog_list_caches(pkg_id: Any = None, version: Any = None) -> 
     from modstore_server import cache
 
     if pkg_id and version:
-        cache.delete(f"catalog:v1:pkg:{pkg_id}:{version}")
+        cache.delete(f"catalog:v1:{_catalog_cache_scope()}:pkg:{pkg_id}:{version}")
 
 
-def _try_index_catalog_item(record: Dict[str, Any]) -> bool:
-    """Best-effort semantic indexing after the durable catalog write.
+def _semantic_index_timeout_seconds() -> float:
+    raw = (os.environ.get("MODSTORE_CATALOG_INDEX_TIMEOUT_SECONDS") or "5").strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 5.0
+    return min(max(value, 0.05), 30.0)
 
-    Catalog publication and its public download are the source of truth.  A
-    vector provider outage must not turn a committed, reviewed publication
-    into an HTTP 500.  Idempotent retries call this helper again so a transient
-    indexing outage can recover without creating another listing.
-    """
+
+def _index_catalog_item(record: Dict[str, Any]) -> bool:
+    """Run one best-effort semantic-index attempt in a worker thread."""
+
     embedding_text = f"{record.get('name', '')} {record.get('description', '')}"
     if not embedding_text.strip():
         return False
@@ -86,7 +102,7 @@ def _try_index_catalog_item(record: Dict[str, Any]) -> bool:
                 "industry": record.get("industry", "通用"),
             },
         )
-    except Exception:  # noqa: BLE001 - optional index must not undo publication
+    except Exception:
         logger.exception(
             "catalog semantic indexing degraded pkg_id=%s version=%s",
             record.get("id"),
@@ -94,6 +110,62 @@ def _try_index_catalog_item(record: Dict[str, Any]) -> bool:
         )
         return False
     return True
+
+
+def _start_semantic_index(record: Dict[str, Any]) -> Future[bool] | None:
+    """Start at most one in-flight index attempt per API worker process."""
+
+    global _semantic_index_future
+    with _semantic_index_lock:
+        if _semantic_index_future is not None and not _semantic_index_future.done():
+            return None
+        future: Future[bool] = Future()
+        _semantic_index_future = future
+
+        def run() -> None:
+            future.set_result(_index_catalog_item(dict(record)))
+
+        threading.Thread(
+            target=run,
+            name="catalog-semantic-index",
+            daemon=True,
+        ).start()
+        return future
+
+
+async def _try_index_catalog_item(record: Dict[str, Any]) -> bool:
+    """Bound optional semantic indexing without delaying durable publication.
+
+    Catalog publication and its public download are the source of truth.  A
+    vector provider outage or first-run model download must not keep the upload
+    request open until the publisher times out.  A timed-out attempt continues
+    in one daemon thread, while concurrent uploads fail open instead of starting
+    more downloads.  A later idempotent retry starts a fresh attempt after the
+    prior one finishes.
+    """
+
+    future = _start_semantic_index(record)
+    if future is None:
+        logger.warning(
+            "catalog semantic indexing already in flight; publication continues pkg_id=%s version=%s",
+            record.get("id"),
+            record.get("version"),
+        )
+        return False
+    timeout = _semantic_index_timeout_seconds()
+    try:
+        return await asyncio.wait_for(
+            asyncio.shield(asyncio.wrap_future(future)),
+            timeout=timeout,
+        )
+    except asyncio.TimeoutError:
+        logger.warning(
+            "catalog semantic indexing exceeded %.2fs; publication continues pkg_id=%s version=%s",
+            timeout,
+            record.get("id"),
+            record.get("version"),
+        )
+        return False
 
 
 def _upload_token() -> str:
@@ -179,7 +251,10 @@ def api_list_packages(
 ):
     from modstore_server import cache
 
-    ck = f"catalog:v1:packages:list:{_params_hash(artifact, q, limit, offset)}"
+    ck = (
+        f"catalog:v1:{_catalog_cache_scope()}:packages:list:"
+        f"{_params_hash(artifact, q, limit, offset)}"
+    )
     cached = cache.get_json(ck)
     if cached is not None:
         return cached
@@ -196,7 +271,7 @@ def api_list_packages(
 def api_get_package(pkg_id: str, version: str):
     from modstore_server import cache
 
-    ck = f"catalog:v1:pkg:{pkg_id}:{version}"
+    ck = f"catalog:v1:{_catalog_cache_scope()}:pkg:{pkg_id}:{version}"
     cached = cache.get_json(ck)
     if cached is not None:
         return cached
@@ -254,7 +329,7 @@ def api_index_json():
     # Key includes file mtime so a new upload naturally produces a new cache key;
     # old key expires in 60 s, effectively rate-limiting filesystem reads.
     mtime = int(p.stat().st_mtime) if p.is_file() else 0
-    ck = f"catalog:v1:index:{mtime}"
+    ck = f"catalog:v1:{_catalog_cache_scope()}:index:{mtime}"
     cached = cache.get_json(ck)
     if cached is not None:
         return cached
@@ -370,7 +445,7 @@ async def api_upload_package(
             existing = append_package(existing, None)
         _upsert_market_listing(existing, public_listing=public_listing)
         _invalidate_catalog_list_caches(existing.get("id"), existing.get("version"))
-        semantic_indexed = _try_index_catalog_item(existing)
+        semantic_indexed = await _try_index_catalog_item(existing)
         return {
             "ok": True,
             "idempotent": True,
@@ -414,7 +489,7 @@ async def api_upload_package(
     # Invalidate all list/index caches; individual detail keys expire on their own TTL.
     _invalidate_catalog_list_caches(saved.get("id"), saved.get("version"))
 
-    semantic_indexed = _try_index_catalog_item(saved)
+    semantic_indexed = await _try_index_catalog_item(saved)
 
     return {
         "ok": True,
