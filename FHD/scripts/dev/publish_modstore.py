@@ -271,6 +271,7 @@ def publish_package(
         "source_sha": source_sha,
         "workflow_run_id": workflow_run_id,
         "review": review,
+        "semantic_indexed": bool(result.get("semantic_indexed")),
         "catalog_item_id": matches[0].get("id"),
         "catalog_detail_url": f"{base}/v1/packages/{urllib.parse.quote(pkg_id, safe='')}/"
         f"{urllib.parse.quote(version, safe='')}",
