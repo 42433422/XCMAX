@@ -22,6 +22,12 @@ import {
   activeTaskId,
   enqueueByPriority,
 } from './para_queue_policy.mjs';
+import {
+  effectiveToolName,
+  requestedToolName,
+  supportedToolNames,
+  withFailureCleanup,
+} from './e2e_agent_runtime_policy.mjs';
 
 const require = createRequire(import.meta.url);
 const WebSocket = require('ws');
@@ -721,28 +727,30 @@ async function prepareWorkspace(task) {
   const repoUrl = (task.repo_url || '').trim();
   const taskDir = join(workspaceRoot, safeTaskDirName(task));
   mkdirSync(workspaceRoot, { recursive: true });
-  await execFileAsync('rm', ['-rf', taskDir]);
-  const sourceWorkspace = await sourceWorkspaceFromTask(task);
+  cleanupWorkspace(taskDir);
+  return withFailureCleanup(taskDir, async () => {
+    const sourceWorkspace = await sourceWorkspaceFromTask(task);
 
-  if (sourceWorkspace && await sourceWorkspaceMatchesRepo(sourceWorkspace, repoUrl)) {
-    await cloneSourceWorkspace(sourceWorkspace, taskDir, task);
-    return taskDir;
-  }
-
-  if (!repoUrl) {
-    mkdirSync(taskDir, { recursive: true });
-    if (!existsSync(join(taskDir, '.git'))) await git(taskDir, ['init', '-b', task.base_branch || 'main']);
-    try {
-      await git(taskDir, ['checkout', task.work_branch]);
-    } catch {
-      await git(taskDir, ['checkout', '-b', task.work_branch]);
+    if (sourceWorkspace && await sourceWorkspaceMatchesRepo(sourceWorkspace, repoUrl)) {
+      await cloneSourceWorkspace(sourceWorkspace, taskDir, task);
+      return taskDir;
     }
-    return taskDir;
-  }
 
-  await git(process.cwd(), ['clone', '--branch', task.base_branch || 'main', '--single-branch', repoUrl, taskDir]);
-  await git(taskDir, ['checkout', '-b', task.work_branch]);
-  return taskDir;
+    if (!repoUrl) {
+      mkdirSync(taskDir, { recursive: true });
+      if (!existsSync(join(taskDir, '.git'))) await git(taskDir, ['init', '-b', task.base_branch || 'main']);
+      try {
+        await git(taskDir, ['checkout', task.work_branch]);
+      } catch {
+        await git(taskDir, ['checkout', '-b', task.work_branch]);
+      }
+      return taskDir;
+    }
+
+    await git(process.cwd(), ['clone', '--branch', task.base_branch || 'main', '--single-branch', repoUrl, taskDir]);
+    await git(taskDir, ['checkout', '-b', task.work_branch]);
+    return taskDir;
+  }, cleanupWorkspace);
 }
 
 const WORKSPACE_RETENTION_MS = (() => {
@@ -1034,29 +1042,36 @@ async function handleTask(ws, task) {
   });
 
   const agentConfig = resolveAgentConfig();
-  const devTool = task.tool || agentConfig?.devTool;
-  const hasExplicitTool = ['claude_code', 'cursor', 'codex', 'trae'].includes(devTool);
+  const requestedTool = requestedToolName(task, agentConfig);
+  const devTool = effectiveToolName({ task, agentConfig });
   let toolError = '';
   let toolOutput = '';
-  // 显式工具优先，不被 watchdog 的 FORCE_CODEX 抢走。
-  const useTrae =
-    (devTool === 'trae' || (!hasExplicitTool && process.env.DEVFLEET_FORCE_TRAE === '1'))
-    && traeAgentAvailable();
+  const useTrae = devTool === 'trae' && traeAgentAvailable();
   const useClaude =
     !useTrae
-    && (devTool === 'claude_code' || (!hasExplicitTool && process.env.DEVFLEET_FORCE_CLAUDE === '1'))
+    && devTool === 'claude_code'
     && claudeAgentAvailable();
   const useCursor =
     !useTrae
     && !useClaude
-    && (devTool === 'cursor' || (process.env.DEVFLEET_E2E_CURSOR !== '0' && !hasExplicitTool && process.env.DEVFLEET_FORCE_CURSOR === '1'))
+    && devTool === 'cursor'
+    && process.env.DEVFLEET_E2E_CURSOR !== '0'
     && cursorAgentAvailable();
   const useCodex =
     !useTrae
     && !useClaude
     && !useCursor
-    && (devTool === 'codex' || (!hasExplicitTool && process.env.DEVFLEET_FORCE_CODEX === '1'))
+    && devTool === 'codex'
     && codexAgentAvailable();
+  if (requestedTool && requestedTool !== devTool) {
+    send(ws, {
+      type: 'task_log',
+      task_id: task.task_id,
+      subtask_id: task.subtask_id,
+      content: `[e2e-agent] tool override: requested=${requestedTool} effective=${devTool}`,
+      level: 'info',
+    });
+  }
 
   if (useTrae) {
     send(ws, {
@@ -1367,15 +1382,13 @@ async function handleTask(ws, task) {
   }
 }
 
-const supportedToolNames = ['trae', 'codex', 'cursor', 'claude_code'];
 const taskQueuesByTool = new Map(supportedToolNames.map((tool) => [tool, []]));
 const runningTools = new Set();
 const runningTaskIdsByTool = new Map();
 const knownSubtasks = new Set();
 
 function taskToolName(task) {
-  const raw = String(task?.tool || task?.tool_name || '').trim();
-  return supportedToolNames.includes(raw) ? raw : 'codex';
+  return effectiveToolName({ task, fallback: 'codex' });
 }
 
 function enqueueTask(ws, task) {
