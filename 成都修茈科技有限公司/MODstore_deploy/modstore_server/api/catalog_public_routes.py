@@ -32,11 +32,11 @@ from modstore_server.catalog_store import (
     promote_draft_to_stable,
 )
 from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
+from modstore_server.duty_roster import is_planned_duty_employee_pack
 from modstore_server.employee_config_v2 import (
     extract_or_upgrade_v2_config,
     validate_v2_config,
 )
-from modstore_server.duty_roster import is_planned_duty_employee_pack
 from modstore_server.industry_taxonomy import get_industry_tree
 from modstore_server.models import get_session_factory
 from modstore_server.vector_store import insert_embedding, query_similar
