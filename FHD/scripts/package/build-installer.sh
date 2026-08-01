@@ -2,7 +2,7 @@
 # macOS：产品版本用于发布路径/制品名，三段工具链版本用于 npm/Electron。
 set -euo pipefail
 
-VERSION="${1:-1.0.0.0}"
+VERSION="${1:-1.0.0.1}"
 SKU="${2:-}"
 VERSION="${VERSION#FHD/}"
 VERSION="${VERSION#v}"

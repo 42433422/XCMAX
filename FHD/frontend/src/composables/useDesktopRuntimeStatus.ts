@@ -6,11 +6,27 @@ interface Options {
   displayVersion: (version: string) => string
 }
 
+interface RuntimeHealth {
+  status?: string
+  version?: string
+  degradedReasons?: unknown[]
+  build?: {
+    git_sha?: string
+  }
+}
+
+interface DesktopRuntimeStatus {
+  runtimeStatus?: string
+  readyForUi?: boolean
+  degraded?: boolean
+  degradedReasons?: unknown[]
+}
+
 export function useDesktopRuntimeStatus(options: Options) {
   const healthAppVersion = ref('')
   const desktopShellVersion = ref('')
-  const runtimeHealth = ref<any>(null)
-  const desktopRuntimeStatus = ref<any>(null)
+  const runtimeHealth = ref<RuntimeHealth | null>(null)
+  const desktopRuntimeStatus = ref<DesktopRuntimeStatus | null>(null)
   const loading = ref(true)
   const errorText = ref('')
   let timer: number | null = null

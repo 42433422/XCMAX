@@ -9,7 +9,7 @@
 
 | 口径 | 版本 | 用途 |
 |------|------|------|
-| **XCAGI 稳定产品版本** | `1.0.0.0` | 对外版本、发布目录、下载清单、Windows 文件/产品版本、Python/FastAPI、Android `versionName` |
+| **XCAGI 稳定产品版本** | `1.0.0.1` | 对外版本、发布目录、下载清单、Windows 文件/产品版本、Python/FastAPI、Android `versionName` |
 | **工具链兼容版本** | `1.0.0` | npm/Electron、Dart/Flutter、iOS/macOS `MARKETING_VERSION` |
 
 四段产品版本 `1.0.0.0` 是稳定上线版本的唯一对外口径。npm SemVer、Electron、Dart pub 和 Apple 市场版本只接受三段版本，因此这些锚点使用等价映射 `1.0.0`；它们不代表另一个产品版本。
