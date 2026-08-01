@@ -37,6 +37,7 @@ _REQUIRED_CORE_JOB_IDS = frozenset(
         "auto_version_bump_daily",
         "autonomy_metrics_snapshot",
         "autonomy_posthoc_audit",
+        "capability_proposal_relay",
         "customer_value_reconciler",
         "daily_backup_job",
         "daily_ops_digest_email",
@@ -1298,6 +1299,10 @@ def start_scheduler() -> None:
         id="employee_evolution_scan_loop",
         replace_existing=True,
     )
+
+    from modstore_server.capability_proposal_relay import register_capability_proposal_relay_job
+
+    register_capability_proposal_relay_job(_scheduler, track_job=_run_tracked_scheduler_job)
 
     def _employee_health_scan_loop() -> None:
         try:
