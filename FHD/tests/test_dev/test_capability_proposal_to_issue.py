@@ -32,6 +32,12 @@ def test_ci_workflow_is_manual_fallback_not_false_local_scheduler() -> None:
         assert "workflow_dispatch:" in workflow
         assert "schedule:" not in workflow
         assert "capability_proposal_relay" in workflow
+        assert "issue_comment:" in workflow
+        assert "github.event.comment.author_association == 'OWNER'" in workflow
+        assert "github.event.comment.body == '确认实现'" in workflow
+        assert "github.event.comment.body == '/approve-implementation'" in workflow
+        assert "capability_proposal_promote.py" in workflow
+        assert "actions: write" in workflow
 
 
 @pytest.fixture
@@ -80,6 +86,8 @@ def test_issue_body_and_title_do_not_expose_raw_input() -> None:
     assert "13800000000" not in title
     assert "sample" in body
     assert "slot_names" in body
+    assert "确认实现" in body
+    assert "/approve-implementation" in body
 
 
 def test_only_structured_skill_proposal_is_actionable() -> None:
