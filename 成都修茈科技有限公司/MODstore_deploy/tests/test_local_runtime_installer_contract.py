@@ -17,7 +17,10 @@ def test_local_runtime_installer_is_exact_clean_audited_and_recoverable() -> Non
     assert "rsync -a --delete" in script
     assert 'SOURCE_ALEMBIC="$STAGE/成都修茈科技有限公司/MODstore_deploy/alembic"' in script
     assert "RUNTIME_FILE_RELATIVES=(" in script
+    assert '"FHD/app/services/capability_proposal_recorder.py"' in script
+    assert '"FHD/app/services/intent_confirmation_service.py"' in script
     assert '"FHD/config/duty_employee_work_contracts.json"' in script
+    assert '"FHD/scripts/dev/capability_proposal_to_issue.py"' in script
     assert 'SOURCE_EMPLOYEES="$STAGE/FHD/mods/_employees"' in script
     assert '"$BACKUP/employees/"' in script
     assert '"$TARGET_ROOT/FHD/mods/_employees/"' in script
