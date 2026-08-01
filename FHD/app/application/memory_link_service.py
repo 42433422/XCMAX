@@ -20,8 +20,10 @@ from sqlalchemy import select
 from app.db.models.memory_graph import EdgeType, MemoryNode, MemoryNodeStatus, TypedEdge
 from app.infrastructure.memory_graph_store import MemoryGraphStore
 
-# 匹配 [[...]] 中的标题；不跨行；不允许嵌套中括号
-_LINK_PATTERN = re.compile(r"\[\[([^\]]+)\]\]")
+# 匹配 [[...]] 中的标题；不跨行；不允许嵌套中括号。
+# 标题上限 200 字符（节点 title 上限 160）：有界内层匹配避免 finditer 在
+# 大量连续 "[[" 输入上退化为 O(n²) 多项式回溯（CodeQL polynomial ReDoS）。
+_LINK_PATTERN = re.compile(r"\[\[([^\]]{1,200})\]\]")
 
 
 class MemoryLinkService:

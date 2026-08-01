@@ -86,6 +86,7 @@ async def run_memory_cache_refresh_task(
     interval_minutes: int = DEFAULT_CACHE_REFRESH_INTERVAL_MINUTES,
     scope: str = "project",
     scope_id: str = "XCMAX",
+    stop_event: asyncio.Event | None = None,
 ) -> None:
     """定时刷新本地兜底缓存。
 
@@ -94,9 +95,12 @@ async def run_memory_cache_refresh_task(
         interval_minutes: 调度间隔（分钟），默认 30。
         scope: 作用域类型。
         scope_id: 作用域内的标识。
+        stop_event: 优雅停机信号；set 后循环退出（lifespan shutdown 时触发，
+            task.cancel() 仍作为兜底）。
     """
+    stop = stop_event or asyncio.Event()
     interval_seconds = max(1, interval_minutes * 60)
-    while True:
+    while not stop.is_set():
         try:
             await asyncio.sleep(interval_seconds)
             from app.infrastructure.memory_cache import MemoryCacheService

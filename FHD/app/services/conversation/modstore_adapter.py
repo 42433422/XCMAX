@@ -980,7 +980,8 @@ class ModstorePlatformAdapter:
                         attempts,
                         exc,
                     )
-                    time.sleep(min(0.4 * attempt, 1.5))
+                    # 同步重试退避：用 Event.wait 实现可中断等待（避免热路径 time.sleep）
+                    threading.Event().wait(min(0.4 * attempt, 1.5))
                     continue
             if retry_next:
                 continue

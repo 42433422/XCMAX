@@ -356,8 +356,10 @@ def _xcagi_compat_reply_payload(
     return {"success": True, "response": text, "data": data}
 
 
+# 路径段上限 260 字符（Windows MAX_PATH）：有界匹配避免懒量词 + 前瞻在
+# 大量重复标点的输入上多项式回溯（CodeQL polynomial ReDoS）。
 _EXCEL_PATH_PATTERN = re.compile(
-    r"@?([^\s'\"<>]+?\.(?:xlsx|xlsm|xls))(?=$|[\s,，。.!！?？])",
+    r"@?([^\s'\"<>]{1,260}?\.(?:xlsx|xlsm|xls))(?=$|[\s,，。.!！?？])",
     re.IGNORECASE,
 )
 

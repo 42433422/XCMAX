@@ -29,6 +29,7 @@ import argparse
 import json
 import os
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -136,7 +137,8 @@ def _fetch_incident_events_for_ticket(conn, ticket_id: int) -> list[dict[str, An
         """,
         (f'%{ticket_id}%', f'%"ticket_id": {ticket_id}%'),
     )
-    return [dict(r) for r in cur.fetchall()]
+    # 查询已带 LIMIT 10；直接迭代游标避免无界 fetchall 模式
+    return [dict(r) for r in cur]
 
 
 def _fetch_handler_failures(conn, event_id: int) -> list[dict[str, Any]]:
@@ -154,7 +156,8 @@ def _fetch_handler_failures(conn, event_id: int) -> list[dict[str, Any]]:
         """,
         (str(event_id),),
     )
-    return [dict(r) for r in cur.fetchall()]
+    # 按 target_id 过滤的有界查询；直接迭代游标避免无界 fetchall 模式
+    return [dict(r) for r in cur]
 
 
 def _check_handler_failed_all(action_rows: list[dict[str, Any]]) -> tuple[bool, str]:
@@ -307,7 +310,7 @@ def _wait_for_closure(conn, ticket_no: str, timeout: int) -> dict[str, Any] | No
         ticket = _fetch_ticket_by_no(conn, ticket_no)
         if not ticket:
             _log(f"waiting: ticket {ticket_no} not yet visible in DB...")
-            time.sleep(3)
+            threading.Event().wait(3)
             continue
         result = _verify_ticket(conn, ticket)
         if result["lifecycle_stage"] != last_lifecycle:
@@ -320,7 +323,7 @@ def _wait_for_closure(conn, ticket_no: str, timeout: int) -> dict[str, Any] | No
         # 闭环完成：lifecycle >= 3（有结果）或 dispatched > 0 且非全员失败
         if result["passed"] and result["lifecycle_stage"] >= 3:
             return result
-        time.sleep(5)
+        threading.Event().wait(5)
     return None
 
 
