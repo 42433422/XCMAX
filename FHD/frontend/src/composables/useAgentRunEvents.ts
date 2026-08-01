@@ -136,7 +136,11 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
   const userTextByRunId = new Map<string, string>()
   const messageRefByRunId = new Map<string, string>()
 
-  async function syncAgentRunEvents(runId: string, userText = ''): Promise<boolean> {
+  async function syncAgentRunEvents(
+    runId: string,
+    userText = '',
+    optionsOverride: { forceVisible?: boolean } = {},
+  ): Promise<boolean> {
     const normalizedRunId = String(runId || '').trim()
     if (!normalizedRunId) return false
     const normalizedUserText = String(userText || '').trim()
@@ -163,7 +167,7 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
       if (!accumulated.length) return false
       // 闲聊无工具、或单次成功只读工具：不灌「智能任务」侧栏 / 气泡剧场
       const previewTrace = buildAgentRunTraceFromEvents(accumulated, normalizedRunId)
-      if (isTrivialChatTrace(previewTrace) && previewTrace.terminal) return true
+      if (!optionsOverride.forceVisible && isTrivialChatTrace(previewTrace) && previewTrace.terminal) return true
       const update = buildAgentRunTaskUpdate({
         runId: normalizedRunId,
         userText: userTextByRunId.get(normalizedRunId) || '',
@@ -176,7 +180,7 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
       const fallbackEvents = eventsByRunId.get(normalizedRunId) || []
       if (!fallbackEvents.length) return false
       const previewTrace = buildAgentRunTraceFromEvents(fallbackEvents, normalizedRunId)
-      if (isTrivialChatTrace(previewTrace) && previewTrace.terminal) return true
+      if (!optionsOverride.forceVisible && isTrivialChatTrace(previewTrace) && previewTrace.terminal) return true
       const update = buildAgentRunTaskUpdate({
         runId: normalizedRunId,
         userText: userTextByRunId.get(normalizedRunId) || '',
@@ -191,7 +195,12 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
   async function syncAgentRunFromPayload(payload: unknown, userText = ''): Promise<void> {
     const runId = extractAgentRunId(payload)
     if (!runId) return
-    await syncAgentRunEvents(runId, userText)
+    const root = asRecord(payload)
+    const data = asRecord(root.data)
+    const action = asString(root.action || data.action).trim()
+    await syncAgentRunEvents(runId, userText, {
+      forceVisible: action === 'workflow_confirmation_required',
+    })
   }
 
   async function restoreRecentAgentRuns(userId: string, limit = 20): Promise<string[]> {

@@ -14,7 +14,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
-from app.services.normal_slot_workflow_dispatch import (
+from app.application.normal_slot_workflow_dispatch import (
     registered_router_normal_slot_dispatch as _registered_router_normal_slot_dispatch,
 )
 
