@@ -45,6 +45,100 @@ def test_publish_employee_task_failed_success():
     event = bus.publish.call_args[0][0]
     assert event.event_type == EVENT_TASK_FAILED
     assert event.payload["employee_id"] == "emp-a"
+    assert event.payload["origin_employee_id"] == "emp-a"
+
+
+def test_task_failed_handler_skips_own_failure_event():
+    employee_cls = MagicMock()
+    record_trigger = MagicMock()
+    event = SimpleNamespace(
+        event_type=EVENT_TASK_FAILED,
+        payload={"employee_id": "emp-a", "origin_employee_id": "emp-a"},
+    )
+
+    with (
+        patch("app.application.employee_runtime.agent.EmployeeAgent", employee_cls),
+        patch(
+            "app.application.employee_runtime.metrics.record_employee_trigger",
+            record_trigger,
+        ),
+    ):
+        trig._make_handler("emp-a", MagicMock())(event)
+
+    employee_cls.assert_not_called()
+    record_trigger.assert_not_called()
+
+
+def test_task_failed_handler_skips_non_retryable_event():
+    employee_cls = MagicMock()
+    record_trigger = MagicMock()
+    event = SimpleNamespace(
+        event_type=EVENT_TASK_FAILED,
+        payload={
+            "employee_id": "emp-a",
+            "origin_employee_id": "upstream-employee",
+            "retryable": False,
+        },
+    )
+
+    with (
+        patch("app.application.employee_runtime.agent.EmployeeAgent", employee_cls),
+        patch(
+            "app.application.employee_runtime.metrics.record_employee_trigger",
+            record_trigger,
+        ),
+    ):
+        trig._make_handler("emp-a", MagicMock())(event)
+
+    employee_cls.assert_not_called()
+    record_trigger.assert_not_called()
+
+
+def test_task_failed_handler_allows_distinct_retryable_origin():
+    employee = MagicMock()
+    employee.run.return_value = {"success": True}
+    employee_cls = MagicMock(return_value=employee)
+    record_trigger = MagicMock()
+    event = SimpleNamespace(
+        event_type=EVENT_TASK_FAILED,
+        payload={
+            "employee_id": "emp-a",
+            "origin_employee_id": "upstream-employee",
+            "retryable": True,
+            "task": "repair upstream failure",
+        },
+    )
+
+    with (
+        patch("app.application.employee_runtime.agent.EmployeeAgent", employee_cls),
+        patch(
+            "app.application.employee_runtime.metrics.record_employee_trigger",
+            record_trigger,
+        ),
+    ):
+        trig._make_handler("emp-a", MagicMock())(event)
+
+    employee_cls.assert_called_once_with("emp-a")
+    employee.run.assert_called_once()
+    record_trigger.assert_called_once_with("emp-a", EVENT_TASK_FAILED)
+
+
+def test_task_failed_handler_keeps_legacy_target_without_origin():
+    employee = MagicMock()
+    employee.run.return_value = {"success": True}
+    employee_cls = MagicMock(return_value=employee)
+    event = SimpleNamespace(
+        event_type=EVENT_TASK_FAILED,
+        payload={"employee_id": "emp-a", "task": "legacy upstream failure"},
+    )
+
+    with (
+        patch("app.application.employee_runtime.agent.EmployeeAgent", employee_cls),
+        patch("app.application.employee_runtime.metrics.record_employee_trigger"),
+    ):
+        trig._make_handler("emp-a", MagicMock())(event)
+
+    employee.run.assert_called_once()
 
 
 def test_publish_employee_task_failed_bus_unavailable():
