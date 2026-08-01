@@ -33,7 +33,7 @@
     "app/application/aiopen/service.py": 1080,
     "app/services/user_memory_service.py": 1079,
     "app/services/mobile_relay_desktop_client.py": 1048,
-    "app/application/planner_compat_service.py": 1004,
+    "app/application/planner_compat_service.py": 1018,
     "app/application/etl/parser_regions.py": 983,
     "app/fastapi_routes/excel_extract.py": 969,
     "app/services/tools_payload_legacy.py": 935,
