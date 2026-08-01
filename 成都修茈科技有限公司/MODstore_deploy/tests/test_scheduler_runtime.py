@@ -192,6 +192,11 @@ def test_runtime_status_aggregates_registered_employee_duty(monkeypatch):
     import modstore_server.api.scheduler_runtime_api as runtime_api
 
     monkeypatch.setattr(
+        "modstore_server.storage_pressure_self_heal.get_storage_pressure_status",
+        lambda **_kwargs: {"ok": True, "latest": {"status": "healthy_no_action"}},
+    )
+
+    monkeypatch.setattr(
         runtime_api,
         "get_runtime_status",
         lambda **_kwargs: {
@@ -233,3 +238,4 @@ def test_runtime_status_aggregates_registered_employee_duty(monkeypatch):
         "never_run_count": 1,
         "unregistered_observed_count": 1,
     }
+    assert body["storage_pressure"]["latest"]["status"] == "healthy_no_action"

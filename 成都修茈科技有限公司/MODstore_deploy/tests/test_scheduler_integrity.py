@@ -77,6 +77,7 @@ def test_scheduler_integrity_accepts_complete_required_job_set(monkeypatch):
     assert status["ok"] is True
     assert status["active_job_count"] == status["required_job_count"]
     assert status["missing_required_jobs"] == []
+    assert "storage_pressure_self_heal" in required
 
 
 def test_scheduler_health_endpoint_exposes_partial_registration(monkeypatch):
