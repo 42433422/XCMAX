@@ -4618,7 +4618,6 @@ async def create_workbench_session(
     request: Request,
     user: User = Depends(_get_current_user),
 ):
-    sid = uuid.uuid4().hex[:24]
     raw_files: List[Dict[str, Any]] = []
     content_type = request.headers.get("content-type", "")
     if content_type.lower().startswith("multipart/form-data"):
@@ -4648,10 +4647,28 @@ async def create_workbench_session(
     payload = body.model_dump()
     if raw_files:
         payload["_files"] = raw_files
+    return await start_workbench_session_for_user(int(user.id), payload)
+
+
+async def start_workbench_session_for_user(
+    user_id: int,
+    payload: Dict[str, Any],
+) -> Dict[str, str]:
+    """以已验证用户身份启动一次工作台生产。
+
+    HTTP 工作台和客户定制工单共用这个入口，以免产生两份会话
+    初始化逻辑。调用者必须先完成服务端用户身份校验。
+    """
+    body = _parse_workbench_session_create(dict(payload or {}))
+    normalized = body.model_dump()
+    raw_files = payload.get("_files") if isinstance(payload.get("_files"), list) else []
+    if raw_files:
+        normalized["_files"] = raw_files
+    sid = uuid.uuid4().hex[:24]
     async with _SESSION_LOCK:
         WORKBENCH_SESSIONS[sid] = {
             "id": sid,
-            "user_id": user.id,
+            "user_id": int(user_id),
             "intent": body.intent,
             "status": "running",
             "steps": _default_steps(
@@ -4659,7 +4676,7 @@ async def create_workbench_session(
                 body.execution_mode,
                 employee_target=str(getattr(body, "employee_target", None) or "pack_only"),
             ),
-            "planning_record": _planning_record(payload),
+            "planning_record": _planning_record(normalized),
             "artifact": None,
             "error": None,
             "validate_warnings": None,
@@ -4667,7 +4684,7 @@ async def create_workbench_session(
             "script_result": None,
         }
         _persist_workbench_session_unlocked(sid)
-    _task = asyncio.create_task(_run_pipeline(sid, user.id, payload))
+    _task = asyncio.create_task(_run_pipeline(sid, int(user_id), normalized))
     _task.add_done_callback(_pipeline_task_failsafe(sid))
     return {"session_id": sid, "status": "running"}
 
@@ -4729,13 +4746,29 @@ async def get_workbench_session(
     session_id: str,
     user: User = Depends(_get_current_user),
 ):
+    payload = await get_workbench_session_snapshot(session_id, int(user.id))
+    if payload is None:
+        async with _SESSION_LOCK:
+            _hydrate_workbench_session_unlocked(session_id)
+            exists = WORKBENCH_SESSIONS.get(session_id)
+        if not exists:
+            raise HTTPException(404, "会话不存在或已过期")
+        raise HTTPException(403, "无权访问此会话")
+    return payload
+
+
+async def get_workbench_session_snapshot(
+    session_id: str,
+    user_id: int,
+) -> Optional[Dict[str, Any]]:
+    """返回账号隔离的工作台快照，供定制交付控制面轮询。"""
     async with _SESSION_LOCK:
         _hydrate_workbench_session_unlocked(session_id)
         sess = WORKBENCH_SESSIONS.get(session_id)
     if not sess:
-        raise HTTPException(404, "会话不存在或已过期")
-    if sess.get("user_id") != user.id:
-        raise HTTPException(403, "无权访问此会话")
+        return None
+    if int(sess.get("user_id") or 0) != int(user_id):
+        return None
     return {
         "id": sess["id"],
         "intent": _canonical_workbench_intent(str(sess.get("intent") or "")),
@@ -4747,6 +4780,9 @@ async def get_workbench_session(
         "planning_record": sess.get("planning_record"),
         "error": sess.get("error"),
         "validate_warnings": sess.get("validate_warnings"),
+        "sandbox_report": sess.get("sandbox_report"),
+        "quality_report": sess.get("quality_report"),
+        "six_dimension_report": sess.get("six_dimension_report"),
         "script_result": (
             {
                 "ok": (sess.get("script_result") or {}).get("ok"),

@@ -1996,10 +1996,22 @@ def apply_customer_ticket_incident_progress(
     if not ticket:
         return {"ok": False, "reason": "ticket_not_found"}
 
+    ev = json_loads(ticket.evidence_json, {})
+    if not isinstance(ev, dict):
+        ev = {}
+    delivery_managed = (
+        ticket.intent == "custom_delivery"
+        or str(ev.get("delivery_managed_by") or "") == "custom_delivery"
+    )
     rows = [r for r in (team_rows or []) if isinstance(r, dict)]
     progress = _summarize_incident_team_rows(rows)
     hint = str(summary_hint or ticket.summary or ticket.title or "").strip()[:120]
-    if team_ok:
+    if team_ok and delivery_managed:
+        reply = (
+            f"我是小C。工单「{hint or ticket.ticket_no}」值班员工已提交生产结果。"
+            f"进展：{progress}。产物还需继续通过质量门、您的验收和桌面安装回执。"
+        )
+    elif team_ok:
         reply = (
             f"我是小C。工单「{hint or ticket.ticket_no}」值班员工已完成排查修复并验证通过。"
             f"进展：{progress}。如仍复现请再补充截图。"
@@ -2044,9 +2056,12 @@ def apply_customer_ticket_incident_progress(
     action.error = ""
     db.flush()
 
-    # 有员工结论 → decision_status=approved 进入「有结果」；仅全员成功才结案
-    ticket.decision_status = "approved"
-    if team_ok:
+    # 通用工单：员工团队全员成功即可结案。
+    # 定制交付：incident team 只回写进度；必须继续通过工作台质量门、
+    # 客户验收和桌面安装回执，不得因「员工说成功」提前标记交付。
+    if not delivery_managed:
+        ticket.decision_status = "approved"
+    if team_ok and not delivery_managed:
         ticket.status = "resolved"
         ticket.closed_at = datetime.now(timezone.utc)
     else:
@@ -2054,9 +2069,6 @@ def apply_customer_ticket_incident_progress(
         ticket.closed_at = None
     ticket.updated_at = datetime.now(timezone.utc)
 
-    ev = json_loads(ticket.evidence_json, {})
-    if not isinstance(ev, dict):
-        ev = {}
     reports = list(ev.get("employee_reports") or [])
     reports.append(
         {

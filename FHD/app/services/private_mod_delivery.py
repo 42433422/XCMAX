@@ -17,6 +17,8 @@ from threading import RLock
 from typing import Any
 from urllib.parse import quote
 
+import httpx
+
 from app.infrastructure.mods.catalog_client import catalog_download_to, catalog_get_json
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -642,6 +644,159 @@ def _auth_header(token: str) -> str:
     return raw if raw.lower().startswith("bearer ") else f"Bearer {raw}"
 
 
+async def custom_delivery_remote_json(
+    market_token: str,
+    path: str,
+    *,
+    method: str = "GET",
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """调用 MODstore 定制交付控制面，始终使用当前市场账号令牌。"""
+    token = str(market_token or "").strip()
+    if not token:
+        raise PermissionError("缺少市场登录凭证")
+    from app.fastapi_routes.market_account import _market_base_url
+
+    clean = path if str(path or "").startswith("/") else f"/{path}"
+    url = f"{_market_base_url()}{clean}"
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=8.0)) as client:
+            response = await client.request(
+                method.upper(),
+                url,
+                headers={"Authorization": _auth_header(token)},
+                json=payload if payload is not None else None,
+            )
+    except httpx.RequestError as exc:
+        raise ConnectionError(f"MODstore 定制交付服务不可达：{exc}") from exc
+    try:
+        body = response.json()
+    except ValueError:
+        body = {}
+    if response.status_code >= 400:
+        detail = ""
+        if isinstance(body, dict):
+            detail = str(body.get("detail") or body.get("message") or "").strip()
+        raise RuntimeError(detail or f"MODstore 返回 HTTP {response.status_code}")
+    if not isinstance(body, dict):
+        raise RuntimeError("MODstore 定制交付返回格式无效")
+    return body
+
+
+async def install_custom_delivery_artifact(
+    market_token: str,
+    ticket_id: int,
+    artifact_kind: str,
+) -> dict[str, Any]:
+    """下载已验收的账号私有产物，安装成功后再回写交付回执。"""
+    token = str(market_token or "").strip()
+    kind = str(artifact_kind or "").strip()
+    if kind not in {"module", "employee"}:
+        raise ValueError("artifact_kind 必须是 module 或 employee")
+    from app.fastapi_routes.market_account import _market_base_url
+
+    url = (
+        f"{_market_base_url()}/api/customer-service/custom-deliveries/"
+        f"{int(ticket_id)}/artifacts/{kind}/download"
+    )
+    tmp = tempfile.NamedTemporaryFile(prefix="xcagi-custom-delivery-", suffix=".zip", delete=False)
+    tmp_path = Path(tmp.name)
+    tmp.close()
+    try:
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=8.0)) as client:
+                response = await client.get(
+                    url,
+                    headers={"Authorization": _auth_header(token)},
+                )
+        except httpx.RequestError as exc:
+            raise ConnectionError(f"定制产物下载失败：{exc}") from exc
+        if response.status_code >= 400:
+            try:
+                err = response.json()
+            except ValueError:
+                err = {}
+            detail = str(err.get("detail") or "").strip() if isinstance(err, dict) else ""
+            raise RuntimeError(detail or f"定制产物下载返回 HTTP {response.status_code}")
+        receipt_token = str(response.headers.get("X-Delivery-Receipt-Token") or "").strip()
+        if len(receipt_token) < 16:
+            raise RuntimeError("定制产物缺少安装回执凭证")
+        tmp_path.write_bytes(response.content)
+        if not response.content:
+            raise RuntimeError("定制产物包为空")
+
+        artifact_id = ""
+        installed_version = ""
+        if kind == "employee":
+            from app.infrastructure.mods.artifact_constants import ARTIFACT_EMPLOYEE_PACK
+            from app.infrastructure.mods.artifact_package import peek_artifact
+            from app.infrastructure.mods.employee_registry import get_employee_registry
+
+            if peek_artifact(str(tmp_path)) != ARTIFACT_EMPLOYEE_PACK:
+                raise ValueError("产物类型校验失败：期望 AI 员工包")
+            ok, message = get_employee_registry().install_from_package(
+                str(tmp_path), verify_signature=False
+            )
+            if not ok:
+                raise RuntimeError(message)
+            import zipfile
+
+            with zipfile.ZipFile(tmp_path) as archive:
+                manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
+            artifact_id = str(manifest.get("id") or "").strip()
+            installed_version = str(manifest.get("version") or "").strip()
+        else:
+            from app.infrastructure.mods.mod_manager import get_mod_manager
+            from app.infrastructure.mods.package import ModPackage
+
+            with tempfile.TemporaryDirectory(prefix="xcagi-custom-delivery-check-") as check_dir:
+                _, manifest = ModPackage.extract_package(
+                    str(tmp_path), check_dir, verify_signature=False
+                )
+            artifact_id = str(manifest.get("id") or "").strip()
+            installed_version = str(manifest.get("version") or "").strip()
+            ok, message, metadata = get_mod_manager().install_mod_package(
+                str(tmp_path), verify_signature=False, activate=True
+            )
+            if not ok:
+                raise RuntimeError(message)
+            try:
+                from app.infrastructure.mods.mod_manager import ensure_mod_api_ready
+
+                ensure_mod_api_ready(artifact_id)
+            except RECOVERABLE_ERRORS:
+                logger.warning("定制 Mod %s API 路由刷新失败", artifact_id, exc_info=True)
+            installed_version = str(getattr(metadata, "version", "") or installed_version)
+        if not artifact_id:
+            raise ValueError("定制产物缺少 ID")
+
+        receipt = await custom_delivery_remote_json(
+            token,
+            f"/api/customer-service/custom-deliveries/{int(ticket_id)}/installed",
+            method="POST",
+            payload={
+                "artifact_kind": kind,
+                "artifact_id": artifact_id,
+                "installed_version": installed_version,
+                "host": "XCAGI Desktop",
+                "receipt_token": receipt_token,
+            },
+        )
+        return {
+            "success": True,
+            "artifact_kind": kind,
+            "artifact_id": artifact_id,
+            "installed_version": installed_version,
+            "message": "定制产物已安装并回写交付回执",
+            "delivery": receipt,
+        }
+    finally:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 async def fetch_private_mod_library(market_token: str) -> list[dict[str, Any]]:
     token = str(market_token or "").strip()
     if not token:
@@ -771,9 +926,11 @@ __all__ = [
     "apply_account_state",
     "assert_stage_transition",
     "attach_track_nodes",
+    "custom_delivery_remote_json",
     "export_account_state",
     "fetch_private_mod_library",
     "is_newer_version",
+    "install_custom_delivery_artifact",
     "load_stage_flow_from_ssot",
     "merge_orphan_local_delivery_into_market",
     "normalize_track",
