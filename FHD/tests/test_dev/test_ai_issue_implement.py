@@ -44,6 +44,8 @@ def test_workflow_comment_trigger_requires_open_issue_owner_confirmation() -> No
         assert "github.event.issue.state == 'open'" in workflow
         assert "github.event.comment.author_association == 'OWNER'" in workflow
         assert "contains(github.event.comment.body, '确认')" in workflow
+        assert "target_branch:" in workflow
+        assert "--base-branch" in workflow
 
 
 class TestHasAimplementLabel:
@@ -289,6 +291,7 @@ class TestCommitAndPrLabelRouting:
             "o/r",
             "tok",
             auth_source="allowlist",
+            base_branch="feature/failing-ci",
         )
         assert pr_num == 1
         assert "ai-generated" in captured["labels_payload"]["labels"]
@@ -297,6 +300,88 @@ class TestCommitAndPrLabelRouting:
         assert "risk:r0" not in captured["labels_payload"]["labels"]
         # PR body 必须含 allowlist 来源说明
         assert "allowlist" in captured["pr_payload"]["body"]
+        assert captured["pr_payload"]["base"] == "feature/failing-ci"
+
+
+class TestRepairBaseBranch:
+    @pytest.mark.parametrize(
+        "branch",
+        ["feature/x", "codex/fix-123", "release-2026.08"],
+    )
+    def test_normalizes_safe_same_repo_branch(self, branch: str) -> None:
+        assert _ai_impl._normalize_base_branch(branch) == branch
+
+    @pytest.mark.parametrize(
+        "branch",
+        ["-bad", "refs/heads/main", "HEAD", "bad branch", "a..b", "a//b", "x.lock"],
+    )
+    def test_rejects_unsafe_branch(self, branch: str) -> None:
+        with pytest.raises(ValueError):
+            _ai_impl._normalize_base_branch(branch)
+
+    def test_fetches_exact_remote_branch_refspec(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[tuple[str, ...]] = []
+
+        def fake_git(*args: str, cwd: str | None = None, check: bool = True) -> Any:
+            calls.append(args)
+            return type("Result", (), {"stdout": ""})()
+
+        monkeypatch.setattr(_ai_impl, "_git", fake_git)
+
+        branch, ref = _ai_impl._fetch_remote_base("/repo", "feature/failing-ci")
+
+        assert branch == "feature/failing-ci"
+        assert ref == "refs/remotes/origin/feature/failing-ci"
+        assert calls[0][-1] == (
+            "+refs/heads/feature/failing-ci:refs/remotes/origin/feature/failing-ci"
+        )
+        assert any("refs/heads/main:refs/remotes/origin/main" in call[-1] for call in calls)
+
+    def test_branch_context_contains_target_delta(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        outputs = iter([" file.py | 2 +-\n", "@@ -1 +1 @@\n-old\n+new\n"])
+
+        def fake_git(*args: str, cwd: str | None = None, check: bool = True) -> Any:
+            return type("Result", (), {"stdout": next(outputs)})()
+
+        monkeypatch.setattr(_ai_impl, "_git", fake_git)
+
+        context = _ai_impl._collect_branch_context(
+            "/repo",
+            "feature/failing-ci",
+            "refs/remotes/origin/feature/failing-ci",
+        )
+
+        assert "file.py" in context
+        assert "+new" in context
+
+    def test_real_git_repair_branch_starts_from_failed_branch(self, tmp_path: Path) -> None:
+        remote = tmp_path / "remote.git"
+        seed = tmp_path / "seed"
+        runner = tmp_path / "runner"
+        _ai_impl._git("init", "--bare", str(remote))
+        _ai_impl._git("init", str(seed))
+        _ai_impl._git("config", "user.name", "test", cwd=str(seed))
+        _ai_impl._git("config", "user.email", "test@example.com", cwd=str(seed))
+        (seed / "README.md").write_text("main\n", encoding="utf-8")
+        _ai_impl._git("add", "README.md", cwd=str(seed))
+        _ai_impl._git("commit", "-m", "main", cwd=str(seed))
+        _ai_impl._git("branch", "-M", "main", cwd=str(seed))
+        _ai_impl._git("remote", "add", "origin", str(remote), cwd=str(seed))
+        _ai_impl._git("push", "origin", "main", cwd=str(seed))
+        _ai_impl._git("checkout", "-b", "feature/failing-ci", cwd=str(seed))
+        (seed / "failure.txt").write_text("branch-only\n", encoding="utf-8")
+        _ai_impl._git("add", "failure.txt", cwd=str(seed))
+        _ai_impl._git("commit", "-m", "failing branch", cwd=str(seed))
+        failed_sha = _ai_impl._git("rev-parse", "HEAD", cwd=str(seed)).stdout.strip()
+        _ai_impl._git("push", "origin", "feature/failing-ci", cwd=str(seed))
+        _ai_impl._git("clone", str(remote), str(runner))
+
+        branch, ref = _ai_impl._fetch_remote_base(str(runner), "feature/failing-ci")
+        repair_branch = _ai_impl._create_branch(str(runner), 123, ref)
+
+        assert branch == "feature/failing-ci"
+        assert repair_branch.startswith("ai-impl/123-")
+        assert _ai_impl._git("rev-parse", "HEAD", cwd=str(runner)).stdout.strip() == failed_sha
 
     def test_owner_source_labels_r2_needs_human(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -531,6 +616,7 @@ class TestImplementResultDataclass:
         assert r.ok is False
         assert r.status == "init"
         assert r.changed_files == []
+        assert r.base_branch == "main"
         assert r.pr_number == 0
         assert r.llm_used is False
 
@@ -597,8 +683,11 @@ class TestCallLlmStrictJsonRetry:
         assert result == {"files": [], "estimated_files": 0, "ok": True}
         assert len(requests) == 2
         assert requests[0]["temperature"] == 0.2
+        assert requests[0]["max_tokens"] == 4000
         assert requests[1]["temperature"] == 0
+        assert requests[1]["max_tokens"] == 6000
         assert "严格 JSON" in requests[1]["messages"][-1]["content"]
+        assert "确保完整 JSON 不被截断" in requests[1]["messages"][-1]["content"]
 
     def test_two_invalid_responses_fail_closed_after_one_retry(
         self, monkeypatch: pytest.MonkeyPatch

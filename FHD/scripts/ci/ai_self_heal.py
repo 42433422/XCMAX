@@ -25,6 +25,7 @@ import sys
 import time
 import zipfile
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -315,6 +316,49 @@ def compute_fingerprint(repo: str, workflow: str, job: str, error_line: str) -> 
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def canonical_fingerprint_evidence(errors: list[ErrorEntry], log_text: str) -> str:
+    """Build stable root-cause evidence when Actions only exposes a generic exit line."""
+
+    meaningful_errors = [
+        error.raw
+        for error in errors
+        if "process completed with exit code" not in error.raw.casefold()
+    ]
+    if meaningful_errors:
+        return "\n".join(meaningful_errors)
+
+    excerpt = select_incident_log_excerpt(log_text)
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in excerpt.splitlines():
+        line = re.sub(r"\x1b\[[0-9;]*m", "", raw)
+        line = re.sub(
+            r"\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b",
+            "<timestamp>",
+            line,
+        )
+        line = re.sub(r"\brun_id=\d+\b", "run_id=<id>", line)
+        line = " ".join(line.split())
+        folded = line.casefold()
+        if not line or any(
+            noise in folded
+            for noise in (
+                "process completed with exit code",
+                "node 20 is being deprecated",
+                "post job cleanup",
+                "[command]/usr/bin/git version",
+            )
+        ):
+            continue
+        if line in seen:
+            continue
+        seen.add(line)
+        normalized.append(line)
+    if normalized:
+        return "\n".join(normalized)
+    return "\n".join(error.raw for error in errors) or "unclassified-workflow-failure"
+
+
 def _fingerprint_path(store_path: str | Path | None = None) -> Path:
     if store_path:
         return Path(store_path)
@@ -375,6 +419,80 @@ def record_fingerprint(
     )
     with p.open("a", encoding="utf-8") as f:
         f.write(json.dumps(rec.__dict__) + "\n")
+
+
+def find_existing_remediation_issue(
+    fingerprint: str,
+    *,
+    budget_hours: int = 24,
+    token: str | None = None,
+    repo: str | None = None,
+    client: Any = None,
+    now_ts: float | None = None,
+) -> str:
+    """Return a recent GitHub incident carrying the same fingerprint.
+
+    The runner-local JSONL store disappears after every hosted Actions run, so
+    it cannot provide cross-run deduplication.  GitHub issues are the durable
+    coordination plane already used by the remediation loop; query that plane
+    before creating another incident.  API failures deliberately fail open so
+    an outage in the dedup lookup never suppresses a real incident.
+    """
+
+    repo = repo or os.environ.get("GITHUB_REPOSITORY", "")
+    token = token or os.environ.get("GITHUB_TOKEN", "")
+    if not fingerprint or not repo or not token:
+        return ""
+    if now_ts is None:
+        now_ts = time.time()
+    since = datetime.fromtimestamp(now_ts - budget_hours * 3600, tz=UTC).isoformat()
+    if client is None:
+        if httpx is None:
+            return ""
+        client = httpx.Client(timeout=30.0)
+        close_after = True
+    else:
+        close_after = False
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+    }
+    marker = f"Correlation/Fingerprint: `{fingerprint}`"
+    try:
+        for page in range(1, 11):
+            response = client.get(
+                f"{GITHUB_API}/repos/{repo}/issues",
+                headers=headers,
+                params={
+                    "state": "all",
+                    "labels": "auto-incident",
+                    "sort": "created",
+                    "direction": "desc",
+                    "since": since,
+                    "per_page": 100,
+                    "page": page,
+                },
+            )
+            if response.status_code != 200:
+                return ""
+            payload = response.json()
+            if not isinstance(payload, list):
+                return ""
+            for item in payload:
+                if not isinstance(item, dict) or marker not in str(item.get("body") or ""):
+                    continue
+                return str(item.get("html_url") or "")
+            if len(payload) < 100:
+                break
+    except Exception:
+        return ""
+    finally:
+        if close_after:
+            try:
+                client.close()
+            except Exception:  # pragma: no cover
+                pass
+    return ""
 
 
 # =====================================================================
@@ -703,6 +821,7 @@ def create_remediation_issue(
     fingerprint: str,
     log_excerpt: str,
     errors: list[ErrorEntry],
+    head_repo: str = "",
     token: str | None = None,
     repo: str | None = None,
     client: Any = None,
@@ -733,6 +852,7 @@ def create_remediation_issue(
         f"- Workflow: `{workflow or 'unknown'}`\n"
         f"- Run ID: `{run_id}`\n"
         f"- Branch: `{branch or 'unknown'}`\n"
+        f"- Head Repository: `{head_repo or repo}`\n"
         f"- Correlation/Fingerprint: `{fingerprint}`\n\n"
         "### 提取结果\n\n"
         f"{error_lines}\n\n"
@@ -773,6 +893,7 @@ def dispatch_issue_implementation(
     token: str | None = None,
     repo: str | None = None,
     ref: str = "main",
+    target_branch: str = "main",
     client: Any = None,
 ) -> bool:
     """Explicitly dispatch the implementation loop for a token-created issue.
@@ -805,7 +926,10 @@ def dispatch_issue_implementation(
             headers=headers,
             json={
                 "ref": str(ref).strip(),
-                "inputs": {"issue_number": match.group("number")},
+                "inputs": {
+                    "issue_number": match.group("number"),
+                    "target_branch": str(target_branch or "main").strip(),
+                },
             },
         )
         return response.status_code == 204
@@ -841,6 +965,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--run-id", type=int, default=None, help="失败 workflow run id")
     parser.add_argument("--workflow", default="", help="workflow 名称")
     parser.add_argument("--branch", default="", help="失败 workflow 所在分支")
+    parser.add_argument("--head-repo", default="", help="失败 workflow 的 head 仓库")
     parser.add_argument(
         "--store",
         default=None,
@@ -903,12 +1028,12 @@ def main(argv: list[str] | None = None) -> int:
             print("[heal] LLM unavailable (fail-open), 仅使用规则匹配结果")
 
     # 计算指纹 & 去重
-    error_lines = [e.raw for e in errors]
+    fingerprint_evidence = canonical_fingerprint_evidence(errors, log_text)
     fingerprint = compute_fingerprint(
         repo=repo,
         workflow=args.workflow,
-        job="",  # job 信息从 logs 解析较复杂，此处留空
-        error_line="\n".join(error_lines),
+        job=args.branch,
+        error_line=fingerprint_evidence,
     )
     if is_already_processed(fingerprint, store_path=args.store):
         print(f"[skip] fingerprint {fingerprint[:8]} already processed within 24h")
@@ -921,10 +1046,27 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
+    existing_issue = find_existing_remediation_issue(
+        fingerprint,
+        token=token,
+        repo=repo,
+    )
+    if existing_issue:
+        record_fingerprint(
+            fingerprint=fingerprint,
+            pr_url=existing_issue,
+            repo=repo,
+            workflow=args.workflow,
+            store_path=args.store,
+        )
+        print(f"[skip] durable fingerprint {fingerprint[:8]} already tracked by {existing_issue}")
+        return 0
+
     issue_url = create_remediation_issue(
         run_id=run_id,
         workflow=args.workflow,
         branch=args.branch,
+        head_repo=args.head_repo,
         fingerprint=fingerprint,
         log_excerpt=select_incident_log_excerpt(log_text),
         errors=errors,
@@ -935,11 +1077,20 @@ def main(argv: list[str] | None = None) -> int:
         print("::error::[heal] remediation incident creation failed")
         return 2
 
-    implementation_dispatched = dispatch_issue_implementation(
-        issue_url,
-        token=token,
-        repo=repo,
-    )
+    same_repo_head = not args.head_repo or args.head_repo.casefold() == repo.casefold()
+    implementation_dispatched = False
+    if same_repo_head:
+        implementation_dispatched = dispatch_issue_implementation(
+            issue_url,
+            token=token,
+            repo=repo,
+            target_branch=args.branch or "main",
+        )
+    else:
+        print(
+            "::warning::[heal] incident came from a fork; automatic implementation "
+            f"is disabled for unowned head repository {args.head_repo}"
+        )
     if implementation_dispatched:
         print(f"[heal] implementation workflow dispatched for {issue_url}")
     else:
