@@ -37,26 +37,50 @@ def execute_employee_cron_duty(
     risk_level = str(work_contract.get("risk_level") or "medium").strip().lower()
     bench_provider, bench_model = resolve_platform_bench_llm()
     with track_job_run(f"employee_cron:{employee_id}"):
-        return _require_success(
+        if employee_id == "retention-officer":
+            from modstore_server.file_retention_janitor import run_retention_janitor
+
+            retention = run_retention_janitor(
+                dry_run=True,
+                notification_dry_run=True,
+            )
+            return _require_success(
+                {
+                    **retention,
+                    "handler": "file_retention_janitor",
+                    "summary": str(retention.get("report_md") or "")[:4000],
+                    "read_only": True,
+                    "side_effects": ["retention_audit_receipt"],
+                }
+            )
+        input_data = {
+            "trigger": "schedule",
+            "schedule_source": schedule_source,
+            "work_contract": {
+                "schema": "xcagi.duty_employee_work_contracts/v1",
+                "mode": str(work_contract.get("mode") or "execute"),
+                "risk_level": risk_level,
+                "acceptance": list(work_contract.get("acceptance") or []),
+            },
+            # The reviewed contract approves only low/medium unattended
+            # duty. High-risk actions retain the existing approval/veto.
+            "allow_medium_risk": risk_level in {"low", "medium"},
+            "non_blocking_human_questions": True,
+            "allow_high_risk_real_run": False,
+            **({"project_root": project_root} if project_root else {}),
+        }
+        from modstore_server.employee_duty_input_resolver import (
+            resolve_employee_duty_input,
+        )
+
+        resolved_input = resolve_employee_duty_input(employee_id)
+        if resolved_input is not None:
+            input_data.update(dict(resolved_input.get("input_data") or {}))
+        result = _require_success(
             employee_executor.execute_employee_task(
                 employee_id,
                 task_brief,
-                {
-                    "trigger": "schedule",
-                    "schedule_source": schedule_source,
-                    "work_contract": {
-                        "schema": "xcagi.duty_employee_work_contracts/v1",
-                        "mode": str(work_contract.get("mode") or "execute"),
-                        "risk_level": risk_level,
-                        "acceptance": list(work_contract.get("acceptance") or []),
-                    },
-                    # The reviewed contract approves only low/medium unattended
-                    # duty. High-risk actions retain the existing approval/veto.
-                    "allow_medium_risk": risk_level in {"low", "medium"},
-                    "non_blocking_human_questions": True,
-                    "allow_high_risk_real_run": False,
-                    **({"project_root": project_root} if project_root else {}),
-                },
+                input_data,
                 user_id=0,
                 # Scheduled duty is a platform expense, independent of stale
                 # provider/model names in an old employee manifest.
@@ -65,6 +89,9 @@ def execute_employee_cron_duty(
                 ),
             )
         )
+        if resolved_input is not None:
+            result["duty_input_receipt"] = dict(resolved_input.get("receipt") or {})
+        return result
 
 
 __all__ = ["execute_employee_cron_duty"]
