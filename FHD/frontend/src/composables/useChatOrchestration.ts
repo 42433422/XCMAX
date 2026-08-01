@@ -18,6 +18,7 @@ import { usePrintService } from './usePrintService'
 import { useExcelAnalysis } from './useExcelAnalysis'
 import { isStartPrintMessage, detectRuntimeModeCommand } from '../utils/textParser'
 import chatApi, { parseChatStreamErrorResponse } from '../api/chat'
+import agentRunsApi, { type AgentRun } from '../api/agentRuns'
 import productsApi from '../api/products'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { readPlannerSseResponse, isChatStreamEnabled, type PlannerSseEvent } from '@/utils/chatSseStream'
@@ -145,7 +146,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     finishTask,
     failTask,
     cancelTaskById,
-    retryTask,
+    retryTask: retryTaskLocal,
     toggleTaskExpanded,
     setTaskFilter,
     clearTaskHistory,
@@ -226,44 +227,86 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     syncTaskFromChatResponse,
   } = responseAttach
 
-  const { syncAgentRunFromPayload, syncAgentRunEvents } = useAgentRunEventSync({
+  const { syncAgentRunFromPayload, syncAgentRunEvents, restoreRecentAgentRuns } = useAgentRunEventSync({
     upsertTask,
     getLastAiMessageRef,
   })
 
   /* -------- AgentRun trace 流式轮询（done 后增量更新直到 terminal） -------- */
-  const tracePollingTimers = new Map<string, ReturnType<typeof setInterval>>()
+  const tracePollingTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
   function stopTracePolling(runId: string): void {
     const id = String(runId || '').trim()
     const t = id ? tracePollingTimers.get(id) : undefined
     if (t) {
-      clearInterval(t)
+      clearTimeout(t)
       tracePollingTimers.delete(id)
     }
   }
 
-  function startTracePolling(runId: string): void {
+  function startTracePolling(runId: string, attachToCurrentMessage = true): void {
     const id = String(runId || '').trim()
     if (!id) return
     if (tracePollingTimers.has(id)) return
     let ticks = 0
-    const maxTicks = 10 // 最多 8s（800ms × 10）
-    const timer = setInterval(async () => {
-      ticks += 1
-      try {
-        await syncAgentRunEvents(id, '')
-        attachAgentRunTraceToLastAiMessage()
-      } catch {
-        // 轮询失败静默忽略，下次重试
+    const maxTicks = 150 // 2s × 150 = 5 分钟；重启后会再恢复未终态任务
+    const scheduleNext = () => {
+      const timer = setTimeout(async () => {
+        ticks += 1
+        let terminal = false
+        try {
+          terminal = await syncAgentRunEvents(id, '')
+          if (attachToCurrentMessage) attachAgentRunTraceToLastAiMessage()
+        } catch {
+          // 轮询失败静默忽略，下次重试
+        }
+        if (terminal || ticks >= maxTicks) {
+          stopTracePolling(id)
+          return
+        }
+        scheduleNext()
+      }, 2000)
+      tracePollingTimers.set(id, timer)
+    }
+    scheduleNext()
+  }
+
+  async function retryTask(id: string): Promise<void> {
+    const task = taskList.value.find((item) => item.id === id)
+    if (!task || task.type !== 'agent_run') {
+      retryTaskLocal(id)
+      return
+    }
+    const payload = asRecord(task.payload)
+    const runId = asString(payload.agentRunId || payload.run_id).trim()
+      || String(task.id || '').replace(/^agent_/, '')
+    if (!runId) {
+      await addAndSaveMessage('无法重试：任务缺少持久化 Run ID。', 'ai')
+      return
+    }
+    try {
+      const response = await agentRunsApi.restartRun(runId, {
+        requested_by: dbGate.getModeScopedUserId(resolveEffectiveProModeState()),
+      })
+      const restarted = response?.data
+      if (!response?.success || !restarted?.run_id) {
+        throw new Error(String(response?.message || '任务不能安全重启'))
       }
-      // 检查是否 terminal 或超时
-      const lastAi = [...messages.value].reverse().find((m) => m?.role === 'ai')
-      if (lastAi?.agentRunTrace?.terminal || ticks >= maxTicks) {
-        stopTracePolling(id)
+      await addAndSaveMessage(
+        `已创建新的安全重试任务。\n原任务：${runId}\n新任务：${restarted.run_id}`,
+        'ai',
+      )
+      await syncAgentRunEvents(restarted.run_id, restarted.message || task.title)
+      attachAgentRunTraceToLastAiMessage()
+      if (!['completed', 'failed', 'cancelled'].includes(restarted.status)) {
+        startTracePolling(restarted.run_id)
       }
-    }, 800)
-    tracePollingTimers.set(id, timer)
+    } catch (err: unknown) {
+      await addAndSaveMessage(
+        `无法自动重试：${errorMessage(err, '该任务可能已产生业务变更，请先人工复核。')}`,
+        'ai',
+      )
+    }
   }
 
   /** 组件卸载时清理所有轮询 */
@@ -1215,6 +1258,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       const killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
       const msgIndex = pushStreamingAiShell()
       let streamPlain = ''
+      let streamRunId = ''
+      let streamReadFinished = false
       let doneResult: unknown = null
       let sseError: string | null = null
       // TTS 增量朗读：以句末标点为界把已稳定的前缀丢给语音队列，避免边生成边合成后半句卡顿或被重复打断
@@ -1256,7 +1301,10 @@ export function useChatOrchestration(options: UseChatViewOptions) {
           throw new Error(await parseChatStreamErrorResponse(res))
         }
         await readPlannerSseResponse(res, (ev: PlannerSseEvent) => {
+          const eventRunId = String(ev.run_id || ev.agent_run_id || '').trim()
+          if (eventRunId) streamRunId = eventRunId
           if (ev.type === 'token') {
+            if (ev.ephemeral) return
             streamPlain += ev.text || ''
             applyPlainTextToMessageIndex(msgIndex, streamPlain)
             flushTtsFromStream(streamPlain, false)
@@ -1281,6 +1329,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
             }
           }
         })
+        streamReadFinished = true
         if (sseError) {
           throw new Error(sseError)
         }
@@ -1330,12 +1379,35 @@ export function useChatOrchestration(options: UseChatViewOptions) {
           maybeCloseAssistantFloatForShipmentTask(wrap.task, wrap.autoAction)
         }
       } catch (err: unknown) {
+        const isForegroundTimeout = err instanceof Error && err.name === 'AbortError'
+        const shouldTrackInBackground = !!streamRunId
+          && !streamReadFinished
+          && (isForegroundTimeout || !sseError)
+        if (shouldTrackInBackground) {
+          const partial = streamPlain.trim()
+          const backgroundNotice = [
+            partial,
+            '前台等待已结束，任务已转为后台追踪；你可以继续使用软件。',
+            `任务回执：${streamRunId}`,
+            '最终成功或失败以该任务回执为准。',
+          ].filter(Boolean).join('\n\n')
+          applyPlainTextToMessageIndex(msgIndex, backgroundNotice)
+          await saveMessage('ai', backgroundNotice)
+          await syncAgentRunEvents(streamRunId, primaryForStream)
+          attachAgentRunTraceToLastAiMessage()
+          startTracePolling(streamRunId)
+          return
+        }
         const errText =
-          err instanceof Error && err.name === 'AbortError'
+          isForegroundTimeout
             ? `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
             : errorMessage(err, '流式对话失败')
         applyPlainTextToMessageIndex(msgIndex, `处理失败：${errText}`)
         await saveMessage('ai', `处理失败：${errText}`)
+        if (streamRunId) {
+          await syncAgentRunEvents(streamRunId, primaryForStream)
+          attachAgentRunTraceToLastAiMessage()
+        }
       } finally {
         isStreamingReply.value = false
         window.clearTimeout(killTimer)
@@ -1492,23 +1564,120 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   }
 
   async function confirmWorkflowFromCard() {
+    let pendingCard: NonNullable<(typeof messages.value)[number]['approvalCard']> | undefined
+    let pendingMessage: (typeof messages.value)[number] | undefined
     for (let i = messages.value.length - 1; i >= 0; i -= 1) {
       const msg = messages.value[i]
       if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
-        msg.approvalCard = { ...msg.approvalCard, status: 'confirmed' }
+        pendingCard = msg.approvalCard
+        pendingMessage = msg
         break
       }
+    }
+    const runId = String(pendingCard?.agent_run_id || pendingCard?.run_id || '').trim()
+    if (runId && pendingCard?.approval_required && pendingMessage?.approvalCard) {
+      try {
+        isLoading.value = true
+        setLoadingProgress('正在提交正式审批...')
+        const response = await agentRunsApi.submitApproval(runId, {
+          requested_by: dbGate.getModeScopedUserId(resolveEffectiveProModeState()),
+        })
+        const requestIds = Array.isArray(response?.data?.approval_request_ids)
+          ? response.data.approval_request_ids.filter(Boolean)
+          : []
+        if (!response?.success || !requestIds.length) {
+          throw new Error(String(response?.message || '审批请求提交失败'))
+        }
+        pendingMessage.approvalCard = {
+          ...pendingMessage.approvalCard,
+          status: 'confirmed',
+          approval_request_ids: requestIds,
+        }
+        await addAndSaveMessage(
+          `审批已提交；审批中心通过后将继续原任务。\n审批单：${requestIds.join('、')}\n任务回执：${runId}`,
+          'ai',
+        )
+        await syncAgentRunEvents(runId, String(response.data?.run?.message || ''))
+        attachAgentRunTraceToLastAiMessage()
+        startTracePolling(runId)
+      } catch (err: unknown) {
+        await addAndSaveMessage(`提交审批失败：${errorMessage(err, '未知错误')}。原任务仍保留，可稍后重试。`, 'ai')
+      } finally {
+        isLoading.value = false
+        stopLoadingProgress()
+      }
+      return
+    }
+    if (runId && pendingMessage?.approvalCard) {
+      try {
+        isLoading.value = true
+        setLoadingProgress('正在执行已确认的业务步骤...')
+        const response = await agentRunsApi.continueRun(runId, {
+          approved_by: dbGate.getModeScopedUserId(resolveEffectiveProModeState()),
+        })
+        const run = response?.data as AgentRun | undefined
+        if (!response?.success || !run) {
+          throw new Error(String(response?.message || '任务继续执行失败'))
+        }
+        pendingMessage.approvalCard = { ...pendingMessage.approvalCard, status: 'confirmed' }
+        const steps = Array.isArray(run.steps) ? run.steps : []
+        const lastOutput = [...steps].reverse().find((step) => step?.output)?.output || {}
+        const detail = String(lastOutput.message || lastOutput.error || run.error || '').trim()
+        const text = run.status === 'completed'
+          ? `执行完成：${detail || '所有业务步骤均已完成并写入工具回执。'}\n任务回执：${run.run_id}`
+          : run.status === 'failed'
+            ? `执行失败：${detail || '业务工具未完成变更。'}\n任务回执：${run.run_id}`
+            : `已确认当前步骤，任务状态：${run.status}。\n任务回执：${run.run_id}`
+        await addAndSaveMessage(text, 'ai')
+        await syncAgentRunEvents(runId, String(run.message || ''))
+        attachAgentRunTraceToLastAiMessage()
+        if (!['completed', 'failed', 'cancelled'].includes(run.status)) startTracePolling(runId)
+      } catch (err: unknown) {
+        await addAndSaveMessage(`确认执行失败：${errorMessage(err, '未知错误')}。原任务仍保留，可稍后重试。`, 'ai')
+      } finally {
+        isLoading.value = false
+        stopLoadingProgress()
+      }
+      return
+    }
+    if (pendingMessage?.approvalCard) {
+      pendingMessage.approvalCard = { ...pendingMessage.approvalCard, status: 'confirmed' }
     }
     await sendMessage('确认')
   }
 
   async function cancelWorkflowFromCard() {
+    let pendingCard: NonNullable<(typeof messages.value)[number]['approvalCard']> | undefined
+    let pendingMessage: (typeof messages.value)[number] | undefined
     for (let i = messages.value.length - 1; i >= 0; i -= 1) {
       const msg = messages.value[i]
       if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
-        msg.approvalCard = { ...msg.approvalCard, status: 'cancelled' }
+        pendingCard = msg.approvalCard
+        pendingMessage = msg
         break
       }
+    }
+    const runId = String(pendingCard?.agent_run_id || pendingCard?.run_id || '').trim()
+    if (runId && pendingMessage?.approvalCard) {
+      try {
+        const response = await agentRunsApi.cancelRun(runId, {
+          cancelled_by: dbGate.getModeScopedUserId(resolveEffectiveProModeState()),
+        })
+        const run = response?.data as AgentRun | undefined
+        if (!response?.success || !run) {
+          throw new Error(String(response?.message || '任务取消失败'))
+        }
+        pendingMessage.approvalCard = { ...pendingMessage.approvalCard, status: 'cancelled' }
+        await addAndSaveMessage(`任务已取消，未执行后续业务变更。\n任务回执：${run.run_id}`, 'ai')
+        await syncAgentRunEvents(runId, String(run.message || ''))
+        attachAgentRunTraceToLastAiMessage()
+      } catch (err: unknown) {
+        await addAndSaveMessage(`取消失败：${errorMessage(err, '未知错误')}。原任务仍保留。`, 'ai')
+      }
+      return
+    }
+    if (pendingMessage?.approvalCard) {
+      pendingMessage.approvalCard = { ...pendingMessage.approvalCard, status: 'cancelled' }
     }
     await sendMessage('取消')
   }
@@ -1598,6 +1767,11 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       if (first) linkedExcelSheet.value = first
     }
     window.addEventListener(FHD_DB_WRITE_UNLOCKED_EVENT, dbGate.onDbWriteUnlockedForChatRetry)
+    void restoreRecentAgentRuns(
+      dbGate.getModeScopedUserId(resolveEffectiveProModeState()),
+    ).then((activeRunIds) => {
+      for (const runId of activeRunIds) startTracePolling(runId, false)
+    })
     workflowPanel.mountWorkflowPanel()
   })
 

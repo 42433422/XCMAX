@@ -273,7 +273,8 @@ describe('EtlCenterView folder workflow', () => {
     expect(wrapper.text()).toContain('选择整个文件夹')
     expect(wrapper.text()).toContain('单文件 100.0 MB')
     expect(wrapper.text()).toContain('智能识别（推荐）')
-    expect(wrapper.text()).toContain('送货单会自动选择“发货记录”')
+    expect(wrapper.text()).toContain('送货单会建议“发货记录”')
+    expect(wrapper.text()).toContain('确认前不写业务库')
     expect(wrapper.text()).toContain('已获取 1 个旧 YAML/知识库兼容预设')
     expect(wrapper.find('input[type="file"][multiple]').exists()).toBe(true)
     expect(wrapper.find('input[type="file"][webkitdirectory]').exists()).toBe(true)
@@ -329,7 +330,6 @@ describe('EtlCenterView folder workflow', () => {
       sha256: 'source-hash',
     })
     etlApiMock.preview.mockResolvedValue(shipment)
-    // autoWriteEnabled 默认开启：preview_ready 后会自动调用 execute 写入业务库。
     etlApiMock.execute.mockResolvedValue({ ...shipment, status: 'executing', stage: 'executing' })
     const wrapper = await mountView()
     const input = wrapper.find('input[type="file"][multiple]')
@@ -338,24 +338,20 @@ describe('EtlCenterView folder workflow', () => {
     })
     Object.defineProperty(input.element, 'files', { value: [source] })
     await input.trigger('change')
-    await buttonByText(wrapper, '上传并写入数据库')?.trigger('click')
+    await buttonByText(wrapper, '上传并解析')?.trigger('click')
     await flushPromises()
 
     expect(etlApiMock.preview).toHaveBeenCalledWith(expect.objectContaining({
       upload_id: 'upload-houxuemei',
       target_type: 'auto',
     }))
-    // autoWrite 默认开启：preview_ready 后自动 execute 并切到 history tab。
-    // 切回 preview tab 才能验证候选版式与关联写入提示。
-    await buttonByText(wrapper, '核对写入')?.trigger('click')
-    await flushPromises()
     expect(wrapper.text()).toContain('目标')
     expect(wrapper.text()).toContain('发货记录')
     expect(wrapper.text()).toContain('已获取送货单版式候选：金汉武家私-发货单版式')
     expect(wrapper.text()).toContain('尚未保存')
     expect(wrapper.text()).toContain('要同时补全客户库和产品库？')
     expect(buttonByText(wrapper, '导入客户及产品')).toBeTruthy()
-    expect(etlApiMock.execute).toHaveBeenCalled()
+    expect(etlApiMock.execute).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
@@ -379,7 +375,7 @@ describe('EtlCenterView folder workflow', () => {
     })
     Object.defineProperty(input.element, 'files', { value: [file] })
     await input.trigger('change')
-    await buttonByText(wrapper, '上传并写入数据库')?.trigger('click')
+    await buttonByText(wrapper, '上传并解析')?.trigger('click')
     await flushPromises()
 
     expect(etlApiMock.preview).toHaveBeenCalledWith(expect.objectContaining({
@@ -432,7 +428,7 @@ describe('EtlCenterView folder workflow', () => {
     expect(wrapper.text()).toContain('华东批次 · 2 个可处理文件')
     expect(wrapper.text()).toContain('华东批次/客户/customers.csv')
     expect(wrapper.text()).toContain('华东批次/产品/products.csv')
-    expect(wrapper.text()).toContain('批量上传并写入 2 个文件')
+    expect(wrapper.text()).toContain('批量上传并解析 2 个文件')
     wrapper.unmount()
   })
 
@@ -456,7 +452,7 @@ describe('EtlCenterView folder workflow', () => {
     Object.defineProperty(input.element, 'files', { value: files })
     await input.trigger('change')
     const start = wrapper.findAll('button').find((button) => (
-      button.text().includes('批量上传并写入 2 个文件')
+      button.text().includes('批量上传并解析 2 个文件')
     ))
     await start?.trigger('click')
     await flushPromises()
@@ -637,6 +633,18 @@ describe('EtlCenterView folder workflow', () => {
       },
       llm_structure: { used_llm: true, degraded: false },
     }
+    run.details = {
+      warnings: [
+        {
+          code: 'ETL_SHIPMENT_HISTORY_PRODUCTS_INCLUDED',
+          message: '已从出货历史增补 93 个客户产品候选，仅用于客户产品预演。',
+        },
+        {
+          code: 'ETL_PRODUCT_MODEL_AMBIGUITY',
+          message: '发现 2 组型号歧义，需人工确认。',
+        },
+      ],
+    }
     etlApiMock.run.mockResolvedValue(run)
 
     const wrapper = await mountView(run.id)
@@ -648,6 +656,8 @@ describe('EtlCenterView folder workflow', () => {
     expect(wrapper.text()).toContain('软件 LLM 已参与结构或字段建议')
     expect(wrapper.text()).toContain('客户 甲家具')
     expect(wrapper.text()).toContain('工作簿附表规划 · 已检查 3 个工作表')
+    expect(wrapper.text()).toContain('写入范围提醒 · ETL_SHIPMENT_HISTORY_PRODUCTS_INCLUDED')
+    expect(wrapper.text()).toContain('发现 2 组型号歧义，需人工确认。')
     expect(wrapper.text()).toContain('侯雪梅出货')
     expect(wrapper.text()).toContain('客户与产品补充数据')
     expect(wrapper.text()).toContain('25年回款')

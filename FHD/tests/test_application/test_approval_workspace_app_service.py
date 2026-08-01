@@ -948,6 +948,51 @@ class TestApproveRequest:
         svc.remove_pending_workflow.assert_called_once_with("req-ai-1")
         engine.run.assert_called_once()
 
+    def test_resume_formal_approval_uses_durable_agent_run_link(self):
+        svc = MagicMock()
+        svc.approve.return_value = False
+        svc.get_pending_workflow.return_value = None
+        orchestrator = MagicMock()
+        orchestrator.approve_run_step.return_value = SimpleNamespace(
+            run_id="run-durable",
+            status="completed",
+            plan_id="plan-durable",
+            intent="customer_delete",
+            tool_calls=[object()],
+        )
+
+        with (
+            patch("app.application.workflow.get_approval_service", return_value=svc),
+            patch(
+                "app.application.approval_workspace_app_service._durable_ai_workflow_link",
+                return_value={
+                    "agent_run_id": "run-durable",
+                    "agent_step_id": "step-delete",
+                    "agent_node_id": "delete-customer",
+                },
+            ),
+            patch(
+                "app.application.agent_orchestrator.AgentOrchestrator",
+                return_value=orchestrator,
+            ),
+        ):
+            out = _resume_pending_ai_workflow_after_approval(
+                request_no="approval-durable",
+                opinion="同意",
+            )
+
+        assert out is not None
+        assert out["workflow_executed"] is True
+        assert out["agent_run_id"] == "run-durable"
+        assert out["agent_run_status"] == "completed"
+        orchestrator.approve_run_step.assert_called_once_with(
+            "run-durable",
+            approved_by="approval_workspace",
+            approved_step_id="step-delete",
+            approval_request_id="approval-durable",
+        )
+        svc.remove_pending_workflow.assert_called_once_with("approval-durable")
+
     def test_no_actor_raises_401(self):
         request = Mock()
         with patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve:

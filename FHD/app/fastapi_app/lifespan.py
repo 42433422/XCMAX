@@ -72,6 +72,20 @@ async def lifespan(app: FastAPI):
     mark_startup("lifespan_db_done")
 
     try:
+        from app.application.agent_orchestrator import AgentOrchestrator
+
+        interrupted_runs = await asyncio.to_thread(
+            AgentOrchestrator().reconcile_interrupted_runs
+        )
+        if interrupted_runs:
+            logger.warning(
+                "reconciled %s AgentRun(s) interrupted by the previous app process",
+                interrupted_runs,
+            )
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("AgentRun startup reconciliation skipped: %s", exc)
+
+    try:
         from app.application.desktop_admin_gate import purge_admin_sessions_on_desktop
 
         purged = await asyncio.to_thread(purge_admin_sessions_on_desktop)

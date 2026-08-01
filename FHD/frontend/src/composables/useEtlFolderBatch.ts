@@ -46,7 +46,7 @@ type EtlFolderBatchOptions = {
   busy: Ref<boolean>
   pageError: Ref<string>
   router: Router
-  /** 默认 true：解析就绪后自动写入业务库，而非停在预演确认。 */
+  /** 仅受控场景可开启；产品默认 false，解析后必须停在预演确认。 */
   autoWriteEnabled: Ref<boolean>
   markAutoWrite: (runId: string) => void
   tryAutoWrite: (run: EtlRun) => Promise<void>

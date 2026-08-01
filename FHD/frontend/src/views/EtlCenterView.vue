@@ -46,8 +46,8 @@ const rowTotal = ref(0)
 const rowActionFilter = ref('')
 const busy = ref(false)
 const pageError = ref('')
-/** 上传解析就绪后直接写入业务库（真实导入，不是停在预演）。 */
-const autoWriteEnabled = ref(true)
+/** ERP 写入默认必须停在预演，只有用户明确点击“写入数据库”才执行。 */
+const autoWriteEnabled = ref(false)
 const pendingAutoWriteIds = ref(new Set<string>())
 const validRowsOnly = ref(false)
 const editableMappings = ref<EtlFieldMapping[]>([])
@@ -189,6 +189,23 @@ const summaryCards = computed(() => [
   { action: 'skip', label: '跳过', count: currentRun.value?.summary.skip || 0 },
   { action: 'error', label: '错误', count: currentRun.value?.summary.error || 0 },
 ])
+const parserWarnings = computed<Array<Record<string, unknown>>>(() => {
+  const value = currentRun.value?.details?.warnings
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object',
+      )
+    : []
+})
+const highImpactWarningCodes = new Set([
+  'ETL_SHIPMENT_HISTORY_PRODUCTS_INCLUDED',
+  'ETL_PRODUCT_MODEL_AMBIGUITY',
+  'ETL_LATEST_SOURCE_CONFLICT',
+  'ETL_FUTURE_DATED_SOURCE_ROW',
+])
+function parserWarningTitle(warning: Record<string, unknown>): string {
+  return highImpactWarningCodes.has(String(warning.code || '')) ? '写入范围提醒' : '解析说明'
+}
 const savedShipmentTemplate = computed<Record<string, unknown> | null>(() => {
   const candidate = currentRun.value?.details?.shipment_document_template
   return candidate && typeof candidate === 'object' && !Array.isArray(candidate)
@@ -226,10 +243,22 @@ const linkedCustomerProductPreview = computed<Record<string, unknown> | null>(()
     : null
 })
 const linkedCustomerNames = computed(() => {
-  const names = runRows.value
+  const regionSummary = currentRun.value?.source_features?.region_summary
+  const plannedNames = regionSummary && typeof regionSummary === 'object'
+    ? (regionSummary as Record<string, unknown>).customers
+    : []
+  const names = (Array.isArray(plannedNames) ? plannedNames : runRows.value
     .map((row) => String(row.normalized.customer_name || '').trim())
+  )
+    .map((item) => String(item || '').trim())
     .filter(Boolean)
   return [...new Set(names)]
+})
+const linkedCustomerScopeText = computed(() => {
+  const names = linkedCustomerNames.value
+  if (!names.length) return '按客户名称创建或复用'
+  if (names.length <= 4) return names.join('、')
+  return `${names.slice(0, 4).join('、')} 等 ${names.length} 家客户`
 })
 const plannedBusinessRows = computed(() => {
   if (!currentRun.value) return 0

@@ -3,7 +3,7 @@
       <div>
         <span class="etl-eyebrow">企业版 · 通用 ETL</span>
         <h1>数据对接中心</h1>
-        <p>上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。</p>
+        <p>上传业务文件后先解析、映射和预演；只有你明确确认后才写入。AI 只给建议，最终动作由确定性规则执行。</p>
       </div>
       <div class="etl-hero__limits">
         <span>支持整文件夹</span>
@@ -101,9 +101,9 @@
             </select>
           </label>
           <div v-if="targetType === 'auto'" class="etl-target-scope-note">
-            <strong>先识别单据类型，再真实写入</strong>
+            <strong>先识别单据类型，再进入核对</strong>
             <span>
-              送货单会自动选择“发货记录”；识别结果决定写入目标，解析通过后写入业务库。
+              送货单会建议“发货记录”；识别结果与影响行数会先展示，确认前不写业务库。
             </span>
           </div>
           <div v-else-if="targetType === 'customer_products'" class="etl-target-scope-note">
@@ -181,7 +181,7 @@
           </div>
           <div class="etl-form-actions">
             <span v-if="selectedFiles.length">
-              {{ selectedFiles.length }} 个文件将分别解析并写入业务库
+              {{ selectedFiles.length }} 个文件将分别解析并生成预演
             </span>
             <button
               type="button"
@@ -395,7 +395,7 @@
             <span>{{ currentRun.progress }}%</span>
           </div>
           <progress :value="currentRun.progress" max="100"></progress>
-          <p>正在解析文件；解析通过后将自动写入业务库。</p>
+          <p>正在解析文件；解析通过后进入核对页面，确认前不会写入业务库。</p>
         </div>
         <div class="etl-business-context">
           <div>
@@ -409,7 +409,7 @@
           <div v-if="currentRun.target_type === 'customer_products'">
             <small>客户 → 产品关系</small>
             <strong>
-              {{ linkedCustomerNames.length ? linkedCustomerNames.join('、') : '按客户名称创建或复用' }}
+              {{ linkedCustomerScopeText }}
               → {{ plannedBusinessRows }} 个产品行
             </strong>
           </div>
@@ -506,6 +506,17 @@
               </li>
             </ul>
           </details>
+        </div>
+        <div
+          v-for="warning in parserWarnings"
+          :key="String(warning.code || warning.message)"
+          class="etl-alert etl-alert--warning"
+          data-testid="etl-parser-warning"
+        >
+          <div>
+            <strong>{{ parserWarningTitle(warning) }} · {{ String(warning.code || 'ETL_WARNING') }}</strong>
+            <span>{{ String(warning.message || '请核对本次解析范围后再写入。') }}</span>
+          </div>
         </div>
         <div class="etl-summary-grid">
           <button v-for="item in summaryCards" :key="item.action" type="button" @click="setRowActionFilter(item.action)">

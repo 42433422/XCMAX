@@ -15,7 +15,7 @@
  * - step.retry_scheduled  → ToolPhase.retries++
  * - step.llm_repair_*     → 加入 repairHistory
  * - run.completed         → 终态 success
- * - run.failed / run.continue_ignored / budget.exceeded / planner.blocked → 终态 failed
+ * - run.failed / budget.exceeded / planner.blocked → 终态 failed
  */
 
 import type { AgentRunEvent } from '@/api/agentRuns'
@@ -30,6 +30,7 @@ export type TracePhaseStatus =
   | 'failed'
   | 'waiting'
   | 'blocked'
+  | 'cancelled'
 
 export interface TraceBasePhase {
   kind: TracePhaseKind
@@ -185,7 +186,12 @@ export function isTrivialChatTrace(trace: AgentRunTraceData | null | undefined):
   const tools = toolPhasesOf(trace)
   if (tools.length === 0) return true
   if (tools.length > 1) return false
-  if (trace.status === 'failed' || trace.status === 'waiting' || trace.status === 'blocked') {
+  if (
+    trace.status === 'failed' ||
+    trace.status === 'waiting' ||
+    trace.status === 'blocked' ||
+    trace.status === 'cancelled'
+  ) {
     return false
   }
   const t = tools[0]
@@ -369,7 +375,24 @@ export function buildAgentRunTraceFromEvents(
       continue
     }
     if (type === 'step.waiting_user') {
-      const target = findOpenToolPhase('')
+      let target = findOpenToolPhase('')
+      if (!target) {
+        target = {
+          kind: 'tool',
+          status: 'waiting',
+          started_event_id: asString(ev.event_id),
+          started_at: asString(ev.created_at),
+          node_id: pickString(data, 'node_id', 'step_id'),
+          tool_id: pickString(data, 'tool_id', 'tool'),
+          action: pickString(data, 'action', 'name'),
+          title: asString(data.description).trim() || '等待确认后执行',
+          observations: [],
+          waiting_approval: true,
+          retries: 0,
+          repair_history: [],
+        } as TraceToolPhase
+        phases.push(target)
+      }
       if (target) {
         target.waiting_approval = true
         target.status = 'waiting'
@@ -431,11 +454,11 @@ export function buildAgentRunTraceFromEvents(
       } as TraceRunPhase)
       continue
     }
-    if (type === 'run.failed' || type === 'run.continue_ignored') {
+    if (type === 'run.failed') {
       status = 'failed'
       terminal = true
       totalDurationMs = pickNumber(data, 'duration_ms', 'total_duration_ms')
-      const failFallback = type === 'run.continue_ignored' ? '执行已中止' : '执行失败'
+      const failFallback = '执行失败'
       phases.push({
         kind: 'run',
         status: 'failed',
@@ -445,6 +468,18 @@ export function buildAgentRunTraceFromEvents(
         title: friendlyPhaseTitle(ev.message, failFallback),
         error: friendlyPhaseTitle(ev.message, asString(data.error).trim() || failFallback),
         detail: asString(data.error).trim() || undefined,
+      } as TraceRunPhase)
+      continue
+    }
+    if (type === 'run.cancelled') {
+      status = 'cancelled'
+      terminal = true
+      phases.push({
+        kind: 'run',
+        status: 'cancelled',
+        started_event_id: asString(ev.event_id),
+        started_at: asString(ev.created_at),
+        title: friendlyPhaseTitle(ev.message, '任务已取消'),
       } as TraceRunPhase)
       continue
     }

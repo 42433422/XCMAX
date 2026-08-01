@@ -80,6 +80,18 @@ describe('buildAgentRunTraceFromEvents', () => {
     expect(run.status).toBe('success')
   })
 
+  it('does not turn a completed run into failure when duplicate continue is ignored', () => {
+    const trace = buildAgentRunTraceFromEvents([
+      ev('planner.completed'),
+      ev('run.completed', { message: '执行完成' }),
+      ev('run.continue_ignored', { message: '没有等待确认的步骤' }),
+    ], 'run_completed')
+
+    expect(trace.status).toBe('success')
+    expect(trace.terminal).toBe(true)
+    expect(trace.phases.some((phase) => phase.status === 'failed')).toBe(false)
+  })
+
   it('marks run as failed when tool.failed + run.failed arrive', () => {
     const events: AgentRunEvent[] = [
       ev('planner.started'),

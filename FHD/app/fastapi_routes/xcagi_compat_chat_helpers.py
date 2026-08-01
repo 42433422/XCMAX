@@ -732,6 +732,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         logger.debug("legacy stream planner AgentRun pre-create skipped", exc_info=True)
     try:
         halted_for_write_token = False
+        run_receipt_sent = False
         for ev in _xcagi_guarded_planner_stream_events(
             body,
             runtime_context=planner_runtime_context,
@@ -767,7 +768,13 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 text = str(ev.get("text") or "")
                 if not ev.get("ephemeral"):
                     reply_parts.append(text)
-                yield _sse_event_line(ev)
+                outgoing_event = ev
+                if pre_run is not None and not run_receipt_sent:
+                    # Attach the durable receipt to the existing first token so
+                    # older clients keep exactly the same SSE event sequence.
+                    outgoing_event = _sse_payload_with_run_id(ev, pre_run.run_id)
+                    run_receipt_sent = True
+                yield _sse_event_line(outgoing_event)
             elif et == "requires_token":
                 if pre_run is not None:
                     payload = {

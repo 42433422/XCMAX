@@ -65,6 +65,11 @@ export interface ContinueAgentRunPayload {
   runtime_context?: Record<string, unknown>
 }
 
+export interface CancelAgentRunPayload {
+  cancelled_by?: string
+  user_id?: string
+}
+
 export const agentRunsApi = {
   createRun(payload: CreateAgentRunPayload): Promise<ApiResponse<AgentRun>> {
     return api.post<ApiResponse<AgentRun>>('/api/agent/runs', payload)
@@ -76,6 +81,36 @@ export const agentRunsApi = {
   ): Promise<ApiResponse<AgentRun>> {
     return api.post<ApiResponse<AgentRun>>(
       `/api/agent/runs/${encodeURIComponent(runId)}/continue`,
+      payload,
+    )
+  },
+
+  cancelRun(
+    runId: string,
+    payload: CancelAgentRunPayload = {},
+  ): Promise<ApiResponse<AgentRun>> {
+    return api.post<ApiResponse<AgentRun>>(
+      `/api/agent/runs/${encodeURIComponent(runId)}/cancel`,
+      payload,
+    )
+  },
+
+  submitApproval(
+    runId: string,
+    payload: { requested_by?: string } = {},
+  ): Promise<ApiResponse<{ run: AgentRun; approval_request_ids: string[] }>> {
+    return api.post<ApiResponse<{ run: AgentRun; approval_request_ids: string[] }>>(
+      `/api/agent/runs/${encodeURIComponent(runId)}/submit-approval`,
+      payload,
+    )
+  },
+
+  restartRun(
+    runId: string,
+    payload: { requested_by?: string } = {},
+  ): Promise<ApiResponse<AgentRun>> {
+    return api.post<ApiResponse<AgentRun>>(
+      `/api/agent/runs/${encodeURIComponent(runId)}/restart`,
       payload,
     )
   },

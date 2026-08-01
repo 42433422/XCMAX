@@ -1633,6 +1633,29 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 流式', () =
     )
   })
 
+  it('流式前台超时但已获取 Run ID 时转为后台追踪', async () => {
+    const abortErr = new Error('Aborted')
+    abortErr.name = 'AbortError'
+    mockReadPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
+      onEvent({ type: 'token', text: '', ephemeral: true, run_id: 'run_background' })
+      throw abortErr
+    })
+    const api = createApi()
+    await api.sendMessage('执行复杂 ERP 任务')
+    expect(mockApplyPlainTextToMessageIndex).toHaveBeenCalledWith(
+      0,
+      expect.stringContaining('已转为后台追踪'),
+    )
+    expect(mockSaveMessage).toHaveBeenCalledWith(
+      'ai',
+      expect.stringContaining('任务回执：run_background'),
+    )
+    expect(mockApplyPlainTextToMessageIndex).not.toHaveBeenCalledWith(
+      0,
+      expect.stringContaining('处理失败'),
+    )
+  })
+
   it('流式非 Abort 错误时报告失败', async () => {
     mockSendChatStream.mockRejectedValue(new Error('连接断开'))
     const api = createApi()

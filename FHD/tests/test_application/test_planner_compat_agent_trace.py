@@ -417,9 +417,13 @@ def test_stream_done_result_attaches_agent_run_id() -> None:
             )
         )
 
-    done = [payload for payload in _sse_payloads(chunks) if payload.get("type") == "done"][0]
+    stream_payloads = _sse_payloads(chunks)
+    first_token = [payload for payload in stream_payloads if payload.get("type") == "token"][0]
+    done = [payload for payload in stream_payloads if payload.get("type") == "done"][0]
     result = done["result"]
     run_id = result["run_id"]
+    assert first_token["run_id"] == run_id
+    assert first_token["agent_run_id"] == run_id
     assert result["data"]["run_id"] == run_id
 
     run = repo.get(run_id)

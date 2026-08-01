@@ -30,6 +30,7 @@ const STATUS_CLASS: Record<TracePhase['status'], string> = {
   failed: 'st-failed',
   waiting: 'st-waiting',
   blocked: 'st-blocked',
+  cancelled: 'st-cancelled',
 }
 
 function escapeMermaidLabel(text: string): string {
@@ -97,6 +98,7 @@ export function traceToMermaid(trace: AgentRunTraceData | null | undefined): str
   lines.push('  classDef st-failed fill:#fee2e2,stroke:#ef4444,color:#991b1b,stroke-width:2px')
   lines.push('  classDef st-waiting fill:#fef3c7,stroke:#f59e0b,color:#92400e,stroke-width:2px')
   lines.push('  classDef st-blocked fill:#f3f4f6,stroke:#9ca3af,color:#4b5563,stroke-width:1px')
+  lines.push('  classDef st-cancelled fill:#f3f4f6,stroke:#9ca3af,color:#4b5563,stroke-width:1px')
 
   return lines.join('\n')
 }

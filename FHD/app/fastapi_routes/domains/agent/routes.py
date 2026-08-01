@@ -116,6 +116,105 @@ def continue_agent_run(
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
 
+@router.post("/api/agent/runs/{run_id}/cancel", response_model=None)
+def cancel_agent_run(
+    run_id: str,
+    body: dict[str, Any] = Body(default_factory=dict),
+) -> dict[str, Any] | JSONResponse:
+    data = body or {}
+    try:
+        run = AgentOrchestrator().cancel_run(
+            run_id,
+            cancelled_by=str(data.get("cancelled_by") or data.get("user_id") or ""),
+        )
+        if run is None:
+            return JSONResponse(
+                {"success": False, "message": "agent run 不存在"},
+                status_code=404,
+            )
+        return _success(run.to_dict())
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("cancel agent run failed: %s", exc)
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+
+
+@router.post("/api/agent/runs/{run_id}/submit-approval", response_model=None)
+def submit_agent_run_approval(
+    run_id: str,
+    body: dict[str, Any] = Body(default_factory=dict),
+) -> dict[str, Any] | JSONResponse:
+    data = body or {}
+    try:
+        run, request_ids = AgentOrchestrator().submit_run_for_approval(
+            run_id,
+            requested_by=str(data.get("requested_by") or data.get("user_id") or ""),
+        )
+        if run is None:
+            return JSONResponse(
+                {"success": False, "message": "agent run 不存在"},
+                status_code=404,
+            )
+        if not request_ids:
+            return JSONResponse(
+                {"success": False, "message": "该任务没有需要提交的正式审批节点"},
+                status_code=409,
+            )
+        return _success(
+            {
+                "run": run.to_dict(),
+                "approval_request_ids": request_ids,
+            }
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("submit agent run approval failed: %s", exc)
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+
+
+@router.post("/api/agent/runs/{run_id}/restart", response_model=None)
+def restart_agent_run(
+    run_id: str,
+    body: dict[str, Any] = Body(default_factory=dict),
+) -> dict[str, Any] | JSONResponse:
+    data = body or {}
+    try:
+        source, restarted, reason = AgentOrchestrator().restart_run(
+            run_id,
+            requested_by=str(data.get("requested_by") or data.get("user_id") or ""),
+        )
+        if source is None:
+            return JSONResponse(
+                {"success": False, "message": "agent run 不存在"},
+                status_code=404,
+            )
+        if restarted is None:
+            messages = {
+                "run_not_terminal": "任务仍在运行，不能重复启动",
+                "manual_review_required": "该任务可能已产生业务变更但缺少完整回执，请先人工复核",
+                "verified_side_effects_present": "原任务已有成功业务回执，不能整单重放",
+                "unverified_non_idempotent_call": "原任务包含结果未知的非幂等操作，禁止自动重试",
+            }
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": messages.get(reason, "该任务当前不能安全重启"),
+                    "reason": reason,
+                    "data": source.to_dict(),
+                },
+                status_code=409,
+            )
+        status_code = 202 if restarted.status in {"waiting_user", "blocked"} else 200
+        return JSONResponse(
+            _success(
+                restarted.to_dict(),
+                restarted_from_run_id=source.run_id,
+            ),
+            status_code=status_code,
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("restart agent run failed: %s", exc)
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+
+
 @router.get("/api/agent/runs/{run_id}/events", response_model=None)
 def list_agent_run_events(
     run_id: str,

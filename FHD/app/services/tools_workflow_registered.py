@@ -1515,14 +1515,19 @@ def _registered_router_business_db(
         return {"success": False, "message": "business_db.write 需要 dict payload。"}
 
     if entity == "customers":
-        if operation in ("create", "ensure_exists", "upsert"):
+        if operation in ("create", "ensure_exists", "upsert", "update", "delete", "batch_delete"):
             router_action = (
                 "ensure_exists" if operation in ("ensure_exists", "upsert") else "create"
             )
+            if operation in ("update", "delete", "batch_delete"):
+                router_action = operation
             return _registered_router_customers(
                 router_action, payload, runtime_context, profile, user_message
             )
-        return {"success": False, "message": "customers 仅支持 create/ensure_exists/upsert。"}
+        return {
+            "success": False,
+            "message": "customers 支持 create/ensure_exists/upsert/update/delete/batch_delete。",
+        }
 
     if entity == "products":
         if operation == "create":

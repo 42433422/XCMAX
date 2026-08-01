@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 contextBridge.exposeInMainWorld('xcagiDesktop', {
   platform: process.platform,
   versions: process.versions,
+  getAppIdentity: () => ipcRenderer.invoke('xcagi:get-app-identity'),
   getDataDir: () => ipcRenderer.invoke('xcagi:get-data-dir'),
   exportSupportBundle: () => ipcRenderer.invoke('xcagi:export-support-bundle'),
   checkForUpdates: () => ipcRenderer.invoke('xcagi:check-for-updates'),

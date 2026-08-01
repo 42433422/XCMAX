@@ -81,9 +81,9 @@
     </div>
     <div class="sidebar-footer">
       <div class="sidebar-status-mods-row">
-        <div class="status-indicator">
-          <span class="status-dot online"></span>
-          <span>系统正常</span>
+        <div class="status-indicator" :title="systemStatusTitle">
+          <span class="status-dot" :class="systemStatusTone"></span>
+          <span>{{ systemStatusText }}</span>
           <DesktopAppUpdatePrompt />
           <span
             v-if="adminDeployStatusText"
@@ -236,6 +236,11 @@ const entitlementSyncStatusError = ref('')
 const entitlementSyncLoading = ref(false)
 const entitlementSyncNoticeUntil = ref(0)
 const healthAppVersion = ref('')
+const desktopShellVersion = ref('')
+const runtimeHealth = ref(null)
+const desktopRuntimeStatus = ref(null)
+const systemStatusLoading = ref(true)
+const systemStatusError = ref('')
 let activeReorderPointerId = null
 let pressTimer = null
 let boundWindowPointerMove = null
@@ -246,6 +251,7 @@ let pendingDragPoint = null
 let adminDeployPollTimer = null
 let entitlementSyncPollTimer = null
 let entitlementSyncNoticeTimer = null
+let systemStatusPollTimer = null
 /** @type {{ key: string, midY: number }[]} */
 let menuHitCache = []
 
@@ -352,12 +358,58 @@ const shouldShowEntitlementSyncStatus = computed(() => {
 
 const sidebarAppVersionText = computed(() => {
   if (shouldShowAdminDeployStatus.value) return ''
-  return displayVersion(healthAppVersion.value || packageJson.version || '')
+  const shellVersion = String(desktopShellVersion.value || packageJson.version || '').trim()
+  const backendVersion = String(healthAppVersion.value || '').trim()
+  if (shellVersion && backendVersion && shellVersion !== backendVersion) return '版本不一致'
+  return displayVersion(shellVersion || backendVersion)
 })
 
 const sidebarAppVersionTitle = computed(() => {
-  const ver = String(healthAppVersion.value || packageJson.version || '').trim()
-  return ver ? `当前版本 ${displayVersion(ver)}` : '当前应用版本'
+  const shellVersion = String(desktopShellVersion.value || packageJson.version || '').trim()
+  const backendVersion = String(healthAppVersion.value || '').trim()
+  const gitSha = String(runtimeHealth.value?.build?.git_sha || '').trim()
+  return [
+    shellVersion ? `桌面/UI ${displayVersion(shellVersion)}` : '',
+    backendVersion ? `后端 ${displayVersion(backendVersion)}` : '',
+    gitSha ? `Git ${gitSha.slice(0, 12)}` : '',
+  ].filter(Boolean).join(' · ') || '当前应用版本未知'
+})
+
+const systemStatusTone = computed(() => {
+  if (systemStatusLoading.value && !runtimeHealth.value) return 'loading'
+  if (systemStatusError.value && !runtimeHealth.value) return 'offline'
+  const healthState = String(runtimeHealth.value?.status || '').toLowerCase()
+  const desktopState = String(desktopRuntimeStatus.value?.runtimeStatus || '').toLowerCase()
+  if (healthState === 'unhealthy' || desktopState === 'unhealthy') return 'offline'
+  if (desktopRuntimeStatus.value && desktopRuntimeStatus.value.readyForUi === false) return 'loading'
+  if (
+    healthState === 'degraded' ||
+    desktopState === 'degraded' ||
+    desktopRuntimeStatus.value?.degraded === true
+  ) return 'warning'
+  return 'online'
+})
+
+const systemStatusText = computed(() => {
+  const tone = systemStatusTone.value
+  if (tone === 'loading') return '系统启动中'
+  if (tone === 'offline') return '系统异常'
+  if (tone === 'warning') return '系统降级'
+  return '系统正常'
+})
+
+const systemStatusTitle = computed(() => {
+  const reasons = [
+    ...(Array.isArray(runtimeHealth.value?.degradedReasons)
+      ? runtimeHealth.value.degradedReasons
+      : []),
+    ...(Array.isArray(desktopRuntimeStatus.value?.degradedReasons)
+      ? desktopRuntimeStatus.value.degradedReasons
+      : []),
+  ].map((item) => String(item || '').trim()).filter(Boolean)
+  if (reasons.length) return `${systemStatusText.value}：${[...new Set(reasons)].join('；')}`
+  if (systemStatusError.value) return `${systemStatusText.value}：${systemStatusError.value}`
+  return systemStatusText.value
 })
 
 const sidebarFooterMetaVisible = computed(
@@ -368,13 +420,55 @@ const sidebarFooterMetaVisible = computed(
 
 async function refreshHealthAppVersion() {
   if (shouldShowAdminDeployStatus.value) return
+  systemStatusLoading.value = true
+  systemStatusError.value = ''
   try {
-    const res = await fetch('/api/health', { credentials: 'same-origin' })
-    if (!res.ok) return
-    const data = await res.json()
-    healthAppVersion.value = String(data?.version || '').trim()
-  } catch {
-    /* 健康检查失败时回退 package.json 版本 */
+    const [healthResult, desktopResult] = await Promise.allSettled([
+      fetch('/api/health?lite=true', { credentials: 'same-origin' }),
+      fetch('/api/desktop/status', { credentials: 'same-origin' }),
+    ])
+    if (healthResult.status !== 'fulfilled' || !healthResult.value.ok) {
+      throw new Error('后端健康检查不可达')
+    }
+    const health = await healthResult.value.json()
+    runtimeHealth.value = health && typeof health === 'object' ? health : null
+    healthAppVersion.value = String(health?.version || '').trim()
+    if (desktopResult.status === 'fulfilled' && desktopResult.value.ok) {
+      const desktop = await desktopResult.value.json()
+      desktopRuntimeStatus.value = desktop && typeof desktop === 'object' ? desktop : null
+    } else {
+      desktopRuntimeStatus.value = null
+      systemStatusError.value = '桌面运行时状态不可达'
+    }
+    if (window.xcagiDesktop?.getAppIdentity) {
+      try {
+        const identity = await window.xcagiDesktop.getAppIdentity()
+        desktopShellVersion.value = String(identity?.version || '').trim()
+      } catch {
+        desktopShellVersion.value = ''
+      }
+    }
+  } catch (error) {
+    runtimeHealth.value = null
+    desktopRuntimeStatus.value = null
+    systemStatusError.value = error instanceof Error ? error.message : String(error || '状态未知')
+  } finally {
+    systemStatusLoading.value = false
+  }
+}
+
+function startSystemStatusPolling() {
+  if (systemStatusPollTimer != null) return
+  void refreshHealthAppVersion()
+  systemStatusPollTimer = window.setInterval(() => {
+    void refreshHealthAppVersion()
+  }, 30_000)
+}
+
+function stopSystemStatusPolling() {
+  if (systemStatusPollTimer != null) {
+    window.clearInterval(systemStatusPollTimer)
+    systemStatusPollTimer = null
   }
 }
 
@@ -912,13 +1006,14 @@ onMounted(async () => {
   }
   syncAdminDeployStatusPolling()
   syncEntitlementSyncPolling()
-  void refreshHealthAppVersion()
+  startSystemStatusPolling()
 })
 
 onBeforeUnmount(() => {
   clearReorderGesture()
   stopAdminDeployStatusPolling()
   stopEntitlementSyncPolling()
+  stopSystemStatusPolling()
   if (entitlementSyncNoticeTimer != null) {
     window.clearTimeout(entitlementSyncNoticeTimer)
     entitlementSyncNoticeTimer = null
@@ -943,6 +1038,24 @@ onBeforeUnmount(() => {
   margin-bottom: 0;
   flex-shrink: 0;
   min-width: 0;
+}
+
+.sidebar-status-mods-row .status-dot.warning {
+  background: #f59e0b;
+}
+
+.sidebar-status-mods-row .status-dot.offline {
+  background: #ef4444;
+}
+
+.sidebar-status-mods-row .status-dot.loading {
+  background: #60a5fa;
+  animation: sidebar-status-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes sidebar-status-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
 }
 
 .sidebar-update-chip {

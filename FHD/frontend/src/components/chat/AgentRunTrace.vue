@@ -114,6 +114,7 @@ const STATUS_LABELS: Record<string, string> = {
   failed: '失败',
   waiting: '等待确认',
   blocked: '已阻断',
+  cancelled: '已取消',
 }
 
 const statusLabel = computed(() => STATUS_LABELS[props.trace.status] || props.trace.status)
@@ -148,7 +149,9 @@ function markerFor(p: TracePhase): string {
     if (p.status === 'blocked') return '⚠'
     return '▸'
   }
-  return p.status === 'success' ? '●' : '✗'
+  if (p.status === 'success') return '●'
+  if (p.status === 'cancelled') return '■'
+  return '✗'
 }
 
 function fallbackTitle(p: TracePhase): string {
@@ -263,6 +266,7 @@ function onAutoApprove(toolId: string) {
 .art-trace.is-failed { border-left-color: var(--art-red); }
 .art-trace.is-waiting { border-left-color: var(--art-amber); }
 .art-trace.is-blocked { border-left-color: var(--art-gray); }
+.art-trace.is-cancelled { border-left-color: var(--art-gray); }
 
 /* Header：单行 inline */
 .art-head {
@@ -286,6 +290,7 @@ function onAutoApprove(toolId: string) {
 .is-success .art-dot { background: var(--art-green); }
 .is-failed .art-dot { background: var(--art-red); }
 .is-waiting .art-dot { background: var(--art-amber); }
+.is-cancelled .art-dot { background: var(--art-gray); }
 
 .art-intent {
   color: var(--art-fg);

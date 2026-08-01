@@ -5,7 +5,11 @@ from unittest.mock import patch
 
 import pytest
 
-from app.application.agent_orchestrator.chat_trace import attach_chat_trace_run
+from app.application.agent_orchestrator.chat_trace import (
+    attach_chat_trace_run,
+    finalize_legacy_chat_run,
+    start_legacy_chat_run,
+)
 from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
 
 
@@ -70,6 +74,42 @@ def test_attach_chat_trace_run_accepts_explicit_intent() -> None:
     assert run.intent == "excel_import_to_db"
     assert run.metadata["channel"] == "deterministic_workflow"
     assert run.metadata["runtime_context"]["workflow_trace_mode"] == "deterministic_shortcut"
+
+
+def test_legacy_chat_cannot_claim_business_mutation_without_tool_receipt() -> None:
+    repo = InMemoryAgentRunRepository()
+    context = {
+        "recent_messages": [
+            {"role": "user", "content": "有哪些客户"},
+            {"role": "ai", "content": "当前共有 1 位客户：候雪梅"},
+        ]
+    }
+    with patch(
+        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+        return_value=repo,
+    ):
+        started = start_legacy_chat_run(
+            message="去掉候雪梅",
+            runtime_context=context,
+            user_id="u1",
+        )
+        result = finalize_legacy_chat_run(
+            started.run_id,
+            {"success": True, "response": "已经删掉了。", "data": {"text": "已经删掉了。"}},
+            message="去掉候雪梅",
+            runtime_context=context,
+            user_id="u1",
+        )
+
+    assert result["success"] is False
+    assert result["error_code"] == "unverified_business_mutation"
+    assert result["execution_receipt"]["executed"] is False
+    assert "未确认执行" in result["response"]
+    run = repo.get(started.run_id)
+    assert run is not None
+    assert run.status == "failed"
+    assert run.metadata["business_mutation_evidence_gate"] == "blocked"
+    assert run.tool_calls == []
 
 
 def test_attach_chat_trace_run_records_llm_calls(tmp_path, monkeypatch) -> None:
