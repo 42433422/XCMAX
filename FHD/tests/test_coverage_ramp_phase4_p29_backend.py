@@ -34,7 +34,9 @@ def test_route_shipment_number_style_order() -> None:
 def test_route_customers_query_with_keyword() -> None:
     rr = route_normal_mode_message("查询甲公司的客户")
     assert rr["intent"] == "customers_query"
-    assert "甲公司" in str(rr["slots"].get("keyword", ""))
+    # 新设计：路由只负责选工具，禁止正则把问句抽成客户名 keyword
+    # （指名检索由 Agent 在工具参数里填 keyword）。
+    assert str(rr["slots"].get("keyword", "")) == ""
 
 
 def test_route_inventory_alert() -> None:
@@ -98,13 +100,15 @@ def test_build_product_query_wrong_intent() -> None:
 
 
 def test_build_customers_query_response_dict(monkeypatch: pytest.MonkeyPatch) -> None:
-    mock_cls = MagicMock()
-    mock_cls.return_value.search.return_value = [
-        {"customer_name": "甲公司", "contact_person": "张三"}
-    ]
-    fake_mod = types.ModuleType("app.services.customers_service")
-    fake_mod.CustomerService = mock_cls  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "app.services.customers_service", fake_mod)
+    # 实现已切换为 erp domain handler（与 GET /api/customers 同源），mock 新依赖。
+    monkeypatch.setattr(
+        "app.mod_sdk.erp_domain_dispatch.try_invoke_erp_domain_handler",
+        lambda *args, **kwargs: {
+            "success": True,
+            "data": [{"customer_name": "甲公司", "contact_person": "张三"}],
+            "total": 1,
+        },
+    )
     rr = route_normal_mode_message("查甲公司客户")
     body = build_customers_query_response_dict(rr)
     assert body is not None

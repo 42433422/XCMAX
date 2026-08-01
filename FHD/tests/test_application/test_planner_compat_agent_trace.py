@@ -39,7 +39,9 @@ def _sse_payloads(chunks: list[bytes]) -> list[dict]:
 @pytest.mark.asyncio
 async def test_execute_compat_chat_attaches_agent_run_id() -> None:
     repo = InMemoryAgentRunRepository()
-    body = XcagiCompatChatBody(message="查库存", user_id="u42", source="desktop")
+    # 用非业务问法，避免命中 normal slot 只读短路（customers/products/inventory），
+    # 确保走 legacy planner 对话路径。
+    body = XcagiCompatChatBody(message="你好，聊聊天", user_id="u42", source="desktop")
 
     with (
         patch(
@@ -120,7 +122,8 @@ async def test_execute_compat_chat_attaches_agent_run_id() -> None:
 
 @pytest.mark.asyncio
 async def test_execute_compat_chat_uses_ai_chat_mainline_when_enabled() -> None:
-    body = XcagiCompatChatBody(message="查询产品库", user_id="u42", source="desktop")
+    # 用非业务问法，避免命中 normal slot 只读短路而绕过 AI chat mainline。
+    body = XcagiCompatChatBody(message="介绍一下你自己", user_id="u42", source="desktop")
 
     with (
         patch("app.application.planner_compat_service.set_llm_mode"),
@@ -186,7 +189,9 @@ async def test_execute_compat_chat_uses_ai_chat_mainline_when_enabled() -> None:
 @pytest.mark.asyncio
 async def test_execute_compat_chat_observes_reply_tool_records_across_thread() -> None:
     repo = InMemoryAgentRunRepository()
-    body = XcagiCompatChatBody(message="查产品 5003", user_id="u42", source="desktop")
+    # 用非业务问法，避免命中 normal slot 只读短路（products.query），
+    # 确保走 legacy planner 对话路径以观察 reply 中的工具记录。
+    body = XcagiCompatChatBody(message="讲个笑话吧", user_id="u42", source="desktop")
     reply = {
         "response": "查询完成",
         "text": "查询完成",

@@ -213,7 +213,8 @@ class TestMergeRuntimeFallbackParams:
         node = WorkflowNode(node_id="n1", tool_id="customers", action="query", params={})
         params = {}
         engine._merge_runtime_fallback_params(node, params, {"message": "find customer"})
-        assert params["keyword"] == "find customer"
+        # customers.query 空检索词 = 列表/计数，禁止把用户原话当客户名注入 keyword。
+        assert "keyword" not in params
 
     def test_no_message(self):
         engine = _make_engine()

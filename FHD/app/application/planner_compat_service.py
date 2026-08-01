@@ -84,6 +84,17 @@ def _request_session_candidates(request: Request) -> list[str]:
         _append(_session_id_from_request(request))
     except Exception:  # noqa: BLE001 - request identity derivation is best effort
         logger.debug("planner session candidate extraction failed", exc_info=True)
+
+    # session_id_from_request 现在优先返回本地 cookie（市场 Bearer 不再盖掉本地
+    # session），所以这里显式把原始 Bearer 追加为最后的兜底候选，保持
+    # 「host 会话优先、市场 token 兜底」的候选契约。
+    try:
+        auth_raw = headers.get("Authorization") or ""
+        auth = auth_raw if isinstance(auth_raw, str) else ""
+        if auth.startswith("Bearer "):
+            _append(auth[7:].strip())
+    except (AttributeError, TypeError):
+        pass
     return candidates
 
 
@@ -390,22 +401,6 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> di
         logger.debug("kitten planner context enrich skipped", exc_info=True)
         kitten_extra = {}
 
-    from app.application.normal_chat_dispatch import try_normal_slot_read_payload
-
-    slot_payload = try_normal_slot_read_payload(body.message, request=request)
-    if isinstance(slot_payload, dict) and slot_payload.get("response"):
-        return _attach_compat_chat_trace(
-            slot_payload,
-            body,
-            message=body.message,
-            runtime_context=runtime_context,
-            channel=(
-                "compat_chat_agent_tool"
-                if slot_payload.get("agent_tool_dispatch")
-                else "compat_chat_slot"
-            ),
-        )
-
     ok_read, read_req = _ensure_chat_db_read_authorized(
         request,
         message=body.message,
@@ -434,6 +429,25 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> di
         )
     if ok_read and _message_requires_db_read_token(body.message):
         runtime_context["chat_db_read_authorized"] = True
+
+    # 槽位只读短路必须放在 DB 读授权之后：customers/products 等确定性工具
+    # 同样读库，不得绕过 DB_READ_TOKEN 门禁。
+    from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+
+    slot_payload = try_normal_slot_read_payload(body.message, request=request)
+    if isinstance(slot_payload, dict) and slot_payload.get("response"):
+        return _attach_compat_chat_trace(
+            slot_payload,
+            body,
+            message=body.message,
+            runtime_context=runtime_context,
+            channel=(
+                "compat_chat_agent_tool"
+                if slot_payload.get("agent_tool_dispatch")
+                else "compat_chat_slot"
+            ),
+        )
+
     intr = planner_workflow_interrupt_reply(body.message)
     if intr is not None:
         cleared = runtime_context_after_workflow_interrupt(runtime_context)

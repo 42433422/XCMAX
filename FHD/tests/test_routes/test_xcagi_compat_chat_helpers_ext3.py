@@ -1369,9 +1369,11 @@ class TestXcagiGuardedPlannerStreamEventsAdditional:
                     client=Mock(),
                 )
             )
-        assert len(results) == 2
-        assert results[0]["text"] == "hello"
-        assert results[1]["text"] == " world"
+        assert len(results) == 3
+        # 首个为 connecting ephemeral 事件（市场 SSE 首包延迟时的即时 ACK）
+        assert results[0]["phase"] == "connecting"
+        assert results[1]["text"] == "hello"
+        assert results[2]["text"] == " world"
 
     def test_exception_in_worker_yields_error(self):
         """Test that exception in worker yields error event."""
@@ -1407,9 +1409,10 @@ class TestXcagiGuardedPlannerStreamEventsAdditional:
                     client=Mock(),
                 )
             )
-        # Should yield error event
-        assert len(results) == 1
-        assert results[0]["type"] == "error"
+        # Should yield connecting ack first, then the error event
+        assert len(results) == 2
+        assert results[0]["phase"] == "connecting"
+        assert results[1]["type"] == "error"
 
 
 # ---------------------------------------------------------------------------

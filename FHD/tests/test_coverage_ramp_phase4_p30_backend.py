@@ -154,16 +154,13 @@ def test_build_inventory_alert_no_low_stock(mock_get: MagicMock) -> None:
 
 
 def test_build_customers_query_empty_list(monkeypatch: pytest.MonkeyPatch) -> None:
-    import sys
-    import types
-
-    mock_cls = MagicMock()
-    mock_cls.return_value.search.return_value = []
-    fake_mod = types.ModuleType("app.services.customers_service")
-    fake_mod.CustomerService = mock_cls  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "app.services.customers_service", fake_mod)
+    # 实现已切换为 erp domain handler（与 GET /api/customers 同源），mock 新依赖。
+    monkeypatch.setattr(
+        "app.mod_sdk.erp_domain_dispatch.try_invoke_erp_domain_handler",
+        lambda *args, **kwargs: {"success": True, "data": []},
+    )
 
     rr = {"intent": "customers_query", "slots": {"keyword": "不存在公司"}}
     body = build_customers_query_response_dict(rr)
     assert body is not None
-    assert "未找到" in body["response"]
+    assert "没有查到" in body["response"]
