@@ -27,6 +27,14 @@ on:
         description: "失败 workflow 所在分支"
         required: false
         default: ""
+      head_repo:
+        description: "失败 workflow 的 head 仓库（fork 保护）"
+        required: false
+        default: ""
+
+concurrency:
+  group: ai-self-heal-${{ github.repository_id }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -75,7 +83,8 @@ jobs:
         run: |
           python scripts/ci/ai_self_heal.py \
             --workflow "${{ github.event.workflow_run.name }}" \
-            --branch "${{ github.event.workflow_run.head_branch }}"
+            --branch "${{ github.event.workflow_run.head_branch }}" \
+            --head-repo "${{ github.event.workflow_run.head_repository.full_name }}"
 
       - name: Run ai-self-heal (manual dispatch)
         if: ${{ github.event_name == 'workflow_dispatch' }}
@@ -84,4 +93,5 @@ jobs:
           python scripts/ci/ai_self_heal.py \
             --run-id ${{ inputs.run_id }} \
             --workflow "${{ inputs.workflow_name }}" \
-            --branch "${{ inputs.branch }}"
+            --branch "${{ inputs.branch }}" \
+            --head-repo "${{ inputs.head_repo }}"
