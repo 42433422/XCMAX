@@ -35,7 +35,7 @@ def _manifest(employee_id: str) -> dict:
 
 
 def _module(employee_id: str) -> ModuleType:
-    module_name = EMPLOYEES[employee_id]
+    module_name = EMPLOYEES.get(employee_id) or employee_id.replace("-", "_")
     path = EMPLOYEE_ROOT / employee_id / "backend" / "employees" / f"{module_name}.py"
     spec = importlib.util.spec_from_file_location(f"test_{module_name}", path)
     assert spec is not None and spec.loader is not None
@@ -130,6 +130,54 @@ def test_knowledge_curator_rejects_unverified_fact() -> None:
     assert output["status"] == "rejected"
     assert output["accepted_entries"] == []
     assert output["rejected_entries"][0]["reasons"] == ["not_verified"]
+
+
+@pytest.mark.parametrize(
+    ("employee_id", "payload"),
+    [
+        ("doc-knowledge-curator", {"facts": []}),
+        ("ecosystem-delivery-reporter", {"deliveries": []}),
+        ("ecosystem-revenue-share-reconciler", {"entries": []}),
+        ("enterprise-adoption-officer", {"tenants": []}),
+    ],
+)
+def test_authoritative_empty_input_is_no_effect_not_handler_failure(
+    employee_id: str, payload: dict
+) -> None:
+    output = _module(employee_id).run(payload, {})
+
+    assert output["ok"] is True
+    assert output["status"] == "no_data"
+    assert output["no_effect"] is True
+    assert output["read_only"] is True
+    assert output["side_effects"] == []
+
+
+def test_empty_payment_ledger_is_no_effect_not_reconciled() -> None:
+    manifest = json.loads(
+        (EMPLOYEE_ROOT / "payment-billing-reconciler" / "manifest.json").read_text()
+    )
+    path = (
+        EMPLOYEE_ROOT
+        / "payment-billing-reconciler"
+        / "backend"
+        / "employees"
+        / "payment_billing_reconciler.py"
+    )
+    spec = importlib.util.spec_from_file_location("test_payment_billing_reconciler", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    output = module.run({"ledger": {"orders": [], "payments": [], "refunds": []}}, {})
+
+    assert output["ok"] is True
+    assert output["status"] == "no_data"
+    assert output["reconciled"] is False
+    required = manifest["employee_config_v2"]["actions"]["direct_python"]["output_schema"][
+        "required"
+    ]
+    assert set(required).issubset(output)
 
 
 def test_quality_validator_requires_matching_employee_module() -> None:
