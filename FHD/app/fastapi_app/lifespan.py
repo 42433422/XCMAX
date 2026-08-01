@@ -409,9 +409,13 @@ async def _init_memory_graph_async(app: FastAPI):
         )
 
         app_service = get_default_app_service()
-        app.state.memory_decay_task = asyncio.create_task(run_memory_decay_task(app_service))
+        stop_event = asyncio.Event()
+        app.state.memory_graph_stop_event = stop_event
+        app.state.memory_decay_task = asyncio.create_task(
+            run_memory_decay_task(app_service, stop_event=stop_event)
+        )
         app.state.memory_cache_refresh_task = asyncio.create_task(
-            run_memory_cache_refresh_task(app_service)
+            run_memory_cache_refresh_task(app_service, stop_event=stop_event)
         )
         logger.info("✅ Persy 记忆图谱定时任务已启动（衰减 24h / 缓存刷新 30min）")
     except RECOVERABLE_ERRORS as exc:

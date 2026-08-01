@@ -39,6 +39,7 @@ async def run_memory_decay_task(
     interval_hours: int = DEFAULT_DECAY_INTERVAL_HOURS,
     scope: str = "project",
     scope_id: str = "XCMAX",
+    stop_event: asyncio.Event | None = None,
 ) -> None:
     """定时执行权重衰减 + 自动归档。
 
@@ -47,9 +48,12 @@ async def run_memory_decay_task(
         interval_hours: 调度间隔（小时），默认 24。
         scope: 作用域类型。
         scope_id: 作用域内的标识。
+        stop_event: 优雅停机信号；set 后循环退出（lifespan shutdown 时触发，
+            task.cancel() 仍作为兜底）。
     """
+    stop = stop_event or asyncio.Event()
     interval_seconds = max(1, interval_hours * 3600)
-    while True:
+    while not stop.is_set():
         try:
             await asyncio.sleep(interval_seconds)
             # 延迟导入，避免模块加载阶段触发 DB 引擎构造
