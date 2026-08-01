@@ -1,0 +1,7 @@
+{
+  "generated_at": "2026-08-01T10:01:50Z",
+  "prometheus_url": "unavailable",
+  "window": "seed",
+  "readings": {},
+  "note": "Prometheus unreachable; bootstrap from sla-snapshot.json"
+}
