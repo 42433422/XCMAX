@@ -62,6 +62,7 @@ def test_publish_verifies_review_listing_and_download(tmp_path: Path) -> None:
                 {
                     "ok": True,
                     "idempotent": False,
+                    "semantic_indexed": False,
                     "package": {"id": "receipt-verifier", "version": "1.2.3", "sha256": digest},
                     "review": {"summary": {"pass": True, "average": 96}},
                 }
@@ -98,6 +99,7 @@ def test_publish_verifies_review_listing_and_download(tmp_path: Path) -> None:
 
     assert receipt["status"] == "published"
     assert receipt["sha256"] == digest
+    assert receipt["semantic_indexed"] is False
     assert receipt["catalog_item_id"] == 42
     assert [method for method, _ in calls] == ["POST", "GET", "GET", "GET"]
 

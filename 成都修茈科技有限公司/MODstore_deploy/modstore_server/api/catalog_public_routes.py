@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import secrets
@@ -42,6 +43,7 @@ from modstore_server.models import get_session_factory
 from modstore_server.vector_store import insert_embedding, query_similar
 
 router = APIRouter(prefix="/v1", tags=["catalog"])
+logger = logging.getLogger(__name__)
 
 
 def _is_customer_delivery_seed(row: Dict[str, Any] | None) -> bool:
@@ -59,6 +61,39 @@ def _invalidate_catalog_list_caches(pkg_id: Any = None, version: Any = None) -> 
 
     if pkg_id and version:
         cache.delete(f"catalog:v1:pkg:{pkg_id}:{version}")
+
+
+def _try_index_catalog_item(record: Dict[str, Any]) -> bool:
+    """Best-effort semantic indexing after the durable catalog write.
+
+    Catalog publication and its public download are the source of truth.  A
+    vector provider outage must not turn a committed, reviewed publication
+    into an HTTP 500.  Idempotent retries call this helper again so a transient
+    indexing outage can recover without creating another listing.
+    """
+    embedding_text = f"{record.get('name', '')} {record.get('description', '')}"
+    if not embedding_text.strip():
+        return False
+    try:
+        item_id = f"{record.get('id')}:{record.get('version')}"
+        insert_embedding(
+            item_id=item_id,
+            text=embedding_text,
+            metadata={
+                "pkg_id": record.get("id"),
+                "version": record.get("version"),
+                "artifact": record.get("artifact", "mod"),
+                "industry": record.get("industry", "通用"),
+            },
+        )
+    except Exception:  # noqa: BLE001 - optional index must not undo publication
+        logger.exception(
+            "catalog semantic indexing degraded pkg_id=%s version=%s",
+            record.get("id"),
+            record.get("version"),
+        )
+        return False
+    return True
 
 
 def _upload_token() -> str:
@@ -335,12 +370,14 @@ async def api_upload_package(
             existing = append_package(existing, None)
         _upsert_market_listing(existing, public_listing=public_listing)
         _invalidate_catalog_list_caches(existing.get("id"), existing.get("version"))
+        semantic_indexed = _try_index_catalog_item(existing)
         return {
             "ok": True,
             "idempotent": True,
             "package": existing,
             "review": existing_review,
             "public_listing": public_listing,
+            "semantic_indexed": semantic_indexed,
         }
 
     rep = await run_package_audit_async(raw_bytes, audit_meta if audit_meta else None)
@@ -377,19 +414,7 @@ async def api_upload_package(
     # Invalidate all list/index caches; individual detail keys expire on their own TTL.
     _invalidate_catalog_list_caches(saved.get("id"), saved.get("version"))
 
-    embedding_text = f"{saved.get('name', '')} {saved.get('description', '')}"
-    if embedding_text.strip():
-        item_id = f"{saved.get('id')}:{saved.get('version')}"
-        insert_embedding(
-            item_id=item_id,
-            text=embedding_text,
-            metadata={
-                "pkg_id": saved.get("id"),
-                "version": saved.get("version"),
-                "artifact": saved.get("artifact", "mod"),
-                "industry": saved.get("industry", "通用"),
-            },
-        )
+    semantic_indexed = _try_index_catalog_item(saved)
 
     return {
         "ok": True,
@@ -397,6 +422,7 @@ async def api_upload_package(
         "package": saved,
         "review": review,
         "public_listing": public_listing,
+        "semantic_indexed": semantic_indexed,
     }
 
 
