@@ -1756,6 +1756,7 @@ def _register_employee_cron_jobs() -> None:
             build_employee_cron_candidates,
         )
         from modstore_server.employee_cron_registration_ledger import (
+            defer_employee_cron_if_approval_required,
             reconcile_employee_cron_registrations,
             record_employee_cron_registration,
         )
@@ -1782,7 +1783,7 @@ def _register_employee_cron_jobs() -> None:
 
     registered = 0
     skipped = 0
-    registered_ids: set[str] = set()
+    represented_ids: set[str] = set()
     for emp_id, manifest, contract in candidates:
         sched = _extract_employee_schedule(manifest) or contract_schedule(contract)
         if not sched:
@@ -1795,6 +1796,10 @@ def _register_employee_cron_jobs() -> None:
         enabled = sched.get("enabled", True)
         if not enabled:
             skipped += 1
+            continue
+
+        if defer_employee_cron_if_approval_required(emp_id, contract):
+            represented_ids.add(emp_id)
             continue
 
         trigger = None
@@ -1842,7 +1847,7 @@ def _register_employee_cron_jobs() -> None:
         try:
             _scheduler.add_job(_runner, trigger, id=job_id, replace_existing=True)
             registered += 1
-            registered_ids.add(emp_id)
+            represented_ids.add(emp_id)
             record_employee_cron_registration(emp_id, status="success")
             logger.info(
                 "employee cron registered: %s -> %s",
@@ -1859,7 +1864,7 @@ def _register_employee_cron_jobs() -> None:
             skipped += 1
 
     try:
-        reconcile_employee_cron_registrations(registered_ids)
+        reconcile_employee_cron_registrations(represented_ids)
     except Exception:
         logger.exception("employee cron: registration ledger reconciliation failed")
 

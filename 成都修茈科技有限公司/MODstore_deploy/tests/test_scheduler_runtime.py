@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -61,6 +62,46 @@ def test_track_job_run_failure_reraises_and_records(db_ready):
     assert entry["consecutive_failures"] == 1
     # never succeeded → no last_success
     assert entry["last_success_at"] is None
+
+
+def test_employee_cron_failure_code_is_safe_for_public_runtime(db_ready):
+    from modstore_server.scheduler_runtime import get_runtime_status, record_job_run
+
+    job_id = f"employee_cron:{uuid.uuid4().hex[:12]}"
+    record_job_run(
+        job_id=job_id,
+        status="failed",
+        started_at=datetime.now(timezone.utc),
+        error=(
+            "RuntimeError('employee_cron_unsuccessful:handler_failed:quota "
+            "provider_response=api_key=must-not-leak')"
+        ),
+    )
+
+    entry = _find(get_runtime_status(), job_id)
+    assert entry is not None
+    assert entry["last_error_code"] == "employee_cron_unsuccessful:handler_failed:quota"
+    assert "must-not-leak" not in json.dumps(entry, ensure_ascii=False)
+
+
+def test_deferred_employee_cron_is_not_reported_as_failure(db_ready):
+    from modstore_server.scheduler_runtime import get_runtime_status, record_job_run
+
+    job_id = f"employee_cron_registered:{uuid.uuid4().hex[:12]}"
+    record_job_run(
+        job_id=job_id,
+        status="deferred",
+        started_at=datetime.now(timezone.utc),
+        error="employee_cron_policy_deferred:approval_required_high_risk",
+    )
+
+    status = get_runtime_status()
+    entry = _find(status, job_id)
+    assert entry is not None
+    assert entry["state"] == "deferred"
+    assert entry["consecutive_failures"] == 0
+    assert entry["last_error_code"] == "employee_cron_policy_deferred:approval_required_high_risk"
+    assert status["summary"]["deferred"] >= 1
 
 
 def test_workflow_scheduler_non_daily_job_uses_runtime_ledger(db_ready):
@@ -176,16 +217,26 @@ def test_runtime_status_endpoint(client):
     assert isinstance(body["jobs"], list)
     assert {"total", "healthy", "failing", "stale"} <= set(body["summary"])
     assert "stale_after_seconds" in body
-    assert body["employee_duty"] == {
-        "registration_observable": False,
-        "registered_cron_count": 0,
-        "registration_failing_count": 0,
-        "observed_cron_count": 0,
-        "last_success_count": 0,
-        "failing_count": 0,
-        "never_run_count": 0,
-        "unregistered_observed_count": 0,
+    duty = body["employee_duty"]
+    assert set(duty) == {
+        "registration_observable",
+        "registered_cron_count",
+        "registration_failing_count",
+        "approval_required_count",
+        "observed_cron_count",
+        "last_success_count",
+        "failing_count",
+        "failure_code_counts",
+        "never_run_count",
+        "approval_required_observed_execution_count",
+        "unregistered_observed_count",
     }
+    assert isinstance(duty["registration_observable"], bool)
+    assert isinstance(duty["failure_code_counts"], dict)
+    assert all(
+        isinstance(duty[name], int)
+        for name in set(duty) - {"registration_observable", "failure_code_counts"}
+    )
 
 
 def test_runtime_status_aggregates_registered_employee_duty(monkeypatch):
@@ -218,8 +269,17 @@ def test_runtime_status_aggregates_registered_employee_duty(monkeypatch):
                     "job_id": "employee_cron_registered:registration-failed",
                     "last_status": "failed",
                 },
+                {
+                    "job_id": "employee_cron_registered:approval-required",
+                    "last_status": "deferred",
+                },
                 {"job_id": "employee_cron:one", "last_status": "success"},
-                {"job_id": "employee_cron:two", "last_status": "failed"},
+                {
+                    "job_id": "employee_cron:two",
+                    "last_status": "failed",
+                    "last_error_code": "employee_cron_unsuccessful:handler_failed:quota",
+                },
+                {"job_id": "employee_cron:approval-required", "last_status": "failed"},
                 {"job_id": "employee_cron:old-unregistered", "last_status": "success"},
             ],
             "summary": {"total": 3, "healthy": 2, "failing": 1, "stale": 0},
@@ -232,10 +292,13 @@ def test_runtime_status_aggregates_registered_employee_duty(monkeypatch):
         "registration_observable": True,
         "registered_cron_count": 3,
         "registration_failing_count": 1,
+        "approval_required_count": 1,
         "observed_cron_count": 2,
         "last_success_count": 1,
         "failing_count": 1,
+        "failure_code_counts": {"employee_cron_unsuccessful:handler_failed:quota": 1},
         "never_run_count": 1,
+        "approval_required_observed_execution_count": 1,
         "unregistered_observed_count": 1,
     }
     assert body["storage_pressure"]["latest"]["status"] == "healthy_no_action"

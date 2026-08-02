@@ -5,6 +5,53 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
+_SAFE_FAILURE_KINDS = frozenset({"quota", "transient", "prompt"})
+
+
+def _result_failure_kind(result: dict[str, Any]) -> str:
+    """Classify a failed result without returning its potentially sensitive error."""
+
+    declared = str(result.get("failure_kind") or "").strip().lower()
+    if declared in _SAFE_FAILURE_KINDS:
+        return declared
+
+    candidates: list[object] = [result.get("error")]
+    nested = result.get("result") if isinstance(result.get("result"), dict) else {}
+    for output in nested.get("outputs") or []:
+        if not isinstance(output, dict):
+            continue
+        candidates.append(output.get("error"))
+        detail = output.get("output") if isinstance(output.get("output"), dict) else {}
+        candidates.append(detail.get("error"))
+
+    from modstore_server.llm_failure_classifier import classify_failure_kind
+
+    for candidate in candidates:
+        text = str(candidate or "").strip()
+        if text:
+            return classify_failure_kind(text)
+    return ""
+
+
+def _unsuccessful_code(result: dict[str, Any], status: str) -> str:
+    if result.get("blocked_by_risk_gate") or status == "blocked_by_risk_gate":
+        return "blocked_by_risk_gate"
+    if result.get("handler_failed") or status == "handler_failed":
+        outcome = "handler_failed"
+    elif result.get("ok") is False or status == "failed":
+        outcome = "execution_failed"
+    else:
+        outcome = status or "execution_failed"
+    kind = _result_failure_kind(result)
+    return f"{outcome}:{kind}" if kind in _SAFE_FAILURE_KINDS else outcome
+
+
+def _execution_exception_code(exc: Exception) -> str:
+    from modstore_server.llm_failure_classifier import classify_failure_kind
+
+    kind = classify_failure_kind(str(exc)) or "unknown"
+    return f"employee_cron_execution_exception:{kind}"
+
 
 def _require_success(result: Any) -> dict[str, Any]:
     if not isinstance(result, dict):
@@ -16,7 +63,7 @@ def _require_success(result: Any) -> dict[str, Any]:
         or result.get("blocked_by_risk_gate")
         or status in {"failed", "handler_failed", "blocked_by_risk_gate"}
     ):
-        raise RuntimeError(f"employee_cron_unsuccessful:{status or 'execution_failed'}")
+        raise RuntimeError(f"employee_cron_unsuccessful:{_unsuccessful_code(result, status)}")
     return result
 
 
@@ -73,11 +120,14 @@ def execute_employee_cron_duty(
             resolve_employee_duty_input,
         )
 
-        resolved_input = resolve_employee_duty_input(employee_id)
+        try:
+            resolved_input = resolve_employee_duty_input(employee_id)
+        except Exception as exc:
+            raise RuntimeError("employee_cron_input_resolution_failed") from exc
         if resolved_input is not None:
             input_data.update(dict(resolved_input.get("input_data") or {}))
-        result = _require_success(
-            employee_executor.execute_employee_task(
+        try:
+            execution = employee_executor.execute_employee_task(
                 employee_id,
                 task_brief,
                 input_data,
@@ -88,7 +138,9 @@ def execute_employee_cron_duty(
                     (bench_provider, bench_model) if bench_provider and bench_model else None
                 ),
             )
-        )
+        except Exception as exc:
+            raise RuntimeError(_execution_exception_code(exc)) from exc
+        result = _require_success(execution)
         if resolved_input is not None:
             result["duty_input_receipt"] = dict(resolved_input.get("receipt") or {})
         return result

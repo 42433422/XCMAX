@@ -9,7 +9,7 @@ import pytest
 
 from modstore_server import employee_duty_filesystem_inputs as filesystem_inputs
 from modstore_server import employee_duty_input_resolver as resolver
-from modstore_server.employee_duty_cron_runtime import execute_employee_cron_duty
+from modstore_server.employee_duty_cron_runtime import _require_success, execute_employee_cron_duty
 
 NOW = datetime(2026, 8, 1, 9, 0, tzinfo=timezone.utc)
 
@@ -386,6 +386,27 @@ def test_llm_ops_input_is_local_and_secret_free(
 def test_unsupported_employee_preserves_existing_execution_path(receipts: Path) -> None:
     assert resolver.resolve_employee_duty_input("unmapped-employee", now=NOW) is None
     assert not receipts.exists()
+
+
+def test_cron_failure_receipt_exposes_only_safe_failure_kind() -> None:
+    with pytest.raises(
+        RuntimeError,
+        match="employee_cron_unsuccessful:handler_failed:quota",
+    ):
+        _require_success(
+            {
+                "handler_failed": True,
+                "result": {
+                    "outputs": [
+                        {
+                            "handler": "agent",
+                            "ok": False,
+                            "error": "403: insufficient quota api_key=must-not-leak",
+                        }
+                    ]
+                },
+            }
+        )
 
 
 def test_receipt_ledger_rotates_before_growth(
