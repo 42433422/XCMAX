@@ -5,7 +5,11 @@ from types import SimpleNamespace
 
 import pytest
 
+from modstore_server import (
+    retort_clarification_gate,
+)
 from modstore_server import self_maintenance_loop_runner as loop_runner
+from modstore_server import self_maintenance_retort_change_evidence as retort_change_evidence
 from modstore_server.autonomous_risk_gate import (
     _historical_rollback_rate as _historical_rollback_rate_v3,
 )
@@ -534,6 +538,177 @@ def test_changed_files_falls_back_after_configured_transport_clone_failure(monke
 
     assert files == ["FHD/app/fallback.py"]
     assert [item[-2] for item in clone_commands] == [para_transport, public_origin]
+
+
+def test_github_compare_changed_files_uses_configured_repository(monkeypatch):
+    captured = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return b'{"files":[{"filename":"FHD/app/example.py"}]}'
+
+    def fake_urlopen(request, timeout):
+        captured["timeout"] = timeout
+        captured["url"] = request.full_url
+        captured["user_agent"] = request.get_header("User-agent")
+        return FakeResponse()
+
+    monkeypatch.setattr(retort_change_evidence, "urlopen", fake_urlopen)
+
+    assert retort_change_evidence.github_compare_changed_files(
+        repo_url="git@github.com:example/XCMAX.git",
+        base_branch="main",
+        branch="devfleet/codex/sub-1",
+    ) == ["FHD/app/example.py"]
+    assert captured == {
+        "timeout": 30,
+        "url": "https://api.github.com/repos/example/XCMAX/compare/main...devfleet%2Fcodex%2Fsub-1",
+        "user_agent": "xcmax-self-maintenance",
+    }
+
+
+def test_retort_change_evidence_uses_github_compare_after_git_diff_failure(monkeypatch, tmp_path):
+    cleaned = []
+    monkeypatch.setattr(
+        retort_change_evidence,
+        "github_compare_changed_files",
+        lambda **kwargs: ["FHD/app/example.py"],
+    )
+
+    result = retort_change_evidence.resolve_retort_change_evidence(
+        run_id="run-github-compare",
+        branch="devfleet/codex/sub-1",
+        repo_url="https://github.com/example/XCMAX.git",
+        base_branch="main",
+        memory={},
+        workspace_root=tmp_path / "runtime",
+        changed_files_for_branch=lambda workspace: (_ for _ in ()).throw(
+            RuntimeError("git transport down")
+        ),
+        cleanup_workspace=lambda workspace: cleaned.append(workspace) or True,
+    )
+
+    assert result == {
+        "changed_files": ["FHD/app/example.py"],
+        "errors": ["git_diff:RuntimeError"],
+        "source": "github_compare",
+    }
+    assert cleaned == [tmp_path / "runtime" / "retort-review-gate" / "run-github-compare"]
+
+
+def test_retort_change_evidence_marks_transport_loss_without_human_hold(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        retort_change_evidence,
+        "github_compare_changed_files",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("compare down")),
+    )
+
+    result = retort_change_evidence.resolve_retort_change_evidence(
+        run_id="run-no-evidence",
+        branch="devfleet/codex/sub-1",
+        repo_url="https://github.com/example/XCMAX.git",
+        base_branch="main",
+        memory={},
+        workspace_root=tmp_path / "runtime",
+        changed_files_for_branch=lambda workspace: (_ for _ in ()).throw(
+            RuntimeError("git transport down")
+        ),
+        cleanup_workspace=lambda workspace: True,
+    )
+
+    assert result == {
+        "changed_files": [],
+        "errors": ["git_diff:RuntimeError", "github_compare:RuntimeError"],
+        "source": "unavailable",
+        "skip_reason": "gate_change_evidence_unavailable",
+    }
+
+
+def test_retort_clarification_uses_github_paths_after_git_diff_failure(monkeypatch, tmp_path):
+    monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(tmp_path / "runtime"))
+    monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
+    monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://github.com/example/XCMAX.git")
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_RETORT_CLARIFICATION", "1")
+    monkeypatch.setattr(
+        loop_runner.retort_change_evidence,
+        "resolve_retort_change_evidence",
+        lambda **kwargs: {
+            "changed_files": ["FHD/app/example.py"],
+            "errors": ["git_diff:RuntimeError"],
+            "source": "github_compare",
+        },
+    )
+    monkeypatch.setattr(retort_clarification_gate, "gate_enabled", lambda: True)
+    monkeypatch.setattr(
+        retort_clarification_gate,
+        "evaluate_retort_clarification_gate",
+        lambda **kwargs: {"aligned": True, "blockers": [], "clarification": None},
+    )
+
+    result = loop_runner._evaluate_retort_clarification_before_review(
+        run_id="run-github-compare",
+        branch="devfleet/codex/sub-1",
+        para_task_id="task-github-compare",
+        memory={},
+    )
+
+    assert result["blocked"] is False
+    assert result["reason"] == "aligned_or_not_needed"
+    assert result["changed_file_count"] == 1
+    assert result["change_evidence"] == {
+        "changed_files": ["FHD/app/example.py"],
+        "errors": ["git_diff:RuntimeError"],
+        "source": "github_compare",
+    }
+
+
+def test_retort_clarification_skips_human_question_without_change_evidence(monkeypatch, tmp_path):
+    monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(tmp_path / "runtime"))
+    monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
+    monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://github.com/example/XCMAX.git")
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_RETORT_CLARIFICATION", "1")
+    monkeypatch.setattr(
+        loop_runner.retort_change_evidence,
+        "resolve_retort_change_evidence",
+        lambda **kwargs: {
+            "changed_files": [],
+            "errors": ["git_diff:RuntimeError", "github_compare:RuntimeError"],
+            "source": "unavailable",
+            "skip_reason": "gate_change_evidence_unavailable",
+        },
+    )
+    monkeypatch.setattr(retort_clarification_gate, "gate_enabled", lambda: True)
+    monkeypatch.setattr(
+        retort_clarification_gate,
+        "evaluate_retort_clarification_gate",
+        lambda **kwargs: pytest.fail("Retort must not receive fabricated empty paths"),
+    )
+
+    result = loop_runner._evaluate_retort_clarification_before_review(
+        run_id="run-no-evidence",
+        branch="devfleet/codex/sub-1",
+        para_task_id="task-no-evidence",
+        memory={},
+    )
+
+    assert result == {
+        "blocked": False,
+        "reason": "gate_change_evidence_unavailable",
+        "changed_file_count": 0,
+        "change_evidence": {
+            "changed_files": [],
+            "errors": ["git_diff:RuntimeError", "github_compare:RuntimeError"],
+            "source": "unavailable",
+            "skip_reason": "gate_change_evidence_unavailable",
+        },
+        "para_task_id": "task-no-evidence",
+    }
 
 
 def test_dynamic_low_risk_policy_allows_self_maintenance_code_and_tests(monkeypatch):

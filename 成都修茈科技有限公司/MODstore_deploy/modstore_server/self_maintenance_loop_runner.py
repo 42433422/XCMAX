@@ -31,6 +31,7 @@ from urllib.parse import unquote, urlparse
 import httpx
 from apscheduler.triggers.cron import CronTrigger
 
+from . import self_maintenance_retort_change_evidence as retort_change_evidence
 from . import self_maintenance_retort_remediation as retort_remediation
 from .duty_employee_registry import duty_employee_records
 from .duty_roster import SIX_LINE_DEPARTMENTS, all_planned_employee_ids
@@ -2758,33 +2759,40 @@ def _evaluate_retort_clarification_before_review(
     if not gate_enabled():
         return {"blocked": False, "reason": "gate_disabled"}
 
-    changed_files: List[str] = []
     base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
     repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
     target = str(branch or "").strip()
-    if repo_url and base_branch and target:
-        workspace_root = _runtime_dir() / DEFAULT_MERGE_WORKSPACE_ROOT
-        workspace = workspace_root / "retort-review-gate" / str(run_id or "run")
-        try:
-            changed_files = _changed_files_for_branch(
-                repo_url=repo_url,
-                base_branch=base_branch,
-                branch=target,
-                workspace=workspace,
-            )
-        except Exception as exc:  # noqa: BLE001 - fall back to memory hints
-            logger.warning(
-                "retort clarification branch diff failed run_id=%s err=%s",
-                run_id,
-                type(exc).__name__,
-            )
-        finally:
-            _cleanup_merge_workspace(workspace)
-
-    if not changed_files:
-        mem_files = memory.get("changed_files") if isinstance(memory, dict) else None
-        if isinstance(mem_files, list):
-            changed_files = [str(x).strip() for x in mem_files if str(x).strip()][:80]
+    change_evidence = retort_change_evidence.resolve_retort_change_evidence(
+        run_id=run_id,
+        branch=target,
+        repo_url=repo_url,
+        base_branch=base_branch,
+        memory=memory,
+        workspace_root=_runtime_dir() / DEFAULT_MERGE_WORKSPACE_ROOT,
+        changed_files_for_branch=lambda workspace: _changed_files_for_branch(
+            repo_url=repo_url,
+            base_branch=base_branch,
+            branch=target,
+            workspace=workspace,
+        ),
+        cleanup_workspace=_cleanup_merge_workspace,
+    )
+    changed_files = list(change_evidence.get("changed_files") or [])
+    if change_evidence.get("skip_reason"):
+        reason = str(change_evidence["skip_reason"])
+        logger.warning(
+            "retort clarification skipped run_id=%s reason=%s source=%s",
+            run_id,
+            reason,
+            change_evidence.get("source"),
+        )
+        return {
+            "blocked": False,
+            "reason": reason,
+            "changed_file_count": 0,
+            "change_evidence": change_evidence,
+            "para_task_id": para_task_id,
+        }
 
     intent_bits = [
         f"self-maintenance review run {run_id}",
@@ -2820,6 +2828,7 @@ def _evaluate_retort_clarification_before_review(
             "reason": reason,
             "blockers": blockers,
             "clarification": gate.get("clarification"),
+            "change_evidence": change_evidence,
             "changed_file_count": len(changed_files),
             "para_task_id": para_task_id,
         }
@@ -2828,6 +2837,7 @@ def _evaluate_retort_clarification_before_review(
         "reason": "aligned_or_not_needed",
         "blockers": blockers,
         "clarification": gate.get("clarification"),
+        "change_evidence": change_evidence,
         "changed_file_count": len(changed_files),
         "aligned": bool(gate.get("aligned")),
     }

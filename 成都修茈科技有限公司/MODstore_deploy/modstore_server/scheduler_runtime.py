@@ -38,6 +38,15 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class DeferredJobRun(Exception):
+    """Record an expected policy hold without treating it as a job failure.
+
+    The underlying operation keeps its own hold/veto evidence. This exception
+    only tells the runtime ledger that a reviewed policy boundary, rather than
+    an execution error, ended the scheduler run.
+    """
+
+
 def _as_utc(dt: datetime | None) -> datetime | None:
     """把可能是 naive（SQLite 回读）的时间戳统一成 aware-UTC，避免比较时炸。"""
     if dt is None:
@@ -80,15 +89,20 @@ def record_job_run(
 
 @contextmanager
 def track_job_run(job_id: str, *, node_id: str = "") -> Iterator[None]:
-    """包住一次 job 执行：退出时记录成功/失败 + 耗时。
+    """包住一次 job 执行：退出时记录成功/失败/受控延迟 + 耗时。
 
     抛异常时记为 ``failed`` 并**原样重抛**——job 自身的错误处理不变，只是被观测。
+    ``DeferredJobRun`` is the explicit exception: it is recorded as
+    ``deferred`` and suppressed because the policy hold is expected.
     """
     started = _utcnow()
     status = "success"
     error = ""
     try:
         yield
+    except DeferredJobRun as exc:
+        status = _DEFERRED_STATUS
+        error = str(exc)
     except Exception as exc:
         status = "failed"
         error = repr(exc)
@@ -234,6 +248,7 @@ def get_runtime_status(
 
 __all__ = [
     "DEFAULT_STALE_AFTER_SECONDS",
+    "DeferredJobRun",
     "get_runtime_status",
     "record_job_run",
     "record_skip",
