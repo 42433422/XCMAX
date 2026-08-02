@@ -55,7 +55,7 @@ def _iter_payload_dicts(payload: dict[str, Any], max_depth: int = 3) -> Iterator
                 stack.append((nested, depth + 1))
 
 
-def _legacy_tool_records(payload: dict[str, Any]) -> list[dict[str, Any]]:
+def legacy_tool_records(payload: dict[str, Any]) -> list[dict[str, Any]]:
     for item in _iter_payload_dicts(payload):
         for key in ("legacy_tool_records", "_tool_records", "tool_records"):
             records = item.get(key)
@@ -83,7 +83,7 @@ def _verified_mutation_evidence(payload: dict[str, Any]) -> bool:
             and receipt.get("verified") is True
         ):
             return True
-    for record in _legacy_tool_records(payload):
+    for record in legacy_tool_records(payload):
         action = str(record.get("action") or "").strip().lower()
         output = record.get("output")
         if action in _MUTATING_TOOL_ACTIONS and isinstance(output, dict) and output.get("success"):

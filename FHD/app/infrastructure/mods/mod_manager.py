@@ -37,11 +37,7 @@ def is_mods_disabled() -> bool:
 
 
 def _default_mods_root() -> str:
-    """
-    解析 mods 根目录。
-    源码树：app/infrastructure/mods/mod_manager.py；默认 mods 目录为 XCAGI/mods（由 run.py 设置 XCAGI_MODS_ROOT）
-    若包装进 site-packages，上一级不再是项目根，需回退到环境变量或从 cwd 向上查找。
-    """
+    """Resolve the MOD root across source and packaged layouts."""
     logger.debug("[_default_mods_root] Resolving mods root, CWD: %s", os.getcwd())
 
     env = (os.environ.get("XCAGI_MODS_ROOT") or os.environ.get("XCAGI_MODS_DIR") or "").strip()
@@ -1169,28 +1165,11 @@ def load_employee_pack_routes(app, mod_manager: ModManager | None = None) -> Non
     if desktop_admin_employee_runtime_disabled():
         logger.debug("desktop SKU skips admin employee_pack route registration")
         return
-    root = mod_manager.mods_root
-    emp_root = os.path.join(root, "_employees")
-    if not os.path.isdir(emp_root):
-        return
-    for name in sorted(os.listdir(emp_root)):
-        pack_path = os.path.join(emp_root, name)
-        if not os.path.isdir(pack_path):
-            continue
-        mf = os.path.join(pack_path, "manifest.json")
-        if not os.path.isfile(mf):
-            continue
-        try:
-            with open(mf, encoding="utf-8") as f:
-                data = json.load(f)
-        except (OSError, json.JSONDecodeError):
-            continue
-        if normalize_artifact(data) != ARTIFACT_EMPLOYEE_PACK:
-            continue
-        pack_id = str(data.get("id") or name).strip()
-        if not pack_id:
-            continue
-        register_employee_pack_routes(app, mod_manager, pack_id)
+    from app.infrastructure.mods.employee_pack_routes import register_employee_pack_routes_from_root
+
+    register_employee_pack_routes_from_root(
+        app, mod_manager, mod_manager.mods_root, register_employee_pack_routes
+    )
 
 
 def _resolve_mod_metadata_for_http(mod_manager: ModManager, mod_id: str) -> ModMetadata | None:
@@ -1349,20 +1328,6 @@ def _mod_allowed_for_api_load(mod_id: str, session_id: str | None = None) -> boo
     return False
 
 
-def _mod_is_installed_locally(manager: object, mod_id: str) -> bool:
-    """Resolve installation state without requiring every test/adapter to expose ModManager internals."""
-    resolver = getattr(manager, "resolve_mod_directory", None)
-    if callable(resolver):
-        return bool(resolver(mod_id))
-    mods_root = getattr(manager, "mods_root", None)
-    if mods_root:
-        from pathlib import Path
-
-        return (Path(str(mods_root)) / mod_id).is_dir()
-    # Third-party/test managers predating local resolution cannot prove absence.
-    return True
-
-
 def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
     """
     访问 /api/mod/{mod_id}/... 前确保 Mod 已 load 且 HTTP 路由已挂载。
@@ -1378,7 +1343,9 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
 
     mm = get_mod_manager()
     if mid not in mm._loaded_mods:
-        if not _mod_is_installed_locally(mm, mid):
+        from app.infrastructure.mods.mod_installation_state import mod_is_installed_locally
+
+        if not mod_is_installed_locally(mm, mid):
             _MOD_API_FAILURE_RETRY_AT.pop(mid, None)
             # Entitlement and local installation are separate states.  Keep a
             # single actionable runtime issue instead of retrying the loader
@@ -1467,8 +1434,10 @@ def _entitled_client_mod_ids_for_api_mount(session_id: str | None = None) -> lis
     # Only installed mods may enter the API mount/load path; a later poll sees
     # a newly installed directory immediately without creating failure loops.
     try:
+        from app.infrastructure.mods.mod_installation_state import filter_installed_mod_ids
+
         manager = get_mod_manager()
-        candidates = {mid for mid in candidates if _mod_is_installed_locally(manager, mid)}
+        candidates = filter_installed_mod_ids(manager, candidates)
     except RECOVERABLE_ERRORS:
         logger.debug("filter locally uninstalled entitled mods skipped", exc_info=True)
 

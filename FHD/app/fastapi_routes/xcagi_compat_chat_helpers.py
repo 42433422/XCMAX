@@ -39,6 +39,7 @@ from app.domain.context.session_context import (
     planner_workflow_interrupt_reply,
     runtime_context_after_workflow_interrupt,
 )
+from app.fastapi_routes.compat_stream_receipt import attach_first_run_receipt
 from app.infrastructure.auth.db_token import effective_db_read_token
 from app.infrastructure.llm.client import set_mode as set_llm_mode
 from app.legacy.chat.legacy_chat_adapter import chat_stream_sse_events
@@ -764,12 +765,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 text = str(ev.get("text") or "")
                 if not ev.get("ephemeral"):
                     reply_parts.append(text)
-                outgoing_event = ev
-                if pre_run is not None and not run_receipt_sent:
-                    # Attach the durable receipt to the existing first token so
-                    # older clients keep exactly the same SSE event sequence.
-                    outgoing_event = _sse_payload_with_run_id(ev, pre_run.run_id)
-                    run_receipt_sent = True
+                outgoing_event, run_receipt_sent = attach_first_run_receipt(ev, getattr(pre_run, "run_id", None), run_receipt_sent, _sse_payload_with_run_id)
                 yield _sse_event_line(outgoing_event)
             elif et == "requires_token":
                 if pre_run is not None:

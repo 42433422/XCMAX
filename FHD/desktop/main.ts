@@ -44,6 +44,7 @@ import { DesktopAutonomyAdapter } from './autonomy/desktop-adapter'
 import { backendCrashPolicy } from './autonomy/policies/backend-crash.policy'
 import { degradedRemediationPolicy } from './autonomy/policies/degraded-remediation.policy'
 import { updateRollbackPolicy } from './autonomy/policies/update-rollback.policy'
+import { sanitizeBackendProxyEnvValues } from './network/backend-proxy-env'
 
 const APP_NAME = 'XCAGI'
 const KELLAI_BUNDLE_ID = 'com.kellai.desktop'
@@ -332,45 +333,7 @@ export function readJsonTextFile(filePath: string): string {
 export function sanitizeBackendProxyEnv(
   env: NodeJS.ProcessEnv | Record<string, string | undefined>
 ): Record<string, string | undefined> {
-  const next: Record<string, string | undefined> = { ...env }
-  // Desktop backend talks to xiu-ci.com for chat SSE. Clash/HTTP_PROXY often
-  // returns 502 HTML for that stream and the UI shows 首包超时. Chromium OTA
-  // already has its own PAC bypass; the Python child must not inherit proxies.
-  // Note: Clash TUN (utun + 198.18.0.0/16) still intercepts at OS route level —
-  // env sanitize cannot bypass TUN; prefer DIRECT rule for xiu-ci.com.
-  // Keep a copy for optional market ConnectError fallback (Python trust_env=False
-  // + XCAGI_MARKET_FALLBACK_PROXY), without re-enabling global HTTP(S)_PROXY.
-  const fallbackProxy =
-    String(next.XCAGI_MARKET_FALLBACK_PROXY || '').trim() ||
-    String(next.HTTPS_PROXY || next.https_proxy || next.HTTP_PROXY || next.http_proxy || '').trim()
-  for (const key of [
-    'ALL_PROXY',
-    'all_proxy',
-    'HTTP_PROXY',
-    'HTTPS_PROXY',
-    'http_proxy',
-    'https_proxy',
-    'XCMAX_CLI_PROXY',
-  ] as const) {
-    delete next[key]
-  }
-  if (fallbackProxy) {
-    next.XCAGI_MARKET_FALLBACK_PROXY = fallbackProxy
-  }
-  next.XCAGI_MARKET_CONNECT_TIMEOUT = String(next.XCAGI_MARKET_CONNECT_TIMEOUT || '20')
-  next.XCAGI_MARKET_CONNECT_ATTEMPTS = String(next.XCAGI_MARKET_CONNECT_ATTEMPTS || '3')
-  const bypass = OTA_PROXY_BYPASS_RULES.split(',')
-    .map(s => s.trim())
-    .filter(s => s && s !== '<local>')
-  const existing = String(next.NO_PROXY || next.no_proxy || '')
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean)
-  const merged = Array.from(new Set([...existing, ...bypass, '::1']))
-  const joined = merged.join(',')
-  next.NO_PROXY = joined
-  next.no_proxy = joined
-  return next
+  return sanitizeBackendProxyEnvValues(env, OTA_PROXY_BYPASS_RULES)
 }
 
 export function backendEditionEnv(): Record<string, string> {

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 from typing import Any, cast
@@ -10,6 +9,13 @@ from typing import Any, cast
 from fastapi import APIRouter, Body, Depends, File, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
+from app.fastapi_routes.domains.auth.enterprise_session import (
+    _schedule_official_market_session_refresh as _schedule_enterprise_session_refresh,
+)
+from app.fastapi_routes.domains.auth.enterprise_session import (
+    entitled_mod_ids_for_session,
+    market_session_mode,
+)
 from app.http.error_codes import (
     ACCOUNT_DISABLED,
     CREATE_FAILED,
@@ -100,50 +106,6 @@ def _account_profile_fields(user: Any, session_meta: dict[str, Any]) -> dict[str
         else False,
         "mfa_enabled": bool(getattr(user, "mfa_enabled", False)) if user is not None else False,
     }
-
-
-def _desktop_runtime_active() -> bool:
-    """True only for the packaged/local desktop backend process."""
-
-    return os.environ.get("XCAGI_DESKTOP_MODE", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-
-
-async def _refresh_enterprise_session_after_first_paint(session_id: str) -> None:
-    """Refresh official-market identity and entitlements without blocking desktop entry.
-
-    The desktop session itself is still verified synchronously from the local
-    signed-in session row.  This task is only the remote confirmation layer:
-    an unavailable official site must not turn a valid, already-signed-in
-    desktop into a login screen during an update or cold start.
-    """
-
-    try:
-        from app.enterprise.mod_entitlements import sync_entitlements_for_session
-        from app.fastapi_routes.market_account import resolve_valid_market_access_token
-
-        market_token = await resolve_valid_market_access_token(session_id)
-        if not market_token:
-            logger.warning(
-                "desktop enterprise session has no valid official market token after refresh"
-            )
-            return
-        await sync_entitlements_for_session(session_id)
-    except Exception:  # noqa: BLE001 - detached startup refresh must never crash the server
-        logger.exception("desktop enterprise session background refresh failed")
-
-
-def _schedule_enterprise_session_refresh(session_id: str) -> None:
-    """Schedule remote official-account work after the desktop can render."""
-
-    asyncio.create_task(
-        _refresh_enterprise_session_after_first_paint(session_id),
-        name="xcagi-enterprise-session-refresh",
-    )
 
 
 @router.get("/api/auth/me")
@@ -302,79 +264,31 @@ async def auth_session_validate(request: Request):
             status_code=200,
         )
 
-    is_enterprise = False
     desktop_refresh_pending = False
     try:
-        from app.mod_sdk.product_skus import resolve_product_sku
-
-        is_enterprise = resolve_product_sku() == "enterprise"
-        if is_enterprise and _desktop_runtime_active():
-            # A desktop session is created only after successful official-account
-            # authentication and carries a persisted market token.  Read it
-            # locally so an update/cold start is not held behind the official
-            # website's network latency; absent local proof still requires login.
-            from app.fastapi_routes.market_account import session_market_token
-
-            if not session_market_token(session_id):
-                return JSONResponse(
-                    {
-                        **error_envelope(
-                            MARKET_NOT_BOUND,
-                            (
-                                "企业版需使用修茈市场企业级账号登录。"
-                                "若此前仅用本地管理员进入，请退出后重新登录。"
-                            ),
-                        ),
-                        "valid": False,
-                    },
-                    status_code=200,
-                )
-            desktop_refresh_pending = True
-            _schedule_enterprise_session_refresh(session_id)
-        elif is_enterprise:
-            from app.fastapi_routes.market_account import resolve_valid_market_access_token
-
-            market_tok = await resolve_valid_market_access_token(session_id)
-            if not market_tok:
-                return JSONResponse(
-                    {
-                        **error_envelope(
-                            MARKET_NOT_BOUND,
-                            (
-                                "企业版需使用修茈市场企业级账号登录。"
-                                "若此前仅用本地管理员进入，请退出后重新登录。"
-                            ),
-                        ),
-                        "valid": False,
-                    },
-                    status_code=200,
-                )
+        session_mode = await market_session_mode(
+            session_id, schedule_refresh=_schedule_enterprise_session_refresh
+        )
+        if session_mode == "missing":
+            return JSONResponse(
+                {
+                    **error_envelope(
+                        MARKET_NOT_BOUND,
+                        "企业版需使用修茈市场企业级账号登录。若此前仅用本地管理员进入，请退出后重新登录。",
+                    ),
+                    "valid": False,
+                },
+                status_code=200,
+            )
+        desktop_refresh_pending = session_mode == "desktop"
     except INFRA_TRANSIENT:
         logger.exception("enterprise market session check on validate failed")
 
     entitled_mod_ids: list[str] = []
     try:
-        from app.enterprise.mod_entitlements import (
-            get_cached_entitled_client_mod_ids,
-            restore_entitlements_from_session_row,
-            sync_entitlements_for_session,
+        entitled_mod_ids = await entitled_mod_ids_for_session(
+            session_id, desktop_refresh_pending=desktop_refresh_pending
         )
-
-        if desktop_refresh_pending:
-            # Restore the last verified entitlement snapshot from the local
-            # session row.  The task above refreshes it from the official site.
-            restore_entitlements_from_session_row(session_id)
-            cached = get_cached_entitled_client_mod_ids()
-            if cached is not None:
-                entitled_mod_ids = sorted(cached)
-        else:
-            entitled = await sync_entitlements_for_session(session_id)
-            if entitled:
-                entitled_mod_ids = sorted(entitled)
-            else:
-                cached = get_cached_entitled_client_mod_ids()
-                if cached is not None:
-                    entitled_mod_ids = sorted(cached)
     except INFRA_TRANSIENT:
         logger.exception("sync enterprise entitlements on validate failed")
     user = resolve_session_user(request)

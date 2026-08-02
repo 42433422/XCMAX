@@ -415,53 +415,12 @@ def start_scheduler() -> None:
 
     autonomy_scheduler.register_autonomy_jobs(_scheduler, _scheduler_startup_recovery_deadlines)
 
-    def _dead_letter_reconcile_job() -> None:
-        try:
-            from modstore_server.dead_letter_reconciler import reconcile_dead_letters
-
-            result = _run_tracked_scheduler_job(
-                "dead_letter_reconciler",
-                lambda: reconcile_dead_letters(limit=200),
-            )
-            if result.get("checked") or result.get("unresolved_count"):
-                logger.info(
-                    "dead-letter reconciliation checked=%s replay=%s quarantined=%s "
-                    "deferred=%s unresolved=%s storage_ok=%s",
-                    result.get("checked"),
-                    result.get("replay_scheduled"),
-                    result.get("quarantined"),
-                    result.get("deferred"),
-                    result.get("unresolved_count"),
-                    bool((result.get("storage") or {}).get("ok")),
-                )
-        except Exception:
-            logger.exception("dead-letter reconciliation failed")
-
-    _scheduler.add_job(
-        _dead_letter_reconcile_job,
-        IntervalTrigger(minutes=max(1, _env_int("MODSTORE_DLQ_RECONCILE_MINUTES", 5))),
-        id="dead_letter_reconciler",
-        replace_existing=True,
-        misfire_grace_time=_cleanup_misfire_grace_time(),
-        coalesce=True,
-        max_instances=1,
+    from modstore_server.scheduler_maintenance import register_dead_letter_reconciliation
+    register_dead_letter_reconciliation(
+        _scheduler, _run_tracked_scheduler_job, _env_int, _cleanup_misfire_grace_time, logger
     )
-    _dead_letter_reconcile_job()
-
-    from modstore_server.incident_bus import dispatch_pending_incidents
-
-    _scheduler.add_job(
-        dispatch_pending_incidents,
-        IntervalTrigger(
-            seconds=max(15, _env_int("MODSTORE_INCIDENT_DISPATCH_PENDING_INTERVAL", 30))
-        ),
-        id="incident_dispatch_pending",
-        replace_existing=True,
-        misfire_grace_time=_cleanup_misfire_grace_time(),
-        coalesce=True,
-        max_instances=1,
-        kwargs={"max_age_seconds": 3600, "limit": 5},
-    )
+    from modstore_server.incident_scheduler import register_pending_incident_dispatch
+    register_pending_incident_dispatch(_scheduler, _env_int, _cleanup_misfire_grace_time)
 
     def _customer_value_reconcile_job() -> None:
         if not _env_bool("MODSTORE_CUSTOMER_VALUE_RECONCILE_ENABLED", True):

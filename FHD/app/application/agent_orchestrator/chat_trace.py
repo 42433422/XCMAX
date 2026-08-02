@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from collections.abc import Iterator
 from typing import Any
 from uuid import uuid4
@@ -23,6 +22,18 @@ from app.application.agent_orchestrator.run_models import (
 from app.application.agent_orchestrator.run_repository import (
     AgentRunRepository,
     get_agent_run_repository,
+)
+from app.application.agent_orchestrator.trace_scalars import (
+    coerce_trace_float as _coerce_trace_float,
+)
+from app.application.agent_orchestrator.trace_scalars import (
+    coerce_trace_int as _coerce_trace_int,
+)
+from app.application.business_mutation_evidence import (
+    apply_business_mutation_evidence_gate,
+)
+from app.application.business_mutation_evidence import (
+    legacy_tool_records as _extract_legacy_tool_records,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -188,150 +199,6 @@ def _extract_low_risk_tool_call(
                 continue
             return spec.tool_id, spec.action, dict(params), dict(tool_call)
     return None
-
-
-def _extract_legacy_tool_records(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    for item in _iter_payload_dicts(payload):
-        for key in ("legacy_tool_records", "_tool_records", "tool_records"):
-            records = item.get(key)
-            if isinstance(records, list):
-                return [record for record in records if isinstance(record, dict)]
-    return []
-
-
-_BUSINESS_MUTATION_VERB_RE = re.compile(
-    r"删除|删掉|去掉|移除|注销|新增|添加|创建|录入|写入|入库|导入|"
-    r"修改|更新|改成|改为|撤销|取消|提交|审批|批准",
-    re.IGNORECASE,
-)
-_BUSINESS_ENTITY_RE = re.compile(
-    r"客户|购买单位|买家|客商|产品|商品|物料|材料|库存|发货单|送货单|"
-    r"订单|报价|价格|员工|人员|考勤|请假|数据库|ERP",
-    re.IGNORECASE,
-)
-_MUTATION_COMPLETION_CLAIM_RE = re.compile(
-    r"(?:已经|已|成功|完成).{0,10}(?:删除|删掉|去掉|移除|注销|新增|添加|创建|"
-    r"录入|写入|入库|导入|修改|更新|撤销|取消|提交|批准)|"
-    r"(?:删除|删掉|去掉|移除|注销|新增|添加|创建|录入|写入|入库|导入|"
-    r"修改|更新|撤销|取消|提交|批准).{0,10}(?:成功|完成|了)",
-    re.IGNORECASE,
-)
-_MUTATING_TOOL_ACTIONS = {
-    "create",
-    "ensure_exists",
-    "upsert",
-    "update",
-    "delete",
-    "batch_delete",
-    "write",
-    "import",
-    "import_records",
-    "import_delivery_notes",
-    "submit",
-    "approve",
-    "cancel",
-}
-
-
-def _business_context_present(
-    message: str,
-    runtime_context: dict[str, Any] | None,
-) -> bool:
-    if _BUSINESS_ENTITY_RE.search(str(message or "")):
-        return True
-    recent = (runtime_context or {}).get("recent_messages") if runtime_context else None
-    if not isinstance(recent, list):
-        return False
-    return any(
-        isinstance(item, dict) and _BUSINESS_ENTITY_RE.search(str(item.get("content") or ""))
-        for item in recent[-6:]
-    )
-
-
-def _verified_mutation_evidence(payload: dict[str, Any]) -> bool:
-    for item in _iter_payload_dicts(payload):
-        receipt = item.get("execution_receipt") or item.get("business_receipt")
-        if (
-            isinstance(receipt, dict)
-            and receipt.get("executed") is True
-            and receipt.get("verified") is True
-        ):
-            return True
-    for record in _extract_legacy_tool_records(payload):
-        action = str(record.get("action") or "").strip().lower()
-        output = record.get("output")
-        if action in _MUTATING_TOOL_ACTIONS and isinstance(output, dict) and output.get("success"):
-            return True
-    return False
-
-
-def _guard_unverified_business_mutation_claim(
-    payload: dict[str, Any],
-    *,
-    message: str,
-    runtime_context: dict[str, Any] | None,
-) -> bool:
-    """Fail closed when model prose claims a business write without a receipt."""
-
-    response_text = " ".join(
-        str(value or "")
-        for value in (
-            payload.get("response"),
-            payload.get("message"),
-            _payload_data(payload).get("text"),
-        )
-    )
-    if payload.get("success") is False:
-        return False
-    if not _BUSINESS_MUTATION_VERB_RE.search(str(message or "")):
-        return False
-    if not _business_context_present(message, runtime_context):
-        return False
-    if not _MUTATION_COMPLETION_CLAIM_RE.search(response_text):
-        return False
-    if _verified_mutation_evidence(payload):
-        return False
-
-    safe_text = (
-        "业务变更未确认执行：没有检测到可验证的业务工具调用或写入回执。"
-        "系统未把模型回复当成数据库变更结果，请从结构化任务卡重新执行。"
-    )
-    receipt = {
-        "domain": "business_data",
-        "operation": "mutation",
-        "status": "unverified",
-        "executed": False,
-        "verified": False,
-        "affected_rows": 0,
-        "reason": "missing_verified_tool_receipt",
-    }
-    payload["success"] = False
-    payload["message"] = safe_text
-    payload["response"] = safe_text
-    payload["error_code"] = "unverified_business_mutation"
-    payload["execution_receipt"] = receipt
-    data = _payload_data(payload)
-    if not data:
-        data = {}
-        payload["data"] = data
-    data["text"] = safe_text
-    data["error_code"] = "unverified_business_mutation"
-    data["execution_receipt"] = receipt
-    return True
-
-
-def _coerce_trace_int(value: Any) -> int:
-    try:
-        return int(value or 0)
-    except (TypeError, ValueError):
-        return 0
-
-
-def _coerce_trace_float(value: Any) -> float:
-    try:
-        return float(value or 0)
-    except (TypeError, ValueError):
-        return 0.0
 
 
 def _iter_llm_trace_payloads(payload: dict[str, Any]) -> Iterator[dict[str, Any]]:
@@ -1665,10 +1532,11 @@ def finalize_legacy_chat_run(
             intent=intent,
         )
 
-    evidence_blocked = _guard_unverified_business_mutation_claim(
+    apply_business_mutation_evidence_gate(
         payload,
         message=message,
         runtime_context=runtime_context,
+        metadata=run.metadata,
     )
     status = _payload_status(payload)
     records = _extract_legacy_tool_records(payload)
@@ -1678,9 +1546,6 @@ def finalize_legacy_chat_run(
     run.metadata["source"] = str(source or "").strip()
     run.metadata["trace_mode"] = "legacy_planner_run"
     run.metadata["runtime_context"] = _trace_safe_value(runtime_context or {})
-    run.metadata["business_mutation_evidence_gate"] = (
-        "blocked" if evidence_blocked else "not_triggered"
-    )
     run.add_event(
         "planner.completed",
         "执行计划已生成",

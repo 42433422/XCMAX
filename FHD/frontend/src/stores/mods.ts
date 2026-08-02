@@ -33,13 +33,13 @@ import {
 import { applyEditionPackPlatformShell } from '@/constants/platformShellMode';
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
 import { filterWorkflowRegistrySourceMods } from '@/utils/modWorkflowEmployees';
+import { isSelectableModInfo, pickEntitledModId } from '@/utils/modSelection';
 import {
   ACCOUNT_CUSTOM_MOD_IDS,
   CLIENT_PRIMARY_ERP_MOD_ID,
   isAuxEmployeePackModId,
   isClientErpSidebarContext,
   isHostMountedModMenuPath,
-  isSelectableExtensionModId,
   shouldHideAttendanceModSidebarMenu,
   shouldSuppressClientErpModMenuId,
 } from '@/constants/genericModPack';
@@ -293,47 +293,6 @@ function entitlementMatchesMod(modId: string, entitledSet: Set<string>): boolean
   return false;
 }
 
-/** employee_pack 是员工能力，不是当前行业/业务 Mod，不能写入全局 Active-Mod 头。 */
-function isSelectableModInfo(mod: ModInfo): boolean {
-  const id = String(mod.id || '').trim();
-  if (!id || !isSelectableExtensionModId(id)) return false;
-  const type = String(mod.type || '').trim().toLowerCase();
-  const artifact = String(mod.artifact || '').trim().toLowerCase();
-  return type !== 'employee_pack' && artifact !== 'employee_pack';
-}
-
-function pickModIdFromEntitled(
-  entitledModIds: string[],
-  modsList: ModInfo[],
-  primaryErpModId: string,
-): string {
-  const entitledSet = new Set(entitledModIds);
-  const selectable = modsList.filter((m) => {
-    const id = String(m.id || '').trim();
-    if (!isSelectableModInfo(m)) return false;
-    return entitledSet.size === 0 || entitlementMatchesMod(id, entitledSet);
-  });
-  if (!selectable.length) return '';
-
-  const customHit = selectable.find((m) => {
-    const id = String(m.id || '').trim();
-    return isAccountCustomModId(id) && entitledSet.has(id);
-  });
-  if (customHit) return String(customHit.id || '').trim();
-
-  if (primaryErpModId && entitlementMatchesMod(primaryErpModId, entitledSet)) {
-    const erpHit = selectable.find((m) => String(m.id || '').trim() === primaryErpModId);
-    if (erpHit) return primaryErpModId;
-  }
-
-  const primaryHit = selectable.find(
-    (m) => m.primary && entitlementMatchesMod(String(m.id || '').trim(), entitledSet),
-  );
-  if (primaryHit) return String(primaryHit.id || '').trim();
-
-  return String(selectable[0].id || '').trim();
-}
-
 export const useModsStore = defineStore('mods', () => {
   const mods = ref<ModInfo[]>([]);
   const modRoutes = ref<ModRoute[]>([]);
@@ -498,7 +457,9 @@ export const useModsStore = defineStore('mods', () => {
 
     let next = '';
     if (!next && (force || !current || !entitlementMatchesMod(current, entitledSet))) {
-      next = pickModIdFromEntitled(entitled, mods.value, primaryErp);
+      next = pickEntitledModId(
+        entitled, mods.value, primaryErp, entitlementMatchesMod, isAccountCustomModId,
+      );
     }
     if (!next) return;
 

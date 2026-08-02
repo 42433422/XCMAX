@@ -1277,74 +1277,25 @@ class AIChatApplicationService(
                 approval_nodes = pending.get("approval_nodes", [])
 
                 if approval_required and approval_nodes:
-                    from app.application.agent_orchestrator import AgentOrchestrator
+                    from app.application.approval_submission import (
+                        approval_pending_response,
+                        submit_pending_approval,
+                    )
 
-                    agent_run_id = str(pending.get("agent_run_id") or "").strip()
-                    if agent_run_id:
-                        agent_run, approval_request_ids = AgentOrchestrator().submit_run_for_approval(
-                            agent_run_id,
-                            requested_by=user_id,
-                        )
-                    else:
-                        # Compatibility for pre-AgentRun pending workflows created
-                        # before this process/version upgrade.
-                        approval_request_ids = []
-                        for node_info in approval_nodes:
-                            node = next(
-                                (
-                                    item
-                                    for item in plan.nodes
-                                    if item.node_id == node_info.get("node_id")
-                                ),
-                                None,
-                            )
-                            if node is None:
-                                continue
-                            request = self.approval_service.create_approval_request(
-                                plan_id=plan.plan_id,
-                                node=node,
-                                runtime_context=runtime_ctx,
-                                plan=plan,
-                            )
-                            if not bool(getattr(request, "persistence_confirmed", True)):
-                                continue
-                            request_id = str(getattr(request, "request_id", "") or "").strip()
-                            if request_id:
-                                approval_request_ids.append(request_id)
-                        agent_run = object() if approval_request_ids else None
+                    agent_run_id, approval_request_ids, submitted = submit_pending_approval(
+                        pending=pending, approval_service=self.approval_service, user_id=user_id
+                    )
                     if agent_run_id:
                         self._pending_workflows.pop(user_id, None)
 
-                    approval_inner = {
-                        "plan_id": plan.plan_id,
-                        "run_id": agent_run_id,
-                        "agent_run_id": agent_run_id,
-                        "approval_required": True,
-                        "approval_nodes": approval_nodes,
-                        "approval_request_ids": approval_request_ids,
-                    }
-                    submitted = bool(agent_run and approval_request_ids)
-                    response_text = (
-                        "已提交审批请求，请在审批中心处理；审批通过后任务会从当前步骤继续。"
-                        if submitted
-                        else "审批请求提交失败，持久化任务仍保留，可稍后重试。"
+                    return approval_pending_response(
+                        plan_id=plan.plan_id,
+                        agent_run_id=agent_run_id,
+                        approval_nodes=approval_nodes,
+                        approval_request_ids=approval_request_ids,
+                        submitted=submitted,
+                        enrich_confirmation=_enrich_confirmation_inner,
                     )
-                    return {
-                        "success": submitted,
-                        "message": "处理完成",
-                        "run_id": agent_run_id,
-                        "agent_run_id": agent_run_id,
-                        "response": response_text,
-                        "data": {
-                            "text": response_text,
-                            "action": "approval_pending",
-                            "run_id": agent_run_id,
-                            "agent_run_id": agent_run_id,
-                            "data": _enrich_confirmation_inner(
-                                approval_inner, action="approval_pending"
-                            ),
-                        },
-                    }
 
                 agent_run_id = str(pending.get("agent_run_id") or "").strip()
                 if agent_run_id:
@@ -1586,48 +1537,19 @@ class AIChatApplicationService(
                     for n in approval_required_nodes
                 ],
             }
-            todo_text = "\n".join(f"- {step}" for step in (plan.todo_steps or []))
-            response_text = (
-                "我已根据语义生成动态工作流计划：\n"
-                f"{thinking_steps}\n\n"
-                f"{todo_text}\n\n"
-                f"检测到中高风险步骤（{', '.join(decision.blocking_nodes)}），"
-                "回复「确认」继续执行，回复「取消」终止。"
-                f"{approval_info if has_approval_requirement else ''}"
+            from app.application.approval_submission import workflow_confirmation_response
+
+            return workflow_confirmation_response(
+                plan=plan,
+                thinking_steps=thinking_steps,
+                blocking_nodes=decision.blocking_nodes,
+                reason=decision.reason,
+                approval_required=has_approval_requirement,
+                approval_nodes=approval_required_nodes,
+                approval_info=approval_info,
+                agent_run_id=agent_run_id,
+                enrich_confirmation=_enrich_confirmation_inner,
             )
-            risk_inner = {
-                "plan_id": plan.plan_id,
-                "intent": plan.intent,
-                "thinking_steps": thinking_steps,
-                "todo": plan.todo_steps,
-                "blocking_nodes": decision.blocking_nodes,
-                "reason": decision.reason,
-                "approval_required": has_approval_requirement,
-                "approval_nodes": [
-                    {"node_id": n.node_id, "tool_id": n.tool_id, "action": n.action}
-                    for n in approval_required_nodes
-                ],
-            }
-            payload: dict[str, Any] = {
-                "success": True,
-                "message": "处理完成",
-                "response": response_text,
-                "data": {
-                    "text": response_text,
-                    "action": "workflow_confirmation_required",
-                    "data": _enrich_confirmation_inner(
-                        risk_inner, action="workflow_confirmation_required"
-                    ),
-                },
-            }
-            if agent_run_id:
-                payload["run_id"] = agent_run_id
-                payload["agent_run_id"] = agent_run_id
-                payload["data"]["run_id"] = agent_run_id
-                payload["data"]["agent_run_id"] = agent_run_id
-                payload["data"]["data"]["run_id"] = agent_run_id
-                payload["data"]["data"]["agent_run_id"] = agent_run_id
-            return payload
 
         agentic_pre_run = None
         if use_agentic:

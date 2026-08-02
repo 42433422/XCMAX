@@ -89,7 +89,7 @@ import type {
   TraceToolPhase,
   TraceRunPhase,
 } from '@/utils/agentRunTraceModel'
-import { shouldShowAgentRunPlanGraph } from '@/utils/agentRunTraceModel'
+import { shouldShowAgentRunPlanGraph, traceStatusLabel } from '@/utils/agentRunTraceModel'
 import { traceToMermaid } from '@/utils/agentRunTraceToMermaid'
 import {
   getToolPermission,
@@ -108,16 +108,7 @@ const emit = defineEmits<{
   'grant-tool-permission': [toolId: string, scope: ToolPermissionScope]
 }>()
 
-const STATUS_LABELS: Record<string, string> = {
-  running: '执行中',
-  success: '完成',
-  failed: '失败',
-  waiting: '等待确认',
-  blocked: '已阻断',
-  cancelled: '已取消',
-}
-
-const statusLabel = computed(() => STATUS_LABELS[props.trace.status] || props.trace.status)
+const statusLabel = computed(() => traceStatusLabel(props.trace.status))
 
 const showPlanGraph = computed(() => shouldShowAgentRunPlanGraph(props.trace))
 

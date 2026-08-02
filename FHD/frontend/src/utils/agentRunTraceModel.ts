@@ -85,6 +85,15 @@ export interface TraceRunPhase extends TraceBasePhase {
 
 export type TracePhase = TracePlannerPhase | TraceToolPhase | TraceRunPhase
 
+const TRACE_STATUS_LABELS: Record<TracePhaseStatus, string> = {
+  running: '执行中', success: '完成', failed: '失败', waiting: '等待确认',
+  blocked: '已阻断', cancelled: '已取消',
+}
+
+export function traceStatusLabel(status: TracePhaseStatus): string {
+  return TRACE_STATUS_LABELS[status] || status
+}
+
 export interface AgentRunTraceData {
   run_id: string
   /** 用户消息意图（取自 events data.intent 或 run_id 缩写） */

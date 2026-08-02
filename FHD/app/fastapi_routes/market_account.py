@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
@@ -12,13 +11,14 @@ import uuid
 from collections.abc import Mapping
 from hashlib import sha256
 from typing import Any
-from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
 
 from app.application import market_account_live as _market_account_live
+from app.fastapi_routes import market_http as _market_http
+from app.fastapi_routes.market_auth_normalization import normalize_market_auth_payload
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(prefix="/api/market", tags=["market-account"])
@@ -26,11 +26,11 @@ logger = logging.getLogger(__name__)
 _MARKET_SESSION_TOKENS: dict[str, str] = {}
 _MARKET_SESSION_REFRESH_TOKENS: dict[str, str] = {}
 _ACCOUNT_OVERVIEW_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
-# The desktop makes several authenticated read calls in sequence after a user
-# signs in.  Keep their TLS connection alive per event-loop and token digest;
-# no authorization result is cached and every request still reaches the market.
-_OFFICIAL_MARKET_HOSTS = frozenset({"xiu-ci.com", "www.xiu-ci.com"})
-_MARKET_READ_CLIENTS: dict[tuple[int, str], httpx.AsyncClient] = {}
+_MARKET_READ_CLIENTS = _market_http.MARKET_READ_CLIENTS
+close_market_read_clients = _market_http.close_market_read_clients
+_market_http_timeout = _market_http.market_http_timeout
+_market_auth_timeout = _market_http.market_auth_timeout
+_market_internal_api_key = _market_http.market_internal_api_key
 _bootstrap_overview_needs_live_merge = _market_account_live.bootstrap_overview_needs_live_merge
 
 
@@ -444,69 +444,11 @@ def _error_message(payload: Any, status_code: int) -> str:
     return f"HTTP {status_code}"
 
 
-def _market_http_timeout() -> float:
-    try:
-        return float(os.environ.get("XCAGI_MARKET_HTTP_TIMEOUT", "20"))
-    except ValueError:
-        return 20.0
-
-
-def _market_auth_timeout() -> float:
-    """Bound interactive sign-in separately from slower market data reads."""
-
-    try:
-        return max(3.0, float(os.environ.get("XCAGI_MARKET_AUTH_TIMEOUT", "8")))
-    except ValueError:
-        return 8.0
-
-
 def _market_http_retries() -> int:
     try:
         return max(1, int(os.environ.get("XCAGI_MARKET_HTTP_RETRIES", "1")))
     except ValueError:
         return 1
-
-
-def _is_official_market_base() -> bool:
-    try:
-        return (urlparse(_market_base_url()).hostname or "").lower() in _OFFICIAL_MARKET_HOSTS
-    except ValueError:
-        return False
-
-
-def _market_read_client(authorization: str, timeout: float) -> httpx.AsyncClient:
-    """Return a pooled client for official-market GETs without sharing credentials.
-
-    The pool key contains only a SHA-256 digest of the Authorization value and
-    is scoped to the active event loop.  This reuses a TLS connection for a
-    single authenticated desktop session, while each request continues to send
-    its original authorization header to the official market.
-    """
-    loop = asyncio.get_running_loop()
-    credential_key = sha256(_auth_header(authorization).encode("utf-8")).hexdigest()
-    key = (id(loop), credential_key)
-    client = _MARKET_READ_CLIENTS.get(key)
-    if client is not None and not client.is_closed:
-        return client
-    client = httpx.AsyncClient(
-        timeout=timeout,
-        trust_env=False,
-        limits=httpx.Limits(
-            max_connections=4,
-            max_keepalive_connections=2,
-            keepalive_expiry=45.0,
-        ),
-    )
-    _MARKET_READ_CLIENTS[key] = client
-    return client
-
-
-async def close_market_read_clients() -> None:
-    """Close pooled official-market read clients when the local backend stops."""
-    clients = tuple(_MARKET_READ_CLIENTS.values())
-    _MARKET_READ_CLIENTS.clear()
-    if clients:
-        await asyncio.gather(*(client.aclose() for client in clients), return_exceptions=True)
 
 
 def _account_overview_cache_ttl() -> float:
@@ -565,8 +507,8 @@ async def _proxy_json(
             # Only idempotent reads to the official market reuse a connection.
             # Login, token refresh, and every write retain the isolated client
             # and CSRF-cookie flow below.
-            if not mutating and _is_official_market_base():
-                client = _market_read_client(authorization, timeout)
+            if not mutating and _market_http.is_official_market_base(_market_base_url()):
+                client = _market_http.market_read_client(authorization, timeout, _auth_header)
                 res = await client.request(
                     method,
                     url,
@@ -1159,76 +1101,17 @@ async def _normalize_market_auth_payload(
     timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Turn market login JSON into normalized token payload."""
-    if isinstance(payload, JSONResponse):
-        try:
-            raw_body = json.loads(payload.body.decode("utf-8") if payload.body else "{}")
-        except RECOVERABLE_ERRORS:
-            raw_body = {}
-        status_code = int(payload.status_code or 502)
-        message = (
-            str(raw_body.get("message") or "").strip()
-            or str(raw_body.get("detail") or "").strip()
-            or _error_message(raw_body, status_code)
-        )
-        err = raw_body.get("error") if isinstance(raw_body.get("error"), dict) else {}
-        code = str(err.get("code") or "").strip()
-        if status_code >= 500 and not code:
-            code = "MARKET_AUTH_UNAVAILABLE"
-        return {
-            "success": False,
-            "message": message,
-            "status_code": status_code,
-            "error_code": code
-            or ("MARKET_AUTH_UNAVAILABLE" if status_code >= 500 else "MARKET_AUTH_FAILED"),
-            "raw": raw_body,
-            "market_base_url": market_base or _market_base_url(),
-        }
-    token = _token_from_auth_response(payload)
-    refresh = _refresh_token_from_auth_response(payload)
-    if not token:
-        return {"success": False, "message": "市场登录成功但未返回 access_token", "raw": payload}
-    # Current market login responses carry the signed enterprise/admin claim.
-    # Re-fetching /api/auth/me before creating the local session adds a second
-    # WAN round trip.  Keep the strict profile lookup whenever that positive
-    # claim is absent, so a missing or negative claim cannot grant access.
-    login_is_enterprise, login_is_market_admin, login_user_blob = _market_identity_from_payloads(
-        payload
+    return await normalize_market_auth_payload(
+        payload,
+        market_base=market_base or _market_base_url(),
+        timeout_seconds=timeout_seconds,
+        proxy_json=_proxy_json,
+        token_from_response=_token_from_auth_response,
+        refresh_token_from_response=_refresh_token_from_auth_response,
+        identity_from_payloads=_market_identity_from_payloads,
+        error_message=_error_message,
+        logger=logger,
     )
-    identity_is_sufficient = bool(login_user_blob) and (
-        login_is_enterprise or login_is_market_admin
-    )
-    me: Any = {}
-    if not identity_is_sufficient:
-        me = await _proxy_json(
-            "GET",
-            "/api/auth/me",
-            authorization=f"Bearer {token}",
-            return_error_payload=True,
-            timeout_seconds=timeout_seconds,
-        )
-    is_enterprise, is_market_admin, user_blob = _market_identity_from_payloads(payload, me)
-    logger.info(
-        "market auth normalized base=%s success=True is_enterprise=%s is_market_admin=%s username=%s raw_keys=%s me_keys=%s profile_refresh_skipped=%s",
-        market_base or _market_base_url(),
-        is_enterprise,
-        is_market_admin,
-        str(user_blob.get("username") or ""),
-        sorted(payload.keys()) if isinstance(payload, dict) else [],
-        sorted(me.keys()) if isinstance(me, dict) else [],
-        identity_is_sufficient,
-    )
-    raw_out = dict(payload) if isinstance(payload, dict) else {}
-    if user_blob and not isinstance(raw_out.get("user"), dict):
-        raw_out["user"] = user_blob
-    return {
-        "success": True,
-        "market_base_url": market_base or _market_base_url(),
-        "token": token,
-        "refresh_token": refresh,
-        "is_enterprise": is_enterprise,
-        "is_market_admin": is_market_admin,
-        "raw": raw_out,
-    }
 
 
 async def login_market_with_password(username: str, password: str) -> dict[str, Any]:
@@ -1303,14 +1186,6 @@ async def login_market_with_phone_code(phone: str, code: str) -> dict[str, Any]:
         market_base=market_base,
         timeout_seconds=auth_timeout,
     )
-
-
-def _market_internal_api_key() -> str:
-    return (
-        os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")
-        or os.environ.get("XCAGI_CS_INTAKE_LINK_SECRET")
-        or ""
-    ).strip()
 
 
 async def ensure_market_enterprise_profile(
