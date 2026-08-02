@@ -1822,6 +1822,44 @@ def test_code_task_text_surfaces_structured_qa_blocking_findings_from_last_decis
     assert "focused pytest command did not exit 0" in prompt
 
 
+def test_code_task_text_surfaces_structured_qa_blocking_findings_from_recent_run():
+    memory = {
+        "last_policy_decision": {
+            "action": "stop",
+            "reason": "scheduler_idle",
+        },
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-qa",
+                "kind": "automated_remediation",
+                "reason": "structured_qa_blocking_findings",
+                "run_id": "run-qa",
+                "task_id": "task-qa",
+            }
+        ],
+        "recent_runs": [
+            {
+                "para_task_id": "task-qa",
+                "run_id": "run-qa",
+                "structured_gate": {
+                    "qa": {
+                        "blocking_findings": ["focused pytest command did not exit 0"],
+                        "target_branch_available": True,
+                        "verdict": "FAIL",
+                    },
+                    "reason": "structured_qa_blocking_findings",
+                },
+            }
+        ],
+    }
+    candidate = _resume_review_qa_candidate(memory)
+    prompt = _code_task_text("run-qa-remediation", {"gaps": []}, memory, candidate)
+
+    assert "=== STRUCTURED REVIEW/QA REMEDIATION ===" in prompt
+    assert "structured_qa_blocking_findings" in prompt
+    assert "focused pytest command did not exit 0" in prompt
+
+
 def test_resume_review_qa_candidate_continues_score_remediation_on_existing_task():
     memory = {
         "open_items": [
