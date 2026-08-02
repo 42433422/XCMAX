@@ -84,6 +84,7 @@ def test_scheduler_health_endpoint_exposes_partial_registration(monkeypatch):
     from modstore_server.api.health import _scheduler_status
     from modstore_server.xcmax_admin_api import scheduler_health
 
+    monkeypatch.setenv("MODSTORE_RUN_BACKGROUND_JOBS", "1")
     monkeypatch.setattr(
         scheduler,
         "_scheduler",
@@ -112,6 +113,54 @@ def test_scheduler_health_endpoint_exposes_partial_registration(monkeypatch):
     assert response["data"]["registration_complete"] is False
     assert response["data"]["missing_required_jobs"]
     assert _scheduler_status() is False
+
+
+def test_api_process_reports_healthy_separate_scheduler(monkeypatch):
+    import modstore_server.api.health as health_api
+
+    calls = []
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return b'{"success": true, "ok": true, "data": {"scheduler_running": true, "scheduler_healthy": true}}'
+
+    def fake_urlopen(*args, **kwargs):
+        calls.append((args, kwargs))
+        return _Response()
+
+    monkeypatch.setenv("MODSTORE_RUN_BACKGROUND_JOBS", "0")
+    monkeypatch.setattr(health_api, "_scheduler_status_cache", None)
+    monkeypatch.setattr(health_api, "urlopen", fake_urlopen)
+
+    assert health_api._scheduler_status() is True
+    assert health_api._scheduler_status() is True
+    assert len(calls) == 1
+
+
+def test_api_process_reports_unhealthy_separate_scheduler(monkeypatch):
+    import modstore_server.api.health as health_api
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return b'{"success": true, "ok": false, "data": {"scheduler_running": true, "scheduler_healthy": false}}'
+
+    monkeypatch.setenv("MODSTORE_RUN_BACKGROUND_JOBS", "0")
+    monkeypatch.setattr(health_api, "_scheduler_status_cache", None)
+    monkeypatch.setattr(health_api, "urlopen", lambda *_args, **_kwargs: _Response())
+
+    assert health_api._scheduler_status() is False
 
 
 def test_scheduler_health_endpoint_accepts_complete_registration(monkeypatch):
