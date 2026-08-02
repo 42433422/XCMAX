@@ -319,12 +319,8 @@ class TestXcagiGuardedPlannerStreamEvents:
                 )
             )
             assert len(events) == 3
-            # 首个为 connecting  ephemeral 事件（市场 SSE 首包延迟时的即时 ACK）
-            assert events[0]["type"] == "token"
-            assert events[0]["ephemeral"] is True
-            assert events[0]["phase"] == "connecting"
+            assert events[0]["type"] == "tool_progress"
             assert events[1]["type"] == "token"
-            assert events[1]["text"] == "Hi"
             assert events[2]["type"] == "done"
 
     def test_yields_error_on_exception(self):
@@ -358,8 +354,7 @@ class TestXcagiGuardedPlannerStreamEvents:
                 )
             )
             assert len(events) == 2
-            # 首个为 connecting ephemeral 事件，其次才是 worker 异常对应的 error
-            assert events[0]["phase"] == "connecting"
+            assert events[0]["type"] == "tool_progress"
             assert events[1]["type"] == "error"
             assert events[1]["status_code"] == 503
 

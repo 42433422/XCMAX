@@ -371,7 +371,6 @@ import {
 const BRAIN_AGENT_SESSION_KEY = 'xcagi_brain_agent_session_id'
 const BRAIN_LAYOUT_MQ = '(max-width: 960px)'
 const route = useRoute()
-
 const tabs = [
   { id: 'private-mod', label: '客户定制' },
   { id: 'architecture', label: '架构' },

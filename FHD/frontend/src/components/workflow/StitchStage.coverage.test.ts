@@ -1088,9 +1088,7 @@ describe('StitchStage.vue - 覆盖率补齐', () => {
         },
         global: { stubs: { YuangongStation: true } },
       })
-      wrapper.unmount()
-      // 不崩溃即可
-      expect(true).toBe(true)
+      expect(() => wrapper.unmount()).not.toThrow()
     })
 
     it('composed 模式下切换 mode 到 tutorial 重置 backdrop 状态', async () => {

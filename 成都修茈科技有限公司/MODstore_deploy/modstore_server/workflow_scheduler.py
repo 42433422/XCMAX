@@ -37,6 +37,7 @@ _REQUIRED_CORE_JOB_IDS = frozenset(
         "auto_version_bump_daily",
         "autonomy_metrics_snapshot",
         "autonomy_posthoc_audit",
+        "capability_proposal_relay",
         "customer_value_reconciler",
         "daily_backup_job",
         "daily_ops_digest_email",
@@ -59,6 +60,7 @@ _REQUIRED_CORE_JOB_IDS = frozenset(
         "retention_janitor_daily",
         "scheduler_heartbeat",
         "self_evolution_metrics",
+        "storage_pressure_self_heal",
         "telemetry_backlog_scan",
         "time_rail_observability_sync",
     }
@@ -533,7 +535,9 @@ def start_scheduler() -> None:
         try:
             from modstore_server.file_retention_janitor import run_retention_janitor
 
-            r = run_retention_janitor()
+            r = run_retention_janitor(
+                notification_dry_run=_env_bool("MODSTORE_NOTIFICATION_RETENTION_DRY_RUN", False)
+            )
             logger.info(
                 "retention janitor done: dry_run=%s status=%s removed=%s released=%s ms=%.1f",
                 bool(r.get("dry_run")),
@@ -553,6 +557,15 @@ def start_scheduler() -> None:
         misfire_grace_time=_cleanup_misfire_grace_time(),
         coalesce=True,
         max_instances=1,
+    )
+
+    from modstore_server.storage_pressure_self_heal import register_storage_pressure_job
+
+    register_storage_pressure_job(
+        _scheduler,
+        track_job=_run_tracked_scheduler_job,
+        startup_probe=_run_scheduler_startup_probe,
+        misfire_grace_time=_cleanup_misfire_grace_time(),
     )
 
     def _incident_collect_pytest_cursor() -> None:
@@ -1303,6 +1316,10 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    from modstore_server.capability_proposal_relay import register_capability_proposal_relay_job
+
+    register_capability_proposal_relay_job(_scheduler, track_job=_run_tracked_scheduler_job)
+
     def _employee_health_scan_loop() -> None:
         try:
 
@@ -1751,6 +1768,9 @@ def _register_employee_cron_jobs() -> None:
             contract_schedule,
             workforce_contract_map,
         )
+        from modstore_server.employee_cron_registration import (
+            build_employee_cron_candidates,
+        )
         from modstore_server.employee_cron_registration_ledger import (
             reconcile_employee_cron_registrations,
             record_employee_cron_registration,
@@ -1766,28 +1786,20 @@ def _register_employee_cron_jobs() -> None:
         logger.exception("employee cron: duty work contracts unavailable")
         work_contracts = {}
 
-    profiles = _load_all_employee_profiles()
-    if not profiles:
-        logger.info("employee cron: no profiles found in catalog")
+    candidates = build_employee_cron_candidates(
+        profiles=_load_all_employee_profiles(),
+        work_contracts=work_contracts,
+        load_employee_pack=load_employee_pack,
+        session_factory=get_session_factory(),
+    )
+    if not candidates:
+        logger.info("employee cron: no catalog profiles or duty contracts found")
         return
 
-    sf = get_session_factory()
     registered = 0
     skipped = 0
     registered_ids: set[str] = set()
-    for prof in profiles:
-        emp_id = str(prof.get("id") or "").strip()
-        if not emp_id:
-            continue
-        try:
-            with sf() as session:
-                pack = load_employee_pack(session, emp_id)
-            manifest = pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
-        except Exception:
-            skipped += 1
-            continue
-
-        contract = work_contracts.get(emp_id) or {}
+    for emp_id, manifest, contract in candidates:
         sched = _extract_employee_schedule(manifest) or contract_schedule(contract)
         if not sched:
             skipped += 1

@@ -271,14 +271,14 @@ exclude_lines = [
 # 当前动态实测只看 metrics/coverage-dual-summary.json；本文件只保存 coverage.py 行覆盖 floor。
 # 禁止在这里复制 pytest passed/failed 快照，避免 SSOT 分裂。
 # 三档目标（分阶段达成，非一次性切到 90%）：
-#   - 当前 floor：85% 行（本字段）/ 77% 分支（由 coverage_ratchet_baseline.json 守护）
+#   - 当前 floor：88% 行（本字段）/ 81% 分支（由 coverage_ratchet_baseline.json 守护）
 #   - Q3 目标（2026-Q3）：85% 行 + 80% 分支
 #   - Q4 终极目标（2026-Q4）：90% 行 + 85% 分支
 # 未修红灯前禁止对外宣称达标或 bump 棘轮。
 # 留 ~2pt 余量防止回退。开启 branch 后 coverage 自带门禁按合并指标拦截，故标准命令传
 # --cov-fail-under=0，由 coverage_ratchet.py --check 按行/分支分别守护（floor 只升不降）。
 # 2026-07-31：吸收 Persy 统一记忆图谱 + ETL 新模块后实测回落，临时下调 floor 以解锁合并。
-fail_under = 85
+fail_under = 88
 
 [tool.coverage.html]
 directory = "htmlcov"

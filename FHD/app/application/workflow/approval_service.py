@@ -5,6 +5,8 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from app.application.workflow.types import (
     ApprovalRequest,
     ApprovalStatus,

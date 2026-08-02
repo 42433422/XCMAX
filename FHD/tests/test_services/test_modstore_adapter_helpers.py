@@ -81,9 +81,26 @@ class TestModstoreAdapterHelpers:
                 )
 
         payloads = list(_iter_market_sse_data_payloads(_Resp()))
-        assert payloads[0] == '{"delta": "hello"}'
-        # done content also yielded when present (after delta)
-        assert any("hello" in p for p in payloads[1:])
+        # 平台 done 恒带全文；已有内容 delta 时不再转发，否则 UI 重复（"2"→"22"）。
+        assert payloads == ['{"delta": "hello"}']
+
+    def test_iter_market_sse_surfaces_done_content_after_empty_delta(self) -> None:
+        class _Resp:
+            def iter_lines(self):
+                return iter(
+                    [
+                        "event: delta",
+                        'data: {"delta": ""}',
+                        "event: done",
+                        'data: {"ok": true, "content": "最终回复"}',
+                    ]
+                )
+
+        payloads = list(_iter_market_sse_data_payloads(_Resp()))
+        # 空 delta 不算内容，done 全文仍需兜底（部分供应商只在 done 放正文）。
+        assert len(payloads) == 2
+        assert payloads[0] == '{"delta": ""}'
+        assert "最终回复" in payloads[1]
 
     def test_market_connect_timeout_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("XCAGI_MARKET_CONNECT_TIMEOUT", raising=False)

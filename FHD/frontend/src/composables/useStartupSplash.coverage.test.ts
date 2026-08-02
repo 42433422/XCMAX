@@ -388,8 +388,7 @@ describe('useStartupSplash - coverage ramp', () => {
       errorListeners.forEach((l) => l(new Event('error')))
 
       // teardownOnUnmount 不应崩溃（startupAudio 已为 null）
-      splash.teardownOnUnmount()
-      expect(true).toBe(true)
+      expect(() => splash.teardownOnUnmount()).not.toThrow()
     })
 
     it('tryPlayStartupAudio 在 play 失败时不抛异常', () => {
@@ -405,8 +404,7 @@ describe('useStartupSplash - coverage ramp', () => {
       })) as unknown as typeof Audio
 
       // 不应抛异常
-      splash.initStartupAudio(() => '/audio/startup.mp3')
-      expect(true).toBe(true)
+      expect(() => splash.initStartupAudio(() => '/audio/startup.mp3')).not.toThrow()
     })
   })
 
@@ -530,14 +528,12 @@ describe('useStartupSplash - coverage ramp', () => {
       splash.teardownOnUnmount()
 
       // 再次调用不应崩溃（audio 已为 null）
-      splash.teardownOnUnmount()
-      expect(true).toBe(true)
+      expect(() => splash.teardownOnUnmount()).not.toThrow()
     })
 
     it('teardownOnUnmount 在 audio 为 null 时不崩溃', () => {
       // 不调用 initStartupAudio，audio 为 null
-      splash.teardownOnUnmount()
-      expect(true).toBe(true)
+      expect(() => splash.teardownOnUnmount()).not.toThrow()
     })
 
     it('teardownOnUnmount 清理所有资源（timers + raf + audio）', () => {

@@ -1,12 +1,15 @@
-# -*- coding: utf-8 -*-
 """分层债棘轮（ratchet）：只减不增地收口后端分层债。
 
-守护两条基线（v10 线内迭代 · 配合 docs/architecture/REFACTOR_DECOMPOSITION_PLAN.md §1.4）：
+守护三条基线（v10 线内迭代 · 配合 docs/architecture/REFACTOR_DECOMPOSITION_PLAN.md §1.4）：
 
 1. ``app/services/**/*.py`` 文件总数 —— 冻结 ``services/`` 层，**不得新增**文件。
    新业务代码应落 ``app/domain`` / ``app/application`` / ``app/infrastructure``。
 2. ``app/fastapi_routes/`` 中直接 ``import app.services.*`` 的**文件清单** —— 路由必须经
    ``application/`` 层，违规清单**只减不增**（绞杀者式收口）。
+3. ``app/domain/**/*.py`` 中反向 ``import app.infrastructure.*`` / ``app.application.*``
+   的**文件清单** —— domain 不得依赖外层（DIP：端口抽象归 domain，由上层组装注入）。
+   ``if TYPE_CHECKING:`` 块内的引用豁免（不参与运行时）；确实无法解除的运行时引用
+   登记到基线 ``domain_reverse_imports_whitelist``（dict：路径 → 原因），白名单同样只减不增。
 
 基线存于 ``scripts/dev/layer_ratchet_baseline.json``，由 ``--update-baseline`` 写入；
 该模式**只允许把基线调低**（除非 ``--force``），保证棘轮单向收紧。
@@ -16,6 +19,7 @@
 用法::
 
     python scripts/dev/check_layer_ratchet.py            # 校验（CI）
+    python scripts/dev/check_layer_ratchet.py --check    # 校验（显式）
     python scripts/dev/check_layer_ratchet.py --json
     python scripts/dev/check_layer_ratchet.py --update-baseline   # 收口后锁定新基线（只降）
 """
@@ -33,6 +37,10 @@ BASELINE_REL = Path("scripts") / "dev" / "layer_ratchet_baseline.json"
 
 SERVICES_REL = Path("app") / "services"
 ROUTES_REL = Path("app") / "fastapi_routes"
+DOMAIN_REL = Path("app") / "domain"
+
+# domain 层禁止反向依赖的外层包前缀
+DOMAIN_REVERSE_PREFIXES = ("app.infrastructure", "app.application")
 
 
 def _imports_app_services(path: Path) -> bool:
@@ -53,8 +61,51 @@ def _imports_app_services(path: Path) -> bool:
     return False
 
 
+def _is_type_checking_guarded(node: ast.AST, parents: dict[int, ast.AST]) -> bool:
+    """判定节点是否被 ``if TYPE_CHECKING:`` / ``if typing.TYPE_CHECKING:`` 包裹。"""
+    anc = parents.get(id(node))
+    while anc is not None:
+        if isinstance(anc, ast.If):
+            test = anc.test
+            if (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
+                isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+            ):
+                return True
+        anc = parents.get(id(anc))
+    return False
+
+
+def _imports_outer_layers(path: Path) -> bool:
+    """AST 判定：domain 文件内是否存在指向 ``app.infrastructure.*`` / ``app.application.*``
+    的运行时 import（``if TYPE_CHECKING:`` 块内的引用豁免）。"""
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except (SyntaxError, OSError):
+        return False
+    parents: dict[int, ast.AST] = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parents[id(child)] = node
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Import, ast.ImportFrom)):
+            continue
+        if _is_type_checking_guarded(node, parents):
+            continue
+        if isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            for prefix in DOMAIN_REVERSE_PREFIXES:
+                if module == prefix or module.startswith(prefix + "."):
+                    return True
+        else:
+            for alias in node.names:
+                for prefix in DOMAIN_REVERSE_PREFIXES:
+                    if alias.name == prefix or alias.name.startswith(prefix + "."):
+                        return True
+    return False
+
+
 def measure(repo_root: Path) -> dict:
-    """返回当前实测：services 文件数 + 路由违规文件清单（相对 app/ 的 posix 路径）。"""
+    """返回当前实测：services 文件数 + 路由违规文件清单 + domain 反向 import 清单（相对 app/ 的 posix 路径）。"""
     services_dir = repo_root / SERVICES_REL
     services_files = sorted(p for p in services_dir.rglob("*.py")) if services_dir.is_dir() else []
 
@@ -65,9 +116,17 @@ def measure(repo_root: Path) -> dict:
             if _imports_app_services(py):
                 offenders.append(py.relative_to(repo_root / "app").as_posix())
 
+    domain_dir = repo_root / DOMAIN_REL
+    domain_offenders: list[str] = []
+    if domain_dir.is_dir():
+        for py in sorted(domain_dir.rglob("*.py")):
+            if _imports_outer_layers(py):
+                domain_offenders.append(py.relative_to(repo_root / "app").as_posix())
+
     return {
         "services_py_file_count": len(services_files),
         "routes_importing_services": offenders,
+        "domain_reverse_imports": domain_offenders,
     }
 
 
@@ -78,12 +137,14 @@ def load_baseline(repo_root: Path) -> dict | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def write_baseline(repo_root: Path, data: dict) -> Path:
+def write_baseline(repo_root: Path, data: dict, whitelist: dict | None = None) -> Path:
     path = repo_root / BASELINE_REL
     payload = {
         "_note": "分层债棘轮基线（只减不增）。由 check_layer_ratchet.py --update-baseline 维护。",
         "services_py_file_count": data["services_py_file_count"],
         "routes_importing_services": sorted(data["routes_importing_services"]),
+        "domain_reverse_imports": sorted(data["domain_reverse_imports"]),
+        "domain_reverse_imports_whitelist": whitelist or {},
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return path
@@ -122,11 +183,29 @@ def evaluate(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
             + "\n".join(f"    - app/{p}" for p in fixed)
         )
 
+    whitelist = set((baseline.get("domain_reverse_imports_whitelist") or {}).keys())
+    cur_domain = set(current["domain_reverse_imports"]) - whitelist
+    base_domain = set(baseline.get("domain_reverse_imports") or []) - whitelist
+    new_domain = sorted(cur_domain - base_domain)
+    fixed_domain = sorted(base_domain - cur_domain)
+    if new_domain:
+        errors.append(
+            "新增 domain 反向 import app.infrastructure/app.application"
+            "（端口抽象应归 domain，由上层组装注入；无法解除者登记基线白名单并注明原因）：\n"
+            + "\n".join(f"    - app/{p}" for p in new_domain)
+        )
+    if fixed_domain:
+        progress.append(
+            f"已收口 {len(fixed_domain)} 个 domain 反向 import ✓ 运行 --update-baseline 锁定：\n"
+            + "\n".join(f"    - app/{p}" for p in fixed_domain)
+        )
+
     return errors, progress
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true", help="显式校验模式（与默认行为一致）")
     parser.add_argument("--json", action="store_true", help="以 JSON 输出实测与判定")
     parser.add_argument(
         "--update-baseline",
@@ -134,7 +213,9 @@ def main(argv: list[str] | None = None) -> int:
         help="把当前实测写为新基线（默认只允许调低；升高需 --force）",
     )
     parser.add_argument("--force", action="store_true", help="允许 --update-baseline 调高基线")
-    parser.add_argument("--repo-root", type=Path, default=REPO_ROOT_DEFAULT, help="仓库根（默认自动推断）")
+    parser.add_argument(
+        "--repo-root", type=Path, default=REPO_ROOT_DEFAULT, help="仓库根（默认自动推断）"
+    )
     args = parser.parse_args(argv)
 
     repo_root: Path = args.repo_root
@@ -154,17 +235,27 @@ def main(argv: list[str] | None = None) -> int:
                 baseline["routes_importing_services"]
             ):
                 raising.append("routes_importing_services")
+            if set(current["domain_reverse_imports"]) - set(
+                baseline.get("domain_reverse_imports") or []
+            ):
+                raising.append("domain_reverse_imports")
             if raising:
                 print(
-                    "拒绝调高基线（棘轮只减不增）：" + ", ".join(raising) + "。如确需放宽请加 --force。",
+                    "拒绝调高基线（棘轮只减不增）："
+                    + ", ".join(raising)
+                    + "。如确需放宽请加 --force。",
                     file=sys.stderr,
                 )
                 return 2
-        out = write_baseline(repo_root, current)
+        whitelist = (baseline or {}).get("domain_reverse_imports_whitelist") or {}
+        out = write_baseline(repo_root, current, whitelist=whitelist)
         print(f"[layer-ratchet] 基线已写入 {out.relative_to(repo_root)}")
         print(f"[layer-ratchet]   services_py_file_count = {current['services_py_file_count']}")
         print(
             f"[layer-ratchet]   routes_importing_services = {len(current['routes_importing_services'])}"
+        )
+        print(
+            f"[layer-ratchet]   domain_reverse_imports = {len(current['domain_reverse_imports'])}"
         )
         return 0
 
@@ -185,9 +276,14 @@ def main(argv: list[str] | None = None) -> int:
                     "current": current,
                     "baseline": {
                         "services_py_file_count": baseline["services_py_file_count"],
-                        "routes_importing_services": sorted(
-                            baseline["routes_importing_services"]
+                        "routes_importing_services": sorted(baseline["routes_importing_services"]),
+                        "domain_reverse_imports": sorted(
+                            baseline.get("domain_reverse_imports") or []
                         ),
+                        "domain_reverse_imports_whitelist": baseline.get(
+                            "domain_reverse_imports_whitelist"
+                        )
+                        or {},
                     },
                     "errors": errors,
                     "progress": progress,
@@ -207,6 +303,11 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"[layer-ratchet] routes→app.services: {len(current['routes_importing_services'])} "
         f"(baseline {len(baseline['routes_importing_services'])})"
+    )
+    print(
+        f"[layer-ratchet] domain→outer reverse imports: {len(current['domain_reverse_imports'])} "
+        f"(baseline {len(baseline.get('domain_reverse_imports') or [])}, "
+        f"whitelist {len(baseline.get('domain_reverse_imports_whitelist') or {})})"
     )
     for p in progress:
         print(f"[layer-ratchet] PROGRESS: {p}")

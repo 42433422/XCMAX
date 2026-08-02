@@ -26,7 +26,6 @@ from app.shell.mods_catalog import list_mod_items
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter(tags=["mod-store"])
 
 
@@ -221,7 +220,6 @@ async def _remote_rows() -> list[dict[str, Any]]:
             mid = str(info.get("id") or "").strip()
             if not mid:
                 continue
-            # 市场上架的工作流单员工 Mod（public_listing）须在能力库展示，与 /api/market/catalog 一致
             if is_infrastructure_mod_hidden_from_store(mid) and not row.get("public_listing"):
                 continue
             rows.append(info)
@@ -275,7 +273,6 @@ def _inject_host_foundation_row(available: list[dict[str, Any]], installed_ids: 
         HOST_FOUNDATION_EMPLOYEE_PACK_ID in installed_ids or is_host_foundation_pack_installed()
     )
     available.insert(0, host_foundation_catalog_row(installed=installed))
-    # 去掉误上架的逐项 bridge（远端若仍有历史条目）
     i = 0
     while i < len(available):
         mid = str(available[i].get("id") or "").strip()
@@ -996,7 +993,6 @@ async def mod_store_upload(
       - 落地到临时文件后调用 ``mod_manager.install_mod_package``
       - 返回安装结果（含 manifest 元数据）
     """
-    # 文件大小限制：100MB（防止恶意大文件）
     MAX_UPLOAD_SIZE = 100 * 1024 * 1024
     filename = (file.filename or "").lower()
     if not (filename.endswith(".xcemp") or filename.endswith(".zip")):
@@ -1425,3 +1421,7 @@ async def mod_store_sync_modstore_library(request: Request) -> ModStoreSimpleRes
         raise HTTPException(status_code=400, detail=str(e)) from e
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+_delivery_routes = __import__("app.fastapi_routes.private_mod_delivery_routes", fromlist=["router"])
+router.include_router(_delivery_routes.router)

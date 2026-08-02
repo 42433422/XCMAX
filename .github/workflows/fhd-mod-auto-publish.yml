@@ -4,8 +4,8 @@ name: Mod Auto Publish
 
 # 进化状态闭环 — 系统自己打包上架 MODstore：
 #   - 触发：PR 合并到 main 且涉及 FHD/mods/_employees/** 文件
-#   - 流程：检测变更 mod → build_mod.py 打包 → 上传到本地 /api/mod-store/upload
-#   - 输出：每个 mod 的 .xcemp 路径 + sha256 + 安装结果
+#   - 流程：检测变更 mod → build_mod.py 打包 → 五维审核 → 公开上架 → 下载摘要复验
+#   - 输出：每个 mod 的包、sha256、审核结论、公开目录与下载回执
 #
 # 也支持 workflow_dispatch 手动触发单个 mod_id
 
@@ -41,6 +41,8 @@ jobs:
     timeout-minutes: 10
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MODSTORE_AUTO_PUBLISH_TOKEN: ${{ secrets.MODSTORE_AUTO_PUBLISH_TOKEN }}
+      MODSTORE_BASE_URL: ${{ vars.MODSTORE_BASE_URL || 'https://xiu-ci.com' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -70,11 +72,34 @@ jobs:
         working-directory: FHD
         env:
           MOD_IDS: ${{ steps.discover.outputs.mod_ids }}
+          SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.sha }}
         run: |
+          set -euo pipefail
+          test -n "${MODSTORE_AUTO_PUBLISH_TOKEN:-}" || {
+            echo "::error::MODSTORE_AUTO_PUBLISH_TOKEN is required"
+            exit 1
+          }
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::exact merged source SHA is required"
+            exit 1
+          }
           mkdir -p dist/employee_packs
+          mkdir -p test_reports/modstore_publish
           for mod_id in $MOD_IDS; do
             echo "=== Building: $mod_id ==="
-            python scripts/build_mod.py --mod-id "$mod_id" --out dist/employee_packs || true
+            python scripts/build_mod.py --mod-id "$mod_id" --out dist/employee_packs
+            package="$(find dist/employee_packs -maxdepth 1 -type f \
+              \( -name "${mod_id}-*.xcemp" -o -name "${mod_id}-*.xcmod" \) \
+              -print | sort | tail -n 1)"
+            test -n "$package" && test -f "$package"
+            python scripts/dev/publish_modstore.py "$package" \
+              --base-url "$MODSTORE_BASE_URL" \
+              --token "$MODSTORE_AUTO_PUBLISH_TOKEN" \
+              --source-repository "$GITHUB_REPOSITORY" \
+              --source-sha "$SOURCE_SHA" \
+              --workflow-run-id "$GITHUB_RUN_ID" \
+              --duty-roster config/duty_roster.json \
+              --receipt "test_reports/modstore_publish/${mod_id}.receipt.json"
           done
 
       - name: Upload artifacts
@@ -82,8 +107,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mod-packages
-          path: FHD/dist/employee_packs/*.xcemp
-          if-no-files-found: ignore
+          path: |
+            FHD/dist/employee_packs/*.xcemp
+            FHD/dist/employee_packs/*.xcmod
+            FHD/dist/employee_packs/*.meta.json
+            FHD/test_reports/modstore_publish/*.receipt.json
+          if-no-files-found: error
 
       - name: Comment on PR with package info
         if: github.event_name == 'pull_request' && steps.discover.outputs.mod_ids != ''
@@ -92,21 +121,27 @@ jobs:
           script: |
             const mods = '${{ steps.discover.outputs.mod_ids }}'.trim().split(/\s+/).filter(Boolean);
             if (mods.length === 0) return;
+            const fs = require('fs');
+            const receipts = mods.map(mod => {
+              const path = `FHD/test_reports/modstore_publish/${mod}.receipt.json`;
+              const row = JSON.parse(fs.readFileSync(path, 'utf8'));
+              if (row.status === 'internal_only') {
+                return `- \`${row.pkg_id}@${row.version}\` — ⏭️ 编制内能力，按策略保留为内部能力、不公开上架`;
+              }
+              return `- \`${row.pkg_id}@${row.version}\` — ✅ 五维审核通过 / ✅ 公开可见 / ✅ 下载 SHA-256 \`${row.sha256.slice(0, 16)}…\`${row.idempotent ? '（幂等复用）' : ''}`;
+            });
             const body = [
               '## Mod Auto Publish',
               '',
-              '已自动打包以下 mod（.xcemp 已上传为 artifact）：',
-              ...mods.map(m => `- \`${m}\``),
+              '以下 MOD 已完成真实上架与下载后置校验：',
+              ...receipts,
               '',
               '### 进化状态闭环',
               '',
               '1. ✅ Mod 代码已合并到 main',
-              '2. ✅ Mod 已自动打包为 .xcemp（含 sha256）',
-              '3. ⚠️ 上架到 MODstore 需在部署环境运行：',
-              '   ```bash',
-              '   curl -X POST https://xiu-ci.com/fhd-api/api/mod-store/upload \\',
-              '     -F "file=@<path>.xcemp"',
-              '   ```',
+              '2. ✅ Mod 已自动打包并绑定合并 SHA / workflow run',
+              '3. ✅ 可公开能力经 MODstore 五维审核后上架',
+              '4. ✅ 公开目录、详情与下载包 SHA-256 已复验；编制内能力保持内部可见',
               '',
               '_本评论由 mod-auto-publish.yml workflow 自动生成。_'
             ].join('\n');

@@ -37,6 +37,7 @@ import {
 } from '@/constants/adminOperatorNav';
 import { buildRoleMenuProfile, canShowCoreMenuKey } from '@/utils/roleMenuProfile';
 import { isClientErpSidebarContext } from '@/constants/genericModPack';
+import { AI_DELIVERY_ROUTES } from './privateModDeliveryRoutes';
 const isSandbox = new URLSearchParams(window.location.search).has('sandbox');
 
 const SANDBOX_ALLOWED = new Set([
@@ -128,12 +129,7 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
       component: () => import('../views/AIEcosystemView.vue'),
       meta: { title: '智能生态' },
     },
-    {
-      path: '/brain',
-      name: 'brain',
-      component: () => import('../views/BrainView.vue'),
-      meta: { title: '智脑集成' },
-    },
+    ...AI_DELIVERY_ROUTES,
     {
       path: '/private-mod-delivery',
       name: 'private-mod-delivery',

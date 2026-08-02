@@ -29,6 +29,7 @@ from app.application.agent_orchestrator.chat_trace import (
     start_legacy_chat_run,
 )
 from app.application.modstore_conversation_app import create_modstore_openai_client_from_request
+from app.application.stream_status_events import MODEL_STREAM_ACCEPTED_EVENT
 from app.application.workflow.multimodal_user_content import (
     EmptyMultimodalResponseError,
     UnsupportedMultimodalModelError,
@@ -44,11 +45,9 @@ from app.legacy.chat.legacy_chat_adapter import chat_stream_sse_events
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-
 _CHAT_DB_READ_GRACE_SEC = 5 * 60
 _chat_db_read_grace_lock = threading.Lock()
 _chat_db_read_grace_until: dict[str, float] = {}
-
 _CHAT_DB_READ_ACTION_RE = re.compile(r"(查看|查询|检索|读取|看|浏览|导出)", re.IGNORECASE)
 _CHAT_RAW_DB_SUBJECT_RE = re.compile(
     r"(数据库|数据表|表结构|schema|sql|SQL|raw|原始|全库|整库|数据库文件)",
@@ -531,16 +530,8 @@ def _xcagi_guarded_planner_stream_events(
     first_token_timeout = min(_xcagi_stream_first_token_timeout_seconds(), total_timeout)
     idle_notice_seconds = _xcagi_stream_idle_notice_seconds()
     started_at = time.monotonic()
-    # Connection acceptance is the transport first packet. Market routing may
-    # continue before visible text without being misreported as a failed stream.
     first_event_seen = True
-    yield {
-        "type": "tool_progress",
-        "label": "模型服务",
-        "text": "模型服务已接收任务，正在思考…",
-        "phase": "accepted",
-    }
-
+    yield MODEL_STREAM_ACCEPTED_EVENT
     while True:
         elapsed = time.monotonic() - started_at
         if elapsed >= total_timeout:

@@ -165,8 +165,9 @@ def test_employee_project_root_matches_yuangon_scope_base(monkeypatch, tmp_path)
 
 def test_scheduler_registers_contract_cron_jobs(monkeypatch) -> None:
     root = Path(__file__).resolve().parents[3]
-    contracts = workforce_contract_map()
-    profiles = [{"id": employee_id} for employee_id in contracts]
+    # Production catalog visibility is a delivery concern and can lag the
+    # reviewed duty SSOT. Registration must still cover every cron contract.
+    profiles = [{"id": "seo-sitemap-curator"}]
     jobs = []
     registration_rows = []
 
@@ -203,6 +204,8 @@ def test_scheduler_registers_contract_cron_jobs(monkeypatch) -> None:
         "emp_cron_seo-sitemap-curator",
         "emp_cron_payment-billing-reconciler",
         "emp_cron_employee-interview-assistant",
+        "emp_cron_llm-ops-engineer",
+        "emp_cron_top-architect",
     }
     assert "emp_cron_deploy-release-officer" not in {job["id"] for job in employee_jobs}
     assert len(registration_rows) == 22
@@ -231,6 +234,10 @@ def test_scheduler_registers_contract_cron_jobs(monkeypatch) -> None:
     monkeypatch.setattr(
         "modstore_server.services.llm.resolve_platform_bench_llm",
         lambda: ("minimax", "MiniMax-M2.7"),
+    )
+    monkeypatch.setattr(
+        "modstore_server.employee_duty_input_resolver.resolve_employee_duty_input",
+        lambda _employee_id: None,
     )
     tracked_job_ids = []
 

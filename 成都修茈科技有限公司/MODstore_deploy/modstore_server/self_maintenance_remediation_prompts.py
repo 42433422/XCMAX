@@ -135,6 +135,44 @@ def external_merge_remediation_prompt(resume_candidate: Any) -> str:
     )
 
 
+def _structured_gate_for_remediation_item(
+    memory: Any,
+    matched_item: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Resolve structured_gate for a hold even when last_policy_decision is stale."""
+
+    embedded = matched_item.get("structured_gate")
+    if isinstance(embedded, dict):
+        return embedded
+
+    hold_reason = str(matched_item.get("reason") or "").strip()
+    selected_run_id = str(matched_item.get("run_id") or "").strip()
+    selected_task_id = str(
+        matched_item.get("task_id") or matched_item.get("para_task_id") or ""
+    ).strip()
+
+    recent_runs = memory.get("recent_runs") if isinstance(memory, dict) else None
+    if isinstance(recent_runs, list):
+        for run in reversed(recent_runs):
+            if not isinstance(run, dict):
+                continue
+            run_gate = run.get("structured_gate")
+            if not isinstance(run_gate, dict):
+                continue
+            if selected_run_id and str(run.get("run_id") or "").strip() == selected_run_id:
+                return run_gate
+            if selected_task_id and str(run.get("para_task_id") or "").strip() == selected_task_id:
+                return run_gate
+
+    decision = memory.get("last_policy_decision") if isinstance(memory, dict) else {}
+    if isinstance(decision, dict) and str(decision.get("reason") or "").strip() == hold_reason:
+        decision_gate = decision.get("structured_gate")
+        if isinstance(decision_gate, dict):
+            return decision_gate
+
+    return None
+
+
 def _matched_structured_remediation_open_item(
     memory: Any,
     resume_candidate: dict[str, Any],
@@ -174,13 +212,10 @@ def structured_report_remediation_prompt(memory: Any, resume_candidate: Any) -> 
     ):
         return ""
     structured_gate = (
-        matched_item.get("structured_gate")
-        if isinstance(matched_item, dict) and isinstance(matched_item.get("structured_gate"), dict)
+        _structured_gate_for_remediation_item(memory, matched_item)
+        if isinstance(matched_item, dict)
         else None
     )
-    if structured_gate is None:
-        decision = memory.get("last_policy_decision") if isinstance(memory, dict) else {}
-        structured_gate = decision.get("structured_gate") if isinstance(decision, dict) else None
     if not isinstance(structured_gate, dict):
         return ""
     review = (

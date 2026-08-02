@@ -23,6 +23,13 @@ release-apk/
 /FHD/_restored-from-transcript-*/
 
 # 全局 Python/IDE/构建产物（FHD/.gitignore 已覆盖大多数，此处为根级兜底）
+# 环境变量/密钥文件：任何层级都不入库（gitleaks 只扫 PR 增量，本地误 add 无兜底）
+.env
+.env.*
+*.env
+!.env.example
+!.env.*.example
+!*.env.example
 __pycache__/
 *.py[cod]
 .venv/

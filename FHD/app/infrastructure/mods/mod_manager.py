@@ -1,6 +1,4 @@
-"""
-Mod Manager - Core manager for scanning, loading, and managing mods
-"""
+"""Core manager for scanning, loading, and managing MODs."""
 
 import importlib
 import importlib.util
@@ -23,11 +21,11 @@ from .artifact_package import (
     validate_employee_pack_manifest,
 )
 from .manifest import ModMetadata, parse_manifest, validate_dependencies
+from .missing_local_state import clear_mod_missing_locally, mark_mod_missing_locally
 from .package import ModPackage, ModPackageError, ModSignatureError
 from .registry import get_mod_registry
 
 logger = logging.getLogger(__name__)
-
 _MOD_API_FAILURE_RETRY_AT: dict[str, float] = {}
 _MOD_API_FAILURE_BACKOFF_SECONDS = 15.0
 
@@ -99,10 +97,7 @@ def _default_mods_root() -> str:
 
 
 def _repo_layout_mods_candidates() -> list[str]:
-    """
-    开发树常见双份 mods（FHD/mods 与 XCAGI/mods）。
-    部署/桥接包仅含 xcagi-* 时，主 XCAGI_MODS_ROOT 可能缺客户 Mod（如 taiyangniao-pro）。
-    """
+    """Find additional repository MOD roots missing from a packaged deployment."""
     file_here = os.path.abspath(__file__)
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(file_here))))
     out: list[str] = []
@@ -1130,11 +1125,16 @@ def register_employee_pack_routes(
         return False
     if normalize_artifact(data) != ARTIFACT_EMPLOYEE_PACK:
         return False
+    from app.mod_sdk.product_plane import employee_pack_allowed_in_runtime
+
+    resolved_id = str(data.get("id") or pid).strip()
+    if not employee_pack_allowed_in_runtime(resolved_id, data):
+        logger.debug("skip control-plane employee route in enterprise client: %s", resolved_id)
+        return False
     backend = data.get("backend") or {}
     entry = str(backend.get("entry") or "").strip()
     if not entry:
         return False
-    resolved_id = str(data.get("id") or pid).strip()
     if not resolved_id:
         return False
     try:

@@ -27,6 +27,14 @@ on:
         description: "失败 workflow 所在分支"
         required: false
         default: ""
+      head_repo:
+        description: "失败 workflow 的 head 仓库（fork 保护）"
+        required: false
+        default: ""
+
+concurrency:
+  group: ai-self-heal-${{ github.repository_id }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -46,6 +54,12 @@ jobs:
       XCAGI_LLM_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
       XCAGI_LLM_BASE_URL: ${{ secrets.XCAGI_LLM_BASE_URL }}
       XCAGI_LLM_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
+      # Durable GitHub-side circuit breaker. Repository variables may tighten
+      # these bounds without changing code; missing/invalid values fail to defaults.
+      AI_SELF_HEAL_MAX_OPEN_INCIDENTS: ${{ vars.AI_SELF_HEAL_MAX_OPEN_INCIDENTS || '20' }}
+      AI_SELF_HEAL_MAX_OPEN_PER_WORKFLOW: ${{ vars.AI_SELF_HEAL_MAX_OPEN_PER_WORKFLOW || '5' }}
+      AI_SELF_HEAL_MAX_RECENT_INCIDENTS: ${{ vars.AI_SELF_HEAL_MAX_RECENT_INCIDENTS || '20' }}
+      AI_SELF_HEAL_INCIDENT_BUDGET_HOURS: ${{ vars.AI_SELF_HEAL_INCIDENT_BUDGET_HOURS || '24' }}
       # Approval ledger callback（fail-open client needs both）
       FHD_API_BASE_URL: https://xiu-ci.com/fhd-api
       AUTONOMY_WEBHOOK_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
@@ -75,7 +89,8 @@ jobs:
         run: |
           python scripts/ci/ai_self_heal.py \
             --workflow "${{ github.event.workflow_run.name }}" \
-            --branch "${{ github.event.workflow_run.head_branch }}"
+            --branch "${{ github.event.workflow_run.head_branch }}" \
+            --head-repo "${{ github.event.workflow_run.head_repository.full_name }}"
 
       - name: Run ai-self-heal (manual dispatch)
         if: ${{ github.event_name == 'workflow_dispatch' }}
@@ -84,4 +99,5 @@ jobs:
           python scripts/ci/ai_self_heal.py \
             --run-id ${{ inputs.run_id }} \
             --workflow "${{ inputs.workflow_name }}" \
-            --branch "${{ inputs.branch }}"
+            --branch "${{ inputs.branch }}" \
+            --head-repo "${{ inputs.head_repo }}"

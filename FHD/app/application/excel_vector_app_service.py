@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import hashlib
 import os
-import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,12 +8,15 @@ from typing import Any
 
 import pandas as pd
 
-from app.application.ports.embedder import EmbedderPort
 from app.application.ports.vector_store import VectorStorePort
+from app.domain.ports.embedder import EmbedderPort, HashEmbedder
 from app.infrastructure.persistence.pg_vector_store import PgVectorStore
 from app.infrastructure.persistence.sqlite_vector_store import SQLiteVectorStore
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import get_app_data_dir
+
+# HashEmbedder 实现已下沉至 app.domain.ports.embedder（本模块仍 re-export，
+# 保持 app.application.excel_vector_app_service.HashEmbedder 历史 import 路径可用）。
 
 
 @dataclass
@@ -23,51 +24,6 @@ class ExcelVectorChunk:
     chunk_id: str
     content: str
     metadata: dict[str, Any]
-
-
-class HashEmbedder(EmbedderPort):
-    """无需外部依赖的轻量哈希嵌入。"""
-
-    def __init__(self, dimensions: int = 256) -> None:
-        self._dimensions = max(64, dimensions)
-
-    def _tokenize(self, text: str) -> list[str]:
-        raw = str(text or "").strip().lower()
-        if not raw:
-            return []
-
-        tokens: list[str] = []
-        ascii_tokens = re.findall(r"[a-z0-9]+", raw)
-        tokens.extend(ascii_tokens)
-
-        cjk_chars = re.findall(r"[\u4e00-\u9fff]", raw)
-        tokens.extend(cjk_chars)
-        if len(cjk_chars) >= 2:
-            tokens.extend("".join(cjk_chars[i : i + 2]) for i in range(0, len(cjk_chars) - 1))
-        return tokens
-
-    def _embed(self, text: str) -> list[float]:
-        vec = [0.0] * self._dimensions
-        tokens = self._tokenize(text)
-        if not tokens:
-            return vec
-
-        for token in tokens:
-            digest = hashlib.md5(token.encode("utf-8")).hexdigest()
-            idx = int(digest[:8], 16) % self._dimensions
-            sign = 1.0 if int(digest[-1], 16) % 2 == 0 else -1.0
-            vec[idx] += sign
-
-        norm = sum(v * v for v in vec) ** 0.5
-        if norm > 0:
-            vec = [v / norm for v in vec]
-        return vec
-
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        return [self._embed(text) for text in texts]
-
-    def embed_query(self, text: str) -> list[float]:
-        return self._embed(text)
 
 
 def _get_default_embedder() -> EmbedderPort:

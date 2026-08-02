@@ -9,5 +9,7 @@
     "fastapi_routes/mod_store_routes.py",
     "fastapi_routes/user_cs_wechat_passive_compat.py",
     "fastapi_routes/voice_routes.py"
-  ]
+  ],
+  "domain_reverse_imports": [],
+  "domain_reverse_imports_whitelist": {}
 }

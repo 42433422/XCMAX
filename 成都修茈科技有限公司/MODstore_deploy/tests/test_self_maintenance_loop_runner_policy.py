@@ -1632,6 +1632,88 @@ def test_retort_non_scope_question_is_not_auto_remediated(monkeypatch):
     assert memory["open_items"] == []
 
 
+def test_reconcile_retort_scope_does_not_reopen_matching_closed_remediation(monkeypatch):
+    memory = {
+        "closed_items": [
+            {
+                "original_item": {
+                    "kind": "automated_remediation",
+                    "reason": "retort_scope_too_large",
+                    "run_id": "run-closed",
+                }
+            }
+        ],
+        "open_items": [],
+    }
+    monkeypatch.setattr(
+        loop_runner,
+        "_read_ledger",
+        lambda limit: [
+            {
+                "branch": "devfleet/cursor/closed-scope",
+                "error": "retort_clarification_pending",
+                "para_task_id": "task-closed",
+                "phase": "complete",
+                "retort_clarification": {
+                    "clarification": {
+                        "questions": [{"reason": "elevated_risk_or_large_diff"}],
+                    },
+                },
+                "run_id": "run-closed",
+                "status": "failed",
+            }
+        ],
+    )
+
+    assert _reconcile_retort_scope_remediations(memory) == {
+        "added": 0,
+        "changed": False,
+        "run_ids": [],
+    }
+    assert memory["open_items"] == []
+
+
+def test_reconcile_retort_scope_ignores_unrelated_closed_item_for_same_run(monkeypatch):
+    memory = {
+        "closed_items": [
+            {
+                "original_item": {
+                    "kind": "failed_steps",
+                    "reason": "employee_step_failed",
+                    "run_id": "run-shared",
+                }
+            }
+        ],
+        "open_items": [],
+    }
+    monkeypatch.setattr(
+        loop_runner,
+        "_read_ledger",
+        lambda limit: [
+            {
+                "branch": "devfleet/cursor/unresolved-scope",
+                "error": "retort_clarification_pending",
+                "para_task_id": "task-shared",
+                "phase": "complete",
+                "retort_clarification": {
+                    "clarification": {
+                        "questions": [{"reason": "elevated_risk_or_large_diff"}],
+                    },
+                },
+                "run_id": "run-shared",
+                "status": "failed",
+            }
+        ],
+    )
+
+    assert _reconcile_retort_scope_remediations(memory) == {
+        "added": 1,
+        "changed": True,
+        "run_ids": ["run-shared"],
+    }
+    assert memory["open_items"][0]["reason"] == "retort_scope_too_large"
+
+
 @pytest.mark.parametrize(
     "hold_reason",
     [
@@ -1731,6 +1813,44 @@ def test_code_task_text_surfaces_structured_qa_blocking_findings_from_last_decis
             }
         ],
         "recent_runs": [],
+    }
+    candidate = _resume_review_qa_candidate(memory)
+    prompt = _code_task_text("run-qa-remediation", {"gaps": []}, memory, candidate)
+
+    assert "=== STRUCTURED REVIEW/QA REMEDIATION ===" in prompt
+    assert "structured_qa_blocking_findings" in prompt
+    assert "focused pytest command did not exit 0" in prompt
+
+
+def test_code_task_text_surfaces_structured_qa_blocking_findings_from_recent_run():
+    memory = {
+        "last_policy_decision": {
+            "action": "stop",
+            "reason": "scheduler_idle",
+        },
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-qa",
+                "kind": "automated_remediation",
+                "reason": "structured_qa_blocking_findings",
+                "run_id": "run-qa",
+                "task_id": "task-qa",
+            }
+        ],
+        "recent_runs": [
+            {
+                "para_task_id": "task-qa",
+                "run_id": "run-qa",
+                "structured_gate": {
+                    "qa": {
+                        "blocking_findings": ["focused pytest command did not exit 0"],
+                        "target_branch_available": True,
+                        "verdict": "FAIL",
+                    },
+                    "reason": "structured_qa_blocking_findings",
+                },
+            }
+        ],
     }
     candidate = _resume_review_qa_candidate(memory)
     prompt = _code_task_text("run-qa-remediation", {"gaps": []}, memory, candidate)

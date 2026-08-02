@@ -5,7 +5,20 @@ Phase 3 从 ``app.legacy.tools_directory_compat`` 迁入。
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+# workflow 工具注册表提供者（由上层组装处注入，避免 domain→application 反向依赖）。
+# 注入点：app/fastapi_routes/domains/misc/routes.py（路由模块加载即完成组装）。
+_workflow_tool_registry_provider: Callable[[], list[dict]] | None = None
+
+
+def register_workflow_tool_registry_provider(provider: Callable[[], list[dict]] | None) -> None:
+    """注入 workflow 工具注册表提供者（application 层 ``tools.workflow`` 的门面）。"""
+    global _workflow_tool_registry_provider
+    _workflow_tool_registry_provider = provider
+
 
 DEFAULT_TOOL_CATEGORIES = [
     {
@@ -86,9 +99,10 @@ def _planner_tools_from_registry() -> list[dict]:
         if is_planner_tools_via_mod_enabled():
             reg = get_planner_chat_tool_registry()
         else:
-            from app.application.tools.workflow import get_workflow_tool_registry
-
-            reg = get_workflow_tool_registry()
+            provider = _workflow_tool_registry_provider
+            if provider is None:
+                return []
+            reg = provider()
     except RECOVERABLE_ERRORS:
         return []
     out: list[dict] = []
@@ -136,4 +150,5 @@ __all__ = [
     "DEFAULT_TOOLS",
     "get_tools_payload",
     "get_tool_categories_payload",
+    "register_workflow_tool_registry_provider",
 ]

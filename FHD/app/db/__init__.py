@@ -180,13 +180,14 @@ def _resolve_host_database_url() -> str:
     test_mgr = _get_test_db_manager()
     if test_mgr and test_mgr.is_enabled():
         return f"sqlite:///{test_mgr.resolved_test_db_path()}"
-    env_url = (os.environ.get("DATABASE_URL") or "").strip()
-    if env_url:
-        return env_url
+    # 桌面模式必须用本机 SQLite，忽略外部环境残留的 DATABASE_URL（如开发机 PostgreSQL）
     if _sqlite_desktop_mode():
         from app.desktop_runtime.db import configure_sqlite_defaults
 
         return configure_sqlite_defaults()
+    env_url = (os.environ.get("DATABASE_URL") or "").strip()
+    if env_url:
+        return env_url
     return _DEFAULT_DATABASE_URL
 
 
@@ -194,13 +195,14 @@ def _get_database_url(db_path: str | None = None) -> str:
     test_mgr = _get_test_db_manager()
     if test_mgr and test_mgr.is_enabled():
         return f"sqlite:///{test_mgr.resolved_test_db_path()}"
-    env_url = (os.environ.get("DATABASE_URL") or "").strip()
-    if env_url:
-        return _database_url_for_active_mod(env_url)
-    if (os.environ.get("XCAGI_DESKTOP_MODE") or "").strip().lower() in {"1", "true", "yes", "on"}:
+    # 桌面模式优先：避免父进程 DATABASE_URL 把桌面后端拽到不可用的 PostgreSQL
+    if _sqlite_desktop_mode():
         from app.desktop_runtime.db import configure_sqlite_defaults
 
         return _database_url_for_active_mod(configure_sqlite_defaults())
+    env_url = (os.environ.get("DATABASE_URL") or "").strip()
+    if env_url:
+        return _database_url_for_active_mod(env_url)
     # 无 DATABASE_URL 时与 Config 一致：默认本机 PostgreSQL（请在 .env 中设置 DATABASE_URL 或使用 SQLite URL）。
     return _database_url_for_active_mod(_DEFAULT_DATABASE_URL)
 

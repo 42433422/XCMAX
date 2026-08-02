@@ -24,7 +24,7 @@ def _bounded_text(value: Any, *, limit: int) -> str:
 
 
 def build_source_files(proposal: Dict[str, Any]) -> Dict[str, str]:
-    """Return exactly three validated source files without touching disk."""
+    """Return exactly five validated, self-contained files without touching disk."""
 
     validate_proposal(proposal)
     pack = proposal["employee_pack"]
@@ -42,6 +42,11 @@ def build_source_files(proposal: Dict[str, Any]) -> Dict[str, str]:
     if not prompt or not criteria:
         raise ProposalScaffoldError("prompt and acceptance criteria are required")
 
+    module_name = re.sub(r"[^a-z0-9_]+", "_", package_id.lower()).strip("_")
+    runtime_module = module_name
+    if runtime_module.endswith("_employee"):
+        runtime_module = runtime_module[: -len("_employee")] or runtime_module
+
     manifest = {
         "id": package_id,
         "name": package_id,
@@ -50,6 +55,7 @@ def build_source_files(proposal: Dict[str, Any]) -> Dict[str, str]:
         "artifact": "employee_pack",
         "scope": "global",
         "department": proposal["department"],
+        "industry": "AI/ERP governance",
         "description": responsibility,
         "prompt_template": prompt,
         "skills": skills,
@@ -72,7 +78,18 @@ def build_source_files(proposal: Dict[str, Any]) -> Dict[str, str]:
                 "system_prompt": prompt,
                 "reasoning_mode": "default",
             },
-            "actions": {"handlers": ["llm_md", "echo"]},
+            "collaboration": {"workflow": {"workflow_id": 0}},
+            "actions": {
+                "handlers": ["direct_python"],
+                "direct_python": {
+                    "module": module_name,
+                    "action": "analyze",
+                },
+            },
+            "metadata": {
+                "framework_version": "2.0.0",
+                "created_by": "autonomous_evolution",
+            },
         },
         "acceptance_criteria": criteria,
         "evolution_proposal": {
@@ -94,10 +111,125 @@ def build_source_files(proposal: Dict[str, Any]) -> Dict[str, str]:
             for skill in skills
         ]
     }
+    employee_entry = f'''"""Self-contained scorecard gap analyst entrypoint."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from typing import Any, Dict
+
+
+async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+    vendor_dir = Path(__file__).resolve().parents[1] / "vendor"
+    if str(vendor_dir) not in sys.path:
+        sys.path.insert(0, str(vendor_dir))
+    from {runtime_module}.convert import analyze_scorecard
+
+    result = analyze_scorecard(dict(payload or {{}}))
+    return {{
+        "ok": True,
+        "summary": result["summary"],
+        "items": result["failed_gates"],
+        "warnings": result["warnings"],
+        "meta": {{"handler": "direct_python", "action": "analyze"}},
+    }}
+'''
+    analyzer = '''"""Deterministic founder-autonomy scorecard evidence analysis."""
+
+from __future__ import annotations
+
+import json
+from typing import Any, Dict, List, Tuple
+
+_FAILED_STATUSES = {"fail", "failed", "missing", "blocked", "not_met", "unmet"}
+
+
+def _load_scorecard(payload: Dict[str, Any]) -> Dict[str, Any]:
+    raw = payload.get("scorecard", payload.get("founder_autonomy_scorecard_json", payload))
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError("scorecard must be valid JSON") from exc
+    if not isinstance(raw, dict):
+        raise ValueError("scorecard must be a JSON object")
+    return raw
+
+
+def _failed(node: Dict[str, Any]) -> bool:
+    status = str(node.get("status") or "").strip().lower().replace("-", "_")
+    if status in _FAILED_STATUSES:
+        return True
+    for key in ("passed", "ok", "met"):
+        if node.get(key) is False:
+            return True
+    return False
+
+
+def _receipt(node: Dict[str, Any]) -> str:
+    for key in ("missing_receipt", "required_receipt", "evidence_receipt", "receipt"):
+        value = node.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:500]
+    return "missing"
+
+
+def _collect(value: Any, path: Tuple[str, ...], out: List[Dict[str, Any]]) -> None:
+    if isinstance(value, dict):
+        if _failed(value):
+            name = str(
+                value.get("name")
+                or value.get("gate")
+                or value.get("id")
+                or (path[-1] if path else "gate")
+            )
+            receipt = _receipt(value)
+            out.append(
+                {
+                    "gate": name[:200],
+                    "path": ".".join(path)[:500],
+                    "status": str(value.get("status") or "failed")[:80],
+                    "missing_receipt": receipt,
+                    "recommendation": (
+                        f"Close gate {name[:200]} with immutable evidence: {receipt}"
+                    ),
+                }
+            )
+        for key, child in value.items():
+            if isinstance(child, (dict, list)):
+                _collect(child, path + (str(key),), out)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            if isinstance(child, (dict, list)):
+                _collect(child, path + (str(index),), out)
+
+
+def analyze_scorecard(payload: Dict[str, Any]) -> Dict[str, Any]:
+    scorecard = _load_scorecard(payload)
+    found: List[Dict[str, Any]] = []
+    _collect(scorecard, (), found)
+    unique: List[Dict[str, Any]] = []
+    seen = set()
+    for row in found:
+        key = (row["path"], row["gate"])
+        if key not in seen:
+            seen.add(key)
+            unique.append(row)
+    warnings = [] if unique else ["No failed evidence gate was found in the supplied scorecard."]
+    summary = (
+        f"Found {len(unique)} failed evidence gate(s); highest priority: {unique[0]['gate']}"
+        if unique
+        else "No failed evidence gate found."
+    )
+    return {"summary": summary, "failed_gates": unique, "warnings": warnings}
+'''
     return {
         "manifest.json": json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         "prompt.txt": prompt + "\n",
         "skills.json": json.dumps(skills_manifest, ensure_ascii=False, indent=2) + "\n",
+        f"backend/employees/{module_name}.py": employee_entry,
+        f"backend/vendor/{runtime_module}/convert.py": analyzer,
     }
 
 
@@ -116,7 +248,9 @@ def materialize_proposal(proposal: Dict[str, Any], *, repo_root: Path) -> Dict[s
         raise ProposalScaffoldError("employee pack source already exists")
     source_dir.mkdir(parents=True)
     for filename, content in files.items():
-        (source_dir / filename).write_text(content, encoding="utf-8")
+        target = source_dir / filename
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
     return {
         "ok": True,
         "package_id": package_id,

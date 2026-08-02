@@ -36,7 +36,6 @@ export function resolveChatSoftwareRouteKey(value: unknown): string {
   if (!key) return ''
   return navigationCapabilities().some((item) => item.route_key === key) ? key : ''
 }
-
 /**
  * Give Planner a host-owned capability map on every turn.  The model still
  * obeys account permissions and write-confirmation gates; this only removes

@@ -20,7 +20,7 @@ def get_current_industry() -> str:
     读取；无请求上下文时回退到 industry_config.get_current_industry()。
     """
     try:
-        from app.infrastructure.request_context import get_current_request
+        from app.domain.context.current_request import get_current_request
 
         request = get_current_request()
         if request is not None:

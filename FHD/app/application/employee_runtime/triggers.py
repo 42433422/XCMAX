@@ -46,7 +46,19 @@ def _make_handler(employee_id: str, binding: TriggerBinding):
         if not _event_matches_employee(event, employee_id):
             return
         payload = dict(getattr(event, "payload", None) or {})
-        payload.setdefault("trigger_event", getattr(event, "event_type", ""))
+        event_type = getattr(event, "event_type", "")
+        # A failed employee must never remediate the failure event emitted by
+        # its own run. Only the explicit origin field proves self-origin; for
+        # legacy events employee_id remains the target employee.
+        origin_employee = str(payload.get("origin_employee_id") or "").strip()
+        if event_type == EVENT_TASK_FAILED and origin_employee == employee_id:
+            logger.debug("skip self task-failed trigger emp=%s", employee_id)
+            return
+        if event_type == EVENT_TASK_FAILED and payload.get("retryable") is False:
+            logger.debug("skip non-retryable task-failed trigger emp=%s", employee_id)
+            return
+
+        payload.setdefault("trigger_event", event_type)
         payload.setdefault("employee_id", employee_id)
         task = str(
             payload.get("task")
@@ -69,7 +81,7 @@ def _make_handler(employee_id: str, binding: TriggerBinding):
             logger.info(
                 "employee trigger handled emp=%s event=%s success=%s",
                 employee_id,
-                getattr(event, "event_type", ""),
+                event_type,
                 result.get("success"),
             )
         except RECOVERABLE_ERRORS:
@@ -94,7 +106,7 @@ def _unsubscribe_employee(bus: Any, employee_id: str) -> None:
         try:
             bus.unsubscribe(sub)
         except RECOVERABLE_ERRORS:
-            logger.debug("unsubscribe failed emp=%s", employee_id, exc_info=True)
+            logger.debug("unsubscribe employee trigger failed", exc_info=True)
 
 
 def refresh_employee_triggers(pack_id: str | None = None) -> dict[str, Any]:
@@ -107,6 +119,26 @@ def refresh_employee_triggers(pack_id: str | None = None) -> dict[str, Any]:
     if desktop_admin_employee_runtime_disabled():
         _ACTIVE_SUBSCRIPTIONS.clear()
         return desktop_employee_runtime_status()
+    from app.mod_sdk.product_plane import automatic_employee_runtime_enabled
+
+    if not automatic_employee_runtime_enabled():
+        try:
+            from app.neuro_bus.bus import get_neuro_bus
+
+            bus = get_neuro_bus()
+            for employee_id in list(_ACTIVE_SUBSCRIPTIONS):
+                _unsubscribe_employee(bus, employee_id)
+        except RECOVERABLE_ERRORS:
+            pass
+        logger.info(
+            "enterprise client: employee event triggers are disabled by product-plane policy"
+        )
+        return {
+            "registered": [],
+            "active_employees": [],
+            "event_types": [],
+            "disabled_by_product_plane": True,
+        }
     try:
         from app.neuro_bus.bus import get_neuro_bus
 
@@ -172,6 +204,7 @@ def publish_employee_task_failed(
         from app.neuro_bus.events.base import NeuroEvent
 
         payload = dict(extra or {})
+        payload.setdefault("origin_employee_id", employee_id)
         payload.update(
             {
                 "employee_id": employee_id,

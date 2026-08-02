@@ -14,6 +14,7 @@ CRON_FILE="/etc/cron.d/xcmax-dr"
 declare -A scripts=(
   [xcmax_release_order.py]=xcmax-release-order
   [xcmax_dr_finalize.sh]=xcmax-dr-finalize
+  [xcmax_dr_storage_retention.sh]=xcmax-dr-storage-retention
   [xcmax_dr_restore_latest.sh]=xcmax-dr-restore-latest
   [xcmax_dr_prepare_runtime.sh]=xcmax-dr-prepare-runtime
   [xcmax_dr_prepare_tunnel_primary.sh]=xcmax-dr-prepare-tunnel-primary
@@ -92,6 +93,8 @@ CRON_TZ=Asia/Shanghai
 
 # 校验 daily logical dump 并封存为接收账号不可改写的 root 归档。
 */10 * * * * root /usr/local/sbin/xcmax-dr-finalize >/dev/null 2>&1
+# 接收空闲时轮转历史发布、基础备份和已被新基础备份覆盖的 WAL。
+5,15,25,35,45,55 * * * * root /usr/local/sbin/xcmax-dr-storage-retention >/dev/null 2>&1
 # 逻辑恢复链保留为跨版本回退路径。
 7,22,37,52 * * * * root /usr/local/sbin/xcmax-dr-restore-latest >/dev/null 2>&1
 # 每个生产发布的精确 SHA 到达后校验并原子切换 DR 代码。

@@ -127,6 +127,14 @@ async def lifespan(app: FastAPI):
                 start_backup_scheduler()
             except RECOVERABLE_ERRORS as exc:
                 logger.warning("⚠️ 桌面端定时备份调度器启动失败: %s", exc)
+            try:
+                from app.desktop_runtime.sync_outbox_scheduler import (
+                    start_sync_outbox_scheduler,
+                )
+
+                start_sync_outbox_scheduler()
+            except RECOVERABLE_ERRORS as exc:
+                logger.warning("⚠️ 同步 outbox 补推调度器启动失败: %s", exc)
 
     # Persy 记忆图谱定时任务（衰减 + 缓存刷新）——轻量任务，fast_start / 完整启动都挂
     await _init_memory_graph_async(app)
@@ -153,6 +161,12 @@ async def lifespan(app: FastAPI):
         stop_backup_scheduler()
     except RECOVERABLE_ERRORS as exc:
         logger.warning("⚠️ 桌面端定时备份调度器关闭失败: %s", exc)
+    try:
+        from app.desktop_runtime.sync_outbox_scheduler import stop_sync_outbox_scheduler
+
+        stop_sync_outbox_scheduler()
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("⚠️ 同步 outbox 补推调度器关闭失败: %s", exc)
     try:
         from app.application.employee_runtime.scheduler import stop_employee_scheduler
 
@@ -380,6 +394,20 @@ async def _init_employee_runtime_async(app: FastAPI):
         app.state.employee_triggers = disabled
         app.state.employee_scheduler = disabled
         logger.info("桌面产品边界：跳过管理端员工触发器与本地调度器")
+        return
+    from app.mod_sdk.product_plane import automatic_employee_runtime_enabled
+
+    if not automatic_employee_runtime_enabled():
+        app.state.employee_triggers = {
+            "registered": [],
+            "active_employees": [],
+            "disabled_by_product_plane": True,
+        }
+        app.state.employee_scheduler = {
+            "running": False,
+            "disabled_by_product_plane": True,
+        }
+        logger.info("enterprise client: employee triggers and scheduler are disabled")
         return
     if passive_node_enabled():
         logger.info("被动应用节点：跳过员工触发器与本地调度器")

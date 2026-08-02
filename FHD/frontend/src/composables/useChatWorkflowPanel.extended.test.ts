@@ -195,27 +195,6 @@ describe('useChatWorkflowPanel - extended', () => {
     // No action expected
   })
 
-  it('phoneAgentWorkflowProgressShouldStart returns false for null', () => {
-    const deps = makeDeps()
-    const panel = useChatWorkflowPanel(deps)
-    // Access internal function via indirect test
-    // The function is not exported, test through buildWorkflowMonitorLine
-    expect(true).toBe(true) // placeholder - tested via integration
-  })
-
-  it('formatPhoneClickError maps known error codes', () => {
-    // These are internal functions, tested indirectly
-    expect(true).toBe(true)
-  })
-
-  it('buildWorkflowMonitorLine returns default for unknown employee', () => {
-    const deps = makeDeps()
-    const panel = useChatWorkflowPanel(deps)
-    // Test via upsertWorkflowEmployeeTask which calls buildWorkflowMonitorLine
-    // With no meta, it should return early
-    expect(true).toBe(true)
-  })
-
   it('pruneStaleWorkflowEmployeeTasks removes tasks without meta', () => {
     const deps = makeDeps()
     deps.taskList.value = [
@@ -314,21 +293,6 @@ describe('useChatWorkflowPanel - extended', () => {
     expect(removeSpy).toHaveBeenCalledWith('xcagi:workflow-ai-employees-changed', expect.any(Function))
     addSpy.mockRestore()
     removeSpy.mockRestore()
-  })
-
-  it('fetchPhoneAgentStatusPayload returns error when no base', async () => {
-    const deps = makeDeps()
-    const panel = useChatWorkflowPanel(deps)
-    // getPhoneAgentApiBase returns '' in mock, so should return error
-    // This is tested indirectly
-    expect(true).toBe(true)
-  })
-
-  it('requestPhoneAgentStart handles fetch failure gracefully', async () => {
-    const deps = makeDeps()
-    const panel = useChatWorkflowPanel(deps)
-    // getPhoneAgentApiBase returns '' in mock, so requestPhoneAgentStart returns early
-    expect(true).toBe(true)
   })
 
   it('registerWorkflowPanelWatchers sets up watchers', () => {

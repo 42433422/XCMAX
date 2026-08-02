@@ -1490,10 +1490,12 @@ describe('ModStore.coverage – onMounted / onBeforeUnmount', () => {
   it('onBeforeUnmount：调用 removeEventListener 清理', async () => {
     const { wrapper } = await mountModStore({ tab: 'all' })
     await waitForAsync()
-    // matchMedia polyfill 通常提供 addEventListener/removeEventListener
+    // matchMedia polyfill 提供 addEventListener/removeEventListener mock
+    const mediaResults = vi.mocked(window.matchMedia).mock.results
+    const mobileMedia = mediaResults.find((r) => r.value?.media === '(max-width: 768px)')?.value
+    expect(mobileMedia).toBeDefined()
     wrapper.unmount()
-    // 不崩溃即可
-    expect(true).toBe(true)
+    expect(mobileMedia.removeEventListener).toHaveBeenCalledWith('change', expect.any(Function))
   })
 })
 
@@ -1778,8 +1780,8 @@ describe('ModStore.coverage – refreshHostMods', () => {
     const mod = makeMod({ is_installed: false })
     await vm.installMod(mod)
     await flushPromises()
-    // 不崩溃即可
-    expect(true).toBe(true)
+    // refresh 抛错被 catch，组件不崩溃且 refresh 已被调用
+    expect(mockModsStore.refresh).toHaveBeenCalled()
     wrapper.unmount()
   })
 })

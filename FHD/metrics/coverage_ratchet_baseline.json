@@ -1,8 +1,8 @@
 {
-  "_note": "覆盖率棘轮基线（只升不降）。后端行 floor SSOT = pyproject.toml fail_under；backend_lines_floor 为镜像（只读参考）。分支 floor 与前端各项 floor 为本文件 SSOT。由 coverage_ratchet.py --bump 维护；updated/last_measured 记录最近 bump 时的实测值。2026-07-25：吸收 shipment ETL/模板解析新模块后实测回落，临时下调 floor 以解锁合并（后续只升不降收口）。2026-07-31：吸收 Persy 统一记忆图谱 + ETL 新模块后实测再次回落，下调 88/81 → 85/77 解锁合并。",
-  "updated": "2026-07-31",
-  "backend_lines_floor": 85,
-  "backend_branch_floor": 77,
+  "_note": "覆盖率棘轮基线（只升不降）。后端行 floor SSOT = pyproject.toml fail_under；backend_lines_floor 为镜像（只读参考）。分支 floor 与前端各项 floor 为本文件 SSOT。由 coverage_ratchet.py --bump 维护；updated/last_measured 记录最近 bump 时的实测值。2026-07-25：吸收 shipment ETL/模板解析新模块后实测回落，临时下调 floor 以解锁合并（后续只升不降收口）。2026-08-01 口径统一：行 floor 88 未实际下调成功——07-31 的 85/77 改动仅存在于其他分支且只改了本镜像与 branch floor（pyproject fail_under 铁律 SSOT 从未下调）；此后任何 floor 下调必须附带 docs/adr/ 下 coverage ADR，由 scripts/dev/guard_coverage_floor.py 强制把关。2026-08-01 全量实测 87.89% 行 / 81.00% 分支（分支 floor 81 即实测对应值；行实测在 floor 88 的 jitter 0.5 容差内）。",
+  "updated": "2026-07-25",
+  "backend_lines_floor": 88,
+  "backend_branch_floor": 81,
   "frontend_floors": {
     "lines": 92,
     "branches": 81,

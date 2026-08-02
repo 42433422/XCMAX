@@ -128,7 +128,7 @@ describe('AIEcosystemView.vue', () => {
     }
   })
 
-  it('opens private mod delivery panel when production launcher clicked', async () => {
+  it('embeds private delivery panel when production launcher clicked', async () => {
     const { wrapper, router } = await mountView()
     const pushSpy = vi.spyOn(router, 'push')
     await wrapper.find('.app-launcher--production').trigger('click')

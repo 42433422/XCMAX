@@ -174,11 +174,14 @@ function marketErrorBody(j: Record<string, unknown>): {
   return { message, marketBaseUrl };
 }
 
-export async function fetchMarketAccountOverview(authorization: string): Promise<MarketAccountOverviewData> {
+export async function fetchMarketAccountOverview(
+  authorization: string,
+  refresh = false,
+): Promise<MarketAccountOverviewData> {
   const res = await apiFetch('/api/market/account-overview', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...marketBearerHeaders(authorization) },
-    body: JSON.stringify({ authorization }),
+    body: JSON.stringify({ authorization, refresh }),
   });
   const j = (await res.json()) as {
     success?: boolean;

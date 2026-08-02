@@ -35,6 +35,7 @@ import { useChatSessionHistory } from './useChatSessionHistory'
 import { useAgentRunEventSync, extractAgentRunId } from './useAgentRunEvents'
 import type { UseChatViewOptions } from './useChatView'
 import type { ChatAutoAction, ChatPlannerPayload, ChatRequest } from '@/types/chat'
+import { collapseExactDuplicateReply } from '@/utils/chatReplyNormalization'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import {
   buildChatSoftwareCapabilities,
@@ -42,7 +43,6 @@ import {
 } from '@/utils/chatCapabilityCatalog'
 import { openDocumentPreviewFromResult } from '@/state/documentPreviewPip'
 import type { ChatExecutionProgressItem } from '@/types/chat-ui'
-
 type XcagiChatWindow = Window & {
   __VUE_CHAT_FILL__?: (value: string) => boolean
   setWorkModeFromChat?: (enabled: boolean) => void
@@ -1420,7 +1420,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
           throw new Error(sseError)
         }
         const donePayload = asPlannerPayload(doneResult)
-        const finalText = String(donePayload.response ?? streamPlain).trim() || streamPlain || '（无内容）'
+        const finalText = collapseExactDuplicateReply(String(donePayload.response ?? streamPlain).trim() || streamPlain || '（无内容）')
         updateExecutionProgress('completed', '任务已完成', 'success')
         patchMessageAtIndex(msgIndex, { toolProgressLabel: undefined })
         applyPlainTextToMessageIndex(msgIndex, finalText)
