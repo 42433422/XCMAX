@@ -2,11 +2,12 @@ from types import SimpleNamespace
 
 
 def test_entitled_but_uninstalled_mod_does_not_enter_load_or_failure_loop(monkeypatch) -> None:
-    from app.infrastructure.mods import mod_manager as module
     from app import runtime_integrity
+    from app.infrastructure.mods import missing_local_state
+    from app.infrastructure.mods import mod_manager as module
 
     load_calls: list[str] = []
-    cleared: list[str] = []
+    issues: list[tuple[str, str, float]] = []
     manager = SimpleNamespace(
         _loaded_mods=[],
         resolve_mod_directory=lambda _mod_id: None,
@@ -16,11 +17,24 @@ def test_entitled_but_uninstalled_mod_does_not_enter_load_or_failure_loop(monkey
     monkeypatch.setattr(module, "_restore_entitlements_from_session_id", lambda _sid: None)
     monkeypatch.setattr(module, "_mod_allowed_for_api_load", lambda _mid, _sid=None: True)
     monkeypatch.setattr(module, "get_mod_manager", lambda: manager)
-    monkeypatch.setattr(runtime_integrity, "clear_runtime_issue", cleared.append)
+    monkeypatch.setattr(
+        runtime_integrity,
+        "record_runtime_issue",
+        lambda issue_id, message, ttl_seconds: issues.append((issue_id, message, ttl_seconds)),
+    )
+    missing_local_state.clear_mod_missing_locally("artifact-generator")
 
     assert module.ensure_mod_api_ready("artifact-generator") is False
+    assert module.ensure_mod_api_ready("artifact-generator") is False
     assert load_calls == []
-    assert cleared == ["industry_mod:artifact-generator"]
+    assert issues == [
+        (
+            "industry_mod:artifact-generator",
+            "Industry MOD is entitled but not installed locally: artifact-generator",
+            24 * 60 * 60,
+        )
+    ]
+    missing_local_state.clear_mod_missing_locally("artifact-generator")
 
 
 def test_desktop_sku_never_registers_admin_employee_pack_routes(monkeypatch, tmp_path) -> None:

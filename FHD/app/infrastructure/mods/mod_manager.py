@@ -28,7 +28,6 @@ from .registry import get_mod_registry
 logger = logging.getLogger(__name__)
 _MOD_API_FAILURE_RETRY_AT: dict[str, float] = {}
 _MOD_API_FAILURE_BACKOFF_SECONDS = 15.0
-_MOD_API_MISSING_LOCAL: set[str] = set()
 
 
 def is_mods_disabled() -> bool:
@@ -1381,14 +1380,12 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
     if mid not in mm._loaded_mods:
         if not _mod_is_installed_locally(mm, mid):
             _MOD_API_FAILURE_RETRY_AT.pop(mid, None)
-            from app.runtime_integrity import clear_runtime_issue
-
-            clear_runtime_issue(f"industry_mod:{mid}")
-            logger.debug(
-                "[ModManager] ensure_mod_api_ready: entitled mod %s is not installed; skip",
-                mid,
-            )
+            # Entitlement and local installation are separate states.  Keep a
+            # single actionable runtime issue instead of retrying the loader
+            # on every authorization refresh.
+            mark_mod_missing_locally(mid)
             return False
+        clear_mod_missing_locally(mid)
         retry_at = _MOD_API_FAILURE_RETRY_AT.get(mid, 0.0)
         if retry_at > time.monotonic():
             logger.debug(
