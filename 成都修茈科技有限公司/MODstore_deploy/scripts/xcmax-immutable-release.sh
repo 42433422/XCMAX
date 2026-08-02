@@ -248,43 +248,6 @@ for raw in open(path, encoding="utf-8"):
 PY
 }
 
-upsert_protected_env_value() {
-  local destination="$1"
-  local key="$2"
-  local value="$3"
-  XCMAX_ENV_VALUE="$value" python3 - "$destination" "$key" <<'PY'
-import os
-import re
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-key = sys.argv[2]
-value = os.environ.get("XCMAX_ENV_VALUE", "")
-if not re.fullmatch(r"[A-Z][A-Z0-9_]*", key):
-    raise SystemExit("invalid protected environment key")
-if len(value) < 32 or "\n" in value or "\r" in value:
-    raise SystemExit(f"{key} must be a single-line secret of at least 32 characters")
-lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
-replacement = f"{key}={value}"
-out = []
-written = False
-for line in lines:
-    if line.split("=", 1)[0].strip() == key:
-        if not written:
-            out.append(replacement)
-            written = True
-        continue
-    out.append(line)
-if not written:
-    out.append(replacement)
-tmp = path.with_suffix(path.suffix + ".tmp")
-tmp.write_text("\n".join(out) + "\n", encoding="utf-8")
-os.chmod(tmp, 0o600)
-tmp.replace(path)
-PY
-}
-
 # The build imports the production app before promotion. Load only the required
 # secret from the protected environment so fail-closed startup validation is real
 # without sourcing arbitrary EnvironmentFile content into the deployment shell.
@@ -296,14 +259,13 @@ migrate_env_file "$SCHEDULER_ENV_FILE" \
   "$SOURCE_ROOT/$MODSTORE_SUBDIR/.env.scheduler" \
   "$SITE_LINK/MODstore_deploy/.env.scheduler" \
   || install -m 600 /dev/null "$SCHEDULER_ENV_FILE"
-if [[ -n "${MODSTORE_AUTO_PUBLISH_TOKEN:-}" ]]; then
-  upsert_protected_env_value \
-    "$ENV_FILE" MODSTORE_AUTO_PUBLISH_TOKEN "$MODSTORE_AUTO_PUBLISH_TOKEN"
-  log "provisioned protected MODstore auto-publish credential"
-fi
 BUILD_JWT_SECRET="$(read_env_value "$ENV_FILE" MODSTORE_JWT_SECRET)"
 [[ -n "$BUILD_JWT_SECRET" ]] || fail "protected production env is missing MODSTORE_JWT_SECRET"
 [[ ${#BUILD_JWT_SECRET} -ge 32 ]] || fail "protected production MODSTORE_JWT_SECRET is shorter than 32 characters"
+BUILD_AUTO_PUBLISH_TOKEN="$(read_env_value "$ENV_FILE" MODSTORE_AUTO_PUBLISH_TOKEN)"
+[[ -n "$BUILD_AUTO_PUBLISH_TOKEN" ]] || fail "protected production env is missing MODSTORE_AUTO_PUBLISH_TOKEN"
+[[ ${#BUILD_AUTO_PUBLISH_TOKEN} -ge 32 ]] || fail "protected production MODSTORE_AUTO_PUBLISH_TOKEN is shorter than 32 characters"
+unset BUILD_AUTO_PUBLISH_TOKEN
 
 PAYMENT_SERVICE_PRESENT=0
 PAYMENT_JAVA_BIN=/usr/bin/java
