@@ -318,7 +318,10 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
     assert 'ditto --norsrc "${package_stage}" "${out_dir}"' not in installer
     assert "--config .electron-builder.release.yml --mac zip" in installer
     assert 'builder_config="desktop/.electron-builder.release.yml"' in installer
-    assert 'sed "s/__XCAGI_PRODUCT_VERSION__/${VERSION}/g" desktop/electron-builder.yml > "${builder_config}"' in installer
+    assert (
+        'sed "s/__XCAGI_PRODUCT_VERSION__/${VERSION}/g" desktop/electron-builder.yml > "${builder_config}"'
+        in installer
+    )
     assert 'rm -f "${builder_config}"' in installer
     assert "electron-builder --mac dmg" not in installer
     assert "scripts/package/create-mac-dmg.sh" in installer
