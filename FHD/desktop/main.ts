@@ -44,31 +44,14 @@ import { DesktopAutonomyAdapter } from './autonomy/desktop-adapter'
 import { backendCrashPolicy } from './autonomy/policies/backend-crash.policy'
 import { degradedRemediationPolicy } from './autonomy/policies/degraded-remediation.policy'
 import { updateRollbackPolicy } from './autonomy/policies/update-rollback.policy'
-import { resolveDesktopInstallIdentity } from './installation-identity'
+import { readJsonTextFile, sanitizeBackendProxyEnv } from './backend-env-utils'
+import { desktopWindowOpenAction, isBenignDesktopLoadAbort, isTrustedDesktopOrigin } from './desktop-navigation'
+import { assertSelfUpdateInstallSupported, getDesktopInstallIdentity } from './desktop-install-update'
+import { warmPersistedDesktopSessionCookieStore } from './session-cookie-warmup'
 
 const APP_NAME = 'XCAGI'
 const KELLAI_BUNDLE_ID = 'com.kellai.desktop'
 const POST_UPDATE_STABILITY_MS = 5_000
-
-/**
- * OTA may only replace the one official macOS application copy.  A DMG-mounted
- * app or an internal acceptance copy has the same bundle id and user data, but
- * allowing it to self-update would leave two competing XCAGI installations.
- */
-export function getDesktopInstallIdentity() {
-  return resolveDesktopInstallIdentity({
-    platform: process.platform,
-    isPackaged: app.isPackaged,
-    executablePath: process.execPath,
-  })
-}
-
-function assertSelfUpdateInstallSupported(): void {
-  const identity = getDesktopInstallIdentity()
-  if (!identity.canSelfUpdate) {
-    throw new Error(identity.reason || '当前安装副本不支持在线更新')
-  }
-}
 
 /** OTA / 更新站直连绕过（setProxy 用逗号；commandLine 用分号）。 */
 export const OTA_PROXY_BYPASS_RULES =
@@ -242,25 +225,6 @@ export function resolveDefaultDesktopPort(): number {
 
 export const DEFAULT_PORT = resolveDefaultDesktopPort()
 
-/**
- * Chromium loads persisted cookies lazily. On a cold start immediately after
- * an update, the renderer's first enterprise-session validation can otherwise
- * race that load and incorrectly treat an existing signed-in user as logged
- * out. This only warms the existing HttpOnly cookie store; the backend still
- * performs the authoritative local-session and official-market validation.
- */
-export async function warmPersistedDesktopSessionCookieStore(): Promise<boolean> {
-  const cookieStore = session.defaultSession.cookies
-  if (!cookieStore?.get) return false
-  try {
-    const cookieName = String(process.env.SESSION_COOKIE_NAME || 'session_id').trim() || 'session_id'
-    const cookies = await cookieStore.get({ url: `http://127.0.0.1:${DEFAULT_PORT}/` })
-    return cookies.some(cookie => cookie.name === cookieName && Boolean(cookie.value))
-  } catch {
-    return false
-  }
-}
-
 /** 桌面后端绑定地址：0.0.0.0 供手机同 WiFi 扫码；Electron UI 仍只加载 127.0.0.1。 */
 export function resolveDesktopBackendBindHost(): string {
   const env = process.env.XCAGI_DESKTOP_API_HOST?.trim()
@@ -355,36 +319,6 @@ export function readPackagedProductSku(): ProductSku | null {
     }
   }
   return null
-}
-
-export function readJsonTextFile(filePath: string): string {
-  const buffer = fs.readFileSync(filePath)
-  let text: string
-  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
-    text = buffer.toString('utf16le')
-  } else {
-    text = buffer.toString('utf8')
-  }
-  return text.replace(/^\uFEFF/, '')
-}
-
-function sanitizeBackendProxyEnv(
-  env: NodeJS.ProcessEnv | Record<string, string | undefined>
-): Record<string, string | undefined> {
-  const next: Record<string, string | undefined> = { ...env }
-  for (const key of ['ALL_PROXY', 'all_proxy'] as const) {
-    const raw = String(next[key] || '').trim().toLowerCase()
-    if (
-      raw.startsWith('socks://') ||
-      raw.startsWith('socks4://') ||
-      raw.startsWith('socks5://') ||
-      raw.startsWith('socks5h://')
-    ) {
-      // Prefer HTTP_PROXY for backend httpx; SOCKS needs optional socksio.
-      delete next[key]
-    }
-  }
-  return next
 }
 
 export function backendEditionEnv(): Record<string, string> {
@@ -1093,39 +1027,6 @@ function tagDesktopWebContents(win: BrowserWindow): void {
     .catch(() => { })
 }
 
-export function isTrustedDesktopOrigin(rawUrl: string | undefined, expectedPort?: number): boolean {
-  if (!rawUrl) return false
-  try {
-    const parsed = new URL(rawUrl)
-    const hostAllowed = parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost'
-    const port = expectedPort ?? DEFAULT_PORT
-    return parsed.protocol === 'http:' && hostAllowed && parsed.port === String(port)
-  } catch {
-    return false
-  }
-}
-
-export function desktopWindowOpenAction(
-  rawUrl: string,
-  expectedPort = DEFAULT_PORT,
-): 'allow' | 'deny' {
-  return isTrustedDesktopOrigin(rawUrl, expectedPort) ? 'allow' : 'deny'
-}
-
-/**
- * Chromium may abort the first navigation while the local backend redirects
- * from splash to the SPA.  If the same trusted desktop page is already loaded,
- * treating that transient abort as a boot failure produces a false error dialog.
- */
-export function isBenignDesktopLoadAbort(
-  error: unknown,
-  currentUrl: string | undefined,
-  expectedPort = DEFAULT_PORT,
-): boolean {
-  const message = error instanceof Error ? error.message : String(error || '')
-  return /ERR_ABORTED/i.test(message) && isTrustedDesktopOrigin(currentUrl, expectedPort)
-}
-
 function configureDesktopMediaPermissions(): void {
   const ses = session.defaultSession
   ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
@@ -1136,7 +1037,7 @@ function configureDesktopMediaPermissions(): void {
       (mediaTypes.length === 0 || mediaTypes.includes('audio') || mediaTypes.includes('microphone'))
     const requestUrl =
       (details as { requestingUrl?: string } | undefined)?.requestingUrl || webContents.getURL()
-    callback(wantsAudio && isTrustedDesktopOrigin(requestUrl))
+    callback(wantsAudio && isTrustedDesktopOrigin(requestUrl, DEFAULT_PORT))
   })
   ses.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
     const mediaTypes = ((details as { mediaTypes?: string[] } | undefined)?.mediaTypes || [])
@@ -1145,7 +1046,7 @@ function configureDesktopMediaPermissions(): void {
       permission === 'media' &&
       (mediaTypes.length === 0 || mediaTypes.includes('audio') || mediaTypes.includes('microphone'))
     const origin = requestingOrigin || webContents?.getURL() || ''
-    return wantsAudio && isTrustedDesktopOrigin(origin)
+    return wantsAudio && isTrustedDesktopOrigin(origin, DEFAULT_PORT)
   })
 }
 
@@ -1263,7 +1164,7 @@ async function createWindow(): Promise<void> {
     }
   })
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    const action = desktopWindowOpenAction(url)
+    const action = desktopWindowOpenAction(url, DEFAULT_PORT)
     if (action === 'deny') {
       console.warn(`[xcagi-desktop] blocked window open to ${url}`)
     }
@@ -1322,7 +1223,7 @@ async function createWindow(): Promise<void> {
       mainWindow.focus()
     } catch (error) {
       const currentUrl = mainWindow?.webContents.getURL()
-      if (isBenignDesktopLoadAbort(error, currentUrl)) {
+      if (isBenignDesktopLoadAbort(error, currentUrl, DEFAULT_PORT)) {
         console.warn('[xcagi-desktop] ignored transient local-page navigation abort', error)
         return
       }
@@ -1553,7 +1454,7 @@ function bootstrap(): void {
 
     app.whenReady().then(async () => {
       await applyOtaProxyBypass()
-      if (await warmPersistedDesktopSessionCookieStore()) {
+      if (await warmPersistedDesktopSessionCookieStore(DEFAULT_PORT)) {
         writeBackendLog('[session] restored persisted desktop session cookie before renderer startup\n')
       }
       const sku = readPackagedProductSku()
