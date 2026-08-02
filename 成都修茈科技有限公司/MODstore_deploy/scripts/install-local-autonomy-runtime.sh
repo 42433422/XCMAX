@@ -193,6 +193,7 @@ files = [
     "MODstore_deploy/modstore_server/duty_workforce_burnin.py",
     "MODstore_deploy/modstore_server/duty_workforce_contracts.py",
     "MODstore_deploy/modstore_server/duty_workforce_learning.py",
+    "MODstore_deploy/modstore_server/employee_duty_input_resolver.py",
     "MODstore_deploy/modstore_server/employee_executor.py",
     "MODstore_deploy/modstore_server/employee_specialized_tools.py",
     "MODstore_deploy/modstore_server/employee_verification.py",
