@@ -15,17 +15,17 @@
     "note": "1.0.0.1 全量 source=[app] + branch 实测；测试通过但低于当前 88/81 发布门槛，不能标记为 green。"
   },
   "wip_local": {
-    "captured_at": "2026-08-02T08:00:00Z",
+    "captured_at": "2026-08-02T09:21:00Z",
     "branch": "codex/release-1.0.0.1-full-20260802",
     "status": "tests_passed_coverage_below_floor",
-    "backend_line_pct": 84.54,
-    "backend_branch_pct": 76.29,
-    "pytest_passed": 35639,
+    "backend_line_pct": 85.28,
+    "backend_branch_pct": 77.44,
+    "pytest_passed": 35619,
     "pytest_failed": 0,
     "pytest_errors": 0,
-    "pytest_skipped": 7,
+    "pytest_skipped": 41,
     "pytest_xpassed": 1,
-    "note": "2026-08-02 本地 CI 等价全量 pytest tests/：测试通过；行/分支覆盖 84.54 / 76.29，低于 88 / 81 门槛。"
+    "note": "2026-08-02 本地 CI 等价全量 pytest tests/：35619 通过、41 跳过、1 xpass；行/分支覆盖 85.28 / 77.44，低于 88 / 81 门槛。"
   },
   "quality_gate": {
     "status": "failed",
@@ -34,8 +34,8 @@
     "backend_branch_floor": 81,
     "head_backend_line_delta": -3.46,
     "head_backend_branch_delta": -4.71,
-    "wip_backend_line_delta": -3.46,
-    "wip_backend_branch_delta": -4.71,
+    "wip_backend_line_delta": -2.72,
+    "wip_backend_branch_delta": -3.56,
     "frontend_lines_delta": 1.21,
     "frontend_branches_delta": 1.45,
     "frontend_functions_delta": 1.39,

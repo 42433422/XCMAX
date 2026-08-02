@@ -303,9 +303,9 @@ def _normalized_order_date(value: Any) -> str:
     match = _DATE_RE.search(text)
     if not match:
         return ""
-    normalized = match.group(1).replace("年", "-").replace("月", "-").replace("日", "")
     try:
-        return date.fromisoformat(normalized).isoformat()
+        year, month, day = (int(part) for part in re.findall(r"\d+", match.group(1)))
+        return date(year, month, day).isoformat()
     except ValueError:
         return ""
 

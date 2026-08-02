@@ -1080,7 +1080,7 @@ class TestPrivateDeliveryRequests:
     def test_create_request_proxies_current_market_identity(
         self, client: TestClient, monkeypatch
     ) -> None:
-        from app.services import private_mod_delivery as delivery
+        from app.application import private_mod_delivery_app as delivery
 
         remote = AsyncMock(
             return_value={
