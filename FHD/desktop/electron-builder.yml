@@ -87,6 +87,11 @@ mac:
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
+    # npm/Electron requires a three-part SemVer, while XCAGI releases use a
+    # four-part product version. Keep Finder and the app bundle aligned with
+    # the product release that users install.
+    CFBundleShortVersionString: ${env.XCAGI_PRODUCT_VERSION}
+    CFBundleVersion: ${env.XCAGI_PRODUCT_VERSION}
     NSMicrophoneUsageDescription: XCAGI 需要使用麦克风进行语音输入和语音转写。
 dmg:
   sign: true
