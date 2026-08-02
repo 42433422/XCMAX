@@ -6522,6 +6522,11 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
             ),
             "run_id": final.get("run_id"),
             "status": final.get("status"),
+            "structured_gate": (
+                decision.get("structured_gate")
+                if isinstance(decision.get("structured_gate"), dict)
+                else None
+            ),
             "kb_salvage": salvage_summary,
         }
     )
