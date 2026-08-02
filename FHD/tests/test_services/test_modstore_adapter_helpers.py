@@ -5,6 +5,10 @@ from __future__ import annotations
 import pytest
 
 from app.services.conversation.modstore_adapter import (
+    _iter_market_sse_data_payloads,
+    _iter_market_transport_plans,
+    _market_connect_attempts,
+    _market_connect_timeout,
     _normalize_stream_choice,
     _platform_stream_payload_to_openai_chunk,
     _strip_bearer_prefix,

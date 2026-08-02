@@ -39,6 +39,10 @@ vi.mock('@/utils/appDialog', () => ({
   appAlert: vi.fn().mockResolvedValue(undefined),
 }))
 
+vi.mock('@/state/documentPreviewPip', () => ({
+  openDocumentPreviewFromBlob: vi.fn(),
+}))
+
 vi.mock('@/api/chat', () => ({
   chatApi: {
     sendChatStream: vi.fn(),
@@ -77,6 +81,7 @@ import { isChatStreamEnabled, readPlannerSseResponse } from '@/utils/chatSseStre
 import { chatApi } from '@/api/chat'
 import { downloadBlob } from '@/utils'
 import { appAlert } from '@/utils/appDialog'
+import { openDocumentPreviewFromBlob } from '@/state/documentPreviewPip'
 
 // ── 辅助函数 ──────────────────────────────────────────────────────────
 
@@ -1255,7 +1260,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
       )
     })
 
-    it('xlsx 格式成功生成：调用 downloadBlob', async () => {
+    it('xlsx 格式成功生成：打开预览并调用 downloadBlob', async () => {
       global.fetch = vi.fn().mockResolvedValueOnce(
         makeResponse({
           ok: true,
@@ -1264,10 +1269,11 @@ describe('useKittenAnalyzer - coverage ramp', () => {
         })
       )
       await analyzer.generateAiOfficeDocument('生成表格', 'xlsx')
+      expect(openDocumentPreviewFromBlob).toHaveBeenCalled()
       expect(downloadBlob).toHaveBeenCalled()
     })
 
-    it('docx 格式成功生成：调用 downloadBlob 并添加 AI 消息', async () => {
+    it('docx 格式成功生成：打开预览、下载并添加 AI 消息', async () => {
       global.fetch = vi.fn().mockResolvedValueOnce(
         makeResponse({
           ok: true,
@@ -1276,6 +1282,7 @@ describe('useKittenAnalyzer - coverage ramp', () => {
         })
       )
       await analyzer.generateAiOfficeDocument('生成文档', 'docx')
+      expect(openDocumentPreviewFromBlob).toHaveBeenCalled()
       expect(downloadBlob).toHaveBeenCalled()
       const aiMsg = analyzer.messages.value.find(
         (m) => m.role === 'ai' && m.content.includes('已生成并下载')

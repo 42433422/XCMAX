@@ -5315,7 +5315,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     result = run_eval(args.tasks)
-    print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+    public_summary = {
+        "suite": "agent_platform_minimum",
+        "tasks_path": str(args.tasks),
+        "total": int(result["total"]),
+        "passed": int(result["passed"]),
+        "failed": int(result["failed"]),
+        "score": float(result["score"]),
+    }
+    print(json.dumps(public_summary, ensure_ascii=False, indent=2))
     return 0 if result["failed"] == 0 else 1
 
 

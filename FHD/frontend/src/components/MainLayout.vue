@@ -128,16 +128,13 @@ import { useTutorialStore } from '@/stores/tutorial'
 import { setTutorialBuildContextFactory } from '@/stores/tutorial'
 import { useTutorialCatalog } from '@/composables/useTutorialCatalog'
 import { documentPreviewPip } from '@/state/documentPreviewPip'
-
 const props = defineProps({
   isProMode: {
     type: Boolean,
     default: false
   }
 })
-
 const emit = defineEmits(['toggle-pro-mode'])
-
 const route = useRoute()
 const router = useRouter()
 const onboardingTutorialStore = useOnboardingTutorialStore()

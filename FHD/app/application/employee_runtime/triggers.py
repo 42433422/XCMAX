@@ -106,7 +106,7 @@ def _unsubscribe_employee(bus: Any, employee_id: str) -> None:
         try:
             bus.unsubscribe(sub)
         except RECOVERABLE_ERRORS:
-            logger.debug("unsubscribe failed emp=%s", employee_id, exc_info=True)
+            logger.debug("unsubscribe employee trigger failed", exc_info=True)
 
 
 def refresh_employee_triggers(pack_id: str | None = None) -> dict[str, Any]:
@@ -122,7 +122,9 @@ def refresh_employee_triggers(pack_id: str | None = None) -> dict[str, Any]:
                 _unsubscribe_employee(bus, employee_id)
         except RECOVERABLE_ERRORS:
             pass
-        logger.info("enterprise client: employee event triggers are disabled by product-plane policy")
+        logger.info(
+            "enterprise client: employee event triggers are disabled by product-plane policy"
+        )
         return {
             "registered": [],
             "active_employees": [],
