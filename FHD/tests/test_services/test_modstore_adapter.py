@@ -782,8 +782,9 @@ class TestModstoreOpenAICompletions:
             chunks = list(
                 completions.create(messages=[{"role": "user", "content": "hi"}], stream=True)
             )
-            assert len(chunks) == 1
-            assert chunks[0].choices[0].delta.content == "streamed"
+            assert len(chunks) == 2
+            assert chunks[0].choices[0].delta.role == "assistant"
+            assert chunks[1].choices[0].delta.content == "streamed"
 
 
 # ---------------------------------------------------------------------------

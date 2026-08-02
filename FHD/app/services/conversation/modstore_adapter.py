@@ -47,19 +47,19 @@ from app.application.workflow.multimodal_user_content import (
 from app.infrastructure.llm import modstore_adapter_failover as _mfailover
 from app.infrastructure.llm.modstore_chat_failover import is_market_chat_failoverable
 from app.infrastructure.llm.modstore_response_normalize import normalize_market_chat_response
-from app.services.conversation.modstore_transport import (
+from app.infrastructure.modstore_transport import (
     httpx_sync_client as _httpx_sync_client,
 )
-from app.services.conversation.modstore_transport import (
+from app.infrastructure.modstore_transport import (
     iter_market_sse_data_payloads as _iter_transport_sse_data_payloads,
 )
-from app.services.conversation.modstore_transport import (
+from app.infrastructure.modstore_transport import (
     iter_market_transport_plans as _iter_market_transport_plans,  # noqa: F401
 )
-from app.services.conversation.modstore_transport import (
+from app.infrastructure.modstore_transport import (
     market_connect_attempts as _market_connect_attempts,  # noqa: F401
 )
-from app.services.conversation.modstore_transport import (
+from app.infrastructure.modstore_transport import (
     market_connect_timeout as _market_connect_timeout,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS

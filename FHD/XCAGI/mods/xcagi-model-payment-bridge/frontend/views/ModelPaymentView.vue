@@ -214,7 +214,6 @@ import {
   type MarketLlmProvider,
 } from '@/api/marketAccount';
 import { swManager } from '@/utils/serviceWorker';
-
 const router = useRouter();
 
 const marketBase = String(
