@@ -10,6 +10,9 @@ excluded — they should bubble to the HTTP boundary as 500s.
 from __future__ import annotations
 
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Legacy alias for im-sync-backend compatibility
 OPERATIONAL_ERRORS: tuple[type[BaseException], ...] = (
@@ -79,3 +82,8 @@ DATA_SHAPE: tuple[type[BaseException], ...] = (
 
 # Union of recoverable operational failures (default inner catch tuple)
 RECOVERABLE_ERRORS: tuple[type[BaseException], ...] = INFRA_TRANSIENT + DATA_SHAPE
+
+
+def record_recoverable_failure(operation: str) -> None:
+    """Record the active recoverable exception before returning a safe response."""
+    logger.exception("%s failed", operation)
