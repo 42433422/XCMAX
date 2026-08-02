@@ -44,7 +44,6 @@ import { DesktopAutonomyAdapter } from './autonomy/desktop-adapter'
 import { backendCrashPolicy } from './autonomy/policies/backend-crash.policy'
 import { degradedRemediationPolicy } from './autonomy/policies/degraded-remediation.policy'
 import { updateRollbackPolicy } from './autonomy/policies/update-rollback.policy'
-import { sanitizeBackendProxyEnvValues } from './network/backend-proxy-env'
 import { resolveDesktopInstallIdentity } from './installation-identity'
 
 const APP_NAME = 'XCAGI'
