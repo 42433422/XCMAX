@@ -40,11 +40,16 @@ def test_customer_delete_intent_uses_recent_customer_context() -> None:
     assert classify_customer_delete_intent("去掉这句话", runtime_context={}) == ""
 
 
-def test_customer_delete_intent_preserves_quoted_name_with_bounded_pattern() -> None:
+def test_customer_delete_intent_preserves_quoted_name() -> None:
     assert (
         classify_customer_delete_intent("删除客户“候雪梅”", runtime_context=_customer_context())
         == "候雪梅"
     )
+
+
+def test_customer_delete_intent_handles_long_whitespace_without_regex_backtracking() -> None:
+    message = "请\t" * 4 + "删除客户" + "\t" * 20_000 + "候雪梅"
+    assert classify_customer_delete_intent(message, runtime_context=_customer_context()) == "候雪梅"
 
 
 def test_customer_delete_waits_then_executes_with_tool_receipt() -> None:

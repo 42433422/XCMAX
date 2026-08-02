@@ -9,46 +9,90 @@ truth.
 
 from __future__ import annotations
 
-import re
 import uuid
 from typing import Any
 
 from app.application.agent_orchestrator import AgentOrchestrator
 from app.application.workflow.types import PlanGraph, WorkflowNode
 
-_CUSTOMER_MARKER_RE = re.compile(r"客户|购买单位|买家|客商", re.IGNORECASE)
-_DELETE_RE = re.compile(
-    r"(?:请|帮我|麻烦)?\s*(?:把\s*)?"
-    r"(?:删除|删掉|去掉|移除|注销)\s*"
-    r"(?:客户|购买单位|买家|客商)?\s*"
-    r"[“\"'《]?([^，。,.!?！？；;\n“”\"'《》]{2,64})[”\"'》]?\s*$",
-    re.IGNORECASE,
+_CUSTOMER_MARKERS = ("客户", "购买单位", "买家", "客商")
+_DELETE_VERBS = ("删除", "删掉", "去掉", "移除", "注销")
+_POLITE_PREFIXES = ("请", "帮我", "麻烦")
+_UNSAFE_EXACT_TARGETS = {"这个", "那个", "该", "上述", "上面", "他", "她", "它", "对方", "客户"}
+_UNSAFE_TARGET_SUFFIXES = (
+    "电话",
+    "手机号",
+    "地址",
+    "联系人",
+    "备注",
+    "标签",
+    "字段",
+    "记录",
+    "发货单",
+    "订单",
 )
-_UNSAFE_TARGET_RE = re.compile(
-    r"^(?:这个|那个|该|上述|上面|他|她|它|对方|客户)$|"
-    r"(?:电话|手机号|地址|联系人|备注|标签|字段|记录|发货单|订单)$",
-    re.IGNORECASE,
-)
+_TARGET_PUNCTUATION = frozenset("，。,.!?！？；;")
 
 
 def _recent_customer_context(context: dict[str, Any] | None, message: str) -> bool:
-    if _CUSTOMER_MARKER_RE.search(message):
+    if any(marker in message for marker in _CUSTOMER_MARKERS):
         return True
     rows = (context or {}).get("recent_messages") if isinstance(context, dict) else None
     if not isinstance(rows, list):
         return False
-    current = re.sub(r"\s+", "", str(message or ""))
+    current = "".join(str(message or "").split())
     for item in rows[-6:]:
         if not isinstance(item, dict):
             continue
         content = str(item.get("content") or "")
         # The frontend includes the current message in recent_messages.  It is
         # not enough by itself to establish the omitted business entity.
-        if re.sub(r"\s+", "", content) == current:
+        if "".join(content.split()) == current:
             continue
-        if _CUSTOMER_MARKER_RE.search(content):
+        if any(marker in content for marker in _CUSTOMER_MARKERS):
             return True
     return False
+
+
+def _parse_customer_delete_target(text: str) -> str:
+    """Parse one exact delete command without regex backtracking on user text."""
+    remaining = " ".join(str(text or "").split())
+    if not remaining:
+        return ""
+
+    while True:
+        matched_prefix = next(
+            (prefix for prefix in _POLITE_PREFIXES if remaining.startswith(prefix)),
+            "",
+        )
+        if not matched_prefix:
+            break
+        remaining = remaining[len(matched_prefix) :].lstrip()
+
+    if remaining.startswith("把"):
+        remaining = remaining[1:].lstrip()
+    verb = next((candidate for candidate in _DELETE_VERBS if remaining.startswith(candidate)), "")
+    if not verb:
+        return ""
+    remaining = remaining[len(verb) :].lstrip()
+    subject = next((noun for noun in _CUSTOMER_MARKERS if remaining.startswith(noun)), "")
+    if subject:
+        remaining = remaining[len(subject) :].lstrip()
+
+    name = remaining.strip(" \t\"'“”《》")
+    for suffix in ("这个客户", "这位客户", "该客户", "客户"):
+        if name.endswith(suffix):
+            name = name[: -len(suffix)].strip()
+            break
+    if (
+        len(name) < 2
+        or len(name) > 64
+        or any(char in _TARGET_PUNCTUATION for char in name)
+        or name in _UNSAFE_EXACT_TARGETS
+        or any(name.endswith(suffix) for suffix in _UNSAFE_TARGET_SUFFIXES)
+    ):
+        return ""
+    return name
 
 
 def classify_customer_delete_intent(
@@ -61,14 +105,7 @@ def classify_customer_delete_intent(
     text = str(message or "").strip()
     if not text or not _recent_customer_context(runtime_context, text):
         return ""
-    match = _DELETE_RE.search(text)
-    if match is None:
-        return ""
-    name = str(match.group(1) or "").strip(" \t\"'“”《》")
-    name = re.sub(r"(?:这个|这位|该)?客户$", "", name).strip()
-    if len(name) < 2 or _UNSAFE_TARGET_RE.search(name):
-        return ""
-    return name
+    return _parse_customer_delete_target(text)
 
 
 def _runtime_context(
