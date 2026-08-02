@@ -1,66 +1,37 @@
-# -*- coding: utf-8 -*-
 """里程碑 H：/api/wechat_contacts/* 遗留路径 Mod 门面代理。"""
 
 from __future__ import annotations
 
+import logging
+from typing import Any
+
 from fastapi import APIRouter, Body, Query
+from fastapi.responses import JSONResponse
 
 from app.mod_sdk.erp_wechat_contacts_facade import tag_legacy_response
 
+logger = logging.getLogger(__name__)
 
-def _to_work_mode_feed_payload(raw: dict, *, per_contact: int) -> dict:
-    """Adapt the legacy desktop feed into the shape consumed by the chat assistant.
+MOD_SOURCE = "mod:xcagi-wechat-bridge"
 
-    The host compatibility route returns ``items`` while the current assistant
-    poller consumes ``feed`` entries with a ``messages`` list.  Keeping the
-    adapter in the Mod facade avoids a permanently failing 404 loop and makes
-    an unconfigured WeChat data source a healthy, empty feed instead of an
-    application error.
-    """
-    items = raw.get("items") if isinstance(raw, dict) else []
-    if not isinstance(items, list):
-        items = []
-    feed: list[dict] = []
-    for index, item in enumerate(items[:per_contact]):
-        if not isinstance(item, dict):
-            continue
-        contact_id = str(item.get("username") or item.get("contact_id") or index + 1)
-        summary = str(item.get("summary") or "").strip()
-        message = {
-            "role": "contact",
-            "text": summary,
-            "timestamp": item.get("timestamp") or 0,
-            "msg_type": str(item.get("msg_type") or "text"),
-        }
-        feed.append(
-            {
-                "contact_id": contact_id,
-                "contact_name": str(item.get("display_name") or contact_id),
-                "unread_count": int(item.get("unread_count") or 0),
-                "messages": [message] if summary else [],
-            }
-        )
-    error = str(raw.get("error") or "").strip() if isinstance(raw, dict) else ""
-    return {
-        "success": True,
-        "feed": feed,
-        "items": items[:per_contact],
-        "per_contact": per_contact,
-        "unavailable_reason": error or None,
-    }
+
+def _tag(out: Any) -> Any:
+    if isinstance(out, dict):
+        out["source"] = MOD_SOURCE
+    return out
 
 
 def mount_wechat_contacts_routes(router: APIRouter) -> None:
     @router.get("/wechat_contacts")
     def mod_wechat_contacts_list(
-        type: str = Query("all"),
-        keyword: str = Query(""),
-        page: int = Query(1, ge=1),
-        per_page: int = Query(50, ge=1, le=200),
+        type: str = Query(default="all"),
+        keyword: str | None = Query(default=None),
+        page: int = Query(default=1, ge=1),
+        per_page: int = Query(default=20, ge=1, le=2000),
     ):
         from app.fastapi_routes.domains.wechat.compat_routes import wechat_contacts_list_compat
 
-        return tag_legacy_response(
+        return _tag(
             wechat_contacts_list_compat(type=type, keyword=keyword, page=page, per_page=per_page)
         )
 
@@ -74,12 +45,7 @@ def mount_wechat_contacts_routes(router: APIRouter) -> None:
     def mod_wechat_work_mode_feed(per_contact: int = Query(default=1, ge=1, le=100)):
         from app.fastapi_routes.domains.wechat.compat_routes import wechat_work_mode_feed
 
-        return tag_legacy_response(
-            _to_work_mode_feed_payload(
-                wechat_work_mode_feed(per_contact=per_contact),
-                per_contact=per_contact,
-            )
-        )
+        return _tag(wechat_work_mode_feed(per_contact=per_contact))
 
     @router.get("/wechat_contacts/ensure_contact_cache")
     def mod_wechat_ensure_cache_get():
@@ -95,19 +61,25 @@ def mount_wechat_contacts_routes(router: APIRouter) -> None:
 
     @router.post("/wechat_contacts/refresh_contact_cache")
     def mod_wechat_refresh_contact_cache():
-        from app.fastapi_routes.domains.wechat.compat_routes import wechat_contacts_refresh_contact_cache_compat
+        from app.fastapi_routes.domains.wechat.compat_routes import (
+            wechat_contacts_refresh_contact_cache_compat,
+        )
 
         return tag_legacy_response(wechat_contacts_refresh_contact_cache_compat())
 
     @router.post("/wechat_contacts/refresh_messages_cache")
     def mod_wechat_refresh_messages_cache():
-        from app.fastapi_routes.domains.wechat.compat_routes import wechat_contacts_refresh_messages_cache_compat
+        from app.fastapi_routes.domains.wechat.compat_routes import (
+            wechat_contacts_refresh_messages_cache_compat,
+        )
 
         return tag_legacy_response(wechat_contacts_refresh_messages_cache_compat())
 
     @router.post("/wechat_contacts/unstar_all")
     async def mod_wechat_unstar_all():
-        from app.fastapi_routes.domains.wechat.compat_routes import wechat_contacts_unstar_all_compat
+        from app.fastapi_routes.domains.wechat.compat_routes import (
+            wechat_contacts_unstar_all_compat,
+        )
 
         return tag_legacy_response(await wechat_contacts_unstar_all_compat())
 
@@ -139,7 +111,9 @@ def mount_wechat_contacts_routes(router: APIRouter) -> None:
 
     @router.post("/wechat_contacts/{contact_id}/refresh_messages")
     def mod_wechat_refresh_messages(contact_id: str):
-        from app.fastapi_routes.domains.wechat.compat_routes import wechat_contacts_refresh_messages_compat
+        from app.fastapi_routes.domains.wechat.compat_routes import (
+            wechat_contacts_refresh_messages_compat,
+        )
 
         return tag_legacy_response(wechat_contacts_refresh_messages_compat(contact_id))
 
@@ -151,10 +125,10 @@ def mount_wechat_contacts_routes(router: APIRouter) -> None:
 
     @router.post("/wechat_contacts/open_chat")
     def mod_wechat_open_chat(body: dict | None = Body(default=None)):
-        _ = body
-        return tag_legacy_response(
+        return JSONResponse(
             {
                 "success": False,
                 "message": "open_chat 尚未在 compat 层实现，请使用桌面端 wechat_cv 工具",
-            }
+            },
+            status_code=501,
         )
