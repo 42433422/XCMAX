@@ -87,6 +87,9 @@ build_one_sku() {
   mkdir -p "${out_dir}"
   rm -rf "${package_stage}"
   mkdir -p "${package_stage}"
+  # Keep macOS bundle metadata on the customer-facing product version even
+  # though desktop/package.json must retain npm's three-part SemVer.
+  export XCAGI_PRODUCT_VERSION="${VERSION}"
 
   echo "========== Building macOS SKU: ${sku} =========="
   if [ "${SKIP_BACKEND:-0}" != "1" ]; then
