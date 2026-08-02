@@ -1,7 +1,7 @@
 {
   "id": "xcagi-wechat-bridge",
   "name": "XCAGI 微信集成 Mod",
-  "version": "1.0.0.0",
+  "version": "1.0.0.1",
   "author": "成都修茈科技有限公司",
   "description": "微信联系人管理、消息处理、任务派发。客户功能 Mod，非 ERP 核心模块，按需安装。",
   "primary": false,

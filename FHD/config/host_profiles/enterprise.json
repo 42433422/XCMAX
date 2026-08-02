@@ -6,6 +6,7 @@
   "package_stage_ids": [
     "xcagi-planner-bridge",
     "xcagi-erp-domain-bridge",
+    "xcagi-wechat-bridge",
     "xcagi-core-workflow-employees",
     "xcagi-approval-bridge",
     "xcagi-lan-license-bridge",
@@ -20,6 +21,7 @@
   "sku_bundled_mod_ids": [
     "xcagi-planner-bridge",
     "xcagi-erp-domain-bridge",
+    "xcagi-wechat-bridge",
     "xcagi-core-workflow-employees",
     "xcagi-approval-bridge",
     "xcagi-lan-license-bridge",
