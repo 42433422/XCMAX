@@ -137,12 +137,11 @@
     "mod_domain_handlers": [
       "products",
       "shipment",
-      "customers",
-      "wechat"
+      "customers"
     ],
     "products_via_service": true,
     "customers_via_service": true,
-    "wechat_contacts_via_facade": true,
+    "wechat_contacts_via_facade": false,
     "repository_via_mod": true,
     "repository_phase": "L++",
     "repository_adapter": "mod_factory",
@@ -153,7 +152,7 @@
       "OrdersView.vue",
       "CreateOrderView.vue",
       "ShipmentRecordsView.vue",
-      "WechatContactsView.vue",
+      # WechatContactsView.vue 已移至 xcagi-wechat-bridge Mod
       "MaterialsView.vue",
       "TraditionalModeView.vue",
       "BusinessDockingView.vue",
@@ -171,8 +170,7 @@
       "/api/customers",
       "/api/orders",
       "/api/shipment",
-      "/api/wechat",
-      "/api/wechat_contacts"
+      "/api/wechat_contacts"  # 已移交 xcagi-wechat-bridge Mod
     ],
     "legacy_host_page_paths": [
       "/products",
@@ -180,7 +178,7 @@
       "/orders",
       "/orders/create",
       "/shipment-records",
-      "/wechat-contacts",
+      "/wechat-contacts",  # 已移交 xcagi-wechat-bridge Mod
       "/materials",
       "/materials-list",
       "/traditional-mode",
