@@ -70,6 +70,26 @@ class EmployeeRegistry:
             )
         return out
 
+    def is_employee_pack_id(self, pack_id: str) -> bool:
+        """Return whether one local id resolves to an employee_pack manifest.
+
+        ``_employees`` is intentionally outside the normal Mod scan.  Callers
+        that receive a persisted active-Mod id therefore need this narrow
+        lookup instead of treating every id as a loadable top-level Mod.
+        """
+        pid = str(pack_id or "").strip()
+        if not pid or pid != os.path.basename(pid):
+            return False
+        manifest_path = os.path.join(self._root(), pid, "manifest.json")
+        if not os.path.isfile(manifest_path):
+            return False
+        try:
+            with open(manifest_path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return False
+        return normalize_artifact(data) == ARTIFACT_EMPLOYEE_PACK
+
     def list_for_mods_api(self) -> list[dict[str, Any]]:
         """与 ModManager._metadata_to_api_dict 形状兼容，供 /api/mods/ 合并。
 

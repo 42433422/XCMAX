@@ -158,6 +158,35 @@ class ModContextMiddleware:
             metadata={"source": "path"},
         )
 
+    @staticmethod
+    def _ignore_desktop_employee_pack_context(mod_id: str | None) -> bool:
+        """Do not turn a persisted employee pack into a desktop active Mod.
+
+        Older desktop profiles can retain an ``_employees/<id>`` selection
+        from a management build.  Employee packs are not top-level customer
+        Mods, so routing ordinary host requests through that id makes the
+        generic loader retry a path which intentionally does not exist.  In a
+        packaged desktop this must fall back to the host context; it must not
+        change the enterprise session or its official-market entitlement.
+        """
+        mid = str(mod_id or "").strip()
+        if not mid:
+            return False
+        try:
+            from app.application.employee_runtime.runtime_policy import (
+                desktop_admin_employee_runtime_disabled,
+            )
+
+            if not desktop_admin_employee_runtime_disabled():
+                return False
+            from app.infrastructure.mods.employee_registry import get_employee_registry
+            from app.infrastructure.mods.mod_manager import get_mod_manager
+
+            return get_employee_registry(get_mod_manager().mods_root).is_employee_pack_id(mid)
+        except RECOVERABLE_ERRORS:
+            logger.debug("desktop employee-pack context lookup skipped", exc_info=True)
+            return False
+
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
@@ -170,6 +199,12 @@ class ModContextMiddleware:
             mod_context = ModContext.from_request(request)
             if not mod_context.mod_id:
                 mod_context = self._mod_context_from_path(str(scope.get("path") or ""))
+            if self._ignore_desktop_employee_pack_context(mod_context.mod_id):
+                logger.info(
+                    "Ignoring persisted employee-pack active Mod in desktop runtime: %s",
+                    mod_context.mod_id,
+                )
+                mod_context = ModContext()
             if mod_context.mod_id:
                 try:
                     cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")

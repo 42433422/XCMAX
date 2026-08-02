@@ -293,6 +293,15 @@ function entitlementMatchesMod(modId: string, entitledSet: Set<string>): boolean
   return false;
 }
 
+/** employee_pack 是员工能力，不是当前行业/业务 Mod，不能写入全局 Active-Mod 头。 */
+function isSelectableModInfo(mod: ModInfo): boolean {
+  const id = String(mod.id || '').trim();
+  if (!id || !isSelectableExtensionModId(id)) return false;
+  const type = String(mod.type || '').trim().toLowerCase();
+  const artifact = String(mod.artifact || '').trim().toLowerCase();
+  return type !== 'employee_pack' && artifact !== 'employee_pack';
+}
+
 function pickModIdFromEntitled(
   entitledModIds: string[],
   modsList: ModInfo[],
@@ -301,7 +310,7 @@ function pickModIdFromEntitled(
   const entitledSet = new Set(entitledModIds);
   const selectable = modsList.filter((m) => {
     const id = String(m.id || '').trim();
-    if (!id || !isSelectableExtensionModId(id)) return false;
+    if (!isSelectableModInfo(m)) return false;
     return entitledSet.size === 0 || entitlementMatchesMod(id, entitledSet);
   });
   if (!selectable.length) return '';
@@ -443,19 +452,20 @@ export const useModsStore = defineStore('mods', () => {
       if (current === CLIENT_PRIMARY_ERP_MOD_ID) setActiveModId('');
       return;
     }
-    if (current && mods.value.some((m) => String(m.id || '').trim() === current)) {
+    const currentMod = mods.value.find((m) => String(m.id || '').trim() === current);
+    if (currentMod) {
       // 若误选宿主 bridge，优先改到第一个行业扩展包（bridge 不作为「当前扩展」）
-      if (!isSelectableExtensionModId(current)) {
+      if (!isSelectableModInfo(currentMod)) {
         const ext =
           findClientPrimaryErpMod() ||
-          mods.value.find((m) => isSelectableExtensionModId(String(m.id || '')));
-        if (ext) setActiveModId(String(ext.id || '').trim());
+          mods.value.find((m) => isSelectableModInfo(m));
+        setActiveModId(ext ? String(ext.id || '').trim() : '');
       }
       return;
     }
     const preferred =
-      mods.value.find((m) => m.primary && isSelectableExtensionModId(String(m.id || ''))) ||
-      mods.value.find((m) => isSelectableExtensionModId(String(m.id || '')));
+      mods.value.find((m) => m.primary && isSelectableModInfo(m)) ||
+      mods.value.find((m) => isSelectableModInfo(m));
     setActiveModId(preferred ? String(preferred.id || '').trim() : '');
   }
 
@@ -792,7 +802,8 @@ export const useModsStore = defineStore('mods', () => {
         return false;
       });
 
-    if (active && isSelectableExtensionModId(active)) {
+    const activeMod = mods.value.find((m) => String(m.id || '').trim() === active);
+    if (active && (!activeMod || isSelectableModInfo(activeMod))) {
       // modsForUi 在已选扩展时仅含 active 一项；若先 pick(ui) 会提前返回，
       // 同线账号定制（如太阳鸟「考勤表转换」）永远进不了侧栏。
       // 原版关闭 / 管理端 SPA：ui 故意为空，不贡献。
@@ -813,7 +824,7 @@ export const useModsStore = defineStore('mods', () => {
     }
     const installedIds = mods.value.map((m) => String(m.id || '').trim()).filter(Boolean);
     if (isClientErpSidebarContext(installedIds, activeModId.value)) {
-      const fromFull = full.filter((m) => isSelectableExtensionModId(String(m.id || '')));
+      const fromFull = full.filter((m) => isSelectableModInfo(m));
       if (fromFull.length) return fromFull;
     }
     return ui;

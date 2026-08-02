@@ -359,6 +359,35 @@ class TestMiddlewareCall:
             await middleware(scope, MagicMock(), MagicMock())
 
     @pytest.mark.asyncio
+    async def test_desktop_ignores_persisted_employee_pack_active_mod(self, monkeypatch):
+        """A legacy employee selection must not degrade the desktop host."""
+        monkeypatch.setattr("app.infrastructure.mods.mod_auth.MOD_SIGNATURE_SECRET", "")
+        monkeypatch.setattr(
+            ModContextMiddleware,
+            "_ignore_desktop_employee_pack_context",
+            staticmethod(lambda mod_id: mod_id == "artifact-generator"),
+        )
+        seen = {}
+
+        async def app(scope, receive, send):
+            from app.request_active_mod_ctx import get_request_active_mod_id
+
+            seen["active_mod"] = get_request_active_mod_id()
+
+        middleware = ModContextMiddleware(app)
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/customers",
+            "headers": [(b"x-xcagi-active-mod-id", b"artifact-generator")],
+        }
+        with patch("app.infrastructure.mods.mod_manager.ensure_mod_api_ready") as ensure_ready:
+            await middleware(scope, MagicMock(), MagicMock())
+
+        assert seen["active_mod"] == ""
+        ensure_ready.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_ensure_mod_api_ready_recoverable_error(self, monkeypatch):
         monkeypatch.setattr("app.infrastructure.mods.mod_auth.MOD_SIGNATURE_SECRET", "")
 

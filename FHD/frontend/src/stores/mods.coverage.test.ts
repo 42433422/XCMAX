@@ -1214,6 +1214,31 @@ describe('mods store – coverage 补齐', () => {
       expect(store.activeModId).not.toBe('xcagi-planner-bridge');
     });
 
+    it('遗留 employee_pack 不能作为当前行业 Mod，自动切回可用扩展', async () => {
+      mockApiFetch.mockResolvedValue(
+        makeResponse({
+          success: true,
+          data: [
+            {
+              id: 'artifact-generator',
+              name: '产物生成员工',
+              version: '1.0',
+              author: 'xcagi',
+              description: 'employee pack',
+              type: 'employee_pack',
+            },
+            ...sampleMods,
+          ],
+        }),
+      );
+
+      const store = useModsStore();
+      store.setActiveModId('artifact-generator');
+      await store.fetchMods();
+
+      expect(store.activeModId).toBe('attendance-industry');
+    });
+
     it('无 active mod 时选择 primary 可选扩展', async () => {
       mockApiFetch.mockResolvedValue(makeResponse({ success: true, data: sampleMods }));
 
