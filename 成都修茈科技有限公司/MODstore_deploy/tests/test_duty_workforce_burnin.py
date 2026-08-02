@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from datetime import datetime, timezone
 
 from modstore_server import duty_workforce_burnin as burnin
 from modstore_server.mod_employee_agent_runner import EmployeeAgentRunner
@@ -247,6 +249,75 @@ def test_changed_reviewed_manifest_bypasses_attempt_cooldown(monkeypatch) -> Non
     assert unchanged["candidates"] == []
     assert unchanged["skipped"] == [{"employee_id": "safe-direct", "reason": "attempt_cooldown"}]
     assert [row["employee_id"] for row in changed["candidates"]] == ["safe-direct"]
+
+
+def test_plan_requires_matching_accepted_strict_receipt_not_any_employee_success(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """A normal success cannot conceal a rejected or stale burn-in receipt."""
+
+    monkeypatch.setenv("MODSTORE_EMPLOYEE_BURN_IN_MAX_PER_RUN", "2")
+    audit_path = tmp_path / "duty_workforce_burnin.jsonl"
+    monkeypatch.setenv("MODSTORE_EMPLOYEE_BURN_IN_AUDIT_PATH", str(audit_path))
+    contract = _contract("safe-direct")
+    manifest = _direct_manifest()
+    manifest_sha = burnin._payload_sha256(manifest)
+    contract_sha = burnin._payload_sha256(contract)
+    now = datetime(2026, 8, 3, 1, 45, tzinfo=timezone.utc)
+
+    stale_receipt = {
+        "recorded_at": "2026-08-03T01:30:00+00:00",
+        "employee_id": "safe-direct",
+        "status": "accepted",
+        "receipt_accepted": True,
+        "acceptance": {"passed": True},
+        "manifest_sha256": "a" * 64,
+        "contract_sha256": contract_sha,
+    }
+    rejected_current = {
+        **stale_receipt,
+        "status": "rejected",
+        "receipt_accepted": False,
+        "manifest_sha256": manifest_sha,
+    }
+    audit_path.write_text(
+        "\n".join(json.dumps(row) for row in (stale_receipt, rejected_current)) + "\n",
+        encoding="utf-8",
+    )
+
+    unproven = burnin.build_burn_in_plan(
+        limit=2,
+        now=now,
+        _contracts={"safe-direct": contract},
+        _manifests={"safe-direct": manifest},
+        _recent_ids=set(),
+        _recent_manifest_shas={},
+    )
+    assert [row["employee_id"] for row in unproven["candidates"]] == ["safe-direct"]
+    assert unproven["fresh_proven_count"] == 0
+
+    accepted_current = {
+        **stale_receipt,
+        "manifest_sha256": manifest_sha,
+        "contract_sha256": contract_sha,
+    }
+    audit_path.write_text(
+        "\n".join(json.dumps(row) for row in (stale_receipt, rejected_current, accepted_current))
+        + "\n",
+        encoding="utf-8",
+    )
+    proven = burnin.build_burn_in_plan(
+        limit=2,
+        now=now,
+        _contracts={"safe-direct": contract},
+        _manifests={"safe-direct": manifest},
+        _recent_ids=set(),
+        _recent_manifest_shas={},
+    )
+    assert proven["candidates"] == []
+    assert proven["fresh_proven_count"] == 1
+    assert proven["skipped"] == [{"employee_id": "safe-direct", "reason": "fresh_receipt_exists"}]
 
 
 def test_medium_risk_is_eligible_only_for_reviewed_read_only_direct_python(
