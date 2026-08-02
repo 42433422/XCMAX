@@ -20,6 +20,7 @@ promotion 会产生脑裂，本方案明确禁止。
 - 每周分别生成 PostgreSQL 10/16 物理基础备份；每天 03:30 的三库逻辑备份继续保留为跨版本回退。
 - 备份用专用受限 SSH 账号写入 `incoming`；该账号不能执行远程命令，也不能读取归档。
 - 温备机每 10 分钟校验并封存一次完整快照，每 15 分钟检测新快照并恢复。
+- 单次 WAL 传输默认最多占用共享链路 15 分钟，超时保留 partial 供下轮续传；温备接收空闲时自动保留最近 4 个运行版本、2 个基础备份，并只清理已应用基础备份之前的旧 WAL。
 - PostgreSQL 10 支付温备常驻 `127.0.0.1:15432`，PostgreSQL 16 应用温备常驻 `127.0.0.1:15433`；PostgreSQL 16 逻辑恢复实例保留在 `127.0.0.1:5432`。
 - 每次生产发布按精确 Git SHA 将 FHD/MODstore 制品同步到 `runtime-releases`，温备端校验哈希后切换代码。
 - 恢复先写入 `*_next`，校验成功后再切换；上一代保留为 `*_previous`。
@@ -138,6 +139,7 @@ sudo tail -100 /var/log/xcmax-dr/restore.log
 sudo tail -100 /var/log/xcmax-dr/wal-standby.log
 sudo tail -100 /var/log/xcmax-dr/wal-pg16-standby.log
 sudo tail -100 /var/log/xcmax-dr/release-apply.log
+sudo tail -100 /var/log/xcmax-dr/storage-retention.log
 ```
 
 ## 灾难接管

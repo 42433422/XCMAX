@@ -26,6 +26,11 @@ REMOTE_ROOT="${OPS_BACKUP_SSH_DEST:-.}"
 LOCK="/run/lock/xcmax-wal-pg16-ship.lock"
 TRANSFER_LOCK="${OPS_DR_TRANSFER_LOCK:-/run/lock/xcmax-dr-transfer.lock}"
 TRANSFER_WAIT_SECONDS="${OPS_DR_TRANSFER_WAIT_SECONDS:-1800}"
+TRANSFER_MAX_SECONDS="${OPS_DR_WAL_TRANSFER_MAX_SECONDS:-900}"
+
+# shellcheck source=../lib/bounded_transfer.sh
+# shellcheck disable=SC1091
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" &>/dev/null && pwd)/bounded_transfer.sh"
 
 [[ -n "$TARGET" && -f "$KEY" ]] || {
   echo "温备 SSH 目标或私钥未配置" >&2
@@ -96,12 +101,14 @@ chmod 0600 "$status_tmp"
 ssh_cmd="ssh -i $KEY -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
 (
   flock -w "$TRANSFER_WAIT_SECONDS" 8 || exit 1
-  rsync -a --ignore-existing --delay-updates --partial \
+  xcmax_run_bounded_transfer "$TRANSFER_MAX_SECONDS" "postgres16-wal" "$LOG" \
+    rsync -a --ignore-existing --delay-updates --partial \
     -e "$ssh_cmd" \
-    "$ARCHIVE/" "${TARGET}:${REMOTE_ROOT}/wal-pg16/archive/" >>"$LOG" 2>&1
-  rsync -a --delay-updates \
+    "$ARCHIVE/" "${TARGET}:${REMOTE_ROOT}/wal-pg16/archive/"
+  xcmax_run_bounded_transfer "$TRANSFER_MAX_SECONDS" "postgres16-wal-status" "$LOG" \
+    rsync -a --delay-updates \
     -e "$ssh_cmd" \
-    "$status_tmp" "${TARGET}:${REMOTE_ROOT}/wal-pg16/status/current" >>"$LOG" 2>&1
+    "$status_tmp" "${TARGET}:${REMOTE_ROOT}/wal-pg16/status/current"
 ) 8>"$TRANSFER_LOCK"
 mv -f "$status_tmp" "$STATE/wal-pg16-status"
 date -u +%s >"$STATE/wal_pg16_ship_last_success"
