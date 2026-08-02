@@ -18,6 +18,7 @@ vi.mock('pinia', async () => {
 const mockChatSendMessage = vi.fn(async () => undefined)
 // 使用真实 ref 以保证 computed 响应式
 const isLoadingRef = ref(false)
+const isStreamingReplyRef = ref(false)
 const isProModeRef = ref(false)
 const messagesRef = ref<any[]>([])
 const currentTaskRef = ref<any>(null)
@@ -25,6 +26,7 @@ const showHistoryRef = ref(false)
 
 function resetMockRefs() {
   isLoadingRef.value = false
+  isStreamingReplyRef.value = false
   isProModeRef.value = false
   messagesRef.value = []
   currentTaskRef.value = null
@@ -36,7 +38,7 @@ const mockChatViewApi = {
   currentTask: currentTaskRef,
   orderNumberFetching: { value: false },
   isLoading: isLoadingRef,
-  isStreamingReply: { value: false },
+  isStreamingReply: isStreamingReplyRef,
   isExecuting: { value: false },
   latestAssistantPush: { value: null },
   proRuntimeTask: { value: null },
@@ -60,6 +62,7 @@ const mockChatViewApi = {
   taskTableItems: { value: [] },
   taskOrderNumber: { value: '' },
   sendMessage: mockChatSendMessage,
+  stopStreamingReply: vi.fn(),
   confirmTask: vi.fn(),
   refetchTaskOrderNumber: vi.fn(),
   setCustomOrderNumber: vi.fn(),
@@ -325,6 +328,8 @@ describe('ChatView functions – sendMessage', () => {
     mockChatViewApi.isLoading.value = true
     vm.messageInput = '测试消息'
     await vm.sendMessage()
+    await nextTick()
+    expect(wrapper.get('#stopStreamingBtn').text()).toContain('停止')
     expect(mockChatSendMessage).not.toHaveBeenCalled()
     mockChatViewApi.isLoading.value = false
     wrapper.unmount()

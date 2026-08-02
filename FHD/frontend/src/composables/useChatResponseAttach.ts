@@ -2,7 +2,9 @@ import { type Ref } from 'vue'
 import type { ChatMessage } from './useChatMessages'
 import type { TaskItem } from './useChatPersistence'
 import type { ChatPlannerPayload } from '@/types/chat'
+import type { AgentRunEvent } from '@/api/agentRuns'
 import { parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
+import { buildAgentRunTraceFromEvents, isTrivialChatTrace } from '@/utils/agentRunTraceModel'
 import { asRecord, asArray, asString, asNumber, asBoolean } from '@/utils/typeGuards'
 
 export interface UseChatResponseAttachDeps {
@@ -119,6 +121,29 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
     }
   }
 
+  function attachAgentRunTraceToLastAiMessage(): void {
+    const messageRef = getLastAiMessageRef()
+    if (!messageRef) return
+    const target = taskList.value.find((task) => {
+      if (task.type !== 'agent_run') return false
+      if (task.messageRef && task.messageRef !== messageRef) return false
+      return asArray(asRecord(task.payload).agentEvents).length > 0
+    })
+    if (!target) return
+    const payload = asRecord(target.payload)
+    const runId = asString(payload.agentRunId) || target.id.replace(/^agent_/, '')
+    const events = asArray<AgentRunEvent>(payload.agentEvents)
+    if (!events.length) return
+    const trace = buildAgentRunTraceFromEvents(events, runId)
+    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+      const message = messages.value[i]
+      if (message?.role !== 'ai') continue
+      if (isTrivialChatTrace(trace)) delete message.agentRunTrace
+      else message.agentRunTrace = trace
+      break
+    }
+  }
+
   function syncTaskFromChatResponse(resp: ChatPlannerPayload, userText: string) {
     const envelope = asRecord(resp.data)
     const action = asString(envelope.action).trim()
@@ -201,6 +226,7 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
     attachWorkflowTraceToLastAiMessage,
     attachApprovalCardToLastAiMessage,
     attachContextSummaryToLastAiMessage,
+    attachAgentRunTraceToLastAiMessage,
     syncTaskFromChatResponse,
   }
 }

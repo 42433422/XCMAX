@@ -12,6 +12,7 @@ import {
   type PlannerSseEvent,
 } from '@/utils/chatSseStream'
 import type { KittenFieldProfile } from '@/utils/kittenDatasetParser'
+import { openDocumentPreviewFromBlob } from '@/state/documentPreviewPip'
 
 const MAX_CHAT_MESSAGES = 120
 const KITTEN_SNAPSHOT_CACHE_MS = 90_000
@@ -777,11 +778,9 @@ export function useKittenAnalyzer() {
       }
       const blob = await resp.blob()
       await assertKittenFileBlob(resp, blob, format === 'xlsx' ? '表格生成' : '文档生成')
-      const filename = getFilenameFromDisposition(
-        resp.headers.get('content-disposition'),
-        format === 'xlsx' ? `生成表格_${formatExportTimestamp()}.xlsx` : `生成文档_${formatExportTimestamp()}.docx`
-      )
+      const filename = getFilenameFromDisposition(resp.headers.get('content-disposition'), format === 'xlsx' ? `生成表格_${formatExportTimestamp()}.xlsx` : `生成文档_${formatExportTimestamp()}.docx`)
       downloadBlob(blob, filename)
+      try { openDocumentPreviewFromBlob(blob, filename, p) } catch (previewError) { console.warn('[kitten] document preview unavailable:', previewError) }
       addMessage('ai', `已生成并下载：<strong>${filename}</strong><br>（内容由模型起草，正式签署前请法务审核）`)
     } catch (err) {
       const errMessage = err instanceof Error ? err.message : '未知错误'

@@ -46,4 +46,21 @@ describe('authSessionCache', () => {
     await expect(validateEnterpriseSessionCached()).resolves.toBe(true)
     expect(authApi.validateSession).not.toHaveBeenCalled()
   })
+
+  it('ignores a stale invalid probe that started before login completed', async () => {
+    let resolveProbe!: (value: { success: boolean }) => void
+    vi.mocked(authApi.validateSession).mockReturnValue(
+      new Promise((resolve) => {
+        resolveProbe = resolve
+      }),
+    )
+
+    const staleProbe = validateEnterpriseSessionCached()
+    markEnterpriseSessionValid()
+    resolveProbe({ success: false })
+
+    await expect(staleProbe).resolves.toBe(true)
+    await expect(validateEnterpriseSessionCached()).resolves.toBe(true)
+    expect(authApi.validateSession).toHaveBeenCalledTimes(1)
+  })
 })

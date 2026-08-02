@@ -53,4 +53,35 @@ describe('ChatMessageList', () => {
     expect(wrapper.get('.thinking-panel').text()).toContain('internal chain')
     expect(wrapper.get('.trace-panel').text()).toContain('internal_node')
   })
+
+  it('renders a visible execution timeline for a streaming shell', () => {
+    const wrapper = mount(ChatMessageList, {
+      props: {
+        messages: [{
+          role: 'ai' as const,
+          content: '',
+          time: '08:00',
+          streamingShell: true,
+          toolProgressLabel: '正在调用客户资料…',
+          executionProgress: [{
+            phase: 'query',
+            label: '正在调用客户资料…',
+            status: 'running' as const,
+            at: '2026-08-01T08:00:00.000Z',
+          }],
+        }],
+        isLoading: true,
+        isStreamingReply: true,
+        loadingProgressText: '正在调用客户资料…',
+        messageHeights: new Map<number, number>(),
+        latestAiMessageIndex: 0,
+        playingMsgIdx: -1,
+        isMessageCollapsed: () => false,
+        getCollapsedPreview: () => '',
+        canSpeakMessage: () => false,
+      },
+    })
+    expect(wrapper.get('.execution-timeline').text()).toContain('正在调用客户资料')
+    expect(wrapper.find('.execution-timeline__spinner').exists()).toBe(true)
+  })
 })

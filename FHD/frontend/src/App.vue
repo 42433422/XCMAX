@@ -26,16 +26,20 @@ const {
       :is-pro-mode="isProMode"
       @toggle-pro-mode="handleToggleProMode"
     >
-      <router-view v-slot="{ Component, route }">
-        <transition name="route-fade" mode="out-in">
-          <div :key="route.fullPath" class="route-view-shell">
+      <div class="route-view-shell">
+        <router-view v-slot="{ Component, route }">
+          <transition name="route-fade" mode="out-in">
             <keep-alive v-if="!isAdminConsoleSpa()" :max="12">
-              <component :is="Component" />
+              <component :is="Component" :key="String(route.name || route.path)" />
             </keep-alive>
-            <component v-else :is="Component" />
-          </div>
-        </transition>
-      </router-view>
+            <component
+              v-else
+              :is="Component"
+              :key="route.fullPath"
+            />
+          </transition>
+        </router-view>
+      </div>
     </MainLayout>
   </div>
 </template>

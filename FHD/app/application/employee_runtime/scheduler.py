@@ -458,9 +458,16 @@ def _scheduler_loop() -> None:
 
 def start_employee_scheduler() -> dict[str, Any]:
     global _started, _thread, _last_error
-    # 桌面默认关掉 cron 风暴（可用 XCAGI_EMPLOYEE_SCHEDULER=1 显式打开）
-    import os
+    from app.application.employee_runtime.runtime_policy import (
+        desktop_admin_employee_runtime_disabled,
+    )
 
+    if desktop_admin_employee_runtime_disabled():
+        status = stop_employee_scheduler(timeout=0.2)
+        status["disabled_reason"] = "desktop_product_boundary"
+        return status
+
+    # 桌面默认关掉 cron 风暴（可用 XCAGI_EMPLOYEE_SCHEDULER=1 显式打开）
     flag = (os.environ.get("XCAGI_EMPLOYEE_SCHEDULER") or "").strip().lower()
     desktop = (os.environ.get("XCAGI_DESKTOP_MODE") or "").strip().lower() in {
         "1",

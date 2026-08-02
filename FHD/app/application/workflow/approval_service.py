@@ -114,22 +114,40 @@ class ApprovalService:
             created_at=datetime.now(),
         )
         self._pending_requests[request_id] = request
-        if plan is not None:
+        durable_run_id = str((runtime_context or {}).get("agent_run_id") or "").strip()
+        if plan is not None or durable_run_id:
             self._pending_workflows[request_id] = {
                 "plan": plan,
                 "runtime_context": runtime_context or {},
                 "plan_id": plan_id,
+                "agent_run_id": durable_run_id,
+                "agent_step_id": str((runtime_context or {}).get("agent_step_id") or "").strip(),
+                "agent_node_id": str(
+                    (runtime_context or {}).get("agent_node_id") or node.node_id
+                ).strip(),
             }
         logger.info("创建审批请求: %s for %s.%s", request_id, node.tool_id, node.action)
 
         # 同时持久化到 DB（防止重启丢失，且与 /api/approval/requests 工作台共享可见性）
-        self._persist_request_to_db(request)
+        persistence_confirmed = self._persist_request_to_db(
+            request,
+            workflow_link=self._pending_workflows.get(request_id),
+        )
+        request.persistence_confirmed = persistence_confirmed
         return request
 
-    def _persist_request_to_db(self, request: ApprovalRequest) -> None:
+    def _persist_request_to_db(
+        self,
+        request: ApprovalRequest,
+        *,
+        workflow_link: dict[str, Any] | None = None,
+    ) -> bool:
         """将内存审批请求写入 DB approval_requests 表（幂等）。"""
         import json as _json
 
+        from sqlalchemy.exc import SQLAlchemyError
+
+        persistence_errors = RECOVERABLE_ERRORS + (SQLAlchemyError,)
         try:
             from sqlalchemy import text
 
@@ -141,18 +159,52 @@ class ApprovalService:
                     {"rno": request.request_id},
                 ).fetchone()
                 if not existing:
+                    flow_id = db.execute(
+                        text("SELECT id FROM approval_flows ORDER BY id LIMIT 1")
+                    ).scalar()
+                    runtime_ctx = dict((workflow_link or {}).get("runtime_context") or {})
+                    requested_by = str(runtime_ctx.get("requested_by") or "").strip()
+                    applicant_id = None
+                    if requested_by.isdigit():
+                        applicant_id = db.execute(
+                            text("SELECT id FROM users WHERE id = :uid LIMIT 1"),
+                            {"uid": int(requested_by)},
+                        ).scalar()
+                    if applicant_id is None:
+                        applicant_id = db.execute(
+                            text("SELECT id FROM users ORDER BY id LIMIT 1")
+                        ).scalar()
+                    if flow_id is None or applicant_id is None:
+                        raise RuntimeError("approval flow or applicant user is unavailable")
                     db.execute(
                         text(
                             "INSERT INTO approval_requests "
                             "(request_no, flow_id, business_type, title, description, applicant_id, status, created_at) "
-                            "VALUES (:rno, NULL, 'workflow_tool', :title, :desc, NULL, 'pending', :created)"
+                            "VALUES (:rno, :flow_id, 'workflow_tool', :title, :desc, :applicant_id, 'pending', :created)"
                         ),
                         {
                             "rno": request.request_id,
+                            "flow_id": int(flow_id),
+                            "applicant_id": int(applicant_id),
                             "title": f"{request.tool_id}.{request.action}",
                             "desc": _json.dumps(
-                                request.params or {}, ensure_ascii=False, default=str
-                            )[:500],
+                                {
+                                    "params": request.params or {},
+                                    "agent_run_id": str(
+                                        (workflow_link or {}).get("agent_run_id") or ""
+                                    ),
+                                    "agent_step_id": str(
+                                        (workflow_link or {}).get("agent_step_id") or ""
+                                    ),
+                                    "agent_node_id": str(
+                                        (workflow_link or {}).get("agent_node_id")
+                                        or request.node_id
+                                    ),
+                                    "plan_id": request.plan_id,
+                                },
+                                ensure_ascii=False,
+                                default=str,
+                            )[:2000],
                             "created": (request.created_at or datetime.now()).isoformat(),
                         },
                     )
@@ -169,8 +221,10 @@ class ApprovalService:
                 )
             except RECOVERABLE_ERRORS:
                 logger.debug("neuro_notify_approval_changed skipped", exc_info=True)
-        except RECOVERABLE_ERRORS as e:
+            return True
+        except persistence_errors as e:
             logger.debug("AI 审批持久化到 DB 失败（非致命）: %s", e)
+            return False
 
     def get_pending_workflow(self, request_id: str) -> dict[str, Any] | None:
         return self._pending_workflows.get(request_id)

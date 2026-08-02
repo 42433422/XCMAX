@@ -26,6 +26,8 @@ export type AgentRunEventType =
   | 'planner.started'
   | 'rag.failed'
   | 'rag.retrieved'
+  | 'run.cancel_ignored'
+  | 'run.cancelled'
   | 'run.completed'
   | 'run.continue_ignored'
   | 'run.created'
@@ -45,7 +47,10 @@ export type AgentRunEventType =
 export const TERMINAL_AGENT_RUN_EVENT_TYPES: ReadonlySet<AgentRunEventType> = new Set([
   'budget.exceeded',
   'planner.blocked',
+  'run.cancel_ignored',
+  'run.cancelled',
   'run.completed',
+  'run.continue_ignored',
   'run.failed',
 ]);
 

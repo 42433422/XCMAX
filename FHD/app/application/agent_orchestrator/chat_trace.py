@@ -23,13 +23,22 @@ from app.application.agent_orchestrator.run_repository import (
     AgentRunRepository,
     get_agent_run_repository,
 )
+from app.application.agent_orchestrator.trace_serialization import (
+    _MAX_TRACE_DICT_ITEMS as _MAX_TRACE_DICT_ITEMS,
+)
+from app.application.agent_orchestrator.trace_serialization import (
+    _MAX_TRACE_LIST_ITEMS as _MAX_TRACE_LIST_ITEMS,
+)
+from app.application.agent_orchestrator.trace_serialization import (
+    _MAX_TRACE_STRING_CHARS as _MAX_TRACE_STRING_CHARS,
+)
+from app.application.agent_orchestrator.trace_serialization import (
+    trace_safe_value as _trace_safe_value,
+)
+from app.application.business_mutation_evidence import apply_business_mutation_evidence_gate
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-
-_MAX_TRACE_STRING_CHARS = 4000
-_MAX_TRACE_LIST_ITEMS = 20
-_MAX_TRACE_DICT_ITEMS = 40
 _LEGACY_EXECUTE_READ_DEFAULTS = {
     "business_db": ("read",),
     "customers": ("query",),
@@ -37,28 +46,6 @@ _LEGACY_EXECUTE_READ_DEFAULTS = {
     "products": ("query",),
     "shipment_records": ("query",),
 }
-
-
-def _trace_safe_value(value: Any, *, depth: int = 0) -> Any:
-    if depth >= 4:
-        return str(value)[:_MAX_TRACE_STRING_CHARS]
-    if isinstance(value, str):
-        if len(value) <= _MAX_TRACE_STRING_CHARS:
-            return value
-        return value[:_MAX_TRACE_STRING_CHARS] + "...[truncated]"
-    if isinstance(value, (int, float, bool)) or value is None:
-        return value
-    if isinstance(value, (list, tuple)):
-        return [_trace_safe_value(item, depth=depth + 1) for item in value[:_MAX_TRACE_LIST_ITEMS]]
-    if isinstance(value, dict):
-        safe: dict[str, Any] = {}
-        for idx, (key, item) in enumerate(value.items()):
-            if idx >= _MAX_TRACE_DICT_ITEMS:
-                safe["_truncated"] = True
-                break
-            safe[str(key)] = _trace_safe_value(item, depth=depth + 1)
-        return safe
-    return str(value)[:_MAX_TRACE_STRING_CHARS]
 
 
 def _resolved_user_id(
@@ -1543,6 +1530,9 @@ def finalize_legacy_chat_run(
             intent=intent,
         )
 
+    apply_business_mutation_evidence_gate(
+        payload, message=message, runtime_context=runtime_context, metadata=run.metadata
+    )
     status = _payload_status(payload)
     records = _extract_legacy_tool_records(payload)
     run.status = status

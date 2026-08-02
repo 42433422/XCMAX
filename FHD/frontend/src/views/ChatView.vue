@@ -130,8 +130,19 @@
           <i class="fa" :class="voiceButtonIcon" aria-hidden="true"></i>
           <span class="voice-input-btn-label">{{ voiceButtonText }}</span>
         </button>
-        <button
-          class="btn btn-primary send-message-btn"
+          <button
+            v-if="composerSubmitting || isLoading || isStreamingReply"
+            id="stopStreamingBtn"
+            type="button"
+            class="btn btn-secondary send-message-btn"
+            title="停止当前回复"
+            @click="stopStreamingReply"
+          >
+            停止
+          </button>
+          <button
+            v-else
+            class="btn btn-primary send-message-btn"
           id="sendMessageBtn"
           :disabled="!canSendMessage"
           :aria-disabled="!canSendMessage"
@@ -264,6 +275,7 @@ const {
   taskTableItems,
   taskOrderNumber,
   sendMessage: chatSendMessage,
+  stopStreamingReply,
   confirmWorkflowFromCard,
   cancelWorkflowFromCard,
   confirmTask,
@@ -298,6 +310,7 @@ const {
 } = chatViewApi
 
 const messageInput = ref('')
+const composerSubmitting = ref(false)
 
 const {
   voiceButtonDisabled,
@@ -359,15 +372,18 @@ const hasTaskPanelContent = computed(() => (
   || (isProMode.value && !!proRuntimeTask.value)
 ))
 
-const canSendMessage = computed(() => !!messageInput.value.trim() && !isLoading.value)
+const canSendMessage = computed(() => (
+  !!messageInput.value.trim() && !isLoading.value && !composerSubmitting.value
+))
 const sendButtonTitle = computed(() => {
-  if (isLoading.value) return '正在发送，请稍候'
+  if (isLoading.value || composerSubmitting.value) return '正在发送，请稍候'
   if (!messageInput.value.trim()) return '请先输入内容'
   return '发送消息'
 })
 const composerStatusText = computed(() => {
   if (voiceFeedbackText.value) return voiceFeedbackText.value
-  if (isLoading.value) return '正在发送，请稍候'
+  if (isStreamingReply.value) return loadingProgressText.value || '正在生成回复…'
+  if (isLoading.value || composerSubmitting.value) return '正在发送，请稍候'
   if (!messageInput.value.trim()) return '请输入内容后再发送'
   return ''
 })
@@ -376,9 +392,14 @@ const sendMessage = async () => {
   const domInput = document.getElementById('messageInput') as HTMLTextAreaElement | null
   const raw = messageInput.value || (domInput && domInput.value) || ''
   const message = raw.trim()
-  if (!message || isLoading.value) return
+  if (!message || isLoading.value || composerSubmitting.value) return
+  composerSubmitting.value = true
   messageInput.value = ''
-  await chatSendMessage(message)
+  try {
+    await chatSendMessage(message)
+  } finally {
+    composerSubmitting.value = false
+  }
 }
 
 const {

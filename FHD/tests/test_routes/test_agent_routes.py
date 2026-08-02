@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import get_agent_run_repository
+from app.application.agent_orchestrator.run_models import AgentRun
 from app.fastapi_routes.domains.agent.routes import router
 
 
@@ -161,3 +162,69 @@ def test_get_agent_run_returns_404_for_missing_run() -> None:
     events_response = client.get("/api/agent/runs/run_missing/events")
     assert events_response.status_code == 404
     assert events_response.json()["success"] is False
+
+
+def test_cancel_waiting_agent_run() -> None:
+    get_agent_run_repository().clear()
+    client = _client()
+    patches = _planner_fallback_patches()
+
+    with patches[0], patches[1], patches[2], patches[3]:
+        created = client.post(
+            "/api/agent/runs",
+            json={"message": "请把客户 星光贸易 写入数据库", "user_id": "u1"},
+        )
+        assert created.status_code == 202
+        run_id = created.json()["data"]["run_id"]
+        cancelled = client.post(
+            f"/api/agent/runs/{run_id}/cancel",
+            json={"cancelled_by": "u1"},
+        )
+
+    assert cancelled.status_code == 200
+    run = cancelled.json()["data"]
+    assert run["status"] == "cancelled"
+    assert run["steps"][0]["status"] == "skipped"
+    assert run["events"][-1]["event_type"] == "run.cancelled"
+
+
+def test_submit_agent_run_for_formal_approval() -> None:
+    client = _client()
+    run = AgentRun(user_id="u1", message="正式审批", run_id="run-formal")
+    run.status = "waiting_user"
+
+    with patch(
+        "app.fastapi_routes.domains.agent.routes.AgentOrchestrator.submit_run_for_approval",
+        return_value=(run, ["approval-1"]),
+    ) as submit:
+        response = client.post(
+            "/api/agent/runs/run-formal/submit-approval",
+            json={"requested_by": "u1"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["approval_request_ids"] == ["approval-1"]
+    assert response.json()["data"]["run"]["run_id"] == "run-formal"
+    submit.assert_called_once_with("run-formal", requested_by="u1")
+
+
+def test_restart_agent_run_returns_new_durable_run() -> None:
+    client = _client()
+    source = AgentRun(user_id="u1", message="重试任务", run_id="run-old")
+    source.status = "cancelled"
+    restarted = AgentRun(user_id="u1", message="重试任务", run_id="run-new")
+    restarted.status = "waiting_user"
+
+    with patch(
+        "app.fastapi_routes.domains.agent.routes.AgentOrchestrator.restart_run",
+        return_value=(source, restarted, ""),
+    ) as restart:
+        response = client.post(
+            "/api/agent/runs/run-old/restart",
+            json={"requested_by": "u1"},
+        )
+
+    assert response.status_code == 202
+    assert response.json()["data"]["run_id"] == "run-new"
+    assert response.json()["restarted_from_run_id"] == "run-old"
+    restart.assert_called_once_with("run-old", requested_by="u1")

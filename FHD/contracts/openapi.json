@@ -30270,6 +30270,8 @@
               "planner.started",
               "rag.failed",
               "rag.retrieved",
+              "run.cancel_ignored",
+              "run.cancelled",
               "run.completed",
               "run.continue_ignored",
               "run.created",

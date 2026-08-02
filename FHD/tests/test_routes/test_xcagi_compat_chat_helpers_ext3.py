@@ -1369,9 +1369,10 @@ class TestXcagiGuardedPlannerStreamEventsAdditional:
                     client=Mock(),
                 )
             )
-        assert len(results) == 2
-        assert results[0]["text"] == "hello"
-        assert results[1]["text"] == " world"
+        assert len(results) == 3
+        assert results[0]["phase"] == "accepted"
+        assert results[1]["text"] == "hello"
+        assert results[2]["text"] == " world"
 
     def test_exception_in_worker_yields_error(self):
         """Test that exception in worker yields error event."""
@@ -1408,8 +1409,9 @@ class TestXcagiGuardedPlannerStreamEventsAdditional:
                 )
             )
         # Should yield error event
-        assert len(results) == 1
-        assert results[0]["type"] == "error"
+        assert len(results) == 2
+        assert results[0]["phase"] == "accepted"
+        assert results[1]["type"] == "error"
 
 
 # ---------------------------------------------------------------------------

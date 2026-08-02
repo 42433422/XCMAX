@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from app.application.starter_template_catalog import STARTER_TEMPLATES
 from app.application.template_app_service import TemplateApplicationService
 
 
@@ -23,7 +24,9 @@ class TestGetTemplates:
         ts.list_templates.return_value = [{"id": 1}]
         svc = _svc(ts)
         out = svc.get_templates()
-        assert out["templates"] == [{"id": 1}]
+        assert out["templates"][0] == {"id": 1}
+        assert len(out["templates"]) == 1 + len(STARTER_TEMPLATES)
+        assert all(row["starter"] is True for row in out["templates"][1:])
         ts.list_templates.assert_called_once()
 
     def test_category_all_returns_all(self) -> None:
@@ -31,7 +34,8 @@ class TestGetTemplates:
         ts.list_templates.return_value = []
         svc = _svc(ts)
         out = svc.get_templates(category="all")
-        assert out["templates"] == []
+        assert len(out["templates"]) == len(STARTER_TEMPLATES)
+        assert {row["id"] for row in out["templates"]} == {row["id"] for row in STARTER_TEMPLATES}
         ts.list_templates.assert_called_once()
 
     def test_specific_category_filters(self) -> None:
@@ -47,7 +51,8 @@ class TestGetTemplates:
         ts.list_templates.return_value = None
         svc = _svc(ts)
         out = svc.get_templates()
-        assert out["templates"] == []
+        assert len(out["templates"]) == len(STARTER_TEMPLATES)
+        assert all(row["source"] == "builtin_seed" for row in out["templates"])
 
 
 class TestCrudDelegation:

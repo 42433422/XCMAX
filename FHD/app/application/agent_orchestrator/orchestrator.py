@@ -10,6 +10,7 @@ from app.application.agent_orchestrator.budget import (
     budget_exceeded_payload,
     refresh_ai_budget_metadata,
 )
+from app.application.agent_orchestrator.lifecycle import AgentRunLifecycleMixin
 from app.application.agent_orchestrator.repair_advisor import (
     is_llm_repair_enabled,
     llm_repair_attempt_limit,
@@ -19,7 +20,6 @@ from app.application.agent_orchestrator.run_models import (
     AgentRun,
     AgentStep,
     LLMCall,
-    RunEvent,
     ToolCall,
     artifact_from_dict,
     utc_now_iso,
@@ -30,11 +30,11 @@ from app.application.agent_orchestrator.run_repository import (
 )
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_spec import get_tool_action_spec, validate_tool_call
-from app.application.workflow.types import PlanGraph, WorkflowNode
+from app.application.workflow.types import PlanGraph
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
-class AgentOrchestrator:
+class AgentOrchestrator(AgentRunLifecycleMixin):
     def __init__(
         self,
         *,
@@ -56,7 +56,6 @@ class AgentOrchestrator:
         run.metadata["runtime_context"] = dict(runtime_context or {})
         run.add_event("run.created", "Agent run 已创建")
         self._repo.save(run)
-
         try:
             plan = self._plan(run, runtime_context=dict(runtime_context or {}))
             self._apply_plan(run, plan)
@@ -79,6 +78,7 @@ class AgentOrchestrator:
         plan: PlanGraph,
         runtime_context: dict[str, Any] | None = None,
         auto_execute: bool = True,
+        approval_required_node_ids: list[str] | None = None,
     ) -> AgentRun:
         run = AgentRun(user_id=str(user_id or ""), message=str(message or ""))
         run.metadata["runtime_context"] = dict(runtime_context or {})
@@ -95,6 +95,18 @@ class AgentOrchestrator:
         )
         try:
             self._apply_plan(run, plan)
+            formal_approval_nodes = {
+                str(node_id or "").strip()
+                for node_id in (approval_required_node_ids or [])
+                if str(node_id or "").strip()
+            }
+            if formal_approval_nodes:
+                run.metadata["formal_approval_node_ids"] = sorted(formal_approval_nodes)
+                for step in run.steps:
+                    if step.node_id in formal_approval_nodes:
+                        # Tool specs normally own risk.  Formal approval is a stronger
+                        # policy boundary, so it must force the durable run to pause.
+                        step.risk = "high"
             apply_ai_budget_metadata(run, dict(plan.metadata or {}), dict(runtime_context or {}))
             self._repo.save(run)
             if auto_execute:
@@ -120,7 +132,6 @@ class AgentOrchestrator:
         run = self._repo.get(run_id)
         if run is None:
             return None
-
         waiting_step = self._find_waiting_step(run, approved_step_id=approved_step_id)
         # A SQL-backed run can be observed at the durable ``pending`` snapshot
         # between plan persistence and the approval transition.  Route callers
@@ -143,37 +154,29 @@ class AgentOrchestrator:
                 {"approved_by": approved_by, "approved_step_id": approved_step_id},
             )
             return self._repo.save(run)
-
-        context = dict(run.metadata.get("runtime_context") or {})
-        context.update(dict(runtime_context or {}))
-        run.metadata["runtime_context"] = context
-        apply_ai_budget_metadata(run, context)
-        waiting_step.status = "pending"
-        run.status = "running"
-        run.error = ""
-        run.add_event(
-            "step.approved",
-            f"步骤 {waiting_step.node_id} 已确认继续",
-            {
-                "step_id": waiting_step.step_id,
-                "node_id": waiting_step.node_id,
-                "tool_id": waiting_step.tool_id,
-                "action": waiting_step.action,
-                "approved_by": approved_by,
-            },
-        )
-        self._execute_ready_steps(
+        formal_nodes = {
+            str(node_id or "").strip()
+            for node_id in (run.metadata.get("formal_approval_node_ids") or [])
+        }
+        if waiting_step.node_id in formal_nodes:
+            run.add_event(
+                "step.waiting_user",
+                f"步骤 {waiting_step.node_id} 必须在审批中心通过后执行",
+                {
+                    "step_id": waiting_step.step_id,
+                    "node_id": waiting_step.node_id,
+                    "tool_id": waiting_step.tool_id,
+                    "action": waiting_step.action,
+                    "approval_required": True,
+                },
+            )
+            return self._repo.save(run)
+        return self._continue_waiting_step(
             run,
-            runtime_context=context,
-            approved_step_id=waiting_step.step_id,
+            waiting_step=waiting_step,
+            approved_by=approved_by,
+            runtime_context=runtime_context,
         )
-        return self._repo.save(run)
-
-    def list_runs(self, *, user_id: str | None = None, limit: int = 50) -> list[AgentRun]:
-        return self._repo.list_recent(user_id=user_id, limit=limit)
-
-    def list_events(self, run_id: str, *, after_event_id: str | None = None) -> list[RunEvent]:
-        return self._repo.list_events(run_id, after_event_id=after_event_id)
 
     def _plan(self, run: AgentRun, *, runtime_context: dict[str, Any]) -> PlanGraph:
         from app.application.agent_orchestrator.multimodal_planner import (
@@ -185,7 +188,6 @@ class AgentOrchestrator:
         run.status = "planning"
         run.add_event("planner.started", "开始生成 Agent 计划")
         self._repo.save(run)
-
         context = dict(runtime_context or {})
         context.setdefault("message", run.message)
         multimodal_plan = build_multimodal_autonomous_plan(
@@ -206,7 +208,6 @@ class AgentOrchestrator:
                 },
             )
             return multimodal_plan
-
         planner = LLMWorkflowPlanner()
         plan = planner.plan(run.user_id, run.message, get_workflow_tool_registry(), context)
         run.add_event(
@@ -215,56 +216,6 @@ class AgentOrchestrator:
             {"plan_id": plan.plan_id, "intent": plan.intent, "nodes": len(plan.nodes)},
         )
         return plan
-
-    def _apply_plan(self, run: AgentRun, plan: PlanGraph) -> None:
-        run.plan_id = plan.plan_id
-        run.intent = plan.intent
-        run.metadata["plan"] = {
-            "todo_steps": list(plan.todo_steps or []),
-            "risk_level": plan.risk_level,
-            "metadata": dict(plan.metadata or {}),
-        }
-        run.steps = [self._step_from_node(node) for node in plan.nodes]
-        self._apply_repair_policy(run, dict(plan.metadata or {}))
-        self._attach_artifacts_from_payload(
-            run,
-            getattr(plan, "metadata", {}) or {},
-            source="plan.metadata",
-        )
-        self._refresh_artifact_metadata(run)
-        run.status = "running" if run.steps else "blocked"
-        if not run.steps:
-            run.error = "planner returned no executable steps"
-            run.add_event("planner.blocked", "计划没有可执行节点")
-
-    @staticmethod
-    def _step_from_node(node: WorkflowNode) -> AgentStep:
-        spec = get_tool_action_spec(node.tool_id, node.action)
-        return AgentStep(
-            node_id=node.node_id,
-            tool_id=node.tool_id,
-            action=spec.action if spec is not None else node.action,
-            params=dict(node.params or {}),
-            risk=spec.risk if spec is not None else str(node.risk or "low"),
-            idempotent=bool(spec.idempotent) if spec is not None else bool(node.idempotent),
-            description=str(node.description or ""),
-            depends_on=list(node.depends_on or []),
-        )
-
-    @staticmethod
-    def _find_waiting_step(
-        run: AgentRun,
-        *,
-        approved_step_id: str = "",
-    ) -> AgentStep | None:
-        wanted = str(approved_step_id or "").strip()
-        for step in run.steps:
-            if step.status != "waiting_user":
-                continue
-            if wanted and wanted not in {step.step_id, step.node_id}:
-                continue
-            return step
-        return None
 
     def _execute_ready_steps(
         self,
@@ -306,10 +257,12 @@ class AgentOrchestrator:
                     f"步骤 {step.node_id} 需要用户确认",
                     {
                         "step_id": step.step_id,
+                        "node_id": step.node_id,
                         "tool_id": step.tool_id,
                         "action": step.action,
                         "risk": step.risk,
                         "idempotent": step.idempotent,
+                        "description": step.description,
                     },
                 )
                 return
@@ -404,6 +357,8 @@ class AgentOrchestrator:
             {
                 "step_id": step.step_id,
                 "node_id": step.node_id,
+                "tool_id": step.tool_id,
+                "action": step.action,
                 "call_id": tool_call.call_id,
                 "cost_units": tool_call.cost_units,
                 "permission": tool_call.permission,
@@ -479,11 +434,14 @@ class AgentOrchestrator:
                 {
                     "step_id": step.step_id,
                     "node_id": step.node_id,
+                    "tool_id": step.tool_id,
+                    "action": step.action,
                     "call_id": tool_call.call_id,
                     "duration_ms": step.duration_ms,
                     "cost_units": tool_call.cost_units,
                     "attempt_count": attempt_count,
                     "observation_id": observation.get("observation_id"),
+                    "output": copy.deepcopy(step.output),
                 },
             )
             return
@@ -501,6 +459,8 @@ class AgentOrchestrator:
             {
                 "step_id": step.step_id,
                 "node_id": step.node_id,
+                "tool_id": step.tool_id,
+                "action": step.action,
                 "call_id": tool_call.call_id,
                 "error": step.error,
                 "duration_ms": step.duration_ms,

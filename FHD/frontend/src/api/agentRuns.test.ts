@@ -45,6 +45,30 @@ describe('agentRunsApi', () => {
     })
   })
 
+  it('cancels an agent run', async () => {
+    await agentRunsApi.cancelRun('run/1', { cancelled_by: 'u1' })
+
+    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/cancel', {
+      cancelled_by: 'u1',
+    })
+  })
+
+  it('submits a formal approval linked to the run', async () => {
+    await agentRunsApi.submitApproval('run/1', { requested_by: 'u1' })
+
+    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/submit-approval', {
+      requested_by: 'u1',
+    })
+  })
+
+  it('restarts a safe terminal run as a new run', async () => {
+    await agentRunsApi.restartRun('run/1', { requested_by: 'u1' })
+
+    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/restart', {
+      requested_by: 'u1',
+    })
+  })
+
   it('reads run detail, list, and events', async () => {
     await agentRunsApi.getRun('run/1')
     await agentRunsApi.listRuns({ user_id: 'u1', limit: 10 })

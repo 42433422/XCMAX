@@ -32,57 +32,26 @@ import { useChatRequest } from './useChatRequest'
 import { useChatResponseAttach } from './useChatResponseAttach'
 import { useChatSessionHistory } from './useChatSessionHistory'
 import { useAgentRunEventSync } from './useAgentRunEvents'
+import { useChatAgentRunRuntime } from './useChatAgentRunRuntime'
+import {
+  asAutoAction, asPlannerPayload, asShipmentTask, buildShipmentDownloadUrl,
+  buildTaskCompletedDescription, errorMessage, extractShipmentExecutionContext,
+  getXcagiWindow, isDatabaseTokenRequirement, type DynamicShipmentTask,
+} from './chatOrchestrationUtils'
 import type { UseChatViewOptions } from './useChatView'
 import type { ChatAutoAction, ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
-
-type XcagiChatWindow = Window & {
-  __VUE_CHAT_FILL__?: (value: string) => boolean
-  setWorkModeFromChat?: (enabled: boolean) => void
-  setMonitorModeFromChat?: (enabled: boolean) => void
-  refreshWorkModeMonitorList?: () => void
-  legacyAutoActionHandler?: (action: ChatAutoAction, userMessage: string) => void
-  isProTaskAcquisitionMessage?: (message: string) => boolean
-  jarvisSendMessage?: (message: string) => void
-}
-
-type DynamicShipmentTask = ShipmentTask & Record<string, unknown>
-
-function getXcagiWindow(): XcagiChatWindow {
-  return window as XcagiChatWindow
-}
-
-function asShipmentTask(value: unknown): DynamicShipmentTask {
-  const row = asRecord(value)
-  return {
-    ...row,
-    type: asString(row.type),
-  } as DynamicShipmentTask
-}
-
-function asPlannerPayload(value: unknown): ChatPlannerPayload {
-  return asRecord(value) as ChatPlannerPayload
-}
-
-function asAutoAction(value: unknown): ChatAutoAction {
-  return asRecord(value) as ChatAutoAction
-}
-
-function errorMessage(err: unknown, fallback: string): string {
-  return err instanceof Error ? err.message : asString(err, fallback)
-}
-
-function isDatabaseTokenRequirement(tokenName?: unknown, tokenDescription?: unknown): boolean {
-  const raw = `${String(tokenName || '')} ${String(tokenDescription || '')}`.toUpperCase()
-  return /DB_(READ|WRITE)_TOKEN|DATABASE TOKEN|数据库.*令牌|一级|二级|写入令牌|查看令牌/.test(raw)
-}
-
+import {
+  buildChatSoftwareCapabilities,
+  resolveChatSoftwareRouteKey,
+} from '@/utils/chatCapabilityCatalog'
+import { openDocumentPreviewFromResult } from '@/state/documentPreviewPip'
+import type { ChatExecutionProgressItem } from '@/types/chat-ui'
 export function useChatOrchestration(options: UseChatViewOptions) {
   const tutorialStore = useTutorialStore()
   const modsStore = useModsStore()
   const { sessionId } = options
   const proIntentExperienceEnabled = options.proIntentExperienceEnabled
-
   const historyPersistence = useChatHistoryPersistence({
     sessionId,
     getActiveModId: () => String(modsStore.activeModId || ''),
@@ -96,6 +65,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     saveMessage,
     pushStreamingAiShell,
     applyPlainTextToMessageIndex,
+    patchMessageAtIndex = () => {},
     clearMessages,
     loadMessages,
     syncFromServer,
@@ -126,11 +96,20 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const orderNumberFetching = ref(false)
   const isLoading = ref(false)
   const isStreamingReply = ref(false)
+  let activeChatStreamController: AbortController | null = null
+  let streamAbortRequestedByUser = false
   const isExecuting = ref(false)
   const latestAssistantPush = ref<{ title: string; description: string } | null>(null)
   const proRuntimeTask = ref<{ title: string; statusText: string; statusClass: string; description: string } | null>(null)
   const chatMessagesRef = ref<HTMLElement | null>(null)
   let persistTaskPanelStateForSession: (targetSessionId?: string) => void = () => { }
+
+  function stopStreamingReply() {
+    if (!activeChatStreamController) return
+    streamAbortRequestedByUser = true
+    clearVoiceQueue()
+    activeChatStreamController.abort()
+  }
 
   const {
     taskList,
@@ -145,7 +124,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     finishTask,
     failTask,
     cancelTaskById,
-    retryTask,
+    retryTask: retryTaskLocal,
     toggleTaskExpanded,
     setTaskFilter,
     clearTaskHistory,
@@ -222,13 +201,15 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     attachWorkflowTraceToLastAiMessage,
     attachApprovalCardToLastAiMessage,
     attachContextSummaryToLastAiMessage,
+    attachAgentRunTraceToLastAiMessage = () => {},
     syncTaskFromChatResponse,
   } = responseAttach
 
-  const { syncAgentRunFromPayload } = useAgentRunEventSync({
+  const { syncAgentRunFromPayload, syncAgentRunEvents, restoreRecentAgentRuns } = useAgentRunEventSync({
     upsertTask,
     getLastAiMessageRef,
   })
+
 
   const chatRequest = useChatRequest({
     messages,
@@ -258,6 +239,16 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     requestChatByModeBatchWithTimeout,
     resolveChatTimeoutMs,
   } = chatRequest
+
+  const {
+    retryTask, startTracePolling, confirmWorkflowFromCard,
+    cancelWorkflowFromCard, restoreAndPoll,
+  } = useChatAgentRunRuntime({
+    messages, taskList, retryTaskLocal, addAndSaveMessage, syncAgentRunEvents,
+    restoreRecentAgentRuns, attachAgentRunTraceToLastAiMessage,
+    getUserId: () => dbGate.getModeScopedUserId(resolveEffectiveProModeState()),
+    isLoading, setLoadingProgress, stopLoadingProgress, sendFallback: sendMessage,
+  })
 
   function generateSessionId(): string {
     return Date.now().toString(36) + Math.random().toString(36).substr(2)
@@ -746,94 +737,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   })
   const { readWorkflowEmployeeEnabledMap, upsertWorkflowEmployeeTask } = workflowPanel
 
-  /** 出货管理 AI 员工：打印成功后拉取出货记录、统计与审计，并提示保存（导出）/推送 */
-  function buildTaskCompletedDescription(successMsg: string, data: unknown): string {
-    const row = asRecord(data)
-    const nestedData = asRecord(row.data)
-    const document = asRecord(row.document || nestedData.document)
-    const parts = [successMsg || '任务执行成功']
-    const docName = row.doc_name || nestedData.doc_name || document.filename
-    const orderNo = row.order_number || nestedData.order_number || document.order_number
-    const filePath = row.file_path || nestedData.file_path || document.filepath
-    const labels = asArray(row.labels).length ? asArray(row.labels) : asArray(nestedData.labels)
-    if (docName) parts.push(`文档：${docName}`)
-    if (orderNo) parts.push(`单号：${orderNo}`)
-    if (typeof row.record_id !== 'undefined' && row.record_id !== null) parts.push(`记录ID：${row.record_id}`)
-    if (typeof row.order_id !== 'undefined' && row.order_id !== null) parts.push(`订单ID：${row.order_id}`)
-    if (labels.length) parts.push(`标签：${labels.length} 张`)
-    if (filePath) parts.push(`路径：${filePath}`)
-    return parts.join('；')
-  }
-
-  function buildShipmentDownloadUrl(data: unknown): string {
-    const row = asRecord(data)
-    const nestedData = asRecord(row.data)
-    const document = asRecord(row.document || nestedData.document)
-    const directUrl = row.download_url || nestedData.download_url
-    if (directUrl && typeof directUrl === 'string') return directUrl
-
-    const docName = row.doc_name || nestedData.doc_name || document.filename
-    if (!docName || typeof docName !== 'string') return ''
-
-    return `/api/shipment/download/${encodeURIComponent(docName)}`
-  }
-
-  function normalizeRecordId(value: unknown): number | null {
-    if (value === null || value === undefined || value === '') return null
-    const n = Number(value)
-    if (!Number.isFinite(n)) return null
-    const normalized = Math.trunc(n)
-    return normalized > 0 ? normalized : null
-  }
-
-  function extractShipmentExecutionContext(data: unknown) {
-    const row = asRecord(data)
-    const nestedData = asRecord(row.data)
-    const document = asRecord(row.document || nestedData.document)
-    const filePath = asString(row.file_path || nestedData.file_path || document.filepath)
-    const purchaseUnit = String(
-      row.purchase_unit
-      ?? nestedData.purchase_unit
-      ?? document.purchase_unit
-      ?? ''
-    ).trim()
-    const orderId = normalizeRecordId(
-      row.order_id
-      ?? row.record_id
-      ?? nestedData.order_id
-      ?? nestedData.record_id
-      ?? document.order_id
-      ?? document.record_id
-    )
-    const labelsRaw = asArray(row.labels).length ? asArray(row.labels) : asArray(nestedData.labels)
-
-    const labelPaths: string[] = []
-    labelsRaw.forEach((label: unknown) => {
-      if (typeof label === 'string' && label.trim()) {
-        labelPaths.push(label.trim())
-        return
-      }
-      if (label && typeof label === 'object') {
-        const labelRow = asRecord(label)
-        const p =
-          labelRow.file_path ||
-          labelRow.path ||
-          labelRow.filePath ||
-          labelRow.filepath ||
-          ''
-        if (typeof p === 'string' && p.trim()) {
-          labelPaths.push(p.trim())
-        }
-      }
-    })
-
-    return {
-      filePath,
-      purchaseUnit,
-      orderId,
-      labelPaths: Array.from(new Set(labelPaths))
-    }
-  }
 
   async function confirmTask(): Promise<void> {
     if (!currentTask.value || isExecuting.value) return
@@ -980,6 +883,19 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     console.log('[AutoAction] 触发:', autoAction, '| 用户消息:', userMessage)
     const type = String(autoAction.type || '')
     const actionQuery = String(autoAction.query || autoAction.keyword || userMessage || '').trim()
+
+    if (type === 'navigate') {
+      const routeKey = resolveChatSoftwareRouteKey(
+        autoAction.route_key || autoAction.view || autoAction.target,
+      )
+      if (routeKey) {
+        window.dispatchEvent(new CustomEvent('xcagi:switch-view', { detail: { view: routeKey } }))
+        window.dispatchEvent(new CustomEvent('auto-action', {
+          detail: { action: { ...autoAction, route_key: routeKey }, userMessage },
+        }))
+      }
+      return
+    }
 
     if (type === 'set_work_mode') {
       applyProRuntimeMode(type, autoAction.enabled !== false)
@@ -1169,11 +1085,37 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       const baseS = resolveChatTimeoutMs(primaryForStream)
       const timeoutMsS = Math.min(120000, baseS)
       const controller = new AbortController()
+      activeChatStreamController = controller
+      streamAbortRequestedByUser = false
       const killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
       const msgIndex = pushStreamingAiShell()
+      const executionProgress: ChatExecutionProgressItem[] = []
+      const updateExecutionProgress = (
+        phase: string,
+        label: string,
+        status: ChatExecutionProgressItem['status'] = 'running',
+      ) => {
+        const previous = executionProgress[executionProgress.length - 1]
+        if (previous && previous.phase === phase && previous.label === label) {
+          previous.status = status
+          previous.at = new Date().toISOString()
+        } else {
+          if (previous?.status === 'running') previous.status = 'success'
+          executionProgress.push({ phase, label, status, at: new Date().toISOString() })
+          if (executionProgress.length > 12) executionProgress.splice(0, executionProgress.length - 12)
+        }
+        patchMessageAtIndex(msgIndex, {
+          toolProgressLabel: label,
+          executionProgress: executionProgress.map((item) => ({ ...item })),
+        })
+      }
+      updateExecutionProgress('accepted', '已接收任务，正在理解你的需求…')
       let streamPlain = ''
+      let streamRunId = ''
+      let streamReadFinished = false
       let doneResult: unknown = null
       let sseError: string | null = null
+      let receivedAnyStreamEvent = false
       // TTS 增量朗读：以句末标点为界把已稳定的前缀丢给语音队列，避免边生成边合成后半句卡顿或被重复打断
       let ttsSpokenOffset = 0
       const ttsShouldSpeakThisMessage = ttsEnabled.value
@@ -1204,20 +1146,30 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         const { body } = buildPlannerChatRequestPayload(primaryForStream, {
           fromWriteUnlock: !!opts?.fromWriteUnlock
         })
-        const res = await chatApi.sendChatStream(
-          { ...body, message: String(body.message || primaryForStream) } as ChatRequest &
-          Record<string, unknown>,
-          { signal: controller.signal },
-        )
-        if (!res.ok) {
-          throw new Error(await parseChatStreamErrorResponse(res))
+        const softwareCapabilities = buildChatSoftwareCapabilities()
+        body.software_capabilities = softwareCapabilities
+        body.runtime_context = {
+          ...asRecord(body.runtime_context),
+          software_capabilities: softwareCapabilities,
         }
-        await readPlannerSseResponse(res, (ev: PlannerSseEvent) => {
+        const handleStreamEvent = (ev: PlannerSseEvent) => {
+          receivedAnyStreamEvent = true
+          const eventRunId = String(ev.run_id || ev.agent_run_id || '').trim()
+          if (eventRunId) streamRunId = eventRunId
           if (ev.type === 'token') {
+            if (ev.ephemeral) return
             streamPlain += ev.text || ''
             applyPlainTextToMessageIndex(msgIndex, streamPlain)
             flushTtsFromStream(streamPlain, false)
+            updateExecutionProgress('generating', '正在生成回复…')
             setLoadingProgress('正在生成回复…')
+          } else if (ev.type === 'tool_progress') {
+            const rawLabel = String(ev.text || ev.label || ev.phase || '工具').trim()
+            const progressText = ev.phase === 'accepted'
+              ? rawLabel
+              : rawLabel ? `正在调用 ${rawLabel}…` : '正在调用工具…'
+            updateExecutionProgress(String(ev.phase || 'tool'), progressText)
+            setLoadingProgress(progressText)
           } else if (ev.type === 'done') {
             doneResult = ev.result
           } else if (ev.type === 'error') {
@@ -1226,6 +1178,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
             const tokenName = ev.token_name || ''
             const tokenDesc = ev.token_description || ''
             handleChatRequiresToken(tokenName, tokenDesc, remoteMessages)
+            updateExecutionProgress('authorization', `等待授权：${tokenDesc || tokenName || '授权信息'}`, 'waiting')
             streamPlain += `\n[需要授权：${tokenDesc || tokenName || '授权信息'}]\n`
             applyPlainTextToMessageIndex(msgIndex, streamPlain)
             flushTtsFromStream(streamPlain, false)
@@ -1237,12 +1190,40 @@ export function useChatOrchestration(options: UseChatViewOptions) {
               plannerWriteUnlockResumeDraft.value = streamPlain
             }
           }
-        })
+        }
+        const requestStreamOnce = async () => {
+          const res = await chatApi.sendChatStream(
+            { ...body, message: String(body.message || primaryForStream) } as ChatRequest &
+            Record<string, unknown>,
+            { signal: controller.signal },
+          )
+          if (!res.ok) {
+            const httpError = new Error(await parseChatStreamErrorResponse(res)) as Error & {
+              retryable?: boolean
+            }
+            httpError.retryable = res.status === 408 || res.status === 429 || res.status >= 500
+            throw httpError
+          }
+          await readPlannerSseResponse(res, handleStreamEvent)
+        }
+        try {
+          await requestStreamOnce()
+        } catch (firstError: unknown) {
+          const retryable = (firstError as { retryable?: boolean })?.retryable !== false
+          if (receivedAnyStreamEvent || controller.signal.aborted || !retryable) throw firstError
+          updateExecutionProgress('reconnect', '模型服务响应较慢，正在自动重连…', 'retrying')
+          setLoadingProgress('模型服务响应较慢，正在自动重连…')
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 600))
+          await requestStreamOnce()
+        }
+        streamReadFinished = true
         if (sseError) {
           throw new Error(sseError)
         }
         const donePayload = asPlannerPayload(doneResult)
         const finalText = String(donePayload.response ?? streamPlain).trim() || streamPlain || '（无内容）'
+        updateExecutionProgress('completed', '任务已完成', 'success')
+        patchMessageAtIndex(msgIndex, { toolProgressLabel: undefined })
         applyPlainTextToMessageIndex(msgIndex, finalText)
         // 后端 done 事件可能带一段非 token 的尾部文本（比如总结段），统一再做一次兜底朗读
         if (ttsShouldSpeakThisMessage && ttsEnabled.value) {
@@ -1283,14 +1264,52 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         if (wrap.task) {
           maybeCloseAssistantFloatForShipmentTask(wrap.task, wrap.autoAction)
         }
+        openDocumentPreviewFromResult(wrap)
       } catch (err: unknown) {
+        const isForegroundTimeout = err instanceof Error && err.name === 'AbortError'
+        if (isForegroundTimeout && streamAbortRequestedByUser) {
+          const partial = streamPlain.trim()
+          updateExecutionProgress('cancelled', '已停止生成', 'cancelled')
+          patchMessageAtIndex(msgIndex, { toolProgressLabel: undefined })
+          const stoppedText = partial || '（已停止生成）'
+          applyPlainTextToMessageIndex(msgIndex, stoppedText)
+          await saveMessage('ai', stoppedText)
+          return
+        }
+        const shouldTrackInBackground = !!streamRunId
+          && !streamReadFinished
+          && (isForegroundTimeout || !sseError)
+        if (shouldTrackInBackground) {
+          updateExecutionProgress('background', '前台等待结束，任务继续在后台执行', 'waiting')
+          const partial = streamPlain.trim()
+          const backgroundNotice = [
+            partial,
+            '前台等待已结束，任务已转为后台追踪；你可以继续使用软件。',
+            `任务回执：${streamRunId}`,
+            '最终成功或失败以该任务回执为准。',
+          ].filter(Boolean).join('\n\n')
+          applyPlainTextToMessageIndex(msgIndex, backgroundNotice)
+          await saveMessage('ai', backgroundNotice)
+          await syncAgentRunEvents(streamRunId, primaryForStream)
+          attachAgentRunTraceToLastAiMessage()
+          startTracePolling(streamRunId)
+          return
+        }
         const errText =
-          err instanceof Error && err.name === 'AbortError'
+          isForegroundTimeout
             ? `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
             : errorMessage(err, '流式对话失败')
-        applyPlainTextToMessageIndex(msgIndex, `处理失败：${errText}`)
-        await saveMessage('ai', `处理失败：${errText}`)
+        updateExecutionProgress('failed', `处理失败：${errText}`, 'failed')
+        patchMessageAtIndex(msgIndex, { toolProgressLabel: undefined })
+        const failureText = `处理失败：${errText}\n\n上下文已保留，可重新发送或从右侧任务面板重试。`
+        applyPlainTextToMessageIndex(msgIndex, failureText)
+        await saveMessage('ai', failureText)
+        if (streamRunId) {
+          await syncAgentRunEvents(streamRunId, primaryForStream)
+          attachAgentRunTraceToLastAiMessage()
+        }
       } finally {
+        if (activeChatStreamController === controller) activeChatStreamController = null
         isStreamingReply.value = false
         window.clearTimeout(killTimer)
         isLoading.value = false
@@ -1438,27 +1457,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     }
   }
 
-  async function confirmWorkflowFromCard() {
-    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
-      const msg = messages.value[i]
-      if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
-        msg.approvalCard = { ...msg.approvalCard, status: 'confirmed' }
-        break
-      }
-    }
-    await sendMessage('确认')
-  }
-
-  async function cancelWorkflowFromCard() {
-    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
-      const msg = messages.value[i]
-      if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
-        msg.approvalCard = { ...msg.approvalCard, status: 'cancelled' }
-        break
-      }
-    }
-    await sendMessage('取消')
-  }
 
   async function sendMessage(message: string) {
     await addAndSaveMessage(message, 'user')
@@ -1545,6 +1543,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       if (first) linkedExcelSheet.value = first
     }
     window.addEventListener(FHD_DB_WRITE_UNLOCKED_EVENT, dbGate.onDbWriteUnlockedForChatRetry)
+    void restoreAndPoll(dbGate.getModeScopedUserId(resolveEffectiveProModeState()))
     workflowPanel.mountWorkflowPanel()
   })
 
@@ -1591,6 +1590,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     scrollToBottom,
     syncProModeState: dbGate.syncProModeState,
     sendMessage,
+    stopStreamingReply,
     confirmWorkflowFromCard,
     cancelWorkflowFromCard,
     confirmTask,

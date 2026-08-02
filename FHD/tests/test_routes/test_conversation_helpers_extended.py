@@ -318,9 +318,11 @@ class TestXcagiGuardedPlannerStreamEvents:
                     client=MagicMock(),
                 )
             )
-            assert len(events) == 2
-            assert events[0]["type"] == "token"
-            assert events[1]["type"] == "done"
+            assert len(events) == 3
+            assert events[0]["type"] == "tool_progress"
+            assert events[0]["phase"] == "accepted"
+            assert events[1]["type"] == "token"
+            assert events[2]["type"] == "done"
 
     def test_yields_error_on_exception(self):
         """Should yield error event when worker raises exception."""
@@ -352,9 +354,10 @@ class TestXcagiGuardedPlannerStreamEvents:
                     client=MagicMock(),
                 )
             )
-            assert len(events) == 1
-            assert events[0]["type"] == "error"
-            assert events[0]["status_code"] == 503
+            assert len(events) == 2
+            assert events[0]["phase"] == "accepted"
+            assert events[1]["type"] == "error"
+            assert events[1]["status_code"] == 503
 
 
 # ---------------------------------------------------------------------------

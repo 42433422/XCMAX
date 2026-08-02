@@ -669,16 +669,14 @@ const startupMarks: DesktopStartupMarks = {}
 
 export function readPackagedAppVersion(): string {
   if (!app.isPackaged) return 'dev'
-  const candidates = [
-    path.join(process.resourcesPath, 'backend', 'version.txt'),
-    path.join(process.resourcesPath, 'product-sku.json')
-  ]
+  const candidates = [path.join(process.resourcesPath, 'build-info.json'), path.join(process.resourcesPath, 'backend', 'version.txt'), path.join(process.resourcesPath, 'product-sku.json')]
   for (const filePath of candidates) {
     try {
       if (!fs.existsSync(filePath)) continue
       const raw = readJsonTextFile(filePath).trim()
       if (filePath.endsWith('version.txt')) return raw || 'unknown'
-      const json = JSON.parse(raw) as { sku?: string; schema_version?: number }
+      const json = JSON.parse(raw) as { version?: string; sku?: string; schema_version?: number }
+      if (filePath.endsWith('build-info.json')) return String(json.version || '').trim() || app.getVersion()
       return `${json.sku || 'enterprise'}-${json.schema_version ?? 1}`
     } catch {
       /* ignore */
@@ -1529,6 +1527,7 @@ function bootstrap(): void {
       })
 
       ipcMain.handle('xcagi:get-data-dir', () => app.getPath('userData'))
+      ipcMain.handle('xcagi:get-app-identity', () => ({ name: app.getName(), version: readPackagedAppVersion(), isPackaged: app.isPackaged }))
       ipcMain.handle('xcagi:open-kellai-desktop', () => openKellaiDesktop())
       ipcMain.handle('xcagi:export-support-bundle', () => exportSupportBundleInteractive())
       ipcMain.handle('xcagi:check-for-updates', () => runUpdateCheckWithDirectNet())
@@ -1620,7 +1619,7 @@ function bootstrap(): void {
             },
             restartCountRef: () => restartCount,
             port: DEFAULT_PORT,
-            appVersion: app.getVersion(),
+            appVersion: readPackagedAppVersion(),
             buildSha: readLocalBuildSha(),
             configPath: null,
             // Phase 1：注入 backend 重启 / 版本回滚闭包（与 main.ts 现有逻辑共存）

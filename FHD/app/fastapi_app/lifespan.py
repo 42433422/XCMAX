@@ -61,6 +61,18 @@ async def lifespan(app: FastAPI):
     mark_startup("lifespan_db_done")
 
     try:
+        from app.application.agent_orchestrator import AgentOrchestrator
+
+        interrupted_runs = await asyncio.to_thread(AgentOrchestrator().reconcile_interrupted_runs)
+        if interrupted_runs:
+            logger.warning(
+                "reconciled %s AgentRun(s) interrupted by the previous app process",
+                interrupted_runs,
+            )
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("AgentRun startup reconciliation skipped: %s", exc)
+
+    try:
         from app.application.desktop_admin_gate import purge_admin_sessions_on_desktop
 
         purged = await asyncio.to_thread(purge_admin_sessions_on_desktop)
@@ -344,6 +356,17 @@ async def _init_neuro_ddd_async(app: FastAPI):
 
 async def _init_employee_runtime_async(app: FastAPI):
     """Initialize local AI employee triggers and cron scheduler."""
+    from app.application.employee_runtime.runtime_policy import (
+        desktop_admin_employee_runtime_disabled,
+        desktop_employee_runtime_status,
+    )
+
+    if desktop_admin_employee_runtime_disabled():
+        disabled = desktop_employee_runtime_status()
+        app.state.employee_triggers = disabled
+        app.state.employee_scheduler = disabled
+        logger.info("桌面产品边界：跳过管理端员工触发器与本地调度器")
+        return
     if passive_node_enabled():
         logger.info("被动应用节点：跳过员工触发器与本地调度器")
         return

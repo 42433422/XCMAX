@@ -61,7 +61,9 @@ class RunEvents:
     RUN_CREATED = "run.created"  # sla_tier=conscious
     RUN_COMPLETED = "run.completed"  # terminal
     RUN_FAILED = "run.failed"  # terminal
-    RUN_CONTINUE_IGNORED = "run.continue_ignored"
+    RUN_CONTINUE_IGNORED = "run.continue_ignored"  # terminal
+    RUN_CANCELLED = "run.cancelled"  # terminal
+    RUN_CANCEL_IGNORED = "run.cancel_ignored"  # terminal
 
 class StepEvents:
     STEP_BLOCKED = "step.blocked"
@@ -297,6 +299,8 @@ ALL_EVENT_TYPES: frozenset[str] = frozenset({
     "product.updated",
     "rag.failed",
     "rag.retrieved",
+    "run.cancel_ignored",
+    "run.cancelled",
     "run.completed",
     "run.continue_ignored",
     "run.created",
@@ -352,6 +356,8 @@ AGENT_RUN_EVENT_TYPES: frozenset[str] = frozenset({
     "planner.started",
     "rag.failed",
     "rag.retrieved",
+    "run.cancel_ignored",
+    "run.cancelled",
     "run.completed",
     "run.continue_ignored",
     "run.created",
@@ -372,13 +378,16 @@ AGENT_RUN_EVENT_TYPES: frozenset[str] = frozenset({
 TERMINAL_AGENT_RUN_EVENT_TYPES: frozenset[str] = frozenset({
     "budget.exceeded",
     "planner.blocked",
+    "run.cancel_ignored",
+    "run.cancelled",
     "run.completed",
+    "run.continue_ignored",
     "run.failed",
 })
 
-EventType = Literal["ai.context_updated", "ai.conversation_ended", "ai.conversation_started", "ai.feedback_received", "ai.intent_recognized", "ai.response_generated", "artifact.attached", "auth.login_failed", "auth.password_changed", "auth.permission_granted", "auth.permission_revoked", "auth.token_refreshed", "auth.user_login", "auth.user_logout", "auth.user_registered", "billing.debit_failed", "billing.debited", "billing.insufficient_balance", "billing.record_failed", "billing.recorded", "billing.refund_failed", "billing.refund_pending", "billing.refund_recorded", "billing.refunded", "budget.exceeded", "conversation.assigned", "conversation.created", "conversation.ended", "conversation.exported", "conversation.message_added", "conversation.tagged", "customer.credit_limit_changed", "customer.deactivated", "customer.preference_updated", "customer.purchase_unit_bound", "customer.registered", "customer.updated", "dataset.ingest_failed", "dataset.ingested", "http.request.completed", "http.request.failed", "http.request.started", "inventory.check_completed", "inventory.low_stock_alert", "inventory.stock_changed", "inventory.stock_in", "inventory.stock_out", "inventory.transfer", "llm.completed", "llm.failed", "material.created", "material.low_stock_alert", "material.stock_in", "material.stock_out", "material.supplier_changed", "material.updated", "memory.failed", "memory.recalled", "observation.recorded", "ocr.batch_completed", "ocr.result_validated", "ocr.task_completed", "ocr.task_failed", "ocr.task_started", "ocr.task_submitted", "order.cancelled", "order.fulfilled", "order.item_updated", "order.paid", "order.payment_failed", "order.refunded", "order.shipped", "order.status_changed", "order.submitted", "payment.completed", "payment.created", "payment.failed", "payment.method_changed", "payment.notification_sent", "payment.refunded", "planner.blocked", "planner.completed", "planner.started", "print.job_completed", "print.job_failed", "print.job_started", "print.job_submitted", "print.label_requested", "print.printer_status_changed", "product.cache_invalidated", "product.created", "product.deleted", "product.imported", "product.price_changed", "product.updated", "rag.failed", "rag.retrieved", "run.completed", "run.continue_ignored", "run.created", "run.failed", "shipment.cancelled", "shipment.created", "shipment.deleted", "shipment.exported", "shipment.inventory_deducted", "shipment.item_added", "shipment.printed", "step.approved", "step.blocked", "step.llm_repair_failed", "step.llm_repair_requested", "step.repair_applied", "step.repair_rejected", "step.retry_scheduled", "step.waiting_user", "tool.completed", "tool.failed", "tool.started", "wechat.contact_added", "wechat.contact_updated", "wechat.login_status_changed", "wechat.message_received", "wechat.message_sent", "wechat.task_completed", "wechat.task_created"]
+EventType = Literal["ai.context_updated", "ai.conversation_ended", "ai.conversation_started", "ai.feedback_received", "ai.intent_recognized", "ai.response_generated", "artifact.attached", "auth.login_failed", "auth.password_changed", "auth.permission_granted", "auth.permission_revoked", "auth.token_refreshed", "auth.user_login", "auth.user_logout", "auth.user_registered", "billing.debit_failed", "billing.debited", "billing.insufficient_balance", "billing.record_failed", "billing.recorded", "billing.refund_failed", "billing.refund_pending", "billing.refund_recorded", "billing.refunded", "budget.exceeded", "conversation.assigned", "conversation.created", "conversation.ended", "conversation.exported", "conversation.message_added", "conversation.tagged", "customer.credit_limit_changed", "customer.deactivated", "customer.preference_updated", "customer.purchase_unit_bound", "customer.registered", "customer.updated", "dataset.ingest_failed", "dataset.ingested", "http.request.completed", "http.request.failed", "http.request.started", "inventory.check_completed", "inventory.low_stock_alert", "inventory.stock_changed", "inventory.stock_in", "inventory.stock_out", "inventory.transfer", "llm.completed", "llm.failed", "material.created", "material.low_stock_alert", "material.stock_in", "material.stock_out", "material.supplier_changed", "material.updated", "memory.failed", "memory.recalled", "observation.recorded", "ocr.batch_completed", "ocr.result_validated", "ocr.task_completed", "ocr.task_failed", "ocr.task_started", "ocr.task_submitted", "order.cancelled", "order.fulfilled", "order.item_updated", "order.paid", "order.payment_failed", "order.refunded", "order.shipped", "order.status_changed", "order.submitted", "payment.completed", "payment.created", "payment.failed", "payment.method_changed", "payment.notification_sent", "payment.refunded", "planner.blocked", "planner.completed", "planner.started", "print.job_completed", "print.job_failed", "print.job_started", "print.job_submitted", "print.label_requested", "print.printer_status_changed", "product.cache_invalidated", "product.created", "product.deleted", "product.imported", "product.price_changed", "product.updated", "rag.failed", "rag.retrieved", "run.cancel_ignored", "run.cancelled", "run.completed", "run.continue_ignored", "run.created", "run.failed", "shipment.cancelled", "shipment.created", "shipment.deleted", "shipment.exported", "shipment.inventory_deducted", "shipment.item_added", "shipment.printed", "step.approved", "step.blocked", "step.llm_repair_failed", "step.llm_repair_requested", "step.repair_applied", "step.repair_rejected", "step.retry_scheduled", "step.waiting_user", "tool.completed", "tool.failed", "tool.started", "wechat.contact_added", "wechat.contact_updated", "wechat.login_status_changed", "wechat.message_received", "wechat.message_sent", "wechat.task_completed", "wechat.task_created"]
 
-AgentRunEventType = Literal["artifact.attached", "billing.debit_failed", "billing.debited", "billing.insufficient_balance", "billing.record_failed", "billing.recorded", "billing.refund_failed", "billing.refund_pending", "billing.refund_recorded", "billing.refunded", "budget.exceeded", "dataset.ingest_failed", "dataset.ingested", "llm.completed", "llm.failed", "memory.failed", "memory.recalled", "observation.recorded", "planner.blocked", "planner.completed", "planner.started", "rag.failed", "rag.retrieved", "run.completed", "run.continue_ignored", "run.created", "run.failed", "step.approved", "step.blocked", "step.llm_repair_failed", "step.llm_repair_requested", "step.repair_applied", "step.repair_rejected", "step.retry_scheduled", "step.waiting_user", "tool.completed", "tool.failed", "tool.started"]
+AgentRunEventType = Literal["artifact.attached", "billing.debit_failed", "billing.debited", "billing.insufficient_balance", "billing.record_failed", "billing.recorded", "billing.refund_failed", "billing.refund_pending", "billing.refund_recorded", "billing.refunded", "budget.exceeded", "dataset.ingest_failed", "dataset.ingested", "llm.completed", "llm.failed", "memory.failed", "memory.recalled", "observation.recorded", "planner.blocked", "planner.completed", "planner.started", "rag.failed", "rag.retrieved", "run.cancel_ignored", "run.cancelled", "run.completed", "run.continue_ignored", "run.created", "run.failed", "step.approved", "step.blocked", "step.llm_repair_failed", "step.llm_repair_requested", "step.repair_applied", "step.repair_rejected", "step.retry_scheduled", "step.waiting_user", "tool.completed", "tool.failed", "tool.started"]
 
 def is_known_event_type(s: str) -> bool:
     """Return True if s is a registered event type across all three streams."""

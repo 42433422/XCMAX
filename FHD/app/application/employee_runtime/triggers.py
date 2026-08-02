@@ -111,6 +111,14 @@ def _unsubscribe_employee(bus: Any, employee_id: str) -> None:
 
 def refresh_employee_triggers(pack_id: str | None = None) -> dict[str, Any]:
     """扫描已安装员工包并（重新）注册 NeuroBus 触发订阅。"""
+    from app.application.employee_runtime.runtime_policy import (
+        desktop_admin_employee_runtime_disabled,
+        desktop_employee_runtime_status,
+    )
+
+    if desktop_admin_employee_runtime_disabled():
+        _ACTIVE_SUBSCRIPTIONS.clear()
+        return desktop_employee_runtime_status()
     try:
         from app.neuro_bus.bus import get_neuro_bus
 

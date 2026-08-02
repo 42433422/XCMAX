@@ -81,9 +81,9 @@
     </div>
     <div class="sidebar-footer">
       <div class="sidebar-status-mods-row">
-        <div class="status-indicator">
-          <span class="status-dot online"></span>
-          <span>系统正常</span>
+        <div class="status-indicator" :title="systemStatusTitle">
+          <span class="status-dot" :class="systemStatusTone"></span>
+          <span>{{ systemStatusText }}</span>
           <DesktopAppUpdatePrompt />
           <span
             v-if="adminDeployStatusText"
@@ -145,7 +145,6 @@
     </div>
   </div>
 </template>
-
 <script setup>
 import { TransitionGroup, computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -175,10 +174,9 @@ import { primeCsrfCookie } from '@/api/core'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import SidebarMenuItem from '@/components/SidebarMenuItem.vue'
 import DesktopAppUpdatePrompt from '@/components/DesktopAppUpdatePrompt.vue'
+import { useDesktopRuntimeStatus } from '@/composables/useDesktopRuntimeStatus'
 import packageJson from '../../package.json'
-
 const { imUnreadTotal } = useImUnreadBadge()
-
 const props = defineProps({
   activeView: {
     type: String,
@@ -189,9 +187,7 @@ const props = defineProps({
     default: false,
   },
 })
-
 const emit = defineEmits(['change-view', 'toggle-pro-mode'])
-
 const industryStore = useIndustryStore()
 const sidebarLayoutStore = useSidebarLayoutStore()
 const modsStore = useModsStore()
@@ -200,7 +196,6 @@ const { modsForUi } = storeToRefs(modsStore)
 const { isAdminAccount, displayBrand } = storeToRefs(accountProfileStore)
 const { menuItems, visibleNavItems: _visibleNavItems } = useVisibleNavItems()
 const { assistantSubtitle } = useIndustryUiText()
-
 function shortModLabel(name) {
   const s = String(name || '').trim()
   if (!s) return 'Mod'
@@ -235,7 +230,6 @@ const entitlementSyncStatus = ref(null)
 const entitlementSyncStatusError = ref('')
 const entitlementSyncLoading = ref(false)
 const entitlementSyncNoticeUntil = ref(0)
-const healthAppVersion = ref('')
 let activeReorderPointerId = null
 let pressTimer = null
 let boundWindowPointerMove = null
@@ -350,14 +344,13 @@ const shouldShowEntitlementSyncStatus = computed(() => {
   return Boolean(accountProfileStore.marketUserId || displayBrand.value)
 })
 
-const sidebarAppVersionText = computed(() => {
-  if (shouldShowAdminDeployStatus.value) return ''
-  return displayVersion(healthAppVersion.value || packageJson.version || '')
-})
-
-const sidebarAppVersionTitle = computed(() => {
-  const ver = String(healthAppVersion.value || packageJson.version || '').trim()
-  return ver ? `当前版本 ${displayVersion(ver)}` : '当前应用版本'
+const {
+  sidebarAppVersionText, sidebarAppVersionTitle, systemStatusTone, systemStatusText,
+  systemStatusTitle, startSystemStatusPolling, stopSystemStatusPolling,
+} = useDesktopRuntimeStatus({
+  shouldHideVersion: shouldShowAdminDeployStatus,
+  fallbackVersion: packageJson.version,
+  displayVersion,
 })
 
 const sidebarFooterMetaVisible = computed(
@@ -365,18 +358,6 @@ const sidebarFooterMetaVisible = computed(
     Boolean(sidebarAppVersionText.value) ||
     Boolean(primaryModChip.value && !isAdminConsoleSpa()),
 )
-
-async function refreshHealthAppVersion() {
-  if (shouldShowAdminDeployStatus.value) return
-  try {
-    const res = await fetch('/api/health', { credentials: 'same-origin' })
-    if (!res.ok) return
-    const data = await res.json()
-    healthAppVersion.value = String(data?.version || '').trim()
-  } catch {
-    /* 健康检查失败时回退 package.json 版本 */
-  }
-}
 
 function displayVersion(value) {
   const text = String(value || '').trim()
@@ -912,13 +893,14 @@ onMounted(async () => {
   }
   syncAdminDeployStatusPolling()
   syncEntitlementSyncPolling()
-  void refreshHealthAppVersion()
+  startSystemStatusPolling()
 })
 
 onBeforeUnmount(() => {
   clearReorderGesture()
   stopAdminDeployStatusPolling()
   stopEntitlementSyncPolling()
+  stopSystemStatusPolling()
   if (entitlementSyncNoticeTimer != null) {
     window.clearTimeout(entitlementSyncNoticeTimer)
     entitlementSyncNoticeTimer = null
@@ -943,6 +925,24 @@ onBeforeUnmount(() => {
   margin-bottom: 0;
   flex-shrink: 0;
   min-width: 0;
+}
+
+.sidebar-status-mods-row .status-dot.warning {
+  background: #f59e0b;
+}
+
+.sidebar-status-mods-row .status-dot.offline {
+  background: #ef4444;
+}
+
+.sidebar-status-mods-row .status-dot.loading {
+  background: #60a5fa;
+  animation: sidebar-status-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes sidebar-status-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
 }
 
 .sidebar-update-chip {

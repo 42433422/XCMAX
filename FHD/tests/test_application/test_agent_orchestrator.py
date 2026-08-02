@@ -113,6 +113,168 @@ def test_agent_orchestrator_waits_for_user_on_medium_risk_step():
     assert "step.waiting_user" in [event.event_type for event in run.events]
 
 
+def test_formal_approval_run_cannot_be_bypassed_and_resumes_after_workspace_approval():
+    from types import SimpleNamespace
+
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+
+    repo = InMemoryAgentRunRepository()
+    plan = PlanGraph(
+        plan_id="plan-formal-approval",
+        intent="customer_query",
+        nodes=[
+            WorkflowNode(
+                node_id="query_customer",
+                tool_id="business_db",
+                action="read",
+                params={"entity": "customers", "filters": {"unit_name": "星光贸易"}},
+                risk="low",
+                idempotent=True,
+            )
+        ],
+    )
+    fake_approval_service = SimpleNamespace(
+        create_approval_request=lambda **_kwargs: SimpleNamespace(request_id="approval-1")
+    )
+    with (
+        patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool",
+            return_value={"success": True, "data": [{"unit_name": "星光贸易"}]},
+        ) as mock_execute,
+        patch("app.application.workflow.get_approval_service", return_value=fake_approval_service),
+    ):
+        orchestrator = AgentOrchestrator(repository=repo)
+        waiting = orchestrator.start_run_from_plan(
+            user_id="u1",
+            message="查询客户并正式审批",
+            plan=plan,
+            approval_required_node_ids=["query_customer"],
+        )
+        bypassed = orchestrator.continue_run(waiting.run_id, approved_by="chat-user")
+        submitted, request_ids = orchestrator.submit_run_for_approval(
+            waiting.run_id,
+            requested_by="u1",
+        )
+        completed = orchestrator.approve_run_step(
+            waiting.run_id,
+            approved_by="approval_workspace",
+            approved_step_id="query_customer",
+            approval_request_id="approval-1",
+        )
+
+    assert waiting.status == "waiting_user"
+    assert bypassed is not None and bypassed.status == "waiting_user"
+    assert mock_execute.call_count == 1
+    assert submitted is not None
+    assert submitted.metadata["approval_request_by_node"] == {"query_customer": "approval-1"}
+    assert request_ids == ["approval-1"]
+    assert completed is not None and completed.status == "completed"
+    assert completed.metadata["approved_request_ids"] == ["approval-1"]
+
+
+def test_startup_reconciliation_fails_executing_runs_but_preserves_waiting_runs():
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+
+    repo = InMemoryAgentRunRepository()
+    interrupted = AgentRun(user_id="u1", message="删除客户", status="running")
+    interrupted_step = AgentStep(
+        node_id="delete_customer",
+        tool_id="business_db",
+        action="write",
+        idempotent=False,
+        status="running",
+    )
+    interrupted.steps = [interrupted_step]
+    interrupted.tool_calls = [
+        ToolCall(
+            step_id=interrupted_step.step_id,
+            node_id=interrupted_step.node_id,
+            tool_id=interrupted_step.tool_id,
+            action=interrupted_step.action,
+            status="running",
+        )
+    ]
+    waiting = AgentRun(user_id="u1", message="等待确认", status="waiting_user")
+    waiting.steps = [
+        AgentStep(
+            node_id="safe_wait",
+            tool_id="business_db",
+            action="read",
+            status="waiting_user",
+        )
+    ]
+    repo.save(interrupted)
+    repo.save(waiting)
+
+    reconciled = AgentOrchestrator(repository=repo).reconcile_interrupted_runs()
+
+    failed = repo.get(interrupted.run_id)
+    preserved = repo.get(waiting.run_id)
+    assert reconciled == 1
+    assert failed is not None and failed.status == "failed"
+    assert failed.final_output["error_code"] == "agent_run_interrupted"
+    assert failed.final_output["manual_review_required"] is True
+    assert failed.final_output["retry_automatically"] is False
+    assert failed.tool_calls[0].status == "failed"
+    assert failed.events[-1].event_type == "run.failed"
+    assert preserved is not None and preserved.status == "waiting_user"
+    source, restarted, reason = AgentOrchestrator(repository=repo).restart_run(
+        interrupted.run_id,
+        requested_by="u1",
+    )
+    assert source is not None
+    assert restarted is None
+    assert reason == "manual_review_required"
+
+
+def test_cancelled_unstarted_run_restarts_as_a_new_confirmable_run():
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+
+    repo = InMemoryAgentRunRepository()
+    plan = PlanGraph(
+        plan_id="plan-restart-safe",
+        intent="customer_create",
+        nodes=[
+            WorkflowNode(
+                node_id="create_customer",
+                tool_id="business_db",
+                action="write",
+                params={
+                    "entity": "customers",
+                    "operation": "create",
+                    "payload": {"unit_name": "星光贸易"},
+                },
+                risk="medium",
+                idempotent=False,
+            )
+        ],
+    )
+    orchestrator = AgentOrchestrator(repository=repo)
+    waiting = orchestrator.start_run_from_plan(
+        user_id="u1",
+        message="创建客户星光贸易",
+        plan=plan,
+    )
+    cancelled = orchestrator.cancel_run(waiting.run_id, cancelled_by="u1")
+    source, restarted, reason = orchestrator.restart_run(
+        waiting.run_id,
+        requested_by="u1",
+    )
+
+    assert cancelled is not None and cancelled.status == "cancelled"
+    assert source is not None and source.run_id == waiting.run_id
+    assert reason == ""
+    assert restarted is not None and restarted.run_id != waiting.run_id
+    assert restarted.status == "waiting_user"
+    assert restarted.metadata["restarted_from_run_id"] == waiting.run_id
+
+
 def test_agent_orchestrator_continues_waiting_run_after_approval():
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository

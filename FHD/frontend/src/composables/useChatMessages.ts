@@ -9,7 +9,7 @@ import {
   buildChatMessagesKey,
   buildChatSessionMetaKey,
 } from '@/utils/chatStorageKeys'
-import { asRecord, asArray, asString, asBoolean } from '@/utils/typeGuards'
+import { asRecord, asArray, asString, asBoolean, asNumber } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
@@ -204,6 +204,7 @@ export function useChatMessages(sessionId: Ref<string>) {
   function hasRenderableSidecar(row: Record<string, unknown>): boolean {
     if (asBoolean(row.streamingShell)) return true
     if (asString(row.toolProgressLabel).trim()) return true
+    if (asArray(row.executionProgress).length) return true
     if (asString(row.downloadUrl).trim()) return true
     if (asString(row.shipmentDownloadUrl).trim()) return true
     if (asString(row.thinkingSteps).trim()) return true
@@ -211,6 +212,8 @@ export function useChatMessages(sessionId: Ref<string>) {
     if (asArray(row.todoSteps).length) return true
     if (asArray(row.nodeResults).length) return true
     if (row.contextSummary != null && String(row.contextSummary).trim()) return true
+    if (Object.keys(asRecord(row.approvalCard)).length) return true
+    if (asArray((asRecord(row.agentRunTrace)).phases).length) return true
     return false
   }
 
@@ -220,6 +223,25 @@ export function useChatMessages(sessionId: Ref<string>) {
 
     const toolProgressLabel = asString(row.toolProgressLabel).trim()
     if (toolProgressLabel) extras.toolProgressLabel = toolProgressLabel
+
+    const executionProgress = asArray(row.executionProgress)
+      .map((raw) => {
+        const item = asRecord(raw)
+        const label = asString(item.label).trim()
+        if (!label) return null
+        const rawStatus = asString(item.status).trim()
+        const allowedStatuses = new Set(['running', 'success', 'retrying', 'waiting', 'failed', 'cancelled'])
+        return {
+          phase: asString(item.phase).trim() || 'working',
+          label,
+          status: allowedStatuses.has(rawStatus) ? rawStatus : 'running',
+          at: asString(item.at).trim() || new Date().toISOString(),
+        }
+      })
+      .filter(Boolean) as NonNullable<ChatMessageExtras['executionProgress']>
+    if (executionProgress.length) {
+      extras.executionProgress = executionProgress as NonNullable<ChatMessageExtras['executionProgress']>
+    }
 
     const downloadUrl = asString(row.downloadUrl).trim()
     if (downloadUrl) extras.downloadUrl = downloadUrl
@@ -268,6 +290,24 @@ export function useChatMessages(sessionId: Ref<string>) {
       extras.contextSummary = contextSummary
     }
 
+    const approvalCard = asRecord(row.approvalCard)
+    if (Object.keys(approvalCard).length) {
+      extras.approvalCard = approvalCard as NonNullable<ChatMessageExtras['approvalCard']>
+    }
+
+    const trace = asRecord(row.agentRunTrace)
+    if (asArray(trace.phases).length) {
+      extras.agentRunTrace = {
+        run_id: asString(trace.run_id),
+        intent: asString(trace.intent),
+        status: asString(trace.status) as never,
+        ...(trace.total_duration_ms != null ? { total_duration_ms: asNumber(trace.total_duration_ms, 0) } : {}),
+        ...(trace.last_event_id ? { last_event_id: asString(trace.last_event_id) } : {}),
+        ...(trace.terminal ? { terminal: true } : {}),
+        phases: asArray(trace.phases).map((raw) => asRecord(raw)),
+      } as never
+    }
+
     return extras
   }
 
@@ -310,25 +350,31 @@ export function useChatMessages(sessionId: Ref<string>) {
   }
 
   function sanitizeMessagesList(rawList: unknown[]): ChatMessage[] {
-    return (Array.isArray(rawList) ? rawList : [])
+    const sanitized = (Array.isArray(rawList) ? rawList : [])
       .map((msg: unknown) => {
         const row = asRecord(msg)
         const roleRaw = asString(row.role)
         const role = (roleRaw === 'user' || roleRaw === 'task') ? roleRaw : 'ai'
         const content = asString(row.content)
-        const streamingShell = asBoolean(row.streamingShell)
-        const toolProgressLabel = asString(row.toolProgressLabel).trim()
-        if (!hasMeaningfulContent(content) && !streamingShell && !toolProgressLabel) return null
+        if (!hasMeaningfulContent(content) && !hasRenderableSidecar(row)) return null
         return {
           role,
           content,
           time: asString(row.time).trim()
             || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-          ...(streamingShell ? { streamingShell: true } : {}),
-          ...(toolProgressLabel ? { toolProgressLabel } : {}),
+          ...sanitizeMessageExtras(row),
         } as ChatMessage
       })
       .filter((m): m is ChatMessage => !!m)
+
+    return sanitized.filter((message, index) => {
+      if (index === 0) return true
+      const previous = sanitized[index - 1]
+      if (previous.role !== message.role || previous.time !== message.time) return true
+      const previousText = extractPlainText(previous.content).replace(/\s+/g, ' ').trim()
+      const currentText = extractPlainText(message.content).replace(/\s+/g, ' ').trim()
+      return !previousText || previousText !== currentText
+    })
   }
 
   function normalizeServerContentToHtml(raw: unknown): string {
@@ -413,6 +459,13 @@ export function useChatMessages(sessionId: Ref<string>) {
     persistMessagesCache()
   }
 
+  function patchMessageAtIndex(index: number, patch: ChatMessageExtras) {
+    const row = messages.value[index]
+    if (!row) return
+    Object.assign(row, patch)
+    persistMessagesCache()
+  }
+
   function clearMessages() {
     messages.value = []
     persistMessagesCache()
@@ -476,6 +529,7 @@ export function useChatMessages(sessionId: Ref<string>) {
     addAndSaveMessage,
     pushStreamingAiShell,
     applyPlainTextToMessageIndex,
+    patchMessageAtIndex,
     clearMessages,
     loadMessages,
     syncFromServer,
