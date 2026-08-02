@@ -617,7 +617,6 @@ def _private_mod_declared_nodes(
 # during the transition so it cannot shadow the canonical handlers.
 async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse:
     """生产员工专用：客户私有 Mod 双轨交付状态与私有更新信息。"""
-    from app.mod_sdk.customer_delivery import delivery_for_account_custom_mod
     from app.application.private_mod_delivery_app import (
         HAPPY_PATH,
         STAGE_LABELS,
@@ -631,6 +630,7 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
         project_state,
         stage_label,
     )
+    from app.mod_sdk.customer_delivery import delivery_for_account_custom_mod
 
     context = await _private_mod_context(request)
     mod_ids = context["mod_ids"]
@@ -791,8 +791,8 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
     uid = int(context.get("market_user_id") or 0)
     if uid > 0:
         try:
-            from app.application.xcmax_sync_app import record_change
             from app.application.private_mod_delivery_app import export_account_state
+            from app.application.xcmax_sync_app import record_change
 
             record_change(
                 "private_mod_delivery",
@@ -841,9 +841,9 @@ async def mod_store_private_mod_update(request: Request) -> ModStoreInstallResul
     if mod_id not in context["mod_ids"]:
         raise HTTPException(status_code=403, detail="当前账号未授权该客户私有 Mod")
     try:
+        from app.application.private_mod_delivery_app import update_private_mod_from_library
         from app.fastapi_routes.market_account import resolve_valid_market_access_token
         from app.infrastructure.auth.dependencies import session_id_from_request
-        from app.application.private_mod_delivery_app import update_private_mod_from_library
 
         sid = session_id_from_request(request)
         token = await resolve_valid_market_access_token(sid) if sid else ""
