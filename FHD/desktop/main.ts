@@ -243,6 +243,25 @@ export function resolveDefaultDesktopPort(): number {
 
 export const DEFAULT_PORT = resolveDefaultDesktopPort()
 
+/**
+ * Chromium loads persisted cookies lazily. On a cold start immediately after
+ * an update, the renderer's first enterprise-session validation can otherwise
+ * race that load and incorrectly treat an existing signed-in user as logged
+ * out. This only warms the existing HttpOnly cookie store; the backend still
+ * performs the authoritative local-session and official-market validation.
+ */
+export async function warmPersistedDesktopSessionCookieStore(): Promise<boolean> {
+  const cookieStore = session.defaultSession.cookies
+  if (!cookieStore?.get) return false
+  try {
+    const cookieName = String(process.env.SESSION_COOKIE_NAME || 'session_id').trim() || 'session_id'
+    const cookies = await cookieStore.get({ url: `http://127.0.0.1:${DEFAULT_PORT}/` })
+    return cookies.some(cookie => cookie.name === cookieName && Boolean(cookie.value))
+  } catch {
+    return false
+  }
+}
+
 /** 桌面后端绑定地址：0.0.0.0 供手机同 WiFi 扫码；Electron UI 仍只加载 127.0.0.1。 */
 export function resolveDesktopBackendBindHost(): string {
   const env = process.env.XCAGI_DESKTOP_API_HOST?.trim()
@@ -1535,6 +1554,9 @@ function bootstrap(): void {
 
     app.whenReady().then(async () => {
       await applyOtaProxyBypass()
+      if (await warmPersistedDesktopSessionCookieStore()) {
+        writeBackendLog('[session] restored persisted desktop session cookie before renderer startup\n')
+      }
       const sku = readPackagedProductSku()
       if (sku && !process.env.XCAGI_UPDATE_URL) {
         process.env.XCAGI_UPDATE_URL = SKU_UPDATE_URL[sku]

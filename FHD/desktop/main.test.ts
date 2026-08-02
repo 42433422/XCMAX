@@ -63,6 +63,7 @@ const electronMocks = vi.hoisted(() => {
   const shell = { openPath: vi.fn() }
   const session = {
     defaultSession: {
+      cookies: { get: vi.fn(() => Promise.resolve([] as Array<{ name: string; value: string }>)) },
       setPermissionRequestHandler: vi.fn(),
       setPermissionCheckHandler: vi.fn(),
       setProxy: vi.fn(() => Promise.resolve())
@@ -158,6 +159,34 @@ describe('main — resolveDefaultDesktopPort', () => {
     process.env.XCAGI_DESKTOP_PORT = '17500.9'
     const { resolveDefaultDesktopPort } = await import('./main.js')
     expect(resolveDefaultDesktopPort()).toBe(17500)
+  })
+})
+
+describe('main — warmPersistedDesktopSessionCookieStore', () => {
+  beforeEach(() => {
+    electronMocks.session.defaultSession.cookies.get.mockReset()
+    delete process.env.SESSION_COOKIE_NAME
+  })
+
+  it('warms an existing persisted enterprise session before renderer startup', async () => {
+    electronMocks.session.defaultSession.cookies.get.mockResolvedValue([
+      { name: 'session_id', value: 'persisted-session' },
+    ])
+    const { warmPersistedDesktopSessionCookieStore } = await import('./main.js')
+
+    await expect(warmPersistedDesktopSessionCookieStore()).resolves.toBe(true)
+    expect(electronMocks.session.defaultSession.cookies.get).toHaveBeenCalledWith({
+      url: 'http://127.0.0.1:17500/',
+    })
+  })
+
+  it('does not treat unrelated cookies as an authenticated session', async () => {
+    electronMocks.session.defaultSession.cookies.get.mockResolvedValue([
+      { name: 'csrf_token', value: 'csrf' },
+    ])
+    const { warmPersistedDesktopSessionCookieStore } = await import('./main.js')
+
+    await expect(warmPersistedDesktopSessionCookieStore()).resolves.toBe(false)
   })
 })
 
