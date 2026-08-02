@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 import time
 from typing import Any
 
@@ -32,6 +33,11 @@ from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_spec import get_tool_action_spec, validate_tool_call
 from app.application.workflow.types import PlanGraph
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
+
+_AGENT_RUN_FAILURE_MESSAGE = "Agent 运行失败，请稍后重试"
+_AGENT_TOOL_FAILURE_MESSAGE = "工具执行失败，请稍后重试"
 
 
 class AgentOrchestrator(AgentRunLifecycleMixin):
@@ -65,10 +71,15 @@ class AgentOrchestrator(AgentRunLifecycleMixin):
             if auto_execute:
                 self._execute_ready_steps(run, runtime_context=dict(runtime_context or {}))
             return self._repo.save(run)
-        except RECOVERABLE_ERRORS as exc:
+        except RECOVERABLE_ERRORS:
+            logger.exception("Agent run planning or execution failed")
             run.status = "failed"
-            run.error = str(exc)
-            run.add_event("run.failed", "Agent run 失败", {"error": str(exc)})
+            run.error = _AGENT_RUN_FAILURE_MESSAGE
+            run.add_event(
+                "run.failed",
+                "Agent run 失败",
+                {"error_code": "agent_run_failed"},
+            )
             return self._repo.save(run)
 
     def start_run_from_plan(
@@ -113,10 +124,15 @@ class AgentOrchestrator(AgentRunLifecycleMixin):
             if auto_execute:
                 self._execute_ready_steps(run, runtime_context=dict(runtime_context or {}))
             return self._repo.save(run)
-        except RECOVERABLE_ERRORS as exc:
+        except RECOVERABLE_ERRORS:
+            logger.exception("Agent run plan application failed")
             run.status = "failed"
-            run.error = str(exc)
-            run.add_event("run.failed", "Agent run 失败", {"error": str(exc)})
+            run.error = _AGENT_RUN_FAILURE_MESSAGE
+            run.add_event(
+                "run.failed",
+                "Agent run 失败",
+                {"error_code": "agent_run_failed"},
+            )
             return self._repo.save(run)
 
     def get_run(self, run_id: str) -> AgentRun | None:
@@ -404,11 +420,16 @@ class AgentOrchestrator(AgentRunLifecycleMixin):
         else:
             try:
                 output = self._tool_executor.execute(step, runtime_context=ctx)
-            except RECOVERABLE_ERRORS as exc:
+            except RECOVERABLE_ERRORS:
+                logger.exception(
+                    "Agent tool execution failed for %s.%s",
+                    step.tool_id,
+                    step.action,
+                )
                 output = {
                     "success": False,
                     "error_code": "tool_exception",
-                    "message": str(exc),
+                    "message": _AGENT_TOOL_FAILURE_MESSAGE,
                 }
         step.output = dict(output or {})
         step.finished_at = utc_now_iso()

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from app.application.agent_orchestrator.run_models import AgentArtifact, AgentRun
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
 
 _DOCUMENT_ARTIFACT_TYPES = {
     "pdf_document",
@@ -48,11 +51,12 @@ def ingest_artifact_to_dataset(run: AgentRun, artifact: AgentArtifact) -> dict[s
                 "fallback_reason": str(result.get("message") or "file ingest failed"),
             }
             result = service.ingest_document(**fallback_request)
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
+        logger.exception("Agent artifact dataset ingestion failed")
         result = {
             "success": False,
             "dataset_id": request["dataset_id"],
-            "message": str(exc),
+            "message": "资料入库失败，请稍后重试",
             "error_code": "dataset_ingest_exception",
         }
 

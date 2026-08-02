@@ -365,7 +365,8 @@ class TestCognitionFhd:
         ):
             out = exec_mod._cognition_fhd({}, {"normalized_input": {}}, {}, "task")
             assert out["reasoning"] == ""
-            assert "llm down" in out["error"]
+            assert out["error"] == "智能员工推理暂时不可用，请稍后重试"
+            assert out["error_code"] == "employee_cognition_unavailable"
 
     def test_returns_error_when_raw_has_error(self):
         with patch(

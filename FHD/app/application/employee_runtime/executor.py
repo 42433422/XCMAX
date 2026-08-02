@@ -320,8 +320,15 @@ def _cognition_fhd(
         from app.application.employee_runtime.agent_runner import _chat_completion, _run_async
 
         raw = _run_async(_chat_completion(messages, max_tokens=max_tokens))
-    except RECOVERABLE_ERRORS as exc:
-        return {"reasoning": "", "error": str(exc)[:800], "input": normalized, "memory": memory}
+    except RECOVERABLE_ERRORS:
+        logger.exception("Employee cognition LLM call failed")
+        return {
+            "reasoning": "",
+            "error": "智能员工推理暂时不可用，请稍后重试",
+            "error_code": "employee_cognition_unavailable",
+            "input": normalized,
+            "memory": memory,
+        }
     if raw.get("error"):
         return {
             "reasoning": "",

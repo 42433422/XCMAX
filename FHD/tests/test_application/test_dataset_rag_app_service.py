@@ -109,7 +109,7 @@ def test_dataset_rejects_file_outside_allowed_roots(tmp_path: Path) -> None:
 
     assert result["success"] is False
     assert result["error_code"] == "dataset_ingest_failed"
-    assert "not under allowed dirs" in result["message"]
+    assert result["message"] == "资料入库失败，请稍后重试"
 
 
 def test_dataset_document_delete_removes_chunks(tmp_path: Path) -> None:

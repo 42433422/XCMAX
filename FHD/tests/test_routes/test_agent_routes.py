@@ -164,6 +164,23 @@ def test_agent_run_does_not_expose_operational_exception_details() -> None:
     assert response.json()["message"] == "Agent 服务暂时不可用，请稍后重试"
 
 
+def test_agent_run_hides_internal_planning_error_from_run_payload() -> None:
+    client = _client()
+
+    with patch(
+        "app.application.agent_orchestrator.orchestrator.AgentOrchestrator._plan",
+        side_effect=RuntimeError("database password must stay private"),
+    ):
+        response = client.post("/api/agent/runs", json={"message": "查库存"})
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert "database password" not in response.text
+    assert payload["status"] == "failed"
+    assert payload["error"] == "Agent 运行失败，请稍后重试"
+    assert payload["events"][-1]["data"] == {"error_code": "agent_run_failed"}
+
+
 def test_get_agent_run_returns_404_for_missing_run() -> None:
     get_agent_run_repository().clear()
     client = _client()

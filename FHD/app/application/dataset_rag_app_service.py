@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import threading
@@ -30,6 +31,8 @@ from app.infrastructure.rag.dataset_vector_index import (
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import get_app_data_dir, get_upload_dir
 from app.utils.safe_download_path import UnsafeDownloadPathError, resolve_under_allowed_dirs
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -316,11 +319,12 @@ class DatasetRagApplicationService:
                 "document": document.to_dict(),
                 "chunk_count": len(chunks),
             }
-        except (*RECOVERABLE_ERRORS, UnsafeDownloadPathError) as exc:
+        except (*RECOVERABLE_ERRORS, UnsafeDownloadPathError):
+            logger.exception("Dataset document ingestion failed")
             return {
                 "success": False,
                 "dataset_id": dataset_key,
-                "message": str(exc),
+                "message": "资料入库失败，请稍后重试",
                 "error_code": "dataset_ingest_failed",
             }
 
