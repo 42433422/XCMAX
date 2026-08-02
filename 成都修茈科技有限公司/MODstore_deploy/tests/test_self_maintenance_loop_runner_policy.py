@@ -3275,6 +3275,63 @@ def test_reconcile_real_para_merge_sha_closes_matching_open_item():
     assert memory["closed_items"][0]["resolution_reason"] == "para_reported_real_merge_sha"
 
 
+def test_reconcile_manual_merge_veto_reclassifies_legacy_task_remediation():
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-held",
+                "kind": "automated_remediation",
+                "para_task_id": "task-held",
+                "reason": "para_merge_conflict",
+                "run_id": "run-held",
+            }
+        ],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-held",
+                "para_task_id": "task-held",
+                "run_id": "run-held",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-held",
+            "detail": "manual-veto-active: PR #1332 has hold-merge label",
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result == {"changed": True, "merged": 0, "remediation_added": 1}
+    assert len(memory["open_items"]) == 1
+    assert memory["open_items"][0]["kind"] == "human_strategy_approval"
+    assert memory["open_items"][0]["reason"] == "manual_merge_veto_active"
+    assert len(memory["closed_items"]) == 1
+    assert memory["closed_items"][0]["actor"] == "para_merge_reconciler"
+    assert memory["closed_items"][0]["resolution_reason"] == ("reclassified_as_manual_merge_veto")
+    assert memory["closed_items"][0]["original_item"]["reason"] == "para_merge_conflict"
+    assert _resume_review_qa_candidate(memory) is None
+
+    repeated = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert repeated == {"changed": False, "merged": 0, "remediation_added": 0}
+    assert len(memory["open_items"]) == 1
+    assert len(memory["closed_items"]) == 1
+
+
 @pytest.mark.parametrize(
     ("task", "expected_reason", "expected_resume_from_clean_baseline"),
     [

@@ -7,6 +7,8 @@ import subprocess
 from pathlib import Path
 from typing import Any, Callable, Dict, Mapping, Optional
 
+import httpx
+
 from .self_maintenance_policy import (
     is_auxiliary_self_maintenance_evidence_path,
     normalize_merge_review_veto_code,
@@ -68,6 +70,68 @@ def operational_merge_reason_candidates(detail: str) -> list[str]:
             if tail:
                 candidates.append(tail)
     return candidates
+
+
+def fetch_para_task_state(
+    api_base: str,
+    task_id: str,
+    headers: Mapping[str, str],
+) -> Dict[str, Any]:
+    """Fetch one Para task with caller-provided authentication headers."""
+
+    with httpx.Client(timeout=20.0, trust_env=False, verify=False) as client:
+        response = client.get(f"{api_base.rstrip('/')}/api/tasks/{task_id}", headers=headers)
+        response.raise_for_status()
+        task = (response.json() or {}).get("task") or {}
+    return task if isinstance(task, dict) else {}
+
+
+def reconcile_manual_merge_veto(
+    memory: Dict[str, Any],
+    source: str,
+    detail: str,
+    task_id: str,
+    closed_at: str,
+) -> Optional[tuple[str, list[Dict[str, Any]], bool]]:
+    """Replace contradictory same-task remediation state with one human hold."""
+
+    if str(source or "").strip() != "merge-worker" or not any(
+        candidate.lower().startswith("manual-veto-active:")
+        for candidate in operational_merge_reason_candidates(detail)
+    ):
+        return None
+
+    reason = "manual_merge_veto_active"
+    open_items = memory.get("open_items")
+    if not isinstance(open_items, list):
+        open_items = []
+    closed_items = memory.get("closed_items")
+    if not isinstance(closed_items, list):
+        closed_items = []
+
+    kept: list[Dict[str, Any]] = []
+    closed: list[Dict[str, Any]] = []
+    for item in open_items:
+        if not isinstance(item, dict):
+            continue
+        item_task_id = str(item.get("task_id") or item.get("para_task_id") or "")
+        if item_task_id == task_id and str(item.get("reason") or "") != reason:
+            closed.append(
+                {
+                    "actor": "para_merge_reconciler",
+                    "closed_at": closed_at,
+                    "original_item": item,
+                    "resolution_reason": "reclassified_as_manual_merge_veto",
+                }
+            )
+        else:
+            kept.append(item)
+
+    memory["open_items"] = kept[-50:]
+    memory["closed_items"] = (closed_items + closed)[-200:]
+    if closed:
+        memory["updated_at"] = closed_at
+    return reason, memory["open_items"], bool(closed)
 
 
 def is_branch_preserving_para_merge_failure_detail(detail: str) -> bool:

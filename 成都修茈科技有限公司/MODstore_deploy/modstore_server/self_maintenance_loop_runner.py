@@ -31,6 +31,7 @@ from urllib.parse import unquote, urlparse
 import httpx
 from apscheduler.triggers.cron import CronTrigger
 
+from . import self_maintenance_para_merge_remediation as para_merge_remediation
 from . import self_maintenance_retort_change_evidence as retort_change_evidence
 from . import self_maintenance_retort_remediation as retort_remediation
 from .duty_employee_registry import duty_employee_records
@@ -108,6 +109,7 @@ logger = logging.getLogger(__name__)
 RETORT_SCOPE_REASON = retort_remediation.RETORT_SCOPE_REASON
 _reconcile_retort_scope_remediations = retort_remediation.reconcile_retort_scope_remediations
 _reconcile_absorbed_para_merge_remediations = reconcile_absorbed_para_merge_remediations
+_manual_merge_veto = para_merge_remediation.reconcile_manual_merge_veto
 _retort_scope_only_clarification = retort_remediation.retort_scope_only_clarification
 
 DEFAULT_RUNTIME_DIR = str(Path.home() / ".xcmax" / "modstore-daily")
@@ -2271,28 +2273,15 @@ def _fetch_para_task_report_excerpt(
     return "\n".join(chunks)[-limit:]
 
 
-def _fetch_para_task_state(api_base: str, task_id: str) -> Dict[str, Any]:
-    headers = _guest_auth_headers(api_base)
-    with httpx.Client(timeout=20.0, trust_env=False, verify=False) as client:
-        resp = client.get(f"{api_base.rstrip('/')}/api/tasks/{task_id}", headers=headers)
-        resp.raise_for_status()
-        task = (resp.json() or {}).get("task") or {}
-    return task if isinstance(task, dict) else {}
-
-
 def _reconcile_requested_merge_feedback(
     memory: Dict[str, Any],
     *,
     api_base: Optional[str] = None,
     task_fetcher: Optional[Any] = None,
 ) -> Dict[str, Any]:
-    """Settle requested merges from Para without confusing request with success.
+    """Settle requested merges only after Para reports terminal state.
 
-    ``completed_merge_requested`` remains open until Para reports a real merged
-    SHA. Any terminal merge failure becomes an automated remediation item with
-    the exact findings. The next code employee starts from the configured clean
-    base and uses the rejected branch only as evidence, preventing retries from
-    accumulating an ever-larger inherited diff.
+    Requests stay open until a real merge SHA or an auditable failure arrives.
     """
 
     base = (api_base or os.environ.get("MODSTORE_PARA_API_BASE") or "").strip()
@@ -2304,7 +2293,6 @@ def _reconcile_requested_merge_feedback(
         open_items = []
         memory["open_items"] = open_items
 
-    fetcher = task_fetcher or _fetch_para_task_state
     changed = False
     merged = 0
     remediation_added = 0
@@ -2319,7 +2307,12 @@ def _reconcile_requested_merge_feedback(
             continue
         checked_task_ids.add(task_id)
         try:
-            task = fetcher(base, task_id)
+            if task_fetcher is not None:
+                task = task_fetcher(base, task_id)
+            else:
+                task = para_merge_remediation.fetch_para_task_state(
+                    base, task_id, _guest_auth_headers(base)
+                )
         except Exception:
             logger.exception("failed to reconcile requested Para merge task_id=%s", task_id)
             continue
@@ -2372,7 +2365,13 @@ def _reconcile_requested_merge_feedback(
             or task.get("error")
             or f"Para merge task ended with status={task_status}"
         ).strip()[:4000]
-        if source == "ai-review-veto":
+        item_kind = "automated_remediation"
+        manual_veto = _manual_merge_veto(memory, source, detail, task_id, _iso(_utc_now()))
+        if manual_veto is not None:
+            reason, open_items, manual_veto_changed = manual_veto
+            item_kind = "human_strategy_approval"
+            changed = manual_veto_changed or changed
+        elif source == "ai-review-veto":
             reason = "para_ai_review_rejected"
         elif task_status == "merge_conflict":
             reason = "para_merge_conflict"
@@ -2411,7 +2410,7 @@ def _reconcile_requested_merge_feedback(
                 "branch": rejected_branch,
                 "created_at": _iso(_utc_now()),
                 "detail": detail,
-                "kind": "automated_remediation",
+                "kind": item_kind,
                 "para_task_id": task_id,
                 "reason": reason,
                 "rejected_branch": rejected_branch,
