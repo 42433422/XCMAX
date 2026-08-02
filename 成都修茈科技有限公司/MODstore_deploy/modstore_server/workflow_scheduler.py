@@ -1752,6 +1752,9 @@ def _register_employee_cron_jobs() -> None:
             contract_schedule,
             workforce_contract_map,
         )
+        from modstore_server.employee_cron_registration import (
+            build_employee_cron_candidates,
+        )
         from modstore_server.employee_cron_registration_ledger import (
             reconcile_employee_cron_registrations,
             record_employee_cron_registration,
@@ -1767,28 +1770,20 @@ def _register_employee_cron_jobs() -> None:
         logger.exception("employee cron: duty work contracts unavailable")
         work_contracts = {}
 
-    profiles = _load_all_employee_profiles()
-    if not profiles:
-        logger.info("employee cron: no profiles found in catalog")
+    candidates = build_employee_cron_candidates(
+        profiles=_load_all_employee_profiles(),
+        work_contracts=work_contracts,
+        load_employee_pack=load_employee_pack,
+        session_factory=get_session_factory(),
+    )
+    if not candidates:
+        logger.info("employee cron: no catalog profiles or duty contracts found")
         return
 
-    sf = get_session_factory()
     registered = 0
     skipped = 0
     registered_ids: set[str] = set()
-    for prof in profiles:
-        emp_id = str(prof.get("id") or "").strip()
-        if not emp_id:
-            continue
-        try:
-            with sf() as session:
-                pack = load_employee_pack(session, emp_id)
-            manifest = pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
-        except Exception:
-            skipped += 1
-            continue
-
-        contract = work_contracts.get(emp_id) or {}
+    for emp_id, manifest, contract in candidates:
         sched = _extract_employee_schedule(manifest) or contract_schedule(contract)
         if not sched:
             skipped += 1
