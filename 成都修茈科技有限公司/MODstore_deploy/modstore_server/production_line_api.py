@@ -211,6 +211,14 @@ async def api_webhook_outbox_process(limit: int = 20):
     return {"ok": True, "data": process_pending_outbox(limit=limit)}
 
 
+@router.get("/webhook-outbox/status")
+async def api_webhook_outbox_status():
+    """Non-PII retry-queue health; imported legacy rows are never replayed here."""
+    from modstore_server.cs_webhook_outbox import outbox_status_summary
+
+    return {"ok": True, "data": outbox_status_summary()}
+
+
 @router.post("/webhook-outbox/replay/{landing_contact_id}")
 async def api_webhook_replay(landing_contact_id: int):
     from modstore_server.cs_webhook_outbox import replay_by_landing_contact_id
