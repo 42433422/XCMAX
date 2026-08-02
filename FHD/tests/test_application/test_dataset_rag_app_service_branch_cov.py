@@ -1213,7 +1213,8 @@ class TestIngestDocumentExceptions:
         svc = _make_svc(tmp_path)
         result = svc.ingest_document(dataset_id="ds", text="", file_path="")
         assert result["success"] is False
-        assert "text or file_path is required" in result["message"]
+        assert result["message"] == "资料入库失败，请稍后重试"
+        assert result["error_code"] == "dataset_ingest_failed"
 
     def test_whitespace_text_no_file_raises(self, tmp_path):
         svc = _make_svc(tmp_path)

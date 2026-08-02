@@ -408,7 +408,8 @@ def test_materials_create_exception_500(
     mock_material_svc.create_material.side_effect = RuntimeError("db locked")
     r = materials_client.post("/api/materials", json={"name": "异常项"})
     assert r.status_code == 500
-    assert "db locked" in r.json()["message"]
+    assert r.json()["message"] == "工具执行失败，请稍后重试"
+    assert r.json()["error_code"] == "tool_exception"
 
 
 def test_materials_list_injects_count(
