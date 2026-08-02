@@ -28,7 +28,12 @@ REMOTE_ROOT="${OPS_BACKUP_SSH_DEST:-.}"
 LOCK="/run/lock/xcmax-wal-ship.lock"
 TRANSFER_LOCK="${OPS_DR_TRANSFER_LOCK:-/run/lock/xcmax-dr-transfer.lock}"
 TRANSFER_WAIT_SECONDS="${OPS_DR_TRANSFER_WAIT_SECONDS:-1800}"
+TRANSFER_MAX_SECONDS="${OPS_DR_WAL_TRANSFER_MAX_SECONDS:-900}"
 PG_OS_USER="${OPS_PG_OS_USER:-postgres}"
+
+# shellcheck source=../lib/bounded_transfer.sh
+# shellcheck disable=SC1091
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" &>/dev/null && pwd)/bounded_transfer.sh"
 
 [[ "$WAL_ROOT" == /var/lib/pgsql/xcmax-wal ]] || {
   echo "拒绝非标准 WAL 根目录: $WAL_ROOT" >&2
@@ -110,12 +115,14 @@ ssh_opts=(
 )
 (
   flock -w "$TRANSFER_WAIT_SECONDS" 8 || exit 1
-  rsync -a --ignore-existing --delay-updates --partial \
+  xcmax_run_bounded_transfer "$TRANSFER_MAX_SECONDS" "postgres10-wal" "$LOG" \
+    rsync -a --ignore-existing --delay-updates --partial \
     -e "ssh ${ssh_opts[*]}" \
-    "$ARCHIVE/" "${TARGET}:${REMOTE_ROOT}/wal/archive/" >>"$LOG" 2>&1
-  rsync -a --delay-updates \
+    "$ARCHIVE/" "${TARGET}:${REMOTE_ROOT}/wal/archive/"
+  xcmax_run_bounded_transfer "$TRANSFER_MAX_SECONDS" "postgres10-wal-status" "$LOG" \
+    rsync -a --delay-updates \
     -e "ssh ${ssh_opts[*]}" \
-    "$status_tmp" "${TARGET}:${REMOTE_ROOT}/wal/status/current" >>"$LOG" 2>&1
+    "$status_tmp" "${TARGET}:${REMOTE_ROOT}/wal/status/current"
 ) 8>"$TRANSFER_LOCK"
 mv -f "$status_tmp" "$STATE/wal-status"
 date -u +%s >"$STATE/wal_ship_last_success"
