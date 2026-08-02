@@ -36,7 +36,9 @@ class _IntentRecognitionCache:
         key = self._make_key(message)
         if key not in self._cache:
             return None
-        if time.time() - self._timestamps.get(key, 0) > self._ttl:
+        # A zero TTL means no reuse at all.  Use an inclusive boundary so an
+        # entry created and read in the same clock tick cannot leak through.
+        if self._ttl <= 0 or time.time() - self._timestamps.get(key, 0) >= self._ttl:
             del self._cache[key]
             del self._timestamps[key]
             return None

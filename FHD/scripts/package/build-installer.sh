@@ -160,11 +160,13 @@ build_one_sku() {
     x86_64) artifact_arch="x64" ;;
     *) artifact_arch="$(uname -m)" ;;
   esac
-  # Volume names with spaces make hdiutil fail with "操作不被允许" on some macOS hosts.
+  # Version the DMG volume name as well as the artifact. A stale mount-point
+  # reservation for a prior generic SKU label can otherwise make hdiutil
+  # reject an otherwise valid signed application.
   scripts/package/create-mac-dmg.sh \
     "${app_path}" \
     "${package_stage}/XCAGI-${label}-${VERSION}-mac-${artifact_arch}.dmg" \
-    "XCAGI-${label}"
+    "XCAGI ${label} ${VERSION}"
   # Publish only sealed archive artifacts. A loose .app copied back into this
   # Desktop/FileProvider checkout receives com.apple.FinderInfo again almost
   # immediately, which makes codesign reject that copy even though the ZIP and

@@ -60,11 +60,19 @@ from app.infrastructure.modstore_transport import (
     iter_market_transport_plans as _iter_market_transport_plans,
 )
 from app.infrastructure.modstore_transport import (
+    market_connect_attempts as _transport_market_connect_attempts,
+)
+from app.infrastructure.modstore_transport import (
     market_connect_timeout as _market_connect_timeout,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+def _market_connect_attempts() -> int:
+    """Keep the adapter's transport-attempt helper available to its callers/tests."""
+    return _transport_market_connect_attempts()
 
 _VISION_HINT_RE = re.compile(
     r"vision|vl-|vlm|deepseek-vl|qwen-vl|llava|omni|gpt-4o|gpt-4\.1|"

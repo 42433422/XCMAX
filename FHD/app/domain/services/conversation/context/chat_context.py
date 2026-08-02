@@ -283,6 +283,16 @@ class ChatContext:
         now = time.time()
         cleaned = 0
 
+        # A non-positive retention period means "expire everything".  Comparing
+        # against a freshly-created turn's timestamp is otherwise timing
+        # dependent (the same clock tick could retain one item).
+        if max_age_seconds <= 0:
+            cleaned = sum(len(turns) for turns in self._history.values())
+            self._history.clear()
+            if cleaned > 0:
+                logger.info("[CHAT_CONTEXT] Cleaned up %s old history entries", cleaned)
+            return cleaned
+
         for user_id, turns in list(self._history.items()):
             original_len = len(turns)
             self._history[user_id] = [t for t in turns if now - t.timestamp <= max_age_seconds]
