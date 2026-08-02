@@ -5,12 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-import httpx
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -107,7 +105,7 @@ def _fhd_cs_bridge_base() -> str:
             os.environ.get("XCAGI_FHD_INTERNAL_URL")
             or os.environ.get("FHD_INTERNAL_BASE_URL")
             or os.environ.get("XCAGI_API_BASE_URL")
-            or "http://127.0.0.1:8765"
+            or ""
         )
         .strip()
         .rstrip("/")
@@ -123,7 +121,7 @@ def _default_cs_intake_webhook_url() -> str:
     if explicit:
         return explicit
     base = _fhd_cs_bridge_base()
-    return f"{base}/api/mod/{_cs_bridge_mod_id()}/user-cs/demand-form/sync"
+    return f"{base}/api/mod/{_cs_bridge_mod_id()}/user-cs/demand-form/sync" if base else ""
 
 
 def _default_landing_funnel_webhook_url() -> str:
@@ -131,7 +129,7 @@ def _default_landing_funnel_webhook_url() -> str:
     if explicit:
         return explicit
     base = _fhd_cs_bridge_base()
-    return f"{base}/api/mod/{_cs_bridge_mod_id()}/user-cs/landing-funnel/sync"
+    return f"{base}/api/mod/{_cs_bridge_mod_id()}/user-cs/landing-funnel/sync" if base else ""
 
 
 def _resolve_market_user_id_by_email(email: str) -> int | None:
@@ -160,6 +158,7 @@ def _notify_cs_intake_webhook(payload: dict) -> None:
     uid = int(payload.get("market_user_id") or 0)
     url = _default_cs_intake_webhook_url() if uid > 0 else _default_landing_funnel_webhook_url()
     if not url:
+        logger.error("cs intake webhook is not configured; contact was stored but not forwarded")
         return
     secret = (
         os.environ.get("XCAGI_CS_INTAKE_WEBHOOK_SECRET")
