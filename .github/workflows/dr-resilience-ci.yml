@@ -100,6 +100,11 @@ jobs:
           grep -q 'xcmax-dr-transfer.lock' ops/dr/xcmax_wal_ship.sh
           grep -q 'xcmax-dr-transfer.lock' ops/dr/xcmax_wal_ship_pg16.sh
           grep -q 'xcmax-dr-transfer.lock' ops/dr/xcmax_release_sync.sh
+          grep -q 'OPS_DR_WAL_TRANSFER_MAX_SECONDS' ops/dr/xcmax_wal_ship.sh
+          grep -q 'OPS_DR_WAL_TRANSFER_MAX_SECONDS' ops/dr/xcmax_wal_ship_pg16.sh
+          grep -q 'xcmax-dr-storage-retention' ops/dr/xcmax_dr_install.sh
+          bash ops/tests/test_bounded_transfer.sh
+          bash ops/tests/test_dr_storage_retention.sh
           grep -q 'pg_create_restore_point' ops/dr/xcmax_wal_ship.sh
           grep -q 'pg_create_restore_point' ops/dr/xcmax_wal_ship_pg16.sh
           ! grep -q 'cat >/etc/cron.d/xcmax-dr' \
