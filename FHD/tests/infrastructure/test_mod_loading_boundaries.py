@@ -21,6 +21,17 @@ def test_mod_installation_check_accepts_installed_safe_id(tmp_path) -> None:
     assert mod_is_installed_locally(manager, "customer-service_1.0") is True
 
 
+def test_mod_installation_check_rejects_symlink_escape(tmp_path) -> None:
+    from app.infrastructure.mods.mod_installation_state import mod_is_installed_locally
+
+    outside = tmp_path.parent / "outside-linked-mod"
+    outside.mkdir(exist_ok=True)
+    (tmp_path / "linked-mod").symlink_to(outside, target_is_directory=True)
+    manager = SimpleNamespace(mods_root=str(tmp_path))
+
+    assert mod_is_installed_locally(manager, "linked-mod") is False
+
+
 def test_entitled_but_uninstalled_mod_does_not_enter_load_or_failure_loop(monkeypatch) -> None:
     from app import runtime_integrity
     from app.infrastructure.mods import missing_local_state

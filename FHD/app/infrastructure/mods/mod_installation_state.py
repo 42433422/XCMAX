@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import os
 import re
-from pathlib import Path
 
 _MOD_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 
@@ -23,13 +23,14 @@ def mod_is_installed_locally(manager: object, mod_id: str) -> bool:
     mods_root = getattr(manager, "mods_root", None)
     if not mods_root:
         return True
-    root = Path(str(mods_root)).resolve()
-    candidate = (root / mod_id).resolve()
-    try:
-        candidate.relative_to(root)
-    except ValueError:
+    # Normalize both paths before comparing them, so traversal segments and
+    # symlinks cannot escape the trusted MOD root.
+    root = os.path.realpath(str(mods_root))
+    candidate = os.path.realpath(os.path.join(root, mod_id))
+    root_prefix = root if root.endswith(os.sep) else f"{root}{os.sep}"
+    if not candidate.startswith(root_prefix):
         return False
-    return candidate.is_dir()
+    return os.path.isdir(candidate)
 
 
 def filter_installed_mod_ids(manager: object, mod_ids: set[str]) -> set[str]:

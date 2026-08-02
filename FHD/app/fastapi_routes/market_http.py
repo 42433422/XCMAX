@@ -7,15 +7,18 @@ lets the account API remain focused on request/response policy.
 from __future__ import annotations
 
 import asyncio
+import hmac
 import os
+import secrets
 from collections.abc import Callable
-from hashlib import blake2b
+from hashlib import sha256
 from urllib.parse import urlparse
 
 import httpx
 
 OFFICIAL_MARKET_HOSTS = frozenset({"xiu-ci.com", "www.xiu-ci.com"})
 MARKET_READ_CLIENTS: dict[tuple[int, str], httpx.AsyncClient] = {}
+_MARKET_READ_CACHE_KEY = secrets.token_bytes(32)
 
 
 def market_http_timeout() -> float:
@@ -55,11 +58,14 @@ def market_read_client(
 ) -> httpx.AsyncClient:
     """Reuse a TLS connection per event loop and credential digest for safe reads."""
     loop = asyncio.get_running_loop()
-    # This is an in-memory connection-pool key, not a credential store.  Use a
-    # modern collision-resistant digest so an authorization value never becomes
-    # part of either the key or process diagnostics in clear text.
-    credential_key = blake2b(
-        normalize_authorization(authorization).encode("utf-8"), digest_size=32
+    # This is an in-memory connection-pool key, not credential storage. A
+    # process-local random HMAC key prevents the authorization value from being
+    # recoverable from the pool key without adding password-hashing work to the
+    # interactive official-account path.
+    credential_key = hmac.new(
+        _MARKET_READ_CACHE_KEY,
+        normalize_authorization(authorization).encode("utf-8"),
+        sha256,
     ).hexdigest()
     key = (id(loop), credential_key)
     client = MARKET_READ_CLIENTS.get(key)
