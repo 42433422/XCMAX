@@ -262,7 +262,8 @@ def test_xcagi_guarded_planner_stream_events(mock_stream: MagicMock) -> None:
         )
     )
     assert events
-    assert events[0]["type"] == "token"
+    assert events[0]["type"] == "tool_progress"
+    assert events[1]["type"] == "token"
 
 
 @patch("app.application.get_excel_vector_search_app_service")
