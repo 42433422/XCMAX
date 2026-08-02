@@ -88,8 +88,15 @@ build_one_sku() {
   rm -rf "${package_stage}"
   mkdir -p "${package_stage}"
   # Keep macOS bundle metadata on the customer-facing product version even
-  # though desktop/package.json must retain npm's three-part SemVer.
-  export XCAGI_PRODUCT_VERSION="${VERSION}"
+  # though desktop/package.json must retain npm's three-part SemVer.  The
+  # generated config stays next to the source config so its relative build
+  # hooks and resource paths continue to resolve from desktop/.
+  local builder_config="desktop/.electron-builder.release.yml"
+  sed "s/__XCAGI_PRODUCT_VERSION__/${VERSION}/g" desktop/electron-builder.yml > "${builder_config}"
+  if grep -Fq "__XCAGI_PRODUCT_VERSION__" "${builder_config}"; then
+    echo "[err] macOS product version was not resolved in ${builder_config}" >&2
+    exit 1
+  fi
 
   echo "========== Building macOS SKU: ${sku} =========="
   if [ "${SKIP_BACKEND:-0}" != "1" ]; then
@@ -130,7 +137,7 @@ build_one_sku() {
   local package_attempt
   local package_ok=0
   for package_attempt in 1 2 3; do
-    if (cd desktop && PATH="${ROOT}/scripts/package/codesign-retry-bin:${PATH}" npx electron-builder --mac zip --publish never \
+    if (cd desktop && PATH="${ROOT}/scripts/package/codesign-retry-bin:${PATH}" npx electron-builder --config .electron-builder.release.yml --mac zip --publish never \
       "--config.electronDist=node_modules/electron/dist" \
       "--config.directories.output=${package_stage}" \
       "--config.artifactName=${artifact_name}" \
@@ -146,9 +153,11 @@ build_one_sku() {
     fi
   done
   if [ "${package_ok}" != "1" ]; then
+    rm -f "${builder_config}"
     echo "[err] macOS signing/package failed after 3 attempts" >&2
     exit 1
   fi
+  rm -f "${builder_config}"
   local app_path="${package_stage}/mac-arm64/XCAGI.app"
   if [ ! -d "${app_path}" ]; then
     app_path="$(find "${package_stage}" -maxdepth 2 -type d -name 'XCAGI.app' -print | head -n 1 || true)"
