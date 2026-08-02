@@ -522,7 +522,11 @@ def start_employee_scheduler() -> dict[str, Any]:
     if not automatic_employee_runtime_enabled():
         logger.info("employee scheduler skipped by product-plane policy")
         _started = False
-        return {**get_employee_scheduler_status(), "skipped": True, "disabled_reason": "product_plane"}
+        return {
+            **get_employee_scheduler_status(),
+            "skipped": True,
+            "disabled_reason": "product_plane",
+        }
     with _lock:
         _ensure_jobs_locked()
         if _thread and _thread.is_alive():

@@ -512,7 +512,7 @@ async def _private_mod_context(request: Request) -> dict[str, Any]:
 
 def _enterprise_delivery_scope(context: dict[str, Any], mod_ids: set[str] | None = None) -> str:
     """企业端定制线写/读 scope：必须 market:{uid}，禁止静默落入 local:*。"""
-    from app.services.private_mod_delivery import (
+    from app.application.private_mod_delivery_app import (
         account_scope,
         merge_orphan_local_delivery_into_market,
     )
@@ -618,7 +618,7 @@ def _private_mod_declared_nodes(
 async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse:
     """生产员工专用：客户私有 Mod 双轨交付状态与私有更新信息。"""
     from app.mod_sdk.customer_delivery import delivery_for_account_custom_mod
-    from app.services.private_mod_delivery import (
+    from app.application.private_mod_delivery_app import (
         HAPPY_PATH,
         STAGE_LABELS,
         STAGES,
@@ -745,7 +745,7 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
             uid = 0
         if uid <= 0:
             raise HTTPException(status_code=401, detail="转返工须已绑定市场账号身份")
-        from app.services.user_cs_change_request import create_change_request
+        from app.application.user_cs_change_request_app import create_change_request
 
         node_label = node_id or track
         try:
@@ -770,7 +770,7 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    from app.services.private_mod_delivery import set_track_status
+    from app.application.private_mod_delivery_app import set_track_status
 
     local = _private_mod_local_rows({mod_id}).get(mod_id, {})
     scope_key = _enterprise_delivery_scope(context, {mod_id})
@@ -792,7 +792,7 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
     if uid > 0:
         try:
             from app.application.xcmax_sync_app import record_change
-            from app.services.private_mod_delivery import export_account_state
+            from app.application.private_mod_delivery_app import export_account_state
 
             record_change(
                 "private_mod_delivery",
@@ -808,7 +808,7 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
             _schedule_delivery_outbox_push()
         except RECOVERABLE_ERRORS as exc:
             logger.warning("private Mod delivery sync enqueue failed user=%s: %s", uid, exc)
-    from app.services.private_mod_delivery import overall_status
+    from app.application.private_mod_delivery_app import overall_status
 
     data: dict[str, Any] = {
         "mod_id": mod_id,
@@ -843,7 +843,7 @@ async def mod_store_private_mod_update(request: Request) -> ModStoreInstallResul
     try:
         from app.fastapi_routes.market_account import resolve_valid_market_access_token
         from app.infrastructure.auth.dependencies import session_id_from_request
-        from app.services.private_mod_delivery import update_private_mod_from_library
+        from app.application.private_mod_delivery_app import update_private_mod_from_library
 
         sid = session_id_from_request(request)
         token = await resolve_valid_market_access_token(sid) if sid else ""

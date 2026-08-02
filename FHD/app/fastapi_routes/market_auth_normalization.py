@@ -50,7 +50,9 @@ async def normalize_market_auth_payload(
     refresh = refresh_token_from_response(payload)
     if not token:
         return {"success": False, "message": "市场登录成功但未返回 access_token", "raw": payload}
-    login_is_enterprise, login_is_market_admin, login_user_blob = identity_from_payloads(payload, {})
+    login_is_enterprise, login_is_market_admin, login_user_blob = identity_from_payloads(
+        payload, {}
+    )
     identity_is_sufficient = bool(login_user_blob) and (
         login_is_enterprise or login_is_market_admin
     )

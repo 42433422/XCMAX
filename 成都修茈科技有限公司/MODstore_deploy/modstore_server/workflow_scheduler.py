@@ -416,10 +416,12 @@ def start_scheduler() -> None:
     autonomy_scheduler.register_autonomy_jobs(_scheduler, _scheduler_startup_recovery_deadlines)
 
     from modstore_server.scheduler_maintenance import register_dead_letter_reconciliation
+
     register_dead_letter_reconciliation(
         _scheduler, _run_tracked_scheduler_job, _env_int, _cleanup_misfire_grace_time, logger
     )
     from modstore_server.incident_scheduler import register_pending_incident_dispatch
+
     register_pending_incident_dispatch(_scheduler, _env_int, _cleanup_misfire_grace_time)
 
     def _customer_value_reconcile_job() -> None:

@@ -29,6 +29,17 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from starlette.testclient import TestClient
 
+# Keep real package namespaces in ``sys.modules``.  The child fakes below are
+# intentionally narrow; replacing a parent package during collection leaks
+# empty namespaces into later route tests (including market-account auth).
+import app  # noqa: E402
+import app.application  # noqa: E402
+import app.enterprise  # noqa: E402
+import app.infrastructure  # noqa: E402
+import app.mod_sdk  # noqa: E402
+import app.shell  # noqa: E402
+import app.utils  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Module-level stubs: inject thin fake modules so the import chain works
 # even when heavy infrastructure is absent.

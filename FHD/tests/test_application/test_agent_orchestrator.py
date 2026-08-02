@@ -168,9 +168,7 @@ def test_formal_approval_run_cannot_be_bypassed_and_resumes_after_workspace_appr
     assert bypassed is not None and bypassed.status == "waiting_user"
     assert mock_execute.call_count == 1
     assert submitted is not None
-    assert submitted.metadata["approval_request_by_node"] == {
-        "query_customer": "approval-1"
-    }
+    assert submitted.metadata["approval_request_by_node"] == {"query_customer": "approval-1"}
     assert request_ids == ["approval-1"]
     assert completed is not None and completed.status == "completed"
     assert completed.metadata["approved_request_ids"] == ["approval-1"]

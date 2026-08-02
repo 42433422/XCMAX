@@ -20,6 +20,22 @@ import pytest
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
+# Keep real package namespaces and auth modules intact.  This module stubs
+# direct Mod-store dependencies, but parent-package stubs during collection
+# otherwise leak into subsequent official-account tests.
+import app  # noqa: E402
+import app.application  # noqa: E402
+import app.enterprise  # noqa: E402
+import app.fastapi_routes  # noqa: E402
+import app.fastapi_routes.market_account  # noqa: E402
+import app.infrastructure  # noqa: E402
+import app.infrastructure.auth  # noqa: E402
+import app.infrastructure.auth.dependencies  # noqa: E402
+import app.mod_sdk  # noqa: E402
+import app.shell  # noqa: E402
+import app.utils  # noqa: E402
+import app.utils.operational_errors  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Module-level stubs: inject thin fake modules so the import chain works
 # even when heavy infrastructure is absent.
@@ -1163,14 +1179,19 @@ class TestInstallCustomerDeliverySeedRoute:
         sys.modules[
             "app.mod_sdk.customer_delivery_seed"
         ].install_customer_delivery_seed_package = install_mock
-        sys.modules[
-            "app.fastapi_routes.market_account"
-        ].resolve_valid_market_access_token = AsyncMock(return_value="market-tok")
-        sys.modules["app.infrastructure.auth.dependencies"].session_id_from_request = MagicMock(
-            return_value="sid"
-        )
-
-        with _make_client() as client:
+        with (
+            patch.object(
+                sys.modules["app.fastapi_routes.market_account"],
+                "resolve_valid_market_access_token",
+                AsyncMock(return_value="market-tok"),
+            ),
+            patch.object(
+                sys.modules["app.infrastructure.auth.dependencies"],
+                "session_id_from_request",
+                MagicMock(return_value="sid"),
+            ),
+            _make_client() as client,
+        ):
             resp = client.post(
                 "/install-customer-delivery-seed",
                 json={"mod_id": "mod-x", "industry_id": "attendance"},

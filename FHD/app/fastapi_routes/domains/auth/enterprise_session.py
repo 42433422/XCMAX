@@ -15,9 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def _desktop_runtime_active() -> bool:
-    return os.environ.get("XCAGI_DESKTOP_MODE", "").strip().lower() in {
-        "1", "true", "yes", "on"
-    }
+    return os.environ.get("XCAGI_DESKTOP_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 async def _refresh_official_market_session(session_id: str) -> None:

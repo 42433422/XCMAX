@@ -74,9 +74,7 @@ async def lifespan(app: FastAPI):
     try:
         from app.application.agent_orchestrator import AgentOrchestrator
 
-        interrupted_runs = await asyncio.to_thread(
-            AgentOrchestrator().reconcile_interrupted_runs
-        )
+        interrupted_runs = await asyncio.to_thread(AgentOrchestrator().reconcile_interrupted_runs)
         if interrupted_runs:
             logger.warning(
                 "reconciled %s AgentRun(s) interrupted by the previous app process",
@@ -440,8 +438,6 @@ async def _init_mobile_relay_desktop_async(app: FastAPI):
             start_desktop_relay_poller,
         )
 
-        # 源码升级后，旧的仓库根回落配置一次性迁移到稳定路径，保住既有配对，
-        # 再恢复轮询（否则桌面会以与手机已配对 relay 不同的身份去 poll，任务卡在「排队中」）。
         await asyncio.to_thread(_migrate_legacy_config_once)
         running = await asyncio.to_thread(start_desktop_relay_poller)
         app.state.mobile_relay_desktop_running = running

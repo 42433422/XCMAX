@@ -19,12 +19,18 @@ def register_dead_letter_reconciliation(
         try:
             from modstore_server.dead_letter_reconciler import reconcile_dead_letters
 
-            result = run_tracked("dead_letter_reconciler", lambda: reconcile_dead_letters(limit=200))
+            result = run_tracked(
+                "dead_letter_reconciler", lambda: reconcile_dead_letters(limit=200)
+            )
             if result.get("checked") or result.get("unresolved_count"):
                 logger.info(
                     "dead-letter reconciliation checked=%s replay=%s quarantined=%s deferred=%s unresolved=%s storage_ok=%s",
-                    result.get("checked"), result.get("replay_scheduled"), result.get("quarantined"),
-                    result.get("deferred"), result.get("unresolved_count"), bool((result.get("storage") or {}).get("ok")),
+                    result.get("checked"),
+                    result.get("replay_scheduled"),
+                    result.get("quarantined"),
+                    result.get("deferred"),
+                    result.get("unresolved_count"),
+                    bool((result.get("storage") or {}).get("ok")),
                 )
         except Exception:
             logger.exception("dead-letter reconciliation failed")

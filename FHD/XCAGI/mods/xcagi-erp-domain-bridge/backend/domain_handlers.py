@@ -8,7 +8,7 @@ from typing import Any
 MOD_SOURCE = "mod:xcagi-erp-domain-bridge"
 EXECUTION_PATH = "mod_domain_handler"
 
-MOD_DOMAIN_IDS = frozenset({"products", "shipment", "customers", "wechat", "etl"})
+MOD_DOMAIN_IDS = frozenset({"products", "shipment", "customers", "etl"})
 
 
 def _tag(out: Any) -> Any:
@@ -254,50 +254,7 @@ def _customers_delete(**kw: Any) -> Any:
     return _tag(customers_delete(**kw))
 
 
-def _wechat_contacts_list(**kw: Any) -> Any:
-    from app.application import get_wechat_contact_app_service
-
-    keyword = kw.get("keyword")
-    contact_type = str(kw.get("type") or "all")
-    starred = str(kw.get("starred") or "false")
-    limit = int(kw.get("limit") or 100)
-    service = get_wechat_contact_app_service()
-    contacts = service.get_contacts(
-        keyword=keyword,
-        contact_type=contact_type if contact_type != "all" else None,
-        starred_only=starred.lower() == "true",
-        limit=limit,
-    )
-    return _tag({"success": True, "data": contacts, "total": len(contacts)})
-
-
-def _wechat_contact_get(**kw: Any) -> Any:
-    from fastapi.responses import JSONResponse
-
-    from app.application import get_wechat_contact_app_service
-
-    contact_id = int(kw.get("contact_id") or 0)
-    service = get_wechat_contact_app_service()
-    contact = service.get_contact_by_id(contact_id)
-    if contact:
-        return _tag({"success": True, "data": contact})
-    return JSONResponse({"success": False, "message": "联系人不存在"}, status_code=404)
-
-
-def _wechat_tasks(**kw: Any) -> Any:
-    from fastapi.responses import JSONResponse
-
-    from app.application import get_wechat_task_app_service
-
-    status = str(kw.get("status") or "pending")
-    contact_id = kw.get("contact_id")
-    limit = int(kw.get("limit") or 20)
-    try:
-        service = get_wechat_task_app_service()
-        tasks = service.get_tasks(contact_id=contact_id, status=status, limit=limit)
-        return _tag({"success": True, "data": tasks, "total": len(tasks)})
-    except Exception as e:
-        return JSONResponse({"success": False, "message": f"查询失败：{str(e)}"}, status_code=500)
+# 微信 handler 已移至 xcagi-wechat-bridge Mod
 
 
 # ── ETL 数据对接中心 ──────────────────────────────────────────
@@ -510,9 +467,6 @@ _DISPATCH: dict[tuple[str, str], Any] = {
     ("customers", "create"): _customers_create,
     ("customers", "update"): _customers_update,
     ("customers", "delete"): _customers_delete,
-    ("wechat", "contacts_list"): _wechat_contacts_list,
-    ("wechat", "contact_get"): _wechat_contact_get,
-    ("wechat", "tasks"): _wechat_tasks,
     # ── ETL 数据对接中心 ──────────────────────────────────────────
     ("etl", "sources"): _etl_sources,
     ("etl", "preview"): _etl_preview,

@@ -89,9 +89,7 @@ class ModContext:
         if ctx.verified:
             ctx.permissions = cls._load_mod_permissions(normalized_mod_id)
             ctx.metadata = {"source": "header", "verified_at": "now"}
-            logger.debug(
-                "Mod context activated: %s (verified=%s)", normalized_mod_id, ctx.verified
-            )
+            logger.debug("Mod context activated: %s (verified=%s)", normalized_mod_id, ctx.verified)
 
         return ctx
 

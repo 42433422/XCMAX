@@ -648,9 +648,8 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         set_llm_mode(m)
     runtime_context, _ = _merge_runtime_context_with_message_paths(body.context, body.message)
     runtime_context = runtime_context_with_tier(runtime_context, ai_tier)
-    # Keep stream and JSON chat on the same verified business-action policy.
-    # This branch intentionally runs before creating a legacy AgentRun: a
-    # blocked/no-data action must not surface as a 100%-completed planner task.
+    # Keep stream and JSON chat on the same verified business-action policy; run before
+    # creating a legacy AgentRun so a blocked/no-data action cannot look completed.
     from app.application.chat_business_safety import try_handle_business_chat_action
 
     business_payload = try_handle_business_chat_action(
@@ -765,7 +764,9 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 text = str(ev.get("text") or "")
                 if not ev.get("ephemeral"):
                     reply_parts.append(text)
-                outgoing_event, run_receipt_sent = attach_first_run_receipt(ev, getattr(pre_run, "run_id", None), run_receipt_sent, _sse_payload_with_run_id)
+                outgoing_event, run_receipt_sent = attach_first_run_receipt(
+                    ev, getattr(pre_run, "run_id", None), run_receipt_sent, _sse_payload_with_run_id
+                )
                 yield _sse_event_line(outgoing_event)
             elif et == "requires_token":
                 if pre_run is not None:

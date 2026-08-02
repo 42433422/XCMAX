@@ -74,6 +74,7 @@ def _market_connect_attempts() -> int:
     """Keep the adapter's transport-attempt helper available to its callers/tests."""
     return _transport_market_connect_attempts()
 
+
 _VISION_HINT_RE = re.compile(
     r"vision|vl-|vlm|deepseek-vl|qwen-vl|llava|omni|gpt-4o|gpt-4\.1|"
     r"gpt-4-turbo|gemini-1\.5|gemini-2|claude-3|claude-sonnet|claude-opus|多模态",

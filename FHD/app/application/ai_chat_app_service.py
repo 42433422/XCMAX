@@ -1401,9 +1401,7 @@ class AIChatApplicationService(
         )
 
         raw_approval_nodes = self.approval_service.get_approval_required_nodes(plan)
-        approval_required_nodes = (
-            raw_approval_nodes if isinstance(raw_approval_nodes, list) else []
-        )
+        approval_required_nodes = raw_approval_nodes if isinstance(raw_approval_nodes, list) else []
         has_approval_requirement = bool(approval_required_nodes)
         approval_info = ""
         if has_approval_requirement:
