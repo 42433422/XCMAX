@@ -7,13 +7,20 @@ from pathlib import Path
 
 import yaml
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 release-gate runner.
+    import tomli as tomllib
+
 ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = ROOT.parents[1]
 RELEASE_SCRIPT = ROOT / "scripts/xcmax-immutable-release.sh"
+PYPROJECT = ROOT / "pyproject.toml"
 
 
 def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     script = RELEASE_SCRIPT.read_text(encoding="utf-8")
+    pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
 
     assert "XCMAX_TARGET_SHA must be a full 40-character commit SHA" in script
     assert 'git -C "$SOURCE_ROOT" archive --format=tar "$TARGET_SHA"' in script
@@ -42,6 +49,7 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert 'MODSTORE_RUNTIME_DIR="$BUILD_ROOT/.runtime-build"' in script
     assert "MODSTORE_INSECURE_EMPTY_JWT" not in script
     assert ".[web,knowledge,evolution-metrics]" in script
+    assert "pandas>=2.0" in pyproject["project"]["optional-dependencies"]["evolution-metrics"]
     assert "import fastapi, pytest, pytest_cov, uvicorn, modstore_server.app" in script
     assert "Environment=MODSTORE_BUS=rabbitmq" not in script
     assert "npm ci --no-audit --legacy-peer-deps --ignore-scripts" in script
