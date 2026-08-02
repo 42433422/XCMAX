@@ -197,7 +197,7 @@ function stopQrPoll() {
 
 async function completeLoginSuccess(raw: Record<string, unknown>) {
   clearHostPackSkippedSession();
-  accountProfileStore.applyFromLoginPayload(raw);
+  await accountProfileStore.applyFromLoginPayload(raw);
   // SSOT：桌面壳禁止管理员会话（派生 account_kind=admin 时拒入）。
   // 管理端 SPA（:5011）本身就是网页运维台，不得套用桌面禁令。
   if (!isAdminConsoleSpa() && isDesktopShell() && accountProfileStore.isAdminAccount) {
