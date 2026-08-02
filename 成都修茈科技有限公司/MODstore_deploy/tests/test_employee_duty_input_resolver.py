@@ -309,9 +309,7 @@ def test_investor_portal_input_uses_public_scorecard_only(
     )
     monkeypatch.setenv("XCMAX_PUBLIC_SITE_STATE_DIR", str(tmp_path))
 
-    result = resolver.resolve_employee_duty_input(
-        "ecosystem-investor-portal-officer", now=NOW
-    )
+    result = resolver.resolve_employee_duty_input("ecosystem-investor-portal-officer", now=NOW)
 
     assert result is not None
     assert result["input_data"]["milestones"] == [
