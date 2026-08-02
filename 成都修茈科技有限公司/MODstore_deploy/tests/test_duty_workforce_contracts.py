@@ -18,6 +18,24 @@ from modstore_server.duty_workforce_contracts import (
 from modstore_server.employee_executor import _trusted_system_duty_contract_execution
 
 
+def test_high_risk_employee_cron_is_recorded_as_approval_deferred(monkeypatch) -> None:
+    from modstore_server.employee_cron_registration_ledger import (
+        defer_employee_cron_if_approval_required,
+    )
+
+    writes = []
+    monkeypatch.setattr(
+        "modstore_server.scheduler_runtime.record_job_run",
+        lambda **kwargs: writes.append(kwargs),
+    )
+
+    deferred = defer_employee_cron_if_approval_required("dbops-engineer", {"risk_level": "high"})
+
+    assert deferred is True
+    assert writes[0]["status"] == "deferred"
+    assert writes[0]["error"] == "employee_cron_policy_deferred:approval_required_high_risk"
+
+
 def test_work_contracts_cover_the_roster_exactly() -> None:
     payload = load_workforce_contracts()
     contracts = workforce_contract_map()
@@ -199,7 +217,15 @@ def test_scheduler_registers_contract_cron_jobs(monkeypatch) -> None:
     workflow_scheduler._register_employee_cron_jobs()
 
     employee_jobs = [job for job in jobs if str(job.get("id") or "").startswith("emp_cron_")]
-    assert len(employee_jobs) == 22
+    high_risk_cron_ids = {
+        employee_id
+        for employee_id, contract in workforce_contract_map().items()
+        if contract.get("trigger", {}).get("cron")
+        and contract.get("risk_level") not in {"", "low", "medium"}
+    }
+    # Reviewed high-risk contracts remain visible in the registration ledger
+    # as deferred, but must never be queued for unattended execution.
+    assert len(employee_jobs) == 22 - len(high_risk_cron_ids)
     assert {job["id"] for job in employee_jobs} >= {
         "emp_cron_seo-sitemap-curator",
         "emp_cron_payment-billing-reconciler",
@@ -207,9 +233,26 @@ def test_scheduler_registers_contract_cron_jobs(monkeypatch) -> None:
         "emp_cron_llm-ops-engineer",
         "emp_cron_top-architect",
     }
-    assert "emp_cron_deploy-release-officer" not in {job["id"] for job in employee_jobs}
+    assert {f"emp_cron_{employee_id}" for employee_id in high_risk_cron_ids}.isdisjoint(
+        {job["id"] for job in employee_jobs}
+    )
     assert len(registration_rows) == 22
-    assert all(row["status"] == "success" for row in registration_rows)
+    deferred = [
+        row
+        for row in registration_rows
+        if row["job_id"].removeprefix("employee_cron_registered:") in high_risk_cron_ids
+    ]
+    assert len(deferred) == len(high_risk_cron_ids)
+    assert all(row["status"] == "deferred" for row in deferred)
+    assert all(
+        row["error"] == "employee_cron_policy_deferred:approval_required_high_risk"
+        for row in deferred
+    )
+    assert all(
+        row["status"] == "success"
+        for row in registration_rows
+        if row["job_id"].removeprefix("employee_cron_registered:") not in high_risk_cron_ids
+    )
     assert {row["job_id"] for row in registration_rows} >= {
         "employee_cron_registered:seo-sitemap-curator",
         "employee_cron_registered:payment-billing-reconciler",
