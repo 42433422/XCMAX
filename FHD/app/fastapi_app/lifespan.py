@@ -137,6 +137,12 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("🛑 FastAPI 应用关闭中...")
+    try:
+        from app.fastapi_routes.market_account import close_market_read_clients
+
+        await close_market_read_clients()
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("市场读取连接池关闭失败: %s", exc)
     if fast_start:
         from app.fastapi_app.deferred_startup import cancel_deferred_heavy_startup
 

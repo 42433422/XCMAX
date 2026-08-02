@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -11,6 +12,7 @@ import uuid
 from collections.abc import Mapping
 from hashlib import sha256
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Body, Request
@@ -23,6 +25,11 @@ logger = logging.getLogger(__name__)
 _MARKET_SESSION_TOKENS: dict[str, str] = {}
 _MARKET_SESSION_REFRESH_TOKENS: dict[str, str] = {}
 _ACCOUNT_OVERVIEW_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+# The desktop makes several authenticated read calls in sequence after a user
+# signs in.  Keep their TLS connection alive per event-loop and token digest;
+# no authorization result is cached and every request still reaches the market.
+_OFFICIAL_MARKET_HOSTS = frozenset({"xiu-ci.com", "www.xiu-ci.com"})
+_MARKET_READ_CLIENTS: dict[tuple[int, str], httpx.AsyncClient] = {}
 
 
 def _market_base_url() -> str:
@@ -449,6 +456,48 @@ def _market_http_retries() -> int:
         return 1
 
 
+def _is_official_market_base() -> bool:
+    try:
+        return (urlparse(_market_base_url()).hostname or "").lower() in _OFFICIAL_MARKET_HOSTS
+    except ValueError:
+        return False
+
+
+def _market_read_client(authorization: str, timeout: float) -> httpx.AsyncClient:
+    """Return a pooled client for official-market GETs without sharing credentials.
+
+    The pool key contains only a SHA-256 digest of the Authorization value and
+    is scoped to the active event loop.  This reuses a TLS connection for a
+    single authenticated desktop session, while each request continues to send
+    its original authorization header to the official market.
+    """
+    loop = asyncio.get_running_loop()
+    credential_key = sha256(_auth_header(authorization).encode("utf-8")).hexdigest()
+    key = (id(loop), credential_key)
+    client = _MARKET_READ_CLIENTS.get(key)
+    if client is not None and not client.is_closed:
+        return client
+    client = httpx.AsyncClient(
+        timeout=timeout,
+        trust_env=False,
+        limits=httpx.Limits(
+            max_connections=4,
+            max_keepalive_connections=2,
+            keepalive_expiry=45.0,
+        ),
+    )
+    _MARKET_READ_CLIENTS[key] = client
+    return client
+
+
+async def close_market_read_clients() -> None:
+    """Close pooled official-market read clients when the local backend stops."""
+    clients = tuple(_MARKET_READ_CLIENTS.values())
+    _MARKET_READ_CLIENTS.clear()
+    if clients:
+        await asyncio.gather(*(client.aclose() for client in clients), return_exceptions=True)
+
+
 def _account_overview_cache_ttl() -> float:
     try:
         return max(0.0, float(os.environ.get("XCAGI_MARKET_OVERVIEW_CACHE_TTL", "45")))
@@ -500,20 +549,33 @@ async def _proxy_json(
     mutating = str(method).upper() in {"POST", "PUT", "PATCH", "DELETE"}
     for attempt in range(retries):
         try:
-            async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
-                req_headers = dict(headers)
-                if mutating:
-                    # 市场对变更类请求强制 CSRF 双提交:先 GET 任意端点拿 csrf_token cookie,
-                    # 再以同值 X-CSRF-Token 头回传(cookie 由同一 client 自动携带)。
-                    # 失败不阻断主请求(老市场无 CSRF 时无副作用)。
-                    try:
-                        await client.get(f"{_market_base_url()}/api/csrf")
-                        csrf = client.cookies.get("csrf_token")
-                        if csrf:
-                            req_headers["X-CSRF-Token"] = csrf
-                    except httpx.HTTPError:
-                        pass
-                res = await client.request(method, url, json=json_body, headers=req_headers)
+            # Only idempotent reads to the official market reuse a connection.
+            # Login, token refresh, and every write retain the isolated client
+            # and CSRF-cookie flow below.
+            if not mutating and _is_official_market_base():
+                client = _market_read_client(authorization, timeout)
+                res = await client.request(
+                    method,
+                    url,
+                    json=json_body,
+                    headers=headers,
+                    timeout=timeout,
+                )
+            else:
+                async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+                    req_headers = dict(headers)
+                    if mutating:
+                        # 市场对变更类请求强制 CSRF 双提交:先 GET 任意端点拿 csrf_token cookie,
+                        # 再以同值 X-CSRF-Token 头回传(cookie 由同一 client 自动携带)。
+                        # 失败不阻断主请求(老市场无 CSRF 时无副作用)。
+                        try:
+                            await client.get(f"{_market_base_url()}/api/csrf")
+                            csrf = client.cookies.get("csrf_token")
+                            if csrf:
+                                req_headers["X-CSRF-Token"] = csrf
+                        except httpx.HTTPError:
+                            pass
+                    res = await client.request(method, url, json=json_body, headers=req_headers)
             break
         except httpx.HTTPError as exc:
             last_exc = exc

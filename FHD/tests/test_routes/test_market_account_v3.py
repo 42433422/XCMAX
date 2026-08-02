@@ -239,6 +239,12 @@ class TestAuthorizationFromRequestResolved:
 
 
 class TestProxyJsonRetryBranches:
+    @pytest.fixture(autouse=True)
+    def _clear_read_clients(self):
+        ma._MARKET_READ_CLIENTS.clear()
+        yield
+        ma._MARKET_READ_CLIENTS.clear()
+
     @pytest.mark.asyncio
     async def test_successful_request(self, monkeypatch):
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "http://localhost:8765")
@@ -342,6 +348,39 @@ class TestProxyJsonRetryBranches:
             mock_client_cls.return_value = mock_client
             result = await ma._proxy_json("GET", "/api/test", authorization="mytoken")
         assert result == {"ok": True}
+
+    @pytest.mark.asyncio
+    async def test_official_get_reuses_client_without_skipping_authorization(self, monkeypatch):
+        monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://xiu-ci.com")
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"user": {"id": 1}}
+        mock_client = MagicMock()
+        mock_client.is_closed = False
+        mock_client.request = AsyncMock(return_value=mock_response)
+        with patch("httpx.AsyncClient", return_value=mock_client) as client_cls:
+            first = await ma._proxy_json("GET", "/api/auth/me", authorization="Bearer token-a")
+            second = await ma._proxy_json("GET", "/api/auth/me", authorization="Bearer token-a")
+        assert first == second == {"user": {"id": 1}}
+        assert client_cls.call_count == 1
+        assert mock_client.request.await_count == 2
+        for call in mock_client.request.await_args_list:
+            assert call.kwargs["headers"]["Authorization"] == "Bearer token-a"
+
+    @pytest.mark.asyncio
+    async def test_close_market_read_clients_closes_and_forgets_pool(self):
+        first = MagicMock()
+        first.aclose = AsyncMock()
+        second = MagicMock()
+        second.aclose = AsyncMock()
+        ma._MARKET_READ_CLIENTS[(1, "first")] = first
+        ma._MARKET_READ_CLIENTS[(1, "second")] = second
+
+        await ma.close_market_read_clients()
+
+        assert ma._MARKET_READ_CLIENTS == {}
+        first.aclose.assert_awaited_once()
+        second.aclose.assert_awaited_once()
 
 
 # ========================= _register_without_verification ==================
