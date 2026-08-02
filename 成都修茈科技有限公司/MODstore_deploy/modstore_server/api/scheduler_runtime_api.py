@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from modstore_server.employee_cron_registration_ledger import REGISTRATION_PREFIX
+from modstore_server.employee_cron_registration_ledger import DEFERRED_STATUS, REGISTRATION_PREFIX
 from modstore_server.scheduler_runtime import get_runtime_status
 
 router = APIRouter(tags=["scheduler-runtime"])
@@ -31,6 +31,11 @@ def scheduler_runtime(stale_after_seconds: int | None = None) -> dict:
         for employee_id, item in registrations.items()
         if str(item.get("last_status") or "") == "failed"
     }
+    approval_required = {
+        employee_id
+        for employee_id, item in registrations.items()
+        if str(item.get("last_status") or "") == DEFERRED_STATUS
+    }
     observed = {
         str(item.get("job_id") or "").removeprefix(_EXECUTION_PREFIX): item
         for item in runtime.get("jobs") or []
@@ -42,15 +47,24 @@ def scheduler_runtime(stale_after_seconds: int | None = None) -> dict:
         for employee_id in observed_registered
         if str(observed[employee_id].get("last_status") or "") == "failed"
     }
+    failure_code_counts: dict[str, int] = {}
+    for employee_id in failing:
+        code = str(observed[employee_id].get("last_error_code") or "").strip()
+        if code:
+            failure_code_counts[code] = failure_code_counts.get(code, 0) + 1
+    deferred_observed = approval_required.intersection(observed)
     runtime["employee_duty"] = {
         "registration_observable": bool(registrations),
         "registered_cron_count": len(registered_ids),
         "registration_failing_count": len(registration_failing),
+        "approval_required_count": len(approval_required),
         "observed_cron_count": len(observed_registered),
         "last_success_count": len(observed_registered - failing),
         "failing_count": len(failing),
+        "failure_code_counts": dict(sorted(failure_code_counts.items())),
         "never_run_count": len(registered_ids - observed_registered),
-        "unregistered_observed_count": len(set(observed) - registered_ids),
+        "approval_required_observed_execution_count": len(deferred_observed),
+        "unregistered_observed_count": len(set(observed) - registered_ids - approval_required),
     }
     try:
         from modstore_server.storage_pressure_self_heal import get_storage_pressure_status
