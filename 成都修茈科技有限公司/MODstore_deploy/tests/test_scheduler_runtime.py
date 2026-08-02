@@ -64,6 +64,24 @@ def test_track_job_run_failure_reraises_and_records(db_ready):
     assert entry["last_success_at"] is None
 
 
+def test_track_job_run_records_expected_policy_hold_as_deferred(db_ready):
+    from modstore_server.scheduler_runtime import (
+        DeferredJobRun,
+        get_runtime_status,
+        track_job_run,
+    )
+
+    job_id = _job("policy_hold")
+    with track_job_run(job_id):
+        raise DeferredJobRun("retort_clarification_pending")
+
+    entry = _find(get_runtime_status(), job_id)
+    assert entry is not None
+    assert entry["state"] == "deferred"
+    assert entry["last_status"] == "deferred"
+    assert entry["consecutive_failures"] == 0
+
+
 def test_employee_cron_failure_code_is_safe_for_public_runtime(db_ready):
     from modstore_server.scheduler_runtime import get_runtime_status, record_job_run
 
