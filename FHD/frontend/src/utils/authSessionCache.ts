@@ -2,6 +2,7 @@ import { authApi } from '@/api/auth';
 
 let cachedValid: boolean | null = null;
 let cachedAt = 0;
+let cacheEpoch = 0;
 /** 企业版会话校验缓存：减少侧栏频繁切换时重复打 /api/auth/session/validate */
 const SESSION_TTL_MS = 5 * 60_000;
 
@@ -15,19 +16,26 @@ export async function validateEnterpriseSessionCached(force = false): Promise<bo
   if (!force && cachedValid !== null && now - cachedAt < SESSION_TTL_MS) {
     return cachedValid;
   }
+  const requestEpoch = cacheEpoch;
   const res = await authApi.validateSession();
-  cachedValid = readValid(res);
-  cachedAt = now;
-  return cachedValid;
+  const valid = readValid(res);
+  if (requestEpoch !== cacheEpoch) {
+    return cachedValid === true;
+  }
+  cachedValid = valid;
+  cachedAt = Date.now();
+  return valid;
 }
 
 export function invalidateEnterpriseSessionCache(): void {
+  cacheEpoch += 1;
   cachedValid = null;
   cachedAt = 0;
 }
 
 /** Login just established the cookie; avoid an immediate blocking validate round-trip. */
 export function markEnterpriseSessionValid(): void {
+  cacheEpoch += 1;
   cachedValid = true;
   cachedAt = Date.now();
 }

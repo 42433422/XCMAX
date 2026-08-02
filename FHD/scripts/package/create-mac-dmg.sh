@@ -131,8 +131,13 @@ PY
 }
 
 DMG_PATH="$(cd "$(dirname "${DMG_PATH}")" && pwd)/$(basename "${DMG_PATH}")"
-DMG_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/xcagi-dmg-root.XXXXXX")"
-NOTARY_RESULT="$(mktemp "${TMPDIR:-/tmp}/xcagi-dmg-notary.XXXXXX.json")"
+# hdiutil creates a temporary mounted volume while copying the app.  On newer
+# macOS releases it may be denied access to a source directory below the
+# per-user TMPDIR, so use the normal system temp volume by default.  CI can
+# still supply a dedicated writable volume when necessary.
+DMG_TMPDIR="${XCAGI_DMG_TMPDIR:-/tmp}"
+DMG_ROOT="$(mktemp -d "${DMG_TMPDIR%/}/xcagi-dmg-root.XXXXXX")"
+NOTARY_RESULT="$(mktemp "${DMG_TMPDIR%/}/xcagi-dmg-notary.XXXXXX.json")"
 cleanup() {
   rm -rf "${DMG_ROOT}" "${NOTARY_RESULT}"
 }
@@ -141,6 +146,12 @@ trap cleanup EXIT
 rm -f "${DMG_PATH}"
 ditto --norsrc "${APP_PATH}" "${DMG_ROOT}/$(basename "${APP_PATH}")"
 ln -s /Applications "${DMG_ROOT}/Applications"
+# Finder/FileProvider provenance attributes can survive the sealed-app copy.
+# macOS then rejects the same bundle while hdiutil populates its temporary
+# volume, despite the source app having a valid Developer ID signature.
+if command -v xattr >/dev/null 2>&1; then
+  xattr -cr "${DMG_ROOT}"
+fi
 hdiutil create \
   -volname "${VOLUME_NAME}" \
   -srcfolder "${DMG_ROOT}" \

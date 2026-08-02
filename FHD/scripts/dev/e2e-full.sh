@@ -81,6 +81,11 @@ export VITE_XCAGI_PLATFORM_SHELL="0"
 export VITE_XCAGI_DEFAULT_PLATFORM_SHELL="0"
 export VITE_API_BASE="${API_URL}"
 export XCAGI_DESKTOP_MODE="1"
+# The bundled enterprise demo account has a local market identity shim.  Keep
+# desktop acceptance deterministic and offline-safe instead of inheriting a
+# developer .env that points every Playwright login at the public market.
+# Live market authentication is covered by the dedicated market contract lane.
+export XCAGI_MARKET_BASE_URL="${E2E_MARKET_BASE_URL:-http://127.0.0.1:9}"
 export XCAGI_MARKET_HTTP_TIMEOUT="${XCAGI_MARKET_HTTP_TIMEOUT:-10}"
 export XCAGI_MARKET_HTTP_RETRIES="${XCAGI_MARKET_HTTP_RETRIES:-2}"
 export XCAGI_DESKTOP_FAST_START="${XCAGI_DESKTOP_FAST_START:-0}"

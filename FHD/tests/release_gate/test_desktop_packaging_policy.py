@@ -321,7 +321,10 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
     assert "electron-builder --mac zip" in installer
     assert "electron-builder --mac dmg" not in installer
     assert "scripts/package/create-mac-dmg.sh" in installer
+    assert '"XCAGI ${label} ${VERSION}"' in installer
     assert "hdiutil create" in dmg_builder
+    assert 'xattr -cr "${DMG_ROOT}"' in dmg_builder
+    assert 'DMG_TMPDIR="${XCAGI_DMG_TMPDIR:-/tmp}"' in dmg_builder
     assert "notarytool submit" in dmg_builder
     assert "stapler staple" in dmg_builder
     assert "Apply signing normalization to both the local dotenv path" in installer
