@@ -52,4 +52,14 @@ def scheduler_runtime(stale_after_seconds: int | None = None) -> dict:
         "never_run_count": len(registered_ids - observed_registered),
         "unregistered_observed_count": len(set(observed) - registered_ids),
     }
+    try:
+        from modstore_server.storage_pressure_self_heal import get_storage_pressure_status
+
+        runtime["storage_pressure"] = get_storage_pressure_status(limit=20)
+    except Exception as exc:  # pragma: no cover - observability must remain failure-safe.
+        runtime["storage_pressure"] = {
+            "ok": False,
+            "reason": "storage_pressure_status_unavailable",
+            "error": type(exc).__name__,
+        }
     return runtime

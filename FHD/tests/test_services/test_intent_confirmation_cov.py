@@ -151,6 +151,104 @@ class TestIntentConfirmationServiceCheckAndBuild:
         result = self.svc.check_and_build_prompt({"final_intent": "unk"})
         assert result["status"] == "unclear"
 
+    def test_registered_skill_candidate_does_not_create_capability_proposal(self):
+        orchestrator = MagicMock()
+        orchestrator.enrich_intent_result.return_value = {
+            "skill_route": {
+                "status": "skill_candidate",
+                "skill": {
+                    "skill_id": "ship.generate",
+                    "title": "生成发货单",
+                    "required_slots": ["unit_name"],
+                },
+            }
+        }
+        with (
+            patch(
+                "app.domain.neuro.cognition.cognitive_orchestrator.get_cognitive_orchestrator",
+                return_value=orchestrator,
+            ),
+            patch(
+                "app.services.intent_confirmation_service.record_capability_proposal"
+            ) as recorder,
+        ):
+            result = self.svc.check_and_build_prompt(
+                {
+                    "final_intent": "unk",
+                    "raw_input": "帮客户发货出一张发货单",
+                    "slots": {},
+                }
+            )
+
+        assert result["status"] == "missing_slots"
+        assert result["missing_slots"] == ["unit_name"]
+        recorder.assert_not_called()
+
+    def test_registered_skill_candidate_with_slots_is_complete(self):
+        orchestrator = MagicMock()
+        orchestrator.enrich_intent_result.return_value = {
+            "skill_route": {
+                "status": "skill_candidate",
+                "skill": {
+                    "skill_id": "ship.generate",
+                    "title": "生成发货单",
+                    "required_slots": ["unit_name"],
+                },
+            }
+        }
+        with patch(
+            "app.domain.neuro.cognition.cognitive_orchestrator.get_cognitive_orchestrator",
+            return_value=orchestrator,
+        ):
+            result = self.svc.check_and_build_prompt(
+                {
+                    "final_intent": "unk",
+                    "raw_input": "给甲公司生成发货单",
+                    "slots": {"unit_name": "甲公司"},
+                }
+            )
+
+        assert result["status"] == "complete"
+        assert result["pending_data"]["missing_slots"] == []
+
+    def test_true_skill_proposal_records_structured_gap_once(self):
+        orchestrator = MagicMock()
+        orchestrator.enrich_intent_result.return_value = {
+            "skill_route": {
+                "status": "skill_proposal",
+                "proposal": {
+                    "proposed_skill_id": "open.vendor_risk_report",
+                    "title": "开放技能：供应商风险报告",
+                    "candidate_slots": ["unit_name"],
+                    "rationale": "classifier_miss_or_low_confidence",
+                    "status": "proposed",
+                },
+            }
+        }
+        with (
+            patch(
+                "app.domain.neuro.cognition.cognitive_orchestrator.get_cognitive_orchestrator",
+                return_value=orchestrator,
+            ),
+            patch(
+                "app.services.intent_confirmation_service.record_capability_proposal"
+            ) as recorder,
+        ):
+            result = self.svc.check_and_build_prompt(
+                {
+                    "final_intent": "unk",
+                    "raw_input": "生成供应商风险报告，联系电话 13800000000",
+                    "slots": {"contact_phone": "13800000000"},
+                }
+            )
+
+        assert result["status"] == "unclear"
+        recorder.assert_called_once()
+        call = recorder.call_args.kwargs
+        assert call["reason"] == "skill_proposal"
+        assert call["context"]["intent_result"]["slot_names"] == ["contact_phone"]
+        assert "13800000000" not in str(call["context"])
+
     def test_final_intent_takes_priority(self):
         result = self.svc.check_and_build_prompt(
             {

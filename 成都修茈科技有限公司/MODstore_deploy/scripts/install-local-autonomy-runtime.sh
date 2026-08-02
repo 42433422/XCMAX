@@ -16,8 +16,11 @@ HEALTH_ATTEMPTS="${MODSTORE_INSTALL_HEALTH_ATTEMPTS:-30}"
 HEALTH_SLEEP_SECONDS="${MODSTORE_INSTALL_HEALTH_SLEEP_SECONDS:-2}"
 RUNTIME_FILE_RELATIVES=(
   "FHD/app/application/employee_runtime/risk_gate.py"
+  "FHD/app/services/capability_proposal_recorder.py"
+  "FHD/app/services/intent_confirmation_service.py"
   "FHD/config/duty_employee_work_contracts.json"
   "FHD/config/risk_actions.registry.json"
+  "FHD/scripts/dev/capability_proposal_to_issue.py"
 )
 
 [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "[install] invalid exact SHA" >&2; exit 2; }
@@ -205,8 +208,11 @@ files = [
     "MODstore_deploy/modstore_server/self_maintenance_loop_runner.py",
     "MODstore_deploy/modstore_server/workflow_scheduler.py",
     "FHD/app/application/employee_runtime/risk_gate.py",
+    "FHD/app/services/capability_proposal_recorder.py",
+    "FHD/app/services/intent_confirmation_service.py",
     "FHD/config/duty_employee_work_contracts.json",
     "FHD/config/risk_actions.registry.json",
+    "FHD/scripts/dev/capability_proposal_to_issue.py",
     "FHD/app/domain/autonomy/__init__.py",
     "FHD/app/domain/autonomy/approval_policy.py",
     "FHD/app/domain/autonomy/audit_log.py",

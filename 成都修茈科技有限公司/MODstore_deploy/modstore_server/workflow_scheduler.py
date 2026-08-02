@@ -37,6 +37,7 @@ _REQUIRED_CORE_JOB_IDS = frozenset(
         "auto_version_bump_daily",
         "autonomy_metrics_snapshot",
         "autonomy_posthoc_audit",
+        "capability_proposal_relay",
         "customer_value_reconciler",
         "daily_backup_job",
         "daily_ops_digest_email",
@@ -58,6 +59,7 @@ _REQUIRED_CORE_JOB_IDS = frozenset(
         "retention_janitor_daily",
         "scheduler_heartbeat",
         "self_evolution_metrics",
+        "storage_pressure_self_heal",
         "telemetry_backlog_scan",
         "time_rail_observability_sync",
     }
@@ -517,7 +519,9 @@ def start_scheduler() -> None:
         try:
             from modstore_server.file_retention_janitor import run_retention_janitor
 
-            r = run_retention_janitor()
+            r = run_retention_janitor(
+                notification_dry_run=_env_bool("MODSTORE_NOTIFICATION_RETENTION_DRY_RUN", False)
+            )
             logger.info(
                 "retention janitor done: dry_run=%s status=%s removed=%s released=%s ms=%.1f",
                 bool(r.get("dry_run")),
@@ -537,6 +541,15 @@ def start_scheduler() -> None:
         misfire_grace_time=_cleanup_misfire_grace_time(),
         coalesce=True,
         max_instances=1,
+    )
+
+    from modstore_server.storage_pressure_self_heal import register_storage_pressure_job
+
+    register_storage_pressure_job(
+        _scheduler,
+        track_job=_run_tracked_scheduler_job,
+        startup_probe=_run_scheduler_startup_probe,
+        misfire_grace_time=_cleanup_misfire_grace_time(),
     )
 
     def _incident_collect_pytest_cursor() -> None:
@@ -1286,6 +1299,10 @@ def start_scheduler() -> None:
         id="employee_evolution_scan_loop",
         replace_existing=True,
     )
+
+    from modstore_server.capability_proposal_relay import register_capability_proposal_relay_job
+
+    register_capability_proposal_relay_job(_scheduler, track_job=_run_tracked_scheduler_job)
 
     def _employee_health_scan_loop() -> None:
         try:

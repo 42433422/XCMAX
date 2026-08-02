@@ -232,6 +232,10 @@ def test_scheduler_registers_contract_cron_jobs(monkeypatch) -> None:
         "modstore_server.services.llm.resolve_platform_bench_llm",
         lambda: ("minimax", "MiniMax-M2.7"),
     )
+    monkeypatch.setattr(
+        "modstore_server.employee_duty_input_resolver.resolve_employee_duty_input",
+        lambda _employee_id: None,
+    )
     tracked_job_ids = []
 
     @contextmanager

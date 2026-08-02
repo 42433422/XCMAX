@@ -230,6 +230,8 @@ def test_production_receipt_finalizer_uses_completed_source_workflow_and_signed_
         assert ".head_sha == $merge_sha" in rendered
         assert "package source SHA is not an ancestor of deployed SHA" in rendered
         assert "steps.source.outputs.package_source_sha" in rendered
+        assert "steps.source.outputs.merge_sha" in rendered
+        assert "fetch-depth': 0" in rendered or "fetch-depth: 0" in rendered
         assert "/commits/${merge_sha}/pulls" in rendered
         assert "attested_branch_head_sha" in rendered
         assert "MODSTORE_OPS_INGEST_TOKEN" in rendered
@@ -238,6 +240,12 @@ def test_production_receipt_finalizer_uses_completed_source_workflow_and_signed_
         assert "/api/ops/self-maintenance/evolution-deployment-receipt" in rendered
         assert "evolution-packages.json" in rendered
         assert "catalog_data/files/" in rendered
+        assert "stored_filename" in rendered
+        assert "MODSTORE_AUTO_PUBLISH_TOKEN" in rendered
+        assert "FHD/scripts/dev/publish_modstore.py" in rendered
+        assert "modstore-evolution-publication-receipts" in rendered
+        assert 'git show "${PACKAGE_SOURCE_SHA}:${archive}"' in rendered
+        assert 'cmp --silent "$source_archive" "$archive"' in rendered
         assert "workflow_status" in rendered
         assert "completed" in rendered
     for workflow_path in (source_path, published_path):

@@ -47,12 +47,10 @@ def _make_handler(employee_id: str, binding: TriggerBinding):
             return
         payload = dict(getattr(event, "payload", None) or {})
         event_type = getattr(event, "event_type", "")
-        # A failed employee must never remediate its own failure event.  Before
-        # this guard, daily-orchestrator subscribed to its own task failure and
-        # created an unbounded failure -> trigger -> failure loop.
-        origin_employee = str(
-            payload.get("origin_employee_id") or payload.get("employee_id") or ""
-        ).strip()
+        # A failed employee must never remediate the failure event emitted by
+        # its own run. Only the explicit origin field proves self-origin; for
+        # legacy events employee_id remains the target employee.
+        origin_employee = str(payload.get("origin_employee_id") or "").strip()
         if event_type == EVENT_TASK_FAILED and origin_employee == employee_id:
             logger.debug("skip self task-failed trigger emp=%s", employee_id)
             return

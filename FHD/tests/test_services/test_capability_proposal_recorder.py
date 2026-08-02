@@ -28,6 +28,7 @@ def isolated_proposal_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> P
     monkeypatch.setenv("CAPABILITY_PROPOSAL_DIR", str(tmp_path))
     recorder._REPORT_DIR = tmp_path
     recorder._PROPOSAL_FILE = tmp_path / "capability_proposal.jsonl"
+    recorder._PROCESSED_FILE = tmp_path / "capability_proposal_processed.jsonl"
     return recorder._PROPOSAL_FILE
 
 
@@ -211,13 +212,27 @@ class TestMarkProposalsProcessed:
         assert rec1["dedup_key"] == "key1"
         assert "ts" in rec1
 
+    def test_repeated_mark_is_idempotent(self, isolated_proposal_file: Path) -> None:
+        assert recorder.mark_proposals_processed(["key1", "key1"]) == 1
+        assert recorder.mark_proposals_processed(["key1"]) == 0
+
+    def test_records_disposition_and_issue_receipt(self, isolated_proposal_file: Path) -> None:
+        assert (
+            recorder.mark_proposals_processed(
+                ["key1"],
+                disposition="issue_created",
+                issue_urls={"key1": "https://github.com/acme/repo/issues/7"},
+            )
+            == 1
+        )
+        marker = isolated_proposal_file.parent / "capability_proposal_processed.jsonl"
+        receipt = json.loads(marker.read_text(encoding="utf-8"))
+        assert receipt["disposition"] == "issue_created"
+        assert receipt["issue_url"].endswith("/issues/7")
+
 
 class TestIntegrationFlow:
-    """端到端：记录 → 列举 → 标记 → 列举（不再返回已处理的）。
-
-    注：当前实现 list_pending_proposals 不读 marker 文件，调用方需传 since_unix
-    来跳过已处理。本测试验证文档化的契约。
-    """
+    """端到端：记录 → 列举 → 标记 → 列举（不再返回已处理的）。"""
 
     def test_full_lifecycle(self, isolated_proposal_file: Path) -> None:
         # 1. 记录 2 条提案
@@ -234,14 +249,9 @@ class TestIntegrationFlow:
         assert len(pending) == 2
 
         # 3. 标记 r1 已处理
-        marker_ts = time.time()
         n = recorder.mark_proposals_processed([r1["dedup_key"]])
         assert n == 1
 
-        # 4. 再次列举（用 since_unix 跳过已处理）
-        # 实际 workflow 用法：记录 marker_ts，下次只取 ts_unix > marker_ts
-        pending_after = recorder.list_pending_proposals(since_unix=marker_ts - 0.001)
-        # r1 ts_unix < marker_ts，但 r2 ts_unix 可能也 < marker_ts
-        # 这里验证 since_unix 过滤生效
-        for p in pending_after:
-            assert p["ts_unix"] > marker_ts - 0.001
+        # 4. 再次列举，只剩未处理的 r2
+        pending_after = recorder.list_pending_proposals()
+        assert [row["dedup_key"] for row in pending_after] == [r2["dedup_key"]]

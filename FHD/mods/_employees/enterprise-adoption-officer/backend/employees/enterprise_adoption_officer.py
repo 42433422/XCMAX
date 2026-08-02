@@ -10,6 +10,28 @@ def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
     tenants = payload.get("tenants")
     if not isinstance(tenants, list):
         return _failed("tenants must be an array")
+    if not tenants:
+        return {
+            "ok": True,
+            "status": "no_data",
+            "summary": "已只读查询企业租户数据源，当前没有可观测企业租户。",
+            "funnel": {
+                "observed": 0,
+                "activated": 0,
+                "active_30d": 0,
+                "feature_adopted": 0,
+                "value_milestone_reached": 0,
+                "activation_rate": 0.0,
+                "adoption_rate": 0.0,
+                "value_rate": 0.0,
+            },
+            "blockers": [],
+            "invalid_fields": [],
+            "evidence": ["input.tenants", "authoritative_empty_observation"],
+            "read_only": True,
+            "side_effects": [],
+            "no_effect": True,
+        }
 
     activated = active = adopted = value_reached = 0
     blocker_counts: Counter[str] = Counter()

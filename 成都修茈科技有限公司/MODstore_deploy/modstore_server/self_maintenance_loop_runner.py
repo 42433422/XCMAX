@@ -99,6 +99,7 @@ from .self_maintenance_remediation_prompts import (
     structured_report_remediation_prompt,
 )
 from .self_maintenance_retry import close_successful_code_resume, is_transient_dispatch_failure
+from .self_maintenance_runtime_evidence import retain_completed_merge_runs
 from .self_maintenance_subprocess import run_cmd_excerpt as _run_cmd_excerpt
 
 logger = logging.getLogger(__name__)
@@ -438,13 +439,14 @@ def _select_recent_milestone_rows(
         run_id
         for run_id, _ in sorted(latest_by_run.items(), key=lambda item: item[1])[-bounded_runs:]
     }
-    selected = [
-        row
-        for row, _ in eligible
-        if not str(row.get("run_id") or "").strip()
-        or str(row.get("run_id") or "").strip() in selected_run_ids
-    ]
-    return selected[-bounded_rows:]
+
+    return retain_completed_merge_runs(
+        eligible,
+        latest_by_run=latest_by_run,
+        recent_run_ids=selected_run_ids,
+        cutoff=cutoff,
+        row_limit=bounded_rows,
+    )
 
 
 def loop_lease_path() -> Path:
@@ -7359,11 +7361,14 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "force",
             "identity_verified",
             "installability_verified",
+            "market_catalog_item_id",
+            "market_listing_verified",
             "merge_sha",
             "ok",
             "package_id",
             "package_sha256",
             "runtime_contract_verified",
+            "source_commit_sha",
             "stored_filename",
             "strategic_council_receipt_id",
             "strategic_council_verified",

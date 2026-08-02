@@ -51,6 +51,9 @@ export const SHELL_CORE_ROUTE_NAMES = new Set([
   'login-register',
   'login-forgot-account',
   'login-forgot-password',
+  // AI 生态「生产员工」轻量页；旧包回退智脑时也须放行，否则壳守卫会打回对话
+  'private-mod-delivery',
+  'brain',
 ])
 
 /** 账号定制 Mod 装齐后开放的宿主 ERP 侧栏（与 industry preset menuLabels 对齐） */

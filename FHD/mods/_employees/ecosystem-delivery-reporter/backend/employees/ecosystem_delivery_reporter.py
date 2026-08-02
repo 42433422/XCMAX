@@ -10,8 +10,20 @@ _VALID_SLA = {"met", "at_risk", "breached"}
 
 def run(payload: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
     deliveries = payload.get("deliveries")
-    if not isinstance(deliveries, list) or not deliveries:
+    if not isinstance(deliveries, list):
         return _failed("deliveries must be a non-empty list", "missing_deliveries")
+    if not deliveries:
+        return {
+            "ok": True,
+            "status": "no_data",
+            "summary": "已只读查询客户价值交付回执，当前没有已验证交付可汇总；未发送报告。",
+            "sla_counts": {},
+            "blockers": [],
+            "evidence": ["input.deliveries", "authoritative_empty_observation"],
+            "read_only": True,
+            "side_effects": [],
+            "no_effect": True,
+        }
 
     blockers: list[dict[str, Any]] = []
     statuses: Counter[str] = Counter()
