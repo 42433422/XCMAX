@@ -1750,8 +1750,10 @@ def _register_employee_cron_jobs() -> None:
         load_employee_pack = employee_runtime.load_employee_pack
         from modstore_server.duty_workforce_contracts import (
             contract_schedule,
-            load_reviewed_duty_manifest,
             workforce_contract_map,
+        )
+        from modstore_server.employee_cron_registration import (
+            build_employee_cron_candidates,
         )
         from modstore_server.employee_cron_registration_ledger import (
             reconcile_employee_cron_registrations,
@@ -1768,45 +1770,20 @@ def _register_employee_cron_jobs() -> None:
         logger.exception("employee cron: duty work contracts unavailable")
         work_contracts = {}
 
-    profiles = _load_all_employee_profiles()
-    profile_ids = {
-        str(profile.get("id") or "").strip()
-        for profile in (profiles or [])
-        if str(profile.get("id") or "").strip()
-    }
-    candidate_ids = sorted(profile_ids | set(work_contracts))
-    if not candidate_ids:
+    candidates = build_employee_cron_candidates(
+        profiles=_load_all_employee_profiles(),
+        work_contracts=work_contracts,
+        load_employee_pack=load_employee_pack,
+        session_factory=get_session_factory(),
+    )
+    if not candidates:
         logger.info("employee cron: no catalog profiles or duty contracts found")
         return
 
-    sf = get_session_factory()
     registered = 0
     skipped = 0
     registered_ids: set[str] = set()
-    for emp_id in candidate_ids:
-        contract = work_contracts.get(emp_id) or {}
-        manifest: dict = {}
-        try:
-            if emp_id in profile_ids:
-                with sf() as session:
-                    pack = load_employee_pack(session, emp_id)
-                manifest = pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
-        except Exception:
-            logger.warning(
-                "employee cron: catalog manifest unavailable for %s; trying reviewed duty SSOT",
-                emp_id,
-                exc_info=True,
-            )
-        if not manifest and contract:
-            try:
-                manifest = load_reviewed_duty_manifest(emp_id)
-            except Exception:
-                logger.warning(
-                    "employee cron: reviewed duty manifest unavailable for %s",
-                    emp_id,
-                    exc_info=True,
-                )
-
+    for emp_id, manifest, contract in candidates:
         sched = _extract_employee_schedule(manifest) or contract_schedule(contract)
         if not sched:
             skipped += 1
