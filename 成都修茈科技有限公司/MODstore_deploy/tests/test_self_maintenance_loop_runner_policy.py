@@ -1889,6 +1889,40 @@ def test_reconcile_retort_scope_ignores_unrelated_closed_item_for_same_run(monke
     assert memory["open_items"][0]["reason"] == "retort_scope_too_large"
 
 
+def test_reconcile_retort_scope_tolerates_malformed_changed_file_count(monkeypatch):
+    memory = {"open_items": []}
+    monkeypatch.setattr(
+        loop_runner,
+        "_read_ledger",
+        lambda limit: [
+            {
+                "branch": "devfleet/cursor/malformed-count",
+                "error": "retort_clarification_pending",
+                "para_task_id": "task-malformed",
+                "phase": "complete",
+                "retort_clarification": {
+                    "changed_file_count": "unknown",
+                    "clarification": {
+                        "questions": [{"reason": "elevated_risk_or_large_diff"}],
+                    },
+                },
+                "run_id": "run-malformed",
+                "status": "failed",
+            }
+        ],
+    )
+
+    assert _reconcile_retort_scope_remediations(memory) == {
+        "added": 1,
+        "changed": True,
+        "run_ids": ["run-malformed"],
+    }
+    assert memory["open_items"][0]["detail"] == (
+        "Retort requested risk acceptance for unknown changed files; "
+        "rebuild the smallest valid fix from the clean base."
+    )
+
+
 @pytest.mark.parametrize(
     "hold_reason",
     [
