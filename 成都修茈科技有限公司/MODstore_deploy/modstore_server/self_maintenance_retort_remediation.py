@@ -180,15 +180,19 @@ def reconcile_retort_scope_remediations(memory: dict[str, Any]) -> dict[str, Any
         para_task_id = str(row.get("para_task_id") or "").strip()
         if not branch or not para_task_id:
             continue
-        changed_file_count = int(
-            (retort if isinstance(retort, dict) else {}).get("changed_file_count") or 0
+        raw_changed_file_count = (retort if isinstance(retort, dict) else {}).get(
+            "changed_file_count"
         )
+        try:
+            changed_file_label = str(max(int(raw_changed_file_count or 0), 0))
+        except (TypeError, ValueError):
+            changed_file_label = "unknown"
         open_items.append(
             {
                 "branch": branch,
                 "created_at": runner._iso(runner._utc_now()),
                 "detail": (
-                    f"Retort requested risk acceptance for {changed_file_count} changed files; "
+                    f"Retort requested risk acceptance for {changed_file_label} changed files; "
                     "rebuild the smallest valid fix from the clean base."
                 ),
                 "kind": "automated_remediation",
