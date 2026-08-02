@@ -49,18 +49,15 @@ from app.infrastructure.llm.modstore_chat_failover import is_market_chat_failove
 from app.infrastructure.llm.modstore_response_normalize import normalize_market_chat_response
 from app.infrastructure.modstore_transport import (
     MARKET_TRANSPORT_ERRORS as _MARKET_TRANSPORT_ERRORS,
+)
+from app.infrastructure.modstore_transport import (
     httpx_sync_client as _httpx_sync_client,
 )
 from app.infrastructure.modstore_transport import (
-    iter_market_transport_plans as _iter_market_transport_plans,
     iter_market_sse_data_payloads as _iter_transport_sse_data_payloads,
-    market_connect_timeout as _market_connect_timeout,
 )
 from app.infrastructure.modstore_transport import (
-    iter_market_transport_plans as _iter_market_transport_plans,  # noqa: F401
-)
-from app.infrastructure.modstore_transport import (
-    market_connect_attempts as _market_connect_attempts,  # noqa: F401
+    iter_market_transport_plans as _iter_market_transport_plans,
 )
 from app.infrastructure.modstore_transport import (
     market_connect_timeout as _market_connect_timeout,
