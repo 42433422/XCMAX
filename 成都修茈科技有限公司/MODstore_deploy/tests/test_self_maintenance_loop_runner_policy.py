@@ -2916,6 +2916,30 @@ def test_auto_merge_policy_blocks_retort_scope_when_diff_chars_exceeded():
     assert "max_diff_chars" in result["violations"]
 
 
+def test_auto_merge_policy_blocks_mixed_executable_and_excluded_retort_paths():
+    files = [
+        *[
+            f"成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy_{index}.py"
+            for index in range(6)
+        ],
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(
+        files,
+        {**_stats(line_changes=20), "git_diff_chars": 2000},
+        memory=_retort_scope_memory(),
+    )
+
+    assert result["ok"] is False
+    assert result["reason"] == "retort_scope_diff_contract_exceeded"
+    assert result["changed_file_count"] == len(files)
+    assert result["scoped_file_count"] == 6
+    assert result["excluded_paths"] == [files[-1]]
+    assert "excluded_paths_present" in result["violations"]
+    assert "max_changed_files" in result["violations"]
+
+
 def test_auto_merge_policy_allows_retort_scope_within_contract():
     files = [
         "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_retort_remediation.py",
