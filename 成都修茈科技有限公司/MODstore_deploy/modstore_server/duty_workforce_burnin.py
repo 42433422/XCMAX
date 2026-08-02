@@ -37,6 +37,10 @@ from modstore_server.duty_workforce_contracts import (
     load_reviewed_duty_manifest,
     workforce_contract_map,
 )
+from modstore_server.duty_workforce_receipts import (
+    fresh_accepted_receipt_identities,
+    recent_attempt_manifest_shas,
+)
 from modstore_server.employee_runtime import parse_employee_config_v2
 from modstore_server.models import EmployeeExecutionMetric, get_session_factory
 
@@ -358,22 +362,6 @@ def assess_burn_in_eligibility(
     }
 
 
-def _fresh_success_ids(window_hours: int, now: datetime) -> set[str]:
-    cutoff = now.replace(tzinfo=None) - timedelta(hours=max(1, window_hours))
-    sf = get_session_factory()
-    with sf() as session:
-        rows = (
-            session.query(EmployeeExecutionMetric.employee_id)
-            .filter(
-                EmployeeExecutionMetric.status.in_(["success", "completed"]),
-                EmployeeExecutionMetric.created_at >= cutoff,
-            )
-            .distinct()
-            .all()
-        )
-    return {str(row[0]) for row in rows if str(row[0] or "").strip()}
-
-
 def _recent_attempt_ids(cooldown_hours: int, now: datetime) -> set[str]:
     cutoff = now.replace(tzinfo=None) - timedelta(hours=max(1, cooldown_hours))
     sf = get_session_factory()
@@ -388,48 +376,6 @@ def _recent_attempt_ids(cooldown_hours: int, now: datetime) -> set[str]:
             .all()
         )
     return {str(row[0]) for row in rows if str(row[0] or "").strip()}
-
-
-def _recent_attempt_manifest_shas(cooldown_hours: int, now: datetime) -> Dict[str, set[str]]:
-    """Return manifest identities attempted during the cooldown window.
-
-    A repaired capability must be eligible for immediate strict re-validation;
-    otherwise the learning loop discovers a gap, ships a new handler, and then
-    waits hours before it can prove the repair.  Missing or legacy audit
-    identity remains fail-closed in ``build_burn_in_plan``.
-    """
-
-    path = burn_in_audit_path()
-    if not path.is_file():
-        return {}
-    cutoff = now.astimezone(timezone.utc) - timedelta(hours=max(1, cooldown_hours))
-    result: Dict[str, set[str]] = {}
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()[-5000:]
-    except OSError:
-        return {}
-    for line in lines:
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(row, dict) or row.get("record_type") == "run_summary":
-            continue
-        employee_id = str(row.get("employee_id") or "").strip()
-        manifest_sha = str(row.get("manifest_sha256") or "").strip().lower()
-        recorded_raw = str(row.get("recorded_at") or "").strip()
-        if not employee_id or len(manifest_sha) != 64 or not recorded_raw:
-            continue
-        try:
-            recorded_at = datetime.fromisoformat(recorded_raw.replace("Z", "+00:00"))
-        except ValueError:
-            continue
-        if recorded_at.tzinfo is None:
-            recorded_at = recorded_at.replace(tzinfo=timezone.utc)
-        if recorded_at.astimezone(timezone.utc) < cutoff:
-            continue
-        result.setdefault(employee_id, set()).add(manifest_sha)
-    return result
 
 
 def _load_manifest(employee_id: str) -> Dict[str, Any]:
@@ -484,10 +430,11 @@ def build_burn_in_plan(
         min(int(limit or limits["max_candidates"]), limits["max_candidates"], 8),
     )
     contracts = _contracts if _contracts is not None else workforce_contract_map()
-    proven = (
-        {str(item) for item in _proven_ids}
-        if _proven_ids is not None
-        else _fresh_success_ids(window_hours, observed_at)
+    proven_override = {str(item) for item in _proven_ids} if _proven_ids is not None else None
+    accepted_receipts = (
+        {}
+        if proven_override is not None
+        else fresh_accepted_receipt_identities(burn_in_audit_path(), window_hours, observed_at)
     )
     recent = (
         {str(item) for item in _recent_ids}
@@ -500,18 +447,18 @@ def build_burn_in_plan(
             for employee_id, values in _recent_manifest_shas.items()
         }
         if _recent_manifest_shas is not None
-        else _recent_attempt_manifest_shas(limits["cooldown_hours"], observed_at)
+        else recent_attempt_manifest_shas(
+            burn_in_audit_path(), limits["cooldown_hours"], observed_at
+        )
     )
     manifests = _manifests or {}
     candidates: list[Dict[str, Any]] = []
     skipped: list[Dict[str, str]] = []
+    fresh_proven_count = 0
 
     for employee_id in sorted(contracts):
         contract = dict(contracts[employee_id] or {})
         contract.setdefault("employee_id", employee_id)
-        if employee_id in proven:
-            skipped.append({"employee_id": employee_id, "reason": "fresh_receipt_exists"})
-            continue
         try:
             manifest = manifests.get(employee_id) or _load_manifest(employee_id)
         except Exception as exc:  # noqa: BLE001 - plan records, never executes on ambiguity
@@ -523,6 +470,16 @@ def build_burn_in_plan(
             )
             continue
         manifest_sha256 = _payload_sha256(manifest)
+        contract_sha256 = _payload_sha256(contract)
+        has_fresh_proof = (
+            employee_id in proven_override
+            if proven_override is not None
+            else (manifest_sha256, contract_sha256) in accepted_receipts.get(employee_id, set())
+        )
+        if has_fresh_proof:
+            fresh_proven_count += 1
+            skipped.append({"employee_id": employee_id, "reason": "fresh_receipt_exists"})
+            continue
         if employee_id in recent:
             attempted_shas = recent_manifest_shas.get(employee_id) or set()
             # A legacy attempt without a recorded manifest remains blocked.
@@ -551,7 +508,7 @@ def build_burn_in_plan(
                 "capability_handlers": list(eligibility.get("capability_handlers") or []),
                 "manifest_source": "reviewed_duty_ssot",
                 "manifest_sha256": manifest_sha256,
-                "contract_sha256": _payload_sha256(contract),
+                "contract_sha256": contract_sha256,
                 "forced_read_only": True,
                 "burn_in_fixture": dict(eligibility.get("burn_in_fixture") or {}),
                 "prohibited_semantics_fixture_override": bool(
@@ -575,7 +532,7 @@ def build_burn_in_plan(
         "observed_at": observed_at.isoformat(),
         "window_hours": max(1, int(window_hours)),
         "planned_count": len(contracts),
-        "fresh_proven_count": len(proven),
+        "fresh_proven_count": fresh_proven_count,
         "candidate_count_before_limit": len(candidates),
         "max_eventual_new_receipts": len(candidates),
         "selected_count": len(selected),
