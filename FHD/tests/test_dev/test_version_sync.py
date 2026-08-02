@@ -164,6 +164,28 @@ class TestSyncApply:
         code = version_sync.sync(apply=True)
         assert code == 0
 
+    def test_apply_updates_all_release_pointer_fields_in_one_file(self, tmp_path, monkeypatch):
+        """同一发布清单的版本锁、展示版本和下载目录必须一起推进。"""
+        release_file = tmp_path / "download_release.json"
+        release_file.write_text(
+            '{"version_lock":"1.0.0.0","marketing_version":"1.0.0.0",'
+            '"download_version":"1.0.0.0"}\n',
+            encoding="utf-8",
+        )
+        fake_anchors = [
+            ("download_release.json", r'"version_lock"\s*:\s*"([\d.]+)"', "product"),
+            ("download_release.json", r'"marketing_version"\s*:\s*"([\d.]+)"', "product"),
+            ("download_release.json", r'"download_version"\s*:\s*"([\d.]+)"', "product"),
+        ]
+        monkeypatch.setattr(version_sync, "ANCHORS", fake_anchors)
+        monkeypatch.setattr(version_sync, "REPO_ROOT", tmp_path)
+        monkeypatch.setattr(version_sync, "_canonical_version", lambda: "1.0.0.1")
+        monkeypatch.setattr(version_sync, "_toolchain_version", lambda: "1.0.0")
+
+        assert version_sync.sync(apply=True) == 0
+        content = release_file.read_text(encoding="utf-8")
+        assert content.count("1.0.0.1") == 3
+
 
 class TestAnchorsConsistency:
     """version_sync 与 verify_version_anchors 共享 ANCHORS 的一致性。"""

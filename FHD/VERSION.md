@@ -9,20 +9,20 @@
 
 | 口径 | 版本 | 用途 |
 |------|------|------|
-| **XCAGI 稳定产品版本** | `1.0.0.0` | 对外版本、发布目录、下载清单、Windows 文件/产品版本、Python/FastAPI、Android `versionName` |
+| **XCAGI 稳定产品版本** | `1.0.0.1` | 对外版本、发布目录、下载清单、Windows 文件/产品版本、Python/FastAPI、Android `versionName` |
 | **工具链兼容版本** | `1.0.0` | npm/Electron、Dart/Flutter、iOS/macOS `MARKETING_VERSION` |
 
-四段产品版本 `1.0.0.0` 是稳定上线版本的唯一对外口径。npm SemVer、Electron、Dart pub 和 Apple 市场版本只接受三段版本，因此这些锚点使用等价映射 `1.0.0`；它们不代表另一个产品版本。
+四段产品版本 `1.0.0.1` 是当前稳定发布候选的唯一对外口径。npm SemVer、Electron、Dart pub 和 Apple 市场版本只接受三段版本，因此这些锚点使用等价映射 `1.0.0`；它们不代表另一个产品版本。
 
 ## 🔗 必须同步的锚点
 
 | 组件 | 版本 | 文件 |
 |------|------|------|
-| **Python 包（根）** | `1.0.0.0` | `pyproject.toml` |
-| **Python 包（XCAGI 子树）** | `1.0.0.0` | `XCAGI/pyproject.toml` |
-| **FastAPI 应用** | `1.0.0.0` | `app/fastapi_app/factory.py` |
-| **Mod 依赖校验基线** | `1.0.0.0` | `app/infrastructure/mods/manifest.py` |
-| **Android versionName** | `1.0.0.0` | Flutter Android Runner Gradle 配置 |
+| **Python 包（根）** | `1.0.0.1` | `pyproject.toml` |
+| **Python 包（XCAGI 子树）** | `1.0.0.1` | `XCAGI/pyproject.toml` |
+| **FastAPI 应用** | `1.0.0.1` | `app/fastapi_app/factory.py` |
+| **Mod 依赖校验基线** | `1.0.0.1` | `app/infrastructure/mods/manifest.py` |
+| **Android versionName** | `1.0.0.1` | Flutter Android Runner Gradle 配置 |
 | **前端 SPA** | `1.0.0` | `frontend/package.json` |
 | **桌面壳 npm** | `1.0.0` | `desktop/package.json` |
 | **根级 npm** | `1.0.0` | `package.json` |
@@ -70,4 +70,4 @@ python scripts/dev/verify_version_anchors.py
 
 ---
 
-*最后更新：2026-07-12（稳定产品版本 1.0.0.0；工具链映射 1.0.0）*
+*最后更新：2026-08-02（稳定产品版本 1.0.0.1；工具链映射 1.0.0）*
