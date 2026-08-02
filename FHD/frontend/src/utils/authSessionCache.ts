@@ -2,8 +2,49 @@ import { authApi } from '@/api/auth';
 
 let cachedValid: boolean | null = null;
 let cachedAt = 0;
+let cacheEpoch = 0;
 /** 企业版会话校验缓存：减少侧栏频繁切换时重复打 /api/auth/session/validate */
 const SESSION_TTL_MS = 5 * 60_000;
+/**
+ * This marker contains no credential and never authorizes an API request.  It
+ * only lets the Electron shell render the already-known workspace while the
+ * official session validation runs in the background after a cold restart.
+ */
+export const LS_ENTERPRISE_SESSION_HINT = 'xcagi_enterprise_session_hint_v1';
+const SESSION_HINT_TTL_MS = 24 * 60 * 60_000;
+
+function writeEnterpriseSessionHint(now = Date.now()): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(LS_ENTERPRISE_SESSION_HINT, String(now));
+  } catch {
+    /* private mode / quota: background validation still works */
+  }
+}
+
+function clearEnterpriseSessionHint(): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.removeItem(LS_ENTERPRISE_SESSION_HINT);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** A recent successful official login may show the desktop shell provisionally. */
+export function hasRecentEnterpriseSessionHint(now = Date.now()): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  try {
+    const at = Number(localStorage.getItem(LS_ENTERPRISE_SESSION_HINT) || 0);
+    if (!Number.isFinite(at) || at <= 0 || now < at || now - at > SESSION_HINT_TTL_MS) {
+      if (at) clearEnterpriseSessionHint();
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function readValid(res: unknown): boolean {
   const r = res as { success?: boolean; valid?: boolean; data?: { valid?: boolean } };
@@ -15,19 +56,30 @@ export async function validateEnterpriseSessionCached(force = false): Promise<bo
   if (!force && cachedValid !== null && now - cachedAt < SESSION_TTL_MS) {
     return cachedValid;
   }
+  const requestEpoch = cacheEpoch;
   const res = await authApi.validateSession();
-  cachedValid = readValid(res);
-  cachedAt = now;
-  return cachedValid;
+  const valid = readValid(res);
+  if (requestEpoch !== cacheEpoch) {
+    return cachedValid === true;
+  }
+  cachedValid = valid;
+  cachedAt = Date.now();
+  if (valid) writeEnterpriseSessionHint(cachedAt);
+  else clearEnterpriseSessionHint();
+  return valid;
 }
 
 export function invalidateEnterpriseSessionCache(): void {
+  cacheEpoch += 1;
   cachedValid = null;
   cachedAt = 0;
+  clearEnterpriseSessionHint();
 }
 
 /** Login just established the cookie; avoid an immediate blocking validate round-trip. */
 export function markEnterpriseSessionValid(): void {
+  cacheEpoch += 1;
   cachedValid = true;
   cachedAt = Date.now();
+  writeEnterpriseSessionHint(cachedAt);
 }

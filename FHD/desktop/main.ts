@@ -44,10 +44,32 @@ import { DesktopAutonomyAdapter } from './autonomy/desktop-adapter'
 import { backendCrashPolicy } from './autonomy/policies/backend-crash.policy'
 import { degradedRemediationPolicy } from './autonomy/policies/degraded-remediation.policy'
 import { updateRollbackPolicy } from './autonomy/policies/update-rollback.policy'
+import { sanitizeBackendProxyEnvValues } from './network/backend-proxy-env'
+import { resolveDesktopInstallIdentity } from './installation-identity'
 
 const APP_NAME = 'XCAGI'
 const KELLAI_BUNDLE_ID = 'com.kellai.desktop'
 const POST_UPDATE_STABILITY_MS = 5_000
+
+/**
+ * OTA may only replace the one official macOS application copy.  A DMG-mounted
+ * app or an internal acceptance copy has the same bundle id and user data, but
+ * allowing it to self-update would leave two competing XCAGI installations.
+ */
+export function getDesktopInstallIdentity() {
+  return resolveDesktopInstallIdentity({
+    platform: process.platform,
+    isPackaged: app.isPackaged,
+    executablePath: process.execPath,
+  })
+}
+
+function assertSelfUpdateInstallSupported(): void {
+  const identity = getDesktopInstallIdentity()
+  if (!identity.canSelfUpdate) {
+    throw new Error(identity.reason || '当前安装副本不支持在线更新')
+  }
+}
 
 /** OTA / 更新站直连绕过（setProxy 用逗号；commandLine 用分号）。 */
 export const OTA_PROXY_BYPASS_RULES =
@@ -1072,6 +1094,20 @@ export function desktopWindowOpenAction(
   return isTrustedDesktopOrigin(rawUrl, expectedPort) ? 'allow' : 'deny'
 }
 
+/**
+ * Chromium may abort the first navigation while the local backend redirects
+ * from splash to the SPA.  If the same trusted desktop page is already loaded,
+ * treating that transient abort as a boot failure produces a false error dialog.
+ */
+export function isBenignDesktopLoadAbort(
+  error: unknown,
+  currentUrl: string | undefined,
+  expectedPort = DEFAULT_PORT,
+): boolean {
+  const message = error instanceof Error ? error.message : String(error || '')
+  return /ERR_ABORTED/i.test(message) && isTrustedDesktopOrigin(currentUrl, expectedPort)
+}
+
 function configureDesktopMediaPermissions(): void {
   const ses = session.defaultSession
   ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
@@ -1267,6 +1303,11 @@ async function createWindow(): Promise<void> {
       }
       mainWindow.focus()
     } catch (error) {
+      const currentUrl = mainWindow?.webContents.getURL()
+      if (isBenignDesktopLoadAbort(error, currentUrl)) {
+        console.warn('[xcagi-desktop] ignored transient local-page navigation abort', error)
+        return
+      }
       console.error('[xcagi-desktop] load main application failed', error)
       throw error
     }
@@ -1293,19 +1334,29 @@ async function createWindow(): Promise<void> {
     updateSplashProgress(creep, '正在加载业务模块…')
   }, 400)
 
-  const ready = waitForBackendPing(DEFAULT_PORT)
+  const pingReady = waitForBackendPing(DEFAULT_PORT)
     .then(() => {
       splashPhase = 'routes'
       phaseStarted = Date.now()
-      updateSplashProgress(58, '本地服务已就绪，正在加载业务模块…')
-      return waitForBackendApplicationReady(DEFAULT_PORT, undefined, { skipPing: true })
+      updateSplashProgress(58, '本地服务已就绪，正在打开工作台…')
     })
-    .then(() => {
+
+  // 登录后的工作台不必等待全部 Mod 和业务路由完成。先在本地服务
+  // 可响应时打开界面，模块继续在后台完成；更新观察期仍会等待两者。
+  const mainUiReady = pingReady.then(() => {
       splashPhase = 'done'
       updateSplashProgress(88, '正在加载应用…')
       return loadMainApplication()
     })
+  const backendApplicationReady = pingReady.then(() =>
+    waitForBackendApplicationReady(DEFAULT_PORT, undefined, { skipPing: true }),
+  )
+  const ready = Promise.all([mainUiReady, backendApplicationReady]).then(() => undefined)
   mainApplicationReady = ready
+  void mainUiReady.then(
+    () => clearInterval(splashTicker),
+    () => clearInterval(splashTicker),
+  )
   void ready
     .catch(error => {
       console.error('[xcagi-desktop] backend readiness wait failed', error)
@@ -1315,7 +1366,6 @@ async function createWindow(): Promise<void> {
         void dialog.showErrorBox(APP_NAME, error instanceof Error ? error.message : String(error))
       }
     })
-    .finally(() => clearInterval(splashTicker))
 
   mainWindow.webContents.on('did-finish-load', () => {
     if (mainWindow) tagDesktopWebContents(mainWindow)
@@ -1529,14 +1579,24 @@ function bootstrap(): void {
       })
 
       ipcMain.handle('xcagi:get-data-dir', () => app.getPath('userData'))
+      ipcMain.handle('xcagi:get-app-identity', () => ({
+        name: app.getName(),
+        version: readPackagedAppVersion(),
+        isPackaged: app.isPackaged,
+        install: getDesktopInstallIdentity(),
+      }))
       ipcMain.handle('xcagi:open-kellai-desktop', () => openKellaiDesktop())
       ipcMain.handle('xcagi:export-support-bundle', () => exportSupportBundleInteractive())
       ipcMain.handle('xcagi:check-for-updates', () => runUpdateCheckWithDirectNet())
       ipcMain.handle('xcagi:get-update-status', () => getUpdateStatus())
-      ipcMain.handle('xcagi:download-update', () => downloadUpdate())
-      ipcMain.handle('xcagi:install-update', () =>
-        installUpdate(runBackendMigrationWithRollback, cancelPreparedRollback),
-      )
+      ipcMain.handle('xcagi:download-update', () => {
+        assertSelfUpdateInstallSupported()
+        return downloadUpdate()
+      })
+      ipcMain.handle('xcagi:install-update', () => {
+        assertSelfUpdateInstallSupported()
+        return installUpdate(runBackendMigrationWithRollback, cancelPreparedRollback)
+      })
       ipcMain.handle('xcagi:set-badge', (_event, count: number) => {
         const n = Math.max(0, Math.floor(Number(count) || 0))
         if (process.platform === 'darwin' || process.platform === 'linux') {
