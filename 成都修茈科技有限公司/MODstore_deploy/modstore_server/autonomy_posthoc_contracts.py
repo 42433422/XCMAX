@@ -341,9 +341,10 @@ def default_para_task_fetcher(task_id: str) -> dict[str, Any]:
     api_base = str(os.environ.get("MODSTORE_PARA_API_BASE") or "").strip()
     if not api_base:
         raise RuntimeError("para_api_base_missing")
-    from modstore_server.self_maintenance_loop_runner import _fetch_para_task_state
+    from modstore_server import self_maintenance_loop_runner as loop_runner
+    from modstore_server.self_maintenance_para_merge_remediation import fetch_para_task_state
 
-    return _fetch_para_task_state(api_base, task_id)
+    return fetch_para_task_state(api_base, task_id, loop_runner._guest_auth_headers(api_base))
 
 
 def _recorded_at_or_after(record: dict[str, Any], allowed_at: datetime) -> bool:

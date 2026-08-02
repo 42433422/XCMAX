@@ -7,11 +7,14 @@ import pytest
 
 import modstore_server.db.base as db_base
 import modstore_server.models as models
+from modstore_server import self_maintenance_loop_runner as loop_runner
+from modstore_server import self_maintenance_para_merge_remediation as para_merge_remediation
 from modstore_server.autonomy_decision_audit import (
     append_autonomy_decision,
     build_autonomy_decision_evidence,
 )
 from modstore_server.autonomy_posthoc_auditor import run_autonomy_posthoc_audit
+from modstore_server.autonomy_posthoc_contracts import default_para_task_fetcher
 from modstore_server.db.employee_ops import (
     DailyDigestRecord,
     EmployeeChangeRequest,
@@ -21,6 +24,32 @@ from modstore_server.db.scheduler_ops import JobRun
 
 UTC = timezone.utc
 NOW = datetime(2026, 7, 22, 12, 0, tzinfo=UTC)
+
+
+def test_default_para_task_fetcher_uses_authenticated_shared_helper(monkeypatch):
+    observed = {}
+    monkeypatch.setenv("MODSTORE_PARA_API_BASE", "https://para.test/")
+    monkeypatch.setattr(
+        loop_runner,
+        "_guest_auth_headers",
+        lambda api_base: {"Authorization": f"Bearer token-for-{api_base}"},
+    )
+
+    def _fetch(api_base, task_id, headers):
+        observed.update(api_base=api_base, task_id=task_id, headers=headers)
+        return {"id": task_id, "status": "merged"}
+
+    monkeypatch.setattr(para_merge_remediation, "fetch_para_task_state", _fetch)
+
+    assert default_para_task_fetcher("task-123") == {
+        "id": "task-123",
+        "status": "merged",
+    }
+    assert observed == {
+        "api_base": "https://para.test/",
+        "headers": {"Authorization": "Bearer token-for-https://para.test/"},
+        "task_id": "task-123",
+    }
 
 
 @pytest.fixture
