@@ -29,7 +29,13 @@ vi.mock('@/utils/platformShellApi', () => ({
   fetchIndustryBaseline: vi.fn(async () => ({ baseline_ready: false })),
 }))
 
+vi.mock('@/constants/productFlow', () => ({
+  defaultOnboardingIndustryId: () => '涂料',
+  readProductFlowCompleted: vi.fn(() => false),
+}))
+
 import { authApi } from '@/api/auth'
+import { readProductFlowCompleted } from '@/constants/productFlow'
 import { fetchIndustryBaseline, fetchOnboardingIndustryCatalog } from '@/utils/platformShellApi'
 import { fetchProductSku } from '@/utils/productSku'
 
@@ -42,6 +48,7 @@ describe('hostPackOnboardingGate', () => {
       selected_industry_id: '涂料',
     } as OnboardingIndustryCatalog)
     vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: false } as IndustryBaselinePlan)
+    vi.mocked(readProductFlowCompleted).mockReturnValue(false)
     vi.mocked(authApi.validateSession).mockResolvedValue({
       success: true,
       data: { account_kind: 'enterprise', market_is_admin: false },
@@ -68,6 +75,18 @@ describe('hostPackOnboardingGate', () => {
   it('does not require host pack when baseline ready', async () => {
     vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: true } as IndustryBaselinePlan)
     await expect(needsHostPackCompletion(true)).resolves.toBe(false)
+  })
+
+  it('keeps a completed product flow out of host onboarding after an update', async () => {
+    vi.mocked(readProductFlowCompleted).mockReturnValue(true)
+
+    await expect(needsHostPackCompletion(true)).resolves.toBe(false)
+
+    expect(fetchProductSku).not.toHaveBeenCalled()
+    expect(authApi.validateSession).not.toHaveBeenCalled()
+    expect(fetchOnboardingIndustryCatalog).not.toHaveBeenCalled()
+    expect(fetchIndustryBaseline).not.toHaveBeenCalled()
+    expect(sessionStorage.getItem('xcagi_host_pack_needs_cache_v1')).toContain('"needs":false')
   })
 
   it('reuses the short session cache for a deep-link reload', async () => {

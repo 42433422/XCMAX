@@ -1,5 +1,6 @@
 import {
   defaultOnboardingIndustryId,
+  readProductFlowCompleted,
 } from '@/constants/productFlow'
 import { authApi } from '@/api/auth'
 import { fetchIndustryBaseline, fetchOnboardingIndustryCatalog } from '@/utils/platformShellApi'
@@ -149,6 +150,13 @@ export async function needsHostPackCompletion(force = false): Promise<boolean> {
   if (isHostPackSkippedThisSession()) return false
 
   const now = Date.now()
+  // 产品入门完成态是跨更新的用户选择。基础包清单可能随版本增加，
+  // 但不能因此把已完成入门的用户再次打回宿主教程；需要重新体验时由教程入口显式打开。
+  if (readProductFlowCompleted()) {
+    writeHostPackNeedsCache(false, now)
+    return false
+  }
+
   if (!force) {
     const cached =
       hostPackNeedsCache && now - hostPackNeedsCache.at < HOST_PACK_CACHE_TTL_MS
