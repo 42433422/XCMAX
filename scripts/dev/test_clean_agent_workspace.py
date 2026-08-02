@@ -63,3 +63,24 @@ def test_runtime_cleanup_is_bounded_and_idempotent(tmp_path: Path) -> None:
     )
     assert second_removed == []
     assert errors == []
+
+
+def test_runtime_log_directory_is_bounded(tmp_path: Path) -> None:
+    logs = tmp_path / "fhd-desktop" / "logs"
+    logs.mkdir(parents=True)
+    log = logs / "fhd.err.log"
+    log.write_bytes(b"0123456789")
+
+    removed: list[str] = []
+    errors: list[str] = []
+    MODULE._trim_runtime_logs(
+        logs,
+        max_bytes=8,
+        tail_bytes=4,
+        removed=removed,
+        errors=errors,
+    )
+
+    assert log.read_bytes() == b"6789"
+    assert removed == [f"trimmed:{log}"]
+    assert errors == []

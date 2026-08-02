@@ -32,6 +32,10 @@ RUNTIME_LOG_TAIL_BYTES = int(
 )
 RUNTIME_BACKUP_KEEP = int(os.environ.get("XCMAX_CLEAN_RUNTIME_BACKUP_KEEP") or 3)
 AGENT_RUNTIME_ROOT = Path.home() / "XCMAX-runtime" / "para-main-agent"
+FHD_DESKTOP_LOG_ROOT = Path(
+    os.environ.get("XCMAX_CLEAN_FHD_DESKTOP_LOG_ROOT")
+    or Path.home() / "XCMAX-runtime" / "fhd-desktop" / "logs"
+)
 _TASK_DIR_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-",
     re.IGNORECASE,
@@ -117,15 +121,14 @@ def _clean_agent_runtime_workspaces(
             errors.append(f"{item}: {exc}")
 
 
-def _trim_agent_runtime_logs(
-    runtime_root: Path,
+def _trim_runtime_logs(
+    logs: Path,
     *,
     max_bytes: int,
     tail_bytes: int,
     removed: list[str],
     errors: list[str],
 ) -> None:
-    logs = runtime_root / "logs"
     if not logs.is_dir():
         return
     bounded_tail = max(0, min(tail_bytes, max_bytes))
@@ -143,6 +146,23 @@ def _trim_agent_runtime_logs(
             removed.append(f"trimmed:{path}")
         except OSError as exc:
             errors.append(f"{path}: {exc}")
+
+
+def _trim_agent_runtime_logs(
+    runtime_root: Path,
+    *,
+    max_bytes: int,
+    tail_bytes: int,
+    removed: list[str],
+    errors: list[str],
+) -> None:
+    _trim_runtime_logs(
+        runtime_root / "logs",
+        max_bytes=max_bytes,
+        tail_bytes=tail_bytes,
+        removed=removed,
+        errors=errors,
+    )
 
 
 def _prune_agent_runtime_backups(
@@ -238,6 +258,13 @@ def main() -> int:
     )
     _trim_agent_runtime_logs(
         AGENT_RUNTIME_ROOT,
+        max_bytes=RUNTIME_LOG_MAX_BYTES,
+        tail_bytes=RUNTIME_LOG_TAIL_BYTES,
+        removed=removed,
+        errors=errors,
+    )
+    _trim_runtime_logs(
+        FHD_DESKTOP_LOG_ROOT,
         max_bytes=RUNTIME_LOG_MAX_BYTES,
         tail_bytes=RUNTIME_LOG_TAIL_BYTES,
         removed=removed,
