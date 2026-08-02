@@ -5,15 +5,70 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Query, Request
+from fastapi import APIRouter, Query
 
 logger = logging.getLogger(__name__)
 
 
-def _invoke(domain: str, action: str, **kwargs: Any):
-    from app.mod_sdk.erp_domain_dispatch import invoke_erp_domain_handler
+MOD_SOURCE = "mod:xcagi-wechat-bridge"
+EXECUTION_PATH = "mod_wechat_handler"
 
-    return invoke_erp_domain_handler(domain, action, **kwargs)
+
+def _tag(out: Any) -> Any:
+    if isinstance(out, dict):
+        tagged = dict(out)
+        inner = tagged.get("execution_path")
+        if inner and inner != EXECUTION_PATH:
+            tagged["handler_via"] = inner
+        tagged["source"] = MOD_SOURCE
+        tagged["execution_path"] = EXECUTION_PATH
+        return tagged
+    return out
+
+
+def _contacts_list(**kw: Any) -> Any:
+    from app.application import get_wechat_contact_app_service
+
+    keyword = kw.get("keyword")
+    contact_type = str(kw.get("type") or "all")
+    starred = str(kw.get("starred") or "false")
+    limit = int(kw.get("limit") or 100)
+    contacts = get_wechat_contact_app_service().get_contacts(
+        keyword=keyword,
+        contact_type=contact_type if contact_type != "all" else None,
+        starred_only=starred.lower() == "true",
+        limit=limit,
+    )
+    return _tag({"success": True, "data": contacts, "total": len(contacts)})
+
+
+def _contact_get(contact_id: int) -> Any:
+    from fastapi.responses import JSONResponse
+
+    from app.application import get_wechat_contact_app_service
+
+    contact = get_wechat_contact_app_service().get_contact_by_id(contact_id)
+    if contact:
+        return _tag({"success": True, "data": contact})
+    return JSONResponse({"success": False, "message": "联系人不存在"}, status_code=404)
+
+
+def _tasks(**kw: Any) -> Any:
+    from fastapi.responses import JSONResponse
+
+    from app.application import get_wechat_task_app_service
+
+    try:
+        tasks = get_wechat_task_app_service().get_tasks(
+            contact_id=kw.get("contact_id"),
+            status=str(kw.get("status") or "pending"),
+            limit=int(kw.get("limit") or 20),
+        )
+        return _tag({"success": True, "data": tasks, "total": len(tasks)})
+    except Exception as exc:  # noqa: BLE001 - preserve legacy error contract
+        return JSONResponse(
+            {"success": False, "message": f"查询失败：{exc}"}, status_code=500
+        )
 
 
 def register_fastapi_routes(app, mod_id: str) -> None:
@@ -38,9 +93,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         starred: str = Query(default="false"),
         limit: int = Query(default=100),
     ):
-        return _invoke(
-            "wechat",
-            "contacts_list",
+        return _contacts_list(
             keyword=keyword,
             type=type,
             starred=starred,
@@ -49,7 +102,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.get("/wechat/contacts/{contact_id:int}")
     def mod_wechat_contact_get(contact_id: int):
-        return _invoke("wechat", "contact_get", contact_id=contact_id)
+        return _contact_get(contact_id)
 
     @router.get("/wechat/tasks")
     def mod_wechat_tasks(
@@ -57,9 +110,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         contact_id: int | None = Query(default=None),
         limit: int = Query(default=20),
     ):
-        return _invoke(
-            "wechat",
-            "tasks",
+        return _tasks(
             status=status,
             contact_id=contact_id,
             limit=limit,

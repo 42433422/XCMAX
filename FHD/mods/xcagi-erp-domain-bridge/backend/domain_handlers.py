@@ -8,7 +8,7 @@ from typing import Any
 MOD_SOURCE = "mod:xcagi-erp-domain-bridge"
 EXECUTION_PATH = "mod_domain_handler"
 
-MOD_DOMAIN_IDS = frozenset({"products", "shipment", "customers", "wechat", "etl"})
+MOD_DOMAIN_IDS = frozenset({"products", "shipment", "customers", "etl"})
 
 
 def _tag(out: Any) -> Any:
@@ -467,9 +467,6 @@ _DISPATCH: dict[tuple[str, str], Any] = {
     ("customers", "create"): _customers_create,
     ("customers", "update"): _customers_update,
     ("customers", "delete"): _customers_delete,
-    ("wechat", "contacts_list"): _wechat_contacts_list,
-    ("wechat", "contact_get"): _wechat_contact_get,
-    ("wechat", "tasks"): _wechat_tasks,
     # ── ETL 数据对接中心 ──────────────────────────────────────────
     ("etl", "sources"): _etl_sources,
     ("etl", "preview"): _etl_preview,

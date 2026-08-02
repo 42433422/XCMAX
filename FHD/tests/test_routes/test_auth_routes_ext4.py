@@ -308,6 +308,57 @@ class TestAuthSessionValidate:
         assert result.status_code == 200
 
     @pytest.mark.asyncio
+    async def test_desktop_enterprise_restores_local_session_before_market_refresh(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """A signed-in desktop must not wait for xiu-ci.com before first paint."""
+        from app.fastapi_routes.domains.auth.routes import auth_session_validate
+
+        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+        request = MagicMock()
+        with (
+            patch(
+                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                return_value="sid",
+            ),
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
+            patch(
+                "app.fastapi_routes.market_account.session_market_token",
+                return_value="persisted-official-market-token",
+            ),
+            patch(
+                "app.fastapi_routes.domains.auth.routes._schedule_enterprise_session_refresh"
+            ) as schedule_refresh,
+            patch(
+                "app.enterprise.mod_entitlements.restore_entitlements_from_session_row",
+                return_value=True,
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids",
+                return_value=["xcagi-wechat-bridge"],
+            ),
+            patch(
+                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                return_value=None,
+            ),
+            patch(
+                "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
+                return_value={"account_kind": "enterprise"},
+            ),
+        ):
+            mock_service = MagicMock()
+            mock_service.session_manager.get_session_info.return_value = {"user_id": 1}
+            mock_get.return_value = mock_service
+            result = await auth_session_validate(request)
+
+        assert result["success"] is True
+        assert result["valid"] is True
+        assert result["official_market_refresh"] == "pending"
+        assert result["entitled_mod_ids"] == ["xcagi-wechat-bridge"]
+        schedule_refresh.assert_called_once_with("sid")
+
+    @pytest.mark.asyncio
     async def test_enterprise_with_market_token(self):
         from app.fastapi_routes.domains.auth.routes import auth_session_validate
 

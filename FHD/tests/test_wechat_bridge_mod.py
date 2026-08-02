@@ -38,3 +38,38 @@ def test_erp_bridge_manifest_remains_valid_after_wechat_extraction() -> None:
     assert "wechat" not in config["mod_domain_handlers"]
     assert "/api/wechat_contacts" not in config["legacy_host_prefixes"]
     assert "/wechat-contacts" not in config["legacy_host_page_paths"]
+
+
+def test_wechat_extraction_does_not_break_erp_handler_import() -> None:
+    from app.infrastructure.mods.mod_manager import import_mod_backend_py
+
+    erp = import_mod_backend_py(
+        str(MODS / "xcagi-erp-domain-bridge"),
+        "xcagi-erp-domain-bridge",
+        "domain_handlers",
+    )
+    assert "wechat.contacts_list" not in erp.list_registered_actions()
+    assert erp.run_domain_handler("wechat", "contacts_list") is None
+
+
+def test_standalone_wechat_bridge_owns_contact_handler(monkeypatch) -> None:
+    from app.infrastructure.mods.mod_manager import import_mod_backend_py
+
+    bridge = import_mod_backend_py(
+        str(MODS / "xcagi-wechat-bridge"),
+        "xcagi-wechat-bridge",
+        "blueprints",
+    )
+
+    class FakeWechatContacts:
+        def get_contacts(self, **_kwargs):
+            return [{"id": 3, "contact_name": "张三"}]
+
+    monkeypatch.setattr(
+        "app.application.get_wechat_contact_app_service",
+        lambda: FakeWechatContacts(),
+    )
+    output = bridge._contacts_list(limit=20)
+    assert output["success"] is True
+    assert output["data"][0]["id"] == 3
+    assert output["source"] == "mod:xcagi-wechat-bridge"
