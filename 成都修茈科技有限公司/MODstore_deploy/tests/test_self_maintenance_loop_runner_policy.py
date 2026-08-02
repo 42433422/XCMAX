@@ -1632,6 +1632,88 @@ def test_retort_non_scope_question_is_not_auto_remediated(monkeypatch):
     assert memory["open_items"] == []
 
 
+def test_reconcile_retort_scope_does_not_reopen_matching_closed_remediation(monkeypatch):
+    memory = {
+        "closed_items": [
+            {
+                "original_item": {
+                    "kind": "automated_remediation",
+                    "reason": "retort_scope_too_large",
+                    "run_id": "run-closed",
+                }
+            }
+        ],
+        "open_items": [],
+    }
+    monkeypatch.setattr(
+        loop_runner,
+        "_read_ledger",
+        lambda limit: [
+            {
+                "branch": "devfleet/cursor/closed-scope",
+                "error": "retort_clarification_pending",
+                "para_task_id": "task-closed",
+                "phase": "complete",
+                "retort_clarification": {
+                    "clarification": {
+                        "questions": [{"reason": "elevated_risk_or_large_diff"}],
+                    },
+                },
+                "run_id": "run-closed",
+                "status": "failed",
+            }
+        ],
+    )
+
+    assert _reconcile_retort_scope_remediations(memory) == {
+        "added": 0,
+        "changed": False,
+        "run_ids": [],
+    }
+    assert memory["open_items"] == []
+
+
+def test_reconcile_retort_scope_ignores_unrelated_closed_item_for_same_run(monkeypatch):
+    memory = {
+        "closed_items": [
+            {
+                "original_item": {
+                    "kind": "failed_steps",
+                    "reason": "employee_step_failed",
+                    "run_id": "run-shared",
+                }
+            }
+        ],
+        "open_items": [],
+    }
+    monkeypatch.setattr(
+        loop_runner,
+        "_read_ledger",
+        lambda limit: [
+            {
+                "branch": "devfleet/cursor/unresolved-scope",
+                "error": "retort_clarification_pending",
+                "para_task_id": "task-shared",
+                "phase": "complete",
+                "retort_clarification": {
+                    "clarification": {
+                        "questions": [{"reason": "elevated_risk_or_large_diff"}],
+                    },
+                },
+                "run_id": "run-shared",
+                "status": "failed",
+            }
+        ],
+    )
+
+    assert _reconcile_retort_scope_remediations(memory) == {
+        "added": 1,
+        "changed": True,
+        "run_ids": ["run-shared"],
+    }
+    assert memory["open_items"][0]["reason"] == "retort_scope_too_large"
+
+
 @pytest.mark.parametrize(
     "hold_reason",
     [

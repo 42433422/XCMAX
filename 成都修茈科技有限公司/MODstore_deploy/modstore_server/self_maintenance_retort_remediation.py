@@ -150,6 +150,17 @@ def reconcile_retort_scope_remediations(memory: dict[str, Any]) -> dict[str, Any
         and item.get("kind") == "automated_remediation"
         and str(item.get("reason") or "").strip() == RETORT_SCOPE_REASON
     }
+    closed_items = memory.get("closed_items")
+    if isinstance(closed_items, list):
+        existing_run_ids.update(
+            str(original_item.get("run_id") or "").strip()
+            for item in closed_items
+            if isinstance(item, dict)
+            for original_item in [item.get("original_item")]
+            if isinstance(original_item, dict)
+            and original_item.get("kind") == "automated_remediation"
+            and str(original_item.get("reason") or "").strip() == RETORT_SCOPE_REASON
+        )
     added_run_ids: list[str] = []
     for row in runner._read_ledger(limit=500):
         run_id = str(row.get("run_id") or "").strip()
