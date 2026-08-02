@@ -517,6 +517,30 @@ describe('main — readPackagedAppVersion', () => {
   })
 })
 
+describe('main — transient desktop load aborts', () => {
+  it('accepts an ERR_ABORTED only after the trusted local page is already present', async () => {
+    const { isBenignDesktopLoadAbort } = await import('./main.js')
+    expect(
+      isBenignDesktopLoadAbort(
+        new Error('ERR_ABORTED (-3) loading http://127.0.0.1:17500/'),
+        'http://127.0.0.1:17500/',
+        17500,
+      ),
+    ).toBe(true)
+  })
+
+  it('does not hide navigation errors to an untrusted page', async () => {
+    const { isBenignDesktopLoadAbort } = await import('./main.js')
+    expect(
+      isBenignDesktopLoadAbort(
+        new Error('ERR_ABORTED (-3) loading https://example.com/'),
+        'https://example.com/',
+        17500,
+      ),
+    ).toBe(false)
+  })
+})
+
 describe('main — frontend cache', () => {
   let savedResourcesPath: string | undefined
   let tmpResources: string

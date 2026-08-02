@@ -22,7 +22,10 @@ import { resolvePlannerChatHomePath, resolvePlannerPagePath } from '@/utils/plan
 import { readActiveExtensionModId } from '@/utils/erpDomainPaths';
 import { isProtectedClientModId } from '@/constants/protectedMods';
 import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku';
-import { validateEnterpriseSessionCached } from '@/utils/authSessionCache';
+import {
+  hasRecentEnterpriseSessionHint,
+  validateEnterpriseSessionCached,
+} from '@/utils/authSessionCache';
 import { useModsStore } from '@/stores/mods';
 import {
   DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
@@ -465,7 +468,45 @@ const router = createRouter({
   routes
 });
 
+type DesktopProfileHydrator = {
+  loaded: boolean
+  refreshFromServer: () => Promise<void>
+}
+
+let desktopSessionRefreshInFlight: Promise<void> | null = null
+
+/**
+ * A prior official validation is enough to render the local shell while a
+ * fresh validation happens in the background. API permissions remain enforced
+ * server-side; an invalid result immediately returns to the login page.
+ */
+function refreshDesktopSessionInBackground(
+  profile: DesktopProfileHydrator,
+  redirect: string,
+): void {
+  if (desktopSessionRefreshInFlight) return
+  desktopSessionRefreshInFlight = validateEnterpriseSessionCached(true)
+    .then(async (valid) => {
+      if (!valid) {
+        await router.replace({ name: 'login', query: { redirect } })
+        return
+      }
+      await profile.refreshFromServer()
+      if (!profile.loaded) {
+        await router.replace({ name: 'login', query: { redirect } })
+      }
+    })
+    .catch(() => {
+      // Network trouble must not discard a previously working local shell.
+      // The next foreground request or navigation revalidates the account.
+    })
+    .finally(() => {
+      desktopSessionRefreshInFlight = null
+    })
+}
+
 router.beforeEach(async (to, _from, next) => {
+  let provisionalDesktopEntry = false
   if (to.name === 'duty-roster-graph') {
     const nextView = normalizeDutyRosterGraphView(to.query.view);
     const currentView = String(Array.isArray(to.query.view) ? to.query.view[0] : to.query.view || '').trim().toLowerCase();
@@ -668,10 +709,14 @@ router.beforeEach(async (to, _from, next) => {
     try {
       const { useAccountProfileStore } = await import('@/stores/accountProfile');
       const profile = useAccountProfileStore();
-      if (!profile.loaded) {
+      const useSessionHint = !profile.loaded && hasRecentEnterpriseSessionHint()
+      if (useSessionHint) {
+        provisionalDesktopEntry = true
+        refreshDesktopSessionInBackground(profile, to.fullPath !== '/login' ? to.fullPath : '/')
+      } else if (!profile.loaded) {
         await profile.refreshFromServer();
       }
-      if (profile.isAdminAccount && to.name !== 'login') {
+      if (!provisionalDesktopEntry && profile.isAdminAccount && to.name !== 'login') {
         try {
           const { authApi } = await import('@/api/auth');
           await authApi.logout().catch(() => undefined);
@@ -713,7 +758,11 @@ router.beforeEach(async (to, _from, next) => {
     try {
       const sku = await fetchProductSku();
       if (isEnterpriseEdition(sku)) {
-        const valid = await validateEnterpriseSessionCached();
+        const useSessionHint = isDesktopShell() && provisionalDesktopEntry
+        if (useSessionHint) {
+          provisionalDesktopEntry = true
+        }
+        const valid = useSessionHint ? true : await validateEnterpriseSessionCached();
         if (!valid) {
           next({
             name: 'login',
@@ -724,10 +773,17 @@ router.beforeEach(async (to, _from, next) => {
         try {
           const { useAccountProfileStore } = await import('@/stores/accountProfile');
           const profile = useAccountProfileStore();
-          if (!profile.loaded) {
+          if (provisionalDesktopEntry && !profile.loaded) {
+            refreshDesktopSessionInBackground(profile, to.fullPath !== '/login' ? to.fullPath : '/')
+          } else if (!profile.loaded) {
             await profile.refreshFromServer();
           }
-          if (!isAdminConsoleSpa() && profile.isAdminAccount && to.name !== 'login') {
+          if (
+            !provisionalDesktopEntry &&
+            !isAdminConsoleSpa() &&
+            profile.isAdminAccount &&
+            to.name !== 'login'
+          ) {
             // 非桌面：网页企业壳把 admin 会话导向独立管理端；桌面已在上方拒入
             if (isDesktopShell()) {
               try {
@@ -776,6 +832,13 @@ router.beforeEach(async (to, _from, next) => {
       });
       return;
     }
+  }
+
+  // Do not turn an existing desktop user into a first-run user while the
+  // background validation and tenant preference hydration are still running.
+  if (provisionalDesktopEntry) {
+    next()
+    return
   }
 
   if (

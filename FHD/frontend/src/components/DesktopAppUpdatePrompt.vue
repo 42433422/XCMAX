@@ -123,6 +123,9 @@
       </div>
 
       <p v-if="errorMessage" class="desktop-update-error">{{ errorMessage }}</p>
+      <p v-if="selfUpdateBlockReason" class="desktop-update-error">
+        {{ selfUpdateBlockReason }} 已保存的数据和登录状态不会被清除。
+      </p>
     </div>
     <template #footer>
       <button type="button" class="btn btn-secondary btn-sm" :disabled="busy" @click="closeModal">
@@ -131,10 +134,11 @@
       <button
         type="button"
         class="btn btn-primary btn-sm"
-        :disabled="busy || phase === 'downloading'"
+        :disabled="busy || phase === 'downloading' || !isSelfUpdateSupported"
         @click="primaryAction"
       >
-        <template v-if="phase === 'downloaded'">更新并重新加载</template>
+        <template v-if="!isSelfUpdateSupported">请先正式安装</template>
+        <template v-else-if="phase === 'downloaded'">更新并重新加载</template>
         <template v-else-if="phase === 'downloading'">下载中…</template>
         <template v-else>下载更新</template>
       </button>
@@ -158,6 +162,8 @@ const {
   badgeLabel,
   notesText,
   mediaSlides,
+  selfUpdateBlockReason,
+  isSelfUpdateSupported,
   openModal,
   closeModal,
   dismiss,
