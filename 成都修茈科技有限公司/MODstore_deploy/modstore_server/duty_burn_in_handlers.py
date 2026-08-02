@@ -93,3 +93,42 @@ def bind_reviewed_burn_in_handlers(
         actions["handlers"] = selected
     bound["actions"] = actions
     return bound
+
+
+def deterministic_direct_input_ready(actions_cfg: Dict[str, Any], payload: Dict[str, Any]) -> bool:
+    """Return true only for a reviewed read-only employee-module contract."""
+
+    direct = (
+        actions_cfg.get("direct_python")
+        if isinstance(actions_cfg.get("direct_python"), dict)
+        else {}
+    )
+    if (
+        str(direct.get("implementation") or "").strip().lower() != "employee_module"
+        or str(direct.get("execution_mode") or "").strip().lower() != "deterministic"
+        or direct.get("read_only") is not True
+    ):
+        return False
+    schema = direct.get("input_schema") if isinstance(direct.get("input_schema"), dict) else {}
+    required = schema.get("required") if isinstance(schema.get("required"), list) else []
+    return bool(required) and all(str(key).strip() and str(key) in payload for key in required)
+
+
+def is_reviewed_direct_burn_in(
+    actions_cfg: Dict[str, Any],
+    payload: Dict[str, Any],
+    requested_handler: str,
+    handlers: list[str],
+    *,
+    burn_in: bool,
+    read_only: bool,
+) -> bool:
+    """Keep an approved deterministic burn-in on its sole reviewed handler."""
+
+    return bool(
+        requested_handler == "direct_python"
+        and handlers == ["direct_python"]
+        and burn_in
+        and read_only
+        and deterministic_direct_input_ready(actions_cfg, payload)
+    )
