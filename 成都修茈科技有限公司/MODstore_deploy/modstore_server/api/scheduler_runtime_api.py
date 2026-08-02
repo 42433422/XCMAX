@@ -53,27 +53,40 @@ def scheduler_runtime(stale_after_seconds: int | None = None) -> dict:
         if code:
             failure_code_counts[code] = failure_code_counts.get(code, 0) + 1
     deferred_observed = approval_required.intersection(observed)
+    policy_held_execution_ids = {
+        f"{_EXECUTION_PREFIX}{employee_id}" for employee_id in deferred_observed
+    }
     policy_held_failed_execution_ids = {
-        f"{_EXECUTION_PREFIX}{employee_id}"
-        for employee_id in deferred_observed
-        if str(observed[employee_id].get("last_status") or "") == "failed"
+        job_id
+        for job_id in policy_held_execution_ids
+        if str(observed[job_id.removeprefix(_EXECUTION_PREFIX)].get("state") or "") == "failing"
+    }
+    policy_held_stale_execution_ids = {
+        job_id
+        for job_id in policy_held_execution_ids
+        if str(observed[job_id.removeprefix(_EXECUTION_PREFIX)].get("state") or "") == "stale"
     }
 
-    # Keep the raw scheduler ledger summary intact: a historical failed run is
-    # still evidence. Expose its current policy context separately so callers
-    # can alert only on failures that are actionable without human approval.
+    # Keep the raw scheduler ledger summary intact: historical executions are
+    # still evidence. Expose current policy context separately so callers alert
+    # only on failures or stale duties actionable without human approval.
     jobs = runtime.get("jobs") or []
-    actionable_failing_count = sum(
-        1
-        for item in jobs
-        if isinstance(item, dict)
-        and str(item.get("state") or "") == "failing"
-        and str(item.get("job_id") or "") not in policy_held_failed_execution_ids
-    )
+
+    def _actionable_count(state: str) -> int:
+        return sum(
+            1
+            for item in jobs
+            if isinstance(item, dict)
+            and str(item.get("state") or "") == state
+            and str(item.get("job_id") or "") not in policy_held_execution_ids
+        )
+
     summary = runtime.get("summary")
     if isinstance(summary, dict):
         summary["policy_held_failures"] = len(policy_held_failed_execution_ids)
-        summary["actionable_failing"] = actionable_failing_count
+        summary["policy_held_stale"] = len(policy_held_stale_execution_ids)
+        summary["actionable_failing"] = _actionable_count("failing")
+        summary["actionable_stale"] = _actionable_count("stale")
 
     runtime["employee_duty"] = {
         "registration_observable": bool(registrations),
@@ -87,6 +100,7 @@ def scheduler_runtime(stale_after_seconds: int | None = None) -> dict:
         "never_run_count": len(registered_ids - observed_registered),
         "approval_required_observed_execution_count": len(deferred_observed),
         "policy_held_observed_failure_count": len(policy_held_failed_execution_ids),
+        "policy_held_observed_stale_count": len(policy_held_stale_execution_ids),
         "unregistered_observed_count": len(set(observed) - registered_ids - approval_required),
     }
     try:
