@@ -495,7 +495,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--peak-floor",
         action="store_true",
-        help="check：启用峰值硬阻断，低于历史峰值 %.1f%% 即失败" % PEAK_FLOOR_MARGIN,
+        help="check：启用峰值硬阻断，低于历史峰值 %.1f%%%% 即失败" % PEAK_FLOOR_MARGIN,
     )
     args = parser.parse_args(argv)
 

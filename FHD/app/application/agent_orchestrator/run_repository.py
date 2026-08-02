@@ -79,6 +79,7 @@ class SQLAlchemyAgentRunRepository:
         self._session_factory = session_factory
         self._auto_create = auto_create
         self._schema_ready = False
+        self._schema_bind_key: str | None = None
         self._schema_lock = threading.RLock()
 
     def save(self, run: AgentRun) -> AgentRun:
@@ -173,21 +174,24 @@ class SQLAlchemyAgentRunRepository:
             db.close()
 
     def _ensure_schema(self) -> None:
-        if not self._auto_create or self._schema_ready:
+        if not self._auto_create:
             return
         with self._schema_lock:
-            if self._schema_ready:
-                return
             with self._session_scope(read_only=True) as db:
                 from app.db.base import Base
                 from app.db.models.agent import AgentRunRecord
 
+                bind = db.get_bind()
+                bind_key = str(getattr(bind, "url", bind))
+                if self._schema_ready and self._schema_bind_key == bind_key:
+                    return
                 Base.metadata.create_all(
-                    bind=db.get_bind(),
+                    bind=bind,
                     tables=[AgentRunRecord.__table__],
                     checkfirst=True,
                 )
             self._schema_ready = True
+            self._schema_bind_key = bind_key
 
     @staticmethod
     def _record_to_run(record) -> AgentRun | None:

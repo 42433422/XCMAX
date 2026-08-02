@@ -32,14 +32,16 @@ def essential_app() -> FastAPI:
 def _collect_paths(app: FastAPI) -> list[str]:
     paths: set[str] = set()
     for route in app.routes:
-        # FastAPI 0.138+ 用 _IncludedRouter 包装 include_router 的路由，
-        # 实际路径在 original_router.routes 中；旧版直接展开为 Route。
-        orig = getattr(route, "original_router", None)
-        if orig is not None:
-            for sub in getattr(orig, "routes", []):
-                p = getattr(sub, "path", None)
-                if p:
-                    paths.add(p)
+        # FastAPI 0.138+ uses _IncludedRouter for include_router; the direct
+        # paths live on original_router.routes.  This shallow snapshot is kept
+        # for stable compatibility coverage, while nested product routers are
+        # checked below through iter_effective_routes with their full prefixes.
+        original_router = getattr(route, "original_router", None)
+        if original_router is not None:
+            for child in getattr(original_router, "routes", []):
+                path = getattr(child, "path", None)
+                if path:
+                    paths.add(path)
         else:
             path = getattr(route, "path", None)
             if path:
@@ -61,3 +63,15 @@ def test_golden_route_snapshot_essential(essential_app: FastAPI):
     if GOLDEN_PATH.exists():
         expected = json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))
         assert paths == expected
+
+
+def test_private_delivery_routes_are_exposed(essential_app: FastAPI):
+    paths = {route.path for route in iter_effective_routes(essential_app.routes) if route.path}
+    assert {
+        "/api/mod-store/private-delivery",
+        "/api/mod-store/private-delivery/requests",
+        "/api/mod-store/private-delivery/requests/{ticket_id}/decision",
+        "/api/mod-store/private-delivery/requests/{ticket_id}/install",
+        "/api/mod-store/private-delivery/status",
+        "/api/mod-store/private-mod/update",
+    } <= paths

@@ -220,7 +220,7 @@ def test_product_parse_edge_cases() -> None:
 # ---------------------------------------------------------------------------
 
 
-@patch("app.db.session.get_db")
+@patch("app.application.wechat_task_app_service.get_db")
 def test_wechat_task_app_service_list(mock_get_db: MagicMock) -> None:
     from app.application.wechat_task_app_service import WechatTaskApplicationService
 

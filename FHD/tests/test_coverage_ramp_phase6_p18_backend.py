@@ -2719,7 +2719,18 @@ class TestMobileExtCsRoutes:
         mock_user = MagicMock()
         mock_user.id = 1
         mock_request = MagicMock()
-        result = await ext_mod.get_cs_messages(request=mock_request, user=mock_user)
+        mock_db = MagicMock()
+        mock_db.__enter__ = MagicMock(return_value=mock_db)
+        mock_db.__exit__ = MagicMock(return_value=False)
+        mock_svc = MagicMock()
+        mock_svc._ensure_enterprise_dedicated_cs_user.return_value = SimpleNamespace(id=99)
+        mock_svc.get_or_create_direct.return_value = {"id": 7}
+        mock_svc.list_messages.return_value = []
+        with (
+            patch("app.db.session.get_db", return_value=mock_db),
+            patch("app.application.im_app_service.ImApplicationService", return_value=mock_svc),
+        ):
+            result = await ext_mod.get_cs_messages(request=mock_request, user=mock_user)
         if hasattr(result, "body"):
             data = json.loads(result.body)
         else:

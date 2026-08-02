@@ -152,3 +152,17 @@ def test_sqlalchemy_agent_run_repository_persists_runs_across_instances(tmp_path
 
     events_after_first = restored_repo.list_events(run.run_id, after_event_id=first_event.event_id)
     assert [event.event_type for event in events_after_first] == ["run.completed"]
+
+
+def test_sqlalchemy_agent_run_repository_initializes_each_database_bind(tmp_path) -> None:
+    first_factory = sessionmaker(bind=create_engine(f"sqlite:///{tmp_path / 'first.db'}"))
+    second_factory = sessionmaker(bind=create_engine(f"sqlite:///{tmp_path / 'second.db'}"))
+    repo = SQLAlchemyAgentRunRepository(session_factory=first_factory)
+
+    repo.save(AgentRun(user_id="u1", message="first database"))
+    repo._session_factory = second_factory
+
+    # A repository can survive a desktop storage-profile switch.  The second
+    # SQLite file has no tables yet, so clear() must initialize its own schema.
+    repo.clear()
+    assert repo.list_recent(limit=10) == []

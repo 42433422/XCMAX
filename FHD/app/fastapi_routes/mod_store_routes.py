@@ -612,7 +612,9 @@ def _private_mod_declared_nodes(
     return {"modules": modules, "employees": employees}
 
 
-@router.get("/private-delivery", response_model=ModStoreSimpleResponse)
+# The canonical private-delivery endpoints were moved to
+# ``private_mod_delivery_routes``.  Keep this legacy implementation unregistered
+# during the transition so it cannot shadow the canonical handlers.
 async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse:
     """生产员工专用：客户私有 Mod 双轨交付状态与私有更新信息。"""
     from app.mod_sdk.customer_delivery import delivery_for_account_custom_mod
@@ -720,7 +722,6 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
     )
 
 
-@router.post("/private-delivery/status", response_model=ModStoreSimpleResponse)
 async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleResponse:
     payload = await _request_payload(request)
     mod_id = _safe_text(payload.get("mod_id"))
@@ -830,7 +831,6 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
     )
 
 
-@router.post("/private-mod/update", response_model=ModStoreInstallResult)
 async def mod_store_private_mod_update(request: Request) -> ModStoreInstallResult:
     payload = await _request_payload(request)
     mod_id = _safe_text(payload.get("mod_id"))
