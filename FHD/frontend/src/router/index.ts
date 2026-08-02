@@ -41,21 +41,8 @@ import {
 import { buildRoleMenuProfile, canShowCoreMenuKey } from '@/utils/roleMenuProfile';
 import { isClientErpSidebarContext } from '@/constants/genericModPack';
 import { AI_DELIVERY_ROUTES } from './privateModDeliveryRoutes';
-const isSandbox = new URLSearchParams(window.location.search).has('sandbox');
-
-const SANDBOX_ALLOWED = new Set([
-  'login',
-  'login-help',
-  'login-register',
-  'login-forgot-account',
-  'login-forgot-password',
-  'chat',
-  'workflow-employee-space',
-  'workflow-employee-stitch-full',
-  'mod-landing',
-  'chat-debug',
-  'tools',
-]);
+import { resolveInitialRoutes } from './initialRouteSelection';
+import { refreshDesktopSessionInBackground } from '@/utils/desktopSessionRestore';
 
 const DEFAULT_DUTY_ROSTER_GRAPH_VIEW = 'department';
 
@@ -432,79 +419,12 @@ if (import.meta.env.VITE_XCMAX_ADMIN_CONSOLE === '1') {
   allRoutes.push(...ADMIN_HOST_ROUTE_RECORDS);
 }
 
-function filterSandboxRoutes(routes: RouteRecordRaw[]): RouteRecordRaw[] {
-  return routes.filter((r) => {
-    if (!r.name) return false;
-    if (SANDBOX_ALLOWED.has(r.name as string)) return true;
-    if (r.path === '/employee-workspace' || r.path === '/yuangong-stitch') return true;
-    return false;
-  });
-}
-
-function filterPlatformShellRoutes(routes: RouteRecordRaw[]): RouteRecordRaw[] {
-  return routes.filter((r) => {
-    if (!r.name) return false;
-    if (SHELL_CORE_ROUTE_NAMES.has(r.name as string)) return true;
-    if (INDUSTRY_DELIVERY_ROUTE_NAMES.has(r.name as string)) return true;
-    if (r.meta?.mod === true) return true;
-    if (r.meta?.hostAdmin === true) return true;
-    if (r.path === '/employee-workspace' || r.path === '/yuangong-stitch') return true;
-    if (r.path?.startsWith('/mod/')) return true;
-    return false;
-  });
-}
-
-function resolveInitialRoutes(): RouteRecordRaw[] {
-  if (isAdminConsoleSpa()) return allRoutes;
-  if (isSandbox) return filterSandboxRoutes(allRoutes);
-  if (isPlatformShellModeEnabled()) return filterPlatformShellRoutes(allRoutes);
-  return allRoutes;
-}
-
-const routes = resolveInitialRoutes();
+const routes = resolveInitialRoutes(allRoutes);
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes
 });
-
-type DesktopProfileHydrator = {
-  loaded: boolean
-  refreshFromServer: () => Promise<void>
-}
-
-let desktopSessionRefreshInFlight: Promise<void> | null = null
-
-/**
- * A prior official validation is enough to render the local shell while a
- * fresh validation happens in the background. API permissions remain enforced
- * server-side; an invalid result immediately returns to the login page.
- */
-function refreshDesktopSessionInBackground(
-  profile: DesktopProfileHydrator,
-  redirect: string,
-): void {
-  if (desktopSessionRefreshInFlight) return
-  desktopSessionRefreshInFlight = validateEnterpriseSessionCached(true)
-    .then(async (valid) => {
-      if (!valid) {
-        await router.replace({ name: 'login', query: { redirect } })
-        return
-      }
-      await profile.refreshFromServer()
-      if (!profile.loaded) {
-        await router.replace({ name: 'login', query: { redirect } })
-      }
-    })
-    .catch(() => {
-      // Network trouble must not discard a previously working local shell.
-      // The next foreground request or navigation revalidates the account.
-    })
-    .finally(() => {
-      desktopSessionRefreshInFlight = null
-    })
-}
-
 router.beforeEach(async (to, _from, next) => {
   let provisionalDesktopEntry = false
   if (to.name === 'duty-roster-graph') {
@@ -712,7 +632,7 @@ router.beforeEach(async (to, _from, next) => {
       const useSessionHint = !profile.loaded && hasRecentEnterpriseSessionHint()
       if (useSessionHint) {
         provisionalDesktopEntry = true
-        refreshDesktopSessionInBackground(profile, to.fullPath !== '/login' ? to.fullPath : '/')
+        refreshDesktopSessionInBackground(router, profile, to.fullPath !== '/login' ? to.fullPath : '/')
       } else if (!profile.loaded) {
         await profile.refreshFromServer();
       }
@@ -774,7 +694,7 @@ router.beforeEach(async (to, _from, next) => {
           const { useAccountProfileStore } = await import('@/stores/accountProfile');
           const profile = useAccountProfileStore();
           if (provisionalDesktopEntry && !profile.loaded) {
-            refreshDesktopSessionInBackground(profile, to.fullPath !== '/login' ? to.fullPath : '/')
+            refreshDesktopSessionInBackground(router, profile, to.fullPath !== '/login' ? to.fullPath : '/')
           } else if (!profile.loaded) {
             await profile.refreshFromServer();
           }
