@@ -267,6 +267,87 @@ def test_pending_remediation_resumes_without_force(
     ]
 
 
+def test_pending_retort_clarification_is_deferred_for_scheduler(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "modstore_server.autonomy_scheduler.pending_automated_remediation",
+        lambda: {
+            "branch": "devfleet/trae/needs-clarification",
+            "reason": "retort_scope_too_large",
+            "run_id": "run-retort",
+            "task_id": "task-retort",
+        },
+    )
+    monkeypatch.setattr(
+        "modstore_server.self_maintenance_loop_runner.run_self_maintenance_loop",
+        lambda **_kwargs: {
+            "status": "failed",
+            "error": "retort_clarification_pending",
+        },
+    )
+
+    result = run_pending_automated_remediation()
+
+    assert result["status"] == "failed"  # Preserve the loop's own veto receipt.
+    assert result["scheduler_status"] == "deferred"
+    assert result["scheduler_reason"] == "retort_clarification_pending"
+
+
+def test_pending_unexpected_remediation_failure_still_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "modstore_server.autonomy_scheduler.pending_automated_remediation",
+        lambda: {
+            "branch": "devfleet/trae/broken",
+            "reason": "structured_review_blocking_findings",
+            "run_id": "run-broken",
+            "task_id": "task-broken",
+        },
+    )
+    monkeypatch.setattr(
+        "modstore_server.self_maintenance_loop_runner.run_self_maintenance_loop",
+        lambda **_kwargs: {"status": "failed", "error": "execution_timeout"},
+    )
+
+    with pytest.raises(
+        RuntimeError, match="automated self-maintenance remediation failed: execution_timeout"
+    ):
+        run_pending_automated_remediation()
+
+
+def test_remediation_scheduler_records_retort_hold_as_deferred(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records: list[dict] = []
+    monkeypatch.setattr(
+        "modstore_server.autonomy_scheduler.register_founder_scorecard_job",
+        lambda _scheduler: None,
+    )
+    monkeypatch.setattr(
+        "modstore_server.autonomy_scheduler.run_pending_automated_remediation",
+        lambda: {
+            "status": "failed",
+            "scheduler_status": "deferred",
+            "scheduler_reason": "retort_clarification_pending",
+        },
+    )
+    monkeypatch.setattr(
+        "modstore_server.scheduler_runtime.record_job_run",
+        lambda **kwargs: records.append(kwargs),
+    )
+    scheduler = MagicMock()
+
+    register_autonomy_jobs(scheduler)
+    remediation_job = scheduler.add_job.call_args.args[0]
+    remediation_job()
+
+    assert records[-1]["job_id"] == "self_maintenance_remediation_loop"
+    assert records[-1]["status"] == "deferred"
+    assert records[-1]["error"] == "retort_clarification_pending"
+
+
 def test_no_pending_remediation_does_not_start_loop(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
