@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import subprocess
 from pathlib import Path
 
 
@@ -83,4 +84,59 @@ def test_runtime_log_directory_is_bounded(tmp_path: Path) -> None:
 
     assert log.read_bytes() == b"6789"
     assert removed == [f"trimmed:{log}"]
+    assert errors == []
+
+
+def _init_git_workspace(path: Path) -> None:
+    path.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(path)], check=True)
+    (path / "tracked.txt").write_text("tracked", encoding="utf-8")
+    subprocess.run(["git", "-C", str(path), "add", "tracked.txt"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(path),
+            "-c",
+            "user.name=test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qm",
+            "initial",
+        ],
+        check=True,
+    )
+
+
+def test_temp_cleanup_requires_clean_unregistered_and_expired_workspace(
+    tmp_path: Path,
+) -> None:
+    temp_root = tmp_path / "private-tmp"
+    stale = temp_root / "xcmax-stale" / "repo"
+    dirty = temp_root / "xcmax-dirty" / "repo"
+    active = temp_root / "xcagi-active" / "worktree"
+    for repo in (stale, dirty, active):
+        _init_git_workspace(repo)
+        os.utime(repo.parent, (1, 1))
+    (dirty / "tracked.txt").write_text("changed", encoding="utf-8")
+
+    removed: list[str] = []
+    kept: list[str] = []
+    errors: list[str] = []
+    MODULE._clean_unregistered_temp_workspaces(
+        temp_root,
+        max_age=60,
+        prefixes=("xcmax-", "xcagi-"),
+        removed=removed,
+        kept=kept,
+        errors=errors,
+        registered_worktrees={active.resolve()},
+    )
+
+    assert not stale.parent.exists()
+    assert dirty.parent.exists()
+    assert active.parent.exists()
+    assert any(item.endswith("xcmax-dirty: uncommitted_changes") for item in kept)
+    assert any(item.endswith("xcagi-active: registered_git_worktree") for item in kept)
     assert errors == []
