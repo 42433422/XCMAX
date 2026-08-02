@@ -451,6 +451,15 @@ def _market_http_timeout() -> float:
         return 20.0
 
 
+def _market_auth_timeout() -> float:
+    """Bound interactive sign-in separately from slower market data reads."""
+
+    try:
+        return max(3.0, float(os.environ.get("XCAGI_MARKET_AUTH_TIMEOUT", "8")))
+    except ValueError:
+        return 8.0
+
+
 def _market_http_retries() -> int:
     try:
         return max(1, int(os.environ.get("XCAGI_MARKET_HTTP_RETRIES", "1")))
@@ -536,6 +545,8 @@ async def _proxy_json(
     authorization: str = "",
     extra_headers: dict[str, str] | None = None,
     return_error_payload: bool = False,
+    timeout_seconds: float | None = None,
+    preflight_csrf: bool = True,
 ):
     url = f"{_market_base_url()}{path}"
     headers: dict[str, str] = {"Accept": "application/json"}
@@ -545,7 +556,7 @@ async def _proxy_json(
         for key, val in extra_headers.items():
             if key and val:
                 headers[str(key)] = str(val)
-    timeout = _market_http_timeout()
+    timeout = timeout_seconds if timeout_seconds is not None else _market_http_timeout()
     retries = _market_http_retries()
     last_exc: Exception | None = None
     mutating = str(method).upper() in {"POST", "PUT", "PATCH", "DELETE"}
@@ -566,7 +577,7 @@ async def _proxy_json(
             else:
                 async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
                     req_headers = dict(headers)
-                    if mutating:
+                    if mutating and preflight_csrf:
                         # 市场对变更类请求强制 CSRF 双提交:先 GET 任意端点拿 csrf_token cookie,
                         # 再以同值 X-CSRF-Token 头回传(cookie 由同一 client 自动携带)。
                         # 失败不阻断主请求(老市场无 CSRF 时无副作用)。
@@ -1145,6 +1156,7 @@ async def _normalize_market_auth_payload(
     payload: Any,
     *,
     market_base: str | None = None,
+    timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Turn market login JSON into normalized token payload."""
     if isinstance(payload, JSONResponse):
@@ -1175,18 +1187,35 @@ async def _normalize_market_auth_payload(
     refresh = _refresh_token_from_auth_response(payload)
     if not token:
         return {"success": False, "message": "市场登录成功但未返回 access_token", "raw": payload}
-    me = await _proxy_json(
-        "GET", "/api/auth/me", authorization=f"Bearer {token}", return_error_payload=True
+    # Current market login responses carry the signed enterprise/admin claim.
+    # Re-fetching /api/auth/me before creating the local session adds a second
+    # WAN round trip.  Keep the strict profile lookup whenever that positive
+    # claim is absent, so a missing or negative claim cannot grant access.
+    login_is_enterprise, login_is_market_admin, login_user_blob = _market_identity_from_payloads(
+        payload
     )
+    identity_is_sufficient = bool(login_user_blob) and (
+        login_is_enterprise or login_is_market_admin
+    )
+    me: Any = {}
+    if not identity_is_sufficient:
+        me = await _proxy_json(
+            "GET",
+            "/api/auth/me",
+            authorization=f"Bearer {token}",
+            return_error_payload=True,
+            timeout_seconds=timeout_seconds,
+        )
     is_enterprise, is_market_admin, user_blob = _market_identity_from_payloads(payload, me)
     logger.info(
-        "market auth normalized base=%s success=True is_enterprise=%s is_market_admin=%s username=%s raw_keys=%s me_keys=%s",
+        "market auth normalized base=%s success=True is_enterprise=%s is_market_admin=%s username=%s raw_keys=%s me_keys=%s profile_refresh_skipped=%s",
         market_base or _market_base_url(),
         is_enterprise,
         is_market_admin,
         str(user_blob.get("username") or ""),
         sorted(payload.keys()) if isinstance(payload, dict) else [],
         sorted(me.keys()) if isinstance(me, dict) else [],
+        identity_is_sufficient,
     )
     raw_out = dict(payload) if isinstance(payload, dict) else {}
     if user_blob and not isinstance(raw_out.get("user"), dict):
@@ -1211,9 +1240,26 @@ async def login_market_with_password(username: str, password: str) -> dict[str, 
     if demo_shim and _is_local_market_base(market_base):
         return _demo_market_login_payload(demo_shim, market_base_url=market_base)
 
+    auth_timeout = _market_auth_timeout()
     payload = await _proxy_json(
-        "POST", "/api/auth/login", json_body={"username": username, "password": password}
+        "POST",
+        "/api/auth/login",
+        json_body={"username": username, "password": password},
+        timeout_seconds=auth_timeout,
+        # The market's anonymous password-login route is CSRF exempt.  Avoid
+        # an otherwise redundant remote cookie round trip before every login.
+        preflight_csrf=False,
     )
+    # Retain compatibility with older market deployments that still require
+    # the double-submit cookie: only a 403 gets one recovery attempt.
+    if isinstance(payload, JSONResponse) and int(payload.status_code or 0) == 403:
+        payload = await _proxy_json(
+            "POST",
+            "/api/auth/login",
+            json_body={"username": username, "password": password},
+            timeout_seconds=auth_timeout,
+            preflight_csrf=True,
+        )
     if isinstance(payload, JSONResponse):
         try:
             status_code = int(payload.status_code or 502)
@@ -1221,7 +1267,11 @@ async def login_market_with_password(username: str, password: str) -> dict[str, 
             status_code = 502
         if demo_shim and _is_local_market_base(market_base) and status_code >= 400:
             return _demo_market_login_payload(demo_shim, market_base_url=market_base)
-    result = await _normalize_market_auth_payload(payload, market_base=market_base)
+    result = await _normalize_market_auth_payload(
+        payload,
+        market_base=market_base,
+        timeout_seconds=auth_timeout,
+    )
     if not result.get("success") and demo_shim and _is_local_market_base(market_base):
         sc = int(result.get("status_code") or 502)
         if sc >= 400:
@@ -1232,12 +1282,27 @@ async def login_market_with_password(username: str, password: str) -> dict[str, 
 async def login_market_with_phone_code(phone: str, code: str) -> dict[str, Any]:
     """Authenticate against market via phone verification code."""
     market_base = _market_base_url()
+    auth_timeout = _market_auth_timeout()
     payload = await _proxy_json(
         "POST",
         "/api/auth/login-with-phone-code",
         json_body={"phone": (phone or "").strip(), "code": (code or "").strip()},
+        timeout_seconds=auth_timeout,
+        preflight_csrf=False,
     )
-    return await _normalize_market_auth_payload(payload, market_base=market_base)
+    if isinstance(payload, JSONResponse) and int(payload.status_code or 0) == 403:
+        payload = await _proxy_json(
+            "POST",
+            "/api/auth/login-with-phone-code",
+            json_body={"phone": (phone or "").strip(), "code": (code or "").strip()},
+            timeout_seconds=auth_timeout,
+            preflight_csrf=True,
+        )
+    return await _normalize_market_auth_payload(
+        payload,
+        market_base=market_base,
+        timeout_seconds=auth_timeout,
+    )
 
 
 def _market_internal_api_key() -> str:

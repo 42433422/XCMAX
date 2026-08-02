@@ -30,8 +30,6 @@ async def test_login_market_for_oidc_profile_uses_internal_bridge(monkeypatch):
                         "user": {"id": 1, "username": "sso-user", "is_enterprise": True},
                     },
                 },
-                # 3) _normalize_market_auth_payload 用市场 token 再查一次 /api/auth/me 取身份
-                {"id": 1, "username": "sso-user", "is_enterprise": True},
             ]
         ),
     ) as proxy_mock:
@@ -39,15 +37,13 @@ async def test_login_market_for_oidc_profile_uses_internal_bridge(monkeypatch):
 
     assert result.get("success") is True
     assert result.get("token") == "market-jwt"
-    assert proxy_mock.await_count == 3
+    # The bridge response already contains the positive enterprise claim, so
+    # login can establish the local session without another WAN /api/auth/me.
+    assert proxy_mock.await_count == 2
     bridge_call = proxy_mock.await_args_list[1]
     assert bridge_call.args[0] == "POST"
     assert bridge_call.args[1] == "/api/auth/internal/sso-issue-token"
     assert bridge_call.kwargs["extra_headers"]["X-Internal-Api-Key"] == "test-internal-key"
-    # 第 3 次调用确认是用市场 JWT 拉取身份
-    me_call = proxy_mock.await_args_list[2]
-    assert me_call.args == ("GET", "/api/auth/me")
-    assert me_call.kwargs["authorization"] == "Bearer market-jwt"
 
 
 @pytest.mark.asyncio
