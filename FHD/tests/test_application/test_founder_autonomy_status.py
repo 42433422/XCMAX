@@ -236,6 +236,8 @@ def test_complete_evidence_can_reach_the_target_band() -> None:
             "ok": True,
             "dry_run": False,
             "catalog_readback_verified": True,
+            "market_catalog_item_id": 17,
+            "market_listing_verified": True,
             "installability_verified": True,
             "runtime_contract_verified": True,
             "strategic_council_verified": True,
@@ -748,6 +750,8 @@ def test_strong_modstore_deployment_event_fields_prove_publish_gate() -> None:
                         "ok": True,
                         "dry_run": False,
                         "catalog_readback_verified": True,
+                        "market_catalog_item_id": 17,
+                        "market_listing_verified": True,
                         "installability_verified": True,
                         "runtime_contract_verified": True,
                         "strategic_council_verified": True,
@@ -763,6 +767,69 @@ def test_strong_modstore_deployment_event_fields_prove_publish_gate() -> None:
     evolution = _dimensions(snapshot)["evolution"]
 
     assert "publish" in {gate["key"] for gate in evolution["evidence"]}
+
+
+def test_strong_modstore_receipt_with_unlinked_run_proves_only_pack_publish() -> None:
+    snapshot = build_founder_autonomy_snapshot(
+        runtime={
+            "evidence": {
+                "milestone_rows": [
+                    {
+                        "run_id": "evolution-deploy-123-capability",
+                        "event": "employee_pack_registered",
+                        "event_type": "modstore_deployment_verified",
+                        "environment": "production",
+                        "status": "verified",
+                        "ok": True,
+                        "dry_run": False,
+                        "catalog_readback_verified": True,
+                        "market_catalog_item_id": 134,
+                        "market_listing_verified": True,
+                        "installability_verified": True,
+                        "runtime_contract_verified": True,
+                        "strategic_council_verified": True,
+                        "package_id": "autonomy-gap-analyst",
+                        "version": "1.0.1",
+                        "package_sha256": "d" * 64,
+                    }
+                ]
+            }
+        },
+        generated_at=NOW,
+    )
+    dimensions = _dimensions(snapshot)
+    evolution_passed = {gate["key"] for gate in dimensions["evolution"]["evidence"]}
+    code_passed = {gate["key"] for gate in dimensions["code"]["evidence"]}
+
+    assert {"package", "publish"}.issubset(evolution_passed)
+    assert {"write", "review", "qa", "merge", "dispatch", "verify"}.isdisjoint(code_passed)
+
+
+def test_private_catalog_receipt_does_not_prove_modstore_publish() -> None:
+    snapshot = build_founder_autonomy_snapshot(
+        runtime={
+            "evidence": {
+                "recent_rows": [
+                    {
+                        "event_type": "modstore_deployment_verified",
+                        "environment": "production",
+                        "ok": True,
+                        "dry_run": False,
+                        "catalog_readback_verified": True,
+                        "installability_verified": True,
+                        "runtime_contract_verified": True,
+                        "strategic_council_verified": True,
+                        "package_id": "private-capability",
+                        "version": "1.0.0",
+                        "package_sha256": "e" * 64,
+                    }
+                ]
+            }
+        },
+        generated_at=NOW,
+    )
+
+    assert "publish" not in {gate["key"] for gate in _dimensions(snapshot)["evolution"]["evidence"]}
 
 
 def test_time_bounded_milestones_survive_idle_feed_churn() -> None:

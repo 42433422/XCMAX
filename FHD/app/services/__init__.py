@@ -88,6 +88,15 @@ def get_ai_product_parser() -> AIProductParser:
 from app.infrastructure.skills import execute_skill, get_skill_registry
 
 
+def __getattr__(name: str):
+    """Expose migrated application modules through legacy service imports."""
+    if name == "private_mod_delivery":
+        from app.application import private_mod_delivery_app
+
+        return private_mod_delivery_app
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 def get_products_service() -> ProductsService:
     """获取产品服务单例"""
     return get_service_registry().products_service
@@ -180,4 +189,5 @@ __all__ = [
     "get_skill_registry",
     "execute_skill",
     "synthesize_to_data_uri",
+    "private_mod_delivery",
 ]

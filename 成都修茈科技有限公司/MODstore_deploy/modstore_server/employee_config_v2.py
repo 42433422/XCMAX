@@ -62,7 +62,10 @@ def upgrade_legacy_manifest_to_v2(legacy: Dict[str, Any]) -> Dict[str, Any]:
             "skills": [],
         },
         "collaboration": {"workflow": {"workflow_id": wf_id}},
-        "commerce": {"industry": _to_str(item.get("industry")) or "通用", "price": max(price, 0.0)},
+        "commerce": {
+            "industry": _to_str(item.get("industry")) or "通用",
+            "price": max(price, 0.0),
+        },
         "workflow_employees": wf_rows if isinstance(wf_rows, list) else [],
         "metadata": {
             "framework_version": "2.0.0",
@@ -99,7 +102,10 @@ def validate_v2_config(
     wf_id = _to_workflow_id(
         (((c.get("collaboration") or {}).get("workflow") or {}).get("workflow_id"))
     )
-    if require_workflow_heart and wf_id <= 0:
+    actions = c.get("actions") if isinstance(c.get("actions"), dict) else {}
+    handlers = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+    direct_python_only = [str(x).strip() for x in handlers] == ["direct_python"]
+    if require_workflow_heart and wf_id <= 0 and not direct_python_only:
         errs.append("工作流心脏必填：collaboration.workflow.workflow_id")
     if wf_id > 0 and db is not None:
         q = db.query(Workflow).filter(Workflow.id == wf_id)

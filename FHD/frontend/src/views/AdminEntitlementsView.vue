@@ -346,7 +346,7 @@
             </p>
           </div>
         </section>
-
+        <AdminPrivateDeliveryPanel :user-id="selectedUserId" />
         <div class="admin-mod-panel">
           <h4>已绑定客户 Mod</h4>
           <div v-if="userModIds.length" class="admin-mod-chips">
@@ -391,6 +391,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin';
+import AdminPrivateDeliveryPanel from '@/components/privateMod/AdminPrivateDeliveryPanel.vue';
 import { appAlert } from '@/utils/appDialog';
 import { apiFetch } from '@/utils/apiBase';
 import { INDUSTRY_PRESET_IDS } from '@/constants/industryPresets';
@@ -642,7 +643,6 @@ function modInstallText(modId: string) {
   const version = String(row.version || '').trim();
   return version ? `已安装 v${version}` : '已安装';
 }
-
 function normalizeLocalCatalogRows(raw: Record<string, unknown>): LocalModRow[] {
   const data = (raw?.data && typeof raw.data === 'object' ? raw.data : raw) as Record<string, unknown>;
   const installed = Array.isArray(data.installed) ? data.installed : [];
@@ -685,7 +685,6 @@ async function refreshLocalStatus() {
     localStatusLoading.value = false;
   }
 }
-
 async function loadUsers() {
   const res = await xcmaxAdminApi.listUsers();
   const data = res as { users?: AdminUser[]; data?: { users?: AdminUser[] } };
@@ -1218,7 +1217,6 @@ onMounted(async () => {
 .admin-user-card--personal .admin-user-card__bar { background: #64748b; }
 .admin-user-card--enterprise .admin-user-card__bar { background: #1e3a5f; }
 .admin-user-card--admin .admin-user-card__bar { background: #92400e; }
-
 .admin-user-card__body {
   padding: 12px 14px 10px;
   display: flex;
@@ -1533,7 +1531,6 @@ onMounted(async () => {
   margin: 0;
   font-size: 12px;
 }
-
 .admin-mod-chips {
   display: flex;
   flex-wrap: wrap;

@@ -58,11 +58,12 @@ spctl -a -vv -t open --context context:primary-signature "${DMG_PATH}"
 # requires a ZIP feed (see generate-update-metadata.mjs). ZIP metadata is
 # produced earlier by build-installer.sh and must stay ZIP-based.
 cd "${ROOT}"
+# electron-builder 26+ removed util/appBuilder; use in-tree buildBlockMap (gzip sidecar).
 node - "${DMG_PATH}" <<'NODE'
-const { executeAppBuilderAsJson } = require('./desktop/node_modules/app-builder-lib/out/util/appBuilder')
+const { buildBlockMap } = require('./desktop/node_modules/app-builder-lib/out/targets/blockmap/blockmap')
 
 const dmg = process.argv[2]
-executeAppBuilderAsJson(['blockmap', '--input', dmg, '--output', `${dmg}.blockmap`])
+buildBlockMap(dmg, 'gzip', `${dmg}.blockmap`)
   .then(info => console.log(`Refreshed DMG blockmap: size=${info.size} sha512=${info.sha512}`))
   .catch(error => {
     console.error(error)

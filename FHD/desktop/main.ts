@@ -38,6 +38,7 @@ import {
 } from './rollback'
 import { terminateChildProcess, waitForChildExit } from './backend-lifecycle'
 import { clampWindowBounds, readWindowState, writeWindowState } from './window-state'
+import { desktopBackendEnv } from './backend-env'
 import { AutonomyController } from './autonomy/controller'
 import { DesktopAutonomyAdapter } from './autonomy/desktop-adapter'
 import { backendCrashPolicy } from './autonomy/policies/backend-crash.policy'
@@ -725,7 +726,7 @@ export function markFrontendCacheCleared(): void {
 }
 
 /** 分阶段就绪：TCP 后即可出窗；desktop/status 软等待，不阻塞 60s 全量 Mod。 */
-async function waitForBackendStatus(port: number, timeoutMs = 15_000): Promise<Record<string, unknown> | null> {
+async function waitForBackendStatus(port: number, timeoutMs = 60_000): Promise<Record<string, unknown> | null> {
   const started = Date.now()
   while (Date.now() - started <= timeoutMs) {
     try {
@@ -815,7 +816,7 @@ async function startBackend(): Promise<void> {
   writeBackendLog(`[cwd] ${executable.cwd}\n`)
   backendProcess = spawn(executable.command, executable.args, {
     cwd: executable.cwd,
-    env: {
+    env: desktopBackendEnv({
       ...sanitizeBackendProxyEnv(process.env),
       XCAGI_DESKTOP_MODE: '1',
       XCAGI_DATA_DIR: app.getPath('userData'),
@@ -826,10 +827,9 @@ async function startBackend(): Promise<void> {
       XCAGI_DESKTOP_FAST_START: '1',
       ...backendEditionEnv(),
       PYTHONUTF8: '1'
-    },
+    }),
     windowsHide: true
   })
-
   backendProcess.stdout.on('data', data => {
     process.stdout.write(`[xcagi-backend] ${data}`)
     writeBackendLog(`[stdout] ${data}`)
@@ -901,7 +901,7 @@ function runBackendMigration(): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(executable.command, [...executable.args, '--migrate-only', '--backup'], {
       cwd: executable.cwd,
-      env: {
+      env: desktopBackendEnv({
         ...sanitizeBackendProxyEnv(process.env),
         XCAGI_DESKTOP_MODE: '1',
         XCAGI_DATA_DIR: app.getPath('userData'),
@@ -909,7 +909,7 @@ function runBackendMigration(): Promise<string> {
         XCAGI_GLOBAL_RATE_LIMIT: '0',
         ...backendEditionEnv(),
         PYTHONUTF8: '1'
-      },
+      }),
       windowsHide: true
     })
     let stderr = ''

@@ -69,11 +69,18 @@ class Config:
         "enable_utc": False,
     }
 
-    # 数据库配置（主库默认 PostgreSQL，可通过环境变量覆盖）
-    DATABASE_URL = os.environ.get(
-        "DATABASE_URL",
-        "postgresql+psycopg://xcagi:xcagi@localhost:5432/xcagi",
+    # 数据库配置：桌面模式默认本机 SQLite；网页/服务端默认 PostgreSQL
+    _desktop_data = (os.environ.get("XCAGI_DATA_DIR") or "").strip()
+    _default_db = (
+        f"sqlite:///{os.path.join(_desktop_data, 'data', 'xcagi.db')}"
+        if DESKTOP_MODE and _desktop_data
+        else (
+            f"sqlite:///{os.path.join(BASE_DIR, 'data', 'xcagi.db')}"
+            if DESKTOP_MODE
+            else "postgresql+psycopg://xcagi:xcagi@localhost:5432/xcagi"
+        )
     )
+    DATABASE_URL = os.environ.get("DATABASE_URL", _default_db)
     # 向量库默认与主库相同；如需拆分可单独设置。
     VECTOR_DB_URL = os.environ.get("VECTOR_DB_URL", DATABASE_URL)
     # 兼容字段：保留 SQLite 场景

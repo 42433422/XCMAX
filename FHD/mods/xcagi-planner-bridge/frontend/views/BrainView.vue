@@ -359,7 +359,6 @@ import {
 
 const BRAIN_AGENT_SESSION_KEY = 'xcagi_brain_agent_session_id'
 const BRAIN_LAYOUT_MQ = '(max-width: 960px)'
-
 const tabs = [
   { id: 'architecture', label: '架构' },
   { id: 'api', label: 'API' },

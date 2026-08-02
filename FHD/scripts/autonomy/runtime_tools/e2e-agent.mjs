@@ -15,6 +15,12 @@ import {
   isTraeProviderFailoverEligible,
   parseTraeStream,
 } from './trae_failover.mjs';
+import {
+  effectiveToolName,
+  requestedToolName,
+  supportedToolNames,
+  withFailureCleanup,
+} from './e2e_agent_runtime_policy.mjs';
 
 const require = createRequire(import.meta.url);
 const WebSocket = require('ws');
@@ -724,28 +730,30 @@ async function prepareWorkspace(task) {
   const repoUrl = (task.repo_url || '').trim();
   const taskDir = join(workspaceRoot, safeTaskDirName(task));
   mkdirSync(workspaceRoot, { recursive: true });
-  await execFileAsync('rm', ['-rf', taskDir]);
-  const sourceWorkspace = await sourceWorkspaceFromTask(task);
+  cleanupWorkspace(taskDir);
+  return withFailureCleanup(taskDir, async () => {
+    const sourceWorkspace = await sourceWorkspaceFromTask(task);
 
-  if (sourceWorkspace && await sourceWorkspaceMatchesRepo(sourceWorkspace, repoUrl)) {
-    await cloneSourceWorkspace(sourceWorkspace, taskDir, task);
-    return taskDir;
-  }
-
-  if (!repoUrl) {
-    mkdirSync(taskDir, { recursive: true });
-    if (!existsSync(join(taskDir, '.git'))) await git(taskDir, ['init', '-b', task.base_branch || 'main']);
-    try {
-      await git(taskDir, ['checkout', task.work_branch]);
-    } catch {
-      await git(taskDir, ['checkout', '-b', task.work_branch]);
+    if (sourceWorkspace && await sourceWorkspaceMatchesRepo(sourceWorkspace, repoUrl)) {
+      await cloneSourceWorkspace(sourceWorkspace, taskDir, task);
+      return taskDir;
     }
-    return taskDir;
-  }
 
-  await git(process.cwd(), ['clone', '--branch', task.base_branch || 'main', '--single-branch', repoUrl, taskDir]);
-  await git(taskDir, ['checkout', '-b', task.work_branch]);
-  return taskDir;
+    if (!repoUrl) {
+      mkdirSync(taskDir, { recursive: true });
+      if (!existsSync(join(taskDir, '.git'))) await git(taskDir, ['init', '-b', task.base_branch || 'main']);
+      try {
+        await git(taskDir, ['checkout', task.work_branch]);
+      } catch {
+        await git(taskDir, ['checkout', '-b', task.work_branch]);
+      }
+      return taskDir;
+    }
+
+    await git(process.cwd(), ['clone', '--branch', task.base_branch || 'main', '--single-branch', repoUrl, taskDir]);
+    await git(taskDir, ['checkout', '-b', task.work_branch]);
+    return taskDir;
+  }, cleanupWorkspace);
 }
 
 const WORKSPACE_RETENTION_MS = (() => {
@@ -1037,39 +1045,26 @@ async function handleTask(ws, task) {
   });
 
   const agentConfig = resolveAgentConfig();
-  const requestedTool = task.tool || agentConfig?.devTool;
-  const hasExplicitTool = ['claude_code', 'cursor', 'codex', 'trae'].includes(requestedTool);
-  // FORCE_* overrides explicit device/tool assignment so DEVFLEET_FORCE_CODEX=1
-  // is not bypassed by device.dev_tool=trae.
-  let devTool = requestedTool;
-  if (process.env.DEVFLEET_FORCE_TRAE === '1') {
-    devTool = 'trae';
-  } else if (process.env.DEVFLEET_FORCE_CODEX === '1') {
-    devTool = 'codex';
-  } else if (process.env.DEVFLEET_FORCE_CLAUDE === '1') {
-    devTool = 'claude_code';
-  } else if (process.env.DEVFLEET_FORCE_CURSOR === '1') {
-    devTool = 'cursor';
-  }
+  const requestedTool = requestedToolName(task, agentConfig);
+  const devTool = effectiveToolName({ task, agentConfig });
   let toolError = '';
   let toolOutput = '';
-  const useTrae =
-    (devTool === 'trae' || (!hasExplicitTool && process.env.DEVFLEET_FORCE_TRAE === '1'))
-    && traeAgentAvailable();
+  const useTrae = devTool === 'trae' && traeAgentAvailable();
   const useClaude =
     !useTrae
-    && (devTool === 'claude_code' || (!hasExplicitTool && process.env.DEVFLEET_FORCE_CLAUDE === '1'))
+    && devTool === 'claude_code'
     && claudeAgentAvailable();
   const useCursor =
     !useTrae
     && !useClaude
-    && (devTool === 'cursor' || (process.env.DEVFLEET_E2E_CURSOR !== '0' && !hasExplicitTool && process.env.DEVFLEET_FORCE_CURSOR === '1'))
+    && devTool === 'cursor'
+    && process.env.DEVFLEET_E2E_CURSOR !== '0'
     && cursorAgentAvailable();
   const useCodex =
     !useTrae
     && !useClaude
     && !useCursor
-    && (devTool === 'codex' || (!hasExplicitTool && process.env.DEVFLEET_FORCE_CODEX === '1'))
+    && devTool === 'codex'
     && codexAgentAvailable();
   if (requestedTool && requestedTool !== devTool) {
     send(ws, {
@@ -1362,23 +1357,9 @@ async function handleTask(ws, task) {
   }
 }
 
-const supportedToolNames = ['trae', 'codex', 'cursor', 'claude_code'];
 const taskQueuesByTool = new Map(supportedToolNames.map((tool) => [tool, []]));
 const runningTools = new Set();
 const knownSubtasks = new Set();
-
-function taskToolName(task) {
-  const raw = String(task?.tool || task?.tool_name || '').trim();
-  return supportedToolNames.includes(raw) ? raw : 'codex';
-}
-
-function effectiveToolName(task) {
-  if (process.env.DEVFLEET_FORCE_TRAE === '1') return 'trae';
-  if (process.env.DEVFLEET_FORCE_CODEX === '1') return 'codex';
-  if (process.env.DEVFLEET_FORCE_CLAUDE === '1') return 'claude_code';
-  if (process.env.DEVFLEET_FORCE_CURSOR === '1') return 'cursor';
-  return taskToolName(task);
-}
 
 function isSelfMaintenanceTask(task) {
   const text = `${task?.title || ''}\n${task?.description || ''}`.toLowerCase();
@@ -1389,7 +1370,7 @@ function enqueueTask(ws, task) {
   const subtaskId = String(task?.subtask_id || '').trim();
   if (subtaskId && knownSubtasks.has(subtaskId)) return false;
   if (subtaskId) knownSubtasks.add(subtaskId);
-  const tool = effectiveToolName(task);
+  const tool = effectiveToolName({ task, fallback: 'codex' });
   if (!task.tool && !task.tool_name) task.tool = tool;
   const item = { ws, task, tool };
   const queue = taskQueuesByTool.get(tool);

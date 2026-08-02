@@ -35,6 +35,7 @@ from modstore_server.models import (
     CatalogItem,
     EmployeeEvolutionRecord,
     EmployeeExecutionMetric,
+    Notification,
     User,
     get_session_factory,
 )
@@ -100,6 +101,12 @@ def _get_admin_user_ids() -> List[int]:
         return [int(r[0]) for r in rows if r and r[0]]
 
 
+def _notification_cooldown_hours() -> int:
+    """Bound repeated alerts even when the scanner runs every few minutes."""
+
+    return max(1, min(_int_env("MODSTORE_HEALTH_SCAN_NOTIFY_COOLDOWN_HOURS", 24), 168))
+
+
 def _notify_admins(title: str, content: str, *, kind: str, payload: Dict[str, Any]) -> None:
     try:
         from modstore_server.notification_service import (
@@ -108,7 +115,34 @@ def _notify_admins(title: str, content: str, *, kind: str, payload: Dict[str, An
         )
 
         notif_type = NotificationType.SYSTEM if kind != "deactivated" else NotificationType.SYSTEM
-        for uid in _get_admin_user_ids():
+        admin_ids = _get_admin_user_ids()
+        if not admin_ids:
+            return
+
+        # The scheduler runs every 30 minutes.  The old implementation emitted
+        # the same alert for every admin on every scan even though the contract
+        # says "once per employee per day".  Resolve all recent recipients in
+        # one query, then write only missing rows.
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=_notification_cooldown_hours())
+        sf = get_session_factory()
+        with sf() as session:
+            recently_notified = {
+                int(row[0])
+                for row in session.query(Notification.user_id)
+                .filter(
+                    Notification.user_id.in_(admin_ids),
+                    Notification.kind == notif_type.value,
+                    Notification.title == title,
+                    Notification.created_at >= cutoff,
+                )
+                .distinct()
+                .all()
+                if row and row[0]
+            }
+
+        for uid in admin_ids:
+            if uid in recently_notified:
+                continue
             try:
                 create_notification(
                     user_id=int(uid),

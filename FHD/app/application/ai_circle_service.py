@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -15,6 +16,43 @@ from app.db.session import get_db
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+# 桌面端员工调度风暴时，交流圈表曾膨胀到千万行导致闪退；硬上限 + 分钟指纹去重
+_DESKTOP_CIRCLE_MAX_ROWS = 5_000
+
+
+def _desktop_mode() -> bool:
+    if (os.environ.get("XCAGI_DESKTOP_MODE") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        return True
+    # 兜底：部分子路径未继承 XCAGI_DESKTOP_MODE 时，仍按桌面数据目录判定
+    data_dir = (os.environ.get("XCAGI_DATA_DIR") or "").replace("\\", "/")
+    return "Application Support/XCAGI" in data_dir or data_dir.rstrip("/").endswith("/XCAGI")
+
+
+def _prune_circle_posts_if_needed(db, *, keep: int = _DESKTOP_CIRCLE_MAX_ROWS) -> None:
+    """删除最旧行，把交流圈表压回 keep 条以内（桌面单用户场景）。"""
+    total = int(db.query(func.count(AiCirclePost.id)).scalar() or 0)
+    overflow = total - int(keep)
+    if overflow <= 0:
+        return
+    old_ids = [
+        int(r[0])
+        for r in db.query(AiCirclePost.id).order_by(AiCirclePost.id.asc()).limit(overflow).all()
+    ]
+    if not old_ids:
+        return
+    db.query(AiCircleReaction).filter(AiCircleReaction.post_id.in_(old_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(AiCircleComment).filter(AiCircleComment.post_id.in_(old_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(AiCirclePost).filter(AiCirclePost.id.in_(old_ids)).delete(synchronize_session=False)
 
 
 def ensure_ai_circle_tables() -> None:
@@ -69,6 +107,10 @@ def record_employee_activity(
     summary: str = "",
 ) -> None:
     """Persist one post for one real employee execution; never synthesise idle posts."""
+    # 桌面：员工调度风暴曾把 ai_circle_posts 写到千万行导致闪退；桌面不再落库，
+    # 交流圈改走低频 MODstore 投影（employee_circle_sync）。
+    if _desktop_mode():
+        return
     employee = str(employee_id or "").strip()
     if not employee:
         return
@@ -86,6 +128,7 @@ def record_employee_activity(
     if summary_text:
         details.append(f"结果：{summary_text}")
     body = state if not details else f"{state}\n" + "\n".join(details)
+    source_ref = f"employee-run:{uuid.uuid4().hex}"
     try:
         ensure_ai_circle_tables()
         with get_db() as db:
@@ -96,7 +139,7 @@ def record_employee_activity(
                     author_name=employee,
                     body=body,
                     source_type="employee_execution",
-                    source_ref=f"employee-run:{uuid.uuid4().hex}",
+                    source_ref=source_ref,
                 )
             )
     except RECOVERABLE_ERRORS:

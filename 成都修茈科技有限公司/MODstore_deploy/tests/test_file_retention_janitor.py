@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
+import modstore_server.models as models
 from modstore_server.file_retention_janitor import (
     RetentionTarget,
     _is_actionable_warning,
     _process_target,
+    prune_notifications,
     run_retention_janitor,
 )
 
@@ -47,12 +50,40 @@ def test_dry_run_all_missing_targets_success(
         ],
     )
     monkeypatch.setattr(janitor, "_resolve_admin_user_id", lambda: 0)
+    monkeypatch.setattr(
+        janitor,
+        "prune_notifications",
+        lambda **_kw: {"ok": True, "candidate_count": 0, "removed_count": 0},
+    )
 
     out = run_retention_janitor(dry_run=True)
     assert out["status"] == "success"
     assert out["removed_count"] == 0
     assert out["released_bytes"] == 0
     assert out["warnings"] == []
+
+
+def test_notification_retention_can_apply_while_file_targets_stay_dry_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import modstore_server.file_retention_janitor as janitor
+
+    calls: list[bool] = []
+    monkeypatch.setattr(janitor, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(janitor, "RETENTION_TARGETS", [])
+    monkeypatch.setattr(janitor, "_resolve_admin_user_id", lambda: 0)
+
+    def _prune(*, dry_run):
+        calls.append(bool(dry_run))
+        return {"ok": True, "candidate_count": 3, "removed_count": 3}
+
+    monkeypatch.setattr(janitor, "prune_notifications", _prune)
+
+    out = run_retention_janitor(dry_run=True, notification_dry_run=False)
+
+    assert out["dry_run"] is True
+    assert calls == [False]
+    assert out["database_retention"]["removed_count"] == 3
 
 
 def test_actionable_warning_raises_status(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -85,6 +116,11 @@ def test_actionable_warning_raises_status(monkeypatch: pytest.MonkeyPatch, tmp_p
         ],
     )
     monkeypatch.setattr(janitor, "_resolve_admin_user_id", lambda: 0)
+    monkeypatch.setattr(
+        janitor,
+        "prune_notifications",
+        lambda **_kw: {"ok": True, "candidate_count": 0, "removed_count": 0},
+    )
 
     def _fail_unlink(self, *a, **k):
         raise OSError("simulated delete failure")
@@ -94,3 +130,108 @@ def test_actionable_warning_raises_status(monkeypatch: pytest.MonkeyPatch, tmp_p
     out = run_retention_janitor(dry_run=False)
     assert out["status"] == "warning"
     assert out["warnings"]
+
+
+def test_notification_retention_bounds_only_noisy_rows(tmp_path: Path, monkeypatch) -> None:
+    models._engine = None
+    models._SessionFactory = None
+    monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "notification-retention.sqlite"))
+    monkeypatch.setenv("MODSTORE_NOTIFICATION_SYSTEM_KEEP_PER_USER", "10")
+    monkeypatch.setenv("MODSTORE_NOTIFICATION_EXECUTION_KEEP_PER_USER", "10")
+    models.init_db()
+
+    now = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    sf = models.get_session_factory()
+    with sf() as session:
+        users = [
+            models.User(
+                username=f"retention-admin-{index}",
+                password_hash="x",
+                email=f"retention-{index}@example.com",
+                is_admin=True,
+            )
+            for index in range(2)
+        ]
+        session.add_all(users)
+        session.flush()
+        for user in users:
+            session.add_all(
+                [
+                    models.Notification(
+                        user_id=user.id,
+                        kind="system",
+                        title=f"system-{index}",
+                        content="derived",
+                        created_at=now - timedelta(minutes=index),
+                    )
+                    for index in range(15)
+                ]
+            )
+            session.add_all(
+                [
+                    models.Notification(
+                        user_id=user.id,
+                        kind="employee_execution_done",
+                        title=f"execution-{index}",
+                        content="derived",
+                        created_at=now - timedelta(minutes=index),
+                    )
+                    for index in range(13)
+                ]
+            )
+            session.add(
+                models.Notification(
+                    user_id=user.id,
+                    kind="payment_success",
+                    title="payment",
+                    content="business evidence",
+                    created_at=now - timedelta(days=365),
+                )
+            )
+        session.commit()
+
+    preview = prune_notifications(dry_run=True, now=now)
+    assert preview["candidate_count"] == 16
+    assert preview["candidate_by_kind"] == {
+        "employee_execution_done": 6,
+        "system": 10,
+    }
+    assert preview["removed_count"] == 0
+
+    applied = prune_notifications(dry_run=False, now=now)
+    assert applied["candidate_count"] == 16
+    assert applied["removed_count"] == 16
+    assert applied["vacuum_recommended"] is True
+
+    with sf() as session:
+        for user in session.query(models.User).all():
+            assert (
+                session.query(models.Notification)
+                .filter(
+                    models.Notification.user_id == user.id,
+                    models.Notification.kind == "system",
+                )
+                .count()
+                == 10
+            )
+            assert (
+                session.query(models.Notification)
+                .filter(
+                    models.Notification.user_id == user.id,
+                    models.Notification.kind == "employee_execution_done",
+                )
+                .count()
+                == 10
+            )
+            assert (
+                session.query(models.Notification)
+                .filter(
+                    models.Notification.user_id == user.id,
+                    models.Notification.kind == "payment_success",
+                )
+                .count()
+                == 1
+            )
+
+    models._engine = None
+    models._SessionFactory = None
