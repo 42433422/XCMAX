@@ -400,6 +400,40 @@ describe('router/index enhanced', () => {
     expect(router.currentRoute.value.name).toBe('settings')
   })
 
+  it('waits for desktop profile hydration before deciding host onboarding', async () => {
+    mockIsEnterpriseEdition.mockReturnValue(true)
+    mockValidateEnterpriseSession.mockResolvedValue(true)
+    mockIsDesktopShell.mockReturnValue(true)
+    mockShouldRouteToHostPackOnboarding.mockReturnValue(true)
+    mockResolveHostPackOnboardingStep.mockResolvedValue(null)
+    mockAccountProfileStore.loaded = false
+
+    let finishHydration: (() => void) | undefined
+    mockAccountProfileStore.refreshFromServer.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishHydration = () => {
+            // This matches the real profile store: it only reports loaded after
+            // the server-backed tenant preferences have been copied locally.
+            mockAccountProfileStore.loaded = true
+            resolve()
+          }
+        }),
+    )
+
+    await router.push('/login')
+    const navigation = router.push('/settings')
+
+    await vi.waitFor(() => expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalledOnce())
+    expect(mockResolveHostPackOnboardingStep).not.toHaveBeenCalled()
+
+    finishHydration?.()
+    await navigation
+
+    expect(mockResolveHostPackOnboardingStep).toHaveBeenCalledOnce()
+    expect(router.currentRoute.value.name).toBe('settings')
+  })
+
   // ── requiresAdminAccount guard ──────────────────────────
 
   it('redirects non-admin to chat when route requires admin', async () => {
