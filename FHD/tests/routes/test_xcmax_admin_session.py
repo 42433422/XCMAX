@@ -120,7 +120,7 @@ class TestReleaseTrainSnapshot:
     def test_file_missing_returns_default(self, tmp_path: Path) -> None:
         with patch.dict("os.environ", {"XCMAX_MONOREPO_ROOT": str(tmp_path)}):
             out = admin_routes._release_train_snapshot()
-        assert out["current"] == "1.0.0.0"
+        assert out["current"] == "1.0.0.1"
         assert out.get("note") == "ssot missing"
 
     def test_bad_json_returns_default(self, tmp_path: Path) -> None:
@@ -129,4 +129,4 @@ class TestReleaseTrainSnapshot:
         (cfg_dir / "release_train.json").write_text("not json")
         with patch.dict("os.environ", {"XCMAX_MONOREPO_ROOT": str(tmp_path)}):
             out = admin_routes._release_train_snapshot()
-        assert out["current"] == "1.0.0.0"
+        assert out["current"] == "1.0.0.1"

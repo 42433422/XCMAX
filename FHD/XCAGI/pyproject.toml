@@ -4,7 +4,7 @@
 
 [project]
 name = "xcagi-runtime"
-version = "1.0.0.0"
+version = "1.0.0.1"
 description = "XCAGI 运行时子树（pytest 路径局部覆盖）"
 requires-python = ">=3.11"
 
