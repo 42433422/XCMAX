@@ -368,6 +368,17 @@ class TestProxyJsonRetryBranches:
             assert call.kwargs["headers"]["Authorization"] == "Bearer token-a"
 
     @pytest.mark.asyncio
+    async def test_read_client_pool_never_uses_plain_authorization_as_a_key(self):
+        from app.fastapi_routes import market_http
+
+        authorization = "Bearer private-token"
+        client = market_http.market_read_client(authorization, 1, lambda value: value)
+        try:
+            assert all(authorization not in key[1] for key in ma._MARKET_READ_CLIENTS)
+        finally:
+            await market_http.close_market_read_clients()
+
+    @pytest.mark.asyncio
     async def test_close_market_read_clients_closes_and_forgets_pool(self):
         first = MagicMock()
         first.aclose = AsyncMock()

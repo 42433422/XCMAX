@@ -65,9 +65,10 @@ def _tasks(**kw: Any) -> Any:
             limit=int(kw.get("limit") or 20),
         )
         return _tag({"success": True, "data": tasks, "total": len(tasks)})
-    except Exception as exc:  # noqa: BLE001 - preserve legacy error contract
+    except Exception:  # noqa: BLE001 - normalize unexpected service failures at the boundary
+        logger.exception("wechat task query failed")
         return JSONResponse(
-            {"success": False, "message": f"查询失败：{exc}"}, status_code=500
+            {"success": False, "message": "查询失败，请稍后重试"}, status_code=500
         )
 
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import os
 from collections.abc import Callable
-from hashlib import sha256
+from hashlib import blake2b
 from urllib.parse import urlparse
 
 import httpx
@@ -55,7 +55,12 @@ def market_read_client(
 ) -> httpx.AsyncClient:
     """Reuse a TLS connection per event loop and credential digest for safe reads."""
     loop = asyncio.get_running_loop()
-    credential_key = sha256(normalize_authorization(authorization).encode("utf-8")).hexdigest()
+    # This is an in-memory connection-pool key, not a credential store.  Use a
+    # modern collision-resistant digest so an authorization value never becomes
+    # part of either the key or process diagnostics in clear text.
+    credential_key = blake2b(
+        normalize_authorization(authorization).encode("utf-8"), digest_size=32
+    ).hexdigest()
     key = (id(loop), credential_key)
     client = MARKET_READ_CLIENTS.get(key)
     if client is not None and not client.is_closed:

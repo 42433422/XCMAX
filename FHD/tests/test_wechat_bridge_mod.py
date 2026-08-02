@@ -73,3 +73,27 @@ def test_standalone_wechat_bridge_owns_contact_handler(monkeypatch) -> None:
     assert output["success"] is True
     assert output["data"][0]["id"] == 3
     assert output["source"] == "mod:xcagi-wechat-bridge"
+
+
+def test_standalone_wechat_bridge_does_not_expose_task_exception(monkeypatch) -> None:
+    from app.infrastructure.mods.mod_manager import import_mod_backend_py
+
+    bridge = import_mod_backend_py(
+        str(MODS / "xcagi-wechat-bridge"),
+        "xcagi-wechat-bridge",
+        "blueprints",
+    )
+
+    class FailingWechatTasks:
+        def get_tasks(self, **_kwargs):
+            raise RuntimeError("database password must stay private")
+
+    monkeypatch.setattr(
+        "app.application.get_wechat_task_app_service",
+        lambda: FailingWechatTasks(),
+    )
+    response = bridge._tasks()
+
+    assert response.status_code == 500
+    assert b"database password" not in response.body
+    assert "查询失败" in response.body.decode("utf-8")
