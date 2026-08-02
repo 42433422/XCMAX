@@ -3,8 +3,27 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 
 REGISTRATION_PREFIX = "employee_cron_registered:"
+DEFERRED_STATUS = "deferred"
+APPROVAL_REQUIRED_HIGH_RISK_CODE = "employee_cron_policy_deferred:approval_required_high_risk"
+
+
+def defer_employee_cron_if_approval_required(
+    employee_id: str,
+    work_contract: dict[str, Any],
+) -> bool:
+    """Record reviewed high-risk duty as awaiting human approval."""
+    risk_level = str(work_contract.get("risk_level") or "").strip().lower()
+    if risk_level in {"", "low", "medium"}:
+        return False
+    record_employee_cron_registration(
+        employee_id,
+        status=DEFERRED_STATUS,
+        error=APPROVAL_REQUIRED_HIGH_RISK_CODE,
+    )
+    return True
 
 
 def record_employee_cron_registration(
@@ -44,7 +63,10 @@ def reconcile_employee_cron_registrations(registered_ids: set[str]) -> None:
 
 
 __all__ = [
+    "APPROVAL_REQUIRED_HIGH_RISK_CODE",
+    "DEFERRED_STATUS",
     "REGISTRATION_PREFIX",
+    "defer_employee_cron_if_approval_required",
     "reconcile_employee_cron_registrations",
     "record_employee_cron_registration",
 ]
