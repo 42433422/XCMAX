@@ -35,6 +35,13 @@ _SCORE_REMEDIATION_REASONS = frozenset(
         "risk_score_v3_below_threshold_or_blocked",
     }
 )
+_DEFERRED_REMEDIATION_ERRORS = frozenset(
+    {
+        "retort_clarification_pending",
+        "retort_clarification_expired",
+        "retort_clarification_cancelled",
+    }
+)
 
 
 def _int_env(name: str, default: int, *, minimum: int = 0) -> int:
@@ -244,9 +251,14 @@ def run_pending_automated_remediation() -> dict[str, Any]:
     )
     status = str(result.get("status") or "")
     if status == "failed":
-        raise RuntimeError(
-            f"automated self-maintenance remediation failed: {result.get('error') or 'unknown'}"
-        )
+        error = str(result.get("error") or "unknown")
+        if error in _DEFERRED_REMEDIATION_ERRORS:
+            return {
+                **result,
+                "scheduler_reason": error,
+                "scheduler_status": "deferred",
+            }
+        raise RuntimeError(f"automated self-maintenance remediation failed: {error}")
     return result
 
 
@@ -261,15 +273,18 @@ def register_autonomy_jobs(
         recovery_deadlines["self_maintenance_remediation_loop"] = deadline
     register_founder_scorecard_job(scheduler)
 
-    from modstore_server.scheduler_runtime import track_job_run
+    from modstore_server.scheduler_runtime import DeferredJobRun, track_job_run
 
     def _remediate() -> None:
         try:
             with track_job_run("self_maintenance_remediation_loop"):
                 result = run_pending_automated_remediation()
+                if result.get("scheduler_status") == "deferred":
+                    raise DeferredJobRun(str(result.get("scheduler_reason") or "policy_hold"))
             logger.info(
-                "self-maintenance remediation scheduler status=%s reason=%s",
+                "self-maintenance remediation scheduler status=%s runtime_status=%s reason=%s",
                 result.get("status"),
+                result.get("scheduler_status") or "success",
                 result.get("reason") or (result.get("gate") or {}).get("reason"),
             )
         except Exception:
