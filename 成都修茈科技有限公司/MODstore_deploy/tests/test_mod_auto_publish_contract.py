@@ -15,14 +15,18 @@ def test_mod_auto_publish_is_real_and_fail_closed() -> None:
     assert "duty_roster.json" in workflow
 
 
-def test_production_deploy_provisions_auto_publish_secret() -> None:
+def test_production_deploy_uses_preprovisioned_auto_publish_secret() -> None:
     workflow = (
         ROOT / "成都修茈科技有限公司/MODstore_deploy/.github/workflows/prod-deploy.yml"
     ).read_text(encoding="utf-8")
     release = (
         ROOT / "成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-immutable-release.sh"
     ).read_text(encoding="utf-8")
-    assert "secrets.MODSTORE_AUTO_PUBLISH_TOKEN" in workflow
-    assert 'MODSTORE_AUTO_PUBLISH_TOKEN="$AUTO_PUBLISH_TOKEN"' in workflow
-    assert "upsert_protected_env_value" in release
-    assert "MODSTORE_AUTO_PUBLISH_TOKEN" in release
+    assert "AUTO_PUBLISH_TOKEN" not in workflow
+    assert "envs: TARGET_SHA,STRICT_KEY" in workflow
+    assert "upsert_protected_env_value" not in release
+    assert (
+        'BUILD_AUTO_PUBLISH_TOKEN="$(read_env_value "$ENV_FILE" MODSTORE_AUTO_PUBLISH_TOKEN)"'
+        in release
+    )
+    assert "unset BUILD_AUTO_PUBLISH_TOKEN" in release
