@@ -42,8 +42,7 @@ def build_employee_cron_candidates(
                     manifest = pack["manifest"]
             except Exception:
                 logger.warning(
-                    "catalog manifest unavailable for %s; trying reviewed duty SSOT",
-                    employee_id,
+                    "catalog manifest unavailable; trying reviewed duty SSOT",
                     exc_info=True,
                 )
         if not manifest and contract:
@@ -51,8 +50,7 @@ def build_employee_cron_candidates(
                 manifest = load_reviewed_duty_manifest(employee_id)
             except Exception:
                 logger.warning(
-                    "reviewed duty manifest unavailable for %s",
-                    employee_id,
+                    "reviewed duty manifest unavailable",
                     exc_info=True,
                 )
         candidates.append((employee_id, manifest, contract))

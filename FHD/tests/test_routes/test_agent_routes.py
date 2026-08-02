@@ -150,6 +150,20 @@ def test_create_agent_run_validates_request_body() -> None:
     assert bad_context.json()["success"] is False
 
 
+def test_agent_run_does_not_expose_operational_exception_details() -> None:
+    client = _client()
+
+    with patch(
+        "app.fastapi_routes.domains.agent.routes.AgentOrchestrator.start_run",
+        side_effect=RuntimeError("database password must stay private"),
+    ):
+        response = client.post("/api/agent/runs", json={"message": "查库存"})
+
+    assert response.status_code == 500
+    assert "database password" not in response.text
+    assert response.json()["message"] == "Agent 服务暂时不可用，请稍后重试"
+
+
 def test_get_agent_run_returns_404_for_missing_run() -> None:
     get_agent_run_repository().clear()
     client = _client()

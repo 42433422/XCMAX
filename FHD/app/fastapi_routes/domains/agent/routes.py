@@ -23,6 +23,14 @@ def _success(data: Any, **extra: Any) -> dict[str, Any]:
     return payload
 
 
+def _internal_error() -> JSONResponse:
+    """Keep operational exception details out of the public agent API."""
+    return JSONResponse(
+        {"success": False, "message": "Agent 服务暂时不可用，请稍后重试"},
+        status_code=500,
+    )
+
+
 @router.post("/api/agent/runs", response_model=None)
 def create_agent_run(
     body: dict[str, Any] = Body(default_factory=dict),
@@ -52,9 +60,9 @@ def create_agent_run(
         )
         status_code = 202 if run.status in {"waiting_user", "blocked"} else 200
         return JSONResponse(_success(run.to_dict()), status_code=status_code)
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("create agent run failed: %s", exc)
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("create agent run failed")
+        return _internal_error()
 
 
 @router.get("/api/agent/runs", response_model=None)
@@ -65,9 +73,9 @@ def list_agent_runs(
     try:
         runs = AgentOrchestrator().list_runs(user_id=user_id, limit=limit)
         return _success([run.to_dict() for run in runs], count=len(runs))
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("list agent runs failed: %s", exc)
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("list agent runs failed")
+        return _internal_error()
 
 
 @router.get("/api/agent/runs/{run_id}", response_model=None)
@@ -80,9 +88,9 @@ def get_agent_run(run_id: str) -> dict[str, Any] | JSONResponse:
                 status_code=404,
             )
         return _success(run.to_dict())
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("get agent run failed: %s", exc)
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("get agent run failed")
+        return _internal_error()
 
 
 @router.post("/api/agent/runs/{run_id}/continue", response_model=None)
@@ -111,9 +119,9 @@ def continue_agent_run(
             )
         status_code = 202 if run.status in {"waiting_user", "blocked"} else 200
         return JSONResponse(_success(run.to_dict()), status_code=status_code)
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("continue agent run failed: %s", exc)
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("continue agent run failed")
+        return _internal_error()
 
 
 @router.post("/api/agent/runs/{run_id}/cancel", response_model=None)
@@ -133,9 +141,9 @@ def cancel_agent_run(
                 status_code=404,
             )
         return _success(run.to_dict())
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("cancel agent run failed: %s", exc)
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("cancel agent run failed")
+        return _internal_error()
 
 
 @router.post("/api/agent/runs/{run_id}/submit-approval", response_model=None)
@@ -165,9 +173,9 @@ def submit_agent_run_approval(
                 "approval_request_ids": request_ids,
             }
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("submit agent run approval failed: %s", exc)
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("submit agent run approval failed")
+        return _internal_error()
 
 
 @router.post("/api/agent/runs/{run_id}/restart", response_model=None)
@@ -210,9 +218,9 @@ def restart_agent_run(
             ),
             status_code=status_code,
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("restart agent run failed: %s", exc)
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("restart agent run failed")
+        return _internal_error()
 
 
 @router.get("/api/agent/runs/{run_id}/events", response_model=None)
@@ -229,6 +237,6 @@ def list_agent_run_events(
             )
         events = orchestrator.list_events(run_id, after_event_id=after_event_id)
         return _success([event.to_dict() for event in events], count=len(events))
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("list agent run events failed: %s", exc)
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("list agent run events failed")
+        return _internal_error()
