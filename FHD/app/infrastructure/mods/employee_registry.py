@@ -50,11 +50,16 @@ class EmployeeRegistry:
                 continue
             if normalize_artifact(data) != ARTIFACT_EMPLOYEE_PACK:
                 continue
+            from app.mod_sdk.product_plane import employee_pack_allowed_in_runtime
+
+            pack_id = str(data.get("id") or name).strip() or name
+            if not employee_pack_allowed_in_runtime(pack_id, data):
+                continue
             emp = data.get("employee") if isinstance(data.get("employee"), dict) else {}
             out.append(
                 {
-                    "pack_id": name,
-                    "id": data.get("id", name),
+                    "pack_id": pack_id,
+                    "id": pack_id,
                     "name": data.get("name", ""),
                     "version": data.get("version", ""),
                     "author": data.get("author", ""),

@@ -126,3 +126,31 @@ def get_active_provider(
         header_provider=header_provider,
         conversation_service=conversation_service,
     )
+
+
+def _register_llm_port_source() -> None:
+    """把本 registry 组装进 domain 层 ``LLMPort``（infrastructure→domain 为合法方向）。
+
+    callable 经 ``sys.modules`` 晚绑定本模块属性，保证测试对
+    ``get_llm_registry`` / ``get_active_provider`` 的 patch 仍然生效。
+    """
+    import sys
+
+    try:
+        from app.domain.neuro.cognition.llm_port import (
+            LLMProviderSource,
+            set_llm_provider_source,
+        )
+
+        _self = sys.modules[__name__]
+        set_llm_provider_source(
+            LLMProviderSource(
+                get_by_id=lambda provider_id: _self.get_llm_registry().get(provider_id),
+                get_active=lambda: _self.get_active_provider(),
+            )
+        )
+    except RECOVERABLE_ERRORS:
+        pass
+
+
+_register_llm_port_source()

@@ -125,16 +125,20 @@ async def _chat_completion(
             return {"error": f"{primary_error}; fallback failed: {str(exc)[:400]}"[:800]}
 
     if primary_error:
-        logger.error("employee agent LLM failed")
+        logger.warning("employee agent LLM unavailable")
         return {
             "error": primary_error,
             "provider": provider,
             "model": primary_model,
+            "error_code": "employee_llm_not_configured",
+            "retryable": False,
         }
     return {
         "error": "employee LLM unavailable",
         "provider": provider,
         "model": primary_model,
+        "error_code": "employee_llm_not_configured",
+        "retryable": False,
     }
 
 

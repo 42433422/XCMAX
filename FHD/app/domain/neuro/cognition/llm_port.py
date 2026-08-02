@@ -13,11 +13,34 @@ Phase 2 的核心目标之一是"不限制 LLM"——本端口通过 ``get_activ
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class LLMProviderSource:
+    """LLM provider 解析源（由 infrastructure 组装注入，避免 domain→infrastructure 反向依赖）。
+
+    两个 callable 均晚绑定到具体实现模块（当前为
+    ``app.infrastructure.llm.providers.registry``，在模块导入时自注册）。
+    """
+
+    get_by_id: Callable[[str], Any]
+    get_active: Callable[[], Any]
+
+
+_source: LLMProviderSource | None = None
+
+
+def set_llm_provider_source(source: LLMProviderSource | None) -> None:
+    """注入 LLM provider 解析源（infrastructure→domain 组装）。"""
+    global _source
+    _source = source
 
 
 class LLMPort:
@@ -51,22 +74,21 @@ class LLMPort:
             LLM 生成的文本内容，或 ``None``（无可用 provider / 调用失败）。
         """
         try:
-            from app.infrastructure.llm.providers.registry import (
-                get_active_provider,
-                get_llm_registry,
-            )
+            source = _source
+            if source is None:
+                logger.debug("LLMPort: no provider source wired")
+                return None
 
-            registry = get_llm_registry()
             target = provider or self._default_provider
             p = None
 
             if target:
-                p = registry.get(target)
+                p = source.get_by_id(target)
                 if p is not None and not p.is_configured:
                     p = None
 
             if p is None:
-                p = get_active_provider()
+                p = source.get_active()
 
             if p is None or not p.is_configured:
                 logger.debug("LLMPort: no provider configured")
@@ -97,9 +119,10 @@ class LLMPort:
     def is_available(self) -> bool:
         """是否有可用的 LLM provider（不发起请求，仅检查配置）。"""
         try:
-            from app.infrastructure.llm.providers.registry import get_active_provider
-
-            p = get_active_provider()
+            source = _source
+            if source is None:
+                return False
+            p = source.get_active()
             return p is not None and p.is_configured
         except RECOVERABLE_ERRORS:
             return False

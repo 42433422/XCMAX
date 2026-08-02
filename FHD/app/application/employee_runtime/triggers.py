@@ -47,9 +47,9 @@ def _make_handler(employee_id: str, binding: TriggerBinding):
             return
         payload = dict(getattr(event, "payload", None) or {})
         event_type = getattr(event, "event_type", "")
-        # A failed employee must never handle the failure event emitted by its
-        # own run. Without this guard, an on_error employee can recurse through
-        # failure -> event -> run -> failure until logs and audit storage fill.
+        # A failed employee must never remediate the failure event emitted by
+        # its own run. Only the explicit origin field proves self-origin; for
+        # legacy events employee_id remains the target employee.
         origin_employee = str(payload.get("origin_employee_id") or "").strip()
         if event_type == EVENT_TASK_FAILED and origin_employee == employee_id:
             logger.debug("skip self task-failed trigger emp=%s", employee_id)
@@ -106,11 +106,31 @@ def _unsubscribe_employee(bus: Any, employee_id: str) -> None:
         try:
             bus.unsubscribe(sub)
         except RECOVERABLE_ERRORS:
-            logger.debug("unsubscribe failed emp=%s", employee_id, exc_info=True)
+            logger.debug("unsubscribe employee trigger failed", exc_info=True)
 
 
 def refresh_employee_triggers(pack_id: str | None = None) -> dict[str, Any]:
     """扫描已安装员工包并（重新）注册 NeuroBus 触发订阅。"""
+    from app.mod_sdk.product_plane import automatic_employee_runtime_enabled
+
+    if not automatic_employee_runtime_enabled():
+        try:
+            from app.neuro_bus.bus import get_neuro_bus
+
+            bus = get_neuro_bus()
+            for employee_id in list(_ACTIVE_SUBSCRIPTIONS):
+                _unsubscribe_employee(bus, employee_id)
+        except RECOVERABLE_ERRORS:
+            pass
+        logger.info(
+            "enterprise client: employee event triggers are disabled by product-plane policy"
+        )
+        return {
+            "registered": [],
+            "active_employees": [],
+            "event_types": [],
+            "disabled_by_product_plane": True,
+        }
     try:
         from app.neuro_bus.bus import get_neuro_bus
 

@@ -10,7 +10,11 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
-from app.domain.ai.tools_directory import get_tool_categories_payload, get_tools_payload
+from app.domain.ai.tools_directory import (
+    get_tool_categories_payload,
+    get_tools_payload,
+    register_workflow_tool_registry_provider,
+)
 from app.infrastructure.auth.db_token import (
     configured_db_write_token,
     effective_db_read_token,
@@ -21,6 +25,16 @@ from app.infrastructure.db.sync_engine import (
     switch_to_production_mode,
     switch_to_test_mode,
 )
+
+
+def _workflow_tool_registry_provider() -> list[dict]:
+    """组装注入：domain 工具目录经本门面惰性访问 application 层 workflow 注册表。"""
+    from app.application.tools.workflow import get_workflow_tool_registry
+
+    return get_workflow_tool_registry()
+
+
+register_workflow_tool_registry_provider(_workflow_tool_registry_provider)
 
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)
@@ -177,7 +191,7 @@ def preferences_post(body: dict = Body(default_factory=dict)) -> dict:
 
 
 def _memory_v2_service():
-    from app.services.user_memory_service import get_user_memory_service
+    from app.application.memory_v2_facade import get_user_memory_service
 
     return get_user_memory_service()
 
@@ -226,15 +240,14 @@ def _run_memory_v2_agent(
     failure_status: int,
 ) -> JSONResponse:
     from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.memory_v2_facade import get_memory_v2_action_meta
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.services.tools_execution.registry import get_workflow_tool_registry
 
     data = dict(params or {})
     user_id = _memory_v2_user_id_from_request(request, data)
     data.setdefault("user_id", user_id)
-    registry = get_workflow_tool_registry()
-    action_meta = dict((registry.get("memory_v2") or {}).get("actions") or {}).get(action)
-    if not isinstance(action_meta, dict):
+    action_meta = get_memory_v2_action_meta(action)
+    if action_meta is None:
         return JSONResponse(
             {"success": False, "message": f"未注册的 Memory v2 动作: {action}"},
             status_code=400,

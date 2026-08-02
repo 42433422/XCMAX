@@ -1,17 +1,8 @@
-from __future__ import annotations
+"""向后兼容 shim：端口定义已下沉至 ``app.domain.ports.embedder``。
 
-from abc import ABC, abstractmethod
+DDD 端口归 domain 层所有；application/infrastructure 的历史 import 路径保持不变。
+"""
 
+from app.domain.ports.embedder import EmbedderPort
 
-class EmbedderPort(ABC):
-    """文本嵌入模型端口。"""
-
-    @abstractmethod
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        """批量生成文本向量。"""
-        raise NotImplementedError
-
-    @abstractmethod
-    def embed_query(self, text: str) -> list[float]:
-        """生成查询向量。"""
-        raise NotImplementedError
+__all__ = ["EmbedderPort"]

@@ -28,12 +28,15 @@ const {
     >
       <router-view v-slot="{ Component, route }">
         <transition name="route-fade" mode="out-in">
-          <div :key="route.fullPath" class="route-view-shell">
-            <keep-alive v-if="!isAdminConsoleSpa()" :max="12">
-              <component :is="Component" />
-            </keep-alive>
-            <component v-else :is="Component" />
-          </div>
+          <keep-alive v-if="!isAdminConsoleSpa()" :max="12">
+            <component :is="Component" :key="String(route.name || route.path)" class="route-view-shell" />
+          </keep-alive>
+          <component
+            v-else
+            :is="Component"
+            :key="route.fullPath"
+            class="route-view-shell"
+          />
         </transition>
       </router-view>
     </MainLayout>

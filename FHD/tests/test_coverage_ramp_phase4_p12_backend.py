@@ -265,7 +265,8 @@ def test_openai_client_create_stream_synthetic(monkeypatch: pytest.MonkeyPatch) 
             )
         )
     assert chunks
-    assert chunks[0].choices[0].delta.content == "片段"
+    assert chunks[0].choices[0].delta.role == "assistant"
+    assert chunks[1].choices[0].delta.content == "片段"
 
 
 def test_create_client_from_request_none() -> None:
