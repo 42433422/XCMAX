@@ -275,6 +275,114 @@ def test_architecture_input_extracts_real_python_dependency_graph(
     ]
 
 
+def test_legacy_archive_input_uses_immutable_release_manifest(
+    receipts: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    manifest = tmp_path / ".xcmax-release.json"
+    manifest.write_text(
+        json.dumps({"git_sha": "a" * 40, "release_id": "a" * 40}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MODSTORE_RELEASE_MANIFEST", str(manifest))
+
+    result = resolver.resolve_employee_duty_input("legacy-archive-curator", now=NOW)
+
+    assert result is not None
+    inventory = result["input_data"]["inventory"]
+    assert inventory[0]["path"] == f"releases/{'a' * 40}"
+    assert inventory[0]["referenced_by"] == ["current"]
+    assert inventory[0]["recovery_path"] == f"git:{'a' * 40}"
+    assert result["receipt"]["sources"] == ["immutable_release_manifest"]
+
+
+def test_investor_portal_input_uses_public_scorecard_only(
+    receipts: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    projection = {
+        "dimensions": [
+            {"id": "code", "progress": 100, "next_gap": "keep proving"},
+            {"id": "customer", "progress": 25, "next_gap": "real payment"},
+        ]
+    }
+    (tmp_path / "download-founder-autonomy.json").write_text(
+        json.dumps(projection), encoding="utf-8"
+    )
+    monkeypatch.setenv("XCMAX_PUBLIC_SITE_STATE_DIR", str(tmp_path))
+
+    result = resolver.resolve_employee_duty_input("ecosystem-investor-portal-officer", now=NOW)
+
+    assert result is not None
+    assert result["input_data"]["milestones"] == [
+        {
+            "id": "code",
+            "status": "complete",
+            "progress_pct": 100.0,
+            "evidence_ref": "public-founder-autonomy:code",
+        },
+        {
+            "id": "customer",
+            "status": "in_progress",
+            "progress_pct": 25.0,
+            "evidence_ref": "public-founder-autonomy:customer",
+        },
+    ]
+    assert result["input_data"]["risks"] == [
+        {
+            "id": "gap-customer",
+            "severity": "high",
+            "status": "open",
+            "mitigation": "real payment",
+        }
+    ]
+
+
+def test_llm_ops_input_is_local_and_secret_free(
+    receipts: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        resolver,
+        "_query_rows",
+        lambda _statement, _parameters=None: [
+            {
+                "provider": "minimax",
+                "model": "MiniMax-M2.7",
+                "status": "success",
+                "total_tokens": 321,
+                "created_at": NOW,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        "modstore_server.services.llm.resolve_platform_bench_llm",
+        lambda: ("minimax", "MiniMax-M2.7"),
+    )
+    monkeypatch.setattr(
+        "modstore_server.llm_key_resolver.platform_api_key",
+        lambda _provider: "must-never-appear",
+    )
+    monkeypatch.setattr(
+        "modstore_server.duty_roster.all_planned_employee_ids",
+        lambda: ["llm-ops-engineer"],
+    )
+
+    result = resolver.resolve_employee_duty_input("llm-ops-engineer", now=NOW)
+
+    assert result is not None
+    snapshot = result["input_data"]["llm_ops_snapshot"]
+    assert snapshot["secrets_redacted"] is True
+    assert snapshot["providers"][0]["health"] == "healthy"
+    assert snapshot["current_route"] == {
+        "provider": "minimax",
+        "model": "MiniMax-M2.7",
+    }
+    assert "must-never-appear" not in json.dumps(result, ensure_ascii=False)
+    assert result["receipt"]["sources"] == [
+        "llm_call_logs",
+        "platform_runtime_route",
+        "duty_roster",
+    ]
+
+
 def test_unsupported_employee_preserves_existing_execution_path(receipts: Path) -> None:
     assert resolver.resolve_employee_duty_input("unmapped-employee", now=NOW) is None
     assert not receipts.exists()

@@ -437,13 +437,179 @@ def _payment_input(_now: datetime) -> ResolvedDutyInput:
     )
 
 
+def _legacy_archive_input(now: datetime) -> ResolvedDutyInput:
+    """Audit the active immutable release as a bounded archive inventory row."""
+
+    explicit = str(os.environ.get("MODSTORE_RELEASE_MANIFEST") or "").strip()
+    if explicit:
+        manifest_path = Path(explicit).expanduser()
+    else:
+        repo_root = str(os.environ.get("MODSTORE_REPO_ROOT") or "").strip()
+        if not repo_root:
+            raise RuntimeError("immutable release manifest is not configured")
+        manifest_path = Path(repo_root).expanduser() / ".xcmax-release.json"
+    try:
+        release = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError("immutable release manifest is unavailable") from exc
+    git_sha = str(release.get("git_sha") or "").strip().lower()
+    if len(git_sha) != 40 or any(char not in "0123456789abcdef" for char in git_sha):
+        raise RuntimeError("immutable release manifest has no valid git_sha")
+    try:
+        observed = datetime.fromtimestamp(manifest_path.stat().st_mtime, timezone.utc)
+    except OSError as exc:
+        raise RuntimeError("immutable release manifest cannot be inspected") from exc
+    last_used_days = max(0.0, (_utc(now) - observed).total_seconds() / 86400)
+    inventory = [
+        {
+            "path": f"releases/{git_sha}",
+            "referenced_by": ["current"],
+            "last_used_days": round(last_used_days, 4),
+            "recovery_path": f"git:{git_sha}",
+        }
+    ]
+    return ResolvedDutyInput(
+        input_data={"inventory": inventory},
+        sources=("immutable_release_manifest",),
+        row_count=1,
+    )
+
+
+def _investor_portal_input(_now: datetime) -> ResolvedDutyInput:
+    """Convert the public founder scorecard into a privacy-safe investor view."""
+
+    state_root = Path(
+        str(os.environ.get("XCMAX_PUBLIC_SITE_STATE_DIR") or "/var/lib/xcmax-public")
+    ).expanduser()
+    projection_path = state_root / "download-founder-autonomy.json"
+    try:
+        projection = json.loads(projection_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError("public founder autonomy projection is unavailable") from exc
+    dimensions = projection.get("dimensions")
+    if not isinstance(dimensions, list) or not dimensions:
+        raise RuntimeError("public founder autonomy projection has no dimensions")
+    milestones: list[dict[str, Any]] = []
+    risks: list[dict[str, Any]] = []
+    for raw in dimensions[:32]:
+        row = raw if isinstance(raw, dict) else {}
+        dimension_id = str(row.get("id") or "").strip()
+        try:
+            progress = max(0.0, min(float(row.get("progress") or 0), 100.0))
+        except (TypeError, ValueError):
+            continue
+        if not dimension_id:
+            continue
+        milestones.append(
+            {
+                "id": dimension_id,
+                "status": "complete" if progress >= 100 else "in_progress",
+                "progress_pct": round(progress, 2),
+                "evidence_ref": f"public-founder-autonomy:{dimension_id}",
+            }
+        )
+        remaining = max(0.0, 100.0 - progress)
+        if remaining:
+            risks.append(
+                {
+                    "id": f"gap-{dimension_id}",
+                    "severity": "high" if remaining >= 50 else "medium",
+                    "status": "open",
+                    "mitigation": str(row.get("next_gap") or "补齐可验证运行证据")[:300],
+                }
+            )
+    if not milestones:
+        raise RuntimeError("public founder autonomy projection has no valid dimensions")
+    return ResolvedDutyInput(
+        input_data={"milestones": milestones, "risks": risks},
+        sources=("public_founder_autonomy_projection",),
+        row_count=len(milestones),
+        truncated=len(dimensions) > 32,
+    )
+
+
+def _llm_ops_input(now: datetime) -> ResolvedDutyInput:
+    """Build a secret-free LLM route snapshot from local production evidence."""
+
+    cutoff = _utc(now) - timedelta(hours=24)
+    rows, truncated = _bounded(
+        _query_rows(
+            "SELECT provider, model, status, total_tokens, created_at "
+            "FROM llm_call_logs WHERE created_at >= :cutoff "
+            "ORDER BY id DESC LIMIT 501",
+            {"cutoff": cutoff.replace(tzinfo=None)},
+        )
+    )
+    from modstore_server.duty_roster import all_planned_employee_ids
+    from modstore_server.llm_key_resolver import platform_api_key
+    from modstore_server.services.llm import resolve_platform_bench_llm
+
+    provider, model = resolve_platform_bench_llm()
+    provider = str(provider or "").strip().lower()
+    model = str(model or "").strip()
+    configured = bool(provider and platform_api_key(provider))
+    route_rows = [
+        row
+        for row in rows
+        if str(row.get("provider") or "").strip().lower() == provider
+        and str(row.get("model") or "").strip() == model
+    ]
+    success_rows = [
+        row
+        for row in route_rows
+        if str(row.get("status") or "").strip().lower() in {"success", "completed"}
+    ]
+    health = "healthy" if configured and success_rows else "unknown"
+    snapshot = {
+        "secrets_redacted": True,
+        "providers": [
+            {
+                "provider": provider or "unresolved",
+                "key_configured": configured,
+                "health": health,
+                "quota": {"classification": "usage_only"},
+            }
+        ],
+        "models": [
+            {
+                "provider": provider,
+                "name": model,
+                "runtime_selectable": configured and bool(model),
+                "health": health,
+            }
+        ],
+        "current_route": {"provider": provider, "model": model},
+        "assets": {
+            "interfaces": ["platform_ai_employee_runtime", "llm_runtime_route"],
+            "by_category": {
+                "duty_employees": sorted(all_planned_employee_ids()),
+                "runtime_models": [model] if model else [],
+            },
+            "providers": [provider] if provider else [],
+            "cli_assets": {
+                "text_only": [],
+                "product_capabilities_not_wired": [],
+            },
+        },
+    }
+    return ResolvedDutyInput(
+        input_data={"llm_ops_snapshot": snapshot},
+        sources=("llm_call_logs", "platform_runtime_route", "duty_roster"),
+        row_count=len(route_rows),
+        truncated=truncated,
+    )
+
+
 _RESOLVERS: dict[str, Callable[[datetime], ResolvedDutyInput]] = {
     "doc-knowledge-curator": _knowledge_input,
     "ecosystem-delivery-reporter": _delivery_input,
+    "ecosystem-investor-portal-officer": _investor_portal_input,
     "ecosystem-revenue-share-reconciler": _revenue_share_input,
     "employee-interview-assistant": _interview_input,
     "employee-pack-quality-interviewer": _quality_input,
     "enterprise-adoption-officer": _enterprise_input,
+    "legacy-archive-curator": _legacy_archive_input,
+    "llm-ops-engineer": _llm_ops_input,
     "payment-billing-reconciler": _payment_input,
     "quality-validator": _pack_validator_input,
     "top-architect": _architecture_input,
