@@ -34,8 +34,8 @@ import { useChatSessionHistory } from './useChatSessionHistory'
 import { useAgentRunEventSync } from './useAgentRunEvents'
 import type { UseChatViewOptions } from './useChatView'
 import type { ChatAutoAction, ChatPlannerPayload, ChatRequest } from '@/types/chat'
+import { collapseExactDuplicateReply } from '@/utils/chatReplyNormalization'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
-
 type XcagiChatWindow = Window & {
   __VUE_CHAT_FILL__?: (value: string) => boolean
   setWorkModeFromChat?: (enabled: boolean) => void
@@ -1242,7 +1242,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
           throw new Error(sseError)
         }
         const donePayload = asPlannerPayload(doneResult)
-        const finalText = String(donePayload.response ?? streamPlain).trim() || streamPlain || '（无内容）'
+        const finalText = collapseExactDuplicateReply(String(donePayload.response ?? streamPlain).trim() || streamPlain || '（无内容）')
         applyPlainTextToMessageIndex(msgIndex, finalText)
         // 后端 done 事件可能带一段非 token 的尾部文本（比如总结段），统一再做一次兜底朗读
         if (ttsShouldSpeakThisMessage && ttsEnabled.value) {

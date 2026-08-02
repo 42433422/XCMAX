@@ -213,7 +213,7 @@ async function applyModFacadeFlagsFromListing(
   modFacadeProbesCompleted = true;
 }
 
-interface ModRoute {
+export interface ModRoute {
   mod_id: string;
   routes_path: string;
 }

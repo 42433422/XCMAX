@@ -78,6 +78,41 @@ def _retry_backoff_seconds(retry_count: int) -> float:
     return float(_RETRY_BASE_SECONDS * (2 ** max(0, retry_count)))
 
 
+def _result_error(value: Any) -> str:
+    """Extract a nested executor error without serializing potentially large output."""
+    if not isinstance(value, dict):
+        return ""
+    for key in ("error", "cognition_error", "message"):
+        text = str(value.get(key) or "").strip()
+        if text:
+            return text[:800]
+    nested = value.get("result")
+    if isinstance(nested, dict):
+        text = _result_error(nested)
+        if text:
+            return text
+    outputs = value.get("outputs")
+    if isinstance(outputs, list):
+        for output in outputs:
+            text = _result_error(output)
+            if text:
+                return text
+    return ""
+
+
+def _is_non_retryable_configuration_error(error: str) -> bool:
+    text = str(error or "").casefold()
+    if not text:
+        return False
+    return (
+        "employee_llm_not_configured" in text
+        or "未配置 llm" in text
+        or "未配置 openai_api_key" in text
+        or "online 模式下无法调用云端大模型" in text
+        or "宿主未配置" in text
+    )
+
+
 @dataclass
 class EmployeeCronJob:
     job_id: str
@@ -94,7 +129,7 @@ class EmployeeCronJob:
     success_count: int = 0
     failure_count: int = 0
     last_run_at: datetime | None = None
-    last_status: str = "never"  # never/running/success/failed/retrying
+    last_status: str = "never"  # never/running/success/failed/retrying/blocked_config
     last_error: str = ""
     last_duration_ms: float | None = None
     # 失败重试
@@ -113,6 +148,8 @@ class EmployeeCronJob:
             state = "disabled"
         elif self.running:
             state = "running"
+        elif self.last_status == "blocked_config":
+            state = "blocked_config"
         elif self.next_retry_at is not None:
             state = "retrying"
         elif self.next_run_at:
@@ -164,10 +201,20 @@ _alert_hook: AlertHook | None = None
 
 def _configured_jobs() -> dict[str, EmployeeCronJob]:
     """环境变量配置的 daily-orchestrator job（向后兼容）。"""
+    from app.mod_sdk.product_plane import automatic_employee_runtime_enabled
+
+    if not automatic_employee_runtime_enabled():
+        return {}
+
     tz = _timezone()
     now = datetime.now(tz)
-    auto_enabled = _truthy(os.environ.get("MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED"), default=True)
-    daily_enabled = _truthy(os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_ENABLED"), default=True)
+    automation_enabled = automatic_employee_runtime_enabled()
+    auto_enabled = automation_enabled and _truthy(
+        os.environ.get("MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED"), default=True
+    )
+    daily_enabled = automation_enabled and _truthy(
+        os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_ENABLED"), default=True
+    )
     hour = _int_env("MODSTORE_DAILY_ORCHESTRATOR_HOUR", 8, minimum=0, maximum=23)
     minute = _int_env("MODSTORE_DAILY_ORCHESTRATOR_MINUTE", 15, minimum=0, maximum=59)
     max_retries = _int_env("MODSTORE_EMPLOYEE_CRON_MAX_RETRIES", 0, minimum=0, maximum=5)
@@ -290,6 +337,10 @@ def _job_from_manifest(
 
 def _discover_manifest_jobs() -> dict[str, EmployeeCronJob]:
     """扫描 _employees 目录，加载所有声明了 schedule 的员工 job。"""
+    from app.mod_sdk.product_plane import automatic_employee_runtime_enabled
+
+    if not automatic_employee_runtime_enabled():
+        return {}
     root = _employees_root()
     if root is None:
         return {}
@@ -563,7 +614,9 @@ def _execute_job_task(
             session_id=session_id,
         )
         ok = bool(result.get("success"))
-        error = "" if ok else str(result.get("error") or result.get("message") or "")[:800]
+        error = "" if ok else _result_error(result)
+        if not error:
+            error = "employee task failed"
         return ok, result, error
     except RECOVERABLE_ERRORS as exc:
         logger.exception("run employee cron job failed job_id=%s", job.job_id)
@@ -595,8 +648,17 @@ def _apply_job_outcome(
         job.failure_count += 1
         job.last_error = error or "employee task failed"
         _last_error = job.last_error
+        # Missing credentials and an unavailable platform route cannot recover
+        # through retries.  Keep the job visible for the next daily preflight,
+        # but never requeue it in the current failure cycle.
+        if _is_non_retryable_configuration_error(job.last_error):
+            job.last_status = "blocked_config"
+            job.retry_count = 0
+            job.next_retry_at = None
+            logger.warning("employee cron job blocked by configuration job_id=%s", job.job_id)
+            _invoke_alert_hook(job.job_id, job.last_error, job.to_dict())
         # 判断是否还能重试
-        if job.max_retries > 0 and job.retry_count < job.max_retries:
+        elif job.max_retries > 0 and job.retry_count < job.max_retries:
             job.retry_count += 1
             job.last_status = "retrying"
             backoff = _retry_backoff_seconds(job.retry_count)

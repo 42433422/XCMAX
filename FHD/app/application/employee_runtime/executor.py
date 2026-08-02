@@ -323,7 +323,14 @@ def _cognition_fhd(
     except RECOVERABLE_ERRORS as exc:
         return {"reasoning": "", "error": str(exc)[:800], "input": normalized, "memory": memory}
     if raw.get("error"):
-        return {"reasoning": "", "error": raw["error"], "input": normalized, "memory": memory}
+        return {
+            "reasoning": "",
+            "error": raw["error"],
+            "error_code": raw.get("error_code"),
+            "retryable": raw.get("retryable"),
+            "input": normalized,
+            "memory": memory,
+        }
     choices = raw.get("choices") or []
     text = ""
     if choices and isinstance(choices[0], dict):

@@ -16,6 +16,7 @@ import httpx
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
 
+from app.application import market_account_live as _market_account_live
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(prefix="/api/market", tags=["market-account"])
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 _MARKET_SESSION_TOKENS: dict[str, str] = {}
 _MARKET_SESSION_REFRESH_TOKENS: dict[str, str] = {}
 _ACCOUNT_OVERVIEW_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_bootstrap_overview_needs_live_merge = _market_account_live.bootstrap_overview_needs_live_merge
 
 
 def _market_base_url() -> str:
@@ -1561,16 +1563,6 @@ def _merge_live_overview_fields(data: dict[str, Any], live: dict[str, Any]) -> N
         data["user"] = live.get("user")
 
 
-def _bootstrap_overview_needs_live_merge(data: dict[str, Any] | None) -> bool:
-    if not isinstance(data, dict):
-        return True
-    return not (
-        isinstance(data.get("user"), dict)
-        and isinstance(data.get("wallet"), dict)
-        and (isinstance(data.get("membership"), dict) or isinstance(data.get("plan"), dict))
-    )
-
-
 @router.post("/account-overview")
 async def market_account_overview(
     request: Request, body: dict[str, Any] = Body(default_factory=dict)
@@ -1619,7 +1611,7 @@ async def market_account_overview(
             raw = payload.get("data") if isinstance(payload.get("data"), dict) else payload
             data = raw if isinstance(raw, dict) else None
             if isinstance(data, dict):
-                if _bootstrap_overview_needs_live_merge(data):
+                if _market_account_live.bootstrap_overview_needs_live_merge(data):
                     live = await _legacy_account_overview(authorization)
                     if isinstance(live, dict) and not live.get("__proxy_error__"):
                         _merge_live_overview_fields(data, live)
@@ -1652,6 +1644,10 @@ async def market_account_overview(
         if not isinstance(data, dict):
             data = _degraded_account_overview("市场账户概览返回格式异常")
 
+        sync_warning = await _market_account_live.refresh_overview_wallet(
+            data, authorization, sync_warning, proxy_json=_proxy_json, error_message=_error_message
+        )
+
         data = {**data, "market_base_url": _market_base_url()}
         if sync_warning and not data.get("sync_warning"):
             data["sync_warning"] = sync_warning
@@ -1680,7 +1676,7 @@ async def _market_llm_catalog_impl(request: Request, body: dict[str, Any]):
         return_error_payload=True,
     )
     if isinstance(payload, JSONResponse):
-        return payload
+        return _market_account_live.degraded_llm_catalog(payload, _market_base_url())
     if isinstance(payload, dict) and payload.get("__proxy_error__"):
         status_code = int(payload.get("status_code") or 502)
         raw_error = payload.get("payload")

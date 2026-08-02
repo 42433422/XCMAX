@@ -12,10 +12,9 @@ import {
   type PlannerSseEvent,
 } from '@/utils/chatSseStream'
 import type { KittenFieldProfile } from '@/utils/kittenDatasetParser'
-
+import { openDocumentPreviewFromBlob } from '@/state/documentPreviewPip'
 const MAX_CHAT_MESSAGES = 120
 const KITTEN_SNAPSHOT_CACHE_MS = 90_000
-
 /** Planner + 工具（如 generate_office_document）可能远超过 120s；过短会 Abort 后走 JSON 再次挂死且无超时 */
 const KITTEN_CHAT_TIMEOUT_MS = (() => {
   const raw = String(import.meta.env.VITE_KITTEN_CHAT_TIMEOUT_MS || '').trim()
@@ -781,6 +780,7 @@ export function useKittenAnalyzer() {
         resp.headers.get('content-disposition'),
         format === 'xlsx' ? `生成表格_${formatExportTimestamp()}.xlsx` : `生成文档_${formatExportTimestamp()}.docx`
       )
+      openDocumentPreviewFromBlob(blob, filename, p)
       downloadBlob(blob, filename)
       addMessage('ai', `已生成并下载：<strong>${filename}</strong><br>（内容由模型起草，正式签署前请法务审核）`)
     } catch (err) {

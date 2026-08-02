@@ -8,6 +8,7 @@ from typing import Any
 from app.application.excel_vector_app_service import HashEmbedder
 from app.application.ports.vector_store import VectorStorePort
 from app.infrastructure.persistence.user_memory_vector_store import get_user_memory_vector_store
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 @dataclass
@@ -229,3 +230,23 @@ def get_user_memory_rag_app_service() -> UserMemoryRagApplicationService:
     if _user_memory_rag_service is None:
         _user_memory_rag_service = UserMemoryRagApplicationService()
     return _user_memory_rag_service
+
+
+def _register_working_memory_long_term_provider() -> None:
+    """把本服务组装进 domain 层 ``WorkingMemory`` 长期召回（application→domain 合法方向）。
+
+    callable 经 ``sys.modules`` 晚绑定本模块属性，保证测试对
+    ``get_user_memory_rag_app_service`` 的 patch 仍然生效。
+    """
+    import sys
+
+    try:
+        from app.domain.neuro.cognition.working_memory import set_long_term_recall_provider
+
+        _self = sys.modules[__name__]
+        set_long_term_recall_provider(lambda: _self.get_user_memory_rag_app_service())
+    except RECOVERABLE_ERRORS:
+        pass
+
+
+_register_working_memory_long_term_provider()

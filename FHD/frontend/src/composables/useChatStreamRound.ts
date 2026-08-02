@@ -8,6 +8,8 @@ import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { asRecord, asString } from '@/utils/typeGuards'
 import { stripInternalMarkers } from '@/utils/lightMarkdown'
 import { stripPlannerDisplayMarkers } from '@/utils/chatBubbleDisplay'
+import { buildChatSoftwareCapabilities } from '@/utils/chatCapabilityCatalog'
+import { openDocumentPreviewFromResult } from '@/state/documentPreviewPip'
 
 export type ChatStreamRoundDeps = {
   pushStreamingAiShell: () => number
@@ -96,6 +98,12 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
       const { body } = deps.buildPlannerChatRequestPayload(primaryForStream, {
         fromWriteUnlock: !!opts?.fromWriteUnlock,
       })
+      const softwareCapabilities = buildChatSoftwareCapabilities()
+      body.software_capabilities = softwareCapabilities
+      body.runtime_context = {
+        ...asRecord(body.runtime_context),
+        software_capabilities: softwareCapabilities,
+      }
       const res = await chatApi.sendChatStream(
         { ...body, message: String(body.message || primaryForStream) } as ChatRequest &
           Record<string, unknown>,
@@ -113,11 +121,14 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
           deps.setLoadingProgress('正在生成回复…')
           deps.scrollToBottom()
         } else if (ev.type === 'tool_progress') {
-          const label = String(ev.label || ev.text || ev.phase || '工具').trim()
+          const label = String(ev.text || ev.label || ev.phase || '工具').trim()
+          const progressText = ev.phase === 'accepted'
+            ? label
+            : label ? `正在调用 ${label}…` : '正在调用工具…'
           deps.patchMessageAtIndex(msgIndex, {
-            toolProgressLabel: label ? `正在调用 ${label}…` : '正在调用工具…',
+            toolProgressLabel: progressText,
           })
-          deps.setLoadingProgress(label ? `正在调用 ${label}…` : '正在调用工具…')
+          deps.setLoadingProgress(progressText)
           deps.scrollToBottom()
         } else if (ev.type === 'done') {
           doneResult = asRecord(ev.result)
@@ -156,6 +167,7 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
           : { success: true, response: finalText }
       await deps.onStreamDone(wrap, primaryForStream, msgIndex)
       deps.persistMessagesCache()
+      openDocumentPreviewFromResult(doneResult)
       return true
     } catch (err: unknown) {
       const errObj = err as { name?: string; message?: string }

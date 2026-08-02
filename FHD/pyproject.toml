@@ -270,7 +270,7 @@ exclude_lines = [
 # 当前动态实测只看 metrics/coverage-dual-summary.json；本文件只保存 coverage.py 行覆盖 floor。
 # 禁止在这里复制 pytest passed/failed 快照，避免 SSOT 分裂。
 # 三档目标（分阶段达成，非一次性切到 90%）：
-#   - 当前 floor：84% 行（本字段）/ 73% 分支（由 coverage_ratchet_baseline.json 守护）
+#   - 当前 floor：88% 行（本字段）/ 81% 分支（由 coverage_ratchet_baseline.json 守护）
 #   - Q3 目标（2026-Q3）：85% 行 + 80% 分支
 #   - Q4 终极目标（2026-Q4）：90% 行 + 85% 分支
 # 未修红灯前禁止对外宣称达标或 bump 棘轮。

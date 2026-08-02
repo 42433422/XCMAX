@@ -1370,8 +1370,7 @@ describe('TopAssistantFloat functions – onAutoRefreshWechatChanged', () => {
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
     vm.onAutoRefreshWechatChanged()
-    // 不报错即通过
-    expect(true).toBe(true)
+    expect(vi.mocked(globalThis.fetch)).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
@@ -1381,7 +1380,7 @@ describe('TopAssistantFloat functions – onAutoRefreshWechatChanged', () => {
     const vm = wrapper.vm as any
     vm.onAutoRefreshWechatChanged()
     await flushPromises()
-    expect(true).toBe(true)
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalled()
     wrapper.unmount()
   })
 })
@@ -1628,11 +1627,14 @@ describe('TopAssistantFloat functions – toggleWorkflowEmployee', () => {
   })
 
   it('切换工作流员工状态', async () => {
+    const { useWorkflowAiEmployeesStore } = await import('@/stores/workflowAiEmployees')
+    const empStore = useWorkflowAiEmployeesStore()
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
     vm.toggleWorkflowEmployee('wechat_msg')
-    // 不报错即通过
-    expect(true).toBe(true)
+    expect(empStore.enabled.wechat_msg).toBe(true)
+    vm.toggleWorkflowEmployee('wechat_msg')
+    expect(empStore.enabled.wechat_msg).toBe(false)
     wrapper.unmount()
   })
 })
@@ -1674,9 +1676,7 @@ describe('TopAssistantFloat functions – pollStarredFeed', () => {
     vi.stubGlobal('fetch', mockFetch)
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
-    await vm.pollStarredFeed()
-    // 不报错即通过
-    expect(true).toBe(true)
+    await expect(vm.pollStarredFeed()).resolves.toBeUndefined()
     wrapper.unmount()
   })
 
@@ -1686,8 +1686,7 @@ describe('TopAssistantFloat functions – pollStarredFeed', () => {
     vi.stubGlobal('fetch', mockFetch)
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
-    await vm.pollStarredFeed()
-    expect(true).toBe(true)
+    await expect(vm.pollStarredFeed()).resolves.toBeUndefined()
     wrapper.unmount()
   })
 })
@@ -1787,8 +1786,7 @@ describe('TopAssistantFloat functions – startFeedPolling / stopFeedPolling', (
     vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
-    vm.stopFeedPolling()
-    expect(true).toBe(true)
+    expect(() => vm.stopFeedPolling()).not.toThrow()
     wrapper.unmount()
   })
 
@@ -1829,16 +1827,14 @@ describe('TopAssistantFloat functions – onTopScroll / onExcelScroll', () => {
   it('onTopScroll 无 excelContainer 时不报错', async () => {
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
-    vm.onTopScroll({ target: { scrollLeft: 100 } })
-    expect(true).toBe(true)
+    expect(() => vm.onTopScroll({ target: { scrollLeft: 100 } })).not.toThrow()
     wrapper.unmount()
   })
 
   it('onExcelScroll 无 excelContainer 时不报错', async () => {
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
-    vm.onExcelScroll()
-    expect(true).toBe(true)
+    expect(() => vm.onExcelScroll()).not.toThrow()
     wrapper.unmount()
   })
 })
@@ -1879,8 +1875,11 @@ describe('TopAssistantFloat functions – fillChatInputWithRetry', () => {
   it('空 text 不执行', async () => {
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
+    const fillFn = vi.fn(() => true)
+    ;(window as any).__VUE_CHAT_FILL__ = fillFn
     await vm.fillChatInputWithRetry('')
-    expect(true).toBe(true)
+    expect(fillFn).not.toHaveBeenCalled()
+    delete (window as any).__VUE_CHAT_FILL__
     wrapper.unmount()
   })
 

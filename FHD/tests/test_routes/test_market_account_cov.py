@@ -2135,14 +2135,16 @@ class TestMarketLlmCatalogImpl:
             resp = _client.get("/api/market/llm-catalog")
         assert resp.status_code == 401
 
-    def test_json_response_passthrough(self):
+    def test_json_response_returns_degraded_catalog(self):
         jr = JSONResponse({"error": "down"}, status_code=503)
         with patch.object(
             ma, "_authorization_from_request_resolved", new=AsyncMock(return_value="Bearer tok")
         ):
             with patch.object(ma, "_proxy_json", new=AsyncMock(return_value=jr)):
                 resp = _client.post("/api/market/llm-catalog", json={})
-        assert resp.status_code == 503
+        assert resp.status_code == 200
+        assert resp.json()["data"]["degraded"] is True
+        assert resp.json()["data"]["sync_warning"] == "模型目录暂时不可用"
 
     def test_proxy_error_returns_degraded(self):
         with patch.object(

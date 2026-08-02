@@ -47,6 +47,21 @@ from app.application.workflow.multimodal_user_content import (
 from app.infrastructure.llm import modstore_adapter_failover as _mfailover
 from app.infrastructure.llm.modstore_chat_failover import is_market_chat_failoverable
 from app.infrastructure.llm.modstore_response_normalize import normalize_market_chat_response
+from app.infrastructure.modstore_transport import (
+    httpx_sync_client as _httpx_sync_client,
+)
+from app.infrastructure.modstore_transport import (
+    iter_market_sse_data_payloads as _iter_transport_sse_data_payloads,
+)
+from app.infrastructure.modstore_transport import (
+    iter_market_transport_plans as _iter_market_transport_plans,  # noqa: F401
+)
+from app.infrastructure.modstore_transport import (
+    market_connect_attempts as _market_connect_attempts,  # noqa: F401
+)
+from app.infrastructure.modstore_transport import (
+    market_connect_timeout as _market_connect_timeout,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -168,6 +183,30 @@ def _platform_stream_payload_to_openai_chunk(data: str) -> Dict[str, Any] | None
             return {"choices": [{"delta": delta, "finish_reason": finish_reason}]}
 
     return None
+
+
+def _market_sse_payload_has_content(data: str) -> bool:
+    """True when a market SSE data payload carries visible delta content."""
+    try:
+        chunk = _platform_stream_payload_to_openai_chunk(data)
+    except ValueError:
+        return False
+    if not chunk:
+        return False
+    for choice in chunk.get("choices") or []:
+        if not isinstance(choice, dict):
+            continue
+        delta = choice.get("delta")
+        if isinstance(delta, dict) and delta.get("content"):
+            return True
+    return False
+
+
+def _iter_market_sse_data_payloads(response: Any) -> Iterator[str]:
+    yield from _iter_transport_sse_data_payloads(
+        response,
+        payload_has_content=_market_sse_payload_has_content,
+    )
 
 
 class ModstorePlatformAdapter:
@@ -854,8 +893,10 @@ class ModstorePlatformAdapter:
                 len(candidates),
             )
             retry_next = False
-            with httpx.Client(
-                timeout=httpx.Timeout(self.timeout, connect=10.0),
+            # Desktop must bypass inherited HTTP(S)_PROXY here.  Those proxies often
+            # buffer SSE until the model finishes, which looks like a first-chunk timeout.
+            with _httpx_sync_client(
+                timeout=httpx.Timeout(self.timeout, connect=_market_connect_timeout()),
                 limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
                 headers=self._build_headers(),
             ) as client:
@@ -883,21 +924,10 @@ class ModstorePlatformAdapter:
                             )
                             raise err
                     else:
-                        current_event = ""
-                        for line in response.iter_lines():
-                            line_text = (line or "").strip()
-                            if not line_text:
-                                continue
-                            if line_text.startswith("event:"):
-                                current_event = line_text[6:].strip().lower()
-                                continue
-                            if line_text.startswith("data:"):
-                                line_text = line_text[5:].strip()
-                            if line_text == "[DONE]":
-                                break
-                            if current_event in {"meta", "done"}:
-                                continue
-                            yield line_text
+                        # Reuse the compatibility parser: some market providers emit
+                        # the complete answer only in a final ``done`` event.  Dropping
+                        # that event leaves the desktop waiting forever for first text.
+                        yield from _iter_market_sse_data_payloads(response)
                         return
             if retry_next:
                 continue
@@ -1035,6 +1065,21 @@ class _ModstoreOpenAICompletions:
         max_tokens: int = 2000,
         **kwargs,
     ) -> Iterator[Any]:
+        # A protocol-valid role chunk reaches the desktop before the upstream model's
+        # first token.  It keeps the stream alive while Xiuci performs routing or a
+        # provider buffers its first content delta; it has no visible message content.
+        yield _to_openai_object(
+            {
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"role": "assistant"},
+                        "finish_reason": None,
+                    }
+                ],
+                "model": model or self._adapter.model_name,
+            }
+        )
         stream_mode = os.environ.get("XCAGI_MODSTORE_USE_NATIVE_STREAM", "").strip().lower()
         use_native_stream = stream_mode not in {"0", "false", "no", "off"}
         if not use_native_stream:

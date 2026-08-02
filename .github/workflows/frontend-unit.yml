@@ -45,6 +45,13 @@ jobs:
         working-directory: FHD/frontend
         run: npm ci --no-audit --no-fund
 
+      - name: "Guard: no empty assertions in tests"
+        working-directory: FHD/frontend
+        run: npx eslint "src/**/*.test.{js,ts}" "tests/**/*.test.{js,ts}"
+
+      - name: "Guard: coverage stub ratchet"
+        run: python3 FHD/scripts/dev/count_frontend_coverage_stubs.py --check
+
       - name: Run Vitest unit tests
         working-directory: FHD/frontend
         run: npm test -- --reporter=default --reporter=junit --outputFile.junit=./test-results/junit.xml

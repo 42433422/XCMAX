@@ -84,6 +84,7 @@
       </div>
       <slot></slot>
     </div>
+    <DocumentPreviewPictureInPicture />
     <FloatingChatAssistant :visible="shouldShowFloatingChatAssistant" :male-avatar="adminConsoleSpa" />
     <VirtualCursor />
     <OnboardingTutorial />
@@ -114,6 +115,7 @@ import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
 import { navigateFromSidebarKey } from '@/utils/sidebarNavigation'
 import { useModRoutes } from '@/composables/useModRoutes'
 import FloatingChatAssistant from './FloatingChatAssistant.vue'
+import DocumentPreviewPictureInPicture from './DocumentPreviewPictureInPicture.vue'
 import PaneResizeHandle from './PaneResizeHandle.vue'
 import Sidebar from './Sidebar.vue'
 import TopAssistantFloat from './TopAssistantFloat.vue'
@@ -125,16 +127,14 @@ import { useOnboardingTutorialStore } from '@/stores/onboardingTutorial'
 import { useTutorialStore } from '@/stores/tutorial'
 import { setTutorialBuildContextFactory } from '@/stores/tutorial'
 import { useTutorialCatalog } from '@/composables/useTutorialCatalog'
-
+import { documentPreviewPip } from '@/state/documentPreviewPip'
 const props = defineProps({
   isProMode: {
     type: Boolean,
     default: false
   }
 })
-
 const emit = defineEmits(['toggle-pro-mode'])
-
 const route = useRoute()
 const router = useRouter()
 const onboardingTutorialStore = useOnboardingTutorialStore()
@@ -318,7 +318,7 @@ const currentRouteName = computed(() => {
 
 /** 侧栏选中「智能对话」时隐藏悬浮入口（含 Mod 门面 /mod/.../chat） */
 const shouldShowFloatingChatAssistant = computed(
-  () => !isChatSidebarActive(currentRouteName.value, route),
+  () => !isChatSidebarActive(currentRouteName.value, route) && !documentPreviewPip.visible,
 )
 
 const {

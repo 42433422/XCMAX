@@ -15,7 +15,7 @@ import logging
 from collections import OrderedDict
 from typing import Any
 
-from app.application.ports.embedder import EmbedderPort
+from app.domain.ports.embedder import EmbedderPort, HashEmbedder
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -40,18 +40,7 @@ class LocalEmbedder(EmbedderPort):
         self._dim = max(dim, 64)
         self._cache_size = max(cache_size, 1)
         self._cache: OrderedDict[str, list[float]] = OrderedDict()
-        self._inner: Any = None
-        self._init_inner()
-
-    def _init_inner(self) -> None:
-        """延迟初始化 HashEmbedder（避免循环导入）。"""
-        try:
-            from app.application.excel_vector_app_service import HashEmbedder
-
-            self._inner = HashEmbedder(dimensions=self._dim)
-        except RECOVERABLE_ERRORS:
-            logger.debug("HashEmbedder init failed, using fallback", exc_info=True)
-            self._inner = None
+        self._inner: Any = HashEmbedder(dimensions=self._dim)
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """批量生成文本向量（带 LRU 缓存）。"""

@@ -4,6 +4,13 @@
 
 子目录 `FHD/.github/workflows/`、`MODstore_deploy/.github/workflows/` 仅保留 **README 指针**与 Issue/PR 模板，**不会**被 GitHub 执行。
 
+## 仓库 git 历史说明（2026-08-01）
+
+本仓当前工作区的 git 历史**始于 2026-07-21**（首个 commit `1b6ae8560`，`fix(deploy): bootstrap FHD staging on single CVM`）。
+该日期之前的提交历史不在当前本地克隆中；远程仓库 `github.com/42433422/XCMAX` 的
+旧分支/标签与 GitHub 侧 PR/Actions 记录仍是历史追溯的补充渠道。
+对早于 2026-07-21 的变更归因，请查 GitHub 远程历史而非本地 `git log`。
+
 ## 分层
 
 | 层级 | 路径 | 说明 |

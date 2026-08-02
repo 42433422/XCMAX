@@ -39,6 +39,9 @@ def test_ensure_mod_api_ready_reorders_spa_fallback_after_dynamic_mount(
             self._loaded_mods.append(mod_id)
             return True
 
+        def resolve_mod_directory(self, mod_id: str) -> str:
+            return f"/mods/{mod_id}"
+
     mgr = _Mgr()
 
     monkeypatch.setattr(

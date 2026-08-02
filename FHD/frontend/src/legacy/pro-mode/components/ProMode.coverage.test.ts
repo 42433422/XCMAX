@@ -653,8 +653,7 @@ describe('ProMode (legacy) - coverage ramp', () => {
       // 切换为 false 触发 cleanup（不应抛错）
       await wrapper.setProps({ modelValue: false })
       await nextTick()
-      // 测试通过即说明无报错
-      expect(true).toBe(true)
+      expect(document.body.classList.contains('pro-mode-active')).toBe(false)
     })
 
     it('shipmentDownloadEntry 无 .entry-text 子元素时不报错', async () => {
@@ -753,9 +752,9 @@ describe('ProMode (legacy) - coverage ramp', () => {
       await nextTick()
       // 卸载（应清理 exitTimer）
       wrapper.unmount()
-      // 快进时间，不应有错误
+      // 快进时间，不应有错误；卸载清理应移除 stepBackProMode
       vi.advanceTimersByTime(500)
-      expect(true).toBe(true)
+      expect(window.stepBackProMode).toBeUndefined()
     })
 
     it('卸载时清理 legacyDetectionTimer', async () => {
@@ -767,29 +766,25 @@ describe('ProMode (legacy) - coverage ramp', () => {
       // 快进时间，不应触发 enableLegacyBridge
       ;(window as any).__legacyToggleProMode = vi.fn()
       vi.advanceTimersByTime(1000)
-      expect(true).toBe(true)
+      expect(window.stepBackProMode).toBeUndefined()
     })
 
     it('卸载时移除 assistant-name-updated 事件监听', async () => {
+      const removeSpy = vi.spyOn(window, 'removeEventListener')
       const wrapper = mountComponent()
       wrapper.unmount()
-      // 卸载后派发事件不应更新组件（组件已销毁）
-      // 主要验证不报错
-      window.dispatchEvent(
-        new CustomEvent('assistant-name-updated', { detail: { name: '贾维斯' } })
-      )
-      expect(true).toBe(true)
+      expect(removeSpy).toHaveBeenCalledWith('assistant-name-updated', expect.any(Function))
+      removeSpy.mockRestore()
     })
 
     it('legacy 运行时卸载：清理 MutationObserver（无报错）', async () => {
+      const disconnectSpy = vi.spyOn(MutationObserver.prototype, 'disconnect')
       ;(window as any).__legacyToggleProMode = vi.fn()
       const wrapper = mountComponent()
       // 卸载（应断开 MutationObserver）
       wrapper.unmount()
-      // 修改 body class 不应触发已断开的 observer
-      document.body.classList.add('some-class')
-      await flushMutationObserver()
-      expect(true).toBe(true)
+      expect(disconnectSpy).toHaveBeenCalled()
+      disconnectSpy.mockRestore()
     })
 
     it('卸载时 window.stepBackProMode 已被外部覆盖时不删除', () => {

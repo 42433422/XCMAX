@@ -207,9 +207,8 @@ describe('hostConfig', () => {
       vi.mocked(apiFetch).mockRejectedValue('string error')
 
       const store = useHostConfigStore()
-      await store.bootstrapHostConfig()
       // The function should not throw regardless of error type
-      expect(true).toBe(true)
+      await expect(store.bootstrapHostConfig()).resolves.toBeUndefined()
     })
   })
 })
