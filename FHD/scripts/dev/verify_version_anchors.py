@@ -22,8 +22,10 @@ ANCHORS: list[tuple[str, str, str]] = [
     ("XCAGI/package.json", r'"version"\s*:\s*"([\d.]+)"', TOOLCHAIN_VERSION),
     ("admin-console/package.json", r'"version"\s*:\s*"([\d.]+)"', TOOLCHAIN_VERSION),
     ("sunbird-console/package.json", r'"version"\s*:\s*"([\d.]+)"', TOOLCHAIN_VERSION),
-    ("app/fastapi_app/factory.py", r'version="([\d.]+)"', PRODUCT_VERSION),
-    ("app/infrastructure/mods/manifest.py", r'current_version\s*=\s*"([\d.]+)"', PRODUCT_VERSION),
+    # Both runtime anchors intentionally allow a release environment override,
+    # with the stable product version as the deterministic fallback.
+    ("app/fastapi_app/factory.py", r'XCAGI_VERSION"\)\s*or\s*"([\d.]+)"', PRODUCT_VERSION),
+    ("app/infrastructure/mods/manifest.py", r'XCAGI_VERSION"\)\s*or\s*"([\d.]+)"', PRODUCT_VERSION),
     ("mobile-flutter-poc/android/app/build.gradle.kts", r'injectedVersionName[\s\S]*?\?:\s*"([\d.]+)"', PRODUCT_VERSION),
     ("mobile-flutter-poc/pubspec.yaml", r'(?m)^version:\s*([\d.]+)\+\d+', TOOLCHAIN_VERSION),
     ("mobile-flutter-poc/ios/Flutter/Version.xcconfig", r'(?m)^FLUTTER_BUILD_NAME=([\d.]+)', TOOLCHAIN_VERSION),
