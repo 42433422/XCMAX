@@ -12,9 +12,9 @@ describe('refreshTenantScopedClientStores', () => {
     localStorage.clear()
   })
 
-  it('runs without throwing when pinia ready', () => {
-    expect(() =>
-      refreshTenantScopedClientStores({ tenantId: 't1', userId: 'u1' }),
-    ).not.toThrow()
+  it('runs and hydrates workspace preferences when pinia is ready', async () => {
+    await expect(
+      refreshTenantScopedClientStores({ tenantId: 't1', marketUserId: 'u1' }),
+    ).resolves.toBeUndefined()
   })
 })
