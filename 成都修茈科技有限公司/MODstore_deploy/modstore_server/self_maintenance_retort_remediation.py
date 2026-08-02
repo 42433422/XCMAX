@@ -79,6 +79,7 @@ def assess_retort_scope_diff_contract(
     contract = retort_scope_remediation_contract()
     scoped_files, excluded_hits = _retort_scope_scoped_changed_files(changed_files)
     scoped_file_count = len(scoped_files)
+    changed_file_count = scoped_file_count + len(excluded_hits)
     scoped_line_changes = _retort_scope_line_changes(diff_stats)
     diff_chars = int((diff_stats or {}).get("git_diff_chars") or 0)
     if diff_chars <= 0 and diff_excerpt:
@@ -87,7 +88,7 @@ def assess_retort_scope_diff_contract(
     violations: list[str] = []
     if excluded_hits:
         violations.append("excluded_paths_present")
-    if scoped_file_count > int(contract["max_changed_files"]):
+    if changed_file_count > int(contract["max_changed_files"]):
         violations.append("max_changed_files")
     if scoped_line_changes > int(contract["max_changed_lines"]):
         violations.append("max_changed_lines")
@@ -98,6 +99,7 @@ def assess_retort_scope_diff_contract(
 
     return {
         "contract": contract,
+        "changed_file_count": changed_file_count,
         "excluded_paths": excluded_hits,
         "git_diff_chars": diff_chars,
         "reason": "retort_scope_diff_contract_exceeded",

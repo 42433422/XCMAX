@@ -7,6 +7,7 @@ from pathlib import Path
 from modstore_server.duty_burn_in_handlers import bind_reviewed_burn_in_handlers
 from modstore_server.employee_executor import (
     _action_direct_python,
+    _actions_real,
     _deterministic_direct_input_ready,
 )
 
@@ -37,11 +38,13 @@ ADDITIONAL_DIRECT_WORKERS = {
     "push-update-context-officer": "push_update_context_officer",
     "security-secrets-guard": "security_secrets_guard",
     "site-content-editor": "site_content_editor",
+    "test-qa-runner": "test_qa_runner",
     "user-customer-service-officer": "user_customer_service_officer",
 }
 DIRECT_WORKER_VERSIONS = {employee_id: "1.1.0" for employee_id in ADDITIONAL_DIRECT_WORKERS}
 DIRECT_WORKER_VERSIONS["log-monitor-incident"] = "1.3.0"
 DIRECT_WORKER_VERSIONS["llm-ops-engineer"] = "1.6.0"
+DIRECT_WORKER_VERSIONS["test-qa-runner"] = "2.0.3"
 
 
 def _load_worker(employee_id: str, module_name: str):
@@ -356,6 +359,7 @@ def test_read_only_burn_in_executes_reviewed_sources_not_stale_catalog(
         "market-frontend-dev",
         "marketing-site-builder",
         "security-secrets-guard",
+        "test-qa-runner",
     ):
         manifest = _manifest(employee_id)
         direct = manifest["employee_config_v2"]["actions"]["direct_python"]
@@ -376,6 +380,46 @@ def test_read_only_burn_in_executes_reviewed_sources_not_stale_catalog(
         assert result["output"]["status"] == "approved", (employee_id, result)
         assert result["output"]["read_only"] is True, employee_id
         assert result["output"]["side_effects"] == [], employee_id
+
+
+def test_test_qa_burn_in_preserves_only_its_reviewed_direct_handler(
+    monkeypatch,
+) -> None:
+    def stale_catalog_must_not_run(*_args, **_kwargs):
+        raise AssertionError("read-only burn-in must not execute a stale catalog ZIP")
+
+    monkeypatch.setattr(
+        "modstore_server.employee_executor.load_employee_pack_resolved",
+        stale_catalog_must_not_run,
+    )
+    monkeypatch.setattr(
+        "modstore_server.employee_executor._employee_pack_extract_root",
+        stale_catalog_must_not_run,
+    )
+    manifest = _manifest("test-qa-runner")
+    direct = manifest["employee_config_v2"]["actions"]["direct_python"]
+
+    result = _actions_real(
+        {"actions": {"handlers": ["direct_python"], "direct_python": direct}},
+        {
+            "reasoning": "",
+            "input": {
+                **direct["burn_in_fixture"],
+                "burn_in": True,
+                "burn_in_read_only": True,
+                "handler": "direct_python",
+                "im_reply_managed": True,
+            },
+        },
+        "fixture-only reviewed duty audit",
+        "test-qa-runner",
+    )
+
+    assert result["handlers"] == ["direct_python"]
+    assert len(result["outputs"]) == 1
+    assert result["outputs"][0]["handler"] == "direct_python"
+    assert result["outputs"][0]["output"]["status"] == "approved"
+    assert result["outputs"][0]["output"]["side_effects"] == []
 
 
 def test_security_guard_rejects_sensitive_fields_inside_declared_summary() -> None:
