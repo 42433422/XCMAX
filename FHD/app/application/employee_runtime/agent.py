@@ -98,6 +98,28 @@ class EmployeeAgent:
         except ImportError:
             return ws_gate or write_gate
 
+    @staticmethod
+    def _is_deterministic_office_worker(employee_id: str, handler_list: list[str]) -> bool:
+        """Whether this request is handled wholly by a bundled local converter.
+
+        The ten Office employee packs have a single ``direct_python`` action.
+        Their generate/read operations are deterministic local file work, so a
+        missing model credential must not prevent the already-selected tool
+        from executing.  Keep the exception narrow: other direct-python
+        employees preserve the historical cognition path when they do not
+        provide a file input.
+        """
+
+        if handler_list != ["direct_python"]:
+            return False
+        try:
+            from app.mod_sdk.employee_pack_compat import list_office_pack_catalog
+
+            office_ids = set(list_office_pack_catalog().get("pack_ids") or [])
+            return employee_id in office_ids
+        except RECOVERABLE_ERRORS:
+            return False
+
     def _run_upstream_collaboration(
         self,
         task: str,
@@ -285,7 +307,10 @@ class EmployeeAgent:
             perceived = self._perceive(config, payload)
 
             file_path_fast = str(payload.get("file_path") or payload.get("path") or "").strip()
-            direct_only = handler_list == ["direct_python"] and bool(file_path_fast)
+            direct_only = handler_list == ["direct_python"] and (
+                bool(file_path_fast)
+                or self._is_deterministic_office_worker(employee_id, handler_list)
+            )
             if direct_only:
                 reasoning: dict[str, Any] = {
                     "input": dict(payload),
