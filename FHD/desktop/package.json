@@ -1,6 +1,6 @@
 {
   "name": "xcagi-desktop",
-  "version": "1.0.0",
+  "version": "1.0.0.1",
   "private": true,
   "author": "XCAGI",
   "description": "XCAGI desktop shell for Windows and macOS",
@@ -8,7 +8,7 @@
   "type": "commonjs",
   "scripts": {
     "dev": "npm run build && electron .",
-    "build": "tsc -p tsconfig.json && cp resources/splash.html dist/splash.html",
+    "build": "node scripts/inject-version.cjs && tsc -p tsconfig.json && cp resources/splash.html dist/splash.html",
     "pack": "npm run build && electron-builder --dir --config electron-builder.yml",
     "dist": "npm run build && electron-builder --config electron-builder.yml",
     "dist:win": "npm run build && electron-builder --win --config electron-builder.yml",

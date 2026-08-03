@@ -18,6 +18,8 @@ let remoteBuildSha = ''
 let remoteReleaseDate = ''
 let remoteReleaseNotes = ''
 let remoteReleaseMedia: ReleaseMediaSlide[] = []
+let remoteMinVersion = ''
+let remoteForceUpgrade = false
 let rebuildHookInstalled = false
 let updaterNetSession: Session | null = null
 let updaterNetSessionReady: Promise<Session> | null = null
@@ -100,6 +102,54 @@ function buildInfoCandidates(): string[] {
     path.join(process.resourcesPath, 'build-info.json'),
     path.join(process.resourcesPath, 'backend', 'build-info.json'),
   ]
+}
+
+/** 远程更新元数据中的最低兼容版本（低于此版本必须强制更新）。 */
+export function getRemoteMinVersion(): string {
+  return remoteMinVersion
+}
+
+/** 远程更新元数据标记了强制升级。 */
+export function isForceUpgradeEnabled(): boolean {
+  return remoteForceUpgrade
+}
+
+/** 当前版本是否低于最低兼容版本，需要强制升级。 */
+export function isCurrentBelowMinVersion(): boolean {
+  if (!remoteMinVersion) return false
+  const current = app.getVersion()
+  try {
+    return compareVersions(current, remoteMinVersion) < 0
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 4 段式版本号比较（如 1.0.0.1 vs 1.0.0.0）。
+ * 支持 2-4 段，缺失段视为 0。
+ */
+export function compareVersions(a: string, b: string): number {
+  const partsA = a.split('.').map(s => {
+    const n = parseInt(s, 10)
+    return Number.isFinite(n) ? n : 0
+  })
+  const partsB = b.split('.').map(s => {
+    const n = parseInt(s, 10)
+    return Number.isFinite(n) ? n : 0
+  })
+  const len = Math.max(partsA.length, partsB.length)
+  for (let i = 0; i < len; i++) {
+    const va = partsA[i] ?? 0
+    const vb = partsB[i] ?? 0
+    if (va !== vb) return va - vb
+  }
+  return 0
+}
+
+/** 当前 Electron 版本是否低于最低兼容版本（需要强制升级）。 */
+export function isForceUpgradeRequired(): boolean {
+  return remoteForceUpgrade && isCurrentBelowMinVersion()
 }
 
 export function readLocalBuildSha(): string {
@@ -408,6 +458,8 @@ export async function checkForUpdates(): Promise<unknown> {
     remoteReleaseDate = parseYamlField(metadataText, 'releaseDate').replace(/^['"]|['"]$/g, '')
     remoteReleaseNotes = parseYamlBlock(metadataText, 'releaseNotes')
     remoteReleaseMedia = parseReleaseMediaFromYaml(metadataText)
+    remoteMinVersion = parseYamlField(metadataText, 'minVersion')
+    remoteForceUpgrade = String(parseYamlField(metadataText, 'forceUpgrade') || '').trim().toLowerCase() === 'true'
     installSameVersionRebuildHook()
   }
   return autoUpdater.checkForUpdates()
@@ -507,6 +559,8 @@ export function __resetUpdateDownloadedForTest(): void {
   remoteReleaseNotes = ''
   remoteBuildSha = ''
   remoteReleaseDate = ''
+  remoteMinVersion = ''
+  remoteForceUpgrade = false
 }
 
 export { normalizeReleaseMedia, parseReleaseMediaFromYaml } from './release-media.js'
