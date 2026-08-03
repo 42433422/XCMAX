@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from html import unescape
 import re
+from html import unescape
 
 _TOOL_CALL_MARKER_RE = re.compile(r"<\s*/?\s*tool_call\b", re.IGNORECASE)
 _TOOL_CALL_BLOCK_RE = re.compile(
