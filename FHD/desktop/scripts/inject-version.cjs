@@ -18,8 +18,8 @@ try {
   }
 
   const versionText = fs.readFileSync(versionFile, 'utf8')
-  const productMatch = /\*\*XCAGI 稳定产品版本\*\*\s*\|\s*`([\d.]+)`/.exec(versionText)
-  const toolchainMatch = /\*\*工具链兼容版本\*\*\s*\|\s*`([\d.]+)`/.exec(versionText)
+  const productMatch = versionText.match(/\*\*XCAGI 稳定产品版本\*\*\s*\|\s*`([\d.]+)`/)
+  const toolchainMatch = versionText.match(/\*\*工具链兼容版本\*\*\s*\|\s*`([\d.]+)`/)
   if (!productMatch || !toolchainMatch) throw new Error('无法从 VERSION.md 解析产品/工具链版本')
   const productVersion = productMatch[1]
   const toolchainVersion = toolchainMatch[1]
