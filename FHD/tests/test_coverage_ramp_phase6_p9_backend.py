@@ -898,8 +898,28 @@ def test_execute_planner_tool_from_body_invalid_json_result() -> None:
         ),
     ):
         out = execute_planner_tool_from_body({"tool_name": "tool_y"})
-    assert out["success"] is True
+    assert out["success"] is False
+    assert out["error"] == "工具执行返回了无效结果"
     assert out["execution_path"] == "host.workflow"
+
+
+def test_execute_planner_tool_from_body_propagates_structured_failure() -> None:
+    raw = '{"success": false, "error": "employee output is missing"}'
+    mock_exec = MagicMock(return_value=raw)
+    with (
+        patch(
+            "app.mod_sdk.planner_tools.resolve_planner_tool_executor",
+            return_value=mock_exec,
+        ),
+        patch(
+            "app.mod_sdk.planner_tools.is_planner_tools_via_mod_enabled",
+            return_value=True,
+        ),
+    ):
+        out = execute_planner_tool_from_body({"tool_name": "word-full-read-employee"})
+    assert out["success"] is False
+    assert out["error"] == "employee output is missing"
+    assert out["execution_path"] == "mod_facade"
 
 
 def test_execute_planner_tool_from_body_workspace_root_from_env(

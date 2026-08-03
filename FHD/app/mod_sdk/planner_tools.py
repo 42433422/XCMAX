@@ -261,9 +261,13 @@ def execute_planner_tool_from_body(body: dict[str, Any] | None) -> dict[str, Any
 
     execution_path = "host.workflow"
     handler_mod: str | None = None
+    tool_success = False
+    tool_error = "工具执行返回了无效结果"
     try:
         probe = json.loads(raw)
         if isinstance(probe, dict):
+            tool_success = bool(probe.get("success"))
+            tool_error = str(probe.get("error") or probe.get("message") or tool_error)
             src = str(probe.get("source") or "")
             if src.startswith("mod:"):
                 execution_path = "mod_native"
@@ -275,12 +279,16 @@ def execute_planner_tool_from_body(body: dict[str, Any] | None) -> dict[str, Any
         handler_mod = PLANNER_FACADE_MOD_ID
 
     return {
-        "success": True,
+        # A planner facade must report the actual employee/tool outcome.  Do
+        # not turn a structured failure (or malformed response) into a
+        # completed task merely because dispatch itself returned normally.
+        "success": tool_success,
         "tool_name": name,
         "result": raw,
         "execution_path": execution_path,
         "mod_id": handler_mod,
         "delegate": "host.workflow" if execution_path != "mod_native" else None,
+        **({"error": tool_error} if not tool_success else {}),
     }
 
 
