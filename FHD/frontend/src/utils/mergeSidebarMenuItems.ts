@@ -15,6 +15,31 @@ export type ResolvedSidebarMenuItem = {
   children?: ResolvedSidebarMenuItem[]
 }
 
+/**
+ * Shallow memo 缓存：每次路由切换时 store ref 引用通常不变，
+ * 直接复用上次计算结果，避免全量遍历 + 正则匹配。
+ * 命中条件：6 个参数引用完全一致（===），对应 Vue 响应式 store
+ * 未触发更新时的常见场景（单纯 route.path 变化不影响菜单内容）。
+ */
+type _MergeArgs = [
+  ResolvedSidebarMenuItem[],
+  ResolvedSidebarMenuItem[],
+  ResolvedSidebarMenuItem[],
+  ResolvedSidebarMenuItem[],
+  string[],
+  string | null | undefined,
+]
+let _lastCache: { args: _MergeArgs; result: ResolvedSidebarMenuItem[] } | null = null
+
+function _cacheHit(args: _MergeArgs): boolean {
+  if (!_lastCache) return false
+  const prev = _lastCache.args
+  for (let i = 0; i < 6; i++) {
+    if (prev[i] !== args[i]) return false
+  }
+  return true
+}
+
 function collectNavKeys(items: ResolvedSidebarMenuItem[]): Set<string> {
   const keys = new Set<string>()
   for (const item of items) {
@@ -117,6 +142,9 @@ const hostKeysFromPath = new Set([
 
 /**
  * 合并宿主核心菜单 + Mod 菜单 + 尾部项，按 key 与宿主槽位去重。
+ *
+ * Performance：模块级 shallow memo。路由频繁切换但 store 引用未变时
+ * 直接命中（~O(1) 引用比较），避免 4 × N 次 push + 正则/字符串扫描。
  */
 export function mergeSidebarMenuItems(
   coreItems: ResolvedSidebarMenuItem[],
@@ -126,6 +154,11 @@ export function mergeSidebarMenuItems(
   installedModIds: string[],
   activeModId?: string | null,
 ): ResolvedSidebarMenuItem[] {
+  const args: _MergeArgs = [coreItems, modItems, adminItems, trailingItems, installedModIds, activeModId]
+  if (_cacheHit(args)) {
+    return _lastCache!.result
+  }
+
   const occupiedHostSlots = new Set<string>([
     ...collectNavKeys(coreItems),
     ...collectNavKeys(trailingItems),
@@ -168,5 +201,6 @@ export function mergeSidebarMenuItems(
   for (const item of adminItems) push(item)
   for (const item of trailingItems) push(item)
 
+  _lastCache = { args, result: out }
   return out
 }
