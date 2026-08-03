@@ -456,27 +456,53 @@ def start_scheduler() -> None:
             from modstore_server.customer_value_reconciler import (
                 reconcile_paid_customer_value,
             )
+            from modstore_server.customer_value_escalation import (
+                ensure_customer_value_gap_escalation,
+            )
 
-            result = _run_authoritative_customer_value_job(
-                lambda: reconcile_paid_customer_value(
-                    window_days=max(
-                        1,
-                        min(
-                            _env_int("MODSTORE_CUSTOMER_VALUE_WINDOW_DAYS", 90),
-                            3650,
-                        ),
-                    )
+            window_days = max(
+                1,
+                min(
+                    _env_int("MODSTORE_CUSTOMER_VALUE_WINDOW_DAYS", 90),
+                    3650,
                 ),
             )
-            if result.get("created") or not result.get("source_ready"):
+
+            def _reconcile_and_escalate() -> dict[str, Any]:
+                reconciled = reconcile_paid_customer_value(
+                    window_days=window_days,
+                    include_evidence=True,
+                )
+                if reconciled.get("source_ready") is not True:
+                    return reconciled
+                escalation = ensure_customer_value_gap_escalation(
+                    evidence=reconciled.get("evidence"),
+                    window_days=window_days,
+                )
+                return {**reconciled, "escalation": escalation}
+
+            result = _run_authoritative_customer_value_job(
+                _reconcile_and_escalate,
+            )
+            escalation = (
+                result.get("escalation")
+                if isinstance(result.get("escalation"), dict)
+                else {}
+            )
+            if (
+                result.get("created")
+                or not result.get("source_ready")
+                or escalation.get("action_created")
+            ):
                 logger.info(
                     "customer-value reconciliation source=%s ready=%s checked=%s "
-                    "created=%s existing=%s skipped=%s",
+                    "created=%s existing=%s escalation=%s skipped=%s",
                     result.get("source_owner"),
                     result.get("source_ready"),
                     result.get("checked"),
                     result.get("created"),
                     result.get("existing"),
+                    escalation.get("status"),
                     result.get("skipped"),
                 )
         except Exception:
