@@ -71,15 +71,40 @@ def get_java_sync_client() -> httpx.Client:
 # ---------------------------------------------------------------------------
 
 
+def _is_closed_event_loop(error: RuntimeError) -> bool:
+    """Return whether an async client belongs to an already-destroyed loop."""
+    return "event loop is closed" in str(error).lower()
+
+
+async def _close_async_client(client: httpx.AsyncClient) -> None:
+    """Close a pooled async client without turning a prior loop teardown into an error."""
+    try:
+        await client.aclose()
+    except RuntimeError as error:
+        # A worker can be stopped after the event loop that created an idle
+        # client has already gone away.  There is nothing left to close in
+        # that pool, so do not emit a false shutdown failure.  Other runtime
+        # errors remain observable to the FastAPI shutdown hook.
+        if not _is_closed_event_loop(error):
+            raise
+
+
 async def close_all() -> None:
     """Close all shared clients.  Call from the FastAPI shutdown lifespan."""
     global _java_async_client, _external_async_client, _java_sync_client
-    if _java_async_client is not None:
-        await _java_async_client.aclose()
-        _java_async_client = None
-    if _external_async_client is not None:
-        await _external_async_client.aclose()
-        _external_async_client = None
-    if _java_sync_client is not None:
-        _java_sync_client.close()
-        _java_sync_client = None
+
+    # Detach first.  A client created on an old event loop cannot be reused,
+    # even when its best-effort close encounters that loop already closing.
+    java_async_client = _java_async_client
+    external_async_client = _external_async_client
+    java_sync_client = _java_sync_client
+    _java_async_client = None
+    _external_async_client = None
+    _java_sync_client = None
+
+    if java_async_client is not None:
+        await _close_async_client(java_async_client)
+    if external_async_client is not None:
+        await _close_async_client(external_async_client)
+    if java_sync_client is not None:
+        java_sync_client.close()
