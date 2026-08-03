@@ -302,7 +302,8 @@ class TestLoadRuleSpecDeep:
 
 
 class TestActionVendorConvertDeep:
-    def test_generate_with_existing_src_file(self, tmp_path) -> None:
+    def test_generate_with_existing_src_file(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
         backend = tmp_path / "backend" / "vendor" / "csv"
         backend.mkdir(parents=True)
         (backend / "convert.py").write_text(
@@ -315,11 +316,14 @@ class TestActionVendorConvertDeep:
         payload_file = inputs_dir / "payload.json"
         payload_file.write_text(json.dumps({"data": "test"}))
 
-        out = exec_mod._action_vendor_convert(tmp_path, "emp-generate-1", {}, None)
+        out = exec_mod._action_vendor_convert(
+            tmp_path, "emp-generate-1", {"file_path": str(payload_file)}, None
+        )
         assert out["ok"] is True
         assert out["handler"] == "direct_python"
 
-    def test_generate_with_user_request_creates_payload(self, tmp_path) -> None:
+    def test_generate_with_user_request_creates_payload(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
         backend = tmp_path / "backend" / "vendor" / "csv"
         backend.mkdir(parents=True)
         (backend / "convert.py").write_text(
@@ -330,7 +334,10 @@ class TestActionVendorConvertDeep:
             tmp_path, "emp-generate-1", {"user_request": "generate something"}, None
         )
         assert out["ok"] is True
-        payload_file = tmp_path / "inputs" / "payload.json"
+        placeholder_dir = tmp_path / ".xcagi" / "employee-inputs"
+        payload_files = list(placeholder_dir.glob("emp-generate-1-*.json"))
+        assert len(payload_files) == 1
+        payload_file = payload_files[0]
         assert payload_file.read_text(encoding="utf-8") == "{}"
         assert "generate something" not in payload_file.read_text(encoding="utf-8")
         assert out["output"]["payload"]["user_query"] == "generate something"
