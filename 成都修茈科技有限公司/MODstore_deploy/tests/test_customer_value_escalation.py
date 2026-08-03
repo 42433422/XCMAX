@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 
-import modstore_server.models as models
 import pytest
 from sqlalchemy import select
 
+import modstore_server.models as models
 from modstore_server.customer_value_escalation import (
     ensure_customer_value_gap_escalation,
 )
