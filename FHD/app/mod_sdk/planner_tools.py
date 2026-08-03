@@ -321,6 +321,16 @@ def list_planner_tools_registry_detail() -> dict[str, Any]:
 
     native_summary = list_native_planner_tools_summary()
     try:
+        from app.application.tools.registered_capabilities import (
+            ERP_CAPABILITY_TOOL_NAME,
+            registered_capability_catalog,
+        )
+
+        product_capabilities = registered_capability_catalog()
+    except RECOVERABLE_ERRORS:
+        product_capabilities = {}
+        ERP_CAPABILITY_TOOL_NAME = "execute_erp_capability"
+    try:
         from app.mod_sdk.employee_tool_registry import build_employee_tools_status
 
         employee_status = build_employee_tools_status()
@@ -334,6 +344,9 @@ def list_planner_tools_registry_detail() -> dict[str, Any]:
         "mod_extension_names": ext_names,
         "employee_planner": employee_status,
         "employee_pack_tools": employee_status.get("employee_pack_tools") or [],
+        "registered_capability_tool": ERP_CAPABILITY_TOOL_NAME,
+        "registered_capability_count": int(product_capabilities.get("capability_count") or 0),
+        "registered_capability_ids": product_capabilities.get("capability_ids") or [],
         "execution_via_mod_facade": via_mod,
         "native_planner_tools": native_summary,
         "execution_path": (
