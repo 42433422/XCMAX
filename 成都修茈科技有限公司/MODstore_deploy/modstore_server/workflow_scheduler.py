@@ -453,21 +453,11 @@ def start_scheduler() -> None:
         if not _env_bool("MODSTORE_CUSTOMER_VALUE_RECONCILE_ENABLED", True):
             return
         try:
-            from modstore_server.customer_value_reconciler import (
-                reconcile_paid_customer_value,
+            from modstore_server.customer_value_scheduler_job import (
+                reconcile_customer_value_with_escalation,
             )
 
-            result = _run_authoritative_customer_value_job(
-                lambda: reconcile_paid_customer_value(
-                    window_days=max(
-                        1,
-                        min(
-                            _env_int("MODSTORE_CUSTOMER_VALUE_WINDOW_DAYS", 90),
-                            3650,
-                        ),
-                    )
-                ),
-            )
+            result = _run_authoritative_customer_value_job(reconcile_customer_value_with_escalation)
             if result.get("created") or not result.get("source_ready"):
                 logger.info(
                     "customer-value reconciliation source=%s ready=%s checked=%s "
