@@ -8,6 +8,7 @@ import inspect
 import json
 import logging
 import os
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -16,8 +17,13 @@ from app.application.employee_runtime.loader import (
     DIRECT_PYTHON_RUNTIME_MISSING_MSG,
     pack_has_direct_python_runtime,
 )
+from app.application.shipment_excel_etl_security import (
+    ShipmentEtlPathError,
+    resolve_etl_output_path,
+)
 from app.mod_sdk.employee_specialized_tools import get_employee_tools, handle_specialized
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
 
@@ -182,14 +188,27 @@ def _action_vendor_convert(
     if mod is None or not callable(getattr(mod, "convert_file", None)):
         return {"handler": "direct_python", "ok": False, "error": "vendor convert 模块无效"}
     is_generate = "generate" in employee_id.lower()
-    src = _resolve_file_path(payload, workspace_root)
-    if not is_generate and src is None:
-        return {"handler": "direct_python", "ok": False, "error": "缺少有效 file_path"}
-    out_dir = pack_root / "outputs"
-    out_dir.mkdir(parents=True, exist_ok=True)
     rule_spec = _load_rule_spec(pack_root)
     default_out = str(rule_spec.get("default_output_relpath") or "outputs/data.json")
-    output_path = out_dir / Path(default_out).name
+    output_name = Path(default_out).name
+    # A packaged macOS app (and especially a mounted DMG) is read-only.  Input
+    # placeholders and generated documents therefore belong to a path that has
+    # passed the shared ETL workspace sandbox, never to ``mods/_employees``.
+    # Request data can nominate a workspace only when it is already under a
+    # trusted root; ``resolve_etl_output_path`` rejects traversal and rebuilds
+    # the final path under that root.
+    requested_root = str(workspace_root or get_app_data_dir()).strip()
+    try:
+        output_path = resolve_etl_output_path(
+            str(Path(requested_root) / "outputs" / output_name),
+            workspace_root=workspace_root,
+        )
+    except ShipmentEtlPathError:
+        return {"handler": "direct_python", "ok": False, "error": "工作区不在允许范围"}
+    workspace = output_path.parent.parent
+    src = _resolve_file_path(payload, str(workspace))
+    if not is_generate and src is None:
+        return {"handler": "direct_python", "ok": False, "error": "缺少有效 file_path"}
     vendor_payload = {
         k: v for k, v in payload.items() if k not in ("file_path", "path", "output_path")
     }
@@ -198,9 +217,11 @@ def _action_vendor_convert(
     ):
         vendor_payload["user_query"] = payload["user_request"]
     if is_generate:
-        src = src or (pack_root / "inputs" / "payload.json")
+        src = src or (
+            workspace / ".xcagi" / "employee-inputs" / f"{employee_id}-{uuid.uuid4().hex}.json"
+        )
         if not src.is_file() and payload.get("user_request"):
-            payload_path = pack_root / "inputs" / "payload.json"
+            payload_path = src
             payload_path.parent.mkdir(parents=True, exist_ok=True)
             # The request remains in memory via ``vendor_payload``.  Persist only a
             # non-sensitive placeholder because converters require a source path.
@@ -212,7 +233,7 @@ def _action_vendor_convert(
                 "ok": False,
                 "error": "生成类员工需要 JSON 输入或 user_request",
             }
-    ctx = {"employee_id": employee_id, "workspace_root": str(workspace_root or os.getcwd())}
+    ctx = {"employee_id": employee_id, "workspace_root": str(workspace)}
     convert_fn = mod.convert_file
     try:
         result = _run_maybe_async(
@@ -280,6 +301,14 @@ def _action_direct_python_module(
             payload[key] = reasoning[key]
     payload.setdefault("task", task)
     payload.setdefault("workspace_root", str(workspace_root or os.getcwd()))
+    # The generated employee modules require an input file, but their vendor
+    # converters can deterministically construct a document from user_request.
+    # Route that no-file case there instead of asking the model to improvise an
+    # input or attempting writes inside the installed application bundle.
+    is_generate = "generate" in employee_id.lower()
+    has_file = bool(str(payload.get("file_path") or payload.get("path") or "").strip())
+    if is_generate and not has_file and str(payload.get("user_request") or "").strip():
+        return _action_vendor_convert(pack_root, employee_id, payload, workspace_root)
     ctx = _build_enriched_ctx(employee_id, payload["workspace_root"])
     # 拦截 specialized handler：直接走专属工具调度，不调用员工 run()
     if str(payload.get("handler") or "").strip() == "specialized":

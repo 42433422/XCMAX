@@ -257,10 +257,12 @@ describe('useChatOrchestration batch/json', () => {
     expect(requestChatByModeWithTimeout).toHaveBeenCalled()
     expect(addAndSaveMessage).toHaveBeenCalledWith('请确认', 'ai', undefined, expect.any(Object))
     expect(agentListEvents).toHaveBeenCalledWith('run_1', {})
+    // A confirmation response has not executed a tool yet. It must remain a
+    // queued workflow, rather than showing the user a false "agent success".
     expect(upsertTask).toHaveBeenCalledWith(expect.objectContaining({
-      id: 'agent_run_1',
-      source: 'agent',
-      status: 'success',
+      id: 'wf-2',
+      source: 'workflow',
+      status: 'queued',
     }))
   })
 })

@@ -108,6 +108,39 @@ def test_execute_employee_csv_read_tool(employee_mods_root, tmp_path):
     assert data.get("success") is True
 
 
+def test_office_employee_never_reports_success_without_artifact(employee_mods_root, monkeypatch):
+    """A direct Python return is insufficient when the promised output is absent."""
+    pack_id = "csv-full-read-employee"
+    _write_csv_read_pack(employee_mods_root, pack_id)
+
+    from app.application.employee_runtime import executor
+    from app.mod_sdk import employee_tool_registry as registry
+
+    registry.invalidate_employee_tool_cache()
+    monkeypatch.setattr(
+        executor,
+        "execute_employee_task_local",
+        lambda *_args, **_kwargs: {
+            "success": True,
+            "result": {
+                "outputs": [
+                    {
+                        "handler": "direct_python",
+                        "ok": True,
+                        "output_path": "/tmp/does-not-exist-xcagi.csv",
+                    }
+                ]
+            },
+        },
+    )
+
+    data = json.loads(registry.execute_employee_tool(pack_id, {"file_path": "x.csv"}))
+
+    assert data["success"] is False
+    assert data["artifact_postcondition"]["verified"] is False
+    assert "输出文件" in data["error"]
+
+
 def test_get_planner_chat_tool_registry_merges_employee_tools(employee_mods_root):
     _write_csv_read_pack(employee_mods_root)
     from app.application.tools.workflow import invalidate_workflow_tool_registry

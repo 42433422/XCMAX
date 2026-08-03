@@ -49,14 +49,17 @@ for pat in blocks:
     t = re.sub(pat, "\n", t, flags=re.DOTALL)
 
 marker = "    ## CORP_SITE_END"
-includes = """
-    include /etc/nginx/snippets/marketing-site-static.inc.conf;
-    include /etc/nginx/snippets/corp-main-styles.inc.conf;
-    include /etc/nginx/snippets/xcagi-cos-alias.inc.conf;
-    include /etc/nginx/snippets/market-static.inc.conf;
-"""
-if "snippets/market-static.inc.conf" not in t:
-    t = t.replace(marker, marker + includes)
+includes = [
+    "include /etc/nginx/snippets/marketing-site-static.inc.conf;",
+    "include /etc/nginx/snippets/corp-main-styles.inc.conf;",
+    "include /etc/nginx/snippets/xcagi-cos-alias.inc.conf;",
+    "include /etc/nginx/snippets/market-static.inc.conf;",
+]
+for include in includes:
+    # 线上可能已经只同步了部分静态片段；逐项补齐，不能因为 market 片段
+    # 已存在而遗漏版本化 XCAGI 下载路由。
+    if include not in t:
+        t = t.replace(marker, marker + "\n    " + include)
 
 founder_include = """
     include /etc/nginx/snippets/founder-autonomy-admin.inc.conf;

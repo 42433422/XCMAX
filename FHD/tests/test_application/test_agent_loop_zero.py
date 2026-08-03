@@ -179,6 +179,7 @@ class TestRunEmployeeAgentLoop:
                 max_iterations=2,
             )
         assert result["max_iterations_reached"] is True
+        assert result["ok"] is False
         assert result["rounds"] == 2
         assert result["exit_status"] == "max_iterations"
 
@@ -252,7 +253,8 @@ class TestRunEmployeeAgentLoop:
             tools=[{"type": "function", "function": {"name": "dangerous_tool"}}],
             gate=gate,
         )
-        assert result["ok"] is True
+        assert result["ok"] is False
+        assert result["exit_status"] == "tool_blocked"
         assert any(tc.get("blocked") for tc in result["tool_calls"])
 
     @patch("app.infrastructure.llm.client.get_openai_compatible_client")

@@ -28,6 +28,7 @@ from app.application.agent_orchestrator.chat_trace import (
     finalize_legacy_chat_run,
     start_legacy_chat_run,
 )
+from app.application.chat_reply_safety import sanitize_model_chat_reply
 from app.application.modstore_conversation_app import create_modstore_openai_client_from_request
 from app.application.stream_status_events import MODEL_STREAM_ACCEPTED_EVENT
 from app.application.workflow.multimodal_user_content import (
@@ -796,7 +797,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 yield _sse_event_line(ev)
         if halted_for_write_token:
             return
-        merged = "".join(reply_parts)
+        merged = sanitize_model_chat_reply("".join(reply_parts))
         if not merged.strip():
             msg = (
                 "模型服务已完成请求，但没有返回可显示的正文。"

@@ -352,7 +352,7 @@ def _release_train_snapshot() -> dict[str, Any]:
     def _default_snapshot(*, note: str | None = None) -> dict[str, Any]:
         data: dict[str, Any] = {
             "epoch": "1.0.0.0",
-            "current": "1.0.0.0",
+            "current": "1.0.0.1",
             "started_at": "2026-06-04",
             "day_index": 0,
         }

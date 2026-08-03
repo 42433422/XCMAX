@@ -33,6 +33,7 @@ from app.application.employee_runtime.loader import (
     resolve_pack_dir,
 )
 from app.application.employee_runtime.memory import EmployeeMemoryManager, MemoryContext
+from app.application.employee_runtime.office_workers import is_deterministic_office_worker
 from app.application.employee_runtime.result_builders import (
     build_blocked_result,
     build_cognition_failed_result,
@@ -285,7 +286,9 @@ class EmployeeAgent:
             perceived = self._perceive(config, payload)
 
             file_path_fast = str(payload.get("file_path") or payload.get("path") or "").strip()
-            direct_only = handler_list == ["direct_python"] and bool(file_path_fast)
+            direct_only = handler_list == ["direct_python"] and (
+                bool(file_path_fast) or is_deterministic_office_worker(employee_id, handler_list)
+            )
             if direct_only:
                 reasoning: dict[str, Any] = {
                     "input": dict(payload),

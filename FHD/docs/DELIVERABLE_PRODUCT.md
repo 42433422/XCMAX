@@ -1,4 +1,4 @@
-# XCAGI 1.0.0.0 企业版可交付产品说明
+# XCAGI 1.0.0.1 企业版可交付产品说明
 
 > **产品模型**：每家客户独立部署一份宿主；装平台 MOD 后变为对应垂直系统。供应商不代运营客户业务库。
 
@@ -8,9 +8,9 @@
 
 | 交付物 | 路径 / 命令 | 验收 |
 |--------|-------------|------|
-| Windows 企业版安装包 | `build-installer.ps1 -Version 1.0.0.0 -ProductSku enterprise` | `release/xcagi-v1.0.0.0/enterprise/` |
-| Windows 安装包（macOS/Linux 交叉构建） | `bash scripts/package/build-windows-installer.sh 1.0.0.0 enterprise` | Docker/Wine 构建，必须包含 `resources/backend/xcagi-backend.exe` |
-| macOS 安装包（单 SKU） | `bash scripts/package/build-installer.sh 1.0.0.0 enterprise` | 与 Windows 共用 SKU 资源契约，后端二进制按平台生成 |
+| Windows 企业版安装包 | `build-installer.ps1 -Version 1.0.0.1 -ProductSku enterprise` | `release/xcagi-v1.0.0.1/enterprise/` |
+| Windows 安装包（macOS/Linux 交叉构建） | `bash scripts/package/build-windows-installer.sh 1.0.0.1 enterprise` | Docker/Wine 构建，必须包含 `resources/backend/xcagi-backend.exe` |
+| macOS 安装包（单 SKU） | `bash scripts/package/build-installer.sh 1.0.0.1 enterprise` | 与 Windows 共用 SKU 资源契约，后端二进制按平台生成 |
 | 通用壳前端 | 默认 `npm run build`（generic） | 侧栏仅壳菜单 + Mod |
 | 内置 Mod 种子（L1 平台 bridge） | 安装包 `mods/` | 首启自动复制到 userData/mods |
 | 行业中性种子池（L2） | 安装包 `industry-seeds/`（仅 enterprise + open 行业） | 引导选行业后单拷，不全量激活 |
@@ -62,7 +62,7 @@ powershell -ExecutionPolicy Bypass -File scripts/dev/adcdfg_acceptance.ps1
 powershell -ExecutionPolicy Bypass -File scripts/dev/deliverable_smoke.ps1
 ```
 
-确认 `VERSION.md` 的产品版本为 **1.0.0.0**、工具链映射为 **1.0.0**，并通过版本锚点校验。
+确认 `VERSION.md` 的产品版本为 **1.0.0.1**、工具链映射为 **1.0.0**，并通过版本锚点校验。
 
 ---
 

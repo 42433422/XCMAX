@@ -1,10 +1,10 @@
 {
   "schema": "xcagi.download_release/v1",
-  "_doc": "官网下载版本 SSOT。当前只发布 enterprise；personal 已冻结，仅保留历史兼容入口。稳定产品版本、下载目录和 Android versionName 统一为 1.0.0.0；npm/Electron/Apple 工具链内部映射为 1.0.0。",
-  "version_lock": "1.0.0.0",
-  "marketing_version": "1.0.0.0",
-  "download_version": "1.0.0.0",
-  "android_version": "1.0.0.0",
+  "_doc": "官网下载版本 SSOT。当前只发布 enterprise；personal 已冻结，仅保留历史兼容入口。稳定产品版本、下载目录和 Android versionName 统一为 1.0.0.1；npm/Electron/Apple 工具链内部映射为 1.0.0。",
+  "version_lock": "1.0.0.1",
+  "marketing_version": "1.0.0.1",
+  "download_version": "1.0.0.1",
+  "android_version": "1.0.0.1",
   "android_git_sha": "a6af956c70e5c4ced49859240455fc9ba8e42e5c",
   "release_ready": true,
   "active_skus": [
@@ -24,10 +24,10 @@
   },
   "artifacts": {
     "enterprise": {
-      "win": "XCAGI-Enterprise-Setup-1.0.0.0-x64.exe",
-      "mac_arm64": "XCAGI-Enterprise-1.0.0.0-mac-arm64.dmg",
-      "mac_x64": "XCAGI-Enterprise-1.0.0.0-mac-x64.dmg",
-      "android": "XCAGI-Enterprise-Android-1.0.0.0.apk"
+      "win": "XCAGI-Enterprise-Setup-1.0.0.1-x64.exe",
+      "mac_arm64": "XCAGI-Enterprise-1.0.0.1-mac-arm64.dmg",
+      "mac_x64": "XCAGI-Enterprise-1.0.0.1-mac-x64.dmg",
+      "android": "XCAGI-Enterprise-Android-1.0.0.1.apk"
     }
   },
   "updater_manifests": {

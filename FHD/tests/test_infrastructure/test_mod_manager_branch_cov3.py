@@ -2482,6 +2482,38 @@ class TestEnsureModApiReady:
             gmm.return_value = mm
             assert ensure_mod_api_ready("m") is False
 
+    def test_employee_pack_uses_employee_route_registry(self, tmp_path: Path) -> None:
+        mods_root = tmp_path / "mods"
+        pack = mods_root / "_employees" / "artifact-generator"
+        pack.mkdir(parents=True)
+        (pack / "manifest.json").write_text(
+            json.dumps({"id": "artifact-generator", "artifact": "employee_pack"}),
+            encoding="utf-8",
+        )
+        with (
+            patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),
+            patch(
+                "app.infrastructure.mods.mod_manager._mod_allowed_for_api_load",
+                return_value=True,
+            ),
+            patch("app.infrastructure.mods.mod_manager._restore_entitlements_from_session_id"),
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager") as gmm,
+            patch(
+                "app.infrastructure.mods.mod_manager.register_employee_pack_routes",
+                return_value=True,
+            ) as register,
+            patch(
+                "app.infrastructure.mods.mod_manager._employee_pack_routes_registered", new=set()
+            ),
+        ):
+            mm = MagicMock()
+            mm.mods_root = str(mods_root)
+            mm._loaded_mods = []
+            gmm.return_value = mm
+            assert ensure_mod_api_ready("artifact-generator") is True
+            mm.load_mod.assert_not_called()
+            register.assert_called_once()
+
     def test_already_registered_returns_true(self) -> None:
         with (
             patch("app.infrastructure.mods.mod_manager.is_mods_disabled", return_value=False),

@@ -34,11 +34,11 @@ fi
 deploy_emit verify ok
 
 VERSION="$(
-  python3 - <<'PY' "$FHD_ROOT/pyproject.toml" 2>/dev/null || echo "1.0.0.0"
+  python3 - <<'PY' "$FHD_ROOT/pyproject.toml" 2>/dev/null || echo "1.0.0.1"
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
 m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
-print(m.group(1) if m else "1.0.0.0")
+print(m.group(1) if m else "1.0.0.1")
 PY
 )"
 

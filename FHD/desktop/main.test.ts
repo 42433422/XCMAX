@@ -63,6 +63,7 @@ const electronMocks = vi.hoisted(() => {
   const shell = { openPath: vi.fn() }
   const session = {
     defaultSession: {
+      cookies: { get: vi.fn(() => Promise.resolve([] as Array<{ name: string; value: string }>)) },
       setPermissionRequestHandler: vi.fn(),
       setPermissionCheckHandler: vi.fn(),
       setProxy: vi.fn(() => Promise.resolve())
@@ -158,6 +159,34 @@ describe('main — resolveDefaultDesktopPort', () => {
     process.env.XCAGI_DESKTOP_PORT = '17500.9'
     const { resolveDefaultDesktopPort } = await import('./main.js')
     expect(resolveDefaultDesktopPort()).toBe(17500)
+  })
+})
+
+describe('main — warmPersistedDesktopSessionCookieStore', () => {
+  beforeEach(() => {
+    electronMocks.session.defaultSession.cookies.get.mockReset()
+    delete process.env.SESSION_COOKIE_NAME
+  })
+
+  it('warms an existing persisted enterprise session before renderer startup', async () => {
+    electronMocks.session.defaultSession.cookies.get.mockResolvedValue([
+      { name: 'session_id', value: 'persisted-session' },
+    ])
+    const { warmPersistedDesktopSessionCookieStore } = await import('./session-cookie-warmup.js')
+
+    await expect(warmPersistedDesktopSessionCookieStore(17500)).resolves.toBe(true)
+    expect(electronMocks.session.defaultSession.cookies.get).toHaveBeenCalledWith({
+      url: 'http://127.0.0.1:17500/',
+    })
+  })
+
+  it('does not treat unrelated cookies as an authenticated session', async () => {
+    electronMocks.session.defaultSession.cookies.get.mockResolvedValue([
+      { name: 'csrf_token', value: 'csrf' },
+    ])
+    const { warmPersistedDesktopSessionCookieStore } = await import('./session-cookie-warmup.js')
+
+    await expect(warmPersistedDesktopSessionCookieStore(17500)).resolves.toBe(false)
   })
 })
 
@@ -426,7 +455,7 @@ describe('main — backendEditionEnv', () => {
 
 describe('main — readJsonTextFile', () => {
   it('reads UTF-8 file content', async () => {
-    const { readJsonTextFile } = await import('./main.js')
+    const { readJsonTextFile } = await import('./backend-env-utils.js')
     const tmp = path.join(os.tmpdir(), `xcagi-test-utf8-${Date.now()}.json`)
     fs.writeFileSync(tmp, '{"k": "v"}', 'utf8')
     expect(readJsonTextFile(tmp)).toBe('{"k": "v"}')
@@ -434,7 +463,7 @@ describe('main — readJsonTextFile', () => {
   })
 
   it('reads UTF-16LE file with BOM', async () => {
-    const { readJsonTextFile } = await import('./main.js')
+    const { readJsonTextFile } = await import('./backend-env-utils.js')
     const tmp = path.join(os.tmpdir(), `xcagi-test-utf16-${Date.now()}.json`)
     const content = '{"k": "v"}'
     const buf = Buffer.from(content, 'utf16le')
@@ -446,7 +475,7 @@ describe('main — readJsonTextFile', () => {
   })
 
   it('strips UTF-8 BOM if present', async () => {
-    const { readJsonTextFile } = await import('./main.js')
+    const { readJsonTextFile } = await import('./backend-env-utils.js')
     const tmp = path.join(os.tmpdir(), `xcagi-test-bom-${Date.now()}.json`)
     fs.writeFileSync(tmp, '\uFEFF{"k": "v"}', 'utf8')
     expect(readJsonTextFile(tmp)).toBe('{"k": "v"}')
@@ -456,54 +485,54 @@ describe('main — readJsonTextFile', () => {
 
 describe('main — isTrustedDesktopOrigin', () => {
   it('accepts 127.0.0.1 with matching port', async () => {
-    const { isTrustedDesktopOrigin } = await import('./main.js')
+    const { isTrustedDesktopOrigin } = await import('./desktop-navigation.js')
     expect(isTrustedDesktopOrigin('http://127.0.0.1:17500/', 17500)).toBe(true)
   })
 
   it('accepts localhost with matching port', async () => {
-    const { isTrustedDesktopOrigin } = await import('./main.js')
+    const { isTrustedDesktopOrigin } = await import('./desktop-navigation.js')
     expect(isTrustedDesktopOrigin('http://localhost:17500/', 17500)).toBe(true)
   })
 
   it('rejects mismatched port', async () => {
-    const { isTrustedDesktopOrigin } = await import('./main.js')
+    const { isTrustedDesktopOrigin } = await import('./desktop-navigation.js')
     expect(isTrustedDesktopOrigin('http://127.0.0.1:5000/', 17500)).toBe(false)
   })
 
   it('rejects external hostname', async () => {
-    const { isTrustedDesktopOrigin } = await import('./main.js')
+    const { isTrustedDesktopOrigin } = await import('./desktop-navigation.js')
     expect(isTrustedDesktopOrigin('http://example.com:17500/', 17500)).toBe(false)
   })
 
   it('rejects https protocol', async () => {
-    const { isTrustedDesktopOrigin } = await import('./main.js')
+    const { isTrustedDesktopOrigin } = await import('./desktop-navigation.js')
     expect(isTrustedDesktopOrigin('https://127.0.0.1:17500/', 17500)).toBe(false)
   })
 
   it('rejects file protocol', async () => {
-    const { isTrustedDesktopOrigin } = await import('./main.js')
+    const { isTrustedDesktopOrigin } = await import('./desktop-navigation.js')
     expect(isTrustedDesktopOrigin('file:///etc/passwd', 17500)).toBe(false)
   })
 
   it('returns false for undefined input', async () => {
-    const { isTrustedDesktopOrigin } = await import('./main.js')
+    const { isTrustedDesktopOrigin } = await import('./desktop-navigation.js')
     expect(isTrustedDesktopOrigin(undefined, 17500)).toBe(false)
   })
 
   it('returns false for malformed URL', async () => {
-    const { isTrustedDesktopOrigin } = await import('./main.js')
+    const { isTrustedDesktopOrigin } = await import('./desktop-navigation.js')
     expect(isTrustedDesktopOrigin('not-a-url', 17500)).toBe(false)
   })
 })
 
 describe('main — desktopWindowOpenAction', () => {
   it('allows only the trusted local desktop origin', async () => {
-    const { desktopWindowOpenAction } = await import('./main.js')
+    const { desktopWindowOpenAction } = await import('./desktop-navigation.js')
     expect(desktopWindowOpenAction('http://127.0.0.1:17500/orders', 17500)).toBe('allow')
   })
 
   it('denies external and malformed URLs', async () => {
-    const { desktopWindowOpenAction } = await import('./main.js')
+    const { desktopWindowOpenAction } = await import('./desktop-navigation.js')
     expect(desktopWindowOpenAction('https://example.com/', 17500)).toBe('deny')
     expect(desktopWindowOpenAction('not-a-url', 17500)).toBe('deny')
   })
@@ -514,6 +543,30 @@ describe('main — readPackagedAppVersion', () => {
     electronMocks.app.isPackaged = false
     const { readPackagedAppVersion } = await import('./main.js')
     expect(readPackagedAppVersion()).toBe('dev')
+  })
+})
+
+describe('main — transient desktop load aborts', () => {
+  it('accepts an ERR_ABORTED only after the trusted local page is already present', async () => {
+    const { isBenignDesktopLoadAbort } = await import('./desktop-navigation.js')
+    expect(
+      isBenignDesktopLoadAbort(
+        new Error('ERR_ABORTED (-3) loading http://127.0.0.1:17500/'),
+        'http://127.0.0.1:17500/',
+        17500,
+      ),
+    ).toBe(true)
+  })
+
+  it('does not hide navigation errors to an untrusted page', async () => {
+    const { isBenignDesktopLoadAbort } = await import('./desktop-navigation.js')
+    expect(
+      isBenignDesktopLoadAbort(
+        new Error('ERR_ABORTED (-3) loading https://example.com/'),
+        'https://example.com/',
+        17500,
+      ),
+    ).toBe(false)
   })
 })
 

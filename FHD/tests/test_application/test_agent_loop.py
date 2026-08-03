@@ -160,6 +160,8 @@ class TestRunEmployeeAgentLoop:
             max_iterations=2,
         )
         assert result["max_iterations_reached"] is True
+        assert result["ok"] is False
+        assert result["exit_status"] == "max_iterations"
 
     @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-4")
     @patch("app.infrastructure.llm.client.get_openai_compatible_client")
@@ -216,7 +218,8 @@ class TestRunEmployeeAgentLoop:
             tools=[{"type": "function", "function": {"name": "dangerous_tool"}}],
             gate=gate,
         )
-        assert result["ok"] is True
+        assert result["ok"] is False
+        assert result["exit_status"] == "tool_blocked"
         assert any(t.get("blocked") for t in result["tool_calls"])
 
     @patch(
@@ -257,7 +260,66 @@ class TestRunEmployeeAgentLoop:
             task="do something",
             tools=[{"type": "function", "function": {"name": "tool1"}}],
         )
-        assert result["ok"] is True
+        assert result["ok"] is False
+        assert result["exit_status"] == "tool_failed"
+        assert result["tool_calls"][0]["success"] is False
+
+    @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-4")
+    @patch("app.infrastructure.llm.client.get_openai_compatible_client")
+    @patch("app.infrastructure.llm.client.require_api_key")
+    def test_malformed_tool_arguments_are_not_executed(self, mock_key, mock_client, mock_model):
+        bad_call = MagicMock()
+        bad_call.id = "call_bad"
+        bad_call.function.name = "tool1"
+        bad_call.function.arguments = "{not-json"
+        first = MagicMock(choices=[MagicMock(message=MagicMock(content="", tool_calls=[bad_call]))])
+        second = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="请补充正确参数", tool_calls=None))]
+        )
+        mock_client.return_value.chat.completions.create.side_effect = [first, second]
+
+        with patch("app.application.tools.workflow.execute_workflow_tool") as execute:
+            result = run_employee_agent_loop(
+                employee_id="emp1",
+                system_prompt="test",
+                task="do something",
+                tools=[{"type": "function", "function": {"name": "tool1"}}],
+            )
+
+        execute.assert_not_called()
+        assert result["ok"] is False
+        assert result["exit_status"] == "tool_failed"
+        assert result["tool_calls"][0]["invalid_arguments"] is True
+
+    @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-4")
+    @patch("app.infrastructure.llm.client.get_openai_compatible_client")
+    @patch("app.infrastructure.llm.client.require_api_key")
+    def test_gate_error_fails_closed(self, mock_key, mock_client, mock_model):
+        tool_call = MagicMock()
+        tool_call.id = "call_gate"
+        tool_call.function.name = "tool1"
+        tool_call.function.arguments = "{}"
+        first = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="", tool_calls=[tool_call]))]
+        )
+        second = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="授权检查失败", tool_calls=None))]
+        )
+        mock_client.return_value.chat.completions.create.side_effect = [first, second]
+
+        with patch("app.application.tools.workflow.execute_workflow_tool") as execute:
+            result = run_employee_agent_loop(
+                employee_id="emp1",
+                system_prompt="test",
+                task="do something",
+                tools=[{"type": "function", "function": {"name": "tool1"}}],
+                gate=MagicMock(side_effect=RuntimeError("gate unavailable")),
+            )
+
+        execute.assert_not_called()
+        assert result["ok"] is False
+        assert result["exit_status"] == "tool_blocked"
+        assert result["tool_calls"][0]["reason"] == "工具授权检查失败，未执行"
 
     @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-4")
     @patch("app.infrastructure.llm.client.get_openai_compatible_client")

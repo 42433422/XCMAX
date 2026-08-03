@@ -76,15 +76,15 @@ def _local_git_sha(root: Path) -> str:
 def _local_version(root: Path) -> str:
     pyproject = root / "pyproject.toml"
     if not pyproject.is_file():
-        return "1.0.0.0"
+        return "1.0.0.1"
     try:
         import re
 
         text = pyproject.read_text(encoding="utf-8")
         m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
-        return m.group(1) if m else "1.0.0.0"
+        return m.group(1) if m else "1.0.0.1"
     except _DEPLOY_ERRORS:
-        return "1.0.0.0"
+        return "1.0.0.1"
 
 
 def _read_local_manifest(root: Path) -> dict[str, Any] | None:

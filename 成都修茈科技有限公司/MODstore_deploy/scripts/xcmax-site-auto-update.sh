@@ -295,7 +295,7 @@ sync_site_static() {
   local paths=(
     '*.html' 'styles.css' 'main.js' 'contact-intake.js' 'contact-channels.js' 'visualization.js' 'world-will.js'
     'world-will-ticker.js' 'world-will-ticker.css'
-    'sitemap.xml' 'baidu_urls.txt' 'download-release.json' 'download-action-board.js'
+    'sitemap.xml' 'baidu_urls.txt' 'download-action-board.js'
     'images' 'site' 'assets' 'corp-butler' 'partials'
   )
   for p in "${paths[@]}"; do
@@ -336,7 +336,7 @@ publish_site_static_to_live() {
            "$git_site"/contact-channels.js \
            "$git_site"/visualization.js "$git_site"/world-will.js "$git_site"/world-will-ticker.js \
            "$git_site"/world-will-ticker.css \
-           "$git_site"/sitemap.xml "$git_site"/baidu_urls.txt "$git_site"/download-release.json \
+           "$git_site"/sitemap.xml "$git_site"/baidu_urls.txt \
            "$git_site"/download-action-board.js; do
     [[ -e "$f" ]] || continue
     base="$(basename "$f")"
@@ -344,6 +344,14 @@ publish_site_static_to_live() {
     cp -f "$f" "$live_site/$base"
   done
   shopt -u nullglob
+  # The desktop release workflow owns this pointer and updates it atomically only
+  # after platform artifacts and public URLs are verified.  A website refresh may
+  # seed a missing file, but must never overwrite an already verified release.
+  if [[ ! -e "$live_site/download-release.json" && -f "$git_site/download-release.json" ]]; then
+    cp -f "$git_site/download-release.json" "$live_site/download-release.json"
+  else
+    log "保留发布流程管理的 download-release.json"
+  fi
   if [[ -d "$git_site/partials" ]]; then
     cp -af "$git_site/partials/." "$live_site/partials/"
   fi

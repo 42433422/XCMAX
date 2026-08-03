@@ -12,6 +12,8 @@ import {
   readProductFlowCompleted,
   markProductFlowCompleted,
   readHostPackAcknowledged,
+  hostPackAcknowledgedRef,
+  refreshHostPackAcknowledged,
   markHostPackAcknowledged,
   resetProductFlowState,
   parseFlowStepQuery,
@@ -155,6 +157,15 @@ describe('productFlow', () => {
     expect(readHostPackAcknowledged()).toBe(false)
     localStorage.setItem(buildTenantScopedStorageKey(LS_PRODUCT_FLOW_HOST_ACK, 'tenant:10'), '1')
     expect(readHostPackAcknowledged()).toBe(true)
+  })
+
+  it('refreshes the reactive host acknowledgement after same-window scoped hydration', () => {
+    setTenantStorageScopeCache('tenant:10')
+    localStorage.setItem(buildTenantScopedStorageKey(LS_PRODUCT_FLOW_HOST_ACK, 'tenant:10'), '1')
+
+    refreshHostPackAcknowledged()
+
+    expect(hostPackAcknowledgedRef().value).toBe(true)
   })
 
   it('resetProductFlowState clears both localStorage keys', () => {

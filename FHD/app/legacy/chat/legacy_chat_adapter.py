@@ -67,7 +67,7 @@ def _resolve_chat_execute_tool():
     return resolve_planner_tool_executor()
 
 
-_TOOL_DEDUP: set[str] = set()
+_TOOL_DEDUP: ContextVar[set[str] | None] = ContextVar("_TOOL_DEDUP", default=None)
 _TOOL_DEDUP_LOCK = threading.Lock()
 _LAST_TOOL_TRACE = threading.local()
 _LAST_TOOL_RESULT: ContextVar[dict[str, Any] | None] = ContextVar("_LAST_TOOL_RESULT", default=None)
@@ -88,9 +88,18 @@ def _resolve_chat_model_for_client(client: Any | None, explicit_model: str | Non
 
 
 def reset_planner_tool_dedup_state() -> None:
-    with _TOOL_DEDUP_LOCK:
-        _TOOL_DEDUP.clear()
+    """Start an isolated tool-call deduplication scope for one chat request."""
+    _TOOL_DEDUP.set(set())
     clear_last_tool_result()
+
+
+def _tool_dedup_state() -> set[str]:
+    """Return the current request's deduplication state without sharing it globally."""
+    state = _TOOL_DEDUP.get()
+    if state is None:
+        state = set()
+        _TOOL_DEDUP.set(state)
+    return state
 
 
 def clear_last_tool_result() -> None:
@@ -356,10 +365,11 @@ def append_tool_messages(
 
     if not use_parallel:
         for tc, name, raw_eff, key in parsed:
+            dedup_state = _tool_dedup_state()
             with _TOOL_DEDUP_LOCK:
-                is_dup = key in _TOOL_DEDUP
+                is_dup = key in dedup_state
                 if not is_dup:
-                    _TOOL_DEDUP.add(key)
+                    dedup_state.add(key)
             if is_dup:
                 payload = {
                     "error": "duplicate_tool_call",
@@ -384,15 +394,16 @@ def append_tool_messages(
     payloads: list[dict[str, Any] | None] = [None] * len(parsed)
     to_run: list[tuple[int, str, str]] = []
 
+    dedup_state = _tool_dedup_state()
     with _TOOL_DEDUP_LOCK:
         for i, (_tc, name, raw_eff, key) in enumerate(parsed):
-            if key in _TOOL_DEDUP:
+            if key in dedup_state:
                 payloads[i] = {
                     "error": "duplicate_tool_call",
                     "hint": "same tool+arguments already executed",
                 }
             else:
-                _TOOL_DEDUP.add(key)
+                dedup_state.add(key)
                 to_run.append((i, name, raw_eff))
 
     def _execute_idx(idx: int, name: str, raw_eff: str) -> tuple[int, dict[str, Any]]:
@@ -450,7 +461,7 @@ def chat(
     model: str | None = None,
     client: OpenAI | None = None,
 ) -> Any:
-    clear_last_tool_result()
+    reset_planner_tool_dedup_state()
     if max_iterations is None:
         max_iterations = 8
     sys = merge_system_prompt(system_prompt, runtime_context)
@@ -468,13 +479,16 @@ def chat(
         cli = client
     mdl = _resolve_chat_model_for_client(cli, model)
     tools = _get_workflow_tool_registry()
+    from app.application.document_employee_routing import forced_document_tool_choice
+
+    tool_choice = forced_document_tool_choice(user_message, tools, runtime_context) or "auto"
     tool_outputs: list[str] = []
     for _ in range(max_iterations):
         c = cli.chat.completions.create(
             model=mdl,
             messages=messages,
             tools=tools if tools else None,
-            tool_choice="auto" if tools else None,
+            tool_choice=tool_choice if tools else None,
         )
         msg = c.choices[0].message
         tcs = getattr(msg, "tool_calls", None) or []
@@ -526,6 +540,7 @@ def chat(
                     ),
                     ensure_ascii=False,
                 )
+            tool_choice = "auto"
             continue
         result = str(msg.content or "").strip()
         if has_image_input and not result:
@@ -563,7 +578,7 @@ def chat_stream_text(
     model: str | None = None,
     client: OpenAI | None = None,
 ) -> Iterable[str | dict[str, Any]]:
-    clear_last_tool_result()
+    reset_planner_tool_dedup_state()
     if max_iterations is None:
         max_iterations = 8
     sys = merge_system_prompt(system_prompt, runtime_context)
@@ -581,13 +596,16 @@ def chat_stream_text(
         cli = client
     mdl = _resolve_chat_model_for_client(cli, model)
     tools = _get_workflow_tool_registry()
+    from app.application.document_employee_routing import forced_document_tool_choice
+
+    tool_choice = forced_document_tool_choice(user_message, tools, runtime_context) or "auto"
     for _ in range(max_iterations):
         stream = cli.chat.completions.create(
             model=mdl,
             messages=messages,
             stream=True,
             tools=tools if tools else None,
-            tool_choice="auto" if tools else None,
+            tool_choice=tool_choice if tools else None,
         )
         text_parts: list[str] = []
         tool_calls_by_idx: dict[int, Any] = {}
@@ -702,6 +720,7 @@ def chat_stream_text(
                 while len(tool_payloads) < n_tail:
                     tool_payloads.append({})
             yield _post_tool_round_hint(tcs, tool_payloads)
+            tool_choice = "auto"
             continue
         if text_parts:
             return

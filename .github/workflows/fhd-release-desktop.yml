@@ -8,9 +8,10 @@ on:
       version:
         description: "Release version"
         required: true
-        default: "1.0.0.0"
+        default: "1.0.0.1"
         type: choice
         options:
+          - "1.0.0.1"
           - "1.0.0.0"
       verify_only:
         description: "Verify already-published public artifacts without rebuilding or uploading"

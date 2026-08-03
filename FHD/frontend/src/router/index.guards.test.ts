@@ -55,6 +55,8 @@ vi.mock('@/utils/productSku', () => ({
 }))
 
 vi.mock('@/utils/authSessionCache', () => ({
+  consumeDesktopSessionBootstrapHint: vi.fn().mockResolvedValue(false),
+  hasRecentEnterpriseSessionHint: vi.fn(() => false),
   validateEnterpriseSessionCached: vi.fn().mockResolvedValue(true),
 }))
 
