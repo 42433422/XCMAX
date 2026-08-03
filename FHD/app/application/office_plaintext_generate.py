@@ -42,9 +42,11 @@ def _text_from_request(src_path: Path, payload: dict[str, Any]) -> str:
 
 def _structured(fmt: str, data: dict[str, Any]) -> dict[str, Any] | None:
     nested_keys = ("document_full", "presentation_full", "table_json")
-    candidates = [data] + [
-        value for key in nested_keys if isinstance((value := data.get(key)), dict)
-    ]
+    candidates = [data]
+    for key in nested_keys:
+        value = data.get(key)
+        if isinstance(value, dict):
+            candidates.append(value)
     for candidate in candidates:
         if fmt == "word" and (
             candidate.get("paragraphs") or candidate.get("blocks") or candidate.get("plain_text")
