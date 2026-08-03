@@ -473,6 +473,22 @@ describe('MainLayout.vue – sidebar timers', () => {
     wrapper.unmount()
   })
 
+  it('keeps desktop navigation visible in the installed Electron shell', async () => {
+    document.documentElement.classList.add('xcagi-electron')
+    try {
+      const { wrapper } = await mountMainLayout()
+      wrapper.vm.sidebarCollapsed = true
+      wrapper.vm.isSidebarFeatureEnabled = true
+      wrapper.vm.scheduleSidebarAutoCollapse()
+
+      expect(wrapper.vm.sidebarCollapsed).toBe(false)
+      expect(wrapper.vm.sidebarCollapseTimer).toBeNull()
+      wrapper.unmount()
+    } finally {
+      document.documentElement.classList.remove('xcagi-electron')
+    }
+  })
+
   it('ensureSidebarExpandedForTutorial expands sidebar', async () => {
     const { wrapper } = await mountMainLayout()
     wrapper.vm.sidebarCollapsed = true

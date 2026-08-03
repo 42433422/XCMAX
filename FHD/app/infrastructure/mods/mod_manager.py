@@ -1338,6 +1338,32 @@ def _mod_allowed_for_api_load(mod_id: str, session_id: str | None = None) -> boo
     return False
 
 
+def _is_installed_employee_pack(mod_manager: ModManager, pack_id: str) -> bool:
+    """Check the separately managed ``mods/_employees`` store safely.
+
+    Employee packs intentionally do not appear in the ordinary Mod scan.  An
+    entitled employee pack therefore must not be reported as a missing
+    industry MOD just because it is not under ``mods/<id>``.
+    """
+    root = getattr(mod_manager, "mods_root", "")
+    if not isinstance(root, (str, os.PathLike)):
+        return False
+    pack_path = os.path.join(os.fspath(root), "_employees", pack_id)
+    manifest_path = os.path.join(pack_path, "manifest.json")
+    if not os.path.isfile(manifest_path):
+        return False
+    try:
+        with open(manifest_path, encoding="utf-8") as handle:
+            manifest = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return False
+    return (
+        isinstance(manifest, dict)
+        and normalize_artifact(manifest) == ARTIFACT_EMPLOYEE_PACK
+        and str(manifest.get("id") or pack_id).strip() == pack_id
+    )
+
+
 def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
     """
     访问 /api/mod/{mod_id}/... 前确保 Mod 已 load 且 HTTP 路由已挂载。
@@ -1352,6 +1378,25 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
         return False
 
     mm = get_mod_manager()
+    if _is_installed_employee_pack(mm, mid):
+        # employee_pack routes are mounted by their own registry. They are
+        # still entitlement-gated above; this only chooses the correct local
+        # storage/route path after authorization has already succeeded.
+        clear_mod_missing_locally(mid)
+        from app.runtime_integrity import clear_runtime_issue
+
+        clear_runtime_issue(f"industry_mod:{mid}")
+        if mid in _employee_pack_routes_registered:
+            return True
+        try:
+            from app.fastapi_app import get_fastapi_app
+
+            app = get_fastapi_app()
+        except RECOVERABLE_ERRORS as e:
+            logger.warning("[ModManager] employee pack %s cannot get app: %s", mid, e)
+            return False
+        return register_employee_pack_routes(app, mm, mid)
+
     if mid not in mm._loaded_mods:
         if mm.resolve_mod_directory(mid) is None:
             mark_mod_missing_locally(mid)
