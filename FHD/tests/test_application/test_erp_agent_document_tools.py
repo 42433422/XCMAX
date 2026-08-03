@@ -36,9 +36,19 @@ def test_all_ten_built_in_document_workers_are_registered_and_runnable() -> None
     assert expected <= names
 
 
-def test_word_generator_writes_an_actual_document_from_a_chat_request(tmp_path) -> None:
+def test_word_generator_writes_an_actual_document_from_a_chat_request(
+    tmp_path, monkeypatch
+) -> None:
     """A forced chat call must yield a file, even when no JSON was uploaded."""
     from app.mod_sdk.employee_tool_registry import execute_employee_tool
+
+    def unexpected_cognition(*_args, **_kwargs):
+        raise AssertionError("bundled Office conversion must not need an LLM")
+
+    monkeypatch.setattr(
+        "app.application.employee_runtime.agent._ex._cognition_fhd",
+        unexpected_cognition,
+    )
 
     result = json.loads(
         execute_employee_tool(
