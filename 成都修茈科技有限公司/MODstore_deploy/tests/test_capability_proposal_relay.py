@@ -21,6 +21,7 @@ def relay_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, P
     script.write_text("# test relay\n", encoding="utf-8")
     monkeypatch.setenv("MODSTORE_GIT_REPO_ROOT", str(root))
     monkeypatch.setenv("MODSTORE_CAPABILITY_PROPOSAL_REPO", "acme/repo")
+    monkeypatch.setattr(relay.shutil, "which", lambda _name: "/usr/bin/gh")
     monkeypatch.delenv("XCAGI_FHD_ROOT", raising=False)
     monkeypatch.delenv("MODSTORE_CAPABILITY_PROPOSAL_DIRS", raising=False)
     return root, report_dir
@@ -115,6 +116,50 @@ def test_failed_child_is_reported_and_lease_is_cleaned(
     assert result["pending_after"] == 1
     assert len(events) == 1
     assert not (report_dir / "capability_proposal_relay.lock").exists()
+
+
+def test_token_transport_stays_out_of_child_command(
+    relay_root: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _root, report_dir = relay_root
+    _write_proposal(report_dir)
+    monkeypatch.setenv("MODSTORE_GITHUB_TOKEN", "test-token")
+    observed: dict[str, object] = {}
+
+    def fake_run(command: list[str], **kwargs) -> subprocess.CompletedProcess[str]:
+        observed["command"] = command
+        observed["environment"] = kwargs["env"]
+        target = Path(kwargs["env"]["CAPABILITY_PROPOSAL_DIR"])
+        (target / "capability_proposal_processed.jsonl").write_text(
+            json.dumps({"dedup_key": "proposal-key", "disposition": "issue_created"}) + "\n",
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(relay.subprocess, "run", fake_run)
+    result = relay.run_capability_proposal_relay()
+
+    assert result["ok"] is True
+    assert "--gh-cli" not in observed["command"]
+    assert "test-token" not in observed["command"]
+    assert observed["environment"]["GITHUB_TOKEN"] == "test-token"
+
+
+def test_candidate_without_github_transport_is_configuration_blocked(
+    relay_root: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _root, report_dir = relay_root
+    _write_proposal(report_dir)
+    monkeypatch.delenv("MODSTORE_GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.setattr(relay.shutil, "which", lambda _name: None)
+
+    result = relay.run_capability_proposal_relay()
+
+    assert result["ok"] is False
+    assert result["status"] == "configuration_blocked"
+    assert result["configuration_errors"] == ["github_credentials_unavailable"]
 
 
 def test_scheduler_registration_tracks_relay(monkeypatch: pytest.MonkeyPatch) -> None:
