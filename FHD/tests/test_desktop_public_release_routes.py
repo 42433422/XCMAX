@@ -58,6 +58,9 @@ def test_site_refreshes_preserve_a_verified_desktop_release_pointer() -> None:
     ).read_text(encoding="utf-8")
 
     assert '[ ! -e "${LIVE_SITE}/download-release.json" ]' in workflow
-    assert 'preserving release-managed download-release.json' in workflow
-    assert '[[ ! -e "$live_site/download-release.json" && -f "$git_site/download-release.json" ]]' in auto_update
-    assert '保留发布流程管理的 download-release.json' in auto_update
+    assert "preserving release-managed download-release.json" in workflow
+    assert (
+        '[[ ! -e "$live_site/download-release.json" && -f "$git_site/download-release.json" ]]'
+        in auto_update
+    )
+    assert "保留发布流程管理的 download-release.json" in auto_update

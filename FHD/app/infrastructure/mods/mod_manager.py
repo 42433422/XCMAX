@@ -33,6 +33,8 @@ logger = logging.getLogger(__name__)
 def _restore_entitlements_from_session_id(session_id: str | None) -> None:
     """Compatibility seam retained for callers and focused runtime tests."""
     restore_entitlements_from_session_id(session_id)
+
+
 _MOD_API_FAILURE_RETRY_AT: dict[str, float] = {}
 _MOD_API_FAILURE_BACKOFF_SECONDS = 15.0
 

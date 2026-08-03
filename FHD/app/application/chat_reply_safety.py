@@ -10,7 +10,9 @@ _TOOL_CALL_BLOCK_RE = re.compile(
     r"<\s*tool_call\b.*?(?:<\s*/\s*tool_call\s*>|$)",
     re.IGNORECASE | re.DOTALL,
 )
-_NO_VISIBLE_REPLY = "未生成可执行的业务动作，未执行任何数据操作。请重新说明要查看、修改或删除的具体对象。"
+_NO_VISIBLE_REPLY = (
+    "未生成可执行的业务动作，未执行任何数据操作。请重新说明要查看、修改或删除的具体对象。"
+)
 
 
 def sanitize_model_chat_reply(raw: object) -> str:
