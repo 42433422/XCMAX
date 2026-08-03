@@ -1,0 +1,139 @@
+"""ERP Agent document-worker integration: real function calls, never text protocol."""
+
+from __future__ import annotations
+
+import json
+from types import SimpleNamespace
+
+from app.application.tools.workflow import get_workflow_tool_registry, invalidate_workflow_tool_registry
+from app.mod_sdk.employee_pack_compat import list_office_pack_catalog
+from app.mod_sdk.employee_tool_registry import (
+    build_employee_tools_status,
+    invalidate_employee_tool_cache,
+)
+
+
+def test_all_ten_built_in_document_workers_are_registered_and_runnable() -> None:
+    expected = set(list_office_pack_catalog()["pack_ids"])
+    assert len(expected) == 10
+    invalidate_employee_tool_cache()
+    invalidate_workflow_tool_registry()
+    status = build_employee_tools_status()
+    names = {row["function"]["name"] for row in get_workflow_tool_registry() if row.get("function")}
+
+    assert status["office_ready"] is True
+    assert status["missing_office_pack_ids"] == []
+    # Some non-document host packs may intentionally be unavailable in a
+    # lightweight test environment.  The release contract here is that each
+    # bundled office employee is executable, not that every optional pack is.
+    assert not (expected & set(status["runtime_missing_pack_ids"]))
+    assert expected <= set(status["registered_tool_names"])
+    assert expected <= names
+
+
+def test_explicit_document_request_forces_real_function_call_then_returns_to_auto(monkeypatch) -> None:
+    from app.legacy.chat import legacy_chat_adapter as adapter
+
+    calls: list[dict] = []
+    executed: list[tuple[str, dict]] = []
+
+    class _Completions:
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                tool_call = SimpleNamespace(
+                    id="call_word_1",
+                    function=SimpleNamespace(
+                        name="word-generate-employee",
+                        arguments=json.dumps({"user_request": "起草销售合同"}, ensure_ascii=False),
+                    ),
+                )
+                return SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(content="", tool_calls=[tool_call]))]
+                )
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="合同已生成", tool_calls=[]))]
+            )
+
+    client = SimpleNamespace(
+        chat=SimpleNamespace(completions=_Completions()),
+        is_modstore_openai_compatible=False,
+    )
+    monkeypatch.setattr(
+        adapter,
+        "_get_workflow_tool_registry",
+        lambda: [{"type": "function", "function": {"name": "word-generate-employee"}}],
+    )
+
+    def _execute(name: str, raw_args: str, _workspace: str | None, **_kwargs: object) -> str:
+        executed.append((name, json.loads(raw_args)))
+        return json.dumps({"success": True, "output_path": "/tmp/sales-contract.docx"})
+
+    monkeypatch.setattr(adapter, "_resolve_chat_execute_tool", lambda: _execute)
+    result = adapter.chat("起草一份 Word 销售合同", client=client)
+
+    assert calls[0]["tool_choice"] == {
+        "type": "function",
+        "function": {"name": "word-generate-employee"},
+    }
+    assert calls[1]["tool_choice"] == "auto"
+    assert executed == [("word-generate-employee", {"user_request": "起草销售合同"})]
+    assert result["text"] == "合同已生成"
+
+
+def test_explicit_document_stream_uses_the_same_real_function_call(monkeypatch) -> None:
+    """The desktop path streams, so it must not fall back to an XML-looking reply."""
+    from app.legacy.chat import legacy_chat_adapter as adapter
+
+    calls: list[dict] = []
+    executed: list[tuple[str, dict]] = []
+
+    def _chunk(*, content: str | None = None, tool_calls: list[object] | None = None, finish_reason: str | None = None):
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    delta=SimpleNamespace(content=content, tool_calls=tool_calls or []),
+                    finish_reason=finish_reason,
+                )
+            ]
+        )
+
+    class _Completions:
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                tool_call = SimpleNamespace(
+                    index=0,
+                    id="call_word_stream_1",
+                    function=SimpleNamespace(
+                        name="word-generate-employee",
+                        arguments=json.dumps({"user_request": "起草销售合同"}, ensure_ascii=False),
+                    ),
+                )
+                return iter([_chunk(tool_calls=[tool_call], finish_reason="tool_calls")])
+            return iter([_chunk(content="合同已生成", finish_reason="stop")])
+
+    client = SimpleNamespace(
+        chat=SimpleNamespace(completions=_Completions()),
+        is_modstore_openai_compatible=False,
+    )
+    monkeypatch.setattr(
+        adapter,
+        "_get_workflow_tool_registry",
+        lambda: [{"type": "function", "function": {"name": "word-generate-employee"}}],
+    )
+
+    def _execute(name: str, raw_args: str, _workspace: str | None, **_kwargs: object) -> str:
+        executed.append((name, json.loads(raw_args)))
+        return json.dumps({"success": True, "output_path": "/tmp/sales-contract.docx"})
+
+    monkeypatch.setattr(adapter, "_resolve_chat_execute_tool", lambda: _execute)
+    events = list(adapter.chat_stream_text("起草一份 Word 销售合同", client=client))
+
+    assert calls[0]["tool_choice"] == {
+        "type": "function",
+        "function": {"name": "word-generate-employee"},
+    }
+    assert calls[1]["tool_choice"] == "auto"
+    assert executed == [("word-generate-employee", {"user_request": "起草销售合同"})], (calls, events)
+    assert "合同已生成" in events
