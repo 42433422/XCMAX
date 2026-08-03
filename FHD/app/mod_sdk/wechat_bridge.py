@@ -158,9 +158,7 @@ def mount_legacy_routes(router: Any) -> None:
             wechat_contacts_update_compat,
         )
 
-        return tag_legacy_response(
-            wechat_contacts_update_compat(contact_id, body=body or {})
-        )
+        return tag_legacy_response(wechat_contacts_update_compat(contact_id, body=body or {}))
 
     @router.delete("/wechat_contacts/{contact_id}")
     def contacts_delete(contact_id: str):

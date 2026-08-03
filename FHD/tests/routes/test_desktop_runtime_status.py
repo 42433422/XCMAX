@@ -281,9 +281,7 @@ class TestCrashReport:
             response = anon_client.post("/api/desktop/crash-report", json={"error": "boom"})
         assert response.status_code == 409
 
-    def test_minidump_report_is_saved(
-        self, anon_client: TestClient, tmp_path: Path
-    ) -> None:
+    def test_minidump_report_is_saved(self, anon_client: TestClient, tmp_path: Path) -> None:
         with (
             patch("app.fastapi_routes.desktop_runtime.is_desktop_mode", return_value=True),
             patch(
