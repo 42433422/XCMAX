@@ -202,8 +202,58 @@ def _append_evolution_event(result: dict[str, Any]) -> None:
             "pending_after": result.get("pending_after", 0),
             "issue_urls": result.get("issue_urls", []),
             "postcondition": result.get("postcondition", {}),
+            # Configuration errors are stable, non-secret identifiers.  They
+            # make an unavailable relay visible to the owner without ever
+            # placing credentials or proposal contents in the ledger.
+            "configuration_errors": result.get("configuration_errors", []),
+            "remediation": result.get("remediation"),
         }
     )
+
+
+def _configuration_block_has_recent_audit(errors: list[str]) -> bool:
+    """Avoid appending the same unresolved configuration block every run."""
+
+    from modstore_server.evolution_ledger import list_events
+
+    expected = sorted(str(item) for item in errors if str(item))
+    for event in list_events(
+        event_type="capability_proposal_relay_completed",
+        final_status="configuration_blocked",
+        since_days=1,
+    ):
+        observed = sorted(
+            str(item) for item in (event.get("configuration_errors") or []) if str(item)
+        )
+        if observed == expected:
+            return True
+    return False
+
+
+def _record_configuration_block(result: dict[str, Any]) -> None:
+    """Persist a bounded, secret-free audit event for an actionable blocker."""
+
+    errors = [str(item) for item in (result.get("configuration_errors") or []) if str(item)]
+    try:
+        if _configuration_block_has_recent_audit(errors):
+            result["audit_event_written"] = False
+            result["audit_event_reason"] = "duplicate_within_24h"
+            return
+    except Exception:
+        # Failure to query the audit ledger must not conceal the original
+        # configuration blocker from scheduler health.
+        logger.warning("capability proposal relay audit dedupe unavailable", exc_info=True)
+
+    try:
+        _append_evolution_event(result)
+        result["audit_event_written"] = True
+    except Exception:
+        # The caller still receives ``configuration_blocked`` and the
+        # scheduler records it as a failed job; audit storage is extra
+        # evidence, not a reason to rewrite the original failure.
+        logger.warning("capability proposal relay audit append failed", exc_info=True)
+        result["audit_event_written"] = False
+        result["audit_event_reason"] = "append_failed"
 
 
 def run_capability_proposal_relay() -> dict[str, Any]:
@@ -246,7 +296,12 @@ def run_capability_proposal_relay() -> dict[str, Any]:
                 ok=False,
                 status="configuration_blocked",
                 configuration_errors=missing,
+                remediation=(
+                    "provision MODSTORE_GITHUB_TOKEN or an authenticated gh client "
+                    "through protected runtime configuration"
+                ),
             )
+            _record_configuration_block(result)
             return result
         max_issues = max(1, _env_int("MODSTORE_CAPABILITY_PROPOSAL_MAX_ISSUES", 5))
         timeout = max(30, _env_int("MODSTORE_CAPABILITY_PROPOSAL_TIMEOUT_SECONDS", 180))
