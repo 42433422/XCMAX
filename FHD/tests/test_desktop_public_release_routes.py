@@ -44,3 +44,21 @@ def test_corporate_deploy_syncs_the_versioned_download_snippet_before_nginx_relo
     assert 'bash "${SITE_ROOT}/deploy/scripts/sync-nginx-xiu-ci-snippets.sh"' in workflow
     assert "xcagi-cos-alias.inc.conf" in sync_script
     assert "for include in includes:" in sync_script
+
+
+def test_site_refreshes_preserve_a_verified_desktop_release_pointer() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "corp-site-deploy.yml").read_text(
+        encoding="utf-8"
+    )
+    auto_update = (
+        REPO_ROOT
+        / "成都修茈科技有限公司"
+        / "MODstore_deploy"
+        / "scripts"
+        / "xcmax-site-auto-update.sh"
+    ).read_text(encoding="utf-8")
+
+    assert '[ ! -e "${LIVE_SITE}/download-release.json" ]' in workflow
+    assert 'preserving release-managed download-release.json' in workflow
+    assert '[[ ! -e "$live_site/download-release.json" && -f "$git_site/download-release.json" ]]' in auto_update
+    assert '保留发布流程管理的 download-release.json' in auto_update
