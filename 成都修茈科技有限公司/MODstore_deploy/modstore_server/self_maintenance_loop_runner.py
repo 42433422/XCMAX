@@ -3111,7 +3111,7 @@ def _structured_protocol_ok(step_name: str, report_excerpt: str) -> Tuple[bool, 
     return True, ""
 
 
-def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _structured_report_gate(steps: List[Dict[str, Any]], branch=None) -> Dict[str, Any]:
     review_steps = [step for step in steps if step.get("step") == "review"]
     qa_steps = [step for step in steps if step.get("step") == "qa"]
     if review_steps:
@@ -3201,7 +3201,7 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "focused_command": focused_command,
                 "qa": qa_json,
             }
-        quality_failure = _quality_check_failure(qa_json)
+        quality_failure = _quality_check_failure(qa_json, target_branch=branch)
         if quality_failure:
             return {
                 "ok": False,
@@ -5445,7 +5445,7 @@ def _auto_merge_low_risk_branch(
         return {"ok": False, "reason": "missing_api_base"}
 
     if repo_url.startswith(("http://", "https://")):
-        report_gate = _structured_report_gate(steps or [])
+        report_gate = _structured_report_gate(steps or [], branch)
         if not report_gate.get("ok"):
             return {
                 "ok": False,
@@ -6051,7 +6051,7 @@ def _decide_post_loop_policy(
         return {"action": "stop", "reason": "loop_not_completed"}
     if any(not bool(step.get("ok")) for step in steps):
         return {"action": "stop", "reason": "employee_step_failed"}
-    structured_gate = _structured_report_gate(steps)
+    structured_gate = _structured_report_gate(steps, branch)
     report_only_missing = _missing_report_only_evidence(steps)
     roster_gate = _loop_steps_roster_gate(steps)
     governance_gate = _governance_audit_gate()
