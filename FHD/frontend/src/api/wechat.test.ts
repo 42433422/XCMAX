@@ -34,6 +34,7 @@ beforeEach(() => {
 
 describe('wechatApi thin wrappers', () => {
   it('delegates GET/POST/PUT/DELETE endpoints', async () => {
+    await wechatApi.autoConfigure({ force_key_scan: false })
     await wechatApi.getTasks({ q: '1' })
     await wechatApi.confirmTask(1)
     await wechatApi.ignoreTask(2)
@@ -60,6 +61,10 @@ describe('wechatApi thin wrappers', () => {
     expect(apiMock.post).toHaveBeenCalled()
     expect(apiMock.put).toHaveBeenCalled()
     expect(apiMock.delete).toHaveBeenCalled()
+    expect(apiMock.post).toHaveBeenCalledWith(
+      expect.stringContaining('/wechat/decrypt/auto_configure'),
+      { force_key_scan: false },
+    )
   })
 
   it('searchContacts coerces empty query', async () => {

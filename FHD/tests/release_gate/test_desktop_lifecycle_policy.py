@@ -17,9 +17,12 @@ def test_windows_uninstall_preserves_user_data_and_cleans_scheduled_task() -> No
 def test_release_contains_upgrade_rollback_crash_and_window_recovery() -> None:
     builder = (ROOT / "desktop/electron-builder.yml").read_text(encoding="utf-8")
     main = (ROOT / "desktop/main.ts").read_text(encoding="utf-8")
+    resilience = (ROOT / "desktop/desktop-resilience.ts").read_text(encoding="utf-8")
     assert "- zip" in builder, "electron-updater requires a ZIP artifact on macOS"
     assert "checkPendingRollback" in main and "triggerRollbackSafe" in main
-    assert "render-process-gone" in main and "crashReporter.start" in main
+    assert "render-process-gone" in main
+    assert "initializeLocalCrashReporting" in main
+    assert "crashReporter.start" in resilience
     assert "readWindowState" in main and "writeWindowState" in main
 
 

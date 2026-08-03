@@ -4,7 +4,6 @@ import {
   Notification,
   Tray,
   app,
-  crashReporter,
   dialog,
   ipcMain,
   nativeImage,
@@ -44,6 +43,7 @@ import { DesktopAutonomyAdapter } from './autonomy/desktop-adapter'
 import { backendCrashPolicy } from './autonomy/policies/backend-crash.policy'
 import { degradedRemediationPolicy } from './autonomy/policies/degraded-remediation.policy'
 import { updateRollbackPolicy } from './autonomy/policies/update-rollback.policy'
+import { createForceUpgradeHandler, initializeLocalCrashReporting } from './desktop-resilience'
 import { readJsonTextFile, sanitizeBackendProxyEnv } from './backend-env-utils'
 import { desktopWindowOpenAction, isBenignDesktopLoadAbort, isTrustedDesktopOrigin } from './desktop-navigation'
 import { assertSelfUpdateInstallSupported, getDesktopInstallIdentity } from './desktop-install-update'
@@ -495,23 +495,12 @@ function writeBackendLog(line: string): void {
   }
 }
 
-function initializeLocalCrashReporting(): void {
-  try {
-    const crashDir = path.join(app.getPath('userData'), 'crash-dumps')
-    fs.mkdirSync(crashDir, { recursive: true })
-    app.setPath('crashDumps', crashDir)
-    crashReporter.start({ uploadToServer: false, compress: true })
-    writeBackendLog(`[crash] local crash capture enabled dir=${crashDir}\n`)
-  } catch (error) {
-    writeBackendLog(`[crash] initialization failed: ${error instanceof Error ? error.message : String(error)}\n`)
-  }
-  process.on('uncaughtExceptionMonitor', error => {
-    writeBackendLog(`[crash] main uncaughtException: ${error.stack || error.message}\n`)
-  })
-  process.on('unhandledRejection', reason => {
-    writeBackendLog(`[crash] main unhandledRejection: ${reason instanceof Error ? reason.stack || reason.message : String(reason)}\n`)
-  })
-}
+const checkForceUpgrade = createForceUpgradeHandler({
+  appName: APP_NAME,
+  writeLog: writeBackendLog,
+  beforeInstall: runBackendMigrationWithRollback,
+  onInstallFailed: cancelPreparedRollback,
+})
 
 function packagedBackendHealthTimeoutMs(): number {
   if (!app.isPackaged) {
@@ -1305,7 +1294,7 @@ async function createWindow(): Promise<void> {
     void showDbRecoveryDialogIfNeeded(status)
   })
 
-  configureUpdater(mainWindow)
+  configureUpdater(mainWindow, { onForceUpgradeRequired: checkForceUpgrade })
 }
 
 async function waitForMainApplicationReady(): Promise<void> {
@@ -1429,7 +1418,7 @@ function bootstrap(): void {
   if (!gotLock) {
     app.quit()
   } else {
-    initializeLocalCrashReporting()
+    initializeLocalCrashReporting({ port: DEFAULT_PORT, writeLog: writeBackendLog })
     app.on('second-instance', () => {
       if (mainWindow) {
         if (mainWindow.isMinimized()) mainWindow.restore()

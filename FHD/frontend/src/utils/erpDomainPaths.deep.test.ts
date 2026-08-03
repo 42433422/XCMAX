@@ -6,6 +6,7 @@ const protectedIds = new Set<string>()
 
 vi.mock('@/constants/erpDomainMod', () => ({
   ERP_DOMAIN_BRIDGE_MOD_ID: 'xcagi-erp-domain-bridge',
+  WECHAT_BRIDGE_MOD_ID: 'xcagi-wechat-bridge',
   LEGACY_CLIENT_ERP_MOD_ID: 'legacy-erp',
   readErpDomainModFacadeEnabled: () => facadeEnabled.value,
 }))
@@ -86,8 +87,8 @@ describe('erpDomainPaths deep branches', () => {
   })
 
   it('resolveErpApiPath wechat_contacts compat routes to facade', () => {
-    expect(resolveErpApiPath('/api/wechat_contacts/list', ['xcagi-erp-domain-bridge'])).toContain(
-      '/api/mod/xcagi-erp-domain-bridge',
+    expect(resolveErpApiPath('/api/wechat_contacts/list', ['xcagi-wechat-bridge'])).toContain(
+      '/api/mod/xcagi-wechat-bridge',
     )
   })
 

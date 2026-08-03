@@ -1,0 +1,67 @@
+.wechat-contacts-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.wechat-contacts-panel-note {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+.wechat-contacts-panel-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.wechat-contacts-panel-search { max-width: 320px; }
+.wechat-contacts-panel-type-label { margin: 0; white-space: nowrap; }
+.wechat-contacts-panel-type { width: 120px; }
+
+.wechat-contacts-panel-search-results {
+  margin-top: 10px;
+  min-height: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.wechat-contacts-panel-result { margin-bottom: 8px; }
+.wechat-contacts-panel-star-action { margin-top: 6px; }
+
+.wechat-contacts-panel-chat-modal {
+  max-width: 780px;
+  width: calc(100vw - 32px);
+  display: flex;
+  flex-direction: column;
+  max-height: 80vh;
+}
+
+.wechat-contacts-panel-chat-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 200px;
+  max-height: 50vh;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.wechat-contacts-panel-chat-role { font-size: 11px; margin-bottom: 4px; }
+.wechat-contacts-panel-chat-text { word-break: break-word; white-space: pre-wrap; }
+
+.wechat-chat-msg {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.wechat-contacts-panel-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}

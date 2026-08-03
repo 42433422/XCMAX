@@ -60,6 +60,7 @@
   "/api/desktop/automation/status",
   "/api/desktop/automation/workflow/run",
   "/api/desktop/automation/yolo/export",
+  "/api/desktop/crash-report",
   "/api/desktop/deployment",
   "/api/desktop/mobile-pairing-status",
   "/api/desktop/models",
