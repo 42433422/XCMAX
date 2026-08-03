@@ -5,8 +5,8 @@ from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.desktop_runtime import (
@@ -300,6 +300,40 @@ def install_manifest(path: str, _user=Depends(get_logged_in_user)):
         )
     ]
     return {"success": True, "files": targets}
+
+
+@router.post("/crash-report")
+async def receive_crash_report(request: Request):
+    """接收桌面端 Electron 进程崩溃报告（JSON 或 multipart minidump）。
+
+    不要求登录——崩溃可能发生在用户登录之前。存储到数据目录 crash-reports/ 下，
+    供后续诊断分析。
+    """
+    if not is_desktop_mode():
+        raise HTTPException(status_code=409, detail="崩溃报告仅在桌面模式下可用")
+
+    dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))
+    crash_dir = dirs["root"] / "crash-reports"
+    crash_dir.mkdir(parents=True, exist_ok=True)
+
+    content_type = (request.headers.get("content-type") or "").lower()
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        for field_name in form:
+            field = form[field_name]
+            if isinstance(field, UploadFile) and field.filename:
+                ext = Path(field.filename).suffix or ".dmp"
+                target = crash_dir / f"crash-{ts}-{field_name}{ext}"
+                content = await field.read()
+                target.write_bytes(content)
+        return JSONResponse({"saved": True, "dir": str(crash_dir)})
+
+    body = await request.body()
+    target = crash_dir / f"crash-{ts}.json"
+    target.write_bytes(body)
+    return JSONResponse({"saved": True, "path": str(target)})
 
 
 @router.get("/support-bundle")

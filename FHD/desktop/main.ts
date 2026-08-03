@@ -23,6 +23,7 @@ import {
   downloadUpdate,
   getUpdateStatus,
   installUpdate,
+  isForceUpgradeRequired,
   readLocalBuildSha,
   runUpdateCheckWithDirectNet,
 } from './updater'
@@ -517,6 +518,91 @@ function writeBackendLog(line: string): void {
   }
 }
 
+/** 上传崩溃报告到后端。启动时触发，异步不阻塞。 */
+async function uploadCrashReports(): Promise<void> {
+  const crashDir = app.getPath('crashDumps')
+  try {
+    const entries = fs.readdirSync(crashDir, { withFileTypes: true })
+    const pending = entries.filter(
+      ent => ent.isFile() && !ent.name.endsWith('.uploaded') && !ent.name.endsWith('.uploading')
+    )
+    if (!pending.length) return
+
+    const markerDir = path.join(crashDir, '.uploaded-markers')
+    fs.mkdirSync(markerDir, { recursive: true })
+
+    for (const ent of pending) {
+      const filePath = path.join(crashDir, ent.name)
+      const markerPath = path.join(markerDir, `${ent.name}.ok`)
+      if (fs.existsSync(markerPath)) continue
+      try {
+        const url = `http://127.0.0.1:${DEFAULT_PORT}/api/desktop/crash-report`
+        const fileBuffer = fs.readFileSync(filePath)
+        const formData = new FormData()
+        const blob = new Blob([fileBuffer], { type: 'application/octet-stream' })
+        formData.append('minidump', blob, ent.name)
+        await fetch(url, { method: 'POST', body: formData, signal: AbortSignal.timeout(10_000) })
+        fs.writeFileSync(markerPath, new Date().toISOString(), 'utf8')
+        writeBackendLog(`[crash] uploaded ${ent.name} to backend\n`)
+      } catch {
+        writeBackendLog(`[crash] upload failed for ${ent.name}, will retry next startup\n`)
+      }
+    }
+  } catch {
+    // crash dir not created yet or no pending files
+  }
+}
+
+/** 发送 JS 级异常到后端崩溃报告端点。 */
+async function sendJsCrashReport(payload: { type: string; error: string; stack?: string }): Promise<void> {
+  try {
+    await fetch(`http://127.0.0.1:${DEFAULT_PORT}/api/desktop/crash-report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...payload, ts: new Date().toISOString(), appVersion: app.getVersion() }),
+      signal: AbortSignal.timeout(5_000),
+    })
+  } catch {
+    // backend offline, will be logged locally
+  }
+}
+
+/** 检查是否需要强制升级，如果是则弹阻塞对话框并自动下载安装。 */
+async function checkForceUpgrade(): Promise<void> {
+  if (!isForceUpgradeRequired()) return
+  writeBackendLog('[force-upgrade] 当前版本低于最低兼容版本，触发强制升级\n')
+  try {
+    const { response } = await dialog.showMessageBox({
+      type: 'warning',
+      title: APP_NAME,
+      message: '当前版本过低，需要更新',
+      detail:
+        '当前使用的 XCAGI 版本已低于最低兼容版本，部分功能可能不可用。\n\n' +
+        '请点击「立即更新」下载最新版本，或从官网下载安装包手动更新。',
+      buttons: ['立即更新', '退出'],
+      defaultId: 0,
+      cancelId: 1,
+    })
+    if (response !== 0) {
+      app.quit()
+      return
+    }
+    writeBackendLog('[force-upgrade] 用户确认强制升级，开始下载…\n')
+    await downloadUpdate()
+    writeBackendLog('[force-upgrade] 下载完成，准备安装…\n')
+    await installUpdate(runBackendMigrationWithRollback, cancelPreparedRollback)
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
+    writeBackendLog(`[force-upgrade] 强制升级失败: ${msg}\n`)
+    await dialog.showMessageBox({
+      type: 'error',
+      title: APP_NAME,
+      message: '强制升级失败',
+      detail: `${msg}\n\n请从官网下载最新安装包手动更新。`,
+    })
+  }
+}
+
 function initializeLocalCrashReporting(): void {
   try {
     const crashDir = path.join(app.getPath('userData'), 'crash-dumps')
@@ -528,11 +614,18 @@ function initializeLocalCrashReporting(): void {
     writeBackendLog(`[crash] initialization failed: ${error instanceof Error ? error.message : String(error)}\n`)
   }
   process.on('uncaughtExceptionMonitor', error => {
-    writeBackendLog(`[crash] main uncaughtException: ${error.stack || error.message}\n`)
+    const msg = `[crash] main uncaughtException: ${error.stack || error.message}\n`
+    writeBackendLog(msg)
+    void sendJsCrashReport({ type: 'uncaughtException', error: error.message, stack: error.stack })
   })
   process.on('unhandledRejection', reason => {
-    writeBackendLog(`[crash] main unhandledRejection: ${reason instanceof Error ? reason.stack || reason.message : String(reason)}\n`)
+    const msg = reason instanceof Error ? reason.stack || reason.message : String(reason)
+    writeBackendLog(`[crash] main unhandledRejection: ${msg}\n`)
+    void sendJsCrashReport({ type: 'unhandledRejection', error: String(reason), stack: reason instanceof Error ? reason.stack : undefined })
   })
+  // 启动后异步上传之前未发送的崩溃 dump
+  // 延迟 30 秒，让后端先就绪
+  setTimeout(() => void uploadCrashReports(), 30_000)
 }
 
 function packagedBackendHealthTimeoutMs(): number {
@@ -1333,6 +1426,11 @@ async function createWindow(): Promise<void> {
   })
 
   configureUpdater(mainWindow)
+
+  // 延迟一段时间后检测强制升级（等更新元数据 fetch 完成）
+  setTimeout(() => {
+    void checkForceUpgrade()
+  }, 90_000)
 }
 
 async function waitForMainApplicationReady(): Promise<void> {
