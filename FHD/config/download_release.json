@@ -2,7 +2,7 @@
   "schema": "xcagi.download_release/v1",
   "_doc": "官网下载版本 SSOT。当前只发布 enterprise；personal 已冻结，仅保留历史兼容入口。稳定产品版本、下载目录和 Android versionName 统一为 1.0.0.0；npm/Electron/Apple 工具链内部映射为 1.0.0。",
   "version_lock": "1.0.0.0",
-  "marketing_version": "1.0.0.0",
+  "marketing_version": "1.0.0.1",
   "download_version": "1.0.0.0",
   "android_version": "1.0.0.0",
   "android_git_sha": "a6af956c70e5c4ced49859240455fc9ba8e42e5c",

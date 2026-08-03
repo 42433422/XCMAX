@@ -218,7 +218,7 @@ def validate_dependencies(metadata: ModMetadata, loaded_mods: list[str]) -> bool
 def _check_xcagi_version(version_spec: str) -> bool:
     import re
 
-    current_version = "1.0.0.0"
+    current_version = "1.0.0.1"
 
     match = re.match(r">=([\d.]+)", version_spec)
     if match:

@@ -3,7 +3,7 @@
 ; 需要安装 Inno Setup: https://jrsoftware.org/isdl.php
 
 #define MyAppName "XCAGI"
-#define MyAppVersion "1.0.0.0"
+#define MyAppVersion "1.0.0.1"
 #define MyAppPublisher "XCAGI"
 #define MyAppURL "https://xcagi.com"
 #define MyAppExeName "XCAGI.exe"
