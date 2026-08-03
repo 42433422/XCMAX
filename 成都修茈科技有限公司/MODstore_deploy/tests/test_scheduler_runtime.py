@@ -247,6 +247,8 @@ def test_runtime_status_endpoint(client):
         "failure_code_counts",
         "never_run_count",
         "approval_required_observed_execution_count",
+        "policy_held_observed_failure_count",
+        "policy_held_observed_stale_count",
         "unregistered_observed_count",
     }
     assert isinstance(duty["registration_observable"], bool)
@@ -286,21 +288,32 @@ def test_runtime_status_aggregates_registered_employee_duty(monkeypatch):
                 {
                     "job_id": "employee_cron_registered:registration-failed",
                     "last_status": "failed",
+                    "state": "failing",
                 },
                 {
                     "job_id": "employee_cron_registered:approval-required",
                     "last_status": "deferred",
+                    "state": "deferred",
                 },
-                {"job_id": "employee_cron:one", "last_status": "success"},
+                {"job_id": "employee_cron:one", "last_status": "success", "state": "healthy"},
                 {
                     "job_id": "employee_cron:two",
                     "last_status": "failed",
                     "last_error_code": "employee_cron_unsuccessful:handler_failed:quota",
+                    "state": "failing",
                 },
-                {"job_id": "employee_cron:approval-required", "last_status": "failed"},
-                {"job_id": "employee_cron:old-unregistered", "last_status": "success"},
+                {
+                    "job_id": "employee_cron:approval-required",
+                    "last_status": "failed",
+                    "state": "failing",
+                },
+                {
+                    "job_id": "employee_cron:old-unregistered",
+                    "last_status": "success",
+                    "state": "healthy",
+                },
             ],
-            "summary": {"total": 3, "healthy": 2, "failing": 1, "stale": 0},
+            "summary": {"total": 8, "healthy": 2, "failing": 3, "stale": 0, "deferred": 1},
         },
     )
 
@@ -317,6 +330,68 @@ def test_runtime_status_aggregates_registered_employee_duty(monkeypatch):
         "failure_code_counts": {"employee_cron_unsuccessful:handler_failed:quota": 1},
         "never_run_count": 1,
         "approval_required_observed_execution_count": 1,
+        "policy_held_observed_failure_count": 1,
+        "policy_held_observed_stale_count": 0,
         "unregistered_observed_count": 1,
     }
+    assert body["summary"] == {
+        "total": 8,
+        "healthy": 2,
+        "failing": 3,
+        "stale": 0,
+        "deferred": 1,
+        "policy_held_failures": 1,
+        "policy_held_stale": 0,
+        "actionable_failing": 2,
+        "actionable_stale": 0,
+    }
     assert body["storage_pressure"]["latest"]["status"] == "healthy_no_action"
+
+
+def test_runtime_status_excludes_policy_held_stale_execution(monkeypatch):
+    import modstore_server.api.scheduler_runtime_api as runtime_api
+
+    monkeypatch.setattr(
+        "modstore_server.storage_pressure_self_heal.get_storage_pressure_status",
+        lambda **_kwargs: {"ok": True, "latest": {"status": "healthy_no_action"}},
+    )
+    monkeypatch.setattr(
+        runtime_api,
+        "get_runtime_status",
+        lambda **_kwargs: {
+            "ok": True,
+            "jobs": [
+                {
+                    "job_id": "employee_cron_registered:approval-required",
+                    "last_status": "deferred",
+                    "state": "deferred",
+                },
+                {
+                    "job_id": "employee_cron:approval-required",
+                    "last_status": "success",
+                    "state": "stale",
+                },
+                {
+                    "job_id": "customer_value_reconciler",
+                    "last_status": "success",
+                    "state": "stale",
+                },
+            ],
+            "summary": {"total": 3, "healthy": 0, "failing": 0, "stale": 2, "deferred": 1},
+        },
+    )
+
+    body = runtime_api.scheduler_runtime()
+
+    assert body["summary"] == {
+        "total": 3,
+        "healthy": 0,
+        "failing": 0,
+        "stale": 2,
+        "deferred": 1,
+        "policy_held_failures": 0,
+        "policy_held_stale": 1,
+        "actionable_failing": 0,
+        "actionable_stale": 1,
+    }
+    assert body["employee_duty"]["policy_held_observed_stale_count"] == 1
