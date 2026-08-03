@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 from modstore_server.customer_value_evidence import (
     append_customer_value_receipt,
+    build_customer_value_evidence,
     classify_payment_order,
     load_authoritative_payment_orders,
     payment_amount_cents,
@@ -96,6 +97,7 @@ def reconcile_paid_customer_value(
     orders: list[dict[str, Any]] | None = None,
     session_factory: Callable[..., Any] | None = None,
     now: datetime | None = None,
+    include_evidence: bool = False,
 ) -> dict[str, Any]:
     """Append goal and delivery proof for each eligible, fulfilled payment."""
 
@@ -189,7 +191,7 @@ def reconcile_paid_customer_value(
                 created += 1
             else:
                 existing += 1
-    return {
+    result = {
         "ok": True,
         "source_owner": source_owner,
         "source_ready": True,
@@ -198,6 +200,22 @@ def reconcile_paid_customer_value(
         "existing": existing,
         "skipped": dict(sorted(skipped.items())),
     }
+    if include_evidence:
+        evidence = build_customer_value_evidence(
+            window_days=window_days,
+            orders=rows,
+            session_factory=session_factory,
+            now=now,
+        )
+        # ``orders=`` is an in-process hand-off from the just-validated
+        # authoritative source, not an arbitrary test injection.  Preserve its
+        # provenance instead of presenting the aggregate as a new source.
+        evidence["source_owner"] = source_owner
+        evidence["source_available"] = True
+        evidence["source_authoritative"] = True
+        evidence["value_ledger_ready"] = bool(evidence.get("append_only_store_available"))
+        result["evidence"] = evidence
+    return result
 
 
 __all__ = ["reconcile_paid_customer_value"]
