@@ -171,6 +171,22 @@ describe('useChatMessages', () => {
     expect(messages.messages.value[idx].streamingShell).toBe(true)
   })
 
+  it('never renders model tool protocol as an assistant reply', () => {
+    messages.addMessage('<tool_call><function=skill>open_client_list</function></tool_call>', 'ai')
+    expect(messages.messages.value).toHaveLength(1)
+
+    messages.addMessage('已查询。<tool_call>hidden</tool_call>', 'ai')
+    expect(messages.messages.value[1].content).toContain('已查询。')
+    expect(messages.messages.value[1].content).not.toContain('tool_call')
+  })
+
+  it('removes encoded legacy tool protocol from cached assistant messages', () => {
+    messages.loadMessages([
+      { role: 'ai', content: '&amp;lt;tool_call&amp;gt;hidden&amp;lt;/tool_call&amp;gt;', time: '10:00' },
+    ])
+    expect(messages.messages.value).toHaveLength(0)
+  })
+
   it('saveMessage calls API', async () => {
     const chatApi = (await import('@/api/chat')).default
     messages.addMessage('test', 'user')
