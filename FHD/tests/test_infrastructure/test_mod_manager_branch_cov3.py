@@ -2502,7 +2502,9 @@ class TestEnsureModApiReady:
                 "app.infrastructure.mods.mod_manager.register_employee_pack_routes",
                 return_value=True,
             ) as register,
-            patch("app.infrastructure.mods.mod_manager._employee_pack_routes_registered", new=set()),
+            patch(
+                "app.infrastructure.mods.mod_manager._employee_pack_routes_registered", new=set()
+            ),
         ):
             mm = MagicMock()
             mm.mods_root = str(mods_root)

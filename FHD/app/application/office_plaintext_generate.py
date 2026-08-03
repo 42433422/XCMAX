@@ -42,12 +42,20 @@ def _text_from_request(src_path: Path, payload: dict[str, Any]) -> str:
 
 def _structured(fmt: str, data: dict[str, Any]) -> dict[str, Any] | None:
     nested_keys = ("document_full", "presentation_full", "table_json")
-    candidates = [data] + [value for key in nested_keys if isinstance((value := data.get(key)), dict)]
+    candidates = [data] + [
+        value for key in nested_keys if isinstance((value := data.get(key)), dict)
+    ]
     for candidate in candidates:
-        if fmt == "word" and (candidate.get("paragraphs") or candidate.get("blocks") or candidate.get("plain_text")):
+        if fmt == "word" and (
+            candidate.get("paragraphs") or candidate.get("blocks") or candidate.get("plain_text")
+        ):
             return candidate
         if fmt in {"excel", "csv"} and (
-            candidate.get("sheets") or (isinstance(candidate.get("columns"), list) and isinstance(candidate.get("rows"), list))
+            candidate.get("sheets")
+            or (
+                isinstance(candidate.get("columns"), list)
+                and isinstance(candidate.get("rows"), list)
+            )
         ):
             return candidate
         if fmt == "ppt" and isinstance(candidate.get("slides"), list) and candidate["slides"]:
@@ -66,7 +74,12 @@ def _word_spec(text: str) -> dict[str, Any]:
     return {
         "plain_text": text,
         "paragraphs": [
-            {"index": idx, "text": line, "is_heading": idx == 0, "heading_level": 1 if idx == 0 else None}
+            {
+                "index": idx,
+                "text": line,
+                "is_heading": idx == 0,
+                "heading_level": 1 if idx == 0 else None,
+            }
             for idx, line in enumerate(lines)
         ],
         "tables": [],
@@ -84,7 +97,11 @@ def _table_spec(text: str) -> dict[str, Any]:
     else:
         columns = ["内容"]
         rows = [{"内容": line} for line in lines]
-    return {"columns": columns, "rows": rows, "sheets": [{"name": "Sheet1", "columns": columns, "rows": rows}]}
+    return {
+        "columns": columns,
+        "rows": rows,
+        "sheets": [{"name": "Sheet1", "columns": columns, "rows": rows}],
+    }
 
 
 def _ppt_spec(text: str) -> dict[str, Any]:
@@ -92,7 +109,9 @@ def _ppt_spec(text: str) -> dict[str, Any]:
     slides = []
     for idx, chunk in enumerate(chunks):
         lines = _lines(chunk)
-        slides.append({"title": lines[0] if lines else f"幻灯片 {idx + 1}", "bullets": lines[1:] or lines[:1]})
+        slides.append(
+            {"title": lines[0] if lines else f"幻灯片 {idx + 1}", "bullets": lines[1:] or lines[:1]}
+        )
     return {"title": slides[0]["title"] if slides else "演示文稿", "slides": slides}
 
 
@@ -128,19 +147,32 @@ async def resolve_generate_spec(
     raise ValueError(f"unsupported office format: {fmt}")
 
 
-async def resolve_word_document_spec(src_path: Path, payload: dict[str, Any], ctx: dict[str, Any], rule_spec: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+async def resolve_word_document_spec(
+    src_path: Path, payload: dict[str, Any], ctx: dict[str, Any], rule_spec: dict[str, Any]
+) -> tuple[dict[str, Any], list[str]]:
     return await resolve_generate_spec("word", src_path, payload, ctx, rule_spec)
 
 
-async def resolve_table_spec(src_path: Path, payload: dict[str, Any], ctx: dict[str, Any], rule_spec: dict[str, Any], *, fmt: str = "excel") -> tuple[dict[str, Any], list[str]]:
+async def resolve_table_spec(
+    src_path: Path,
+    payload: dict[str, Any],
+    ctx: dict[str, Any],
+    rule_spec: dict[str, Any],
+    *,
+    fmt: str = "excel",
+) -> tuple[dict[str, Any], list[str]]:
     return await resolve_generate_spec(fmt, src_path, payload, ctx, rule_spec)
 
 
-async def resolve_presentation_spec(src_path: Path, payload: dict[str, Any], ctx: dict[str, Any], rule_spec: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+async def resolve_presentation_spec(
+    src_path: Path, payload: dict[str, Any], ctx: dict[str, Any], rule_spec: dict[str, Any]
+) -> tuple[dict[str, Any], list[str]]:
     return await resolve_generate_spec("ppt", src_path, payload, ctx, rule_spec)
 
 
-async def resolve_pdf_document_spec(src_path: Path, payload: dict[str, Any], ctx: dict[str, Any], rule_spec: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+async def resolve_pdf_document_spec(
+    src_path: Path, payload: dict[str, Any], ctx: dict[str, Any], rule_spec: dict[str, Any]
+) -> tuple[dict[str, Any], list[str]]:
     return await resolve_generate_spec("pdf", src_path, payload, ctx, rule_spec)
 
 

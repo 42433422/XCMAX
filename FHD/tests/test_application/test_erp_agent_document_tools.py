@@ -90,7 +90,9 @@ def test_other_document_generators_write_files_without_modstore_source(
     assert read_result["success"] is True, read_result
 
 
-def test_explicit_document_request_forces_real_function_call_then_returns_to_auto(monkeypatch) -> None:
+def test_explicit_document_request_forces_real_function_call_then_returns_to_auto(
+    monkeypatch,
+) -> None:
     from app.legacy.chat import legacy_chat_adapter as adapter
 
     calls: list[dict] = []
@@ -108,10 +110,14 @@ def test_explicit_document_request_forces_real_function_call_then_returns_to_aut
                     ),
                 )
                 return SimpleNamespace(
-                    choices=[SimpleNamespace(message=SimpleNamespace(content="", tool_calls=[tool_call]))]
+                    choices=[
+                        SimpleNamespace(message=SimpleNamespace(content="", tool_calls=[tool_call]))
+                    ]
                 )
             return SimpleNamespace(
-                choices=[SimpleNamespace(message=SimpleNamespace(content="合同已生成", tool_calls=[]))]
+                choices=[
+                    SimpleNamespace(message=SimpleNamespace(content="合同已生成", tool_calls=[]))
+                ]
             )
 
     client = SimpleNamespace(
@@ -147,7 +153,12 @@ def test_explicit_document_stream_uses_the_same_real_function_call(monkeypatch) 
     calls: list[dict] = []
     executed: list[tuple[str, dict]] = []
 
-    def _chunk(*, content: str | None = None, tool_calls: list[object] | None = None, finish_reason: str | None = None):
+    def _chunk(
+        *,
+        content: str | None = None,
+        tool_calls: list[object] | None = None,
+        finish_reason: str | None = None,
+    ):
         return SimpleNamespace(
             choices=[
                 SimpleNamespace(
@@ -194,5 +205,8 @@ def test_explicit_document_stream_uses_the_same_real_function_call(monkeypatch) 
         "function": {"name": "word-generate-employee"},
     }
     assert calls[1]["tool_choice"] == "auto"
-    assert executed == [("word-generate-employee", {"user_request": "起草销售合同"})], (calls, events)
+    assert executed == [("word-generate-employee", {"user_request": "起草销售合同"})], (
+        calls,
+        events,
+    )
     assert "合同已生成" in events
