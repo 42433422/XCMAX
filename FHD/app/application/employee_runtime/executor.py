@@ -8,6 +8,7 @@ import inspect
 import json
 import logging
 import os
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -185,7 +186,17 @@ def _action_vendor_convert(
     src = _resolve_file_path(payload, workspace_root)
     if not is_generate and src is None:
         return {"handler": "direct_python", "ok": False, "error": "缺少有效 file_path"}
-    out_dir = pack_root / "outputs"
+    # A packaged macOS app (and especially a mounted DMG) is read-only.  Input
+    # placeholders and generated documents therefore belong to the caller's
+    # workspace/data directory, never to ``mods/_employees`` inside the app.
+    raw_workspace = (
+        workspace_root
+        or os.environ.get("WORKSPACE_ROOT")
+        or os.environ.get("XCAGI_DATA_DIR")
+        or os.getcwd()
+    )
+    workspace = Path(str(raw_workspace)).expanduser()
+    out_dir = workspace / "outputs"
     out_dir.mkdir(parents=True, exist_ok=True)
     rule_spec = _load_rule_spec(pack_root)
     default_out = str(rule_spec.get("default_output_relpath") or "outputs/data.json")
@@ -198,9 +209,9 @@ def _action_vendor_convert(
     ):
         vendor_payload["user_query"] = payload["user_request"]
     if is_generate:
-        src = src or (pack_root / "inputs" / "payload.json")
+        src = src or (workspace / ".xcagi" / "employee-inputs" / f"{employee_id}-{uuid.uuid4().hex}.json")
         if not src.is_file() and payload.get("user_request"):
-            payload_path = pack_root / "inputs" / "payload.json"
+            payload_path = src
             payload_path.parent.mkdir(parents=True, exist_ok=True)
             # The request remains in memory via ``vendor_payload``.  Persist only a
             # non-sensitive placeholder because converters require a source path.
@@ -280,6 +291,14 @@ def _action_direct_python_module(
             payload[key] = reasoning[key]
     payload.setdefault("task", task)
     payload.setdefault("workspace_root", str(workspace_root or os.getcwd()))
+    # The generated employee modules require an input file, but their vendor
+    # converters can deterministically construct a document from user_request.
+    # Route that no-file case there instead of asking the model to improvise an
+    # input or attempting writes inside the installed application bundle.
+    is_generate = "generate" in employee_id.lower()
+    has_file = bool(str(payload.get("file_path") or payload.get("path") or "").strip())
+    if is_generate and not has_file and str(payload.get("user_request") or "").strip():
+        return _action_vendor_convert(pack_root, employee_id, payload, workspace_root)
     ctx = _build_enriched_ctx(employee_id, payload["workspace_root"])
     # 拦截 specialized handler：直接走专属工具调度，不调用员工 run()
     if str(payload.get("handler") or "").strip() == "specialized":
