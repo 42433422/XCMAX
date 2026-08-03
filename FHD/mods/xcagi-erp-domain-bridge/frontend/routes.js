@@ -22,7 +22,7 @@ const modRoutes = [
   route('/orders', 'mod-erp-orders', 'OrdersView.vue', '考勤单管理'),
   route('/orders/create', 'mod-erp-orders-create', 'CreateOrderView.vue', '新建考勤单'),
   route('/shipment-records', 'mod-erp-shipment-records', 'ShipmentRecordsView.vue', '考勤记录'),
-  { path: `${PREFIX}/wechat-contacts`, name: 'mod-erp-wechat-contacts', redirect: `${PREFIX}/data-sources` },
+  // wechat-contacts 已移至 xcagi-wechat-bridge Mod
   route('/materials', 'mod-erp-materials', 'MaterialsView.vue', '排班资源'),
   { path: `${PREFIX}/materials-list`, name: 'mod-erp-materials-list', redirect: `${PREFIX}/materials` },
   route('/traditional-mode', 'mod-erp-traditional-mode', 'TraditionalModeView.vue', '表格模式'),

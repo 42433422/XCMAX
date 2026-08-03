@@ -21,6 +21,10 @@ describe('modRouteGlob.enterprise loaders', () => {
     }
   })
 
+  it('includes the independent WeChat bridge route module', () => {
+    expect(Object.keys(modRouteGlob).some((key) => key.includes('xcagi-wechat-bridge'))).toBe(true)
+  })
+
   it('calling each loader either resolves or rejects (function exercised)', async () => {
     const entries = Object.entries(modRouteGlob)
     expect(entries.length).toBeGreaterThan(0)

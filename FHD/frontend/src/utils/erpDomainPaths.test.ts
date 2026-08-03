@@ -49,8 +49,8 @@ describe('erpDomainPaths', () => {
     expect(resolveErpApiPath('/api/purchase_units')).toBe(
       '/api/mod/xcagi-erp-domain-bridge/purchase_units',
     )
-    expect(resolveErpApiPath('/api/wechat_contacts/ensure_contact_cache')).toBe(
-      '/api/mod/xcagi-erp-domain-bridge/wechat_contacts/ensure_contact_cache',
+    expect(resolveErpApiPath('/api/wechat_contacts/ensure_contact_cache', ['xcagi-wechat-bridge'])).toBe(
+      '/api/mod/xcagi-wechat-bridge/wechat_contacts/ensure_contact_cache',
     )
   })
 
@@ -75,7 +75,7 @@ describe('erpDomainPaths', () => {
   it('prefers active protected client mod for products/customers/units; orders via erp bridge', () => {
     localStorage.setItem(LS, '1')
     writeActiveExtensionModIdToStorage('taiyangniao-pro', TEST_SCOPE)
-    const ids = ['taiyangniao-pro', 'xcagi-erp-domain-bridge']
+    const ids = ['taiyangniao-pro', 'xcagi-erp-domain-bridge', 'xcagi-wechat-bridge']
     expect(resolveErpApiBase(ids)).toBe('/api/mod/taiyangniao-pro')
     expect(resolveErpApiPath('/api/products/list', ids)).toBe(
       '/api/mod/taiyangniao-pro/products/list',
@@ -104,18 +104,18 @@ describe('erpDomainPaths', () => {
 
   it('routes wechat_contacts compat via erp bridge when bridge is installed', () => {
     writeActiveExtensionModIdToStorage('taiyangniao-pro', TEST_SCOPE)
-    const ids = ['taiyangniao-pro', 'xcagi-erp-domain-bridge']
+    const ids = ['taiyangniao-pro', 'xcagi-erp-domain-bridge', 'xcagi-wechat-bridge']
     expect(resolveErpApiPath('/api/wechat_contacts/work_mode_feed?per_contact=1', ids)).toBe(
-      '/api/mod/xcagi-erp-domain-bridge/wechat_contacts/work_mode_feed?per_contact=1',
+      '/api/mod/xcagi-wechat-bridge/wechat_contacts/work_mode_feed?per_contact=1',
     )
     expect(resolveErpApiPath('/api/wechat_contacts/decrypt_status', ids)).toBe(
-      '/api/mod/xcagi-erp-domain-bridge/wechat_contacts/decrypt_status',
+      '/api/mod/xcagi-wechat-bridge/wechat_contacts/decrypt_status',
     )
   })
 
   it('routes ERP API via bridge when active mod is industry shell (attendance-industry)', () => {
     writeActiveExtensionModIdToStorage('attendance-industry', TEST_SCOPE)
-    const ids = ['attendance-industry', 'xcagi-erp-domain-bridge']
+    const ids = ['attendance-industry', 'xcagi-erp-domain-bridge', 'xcagi-wechat-bridge']
     expect(resolveErpApiBase(ids)).toBe('/api/mod/xcagi-erp-domain-bridge')
     expect(resolveErpApiPath('/api/customers/list', ids)).toBe(
       '/api/mod/xcagi-erp-domain-bridge/customers/list',
@@ -139,9 +139,9 @@ describe('erpDomainPaths', () => {
 
   it('does not map wechat_contacts to attendance-industry client mod', () => {
     localStorage.setItem(LS, '1')
-    const ids = ['attendance-industry', 'xcagi-erp-domain-bridge']
+    const ids = ['attendance-industry', 'xcagi-erp-domain-bridge', 'xcagi-wechat-bridge']
     expect(resolveErpApiPath('/api/wechat_contacts/decrypt_status', ids)).toBe(
-      '/api/mod/xcagi-erp-domain-bridge/wechat_contacts/decrypt_status',
+      '/api/mod/xcagi-wechat-bridge/wechat_contacts/decrypt_status',
     )
   })
 })

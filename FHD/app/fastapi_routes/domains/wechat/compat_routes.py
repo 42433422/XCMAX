@@ -344,6 +344,7 @@ def _assistant_work_mode_feed_payload(raw: dict, *, per_contact: int) -> dict:
 
 
 @router.get("/mod/xcagi-erp-domain-bridge/wechat_contacts/work_mode_feed")
+@router.get("/mod/xcagi-wechat-bridge/wechat_contacts/work_mode_feed")
 def wechat_work_mode_feed_host_alias(
     per_contact: int = Query(default=1, ge=1, le=100),
 ) -> dict:

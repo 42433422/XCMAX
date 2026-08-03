@@ -198,8 +198,8 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
     {
       path: '/wechat-contacts',
       name: 'wechat-contacts',
-      redirect: { name: 'data-sources', query: { source: 'wechat_local_db' } },
-      meta: { title: '数据来源' },
+      component: () => import('../views/WechatContactsView.vue'),
+      meta: { title: '微信联系人' },
     },
     {
       path: '/print',

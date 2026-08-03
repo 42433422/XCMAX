@@ -26,13 +26,13 @@ describe('sidebarApiRegression', () => {
       ['/api/orders?limit=100', '/api/mod/xcagi-erp-domain-bridge/orders?limit=100'],
       [
         '/api/wechat_contacts/ensure_contact_cache',
-        '/api/mod/xcagi-erp-domain-bridge/wechat_contacts/ensure_contact_cache',
+        '/api/mod/xcagi-wechat-bridge/wechat_contacts/ensure_contact_cache',
       ],
       ['/api/materials', '/api/materials'],
       ['/api/print/templates', '/api/print/templates'],
     ]
     for (const [host, expected] of cases) {
-      expect(resolveErpApiPath(host)).toBe(expected)
+      expect(resolveErpApiPath(host, ['xcagi-erp-domain-bridge', 'xcagi-wechat-bridge'])).toBe(expected)
     }
   })
 
@@ -49,7 +49,7 @@ describe('sidebarApiRegression', () => {
       '/mod/xcagi-erp-domain-bridge/products',
     )
     expect(resolveErpPageRedirectForRouteName('wechat-contacts')).toBe(
-      '/mod/xcagi-erp-domain-bridge/data-sources?source=wechat_local_db',
+      '/mod/xcagi-wechat-bridge/wechat-contacts',
     )
   })
 
