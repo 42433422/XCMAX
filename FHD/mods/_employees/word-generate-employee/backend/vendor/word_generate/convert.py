@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from modstore_server.office_plaintext_generate import resolve_word_document_spec
+from app.application.office_plaintext_generate import resolve_word_document_spec
 
 
 def _style_for_paragraph(doc: Any, p: Dict[str, Any]) -> Optional[str]:
