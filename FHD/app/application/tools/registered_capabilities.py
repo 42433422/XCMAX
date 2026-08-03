@@ -126,6 +126,15 @@ def build_registered_capability_tool_definition() -> dict[str, Any]:
     }
 
 
+def extend_workflow_tool_registry(registry: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Append the product capability tool without making a second hard-coded catalog."""
+
+    try:
+        return [*registry, build_registered_capability_tool_definition()]
+    except RECOVERABLE_ERRORS:
+        return registry
+
+
 def resolve_registered_capability_call(args: dict[str, Any] | None) -> dict[str, Any]:
     """Validate and normalize one model tool call against the SSOT registry."""
 
@@ -288,6 +297,7 @@ __all__ = [
     "ERP_CAPABILITY_TOOL_NAME",
     "build_registered_capability_tool_definition",
     "execute_registered_capability",
+    "extend_workflow_tool_registry",
     "registered_capability_catalog",
     "resolve_registered_capability_call",
 ]

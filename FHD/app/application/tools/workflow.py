@@ -1,15 +1,4 @@
-"""Workflow tool registry + dispatcher + Excel/import handlers.
-
-Phase 4B 从 ``app.legacy.tools`` 吸收实现。本模块汇总所有工作流工具的:
-
-- 注册表 :func:`get_workflow_tool_registry` / :func:`_base_registry`
-- 分派器 :func:`execute_workflow_tool`
-- Excel 分析 / 查询 / 聚合 / 统计:`handle_excel_analysis`
-- Excel 导入数据库:`_handle_import_excel_to_database` 及推断映射
-
-后续 (Phase 4C) 可再按工具组细拆到 ``excel_handlers.py`` /
-``import_excel.py`` / ``registry.py`` / ``dispatcher.py``,外部 import 不变。
-"""
+"""Workflow tool registry, dispatcher, and Excel/import handlers."""
 
 from __future__ import annotations
 
@@ -23,6 +12,11 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+from app.application.tools.registered_capabilities import (
+    ERP_CAPABILITY_TOOL_NAME,
+    execute_registered_capability,
+    extend_workflow_tool_registry,
+)
 from app.infrastructure.auth.db_token import configured_db_write_token  # noqa: F401
 from app.infrastructure.excel.schema_service import ExcelSchemaUnderstandingService
 from app.infrastructure.excel.text_to_pandas import _safe_exec_pandas
@@ -892,19 +886,7 @@ def get_workflow_tool_registry() -> list[dict[str, Any]]:
         and _workflow_registry_cache_ver == _WORKFLOW_REG_VER
     ):
         return _workflow_tool_registry_cache
-    reg = _base_registry()
-    # Every user-facing ERP capability is registered once in
-    # config/risk_actions.registry.json.  Project that SSOT into a single,
-    # approval-gated model tool instead of maintaining a second, incomplete
-    # hard-coded list (which previously hid printing and other product areas).
-    try:
-        from app.application.tools.registered_capabilities import (
-            build_registered_capability_tool_definition,
-        )
-
-        reg.append(build_registered_capability_tool_definition())
-    except RECOVERABLE_ERRORS:
-        logger.debug("registered ERP capability tool unavailable", exc_info=True)
+    reg = extend_workflow_tool_registry(_base_registry())
     try:
         from app.mod_sdk.employee_tool_registry import build_employee_pack_tool_definitions
 
@@ -950,9 +932,7 @@ def execute_workflow_tool(
             args = json.loads(args or "{}")
         except RECOVERABLE_ERRORS:
             args = {}
-    if name == "execute_erp_capability":
-        from app.application.tools.registered_capabilities import execute_registered_capability
-
+    if name == ERP_CAPABILITY_TOOL_NAME:
         return execute_registered_capability(args, workspace_root=workspace_root)
     try:
         from app.mod_sdk.employee_tool_registry import execute_employee_tool, is_employee_tool
