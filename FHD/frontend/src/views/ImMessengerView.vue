@@ -92,6 +92,9 @@
       <main v-if="activeExternalEntry" class="im-chat im-chat--external-inbox">
         <KellaiCustomerInbox />
       </main>
+      <main v-else-if="activeGroupChat" class="im-chat im-chat--group-chat">
+        <AiGroupChatView />
+      </main>
       <main v-else-if="activeSystemEntry" class="im-chat im-chat--system-employee">
         <header class="im-chat-head">
           <span
@@ -431,6 +434,7 @@ import {
   sendCursorSuperEmployeeMessage,
 } from '@/api/cursorSuperEmployee';
 import KellaiCustomerInbox from '@/components/im/KellaiCustomerInbox.vue';
+import AiGroupChatView from '@/views/AiGroupChatView.vue';
 
 type CurrentUserPayload = {
   user?: { id?: number };
@@ -484,8 +488,16 @@ type ExternalAppEntry = {
   is_external_app_entry: true;
 };
 
+type AiGroupChatEntry = {
+  id: 'ai-group-chat';
+  display_name: '我的群聊';
+  username: 'ai-group-chat';
+  subtitle: '多 AI 员工协同群聊';
+  is_ai_group_chat_entry: true;
+};
+
 type SystemEmployeeEntry = CodexSuperEmployeeEntry | ClaudeSuperEmployeeEntry | CursorSuperEmployeeEntry | DutyEmployeeEntry;
-type PinnedImEntry = ImContact | SystemEmployeeEntry | ExternalAppEntry;
+type PinnedImEntry = ImContact | SystemEmployeeEntry | ExternalAppEntry | AiGroupChatEntry;
 type ImSidebarListItem =
   | { kind: 'pinned'; key: string; entry: PinnedImEntry }
   | { kind: 'conversation'; key: string; conversation: ImConversationSummary };
@@ -573,6 +585,14 @@ const KELLAI_CUSTOMER_IM_ENTRY: ExternalAppEntry = {
   is_external_app_entry: true,
 };
 
+const AI_GROUP_CHAT_ENTRY: AiGroupChatEntry = {
+  id: 'ai-group-chat',
+  display_name: '我的群聊',
+  username: 'ai-group-chat',
+  subtitle: '多 AI 员工协同群聊',
+  is_ai_group_chat_entry: true,
+};
+
 const SUPER_CLI_TOOLS: SystemEmployeeEntry[] = [
   CODEX_SUPER_EMPLOYEE_ENTRY,
   CURSOR_SUPER_EMPLOYEE_ENTRY,
@@ -584,6 +604,7 @@ const conversations = ref<ImConversationSummary[]>([]);
 const activeConversationId = ref<number | null>(null);
 const activeSystemEntry = ref<SystemEmployeeEntry | null>(null);
 const activeExternalEntry = ref<ExternalAppEntry | null>(null);
+const activeGroupChat = ref(false);
 const codexMessages = ref<CodexSuperEmployeeMessage[]>([]);
 const codexDraft = ref('');
 const codexBusy = ref(false);
@@ -756,9 +777,9 @@ const filteredContacts = computed(() => {
 
 const pinnedContacts = computed<PinnedImEntry[]>(() => {
   if (isAdminCustomerServiceConsole.value) {
-    return [CODEX_SUPER_EMPLOYEE_ENTRY, CURSOR_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY, ...dutyEmployees.value];
+    return [AI_GROUP_CHAT_ENTRY, CODEX_SUPER_EMPLOYEE_ENTRY, CURSOR_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY, ...dutyEmployees.value];
   }
-  return contacts.value.filter((c) => isEnterpriseDedicatedContact(c));
+  return [AI_GROUP_CHAT_ENTRY, ...contacts.value.filter((c) => isEnterpriseDedicatedContact(c))];
 });
 
 const externalChannelEntries = computed<ExternalAppEntry[]>(() => [
@@ -769,7 +790,7 @@ const externalChannelEntries = computed<ExternalAppEntry[]>(() => [
 const sidebarListItems = computed<ImSidebarListItem[]>(() => {
   const pinnedConversationIds = new Set<number>();
   for (const entry of pinnedContacts.value) {
-    if (isSuperEmployeeEntry(entry) || isDutyEmployeeEntry(entry) || isExternalAppEntry(entry)) {
+    if (isSuperEmployeeEntry(entry) || isDutyEmployeeEntry(entry) || isExternalAppEntry(entry) || isAiGroupChatEntry(entry)) {
       continue;
     }
     const conv = existingDedicatedConversation(entry);
@@ -842,10 +863,15 @@ function isExternalAppEntry(entry: PinnedImEntry | null): entry is ExternalAppEn
   return Boolean(entry && 'is_external_app_entry' in entry && entry.is_external_app_entry);
 }
 
+function isAiGroupChatEntry(entry: PinnedImEntry | null): entry is AiGroupChatEntry {
+  return Boolean(entry && 'is_ai_group_chat_entry' in entry && entry.is_ai_group_chat_entry);
+}
+
 function pinnedEntryPreview(entry: PinnedImEntry): string {
   if (isSuperEmployeeEntry(entry)) return entry.subtitle;
   if (isDutyEmployeeEntry(entry)) return entry.subtitle;
   if (isExternalAppEntry(entry)) return entry.subtitle;
+  if (isAiGroupChatEntry(entry)) return entry.subtitle;
   return `@${entry.username}`;
 }
 
@@ -865,6 +891,7 @@ function pinnedAvatarText(entry: PinnedImEntry): string {
   if (isClaudeSuperEmployeeEntry(entry)) return 'Claude';
   if (isCursorSuperEmployeeEntry(entry)) return 'Cursor';
   if (isExternalAppEntry(entry)) return '客';
+  if (isAiGroupChatEntry(entry)) return '群';
   if (isDutyEmployeeEntry(entry)) return avatarText(entry.display_name);
   return avatarText(entry.display_name);
 }
@@ -1116,6 +1143,7 @@ function existingDedicatedConversation(contact: ImContact): ImConversationSummar
 
 function isPinnedContactActive(contact: PinnedImEntry): boolean {
   if (isExternalAppEntry(contact)) return activeExternalEntry.value?.id === contact.id;
+  if (isAiGroupChatEntry(contact)) return activeGroupChat.value;
   if (isSuperEmployeeEntry(contact)) {
     return activeSystemEntry.value?.id === contact.id;
   }
@@ -1152,6 +1180,7 @@ function sidebarItemAvatarClasses(item: ImSidebarListItem) {
       [`im-avatar--${avatarKey}`]: avatarKey,
       'im-avatar--employee': isDutyEmployeeEntry(entry),
       'im-avatar--external': isExternalAppEntry(entry),
+      'im-avatar--group': isAiGroupChatEntry(entry),
     },
   ];
 }
@@ -1160,13 +1189,16 @@ function sidebarItemPinClasses(item: ImSidebarListItem) {
   if (item.kind !== 'pinned') return [];
   return [
     'fa',
-    isExternalAppEntry(item.entry)
-      ? 'fa-comments-o'
-      : isDutyEmployeeEntry(item.entry)
-        ? 'fa-id-badge'
-        : 'fa-thumb-tack',
+    isAiGroupChatEntry(item.entry)
+      ? 'fa-users'
+      : isExternalAppEntry(item.entry)
+        ? 'fa-comments-o'
+        : isDutyEmployeeEntry(item.entry)
+          ? 'fa-id-badge'
+          : 'fa-thumb-tack',
     'im-pin',
     {
+      'im-pin--group': isAiGroupChatEntry(item.entry),
       'im-pin--employee': isDutyEmployeeEntry(item.entry),
       'im-pin--external': isExternalAppEntry(item.entry),
     },
@@ -1459,6 +1491,19 @@ function startCodexPolling(requestId = ''): void {
 }
 
 async function activatePinnedEntry(entry: PinnedImEntry): Promise<void> {
+  if (isAiGroupChatEntry(entry)) {
+    closeOverlappingAssistantFloat();
+    stopCodexPolling();
+    stopCodexTypewriter(true);
+    activeExternalEntry.value = null;
+    activeSystemEntry.value = null;
+    activeConversationId.value = null;
+    activeGroupChat.value = true;
+    messages.value = [];
+    hasMoreHistory.value = false;
+    closeContactPicker();
+    return;
+  }
   if (isExternalAppEntry(entry)) {
     closeOverlappingAssistantFloat();
     stopCodexPolling();
@@ -1478,6 +1523,7 @@ async function activatePinnedEntry(entry: PinnedImEntry): Promise<void> {
     activeExternalEntry.value = null;
     activeSystemEntry.value = entry;
     activeConversationId.value = null;
+    activeGroupChat.value = false;
     messages.value = [];
     codexMessages.value = [];
     hasMoreHistory.value = false;
@@ -1493,6 +1539,7 @@ async function activatePinnedEntry(entry: PinnedImEntry): Promise<void> {
     activeExternalEntry.value = null;
     activeSystemEntry.value = entry;
     activeConversationId.value = null;
+    activeGroupChat.value = false;
     messages.value = [];
     hasMoreHistory.value = false;
     closeContactPicker();
@@ -1506,6 +1553,7 @@ async function activatePinnedEntry(entry: PinnedImEntry): Promise<void> {
   stopCodexTypewriter(true);
   activeExternalEntry.value = null;
   activeSystemEntry.value = null;
+  activeGroupChat.value = false;
   await startChatWith(entry);
 }
 
@@ -1766,6 +1814,7 @@ async function selectConversation(id: number): Promise<void> {
   dutyEmployeeDraft.value = '';
   activeExternalEntry.value = null;
   activeSystemEntry.value = null;
+  activeGroupChat.value = false;
   activeConversationId.value = id;
   busy.value = true;
   try {
@@ -2157,6 +2206,9 @@ onUnmounted(() => {
 .im-pin--external {
   color: #0f766e;
 }
+.im-pin--group {
+  color: #7c3aed;
+}
 .im-conv-main {
   min-width: 0;
   flex: 1;
@@ -2233,6 +2285,11 @@ onUnmounted(() => {
   background: #e6f6f2;
   color: #0f766e;
 }
+.im-avatar--group {
+  border-radius: 10px;
+  background: #f3e8ff;
+  color: #7c3aed;
+}
 .im-avatar--sm.im-avatar--employee {
   flex-basis: 30px;
   width: 30px;
@@ -2305,6 +2362,12 @@ onUnmounted(() => {
 .im-chat--empty .fa {
   font-size: 42px;
   opacity: 0.35;
+}
+.im-chat--group-chat {
+  overflow: hidden;
+}
+.im-chat--group-chat > :deep(*) {
+  height: 100%;
 }
 .im-load-more {
   margin: 10px auto 0;

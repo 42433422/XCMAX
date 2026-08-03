@@ -20,17 +20,21 @@ export type AccountRoleSource = {
 const ENTERPRISE_GENERIC_CORE_KEYS = new Set([
   'chat',
   'im',
+  'ai-groups',
   'ai-ecosystem',
   'persy-knowledge',
   'employee-workflow',
   'workflow-employee-space',
+  'workflow-visualization',
   'mod-store',
   'settings',
   'desktop-runtime',
   'data-sources',
+  'business-docking',
   'printer-list',
   'template-preview',
   'tools',
+  'orders-create',
 ])
 
 const ENTERPRISE_BUSINESS_CORE_KEYS = new Set([
