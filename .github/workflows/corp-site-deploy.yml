@@ -125,6 +125,8 @@ jobs:
             NGINX_SRC="${SITE_ROOT}/nginx-xiu-ci-root.conf"
             if [ -f /etc/nginx/conf.d/xiu-ci.com.conf ]; then
               echo "[info] canonical xiu-ci.com.conf exists; skip conflicting standalone corp vhost"
+              # 同步版本化 XCAGI 下载路由；否则新版本 /xcagi-vX.Y.Z.W/ 会落入官网首页。
+              bash "${SITE_ROOT}/deploy/scripts/sync-nginx-xiu-ci-snippets.sh"
               # HTTPS whitelist never included /partials/; pin it on the live conf.
               python3 "${SITE_ROOT}/MODstore_deploy/scripts/fix-nginx-corp-partials.py"
               python3 "${SITE_ROOT}/MODstore_deploy/scripts/fix-nginx-corp-download-routes.py"
