@@ -213,9 +213,7 @@ def reconcile_paid_customer_value(
         evidence["source_owner"] = source_owner
         evidence["source_available"] = True
         evidence["source_authoritative"] = True
-        evidence["value_ledger_ready"] = bool(
-            evidence.get("append_only_store_available")
-        )
+        evidence["value_ledger_ready"] = bool(evidence.get("append_only_store_available"))
         result["evidence"] = evidence
     return result
 
