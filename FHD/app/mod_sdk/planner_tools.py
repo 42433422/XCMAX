@@ -241,8 +241,16 @@ def execute_planner_tool_from_body(body: dict[str, Any] | None) -> dict[str, Any
         return {"success": False, "error": "tool_name required"}
 
     args = payload.get("arguments") or payload.get("args") or {}
+    # A packaged desktop backend runs with its CWD inside the read-only app
+    # bundle.  Tool calls that do not explicitly provide a workspace must
+    # therefore default to the user's data directory, not ``os.getcwd()``;
+    # otherwise the bundled Office employees cannot write their verified
+    # artifacts on a fresh install.
     workspace_root = str(
-        payload.get("workspace_root") or os.environ.get("WORKSPACE_ROOT") or os.getcwd()
+        payload.get("workspace_root")
+        or os.environ.get("WORKSPACE_ROOT")
+        or os.environ.get("XCAGI_DATA_DIR")
+        or os.getcwd()
     ).strip()
     db_write_token = payload.get("db_write_token")
     if db_write_token is not None:

@@ -943,6 +943,29 @@ def test_execute_planner_tool_from_body_workspace_root_from_env(
     assert mock_exec.call_args.args[2] == "/custom/ws"
 
 
+def test_execute_planner_tool_from_body_uses_desktop_data_dir_before_cwd(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Packaged desktop tools must not default to the read-only app bundle CWD."""
+
+    raw = '{"success": true}'
+    mock_exec = MagicMock(return_value=raw)
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+    monkeypatch.setenv("XCAGI_DATA_DIR", "/desktop/user-data")
+    with (
+        patch(
+            "app.mod_sdk.planner_tools.resolve_planner_tool_executor",
+            return_value=mock_exec,
+        ),
+        patch(
+            "app.mod_sdk.planner_tools.is_planner_tools_via_mod_enabled",
+            return_value=False,
+        ),
+    ):
+        execute_planner_tool_from_body({"tool_name": "word-generate-employee"})
+    assert mock_exec.call_args.args[2] == "/desktop/user-data"
+
+
 # ---------------------------------------------------------------------------
 # planner_tools — list_planner_tools_registry_detail
 # ---------------------------------------------------------------------------
