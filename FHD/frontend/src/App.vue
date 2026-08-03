@@ -81,7 +81,6 @@ const {
 }
 
 .route-view-shell > * {
-  flex: 1 1 auto;
   min-height: 0;
 }
 

@@ -241,7 +241,7 @@ def test_macos_after_pack_uses_unambiguous_developer_id_and_fails_closed() -> No
     assert "log(`native sign warn" not in after_pack
 
 
-def test_desktop_package_includes_commercial_safe_pdf_runtime() -> None:
+def test_desktop_package_includes_commercial_safe_office_employee_runtimes() -> None:
     spec = (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(encoding="utf-8")
     pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     entrypoint = (REPO_ROOT / "XCAGI" / "run_fastapi.py").read_text(encoding="utf-8")
@@ -259,7 +259,11 @@ def test_desktop_package_includes_commercial_safe_pdf_runtime() -> None:
     assert '"reportlab>=5,<6"' in pyproject
     assert "PyMuPDF" not in pyproject
     assert "collect_submodules(module)" in spec
-    assert 'for module in ["pypdf", "reportlab"]' in spec
+    assert 'for module in ["docx", "openpyxl", "pptx", "xlsxwriter", "pypdf", "reportlab"]' in spec
+    assert '"app.application.office_plaintext_generate"' in spec
+    assert '"python-docx>=1.1.0"' in pyproject
+    assert "openpyxl==3.1.5" in pyproject
+    assert '"python-pptx>=1.0.2"' in pyproject
     assert "import fitz" not in employee_runtime
     assert "from pypdf import PdfReader" in employee_runtime
     assert "from reportlab.pdfgen import canvas" in employee_runtime
@@ -316,7 +320,13 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
     assert 'for staged_file in "${package_stage}"/*' in installer
     assert 'ditto --norsrc "${staged_file}" "${out_dir}/$(basename "${staged_file}")"' in installer
     assert 'ditto --norsrc "${package_stage}" "${out_dir}"' not in installer
-    assert "electron-builder --mac zip" in installer
+    assert "--config .electron-builder.release.yml --mac zip" in installer
+    assert 'builder_config="desktop/.electron-builder.release.yml"' in installer
+    assert (
+        'sed "s/__XCAGI_PRODUCT_VERSION__/${VERSION}/g" desktop/electron-builder.yml > "${builder_config}"'
+        in installer
+    )
+    assert 'rm -f "${builder_config}"' in installer
     assert "electron-builder --mac dmg" not in installer
     assert "scripts/package/create-mac-dmg.sh" in installer
     assert "hdiutil create" in dmg_builder

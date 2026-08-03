@@ -142,6 +142,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     createTaskId,
     sortTaskList,
     upsertTask,
+    removeTask,
     finishTask,
     failTask,
     cancelTaskById,
@@ -227,6 +228,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
   const { syncAgentRunFromPayload } = useAgentRunEventSync({
     upsertTask,
+    removeTask,
     getLastAiMessageRef,
   })
 
@@ -276,7 +278,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     div.textContent = text
     return div.innerHTML.replace(/\n/g, '<br>')
   }
-
   const sessionHistory = useChatSessionHistory({
     sessionId,
     taskList,
@@ -306,7 +307,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     newConversation,
     registerHistoryModWatch,
   } = sessionHistory
-
 
   const {
     lastShipmentExecution,

@@ -5,6 +5,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 const updateListeners: Array<(event: unknown) => void> = []
 
 const desktopApi = {
+  getAppIdentity: vi.fn().mockResolvedValue({}),
   checkForUpdates: vi.fn().mockResolvedValue({}),
   getUpdateStatus: vi.fn().mockResolvedValue(null),
   downloadUpdate: vi.fn().mockResolvedValue({}),
@@ -103,6 +104,25 @@ describe('DesktopAppUpdatePrompt', () => {
     await downloadBtn.trigger('click')
     await flushPromises()
     expect(desktopApi.downloadUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('explains why a temporary macOS copy cannot self-update', async () => {
+    desktopApi.getAppIdentity.mockResolvedValueOnce({
+      install: {
+        canSelfUpdate: false,
+        reason: '请通过安装包替换 /Applications/XCAGI.app 后再使用在线更新。',
+      },
+    })
+    const wrapper = mountPrompt()
+    await flushPromises()
+    emitUpdate('update-available', { version: '1.0.0' })
+    await nextTick()
+    await wrapper.find('.desktop-update-chip').trigger('click')
+
+    expect(wrapper.text()).toContain('请通过安装包替换 /Applications/XCAGI.app 后再使用在线更新。')
+    const action = wrapper.findAll('button').find((button) => button.text().includes('请先正式安装'))!
+    expect(action.attributes('disabled')).toBeDefined()
+    expect(desktopApi.downloadUpdate).not.toHaveBeenCalled()
   })
 
   it('installs after download completes', async () => {

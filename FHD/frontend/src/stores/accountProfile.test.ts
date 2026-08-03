@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useAccountProfileStore } from './accountProfile'
+import { refreshTenantScopedClientStores } from '@/utils/refreshTenantScopedClientStores'
 
 vi.mock('@/api/auth', () => ({
   authApi: {
@@ -19,7 +20,7 @@ vi.mock('@/utils/productSku', () => ({
 }))
 
 vi.mock('@/utils/refreshTenantScopedClientStores', () => ({
-  refreshTenantScopedClientStores: vi.fn(),
+  refreshTenantScopedClientStores: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@/utils/tenantStorageScopeRuntime', () => ({
@@ -210,5 +211,27 @@ describe('useAccountProfileStore', () => {
     store.loaded = true
     await store.refreshFromServer()
     expect(store.loaded).toBe(false)
+  })
+
+  it('waits for tenant preference hydration before refresh resolves', async () => {
+    let releaseHydration: (() => void) | undefined
+    vi.mocked(refreshTenantScopedClientStores).mockImplementationOnce(
+      () => new Promise<void>((resolve) => { releaseHydration = resolve }),
+    )
+    const { authApi } = await import('@/api/auth')
+    vi.mocked(authApi.getCurrentUser).mockResolvedValueOnce({
+      success: true,
+      data: { account_kind: 'enterprise', tenant_id: 1, local_user_id: 2 },
+    })
+    const store = useAccountProfileStore()
+    let resolved = false
+    const refresh = store.refreshFromServer().then(() => { resolved = true })
+
+    await vi.waitFor(() => expect(store.loaded).toBe(true))
+    expect(resolved).toBe(false)
+
+    releaseHydration?.()
+    await refresh
+    expect(resolved).toBe(true)
   })
 })

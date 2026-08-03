@@ -1,6 +1,6 @@
 # FHD 发版检查清单（v10 线）
 
-Tag：`FHD/v1.0.0.0` 或 `FHD/v1.0.0.0-rc.1`（预发）。
+Tag：`FHD/v1.0.0.1` 或 `FHD/v1.0.0.1-rc.1`（预发）。
 
 ## GitHub Secrets（必填）
 
