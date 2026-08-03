@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 import modstore_server.capability_proposal_relay as relay
+from modstore_server.evolution_ledger import list_events
 
 
 @pytest.fixture
@@ -154,12 +155,63 @@ def test_candidate_without_github_transport_is_configuration_blocked(
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.delenv("GH_TOKEN", raising=False)
     monkeypatch.setattr(relay.shutil, "which", lambda _name: None)
+    events: list[dict] = []
+    monkeypatch.setattr(relay, "_configuration_block_has_recent_audit", lambda _errors: False)
+    monkeypatch.setattr(relay, "_append_evolution_event", lambda event: events.append(dict(event)))
 
     result = relay.run_capability_proposal_relay()
 
     assert result["ok"] is False
     assert result["status"] == "configuration_blocked"
     assert result["configuration_errors"] == ["github_credentials_unavailable"]
+    assert result["audit_event_written"] is True
+    assert result["remediation"].startswith("provision MODSTORE_GITHUB_TOKEN")
+    assert events == [
+        {
+            "ok": False,
+            "status": "configuration_blocked",
+            "scanned_dirs": 1,
+            "created_count": 0,
+            "ignored_count": 0,
+            "pending_after": 0,
+            "issue_urls": [],
+            "results": [],
+            "configuration_errors": ["github_credentials_unavailable"],
+            "remediation": (
+                "provision MODSTORE_GITHUB_TOKEN or an authenticated gh client "
+                "through protected runtime configuration"
+            ),
+        }
+    ]
+    assert "proposal-key" not in str(events)
+
+
+def test_configuration_block_audit_is_deduplicated(
+    relay_root: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _root, report_dir = relay_root
+    _write_proposal(report_dir)
+    monkeypatch.delenv("MODSTORE_GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.setattr(relay.shutil, "which", lambda _name: None)
+    monkeypatch.setenv("MODSTORE_EVOLUTION_LEDGER_PATH", str(tmp_path / "evolution.jsonl"))
+
+    first = relay.run_capability_proposal_relay()
+    result = relay.run_capability_proposal_relay()
+
+    assert first["audit_event_written"] is True
+    assert result["status"] == "configuration_blocked"
+    assert result["audit_event_written"] is False
+    assert result["audit_event_reason"] == "duplicate_within_24h"
+    events = list_events(
+        event_type="capability_proposal_relay_completed",
+        final_status="configuration_blocked",
+    )
+    assert len(events) == 1
+    assert events[0]["configuration_errors"] == ["github_credentials_unavailable"]
+    assert events[0]["remediation"].startswith("provision MODSTORE_GITHUB_TOKEN")
+    assert "proposal-key" not in str(events[0])
 
 
 def test_scheduler_registration_tracks_relay(monkeypatch: pytest.MonkeyPatch) -> None:
