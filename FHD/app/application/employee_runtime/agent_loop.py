@@ -77,6 +77,87 @@ def _parse_args(raw: str) -> dict[str, Any]:
         return {}
 
 
+def _parse_tool_args(raw: str) -> tuple[dict[str, Any], str | None]:
+    """Parse one model function-call payload without silently executing bad JSON.
+
+    ``_parse_args`` is kept as the historic, lenient helper used by callers and
+    tests.  An agent loop has a different safety contract: malformed arguments
+    are an invalid tool call, not an invitation to execute the tool with an
+    empty object.  The model receives a structured error and can repair the
+    call on a later round.
+    """
+
+    try:
+        data = json.loads(raw or "{}")
+    except json.JSONDecodeError:
+        return {}, "工具参数不是有效 JSON 对象"
+    if not isinstance(data, dict):
+        return {}, "工具参数必须是 JSON 对象"
+    return data, None
+
+
+def _tool_result_state(raw: str) -> tuple[bool, str | None, bool]:
+    """Return ``(success, error, verified)`` for a workflow tool result.
+
+    The legacy workflow surface predates a uniform output schema.  A structured
+    ``success`` field is authoritative; an explicit error/token request is a
+    failure or unfinished action.  Older read-only tools that return a useful
+    object without either field remain compatible but are marked unverified in
+    the trace, rather than being mistaken for proof of a consequential action.
+    """
+
+    try:
+        payload = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return False, "工具返回不是有效 JSON", True
+    if not isinstance(payload, dict):
+        return False, "工具返回必须是 JSON 对象", True
+    if "success" in payload:
+        if payload.get("success") is True:
+            return True, None, True
+        return (
+            False,
+            str(payload.get("error") or payload.get("message") or "工具返回失败")[:500],
+            True,
+        )
+    if payload.get("requires_token") or payload.get("pending_approval"):
+        return (
+            False,
+            str(payload.get("message") or "工具等待授权")[:500],
+            True,
+        )
+    if payload.get("error"):
+        return False, str(payload.get("error"))[:500], True
+    # Older read-only handlers can return data without a success envelope.
+    # Preserve their compatibility, but make the weaker proof visible in the
+    # trajectory and never use it to justify a side-effect claim.
+    return True, None, False
+
+
+def _terminal_tool_failure(tool_trace: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Summarize an unfinished/failed tool action for the final run result."""
+
+    failed = [row for row in tool_trace if row.get("success") is False]
+    if not failed:
+        return None
+    first = failed[0]
+    if first.get("pending_approval"):
+        return {
+            "exit_status": "waiting_approval",
+            "error": str(first.get("reason") or "工具等待用户授权"),
+            "pending_approval": True,
+        }
+    if first.get("blocked"):
+        return {
+            "exit_status": "tool_blocked",
+            "error": str(first.get("reason") or "工具调用被拦截"),
+        }
+    return {
+        "exit_status": "tool_failed",
+        "error": str(first.get("error") or first.get("reason") or "工具调用失败"),
+    }
+
+
 def run_employee_agent_loop(
     *,
     employee_id: str,
@@ -183,6 +264,17 @@ def run_employee_agent_loop(
 
         if not tcs:
             text = str(msg.content or "").strip()
+            terminal_failure = _terminal_tool_failure(tool_trace)
+            if terminal_failure:
+                return {
+                    "handler": "agent",
+                    "ok": False,
+                    "output": text,
+                    "rounds": rounds,
+                    "tool_calls": tool_trace,
+                    "trajectory": trajectory,
+                    **terminal_failure,
+                }
             return {
                 "handler": "agent",
                 "ok": True,
@@ -196,8 +288,40 @@ def run_employee_agent_loop(
         for tc in tcs:
             fn = getattr(tc, "function", None)
             tool_name = str(getattr(fn, "name", "") or "").strip()
-            args = _parse_args(str(getattr(fn, "arguments", "") or ""))
+            raw_arguments = str(getattr(fn, "arguments", "") or "")
+            args, args_error = _parse_tool_args(raw_arguments)
             tc_id = str(getattr(tc, "id", "") or "")
+            if args_error:
+                tool_trace.append(
+                    {
+                        "tool": tool_name,
+                        "args": args,
+                        "success": False,
+                        "error": args_error,
+                        "invalid_arguments": True,
+                    }
+                )
+                trajectory.append(
+                    {
+                        "round": rounds,
+                        "event": "tool",
+                        "tool": tool_name,
+                        "args": args,
+                        "blocked": True,
+                        "success": False,
+                        "result": args_error,
+                    }
+                )
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc_id,
+                        "content": json.dumps(
+                            {"success": False, "error": args_error}, ensure_ascii=False
+                        ),
+                    }
+                )
+                continue
             fingerprint = json.dumps(
                 {"tool": tool_name, "args": args}, ensure_ascii=False, sort_keys=True
             )
@@ -222,10 +346,21 @@ def run_employee_agent_loop(
                 try:
                     verdict = gate(tool_name, args)
                 except RECOVERABLE_ERRORS:
-                    verdict = {"ok": True}
+                    logger.exception("employee tool gate failed closed: %s", tool_name)
+                    verdict = {"ok": False, "reason": "工具授权检查失败，未执行"}
                 if not verdict.get("ok", True):
                     reason = str(verdict.get("reason") or "blocked by employee gate")
-                    tool_trace.append({"tool": tool_name, "blocked": True, "reason": reason})
+                    tool_trace.append(
+                        {
+                            "tool": tool_name,
+                            "args": args,
+                            "blocked": True,
+                            "success": False,
+                            "reason": reason,
+                            "pending_approval": bool(verdict.get("pending_approval")),
+                            "approval_request_ids": list(verdict.get("approval_request_ids") or []),
+                        }
+                    )
                     trajectory.append(
                         {
                             "round": rounds,
@@ -233,6 +368,7 @@ def run_employee_agent_loop(
                             "tool": tool_name,
                             "args": args,
                             "blocked": True,
+                            "success": False,
                             "result": reason,
                         }
                     )
@@ -256,7 +392,16 @@ def run_employee_agent_loop(
                 result_raw = json.dumps(
                     {"success": False, "error": str(exc)[:300]}, ensure_ascii=False
                 )
-            tool_trace.append({"tool": tool_name, "args": args})
+            tool_success, tool_error, verified = _tool_result_state(str(result_raw))
+            tool_trace.append(
+                {
+                    "tool": tool_name,
+                    "args": args,
+                    "success": tool_success,
+                    "error": tool_error,
+                    "verified": verified,
+                }
+            )
             trajectory.append(
                 {
                     "round": rounds,
@@ -264,6 +409,8 @@ def run_employee_agent_loop(
                     "tool": tool_name,
                     "args": args,
                     "blocked": False,
+                    "success": tool_success,
+                    "verified": verified,
                     "result": str(result_raw)[:2000],
                 }
             )
@@ -273,8 +420,9 @@ def run_employee_agent_loop(
 
     return {
         "handler": "agent",
-        "ok": True,
-        "output": "（已达到最大迭代次数，返回当前进展）",
+        "ok": False,
+        "error": "已达到最大迭代次数，任务尚未完成",
+        "output": "（已达到最大迭代次数，任务尚未完成）",
         "rounds": rounds,
         "tool_calls": tool_trace,
         "max_iterations_reached": True,
