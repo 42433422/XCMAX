@@ -3447,6 +3447,63 @@ def test_reconcile_terminal_para_merge_failure_restarts_from_clean_base(
     assert len(memory["open_items"]) == 1
 
 
+def test_reconcile_manual_veto_replaces_legacy_same_task_remediation():
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-manual",
+                "detail": "true conflict",
+                "kind": "automated_remediation",
+                "para_task_id": "task-manual",
+                "reason": "para_merge_conflict",
+                "run_id": "run-manual",
+                "task_id": "task-manual",
+            }
+        ],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-manual",
+                "para_task_id": "task-manual",
+                "run_id": "run-manual",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-manual",
+            "detail": "manual-veto-active: PR #926 has hold-merge label",
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result == {"changed": True, "merged": 0, "remediation_added": 1}
+    assert len(memory["open_items"]) == 1
+    assert memory["open_items"][0]["kind"] == "human_strategy_approval"
+    assert memory["open_items"][0]["reason"] == "manual_merge_veto_active"
+    assert memory["closed_items"][-1]["original_item"]["reason"] == "para_merge_conflict"
+    assert memory["closed_items"][-1]["resolution_reason"] == (
+        "reclassified_as_manual_merge_veto_active"
+    )
+    assert _resume_review_qa_candidate(memory) is None
+
+    repeated = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+    assert repeated["changed"] is False
+    assert len(memory["open_items"]) == 1
+
+
 def test_reconcile_post_dispatch_merge_failure_continues_on_rejected_branch():
     memory = {
         "closed_items": [],
