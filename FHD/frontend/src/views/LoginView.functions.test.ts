@@ -107,10 +107,18 @@ vi.mock('@/utils/hostPackOnboardingGate', () => ({
 
 const mockHasRecentEnterpriseSessionHint = vi.fn(() => false)
 const mockConsumeDesktopSessionBootstrapHint = vi.fn(async () => false)
+const mockCanResumeRecentDesktopSession = vi.fn(async (
+  isDesktop: boolean,
+  isEnterprise: boolean,
+  query: Record<string, unknown>,
+) => {
+  const error = query.error
+  if (!isDesktop || !isEnterprise || query.oidc || query.oidc_error || (typeof error === 'string' && error.trim())) return false
+  return mockHasRecentEnterpriseSessionHint() || await mockConsumeDesktopSessionBootstrapHint()
+})
 
 vi.mock('@/utils/authSessionCache', () => ({
-  hasRecentEnterpriseSessionHint: () => mockHasRecentEnterpriseSessionHint(),
-  consumeDesktopSessionBootstrapHint: () => mockConsumeDesktopSessionBootstrapHint(),
+  canResumeRecentDesktopSession: (...args: [boolean, boolean, Record<string, unknown>]) => mockCanResumeRecentDesktopSession(...args),
 }))
 
 const mockIsDesktopShell = vi.fn(() => false)

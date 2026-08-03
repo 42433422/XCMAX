@@ -23,10 +23,7 @@ import { ADMIN_OPERATOR_HOME_ROUTE } from '@/constants/adminOperatorNav';
 import type { AccountKind } from '@/api/auth';
 import { loadLoginPreferences, saveLoginPreferences } from '@/utils/loginPreferences';
 import { clearHostPackSkippedSession } from '@/utils/hostPackOnboardingGate';
-import {
-  consumeDesktopSessionBootstrapHint,
-  hasRecentEnterpriseSessionHint,
-} from '@/utils/authSessionCache';
+import { canResumeRecentDesktopSession } from '@/utils/authSessionCache';
 import OtpCells from '@/components/OtpCells.vue';
 
 const route = useRoute();
@@ -154,33 +151,13 @@ async function tryAutoLogin() {
 
 let loginViewActive = true;
 
-async function canResumeRecentDesktopSession(): Promise<boolean> {
-  const gateError = route.query.error;
-  const canResume =
-    isDesktopShell() &&
-    isEnterpriseEdition.value &&
-    !route.query.oidc &&
-    !route.query.oidc_error &&
-    !(typeof gateError === 'string' && gateError.trim());
-  if (!canResume) return false;
-  return hasRecentEnterpriseSessionHint() || await consumeDesktopSessionBootstrapHint();
-}
-
 onMounted(async () => {
   applySavedLoginPreferences();
   const sku = await fetchProductSku();
   if (!loginViewActive) return;
   productSku.value = sku;
-  if (typeof document !== 'undefined') {
-    document.title = loginPageTitle(productSku.value);
-  }
-  // A recent official session may render the desktop shell immediately.  The
-  // protected-route guard starts a fresh official validation in the background
-  // and sends invalid sessions back here; this does not authorize any API.
-  if (await canResumeRecentDesktopSession()) {
-    await router.replace(redirectPath.value);
-    return;
-  }
+  if (typeof document !== 'undefined') document.title = loginPageTitle(productSku.value);
+  if (await canResumeRecentDesktopSession(isDesktopShell(), isEnterpriseEdition.value, route.query)) return void router.replace(redirectPath.value);
   try {
     const st = await authApi.getOidcStatus();
     if (!loginViewActive) return;

@@ -67,6 +67,17 @@ export async function consumeDesktopSessionBootstrapHint(): Promise<boolean> {
   }
 }
 
+/** Decide whether a validated desktop session can enter the shell provisionally. */
+export async function canResumeRecentDesktopSession(
+  isDesktop: boolean,
+  isEnterprise: boolean,
+  query: Record<string, unknown>,
+): Promise<boolean> {
+  const error = query.error;
+  if (!isDesktop || !isEnterprise || query.oidc || query.oidc_error || (typeof error === 'string' && error.trim())) return false;
+  return hasRecentEnterpriseSessionHint() || await consumeDesktopSessionBootstrapHint();
+}
+
 function clearDesktopSessionBootstrapHint(): void {
   desktopBootstrapSessionHint = false;
 }
