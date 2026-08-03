@@ -33,6 +33,10 @@ from app.application.employee_runtime.loader import (
     resolve_pack_dir,
 )
 from app.application.employee_runtime.memory import EmployeeMemoryManager, MemoryContext
+from app.application.employee_runtime.result_builders import (
+    build_blocked_result,
+    build_cognition_failed_result,
+)
 from app.application.employee_runtime.risk_gate import gate_action_or_block
 from app.domain.employee.memory_scope import MemoryScope
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -461,21 +465,7 @@ class EmployeeAgent:
         gate: dict[str, Any],
         t0: float,
     ) -> dict[str, Any]:
-        return {
-            "employee_id": self.employee_id,
-            "pack": {"id": pack["pack_id"], "version": pack.get("version")},
-            "duration_ms": round((time.perf_counter() - t0) * 1000, 3),
-            "result": {
-                "task": task,
-                "handlers": handler_list,
-                "outputs": [],
-                "summary": "blocked by risk middleware",
-                "risk_gate": gate,
-            },
-            "executed_at": datetime.now(UTC).isoformat(),
-            "blocked_by_risk_gate": True,
-            "success": False,
-        }
+        return build_blocked_result(self.employee_id, pack, task, handler_list, gate, t0)
 
     def _cognition_failed_result(
         self,
@@ -485,23 +475,9 @@ class EmployeeAgent:
         reasoning: dict[str, Any],
         t0: float,
     ) -> dict[str, Any]:
-        return {
-            "employee_id": self.employee_id,
-            "pack": {"id": pack["pack_id"], "version": pack.get("version")},
-            "duration_ms": round((time.perf_counter() - t0) * 1000, 3),
-            "success": False,
-            "error": str(reasoning.get("error") or "employee cognition failed"),
-            "error_code": reasoning.get("error_code"),
-            "retryable": reasoning.get("retryable"),
-            "result": {
-                "task": task,
-                "handlers": handler_list,
-                "outputs": [],
-                "summary": "cognition failed",
-                "cognition_error": reasoning.get("error"),
-            },
-            "executed_at": datetime.now(UTC).isoformat(),
-        }
+        return build_cognition_failed_result(
+            self.employee_id, pack, task, handler_list, reasoning, t0
+        )
 
 
 __all__ = ["EmployeeAgent"]

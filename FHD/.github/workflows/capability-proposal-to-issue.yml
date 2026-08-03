@@ -1,29 +1,31 @@
 name: Capability Proposal to Issue
 
 # 进化状态闭环（2026-07-20）：
-#   1. intent_confirmation_service 检测到未命中意图 → 写 capability_proposal.jsonl
-#   2. 本 workflow 每周一 04:00 UTC 读取 pending 提案
-#   3. 创建 GitHub issue 并打 `ai-implement` 标签
-#   4. 触发 ai-issue-implement.yml workflow 自主实现
+#   1. intent_confirmation_service 仅在 skill_proposal 时写 capability_proposal.jsonl
+#   2. 主路径由 MODstore 本地 capability_proposal_relay 调度并写 processed 收据
+#   3. 创建脱敏治理 issue，不直接触发任意代码生成
+#   4. 能力边界/风险/验收通过后，再进入受控实现与 MODstore 上架链
 #
-# 触发：每周一 04:00 UTC（错开 intent-benchmark.yml 的 03:00）+ 手动
+# 本 workflow 仅保留为已同步提案的手动 CI 兜底；GitHub runner 看不到桌面本地 JSONL。
 
 on:
-  schedule:
-    - cron: "0 4 * * 1"
   workflow_dispatch:
     inputs:
       max_issues:
         description: "单次最多创建 issue 数"
         required: false
         default: "5"
+  issue_comment:
+    types: [created]
 
 permissions:
+  actions: write
   issues: write
   contents: read
 
 jobs:
   create-issues:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -61,3 +63,46 @@ jobs:
           name: capability-proposal-log
           path: FHD/test_reports/capability_proposal.jsonl
           if-no-files-found: ignore
+
+  promote-approved-proposal:
+    if: |
+      github.event_name == 'issue_comment' &&
+      github.event.issue.state == 'open' &&
+      github.event.comment.author_association == 'OWNER' &&
+      (github.event.comment.body == '确认实现' ||
+       github.event.comment.body == '/approve-implementation') &&
+      contains(github.event.issue.labels.*.name, 'capability-proposal')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate owner approval and dispatch implementation
+        working-directory: FHD
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          APPROVAL_COMMENT_ID: ${{ github.event.comment.id }}
+        run: |
+          python scripts/dev/capability_proposal_promote.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --token "$GITHUB_TOKEN" \
+            --issue-number "$ISSUE_NUMBER" \
+            --comment-id "$APPROVAL_COMMENT_ID" \
+            --workflow-ref main \
+            --target-branch main \
+            --apply
+
+      - name: Upload promotion receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capability-promotion-${{ github.event.issue.number }}
+          path: FHD/test_reports/capability_promotion_*.json
+          if-no-files-found: error

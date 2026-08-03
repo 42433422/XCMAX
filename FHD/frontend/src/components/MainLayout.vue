@@ -128,16 +128,13 @@ import { useTutorialStore } from '@/stores/tutorial'
 import { setTutorialBuildContextFactory } from '@/stores/tutorial'
 import { useTutorialCatalog } from '@/composables/useTutorialCatalog'
 import { documentPreviewPip } from '@/state/documentPreviewPip'
-
 const props = defineProps({
   isProMode: {
     type: Boolean,
     default: false
   }
 })
-
 const emit = defineEmits(['toggle-pro-mode'])
-
 const route = useRoute()
 const router = useRouter()
 const onboardingTutorialStore = useOnboardingTutorialStore()
@@ -275,7 +272,7 @@ const viewTitlesBase = {
   'shipment-records': '业务记录',
   customers: '组织管理',
   'data-sources': '数据来源',
-  'wechat-contacts': '数据来源',
+  'wechat-contacts': '微信联系人',
   print: '模板与打印',
   'printer-list': '打印机列表',
   'template-preview': '模板库',

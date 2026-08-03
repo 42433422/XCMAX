@@ -15,11 +15,46 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+_OUTBOX_FILENAME = "cs_webhook_outbox.sqlite3"
+_LEGACY_OUTBOX_PATH = Path("/tmp/modstore_data") / _OUTBOX_FILENAME
+_LEGACY_MIGRATION_BATCH_SIZE = 100
+_MAX_STATUS_BUCKETS = 32
+
 
 def _db_path() -> Path:
-    root = Path(os.environ.get("MODSTORE_DATA_DIR", "/tmp/modstore_data")).expanduser()
-    root.mkdir(parents=True, exist_ok=True)
-    return root / "cs_webhook_outbox.sqlite3"
+    """Resolve a durable outbox path when the runtime supplies one.
+
+    ``/tmp`` remains a deliberately explicit development fallback only.  The
+    scheduler process in production already owns ``MODSTORE_RUNTIME_DIR``;
+    using it prevents customer leads from disappearing with tmp cleanup or a
+    host restart.
+    """
+
+    explicit = (os.environ.get("MODSTORE_CS_WEBHOOK_OUTBOX_PATH") or "").strip()
+    if explicit:
+        path = Path(explicit).expanduser()
+    else:
+        root = (
+            os.environ.get("MODSTORE_RUNTIME_DIR")
+            or os.environ.get("MODSTORE_DATA_DIR")
+            or "/tmp/modstore_data"
+        )
+        path = Path(root).expanduser() / _OUTBOX_FILENAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _legacy_db_path() -> Path:
+    """Allow a one-time migration from the former tmp-backed outbox."""
+
+    return Path(
+        os.environ.get("MODSTORE_LEGACY_CS_WEBHOOK_OUTBOX_PATH", str(_LEGACY_OUTBOX_PATH))
+    ).expanduser()
+
+
+def _legacy_migration_enabled() -> bool:
+    value = os.environ.get("MODSTORE_MIGRATE_LEGACY_CS_WEBHOOK_OUTBOX", "1")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _connect() -> sqlite3.Connection:
@@ -48,8 +83,159 @@ def ensure_outbox_schema() -> None:
             );
             CREATE INDEX IF NOT EXISTS ix_cs_webhook_outbox_status
               ON cs_webhook_outbox(status, next_retry_at);
+            CREATE TABLE IF NOT EXISTS cs_webhook_outbox_migrations (
+              source_path TEXT PRIMARY KEY,
+              migrated_at TEXT NOT NULL,
+              migrated_row_count INTEGER NOT NULL DEFAULT 0
+            );
             """)
         conn.commit()
+        _migrate_legacy_outbox(conn)
+        conn.commit()
+
+
+def _migrate_legacy_outbox(conn: sqlite3.Connection) -> None:
+    """Preserve tmp-era rows in durable storage without replaying customer data.
+
+    Imported pending rows are deliberately marked ``recovery_pending`` rather
+    than ``pending``.  An operator must explicitly choose to replay them; the
+    automatic retry job only handles newly-created ``pending`` deliveries.
+    """
+
+    target = _db_path()
+    legacy = _legacy_db_path()
+    if not _legacy_migration_enabled() or not legacy.exists():
+        return
+    try:
+        if target.resolve() == legacy.resolve():
+            return
+    except OSError:
+        return
+
+    source_path = str(legacy.resolve())
+    legacy_conn: sqlite3.Connection | None = None
+    try:
+        # The API process and the dedicated scheduler may start concurrently.
+        # Serialize the marker check and copy so rows cannot be imported twice.
+        conn.execute("BEGIN IMMEDIATE")
+        already_migrated = conn.execute(
+            "SELECT 1 FROM cs_webhook_outbox_migrations WHERE source_path = ?",
+            (source_path,),
+        ).fetchone()
+        if already_migrated:
+            conn.rollback()
+            return
+        legacy_conn = sqlite3.connect(f"file:{legacy.resolve()}?mode=ro", uri=True)
+        table = legacy_conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='cs_webhook_outbox'"
+        ).fetchone()
+        if not table:
+            return
+        legacy_rows = legacy_conn.execute("""
+            SELECT target_url, payload_json, headers_json, attempts, max_attempts,
+                   last_error, status, landing_contact_id, market_user_id,
+                   created_at, updated_at, next_retry_at
+            FROM cs_webhook_outbox ORDER BY id ASC
+            """)
+        migrated = 0
+        while batch := legacy_rows.fetchmany(_LEGACY_MIGRATION_BATCH_SIZE):
+            for row in batch:
+                source_status = str(row[6] or "pending")
+                status = "recovery_pending" if source_status == "pending" else source_status
+                conn.execute(
+                    """
+                    INSERT INTO cs_webhook_outbox (
+                      target_url, payload_json, headers_json, attempts, max_attempts,
+                      last_error, status, landing_contact_id, market_user_id,
+                      created_at, updated_at, next_retry_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (*row[:6], status, *row[7:]),
+                )
+                migrated += 1
+        conn.execute(
+            """
+            INSERT INTO cs_webhook_outbox_migrations (
+              source_path, migrated_at, migrated_row_count
+            ) VALUES (?, ?, ?)
+            """,
+            (source_path, _now_iso(), migrated),
+        )
+        logger.warning(
+            "migrated cs webhook outbox rows into durable storage: rows=%s status=recovery_pending",
+            migrated,
+        )
+    except sqlite3.Error:
+        conn.rollback()
+        logger.exception("legacy cs webhook outbox migration failed")
+    finally:
+        if legacy_conn is not None:
+            legacy_conn.close()
+
+
+def outbox_status_summary() -> dict[str, Any]:
+    """Return non-PII queue health suitable for a read-only admin endpoint."""
+
+    ensure_outbox_schema()
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT status, COUNT(*) FROM cs_webhook_outbox GROUP BY status LIMIT ?",
+            (_MAX_STATUS_BUCKETS,),
+        ).fetchall()
+        oldest = conn.execute(
+            "SELECT MIN(created_at) FROM cs_webhook_outbox WHERE status = 'pending'"
+        ).fetchone()
+    counts = {str(row[0]): int(row[1]) for row in rows}
+    path = _db_path()
+    return {
+        "storage": "tmp_fallback" if path.parent == Path("/tmp/modstore_data") else "configured",
+        "counts": counts,
+        "pending_count": counts.get("pending", 0),
+        "recovery_pending_count": counts.get("recovery_pending", 0),
+        "oldest_pending_at": str(oldest[0] or ""),
+    }
+
+
+def retry_interval_seconds() -> int:
+    try:
+        configured = int(os.environ.get("MODSTORE_CS_WEBHOOK_OUTBOX_RETRY_SECONDS", "60"))
+    except ValueError:
+        configured = 60
+    return max(30, min(configured, 3600))
+
+
+def register_retry_job(scheduler: Any, *, track_job: Any | None = None) -> bool:
+    """Register the autonomous retry loop on the process-wide scheduler."""
+
+    enabled = os.environ.get("MODSTORE_CS_WEBHOOK_OUTBOX_RETRY_ENABLED", "1")
+    if enabled.strip().lower() not in {"1", "true", "yes", "on"}:
+        logger.info("cs webhook outbox retry disabled by configuration")
+        return False
+
+    from apscheduler.triggers.interval import IntervalTrigger
+
+    def _run() -> dict[str, int]:
+        result = process_pending_outbox(limit=20)
+        if result["delivered"] or result["failed"] or result["skipped"]:
+            logger.info("cs webhook outbox retry: %s", result)
+        return result
+
+    def _job() -> None:
+        if track_job is None:
+            _run()
+        else:
+            track_job("cs_webhook_outbox_retry", _run)
+
+    scheduler.add_job(
+        _job,
+        IntervalTrigger(seconds=retry_interval_seconds()),
+        id="cs_webhook_outbox_retry",
+        replace_existing=True,
+        misfire_grace_time=300,
+        coalesce=True,
+        max_instances=1,
+    )
+    return True
 
 
 def _now_iso() -> str:

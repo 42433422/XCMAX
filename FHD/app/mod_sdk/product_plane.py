@@ -12,7 +12,6 @@ from typing import Any
 
 from app.mod_sdk.product_skus import resolve_product_sku
 
-
 CONTROL_PLANE_EMPLOYEE_IDS = frozenset(
     {
         "daily-orchestrator",

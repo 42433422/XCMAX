@@ -650,8 +650,9 @@ class TestModstoreOpenAICompletionsStream:
         with patch.dict(os.environ, {"XCAGI_MODSTORE_USE_NATIVE_STREAM": "false"}):
             chunks = list(completions._stream(messages=[{"role": "user", "content": "hi"}]))
 
-        assert len(chunks) == 1
-        assert chunks[0].choices[0].delta.content == "hello"
+        assert len(chunks) == 2
+        assert chunks[0].choices[0].delta.role == "assistant"
+        assert chunks[1].choices[0].delta.content == "hello"
 
     def test_use_native_stream_false_with_tool_calls(self):
         """L930=True: message has tool_calls → delta includes tool_calls."""
@@ -673,8 +674,9 @@ class TestModstoreOpenAICompletionsStream:
         with patch.dict(os.environ, {"XCAGI_MODSTORE_USE_NATIVE_STREAM": "0"}):
             chunks = list(completions._stream(messages=[{"role": "user", "content": "hi"}]))
 
-        assert len(chunks) == 1
-        delta = chunks[0].choices[0].delta
+        assert len(chunks) == 2
+        assert chunks[0].choices[0].delta.role == "assistant"
+        delta = chunks[1].choices[0].delta
         assert hasattr(delta, "tool_calls") and delta.tool_calls is not None
 
     def test_use_native_stream_false_no_content_no_tool_calls(self):
@@ -696,7 +698,8 @@ class TestModstoreOpenAICompletionsStream:
         with patch.dict(os.environ, {"XCAGI_MODSTORE_USE_NATIVE_STREAM": "no"}):
             chunks = list(completions._stream(messages=[{"role": "user", "content": "hi"}]))
 
-        assert len(chunks) == 1
+        assert len(chunks) == 2
+        assert chunks[0].choices[0].delta.role == "assistant"
 
     def test_use_native_stream_true_yields_chunks(self):
         """L946=True path: native stream yields multiple chunks."""
@@ -711,7 +714,8 @@ class TestModstoreOpenAICompletionsStream:
         with patch.dict(os.environ, {"XCAGI_MODSTORE_USE_NATIVE_STREAM": "1"}):
             chunks = list(completions._stream(messages=[{"role": "user", "content": "hi"}]))
 
-        assert len(chunks) == 2
+        assert len(chunks) == 3
+        assert chunks[0].choices[0].delta.role == "assistant"
 
     def test_use_native_stream_true_none_chunk_filtered(self):
         """L954=False (chunk is None): filtered out → not yielded."""
@@ -726,8 +730,9 @@ class TestModstoreOpenAICompletionsStream:
         with patch.dict(os.environ, {"XCAGI_MODSTORE_USE_NATIVE_STREAM": "true"}):
             chunks = list(completions._stream(messages=[{"role": "user", "content": "hi"}]))
 
-        # Only the second payload (non-None) should be yielded
-        assert len(chunks) == 1
+        # Role prelude plus the second payload; the ``[DONE]`` payload stays filtered.
+        assert len(chunks) == 2
+        assert chunks[0].choices[0].delta.role == "assistant"
 
 
 # ===========================================================================

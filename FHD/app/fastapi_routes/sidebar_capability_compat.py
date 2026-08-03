@@ -58,10 +58,10 @@ def data_sources_alias() -> dict[str, Any]:
             "id": "wechat_local_db",
             "name": "微信本地数据库",
             "kind": "wechat",
-            "route": "/mod/xcagi-erp-domain-bridge/data-sources?source=wechat_local_db",
+            "route": "/mod/xcagi-wechat-bridge/wechat-contacts",
             "apis": [
                 "/api/wechat_contacts/decrypt_status",
-                "/api/mod/xcagi-erp-domain-bridge/wechat/contacts",
+                "/api/mod/xcagi-wechat-bridge/wechat/contacts",
             ],
         },
         {

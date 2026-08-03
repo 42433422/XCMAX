@@ -1,18 +1,24 @@
 # CI SSOT: generated from FHD/.github/workflows/sunbird-installer.yml — DO NOT edit here.
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
-name: Sunbird Installer
+# 退役：太阳鸟定制安装包不再作为正式交付面；客户走通用 Enterprise + 私有交付进度。
+# 本 workflow 仅保留手工排障/复现，禁止当作新签约发版入口。
+name: Sunbird Installer (retired)
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version"
+        description: "Release version（退役流程，勿用于正式交付）"
         required: true
         default: "1.0.0.0"
       source_ref:
         description: "Git ref with sunbird build scripts"
         required: true
         default: "feat/enterprise-deploy-maturity"
+      acknowledge_retired:
+        description: "必须填 retired-ok 才允许跑（防止误触正式交付）"
+        required: true
+        default: ""
 
 permissions:
   contents: read
@@ -28,6 +34,13 @@ jobs:
       PYTHONUTF8: "1"
       PYTHONIOENCODING: utf-8
     steps:
+      - name: Refuse unless explicitly acknowledged as retired
+        shell: bash
+        run: |
+          if [ "${{ github.event.inputs.acknowledge_retired }}" != "retired-ok" ]; then
+            echo "::error::Sunbird custom installer is retired. Use Release Desktop (enterprise). To force a historical rebuild, set acknowledge_retired=retired-ok."
+            exit 1
+          fi
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.source_ref }}
@@ -52,6 +65,23 @@ jobs:
         run: |
           $v = "${{ github.event.inputs.version }}".TrimStart('v','V')
           scripts/package/build-sunbird-installer.ps1 -Version $v
+      - name: Stage sunbird installer for upload
+        if: success()
+        shell: pwsh
+        run: |
+          $v = "${{ github.event.inputs.version }}".TrimStart('v','V')
+          $src = "release/xcagi-v$v/sunbird"
+          $dst = "build/ci-sunbird-artifact"
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Get-ChildItem $src -Filter "*.exe" -File | Where-Object { $_.Name -like "*Setup*" } | Copy-Item -Destination $dst -Force
+          if (-not (Get-ChildItem $dst -Filter "*.exe")) { throw "No sunbird Setup exe in $src" }
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: sunbird-installer
+          path: FHD/build/ci-sunbird-artifact/**
+          if-no-files-found: error
+          retention-days: 14
       - name: Install and smoke Sunbird package
         shell: pwsh
         run: |
@@ -108,16 +138,3 @@ jobs:
             -UseInstalledBackend `
             -ReadyTimeoutSeconds 240 `
             -MinHostFoundationCount 6
-      - name: Stage sunbird installer for upload
-        shell: pwsh
-        run: |
-          $v = "${{ github.event.inputs.version }}".TrimStart('v','V')
-          $src = "release/xcagi-v$v/sunbird"
-          $dst = "build/ci-sunbird-artifact"
-          New-Item -ItemType Directory -Force -Path $dst | Out-Null
-          Get-ChildItem $src -Filter "*.exe" -File | Where-Object { $_.Name -like "*Setup*" } | Copy-Item -Destination $dst -Force
-          if (-not (Get-ChildItem $dst -Filter "*.exe")) { throw "No sunbird Setup exe in $src" }
-      - uses: actions/upload-artifact@v4
-        with:
-          name: sunbird-installer
-          path: FHD/build/ci-sunbird-artifact/**

@@ -64,6 +64,15 @@ def record_employee_run(
         }
         per[employee_id] = row
     try:
+        import os
+
+        if (os.environ.get("XCAGI_DESKTOP_MODE") or "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }:
+            return
         from app.application.ai_circle_service import record_employee_activity
 
         record_employee_activity(

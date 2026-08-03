@@ -7,13 +7,20 @@ from pathlib import Path
 
 import yaml
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 release-gate runner.
+    import tomli as tomllib
+
 ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = ROOT.parents[1]
 RELEASE_SCRIPT = ROOT / "scripts/xcmax-immutable-release.sh"
+PYPROJECT = ROOT / "pyproject.toml"
 
 
 def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     script = RELEASE_SCRIPT.read_text(encoding="utf-8")
+    pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
 
     assert "XCMAX_TARGET_SHA must be a full 40-character commit SHA" in script
     assert 'git -C "$SOURCE_ROOT" archive --format=tar "$TARGET_SHA"' in script
@@ -42,6 +49,7 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert 'MODSTORE_RUNTIME_DIR="$BUILD_ROOT/.runtime-build"' in script
     assert "MODSTORE_INSECURE_EMPTY_JWT" not in script
     assert ".[web,knowledge,evolution-metrics]" in script
+    assert "pandas>=2.0" in pyproject["project"]["optional-dependencies"]["evolution-metrics"]
     assert "import fastapi, pytest, pytest_cov, uvicorn, modstore_server.app" in script
     assert "Environment=MODSTORE_BUS=rabbitmq" not in script
     assert "npm ci --no-audit --legacy-peer-deps --ignore-scripts" in script
@@ -60,6 +68,8 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert "MODSTORE_RUNTIME_DIR=%s" in script
     assert "MODSTORE_REPO_ROOT=%s" in script
     assert "XCMAX_MONOREPO_ROOT=%s" in script
+    assert "MODSTORE_CAPABILITY_PROPOSAL_REPO=%s" in script
+    assert 'GITHUB_REPOSITORY_SLUG="${XCMAX_GITHUB_REPOSITORY:-}"' in script
     assert "JAVA_PAYMENT_SERVICE_URL=http://127.0.0.1:8080" in script
     assert '"$RUNTIME_DIR" "$CURRENT_LINK" "$CURRENT_LINK"' in script
     assert "verify_customer_value_reconciler" in script
@@ -202,6 +212,8 @@ def test_production_workflow_deploys_only_successful_tested_main_sha() -> None:
         assert "workflow_run.conclusion == 'success'" in deploy["if"]
         rendered = str(deploy)
         assert "TARGET_SHA" in rendered
+        assert "REPOSITORY_SLUG" in rendered
+        assert "XCMAX_GITHUB_REPOSITORY" in rendered
         assert "xcmax-immutable-release.sh" in rendered
         assert "modstore-deployment-correlation" in rendered
         assert "actions/upload-artifact@v4" in rendered
@@ -230,6 +242,8 @@ def test_production_receipt_finalizer_uses_completed_source_workflow_and_signed_
         assert ".head_sha == $merge_sha" in rendered
         assert "package source SHA is not an ancestor of deployed SHA" in rendered
         assert "steps.source.outputs.package_source_sha" in rendered
+        assert "steps.source.outputs.merge_sha" in rendered
+        assert "fetch-depth': 0" in rendered or "fetch-depth: 0" in rendered
         assert "/commits/${merge_sha}/pulls" in rendered
         assert "attested_branch_head_sha" in rendered
         assert "MODSTORE_OPS_INGEST_TOKEN" in rendered
@@ -238,6 +252,12 @@ def test_production_receipt_finalizer_uses_completed_source_workflow_and_signed_
         assert "/api/ops/self-maintenance/evolution-deployment-receipt" in rendered
         assert "evolution-packages.json" in rendered
         assert "catalog_data/files/" in rendered
+        assert "stored_filename" in rendered
+        assert "MODSTORE_AUTO_PUBLISH_TOKEN" in rendered
+        assert "FHD/scripts/dev/publish_modstore.py" in rendered
+        assert "modstore-evolution-publication-receipts" in rendered
+        assert 'git show "${PACKAGE_SOURCE_SHA}:${archive}"' in rendered
+        assert 'cmp --silent "$source_archive" "$archive"' in rendered
         assert "workflow_status" in rendered
         assert "completed" in rendered
     for workflow_path in (source_path, published_path):

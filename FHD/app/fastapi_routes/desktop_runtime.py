@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import os
+import uuid
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -32,6 +33,10 @@ from app.runtime_integrity import runtime_integrity_snapshot
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop-runtime"])
+
+_MAX_CRASH_DUMP_BYTES = 20 * 1024 * 1024
+_MAX_CRASH_JSON_BYTES = 1024 * 1024
+_ALLOWED_CRASH_SUFFIXES = {".dmp", ".zip", ".json", ".txt", ".log"}
 
 
 class DownloadModelRequest(BaseModel):
@@ -317,23 +322,46 @@ async def receive_crash_report(request: Request):
     crash_dir.mkdir(parents=True, exist_ok=True)
 
     content_type = (request.headers.get("content-type") or "").lower()
-    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > _MAX_CRASH_DUMP_BYTES + 1024 * 1024:
+                raise HTTPException(status_code=413, detail="崩溃报告过大")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Content-Length 无效") from None
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    report_id = uuid.uuid4().hex[:12]
 
     if "multipart/form-data" in content_type:
         form = await request.form()
+        saved: list[str] = []
         for field_name in form:
             field = form[field_name]
-            if isinstance(field, UploadFile) and field.filename:
-                ext = Path(field.filename).suffix or ".dmp"
-                target = crash_dir / f"crash-{ts}-{field_name}{ext}"
-                content = await field.read()
-                target.write_bytes(content)
-        return JSONResponse({"saved": True, "dir": str(crash_dir)})
+            filename = str(getattr(field, "filename", "") or "").strip()
+            reader = getattr(field, "read", None)
+            if not filename or not callable(reader):
+                continue
+            content = await reader()
+            if len(content) > _MAX_CRASH_DUMP_BYTES:
+                raise HTTPException(status_code=413, detail="崩溃转储超过 20 MB")
+            ext = Path(filename).suffix.lower()
+            if ext not in _ALLOWED_CRASH_SUFFIXES:
+                ext = ".bin"
+            target = crash_dir / f"crash-{ts}-{report_id}-{len(saved)}{ext}"
+            target.write_bytes(content)
+            saved.append(target.name)
+        if not saved:
+            raise HTTPException(status_code=400, detail="未收到崩溃转储文件")
+        return JSONResponse({"saved": True, "files": saved})
 
+    if "application/json" not in content_type:
+        raise HTTPException(status_code=415, detail="仅支持 JSON 或 multipart 崩溃报告")
     body = await request.body()
-    target = crash_dir / f"crash-{ts}.json"
+    if len(body) > _MAX_CRASH_JSON_BYTES:
+        raise HTTPException(status_code=413, detail="JSON 崩溃报告超过 1 MB")
+    target = crash_dir / f"crash-{ts}-{report_id}.json"
     target.write_bytes(body)
-    return JSONResponse({"saved": True, "path": str(target)})
+    return JSONResponse({"saved": True, "file": target.name})
 
 
 @router.get("/support-bundle")

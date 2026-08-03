@@ -84,14 +84,13 @@ describe('erpPagePaths – resolveErpPagePath 边界', () => {
   it('facade 开启时 wechat-contacts 添加 source 参数', () => {
     vi.stubGlobal('localStorage', { getItem: () => '1' })
     const result = resolveErpPagePath('/wechat-contacts')
-    expect(result).toContain('/mod/xcagi-erp-domain-bridge/data-sources')
-    expect(result).toContain('source=wechat_local_db')
+    expect(result).toBe('/mod/xcagi-wechat-bridge/wechat-contacts')
   })
 
   it('facade 开启时 wechat-contacts 保留已有 query', () => {
     vi.stubGlobal('localStorage', { getItem: () => '1' })
     const result = resolveErpPagePath('/wechat-contacts?foo=bar')
-    expect(result).toContain('/mod/xcagi-erp-domain-bridge/data-sources')
+    expect(result).toContain('/mod/xcagi-wechat-bridge/wechat-contacts')
     expect(result).toContain('foo=bar')
   })
 
@@ -157,7 +156,7 @@ describe('erpPagePaths – resolveErpPageRedirectForRouteName 边界', () => {
   it('facade 开启时 wechat-contacts 添加 source 参数', () => {
     vi.stubGlobal('localStorage', { getItem: () => '1' })
     expect(resolveErpPageRedirectForRouteName('wechat-contacts')).toBe(
-      '/mod/xcagi-erp-domain-bridge/data-sources?source=wechat_local_db',
+      '/mod/xcagi-wechat-bridge/wechat-contacts',
     )
   })
 })
@@ -229,7 +228,7 @@ describe('erpPagePaths – pushErpPage', () => {
     vi.stubGlobal('localStorage', { getItem: () => '1' })
     pushErpPage(mockRouter as unknown as Router, { name: 'wechat-contacts' })
     expect(mockRouter.push).toHaveBeenCalledWith({
-      path: '/mod/xcagi-erp-domain-bridge/data-sources?source=wechat_local_db',
+      path: '/mod/xcagi-wechat-bridge/wechat-contacts',
     })
   })
 

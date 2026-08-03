@@ -26,7 +26,7 @@
    人工审查生成脚本（删噪音、确认无意外 DROP），与模型改动同 PR 提交。
 2. **auto-init（`app/db/init_db.py` 的 `create_all`）保留为桌面端（SQLite）运行时兜底**，
    不是 schema 演进手段——演进必须走迁移。
-3. **生产 PostgreSQL 以 Alembic 迁移链为 schema 唯一真相源**。
+3. **生产 PostgreSQL 的 schema 变更统一通过 Alembic 迁移链管理**。
 4. **防漂移门禁**：
    - 本地/CI：`python scripts/dev/check_schema_drift.py`（临时 SQLite 库 `upgrade head`
      后 autogenerate 对比模型，漂移则打印缺失表/列并退出码 1）；

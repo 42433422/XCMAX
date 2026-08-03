@@ -25,6 +25,7 @@ import {
   installUpdate,
   isForceUpgradeRequired,
   readLocalBuildSha,
+  readLocalProductVersion,
   runUpdateCheckWithDirectNet,
 } from './updater'
 import {
@@ -39,6 +40,7 @@ import {
 } from './rollback'
 import { terminateChildProcess, waitForChildExit } from './backend-lifecycle'
 import { clampWindowBounds, readWindowState, writeWindowState } from './window-state'
+import { desktopBackendEnv } from './backend-env'
 import { AutonomyController } from './autonomy/controller'
 import { DesktopAutonomyAdapter } from './autonomy/desktop-adapter'
 import { backendCrashPolicy } from './autonomy/policies/backend-crash.policy'
@@ -540,7 +542,14 @@ async function uploadCrashReports(): Promise<void> {
         const formData = new FormData()
         const blob = new Blob([fileBuffer], { type: 'application/octet-stream' })
         formData.append('minidump', blob, ent.name)
-        await fetch(url, { method: 'POST', body: formData, signal: AbortSignal.timeout(10_000) })
+        const response = await fetch(url, {
+          method: 'POST',
+          body: formData,
+          signal: AbortSignal.timeout(10_000),
+        })
+        if (!response.ok) {
+          throw new Error(`crash upload rejected: HTTP ${response.status}`)
+        }
         fs.writeFileSync(markerPath, new Date().toISOString(), 'utf8')
         writeBackendLog(`[crash] uploaded ${ent.name} to backend\n`)
       } catch {
@@ -558,7 +567,12 @@ async function sendJsCrashReport(payload: { type: string; error: string; stack?:
     await fetch(`http://127.0.0.1:${DEFAULT_PORT}/api/desktop/crash-report`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...payload, ts: new Date().toISOString(), appVersion: app.getVersion() }),
+      body: JSON.stringify({
+        ...payload,
+        ts: new Date().toISOString(),
+        appVersion: readLocalProductVersion(),
+        toolchainVersion: app.getVersion(),
+      }),
       signal: AbortSignal.timeout(5_000),
     })
   } catch {
@@ -567,8 +581,11 @@ async function sendJsCrashReport(payload: { type: string; error: string; stack?:
 }
 
 /** 检查是否需要强制升级，如果是则弹阻塞对话框并自动下载安装。 */
+let forceUpgradeDialogOpen = false
+
 async function checkForceUpgrade(): Promise<void> {
-  if (!isForceUpgradeRequired()) return
+  if (!isForceUpgradeRequired() || forceUpgradeDialogOpen) return
+  forceUpgradeDialogOpen = true
   writeBackendLog('[force-upgrade] 当前版本低于最低兼容版本，触发强制升级\n')
   try {
     const { response } = await dialog.showMessageBox({
@@ -599,6 +616,8 @@ async function checkForceUpgrade(): Promise<void> {
       message: '强制升级失败',
       detail: `${msg}\n\n请从官网下载最新安装包手动更新。`,
     })
+  } finally {
+    forceUpgradeDialogOpen = false
   }
 }
 
@@ -818,7 +837,7 @@ export function markFrontendCacheCleared(): void {
 }
 
 /** 分阶段就绪：TCP 后即可出窗；desktop/status 软等待，不阻塞 60s 全量 Mod。 */
-async function waitForBackendStatus(port: number, timeoutMs = 15_000): Promise<Record<string, unknown> | null> {
+async function waitForBackendStatus(port: number, timeoutMs = 60_000): Promise<Record<string, unknown> | null> {
   const started = Date.now()
   while (Date.now() - started <= timeoutMs) {
     try {
@@ -908,7 +927,7 @@ async function startBackend(): Promise<void> {
   writeBackendLog(`[cwd] ${executable.cwd}\n`)
   backendProcess = spawn(executable.command, executable.args, {
     cwd: executable.cwd,
-    env: {
+    env: desktopBackendEnv({
       ...sanitizeBackendProxyEnv(process.env),
       XCAGI_DESKTOP_MODE: '1',
       XCAGI_DATA_DIR: app.getPath('userData'),
@@ -919,10 +938,9 @@ async function startBackend(): Promise<void> {
       XCAGI_DESKTOP_FAST_START: '1',
       ...backendEditionEnv(),
       PYTHONUTF8: '1'
-    },
+    }),
     windowsHide: true
   })
-
   backendProcess.stdout.on('data', data => {
     process.stdout.write(`[xcagi-backend] ${data}`)
     writeBackendLog(`[stdout] ${data}`)
@@ -994,7 +1012,7 @@ function runBackendMigration(): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(executable.command, [...executable.args, '--migrate-only', '--backup'], {
       cwd: executable.cwd,
-      env: {
+      env: desktopBackendEnv({
         ...sanitizeBackendProxyEnv(process.env),
         XCAGI_DESKTOP_MODE: '1',
         XCAGI_DATA_DIR: app.getPath('userData'),
@@ -1002,7 +1020,7 @@ function runBackendMigration(): Promise<string> {
         XCAGI_GLOBAL_RATE_LIMIT: '0',
         ...backendEditionEnv(),
         PYTHONUTF8: '1'
-      },
+      }),
       windowsHide: true
     })
     let stderr = ''
@@ -1425,12 +1443,7 @@ async function createWindow(): Promise<void> {
     void showDbRecoveryDialogIfNeeded(status)
   })
 
-  configureUpdater(mainWindow)
-
-  // 延迟一段时间后检测强制升级（等更新元数据 fetch 完成）
-  setTimeout(() => {
-    void checkForceUpgrade()
-  }, 90_000)
+  configureUpdater(mainWindow, { onForceUpgradeRequired: checkForceUpgrade })
 }
 
 async function waitForMainApplicationReady(): Promise<void> {

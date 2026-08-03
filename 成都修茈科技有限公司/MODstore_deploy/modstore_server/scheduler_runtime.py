@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Iterator
@@ -23,9 +24,27 @@ DEFAULT_STALE_AFTER_SECONDS = int(
     os.environ.get("MODSTORE_JOB_STALE_AFTER_SECONDS", str(26 * 3600))
 )
 
+_DEFERRED_STATUS = "deferred"
+_SAFE_EMPLOYEE_CRON_ERROR_CODE = re.compile(
+    r"\b("
+    r"employee_cron_(?:unsuccessful|execution_exception|policy_deferred):"
+    r"[a-z0-9_]+(?::[a-z0-9_]+){0,2}"
+    r"|employee_cron_input_resolution_failed"
+    r")\b"
+)
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+class DeferredJobRun(Exception):
+    """Record an expected policy hold without treating it as a job failure.
+
+    The underlying operation keeps its own hold/veto evidence. This exception
+    only tells the runtime ledger that a reviewed policy boundary, rather than
+    an execution error, ended the scheduler run.
+    """
 
 
 def _as_utc(dt: datetime | None) -> datetime | None:
@@ -70,15 +89,20 @@ def record_job_run(
 
 @contextmanager
 def track_job_run(job_id: str, *, node_id: str = "") -> Iterator[None]:
-    """包住一次 job 执行：退出时记录成功/失败 + 耗时。
+    """包住一次 job 执行：退出时记录成功/失败/受控延迟 + 耗时。
 
     抛异常时记为 ``failed`` 并**原样重抛**——job 自身的错误处理不变，只是被观测。
+    ``DeferredJobRun`` is the explicit exception: it is recorded as
+    ``deferred`` and suppressed because the policy hold is expected.
     """
     started = _utcnow()
     status = "success"
     error = ""
     try:
         yield
+    except DeferredJobRun as exc:
+        status = _DEFERRED_STATUS
+        error = str(exc)
     except Exception as exc:
         status = "failed"
         error = repr(exc)
@@ -110,6 +134,22 @@ def record_skip(job_id: str, *, reason: str = "", node_id: str = "") -> None:
     )
 
 
+def _safe_last_error_code(job_id: str, error: object) -> str | None:
+    """Expose only reviewed scheduler codes, never raw exception text.
+
+    The runtime endpoint is public.  Scheduler errors can include provider or
+    file-system details, so an error string is not a safe observability field.
+    Employee cron wrappers deliberately raise a small allowlisted vocabulary
+    that lets operators distinguish approval, input, quota, and transient
+    paths without leaking the underlying exception.
+    """
+
+    if not str(job_id or "").startswith("employee_cron"):
+        return None
+    match = _SAFE_EMPLOYEE_CRON_ERROR_CODE.search(str(error or ""))
+    return match.group(1) if match else None
+
+
 def _job_summary(
     job_id: str, runs: list[Any], *, now: datetime, stale_after: int
 ) -> dict[str, Any]:
@@ -121,13 +161,15 @@ def _job_summary(
     for r in reversed(runs_sorted):
         if r.status == "failed":
             consecutive_failures += 1
-        elif r.status == "success":
+        elif r.status in {"success", _DEFERRED_STATUS}:
             break
 
     last_success_at = _as_utc(last_success.started_at) if last_success else None
     age = (now - last_success_at).total_seconds() if last_success_at else None
 
-    if last.status == "failed":
+    if last.status == _DEFERRED_STATUS:
+        state = _DEFERRED_STATUS
+    elif last.status == "failed":
         state = "failing"
     elif last_success_at is None or (age is not None and age > stale_after):
         state = "stale"
@@ -144,6 +186,7 @@ def _job_summary(
         "seconds_since_success": round(age) if age is not None else None,
         "consecutive_failures": consecutive_failures,
         "runs_counted": len(runs_sorted),
+        "last_error_code": _safe_last_error_code(job_id, getattr(last, "error", "")),
     }
 
 
@@ -192,6 +235,7 @@ def get_runtime_status(
         "healthy": sum(1 for j in jobs if j["state"] == "healthy"),
         "failing": sum(1 for j in jobs if j["state"] == "failing"),
         "stale": sum(1 for j in jobs if j["state"] == "stale"),
+        "deferred": sum(1 for j in jobs if j["state"] == _DEFERRED_STATUS),
     }
     return {
         "generated_at": now.isoformat(),
@@ -204,6 +248,7 @@ def get_runtime_status(
 
 __all__ = [
     "DEFAULT_STALE_AFTER_SECONDS",
+    "DeferredJobRun",
     "get_runtime_status",
     "record_job_run",
     "record_skip",

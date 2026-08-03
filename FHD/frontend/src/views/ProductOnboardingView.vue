@@ -157,21 +157,13 @@
               <i class="fa" :class="bootstrapBusy ? 'fa-spinner fa-spin' : 'fa-download'"></i>
               {{ bootstrapBusy ? '正在装齐…' : '一键装齐' }}
             </button>
-            <button
-              v-else
-              type="button"
-              class="btn primary"
-              :disabled="finishing"
-              @click="finishOnboardingComplete"
-            >
+            <button v-else type="button" class="btn primary" :disabled="finishing" @click="finishOnboardingComplete">
               <i class="fa" :class="finishing ? 'fa-spinner fa-spin' : 'fa-check'"></i>
               {{ finishing ? '正在进入智能对话…' : '完成并进入对话' }}
             </button>
             <button type="button" class="btn link" :disabled="finishing" @click="finishToChat">先进入对话</button>
           </div>
-          <p v-if="finishing" class="finish-progress" role="status" aria-live="polite">
-            菜单已经准备好，正在打开智能对话…
-          </p>
+          <p v-if="finishing" class="finish-progress" role="status" aria-live="polite">菜单已经准备好，正在打开智能对话…</p>
           <details v-if="hostPackDetailGroups.length" class="host-pack-details">
             <summary>查看明细（可选）</summary>
             <p v-if="baselinePlan?.summary" class="lead muted">{{ baselinePlan.summary }}</p>
@@ -258,6 +250,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { installHostFoundation, installMod, installIndustrySeed, installCustomerDeliverySeed } from '@/api/modStore'
 import { autoOnboardWorkflowEmployeesFromMods } from '@/utils/workflowEmployeeOnboard'
+import { deliverySeedModIds } from '@/utils/deliverySeedPackages'
 import { queueWorkspacePrefsSync } from '@/utils/workspacePrefsApi'
 import { useModsStore } from '@/stores/mods'
 import { readBuildEdition } from '@/constants/genericModPack'
@@ -296,17 +289,14 @@ import { resolveCoreNavLabel } from '@/utils/coreNavLabel'
 import { patchWorkspacePrefs } from '@/utils/workspacePrefsApi'
 import { appAlert } from '@/utils/appDialog'
 import { productErrorMessage } from '@/utils/productErrorMessage'
-
 const route = useRoute()
 const router = useRouter()
 const flow = useProductFlow()
 const industryStore = useIndustryStore()
 const { buildContext: tutorialBuildContext } = useTutorialCatalog()
-
 const industryOptions = listIndustryPresets()
 const onboardingCatalog = ref(null)
 const onboardingCatalogLoaded = ref(false)
-
 function catalogChipRow(pkg) {
   const id = String(pkg?.industry_id || '').trim()
   return {
@@ -316,7 +306,6 @@ function catalogChipRow(pkg) {
     productName: String(pkg?.product_name || '').trim(),
   }
 }
-
 const openIndustryOptions = computed(() => {
   const catalog = onboardingCatalog.value
   if (catalog) {
@@ -327,7 +316,6 @@ const openIndustryOptions = computed(() => {
     .filter((p) => isOnboardingIndustryOpen(p.id))
     .map((p) => ({ id: p.id, name: p.name, scenario: p.scenario, productName: '' }))
 })
-
 const previewIndustryOptions = computed(() => {
   const previewPkgs = onboardingCatalog.value?.preview_packages
   if (Array.isArray(previewPkgs) && previewPkgs.length) {
@@ -338,7 +326,6 @@ const previewIndustryOptions = computed(() => {
     .filter((p) => !isOnboardingIndustryOpen(p.id))
     .map((p) => ({ id: p.id, name: p.name, scenario: p.scenario, productName: '' }))
 })
-
 const openIndustryLeadNames = computed(() => {
   const ids = onboardingCatalog.value?.open_industry_ids
   if (Array.isArray(ids) && ids.length) return ids
@@ -352,7 +339,6 @@ const pickedIndustryId = ref(resolveDefaultPickedIndustryId())
 const canConfirmIndustry = computed(
   () => openIndustryOptions.value.length > 0 && isIndustrySelectable(pickedIndustryId.value),
 )
-
 function industryPackageLabel(industryId) {
   const id = String(industryId || '').trim()
   const row = onboardingCatalog.value?.open_packages?.find((p) => p.industry_id === id)
@@ -362,7 +348,6 @@ function industryPackageLabel(industryId) {
   const preset = getIndustryPreset(id)
   return preset?.name ? `${preset.name}行业包` : ''
 }
-
 function industryPackageModId(industryId) {
   const id = String(industryId || '').trim()
   const row = onboardingCatalog.value?.open_packages?.find((p) => p.industry_id === id)
@@ -603,7 +588,7 @@ async function runBootstrap() {
         )
       }
     }
-    const customSeedIds = [...(baselinePlan.value?.account_custom_mod_ids || [])]
+    const customSeedIds = deliverySeedModIds(baselinePlan.value)
     for (const modId of customSeedIds) {
       try {
         const ir = await installCustomerDeliverySeed(modId, pickedIndustryId.value)
@@ -762,7 +747,6 @@ async function finishOnboardingComplete() {
   })
   flow.markProductFlowCompleted()
   flow.markHostPackAcknowledged()
-  // 先让用户看到确定的进入状态；旧逻辑会同时跳转 done 和主页，造成路由竞争与卡顿感。
   await nextTick()
   finishHostPackFlow()
 }

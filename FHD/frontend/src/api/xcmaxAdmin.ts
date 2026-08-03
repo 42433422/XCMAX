@@ -106,6 +106,9 @@ export const xcmaxAdminApi = {
   listUserMods(userId: number) {
     return api.get(`/api/xcmax/admin/market/users/${userId}/mods`);
   },
+  getUserPrivateDelivery(userId: number) {
+    return api.get(`/api/xcmax/admin/market/users/${userId}/private-delivery`);
+  },
   bindUserMod(userId: number, modId: string) {
     return api.post(`/api/xcmax/admin/market/users/${userId}/mods/${encodeURIComponent(modId)}`, {});
   },

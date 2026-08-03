@@ -31,6 +31,7 @@ from urllib.parse import unquote, urlparse
 import httpx
 from apscheduler.triggers.cron import CronTrigger
 
+from . import self_maintenance_retort_change_evidence as retort_change_evidence
 from . import self_maintenance_retort_remediation as retort_remediation
 from .duty_employee_registry import duty_employee_records
 from .duty_roster import SIX_LINE_DEPARTMENTS, all_planned_employee_ids
@@ -64,6 +65,7 @@ from .self_maintenance_para_merge_remediation import (
     classify_para_merge_review_detail,
     para_merge_resume_pins_rejected_branch,
     reconcile_absorbed_para_merge_remediations,
+    reconcile_para_merge_failure_state,
     resume_candidate_from_para_ai_review_item,
     resume_from_clean_baseline_for_para_merge,
 )
@@ -99,6 +101,7 @@ from .self_maintenance_remediation_prompts import (
     structured_report_remediation_prompt,
 )
 from .self_maintenance_retry import close_successful_code_resume, is_transient_dispatch_failure
+from .self_maintenance_runtime_evidence import retain_completed_merge_runs
 from .self_maintenance_subprocess import run_cmd_excerpt as _run_cmd_excerpt
 
 logger = logging.getLogger(__name__)
@@ -438,13 +441,14 @@ def _select_recent_milestone_rows(
         run_id
         for run_id, _ in sorted(latest_by_run.items(), key=lambda item: item[1])[-bounded_runs:]
     }
-    selected = [
-        row
-        for row, _ in eligible
-        if not str(row.get("run_id") or "").strip()
-        or str(row.get("run_id") or "").strip() in selected_run_ids
-    ]
-    return selected[-bounded_rows:]
+
+    return retain_completed_merge_runs(
+        eligible,
+        latest_by_run=latest_by_run,
+        recent_run_ids=selected_run_ids,
+        cutoff=cutoff,
+        row_limit=bounded_rows,
+    )
 
 
 def loop_lease_path() -> Path:
@@ -2369,12 +2373,9 @@ def _reconcile_requested_merge_feedback(
             or task.get("error")
             or f"Para merge task ended with status={task_status}"
         ).strip()[:4000]
-        if source == "ai-review-veto":
-            reason = "para_ai_review_rejected"
-        elif task_status == "merge_conflict":
-            reason = "para_merge_conflict"
-        else:
-            reason = "para_merge_task_failed"
+        reason, item_kind, open_items, changed = reconcile_para_merge_failure_state(
+            memory, changed, detail, source, task_id, task_status
+        )
         existing_receipt = run.get("merge_reconciliation")
         receipt = {
             "detail": detail,
@@ -2396,6 +2397,7 @@ def _reconcile_requested_merge_feedback(
             isinstance(item, dict)
             and str(item.get("task_id") or item.get("para_task_id") or "") == task_id
             and item.get("reason") == reason
+            and item.get("kind") == item_kind
             for item in open_items
         )
         if not already_open:
@@ -2408,7 +2410,7 @@ def _reconcile_requested_merge_feedback(
                 "branch": rejected_branch,
                 "created_at": _iso(_utc_now()),
                 "detail": detail,
-                "kind": "automated_remediation",
+                "kind": item_kind,
                 "para_task_id": task_id,
                 "reason": reason,
                 "rejected_branch": rejected_branch,
@@ -2756,33 +2758,40 @@ def _evaluate_retort_clarification_before_review(
     if not gate_enabled():
         return {"blocked": False, "reason": "gate_disabled"}
 
-    changed_files: List[str] = []
     base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip()
     repo_url = os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
     target = str(branch or "").strip()
-    if repo_url and base_branch and target:
-        workspace_root = _runtime_dir() / DEFAULT_MERGE_WORKSPACE_ROOT
-        workspace = workspace_root / "retort-review-gate" / str(run_id or "run")
-        try:
-            changed_files = _changed_files_for_branch(
-                repo_url=repo_url,
-                base_branch=base_branch,
-                branch=target,
-                workspace=workspace,
-            )
-        except Exception as exc:  # noqa: BLE001 - fall back to memory hints
-            logger.warning(
-                "retort clarification branch diff failed run_id=%s err=%s",
-                run_id,
-                type(exc).__name__,
-            )
-        finally:
-            _cleanup_merge_workspace(workspace)
-
-    if not changed_files:
-        mem_files = memory.get("changed_files") if isinstance(memory, dict) else None
-        if isinstance(mem_files, list):
-            changed_files = [str(x).strip() for x in mem_files if str(x).strip()][:80]
+    change_evidence = retort_change_evidence.resolve_retort_change_evidence(
+        run_id=run_id,
+        branch=target,
+        repo_url=repo_url,
+        base_branch=base_branch,
+        memory=memory,
+        workspace_root=_runtime_dir() / DEFAULT_MERGE_WORKSPACE_ROOT,
+        changed_files_for_branch=lambda workspace: _changed_files_for_branch(
+            repo_url=repo_url,
+            base_branch=base_branch,
+            branch=target,
+            workspace=workspace,
+        ),
+        cleanup_workspace=_cleanup_merge_workspace,
+    )
+    changed_files = list(change_evidence.get("changed_files") or [])
+    if change_evidence.get("skip_reason"):
+        reason = str(change_evidence["skip_reason"])
+        logger.warning(
+            "retort clarification skipped run_id=%s reason=%s source=%s",
+            run_id,
+            reason,
+            change_evidence.get("source"),
+        )
+        return {
+            "blocked": False,
+            "reason": reason,
+            "changed_file_count": 0,
+            "change_evidence": change_evidence,
+            "para_task_id": para_task_id,
+        }
 
     intent_bits = [
         f"self-maintenance review run {run_id}",
@@ -2818,6 +2827,7 @@ def _evaluate_retort_clarification_before_review(
             "reason": reason,
             "blockers": blockers,
             "clarification": gate.get("clarification"),
+            "change_evidence": change_evidence,
             "changed_file_count": len(changed_files),
             "para_task_id": para_task_id,
         }
@@ -2826,6 +2836,7 @@ def _evaluate_retort_clarification_before_review(
         "reason": "aligned_or_not_needed",
         "blockers": blockers,
         "clarification": gate.get("clarification"),
+        "change_evidence": change_evidence,
         "changed_file_count": len(changed_files),
         "aligned": bool(gate.get("aligned")),
     }
@@ -3099,7 +3110,7 @@ def _structured_protocol_ok(step_name: str, report_excerpt: str) -> Tuple[bool, 
     return True, ""
 
 
-def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _structured_report_gate(steps: List[Dict[str, Any]], branch=None) -> Dict[str, Any]:
     review_steps = [step for step in steps if step.get("step") == "review"]
     qa_steps = [step for step in steps if step.get("step") == "qa"]
     if review_steps:
@@ -3189,7 +3200,7 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "focused_command": focused_command,
                 "qa": qa_json,
             }
-        quality_failure = _quality_check_failure(qa_json)
+        quality_failure = _quality_check_failure(qa_json, target_branch=branch)
         if quality_failure:
             return {
                 "ok": False,
@@ -5433,7 +5444,7 @@ def _auto_merge_low_risk_branch(
         return {"ok": False, "reason": "missing_api_base"}
 
     if repo_url.startswith(("http://", "https://")):
-        report_gate = _structured_report_gate(steps or [])
+        report_gate = _structured_report_gate(steps or [], branch)
         if not report_gate.get("ok"):
             return {
                 "ok": False,
@@ -6039,7 +6050,7 @@ def _decide_post_loop_policy(
         return {"action": "stop", "reason": "loop_not_completed"}
     if any(not bool(step.get("ok")) for step in steps):
         return {"action": "stop", "reason": "employee_step_failed"}
-    structured_gate = _structured_report_gate(steps)
+    structured_gate = _structured_report_gate(steps, branch)
     report_only_missing = _missing_report_only_evidence(steps)
     roster_gate = _loop_steps_roster_gate(steps)
     governance_gate = _governance_audit_gate()
@@ -6520,6 +6531,11 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
             ),
             "run_id": final.get("run_id"),
             "status": final.get("status"),
+            "structured_gate": (
+                decision.get("structured_gate")
+                if isinstance(decision.get("structured_gate"), dict)
+                else None
+            ),
             "kb_salvage": salvage_summary,
         }
     )
@@ -7359,11 +7375,14 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
             "force",
             "identity_verified",
             "installability_verified",
+            "market_catalog_item_id",
+            "market_listing_verified",
             "merge_sha",
             "ok",
             "package_id",
             "package_sha256",
             "runtime_contract_verified",
+            "source_commit_sha",
             "stored_filename",
             "strategic_council_receipt_id",
             "strategic_council_verified",

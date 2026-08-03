@@ -16,6 +16,7 @@ import httpx
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
 
+from app.application import market_account_live as _market_account_live
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(prefix="/api/market", tags=["market-account"])
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 _MARKET_SESSION_TOKENS: dict[str, str] = {}
 _MARKET_SESSION_REFRESH_TOKENS: dict[str, str] = {}
 _ACCOUNT_OVERVIEW_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_bootstrap_overview_needs_live_merge = _market_account_live.bootstrap_overview_needs_live_merge
 
 
 def _market_base_url() -> str:
@@ -1561,35 +1563,6 @@ def _merge_live_overview_fields(data: dict[str, Any], live: dict[str, Any]) -> N
         data["user"] = live.get("user")
 
 
-def _bootstrap_overview_needs_live_merge(data: dict[str, Any] | None) -> bool:
-    if not isinstance(data, dict):
-        return True
-    return not (
-        isinstance(data.get("user"), dict)
-        and isinstance(data.get("wallet"), dict)
-        and (isinstance(data.get("membership"), dict) or isinstance(data.get("plan"), dict))
-    )
-
-
-async def _refresh_live_wallet_snapshot(authorization: str) -> tuple[dict[str, Any] | None, str]:
-    """Read the current wallet balance instead of trusting a stale account-bootstrap snapshot."""
-    snapshot: dict[str, Any] = {}
-    warning = ""
-    for path in ("/api/wallet/overview", "/api/wallet/balance"):
-        payload = await _proxy_json("GET", path, authorization=authorization, return_error_payload=True)
-        if isinstance(payload, dict) and not payload.get("__proxy_error__"):
-            raw = payload.get("data") if isinstance(payload.get("data"), dict) else payload
-            wallet = raw.get("wallet") if isinstance(raw, dict) and isinstance(raw.get("wallet"), dict) else raw
-            if isinstance(wallet, dict):
-                snapshot.update(wallet)
-            continue
-        if not warning and isinstance(payload, dict) and payload.get("__proxy_error__"):
-            warning = _error_message(payload.get("payload"), int(payload.get("status_code") or 502))
-    if "balance" in snapshot:
-        return snapshot, ""
-    return None, warning or "市场钱包实时余额未同步"
-
-
 @router.post("/account-overview")
 async def market_account_overview(
     request: Request, body: dict[str, Any] = Body(default_factory=dict)
@@ -1638,7 +1611,7 @@ async def market_account_overview(
             raw = payload.get("data") if isinstance(payload.get("data"), dict) else payload
             data = raw if isinstance(raw, dict) else None
             if isinstance(data, dict):
-                if _bootstrap_overview_needs_live_merge(data):
+                if _market_account_live.bootstrap_overview_needs_live_merge(data):
                     live = await _legacy_account_overview(authorization)
                     if isinstance(live, dict) and not live.get("__proxy_error__"):
                         _merge_live_overview_fields(data, live)
@@ -1671,14 +1644,9 @@ async def market_account_overview(
         if not isinstance(data, dict):
             data = _degraded_account_overview("市场账户概览返回格式异常")
 
-        live_wallet, wallet_warning = await _refresh_live_wallet_snapshot(authorization)
-        if live_wallet is not None:
-            data["wallet"] = live_wallet
-        elif wallet_warning:
-            # 不把旧快照或不可达状态伪装成余额；前端会显示“未同步”。
-            data["wallet"] = {"balance": None}
-            if not sync_warning:
-                sync_warning = wallet_warning
+        sync_warning = await _market_account_live.refresh_overview_wallet(
+            data, authorization, sync_warning, proxy_json=_proxy_json, error_message=_error_message
+        )
 
         data = {**data, "market_base_url": _market_base_url()}
         if sync_warning and not data.get("sync_warning"):
@@ -1708,22 +1676,7 @@ async def _market_llm_catalog_impl(request: Request, body: dict[str, Any]):
         return_error_payload=True,
     )
     if isinstance(payload, JSONResponse):
-        try:
-            import json as _json
-
-            raw = _json.loads(payload.body.decode() if payload.body else "{}")
-            message = str(raw.get("message") or raw.get("detail") or "模型目录暂时不可用")
-        except RECOVERABLE_ERRORS:
-            message = "模型目录暂时不可用"
-        return {
-            "success": True,
-            "data": {
-                "degraded": True,
-                "providers": [],
-                "sync_warning": message,
-                "market_base_url": _market_base_url(),
-            },
-        }
+        return _market_account_live.degraded_llm_catalog(payload, _market_base_url())
     if isinstance(payload, dict) and payload.get("__proxy_error__"):
         status_code = int(payload.get("status_code") or 502)
         raw_error = payload.get("payload")

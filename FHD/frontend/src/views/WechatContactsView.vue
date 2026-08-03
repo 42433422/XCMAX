@@ -1,5 +1,5 @@
 <template>
-  <HostModBridgeView mod-id="xcagi-wechat-bridge" view="WechatContactsView" title="ERP 业务页" />
+  <HostModBridgeView mod-id="xcagi-wechat-bridge" view="WechatContactsView" title="微信联系人" />
 </template>
 
 <script setup lang="ts">

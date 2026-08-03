@@ -5,7 +5,11 @@ from types import SimpleNamespace
 
 import pytest
 
+from modstore_server import (
+    retort_clarification_gate,
+)
 from modstore_server import self_maintenance_loop_runner as loop_runner
+from modstore_server import self_maintenance_retort_change_evidence as retort_change_evidence
 from modstore_server.autonomous_risk_gate import (
     _historical_rollback_rate as _historical_rollback_rate_v3,
 )
@@ -252,10 +256,14 @@ def test_remote_merge_request_runs_only_after_structured_gate_and_ssot(monkeypat
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
     monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
     monkeypatch.setenv("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", "1")
+    report_gate_calls = []
     monkeypatch.setattr(
         loop_runner,
         "_structured_report_gate",
-        lambda steps: {"ok": True, "reason": "structured_reports_passed"},
+        lambda steps, branch=None: (
+            report_gate_calls.append((steps, branch))
+            or {"ok": True, "reason": "structured_reports_passed"}
+        ),
     )
     risk_calls = []
     monkeypatch.setattr(
@@ -288,6 +296,12 @@ def test_remote_merge_request_runs_only_after_structured_gate_and_ssot(monkeypat
     assert result["ok"] is True
     assert result["merge_requested"] is True
     assert result["branch_head_sha"] == "a" * 40
+    assert report_gate_calls == [
+        (
+            [{"step": "review"}, {"step": "qa"}],
+            "devfleet/codex/sub-1",
+        )
+    ]
     assert risk_calls[0][0] == "self_maintenance_l1_merge"
     assert risk_calls[0][1]["source"] == "self_maintenance_loop.remote_merge_request"
     assert merge_calls == [{"api_base": "http://127.0.0.1:3001", "task_id": "task-remote"}]
@@ -301,7 +315,11 @@ def test_remote_merge_request_is_not_emitted_when_ssot_blocks(monkeypatch):
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
     monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
     monkeypatch.setenv("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", "1")
-    monkeypatch.setattr(loop_runner, "_structured_report_gate", lambda steps: {"ok": True})
+    monkeypatch.setattr(
+        loop_runner,
+        "_structured_report_gate",
+        lambda steps, branch=None: {"ok": True},
+    )
     heads = {"main": "b" * 40, "devfleet/codex/sub-1": "a" * 40}
     monkeypatch.setattr(loop_runner, "_remote_branch_head", lambda _repo, branch: heads[branch])
     monkeypatch.setattr(
@@ -333,7 +351,11 @@ def test_remote_merge_request_defers_unreachable_head_to_para_worker(monkeypatch
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
     monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
     monkeypatch.setenv("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", "1")
-    monkeypatch.setattr(loop_runner, "_structured_report_gate", lambda steps: {"ok": True})
+    monkeypatch.setattr(
+        loop_runner,
+        "_structured_report_gate",
+        lambda steps, branch=None: {"ok": True},
+    )
     monkeypatch.setattr(loop_runner, "_remote_branch_head", lambda _repo, _branch: None)
     monkeypatch.setattr(
         "modstore_server.autonomy_guard_delegate.evaluate_risk",
@@ -534,6 +556,177 @@ def test_changed_files_falls_back_after_configured_transport_clone_failure(monke
 
     assert files == ["FHD/app/fallback.py"]
     assert [item[-2] for item in clone_commands] == [para_transport, public_origin]
+
+
+def test_github_compare_changed_files_uses_configured_repository(monkeypatch):
+    captured = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return b'{"files":[{"filename":"FHD/app/example.py"}]}'
+
+    def fake_urlopen(request, timeout):
+        captured["timeout"] = timeout
+        captured["url"] = request.full_url
+        captured["user_agent"] = request.get_header("User-agent")
+        return FakeResponse()
+
+    monkeypatch.setattr(retort_change_evidence, "urlopen", fake_urlopen)
+
+    assert retort_change_evidence.github_compare_changed_files(
+        repo_url="git@github.com:example/XCMAX.git",
+        base_branch="main",
+        branch="devfleet/codex/sub-1",
+    ) == ["FHD/app/example.py"]
+    assert captured == {
+        "timeout": 30,
+        "url": "https://api.github.com/repos/example/XCMAX/compare/main...devfleet%2Fcodex%2Fsub-1",
+        "user_agent": "xcmax-self-maintenance",
+    }
+
+
+def test_retort_change_evidence_uses_github_compare_after_git_diff_failure(monkeypatch, tmp_path):
+    cleaned = []
+    monkeypatch.setattr(
+        retort_change_evidence,
+        "github_compare_changed_files",
+        lambda **kwargs: ["FHD/app/example.py"],
+    )
+
+    result = retort_change_evidence.resolve_retort_change_evidence(
+        run_id="run-github-compare",
+        branch="devfleet/codex/sub-1",
+        repo_url="https://github.com/example/XCMAX.git",
+        base_branch="main",
+        memory={},
+        workspace_root=tmp_path / "runtime",
+        changed_files_for_branch=lambda workspace: (_ for _ in ()).throw(
+            RuntimeError("git transport down")
+        ),
+        cleanup_workspace=lambda workspace: cleaned.append(workspace) or True,
+    )
+
+    assert result == {
+        "changed_files": ["FHD/app/example.py"],
+        "errors": ["git_diff:RuntimeError"],
+        "source": "github_compare",
+    }
+    assert cleaned == [tmp_path / "runtime" / "retort-review-gate" / "run-github-compare"]
+
+
+def test_retort_change_evidence_marks_transport_loss_without_human_hold(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        retort_change_evidence,
+        "github_compare_changed_files",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("compare down")),
+    )
+
+    result = retort_change_evidence.resolve_retort_change_evidence(
+        run_id="run-no-evidence",
+        branch="devfleet/codex/sub-1",
+        repo_url="https://github.com/example/XCMAX.git",
+        base_branch="main",
+        memory={},
+        workspace_root=tmp_path / "runtime",
+        changed_files_for_branch=lambda workspace: (_ for _ in ()).throw(
+            RuntimeError("git transport down")
+        ),
+        cleanup_workspace=lambda workspace: True,
+    )
+
+    assert result == {
+        "changed_files": [],
+        "errors": ["git_diff:RuntimeError", "github_compare:RuntimeError"],
+        "source": "unavailable",
+        "skip_reason": "gate_change_evidence_unavailable",
+    }
+
+
+def test_retort_clarification_uses_github_paths_after_git_diff_failure(monkeypatch, tmp_path):
+    monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(tmp_path / "runtime"))
+    monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
+    monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://github.com/example/XCMAX.git")
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_RETORT_CLARIFICATION", "1")
+    monkeypatch.setattr(
+        loop_runner.retort_change_evidence,
+        "resolve_retort_change_evidence",
+        lambda **kwargs: {
+            "changed_files": ["FHD/app/example.py"],
+            "errors": ["git_diff:RuntimeError"],
+            "source": "github_compare",
+        },
+    )
+    monkeypatch.setattr(retort_clarification_gate, "gate_enabled", lambda: True)
+    monkeypatch.setattr(
+        retort_clarification_gate,
+        "evaluate_retort_clarification_gate",
+        lambda **kwargs: {"aligned": True, "blockers": [], "clarification": None},
+    )
+
+    result = loop_runner._evaluate_retort_clarification_before_review(
+        run_id="run-github-compare",
+        branch="devfleet/codex/sub-1",
+        para_task_id="task-github-compare",
+        memory={},
+    )
+
+    assert result["blocked"] is False
+    assert result["reason"] == "aligned_or_not_needed"
+    assert result["changed_file_count"] == 1
+    assert result["change_evidence"] == {
+        "changed_files": ["FHD/app/example.py"],
+        "errors": ["git_diff:RuntimeError"],
+        "source": "github_compare",
+    }
+
+
+def test_retort_clarification_skips_human_question_without_change_evidence(monkeypatch, tmp_path):
+    monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(tmp_path / "runtime"))
+    monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
+    monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://github.com/example/XCMAX.git")
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_RETORT_CLARIFICATION", "1")
+    monkeypatch.setattr(
+        loop_runner.retort_change_evidence,
+        "resolve_retort_change_evidence",
+        lambda **kwargs: {
+            "changed_files": [],
+            "errors": ["git_diff:RuntimeError", "github_compare:RuntimeError"],
+            "source": "unavailable",
+            "skip_reason": "gate_change_evidence_unavailable",
+        },
+    )
+    monkeypatch.setattr(retort_clarification_gate, "gate_enabled", lambda: True)
+    monkeypatch.setattr(
+        retort_clarification_gate,
+        "evaluate_retort_clarification_gate",
+        lambda **kwargs: pytest.fail("Retort must not receive fabricated empty paths"),
+    )
+
+    result = loop_runner._evaluate_retort_clarification_before_review(
+        run_id="run-no-evidence",
+        branch="devfleet/codex/sub-1",
+        para_task_id="task-no-evidence",
+        memory={},
+    )
+
+    assert result == {
+        "blocked": False,
+        "reason": "gate_change_evidence_unavailable",
+        "changed_file_count": 0,
+        "change_evidence": {
+            "changed_files": [],
+            "errors": ["git_diff:RuntimeError", "github_compare:RuntimeError"],
+            "source": "unavailable",
+            "skip_reason": "gate_change_evidence_unavailable",
+        },
+        "para_task_id": "task-no-evidence",
+    }
 
 
 def test_dynamic_low_risk_policy_allows_self_maintenance_code_and_tests(monkeypatch):
@@ -1632,6 +1825,122 @@ def test_retort_non_scope_question_is_not_auto_remediated(monkeypatch):
     assert memory["open_items"] == []
 
 
+def test_reconcile_retort_scope_does_not_reopen_matching_closed_remediation(monkeypatch):
+    memory = {
+        "closed_items": [
+            {
+                "original_item": {
+                    "kind": "automated_remediation",
+                    "reason": "retort_scope_too_large",
+                    "run_id": "run-closed",
+                }
+            }
+        ],
+        "open_items": [],
+    }
+    monkeypatch.setattr(
+        loop_runner,
+        "_read_ledger",
+        lambda limit: [
+            {
+                "branch": "devfleet/cursor/closed-scope",
+                "error": "retort_clarification_pending",
+                "para_task_id": "task-closed",
+                "phase": "complete",
+                "retort_clarification": {
+                    "clarification": {
+                        "questions": [{"reason": "elevated_risk_or_large_diff"}],
+                    },
+                },
+                "run_id": "run-closed",
+                "status": "failed",
+            }
+        ],
+    )
+
+    assert _reconcile_retort_scope_remediations(memory) == {
+        "added": 0,
+        "changed": False,
+        "run_ids": [],
+    }
+    assert memory["open_items"] == []
+
+
+def test_reconcile_retort_scope_ignores_unrelated_closed_item_for_same_run(monkeypatch):
+    memory = {
+        "closed_items": [
+            {
+                "original_item": {
+                    "kind": "failed_steps",
+                    "reason": "employee_step_failed",
+                    "run_id": "run-shared",
+                }
+            }
+        ],
+        "open_items": [],
+    }
+    monkeypatch.setattr(
+        loop_runner,
+        "_read_ledger",
+        lambda limit: [
+            {
+                "branch": "devfleet/cursor/unresolved-scope",
+                "error": "retort_clarification_pending",
+                "para_task_id": "task-shared",
+                "phase": "complete",
+                "retort_clarification": {
+                    "clarification": {
+                        "questions": [{"reason": "elevated_risk_or_large_diff"}],
+                    },
+                },
+                "run_id": "run-shared",
+                "status": "failed",
+            }
+        ],
+    )
+
+    assert _reconcile_retort_scope_remediations(memory) == {
+        "added": 1,
+        "changed": True,
+        "run_ids": ["run-shared"],
+    }
+    assert memory["open_items"][0]["reason"] == "retort_scope_too_large"
+
+
+def test_reconcile_retort_scope_tolerates_malformed_changed_file_count(monkeypatch):
+    memory = {"open_items": []}
+    monkeypatch.setattr(
+        loop_runner,
+        "_read_ledger",
+        lambda limit: [
+            {
+                "branch": "devfleet/cursor/malformed-count",
+                "error": "retort_clarification_pending",
+                "para_task_id": "task-malformed",
+                "phase": "complete",
+                "retort_clarification": {
+                    "changed_file_count": "unknown",
+                    "clarification": {
+                        "questions": [{"reason": "elevated_risk_or_large_diff"}],
+                    },
+                },
+                "run_id": "run-malformed",
+                "status": "failed",
+            }
+        ],
+    )
+
+    assert _reconcile_retort_scope_remediations(memory) == {
+        "added": 1,
+        "changed": True,
+        "run_ids": ["run-malformed"],
+    }
+    assert memory["open_items"][0]["detail"] == (
+        "Retort requested risk acceptance for unknown changed files; "
+        "rebuild the smallest valid fix from the clean base."
+    )
+
+
 @pytest.mark.parametrize(
     "hold_reason",
     [
@@ -1731,6 +2040,44 @@ def test_code_task_text_surfaces_structured_qa_blocking_findings_from_last_decis
             }
         ],
         "recent_runs": [],
+    }
+    candidate = _resume_review_qa_candidate(memory)
+    prompt = _code_task_text("run-qa-remediation", {"gaps": []}, memory, candidate)
+
+    assert "=== STRUCTURED REVIEW/QA REMEDIATION ===" in prompt
+    assert "structured_qa_blocking_findings" in prompt
+    assert "focused pytest command did not exit 0" in prompt
+
+
+def test_code_task_text_surfaces_structured_qa_blocking_findings_from_recent_run():
+    memory = {
+        "last_policy_decision": {
+            "action": "stop",
+            "reason": "scheduler_idle",
+        },
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-qa",
+                "kind": "automated_remediation",
+                "reason": "structured_qa_blocking_findings",
+                "run_id": "run-qa",
+                "task_id": "task-qa",
+            }
+        ],
+        "recent_runs": [
+            {
+                "para_task_id": "task-qa",
+                "run_id": "run-qa",
+                "structured_gate": {
+                    "qa": {
+                        "blocking_findings": ["focused pytest command did not exit 0"],
+                        "target_branch_available": True,
+                        "verdict": "FAIL",
+                    },
+                    "reason": "structured_qa_blocking_findings",
+                },
+            }
+        ],
     }
     candidate = _resume_review_qa_candidate(memory)
     prompt = _code_task_text("run-qa-remediation", {"gaps": []}, memory, candidate)
@@ -2192,21 +2539,29 @@ def test_structured_report_gate_requires_black_isort_and_source_governance(monke
 def test_quality_command_matchers_require_real_commands_and_scopes():
     assert matches_black_check_command(
         "python -m modstore_server.self_maintenance_diff_quality --tool black "
-        "--base-ref origin/main --target-ref origin/feature"
+        "--base-ref origin/main --target-ref origin/feature",
+        expected_base_ref="origin/main",
+        expected_target_ref="origin/feature",
     )
     assert matches_isort_check_command(
         "python3 -m modstore_server.self_maintenance_diff_quality --tool isort "
-        "--base-ref origin/main --target-ref HEAD"
+        "--base-ref origin/main --target-ref HEAD",
+        expected_base_ref="origin/main",
+        expected_target_ref="HEAD",
     )
     assert matches_black_check_command(
         "cd /tmp/target && GIT_DIR=/tmp/repo/.git GIT_WORK_TREE=/tmp/target "
         "python3 -m modstore_server.self_maintenance_diff_quality --tool black "
-        "--base-ref origin/main --target-ref origin/feature"
+        "--base-ref origin/main --target-ref origin/feature",
+        expected_base_ref="origin/main",
+        expected_target_ref="origin/feature",
     )
     assert matches_isort_check_command(
         "cd /tmp/target && GIT_DIR=/tmp/repo/.git GIT_WORK_TREE=/tmp/target "
         "python3 -m modstore_server.self_maintenance_diff_quality --tool isort "
-        "--base-ref origin/main --target-ref origin/feature"
+        "--base-ref origin/main --target-ref origin/feature",
+        expected_base_ref="origin/main",
+        expected_target_ref="origin/feature",
     )
     assert not matches_black_check_command(
         "python -m modstore_server.self_maintenance_diff_quality --tool isort "
@@ -2214,7 +2569,28 @@ def test_quality_command_matchers_require_real_commands_and_scopes():
     )
     assert not matches_black_check_command(
         "python -m modstore_server.self_maintenance_diff_quality --tool black "
-        "--base-ref HEAD --target-ref HEAD"
+        "--base-ref HEAD --target-ref HEAD",
+        expected_base_ref="origin/main",
+        expected_target_ref="origin/feature",
+    )
+    assert not matches_black_check_command(
+        "python -m modstore_server.self_maintenance_diff_quality --tool black "
+        "--base-ref origin/unrelated-a --target-ref origin/unrelated-b",
+        expected_base_ref="origin/main",
+        expected_target_ref="origin/feature",
+    )
+    assert not matches_isort_check_command(
+        "python -m modstore_server.self_maintenance_diff_quality --tool isort "
+        "--base-ref origin/unrelated-a --target-ref origin/unrelated-b",
+        expected_base_ref="origin/main",
+        expected_target_ref="origin/feature",
+    )
+    assert not matches_black_check_command(
+        "python -m modstore_server.self_maintenance_diff_quality --tool black "
+        "--base-ref origin/main --target-ref origin/feature "
+        "--target-ref origin/unrelated-b",
+        expected_base_ref="origin/main",
+        expected_target_ref="origin/feature",
     )
     assert matches_black_check_command(
         "cd 成都修茈科技有限公司/MODstore_deploy && "
@@ -2270,7 +2646,51 @@ def test_quality_gate_accepts_worker_env_prefixes_on_real_commands():
         }
     }
 
-    assert quality_check_failure(qa_json) is None
+    assert (
+        quality_check_failure(
+            qa_json,
+            expected_base_ref="origin/main",
+            expected_target_ref="origin/feature",
+        )
+        is None
+    )
+
+
+def test_quality_gate_rejects_wrong_but_unique_diff_refs():
+    qa_json = {
+        "quality_checks": {
+            "black": {
+                "command": (
+                    "python -m modstore_server.self_maintenance_diff_quality --tool black "
+                    "--base-ref origin/unrelated-a --target-ref origin/unrelated-b"
+                ),
+                "exit_code": 0,
+                "status": "passed",
+            },
+            "isort": {
+                "command": (
+                    "python -m modstore_server.self_maintenance_diff_quality --tool isort "
+                    "--base-ref origin/unrelated-a --target-ref origin/unrelated-b"
+                ),
+                "exit_code": 0,
+                "status": "passed",
+            },
+            "source_governance": {
+                "command": "python scripts/dev/source_governance.py --top 10",
+                "exit_code": 0,
+                "status": "passed",
+            },
+        }
+    }
+
+    assert (
+        quality_check_failure(
+            qa_json,
+            expected_base_ref="origin/main",
+            expected_target_ref="origin/feature",
+        )
+        == "structured_qa_black_not_passed"
+    )
 
 
 def test_focused_command_matcher_fails_closed_on_malformed_quotes():
@@ -2796,6 +3216,30 @@ def test_auto_merge_policy_blocks_retort_scope_when_diff_chars_exceeded():
     assert "max_diff_chars" in result["violations"]
 
 
+def test_auto_merge_policy_blocks_mixed_executable_and_excluded_retort_paths():
+    files = [
+        *[
+            f"成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy_{index}.py"
+            for index in range(6)
+        ],
+        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py",
+    ]
+
+    result = _assess_branch_auto_merge_policy(
+        files,
+        {**_stats(line_changes=20), "git_diff_chars": 2000},
+        memory=_retort_scope_memory(),
+    )
+
+    assert result["ok"] is False
+    assert result["reason"] == "retort_scope_diff_contract_exceeded"
+    assert result["changed_file_count"] == len(files)
+    assert result["scoped_file_count"] == 6
+    assert result["excluded_paths"] == [files[-1]]
+    assert "excluded_paths_present" in result["violations"]
+    assert "max_changed_files" in result["violations"]
+
+
 def test_auto_merge_policy_allows_retort_scope_within_contract():
     files = [
         "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_retort_remediation.py",
@@ -2993,6 +3437,63 @@ def test_reconcile_terminal_para_merge_failure_restarts_from_clean_base(
     prompt = _code_task_text("run-retry", {"gaps": []}, memory, candidate)
     assert "EXTERNAL MERGE FAILURE REMEDIATION" in prompt
     assert expected_reason in prompt
+
+    repeated = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+    assert repeated["changed"] is False
+    assert len(memory["open_items"]) == 1
+
+
+def test_reconcile_manual_veto_replaces_legacy_same_task_remediation():
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-manual",
+                "detail": "true conflict",
+                "kind": "automated_remediation",
+                "para_task_id": "task-manual",
+                "reason": "para_merge_conflict",
+                "run_id": "run-manual",
+                "task_id": "task-manual",
+            }
+        ],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-manual",
+                "para_task_id": "task-manual",
+                "run_id": "run-manual",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-manual",
+            "detail": "manual-veto-active: PR #926 has hold-merge label",
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result == {"changed": True, "merged": 0, "remediation_added": 1}
+    assert len(memory["open_items"]) == 1
+    assert memory["open_items"][0]["kind"] == "human_strategy_approval"
+    assert memory["open_items"][0]["reason"] == "manual_merge_veto_active"
+    assert memory["closed_items"][-1]["original_item"]["reason"] == "para_merge_conflict"
+    assert memory["closed_items"][-1]["resolution_reason"] == (
+        "reclassified_as_manual_merge_veto_active"
+    )
+    assert _resume_review_qa_candidate(memory) is None
 
     repeated = _reconcile_requested_merge_feedback(
         memory,

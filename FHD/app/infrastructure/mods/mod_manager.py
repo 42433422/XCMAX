@@ -1,6 +1,4 @@
-"""
-Mod Manager - Core manager for scanning, loading, and managing mods
-"""
+"""Core manager for scanning, loading, and managing MODs."""
 
 import importlib
 import importlib.util
@@ -23,14 +21,13 @@ from .artifact_package import (
     validate_employee_pack_manifest,
 )
 from .manifest import ModMetadata, parse_manifest, validate_dependencies
+from .missing_local_state import clear_mod_missing_locally, mark_mod_missing_locally
 from .package import ModPackage, ModPackageError, ModSignatureError
 from .registry import get_mod_registry
 
 logger = logging.getLogger(__name__)
-
 _MOD_API_FAILURE_RETRY_AT: dict[str, float] = {}
 _MOD_API_FAILURE_BACKOFF_SECONDS = 15.0
-_MOD_API_MISSING_LOCAL: set[str] = set()
 
 
 def is_mods_disabled() -> bool:
@@ -40,11 +37,7 @@ def is_mods_disabled() -> bool:
 
 
 def _default_mods_root() -> str:
-    """
-    解析 mods 根目录。
-    源码树：app/infrastructure/mods/mod_manager.py；默认 mods 目录为 XCAGI/mods（由 run.py 设置 XCAGI_MODS_ROOT）
-    若包装进 site-packages，上一级不再是项目根，需回退到环境变量或从 cwd 向上查找。
-    """
+    """Resolve the MOD root across source and packaged layouts."""
     logger.debug("[_default_mods_root] Resolving mods root, CWD: %s", os.getcwd())
 
     env = (os.environ.get("XCAGI_MODS_ROOT") or os.environ.get("XCAGI_MODS_DIR") or "").strip()
@@ -100,10 +93,7 @@ def _default_mods_root() -> str:
 
 
 def _repo_layout_mods_candidates() -> list[str]:
-    """
-    开发树常见双份 mods（FHD/mods 与 XCAGI/mods）。
-    部署/桥接包仅含 xcagi-* 时，主 XCAGI_MODS_ROOT 可能缺客户 Mod（如 taiyangniao-pro）。
-    """
+    """Find additional repository MOD roots missing from a packaged deployment."""
     file_here = os.path.abspath(__file__)
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(file_here))))
     out: list[str] = []
@@ -1363,25 +1353,10 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
 
     mm = get_mod_manager()
     if mid not in mm._loaded_mods:
-        # Entitlement and local installation are separate states.  Do not
-        # repeatedly invoke the loader for an entitled MOD whose local path is
-        # absent; that only creates an authorization-polling retry loop.
         if mm.resolve_mod_directory(mid) is None:
-            if mid not in _MOD_API_MISSING_LOCAL:
-                _MOD_API_MISSING_LOCAL.add(mid)
-                from app.runtime_integrity import record_runtime_issue
-
-                record_runtime_issue(
-                    f"industry_mod:{mid}",
-                    f"Industry MOD is entitled but not installed locally: {mid}",
-                    ttl_seconds=24 * 60 * 60,
-                )
-                logger.warning(
-                    "[ModManager] ensure_mod_api_ready: mod %s is entitled but not installed locally",
-                    mid,
-                )
+            mark_mod_missing_locally(mid)
             return False
-        _MOD_API_MISSING_LOCAL.discard(mid)
+        clear_mod_missing_locally(mid)
         retry_at = _MOD_API_FAILURE_RETRY_AT.get(mid, 0.0)
         if retry_at > time.monotonic():
             logger.debug(

@@ -1,7 +1,12 @@
 import type { RouteLocationRaw, Router } from 'vue-router'
-import { ERP_DOMAIN_BRIDGE_MOD_ID, readErpDomainModFacadeEnabled } from '@/constants/erpDomainMod'
+import {
+  ERP_DOMAIN_BRIDGE_MOD_ID,
+  WECHAT_BRIDGE_MOD_ID,
+  readErpDomainModFacadeEnabled,
+} from '@/constants/erpDomainMod'
 
 const MOD_PREFIX = `/mod/${ERP_DOMAIN_BRIDGE_MOD_ID}`
+const WECHAT_MOD_PREFIX = `/mod/${WECHAT_BRIDGE_MOD_ID}`
 
 /** 宿主业务 path → Mod 子路径（K+ 扩展考勤/物料/打印等页） */
 const HOST_PATH_TO_MOD: Record<string, string> = {
@@ -10,7 +15,7 @@ const HOST_PATH_TO_MOD: Record<string, string> = {
   '/orders': '/orders',
   '/orders/create': '/orders/create',
   '/shipment-records': '/shipment-records',
-  '/wechat-contacts': '/data-sources',
+  '/wechat-contacts': '/wechat-contacts',
   '/materials': '/materials',
   '/materials-list': '/materials',
   '/traditional-mode': '/traditional-mode',
@@ -31,7 +36,7 @@ const HOST_ROUTE_NAME_TO_MOD: Record<string, string> = {
   orders: '/orders',
   'orders-create': '/orders/create',
   'shipment-records': '/shipment-records',
-  'wechat-contacts': '/data-sources',
+  'wechat-contacts': '/wechat-contacts',
   materials: '/materials',
   'materials-list': '/materials',
   'traditional-mode': '/traditional-mode',
@@ -55,9 +60,7 @@ export function resolveErpPagePath(hostPath: string): string {
   const pathOnly = raw.split('?')[0]?.split('#')[0] || raw
   if (!useErpModPages()) return raw
   if (pathOnly === '/wechat-contacts') {
-    const suffix = raw.slice(pathOnly.length)
-    const query = suffix || '?source=wechat_local_db'
-    return `${MOD_PREFIX}/data-sources${query.startsWith('?') ? query : `?source=wechat_local_db${query}`}`
+    return `${WECHAT_MOD_PREFIX}/wechat-contacts${raw.slice(pathOnly.length)}`
   }
   const seg = HOST_PATH_TO_MOD[pathOnly]
   if (!seg) return raw
@@ -69,11 +72,10 @@ export function resolveErpPageRedirectForRouteName(routeName: string): string | 
   if (!useErpModPages()) return null
   const seg = HOST_ROUTE_NAME_TO_MOD[routeName]
   if (!seg) return null
-  const base = `${MOD_PREFIX}${seg}`
   if (routeName === 'wechat-contacts') {
-    return `${base}?source=wechat_local_db`
+    return `${WECHAT_MOD_PREFIX}/wechat-contacts`
   }
-  return base
+  return `${MOD_PREFIX}${seg}`
 }
 
 /** Mod 物理视图内导航：门面开启时解析为 ``/mod/...`` 路径 */

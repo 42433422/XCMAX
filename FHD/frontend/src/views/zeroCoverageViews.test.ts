@@ -27,7 +27,7 @@ const hostBridgeViews = [
   { name: 'ChatDebugView', modId: 'xcagi-planner-bridge', view: 'ChatDebugView', title: 'Planner 页' },
   { name: 'LabelEditorView', modId: 'xcagi-erp-domain-bridge', view: 'LabelEditorView', title: 'ERP 业务页' },
   { name: 'TemplatePreviewView', modId: 'xcagi-erp-domain-bridge', view: 'TemplatePreviewView', title: 'ERP 业务页' },
-  { name: 'WechatContactsView', modId: 'xcagi-wechat-bridge', view: 'WechatContactsView', title: 'ERP 业务页' },
+  { name: 'WechatContactsView', modId: 'xcagi-wechat-bridge', view: 'WechatContactsView', title: '微信联系人' },
   { name: 'WorkflowVisualizationView', modId: 'xcagi-workflow-visualization-bridge', view: 'WorkflowVisualizationView', title: '流程可视化' },
 ]
 

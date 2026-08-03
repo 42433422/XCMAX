@@ -18,13 +18,6 @@
       "host_prefix": "/api/shipment",
       "facade_prefix": "/api/mod/xcagi-erp-domain-bridge/shipment",
       "handler": "mod.domain_handlers"
-    },
-    {
-      "id": "wechat",
-      "host_prefix": "/api/wechat",
-      "facade_prefix": "/api/mod/xcagi-wechat-bridge/wechat",
-      "handler": "mod.domain_handlers",
-      "note": "已移交 xcagi-wechat-bridge Mod"
     }
   ],
   "delegate": "mod_domain_handlers",

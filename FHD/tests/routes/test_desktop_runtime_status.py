@@ -254,6 +254,71 @@ class TestDownloadModel:
         assert r.status_code in (200, 201, 202, 400, 500)
 
 
+class TestCrashReport:
+    def test_json_report_is_saved_without_login(
+        self, anon_client: TestClient, tmp_path: Path
+    ) -> None:
+        dirs = {"root": tmp_path}
+        with (
+            patch("app.fastapi_routes.desktop_runtime.is_desktop_mode", return_value=True),
+            patch(
+                "app.fastapi_routes.desktop_runtime.ensure_desktop_dirs",
+                return_value=dirs,
+            ),
+        ):
+            response = anon_client.post(
+                "/api/desktop/crash-report",
+                json={"type": "unhandledRejection", "error": "boom"},
+            )
+
+        assert response.status_code == 200
+        saved = response.json()["file"]
+        payload = json.loads((tmp_path / "crash-reports" / saved).read_text())
+        assert payload["error"] == "boom"
+
+    def test_report_rejects_non_desktop_runtime(self, anon_client: TestClient) -> None:
+        with patch("app.fastapi_routes.desktop_runtime.is_desktop_mode", return_value=False):
+            response = anon_client.post("/api/desktop/crash-report", json={"error": "boom"})
+        assert response.status_code == 409
+
+    def test_minidump_report_is_saved(
+        self, anon_client: TestClient, tmp_path: Path
+    ) -> None:
+        with (
+            patch("app.fastapi_routes.desktop_runtime.is_desktop_mode", return_value=True),
+            patch(
+                "app.fastapi_routes.desktop_runtime.ensure_desktop_dirs",
+                return_value={"root": tmp_path},
+            ),
+        ):
+            response = anon_client.post(
+                "/api/desktop/crash-report",
+                files={"minidump": ("renderer.dmp", b"minidump", "application/octet-stream")},
+            )
+
+        assert response.status_code == 200
+        saved = response.json()["files"]
+        assert len(saved) == 1
+        assert (tmp_path / "crash-reports" / saved[0]).read_bytes() == b"minidump"
+
+    def test_report_rejects_unsupported_content_type(
+        self, anon_client: TestClient, tmp_path: Path
+    ) -> None:
+        with (
+            patch("app.fastapi_routes.desktop_runtime.is_desktop_mode", return_value=True),
+            patch(
+                "app.fastapi_routes.desktop_runtime.ensure_desktop_dirs",
+                return_value={"root": tmp_path},
+            ),
+        ):
+            response = anon_client.post(
+                "/api/desktop/crash-report",
+                content=b"boom",
+                headers={"content-type": "text/plain"},
+            )
+        assert response.status_code == 415
+
+
 class TestDesktopDeploymentModes:
     def test_deployment_status_uses_ssot_catalog(
         self, client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

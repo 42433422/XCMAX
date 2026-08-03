@@ -38,7 +38,18 @@ export interface WorkModeTaskAcquisition {
   order?: WorkModeOrder;
 }
 
+export interface WechatAutoConfigureOptions {
+  force_key_scan?: boolean;
+}
+
 export const wechatApi = {
+  autoConfigure(options: WechatAutoConfigureOptions = {}): Promise<ApiResponse<StringMap>> {
+    return api.post<ApiResponse<StringMap>>(
+      erp('/api/wechat/decrypt/auto_configure'),
+      options,
+    );
+  },
+
   getTasks(params: StringMap = {}): Promise<ApiResponse<WechatTask[]>> {
     return api.get<ApiResponse<WechatTask[]>>(erp('/api/wechat/tasks'), params);
   },

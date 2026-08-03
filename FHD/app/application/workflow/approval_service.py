@@ -5,6 +5,8 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from app.application.workflow.types import (
     ApprovalRequest,
     ApprovalStatus,
@@ -169,7 +171,7 @@ class ApprovalService:
                 )
             except RECOVERABLE_ERRORS:
                 logger.debug("neuro_notify_approval_changed skipped", exc_info=True)
-        except RECOVERABLE_ERRORS as e:
+        except (*RECOVERABLE_ERRORS, SQLAlchemyError) as e:
             logger.debug("AI 审批持久化到 DB 失败（非致命）: %s", e)
 
     def get_pending_workflow(self, request_id: str) -> dict[str, Any] | None:

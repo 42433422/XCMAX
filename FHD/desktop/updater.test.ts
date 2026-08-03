@@ -184,6 +184,29 @@ describe('updater — parseYamlField', () => {
   })
 })
 
+describe('updater — forced-upgrade product versions', () => {
+  it('compares three- and four-part versions without conflating npm SemVer', async () => {
+    const { compareVersions } = await import('./updater.js')
+    expect(compareVersions('1.0.0.0', '1.0.0.1')).toBeLessThan(0)
+    expect(compareVersions('1.0.1', '1.0.0.9')).toBeGreaterThan(0)
+    expect(compareVersions('1.0', '1.0.0.0')).toBe(0)
+  })
+
+  it('rejects malformed minimum versions instead of treating them as zero', async () => {
+    const { compareVersions } = await import('./updater.js')
+    expect(() => compareVersions('1.0.0.0', "'1.0.0.1'")).toThrow(/invalid version/)
+  })
+
+  it('prefers the explicit product-version environment over Electron SemVer', async () => {
+    const saved = process.env.XCAGI_PRODUCT_VERSION
+    process.env.XCAGI_PRODUCT_VERSION = '1.0.0.7'
+    const { readLocalProductVersion } = await import('./updater.js')
+    expect(readLocalProductVersion()).toBe('1.0.0.7')
+    if (saved === undefined) delete process.env.XCAGI_PRODUCT_VERSION
+    else process.env.XCAGI_PRODUCT_VERSION = saved
+  })
+})
+
 describe('updater — downloadUpdate is explicit', () => {
   it('exports downloadUpdate for user-triggered installs', async () => {
     const mod = await import('./updater.js')

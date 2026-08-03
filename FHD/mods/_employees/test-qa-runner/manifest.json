@@ -113,7 +113,8 @@
         "burn_in_policy": {
           "reviewed": true,
           "scope": "fixture_only",
-          "external_effects": false
+          "external_effects": false,
+          "receipt_revision": "2026-08-02-direct-handler"
         }
       }
     },

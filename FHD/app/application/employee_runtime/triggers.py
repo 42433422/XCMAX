@@ -47,12 +47,10 @@ def _make_handler(employee_id: str, binding: TriggerBinding):
             return
         payload = dict(getattr(event, "payload", None) or {})
         event_type = getattr(event, "event_type", "")
-        # A failed employee must never remediate its own failure event.  Before
-        # this guard, daily-orchestrator subscribed to its own task failure and
-        # created an unbounded failure -> trigger -> failure loop.
-        origin_employee = str(
-            payload.get("origin_employee_id") or payload.get("employee_id") or ""
-        ).strip()
+        # A failed employee must never remediate the failure event emitted by
+        # its own run. Only the explicit origin field proves self-origin; for
+        # legacy events employee_id remains the target employee.
+        origin_employee = str(payload.get("origin_employee_id") or "").strip()
         if event_type == EVENT_TASK_FAILED and origin_employee == employee_id:
             logger.debug("skip self task-failed trigger emp=%s", employee_id)
             return
@@ -108,7 +106,7 @@ def _unsubscribe_employee(bus: Any, employee_id: str) -> None:
         try:
             bus.unsubscribe(sub)
         except RECOVERABLE_ERRORS:
-            logger.debug("unsubscribe failed emp=%s", employee_id, exc_info=True)
+            logger.debug("unsubscribe employee trigger failed", exc_info=True)
 
 
 def refresh_employee_triggers(pack_id: str | None = None) -> dict[str, Any]:
@@ -124,7 +122,9 @@ def refresh_employee_triggers(pack_id: str | None = None) -> dict[str, Any]:
                 _unsubscribe_employee(bus, employee_id)
         except RECOVERABLE_ERRORS:
             pass
-        logger.info("enterprise client: employee event triggers are disabled by product-plane policy")
+        logger.info(
+            "enterprise client: employee event triggers are disabled by product-plane policy"
+        )
         return {
             "registered": [],
             "active_employees": [],

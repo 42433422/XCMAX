@@ -6,6 +6,9 @@
         先刷新联系人缓存与聊天记录缓存（从解密库导入一次），之后搜索与查看聊天记录只读本地缓存。
       </p>
       <div class="form-group wechat-contacts-panel-toolbar">
+        <button type="button" class="btn btn-primary" @click="configureWechatData" :disabled="loading || configuring">
+          {{ configuring ? '配置中…' : '配置本机微信数据' }}
+        </button>
         <button type="button" class="btn btn-primary" @click="refreshContactCache" :disabled="loading">刷新联系人缓存</button>
         <button type="button" class="btn btn-primary" @click="syncGroupMessages" :disabled="loading || syncingGroups">
           {{ syncingGroups ? '同步中…' : '同步聊天记录' }}
@@ -142,6 +145,7 @@ import { appAlert, appConfirm } from '@/utils/appDialog';
 
 const router = useRouter();
 const loading = ref(false);
+const configuring = ref(false);
 const syncingGroups = ref(false);
 const contacts = ref<any[]>([]);
 const contactType = ref('group');
@@ -199,6 +203,25 @@ async function refreshContactCache() {
     await loadContacts();
   } catch (e: any) {
     await appAlert(`刷新失败: ${e?.message || '未知错误'}`);
+  }
+}
+
+async function configureWechatData() {
+  const confirmed = await appConfirm(
+    '将读取本机微信数据库并写入 XCAGI 本地缓存。数据仅在本机处理，是否继续？',
+  );
+  if (!confirmed) return;
+
+  configuring.value = true;
+  try {
+    const data = await wechatApi.autoConfigure({ force_key_scan: false });
+    if (!data?.success) throw new Error(data?.message || '自动配置失败');
+    await loadContacts();
+    await appAlert(data.message || '本机微信数据已配置');
+  } catch (e: any) {
+    await appAlert(`自动配置失败: ${e?.message || '未知错误'}`);
+  } finally {
+    configuring.value = false;
   }
 }
 

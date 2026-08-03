@@ -37,6 +37,7 @@ import {
 } from '@/constants/adminOperatorNav';
 import { buildRoleMenuProfile, canShowCoreMenuKey } from '@/utils/roleMenuProfile';
 import { isClientErpSidebarContext } from '@/constants/genericModPack';
+import { AI_DELIVERY_ROUTES } from './privateModDeliveryRoutes';
 const isSandbox = new URLSearchParams(window.location.search).has('sandbox');
 
 const SANDBOX_ALLOWED = new Set([
@@ -128,12 +129,7 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
       component: () => import('../views/AIEcosystemView.vue'),
       meta: { title: '智能生态' },
     },
-    {
-      path: '/brain',
-      name: 'brain',
-      component: () => import('../views/BrainView.vue'),
-      meta: { title: '智脑集成' },
-    },
+    ...AI_DELIVERY_ROUTES,
     {
       path: '/project-factory',
       name: 'project-factory',
@@ -211,8 +207,8 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
     {
       path: '/wechat-contacts',
       name: 'wechat-contacts',
-      redirect: { name: 'data-sources', query: { source: 'wechat_local_db' } },
-      meta: { title: '数据来源' },
+      component: () => import('../views/WechatContactsView.vue'),
+      meta: { title: '微信联系人' },
     },
     {
       path: '/print',
