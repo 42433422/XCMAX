@@ -23,6 +23,7 @@ import { readActiveExtensionModId } from '@/utils/erpDomainPaths';
 import { isProtectedClientModId } from '@/constants/protectedMods';
 import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku';
 import {
+  consumeDesktopSessionBootstrapHint,
   hasRecentEnterpriseSessionHint,
   validateEnterpriseSessionCached,
 } from '@/utils/authSessionCache';
@@ -629,7 +630,9 @@ router.beforeEach(async (to, _from, next) => {
     try {
       const { useAccountProfileStore } = await import('@/stores/accountProfile');
       const profile = useAccountProfileStore();
-      const useSessionHint = !profile.loaded && hasRecentEnterpriseSessionHint()
+      const useSessionHint = !profile.loaded && (
+        hasRecentEnterpriseSessionHint() || await consumeDesktopSessionBootstrapHint()
+      )
       if (useSessionHint) {
         provisionalDesktopEntry = true
         refreshDesktopSessionInBackground(router, profile, to.fullPath !== '/login' ? to.fullPath : '/')

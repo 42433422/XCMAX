@@ -358,6 +358,10 @@ let tray: Tray | null = null
 let restartCount = 0
 let backendShutdownComplete = false
 let backendShutdownPromise: Promise<void> | null = null
+// A one-shot, renderer-visible entry hint derived only from an existing local
+// Chromium cookie. It never authorizes an API request or replaces official
+// validation; consuming it avoids replaying a saved password after an update.
+let desktopBootstrapSessionHintAvailable = false
 
 // 自治控制器（与现有更新观察期/backend 重启逻辑共存，零回归；阶段 1 接入）
 let autonomyController: AutonomyController | null = null
@@ -1454,7 +1458,8 @@ function bootstrap(): void {
 
     app.whenReady().then(async () => {
       await applyOtaProxyBypass()
-      if (await warmPersistedDesktopSessionCookieStore(DEFAULT_PORT)) {
+      desktopBootstrapSessionHintAvailable = await warmPersistedDesktopSessionCookieStore(DEFAULT_PORT)
+      if (desktopBootstrapSessionHintAvailable) {
         writeBackendLog('[session] restored persisted desktop session cookie before renderer startup\n')
       }
       const sku = readPackagedProductSku()
@@ -1501,6 +1506,11 @@ function bootstrap(): void {
       })
 
       ipcMain.handle('xcagi:get-data-dir', () => app.getPath('userData'))
+      ipcMain.handle('xcagi:consume-bootstrap-session-hint', () => {
+        const available = desktopBootstrapSessionHintAvailable
+        desktopBootstrapSessionHintAvailable = false
+        return available
+      })
       ipcMain.handle('xcagi:get-app-identity', () => ({
         name: app.getName(),
         version: readPackagedAppVersion(),

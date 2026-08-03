@@ -106,9 +106,11 @@ vi.mock('@/utils/hostPackOnboardingGate', () => ({
 }))
 
 const mockHasRecentEnterpriseSessionHint = vi.fn(() => false)
+const mockConsumeDesktopSessionBootstrapHint = vi.fn(async () => false)
 
 vi.mock('@/utils/authSessionCache', () => ({
   hasRecentEnterpriseSessionHint: () => mockHasRecentEnterpriseSessionHint(),
+  consumeDesktopSessionBootstrapHint: () => mockConsumeDesktopSessionBootstrapHint(),
 }))
 
 const mockIsDesktopShell = vi.fn(() => false)
@@ -492,6 +494,7 @@ describe('LoginView desktop session restore', () => {
     mockFetchProductSku.mockResolvedValue('enterprise')
     mockIsDesktopShell.mockReturnValue(true)
     mockHasRecentEnterpriseSessionHint.mockReturnValue(true)
+    mockConsumeDesktopSessionBootstrapHint.mockResolvedValue(false)
     mockAuthApiGetOidcStatus.mockResolvedValue({ data: { enabled: false } })
     mockLoadLoginPreferences.mockReturnValue({
       rememberPassword: true,
@@ -522,6 +525,18 @@ describe('LoginView desktop session restore', () => {
 
     expect(router.currentRoute.value.name).toBe('login')
     expect(mockAuthApiGetOidcStatus).toHaveBeenCalled()
+  })
+
+  it('uses Electron\'s one-shot persisted-cookie hint when localStorage is unavailable', async () => {
+    mockHasRecentEnterpriseSessionHint.mockReturnValue(false)
+    mockConsumeDesktopSessionBootstrapHint.mockResolvedValue(true)
+
+    const { router } = await mountLoginView({ redirect: '/settings' })
+    await flushPromises()
+
+    expect(router.currentRoute.value.fullPath).toBe('/settings')
+    expect(mockConsumeDesktopSessionBootstrapHint).toHaveBeenCalledOnce()
+    expect(mockAuthApiLogin).not.toHaveBeenCalled()
   })
 })
 

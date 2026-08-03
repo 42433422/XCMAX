@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import {
   validateEnterpriseSessionCached,
+  consumeDesktopSessionBootstrapHint,
   hasRecentEnterpriseSessionHint,
   invalidateEnterpriseSessionCache,
   LS_ENTERPRISE_SESSION_HINT,
@@ -64,5 +65,21 @@ describe('authSessionCache', () => {
     expect(hasRecentEnterpriseSessionHint()).toBe(true)
     invalidateEnterpriseSessionCache()
     expect(hasRecentEnterpriseSessionHint()).toBe(false)
+  })
+
+  it('shares Electron persisted-cookie entry hint across the initial navigation only', async () => {
+    const consumeBootstrapSessionHint = vi.fn().mockResolvedValue(true)
+    Object.defineProperty(window, 'xcagiDesktop', {
+      configurable: true,
+      value: { consumeBootstrapSessionHint },
+    })
+
+    await expect(consumeDesktopSessionBootstrapHint()).resolves.toBe(true)
+    await expect(consumeDesktopSessionBootstrapHint()).resolves.toBe(true)
+    expect(consumeBootstrapSessionHint).toHaveBeenCalledOnce()
+
+    invalidateEnterpriseSessionCache()
+    Object.defineProperty(window, 'xcagiDesktop', { configurable: true, value: undefined })
+    await expect(consumeDesktopSessionBootstrapHint()).resolves.toBe(false)
   })
 })

@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('xcagiDesktop', {
   platform: process.platform,
   versions: process.versions,
   getDataDir: () => ipcRenderer.invoke('xcagi:get-data-dir'),
+  consumeBootstrapSessionHint: () => ipcRenderer.invoke('xcagi:consume-bootstrap-session-hint'),
   exportSupportBundle: () => ipcRenderer.invoke('xcagi:export-support-bundle'),
   checkForUpdates: () => ipcRenderer.invoke('xcagi:check-for-updates'),
   getUpdateStatus: () => ipcRenderer.invoke('xcagi:get-update-status'),
