@@ -189,7 +189,9 @@ def resolve_registered_capability_call(args: dict[str, Any] | None) -> dict[str,
     }
 
 
-def _dispatch_registered_tool(*, tool_id: str, action: str, params: dict[str, Any]) -> dict[str, Any]:
+def _dispatch_registered_tool(
+    *, tool_id: str, action: str, params: dict[str, Any]
+) -> dict[str, Any]:
     from app.application.facades.tools_facade import execute_registered_workflow_tool
 
     return execute_registered_workflow_tool(tool_id=tool_id, action=action, params=params)
@@ -253,8 +255,7 @@ def execute_registered_capability(
         )
 
     capability = {
-        key: resolved[key]
-        for key in ("tool_id", "action", "risk", "idempotent", "required_params")
+        key: resolved[key] for key in ("tool_id", "action", "risk", "idempotent", "required_params")
     }
     approval = decision.to_dict()
     if decision.pending_approval:
