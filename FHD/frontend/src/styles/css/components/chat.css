@@ -41,7 +41,7 @@
 
 .message {
     max-width: min(85%, 760px);
-    min-width: min(100%, 220px);
+    min-width: 0;
     flex-shrink: 0; /* 避免 flex 列布局把气泡压扁导致内容被裁切 */
     padding: 10px 0 8px;
     border-radius: 0;
@@ -215,10 +215,10 @@
 
 .message.user {
     align-self: flex-end;
-    background: rgba(127, 127, 127, 0.08);
+    background: transparent;
     color: var(--xc-color-text-primary, #1f2937);
-    padding: 8px 12px;
-    border-radius: 4px;
+    padding: 8px 0;
+    border-radius: 0;
     box-shadow: none;
 }
 
