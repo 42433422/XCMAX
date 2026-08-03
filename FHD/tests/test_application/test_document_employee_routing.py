@@ -3,7 +3,6 @@ from app.application.document_employee_routing import (
     select_document_employee_tool,
 )
 
-
 OFFICE_TOOLS = [
     {"type": "function", "function": {"name": f"{kind}-{action}-employee"}}
     for kind in ("excel", "csv", "pdf", "ppt", "word")
