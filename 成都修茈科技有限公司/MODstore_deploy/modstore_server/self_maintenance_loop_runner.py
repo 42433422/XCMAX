@@ -65,6 +65,7 @@ from .self_maintenance_para_merge_remediation import (
     classify_para_merge_review_detail,
     para_merge_resume_pins_rejected_branch,
     reconcile_absorbed_para_merge_remediations,
+    reconcile_para_merge_failure_state,
     resume_candidate_from_para_ai_review_item,
     resume_from_clean_baseline_for_para_merge,
 )
@@ -2372,12 +2373,9 @@ def _reconcile_requested_merge_feedback(
             or task.get("error")
             or f"Para merge task ended with status={task_status}"
         ).strip()[:4000]
-        if source == "ai-review-veto":
-            reason = "para_ai_review_rejected"
-        elif task_status == "merge_conflict":
-            reason = "para_merge_conflict"
-        else:
-            reason = "para_merge_task_failed"
+        reason, item_kind, open_items, changed = reconcile_para_merge_failure_state(
+            memory, changed, detail, source, task_id, task_status
+        )
         existing_receipt = run.get("merge_reconciliation")
         receipt = {
             "detail": detail,
@@ -2399,6 +2397,7 @@ def _reconcile_requested_merge_feedback(
             isinstance(item, dict)
             and str(item.get("task_id") or item.get("para_task_id") or "") == task_id
             and item.get("reason") == reason
+            and item.get("kind") == item_kind
             for item in open_items
         )
         if not already_open:
@@ -2411,7 +2410,7 @@ def _reconcile_requested_merge_feedback(
                 "branch": rejected_branch,
                 "created_at": _iso(_utc_now()),
                 "detail": detail,
-                "kind": "automated_remediation",
+                "kind": item_kind,
                 "para_task_id": task_id,
                 "reason": reason,
                 "rejected_branch": rejected_branch,
