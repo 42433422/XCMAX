@@ -39,6 +39,10 @@ DIRECT_PYTHON_RUNTIME_MISSING_MSG = (
     "请在工作台「做员工」流水线完成 generate 步后再安装；"
     "否则会覆盖为仅含 LLM 脚手架的空包。"
 )
+DIRECT_PYTHON_UNTRUSTED_MSG = (
+    "员工包 Python 运行时未通过信任校验：用户可写目录中的代码必须来自真实签名安装，"
+    "且运行前内容哈希必须与安装收据一致。"
+)
 
 
 def _employees_root() -> Path:
@@ -191,6 +195,45 @@ def pack_has_direct_python_runtime(pack_dir: Path | str) -> bool:
     return False
 
 
+def _is_within(path: Path, parent: Path) -> bool:
+    try:
+        path.resolve().relative_to(parent.resolve())
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def verify_direct_python_pack_trust(pack_dir: Path | str) -> tuple[bool, str]:
+    """Trust bundled/source packs, or verify signed-install receipt + current hash."""
+    pdir = Path(pack_dir).resolve()
+    source_root = Path(__file__).resolve().parents[3] / "mods" / "_employees"
+    if _is_within(pdir, source_root):
+        return True, "source_bundled"
+    try:
+        from app.mod_sdk.edition_policy import bundled_mods_dir
+
+        bundled_root = bundled_mods_dir()
+        if bundled_root is not None and _is_within(pdir, Path(bundled_root) / "_employees"):
+            return True, "application_bundled"
+    except RECOVERABLE_ERRORS:
+        logger.debug("resolve bundled employee trust root failed", exc_info=True)
+
+    receipt_path = pdir / ".xcagi-install-receipt.json"
+    try:
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        if not isinstance(receipt, dict) or receipt.get("signature_verified") is not True:
+            return False, "missing_verified_install_receipt"
+        from app.infrastructure.mods.package import compute_directory_hash
+
+        expected = str(receipt.get("content_sha256") or "")
+        actual = compute_directory_hash(str(pdir))
+        if not expected or actual != expected:
+            return False, "installed_pack_content_hash_mismatch"
+        return True, "signed_install_receipt"
+    except (OSError, json.JSONDecodeError, ValueError):
+        return False, "missing_or_invalid_install_receipt"
+
+
 def build_employee_context(employee_id: str, input_data: dict[str, Any]) -> dict[str, Any]:
     return {"employee_id": employee_id, "input_data": input_data or {}}
 
@@ -215,6 +258,7 @@ def list_installed_pack_records() -> list[dict[str, Any]]:
 
 __all__ = [
     "DIRECT_PYTHON_RUNTIME_MISSING_MSG",
+    "DIRECT_PYTHON_UNTRUSTED_MSG",
     "build_employee_context",
     "candidate_pack_ids",
     "list_installed_pack_records",
@@ -223,4 +267,5 @@ __all__ = [
     "pack_has_direct_python_runtime",
     "parse_employee_config_v2",
     "resolve_pack_dir",
+    "verify_direct_python_pack_trust",
 ]

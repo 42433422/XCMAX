@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Any
 
@@ -62,12 +63,59 @@ class WorkflowEngine:
 
         while pending:
             progressed = False
+            ready = [
+                pending[node_id]
+                for node_id in list(pending.keys())
+                if not any(dep not in executed for dep in pending[node_id].depends_on)
+            ]
+            parallel_enabled = bool(runtime_context.get("parallel_execution"))
+            parallel_ready = (
+                len(ready) > 1
+                and parallel_enabled
+                and all(
+                    str(node.risk or "").lower() == "low" and bool(node.idempotent)
+                    for node in ready
+                )
+            )
+            parallel_results: dict[str, NodeExecutionResult] = {}
+            parallel_failure: tuple[str, NodeExecutionResult] | None = None
+            if parallel_ready:
+                max_workers = max(
+                    2,
+                    min(int(runtime_context.get("max_parallel_workers") or 4), 8, len(ready)),
+                )
+                with ThreadPoolExecutor(
+                    max_workers=max_workers,
+                    thread_name_prefix="xcagi-workflow",
+                ) as pool:
+                    futures = {
+                        node.node_id: pool.submit(
+                            self._run_node,
+                            node,
+                            dict(runtime_context),
+                            max_retries=max_retries,
+                        )
+                        for node in ready
+                    }
+                    parallel_results = {
+                        node_id: future.result() for node_id, future in futures.items()
+                    }
+                runtime_context.setdefault("parallel_batches", []).append(
+                    {
+                        "node_ids": [node.node_id for node in ready],
+                        "max_workers": max_workers,
+                    }
+                )
             for node_id in list(pending.keys()):
                 node = pending[node_id]
+                if parallel_ready and node_id not in parallel_results:
+                    continue
                 if any(dep not in executed for dep in node.depends_on):
                     continue
 
-                result = self._run_node(node, runtime_context, max_retries=max_retries)
+                result = parallel_results.get(node_id)
+                if result is None:
+                    result = self._run_node(node, runtime_context, max_retries=max_retries)
                 node_results.append(result)
                 executed.add(node_id)
                 pending.pop(node_id, None)
@@ -83,6 +131,9 @@ class WorkflowEngine:
                         "message": result.error,
                         "recovery_hint": result.recovery_hint,
                     }
+                    if parallel_ready:
+                        parallel_failure = parallel_failure or (node_id, result)
+                        continue
                     return WorkflowRunResult(
                         plan_id=plan.plan_id,
                         success=False,
@@ -90,6 +141,16 @@ class WorkflowEngine:
                         final_context=runtime_context,
                         message=f"节点 {node_id} 执行失败: {result.error}",
                     )
+
+            if parallel_failure is not None:
+                failed_node_id, failed_result = parallel_failure
+                return WorkflowRunResult(
+                    plan_id=plan.plan_id,
+                    success=False,
+                    node_results=node_results,
+                    final_context=runtime_context,
+                    message=f"节点 {failed_node_id} 执行失败: {failed_result.error}",
+                )
 
             if not progressed:
                 stalled_rounds += 1
@@ -138,6 +199,9 @@ class WorkflowEngine:
         agent_history: list[dict[str, Any]] = []
         max_steps = 10
         step = 0
+        terminal_reason = ""
+        completed_by_model = False
+        decision_errors = 0
 
         user_message = str(runtime_context.get("message") or "").strip()
 
@@ -153,6 +217,7 @@ class WorkflowEngine:
             )
 
             if decision is None:
+                terminal_reason = "模型未返回可执行决策"
                 break
 
             decision_action = str(decision.get("action") or "").strip()
@@ -173,6 +238,7 @@ class WorkflowEngine:
 
             if decision_action == "done":
                 agent_history.append({"step": step, "role": "done"})
+                completed_by_model = True
                 break
 
             agent_history.append(
@@ -187,6 +253,7 @@ class WorkflowEngine:
             )
 
             if not tool_id or not tool_action or tool_action == "execute":
+                decision_errors += 1
                 agent_history.append(
                     {
                         "step": step,
@@ -230,13 +297,33 @@ class WorkflowEngine:
 
         if step >= max_steps:
             logger.warning("AgenticLoop 达到最大步数限制 %d", max_steps)
+            terminal_reason = f"达到最大步数限制 {max_steps}，但模型未声明完成"
+
+        failed_results = [result for result in all_node_results if not result.success]
+        success = completed_by_model and not failed_results and decision_errors == 0
+        if failed_results:
+            terminal_reason = f"{len(failed_results)} 个工具步骤失败"
+        elif decision_errors:
+            terminal_reason = f"{decision_errors} 个模型工具决策无效"
+        runtime_context["workflow_status"] = {
+            "state": "completed" if success else "failed",
+            "completed_by_model": completed_by_model,
+            "steps": step,
+            "failed_tool_steps": len(failed_results),
+            "invalid_decisions": decision_errors,
+            "message": "AgenticLoop 执行完成" if success else terminal_reason,
+        }
 
         return WorkflowRunResult(
             plan_id=plan.plan_id,
-            success=True,
+            success=success,
             node_results=all_node_results,
             final_context=runtime_context,
-            message=f"AgenticLoop 完成（{step} 步）",
+            message=(
+                f"AgenticLoop 完成（{step} 步）"
+                if success
+                else f"AgenticLoop 未完成（{step} 步）：{terminal_reason}"
+            ),
         )
 
     def _llm_decide_next_step(

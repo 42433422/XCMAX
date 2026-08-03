@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
+import time
 from typing import Any
 
-from fastapi import APIRouter, Body, Query
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Body, Depends, Query
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.application.agent_orchestrator import AgentOrchestrator
+from app.application.agent_orchestrator.approval_grant import (
+    ApprovalGrantError,
+    consume_approval_grant,
+    issue_approval_grant,
+)
+from app.application.agent_orchestrator.run_control import run_operation_lock
+from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
 from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -23,9 +33,32 @@ def _success(data: Any, **extra: Any) -> dict[str, Any]:
     return payload
 
 
+def _run_response(run: Any, *, principal: AgentPrincipal) -> dict[str, Any]:
+    approval = issue_approval_grant(run, principal_id=principal.user_id)
+    return _success(run.to_dict(), approval=approval) if approval else _success(run.to_dict())
+
+
+def _owned_run(
+    orchestrator: AgentOrchestrator,
+    run_id: str,
+    principal: AgentPrincipal,
+) -> tuple[Any | None, JSONResponse | None]:
+    run = orchestrator.get_run(run_id)
+    if run is None:
+        return None, JSONResponse(
+            {"success": False, "message": "agent run 不存在"}, status_code=404
+        )
+    if not principal.is_admin and run.user_id != principal.user_id:
+        return None, JSONResponse(
+            {"success": False, "message": "无权访问该 agent run"}, status_code=403
+        )
+    return run, None
+
+
 @router.post("/api/agent/runs", response_model=None)
 def create_agent_run(
     body: dict[str, Any] = Body(default_factory=dict),
+    principal: AgentPrincipal = Depends(require_agent_principal),
 ) -> dict[str, Any] | JSONResponse:
     data = body or {}
     message = str(data.get("message") or "").strip()
@@ -35,7 +68,6 @@ def create_agent_run(
             status_code=400,
         )
 
-    user_id = str(data.get("user_id") or "default")
     runtime_context = data.get("runtime_context") or {}
     if not isinstance(runtime_context, dict):
         return JSONResponse(
@@ -45,13 +77,13 @@ def create_agent_run(
 
     try:
         run = AgentOrchestrator().start_run(
-            user_id=user_id,
+            user_id=principal.user_id,
             message=message,
             runtime_context=runtime_context,
             auto_execute=bool(data.get("auto_execute", True)),
         )
         status_code = 202 if run.status in {"waiting_user", "blocked"} else 200
-        return JSONResponse(_success(run.to_dict()), status_code=status_code)
+        return JSONResponse(_run_response(run, principal=principal), status_code=status_code)
     except RECOVERABLE_ERRORS as exc:
         logger.exception("create agent run failed: %s", exc)
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
@@ -59,11 +91,13 @@ def create_agent_run(
 
 @router.get("/api/agent/runs", response_model=None)
 def list_agent_runs(
-    user_id: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
+    principal: AgentPrincipal = Depends(require_agent_principal),
 ) -> dict[str, Any] | JSONResponse:
     try:
-        runs = AgentOrchestrator().list_runs(user_id=user_id, limit=limit)
+        # Public callers can only enumerate their own runs. Cross-user admin search should
+        # use a separately permissioned admin route, not a caller-controlled query string.
+        runs = AgentOrchestrator().list_runs(user_id=principal.user_id, limit=limit)
         return _success([run.to_dict() for run in runs], count=len(runs))
     except RECOVERABLE_ERRORS as exc:
         logger.exception("list agent runs failed: %s", exc)
@@ -71,15 +105,15 @@ def list_agent_runs(
 
 
 @router.get("/api/agent/runs/{run_id}", response_model=None)
-def get_agent_run(run_id: str) -> dict[str, Any] | JSONResponse:
+def get_agent_run(
+    run_id: str,
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any] | JSONResponse:
     try:
-        run = AgentOrchestrator().get_run(run_id)
-        if run is None:
-            return JSONResponse(
-                {"success": False, "message": "agent run 不存在"},
-                status_code=404,
-            )
-        return _success(run.to_dict())
+        run, error = _owned_run(AgentOrchestrator(), run_id, principal)
+        if error is not None:
+            return error
+        return _run_response(run, principal=principal)
     except RECOVERABLE_ERRORS as exc:
         logger.exception("get agent run failed: %s", exc)
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
@@ -89,6 +123,7 @@ def get_agent_run(run_id: str) -> dict[str, Any] | JSONResponse:
 def continue_agent_run(
     run_id: str,
     body: dict[str, Any] = Body(default_factory=dict),
+    principal: AgentPrincipal = Depends(require_agent_principal),
 ) -> dict[str, Any] | JSONResponse:
     data = body or {}
     runtime_context = data.get("runtime_context") or {}
@@ -98,38 +133,143 @@ def continue_agent_run(
             status_code=400,
         )
     try:
-        run = AgentOrchestrator().continue_run(
-            run_id,
-            approved_by=str(data.get("approved_by") or ""),
-            approved_step_id=str(data.get("step_id") or data.get("node_id") or ""),
-            runtime_context=runtime_context,
-        )
+        with run_operation_lock(run_id):
+            orchestrator = AgentOrchestrator()
+            current, error = _owned_run(orchestrator, run_id, principal)
+            if error is not None:
+                return error
+            claims = consume_approval_grant(
+                str(data.get("approval_grant") or ""),
+                run=current,
+                principal_id=principal.user_id,
+            )
+            run = orchestrator.continue_run(
+                run_id,
+                approved_by=principal.user_id,
+                approved_step_id=str(claims["step_id"]),
+                runtime_context=runtime_context,
+            )
         if run is None:
             return JSONResponse(
                 {"success": False, "message": "agent run 不存在"},
                 status_code=404,
             )
         status_code = 202 if run.status in {"waiting_user", "blocked"} else 200
-        return JSONResponse(_success(run.to_dict()), status_code=status_code)
+        return JSONResponse(_run_response(run, principal=principal), status_code=status_code)
+    except ApprovalGrantError as exc:
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
     except RECOVERABLE_ERRORS as exc:
         logger.exception("continue agent run failed: %s", exc)
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+
+
+def _control_agent_run(
+    run_id: str,
+    *,
+    action: str,
+    principal: AgentPrincipal,
+    runtime_context: dict[str, Any] | None = None,
+) -> dict[str, Any] | JSONResponse:
+    with run_operation_lock(run_id):
+        orchestrator = AgentOrchestrator()
+        _, error = _owned_run(orchestrator, run_id, principal)
+        if error is not None:
+            return error
+        if action == "pause":
+            run = orchestrator.pause_run(run_id, requested_by=principal.user_id)
+        elif action == "cancel":
+            run = orchestrator.cancel_run(run_id, requested_by=principal.user_id)
+        else:
+            run = orchestrator.resume_run(
+                run_id,
+                requested_by=principal.user_id,
+                runtime_context=runtime_context,
+            )
+        return _run_response(run, principal=principal)
+
+
+@router.post("/api/agent/runs/{run_id}/pause", response_model=None)
+def pause_agent_run(
+    run_id: str,
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any] | JSONResponse:
+    return _control_agent_run(run_id, action="pause", principal=principal)
+
+
+@router.post("/api/agent/runs/{run_id}/cancel", response_model=None)
+def cancel_agent_run(
+    run_id: str,
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any] | JSONResponse:
+    return _control_agent_run(run_id, action="cancel", principal=principal)
+
+
+@router.post("/api/agent/runs/{run_id}/resume", response_model=None)
+def resume_agent_run(
+    run_id: str,
+    body: dict[str, Any] = Body(default_factory=dict),
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any] | JSONResponse:
+    runtime_context = (body or {}).get("runtime_context") or {}
+    if not isinstance(runtime_context, dict):
+        return JSONResponse(
+            {"success": False, "message": "runtime_context 必须是对象"}, status_code=400
+        )
+    return _control_agent_run(
+        run_id,
+        action="resume",
+        principal=principal,
+        runtime_context=runtime_context,
+    )
 
 
 @router.get("/api/agent/runs/{run_id}/events", response_model=None)
 def list_agent_run_events(
     run_id: str,
     after_event_id: str | None = Query(default=None),
+    principal: AgentPrincipal = Depends(require_agent_principal),
 ) -> dict[str, Any] | JSONResponse:
     try:
         orchestrator = AgentOrchestrator()
-        if orchestrator.get_run(run_id) is None:
-            return JSONResponse(
-                {"success": False, "message": "agent run 不存在"},
-                status_code=404,
-            )
+        _, error = _owned_run(orchestrator, run_id, principal)
+        if error is not None:
+            return error
         events = orchestrator.list_events(run_id, after_event_id=after_event_id)
         return _success([event.to_dict() for event in events], count=len(events))
     except RECOVERABLE_ERRORS as exc:
         logger.exception("list agent run events failed: %s", exc)
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+
+
+@router.get("/api/agent/runs/{run_id}/events/stream", response_model=None)
+async def stream_agent_run_events(
+    run_id: str,
+    after_event_id: str | None = Query(default=None),
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> StreamingResponse | JSONResponse:
+    orchestrator = AgentOrchestrator()
+    _, error = _owned_run(orchestrator, run_id, principal)
+    if error is not None:
+        return error
+
+    async def event_stream():
+        cursor = after_event_id
+        deadline = time.monotonic() + 60.0
+        terminal = {"completed", "failed", "cancelled"}
+        while time.monotonic() < deadline:
+            current_orchestrator = AgentOrchestrator()
+            events = current_orchestrator.list_events(run_id, after_event_id=cursor)
+            for event in events:
+                cursor = event.event_id
+                yield f"id: {event.event_id}\nevent: {event.event_type}\ndata: {json.dumps(json_safe(event.to_dict()), ensure_ascii=False)}\n\n"
+            current = current_orchestrator.get_run(run_id)
+            if current is None or (current.status in terminal and not events):
+                break
+            await asyncio.sleep(0.25)
+        yield "event: stream.closed\ndata: {}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

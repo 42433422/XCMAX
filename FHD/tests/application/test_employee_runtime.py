@@ -110,6 +110,28 @@ def test_loader_prefers_user_employee_pack_over_bundle(employee_mods_root, tmp_p
     assert Path(pack["pack_dir"]) == user_pack.resolve()
 
 
+def test_signed_install_receipt_detects_post_install_tampering(tmp_path):
+    pack_dir = _write_csv_read_pack(tmp_path / "outside-source")
+    from app.application.employee_runtime.loader import verify_direct_python_pack_trust
+    from app.infrastructure.mods.package import compute_directory_hash
+
+    receipt = {
+        "schema_version": 1,
+        "signature_verified": True,
+        "content_sha256": compute_directory_hash(str(pack_dir)),
+    }
+    (pack_dir / ".xcagi-install-receipt.json").write_text(
+        json.dumps(receipt), encoding="utf-8"
+    )
+    assert verify_direct_python_pack_trust(pack_dir)[0] is True
+
+    worker = next((pack_dir / "backend").rglob("*.py"))
+    worker.write_text(worker.read_text(encoding="utf-8") + "\n# tampered\n", encoding="utf-8")
+    trusted, reason = verify_direct_python_pack_trust(pack_dir)
+    assert trusted is False
+    assert reason == "installed_pack_content_hash_mismatch"
+
+
 def test_tool_registry_uses_pack_id_as_tool_name(employee_mods_root):
     _write_csv_read_pack(employee_mods_root)
     from app.mod_sdk.employee_tool_registry import (
@@ -125,7 +147,7 @@ def test_tool_registry_uses_pack_id_as_tool_name(employee_mods_root):
     assert is_employee_tool("csv-full-read-employee")
 
 
-def test_execute_employee_task_local_csv(employee_mods_root, tmp_path):
+def test_untrusted_writable_employee_python_is_blocked(employee_mods_root, tmp_path):
     pack_id = "csv-full-read-employee"
     _write_csv_read_pack(employee_mods_root, pack_id)
     csv_file = tmp_path / "sample.csv"
@@ -138,9 +160,10 @@ def test_execute_employee_task_local_csv(employee_mods_root, tmp_path):
         {"file_path": str(csv_file)},
         workspace_root=str(tmp_path),
     )
-    assert result.get("success") is True
+    assert result.get("success") is False
     outputs = result.get("result", {}).get("outputs") or []
-    assert outputs and outputs[0].get("ok") is True
+    assert outputs and outputs[0].get("ok") is False
+    assert outputs[0].get("error_code") == "employee_python_pack_untrusted"
 
 
 def test_workflow_registry_includes_employee_tools(employee_mods_root):

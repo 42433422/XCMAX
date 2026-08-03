@@ -200,6 +200,7 @@ class TestAgenticLoopDoneBranch:
 
         # No tool was actually executed — the bad decision was skipped.
         assert result.node_results == []
+        assert result.success is False
 
     def test_skip_when_tool_id_empty(self):
         """Lines 189-190: empty tool_id → skip."""
@@ -230,6 +231,7 @@ class TestAgenticLoopDoneBranch:
             )
 
         assert result.node_results == []
+        assert result.success is False
 
     def test_max_steps_warning_logged(self):
         """Lines 231-232: step >= max_steps → warning is logged."""
@@ -260,7 +262,7 @@ class TestAgenticLoopDoneBranch:
         # The warning about max_steps should have been emitted.
         warning_calls = [str(c) for c in mock_logger.warning.call_args_list]
         assert any("最大步数" in w for w in warning_calls)
-        assert result.success is True
+        assert result.success is False
 
 
 # ---------------------------------------------------------------------------

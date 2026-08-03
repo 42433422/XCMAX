@@ -1,5 +1,6 @@
 """Tests for app.application.workflow.engine — coverage ramp."""
 
+import threading
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -104,6 +105,42 @@ class TestWorkflowEngineRunBatch:
         result = engine.run(plan)
         assert result.success is True
         assert result.node_results == []
+
+    def test_parallelizes_only_independent_low_risk_idempotent_nodes(self):
+        barrier = threading.Barrier(2, timeout=2)
+        thread_ids = []
+
+        def dispatch(tool_id, action, params):
+            thread_ids.append(threading.get_ident())
+            barrier.wait()
+            return {"success": True, "tool_id": tool_id}
+
+        engine = WorkflowEngine(tool_dispatcher=dispatch)
+        nodes = [
+            WorkflowNode(
+                node_id="n1",
+                tool_id="products",
+                action="query",
+                params={},
+                risk="low",
+                idempotent=True,
+            ),
+            WorkflowNode(
+                node_id="n2",
+                tool_id="customers",
+                action="query",
+                params={},
+                risk="low",
+                idempotent=True,
+            ),
+        ]
+        result = engine.run(
+            _simple_plan(nodes=nodes),
+            runtime_context={"parallel_execution": True, "max_parallel_workers": 2},
+        )
+        assert result.success is True
+        assert len(set(thread_ids)) == 2
+        assert result.final_context["parallel_batches"][0]["node_ids"] == ["n1", "n2"]
 
 
 # ========================= _run_node =====================================
@@ -273,7 +310,7 @@ class TestWorkflowEngineAgenticLoop:
                 agentic_loop=True,
                 tool_registry={"products": {"actions": {"query": {"risk": "low"}}}},
             )
-        assert result.success is True
+        assert result.success is False
         assert len(result.node_results) == 0
 
     def test_agentic_loop_execute_then_done(self):

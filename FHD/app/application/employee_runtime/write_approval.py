@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import uuid
 from typing import Any
 
@@ -20,10 +19,9 @@ def build_write_approval_gate(
     """返回 agent_loop gate：(tool_name, args) -> {ok, reason}。
 
     代码修改工具（``patch_file`` / ``write_file``）统一委托 autonomy_guard；
-    写库类业务工具（``import_excel_to_database`` / ``products_bulk_import``）需满足其一：
-    - 输入 ``approved_write=True`` / ``allow_write=True``
-    - 输入 ``write_token`` / ``approval_token`` 匹配 ``FHD_DB_WRITE_TOKEN``
-    - ApprovalGatedEngine 生成人工审批请求后，由审批工作台放行
+    写库类业务工具（``import_excel_to_database`` / ``products_bulk_import``）只接受
+    ApprovalGatedEngine 中已持久化的审批结果。模型参数和员工输入不能自我声明批准，
+    也不能携带服务端写令牌绕过审批。
     """
     payload = dict(input_data or {})
 
@@ -49,18 +47,6 @@ def build_write_approval_gate(
                 "pending_approval": decision.requires_confirmation,
                 "risk_decision": decision.to_dict(),
             }
-        if payload.get("approved_write") or payload.get("allow_write"):
-            return {"ok": True}
-        configured_token = str(os.environ.get("FHD_DB_WRITE_TOKEN") or "").strip()
-        supplied_token = str(
-            payload.get("write_token")
-            or payload.get("approval_token")
-            or (args or {}).get("write_token")
-            or (args or {}).get("approval_token")
-            or ""
-        ).strip()
-        if configured_token and supplied_token and supplied_token == configured_token:
-            return {"ok": True}
         try:
             from app.application.workflow.approval_gated_engine import ApprovalGatedEngine
             from app.application.workflow.engine import WorkflowEngine
@@ -92,7 +78,7 @@ def build_write_approval_gate(
             if decision.pending_approval:
                 return {
                     "ok": False,
-                    "reason": "写操作待审批（请在审批工作台通过后重试，或传 approved_write=True）",
+                    "reason": "写操作待审批（请在审批工作台通过后重试）",
                     "pending_approval": True,
                     "approval_request_ids": list(decision.approval_request_ids or []),
                 }
@@ -110,7 +96,7 @@ def build_write_approval_gate(
         return {
             "ok": False,
             "reason": (
-                f"写库工具 {name} 被审批门拦截：需 approved_write=True、allow_write=True 或审批通过"
+                f"写库工具 {name} 被审批门拦截：需在审批工作台通过"
             ),
         }
 

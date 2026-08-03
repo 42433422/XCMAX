@@ -1814,7 +1814,7 @@ class TestWorkflowEngineAgenticLoop:
                 agentic_loop=True,
                 tool_registry={"products": {"actions": {"query": {"risk": "low"}}}},
             )
-        assert result.success is True
+        assert result.success is False
         assert len(result.node_results) == 0
 
     def test_agentic_loop_execute_then_done(self):
@@ -1870,7 +1870,7 @@ class TestWorkflowEngineAgenticLoop:
                 agentic_loop=True,
                 tool_registry={"products": {"actions": {"query": {"risk": "low"}}}},
             )
-        assert result.success is True
+        assert result.success is False
         assert len(result.node_results) == 1
         assert result.node_results[0].success is False
 

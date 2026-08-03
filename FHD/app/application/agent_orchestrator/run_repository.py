@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import os
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -201,15 +202,42 @@ class SQLAlchemyAgentRunRepository:
 
 
 _agent_run_repository: AgentRunRepository | None = None
+_agent_run_repository_status: dict[str, str | bool] = {
+    "mode": "uninitialized",
+    "durable": False,
+    "degraded_reason": "",
+}
 
 
 def get_agent_run_repository() -> AgentRunRepository:
-    global _agent_run_repository
+    global _agent_run_repository, _agent_run_repository_status
     if _agent_run_repository is None:
         try:
             _agent_run_repository = SQLAlchemyAgentRunRepository()
             _agent_run_repository.list_recent(limit=1)
+            _agent_run_repository_status = {
+                "mode": "sqlalchemy",
+                "durable": True,
+                "degraded_reason": "",
+            }
         except RECOVERABLE_ERRORS as exc:
+            require_durable = os.environ.get(
+                "XCAGI_AGENT_RUN_REQUIRE_DURABLE", ""
+            ).strip().lower() in {"1", "true", "yes", "on"}
+            if require_durable:
+                raise RuntimeError(
+                    f"durable AgentRun repository is required but unavailable: {exc}"
+                ) from exc
             logger.warning("AgentRun SQL repository unavailable, using memory store: %s", exc)
             _agent_run_repository = InMemoryAgentRunRepository()
+            _agent_run_repository_status = {
+                "mode": "memory",
+                "durable": False,
+                "degraded_reason": str(exc),
+            }
     return _agent_run_repository
+
+
+def get_agent_run_repository_status() -> dict[str, str | bool]:
+    get_agent_run_repository()
+    return dict(_agent_run_repository_status)

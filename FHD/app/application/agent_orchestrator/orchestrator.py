@@ -15,6 +15,11 @@ from app.application.agent_orchestrator.repair_advisor import (
     llm_repair_attempt_limit,
     request_llm_repair,
 )
+from app.application.agent_orchestrator.run_control import (
+    clear_run_control,
+    get_run_control,
+    request_run_control,
+)
 from app.application.agent_orchestrator.run_models import (
     AgentRun,
     AgentStep,
@@ -26,6 +31,7 @@ from app.application.agent_orchestrator.run_models import (
 )
 from app.application.agent_orchestrator.run_repository import (
     AgentRunRepository,
+    SQLAlchemyAgentRunRepository,
     get_agent_run_repository,
 )
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
@@ -42,6 +48,14 @@ class AgentOrchestrator:
         tool_executor: AgentToolExecutor | None = None,
     ) -> None:
         self._repo = repository or get_agent_run_repository()
+        self._repository_status = {
+            "mode": (
+                "sqlalchemy"
+                if isinstance(self._repo, SQLAlchemyAgentRunRepository)
+                else "memory"
+            ),
+            "durable": isinstance(self._repo, SQLAlchemyAgentRunRepository),
+        }
         self._tool_executor = tool_executor or AgentToolExecutor()
 
     def start_run(
@@ -53,6 +67,7 @@ class AgentOrchestrator:
         auto_execute: bool = True,
     ) -> AgentRun:
         run = AgentRun(user_id=str(user_id or ""), message=str(message or ""))
+        run.metadata["persistence"] = dict(self._repository_status)
         run.metadata["runtime_context"] = dict(runtime_context or {})
         run.add_event("run.created", "Agent run 已创建")
         self._repo.save(run)
@@ -81,6 +96,7 @@ class AgentOrchestrator:
         auto_execute: bool = True,
     ) -> AgentRun:
         run = AgentRun(user_id=str(user_id or ""), message=str(message or ""))
+        run.metadata["persistence"] = dict(self._repository_status)
         run.metadata["runtime_context"] = dict(runtime_context or {})
         run.add_event("run.created", "Agent run 已创建")
         run.add_event(
@@ -174,6 +190,51 @@ class AgentOrchestrator:
 
     def list_events(self, run_id: str, *, after_event_id: str | None = None) -> list[RunEvent]:
         return self._repo.list_events(run_id, after_event_id=after_event_id)
+
+    def pause_run(self, run_id: str, *, requested_by: str = "") -> AgentRun | None:
+        run = self._repo.get(run_id)
+        if run is None:
+            return None
+        if run.status in {"completed", "failed", "cancelled"}:
+            return run
+        request_run_control(run_id, "pause")
+        run.status = "paused"
+        run.metadata["control"] = {"state": "paused", "requested_by": requested_by}
+        run.add_event("run.paused", "Agent run 已暂停", {"requested_by": requested_by})
+        return self._repo.save(run)
+
+    def cancel_run(self, run_id: str, *, requested_by: str = "") -> AgentRun | None:
+        run = self._repo.get(run_id)
+        if run is None:
+            return None
+        if run.status in {"completed", "failed", "cancelled"}:
+            return run
+        request_run_control(run_id, "cancel")
+        self._mark_controlled(run, "cancel", requested_by=requested_by)
+        return self._repo.save(run)
+
+    def resume_run(
+        self,
+        run_id: str,
+        *,
+        requested_by: str = "",
+        runtime_context: dict[str, Any] | None = None,
+    ) -> AgentRun | None:
+        run = self._repo.get(run_id)
+        if run is None:
+            return None
+        if run.status != "paused":
+            return run
+        clear_run_control(run_id)
+        context = dict(run.metadata.get("runtime_context") or {})
+        context.update(dict(runtime_context or {}))
+        run.metadata["runtime_context"] = context
+        run.metadata["control"] = {"state": "running", "requested_by": requested_by}
+        run.status = "running"
+        run.add_event("run.resumed", "Agent run 已恢复", {"requested_by": requested_by})
+        self._repo.save(run)
+        self._execute_ready_steps(run, runtime_context=context)
+        return self._repo.save(run)
 
     def _plan(self, run: AgentRun, *, runtime_context: dict[str, Any]) -> PlanGraph:
         from app.application.agent_orchestrator.multimodal_planner import (
@@ -284,6 +345,8 @@ class AgentOrchestrator:
         }
 
         for step in run.steps:
+            if self._apply_requested_control(run):
+                return
             if step.status == "completed":
                 continue
             if any(dep not in completed_node_ids for dep in step.depends_on):
@@ -326,6 +389,8 @@ class AgentOrchestrator:
                 self._execute_step(
                     run, step, runtime_context=runtime_context, node_outputs=node_outputs
                 )
+                if self._apply_requested_control(run):
+                    return
                 if step.status == "completed":
                     break
                 if self._prepare_repair_or_retry(run, step, runtime_context=runtime_context):
@@ -361,6 +426,47 @@ class AgentOrchestrator:
         }
         self._append_llm_summary_to_final_output(run)
         run.add_event("run.completed", "Agent run 执行完成", run.final_output)
+        clear_run_control(run.run_id)
+
+    def _apply_requested_control(self, run: AgentRun) -> bool:
+        control = get_run_control(run.run_id)
+        if control is None:
+            return False
+        self._mark_controlled(run, control)
+        self._repo.save(run)
+        return True
+
+    @staticmethod
+    def _mark_controlled(
+        run: AgentRun,
+        control: str,
+        *,
+        requested_by: str = "",
+    ) -> None:
+        if control == "cancel":
+            for step in run.steps:
+                if step.status in {"pending", "retrying", "waiting_user"}:
+                    step.status = "skipped"
+                    step.error = "run cancelled before execution"
+            run.status = "cancelled"
+            run.error = "run cancelled"
+            run.metadata["control"] = {"state": "cancelled", "requested_by": requested_by}
+            run.final_output = {
+                **dict(run.final_output or {}),
+                "cancelled": True,
+                "completed_step_ids": [
+                    step.step_id for step in run.steps if step.status == "completed"
+                ],
+            }
+            if not any(event.event_type == "run.cancelled" for event in run.events):
+                run.add_event(
+                    "run.cancelled", "Agent run 已取消", {"requested_by": requested_by}
+                )
+            return
+        run.status = "paused"
+        run.metadata["control"] = {"state": "paused", "requested_by": requested_by}
+        if not any(event.event_type == "run.paused" for event in run.events):
+            run.add_event("run.paused", "Agent run 已暂停", {"requested_by": requested_by})
 
     @staticmethod
     def _can_auto_execute(step: AgentStep) -> bool:

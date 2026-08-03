@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.middleware.csrf import CSRFMiddleware
+from app.security.mobile_jwt import issue_mobile_tokens
 
 
 @pytest.fixture(autouse=True)
@@ -102,6 +103,18 @@ def test_mutating_matching_csrf_allowed(client):
     )
     assert r.status_code == 200
     assert r.json() == {"success": True, "created": True}
+
+
+def test_unverified_bearer_does_not_bypass_csrf(client):
+    r = client.post("/api/items", headers={"Authorization": "Bearer attacker-controlled"})
+    assert r.status_code == 403
+
+
+def test_verified_mobile_access_bearer_bypasses_csrf(client, monkeypatch):
+    monkeypatch.setenv("SECRET_KEY", "csrf-test-secret-at-least-32-bytes")
+    token = issue_mobile_tokens(user_id=7, session_id="sid-7")["access_token"]
+    r = client.post("/api/items", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200
 
 
 def test_login_exempt_by_default(client):
