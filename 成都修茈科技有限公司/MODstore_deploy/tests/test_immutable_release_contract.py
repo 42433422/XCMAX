@@ -68,6 +68,8 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert "MODSTORE_RUNTIME_DIR=%s" in script
     assert "MODSTORE_REPO_ROOT=%s" in script
     assert "XCMAX_MONOREPO_ROOT=%s" in script
+    assert "MODSTORE_CAPABILITY_PROPOSAL_REPO=%s" in script
+    assert 'GITHUB_REPOSITORY_SLUG="${XCMAX_GITHUB_REPOSITORY:-}"' in script
     assert "JAVA_PAYMENT_SERVICE_URL=http://127.0.0.1:8080" in script
     assert '"$RUNTIME_DIR" "$CURRENT_LINK" "$CURRENT_LINK"' in script
     assert "verify_customer_value_reconciler" in script
@@ -210,6 +212,8 @@ def test_production_workflow_deploys_only_successful_tested_main_sha() -> None:
         assert "workflow_run.conclusion == 'success'" in deploy["if"]
         rendered = str(deploy)
         assert "TARGET_SHA" in rendered
+        assert "REPOSITORY_SLUG" in rendered
+        assert "XCMAX_GITHUB_REPOSITORY" in rendered
         assert "xcmax-immutable-release.sh" in rendered
         assert "modstore-deployment-correlation" in rendered
         assert "actions/upload-artifact@v4" in rendered
