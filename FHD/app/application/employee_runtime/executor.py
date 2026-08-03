@@ -217,7 +217,9 @@ def _action_vendor_convert(
     ):
         vendor_payload["user_query"] = payload["user_request"]
     if is_generate:
-        src = src or (workspace / ".xcagi" / "employee-inputs" / f"{employee_id}-{uuid.uuid4().hex}.json")
+        src = src or (
+            workspace / ".xcagi" / "employee-inputs" / f"{employee_id}-{uuid.uuid4().hex}.json"
+        )
         if not src.is_file() and payload.get("user_request"):
             payload_path = src
             payload_path.parent.mkdir(parents=True, exist_ok=True)
