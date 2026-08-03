@@ -172,10 +172,17 @@ build_one_sku() {
     x86_64) artifact_arch="x64" ;;
     *) artifact_arch="$(uname -m)" ;;
   esac
+  local dmg_volume_name="XCAGI ${label}"
+  # Local acceptance machines can have a previous release DMG still mounted.
+  # Keep the public release label stable, while allowing an isolated candidate
+  # to opt into a unique volume name without altering the artifact name.
+  if [ -n "${XCAGI_DMG_VOLUME_SUFFIX:-}" ]; then
+    dmg_volume_name="${dmg_volume_name} ${XCAGI_DMG_VOLUME_SUFFIX}"
+  fi
   scripts/package/create-mac-dmg.sh \
     "${app_path}" \
     "${package_stage}/XCAGI-${label}-${VERSION}-mac-${artifact_arch}.dmg" \
-    "XCAGI ${label}"
+    "${dmg_volume_name}"
   # Publish only sealed archive artifacts. A loose .app copied back into this
   # Desktop/FileProvider checkout receives com.apple.FinderInfo again almost
   # immediately, which makes codesign reject that copy even though the ZIP and
