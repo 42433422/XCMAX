@@ -408,6 +408,15 @@ const ensureSidebarExpandedForTutorial = () => {
 
 const scheduleSidebarAutoCollapse = () => {
   clearSidebarCollapseTimer()
+  // Desktop navigation is the primary way to reach business functions.  It
+  // must remain available after the app has settled; hiding it on an idle
+  // timer makes the shell look incomplete and forces users to discover a
+  // 16px hover target.  Keep the legacy web behavior while disabling that
+  // timer inside the installed Electron desktop shell.
+  if (document.documentElement.classList.contains('xcagi-electron')) {
+    sidebarCollapsed.value = false
+    return
+  }
   if (isAnyTutorialActive.value) return
   if (!isSidebarFeatureEnabled.value || sidebarCollapsed.value) return
   sidebarCollapseTimer = window.setTimeout(() => {
