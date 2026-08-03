@@ -153,7 +153,7 @@ def is_employee_tool(name: str) -> bool:
     return resolve_tool_to_pack_id(name) is not None
 
 
-def _office_output_paths(result: dict[str, Any]) -> list[str]:
+def _office_output_paths(pack_id: str, result: dict[str, Any]) -> list[str]:
     """Extract direct-runtime artifact paths from a completed office employee.
 
     The ten built-in document employees are local file workers.  For them a
@@ -167,10 +167,14 @@ def _office_output_paths(result: dict[str, Any]) -> list[str]:
 
     def visit(value: Any) -> None:
         if isinstance(value, dict):
-            raw = str(value.get("output_path") or "").strip()
-            if raw and raw not in paths:
-                paths.append(raw)
-            for nested in value.values():
+            for key, nested in value.items():
+                # PDF generation returns a JSON intermediary in ``output_path``
+                # and the promised file in ``pdf_output_path``.  Keep both
+                # candidates until the pack-specific contract below selects
+                # the actual deliverable.
+                raw = str(nested or "").strip() if key.endswith("output_path") else ""
+                if raw and raw not in paths:
+                    paths.append(raw)
                 visit(nested)
         elif isinstance(value, list):
             for nested in value:
@@ -181,6 +185,20 @@ def _office_output_paths(result: dict[str, Any]) -> list[str]:
     # post-action result tree, never the request arguments, so a caller cannot
     # spoof completion with a desired path.
     visit(runtime.get("outputs"))
+
+    # Generation succeeds only when the artifact declared by that worker
+    # exists.  In particular, do not let PDF's intermediate parsed JSON stand
+    # in for the generated PDF returned to the user.
+    expected_suffixes = {
+        "word-generate-employee": ".docx",
+        "excel-generate-employee": ".xlsx",
+        "csv-generate-employee": ".csv",
+        "pdf-generate-employee": ".pdf",
+        "ppt-generate-employee": ".pptx",
+    }
+    suffix = expected_suffixes.get(pack_id)
+    if suffix:
+        return [raw for raw in paths if Path(raw).suffix.lower() == suffix]
     return paths
 
 
@@ -198,7 +216,7 @@ def _verify_office_artifact(pack_id: str, result: dict[str, Any]) -> dict[str, A
     if result.get("success") is not True:
         return {"verified": False, "reason": "员工运行未成功", "paths": []}
 
-    paths = _office_output_paths(result)
+    paths = _office_output_paths(pack_id, result)
     if not paths:
         return {"verified": False, "reason": "员工未返回输出文件", "paths": []}
     invalid: list[str] = []

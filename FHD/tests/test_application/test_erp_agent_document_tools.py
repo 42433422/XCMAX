@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -59,6 +60,8 @@ def test_word_generator_writes_an_actual_document_from_a_chat_request(
     )
 
     assert result["success"] is True
+    assert result["artifact_postcondition"]["verified"] is True
+    assert Path(result["artifact_postcondition"]["paths"][0]).suffix == ".docx"
     generated = list((tmp_path / "outputs").glob("*.docx"))
     assert generated and generated[0].stat().st_size > 0
     read_result = json.loads(
@@ -92,6 +95,8 @@ def test_other_document_generators_write_files_without_modstore_source(
     )
 
     assert result["success"] is True
+    assert result["artifact_postcondition"]["verified"] is True
+    assert Path(result["artifact_postcondition"]["paths"][0]).suffix == suffix
     generated = list((tmp_path / "outputs").glob(f"*{suffix}"))
     assert generated and generated[0].stat().st_size > 0
     read_result = json.loads(
