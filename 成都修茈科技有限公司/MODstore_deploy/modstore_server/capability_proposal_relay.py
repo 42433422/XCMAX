@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -101,6 +102,24 @@ def _repo_slug() -> str:
     except (OSError, subprocess.TimeoutExpired):
         return ""
     return _parse_repo_slug(result.stdout) if result.returncode == 0 else ""
+
+
+def _github_token() -> str:
+    """Return an in-process GitHub credential without exposing it to argv."""
+
+    for name in ("MODSTORE_GITHUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN"):
+        token = str(os.environ.get(name) or "").strip()
+        if token:
+            return token
+    return ""
+
+
+def _github_transport(token: str) -> str:
+    """Prefer the protected environment credential; CLI is a legacy fallback."""
+
+    if token:
+        return "token"
+    return "gh_cli" if shutil.which("gh") else ""
 
 
 def _read_receipts(path: Path) -> dict[str, dict[str, Any]]:
@@ -213,8 +232,21 @@ def run_capability_proposal_relay() -> dict[str, Any]:
         "results": [],
     }
     try:
-        if not script or not repo:
-            result.update(ok=False, status="configuration_blocked")
+        token = _github_token()
+        transport = _github_transport(token)
+        missing: list[str] = []
+        if not script:
+            missing.append("proposal_relay_script_unavailable")
+        if not repo:
+            missing.append("proposal_repository_unconfigured")
+        if not transport:
+            missing.append("github_credentials_unavailable")
+        if missing:
+            result.update(
+                ok=False,
+                status="configuration_blocked",
+                configuration_errors=missing,
+            )
             return result
         max_issues = max(1, _env_int("MODSTORE_CAPABILITY_PROPOSAL_MAX_ISSUES", 5))
         timeout = max(30, _env_int("MODSTORE_CAPABILITY_PROPOSAL_TIMEOUT_SECONDS", 180))
@@ -223,18 +255,25 @@ def run_capability_proposal_relay() -> dict[str, Any]:
             before = _read_receipts(marker)
             child_env = os.environ.copy()
             child_env["CAPABILITY_PROPOSAL_DIR"] = str(directory)
+            command = [
+                sys.executable,
+                str(script),
+                "--repo",
+                repo,
+                "--max-issues",
+                str(max_issues),
+            ]
+            if transport == "token":
+                # capability_proposal_to_issue reads GITHUB_TOKEN from its
+                # environment.  Passing it as --token would expose it through
+                # process inspection and scheduler diagnostics.
+                child_env["GITHUB_TOKEN"] = token
+            else:
+                command.append("--gh-cli")
+            command.append("--apply")
             try:
                 completed = subprocess.run(
-                    [
-                        sys.executable,
-                        str(script),
-                        "--repo",
-                        repo,
-                        "--max-issues",
-                        str(max_issues),
-                        "--gh-cli",
-                        "--apply",
-                    ],
+                    command,
                     capture_output=True,
                     text=True,
                     timeout=timeout,

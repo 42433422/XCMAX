@@ -17,6 +17,10 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from modstore_server import autonomy_scheduler, payment_orders
 from modstore_server.models import WorkflowTrigger, get_session_factory
+from modstore_server.scheduler_extensions import register_extensions as _register_extensions
+from modstore_server.scheduler_timing import (
+    cleanup_misfire_grace_time as _cleanup_misfire_grace_time,
+)
 from modstore_server.workflow_event_runner import run_workflow_for_trigger
 
 logger = logging.getLogger(__name__)
@@ -87,14 +91,12 @@ def _business_misfire_grace_time() -> int:
     return max(60, _env_int("MODSTORE_SCHEDULER_BUSINESS_MISFIRE_GRACE_SECONDS", 3600))
 
 
-def _cleanup_misfire_grace_time() -> int:
-    return max(60, _env_int("MODSTORE_SCHEDULER_CLEANUP_MISFIRE_GRACE_SECONDS", 4 * 3600))
-
-
 def required_scheduler_job_ids() -> tuple[str, ...]:
     required = set(_REQUIRED_CORE_JOB_IDS) | set(autonomy_scheduler.REQUIRED_JOB_IDS)
     if _env_bool("MODSTORE_EMPLOYEE_BURN_IN_SCHEDULER_ENABLED", True):
         required.add("duty_workforce_burnin")
+    if _env_bool("MODSTORE_CS_WEBHOOK_OUTBOX_RETRY_ENABLED", True):
+        required.add("cs_webhook_outbox_retry")
     if _env_bool("MODSTORE_BOSS_IM_REPORT_ENABLED", True):
         required.add("boss_daily_im_report")
     if _env_bool("MODSTORE_LLM_AUTOPILOT_ENABLED", False):
@@ -1300,9 +1302,7 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
-    from modstore_server.capability_proposal_relay import register_capability_proposal_relay_job
-
-    register_capability_proposal_relay_job(_scheduler, track_job=_run_tracked_scheduler_job)
+    _register_extensions(_scheduler, track_job=_run_tracked_scheduler_job)
 
     def _employee_health_scan_loop() -> None:
         try:

@@ -14,6 +14,7 @@ ENV_DIR="${MODSTORE_ENV_DIR:-/etc/xcmax}"
 ENV_FILE="${MODSTORE_ENV_FILE:-${ENV_DIR}/modstore.env}"
 SCHEDULER_ENV_FILE="${MODSTORE_SCHEDULER_ENV_FILE:-${ENV_DIR}/modstore-scheduler.env}"
 TARGET_SHA="${XCMAX_TARGET_SHA:-${1:-}}"
+GITHUB_REPOSITORY_SLUG="${XCMAX_GITHUB_REPOSITORY:-}"
 SITE_SUBDIR="成都修茈科技有限公司"
 MODSTORE_SUBDIR="${SITE_SUBDIR}/MODstore_deploy"
 LOCK_FILE="${XCMAX_RELEASE_LOCK:-/run/lock/xcmax-immutable-release.lock}"
@@ -69,6 +70,10 @@ resolve_java_home() {
 [[ "$RUNTIME_DIR" == /* ]] || fail "MODSTORE_RUNTIME_DIR must be an absolute path"
 [[ "$RELEASES_TO_KEEP" =~ ^[0-9]+$ ]] && (( RELEASES_TO_KEEP >= 2 )) \
   || fail "XCMAX_RELEASES_TO_KEEP must be an integer greater than or equal to 2"
+if [[ -n "$GITHUB_REPOSITORY_SLUG" ]] \
+  && ! [[ "$GITHUB_REPOSITORY_SLUG" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+  fail "XCMAX_GITHUB_REPOSITORY must be an owner/repository slug when set"
+fi
 
 install -d -m 755 "$RELEASES_DIR"
 install -d -m 700 "$RUNTIME_DIR"
@@ -248,43 +253,6 @@ for raw in open(path, encoding="utf-8"):
 PY
 }
 
-upsert_protected_env_value() {
-  local destination="$1"
-  local key="$2"
-  local value="$3"
-  XCMAX_ENV_VALUE="$value" python3 - "$destination" "$key" <<'PY'
-import os
-import re
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-key = sys.argv[2]
-value = os.environ.get("XCMAX_ENV_VALUE", "")
-if not re.fullmatch(r"[A-Z][A-Z0-9_]*", key):
-    raise SystemExit("invalid protected environment key")
-if len(value) < 32 or "\n" in value or "\r" in value:
-    raise SystemExit(f"{key} must be a single-line secret of at least 32 characters")
-lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
-replacement = f"{key}={value}"
-out = []
-written = False
-for line in lines:
-    if line.split("=", 1)[0].strip() == key:
-        if not written:
-            out.append(replacement)
-            written = True
-        continue
-    out.append(line)
-if not written:
-    out.append(replacement)
-tmp = path.with_suffix(path.suffix + ".tmp")
-tmp.write_text("\n".join(out) + "\n", encoding="utf-8")
-os.chmod(tmp, 0o600)
-tmp.replace(path)
-PY
-}
-
 # The build imports the production app before promotion. Load only the required
 # secret from the protected environment so fail-closed startup validation is real
 # without sourcing arbitrary EnvironmentFile content into the deployment shell.
@@ -296,14 +264,13 @@ migrate_env_file "$SCHEDULER_ENV_FILE" \
   "$SOURCE_ROOT/$MODSTORE_SUBDIR/.env.scheduler" \
   "$SITE_LINK/MODstore_deploy/.env.scheduler" \
   || install -m 600 /dev/null "$SCHEDULER_ENV_FILE"
-if [[ -n "${MODSTORE_AUTO_PUBLISH_TOKEN:-}" ]]; then
-  upsert_protected_env_value \
-    "$ENV_FILE" MODSTORE_AUTO_PUBLISH_TOKEN "$MODSTORE_AUTO_PUBLISH_TOKEN"
-  log "provisioned protected MODstore auto-publish credential"
-fi
 BUILD_JWT_SECRET="$(read_env_value "$ENV_FILE" MODSTORE_JWT_SECRET)"
 [[ -n "$BUILD_JWT_SECRET" ]] || fail "protected production env is missing MODSTORE_JWT_SECRET"
 [[ ${#BUILD_JWT_SECRET} -ge 32 ]] || fail "protected production MODSTORE_JWT_SECRET is shorter than 32 characters"
+BUILD_AUTO_PUBLISH_TOKEN="$(read_env_value "$ENV_FILE" MODSTORE_AUTO_PUBLISH_TOKEN)"
+[[ -n "$BUILD_AUTO_PUBLISH_TOKEN" ]] || fail "protected production env is missing MODSTORE_AUTO_PUBLISH_TOKEN"
+[[ ${#BUILD_AUTO_PUBLISH_TOKEN} -ge 32 ]] || fail "protected production MODSTORE_AUTO_PUBLISH_TOKEN is shorter than 32 characters"
+unset BUILD_AUTO_PUBLISH_TOKEN
 
 PAYMENT_SERVICE_PRESENT=0
 PAYMENT_JAVA_BIN=/usr/bin/java
@@ -471,9 +438,9 @@ write_service_units() {
   if [[ -f "$release_manifest" ]]; then
     release_artifact_sha="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("artifact_sha256", ""))' "$release_manifest")"
   fi
-  printf 'MODSTORE_GIT_SHA=%s\nMODSTORE_EXPECTED_GIT_SHA=%s\nMODSTORE_DEPLOY_TIER=production\nMODSTORE_RELEASE_MANIFEST=%s/.xcmax-release.json\nMODSTORE_RELEASE_ARTIFACT_SHA256=%s\nMODSTORE_RUNTIME_DIR=%s\nMODSTORE_REPO_ROOT=%s\nXCMAX_MONOREPO_ROOT=%s\nJAVA_PAYMENT_SERVICE_URL=http://127.0.0.1:8080\n' \
+  printf 'MODSTORE_GIT_SHA=%s\nMODSTORE_EXPECTED_GIT_SHA=%s\nMODSTORE_DEPLOY_TIER=production\nMODSTORE_RELEASE_MANIFEST=%s/.xcmax-release.json\nMODSTORE_RELEASE_ARTIFACT_SHA256=%s\nMODSTORE_RUNTIME_DIR=%s\nMODSTORE_REPO_ROOT=%s\nXCMAX_MONOREPO_ROOT=%s\nMODSTORE_CAPABILITY_PROPOSAL_REPO=%s\nJAVA_PAYMENT_SERVICE_URL=http://127.0.0.1:8080\n' \
     "$TARGET_SHA" "$TARGET_SHA" "$CURRENT_LINK" "$release_artifact_sha" \
-    "$RUNTIME_DIR" "$CURRENT_LINK" "$CURRENT_LINK" > "${release_env}.tmp"
+    "$RUNTIME_DIR" "$CURRENT_LINK" "$CURRENT_LINK" "$GITHUB_REPOSITORY_SLUG" > "${release_env}.tmp"
   chmod 644 "${release_env}.tmp"
   mv -f "${release_env}.tmp" "$release_env"
 

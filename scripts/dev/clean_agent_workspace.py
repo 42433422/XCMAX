@@ -14,6 +14,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -31,6 +32,17 @@ RUNTIME_LOG_TAIL_BYTES = int(
     os.environ.get("XCMAX_CLEAN_RUNTIME_LOG_TAIL_BYTES") or 4 * 1024 * 1024
 )
 RUNTIME_BACKUP_KEEP = int(os.environ.get("XCMAX_CLEAN_RUNTIME_BACKUP_KEEP") or 3)
+TMP_WORKSPACE_ROOT = Path(os.environ.get("XCMAX_CLEAN_TMP_ROOT") or "/private/tmp")
+TMP_WORKSPACE_MAX_AGE_SEC = int(
+    os.environ.get("XCMAX_CLEAN_TMP_WORKSPACE_MAX_AGE_SEC") or 7 * 24 * 3600
+)
+TMP_WORKSPACE_PREFIXES = tuple(
+    item.strip()
+    for item in (
+        os.environ.get("XCMAX_CLEAN_TMP_WORKSPACE_PREFIXES") or "xcmax-,xcagi-"
+    ).split(",")
+    if item.strip()
+)
 AGENT_RUNTIME_ROOT = Path.home() / "XCMAX-runtime" / "para-main-agent"
 FHD_DESKTOP_LOG_ROOT = Path(
     os.environ.get("XCMAX_CLEAN_FHD_DESKTOP_LOG_ROOT")
@@ -97,6 +109,118 @@ def _clean_aged_dir(path: Path, max_age: int, removed: list[str]) -> None:
         if age < max_age:
             continue
         _rm_tree(item, removed)
+
+
+def _registered_git_worktrees(errors: list[str]) -> set[Path]:
+    """Return all worktrees registered by this checkout, resolving stale entries safely."""
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(ROOT), "worktree", "list", "--porcelain"],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        errors.append(f"git_worktree_list: {exc}")
+        return set()
+    if proc.returncode:
+        errors.append(f"git_worktree_list: {proc.stderr.strip() or proc.returncode}")
+        return set()
+    return {
+        Path(line.removeprefix("worktree ")).resolve()
+        for line in proc.stdout.splitlines()
+        if line.startswith("worktree ")
+    }
+
+
+def _git_workspace_state(path: Path) -> str:
+    """Classify a directory without ever treating an unknown directory as disposable."""
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(path), "status", "--porcelain"],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "unknown"
+    if proc.returncode:
+        return "unknown"
+    return "dirty" if proc.stdout.strip() else "clean"
+
+
+def _candidate_git_roots(path: Path) -> list[Path]:
+    """Locate the common task layouts without recursively walking arbitrary temp files."""
+    candidates = [path, path / "repo", path / "worktree"]
+    return [
+        candidate
+        for candidate in candidates
+        if _git_workspace_state(candidate) != "unknown"
+    ]
+
+
+def _has_registered_worktree(path: Path, registered: set[Path]) -> bool:
+    resolved = path.resolve()
+    return any(
+        worktree == resolved or resolved in worktree.parents for worktree in registered
+    )
+
+
+def _clean_unregistered_temp_workspaces(
+    temp_root: Path,
+    *,
+    max_age: int,
+    prefixes: tuple[str, ...],
+    removed: list[str],
+    kept: list[str],
+    errors: list[str],
+    registered_worktrees: set[Path] | None = None,
+) -> None:
+    """Remove only old, clean, unregistered XCMAX task sandboxes.
+
+    A task sandbox is retained when it is an active Git worktree, has uncommitted
+    changes, is too recent, or cannot be proven to be a Git workspace.  This
+    intentionally favours preserving work over reclaiming disk space.
+    """
+    if not temp_root.is_dir():
+        return
+    registered = (
+        registered_worktrees
+        if registered_worktrees is not None
+        else _registered_git_worktrees(errors)
+    )
+    now = time.time()
+    for candidate in temp_root.iterdir():
+        if (
+            not candidate.is_dir()
+            or candidate.is_symlink()
+            or not candidate.name.startswith(prefixes)
+        ):
+            continue
+        try:
+            age = now - candidate.stat().st_mtime
+        except OSError as exc:
+            errors.append(f"{candidate}: {exc}")
+            continue
+        if _has_registered_worktree(candidate, registered):
+            kept.append(f"{candidate}: registered_git_worktree")
+            continue
+        if age < max_age:
+            kept.append(f"{candidate}: retention_window")
+            continue
+        git_roots = _candidate_git_roots(candidate)
+        if len(git_roots) != 1:
+            kept.append(f"{candidate}: unproven_temp_workspace")
+            continue
+        if _git_workspace_state(git_roots[0]) != "clean":
+            kept.append(f"{candidate}: uncommitted_changes")
+            continue
+        try:
+            _rm_tree(candidate, removed)
+        except OSError as exc:
+            errors.append(f"{candidate}: {exc}")
 
 
 def _clean_agent_runtime_workspaces(
@@ -198,8 +322,6 @@ def _prune_agent_runtime_backups(
 
 def _is_git_tracked(path: Path) -> bool:
     try:
-        import subprocess
-
         rel = str(path.relative_to(ROOT))
         proc = subprocess.run(
             ["git", "-C", str(ROOT), "ls-files", "--error-unmatch", "--", rel],
@@ -274,6 +396,14 @@ def main() -> int:
         AGENT_RUNTIME_ROOT,
         keep=RUNTIME_BACKUP_KEEP,
         removed=removed,
+        errors=errors,
+    )
+    _clean_unregistered_temp_workspaces(
+        TMP_WORKSPACE_ROOT,
+        max_age=TMP_WORKSPACE_MAX_AGE_SEC,
+        prefixes=TMP_WORKSPACE_PREFIXES,
+        removed=removed,
+        kept=kept,
         errors=errors,
     )
 
