@@ -14,6 +14,7 @@ ENV_DIR="${MODSTORE_ENV_DIR:-/etc/xcmax}"
 ENV_FILE="${MODSTORE_ENV_FILE:-${ENV_DIR}/modstore.env}"
 SCHEDULER_ENV_FILE="${MODSTORE_SCHEDULER_ENV_FILE:-${ENV_DIR}/modstore-scheduler.env}"
 TARGET_SHA="${XCMAX_TARGET_SHA:-${1:-}}"
+GITHUB_REPOSITORY_SLUG="${XCMAX_GITHUB_REPOSITORY:-}"
 SITE_SUBDIR="成都修茈科技有限公司"
 MODSTORE_SUBDIR="${SITE_SUBDIR}/MODstore_deploy"
 LOCK_FILE="${XCMAX_RELEASE_LOCK:-/run/lock/xcmax-immutable-release.lock}"
@@ -69,6 +70,10 @@ resolve_java_home() {
 [[ "$RUNTIME_DIR" == /* ]] || fail "MODSTORE_RUNTIME_DIR must be an absolute path"
 [[ "$RELEASES_TO_KEEP" =~ ^[0-9]+$ ]] && (( RELEASES_TO_KEEP >= 2 )) \
   || fail "XCMAX_RELEASES_TO_KEEP must be an integer greater than or equal to 2"
+if [[ -n "$GITHUB_REPOSITORY_SLUG" ]] \
+  && ! [[ "$GITHUB_REPOSITORY_SLUG" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+  fail "XCMAX_GITHUB_REPOSITORY must be an owner/repository slug when set"
+fi
 
 install -d -m 755 "$RELEASES_DIR"
 install -d -m 700 "$RUNTIME_DIR"
@@ -433,9 +438,9 @@ write_service_units() {
   if [[ -f "$release_manifest" ]]; then
     release_artifact_sha="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("artifact_sha256", ""))' "$release_manifest")"
   fi
-  printf 'MODSTORE_GIT_SHA=%s\nMODSTORE_EXPECTED_GIT_SHA=%s\nMODSTORE_DEPLOY_TIER=production\nMODSTORE_RELEASE_MANIFEST=%s/.xcmax-release.json\nMODSTORE_RELEASE_ARTIFACT_SHA256=%s\nMODSTORE_RUNTIME_DIR=%s\nMODSTORE_REPO_ROOT=%s\nXCMAX_MONOREPO_ROOT=%s\nJAVA_PAYMENT_SERVICE_URL=http://127.0.0.1:8080\n' \
+  printf 'MODSTORE_GIT_SHA=%s\nMODSTORE_EXPECTED_GIT_SHA=%s\nMODSTORE_DEPLOY_TIER=production\nMODSTORE_RELEASE_MANIFEST=%s/.xcmax-release.json\nMODSTORE_RELEASE_ARTIFACT_SHA256=%s\nMODSTORE_RUNTIME_DIR=%s\nMODSTORE_REPO_ROOT=%s\nXCMAX_MONOREPO_ROOT=%s\nMODSTORE_CAPABILITY_PROPOSAL_REPO=%s\nJAVA_PAYMENT_SERVICE_URL=http://127.0.0.1:8080\n' \
     "$TARGET_SHA" "$TARGET_SHA" "$CURRENT_LINK" "$release_artifact_sha" \
-    "$RUNTIME_DIR" "$CURRENT_LINK" "$CURRENT_LINK" > "${release_env}.tmp"
+    "$RUNTIME_DIR" "$CURRENT_LINK" "$CURRENT_LINK" "$GITHUB_REPOSITORY_SLUG" > "${release_env}.tmp"
   chmod 644 "${release_env}.tmp"
   mv -f "${release_env}.tmp" "$release_env"
 
