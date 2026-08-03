@@ -893,6 +893,18 @@ def get_workflow_tool_registry() -> list[dict[str, Any]]:
     ):
         return _workflow_tool_registry_cache
     reg = _base_registry()
+    # Every user-facing ERP capability is registered once in
+    # config/risk_actions.registry.json.  Project that SSOT into a single,
+    # approval-gated model tool instead of maintaining a second, incomplete
+    # hard-coded list (which previously hid printing and other product areas).
+    try:
+        from app.application.tools.registered_capabilities import (
+            build_registered_capability_tool_definition,
+        )
+
+        reg.append(build_registered_capability_tool_definition())
+    except RECOVERABLE_ERRORS:
+        logger.debug("registered ERP capability tool unavailable", exc_info=True)
     try:
         from app.mod_sdk.employee_tool_registry import build_employee_pack_tool_definitions
 
@@ -938,6 +950,10 @@ def execute_workflow_tool(
             args = json.loads(args or "{}")
         except RECOVERABLE_ERRORS:
             args = {}
+    if name == "execute_erp_capability":
+        from app.application.tools.registered_capabilities import execute_registered_capability
+
+        return execute_registered_capability(args, workspace_root=workspace_root)
     try:
         from app.mod_sdk.employee_tool_registry import execute_employee_tool, is_employee_tool
 
