@@ -23,6 +23,7 @@ import { ADMIN_OPERATOR_HOME_ROUTE } from '@/constants/adminOperatorNav';
 import type { AccountKind } from '@/api/auth';
 import { loadLoginPreferences, saveLoginPreferences } from '@/utils/loginPreferences';
 import { clearHostPackSkippedSession } from '@/utils/hostPackOnboardingGate';
+import { hasRecentEnterpriseSessionHint } from '@/utils/authSessionCache';
 import OtpCells from '@/components/OtpCells.vue';
 
 const route = useRoute();
@@ -150,6 +151,18 @@ async function tryAutoLogin() {
 
 let loginViewActive = true;
 
+function canResumeRecentDesktopSession(): boolean {
+  const gateError = route.query.error;
+  return (
+    isDesktopShell() &&
+    isEnterpriseEdition.value &&
+    !route.query.oidc &&
+    !route.query.oidc_error &&
+    !(typeof gateError === 'string' && gateError.trim()) &&
+    hasRecentEnterpriseSessionHint()
+  );
+}
+
 onMounted(async () => {
   applySavedLoginPreferences();
   const sku = await fetchProductSku();
@@ -157,6 +170,13 @@ onMounted(async () => {
   productSku.value = sku;
   if (typeof document !== 'undefined') {
     document.title = loginPageTitle(productSku.value);
+  }
+  // A recent official session may render the desktop shell immediately.  The
+  // protected-route guard starts a fresh official validation in the background
+  // and sends invalid sessions back here; this does not authorize any API.
+  if (canResumeRecentDesktopSession()) {
+    await router.replace(redirectPath.value);
+    return;
   }
   try {
     const st = await authApi.getOidcStatus();
