@@ -88,6 +88,9 @@ for module in [
 hiddenimports.extend(
     [
         "app.fastapi_routes.platform_shell_routes",
+        # Office employee vendor packages are loaded at runtime from mods, so
+        # PyInstaller cannot discover this bridge from static imports alone.
+        "app.application.office_plaintext_generate",
         "app.mod_sdk.deliverable_status",
         "app.mod_sdk.desktop_deliverable",
         "app.mod_sdk.platform_shell",
@@ -122,10 +125,12 @@ for module in ["ctranslate2", "av"]:
     except Exception:
         pass
 
-# Official PDF employees must remain usable in the commercial desktop package.
-# pypdf and ReportLab are permissively licensed; do not replace them with the
-# AGPL PyMuPDF/fitz runtime unless a separate commercial license is recorded.
-for module in ["pypdf", "reportlab"]:
+# Official office employees are dynamically loaded from the bundled MOD pack.
+# Explicitly collect their runtimes so a frozen app has the same Word, Excel,
+# CSV, PDF and presentation capabilities as the checked source tree. pypdf and
+# ReportLab are permissively licensed; do not replace them with the AGPL
+# PyMuPDF/fitz runtime unless a separate commercial license is recorded.
+for module in ["docx", "openpyxl", "pptx", "xlsxwriter", "pypdf", "reportlab"]:
     try:
         hiddenimports.extend(collect_submodules(module))
     except Exception:

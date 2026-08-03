@@ -289,11 +289,11 @@ class TestPlannerToolsMaxWorkers:
 # ---------------------------------------------------------------------------
 class TestResetPlannerToolDedupState:
     def test_clears_dedup_set(self):
-        from app.legacy.chat.legacy_chat_adapter import _TOOL_DEDUP
+        from app.legacy.chat.legacy_chat_adapter import _tool_dedup_state
 
-        _TOOL_DEDUP.add("test_key")
+        _tool_dedup_state().add("test_key")
         reset_planner_tool_dedup_state()
-        assert len(_TOOL_DEDUP) == 0
+        assert len(_tool_dedup_state()) == 0
 
 
 # ---------------------------------------------------------------------------

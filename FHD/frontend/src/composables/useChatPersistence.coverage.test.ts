@@ -1601,6 +1601,34 @@ describe('useChatPersistence — coverage ramp', () => {
         expect(deps.sortTaskList).toHaveBeenCalled()
       })
 
+      it('drops legacy agent rows that have no tool execution evidence', () => {
+        const legacyAgent = {
+          ...makeTaskItem('agent_legacy'),
+          type: 'agent_run',
+          source: 'agent' as const,
+          payload: { agentEvents: [{ event_type: 'run.completed' }] },
+        }
+        const verifiedAgent = {
+          ...makeTaskItem('agent_verified'),
+          type: 'agent_run',
+          source: 'agent' as const,
+          payload: { agentEvents: [{ event_type: 'tool.completed' }, { event_type: 'run.completed' }] },
+        }
+        sessionStorage.setItem(CHAT_TASK_PANEL_STORAGE_PREFIX + 's1', JSON.stringify({
+          taskList: [legacyAgent, verifiedAgent],
+          activeTaskId: 'agent_legacy',
+          expandedTaskIds: ['agent_legacy', 'agent_verified'],
+          taskFilter: 'all',
+          currentTask: null,
+          savedAt: 1,
+        }))
+        const deps = makeDeps()
+        const { applyPersistedTaskPanelStateForSession } = useChatTaskPanelPersistence(deps)
+        applyPersistedTaskPanelStateForSession('s1')
+        expect(deps.taskList.value.map((task) => task.id)).toEqual(['agent_verified'])
+        expect(deps.activeTaskId.value).toBe('agent_verified')
+      })
+
       it('truncates taskList to TASK_HISTORY_LIMIT when applying', () => {
         const longList = Array.from({ length: TASK_HISTORY_LIMIT + 5 }, (_, i) =>
           makeTaskItem(`t${i}`),

@@ -44,6 +44,10 @@ import { backendCrashPolicy } from './autonomy/policies/backend-crash.policy'
 import { degradedRemediationPolicy } from './autonomy/policies/degraded-remediation.policy'
 import { updateRollbackPolicy } from './autonomy/policies/update-rollback.policy'
 import { createForceUpgradeHandler, initializeLocalCrashReporting } from './desktop-resilience'
+import { readJsonTextFile, sanitizeBackendProxyEnv } from './backend-env-utils'
+import { desktopWindowOpenAction, isBenignDesktopLoadAbort, isTrustedDesktopOrigin } from './desktop-navigation'
+import { assertSelfUpdateInstallSupported, getDesktopInstallIdentity } from './desktop-install-update'
+import { warmPersistedDesktopSessionCookieStore } from './session-cookie-warmup'
 
 const APP_NAME = 'XCAGI'
 const KELLAI_BUNDLE_ID = 'com.kellai.desktop'
@@ -317,36 +321,6 @@ export function readPackagedProductSku(): ProductSku | null {
   return null
 }
 
-export function readJsonTextFile(filePath: string): string {
-  const buffer = fs.readFileSync(filePath)
-  let text: string
-  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
-    text = buffer.toString('utf16le')
-  } else {
-    text = buffer.toString('utf8')
-  }
-  return text.replace(/^\uFEFF/, '')
-}
-
-function sanitizeBackendProxyEnv(
-  env: NodeJS.ProcessEnv | Record<string, string | undefined>
-): Record<string, string | undefined> {
-  const next: Record<string, string | undefined> = { ...env }
-  for (const key of ['ALL_PROXY', 'all_proxy'] as const) {
-    const raw = String(next[key] || '').trim().toLowerCase()
-    if (
-      raw.startsWith('socks://') ||
-      raw.startsWith('socks4://') ||
-      raw.startsWith('socks5://') ||
-      raw.startsWith('socks5h://')
-    ) {
-      // Prefer HTTP_PROXY for backend httpx; SOCKS needs optional socksio.
-      delete next[key]
-    }
-  }
-  return next
-}
-
 export function backendEditionEnv(): Record<string, string> {
   const sku = readPackagedProductSku()
   if (!sku) {
@@ -384,6 +358,10 @@ let tray: Tray | null = null
 let restartCount = 0
 let backendShutdownComplete = false
 let backendShutdownPromise: Promise<void> | null = null
+// A one-shot, renderer-visible entry hint derived only from an existing local
+// Chromium cookie. It never authorizes an API request or replaces official
+// validation; consuming it avoids replaying a saved password after an update.
+let desktopBootstrapSessionHintAvailable = false
 
 // 自治控制器（与现有更新观察期/backend 重启逻辑共存，零回归；阶段 1 接入）
 let autonomyController: AutonomyController | null = null
@@ -1042,25 +1020,6 @@ function tagDesktopWebContents(win: BrowserWindow): void {
     .catch(() => { })
 }
 
-export function isTrustedDesktopOrigin(rawUrl: string | undefined, expectedPort?: number): boolean {
-  if (!rawUrl) return false
-  try {
-    const parsed = new URL(rawUrl)
-    const hostAllowed = parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost'
-    const port = expectedPort ?? DEFAULT_PORT
-    return parsed.protocol === 'http:' && hostAllowed && parsed.port === String(port)
-  } catch {
-    return false
-  }
-}
-
-export function desktopWindowOpenAction(
-  rawUrl: string,
-  expectedPort = DEFAULT_PORT,
-): 'allow' | 'deny' {
-  return isTrustedDesktopOrigin(rawUrl, expectedPort) ? 'allow' : 'deny'
-}
-
 function configureDesktopMediaPermissions(): void {
   const ses = session.defaultSession
   ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
@@ -1071,7 +1030,7 @@ function configureDesktopMediaPermissions(): void {
       (mediaTypes.length === 0 || mediaTypes.includes('audio') || mediaTypes.includes('microphone'))
     const requestUrl =
       (details as { requestingUrl?: string } | undefined)?.requestingUrl || webContents.getURL()
-    callback(wantsAudio && isTrustedDesktopOrigin(requestUrl))
+    callback(wantsAudio && isTrustedDesktopOrigin(requestUrl, DEFAULT_PORT))
   })
   ses.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
     const mediaTypes = ((details as { mediaTypes?: string[] } | undefined)?.mediaTypes || [])
@@ -1080,7 +1039,7 @@ function configureDesktopMediaPermissions(): void {
       permission === 'media' &&
       (mediaTypes.length === 0 || mediaTypes.includes('audio') || mediaTypes.includes('microphone'))
     const origin = requestingOrigin || webContents?.getURL() || ''
-    return wantsAudio && isTrustedDesktopOrigin(origin)
+    return wantsAudio && isTrustedDesktopOrigin(origin, DEFAULT_PORT)
   })
 }
 
@@ -1198,7 +1157,7 @@ async function createWindow(): Promise<void> {
     }
   })
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    const action = desktopWindowOpenAction(url)
+    const action = desktopWindowOpenAction(url, DEFAULT_PORT)
     if (action === 'deny') {
       console.warn(`[xcagi-desktop] blocked window open to ${url}`)
     }
@@ -1256,6 +1215,11 @@ async function createWindow(): Promise<void> {
       }
       mainWindow.focus()
     } catch (error) {
+      const currentUrl = mainWindow?.webContents.getURL()
+      if (isBenignDesktopLoadAbort(error, currentUrl, DEFAULT_PORT)) {
+        console.warn('[xcagi-desktop] ignored transient local-page navigation abort', error)
+        return
+      }
       console.error('[xcagi-desktop] load main application failed', error)
       throw error
     }
@@ -1282,19 +1246,29 @@ async function createWindow(): Promise<void> {
     updateSplashProgress(creep, '正在加载业务模块…')
   }, 400)
 
-  const ready = waitForBackendPing(DEFAULT_PORT)
+  const pingReady = waitForBackendPing(DEFAULT_PORT)
     .then(() => {
       splashPhase = 'routes'
       phaseStarted = Date.now()
-      updateSplashProgress(58, '本地服务已就绪，正在加载业务模块…')
-      return waitForBackendApplicationReady(DEFAULT_PORT, undefined, { skipPing: true })
+      updateSplashProgress(58, '本地服务已就绪，正在打开工作台…')
     })
-    .then(() => {
+
+  // 登录后的工作台不必等待全部 Mod 和业务路由完成。先在本地服务
+  // 可响应时打开界面，模块继续在后台完成；更新观察期仍会等待两者。
+  const mainUiReady = pingReady.then(() => {
       splashPhase = 'done'
       updateSplashProgress(88, '正在加载应用…')
       return loadMainApplication()
     })
+  const backendApplicationReady = pingReady.then(() =>
+    waitForBackendApplicationReady(DEFAULT_PORT, undefined, { skipPing: true }),
+  )
+  const ready = Promise.all([mainUiReady, backendApplicationReady]).then(() => undefined)
   mainApplicationReady = ready
+  void mainUiReady.then(
+    () => clearInterval(splashTicker),
+    () => clearInterval(splashTicker),
+  )
   void ready
     .catch(error => {
       console.error('[xcagi-desktop] backend readiness wait failed', error)
@@ -1304,7 +1278,6 @@ async function createWindow(): Promise<void> {
         void dialog.showErrorBox(APP_NAME, error instanceof Error ? error.message : String(error))
       }
     })
-    .finally(() => clearInterval(splashTicker))
 
   mainWindow.webContents.on('did-finish-load', () => {
     if (mainWindow) tagDesktopWebContents(mainWindow)
@@ -1474,6 +1447,10 @@ function bootstrap(): void {
 
     app.whenReady().then(async () => {
       await applyOtaProxyBypass()
+      desktopBootstrapSessionHintAvailable = await warmPersistedDesktopSessionCookieStore(DEFAULT_PORT)
+      if (desktopBootstrapSessionHintAvailable) {
+        writeBackendLog('[session] restored persisted desktop session cookie before renderer startup\n')
+      }
       const sku = readPackagedProductSku()
       if (sku && !process.env.XCAGI_UPDATE_URL) {
         process.env.XCAGI_UPDATE_URL = SKU_UPDATE_URL[sku]
@@ -1518,14 +1495,29 @@ function bootstrap(): void {
       })
 
       ipcMain.handle('xcagi:get-data-dir', () => app.getPath('userData'))
+      ipcMain.handle('xcagi:consume-bootstrap-session-hint', () => {
+        const available = desktopBootstrapSessionHintAvailable
+        desktopBootstrapSessionHintAvailable = false
+        return available
+      })
+      ipcMain.handle('xcagi:get-app-identity', () => ({
+        name: app.getName(),
+        version: readPackagedAppVersion(),
+        isPackaged: app.isPackaged,
+        install: getDesktopInstallIdentity(),
+      }))
       ipcMain.handle('xcagi:open-kellai-desktop', () => openKellaiDesktop())
       ipcMain.handle('xcagi:export-support-bundle', () => exportSupportBundleInteractive())
       ipcMain.handle('xcagi:check-for-updates', () => runUpdateCheckWithDirectNet())
       ipcMain.handle('xcagi:get-update-status', () => getUpdateStatus())
-      ipcMain.handle('xcagi:download-update', () => downloadUpdate())
-      ipcMain.handle('xcagi:install-update', () =>
-        installUpdate(runBackendMigrationWithRollback, cancelPreparedRollback),
-      )
+      ipcMain.handle('xcagi:download-update', () => {
+        assertSelfUpdateInstallSupported()
+        return downloadUpdate()
+      })
+      ipcMain.handle('xcagi:install-update', () => {
+        assertSelfUpdateInstallSupported()
+        return installUpdate(runBackendMigrationWithRollback, cancelPreparedRollback)
+      })
       ipcMain.handle('xcagi:set-badge', (_event, count: number) => {
         const n = Math.max(0, Math.floor(Number(count) || 0))
         if (process.platform === 'darwin' || process.platform === 'linux') {

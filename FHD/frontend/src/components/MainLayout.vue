@@ -408,6 +408,7 @@ const ensureSidebarExpandedForTutorial = () => {
 
 const scheduleSidebarAutoCollapse = () => {
   clearSidebarCollapseTimer()
+  if (document.documentElement.classList.contains('xcagi-electron')) return void (sidebarCollapsed.value = false)
   if (isAnyTutorialActive.value) return
   if (!isSidebarFeatureEnabled.value || sidebarCollapsed.value) return
   sidebarCollapseTimer = window.setTimeout(() => {
@@ -415,7 +416,6 @@ const scheduleSidebarAutoCollapse = () => {
     sidebarCollapsed.value = true
   }, SIDEBAR_INACTIVITY_MS)
 }
-
 watch(isAnyTutorialActive, (active) => {
   if (active) {
     ensureSidebarExpandedForTutorial()

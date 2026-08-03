@@ -1,4 +1,4 @@
-# XCAGI 1.0.0.0 稳定版 - 独立宿主 + 平台 MOD 变身垂直系统
+# XCAGI 1.0.0.1 稳定版 - 独立宿主 + 平台 MOD 变身垂直系统
 
 > **产品模型**：每家客户部署**自己的一份** XCAGI 宿主（空壳）；从平台安装 MOD 后，该实例即变为对应的行业系统（ERP、出货、客服等）。你不代运营客户业务数据。  
 > 技术形态：桌面版 + Web 自托管并行 · Neuro-DDD · FastAPI · Mod 生态 · MOD 商店。  
@@ -20,9 +20,9 @@
 
 ## 🌟 项目简介
 
-**XCAGI 1.0.0.0 稳定版**通过 OCR、混合意图识别与大模型工作流，把「上传 Excel / 对话指令 → 解析 → 业务动作（出货、打印、库存等）」连成可运维的闭环，并提供 Windows / macOS 桌面交付形态。
+**XCAGI 1.0.0.1 稳定版**通过 OCR、混合意图识别与大模型工作流，把「上传 Excel / 对话指令 → 解析 → 业务动作（出货、打印、库存等）」连成可运维的闭环，并提供 Windows / macOS 桌面交付形态。
 
-> 🚀 **1.0.0.0 当前稳定版本**：`Electron 桌面壳 + FastAPI 本地子进程 + Vue 3 前端复用`，同时保留 Docker / Nginx Web 版并行交付；npm/Electron/Flutter/Apple 工具链锚点使用等价三段版本 `1.0.0`。
+> 🚀 **1.0.0.1 当前稳定版本**：`Electron 桌面壳 + FastAPI 本地子进程 + Vue 3 前端复用`，同时保留 Docker / Nginx Web 版并行交付；npm/Electron/Flutter/Apple 工具链锚点使用等价三段版本 `1.0.0`。
 > 🎯 **从「工具」到「员工」**: 侧重可编排的用例与可替换的基础设施实现，而不是把业务规则堆在路由里。  
 > 🧠 **Neuro-DDD 在本仓库的含义**: **DDD 分层**（`application` / `domain` / `infrastructure`）+ **AI 对话与工作流的用例编排**；HTTP 层尽量薄，装配集中在 Composition Root（`app/bootstrap.py`）。**神经域 + NeuroBus 大图及组件摘录**与 `**[XCAGI/README.md](XCAGI/README.md)`** 同构展示；**以源码为准**。
 
@@ -52,14 +52,14 @@
 
 | 组件 | 版本 | 文件 |
 |------|------|------|
-| **稳定产品版本** | `1.0.0.0` | 发布目录、下载清单、Python/FastAPI、Android、Windows 文件版本 |
+| **稳定产品版本** | `1.0.0.1` | 发布目录、下载清单、Python/FastAPI、Android、Windows 文件版本 |
 | **工具链兼容版本** | `1.0.0` | npm/Electron、Flutter pub、iOS/macOS 市场版本 |
 
 > 独立子工程保留自己的版本号：`MODstore/pyproject.toml`（`0.2.0`）、`MODstore/web/package.json`（`0.2.0`）、`MODstore/market/package.json`（`1.0.0`）。
 
-发版脚本的 **`-Version` / 版本参数**必须传入产品版本 **`1.0.0.0`**；脚本会自动派生工具链版本 `1.0.0`。
+发版脚本的 **`-Version` / 版本参数**必须传入产品版本 **`1.0.0.1`**；脚本会自动派生工具链版本 `1.0.0`。
 
-### 当前定位（1.0.0.0 稳定版）
+### 当前定位（1.0.0.1 稳定版）
 
 **跨平台企业 AI 员工桌面平台** — Windows/macOS 桌面版 + Web 版并行交付，保留 Neuro-DDD + FastAPI + Mod 生态 + Token 认证钱包 + 跨行业 UI 适配。
 
@@ -74,10 +74,10 @@
 
 ```bash
 # Windows 桌面安装包
-powershell -ExecutionPolicy Bypass -File scripts/package/build-installer.ps1 -Version 1.0.0.0 -ProductSku enterprise
+powershell -ExecutionPolicy Bypass -File scripts/package/build-installer.ps1 -Version 1.0.0.1 -ProductSku enterprise
 
 # macOS 桌面安装包
-bash scripts/package/build-installer.sh 1.0.0.0 enterprise
+bash scripts/package/build-installer.sh 1.0.0.1 enterprise
 ```
 
 ### 相关文档（与 VERSION.md 相同索引）
@@ -106,13 +106,13 @@ rg -n 'version\s*=\s*"[0-9]' app/fastapi_app/factory.py app/infrastructure/mods/
 |------|------|
 | **SSOT 仓库** | **[XCMAX](https://github.com/42433422/XCMAX)**，默认分支 **`main`**；`git clone` 后产品代码在 **`FHD/`** 子目录。 |
 | **历史仓库** | **[ai-excel-helper](https://github.com/42433422/ai-excel-helper)** / **[XCMAX-roadmap](https://github.com/42433422/XCMAX-roadmap)** 已归档；旧 commit 备份于本机 `~/XCMAX-archives/nested-git-backup-20260608/`。 |
-| **Git 标签** | 稳定版标签 **`FHD/v1.0.0.0`** 与产品版本 `1.0.0.0` 对齐（发版时打在根仓 `main`）。 |
+| **Git 标签** | 稳定版标签 **`FHD/v1.0.0.1`** 与产品版本 `1.0.0.1` 对齐（发版时打在根仓 `main`）。 |
 | **与 xcagi 发行说明** | 历史仍可与 **[xcagi/releases](https://github.com/42433422/xcagi/releases)** 对照；[`CHANGELOG.md`](CHANGELOG.md) 为主变更记录。 |
 | **CI 入口** | 仓根 [`.github/workflows/`](../../.github/workflows/)（见 [`docs/CI_SSOT.md`](../../docs/CI_SSOT.md)），**非** `FHD/.github/workflows/`。 |
 
 ---
 
-## 🖥️ 1.0.0.0 稳定版交付形态
+## 🖥️ 1.0.0.1 稳定版交付形态
 
 - **桌面版**：Windows `.exe` 与 macOS `.dmg/.pkg`，由 [desktop/](desktop/) 的 Electron 壳启动本地 FastAPI 子进程，数据默认存放在系统 userData 目录。
 - **Web 版**：Docker Compose / Nginx 路径继续保留，适合企业自托管、局域网部署和开发调试。
@@ -558,7 +558,7 @@ cd XCAGI && python run.py
 
 ## 🔄 版本演进
 
-### 1.0.0.0（当前稳定主线）
+### 1.0.0.1（当前稳定主线）
 
 - **版本与锚点、发版自检、Git/GitHub 行为**：已上收至前文 **[版本与发布约定](#version-policy)**（与 [`VERSION.md`](VERSION.md) 对齐），请勿在本小节重复改版本号表。
 - **跨行业 UI 适配**：宿主菜单/欢迎语/快捷按钮随所选行业切换；Mod 制作端可指定目标行业。
@@ -673,6 +673,6 @@ pytest
 
 ---
 
-**XCAGI 1.0.0.0 稳定版 — 企业 AI 员工平台（Neuro-DDD + FastAPI + Mod 生态 + 桌面版 + 跨行业适配）**
+**XCAGI 1.0.0.1 稳定版 — 企业 AI 员工平台（Neuro-DDD + FastAPI + Mod 生态 + 桌面版 + 跨行业适配）**
 
 [🔝 返回顶部](#-项目简介)

@@ -9,6 +9,7 @@ import {
   extractSessionIdForActiveMod,
 } from '@/utils/chatStorageKeys'
 import { isIndustryWelcomePlainText } from '@/constants/industryPresets'
+import { hasAgentRunExecutionEvidence } from '@/utils/agentRunExecution'
 
 /** 刷新后仍能把「分析 Excel」结果随 /api/ai/chat 的 context 带上，避免「加入数据库」落 LLM 空转 */
 export const EXCEL_ANALYSIS_STORAGE_PREFIX = 'xcagi_excel_analysis_ctx_'
@@ -235,6 +236,11 @@ export function clearPersistedTaskPanelState(sessionKey: string): void {
 }
 
 export const TASK_HISTORY_LIMIT = 20
+
+export function isVerifiedAgentTask(task: TaskItem): boolean {
+  if (task.type !== 'agent_run') return true
+  return hasAgentRunExecutionEvidence(task.payload?.agentEvents)
+}
 
 export function toPlainText(raw: unknown): string {
   return String(raw || '')
@@ -492,7 +498,9 @@ export function useChatTaskPanelPersistence(deps: ChatTaskPanelPersistenceDeps) 
       currentTask.value = null
       return
     }
-    taskList.value = Array.isArray(persisted.taskList) ? persisted.taskList.slice(0, TASK_HISTORY_LIMIT) : []
+    taskList.value = (Array.isArray(persisted.taskList) ? persisted.taskList : [])
+      .filter(isVerifiedAgentTask)
+      .slice(0, TASK_HISTORY_LIMIT)
     taskFilter.value = persisted.taskFilter
     currentTask.value = (persisted.currentTask || null) as ShipmentTask | null
     const idSet = new Set(taskList.value.map((t) => t.id))

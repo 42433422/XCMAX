@@ -174,6 +174,16 @@ export function hostPackAcknowledgedRef(): Ref<boolean> {
   return hostPackAckRef
 }
 
+/**
+ * Same-window localStorage writes do not emit a browser `storage` event.
+ * Re-read the scoped acknowledgement after the profile/workspace preference
+ * hydration so an already completed host does not keep the minimal sidebar
+ * until the user refreshes the app.
+ */
+export function refreshHostPackAcknowledged(): void {
+  hostPackAckRef.value = readHostPackAcknowledged()
+}
+
 export function markHostPackAcknowledged(): void {
   hostPackAckRef.value = true
   if (typeof localStorage === 'undefined') return
