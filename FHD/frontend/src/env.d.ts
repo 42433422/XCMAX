@@ -23,6 +23,8 @@ interface Window {
       };
     }>;
     getDataDir: () => Promise<string>;
+    /** One-shot, local-only renderer entry hint from Electron's persisted cookie store. */
+    consumeBootstrapSessionHint?: () => Promise<boolean>;
     checkForUpdates: () => Promise<unknown>;
     getUpdateStatus?: () => Promise<{ type: string; data?: unknown } | null>;
     downloadUpdate: () => Promise<unknown>;

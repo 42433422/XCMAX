@@ -22,6 +22,7 @@ const {
   mockResolvePlannerPagePath,
   mockFetchProductSku,
   mockIsEnterpriseEdition,
+  mockConsumeDesktopSessionBootstrapHint,
   mockHasRecentEnterpriseSessionHint,
   mockValidateEnterpriseSession,
   mockIsAdminConsoleSpa,
@@ -40,6 +41,7 @@ const {
   mockResolvePlannerPagePath: vi.fn((p: string) => p),
   mockFetchProductSku: vi.fn().mockResolvedValue('generic'),
   mockIsEnterpriseEdition: vi.fn(() => false),
+  mockConsumeDesktopSessionBootstrapHint: vi.fn().mockResolvedValue(false),
   mockHasRecentEnterpriseSessionHint: vi.fn(() => false),
   mockValidateEnterpriseSession: vi.fn().mockResolvedValue(true),
   mockIsAdminConsoleSpa: vi.fn(() => false),
@@ -117,6 +119,7 @@ vi.mock('@/utils/productSku', () => ({
 }))
 
 vi.mock('@/utils/authSessionCache', () => ({
+  consumeDesktopSessionBootstrapHint: mockConsumeDesktopSessionBootstrapHint,
   hasRecentEnterpriseSessionHint: mockHasRecentEnterpriseSessionHint,
   validateEnterpriseSessionCached: mockValidateEnterpriseSession,
 }))
@@ -235,6 +238,7 @@ describe('router/index enhanced', () => {
     vi.clearAllMocks()
     mockIsAdminConsoleSpa.mockReturnValue(false)
     mockIsEnterpriseEdition.mockReturnValue(false)
+    mockConsumeDesktopSessionBootstrapHint.mockResolvedValue(false)
     mockHasRecentEnterpriseSessionHint.mockReturnValue(false)
     mockValidateEnterpriseSession.mockResolvedValue(true)
     mockIsDesktopShell.mockReturnValue(false)
@@ -464,6 +468,26 @@ describe('router/index enhanced', () => {
     finishValidation?.(true)
     await vi.waitFor(() => expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalledOnce())
     expect(mockAccountProfileStore.loaded).toBe(true)
+  })
+
+  it('uses Electron\'s persisted-cookie entry hint when localStorage has not restored yet', async () => {
+    mockIsEnterpriseEdition.mockReturnValue(true)
+    mockIsDesktopShell.mockReturnValue(true)
+    mockConsumeDesktopSessionBootstrapHint.mockResolvedValue(true)
+    mockShouldRouteToHostPackOnboarding.mockReturnValue(true)
+    mockAccountProfileStore.loaded = false
+
+    let finishValidation: ((valid: boolean) => void) | undefined
+    mockValidateEnterpriseSession.mockImplementationOnce(
+      () => new Promise<boolean>((resolve) => { finishValidation = resolve }),
+    )
+
+    await router.push('/login')
+    await router.push('/settings')
+
+    expect(router.currentRoute.value.name).toBe('settings')
+    expect(mockConsumeDesktopSessionBootstrapHint).toHaveBeenCalledOnce()
+    finishValidation?.(true)
   })
 
   // ── requiresAdminAccount guard ──────────────────────────
