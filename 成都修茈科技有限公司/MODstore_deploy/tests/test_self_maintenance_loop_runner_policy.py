@@ -256,10 +256,14 @@ def test_remote_merge_request_runs_only_after_structured_gate_and_ssot(monkeypat
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
     monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
     monkeypatch.setenv("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", "1")
+    report_gate_calls = []
     monkeypatch.setattr(
         loop_runner,
         "_structured_report_gate",
-        lambda steps: {"ok": True, "reason": "structured_reports_passed"},
+        lambda steps, branch=None: (
+            report_gate_calls.append((steps, branch))
+            or {"ok": True, "reason": "structured_reports_passed"}
+        ),
     )
     risk_calls = []
     monkeypatch.setattr(
@@ -292,6 +296,12 @@ def test_remote_merge_request_runs_only_after_structured_gate_and_ssot(monkeypat
     assert result["ok"] is True
     assert result["merge_requested"] is True
     assert result["branch_head_sha"] == "a" * 40
+    assert report_gate_calls == [
+        (
+            [{"step": "review"}, {"step": "qa"}],
+            "devfleet/codex/sub-1",
+        )
+    ]
     assert risk_calls[0][0] == "self_maintenance_l1_merge"
     assert risk_calls[0][1]["source"] == "self_maintenance_loop.remote_merge_request"
     assert merge_calls == [{"api_base": "http://127.0.0.1:3001", "task_id": "task-remote"}]
@@ -305,7 +315,11 @@ def test_remote_merge_request_is_not_emitted_when_ssot_blocks(monkeypatch):
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
     monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
     monkeypatch.setenv("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", "1")
-    monkeypatch.setattr(loop_runner, "_structured_report_gate", lambda steps: {"ok": True})
+    monkeypatch.setattr(
+        loop_runner,
+        "_structured_report_gate",
+        lambda steps, branch=None: {"ok": True},
+    )
     heads = {"main": "b" * 40, "devfleet/codex/sub-1": "a" * 40}
     monkeypatch.setattr(loop_runner, "_remote_branch_head", lambda _repo, branch: heads[branch])
     monkeypatch.setattr(
@@ -337,7 +351,11 @@ def test_remote_merge_request_defers_unreachable_head_to_para_worker(monkeypatch
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
     monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
     monkeypatch.setenv("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", "1")
-    monkeypatch.setattr(loop_runner, "_structured_report_gate", lambda steps: {"ok": True})
+    monkeypatch.setattr(
+        loop_runner,
+        "_structured_report_gate",
+        lambda steps, branch=None: {"ok": True},
+    )
     monkeypatch.setattr(loop_runner, "_remote_branch_head", lambda _repo, _branch: None)
     monkeypatch.setattr(
         "modstore_server.autonomy_guard_delegate.evaluate_risk",
@@ -2521,21 +2539,29 @@ def test_structured_report_gate_requires_black_isort_and_source_governance(monke
 def test_quality_command_matchers_require_real_commands_and_scopes():
     assert matches_black_check_command(
         "python -m modstore_server.self_maintenance_diff_quality --tool black "
-        "--base-ref origin/main --target-ref origin/feature"
+        "--base-ref origin/main --target-ref origin/feature",
+        expected_base_ref="origin/main",
+        expected_target_ref="origin/feature",
     )
     assert matches_isort_check_command(
         "python3 -m modstore_server.self_maintenance_diff_quality --tool isort "
-        "--base-ref origin/main --target-ref HEAD"
+        "--base-ref origin/main --target-ref HEAD",
+        expected_base_ref="origin/main",
+        expected_target_ref="HEAD",
     )
     assert matches_black_check_command(
         "cd /tmp/target && GIT_DIR=/tmp/repo/.git GIT_WORK_TREE=/tmp/target "
         "python3 -m modstore_server.self_maintenance_diff_quality --tool black "
-        "--base-ref origin/main --target-ref origin/feature"
+        "--base-ref origin/main --target-ref origin/feature",
+        expected_base_ref="origin/main",
+        expected_target_ref="origin/feature",
     )
     assert matches_isort_check_command(
         "cd /tmp/target && GIT_DIR=/tmp/repo/.git GIT_WORK_TREE=/tmp/target "
         "python3 -m modstore_server.self_maintenance_diff_quality --tool isort "
-        "--base-ref origin/main --target-ref origin/feature"
+        "--base-ref origin/main --target-ref origin/feature",
+        expected_base_ref="origin/main",
+        expected_target_ref="origin/feature",
     )
     assert not matches_black_check_command(
         "python -m modstore_server.self_maintenance_diff_quality --tool isort "
@@ -2543,7 +2569,28 @@ def test_quality_command_matchers_require_real_commands_and_scopes():
     )
     assert not matches_black_check_command(
         "python -m modstore_server.self_maintenance_diff_quality --tool black "
-        "--base-ref HEAD --target-ref HEAD"
+        "--base-ref HEAD --target-ref HEAD",
+        expected_base_ref="origin/main",
+        expected_target_ref="origin/feature",
+    )
+    assert not matches_black_check_command(
+        "python -m modstore_server.self_maintenance_diff_quality --tool black "
+        "--base-ref origin/unrelated-a --target-ref origin/unrelated-b",
+        expected_base_ref="origin/main",
+        expected_target_ref="origin/feature",
+    )
+    assert not matches_isort_check_command(
+        "python -m modstore_server.self_maintenance_diff_quality --tool isort "
+        "--base-ref origin/unrelated-a --target-ref origin/unrelated-b",
+        expected_base_ref="origin/main",
+        expected_target_ref="origin/feature",
+    )
+    assert not matches_black_check_command(
+        "python -m modstore_server.self_maintenance_diff_quality --tool black "
+        "--base-ref origin/main --target-ref origin/feature "
+        "--target-ref origin/unrelated-b",
+        expected_base_ref="origin/main",
+        expected_target_ref="origin/feature",
     )
     assert matches_black_check_command(
         "cd 成都修茈科技有限公司/MODstore_deploy && "
@@ -2599,7 +2646,51 @@ def test_quality_gate_accepts_worker_env_prefixes_on_real_commands():
         }
     }
 
-    assert quality_check_failure(qa_json) is None
+    assert (
+        quality_check_failure(
+            qa_json,
+            expected_base_ref="origin/main",
+            expected_target_ref="origin/feature",
+        )
+        is None
+    )
+
+
+def test_quality_gate_rejects_wrong_but_unique_diff_refs():
+    qa_json = {
+        "quality_checks": {
+            "black": {
+                "command": (
+                    "python -m modstore_server.self_maintenance_diff_quality --tool black "
+                    "--base-ref origin/unrelated-a --target-ref origin/unrelated-b"
+                ),
+                "exit_code": 0,
+                "status": "passed",
+            },
+            "isort": {
+                "command": (
+                    "python -m modstore_server.self_maintenance_diff_quality --tool isort "
+                    "--base-ref origin/unrelated-a --target-ref origin/unrelated-b"
+                ),
+                "exit_code": 0,
+                "status": "passed",
+            },
+            "source_governance": {
+                "command": "python scripts/dev/source_governance.py --top 10",
+                "exit_code": 0,
+                "status": "passed",
+            },
+        }
+    }
+
+    assert (
+        quality_check_failure(
+            qa_json,
+            expected_base_ref="origin/main",
+            expected_target_ref="origin/feature",
+        )
+        == "structured_qa_black_not_passed"
+    )
 
 
 def test_focused_command_matcher_fails_closed_on_malformed_quotes():
@@ -3346,6 +3437,63 @@ def test_reconcile_terminal_para_merge_failure_restarts_from_clean_base(
     prompt = _code_task_text("run-retry", {"gaps": []}, memory, candidate)
     assert "EXTERNAL MERGE FAILURE REMEDIATION" in prompt
     assert expected_reason in prompt
+
+    repeated = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+    assert repeated["changed"] is False
+    assert len(memory["open_items"]) == 1
+
+
+def test_reconcile_manual_veto_replaces_legacy_same_task_remediation():
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/sub-1-manual",
+                "detail": "true conflict",
+                "kind": "automated_remediation",
+                "para_task_id": "task-manual",
+                "reason": "para_merge_conflict",
+                "run_id": "run-manual",
+                "task_id": "task-manual",
+            }
+        ],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-manual",
+                "para_task_id": "task-manual",
+                "run_id": "run-manual",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+    task = {
+        "status": "merge_conflict",
+        "merge_conflict": {
+            "branch_name": "devfleet/cursor/sub-1-manual",
+            "detail": "manual-veto-active: PR #926 has hold-merge label",
+            "source": "merge-worker",
+        },
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result == {"changed": True, "merged": 0, "remediation_added": 1}
+    assert len(memory["open_items"]) == 1
+    assert memory["open_items"][0]["kind"] == "human_strategy_approval"
+    assert memory["open_items"][0]["reason"] == "manual_merge_veto_active"
+    assert memory["closed_items"][-1]["original_item"]["reason"] == "para_merge_conflict"
+    assert memory["closed_items"][-1]["resolution_reason"] == (
+        "reclassified_as_manual_merge_veto_active"
+    )
+    assert _resume_review_qa_candidate(memory) is None
 
     repeated = _reconcile_requested_merge_feedback(
         memory,

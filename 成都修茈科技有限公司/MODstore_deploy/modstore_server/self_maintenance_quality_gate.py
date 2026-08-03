@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 from pathlib import Path
@@ -132,7 +133,13 @@ def diff_quality_commands(*, base_ref: str, target_ref: str) -> tuple[str, str]:
     )
 
 
-def _matches_diff_quality_command(command: Any, tool: str) -> bool:
+def _matches_diff_quality_command(
+    command: Any,
+    tool: str,
+    *,
+    expected_base_ref: Optional[str],
+    expected_target_ref: Optional[str],
+) -> bool:
     """Accept the repository helper that computes the complete changed-file set."""
 
     tokens = _safe_command_tokens(str(command or "").strip())
@@ -149,29 +156,42 @@ def _matches_diff_quality_command(command: Any, tool: str) -> bool:
         args = segment[3:]
         values: dict[str, str] = {}
         for name in ("--tool", "--base-ref", "--target-ref"):
+            if args.count(name) != 1:
+                break
             try:
                 index = args.index(name)
                 values[name] = args[index + 1]
             except (ValueError, IndexError):
                 values[name] = ""
+        if len(values) != 3:
+            continue
         base_ref = values["--base-ref"]
         target_ref = values["--target-ref"]
         if (
             values["--tool"] == tool
-            and base_ref
-            and target_ref
-            and base_ref != target_ref
-            and not base_ref.startswith("-")
-            and not target_ref.startswith("-")
+            and expected_base_ref
+            and expected_target_ref
+            and base_ref == expected_base_ref
+            and target_ref == expected_target_ref
         ):
             return True
     return False
 
 
-def matches_black_check_command(command: Any) -> bool:
+def matches_black_check_command(
+    command: Any,
+    *,
+    expected_base_ref: Optional[str] = None,
+    expected_target_ref: Optional[str] = None,
+) -> bool:
     """Require Black over the exact diff or every MODstore Python source scope."""
 
-    if _matches_diff_quality_command(command, "black"):
+    if _matches_diff_quality_command(
+        command,
+        "black",
+        expected_base_ref=expected_base_ref,
+        expected_target_ref=expected_target_ref,
+    ):
         return True
     tokens = _safe_command_tokens(str(command or "").strip())
     if tokens is None:
@@ -195,10 +215,20 @@ def matches_black_check_command(command: Any) -> bool:
     return False
 
 
-def matches_isort_check_command(command: Any) -> bool:
+def matches_isort_check_command(
+    command: Any,
+    *,
+    expected_base_ref: Optional[str] = None,
+    expected_target_ref: Optional[str] = None,
+) -> bool:
     """Require isort over the exact diff or every MODstore Python source scope."""
 
-    if _matches_diff_quality_command(command, "isort"):
+    if _matches_diff_quality_command(
+        command,
+        "isort",
+        expected_base_ref=expected_base_ref,
+        expected_target_ref=expected_target_ref,
+    ):
         return True
     tokens = _safe_command_tokens(str(command or "").strip())
     if tokens is None:
@@ -257,15 +287,39 @@ def _reported_check_passed(check: Any, matcher: Any) -> bool:
     )
 
 
-def quality_check_failure(qa_json: dict[str, Any]) -> Optional[str]:
+def quality_check_failure(
+    qa_json: dict[str, Any],
+    *,
+    target_branch: Optional[str] = None,
+    expected_base_ref: Optional[str] = None,
+    expected_target_ref: Optional[str] = None,
+) -> Optional[str]:
     """Return the first missing mandatory merge-readiness check."""
 
+    if target_branch:
+        base_branch = os.environ.get("MODSTORE_PARA_BRANCH", "").strip() or "main"
+        expected_base_ref = f"origin/{base_branch}"
+        expected_target_ref = f"origin/{target_branch}"
     checks = qa_json.get("quality_checks")
     if not isinstance(checks, dict):
         return "structured_qa_black_not_passed"
-    if not _reported_check_passed(checks.get("black"), matches_black_check_command):
+    if not _reported_check_passed(
+        checks.get("black"),
+        lambda command: matches_black_check_command(
+            command,
+            expected_base_ref=expected_base_ref,
+            expected_target_ref=expected_target_ref,
+        ),
+    ):
         return "structured_qa_black_not_passed"
-    if not _reported_check_passed(checks.get("isort"), matches_isort_check_command):
+    if not _reported_check_passed(
+        checks.get("isort"),
+        lambda command: matches_isort_check_command(
+            command,
+            expected_base_ref=expected_base_ref,
+            expected_target_ref=expected_target_ref,
+        ),
+    ):
         return "structured_qa_isort_not_passed"
     if not _reported_check_passed(
         checks.get("source_governance"),

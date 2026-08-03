@@ -65,6 +65,7 @@ from .self_maintenance_para_merge_remediation import (
     classify_para_merge_review_detail,
     para_merge_resume_pins_rejected_branch,
     reconcile_absorbed_para_merge_remediations,
+    reconcile_para_merge_failure_state,
     resume_candidate_from_para_ai_review_item,
     resume_from_clean_baseline_for_para_merge,
 )
@@ -2372,12 +2373,9 @@ def _reconcile_requested_merge_feedback(
             or task.get("error")
             or f"Para merge task ended with status={task_status}"
         ).strip()[:4000]
-        if source == "ai-review-veto":
-            reason = "para_ai_review_rejected"
-        elif task_status == "merge_conflict":
-            reason = "para_merge_conflict"
-        else:
-            reason = "para_merge_task_failed"
+        reason, item_kind, open_items, changed = reconcile_para_merge_failure_state(
+            memory, changed, detail, source, task_id, task_status
+        )
         existing_receipt = run.get("merge_reconciliation")
         receipt = {
             "detail": detail,
@@ -2399,6 +2397,7 @@ def _reconcile_requested_merge_feedback(
             isinstance(item, dict)
             and str(item.get("task_id") or item.get("para_task_id") or "") == task_id
             and item.get("reason") == reason
+            and item.get("kind") == item_kind
             for item in open_items
         )
         if not already_open:
@@ -2411,7 +2410,7 @@ def _reconcile_requested_merge_feedback(
                 "branch": rejected_branch,
                 "created_at": _iso(_utc_now()),
                 "detail": detail,
-                "kind": "automated_remediation",
+                "kind": item_kind,
                 "para_task_id": task_id,
                 "reason": reason,
                 "rejected_branch": rejected_branch,
@@ -3111,7 +3110,7 @@ def _structured_protocol_ok(step_name: str, report_excerpt: str) -> Tuple[bool, 
     return True, ""
 
 
-def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _structured_report_gate(steps: List[Dict[str, Any]], branch=None) -> Dict[str, Any]:
     review_steps = [step for step in steps if step.get("step") == "review"]
     qa_steps = [step for step in steps if step.get("step") == "qa"]
     if review_steps:
@@ -3201,7 +3200,7 @@ def _structured_report_gate(steps: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "focused_command": focused_command,
                 "qa": qa_json,
             }
-        quality_failure = _quality_check_failure(qa_json)
+        quality_failure = _quality_check_failure(qa_json, target_branch=branch)
         if quality_failure:
             return {
                 "ok": False,
@@ -5445,7 +5444,7 @@ def _auto_merge_low_risk_branch(
         return {"ok": False, "reason": "missing_api_base"}
 
     if repo_url.startswith(("http://", "https://")):
-        report_gate = _structured_report_gate(steps or [])
+        report_gate = _structured_report_gate(steps or [], branch)
         if not report_gate.get("ok"):
             return {
                 "ok": False,
@@ -6051,7 +6050,7 @@ def _decide_post_loop_policy(
         return {"action": "stop", "reason": "loop_not_completed"}
     if any(not bool(step.get("ok")) for step in steps):
         return {"action": "stop", "reason": "employee_step_failed"}
-    structured_gate = _structured_report_gate(steps)
+    structured_gate = _structured_report_gate(steps, branch)
     report_only_missing = _missing_report_only_evidence(steps)
     roster_gate = _loop_steps_roster_gate(steps)
     governance_gate = _governance_audit_gate()
