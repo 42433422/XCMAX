@@ -56,7 +56,7 @@ export const SHELL_VIEW_TITLE_BASE: Record<string, string> = {
   'materials-list': '资源库',
   materials: '资源库',
   'traditional-mode': '表格模式',
-  'business-docking': '业务对接',
+  'business-docking': '数据对接中心',
   orders: '业务单据',
   'orders-create': '新建业务单据',
   purchase: '耗材申领',

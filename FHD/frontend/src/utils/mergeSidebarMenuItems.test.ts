@@ -69,7 +69,7 @@ describe('mergeSidebarMenuItems', () => {
     expect(merged.map((item) => item.key)).toEqual(['materials'])
   })
 
-  it('keeps model service in settings and business docking in chat, not primary navigation', () => {
+  it('keeps model service in settings but shows business docking in primary navigation', () => {
     const merged = mergeSidebarMenuItems(
       [
         { key: 'chat', name: '智能对话', iconClass: 'fa-comments-o' },
@@ -95,7 +95,11 @@ describe('mergeSidebarMenuItems', () => {
       [],
       [],
     )
-    expect(merged.map((item) => item.key)).toEqual(['chat', 'settings'])
+    expect(merged.map((item) => item.key)).toEqual([
+      'chat',
+      'settings',
+      'mod-erp-business-docking',
+    ])
   })
 
   it('drops mod item when key uses erroneous mod-mod- prefix', () => {

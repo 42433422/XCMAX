@@ -69,24 +69,19 @@ function isRetiredMaterialsListMenuItem(item: ResolvedSidebarMenuItem): boolean 
 }
 
 /**
- * These capabilities remain available from their canonical surfaces:
- * model service lives in Settings, while business docking is launched from Chat.
- * Keep stale Mod/runtime menu rows from recreating duplicate primary navigation.
+ * 模型服务已整合进系统设置，避免旧 Mod 行在主导航重复创建入口。
+ * 数据对接中心（ETL）是一级入口，不再走此抑制。
  */
 function isConsolidatedCapabilityMenuItem(item: ResolvedSidebarMenuItem): boolean {
   const key = normalizeModSidebarNavKey(String(item.key || '').trim())
   if (
     key === 'model-payment' ||
-    key === 'mod-model-payment' ||
-    key === 'business-docking' ||
-    key === 'mod-erp-business-docking'
+    key === 'mod-model-payment'
   ) return true
   const path = String(item.path || '').trim().split('?')[0].split('#')[0]
   return (
     path === '/model-payment' ||
-    path.endsWith('/model-payment') ||
-    path === '/business-docking' ||
-    path.endsWith('/business-docking')
+    path.endsWith('/model-payment')
   )
 }
 
