@@ -2592,6 +2592,18 @@ def test_quality_command_matchers_require_real_commands_and_scopes():
         expected_base_ref="origin/main",
         expected_target_ref="origin/feature",
     )
+    assert not matches_black_check_command(
+        "python -m black --check /tmp/unrelated/modman "
+        "/tmp/unrelated/modstore_server /tmp/unrelated/tests",
+        expected_base_ref="origin/main",
+        expected_target_ref="origin/feature",
+    )
+    assert not matches_isort_check_command(
+        "python -m isort --check-only --diff /tmp/unrelated/modman "
+        "/tmp/unrelated/modstore_server /tmp/unrelated/tests",
+        expected_base_ref="origin/main",
+        expected_target_ref="origin/feature",
+    )
     assert matches_black_check_command(
         "cd 成都修茈科技有限公司/MODstore_deploy && "
         "python3 -m black --check modman/ modstore_server/ tests/"
@@ -2671,6 +2683,43 @@ def test_quality_gate_rejects_wrong_but_unique_diff_refs():
                 "command": (
                     "python -m modstore_server.self_maintenance_diff_quality --tool isort "
                     "--base-ref origin/unrelated-a --target-ref origin/unrelated-b"
+                ),
+                "exit_code": 0,
+                "status": "passed",
+            },
+            "source_governance": {
+                "command": "python scripts/dev/source_governance.py --top 10",
+                "exit_code": 0,
+                "status": "passed",
+            },
+        }
+    }
+
+    assert (
+        quality_check_failure(
+            qa_json,
+            expected_base_ref="origin/main",
+            expected_target_ref="origin/feature",
+        )
+        == "structured_qa_black_not_passed"
+    )
+
+
+def test_quality_gate_rejects_unbound_full_scope_commands_when_refs_expected():
+    qa_json = {
+        "quality_checks": {
+            "black": {
+                "command": (
+                    "python -m black --check /tmp/unrelated/modman "
+                    "/tmp/unrelated/modstore_server /tmp/unrelated/tests"
+                ),
+                "exit_code": 0,
+                "status": "passed",
+            },
+            "isort": {
+                "command": (
+                    "python -m isort --check-only --diff /tmp/unrelated/modman "
+                    "/tmp/unrelated/modstore_server /tmp/unrelated/tests"
                 ),
                 "exit_code": 0,
                 "status": "passed",

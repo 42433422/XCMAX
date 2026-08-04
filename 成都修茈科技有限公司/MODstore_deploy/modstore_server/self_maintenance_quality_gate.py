@@ -193,6 +193,8 @@ def matches_black_check_command(
         expected_target_ref=expected_target_ref,
     ):
         return True
+    if expected_base_ref or expected_target_ref:
+        return False
     tokens = _safe_command_tokens(str(command or "").strip())
     if tokens is None:
         return False
@@ -230,6 +232,8 @@ def matches_isort_check_command(
         expected_target_ref=expected_target_ref,
     ):
         return True
+    if expected_base_ref or expected_target_ref:
+        return False
     tokens = _safe_command_tokens(str(command or "").strip())
     if tokens is None:
         return False
