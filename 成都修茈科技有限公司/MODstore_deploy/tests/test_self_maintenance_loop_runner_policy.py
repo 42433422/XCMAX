@@ -5011,6 +5011,41 @@ class TestExtractFailureReasonEndToEnd:
 # ---------------------------------------------------------------------------
 
 
+def test_kb_validation_rejects_trailing_blank_line_before_schema_gate(monkeypatch, tmp_path):
+    payload = {
+        "schema_version": 1,
+        "kind": "fix",
+        "created_at": "2026-08-04T16:30:15+00:00",
+        "symptom": "KB JSON has a trailing blank line",
+        "root_cause": "raw branch content was stripped before validation",
+        "fix_diff": "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-old\n+new\n",
+        "metadata": {"component": "self_maintenance_loop"},
+        "executable_template": {
+            "applicability_check": "branch KB JSON ends with two LF bytes",
+            "patch_strategy": "validate raw branch content before parsing JSON",
+            "rollback_plan": "revert raw-content validation with its regression",
+            "required_tests": ["test_self_maintenance_loop_runner_policy.py"],
+        },
+    }
+    raw = json.dumps(payload, indent=2) + "\n\n"
+
+    def fake_run(*_args, **kwargs):
+        assert kwargs["text"] is True
+        return raw
+
+    monkeypatch.setattr(loop_runner.subprocess, "check_output", fake_run)
+
+    result = loop_runner._validate_kb_json_changes_for_auto_merge(
+        branch="candidate",
+        files=["FHD/XCAGI/kb/fixes/test.json"],
+        workspace=tmp_path,
+    )
+
+    assert result["ok"] is False
+    assert result["reason"] == "kb_json_schema_validation_failed"
+    assert "exactly one LF" in result["errors"][0]["error"]
+
+
 def _kb_validation_failed_payload(file_name="FHD/XCAGI/kb/fixes/test.json"):
     """模拟 _validate_kb_json_changes_for_auto_merge 失败时的返回。"""
     return {

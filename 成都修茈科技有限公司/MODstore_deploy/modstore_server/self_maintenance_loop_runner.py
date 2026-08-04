@@ -3573,17 +3573,15 @@ def _validate_kb_json_changes_for_auto_merge(
         normalized = _normalize_repo_path(file_name)
         checked.append(normalized)
         try:
-            raw = _run_cmd(
-                [
-                    "git",
-                    "-c",
-                    "core.quotePath=false",
-                    "show",
-                    f"origin/{branch}:{normalized}",
-                ],
+            raw = subprocess.check_output(
+                ["git", "-c", "core.quotePath=false", "show", f"origin/{branch}:{normalized}"],
                 cwd=workspace,
+                stderr=subprocess.STDOUT,
+                text=True,
                 timeout=60,
             )
+            if raw != raw.rstrip(" \t\r\n") + "\n":
+                raise ValueError("KB JSON must end with exactly one LF")
             payload = json.loads(raw)
             validate_kb_payload(kind, payload)
         except Exception as exc:
