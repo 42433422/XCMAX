@@ -1,4 +1,5 @@
 """产品导出 mixin：从超大仓储实现中拆出 export_to_excel，保持同一契约。"""
+
 from __future__ import annotations
 
 from datetime import datetime

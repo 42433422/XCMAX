@@ -3,6 +3,7 @@
 - TRIVIAL_MEASURE_UNITS：products.unit 历史误填的纯计量词集合（供 find_product_units 去重排除）。
 - apply_product_filters：对查询应用 unit_name / model_number / keyword 过滤（不含 get_db，纯查询构造）。
 """
+
 from __future__ import annotations
 
 import re
