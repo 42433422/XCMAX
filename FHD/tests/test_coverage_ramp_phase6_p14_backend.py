@@ -69,6 +69,7 @@ from app.services.conversation.manager import (
 # 1. app/services/conversation/manager.py
 # ===========================================================================
 
+
 class _ConversationHost(AIConversationService):
     """Test host that bypasses __init__ heavy LLM/service wiring."""
 
