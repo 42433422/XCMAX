@@ -17,7 +17,7 @@ from app.domain.context.session_context import (
     _sanitize_untrusted_context_line,
     format_runtime_context_for_llm,
 )
-from app.infrastructure.persistence.product_repository_impl import SQLAlchemyProductRepository
+from app.infrastructure.repositories.product_repository_impl import SQLAlchemyProductRepository
 from app.infrastructure.persistence.wechat_contact_store_impl import (
     _read_rows_from_contact_db,
     resolve_decrypt_contact_db_path,

@@ -77,6 +77,8 @@ coverage/
 data/dev-db/
 XCAGI/data/desktop-dev/
 XCAGI/data/enterprise-desktop/
+XCAGI/data/admin-web-dev/
+XCAGI/data/
 data/model_payment_orders.json
 customer_products_final_corrected.db
 
