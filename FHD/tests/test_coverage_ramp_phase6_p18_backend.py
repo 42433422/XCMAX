@@ -520,7 +520,9 @@ class TestProductRepositoryBatchOps:
         mock_db.flush.return_value = None
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.repositories.product_repository_impl.Product") as MockProduct:
+        with patch(
+            "app.infrastructure.repositories.product_repository_impl.Product"
+        ) as MockProduct:
             MockProduct.return_value = mock_product
             result = repo.batch_create([{"product_name": "产品1"}])
 
