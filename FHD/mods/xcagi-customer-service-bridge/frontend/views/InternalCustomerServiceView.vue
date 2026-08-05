@@ -105,6 +105,8 @@
               :crm-repair-loading="crmRepairLoading"
               :external-crm-push-loading="externalCrmPushLoading"
               :external-crm-pull-loading="externalCrmPullLoading"
+              :external-crm-status-label="externalCrmStatusLabel"
+              :external-crm-pull-status-label="externalCrmPullStatusLabel"
               :finance-ledger-items="financeLedgerItems"
               :finance-ledger-loading="financeLedgerLoading"
               :selected-user-id="selectedUserId"
@@ -385,6 +387,8 @@ const {
   crmRepairLoading,
   externalCrmPushLoading,
   externalCrmPullLoading,
+  externalCrmStatusLabel,
+  externalCrmPullStatusLabel,
   intakeQuickFormUrl,
   intakeLinkLoading,
   intakeAuditCode,
