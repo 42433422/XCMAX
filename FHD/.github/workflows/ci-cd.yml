@@ -226,6 +226,11 @@ jobs:
         working-directory: frontend
         run: npm run test:coverage
 
+      # 前端覆盖率诚实化（Delta B）：以 coverage_ratchet.py 为硬门禁，回退即阻断。
+      - name: Frontend coverage ratchet gate
+        working-directory: frontend
+        run: python ../scripts/dev/coverage_ratchet.py --check --require-frontend
+
       - name: Run vue-tsc
         working-directory: frontend
         run: |

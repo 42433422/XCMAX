@@ -146,25 +146,52 @@ HISTORICAL_HINTS = (
     "~", "约", "待", "计划", "means", "已诞生", "收录", "封顶", "卡", "上限",
 )
 
+# 日期标记：行内或所在章节头带 YYYY-MM-DD 视为历史快照（WIP / changelog / 阶段盘点）
+DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+HEADING_RE = re.compile(r"^#{1,6}\s+")
+
+# 非代码覆盖率指标：CI workflow 覆盖 / 全景图覆盖等，与代码覆盖率无直接可比性，豁免
+NON_CODE_COVERAGE_HINTS = ("全景图", "workflow 覆盖率", "workflow coverage", "CI workflow 覆盖")
+
+# changelog 记录天然是历史条目，整文件豁免
+CHANGELOG_NAME_HINTS = ("CHANGELOG", "changelog")
+
+
+def in_dated_section(lines: list[str], n: int) -> bool:
+    """行 n 是否位于带日期标记的章节内（行自身或最近前置章节头含 YYYY-MM-DD）。"""
+    if DATE_RE.search(lines[n - 1]):
+        return True
+    for i in range(n - 1, -1, -1):
+        if HEADING_RE.match(lines[i]):
+            return bool(DATE_RE.search(lines[i]))
+    return False
+
 
 def scan_docs(docs: list[Path], ssot: dict[str, float]) -> list[str]:
     """扫描文档，把"当前 floor/门禁"宣称的覆盖率数字与 SSOT 真值比对，列出失实宣称。
 
     仅把当前 floor 值（后端行/分支 + 前端各项 floor + last_measured）作为允许集合；
-    目标值（target_*）与 vitest/pyproject 的 floor 由其余字段覆盖。命中历史/目标/阶段
-    提示词的行视为非当前宣称，豁免。
+    目标值（target_*）与 vitest/pyproject 的 floor 由其余字段覆盖。以下情况豁免：
+    * 命中历史/目标/阶段提示词的行（原有逻辑）；
+    * 行或所在章节头带日期标记（历史快照）；
+    * changelog 文件（Q 历史条目）；
+    * 非代码覆盖率指标（如 CI workflow / 全景图覆盖）。
     """
     allowed = set(round(v, 2) for k, v in ssot.items() if not k.startswith("target_"))
     issues: list[str] = []
     for doc in docs:
         if not doc.is_file():
             continue
+        if any(h in doc.name for h in CHANGELOG_NAME_HINTS):
+            continue
         text = doc.read_text(encoding="utf-8", errors="ignore")
         lines = text.splitlines()
         for n, line in enumerate(lines, 1):
             if not CONTEXT_RE.search(line):
                 continue
-            hist = any(h in line for h in HISTORICAL_HINTS)
+            if any(h in line for h in NON_CODE_COVERAGE_HINTS):
+                continue
+            hist = any(h in line for h in HISTORICAL_HINTS) or in_dated_section(lines, n)
             for m in PCT_RE.finditer(line):
                 num = float(m.group(1))
                 if round(num, 2) in allowed:

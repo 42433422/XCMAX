@@ -12,10 +12,10 @@
   "last_measured": {
     "backend_lines": 88.19,
     "backend_branches": 81.5,
-    "frontend_lines": 93.21,
-    "frontend_branches": 82.45,
-    "frontend_functions": 91.39,
-    "frontend_statements": 93.21
+    "frontend_lines": 92.73,
+    "frontend_branches": 81.26,
+    "frontend_functions": 90.32,
+    "frontend_statements": 92.73
   },
   "last_measured_commit": "fix/auto-merge-conflict-spam-dedupe",
   "last_measured_date": "2026-07-25"
