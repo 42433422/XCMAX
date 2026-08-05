@@ -81,6 +81,55 @@ QUALITY_CHECKS_JSON = (
 )
 
 
+def test_governance_audit_gate_fails_closed_when_existing_audit_is_unreadable(
+    monkeypatch,
+) -> None:
+    class UnreadableAuditPath:
+        @staticmethod
+        def exists() -> bool:
+            return True
+
+        @staticmethod
+        def open(*_args, **_kwargs):
+            raise OSError("permission denied")
+
+    monkeypatch.setattr(loop_runner, "governance_audit_path", UnreadableAuditPath)
+
+    with pytest.raises(OSError, match="permission denied"):
+        loop_runner._read_governance_audit()
+
+    gate = loop_runner._governance_audit_gate()
+
+    assert gate["ok"] is False
+    assert gate["blocking"] is True
+    assert gate["action"] == "hold_for_governance_review"
+    assert gate["reason"] == "governance_audit_unavailable"
+    assert gate["summary"] == {
+        "recent_count": 0,
+        "success_count": 0,
+        "failure_count": 0,
+        "consecutive_failures": 0,
+        "health": "unavailable",
+        "error_type": "OSError",
+        "error": "permission denied",
+    }
+
+
+def test_governance_audit_gate_allows_missing_audit_history(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_GOVERNANCE_AUDIT",
+        str(tmp_path / "missing-governance-audit.jsonl"),
+    )
+
+    gate = loop_runner._governance_audit_gate()
+
+    assert gate["ok"] is True
+    assert gate["blocking"] is False
+    assert gate["action"] == "allow"
+    assert gate["reason"] == "governance_audit_healthy"
+    assert gate["summary"]["health"] == "ok"
+
+
 def test_scheduler_selected_remediation_is_resolved_exactly() -> None:
     memory = {
         "open_items": [

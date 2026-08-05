@@ -538,7 +538,7 @@ def _read_governance_audit(limit: int = 10) -> List[Dict[str, Any]]:
                     rows.append(row)
     except OSError:
         logger.exception("failed to read self-maintenance governance audit")
-        return []
+        raise
     return rows[-limit:]
 
 
@@ -586,7 +586,18 @@ def record_governance_audit_review(
 def _governance_audit_summary(
     rows: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    items = rows if isinstance(rows, list) else _read_governance_audit(10)
+    try:
+        items = rows if isinstance(rows, list) else _read_governance_audit(10)
+    except OSError as exc:
+        return {
+            "recent_count": 0,
+            "success_count": 0,
+            "failure_count": 0,
+            "consecutive_failures": 0,
+            "health": "unavailable",
+            "error_type": type(exc).__name__,
+            "error": str(exc)[:300],
+        }
     success_count = sum(
         1 for item in items if isinstance(item, dict) and item.get("ok") is not False
     )
@@ -609,12 +620,17 @@ def _governance_audit_summary(
 def _governance_audit_gate() -> Dict[str, Any]:
     summary = _governance_audit_summary()
     health = str(summary.get("health") or "").strip()
-    ok = health != "bad"
+    ok = health in {"ok", "warn"}
+    reason = {
+        "bad": "governance_audit_consecutive_failures",
+        "ok": "governance_audit_healthy",
+        "warn": "governance_audit_healthy",
+    }.get(health, "governance_audit_unavailable")
     return {
         "ok": ok,
         "blocking": not ok,
         "action": "allow" if ok else "hold_for_governance_review",
-        "reason": ("governance_audit_healthy" if ok else "governance_audit_consecutive_failures"),
+        "reason": reason,
         "summary": summary,
         "policy": "consecutive_governance_action_failures_pause_auto_continue_and_auto_merge",
     }
@@ -7805,24 +7821,7 @@ def get_self_maintenance_runtime_status(limit: int = 80) -> Dict[str, Any]:
         "windows": metric_windows[-2:],
     }
 
-    governance_audit = _read_governance_audit(10)
-    governance_audit_summary = _governance_audit_summary(governance_audit)
-    governance_gate_current = {
-        "ok": governance_audit_summary.get("health") != "bad",
-        "blocking": governance_audit_summary.get("health") == "bad",
-        "action": (
-            "hold_for_governance_review"
-            if governance_audit_summary.get("health") == "bad"
-            else "allow"
-        ),
-        "reason": (
-            "governance_audit_consecutive_failures"
-            if governance_audit_summary.get("health") == "bad"
-            else "governance_audit_healthy"
-        ),
-        "summary": governance_audit_summary,
-        "policy": "consecutive_governance_action_failures_pause_auto_continue_and_auto_merge",
-    }
+    governance_gate_current = _governance_audit_gate()
     roster_gate_current = (
         roster_alignment.get("gate") if isinstance(roster_alignment.get("gate"), dict) else {}
     )

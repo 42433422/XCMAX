@@ -6,7 +6,8 @@ from pathlib import Path
 
 def _create_legacy_outbox(path: Path) -> None:
     with sqlite3.connect(path) as conn:
-        conn.executescript("""
+        conn.executescript(
+            """
             CREATE TABLE cs_webhook_outbox (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               target_url TEXT NOT NULL,
@@ -22,7 +23,8 @@ def _create_legacy_outbox(path: Path) -> None:
               updated_at TEXT NOT NULL,
               next_retry_at TEXT
             );
-            """)
+            """
+        )
         conn.execute(
             """
             INSERT INTO cs_webhook_outbox (
