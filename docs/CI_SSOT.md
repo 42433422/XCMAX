@@ -142,7 +142,7 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 
 ## Branch protection（main）
 
-已通过 API 配置（2026-06-13，2026-07 发版红线扩展）：required status checks 含 `guard-temp-scripts`、`backend-test`、`frontend-test`、`frontend-e2e`、`arch-fitness`、`security-scan`、`pack-verify`、`container-scan`、`docker-build-fhd-api`，以及 **`release-verify`**、**`desktop-build-smoke`**、**`SSOT Drift Gate`**、**`Release gate (hard block)`**；`vue-tsc` / `mypy` / `build:strict` 已在 `frontend-test` / `backend-test` 内硬失败。本地等价：`bash FHD/scripts/dev/release_verify.sh`。
+已通过 API 配置（2026-06-13，2026-07 发版红线扩展）：required status checks 含 `guard-temp-scripts`、`backend-test`、`frontend-test`、`frontend-e2e`、`arch-fitness`、`security-scan`、`pack-verify`、`container-scan`、`docker-build-fhd-api`，以及 **`release-verify`**、**`desktop-build-smoke`**、**`SSOT Drift Gate`**、**`Release gate (hard block)`**；`vue-tsc` / `mypy` / `build:strict` 已在 `frontend-test` / `backend-test` 内硬失败。**覆盖率门禁**（2026-08-05 诚实化）：`backend-test` 内以 `coverage_ratchet.py --check --behavior --require-backend` 为唯一硬 gate（排除 `coverage_ramp` stub 的行为口径）；`frontend-test` 内以 `coverage_ratchet.py --check --require-frontend` 硬阻断前端覆盖率回退。本地等价：`bash FHD/scripts/dev/release_verify.sh`。
 
 > **Public 仓库**：`42433422/XCMAX` 已为 **PUBLIC**；Actions 对 public repo 有免费额度。若 job 仍报 `payments have failed or spending limit`，在 [Payment information](https://github.com/settings/billing/payment_information) 添加有效支付方式。
 
@@ -304,6 +304,13 @@ cd XCMAX
 
 仓库历史上积累了大量远端/本地分支（886 / 193），部分 `behind main` 达 121–517，
 合并冲突成本爆炸。遵循以下策略控制分支增量，并配套安全清理工具。
+
+> **2026-08-05 dry-run 实测**（`prune_stale_branches.py` 默认参数）：远端 888 分支 →
+> `active=862 / stale=6 / deletable=0 / protected=20`。已合并进 `main` 的分支仅 95 个，
+> 且均因 2026-07-21 git 历史重置而提交时间在旧阈值内，故**当前安全口径下无可自动删除项**。
+> 真正的僵尸来源是 **561 个未合并的自动 agent 分支**（`devfleet/cursor` 305 + `devfleet/codex`
+> 224 + `devfleet/trae` 32），它们领先 `main` 巨大（ahead 1389+）且从未合并，安全工具
+> **不会**自动删除未合并分支（防误删），需人工按 `--before / --behind` 框定范围逐批决策。
 
 ### 命名规范
 - 特性分支：`feature/<module>-<short-desc>`（如 `feature/admin-orders-foundation-ui`）

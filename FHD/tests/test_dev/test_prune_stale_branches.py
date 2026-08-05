@@ -20,7 +20,7 @@ import pytest
 from scripts.dev import prune_stale_branches as psb
 
 TODAY = dt.date(2026, 8, 5)
-OLD = "2025-01-01"   # 远早于 stale_days
+OLD = "2025-01-01"  # 远早于 stale_days
 RECENT = "2026-07-20"  # 距 TODAY(2026-08-05) 16 天，在 stale_days=30 内 → active
 
 
@@ -58,13 +58,16 @@ def _classify(info: psb.BranchInfo, **kw) -> psb.BranchInfo:
 # 保护规则
 # --------------------------------------------------------------------------- #
 
+
 @pytest.mark.parametrize("name", ["main", "develop", "release/1.0", "release/v2.0.1"])
 def test_is_protected_reserved(name: str):
     assert psb.is_protected_branch(name, current_branch="feat/desktop-native-capabilities")
 
 
 def test_is_protected_current_branch():
-    assert psb.is_protected_branch("feat/desktop-native-capabilities", "feat/desktop-native-capabilities")
+    assert psb.is_protected_branch(
+        "feat/desktop-native-capabilities", "feat/desktop-native-capabilities"
+    )
 
 
 def test_is_protected_not_for_feature():
@@ -88,6 +91,7 @@ def test_resolve_protection_non_pr_feature():
 # --------------------------------------------------------------------------- #
 # 分类
 # --------------------------------------------------------------------------- #
+
 
 def test_classify_protected_never_deletable():
     info = _mk("main", protected=True, merged=True)
@@ -163,6 +167,7 @@ def test_classify_open_pr_keeps_category_but_never_deletable():
 # 删除执行
 # --------------------------------------------------------------------------- #
 
+
 def test_apply_deletions_only_deletes_deletable(tmp_path: Path):
     deletable = _mk("feat/to-delete", behind=100, merged=True)
     _classify(deletable)
@@ -181,8 +186,14 @@ def test_apply_deletions_only_deletes_deletable(tmp_path: Path):
         stderr = ""
 
     with (
-        patch.object(psb, "delete_remote", side_effect=lambda n, cwd=None: (_R(), deleted_remote.append(n))[0]),
-        patch.object(psb, "delete_local", side_effect=lambda n, cwd=None: (_R(), deleted_local.append(n))[0]),
+        patch.object(
+            psb,
+            "delete_remote",
+            side_effect=lambda n, cwd=None: (_R(), deleted_remote.append(n))[0],
+        ),
+        patch.object(
+            psb, "delete_local", side_effect=lambda n, cwd=None: (_R(), deleted_local.append(n))[0]
+        ),
         patch.object(psb, "local_branch_exists", return_value=True),
     ):
         deleted, failed = psb.apply_deletions(
@@ -231,7 +242,18 @@ def test_dry_run_defaults_do_not_delete():
 
 
 def test_parse_args_apply_flag():
-    ns = psb.parse_args(["--apply", "--prune-local", "--before", "2025-01-01", "--behind", "50", "--stale-days", "60"])
+    ns = psb.parse_args(
+        [
+            "--apply",
+            "--prune-local",
+            "--before",
+            "2025-01-01",
+            "--behind",
+            "50",
+            "--stale-days",
+            "60",
+        ]
+    )
     assert ns.apply is True
     assert ns.prune_local is True
     assert ns.before == dt.date(2025, 1, 1)
