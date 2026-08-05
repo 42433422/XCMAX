@@ -70,6 +70,7 @@
 | mobile-tri-platform | `FHD/docs/mobile_tri_platform_ssot.md` | blocking |
 | neuro-bus-events | `FHD/config/neuro_bus_events.yaml` | blocking |
 | runtime-inventory | `FHD/config/service_topology.yaml` | blocking |
+| repository-ssot | `FHD/app/infrastructure/repositories/` | blocking |
 
 ## 已退役 SSOT（指针化）
 
