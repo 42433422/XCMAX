@@ -64,15 +64,19 @@ class TestExecuteTool:
 
 
 class TestExecuteProductsTool:
-    def test_empty_params(self):
+    @patch("app.bootstrap.get_products_service")
+    def test_empty_params(self, mock_svc):
         from app.application.workflow.planner import _execute_products_tool
 
+        mock_svc.return_value.get_products.return_value = {"success": True, "products": []}
         result = _execute_products_tool({})
         assert isinstance(result, dict)
 
-    def test_with_keyword(self):
+    @patch("app.bootstrap.get_products_service")
+    def test_with_keyword(self, mock_svc):
         from app.application.workflow.planner import _execute_products_tool
 
+        mock_svc.return_value.get_products.return_value = {"success": True, "products": []}
         result = _execute_products_tool({"keyword": "测试"})
         assert isinstance(result, dict)
 

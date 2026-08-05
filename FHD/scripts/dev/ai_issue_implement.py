@@ -3,7 +3,9 @@
 约束（来自 .trae/rules/cicd-e2e-prompt.md）：
   - owner 评论「确认」才执行（除非命中域预授权 allowlist）
   - 预估变更 >5 文件拒做
-  - 实现后创建 PR；LLM 代码一律标 needs-human + ai-generated + risk:r2
+  - 实现后创建 PR；LLM 代码（非安全类）标 ai-generated + risk:r1（可自动合并），
+    受三层护栏约束：SLA 二次守卫（CI 全绿/体量/路径）+ 48h 观察期 + hold-merge veto
+  - 安全类 / 需要人工判断的一律保留 needs-human
   - 只接受完整新文件内容或唯一精确替换，不把描述摘要当源码
 
 预授权（方案 B）：

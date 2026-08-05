@@ -2450,15 +2450,19 @@ class TestPlanWithReactMultiagentProbeOutputs:
                     "choices": [{"message": {"content": json.dumps(repaired_payload)}}]
                 }
                 mock_client.return_value.post.return_value = resp
-                result = planner._plan_with_react_multiagent(
-                    plan_id="pid",
-                    user_id="u1",
-                    message="test",
-                    tool_registry=_sample_registry(),
-                    context={},
-                )
-                assert result is not None
-                assert result.nodes[0].params["entity"] == "products"
+                with patch(
+                    "app.application.facades.tools_facade.execute_registered_workflow_tool",
+                    return_value={"success": True, "data": []},
+                ):
+                    result = planner._plan_with_react_multiagent(
+                        plan_id="pid",
+                        user_id="u1",
+                        message="test",
+                        tool_registry=_sample_registry(),
+                        context={},
+                    )
+                    assert result is not None
+                    assert result.nodes[0].params["entity"] == "products"
 
     def test_critic_repair_still_invalid_returns_none(self) -> None:
         """critic 修复后仍无效时返回 None。"""
@@ -2503,14 +2507,18 @@ class TestPlanWithReactMultiagentProbeOutputs:
                     "choices": [{"message": {"content": json.dumps(bad_repaired_payload)}}]
                 }
                 mock_client.return_value.post.return_value = resp
-                result = planner._plan_with_react_multiagent(
-                    plan_id="pid",
-                    user_id="u1",
-                    message="test",
-                    tool_registry=_sample_registry(),
-                    context={},
-                )
-                assert result is None
+                with patch(
+                    "app.application.facades.tools_facade.execute_registered_workflow_tool",
+                    return_value={"success": True, "data": []},
+                ):
+                    result = planner._plan_with_react_multiagent(
+                        plan_id="pid",
+                        user_id="u1",
+                        message="test",
+                        tool_registry=_sample_registry(),
+                        context={},
+                    )
+                    assert result is None
 
     def test_critic_repair_returns_none_falls_back(self) -> None:
         """critic 修复返回 None 时回退 fallback。"""
@@ -2531,14 +2539,18 @@ class TestPlanWithReactMultiagentProbeOutputs:
         )
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, invalid_final]):
             with patch.object(planner, "_critic_repair_with_llm", return_value=None):
-                result = planner._plan_with_react_multiagent(
-                    plan_id="pid",
-                    user_id="u1",
-                    message="test",
-                    tool_registry=_sample_registry(),
-                    context={},
-                )
-                assert result is None
+                with patch(
+                    "app.application.facades.tools_facade.execute_registered_workflow_tool",
+                    return_value={"success": True, "data": []},
+                ):
+                    result = planner._plan_with_react_multiagent(
+                        plan_id="pid",
+                        user_id="u1",
+                        message="test",
+                        tool_registry=_sample_registry(),
+                        context={},
+                    )
+                    assert result is None
 
 
 # ---------------------------------------------------------------------------
