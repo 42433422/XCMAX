@@ -28,13 +28,6 @@ from .package import ModPackage, ModPackageError, ModSignatureError
 from .registry import get_mod_registry
 
 logger = logging.getLogger(__name__)
-
-
-def _restore_entitlements_from_session_id(session_id: str | None) -> None:
-    """Compatibility seam retained for callers and focused runtime tests."""
-    restore_entitlements_from_session_id(session_id)
-
-
 _MOD_API_FAILURE_RETRY_AT: dict[str, float] = {}
 _MOD_API_FAILURE_BACKOFF_SECONDS = 15.0
 
@@ -106,7 +99,7 @@ def _repo_layout_mods_candidates() -> list[str]:
     file_here = os.path.abspath(__file__)
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(file_here))))
     out: list[str] = []
-    for rel in ("mods", "mods-admin-runtime", os.path.join("XCAGI", "mods")):
+    for rel in ("mods", os.path.join("XCAGI", "mods")):
         p = os.path.abspath(os.path.join(repo_root, rel))
         if os.path.isdir(p) and p not in out:
             out.append(p)
@@ -176,7 +169,7 @@ def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
     if path is None:
         raise FileNotFoundError(f"Mod {mod_id} backend file missing")
     safe = "".join(c if c.isalnum() else "_" for c in mod_id)
-    # 同一 mod_id 可能来自 mods/ 与 mods-admin-runtime/ 等不同物理路径；须纳入缓存键避免错用旧模块。
+    # 同一 mod_id 可能来自 mods/ 与 XCAGI/mods/ 等不同物理路径；须纳入缓存键避免错用旧模块。
     import hashlib
 
     path_digest = hashlib.sha256(os.path.normpath(os.path.abspath(mod_path)).encode()).hexdigest()[
@@ -1295,6 +1288,11 @@ def _register_single_mod_http_routes(
         return False
 
 
+def _restore_entitlements_from_session_id(session_id: str | None) -> None:
+    """恢复企业 Mod 权益（委托给 dedicated 模块，保留旧调用方兼容）。"""
+    restore_entitlements_from_session_id(session_id)
+
+
 def _mod_allowed_for_api_load(mod_id: str, session_id: str | None = None) -> bool:
     mid = (mod_id or "").strip()
     if not mid:
@@ -1338,7 +1336,6 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
     )
     if employee_pack_ready is not None:
         return employee_pack_ready
-
     if mid not in mm._loaded_mods:
         if mm.resolve_mod_directory(mid) is None:
             mark_mod_missing_locally(mid)

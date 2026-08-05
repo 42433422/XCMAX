@@ -378,7 +378,7 @@
       "id": "service",
       "code": "L3",
       "label": "服务层",
-      "desc": "微信触达、客服沟通与人事服务",
+      "desc": "客服沟通与人事服务",
       "color": "#059669"
     },
     {
@@ -390,13 +390,6 @@
     }
   ],
   "enterprise_employees": {
-    "wechat_contacts": {
-      "label": "企微联系人",
-      "enterprise_layer": "service",
-      "listing": "listed",
-      "source": "store",
-      "mod_id": "wechat-contacts-ai-employee"
-    },
     "lan_gate": {
       "label": "局域网网关",
       "enterprise_layer": "tools",
@@ -421,13 +414,6 @@
     "receipt_confirm": {
       "label": "签收确认",
       "enterprise_layer": "execution",
-      "listing": "unlisted",
-      "source": "custom",
-      "mod_id": "xcagi-core-workflow-employees"
-    },
-    "wechat_msg": {
-      "label": "微信消息",
-      "enterprise_layer": "service",
       "listing": "unlisted",
       "source": "custom",
       "mod_id": "xcagi-core-workflow-employees"

@@ -90,6 +90,14 @@ except Exception:
 | Prometheus 采集 | `python scripts/observability/collect_slo_metrics.py --window 30d` |
 | 7 天验收 | `bash scripts/observability/run_staging_7d_acceptance.sh` |
 
+## 覆盖率门禁口径（质量 SLO · Delta A）
+
+后端覆盖率门禁唯一硬 gate 为**行为口径**（2026-08-05 起）：CI 用
+`coverage_ratchet.py --check --behavior --require-backend --record` 排除
+`coverage_ramp` 注水 stub（`-m 'not coverage_ramp'`）后硬阻断。floor 见
+`metrics/coverage_ratchet_baseline.json` 的 `behavior_floors {lines, branches}`
+（只升不降）；全量 `fail_under` 保留为参考/趋势口径。
+
 ## 验收模式
 
 | 模式 | 适用 | 证据 |

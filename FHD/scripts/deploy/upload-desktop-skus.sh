@@ -2,12 +2,13 @@
 # 上传 release/xcagi-v{version}/{personal,enterprise}/ 桌面制品至 update 服务器。
 set -euo pipefail
 
-VERSION="${1:-1.0.0.0}"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# 版本默认值取自 SSOT（FHD/VERSION.md），避免脚本内硬编码产物版本。
+VERSION="${1:-$(. "$ROOT/scripts/deploy/lib/version.sh" && product_version)}"
 SKU="${2:-all}"
 VERSION="${VERSION#v}"
 VERSION="${VERSION#V}"
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RELEASE_ROOT="${ROOT}/release/xcagi-v${VERSION}"
 
 HOST="${XCAGI_UPDATE_SSH_HOST:-119.27.178.147}"

@@ -322,47 +322,6 @@ def get_distillation_db_path() -> str:
     return get_db_path("distillation.db")
 
 
-def init_wechat_tasks_table(db_path: str | None = None) -> None:
-    """初始化 wechat_tasks 表（存放从微信解析出来的任务）"""
-    db_path = db_path or get_db_path("products.db")
-    with sqlite_conn(db_path) as conn:
-        cur = conn.cursor()
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS wechat_tasks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                contact_id INTEGER,
-                username TEXT,
-                display_name TEXT,
-                message_id TEXT,
-                msg_timestamp INTEGER,
-                raw_text TEXT NOT NULL,
-                task_type TEXT NOT NULL DEFAULT 'unknown',
-                status TEXT NOT NULL DEFAULT 'pending',
-                last_status_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-
-        cur.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_wechat_tasks_contact_status
-            ON wechat_tasks (contact_id, status)
-            """
-        )
-
-        cur.execute(
-            """
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_wechat_tasks_msg_unique
-            ON wechat_tasks (message_id, username)
-            """
-        )
-
-        conn.commit()
-
-
 def init_distillation_tables(engine: Engine) -> None:
     """
     在主库上创建蒸馏样本表 distillation_log / training_stats。

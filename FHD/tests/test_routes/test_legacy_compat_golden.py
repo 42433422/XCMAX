@@ -46,7 +46,6 @@ EXPECTED_ROUTER_PATHS: tuple[tuple[str, str], ...] = (
     ("legacy_auth", "/api/auth"),
     ("system_routes", "/api/system"),
     ("code_editor", "/api/code-editor"),
-    ("wechat_decrypt", "/api/wechat/decrypt"),
     (
         "xcagi_compat",
         "/api/ai/unified_chat",

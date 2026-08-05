@@ -200,7 +200,10 @@ describe('ImMessengerView.vue', () => {
     expect(wrapper.find('.im-pin').exists()).toBe(false)
     expect(fetchCodexSuperEmployeeMessages).toHaveBeenCalledWith({ scope: 'admin' })
 
-    await wrapper.find('.im-conv-item--pinned').trigger('click')
+    await wrapper
+      .findAll('.im-conv-item--pinned')
+      .find((el) => el.text().includes('超级员工-Codex'))!
+      .trigger('click')
     await flushPromises()
 
     expect(wrapper.text()).toContain('跨设备协作开发员工')

@@ -73,7 +73,7 @@ def _call_mod_resolver(fn_name: str) -> Any:
 
 
 def _host_products_repository():
-    from app.infrastructure.persistence.product_repository_impl import SQLAlchemyProductRepository
+    from app.infrastructure.repositories.product_repository_impl import SQLAlchemyProductRepository
 
     return SQLAlchemyProductRepository()
 

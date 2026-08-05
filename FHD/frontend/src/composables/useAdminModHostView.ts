@@ -1,27 +1,22 @@
 import { shallowRef, type Component } from 'vue'
 import ModRequiredView from '@/components/ModRequiredView.vue'
-
-const modRuntimeViewLoaders = import.meta.glob(
-  '../../../mods-admin-runtime/*/frontend/views/*.vue',
-) as Record<string, () => Promise<{ default: Component }>>
-
-function loaderKey(modId: string, viewFile: string): string {
-  return `../../../mods-admin-runtime/${modId}/frontend/views/${viewFile}.vue`
-}
+import { findModViewLoader } from '@/router/modViews'
 
 /**
- * 宿主壳页加载 Mod 物理视图：优先 mods-admin-runtime（无需本机已安装 Mod 即可展示 UI）。
+ * 宿主壳页加载 Mod 物理视图。
+ * 视图源统一走 modPhysicalViewGlob（按 edition 解析，SSOT = `mods/`），
+ * 不再硬编码 mods-admin-runtime，避免两套 glob/目录漂移导致构建后视图回退。
  * 仅当物理视图文件不存在时回退 ModRequiredView。
  */
 export function useAdminModHostView(modId: string, viewFile: string, title: string) {
   const View = shallowRef<Component>(ModRequiredView)
   const modProps = { modId, title }
 
-  const load = modRuntimeViewLoaders[loaderKey(modId, viewFile)]
+  const load = findModViewLoader(modId, viewFile)
   if (load) {
     void load()
       .then((m) => {
-        View.value = m.default
+        View.value = m.default as Component
       })
       .catch(() => {
         /* 保持 ModRequiredView */

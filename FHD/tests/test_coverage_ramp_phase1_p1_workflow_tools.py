@@ -148,16 +148,6 @@ def test_execute_tool_print_label() -> None:
 
 @patch.dict(
     "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS",
-    {("wechat_send", "preview"): lambda p: {"success": True}},
-    clear=False,
-)
-def test_execute_tool_wechat_preview() -> None:
-    out = execute_tool("wechat_send", {"contact": "Bob"})
-    assert out["success"] is True
-
-
-@patch.dict(
-    "app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS",
     {("import_excel", "import"): lambda p: {"success": True}},
     clear=False,
 )

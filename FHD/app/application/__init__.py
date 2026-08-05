@@ -49,11 +49,6 @@ from .user_preference_app_service import (
     UserPreferenceApplicationService,
     get_user_preference_app_service,
 )
-from .wechat_contact_app_service import (
-    WechatContactApplicationService,
-    get_wechat_contact_app_service,
-)
-from .wechat_task_app_service import WechatTaskApplicationService, get_wechat_task_app_service
 
 # 下列子模块被 pytest monkeypatch.setattr 的属性遍历路径引用；
 # 必须在包层面显式导入，否则 pytest 9.x 在 getattr 找不到时走 importlib
@@ -112,8 +107,4 @@ __all__ = [
     "get_user_app_service",
     "UserPreferenceApplicationService",
     "get_user_preference_app_service",
-    "WechatContactApplicationService",
-    "get_wechat_contact_app_service",
-    "WechatTaskApplicationService",
-    "get_wechat_task_app_service",
 ]

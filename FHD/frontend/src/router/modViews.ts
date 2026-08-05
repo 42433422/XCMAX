@@ -9,9 +9,11 @@ function normalizePath(p: string): string {
 }
 
 function findModViewKey(modId: string, viewFile: string): string | undefined {
+  // glob key 始终带 `.vue`，而调用方有的传 `OrdersView`、有的传 `OrdersView.vue`，
+  // 因此两种后缀都要匹配，否则 HostModBridgeView 加载 mod 视图会回退 ModRequiredView。
   const suffixes = [
     `/mods/${modId}/frontend/views/${viewFile}`,
-    `/mods-admin-runtime/${modId}/frontend/views/${viewFile}`,
+    `/mods/${modId}/frontend/views/${viewFile}.vue`,
   ];
   return Object.keys(modPhysicalViewGlob).find((k) => {
     const nk = normalizePath(k);
@@ -68,6 +70,19 @@ export function resolveModPageView(
 
 export function listPhysicalViewGlobKeys(): string[] {
   return Object.keys(modPhysicalViewGlob);
+}
+
+/**
+ * 统一的 Mod 物理视图查找入口：仅从单一 glob（modPhysicalViewGlob，按 edition 解析）取 loader。
+ * 企业版与 full 版 glob 均指向 SSOT `mods/`（不再读 mods-admin-runtime 副本）。
+ * 供 useAdminModHostView 等宿主壳复用，避免各自硬编码目录/glob 造成"构建后视图回退"的漂移。
+ */
+export function findModViewLoader(modId: string, viewFile: string): ViewLoader | undefined {
+  const key = findModViewKey(modId, viewFile);
+  if (!key) {
+    return undefined;
+  }
+  return modPhysicalViewGlob[key] as ViewLoader;
 }
 
 export function physicalViewExists(modId: string, viewFile: string): boolean {

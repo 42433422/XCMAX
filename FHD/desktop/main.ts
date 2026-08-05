@@ -4,7 +4,9 @@ import {
   Notification,
   Tray,
   app,
+  clipboard,
   dialog,
+  globalShortcut,
   ipcMain,
   nativeImage,
   screen,
@@ -22,6 +24,7 @@ import {
   downloadUpdate,
   getUpdateStatus,
   installUpdate,
+  isForceUpgradeRequired,
   readLocalBuildSha,
   runUpdateCheckWithDirectNet,
 } from './updater'
@@ -38,6 +41,8 @@ import {
 import { terminateChildProcess, waitForChildExit } from './backend-lifecycle'
 import { clampWindowBounds, readWindowState, writeWindowState } from './window-state'
 import { desktopBackendEnv } from './backend-env'
+import { desktopOfflineDbPath, queryOffline } from './data-bridge'
+import { deleteSecret, getSecret, listSecrets, setSecret } from './secure-store'
 import { AutonomyController } from './autonomy/controller'
 import { DesktopAutonomyAdapter } from './autonomy/desktop-adapter'
 import { backendCrashPolicy } from './autonomy/policies/backend-crash.policy'
@@ -365,6 +370,24 @@ let desktopBootstrapSessionHintAvailable = false
 
 // 自治控制器（与现有更新观察期/backend 重启逻辑共存，零回归；阶段 1 接入）
 let autonomyController: AutonomyController | null = null
+
+/**
+ * 常驻模式下切换主窗口的显示/隐藏。
+ * 窗口隐藏时后端保持常驻（不随窗口销毁），实现"关窗到托盘 + 秒开"。
+ */
+function toggleMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    void createWindow()
+    return
+  }
+  if (mainWindow.isVisible()) {
+    mainWindow.hide()
+  } else {
+    mainWindow.show()
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+  }
+}
 
 function repoRoot(): string {
   return app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '..', '..')
@@ -1130,7 +1153,15 @@ async function createWindow(): Promise<void> {
   }
   createdWindow.on('move', scheduleWindowStateWrite)
   createdWindow.on('resize', scheduleWindowStateWrite)
-  createdWindow.on('close', persistWindowState)
+  // 常驻：非退出时关窗仅隐藏到托盘，后端保持常驻实现"秒开"；仅托盘"退出"或
+  // app.quit() 才真正关闭（isQuitting 已在 before-quit 置位）。
+  createdWindow.on('close', (event) => {
+    persistWindowState()
+    if (!app.isQuitting) {
+      event.preventDefault()
+      createdWindow.hide()
+    }
+  })
   if (process.platform !== 'darwin') {
     mainWindow.setAutoHideMenuBar(true)
     mainWindow.setMenuBarVisibility(false)
@@ -1390,7 +1421,7 @@ function createTray(): void {
   tray.setToolTip(APP_NAME)
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: '显示 XCAGI', click: () => mainWindow?.show() },
+      { label: '显示 / 隐藏 XCAGI', click: () => toggleMainWindow() },
       { label: '打开数据目录', click: () => void shell.openPath(app.getPath('userData')) },
       { label: '导出诊断包…', click: () => void exportSupportBundleInteractive() },
       { label: '检查更新', click: () => void runUpdateCheckWithDirectNet() },
@@ -1433,6 +1464,7 @@ function bootstrap(): void {
     // will-quit runs after BrowserWindows have closed, so renderer keep-alive
     // connections no longer prevent the backend from shutting down gracefully.
     app.on('will-quit', event => {
+      globalShortcut.unregisterAll()
       if (backendShutdownComplete) {
         return
       }
@@ -1536,14 +1568,63 @@ function bootstrap(): void {
           if (!Notification.isSupported()) {
             return { ok: false, reason: 'unsupported' }
           }
-          new Notification({ title, body }).show()
+          const notification = new Notification({ title, body })
+          notification.on('click', () => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.show()
+              mainWindow.focus()
+            }
+          })
+          notification.show()
           return { ok: true }
         }
       )
 
+      // 原生本地数据桥（离线只读）：后端 HTTP 不可用时前端可直读本地 SQLite。
+      ipcMain.handle('xcagi:offline-query', (_event, params: unknown) => {
+        const p = (params && typeof params === 'object' ? params : {}) as {
+          kind?: string
+          keyword?: string
+          limit?: number
+        }
+        return queryOffline(desktopOfflineDbPath(), {
+          kind: String(p.kind || ''),
+          keyword: p.keyword,
+          limit: p.limit,
+        })
+      })
+
+      // 端侧密钥链（safeStorage）：敏感配置加密落盘，明文只驻内存。
+      ipcMain.handle('xcagi:secure-get', (_event, key: string) => getSecret(String(key)))
+      ipcMain.handle('xcagi:secure-set', (_event, key: string, value: string) =>
+        setSecret(String(key), value === undefined ? '' : String(value)),
+      )
+      ipcMain.handle('xcagi:secure-delete', (_event, key: string) => deleteSecret(String(key)))
+      ipcMain.handle('xcagi:secure-list', () => listSecrets())
+
+      // 剪贴板原生读写（P2 高频微交互）。
+      ipcMain.handle('xcagi:clipboard-read-text', () => clipboard.readText())
+      ipcMain.handle('xcagi:clipboard-write-text', (_event, text: string) => {
+        clipboard.writeText(String(text ?? ''))
+        return { ok: true }
+      })
+      // 原生打开本地路径（文件/目录），供拖拽文件、导出等场景系统级打开。
+      ipcMain.handle('xcagi:open-path', async (_event, target: string) => {
+        const p = String(target || '')
+        if (!p || !fs.existsSync(p)) return { ok: false, reason: 'not_found' }
+        const err = await shell.openPath(p)
+        return { ok: !err, reason: err || undefined }
+      })
+
       configureDesktopMediaPermissions()
       createMenu()
       createTray()
+      // 全局快捷键：唤起 / 隐藏主窗口（常驻模式直达）
+      try {
+        globalShortcut.register('CommandOrControl+Shift+X', () => toggleMainWindow())
+      } catch {
+        /* 全局快捷键注册失败不阻塞启动 */
+      }
 
       // 更新后首次启动观察期：检查 rollback marker
       const pendingRollback = checkPendingRollback()
@@ -1648,6 +1729,12 @@ function bootstrap(): void {
     })
 
     app.on('activate', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show()
+        if (mainWindow.isMinimized()) mainWindow.restore()
+        mainWindow.focus()
+        return
+      }
       if (BrowserWindow.getAllWindows().length === 0) {
         void createWindow()
       }

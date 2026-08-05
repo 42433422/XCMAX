@@ -25,7 +25,7 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
     assert "personal   = 'minimal'" in ps_sync
     assert "enterprise = 'full'" in ps_sync
 
-    for script in (sh_backend, sh_windows, sh_thin):
+    for script in (sh_windows, sh_thin):
         assert (
             "VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full"
         ) in script
@@ -33,6 +33,18 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
         # 桌面包不得构建 admin-console
         assert "admin-console && npm run build" not in script
         assert "(cd admin-console && npm run build)" not in script
+
+    # build-backend.sh 自 4c724dae8 起把前端构建委托给 build-frontend.sh（SSOT 单点构建），
+    # enterprise=full 的构建由 build-frontend.sh 保证，这里校验委托关系与 admin-console 禁令。
+    sh_frontend = (scripts / "build-frontend.sh").read_text(encoding="utf-8")
+    assert "build-frontend.sh" in sh_backend
+    assert (
+        'VITE_XCAGI_PRODUCT_SKU="${VITE_SKU}" VITE_XCAGI_EDITION=full npm run build:full'
+        in sh_frontend
+    )
+    assert "VITE_XCAGI_PRODUCT_SKU=enterprise npm run build" not in sh_backend
+    assert "admin-console && npm run build" not in sh_backend
+    assert "(cd admin-console && npm run build)" not in sh_backend
 
     assert "admin-console" not in ps_backend or "不构建 admin-console" in ps_backend
     assert 'Push-Location (Join-Path $Root "admin-console")' not in ps_backend

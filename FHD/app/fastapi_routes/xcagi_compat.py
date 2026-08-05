@@ -17,18 +17,11 @@ from app.fastapi_routes.domains.misc.routes import router as misc_router
 from app.fastapi_routes.domains.product.compat_routes import router as product_compat_router
 from app.fastapi_routes.domains.product.routes import router as product_legacy_router
 from app.fastapi_routes.domains.template.routes import router as template_router
-from app.fastapi_routes.domains.wechat.compat_routes import router as wechat_compat_router
-from app.fastapi_routes.domains.wechat.routes import router as wechat_legacy_router
 from app.neuro_bus.bus import get_neuro_bus
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["xcagi-compat"])
-
-_wechat = APIRouter()
-_wechat.include_router(wechat_compat_router)
-_wechat.include_router(wechat_legacy_router)
-router.include_router(_wechat)
 
 _product = APIRouter()
 _product.include_router(product_legacy_router)
