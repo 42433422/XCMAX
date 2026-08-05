@@ -91,6 +91,7 @@
 [giant-file] app/services/xcmax_sync_service.py
 [giant-file] app/utils/async_tasks.py
 [giant-file] app/utils/decorators.py
+[giant-file] app/utils/excel/excel_template_analyzer.py
 [giant-file] app/utils/excel_template_analyzer.py
 [giant-file] app/utils/print_utils.py
 [giant-file] app/utils/redis_cache.py
