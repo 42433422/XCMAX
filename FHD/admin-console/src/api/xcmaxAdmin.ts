@@ -182,17 +182,6 @@ export const xcmaxAdminApi = {
       `/api/xcmax/admin/deploy/jobs/${encodeURIComponent(jobId)}`,
     );
   },
-  listWechatGroups(params: { keyword?: string; limit?: number } = {}) {
-    return api.get('/api/xcmax/admin/wechat/groups', params);
-  },
-  getUserWechatBindings(userId: number) {
-    return api.get(`/api/xcmax/admin/market/users/${userId}/wechat-customers`);
-  },
-  saveUserWechatBindings(userId: number, contactIds: number[]) {
-    return api.put(`/api/xcmax/admin/market/users/${userId}/wechat-customers`, {
-      contact_ids: contactIds,
-    });
-  },
   fetchPendingAutonomyActions() {
     return api.get<{ ok: boolean; count: number; items: AutonomyPendingAction[] }>(
       '/api/xcmax/admin/autonomy/actions/pending',

@@ -91,7 +91,7 @@ describe('lazy-load preloadRelatedComponents', () => {
 
   it('preloads related components for ProFeatureWidget', () => {
     expect(componentPreloadMap.ProFeatureWidget).toEqual(
-      expect.arrayContaining(['WeChatLoginPanel', 'UserListPanel', 'ProductQueryPanel']),
+      expect.arrayContaining(['UserListPanel', 'ProductQueryPanel']),
     )
     expect(() => preloadRelatedComponents('ProFeatureWidget')).not.toThrow()
   })

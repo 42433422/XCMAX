@@ -36,7 +36,6 @@ export const ENTERPRISE_ORG_LAYERS: readonly EnterpriseOrgLayer[] = [
   { id: 'management', code: 'L4', label: '管理层', desc: '流程编排、路由协同与自治监控', color: '#7c3aed' },
 ] as const
 export const ENTERPRISE_EMPLOYEES: Record<string, EnterpriseEmployeeMeta> = {
-  'wechat_contacts': { id: 'wechat_contacts', label: '企微联系人', enterprise_layer: 'service', listing: 'listed', source: 'store', mod_id: 'wechat-contacts-ai-employee' },
   'lan_gate': { id: 'lan_gate', label: '局域网网关', enterprise_layer: 'tools', listing: 'listed', source: 'store', mod_id: 'lan-gate-ai-employee' },
   'label_print': { id: 'label_print', label: '标签打印', enterprise_layer: 'execution', listing: 'unlisted', source: 'custom', mod_id: 'xcagi-core-workflow-employees' },
   'shipment_mgmt': { id: 'shipment_mgmt', label: '出货管理', enterprise_layer: 'execution', listing: 'unlisted', source: 'custom', mod_id: 'xcagi-core-workflow-employees' },
@@ -88,7 +87,6 @@ const MANIFEST_LAYER_ALIASES: Record<string, EnterpriseOrgLayerId> = {
  * 这里只保留 SSOT 未收录的客户专属/历史别名，禁止与 SSOT 重叠（见 test_employee_ssot 守卫）。
  */
 const EMP_ID_LAYER: Record<string, EnterpriseOrgLayerId> = {
-  wechat_contacts_hub: 'service', // wechat-contacts-ai-employee 变体
   wechat_phone: 'service', // sz-qsm-pro 客户包
   lan_gate_hub: 'tools', // lan-gate-ai-employee 变体
   lan_gate_ai: 'tools', // 历史别名

@@ -111,19 +111,6 @@ vi.mock('@/utils/syncEnterpriseWorkflowRegistry', () => ({
   syncEnterpriseWorkflowRegistry: vi.fn(async () => undefined),
 }))
 
-vi.mock('@/utils/wechatIntent', () => ({
-  inferWechatCustomerIntent: vi.fn((text: string) => ({
-    label: '通用意图',
-    detail: `本地规则识别：${String(text).slice(0, 30)}`,
-  })),
-  isLabelPrintRelatedWechatIntent: vi.fn(() => false),
-  isReceiptConfirmRelatedWechatIntent: vi.fn(() => false),
-}))
-
-vi.mock('@/utils/wechatShipmentDetect', () => ({
-  shouldTryWechatShipmentPreview: vi.fn(() => false),
-}))
-
 vi.mock('@/constants/productFlow', () => ({
   DEFAULT_TUTORIAL_TRACK_ID: 'host',
 }))
@@ -293,7 +280,6 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
       title: '测试推送',
       description: '测试描述',
       feature: 'wechat',
-      source: 'wechat_contacts',
     })
     await flushPromises()
     await wrapper.find('.assistant-float-toggle').trigger('click')
@@ -302,17 +288,17 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
     expect(wrapper.text()).toContain('测试描述')
   })
 
-  it('非微信推送事件被忽略', async () => {
+  it('任意推送事件都被添加到推送列表', async () => {
     const { wrapper } = await mountComponent()
     dispatchWindowEvent('xcagi:assistant-push', {
       title: '其他推送',
-      description: '不应显示',
+      description: '应显示',
       feature: 'other',
     })
     await flushPromises()
     await wrapper.find('.assistant-float-toggle').trigger('click')
     await flushPromises()
-    expect(wrapper.text()).not.toContain('其他推送')
+    expect(wrapper.text()).toContain('其他推送')
   })
 
   it('副窗关闭时收到推送显示弹窗通知', async () => {
@@ -884,112 +870,6 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
     expect(wrapper.text()).toContain('暂无推送')
   })
 
-  // ===== 13. 自动刷新微信 =====
-
-  it('auto-refresh-wechat-changed 事件开启轮询', async () => {
-    localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
-    const { wrapper } = await mountComponent()
-    dispatchWindowEvent('xcagi:auto-refresh-wechat-changed')
-    await flushPromises()
-    expect(wrapper.exists()).toBe(true)
-  })
-
-  it('auto-refresh-wechat-changed 事件关闭轮询', async () => {
-    const { wrapper } = await mountComponent()
-    dispatchWindowEvent('xcagi:auto-refresh-wechat-changed')
-    await flushPromises()
-    expect(wrapper.exists()).toBe(true)
-  })
-
-  it('pollStarredFeed 网络异常不抛错', async () => {
-    localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch') }))
-    const { wrapper } = await mountComponent()
-    dispatchWindowEvent('xcagi:auto-refresh-wechat-changed')
-    await flushPromises()
-    expect(wrapper.exists()).toBe(true)
-  })
-
-  it('pollStarredFeed 返回非 ok 状态静默处理', async () => {
-    localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({ success: false }, false)))
-    const { wrapper } = await mountComponent()
-    dispatchWindowEvent('xcagi:auto-refresh-wechat-changed')
-    await flushPromises()
-    expect(wrapper.exists()).toBe(true)
-  })
-
-  it('pollStarredFeed 返回成功 feed 触发推送事件', async () => {
-    localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({
-      success: true,
-      feed: [
-        {
-          contact_id: 'c1',
-          contact_name: '联系人A',
-          messages: [{ role: 'user', text: '你好' }],
-        },
-      ],
-    })))
-    const { wrapper } = await mountComponent()
-    // 第一次轮询建立基线
-    dispatchWindowEvent('xcagi:auto-refresh-wechat-changed')
-    await flushPromises()
-    // 第二次轮询，消息变化触发推送
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({
-      success: true,
-      feed: [
-        {
-          contact_id: 'c1',
-          contact_name: '联系人A',
-          messages: [{ role: 'user', text: '新消息内容' }],
-        },
-      ],
-    })))
-    dispatchWindowEvent('xcagi:auto-refresh-wechat-changed')
-    await flushPromises()
-    expect(wrapper.exists()).toBe(true)
-  })
-
-  // ===== 14. 微信消息 AI 管道 =====
-
-  it('pollStarredFeed 触发微信消息 AI 管道（专业模式）', async () => {
-    localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
-    localStorage.setItem('xcagi_pro_intent_experience', '1')
-    // 启用 wechat_msg 员工以触发 AI 管道
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({
-      success: true,
-      data: {
-        success: true,
-        primary_intent: '询问价格',
-        tool_key: 'price_query',
-        intent_hints: ['价格相关'],
-        confidence: 0.9,
-      },
-      feed: [
-        {
-          contact_id: 'c1',
-          contact_name: '联系人A',
-          messages: [{ role: 'user', text: '这个多少钱' }],
-        },
-      ],
-    })))
-    const { wrapper } = await mountComponent()
-    dispatchWindowEvent('xcagi:auto-refresh-wechat-changed')
-    await flushPromises()
-    expect(wrapper.exists()).toBe(true)
-  })
-
-  it('pollStarredFeed 专业模式 API 失败回退本地规则', async () => {
-    localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
-    localStorage.setItem('xcagi_pro_intent_experience', '1')
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('API 不可用') }))
-    const { wrapper } = await mountComponent()
-    dispatchWindowEvent('xcagi:auto-refresh-wechat-changed')
-    await flushPromises()
-    expect(wrapper.exists()).toBe(true)
-  })
-
   // ===== 15. 卸载清理 =====
 
   it('组件卸载时清理事件监听与定时器', async () => {
@@ -1151,113 +1031,6 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
     expect(wrapper.find('.product-search-row').exists()).toBe(true)
   })
 
-  // ===== 23. 微信消息 AI 管道 - 完整路径 =====
-
-  it('pollStarredFeed 触发微信 AI 管道并执行发货预览', async () => {
-    localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
-    const { shouldTryWechatShipmentPreview } = await import('@/utils/wechatShipmentDetect')
-      ; (shouldTryWechatShipmentPreview as ReturnType<typeof vi.fn>).mockReturnValue(true)
-    // 第一次 fetch: 建立基线
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({
-      success: true,
-      feed: [
-        { contact_id: 'c1', contact_name: '联系人A', messages: [{ role: 'user', text: '发货' }] },
-      ],
-    })))
-    const { wrapper } = await mountComponent()
-    dispatchWindowEvent('xcagi:auto-refresh-wechat-changed')
-    await flushPromises()
-    // 第二次 fetch: 消息变化 + 触发发货预览
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({
-      success: true,
-      data: { success: true, task: { type: 'shipment_generate' } },
-      feed: [
-        { contact_id: 'c1', contact_name: '联系人A', messages: [{ role: 'user', text: '请帮我发货' }] },
-      ],
-    })))
-    dispatchWindowEvent('xcagi:auto-refresh-wechat-changed')
-    await flushPromises()
-    expect(wrapper.exists()).toBe(true)
-  })
-
-  it('pollStarredFeed 触发标签打印信号', async () => {
-    localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
-    const { isLabelPrintRelatedWechatIntent } = await import('@/utils/wechatIntent')
-      ; (isLabelPrintRelatedWechatIntent as ReturnType<typeof vi.fn>).mockReturnValue(true)
-    // 第一次 fetch: 建立基线
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({
-      success: true,
-      feed: [
-        { contact_id: 'c2', contact_name: '联系人B', messages: [{ role: 'user', text: '打印' }] },
-      ],
-    })))
-    const { wrapper } = await mountComponent()
-    dispatchWindowEvent('xcagi:auto-refresh-wechat-changed')
-    await flushPromises()
-    // 第二次 fetch: 消息变化
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({
-      success: true,
-      feed: [
-        { contact_id: 'c2', contact_name: '联系人B', messages: [{ role: 'user', text: '打印标签' }] },
-      ],
-    })))
-    dispatchWindowEvent('xcagi:auto-refresh-wechat-changed')
-    await flushPromises()
-    expect(wrapper.exists()).toBe(true)
-  })
-
-  it('pollStarredFeed 触发收货确认信号', async () => {
-    localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
-    const { isReceiptConfirmRelatedWechatIntent } = await import('@/utils/wechatIntent')
-      ; (isReceiptConfirmRelatedWechatIntent as ReturnType<typeof vi.fn>).mockReturnValue(true)
-    // 第一次 fetch: 建立基线
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({
-      success: true,
-      feed: [
-        { contact_id: 'c3', contact_name: '联系人C', messages: [{ role: 'user', text: '收货' }] },
-      ],
-    })))
-    const { wrapper } = await mountComponent()
-    dispatchWindowEvent('xcagi:auto-refresh-wechat-changed')
-    await flushPromises()
-    // 第二次 fetch: 消息变化
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({
-      success: true,
-      feed: [
-        { contact_id: 'c3', contact_name: '联系人C', messages: [{ role: 'user', text: '确认收货' }] },
-      ],
-    })))
-    dispatchWindowEvent('xcagi:auto-refresh-wechat-changed')
-    await flushPromises()
-    expect(wrapper.exists()).toBe(true)
-  })
-
-  it('pollStarredFeed 专业模式 API 返回无效数据回退本地规则', async () => {
-    localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
-    localStorage.setItem('xcagi_pro_intent_experience', '1')
-    // 第一次 fetch: 建立基线
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({
-      success: true,
-      feed: [
-        { contact_id: 'c4', contact_name: '联系人D', messages: [{ role: 'user', text: '基线' }] },
-      ],
-    })))
-    const { wrapper } = await mountComponent()
-    dispatchWindowEvent('xcagi:auto-refresh-wechat-changed')
-    await flushPromises()
-    // 第二次 fetch: API 返回 success:false
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({
-      success: true,
-      data: { success: false },
-      feed: [
-        { contact_id: 'c4', contact_name: '联系人D', messages: [{ role: 'user', text: '新消息' }] },
-      ],
-    })))
-    dispatchWindowEvent('xcagi:auto-refresh-wechat-changed')
-    await flushPromises()
-    expect(wrapper.exists()).toBe(true)
-  })
-
   // ===== 24. 滚动同步 =====
 
   it('关联网格后触发滚动同步', async () => {
@@ -1325,33 +1098,6 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
     await flushPromises()
     expect(fillFn).toHaveBeenCalled()
     delete (window as Record<string, unknown>).__VUE_CHAT_FILL__
-  })
-
-  // ===== 27. pollStarredFeed 联系人消失清理 =====
-
-  it('pollStarredFeed 清理消失的联系人', async () => {
-    localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
-    // 第一次: 有两个联系人
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({
-      success: true,
-      feed: [
-        { contact_id: 'c1', contact_name: 'A', messages: [{ role: 'user', text: 'hi' }] },
-        { contact_id: 'c2', contact_name: 'B', messages: [{ role: 'user', text: 'hello' }] },
-      ],
-    })))
-    const { wrapper } = await mountComponent()
-    dispatchWindowEvent('xcagi:auto-refresh-wechat-changed')
-    await flushPromises()
-    // 第二次: c2 消失
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({
-      success: true,
-      feed: [
-        { contact_id: 'c1', contact_name: 'A', messages: [{ role: 'user', text: 'hi' }] },
-      ],
-    })))
-    dispatchWindowEvent('xcagi:auto-refresh-wechat-changed')
-    await flushPromises()
-    expect(wrapper.exists()).toBe(true)
   })
 
   // ===== 28. mods 变化触发 watch =====

@@ -196,12 +196,6 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
       meta: { title: '数据来源' },
     },
     {
-      path: '/wechat-contacts',
-      name: 'wechat-contacts',
-      component: () => import('../views/WechatContactsView.vue'),
-      meta: { title: '微信联系人' },
-    },
-    {
       path: '/print',
       name: 'print',
       component: () => import('../views/PrintView.vue'),

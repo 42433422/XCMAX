@@ -45,9 +45,9 @@ describe('enterpriseWorkflowEstablishment constants and functions', () => {
       expect(Object.keys(ENTERPRISE_EMPLOYEES).length).toBeGreaterThan(0)
     })
 
-    it('contains wechat_contacts employee', () => {
-      expect(ENTERPRISE_EMPLOYEES['wechat_contacts']).toBeTruthy()
-      expect(ENTERPRISE_EMPLOYEES['wechat_contacts'].enterprise_layer).toBe('service')
+    it('contains wechat_msg employee', () => {
+      expect(ENTERPRISE_EMPLOYEES['wechat_msg']).toBeTruthy()
+      expect(ENTERPRISE_EMPLOYEES['wechat_msg'].enterprise_layer).toBe('service')
     })
   })
 
@@ -117,7 +117,7 @@ describe('enterpriseWorkflowEstablishment constants and functions', () => {
     })
 
     it('returns layer from SSOT for known empId', () => {
-      expect(resolveEnterpriseOrgLayer('wechat_contacts')).toBe('service')
+      expect(resolveEnterpriseOrgLayer('wechat_msg')).toBe('service')
     })
 
     it('returns layer from SSOT for label_print', () => {
@@ -167,7 +167,7 @@ describe('enterpriseWorkflowEstablishment constants and functions', () => {
 
   describe('resolveEnterpriseEstablishmentZone (deprecated)', () => {
     it('delegates to resolveEnterpriseOrgLayer', () => {
-      expect(resolveEnterpriseEstablishmentZone('wechat_contacts')).toBe('service')
+      expect(resolveEnterpriseEstablishmentZone('wechat_msg')).toBe('service')
     })
   })
 
@@ -184,7 +184,7 @@ describe('enterpriseWorkflowEstablishment constants and functions', () => {
       const desks = [
         { empId: 'label_print' },
         { empId: 'shipment_mgmt' },
-        { empId: 'wechat_contacts' },
+        { empId: 'wechat_msg' },
       ]
       // label_print and shipment_mgmt are both execution → count 2
       expect(countEnterpriseEstablishmentMaxSlots(desks)).toBe(2)
@@ -193,7 +193,7 @@ describe('enterpriseWorkflowEstablishment constants and functions', () => {
     it('returns 1 when all desks in different layers', () => {
       const desks = [
         { empId: 'label_print' },
-        { empId: 'wechat_contacts' },
+        { empId: 'wechat_msg' },
       ]
       expect(countEnterpriseEstablishmentMaxSlots(desks)).toBe(1)
     })

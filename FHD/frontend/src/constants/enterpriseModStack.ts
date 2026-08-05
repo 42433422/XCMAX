@@ -19,9 +19,7 @@ export type EnterpriseModStack = {
 }
 
 /** 市场安装的独立员工 Mod；必须显式登记，避免任意 *-ai-employee 串栈 */
-const WORKFLOW_CARRIER_MOD_IDS = new Set<string>([
-  'wechat-contacts-ai-employee',
-])
+const WORKFLOW_CARRIER_MOD_IDS = new Set<string>([])
 
 export function buildEnterpriseModStack(plan: IndustryBaselinePlan): EnterpriseModStack {
   const industryModIds = [...(plan.industry_mod_ids || [])]

@@ -19,10 +19,6 @@
     </div>
     
     <div class="widget-body">
-      <WeChatLoginPanel 
-        v-if="activePanel === 'wechat'" 
-        @close="handleClose"
-      />
       <UserListPanel 
         v-if="activePanel === 'users'"
         @close="handleClose"
@@ -37,7 +33,6 @@
 
 <script setup>
 import { ref } from 'vue'
-import WeChatLoginPanel from './WeChatLoginPanel.vue'
 import UserListPanel from './UserListPanel.vue'
 import ProductQueryPanel from './ProductQueryPanel.vue'
 
@@ -48,7 +43,7 @@ const props = defineProps({
   },
   activePanel: {
     type: String,
-    default: 'wechat'
+    default: 'users'
   },
   isWorkMode: {
     type: Boolean,
@@ -59,7 +54,6 @@ const props = defineProps({
 const emit = defineEmits(['close', 'panelChange'])
 
 const tabs = [
-  { id: 'wechat', name: '微信登录' },
   { id: 'users', name: '客户管理' },
   { id: 'products', name: '产品查询' }
 ]

@@ -78,10 +78,6 @@ _LEGACY_BRIDGE_MOD_HOST_APIS: dict[str, list[str]] = {
         "/api/mod/xcagi-erp-domain-bridge/customers",
         "/api/mod/xcagi-erp-domain-bridge/shipment",
     ],
-    "xcagi-wechat-bridge": [
-        "/api/mod/xcagi-wechat-bridge/wechat",
-        "/api/mod/xcagi-wechat-bridge/wechat_contacts",
-    ],
     "xcagi-office-employee-pack-bridge": [
         "/api/mod/xcagi-office-employee-pack-bridge/catalog",
         "/api/mods/",
