@@ -65,7 +65,7 @@ class Fix:
     patch: str  # unified diff 片段（或空字符串表示 needs-human）
     needs_human: bool
     description: str
-    risk_level: str = "r3"  # r0/r1/r2/r3 — 分级合并 SLA 依据（LLM 修复强制 r3）
+    risk_level: str = "r3"  # r0/r1/r2/r3 — 分级合并 SLA 依据（bandit 安全类强制 r3，LLM 业务修复降 r1）
 
 
 @dataclass

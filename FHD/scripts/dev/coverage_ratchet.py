@@ -401,14 +401,19 @@ def cmd_check(args: argparse.Namespace) -> int:
                 failed = True
 
     # 行为覆盖率（排除 coverage_ramp stub 口径）：唯一硬 gate（Delta A）。
-    if args.behavior:
+    if getattr(args, "behavior", False):
         beh_line_floor = behavior_floors.get("lines")
         beh_branch_floor = behavior_floors.get("branches")
         if beh is None:
             if args.require_backend:
-                print(f"ERROR: 缺行为覆盖率 coverage-behavior.json：{args.behavior_json}", file=sys.stderr)
+                print(
+                    f"ERROR: 缺行为覆盖率 coverage-behavior.json：{getattr(args, 'behavior_json', BEHAVIOR_JSON_DEFAULT)}",
+                    file=sys.stderr,
+                )
                 return 1
-            print(f"[cov-ratchet] 跳过行为覆盖率（无 {args.behavior_json}）")
+            print(
+                f"[cov-ratchet] 跳过行为覆盖率（无 {getattr(args, 'behavior_json', BEHAVIOR_JSON_DEFAULT)}）"
+            )
         else:
             bp = "n/a" if beh["branch_pct"] is None else f"{beh['branch_pct']}%"
             print(

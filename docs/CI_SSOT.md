@@ -142,7 +142,7 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 
 ## Branch protection（main）
 
-已通过 API 配置（2026-06-13，2026-07 发版红线扩展）：required status checks 含 `guard-temp-scripts`、`backend-test`、`frontend-test`、`frontend-e2e`、`arch-fitness`、`security-scan`、`pack-verify`、`container-scan`、`docker-build-fhd-api`，以及 **`release-verify`**、**`desktop-build-smoke`**、**`SSOT Drift Gate`**、**`Release gate (hard block)`**；`vue-tsc` / `mypy` / `build:strict` 已在 `frontend-test` / `backend-test` 内硬失败。**覆盖率门禁**（2026-08-05 诚实化）：`backend-test` 内以 `coverage_ratchet.py --check --behavior --require-backend` 为唯一硬 gate（排除 `coverage_ramp` stub 的行为口径）；`frontend-test` 内以 `coverage_ratchet.py --check --require-frontend` 硬阻断前端覆盖率回退。本地等价：`bash FHD/scripts/dev/release_verify.sh`。
+已通过 API 配置（2026-06-13，2026-07 发版红线扩展，2026-08-05 校正为 GitHub 实配 11 项）：required status checks 含 `guard-temp-scripts`、`arch-fitness`、`security-scan`、`gitleaks`、`analyze (python)`、`analyze (javascript-typescript)`、`SSOT Drift Gate`、`Release gate (hard block)`、`backend-test`、`frontend-test`、**`mutation-smoke`**（变异测试 kill rate ≥80%，作用域 app/di + app/contexts，2026-08-05 实测 **93.02%**，80/86）；`vue-tsc` / `mypy` / `build:strict` 已在 `frontend-test` / `backend-test` 内硬失败。**覆盖率门禁**（2026-08-05 诚实化）：`backend-test` 内以 `coverage_ratchet.py --check --behavior --require-backend` 为唯一硬 gate（排除 `coverage_ramp` stub 的行为口径）；`frontend-test` 内以 `coverage_ratchet.py --check --require-frontend` 硬阻断前端覆盖率回退。本地等价：`bash FHD/scripts/dev/release_verify.sh`。
 
 > **Public 仓库**：`42433422/XCMAX` 已为 **PUBLIC**；Actions 对 public repo 有免费额度。若 job 仍报 `payments have failed or spending limit`，在 [Payment information](https://github.com/settings/billing/payment_information) 添加有效支付方式。
 

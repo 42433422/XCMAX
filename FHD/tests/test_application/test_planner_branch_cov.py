@@ -193,7 +193,11 @@ class TestExecuteToolDefaultAction:
         """无匹配 handler 但有真实注册工具时，走 execute_registered_workflow_tool fallback。"""
         with patch("app.application.workflow.planner._WORKFLOW_TOOL_HANDLERS") as handlers:
             handlers.get.return_value = None
-            result = execute_tool("products", {"keyword": "x"})
+            with patch(
+                "app.application.workflow.planner.execute_registered_workflow_tool",
+                return_value={"success": True},
+            ):
+                result = execute_tool("products", {"keyword": "x"})
             # products.query 是真实注册工具，fallback 调度成功
             assert result.get("success") is True
 
