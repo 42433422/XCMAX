@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "kind": "fix",
+  "created_at": "2026-08-05T03:19:57+00:00",
+  "symptom": "Self-maintenance structured QA accepted unbound full-directory Black and isort commands even when the merge gate supplied exact expected base and target refs.",
+  "root_cause": "The formatter matchers checked the exact diff-quality command first but then fell through to legacy full-directory command matching without rejecting that fallback when expected refs were present.",
+  "fix_diff": "diff --git a/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_quality_gate.py b/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_quality_gate.py\nindex 93d12fd6a..d98217566 100644\n--- a/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_quality_gate.py\n+++ b/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_quality_gate.py\n@@ -193,6 +193,8 @@ def matches_black_check_command(\n         expected_target_ref=expected_target_ref,\n     ):\n         return True\n+    if expected_base_ref or expected_target_ref:\n+        return False\n     tokens = _safe_command_tokens(str(command or \"\").strip())\n     if tokens is None:\n         return False\n@@ -230,6 +232,8 @@ def matches_isort_check_command(\n         expected_target_ref=expected_target_ref,\n     ):\n         return True\n+    if expected_base_ref or expected_target_ref:\n+        return False\n     tokens = _safe_command_tokens(str(command or \"\").strip())\n     if tokens is None:\n         return False\ndiff --git a/成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py b/成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py\nindex ef0418cb4..e9000a285 100644\n--- a/成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py\n+++ b/成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py\n@@ -2656,6 +2656,32 @@ def test_quality_gate_accepts_worker_env_prefixes_on_real_commands():\n     )\n \n \n+def test_quality_matchers_require_bound_diff_when_refs_expected():\n+    expected_refs = {\n+        \"expected_base_ref\": \"origin/main\",\n+        \"expected_target_ref\": \"origin/feature\",\n+    }\n+\n+    for tool, matcher, fallback in (\n+        (\n+            \"black\",\n+            matches_black_check_command,\n+            \"python -m black --check modman modstore_server tests\",\n+        ),\n+        (\n+            \"isort\",\n+            matches_isort_check_command,\n+            \"python -m isort --check-only --diff modman modstore_server tests\",\n+        ),\n+    ):\n+        bound = (\n+            \"python -m modstore_server.self_maintenance_diff_quality \"\n+            f\"--tool {tool} --base-ref origin/main --target-ref origin/feature\"\n+        )\n+        assert matcher(bound, **expected_refs)\n+        assert not matcher(fallback, **expected_refs)\n+\n+\n def test_quality_gate_rejects_wrong_but_unique_diff_refs():\n     qa_json = {\n         \"quality_checks\": {\n",
+  "metadata": {
+    "component": "self_maintenance_quality_gate",
+    "files": [
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_quality_gate.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
+    ]
+  },
+  "executable_template": {
+    "applicability_check": "The QA quality gate supplies expected_base_ref or expected_target_ref while a reported Black or isort command uses a legacy full-directory invocation instead of self_maintenance_diff_quality bound to both exact refs.",
+    "patch_strategy": "Try the exact diff-quality matcher first, then reject all legacy formatter fallbacks whenever either expected ref is supplied; retain legacy full-directory compatibility only for callers that supply no expected refs.",
+    "rollback_plan": "Revert the two fail-closed fallback guards and the focused regression test together; no data migration or runtime state rollback is required.",
+    "required_tests": [
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py::test_quality_matchers_require_bound_diff_when_refs_expected",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py::test_quality_gate_accepts_worker_env_prefixes_on_real_commands"
+    ]
+  }
+}

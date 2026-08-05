@@ -2656,6 +2656,32 @@ def test_quality_gate_accepts_worker_env_prefixes_on_real_commands():
     )
 
 
+def test_quality_matchers_require_bound_diff_when_refs_expected():
+    expected_refs = {
+        "expected_base_ref": "origin/main",
+        "expected_target_ref": "origin/feature",
+    }
+
+    for tool, matcher, fallback in (
+        (
+            "black",
+            matches_black_check_command,
+            "python -m black --check modman modstore_server tests",
+        ),
+        (
+            "isort",
+            matches_isort_check_command,
+            "python -m isort --check-only --diff modman modstore_server tests",
+        ),
+    ):
+        bound = (
+            "python -m modstore_server.self_maintenance_diff_quality "
+            f"--tool {tool} --base-ref origin/main --target-ref origin/feature"
+        )
+        assert matcher(bound, **expected_refs)
+        assert not matcher(fallback, **expected_refs)
+
+
 def test_quality_gate_rejects_wrong_but_unique_diff_refs():
     qa_json = {
         "quality_checks": {
