@@ -1062,6 +1062,23 @@ async def admin_list_wallets(request: Request):
     )
 
 
+@router.get("/admin/market/orders", response_model=None)
+async def admin_list_orders(request: Request):
+    """经营看板：代理 MODstore ``/api/admin/orders``（订单列表 + 经营聚合）。
+
+    打通「AI 不知道订单」断点：管理端经此接口读取平台订单数据，供 AI 员工感知与处理。
+    """
+    q = []
+    if request.query_params.get("status"):
+        q.append(f"status={request.query_params['status']}")
+    if request.query_params.get("limit"):
+        q.append(f"limit={request.query_params['limit']}")
+    if request.query_params.get("offset"):
+        q.append(f"offset={request.query_params['offset']}")
+    query = ("?" + "&".join(q)) if q else ""
+    return await _market_admin_proxy(request, "GET", f"/api/admin/orders{query}")
+
+
 @router.post("/admin/market/users/{user_id}/wallet/credit", response_model=None)
 async def admin_credit_user_wallet(
     request: Request,

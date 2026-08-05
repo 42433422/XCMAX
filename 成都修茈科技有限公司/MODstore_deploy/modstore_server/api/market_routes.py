@@ -2364,6 +2364,54 @@ def api_admin_list_transactions(
         }
 
 
+@router.get("/admin/orders")
+def api_admin_list_orders(
+    status: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    user: User = Depends(_require_admin),
+):
+    """管理员订单/经营看板：分页订单列表 + 全量经营聚合。
+
+    数据源：PAYMENT_BACKEND=java 时 Java PostgreSQL 为 SoT，本地 JSON 为只读兜底；
+    其余模式本地 JSON 为权威来源。返回 ``source`` 供前端标注数据来源。
+    """
+    from modstore_server import payment_orders
+
+    rows, total = payment_orders.list_orders(
+        user_id=0,
+        status=status,
+        limit=limit,
+        offset=offset,
+    )
+    all_rows, _ = payment_orders.list_orders(user_id=0, status=None, limit=100000, offset=0)
+    summary: dict[str, Any] = {
+        "total_orders": len(all_rows),
+        "paid_orders": 0,
+        "pending_orders": 0,
+        "paid_revenue": 0.0,
+        "by_status": {},
+    }
+    for o in all_rows:
+        st = str(o.get("status") or "unknown")
+        summary["by_status"][st] = summary["by_status"].get(st, 0) + 1
+        if st == "paid":
+            summary["paid_orders"] += 1
+            try:
+                summary["paid_revenue"] += Decimal(str(o.get("total_amount") or "0"))
+            except Exception:
+                pass
+        elif st == "pending":
+            summary["pending_orders"] += 1
+    summary["paid_revenue"] = float(summary["paid_revenue"])
+    return {
+        "items": rows,
+        "total": total,
+        "summary": summary,
+        "source": "python_json" if payment_orders.is_local_source_of_truth() else "java",
+    }
+
+
 # ── Wallet overview ──────────────────────────────────────────
 
 
