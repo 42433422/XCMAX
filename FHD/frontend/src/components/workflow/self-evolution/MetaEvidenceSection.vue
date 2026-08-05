@@ -4,7 +4,6 @@ defineProps<{
   cards: Array<{ label: string; value: string }>
   paraTaskId: string
   paraCopied: boolean
-  onCopyParaTaskId: () => void
 }>()
 defineEmits<{
   copy: []

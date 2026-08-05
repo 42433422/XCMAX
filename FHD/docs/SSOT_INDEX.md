@@ -28,6 +28,7 @@
 | ssot-framework（SSOT 框架） | [SSOT_FRAMEWORK.md](SSOT_FRAMEWORK.md) | 统一注册表 ssot.yaml + ssot_cli 编排器 |
 | claimed-vs-actual（对外声称 vs 实测） | [CLAIMED_VS_ACTUAL.md](CLAIMED_VS_ACTUAL.md) | 对外声称 vs 实测对照，由 scripts/dev/gen_claimed_vs_actual.py 自动生成 |
 | coverage-metrics（覆盖率唯一数字） | [../metrics/coverage-dual-summary.json](../metrics/coverage-dual-summary.json) | 覆盖率唯一数字 SSOT（committed_head / 棘轮 floor / 目标 / 退役口径） |
+| coverage-behavior-gate（行为覆盖率门禁决策） | [adr/0001-coverage-behavior-gate.md](adr/0001-coverage-behavior-gate.md) | ADR-0001 决策记录：覆盖率门禁从全量口径切换为行为口径（排除 coverage_ramp stub）；`fail_under` 保留为全量行 floor SSOT |
 | account（产品端与账号体系） | [account_system_ssot.md](account_system_ssot.md) | 产品端矩阵、账号体系四维真相源（身份/行业/会员/账号等级）、行业/Persona 派生、字段写入权限矩阵、多租户隔离与账户安全；**定价文档 SSOT** |
 | pricing-enterprise（企业宿主授权价） | [../config/saas_plans.json](../config/saas_plans.json) | 体验 ¥99；永久授权 ¥49,999–¥999,999；收银与 `model-payment` / 企业开户读取 |
 | pricing-membership（市场会员价） | [../../成都修茈科技有限公司/MODstore_deploy/modstore_server/db/base.py](../../成都修茈科技有限公司/MODstore_deploy/modstore_server/db/base.py) | `init_default_plan_templates()` → `PlanTemplate`；VIP ¥9.9 – SVIP8 ¥4,999 |

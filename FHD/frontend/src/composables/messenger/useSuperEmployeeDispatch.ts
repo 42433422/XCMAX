@@ -39,26 +39,19 @@ import {
 } from '@/api/cursorSuperEmployee';
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
 import {
-  CODEX_POLL_INTERVAL_MS,
-  CODEX_POLL_MAX_ROUNDS,
   CODEX_STREAM_PLACEHOLDER_ID,
-  codexReplyFromDispatcher,
   dutyEmployeeReplyFromExecution,
   fallbackDutyEmployees,
   isAiGroupChatEntry,
   isClaudeSuperEmployeeEntry,
   isCodexDispatcherMessage,
-  isCodexDispatchStillOpen,
-  isCodexResultMessage,
   isCodexSuperEmployeeEntry,
+  isSuperEmployeeEntry,
   isCursorSuperEmployeeEntry,
   isDutyEmployeeEntry,
   isExternalAppEntry,
-  isSuperEmployeeEntry,
   latestCodexDispatcherMessage,
-  latestCodexResultMessage,
   normalizeDutyEmployee,
-  sanitizeCodexReplyText,
   uniqueDutyEmployees,
   type ActiveSuperTool,
   type CodexDisplayMessage,
@@ -69,6 +62,7 @@ import {
   type PinnedImEntry,
   type SystemEmployeeEntry,
 } from './useMessengerEntries';
+import { useCodexStreamEngine } from './useCodexStreamEngine';
 
 type MobileApiResponse<T> = {
   success?: boolean;
@@ -122,22 +116,12 @@ export function useSuperEmployeeDispatch(params: UseSuperEmployeeDispatchParams)
   const codexDraft = ref('');
   const codexBusy = ref(false);
   const codexDispatch = ref<CodexSuperEmployeeDispatch | null>(null);
-  const codexStreamBody = ref('');
-  const codexStreamMessageId = ref('');
-  const codexStreamRequestId = ref('');
-  const codexStreamCreatedAt = ref('');
-  const codexStreamActive = ref(false);
   const dutyEmployeeMessages = ref<Record<string, DutyEmployeeChatMessage[]>>({});
   const dutyEmployeeDraft = ref('');
   const dutyEmployeeBusy = ref(false);
   const codexScrollEl = ref<HTMLElement | null>(null);
   const dutyEmployeeScrollEl = ref<HTMLElement | null>(null);
   const codexInputEl = ref<HTMLInputElement | null>(null);
-
-  let codexStreamTarget = '';
-  let codexStreamTimer: ReturnType<typeof setInterval> | null = null;
-  let codexPollTimer: ReturnType<typeof setTimeout> | null = null;
-  let codexPollRound = 0;
 
   const codexApiScope = computed<CodexSuperEmployeeApiScope>(() =>
     isAdminConsoleSpa() ? 'admin' : 'mobile',
@@ -161,6 +145,26 @@ export function useSuperEmployeeDispatch(params: UseSuperEmployeeDispatchParams)
     }
     return fetchCodexSuperEmployeeMessages({ scope: codexApiScope.value });
   }
+
+  const {
+    codexStreamBody,
+    codexStreamMessageId,
+    codexStreamRequestId,
+    codexStreamCreatedAt,
+    codexStreamActive,
+    scrollCodexToBottom,
+    stopCodexTypewriter,
+    stopCodexPolling,
+    startCodexTypewriter,
+    syncCodexStreamFromMessages,
+    startCodexPolling,
+    isCodexPollingActive,
+  } = useCodexStreamEngine({
+    codexMessages,
+    codexScrollEl,
+    activeSystemEntry,
+    fetchActiveSuperMessages,
+  });
 
   function sendActiveSuperMessage(message: string, context: Record<string, unknown>) {
     const tool = activeSuperTool(activeSystemEntry.value);
@@ -281,148 +285,6 @@ export function useSuperEmployeeDispatch(params: UseSuperEmployeeDispatchParams)
     });
   }
 
-  function scrollCodexToBottom(): void {
-    const el = codexScrollEl.value;
-    if (el) el.scrollTop = el.scrollHeight;
-  }
-
-  function stopCodexTypewriter(clearBody = false): void {
-    if (codexStreamTimer) {
-      clearInterval(codexStreamTimer);
-      codexStreamTimer = null;
-    }
-    if (clearBody) {
-      codexStreamBody.value = '';
-      codexStreamTarget = '';
-      codexStreamMessageId.value = '';
-      codexStreamRequestId.value = '';
-      codexStreamCreatedAt.value = '';
-      codexStreamActive.value = false;
-    }
-  }
-
-  function stopCodexPolling(): void {
-    if (codexPollTimer) {
-      clearTimeout(codexPollTimer);
-      codexPollTimer = null;
-    }
-    codexPollRound = 0;
-  }
-
-  function ensureCodexTypewriter(): void {
-    if (codexStreamTimer) return;
-    codexStreamTimer = setInterval(() => {
-      if (!codexStreamTarget) {
-        stopCodexTypewriter();
-        return;
-      }
-      const current = codexStreamBody.value;
-      if (current.length >= codexStreamTarget.length) {
-        stopCodexTypewriter();
-        codexStreamActive.value = codexStreamMessageId.value === CODEX_STREAM_PLACEHOLDER_ID
-          && Boolean(codexPollTimer);
-        return;
-      }
-      const remaining = codexStreamTarget.length - current.length;
-      const step = Math.max(1, Math.min(8, Math.ceil(remaining / 18)));
-      codexStreamBody.value = codexStreamTarget.slice(0, current.length + step);
-      codexStreamActive.value = true;
-      void nextTick().then(scrollCodexToBottom);
-    }, 34);
-  }
-
-  function startCodexTypewriter(options: {
-    body: string;
-    messageId?: string;
-    requestId?: string;
-    createdAt?: string;
-    active?: boolean;
-    reset?: boolean;
-  }): void {
-    const target = sanitizeCodexReplyText(options.body);
-    if (!target) return;
-    const nextMessageId = options.messageId || CODEX_STREAM_PLACEHOLDER_ID;
-    const messageChanged = codexStreamMessageId.value !== nextMessageId;
-    codexStreamTarget = target;
-    codexStreamMessageId.value = nextMessageId;
-    codexStreamRequestId.value = options.requestId || codexStreamRequestId.value;
-    codexStreamCreatedAt.value = options.createdAt || codexStreamCreatedAt.value || new Date().toISOString();
-    if (
-      options.reset
-      || messageChanged
-      || !target.startsWith(codexStreamBody.value)
-      || codexStreamBody.value.length > target.length
-    ) {
-      codexStreamBody.value = target.slice(0, Math.min(target.length, 10));
-    }
-    codexStreamActive.value = options.active !== false || codexStreamBody.value.length < target.length;
-    ensureCodexTypewriter();
-    void nextTick().then(scrollCodexToBottom);
-  }
-
-  function syncCodexStreamFromMessages(
-    items: CodexSuperEmployeeMessage[],
-    requestId = '',
-  ): boolean {
-    const effectiveRequestId = requestId || String(
-      latestCodexDispatcherMessage(items)?.dispatch_request_id || '',
-    );
-    const dispatcher = latestCodexDispatcherMessage(items, effectiveRequestId);
-    if (!requestId && !isCodexDispatchStillOpen(dispatcher)) {
-      return false;
-    }
-    const result = effectiveRequestId ? latestCodexResultMessage(items, effectiveRequestId) : null;
-    if (result) {
-      startCodexTypewriter({
-        body: result.body,
-        messageId: result.id,
-        requestId: String(result.dispatch_request_id || effectiveRequestId || ''),
-        createdAt: result.created_at,
-        active: false,
-        reset: codexStreamMessageId.value !== result.id,
-      });
-      return false;
-    }
-    if (!dispatcher) return false;
-    startCodexTypewriter({
-      body: codexReplyFromDispatcher(dispatcher),
-      messageId: CODEX_STREAM_PLACEHOLDER_ID,
-      requestId: String(dispatcher.dispatch_request_id || effectiveRequestId || ''),
-      createdAt: dispatcher.created_at,
-      active: isCodexDispatchStillOpen(dispatcher),
-      reset: codexStreamMessageId.value !== CODEX_STREAM_PLACEHOLDER_ID,
-    });
-    return isCodexDispatchStillOpen(dispatcher);
-  }
-
-  function startCodexPolling(requestId = ''): void {
-    stopCodexPolling();
-    codexPollRound = 0;
-    const poll = async () => {
-      if (!isSuperEmployeeEntry(activeSystemEntry.value)) return;
-      codexPollRound += 1;
-      try {
-        const next = await fetchActiveSuperMessages();
-        codexMessages.value = next;
-        const shouldContinue = syncCodexStreamFromMessages(next, requestId);
-        if (shouldContinue && codexPollRound < CODEX_POLL_MAX_ROUNDS) {
-          codexPollTimer = setTimeout(poll, CODEX_POLL_INTERVAL_MS);
-        } else {
-          codexPollTimer = null;
-        }
-        await nextTick();
-        scrollCodexToBottom();
-      } catch {
-        if (codexPollRound < CODEX_POLL_MAX_ROUNDS) {
-          codexPollTimer = setTimeout(poll, CODEX_POLL_INTERVAL_MS);
-        } else {
-          codexPollTimer = null;
-        }
-      }
-    };
-    codexPollTimer = setTimeout(poll, CODEX_POLL_INTERVAL_MS);
-  }
-
   async function activatePinnedEntry(entry: PinnedImEntry): Promise<void> {
     if (isAiGroupChatEntry(entry)) {
       closeOverlappingAssistantFloat();
@@ -497,7 +359,7 @@ export function useSuperEmployeeDispatch(params: UseSuperEmployeeDispatchParams)
       codexMessages.value = next;
       if (options.syncStream !== false) {
         const shouldContinue = syncCodexStreamFromMessages(next, codexStreamRequestId.value);
-        if (shouldContinue && !codexPollTimer) {
+        if (shouldContinue && !isCodexPollingActive.value) {
           const dispatcher = latestCodexDispatcherMessage(next, codexStreamRequestId.value);
           startCodexPolling(String(dispatcher?.dispatch_request_id || codexStreamRequestId.value || ''));
         }
