@@ -574,6 +574,19 @@ class TestCheckHabitSuggestion:
 class TestGetAiConversationServiceSingleton:
     """Cover get_ai_conversation_service / init_ai_conversation_service."""
 
+    @pytest.fixture(autouse=True)
+    def _reset_global_singleton(self) -> None:
+        """Reset the global ``_ai_conversation_service`` after each test.
+
+        These tests patch ``AIConversationService.__init__`` to a no-op, creating
+        a broken singleton (no ``contexts`` etc.) that is cached globally and
+        would otherwise pollute later tests that call ``get_ai_conversation_service()``.
+        """
+        yield
+        import app.services.conversation.manager as _manager_mod
+
+        _manager_mod._ai_conversation_service = None
+
     def test_get_ai_conversation_service_returns_singleton(self) -> None:
         with patch(
             "app.services.conversation.manager.AIConversationService.__init__",
