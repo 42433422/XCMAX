@@ -169,7 +169,7 @@ def test_domain_handlers_customers_list(monkeypatch):
         lambda: False,
     )
     monkeypatch.setattr(
-        "app.infrastructure.persistence.compat_db.queries._load_customers_rows",
+        "app.fastapi_routes.domains.db.queries._load_customers_rows",
         lambda: [{"id": 1, "customer_name": "测试"}],
     )
     monkeypatch.setattr(
