@@ -18,7 +18,6 @@
         <div class="cs-topbar-actions">
           <button class="btn btn-sm btn-secondary" type="button" @click="openAddCustomerModal">添加客户</button>
           <button class="btn btn-sm btn-ghost" type="button" @click="refresh">刷新</button>
-          <button class="btn btn-sm btn-ghost" type="button" @click="goDataSources">导入微信</button>
         </div>
       </header>
 
@@ -54,7 +53,6 @@
       <div v-if="loadingEnterpriseUsers" class="loading-hint">加载客户…</div>
       <div v-else-if="!enterpriseUsers.length" class="cs-empty">
         <p>暂无企业客户</p>
-        <button type="button" class="btn btn-sm btn-secondary" @click="goAdminEntitlements">去用户 Mod 管理</button>
       </div>
 
       <div v-else class="cs-clients">
@@ -283,58 +281,14 @@
                 </p>
                 <p v-if="autoStageAdvancing" class="muted cs-auto-advance-hint">清单已完成，正在进入下一阶段…</p>
                 <p v-if="currentStageGuide.actionHint" class="cs-stage-hint">{{ currentStageGuide.actionHint }}</p>
-                <div v-if="currentStageId === 'connected'" class="cs-stage-actions">
-                  <button
-                    v-if="!customerPipeline.connected_welcome_sent"
-                    type="button"
-                    class="btn btn-xs btn-accent"
-                    :disabled="connectedWelcomeSending"
-                    @click="sendConnectedWelcome()"
-                  >
-                    {{ connectedWelcomeSending ? '发送中…' : '发送建联欢迎语' }}
-                  </button>
-                  <button
-                    v-else
-                    type="button"
-                    class="btn btn-xs btn-ghost"
-                    :disabled="connectedWelcomeSending"
-                    @click="sendConnectedWelcome(true)"
-                  >
-                    {{ connectedWelcomeSending ? '发送中…' : '重新发送欢迎语' }}
-                  </button>
-                </div>
-                <p v-if="currentStageId === 'connected' && customerPipeline.connected_welcome_sent" class="cs-stage-done-hint">
-                  建联欢迎语已发送至微信群（若群内未收到可点「重新发送欢迎语」）
-                </p>
                 <p v-if="stageRank(currentStageId) >= stageRank('connected')" class="cs-stage-done-hint muted">
                   客户提交需求表单（审核码兑换或官网填写）后，将自动设为企业客户，并把卡片名称改为表单中的公司名。
                 </p>
                 <div v-if="currentStageId === 'intake'" class="cs-stage-actions">
-                  <button
-                    v-if="!customerPipeline.intake_form_notice_sent"
-                    type="button"
-                    class="btn btn-xs btn-accent"
-                    :disabled="intakeNoticeSending"
-                    @click="sendIntakeFormNotice()"
-                  >
-                    {{ intakeNoticeSending ? '发送中…' : '发送表单链接到微信群' }}
-                  </button>
-                  <button
-                    v-else
-                    type="button"
-                    class="btn btn-xs btn-ghost"
-                    :disabled="intakeNoticeSending"
-                    @click="sendIntakeFormNotice(true)"
-                  >
-                    {{ intakeNoticeSending ? '发送中…' : '重新发送表单说明' }}
-                  </button>
                   <button type="button" class="btn btn-xs" :disabled="intakeLinkLoading" @click="copyIntakeFormUrl">
                     复制表单链接
                   </button>
                 </div>
-                <p v-if="currentStageId === 'intake' && customerPipeline.intake_form_notice_sent" class="cs-stage-done-hint">
-                  表单链接与填写说明已发送至微信群（提交后请让客户把审核码发在群内）
-                </p>
                 <div v-if="showCrmFinalizeActions" class="cs-stage-actions cs-intake-done-actions">
                   <button
                     type="button"
@@ -486,24 +440,13 @@
                   <button type="button" class="btn btn-xs" @click="copyGroupScript(groupScriptForStage())">
                     复制{{ groupScriptActionLabel }}话术
                   </button>
-                  <button type="button" class="btn btn-xs" @click="fillWechatDraft(groupScriptForStage())">
-                    填入下方群消息
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-xs btn-accent"
-                    :disabled="wechatSend.loading || !wechatSendContactName"
-                    @click="sendGroupScript(groupScriptForStage())"
-                  >
-                    {{ wechatSend.loading ? '发送中…' : `发送${groupScriptActionLabel}到微信群` }}
-                  </button>
                   <button
                     type="button"
                     class="btn btn-xs btn-ghost"
                     :disabled="pipelineAnalyzing"
                     @click="analyzeCustomerProgress()"
                   >
-                    {{ pipelineAnalyzing ? '分析中…' : '同步群聊并分析进度' }}
+                    {{ pipelineAnalyzing ? '分析中…' : '分析进度' }}
                   </button>
                   <button
                     v-if="currentStageId === 'intake_done'"
@@ -555,133 +498,7 @@
               </details>
             </section>
 
-            <!-- 微信：绑定与消息分开，互不切换 -->
-            <div class="cs-wechat-split">
-              <section class="cs-block">
-                <h4 class="cs-block-title">群聊绑定</h4>
-                <div v-if="loadingWechatGroups" class="loading-hint">加载群列表…</div>
-                <div v-else-if="!wechatGroupsCatalog.length" class="cs-block-empty">
-                  <button type="button" class="btn btn-xs btn-accent" @click="goDataSources">去导入微信</button>
-                </div>
-                <template v-else>
-                  <input v-model="groupFilter" type="search" class="cs-input" placeholder="搜索群名" @click.stop>
-                  <p class="muted cs-group-list-hint">
-                    共 {{ filteredBindGroups.length }} 个已导入群聊（可勾选多个绑定到当前企业）
-                  </p>
-                  <div class="cs-group-list">
-                    <label v-for="g in filteredBindGroups" :key="g.id" class="cs-group-item" @click.stop>
-                      <input v-model="selectedGroupIdStrings" type="checkbox" :value="String(g.id)" @change="onGroupSelectionChange">
-                      <span>{{ g.contact_name || g.remark || '未命名群' }}</span>
-                    </label>
-                  </div>
-                  <div class="cs-block-actions">
-                    <button type="button" class="btn btn-xs" :disabled="savingBindings || !selectedGroupIdStrings.length" @click="handleSaveBindings()">
-                      {{ savingBindings ? '保存中…' : '保存绑定' }}
-                    </button>
-                    <button type="button" class="btn btn-xs btn-accent" :disabled="savingBindings || !selectedGroupIdStrings.length" @click="handleSaveBindings({ syncAfter: true })">
-                      保存并同步
-                    </button>
-                  </div>
-                </template>
-              </section>
-
-              <section class="cs-block">
-                <h4 class="cs-block-title">群聊消息</h4>
-                <div class="cs-block-actions">
-                  <button type="button" class="btn btn-xs btn-accent" :disabled="syncing" @click="handleSyncWechat()">
-                    {{ syncing ? '同步中…' : '同步群聊' }}
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-xs"
-                    :disabled="passivePolling || !selectedUserId"
-                    title="先复制微信库到快照再读取，不直接打开源库"
-                    @click="runPassivePoll(true)"
-                  >
-                    {{ passivePolling ? '探测中…' : '被动探测' }}
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-xs btn-ghost"
-                    :disabled="passivePolling || passiveLoopBusy || !selectedUserId"
-                    title="对绑定群内新消息自动回复（Mac 微信需在前台）"
-                    @click="runPassivePoll(false)"
-                  >
-                    被动回复
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-xs btn-ghost"
-                    :disabled="passivePolling || passiveLoopBusy || !hasBinding || !selectedUserId"
-                    title="从当前群聊进度重新监听，只回复此后新消息"
-                    @click="resetPassiveWatch"
-                  >
-                    重新监听
-                  </button>
-                </div>
-                <div class="cs-passive-loop-row">
-                  <label class="cs-passive-loop-toggle">
-                    <input
-                      v-model="passiveLoopEnabled"
-                      type="checkbox"
-                      :disabled="!selectedUserId || passivePolling"
-                      @change="onPassiveLoopToggle"
-                    />
-                    <span>轮询客服</span>
-                  </label>
-                  <label class="cs-passive-loop-interval">
-                    <span class="muted">间隔</span>
-                    <select
-                      v-model.number="passiveLoopIntervalSec"
-                      :disabled="!passiveLoopEnabled"
-                      @change="onPassiveLoopIntervalChange"
-                    >
-                      <option :value="10">10 秒</option>
-                      <option :value="30">30 秒</option>
-                      <option :value="60">60 秒</option>
-                      <option :value="120">2 分钟</option>
-                      <option :value="180">3 分钟</option>
-                    </select>
-                  </label>
-                  <span v-if="passiveLoopEnabled && passiveLoopLastAt" class="muted cs-passive-loop-last">
-                    {{ passiveLoopBusy ? '轮询中…' : `上次：${passiveLoopLastAt}` }}
-                  </span>
-                  <span v-if="passiveLlmStatus" class="muted cs-passive-llm-status">{{ passiveLlmStatus }}</span>
-                  <span v-if="passiveLoopSummary" class="cs-passive-loop-summary">{{ passiveLoopSummary }}</span>
-                </div>
-                <p class="muted cs-passive-loop-hint">
-                  开启后由<strong>服务端</strong>按间隔自动解密、回复（可离开本页或切换菜单，无需保持浏览器常开）。每个群每轮最多 1 条；Mac 上 LLM 与打开输入框并行。本页仅刷新状态，同群连发需间隔数秒。
-                  若提示「本轮未入库新消息」，不等于微信没说话，可能是本机库尚未写入；请先点「同步群聊」。
-                </p>
-                <div v-if="wechatLoading" class="loading-hint">加载消息…</div>
-                <ul v-else-if="formattedFeed.length" class="cs-feed">
-                  <li v-for="row in formattedFeed" :key="row.contactId" class="cs-feed-item" @click="openWechatDrawer(row.contactId)">
-                    <span class="cs-feed-name">{{ row.name }}</span>
-                    <span class="cs-feed-text">{{ row.subtitle }}</span>
-                    <span class="cs-feed-time">{{ row.timeLabel }}</span>
-                  </li>
-                </ul>
-                <p v-else class="empty-hint">绑定群聊并同步后显示消息</p>
-                <button v-if="latestFeedSubtitle" type="button" class="btn btn-xs" @click="copyLatestReplyHint">复制跟进话术</button>
-                <div v-if="showWechatSendBlock" class="cs-send-compose">
-                  <textarea v-model="wechatSend.message" rows="3" class="cs-input" placeholder="输入要发送到微信群的消息…" />
-                  <div class="cs-block-actions">
-                    <button
-                      type="button"
-                      class="btn btn-xs btn-accent"
-                      :disabled="wechatSend.loading || !wechatSend.message.trim() || !wechatSendContactName"
-                      @click="sendWechatToGroup"
-                    >
-                      {{ wechatSend.loading ? '发送中…' : '发送到微信群' }}
-                    </button>
-                  </div>
-                  <p v-if="wechatSendContactName" class="cs-send-target">目标群：{{ wechatSendContactName }}</p>
-                  <p v-if="wechatSend.error" class="cs-send-error">{{ wechatSend.error }}</p>
-                </div>
-              </section>
-            </div>
-
-            <!-- 商务操作：按实际阶段展示，与微信区独立 -->
+            <!-- 商务操作：按实际阶段展示 -->
             <section v-if="showIntakeBlock" class="cs-block cs-block-biz">
               <h4 class="cs-block-title">需求采集</h4>
               <p class="cs-block-desc">{{ PHASE_GUIDES.intake.description }}</p>
@@ -694,16 +511,7 @@
                 <button type="button" class="btn btn-xs" :disabled="intakeLinkLoading" @click="openOfficialIntakeForm">
                   打开官网表单
                 </button>
-                <button v-if="demandIntake.messageText" type="button" class="btn btn-xs" @click="copyDemandMessage">复制到微信</button>
-                <button
-                  v-if="demandIntake.messageText"
-                  type="button"
-                  class="btn btn-xs btn-accent"
-                  :disabled="demandIntake.sendingWechat || !wechatSendContactName"
-                  @click="sendDemandIntakeToWechat"
-                >
-                  {{ demandIntake.sendingWechat ? '发送中…' : '一键发到微信群' }}
-                </button>
+                <button v-if="demandIntake.messageText" type="button" class="btn btn-xs" @click="copyDemandMessage">复制话术</button>
               </div>
               <div v-if="intakeSubmissionSummary" class="cs-intake-summary">
                 <p class="cs-intake-summary__title">
@@ -747,7 +555,6 @@
                   {{ contractForm.loading ? '生成中…' : '生成合同' }}
                 </button>
                 <a v-if="contractForm.downloadUrl" class="btn btn-xs btn-accent" :href="contractForm.downloadUrl" download>下载</a>
-                <button v-if="contractForm.wechatHint" type="button" class="btn btn-xs" @click="copyContractHint">复制话术</button>
               </div>
               <p v-if="contractForm.filename" class="cs-contract-file">已生成：{{ contractForm.filename }}</p>
               <ContractEsignPanel
@@ -794,23 +601,6 @@
                   @click="saveDeliveryPlan(currentStageId === 'signed')"
                 >
                   {{ deliveryForm.saving ? '保存中…' : (currentStageId === 'signed' ? '保存并进入交付中' : '保存进度') }}
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-xs"
-                  :disabled="deliveryForm.notifying || !wechatSendContactName"
-                  @click="notifyDeliveryProgress()"
-                >
-                  {{ deliveryForm.notifying ? '发送中…' : '同步进度到微信群' }}
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-xs btn-accent"
-                  :disabled="deliveryForm.sendingSoftware || !wechatSendContactName || !clientDesktopOs"
-                  :title="clientDesktopOs ? '' : '请客户在需求表单中选择 Mac 或 Windows'"
-                  @click="notifySoftwareDelivery(false)"
-                >
-                  {{ deliveryForm.sendingSoftware ? '发送中…' : (customerPipeline.software_delivery_sent_at ? '重新发送安装包' : '发送安装包到微信群') }}
                 </button>
                 <p v-if="clientDesktopOs" class="cs-stage-done-hint muted">
                   交付包：{{ clientDesktopOs === 'mac' ? 'macOS' : 'Windows' }} 电脑端
@@ -877,7 +667,7 @@
             >
               <p class="cs-block-title">客户变更工单（外部客服门户）</p>
               <p class="muted cs-block-hint">
-                客户在「外部客服」提交的交付期变更/Bug 会出现在此，可同步至微信群并更新状态。
+                客户在「外部客服」提交的交付期变更/Bug 会出现在此，可在此更新状态。
               </p>
               <div v-if="changeRequestsLoading" class="loading-hint">加载工单…</div>
               <ul v-else-if="changeRequests.length" class="cs-change-request-list">
@@ -901,14 +691,6 @@
                       <option value="resolved">已解决</option>
                       <option value="rejected">已驳回</option>
                     </select>
-                    <button
-                      type="button"
-                      class="btn btn-xs"
-                      :disabled="changeRequestNotifyingId === cr.id || !wechatSendContactName"
-                      @click="notifyChangeRequestWechat(cr)"
-                    >
-                      {{ changeRequestNotifyingId === cr.id ? '发送中…' : '同步到微信群' }}
-                    </button>
                     <button
                       type="button"
                       class="btn btn-xs btn-accent"
@@ -984,52 +766,21 @@
             </li>
           </ul>
           <p v-if="!addCustomerModal.loading && !addCustomerPickerRows.length" class="empty-hint">
-            无匹配用户。可在
-            <button type="button" class="btn-link" @click="goAdminEntitlements">用户 Mod 管理</button>
-            中创建市场账号后再添加。
+            无匹配用户。可在用户 Mod 管理中创建市场账号后再添加。
           </p>
         </div>
       </div>
     </div>
 
-    <div v-if="wechatDrawer.visible" class="modal-overlay" @click.self="wechatDrawer.visible = false">
-      <div class="modal-content cs-drawer">
-        <div class="modal-header">
-          <h3>{{ wechatDrawer.title }}</h3>
-          <button class="modal-close" type="button" @click="wechatDrawer.visible = false">&times;</button>
-        </div>
-        <div class="modal-body cs-drawer-body">
-          <div v-if="wechatDrawer.loading" class="loading-hint">加载…</div>
-          <div v-else-if="!wechatDrawer.messages.length" class="empty-hint">暂无消息</div>
-          <div v-for="(msg, idx) in wechatDrawer.messages" v-else :key="idx" class="cs-chat-msg">
-            <div class="cs-chat-role">
-              <template v-if="msg.role === 'self'">我</template>
-              <template v-else>
-                {{ msg.sender_display || msg.sender || '成员' }}
-                <span
-                  v-if="msg.sender && msg.sender_display && msg.sender !== msg.sender_display"
-                  class="cs-chat-sender-id"
-                >{{ msg.sender }}</span>
-              </template>
-            </div>
-            <div class="cs-chat-text">{{ formatChatText(msg) }}</div>
-          </div>
-        </div>
-      </div>
     </div>
-  </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { get, post, put } from '@/api'
 import { getUnifiedLedger, type UnifiedLedgerEntry } from '@/api/financeLedger'
-import { wechatApi } from '@/api/wechat'
-import { wechatGroupBridgeApi } from '@/api/wechatGroupBridge'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
-import { useWechatGroupBridge } from '@/composables/useWechatGroupBridge'
-import { useWechatEnterpriseBinding } from '@/composables/useWechatEnterpriseBinding'
 import { useServiceBridge } from '@/composables/useServiceBridge'
 import { appAlert } from '@/utils/appDialog'
 import ContractEsignPanel from '@/components/contract/ContractEsignPanel.vue'
@@ -1080,34 +831,34 @@ const PHASE_GUIDES: Record<string, PhaseGuide> = {
   idle: {
     id: 'idle',
     label: '未接触',
-    headline: '绑定微信群，建立服务通道',
-    description: '先确认该客户对应哪些群，保存绑定后系统才能同步消息、跟踪进度。',
+    headline: '建立客户服务通道',
+    description: '先确认该客户的跟进方式与档案信息，系统据此跟踪服务进度。',
     checklist: [
-      { key: 'bind', text: '勾选负责的微信群并保存' },
-      { key: 'sync', text: '保存后自动同步一次群消息' },
+      { key: 'bind', text: '已确认客户与其跟进方式' },
+      { key: 'sync', text: '已建立客户服务档案' },
     ],
   },
   connected: {
     id: 'connected',
     label: '已建联',
-    headline: '发送建联欢迎语，同步群聊跟进',
+    headline: '建立联系，跟进客户需求',
     description:
-      '进入本阶段后，系统会向已绑定的微信群发送建联欢迎语（AI 助理自我介绍）。下一阶段「需求采集」起，将在群内发送官网需求表单链接与填写说明（含审核码指引）。',
-    actionHint: '若欢迎语未发出，可点击下方「发送建联欢迎语」重试（需 Mac/PC 微信已登录）。',
+      '进入本阶段后，需与客户建立联系并介绍服务。下一阶段「需求采集」起，将向客户发送官网需求表单链接与填写说明（含审核码指引）。',
+    actionHint: '确认与客户建立联系后，即可进入下一阶段。',
     checklist: [
-      { key: 'bind', text: '群聊已绑定' },
-      { key: 'connected_welcome', text: '已向客户发送建联欢迎语（AI 助理自我介绍）' },
-      { key: 'sync', text: '已同步最新消息' },
-      { key: 'messages', text: '看过最近对话并跟进' },
+      { key: 'bind', text: '已与客户建立联系' },
+      { key: 'connected_welcome', text: '已向客户介绍服务（AI 助理自我介绍）' },
+      { key: 'sync', text: '已同步最新沟通记录' },
+      { key: 'messages', text: '已跟进最近沟通记录' },
     ],
   },
   intake: {
     id: 'intake',
     label: '需求采集',
-    headline: '向微信群发送表单链接与填写说明',
+    headline: '发送表单链接与填写说明',
     description:
-      '从本阶段起，请在已绑定微信群发送官网专属需求表单链接，并说明填写方式与审核码回传。客户提交后可用审核码拉取表单；您也可生成更详细话术后再发。',
-    actionHint: '点击下方「发送表单链接到微信群」一键发送（需微信已登录）；未发出前可点「重新发送」。',
+      '从本阶段起，请向客户发送官网专属需求表单链接，并说明填写方式与审核码回传。客户提交后可用审核码拉取表单；您也可生成更详细话术后再发。',
+    actionHint: '复制表单链接并发送给客户填写；未发送前可重新生成。',
     checklist: [
       { key: 'intake_sent', text: '已向客户介绍服务并发送采集话术/表单链接' },
       { key: 'form_done', text: '需求已在官网表单提交并同步' },
@@ -1117,20 +868,20 @@ const PHASE_GUIDES: Record<string, PhaseGuide> = {
     id: 'intake_done',
     label: '已提交',
     headline: '确认需求，准备报价',
-    description: '客户已提交或口头确认需求。请在群内核对范围与交付边界，确认后再发正式报价。',
-    actionHint: '用下方话术在微信群确认需求；客户回复后点「同步群聊并分析进度」可自动识别进入已报价/议价。',
-    groupTip: '报价与议价均在已绑定微信群完成，无需等待自动报价模块。',
+    description: '客户已提交或口头确认需求。请核对范围与交付边界，确认后再发正式报价。',
+    actionHint: '用下方话术确认需求；客户回复后点「分析进度」可自动识别进入已报价/议价。',
+    groupTip: '报价与议价均通过客户沟通推进，无需等待自动报价模块。',
     checklist: [
       { key: 'form_done', text: '需求已提交或已确认' },
       { key: 'erp_linked', text: '已关联 ERP 客户主数据' },
-      { key: 'messages', text: '群内已核对关键需求点' },
+      { key: 'messages', text: '已核对关键需求点' },
     ],
   },
   quoted: {
     id: 'quoted',
     label: '已报价',
     headline: '跟进报价反馈',
-    description: '报价已在群内发出。关注客户回复，若谈价格或折扣请继续在群内沟通并记录让步点。',
+    description: '报价已发出。关注客户回复，若谈价格或折扣请继续沟通并记录让步点。',
     actionHint: '保存为「已报价」后 CRM 会更新报价单状态；还价时请调至「议价」。',
     groupTip: '客户还价时可直接用议价话术回复；达成一致后手动将阶段调至「待签」。',
     checklist: [
@@ -1143,12 +894,12 @@ const PHASE_GUIDES: Record<string, PhaseGuide> = {
     id: 'negotiating',
     label: '议价',
     headline: '议价沟通，调整方案或价格',
-    description: '正在群内谈价格或交付条件。保持回复及时，关键让步与最终口径留在群记录中。',
+    description: '正在谈价格或交付条件。保持回复及时，关键让步与最终口径保留在沟通记录中。',
     actionHint: '保存为「议价」后 CRM 报价单标记为议价中；谈妥后进入「待签」生成合同。',
-    groupTip: '议价以微信群沟通为准，发送前请核对金额与范围后再点发送。',
+    groupTip: '议价以沟通记录为准，发送前请核对金额与范围。',
     checklist: [
       { key: 'crm_record', text: 'CRM 报价单状态为议价中' },
-      { key: 'messages', text: '议价要点已在群内对齐' },
+      { key: 'messages', text: '议价要点已对齐' },
     ],
   },
   contract_pending: {
@@ -1159,7 +910,7 @@ const PHASE_GUIDES: Record<string, PhaseGuide> = {
     actionHint: '必填：甲方名称、合同总金额。生成后可下载 Word 并复制发送话术。',
     checklist: [
       { key: 'contract_draft', text: '已生成合同草案' },
-      { key: 'messages', text: '已在微信群发送并跟进' },
+      { key: 'messages', text: '已发送合同并跟进' },
     ],
   },
   signed: {
@@ -1167,7 +918,7 @@ const PHASE_GUIDES: Record<string, PhaseGuide> = {
     label: '已签',
     headline: '启动交付计划',
     description: '合同已签。请填写客户期望交付时间与制作里程碑，保存后进入「交付中」阶段。',
-    actionHint: '填写预计交付日期并保存计划；可一键向微信群同步首次交付说明。',
+    actionHint: '填写预计交付日期并保存计划；可向客户同步首次交付说明。',
     checklist: [
       { key: 'contract_draft', text: '合同已生成或已签署' },
       { key: 'delivery_plan', text: '已填写预计交付时间与里程碑' },
@@ -1177,9 +928,9 @@ const PHASE_GUIDES: Record<string, PhaseGuide> = {
     id: 'delivering',
     label: '交付中',
     headline: '定制软件制作进行中',
-    description: '按里程碑更新制作进度，定期向客户群同步；客户到款后系统自动生成账单。',
-    actionHint: '勾选已完成里程碑并保存；进度可发到微信群。检测到款后点「检查到款并出账」。',
-    groupTip: '进度以里程碑为准，建议每完成一阶段在群内通报一次。',
+    description: '按里程碑更新制作进度，定期向客户同步；客户到款后系统自动生成账单。',
+    actionHint: '勾选已完成里程碑并保存；进度可同步给客户。检测到款后点「检查到款并出账」。',
+    groupTip: '进度以里程碑为准，建议每完成一阶段向客户通报一次。',
     checklist: [
       { key: 'delivery_progress', text: '制作进度已更新并同步客户' },
       { key: 'payment_received', text: '已确认到款' },
@@ -1191,7 +942,7 @@ const PHASE_GUIDES: Record<string, PhaseGuide> = {
     label: '已交付',
     headline: '交付完成，售后跟进',
     description: '项目已验收交付。确认到款与账单无误后，持续响应售后咨询。',
-    actionHint: '若尚未出账，可再次「检查到款并出账」；验收问题在群内跟进。',
+    actionHint: '若尚未出账，可再次「检查到款并出账」；验收问题持续跟进。',
     checklist: [
       { key: 'delivery_progress', text: '全部里程碑已完成' },
       { key: 'invoice_issued', text: '账单已出具' },
@@ -1202,43 +953,30 @@ const PHASE_GUIDES: Record<string, PhaseGuide> = {
 
 const { stats, loadStats } = useServiceBridge()
 
-const {
-  feed,
-  loading: wechatLoading,
-  syncing,
-  loadFeed,
-  syncGroups,
-  formatFeedItem,
-} = useWechatGroupBridge()
+type EnterpriseUserRow = {
+  id: number
+  username: string
+  isEnterprise?: boolean
+  hasPipeline?: boolean
+  bindingCount?: number
+  is_enterprise?: boolean
+  has_pipeline?: boolean
+}
+
+const enterpriseUsers = ref<EnterpriseUserRow[]>([])
+const selectedUserId = ref<number | null>(null)
+const selectedEnterpriseUser = computed<EnterpriseUserRow | null>(() => null)
+const loadingEnterpriseUsers = ref(false)
+
+async function loadEnterpriseUsers() {}
+function selectEnterprise(_userId: number) {}
 
 const expandedClientId = ref<number | null>(null)
-
-const {
-  enterpriseUsers,
-  selectedUserId,
-  selectedUser: selectedEnterpriseUser,
-  wechatGroups: wechatGroupsCatalog,
-  selectedGroupIdStrings,
-  groupFilter,
-  filteredGroups: filteredBindGroups,
-  loadingUsers: loadingEnterpriseUsers,
-  loadingGroups: loadingWechatGroups,
-  loadingBindings,
-  savingBindings,
-  bindingsDirty,
-  loadEnterpriseUsers,
-  loadWechatGroups,
-  selectEnterprise,
-  onGroupSelectionChange,
-  saveBindings,
-} = useWechatEnterpriseBinding()
 
 const pipelineAnalyzing = ref(false)
 const stageDraft = ref('idle')
 const stageSaving = ref(false)
 const autoStageAdvancing = ref(false)
-const connectedWelcomeSending = ref(false)
-const intakeNoticeSending = ref(false)
 const intakeFinalizeLoading = ref(false)
 const changeRequests = ref<
   Array<{
@@ -1255,7 +993,6 @@ const changeRequests = ref<
   }>
 >([])
 const changeRequestsLoading = ref(false)
-const changeRequestNotifyingId = ref('')
 const changeRequestOpsDispatchingId = ref('')
 const funnelExpanded = ref(true)
 const funnelLoading = ref(false)
@@ -1265,14 +1002,6 @@ const funnelStageFilter = ref('')
 const externalCrmPushLoading = ref(false)
 const externalCrmPullLoading = ref(false)
 const intakeAutoFinalizeAttempted = ref(0)
-const passivePolling = ref(false)
-const passiveLoopEnabled = ref(false)
-const passiveLoopIntervalSec = ref(60)
-const passiveLoopLastAt = ref('')
-const passiveLoopSummary = ref('')
-const passiveLlmStatus = ref('')
-const passiveLoopBusy = ref(false)
-let passiveLoopTimer: ReturnType<typeof setInterval> | null = null
 const pipelineStages = ref([...DEFAULT_PIPELINE_STAGES])
 type IntakeFormFields = {
   name?: string
@@ -1289,15 +1018,12 @@ const customerPipeline = reactive({
   username: '',
   last_message_preview: '',
   intake_sent: false,
-  intake_form_notice_sent: false,
-  connected_welcome_sent: false,
   intake_submitted_at: '',
   landing_contact_id: 0,
   intake_form: null as IntakeFormFields | null,
   erp_customer_id: 0,
   erp_customer_name: '',
   crm_funnel_synced_at: '',
-  intake_done_notice_sent: false,
   crm_opportunity_id: 0,
   crm_quote_id: 0,
   crm_db_synced_at: '',
@@ -1335,8 +1061,6 @@ const deliveryForm = reactive({
   milestones: [] as Array<{ id: string; label: string; weight: number; done: boolean }>,
   progress_percent: 0,
   saving: false,
-  notifying: false,
-  sendingSoftware: false,
   checkingPayment: false,
 })
 
@@ -1366,7 +1090,6 @@ const demandIntake = reactive({
   signedFormUrl: '',
   messageText: '',
   loading: false,
-  sendingWechat: false,
 })
 
 const contractForm = reactive({
@@ -1380,13 +1103,6 @@ const contractForm = reactive({
   savingFields: false,
   filename: '',
   downloadUrl: '',
-  wechatHint: '',
-})
-
-const wechatSend = reactive({
-  message: '',
-  loading: false,
-  error: '',
 })
 
 const CS_BRIDGE = '/api/mod/xcagi-customer-service-bridge'
@@ -1442,19 +1158,15 @@ function stageGuideFor(stageId: string) {
 function checklistItemDoneFactual(key: PhaseCheckKey): boolean {
   switch (key) {
     case 'bind':
-      return hasBinding.value
+      return false
     case 'sync':
-      return formattedFeed.value.length > 0
+      return false
     case 'messages':
-      return formattedFeed.value.length > 0
+      return false
     case 'connected_welcome':
-      return Boolean(customerPipeline.connected_welcome_sent)
+      return false
     case 'intake_sent':
-      return (
-        customerPipeline.intake_form_notice_sent
-        || customerPipeline.intake_sent
-        || Boolean(demandIntake.messageText)
-      )
+      return customerPipeline.intake_sent || Boolean(demandIntake.messageText)
     case 'form_done':
       return Boolean(customerPipeline.intake_submitted_at)
         || stageRank(currentStageId.value) >= stageRank('intake_done')
@@ -1595,37 +1307,6 @@ function stageRank(stageId: string) {
   return pipelineStages.value.findIndex((s) => s.id === stageId)
 }
 
-function formatChatText(msg: Record<string, unknown>) {
-  const text = String(msg.text || msg.content || '').trim()
-  if (!text) return ''
-  const lower = text.toLowerCase()
-  if (
-    text.startsWith('<?xml') ||
-    text.startsWith('<msg') ||
-    lower.includes('<appmsg') ||
-    lower.includes('<sysmsg') ||
-    (text.includes('拍了拍') && text.includes('<template>'))
-  ) {
-    const pat = text.match(/拍了拍[^<]+/)
-    if (pat) return pat[0]
-    return '[系统/卡片消息]'
-  }
-  return text
-}
-
-const wechatDrawer = reactive({
-  visible: false,
-  loading: false,
-  title: '群聊记录',
-  contactId: 0,
-  messages: [] as Array<Record<string, unknown>>,
-})
-
-const formattedFeed = computed(() =>
-  feed.value.map((item) => formatFeedItem(item)).filter((r) => r.contactId > 0),
-)
-const latestFeedSubtitle = computed(() => formattedFeed.value[0]?.subtitle || '')
-
 const currentStageId = computed(() => customerPipeline.stage || 'idle')
 
 const stageDraftDirty = computed(() => stageDraft.value !== currentStageId.value)
@@ -1752,23 +1433,7 @@ const intakeSubmittedAwaitingAdvance = computed(
     && checklistItemDoneFactual('form_done'),
 )
 
-const hasBinding = computed(() => {
-  if (bindingsDirty.value) return selectedGroupIdStrings.value.length > 0
-  return (selectedEnterpriseUser.value?.bindingCount || 0) > 0 || selectedGroupIdStrings.value.length > 0
-})
-
-const showIntakeBlock = computed(() => hasBinding.value || stageRank(currentStageId.value) >= stageRank('connected'))
-
-const showWechatSendBlock = computed(() => hasBinding.value && stageRank(currentStageId.value) >= stageRank('connected'))
-
-const wechatSendContactName = computed(() => {
-  const g = filteredBindGroups.value.find((x) => selectedGroupIdStrings.value.includes(String(x.id)))
-  const fromBinding = g?.contact_name || g?.remark || ''
-  if (fromBinding) return fromBinding
-  const fromFeed = formattedFeed.value[0]?.name
-  if (fromFeed) return fromFeed
-  return ''
-})
+const showIntakeBlock = computed(() => stageRank(currentStageId.value) >= stageRank('connected'))
 
 const showContractBlock = computed(() => {
   const r = stageRank(currentStageId.value)
@@ -1885,27 +1550,6 @@ async function saveDeliveryPlan(startDelivering: boolean) {
   }
 }
 
-async function notifyDeliveryProgress() {
-  if (!selectedUserId.value) return
-  deliveryForm.notifying = true
-  try {
-    const res = await post(`${CS_BRIDGE}/user-cs/delivery/notify-progress`, {
-      market_user_id: selectedUserId.value,
-      username: selectedEnterpriseUser.value?.username || '',
-    })
-    const payload = res as { success?: boolean; error?: string }
-    if (!payload?.success) {
-      await appAlert(payload?.error || '发送失败')
-      return
-    }
-    await appAlert('进度说明已发送到微信群')
-  } catch (e) {
-    await appAlert(e instanceof Error ? e.message : '发送失败')
-  } finally {
-    deliveryForm.notifying = false
-  }
-}
-
 const clientDesktopOs = computed(() => {
   const form = customerPipeline.intake_form
   const direct = String(form?.desktop_os || '').trim()
@@ -1927,44 +1571,6 @@ const clientNeedMobile = computed(() => {
   if (m) return m[1] === '需要'
   return true
 })
-
-async function notifySoftwareDelivery(force: boolean) {
-  if (!selectedUserId.value) return
-  if (!clientDesktopOs.value) {
-    await appAlert('客户尚未在需求表单中选择 Mac / Windows，请补发表单或手动录入后再发送安装包')
-    return
-  }
-  let forceResend = force
-  if (customerPipeline.software_delivery_sent_at && !forceResend) {
-    const ok = window.confirm('安装包链接已发送过，确定重新发送到微信群？')
-    if (!ok) return
-    forceResend = true
-  }
-  deliveryForm.sendingSoftware = true
-  try {
-    const res = await post(`${CS_BRIDGE}/user-cs/delivery/notify-software`, {
-      market_user_id: selectedUserId.value,
-      username: selectedEnterpriseUser.value?.username || '',
-      force: forceResend,
-    })
-    const payload = res as {
-      success?: boolean
-      error?: string
-      data?: { pipeline?: Record<string, unknown>; download_url?: string }
-    }
-    if (!payload?.success) {
-      await appAlert(payload?.error || '发送失败')
-      return
-    }
-    const p = payload.data?.pipeline
-    if (p) applyPipelineFromDoc(p)
-    await appAlert('安装包下载链接已发送到微信群')
-  } catch (e) {
-    await appAlert(e instanceof Error ? e.message : '发送失败')
-  } finally {
-    deliveryForm.sendingSoftware = false
-  }
-}
 
 async function checkPaymentAndInvoice(force: boolean) {
   if (!selectedUserId.value) return
@@ -2167,8 +1773,6 @@ function applyPipelineFromDoc(p: Record<string, unknown>, opts: { resetDraft?: b
   }
   customerPipeline.last_message_preview = String(p.last_message_preview || '')
   customerPipeline.intake_sent = Boolean(p.intake_sent)
-  customerPipeline.intake_form_notice_sent = Boolean(p.intake_form_notice_sent)
-  customerPipeline.connected_welcome_sent = Boolean(p.connected_welcome_sent)
   customerPipeline.intake_submitted_at = String(p.intake_submitted_at || '')
   customerPipeline.landing_contact_id = Number(p.landing_contact_id || 0)
   const rawForm = p.intake_form
@@ -2178,7 +1782,6 @@ function applyPipelineFromDoc(p: Record<string, unknown>, opts: { resetDraft?: b
   customerPipeline.erp_customer_id = Number(p.erp_customer_id || 0)
   customerPipeline.erp_customer_name = String(p.erp_customer_name || '')
   customerPipeline.crm_funnel_synced_at = String(p.crm_funnel_synced_at || '')
-  customerPipeline.intake_done_notice_sent = Boolean(p.intake_done_notice_sent)
   customerPipeline.crm_opportunity_id = Number(p.crm_opportunity_id || 0)
   customerPipeline.crm_quote_id = Number(p.crm_quote_id || 0)
   customerPipeline.crm_db_synced_at = String(p.crm_db_synced_at || '')
@@ -2214,22 +1817,6 @@ function applyPipelineFromDoc(p: Record<string, unknown>, opts: { resetDraft?: b
   if (qd && typeof qd === 'object') {
     crmQuoteStatus.value = String((qd as { status?: string }).status || '')
     crmQuoteSummary.value = String((qd as { summary?: string }).summary || '')
-  }
-  const ps = p.passive_state
-  if (ps && typeof ps === 'object') {
-    passiveLoopEnabled.value = Boolean((ps as { poll_enabled?: boolean }).poll_enabled)
-    const sec = Number((ps as { poll_interval_sec?: number }).poll_interval_sec)
-    if (sec >= 10) passiveLoopIntervalSec.value = sec
-    passiveLoopLastAt.value = formatPassivePollTime((ps as { last_poll_at?: string }).last_poll_at)
-    passiveLoopSummary.value = String((ps as { last_poll_message?: string }).last_poll_message || '')
-  } else {
-    passiveLoopEnabled.value = false
-    passiveLoopSummary.value = ''
-  }
-  if (passiveLoopEnabled.value && selectedUserId.value) {
-    startPassiveLoopTimer()
-  } else {
-    stopPassiveLoopTimer()
   }
 }
 
@@ -2475,41 +2062,6 @@ async function loadIntakeNoticeMessage() {
   }
 }
 
-async function sendIntakeFormNotice(force: boolean = false) {
-  force = force === true
-  if (!selectedUserId.value) return
-  if (!(await ensureBindingsSaved())) return
-  intakeNoticeSending.value = true
-  try {
-    const res = await post(`${CS_BRIDGE}/user-cs/wechat/send-intake-notice`, {
-      market_user_id: selectedUserId.value,
-      username: selectedEnterpriseUser.value?.username || '',
-      contact_name: wechatSendContactName.value || '',
-      brief: demandIntake.brief.trim(),
-      force,
-    })
-    const data = (res as { success?: boolean; data?: { sent?: boolean; error?: string; message?: string; form_url?: string } })?.data
-    if ((res as { success?: boolean }).success && data?.sent) {
-      customerPipeline.intake_form_notice_sent = true
-      customerPipeline.intake_sent = true
-      if (data.message) demandIntake.messageText = data.message
-      if (data.form_url) {
-        intakeQuickFormUrl.value = data.form_url
-        demandIntake.signedFormUrl = data.form_url
-      }
-      await appAlert('需求表单链接与说明已发送到微信群')
-      await handleSyncWechat()
-      await loadPipelineForCustomer()
-    } else {
-      await appAlert(data?.error || '发送失败，请确认微信已登录并重试')
-    }
-  } catch (e) {
-    await appAlert(e instanceof Error ? e.message : String(e))
-  } finally {
-    intakeNoticeSending.value = false
-  }
-}
-
 async function fetchIntakeFormByAuditCode() {
   if (!selectedUserId.value) return
   const code = intakeAuditCode.value.trim()
@@ -2638,10 +2190,8 @@ async function finalizeIntakeFromPipeline(opts: { silent?: boolean } = {}) {
       syncSummaryFromPipeline(selectedUserId.value)
     }
     if (opts.silent) return
-    const fin = payload.data?.finalize as { erp_linked?: boolean; wechat_notice?: { sent?: boolean } } | undefined
     const erpName = customerPipeline.erp_customer_name
-    let msg = erpName ? `已关联 ERP 客户：${erpName}` : '已同步 CRM 漏斗'
-    if (fin?.wechat_notice?.sent) msg += '；已向微信群发送需求确认'
+    const msg = erpName ? `已关联 ERP 客户：${erpName}` : '已同步 CRM 漏斗'
     await appAlert(msg)
   } catch (e) {
     if (!opts.silent) await appAlert(e instanceof Error ? e.message : '同步 CRM 失败')
@@ -2725,7 +2275,7 @@ async function dispatchChangeRequestOps(cr: { id: string; ticket_no?: string }) 
     const res = await post(`${CS_BRIDGE}/user-cs/change-requests/${cr.id}/ops-dispatch`, {
       market_user_id: selectedUserId.value,
       username: selectedEnterpriseUser.value?.username || '',
-      contact_name: selectedEnterpriseUser.value?.username || wechatSendContactName.value,
+      contact_name: selectedEnterpriseUser.value?.username || '',
     })
     const payload = res as {
       success?: boolean
@@ -2786,30 +2336,6 @@ async function onChangeRequestStatus(
   }
 }
 
-async function notifyChangeRequestWechat(cr: { id: string }) {
-  if (!selectedUserId.value || !cr.id) return
-  changeRequestNotifyingId.value = cr.id
-  try {
-    const res = await post<{ success?: boolean; error?: string }>(
-      `${CS_BRIDGE}/user-cs/change-requests/${encodeURIComponent(cr.id)}/notify-wechat`,
-      {
-        market_user_id: selectedUserId.value,
-        contact_name: wechatSendContactName.value,
-      },
-    )
-    if (!res?.success) {
-      await appAlert(res?.error || '发送失败')
-      return
-    }
-    await appAlert('已同步变更工单至微信群')
-    await loadChangeRequestsForCustomer()
-  } catch (e) {
-    await appAlert(e instanceof Error ? e.message : '发送失败')
-  } finally {
-    changeRequestNotifyingId.value = ''
-  }
-}
-
 async function maybeAutoFinalizeIntakeOnOpen() {
   if (!selectedUserId.value) return
   if (!customerPipeline.intake_submitted_at || customerPipeline.crm_funnel_synced_at) return
@@ -2841,7 +2367,6 @@ async function loadPipelineForCustomer() {
     await loadFinanceLedger()
   } catch {
     pipelineStages.value = DEFAULT_PIPELINE_STAGES
-    stopPassiveLoopTimer()
     changeRequests.value = []
   }
 }
@@ -2862,7 +2387,7 @@ async function savePipelineStage(
     const label = stageLabel(stage)
     const ok = window.confirm(
       opts.confirmMessage
-        ?? `将当前客户阶段改为「${label}」？\n可前进或回退，不影响已保存的群绑定与消息。`,
+        ?? `将当前客户阶段改为「${label}」？\n可前进或回退，不影响已保存的客户档案。`,
     )
     if (!ok) {
       stageDraft.value = currentStageId.value
@@ -2870,7 +2395,6 @@ async function savePipelineStage(
     }
   }
   stageDraft.value = stage
-  const shouldOfferIntakeNotice = stage === 'intake' && !customerPipeline.intake_form_notice_sent
   stageSaving.value = true
   try {
     const res = await post(`${CS_BRIDGE}/user-cs/pipeline/stage`, {
@@ -2900,12 +2424,6 @@ async function savePipelineStage(
       await syncCrmRecord()
     }
     await loadClientSummary(selectedUserId.value, selectedEnterpriseUser.value?.username)
-    if (shouldOfferIntakeNotice && stage === currentStageId.value) {
-      const sendNow = window.confirm(
-        '阶段已保存为「需求采集」。是否现在向微信群发送官网表单链接与填写说明？\n（不会自动发送，点「取消」可稍后再发）',
-      )
-      if (sendNow) await sendIntakeFormNotice()
-    }
   } catch (e) {
     await appAlert(e instanceof Error ? e.message : '保存阶段失败')
   } finally {
@@ -2913,28 +2431,18 @@ async function savePipelineStage(
   }
 }
 
-async function analyzeCustomerProgress(options: { skipSync?: boolean } = {}) {
+async function analyzeCustomerProgress(_options: { skipSync?: boolean } = {}) {
   if (!selectedUserId.value) return
   pipelineAnalyzing.value = true
   try {
-    if (bindingsDirty.value || !selectedEnterpriseUser.value?.bindingCount) {
-      await appAlert('请先保存群聊绑定')
-      return
-    }
-    if (!options.skipSync) {
-      await syncGroups(selectedUserId.value)
-      await loadWechatSummary()
-    }
     const res = await post(`${CS_BRIDGE}/user-cs/analyze`, {
       market_user_id: selectedUserId.value,
       username: selectedEnterpriseUser.value?.username || '',
-      has_binding: (selectedEnterpriseUser.value?.bindingCount || 0) > 0,
       intake_sent: customerPipeline.intake_sent || Boolean(demandIntake.messageText),
     })
     const data = (res as {
       data?: {
         pipeline?: Record<string, unknown>
-        connected_welcome?: Record<string, unknown>
         crm?: { opportunity?: Record<string, unknown>; quote?: Record<string, unknown> }
       }
     })?.data
@@ -2945,29 +2453,10 @@ async function analyzeCustomerProgress(options: { skipSync?: boolean } = {}) {
       applyCrmBundle(data?.crm)
       syncSummaryFromPipeline(selectedUserId.value)
     }
-    const welcome = data?.connected_welcome as { sent?: boolean; skipped?: boolean; error?: string } | undefined
-    if (welcome?.sent) {
-      customerPipeline.connected_welcome_sent = true
-      await appAlert('已向微信群发送建联欢迎语')
-      await handleSyncWechat()
-    } else if (welcome?.attempted && !welcome?.sent && welcome?.error) {
-      await appAlert(`建联欢迎语发送失败：${welcome.error}`)
-    }
   } catch (e) {
     await appAlert(e instanceof Error ? e.message : String(e))
   } finally {
     pipelineAnalyzing.value = false
-  }
-}
-
-async function copyLatestReplyHint() {
-  const name = selectedEnterpriseUser.value?.username || '客户'
-  const text = `您好，关于您刚才在群里的问题，我们已收到。${name} 这边会继续跟进，如需提交正式需求也可填写：${demandIntake.formUrl}`
-  try {
-    await navigator.clipboard.writeText(text)
-    await appAlert('已复制')
-  } catch {
-    await appAlert('复制失败')
   }
 }
 
@@ -3011,205 +2500,9 @@ async function copyGroupScript(text: string) {
   if (!text.trim()) return
   try {
     await navigator.clipboard.writeText(text)
-    await appAlert('已复制话术，可粘贴到微信群发送')
+    await appAlert('已复制话术')
   } catch {
     await appAlert('复制失败')
-  }
-}
-
-function fillWechatDraft(text: string) {
-  wechatSend.message = text
-  wechatSend.error = ''
-  nextTick(() => {
-    const el = document.querySelector('.cs-send-compose textarea') as HTMLTextAreaElement | null
-    el?.focus()
-    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  })
-}
-
-async function sendGroupScript(text: string) {
-  if (!(await ensureBindingsSaved())) return
-  fillWechatDraft(text)
-  await sendWechatToGroup()
-}
-
-async function sendConnectedWelcome(force: boolean = false) {
-  force = force === true
-  if (!selectedUserId.value) return
-  if (!(await ensureBindingsSaved())) return
-  connectedWelcomeSending.value = true
-  try {
-    const res = await post(`${CS_BRIDGE}/user-cs/wechat/send-connected-welcome`, {
-      market_user_id: selectedUserId.value,
-      username: selectedEnterpriseUser.value?.username || '',
-      contact_name: wechatSendContactName.value || '',
-      force,
-    })
-    const data = (res as { success?: boolean; data?: { sent?: boolean; error?: string; message?: string; send_result?: { error?: string } } })?.data
-    if ((res as { success?: boolean }).success && data?.sent) {
-      customerPipeline.connected_welcome_sent = true
-      if (data.message) wechatSend.message = data.message
-      await appAlert('建联欢迎语已发送到微信群')
-      await handleSyncWechat()
-      await loadPipelineForCustomer()
-    } else {
-      await appAlert(data?.error || data?.send_result?.error || '建联欢迎语发送失败，请确认微信已登录并重试')
-    }
-  } catch (e) {
-    await appAlert(e instanceof Error ? e.message : String(e))
-  } finally {
-    connectedWelcomeSending.value = false
-  }
-}
-
-async function ensureBindingsSaved(): Promise<boolean> {
-  if (!selectedUserId.value) return false
-  if (!bindingsDirty.value && (selectedEnterpriseUser.value?.bindingCount || 0) > 0) return true
-  if (!selectedGroupIdStrings.value.length) {
-    await appAlert('请先在左侧勾选群聊并点击「保存绑定」')
-    return false
-  }
-  try {
-    await saveBindings()
-    return true
-  } catch (e) {
-    await appAlert(e instanceof Error ? e.message : '保存绑定失败')
-    return false
-  }
-}
-
-type PassivePollPayload = {
-  message?: string
-  replied_count?: number
-  detected_count?: number
-  feed?: Array<Record<string, unknown>>
-  llm_probe?: { ready?: boolean; message?: string }
-  snapshot?: {
-    success?: boolean
-    rebuilt?: boolean
-    skipped?: boolean
-    message?: string
-  }
-  messages_pulled_this_round?: number
-  sync?: {
-    success?: boolean
-    message?: string
-    synced?: number
-    stale?: boolean
-    stale_reason?: string
-    messages_pulled?: number
-    messages_pulled_this_round?: number
-    latest_message_label?: string
-    message_db_ready?: boolean
-  }
-  replies?: Array<{
-    reply_source?: string
-    reply?: string
-    llm_error?: string
-    incoming?: string
-    blocked?: boolean
-    block_reason?: string
-  }>
-  blocked_count?: number
-}
-
-/** 轮询后刷新列表：勿用 passive_poll 内旧 feed 覆盖刚 refresh 的结果 */
-async function reloadFeedAfterRefresh(marketUserId: number) {
-  await loadFeed(marketUserId, 20, { sync: false })
-}
-
-function formatPassivePollSummary(data: PassivePollPayload | undefined) {
-  const chunks: string[] = []
-  if (data?.message) chunks.push(data.message)
-  if (typeof data?.detected_count === 'number' && data.detected_count > 0) {
-    chunks.push(`识别新消息 ${data.detected_count} 条`)
-  }
-  const snap = data?.snapshot
-  const sync = data?.sync
-  if (sync?.stale) {
-    chunks.push(`⚠ 库过期：${sync.stale_reason || sync.message || '解密库落后'}`)
-  } else if (sync?.message_db_ready === false) {
-    chunks.push('⚠ 未连接微信消息库，请到数据来源执行「扫密钥并同步聊天」')
-  } else if (sync?.message) {
-    chunks.push(sync.message)
-  } else if (sync?.latest_message_label) {
-    chunks.push(`库内最新 ${sync.latest_message_label}`)
-  }
-  if (snap?.success) {
-    if (snap.rebuilt) {
-      chunks.push('本机微信库已复制并解密')
-    } else if (snap.skipped) {
-      chunks.push('本机库指纹未变，沿用上次快照')
-    } else if (snap.message && !String(sync?.message || '').includes(String(snap.message))) {
-      chunks.push(String(snap.message))
-    }
-  } else if (snap?.message) {
-    chunks.push(`快照失败：${snap.message}`)
-  }
-  const probe = data?.llm_probe
-  if (probe) {
-    chunks.push(probe.ready ? 'LLM 已就绪' : `LLM 未就绪：${probe.message || ''}`)
-  }
-  const replied = data?.replied_count ?? 0
-  const blockedN = data?.blocked_count ?? 0
-  if (blockedN > 0 && replied === 0 && !data?.dry_run) {
-    const firstBlocked = data?.replies?.find((r) => r.blocked || r.reply_source === 'blocked')
-    const reason =
-      firstBlocked?.block_reason ||
-      firstBlocked?.llm_error ||
-      'LLM 或质量检查未通过，已拦截未发送'
-    chunks.push(`未发送（质量/LLM）：${reason}`)
-  }
-  if (typeof data?.detected_count === 'number' && data.detected_count > 0 && replied === 0 && !data?.dry_run) {
-    const first = data?.replies?.[0] as {
-      send_error?: string
-      send_result?: { error?: string }
-      reply?: string
-      blocked?: boolean
-      reply_source?: string
-    } | undefined
-    if (first?.blocked || first?.reply_source === 'blocked') {
-      // 已在 blocked 分支说明
-    } else {
-    const sendErr =
-      first?.send_error ||
-      first?.send_result?.error ||
-      '请确认 Mac 微信已打开、群名与绑定完全一致、已授权辅助功能'
-    chunks.push(`⚠ 未发送到微信：${sendErr}`)
-    }
-  } else if (
-    typeof data?.detected_count === 'number' &&
-    data.detected_count === 0 &&
-    !data?.dry_run
-  ) {
-    chunks.push('无待回复新消息（重新监听后只回复此后他人新消息；或点「被动回复」补答最新一条）')
-  }
-  const first = data?.replies?.[0]
-  if (first?.reply_source) {
-    if (first.reply_source === 'template') {
-      chunks.push('⚠ 回复=template（不应出现，请检查 LLM 配置）')
-    } else {
-      chunks.push(`回复=${first.reply_source}`)
-    }
-    if (replied > 0) chunks.push(`已发送 ${replied} 条`)
-    if (first.llm_error && first.reply_source !== 'llm') chunks.push(`原因：${first.llm_error}`)
-    if (first.reply) {
-      const preview = String(first.reply)
-      chunks.push(`预览：${preview.length > 60 ? `${preview.slice(0, 60)}…` : preview}`)
-    }
-  }
-  return chunks.filter(Boolean).join(' · ')
-}
-
-async function loadPassiveLlmStatus() {
-  try {
-    const res = await get(`${CS_BRIDGE}/user-cs/wechat/llm-status`)
-    const probe = (res as { data?: { ready?: boolean; message?: string } })?.data
-    passiveLlmStatus.value = probe?.ready
-      ? `LLM：${probe?.message || '已配置（与智能对话同源）'}`
-      : `LLM 未就绪：${probe?.message || '请检查平台/直连配置'}`
-  } catch {
-    passiveLlmStatus.value = ''
   }
 }
 
@@ -3222,190 +2515,6 @@ function formatPassivePollTime(iso?: string) {
   }
 }
 
-function stopPassiveLoopTimer() {
-  if (passiveLoopTimer) {
-    clearInterval(passiveLoopTimer)
-    passiveLoopTimer = null
-  }
-}
-
-function startPassiveLoopTimer() {
-  stopPassiveLoopTimer()
-  if (!passiveLoopEnabled.value || !selectedUserId.value) return
-  const ms = Math.max(10, passiveLoopIntervalSec.value) * 1000
-  passiveLoopTimer = setInterval(() => {
-    void runPassiveLoopTick()
-  }, ms)
-}
-
-async function persistPassiveLoopConfig() {
-  if (!selectedUserId.value) return
-  try {
-    await post(`${CS_BRIDGE}/user-cs/wechat/passive-loop`, {
-      market_user_id: selectedUserId.value,
-      username: selectedEnterpriseUser.value?.username || '',
-      poll_enabled: passiveLoopEnabled.value,
-      poll_interval_sec: passiveLoopIntervalSec.value,
-    })
-  } catch (e) {
-    console.warn('保存轮询客服配置失败', e)
-  }
-}
-
-async function onPassiveLoopToggle() {
-  await persistPassiveLoopConfig()
-  if (passiveLoopEnabled.value) {
-    startPassiveLoopTimer()
-    void refreshPassiveLoopStatus()
-  } else {
-    stopPassiveLoopTimer()
-  }
-}
-
-async function onPassiveLoopIntervalChange() {
-  await persistPassiveLoopConfig()
-  if (passiveLoopEnabled.value) {
-    startPassiveLoopTimer()
-    void runPassiveLoopTick()
-  }
-}
-
-async function resetPassiveWatch() {
-  if (!selectedUserId.value) return
-  if (!(await ensureBindingsSaved())) return
-  passiveLoopBusy.value = true
-  try {
-    await post(`${CS_BRIDGE}/user-cs/wechat/passive-reset-watch`, {
-      market_user_id: selectedUserId.value,
-      username: selectedEnterpriseUser.value?.username || '',
-      poll_enabled: passiveLoopEnabled.value,
-      poll_interval_sec: passiveLoopIntervalSec.value,
-    })
-    const refreshRes = await refreshBoundGroupsLikeDataSources(selectedUserId.value)
-    await loadPipelineForCustomer()
-    passiveLoopSummary.value = [
-      '已重新对齐群聊进度，请在群里发新消息后等待轮询',
-      refreshRes.message || '',
-    ]
-      .filter(Boolean)
-      .join(' · ')
-  } catch (e) {
-    await appAlert(e instanceof Error ? e.message : String(e))
-  } finally {
-    passiveLoopBusy.value = false
-  }
-}
-
-/** 仅刷新轮询状态（实际探测/回复由服务端后台执行）。 */
-async function refreshPassiveLoopStatus() {
-  if (!selectedUserId.value || !passiveLoopEnabled.value) return
-  const uid = selectedUserId.value
-  const uname = encodeURIComponent(selectedEnterpriseUser.value?.username || '')
-  try {
-    const res = await get(
-      `${CS_BRIDGE}/user-cs/wechat/passive-loop?market_user_id=${uid}&username=${uname}`,
-    )
-    const data = (res as { data?: { last_poll_at?: string; last_poll_message?: string } })?.data
-    passiveLoopLastAt.value = formatPassivePollTime(data?.last_poll_at)
-    if (data?.last_poll_message) {
-      passiveLoopSummary.value = String(data.last_poll_message)
-    }
-    void reloadFeedAfterRefresh(uid)
-    if (wechatDrawer.visible && wechatDrawer.contactId > 0) {
-      await openWechatDrawer(wechatDrawer.contactId)
-    }
-  } catch (e) {
-    console.warn('刷新轮询状态失败', e)
-  }
-}
-
-async function runPassiveLoopTick() {
-  if (!selectedUserId.value || !passiveLoopEnabled.value || passiveLoopBusy.value || passivePolling.value) {
-    return
-  }
-  if (!hasBinding.value) {
-    return
-  }
-  passiveLoopBusy.value = true
-  try {
-    await refreshPassiveLoopStatus()
-  } finally {
-    passiveLoopLastAt.value = new Date().toLocaleString(undefined, {
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-    passiveLoopBusy.value = false
-  }
-}
-
-async function runPassivePoll(dryRun: boolean) {
-  if (!selectedUserId.value) return
-  if (!(await ensureBindingsSaved())) return
-  passivePolling.value = true
-  try {
-    const res = await post(`${CS_BRIDGE}/user-cs/wechat/passive-poll`, {
-      market_user_id: selectedUserId.value,
-      username: selectedEnterpriseUser.value?.username || '',
-      dry_run: dryRun,
-      auto_reply: !dryRun,
-      max_replies: 1,
-      use_llm: true,
-      skip_sync: false,
-      catch_up_latest: !dryRun,
-    })
-    const data = (res as { data?: PassivePollPayload })?.data
-    await reloadFeedAfterRefresh(selectedUserId.value)
-    const summary = formatPassivePollSummary(data)
-    await appAlert(summary || data?.message || (dryRun ? '探测完成' : '被动回复完成'))
-  } catch (e) {
-    await appAlert(e instanceof Error ? e.message : String(e))
-  } finally {
-    passivePolling.value = false
-  }
-}
-
-async function sendWechatToGroup() {
-  if (!selectedUserId.value || !wechatSend.message.trim()) return
-  if (!(await ensureBindingsSaved())) return
-  const contact = wechatSendContactName.value
-  if (!contact) {
-    await appAlert('请先绑定群聊并同步，或确认群名称')
-    return
-  }
-  wechatSend.loading = true
-  wechatSend.error = ''
-  try {
-    const res = await post(`${CS_BRIDGE}/user-cs/wechat/send`, {
-      market_user_id: selectedUserId.value,
-      username: selectedEnterpriseUser.value?.username || '',
-      contact_name: contact,
-      message: wechatSend.message.trim(),
-    })
-    const ok = (res as { success?: boolean; data?: { success?: boolean; error?: string } })?.success
-      && (res as { data?: { success?: boolean } })?.data?.success !== false
-    if (!ok) {
-      const err = (res as { error?: string; data?: { error?: string } })?.error
-        || (res as { data?: { error?: string } })?.data?.error
-        || '发送失败'
-      wechatSend.error = err
-      await appAlert(err)
-      return
-    }
-    wechatSend.message = ''
-    await appAlert('已发送到微信群')
-    await handleSyncWechat()
-    await analyzeCustomerProgress({ skipSync: true })
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    wechatSend.error = msg
-    await appAlert(msg)
-  } finally {
-    wechatSend.loading = false
-  }
-}
-
 async function generateDemandIntake() {
   if (!demandIntake.brief.trim()) return
   demandIntake.loading = true
@@ -3414,7 +2523,7 @@ async function generateDemandIntake() {
       brief: demandIntake.brief.trim(),
       client_name: intakePrefillGreetingName(),
       form_url: demandIntake.formUrl.trim(),
-      channel: 'wechat',
+      channel: 'internal',
       market_user_id: selectedUserId.value ?? undefined,
     })
     const payload = (res as { data?: { ok?: boolean; items?: Array<Record<string, string>>; error?: string } })?.data
@@ -3517,58 +2626,11 @@ async function generateContract() {
     }
     contractForm.filename = String(data.filename)
     contractForm.downloadUrl = String(data.download_url || '')
-    contractForm.wechatHint = String(data.wechat_hint || '')
     await loadPipelineForCustomer()
   } catch (e) {
     await appAlert(e instanceof Error ? e.message : String(e))
   } finally {
     contractForm.loading = false
-  }
-}
-
-async function copyContractHint() {
-  if (!contractForm.wechatHint) return
-  try {
-    await navigator.clipboard.writeText(contractForm.wechatHint)
-    await appAlert('已复制发送话术')
-  } catch {
-    await appAlert('复制失败')
-  }
-}
-
-async function sendDemandIntakeToWechat() {
-  if (!demandIntake.messageText.trim() || !selectedUserId.value) return
-  demandIntake.sendingWechat = true
-  wechatSend.error = ''
-  try {
-    const contact = wechatSendContactName.value
-    if (!contact) {
-      await appAlert('请先保存群聊绑定')
-      return
-    }
-    const res = await post(`${CS_BRIDGE}/user-cs/wechat/send`, {
-      market_user_id: selectedUserId.value,
-      username: selectedEnterpriseUser.value?.username || '',
-      contact_name: contact,
-      message: demandIntake.messageText.trim(),
-    })
-    const ok = (res as { success?: boolean; data?: { success?: boolean } })?.success
-      && (res as { data?: { success?: boolean } })?.data?.success !== false
-    if (!ok) {
-      const err = (res as { error?: string; data?: { error?: string } })?.error
-        || (res as { data?: { error?: string } })?.data?.error
-        || '发送失败'
-      await appAlert(err)
-      return
-    }
-    customerPipeline.intake_sent = true
-    await appAlert('需求采集话术已发送到微信群')
-    await loadPipelineForCustomer()
-    await handleSyncWechat()
-  } catch (e) {
-    await appAlert(e instanceof Error ? e.message : String(e))
-  } finally {
-    demandIntake.sendingWechat = false
   }
 }
 
@@ -3692,24 +2754,10 @@ async function copyEnterpriseCredential(kind: 'username' | 'password') {
   }
 }
 
-async function loadWechatSummary(options: { syncFirst?: boolean } = {}): Promise<string> {
-  if (!selectedUserId.value) return ''
-  try {
-    await loadFeed(selectedUserId.value, 20, { sync: Boolean(options.syncFirst) })
-    return ''
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    console.warn('加载群聊摘要失败', e)
-    return msg
-  }
-}
-
 async function toggleClient(userId: number) {
   if (expandedClientId.value === userId) {
     expandedClientId.value = null
     selectedUserId.value = null
-    stopPassiveLoopTimer()
-    passiveLoopEnabled.value = false
     return
   }
   expandedClientId.value = userId
@@ -3722,8 +2770,6 @@ async function toggleClient(userId: number) {
   intakeAuditPreview.value = null
   intakeAuditPreviewCode.value = ''
   intakeAuditPreviewAt.value = ''
-  await loadWechatSummary({ syncFirst: true })
-  await loadPassiveLlmStatus()
   await loadPipelineForCustomer()
   syncDemandIntakeClientNameFromPipeline()
   syncEnterpriseCredsFromPipeline()
@@ -3734,157 +2780,12 @@ async function toggleClient(userId: number) {
   await loadContractFields()
 }
 
-async function handleSaveBindings(options: { syncAfter?: boolean } = {}) {
-  if (!selectedUserId.value || !selectedGroupIdStrings.value.length) {
-    await appAlert('请至少勾选一个群')
-    return false
-  }
-  try {
-    await saveBindings()
-    if ((selectedEnterpriseUser.value?.bindingCount || 0) > 0) {
-      passiveLoopSummary.value = ''
-    }
-    if (options.syncAfter) await handleSyncWechat(true)
-    return true
-  } catch (e) {
-    await appAlert(`保存失败：${e instanceof Error ? e.message : String(e)}`)
-    return false
-  }
-}
-
-/**
- * 与数据来源「扫密钥并同步聊天」同链路：复制本机微信库 → 解密 → 刷新绑定群 context。
- * 禁止仅读旧 WECHAT_MSG_DB_PATH（会导致轮询假刷新）。
- */
-async function refreshBoundGroupsLikeDataSources(marketUserId: number) {
-  const groupRes = await wechatGroupBridgeApi.syncGroups({
-    market_user_id: marketUserId,
-    force_refresh: true,
-    message_limit: 80,
-  })
-  await loadFeed(marketUserId, 20, { sync: false })
-  const synced = Number(groupRes?.synced ?? 0)
-  const failed = Number(groupRes?.failed ?? 0)
-  const pulledNew = Number(
-    groupRes?.messages_pulled_this_round ?? groupRes?.messages_pulled ?? 0,
-  )
-  const latest =
-    String(groupRes?.latest_message_label || '').trim() ||
-    (() => {
-      let label = ''
-      let latestTs = 0
-      for (const item of feed.value) {
-        const row = formatFeedItem(item)
-        const tsRaw = item.last_message_time ?? item.timestamp
-        const tsNum =
-          typeof tsRaw === 'number'
-            ? tsRaw < 1e12
-              ? tsRaw * 1000
-              : tsRaw
-            : Date.parse(String(tsRaw || ''))
-        if (!Number.isNaN(tsNum) && tsNum >= latestTs) {
-          latestTs = tsNum
-          label = row.timeLabel || ''
-        }
-      }
-      return label
-    })()
-  const snap = groupRes?.snapshot as { rebuilt?: boolean; skipped?: boolean; message?: string } | undefined
-  const snapNote = snap?.rebuilt
-    ? '已复制解密本机微信库'
-    : snap?.skipped
-      ? '本机库未变，已复用快照'
-      : snap?.message
-        ? String(snap.message)
-        : ''
-  let message =
-    groupRes?.message ||
-    `已刷新 ${synced} 个群${failed ? `（${failed} 个失败）` : ''}，新增 ${pulledNew} 条${latest ? `，库内最新 ${latest}` : ''}`
-  if (snapNote && !message.includes(snapNote)) {
-    message = `${message}（${snapNote}）`
-  }
-  return {
-    success: Boolean(groupRes?.success) && synced > 0,
-    synced,
-    failed,
-    message,
-    latest_message_label: latest,
-    messages_pulled_this_round: pulledNew,
-    snapshot: snap,
-    details: Array.isArray(groupRes?.details) ? groupRes.details : [],
-  }
-}
-
-async function handleSyncWechat(skipAlert = false) {
-  if (!selectedUserId.value) {
-    if (!skipAlert) await appAlert('请先选择企业客户')
-    return
-  }
-  if (bindingsDirty.value) {
-    if (!skipAlert) await appAlert('将先保存群绑定，再从本机微信库刷新聊天记录（与数据来源相同）')
-    await handleSaveBindings({ syncAfter: true })
-    return
-  }
-  if (!(selectedEnterpriseUser.value?.bindingCount || 0)) {
-    if (!skipAlert) await appAlert('请先在左侧勾选群聊并点击「保存绑定」，再同步群聊')
-    return
-  }
-  syncing.value = true
-  try {
-    const res = await refreshBoundGroupsLikeDataSources(selectedUserId.value)
-    if (!res.success && res.synced === 0) {
-      if (!skipAlert) {
-        await appAlert(
-          res.message ||
-            '刷新失败。请到「数据来源」对绑定群点击「刷新聊天记录」，或检查微信目录与密钥',
-        )
-      }
-      return
-    }
-    await loadFeed(selectedUserId.value, 20, { sync: false })
-    if (!skipAlert) {
-      await appAlert(res.message || `已刷新 ${res.synced} 个群`)
-    }
-  } catch (e) {
-    await appAlert(`同步失败：${e instanceof Error ? e.message : String(e)}`)
-  } finally {
-    syncing.value = false
-  }
-}
-
-async function openWechatDrawer(contactId: number) {
-  const hit = formattedFeed.value.find((r) => r.contactId === contactId)
-  wechatDrawer.contactId = contactId
-  wechatDrawer.title = hit?.name || '群聊记录'
-  wechatDrawer.visible = true
-  wechatDrawer.loading = true
-  wechatDrawer.messages = []
-  try {
-    const res = await wechatGroupBridgeApi.getContactContext(contactId, { refresh: true })
-    const raw = res?.messages ?? res?.data
-    wechatDrawer.messages = Array.isArray(raw) ? raw : []
-  } catch (e) {
-    await appAlert(e instanceof Error ? e.message : String(e))
-  } finally {
-    wechatDrawer.loading = false
-  }
-}
-
 async function refresh() {
-  await Promise.all([loadStats(), loadEnterpriseUsers(), loadWechatGroups(), loadPipelineFunnel()])
+  await Promise.all([loadStats(), loadEnterpriseUsers(), loadPipelineFunnel()])
   await loadAllClientSummaries()
   if (expandedClientId.value) {
-    await loadWechatSummary()
     await loadPipelineForCustomer()
   }
-}
-
-function goDataSources() {
-  router.push({ name: 'data-sources', query: { source: 'wechat_local_db' } })
-}
-
-function goAdminEntitlements() {
-  router.push({ name: 'admin-entitlements', query: { focus: 'wechat' } })
 }
 
 type MarketUserPickerRow = {
@@ -4020,10 +2921,6 @@ onMounted(async () => {
   await refresh()
   const fromRoute = parseMarketUserIdFromRoute()
   if (fromRoute != null) await toggleClient(fromRoute)
-})
-
-onUnmounted(() => {
-  stopPassiveLoopTimer()
 })
 </script>
 
@@ -4361,11 +3258,6 @@ onUnmounted(() => {
   box-shadow: 0 0 0 2px rgba(74, 108, 247, 0.35);
 }
 
-.cs-wechat-split {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
-}
-@media (max-width: 720px) { .cs-wechat-split { grid-template-columns: 1fr; } }
-
 .cs-block {
   background: #f8fafc; border: 1px solid #e8ecf2; border-radius: 10px; padding: 12px;
   display: flex; flex-direction: column; gap: 8px;
@@ -4375,22 +3267,6 @@ onUnmounted(() => {
 .cs-block-title { margin: 0; font-size: 13px; font-weight: 600; color: #334155; }
 .cs-block-desc { margin: 0; font-size: 12px; color: #64748b; line-height: 1.5; }
 .cs-block-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.cs-passive-loop-row {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
-  margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--cs-border);
-}
-.cs-passive-loop-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
-.cs-passive-loop-interval { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
-.cs-passive-loop-interval select { font-size: 12px; padding: 2px 6px; }
-.cs-passive-loop-last { font-size: 11px; }
-.cs-passive-loop-summary { font-size: 11px; color: var(--cs-accent); }
-.cs-passive-llm-status { font-size: 11px; display: block; margin-top: 4px; }
-.cs-passive-loop-hint { font-size: 11px; margin: 6px 0 0; line-height: 1.45; }
-.cs-block-empty { text-align: center; padding: 8px 0; }
-
-.cs-send-compose { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; padding-top: 8px; border-top: 1px dashed #e2e8f0; }
-.cs-send-target { margin: 0; font-size: 11px; color: #64748b; }
-.cs-send-error { margin: 0; font-size: 11px; color: #dc2626; }
 
 .cs-coming-soon {
   font-size: 12px; color: #b45309; margin: 0;
@@ -4413,19 +3289,6 @@ onUnmounted(() => {
   width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 10px;
   font-size: 13px; box-sizing: border-box; background: #fff;
 }
-.cs-group-list-hint { font-size: 11px; margin: 6px 0 4px; }
-.cs-group-list { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
-.cs-group-item { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; padding: 4px 0; }
-.cs-feed { list-style: none; margin: 0; padding: 0; }
-.cs-feed.compact .cs-feed-item { grid-template-columns: 1fr auto; }
-.cs-feed-item {
-  display: grid; grid-template-columns: 1fr 2fr auto; gap: 8px; padding: 8px 10px;
-  border-radius: 8px; font-size: 12px; cursor: pointer; background: #fff; margin-bottom: 4px;
-}
-.cs-feed-item:hover { background: #eff6ff; }
-.cs-feed-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cs-feed-text { color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cs-feed-time { color: #94a3b8; font-size: 11px; white-space: nowrap; }
 .cs-preview {
   font-size: 12px; line-height: 1.55; padding: 10px; background: #fff; border-radius: 8px;
   border: 1px solid #e2e8f0; white-space: pre-wrap; max-height: 160px; overflow: auto; margin: 0;
@@ -4472,8 +3335,4 @@ onUnmounted(() => {
 .cs-tag { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: #f3f4f6; color: #6b7280; }
 .cs-tag--ok { background: #ecfdf5; color: #047857; }
 .btn-link { background: none; border: none; color: var(--color-primary, #2563eb); cursor: pointer; padding: 0; font-size: inherit; text-decoration: underline; }
-.cs-chat-msg { margin-bottom: 8px; padding: 8px; background: #f8fafc; border-radius: 8px; }
-.cs-chat-role { font-size: 11px; color: #94a3b8; margin-bottom: 2px; }
-.cs-chat-sender-id { margin-left: 6px; font-size: 10px; color: #cbd5e1; }
-.cs-chat-text { font-size: 13px; word-break: break-word; white-space: pre-wrap; }
 </style>
