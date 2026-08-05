@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -65,6 +65,10 @@ class TestParsePaidEnvelope:
     def test_rejects_non_dict_body(self):
         assert parse_paid_envelope([]) is None
         assert parse_paid_envelope(None) is None
+
+    def test_rejects_non_dict_data(self):
+        env = dict(_ENVELOPE, data="not-a-dict")
+        assert parse_paid_envelope(env) is None
 
 
 class TestEventDedupKey:
@@ -166,3 +170,68 @@ class TestIngestPaidEvent:
         assert args[0][0] == 42  # user_id
         assert args[1]["amount_yuan"] == "99.00"
         assert args[1]["order_ref"] == "MOD123"
+
+
+class TestBridgeSecretEnv:
+    def test_reads_from_env(self, monkeypatch) -> None:
+        monkeypatch.setenv("MODSTORE_ORDER_WEBHOOK_SECRET", "  env-secret  ")
+        from app.services.order_event_bridge import bridge_secret
+
+        assert bridge_secret() == "env-secret"
+
+    def test_empty_when_unset(self, monkeypatch) -> None:
+        monkeypatch.delenv("MODSTORE_ORDER_WEBHOOK_SECRET", raising=False)
+        from app.services.order_event_bridge import bridge_secret
+
+        assert bridge_secret() == ""
+
+
+class TestEmitPaidEvent:
+    def test_publishes_to_neuro_bus(self) -> None:
+        from app.services.order_event_bridge import emit_paid_event
+
+        bus = MagicMock()
+        bus.publish.return_value = True
+        with patch("app.neuro_bus.bus.get_neuro_bus", return_value=bus):
+            assert emit_paid_event(_ENVELOPE["data"]) is True
+        bus.publish.assert_called_once()
+
+    def test_false_when_publish_returns_false(self) -> None:
+        from app.services.order_event_bridge import emit_paid_event
+
+        bus = MagicMock()
+        bus.publish.return_value = False
+        with patch("app.neuro_bus.bus.get_neuro_bus", return_value=bus):
+            assert emit_paid_event(_ENVELOPE["data"]) is False
+
+    def test_false_on_exception(self) -> None:
+        from app.services.order_event_bridge import emit_paid_event
+
+        bus = MagicMock()
+        bus.publish.side_effect = RuntimeError("bus down")
+        with patch("app.neuro_bus.bus.get_neuro_bus", return_value=bus):
+            assert emit_paid_event(_ENVELOPE["data"]) is False
+
+
+class TestRecordReconciliation:
+    def test_skips_when_no_user_id(self) -> None:
+        from app.services.order_event_bridge import _record_reconciliation_if_user
+
+        with patch("app.services.user_cs_pipeline.record_reconciliation") as rec:
+            _record_reconciliation_if_user({"user_id": 0, "out_trade_no": "MOD0"})
+        rec.assert_not_called()
+
+    def test_records_reconciliation(self) -> None:
+        from app.services.order_event_bridge import _record_reconciliation_if_user
+
+        with patch("app.services.user_cs_pipeline.record_reconciliation") as rec:
+            _record_reconciliation_if_user(_ENVELOPE["data"])
+        rec.assert_called_once()
+
+    def test_swallows_exception(self) -> None:
+        from app.services.order_event_bridge import _record_reconciliation_if_user
+
+        with patch(
+            "app.services.user_cs_pipeline.record_reconciliation", side_effect=RuntimeError("x")
+        ):
+            _record_reconciliation_if_user(_ENVELOPE["data"])  # 不应抛异常
