@@ -139,6 +139,11 @@ export default defineConfig(() => ({
       { find: '@host', replacement: hostSrc },
       { find: '@', replacement: hostSrc },
       { find: '@amin', replacement: path.resolve(hostRoot, '../AMIN') },
+      // 客服桥接 Mod 自有组件/composable 别名（与主 vite.config.js 保持一致，供 sunbird 构建解析）
+      {
+        find: '@mod-frontend/xcagi-customer-service-bridge',
+        replacement: path.resolve(hostRoot, '../mods/xcagi-customer-service-bridge/frontend'),
+      },
       {
         find: '@mod-views/taiyangniao-pro',
         replacement: modViewsDir('taiyangniao-pro'),
