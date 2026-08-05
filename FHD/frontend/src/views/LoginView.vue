@@ -23,6 +23,7 @@ import { ADMIN_OPERATOR_HOME_ROUTE } from '@/constants/adminOperatorNav';
 import type { AccountKind } from '@/api/auth';
 import { loadLoginPreferences, saveLoginPreferences } from '@/utils/loginPreferences';
 import { clearHostPackSkippedSession } from '@/utils/hostPackOnboardingGate';
+import { canResumeRecentDesktopSession } from '@/utils/authSessionCache';
 import OtpCells from '@/components/OtpCells.vue';
 
 const route = useRoute();
@@ -155,9 +156,8 @@ onMounted(async () => {
   const sku = await fetchProductSku();
   if (!loginViewActive) return;
   productSku.value = sku;
-  if (typeof document !== 'undefined') {
-    document.title = loginPageTitle(productSku.value);
-  }
+  if (typeof document !== 'undefined') document.title = loginPageTitle(productSku.value);
+  if (await canResumeRecentDesktopSession(isDesktopShell(), isEnterpriseEdition.value, route.query)) return void router.replace(redirectPath.value);
   try {
     const st = await authApi.getOidcStatus();
     if (!loginViewActive) return;
@@ -197,7 +197,7 @@ function stopQrPoll() {
 
 async function completeLoginSuccess(raw: Record<string, unknown>) {
   clearHostPackSkippedSession();
-  accountProfileStore.applyFromLoginPayload(raw);
+  await accountProfileStore.applyFromLoginPayload(raw);
   // SSOT：桌面壳禁止管理员会话（派生 account_kind=admin 时拒入）。
   // 管理端 SPA（:5011）本身就是网页运维台，不得套用桌面禁令。
   if (!isAdminConsoleSpa() && isDesktopShell() && accountProfileStore.isAdminAccount) {

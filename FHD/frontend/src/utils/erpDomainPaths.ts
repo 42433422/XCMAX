@@ -1,6 +1,7 @@
 import {
   ERP_DOMAIN_BRIDGE_MOD_ID,
   LEGACY_CLIENT_ERP_MOD_ID,
+  WECHAT_BRIDGE_MOD_ID,
   readErpDomainModFacadeEnabled,
 } from '@/constants/erpDomainMod'
 import { CLIENT_PRIMARY_ERP_MOD_ID } from '@/constants/genericModPack'
@@ -10,6 +11,7 @@ import { useModsStore } from '@/stores/mods'
 import { readActiveExtensionModIdFromStorage } from '@/utils/xcagiStorageKeys'
 
 const MOD_FACADE_BASE = `/api/mod/${ERP_DOMAIN_BRIDGE_MOD_ID}`
+const WECHAT_FACADE_BASE = `/api/mod/${WECHAT_BRIDGE_MOD_ID}`
 
 /**
  * 太阳鸟等客户 Mod 自管 API（见 mods/taiyangniao-pro/backend/blueprints.py）。
@@ -33,12 +35,10 @@ const ERP_ON_BRIDGE_WHEN_CLIENT_ACTIVE: readonly string[] = [
  */
 const ERP_DOMAIN_PREFIX_SOURCE = [
     ['/api/shipment', `${MOD_FACADE_BASE}/shipment`],
-    ['/api/wechat_contacts', `${MOD_FACADE_BASE}/wechat_contacts`],
     ['/api/products', `${MOD_FACADE_BASE}/products`],
     ['/api/customers', `${MOD_FACADE_BASE}/customers`],
     ['/api/purchase_units', `${MOD_FACADE_BASE}/purchase_units`],
     ['/api/orders', `${MOD_FACADE_BASE}/orders`],
-    ['/api/wechat', `${MOD_FACADE_BASE}/wechat`],
   ] as const
 
 const ERP_DOMAIN_PREFIX_MAP: ReadonlyArray<readonly [hostPrefix: string, facadePrefix: string]> =
@@ -197,8 +197,8 @@ function resolveWechatContactsCompatPath(
     return null
   }
   const ids = readInstalledModIds(installedModIds)
-  if (ids.includes(ERP_DOMAIN_BRIDGE_MOD_ID) || readErpDomainModFacadeEnabled()) {
-    return `${MOD_FACADE_BASE}${pathOnly.slice(4)}${suffix}`
+  if (ids.includes(WECHAT_BRIDGE_MOD_ID)) {
+    return `${WECHAT_FACADE_BASE}${pathOnly.slice(4)}${suffix}`
   }
   const raw = `${pathOnly}${suffix}`
   return raw.startsWith('/') ? raw : `/${raw}`

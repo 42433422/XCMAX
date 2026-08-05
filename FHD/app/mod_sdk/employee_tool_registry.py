@@ -6,6 +6,7 @@ import json
 import logging
 import re
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from app.application.employee_runtime.loader import (
@@ -152,6 +153,90 @@ def is_employee_tool(name: str) -> bool:
     return resolve_tool_to_pack_id(name) is not None
 
 
+def _office_output_paths(pack_id: str, result: dict[str, Any]) -> list[str]:
+    """Extract direct-runtime artifact paths from a completed office employee.
+
+    The ten built-in document employees are local file workers.  For them a
+    successful Python return alone is not enough: the promised artifact must
+    exist and be non-empty before the planner can tell the user the work is
+    complete.
+    """
+
+    paths: list[str] = []
+    runtime = result.get("result") if isinstance(result.get("result"), dict) else {}
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                # PDF generation returns a JSON intermediary in ``output_path``
+                # and the promised file in ``pdf_output_path``.  Keep both
+                # candidates until the pack-specific contract below selects
+                # the actual deliverable.
+                raw = str(nested or "").strip() if key.endswith("output_path") else ""
+                if raw and raw not in paths:
+                    paths.append(raw)
+                visit(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                visit(nested)
+
+    # Generated reader modules place their converted payload beneath
+    # ``output.items`` while generators expose it directly.  Walk only the
+    # post-action result tree, never the request arguments, so a caller cannot
+    # spoof completion with a desired path.
+    visit(runtime.get("outputs"))
+
+    # Generation succeeds only when the artifact declared by that worker
+    # exists.  In particular, do not let PDF's intermediate parsed JSON stand
+    # in for the generated PDF returned to the user.
+    expected_suffixes = {
+        "word-generate-employee": ".docx",
+        "excel-generate-employee": ".xlsx",
+        "csv-generate-employee": ".csv",
+        "pdf-generate-employee": ".pdf",
+        "ppt-generate-employee": ".pptx",
+    }
+    suffix = expected_suffixes.get(pack_id)
+    if suffix:
+        return [raw for raw in paths if Path(raw).suffix.lower() == suffix]
+    return paths
+
+
+def _verify_office_artifact(pack_id: str, result: dict[str, Any]) -> dict[str, Any] | None:
+    """Return a postcondition record for a built-in office worker, if applicable."""
+
+    try:
+        from app.mod_sdk.employee_pack_compat import list_office_pack_catalog
+
+        office_ids = set(list_office_pack_catalog().get("pack_ids") or [])
+    except RECOVERABLE_ERRORS:
+        return None
+    if pack_id not in office_ids:
+        return None
+    if result.get("success") is not True:
+        return {"verified": False, "reason": "员工运行未成功", "paths": []}
+
+    paths = _office_output_paths(pack_id, result)
+    if not paths:
+        return {"verified": False, "reason": "员工未返回输出文件", "paths": []}
+    invalid: list[str] = []
+    for raw in paths:
+        try:
+            path = Path(raw)
+            if not path.is_file() or path.stat().st_size <= 0:
+                invalid.append(raw)
+        except OSError:
+            invalid.append(raw)
+    if invalid:
+        return {
+            "verified": False,
+            "reason": "输出文件不存在或为空",
+            "paths": paths,
+            "invalid_paths": invalid,
+        }
+    return {"verified": True, "paths": paths}
+
+
 def execute_employee_tool(
     name: str,
     args: dict[str, Any] | str,
@@ -179,16 +264,21 @@ def execute_employee_tool(
         user_id=user_id,
         workspace_root=workspace_root,
     )
-    ok = bool(result.get("success", True) and not result.get("blocked_by_risk_gate"))
-    return json.dumps(
-        {
-            "success": ok,
-            "source": f"employee_pack:{pack_id}",
-            "employee_id": pack_id,
-            "output": result,
-        },
-        ensure_ascii=False,
-    )
+    ok = bool(result.get("success") is True and not result.get("blocked_by_risk_gate"))
+    artifact = _verify_office_artifact(pack_id, result)
+    if artifact is not None and not artifact.get("verified"):
+        ok = False
+    payload: dict[str, Any] = {
+        "success": ok,
+        "source": f"employee_pack:{pack_id}",
+        "employee_id": pack_id,
+        "output": result,
+    }
+    if artifact is not None:
+        payload["artifact_postcondition"] = artifact
+        if not artifact.get("verified"):
+            payload["error"] = str(artifact.get("reason") or "文档员工输出未验证")
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def build_employee_tools_status() -> dict[str, Any]:

@@ -56,8 +56,10 @@ vi.mock('@/constants/loginBranding', () => ({
   loginPasswordInputPlaceholder: () => '请输入密码',
 }))
 
+const mockFetchProductSku = vi.fn(async () => 'generic')
+
 vi.mock('@/utils/productSku', () => ({
-  fetchProductSku: vi.fn(async () => 'generic'),
+  fetchProductSku: () => mockFetchProductSku(),
   isEnterpriseEdition: () => false,
 }))
 
@@ -101,6 +103,28 @@ vi.mock('@/utils/loginPreferences', () => ({
 
 vi.mock('@/utils/hostPackOnboardingGate', () => ({
   clearHostPackSkippedSession: vi.fn(),
+}))
+
+const mockHasRecentEnterpriseSessionHint = vi.fn(() => false)
+const mockConsumeDesktopSessionBootstrapHint = vi.fn(async () => false)
+const mockCanResumeRecentDesktopSession = vi.fn(async (
+  isDesktop: boolean,
+  isEnterprise: boolean,
+  query: Record<string, unknown>,
+) => {
+  const error = query.error
+  if (!isDesktop || !isEnterprise || query.oidc || query.oidc_error || (typeof error === 'string' && error.trim())) return false
+  return mockHasRecentEnterpriseSessionHint() || await mockConsumeDesktopSessionBootstrapHint()
+})
+
+vi.mock('@/utils/authSessionCache', () => ({
+  canResumeRecentDesktopSession: (...args: [boolean, boolean, Record<string, unknown>]) => mockCanResumeRecentDesktopSession(...args),
+}))
+
+const mockIsDesktopShell = vi.fn(() => false)
+
+vi.mock('@/utils/desktopShell', () => ({
+  isDesktopShell: () => mockIsDesktopShell(),
 }))
 
 vi.mock('@/stores/mods', () => ({
@@ -468,6 +492,58 @@ describe('LoginView functions – tryAutoLogin', () => {
     })
     const { wrapper } = await mountLoginView()
     await flushPromises()
+    expect(mockAuthApiLogin).not.toHaveBeenCalled()
+  })
+})
+
+describe('LoginView desktop session restore', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockFetchProductSku.mockResolvedValue('enterprise')
+    mockIsDesktopShell.mockReturnValue(true)
+    mockHasRecentEnterpriseSessionHint.mockReturnValue(true)
+    mockConsumeDesktopSessionBootstrapHint.mockResolvedValue(false)
+    mockAuthApiGetOidcStatus.mockResolvedValue({ data: { enabled: false } })
+    mockLoadLoginPreferences.mockReturnValue({
+      rememberPassword: true,
+      autoLogin: true,
+      username: 'autouser',
+      password: 'autopass',
+    })
+  })
+
+  it('enters the prior desktop workspace before the saved-password auto-login request', async () => {
+    const { router } = await mountLoginView({ redirect: '/settings' })
+    await flushPromises()
+
+    expect(router.currentRoute.value.fullPath).toBe('/settings')
+    expect(mockAuthApiLogin).not.toHaveBeenCalled()
+    expect(mockAuthApiGetOidcStatus).not.toHaveBeenCalled()
+  })
+
+  it('does not resume a desktop session when the route carries an auth error', async () => {
+    mockLoadLoginPreferences.mockReturnValue({
+      rememberPassword: false,
+      autoLogin: false,
+      username: '',
+      password: '',
+    })
+    const { router } = await mountLoginView({ redirect: '/settings', error: '重新登录' })
+    await flushPromises()
+
+    expect(router.currentRoute.value.name).toBe('login')
+    expect(mockAuthApiGetOidcStatus).toHaveBeenCalled()
+  })
+
+  it('uses Electron\'s one-shot persisted-cookie hint when localStorage is unavailable', async () => {
+    mockHasRecentEnterpriseSessionHint.mockReturnValue(false)
+    mockConsumeDesktopSessionBootstrapHint.mockResolvedValue(true)
+
+    const { router } = await mountLoginView({ redirect: '/settings' })
+    await flushPromises()
+
+    expect(router.currentRoute.value.fullPath).toBe('/settings')
+    expect(mockConsumeDesktopSessionBootstrapHint).toHaveBeenCalledOnce()
     expect(mockAuthApiLogin).not.toHaveBeenCalled()
   })
 })

@@ -67,7 +67,7 @@ class TestLocalGitShaExtended:
 class TestLocalVersionExtended:
     def test_no_pyproject_returns_default(self, tmp_path: Path) -> None:
         result = _local_version(tmp_path)
-        assert result == "1.0.0.0"
+        assert result == "1.0.0.1"
 
     def test_pyproject_with_version(self, tmp_path: Path) -> None:
         pyproject = tmp_path / "pyproject.toml"
@@ -79,13 +79,13 @@ class TestLocalVersionExtended:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text("[project]\nname = 'test'\n")
         result = _local_version(tmp_path)
-        assert result == "1.0.0.0"
+        assert result == "1.0.0.1"
 
     def test_pyproject_read_error_returns_default(self, tmp_path: Path) -> None:
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text("version = ")
         result = _local_version(tmp_path)
-        assert result == "1.0.0.0"
+        assert result == "1.0.0.1"
 
 
 class TestReadLocalManifestExtended:

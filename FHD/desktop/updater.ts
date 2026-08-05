@@ -114,12 +114,28 @@ export function isForceUpgradeEnabled(): boolean {
   return remoteForceUpgrade
 }
 
+/** Product version is four-part and comes from signed build metadata, not npm SemVer. */
+export function readLocalProductVersion(): string {
+  const fromEnv = String(process.env.XCAGI_PRODUCT_VERSION || '').trim()
+  if (fromEnv) return fromEnv
+  for (const filePath of buildInfoCandidates()) {
+    try {
+      if (!fs.existsSync(filePath)) continue
+      const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { version?: string }
+      const version = String(raw.version || '').trim()
+      if (version) return version
+    } catch {
+      /* try next */
+    }
+  }
+  return app.getVersion()
+}
+
 /** 当前版本是否低于最低兼容版本，需要强制升级。 */
 export function isCurrentBelowMinVersion(): boolean {
   if (!remoteMinVersion) return false
-  const current = app.getVersion()
   try {
-    return compareVersions(current, remoteMinVersion) < 0
+    return compareVersions(readLocalProductVersion(), remoteMinVersion) < 0
   } catch {
     return false
   }
@@ -130,14 +146,15 @@ export function isCurrentBelowMinVersion(): boolean {
  * 支持 2-4 段，缺失段视为 0。
  */
 export function compareVersions(a: string, b: string): number {
-  const partsA = a.split('.').map(s => {
-    const n = parseInt(s, 10)
-    return Number.isFinite(n) ? n : 0
-  })
-  const partsB = b.split('.').map(s => {
-    const n = parseInt(s, 10)
-    return Number.isFinite(n) ? n : 0
-  })
+  const parse = (value: string): number[] => {
+    const normalized = String(value || '').trim()
+    if (!/^\d+(?:\.\d+){1,3}$/.test(normalized)) {
+      throw new Error(`invalid version: ${normalized || '<empty>'}`)
+    }
+    return normalized.split('.').map(part => Number.parseInt(part, 10))
+  }
+  const partsA = parse(a)
+  const partsB = parse(b)
   const len = Math.max(partsA.length, partsB.length)
   for (let i = 0; i < len; i++) {
     const va = partsA[i] ?? 0
@@ -293,17 +310,10 @@ function enrichUpdateInfo(
  * Cursor-style updates: check in background, never auto-download / auto-prompt.
  * Renderer shows a corner badge; user opens notes modal, then downloads & restarts.
  */
-export function configureUpdater(mainWindow: BrowserWindow): void {
-  // electron-updater 在初始化时校验 app 版本必须为 3 段 semver（x.y.z）。
-  // 产品版本为 4 段（如 1.0.0.1），直接访问 autoUpdater 会抛
-  // "App version is not a valid semver version" 并阻断桌面启动。
-  // 版本非法时跳过更新初始化，保证桌面能正常启动（升级检查降级为不可用）。
-  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(String(app.getVersion() || ''))) {
-    console.warn(
-      `[updater] 跳过更新初始化：app 版本 ${app.getVersion()} 非 3 段 semver。`,
-    )
-    return
-  }
+export function configureUpdater(
+  mainWindow: BrowserWindow,
+  options: { onForceUpgradeRequired?: () => void | Promise<void> } = {},
+): void {
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = false
   ;(autoUpdater as unknown as { allowDowngrade?: boolean }).allowDowngrade = false
@@ -380,15 +390,24 @@ export function configureUpdater(mainWindow: BrowserWindow): void {
     appendUpdaterEvent('error', { message: error.message, stack: error.stack })
   })
 
-  setTimeout(() => {
-    void runUpdateCheckWithDirectNet().catch(error => send('error', { message: error.message }))
-  }, 60_000)
+  const checkAndNotify = async () => {
+    try {
+      await runUpdateCheckWithDirectNet()
+      if (isForceUpgradeRequired()) {
+        await options.onForceUpgradeRequired?.()
+      }
+    } catch (error) {
+      send('error', { message: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  setTimeout(() => void checkAndNotify(), 60_000)
 
   setInterval(() => {
     if (!app.isPackaged && !process.env.XCAGI_UPDATE_URL) {
       return
     }
-    void runUpdateCheckWithDirectNet().catch(error => send('error', { message: error.message }))
+    void checkAndNotify()
   }, 6 * 60 * 60 * 1000)
 }
 
@@ -468,7 +487,7 @@ export async function checkForUpdates(): Promise<unknown> {
     remoteReleaseDate = parseYamlField(metadataText, 'releaseDate').replace(/^['"]|['"]$/g, '')
     remoteReleaseNotes = parseYamlBlock(metadataText, 'releaseNotes')
     remoteReleaseMedia = parseReleaseMediaFromYaml(metadataText)
-    remoteMinVersion = parseYamlField(metadataText, 'minVersion')
+    remoteMinVersion = parseYamlField(metadataText, 'minVersion').replace(/^['"]|['"]$/g, '')
     remoteForceUpgrade = String(parseYamlField(metadataText, 'forceUpgrade') || '').trim().toLowerCase() === 'true'
     installSameVersionRebuildHook()
   }

@@ -17,7 +17,7 @@ export const SIDEBAR_ROUTE_NAME_MAP: Record<string, string> = {
   '/shipment-records': 'shipment-records',
   '/customers': 'customers',
   '/data-sources': 'data-sources',
-  '/wechat-contacts': 'data-sources',
+  '/wechat-contacts': 'wechat-contacts',
   '/print': 'print',
   '/printer-list': 'printer-list',
   '/template-preview': 'template-preview',

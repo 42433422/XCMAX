@@ -36,7 +36,7 @@ def test_list_erp_domains_registry_host(monkeypatch):
     data = ed.list_erp_domains_registry()
     assert data.get("success") is True
     assert data.get("execution_path") == "host.api"
-    assert data.get("domain_count") == 4
+    assert data.get("domain_count") == 3
 
 
 def test_list_erp_domains_registry_mod_facade(monkeypatch):
@@ -147,11 +147,11 @@ def test_registry_phase_g_domains(monkeypatch):
     monkeypatch.setattr(
         ed,
         "_mod_handler_domains",
-        lambda: {"products", "shipment", "customers", "wechat"},
+        lambda: {"products", "shipment", "customers"},
     )
     data = ed.list_erp_domains_registry()
     assert data.get("execution_path") == "mod_domain_handler"
-    for dom_id in ("products", "customers", "wechat"):
+    for dom_id in ("products", "customers", "shipment"):
         row = next(d for d in data["domains"] if d["domain_id"] == dom_id)
         assert row.get("delegate") == "mod.domain_handlers"
 

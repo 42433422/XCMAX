@@ -71,6 +71,15 @@ export function useChatTaskList(options: UseChatTaskListOptions = {}) {
     onPersist?.()
   }
 
+  function removeTask(id: string) {
+    const before = taskList.value.length
+    taskList.value = taskList.value.filter((task) => task.id !== id)
+    if (taskList.value.length === before) return
+    expandedTaskIds.value = expandedTaskIds.value.filter((taskId) => taskId !== id)
+    if (activeTaskId.value === id) activeTaskId.value = taskList.value[0]?.id || ''
+    onPersist?.()
+  }
+
   function finishTask(id: string, summary: string = '') {
     const task = taskList.value.find((t) => t.id === id)
     if (!task) return
@@ -190,6 +199,7 @@ export function useChatTaskList(options: UseChatTaskListOptions = {}) {
     createTaskId,
     sortTaskList,
     upsertTask,
+    removeTask,
     finishTask,
     failTask,
     cancelTaskById,
