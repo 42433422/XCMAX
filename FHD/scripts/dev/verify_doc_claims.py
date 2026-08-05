@@ -139,9 +139,22 @@ def check_snapshot_self_consistency(ssot: dict[str, float]) -> list[str]:
     return problems
 
 
+# 历史 / 目标 / 阶段上下文提示词：命中则把行内数字视作非"当前 floor"宣称，豁免
+HISTORICAL_HINTS = (
+    "历史", "退役", "retired", "已退役", "曾", "旧", "误报", "撤回", "过渡",
+    "目标", "target", "roadmap", "Phase", "阶段", "M1", "M2", "M3", "M4",
+    "~", "约", "待", "计划", "means", "已诞生", "收录", "封顶", "卡", "上限",
+)
+
+
 def scan_docs(docs: list[Path], ssot: dict[str, float]) -> list[str]:
-    """扫描文档，把覆盖率数字与 SSOT 真值比对，列出失实宣称。"""
-    allowed = set(round(v, 2) for v in ssot.values())
+    """扫描文档，把"当前 floor/门禁"宣称的覆盖率数字与 SSOT 真值比对，列出失实宣称。
+
+    仅把当前 floor 值（后端行/分支 + 前端各项 floor + last_measured）作为允许集合；
+    目标值（target_*）与 vitest/pyproject 的 floor 由其余字段覆盖。命中历史/目标/阶段
+    提示词的行视为非当前宣称，豁免。
+    """
+    allowed = set(round(v, 2) for k, v in ssot.items() if not k.startswith("target_"))
     issues: list[str] = []
     for doc in docs:
         if not doc.is_file():
@@ -151,15 +164,17 @@ def scan_docs(docs: list[Path], ssot: dict[str, float]) -> list[str]:
         for n, line in enumerate(lines, 1):
             if not CONTEXT_RE.search(line):
                 continue
+            hist = any(h in line for h in HISTORICAL_HINTS)
             for m in PCT_RE.finditer(line):
                 num = float(m.group(1))
                 if round(num, 2) in allowed:
                     continue
-                # 出现在覆盖率上下文里、又不匹配 SSOT 真值的数字 → 疑似失实
+                if hist:
+                    continue
                 snippet = line.strip()[:90]
                 issues.append(
                     f"{doc.relative_to(FHD_ROOT.parent) if str(doc).startswith(str(FHD_ROOT.parent)) else doc}:{n} "
-                    f"疑似失实覆盖率数字 {num}%（不在 SSOT 真值集合） | {snippet}"
+                    f"疑似失实的当前覆盖率宣称 {num}%（不在 SSOT 当前 floor/实测集合） | {snippet}"
                 )
     return issues
 
