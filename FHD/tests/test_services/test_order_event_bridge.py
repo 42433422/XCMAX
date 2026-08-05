@@ -93,10 +93,7 @@ class TestVerifySignature:
             secret.encode(), f"{ts}.{eid}.".encode() + raw, hashlib.sha256
         ).hexdigest()
         with patch("app.services.order_event_bridge.bridge_secret", return_value=secret):
-            assert (
-                verify_signature(raw, f"sha256={expected}", timestamp=ts, event_id=eid)
-                is True
-            )
+            assert verify_signature(raw, f"sha256={expected}", timestamp=ts, event_id=eid) is True
 
     def test_invalid_signature(self):
         secret = "s3cret"

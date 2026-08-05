@@ -55,16 +55,14 @@ def verify_signature(
             "modstore webhook 缺少 X-Modstore-Webhook-Signature 头 (event_id=%s)", event_id
         )
         return False
-    msg = f"{timestamp or ''}.{event_id or ''}.".encode("utf-8") + raw
-    expected = hmac.new(secret.encode("utf-8"), msg, hashlib.sha256).hexdigest()
+    msg = f"{timestamp or ''}.{event_id or ''}.".encode() + raw
+    expected = hmac.new(secret.encode(), msg, hashlib.sha256).hexdigest()
     sig = signature.replace("sha256=", "").strip()
     ok = hmac.compare_digest(expected, sig)
     if ok:
         logger.info("modstore webhook 验签通过 (event_id=%s)", event_id)
     else:
-        logger.warning(
-            "modstore webhook 验签失败 (event_id=%s, timestamp=%s)", event_id, timestamp
-        )
+        logger.warning("modstore webhook 验签失败 (event_id=%s, timestamp=%s)", event_id, timestamp)
     return ok
 
 
@@ -180,12 +178,8 @@ def ingest_paid_event(
 ) -> dict[str, Any]:
     """处理一个 `payment.paid` envelope，返回处理结果。"""
     if raw is not None and hmac_signature is not None:
-        if not verify_signature(
-            raw, hmac_signature, timestamp=timestamp, event_id=event_id
-        ):
-            logger.warning(
-                "ingest_paid_event 拒绝：验签失败 (event_id=%s)", event_id
-            )
+        if not verify_signature(raw, hmac_signature, timestamp=timestamp, event_id=event_id):
+            logger.warning("ingest_paid_event 拒绝：验签失败 (event_id=%s)", event_id)
             return {"accepted": False, "reason": "invalid_signature"}
 
     data = parse_paid_envelope(envelope)
