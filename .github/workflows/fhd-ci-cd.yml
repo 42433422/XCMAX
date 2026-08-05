@@ -193,30 +193,16 @@ jobs:
           name: xcagi-backend
           fail_ci_if_error: false
 
-      # 行为覆盖率透明化：排除 coverage_ramp 注水 stub 后的真实口径。
-      # 信息性输出，不阻断 CI（continue-on-error）；数据供人工/报告追踪注水占比。
-      - name: Behavior coverage (排除 coverage_ramp stub，信息性)
-        continue-on-error: true
+      # 行为覆盖率诚实化（Delta A）：排除 coverage_ramp 注水 stub 后的真实行为口径。
+      # 这是后端覆盖率门禁的唯一硬 gate（--behavior --require-backend），回退即阻断。
+      - name: Behavior coverage gate (排除 coverage_ramp stub，硬门禁)
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: |
           python -m pytest tests/ -q -m 'not coverage_ramp' \
             --cov --cov-branch --cov-report=json:coverage-behavior.json \
-            --cov-fail-under=0 || true
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          p = Path("coverage-behavior.json")
-          if not p.is_file():
-              print("[behavior-coverage] 无 coverage-behavior.json（行为套件未跑完）")
-              raise SystemExit(0)
-          t = json.loads(p.read_text(encoding="utf-8"))["totals"]
-          ns = t.get("num_statements", 0) or 0
-          nb = t.get("num_branches", 0) or 0
-          ln = t.get("covered_lines", 0) / ns * 100 if ns else 0.0
-          br = t.get("covered_branches", 0) / nb * 100 if nb else 0.0
-          print(f"[behavior-coverage] 排除 coverage_ramp stub：行 {ln:.2f}% / 分支 {br:.2f}%（信息性，不阻断）")
-          PY
+            --cov-fail-under=0
+          python scripts/dev/coverage_ratchet.py --check --behavior --require-backend --record
 
   frontend-test:
     needs: guard-temp-scripts
