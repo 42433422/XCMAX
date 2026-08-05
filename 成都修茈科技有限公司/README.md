@@ -14,6 +14,23 @@
 | Java 支付子服务 | `MODstore_deploy/java_payment_service/` | Spring Boot 17 | [`ci-payment-java.yml`](.github/workflows/ci-payment-java.yml) | [`deploy-payment-java.yml`](.github/workflows/deploy-payment-java.yml) |
 | vibe-coding 独立 Python 包 | `vibe-coding/` | Python | [`ci-vibe-coding.yml`](.github/workflows/ci-vibe-coding.yml) | — |
 
+## 站点结构（营销站 vs Vue 应用）
+
+本目录顶层存在**两条独立入口**，职责不同，勿混用：
+
+1. **营销官网静态页（canonical，线上部署）**
+   - 入口：根 [`index.html`](index.html)（多页站，另含 `about.html`/`contact.html`/`cases.html` 等）
+   - 样式/脚本：根 [`styles.css`](styles.css) + [`main.js`](main.js)
+   - 构建：无需构建，静态文件直接部署；CI 见 `ci-marketing-site.yml`
+   - 维护：修改静态页请直接改根 `*.html`/`styles.css`/`main.js`
+
+2. **根 Vue 3 应用（modstore-market，独立产品）**
+   - 入口：`src/main.ts` → `src/App.vue`，构建配置 [`vite.config.ts`](vite.config.ts)（dev 端口 5176，代理 `/api`→8765）
+   - 构建：`npm install && npm run build`（产物在 `dist/`）；CI 见 `ci-root-frontend.yml`
+   - 维护：改 Vue 应用请只动 `src/`，不要改根 `index.html`（那是静态营销站入口）
+
+> 注意：根目录只有一份 `index.html`/`styles.css`，属营销站 canonical；Vue 应用通过 `vite.config.ts` 独立构建，二者互不覆盖。
+
 ## 工程原则
 
 1. 每个组件有自己的 CI（独立 `concurrency` group + 路径过滤），改一处不会触发所有组件的构建。
