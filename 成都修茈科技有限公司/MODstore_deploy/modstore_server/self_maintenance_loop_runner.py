@@ -2670,7 +2670,7 @@ def _code_task_text(
         "string-list required_tests. Common failure: writing fix_diff as a description but "
         "forgetting executable_template, or setting executable_template to a string. "
         "MANDATORY PRE-PUSH VALIDATION: Before committing/pushing any KB JSON file, you MUST "
-        'run `python -c "from modstore_server.self_evolution_knowledge import validate_kb_payload; '
+        'run `python3 -c "from modstore_server.self_evolution_knowledge import validate_kb_payload; '
         "import json; validate_kb_payload('fixes', json.load(open('FHD/XCAGI/kb/fixes/<file>.json')))\"` "
         "(or 'patterns' for pattern files) and require it to return without raising. If validation "
         "raises ValueError, FIX the JSON before pushing — the loop will reject KB-schema-invalid "
@@ -2701,7 +2701,7 @@ def _code_task_text(
         "`成都修茈科技有限公司/MODstore_deploy`; these commands deterministically "
         "check every changed Python file in the target diff without importing "
         "unrelated historical formatting debt. Also run "
-        "`python scripts/dev/source_governance.py --top 10` from the repository root; "
+        "`python3 scripts/dev/source_governance.py --top 10` from the repository root; "
         "all three are mandatory merge-readiness gates and must exit 0. "
         f"If and only if there is no safe actionable source change, update `{DEFAULT_STATUS_FILE}` "
         f"with LOOP_RUN_ID={run_id!r}, LOOP_KIND='scheduled_self_maintenance', "
@@ -2909,7 +2909,7 @@ def _qa_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) ->
         "Evaluate the target branch, tests, changed files, and previous loop memory as merge-readiness evidence. "
         f"You MUST execute the focused verification command `{focused_test_command}` and include its "
         "exact command, real exit code, and status in tested_commands. If that command's absolute Python "
-        "path does not exist on this worker, also run a platform-equivalent local `python -m pytest` command "
+        "path does not exist on this worker, also run a platform-equivalent local `python3 -m pytest` command "
         "against the same focused test file, and include both attempts in tested_commands. The equivalent "
         "command is valid evidence only when it executes the same pytest target successfully; a syntax-only "
         "check or a different test target is not a substitute. Materialize the COMPLETE target ref into a "
@@ -2924,7 +2924,7 @@ def _qa_task_text(run_id: str, branch: Optional[str], memory: Dict[str, Any]) ->
         f"`{black_command}` and `{isort_command}` from "
         "`成都修茈科技有限公司/MODstore_deploy`; these commands deterministically "
         "check every changed Python file in the target diff. Also run "
-        "`python scripts/dev/source_governance.py --top 10` from the repository root. "
+        "`python3 scripts/dev/source_governance.py --top 10` from the repository root. "
         "Record their exact commands, real exit codes, and statuses in quality_checks. "
         "Use CLEAN_BASELINE_JSON to separate existing allowed failures from new failures; "
         "FAIL only for new failures, missing target branch, blocking findings, or unsafe evidence. "
@@ -3952,7 +3952,7 @@ def _reject_and_retry_kb_schema_failure(
         "```\n\n"
         "Validate before push:\n"
         "```\n"
-        'python -c "from modstore_server.self_evolution_knowledge import validate_kb_payload; '
+        'python3 -c "from modstore_server.self_evolution_knowledge import validate_kb_payload; '
         "import json; validate_kb_payload('fixes', json.load(open('<file>')))\"\n"
         "```\n"
     )

@@ -65,7 +65,8 @@ def _connect() -> sqlite3.Connection:
 
 def ensure_outbox_schema() -> None:
     with _connect() as conn:
-        conn.executescript("""
+        conn.executescript(
+            """
             CREATE TABLE IF NOT EXISTS cs_webhook_outbox (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               target_url TEXT NOT NULL,
@@ -88,7 +89,8 @@ def ensure_outbox_schema() -> None:
               migrated_at TEXT NOT NULL,
               migrated_row_count INTEGER NOT NULL DEFAULT 0
             );
-            """)
+            """
+        )
         conn.commit()
         _migrate_legacy_outbox(conn)
         conn.commit()
@@ -131,12 +133,14 @@ def _migrate_legacy_outbox(conn: sqlite3.Connection) -> None:
         ).fetchone()
         if not table:
             return
-        legacy_rows = legacy_conn.execute("""
+        legacy_rows = legacy_conn.execute(
+            """
             SELECT target_url, payload_json, headers_json, attempts, max_attempts,
                    last_error, status, landing_contact_id, market_user_id,
                    created_at, updated_at, next_retry_at
             FROM cs_webhook_outbox ORDER BY id ASC
-            """)
+            """
+        )
         migrated = 0
         while batch := legacy_rows.fetchmany(_LEGACY_MIGRATION_BATCH_SIZE):
             for row in batch:

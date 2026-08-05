@@ -119,7 +119,7 @@ def diff_quality_command(tool: str, *, base_ref: str, target_ref: str) -> str:
     """Build one fail-closed formatter command over the exact branch diff."""
 
     return (
-        "python -m modstore_server.self_maintenance_diff_quality "
+        "python3 -m modstore_server.self_maintenance_diff_quality "
         f"--tool {shlex.quote(tool)} "
         f"--base-ref {shlex.quote(base_ref)} "
         f"--target-ref {shlex.quote(target_ref)}"

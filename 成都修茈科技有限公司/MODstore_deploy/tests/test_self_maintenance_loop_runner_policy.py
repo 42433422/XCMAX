@@ -2209,7 +2209,7 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     assert "Verify both refs with `git cat-file -e`" in qa
     assert "file:///tmp/repo.git" in qa
     assert "`verified-python -m pytest focused.py -q`" in qa
-    assert "platform-equivalent local `python -m pytest` command" in qa
+    assert "platform-equivalent local `python3 -m pytest` command" in qa
     assert "same focused test file" in qa
     assert "Materialize the COMPLETE target ref" in qa
     assert "do not archive only `成都修茈科技有限公司/MODstore_deploy`" in qa
@@ -2217,27 +2217,27 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     assert "never report PASS with no successful focused tested_commands entry" in qa
     assert "Do not fail solely because the scheduler's absolute Python path" in qa
     assert (
-        "python -m modstore_server.self_maintenance_diff_quality --tool black "
+        "python3 -m modstore_server.self_maintenance_diff_quality --tool black "
         "--base-ref origin/feat/base --target-ref origin/devfleet/codex/sub-1"
     ) in qa
     assert (
-        "python -m modstore_server.self_maintenance_diff_quality --tool isort "
+        "python3 -m modstore_server.self_maintenance_diff_quality --tool isort "
         "--base-ref origin/feat/base --target-ref origin/devfleet/codex/sub-1"
     ) in qa
-    assert "python scripts/dev/source_governance.py --top 10" in qa
+    assert "python3 scripts/dev/source_governance.py --top 10" in qa
     assert '"quality_checks"' in qa
 
     code = _code_task_text("run-1", {}, {})
     assert "`verified-python -m pytest focused.py -q`" in code
     assert (
-        "python -m modstore_server.self_maintenance_diff_quality --tool black "
+        "python3 -m modstore_server.self_maintenance_diff_quality --tool black "
         "--base-ref origin/feat/base --target-ref WORKTREE"
     ) in code
     assert (
-        "python -m modstore_server.self_maintenance_diff_quality --tool isort "
+        "python3 -m modstore_server.self_maintenance_diff_quality --tool isort "
         "--base-ref origin/feat/base --target-ref WORKTREE"
     ) in code
-    assert "python scripts/dev/source_governance.py --top 10" in code
+    assert "python3 scripts/dev/source_governance.py --top 10" in code
     assert "executable_template object" in code
     assert "validate_kb_payload" in code
 
@@ -5279,6 +5279,7 @@ def test_reject_and_retry_kb_schema_first_failure_writes_open_item(monkeypatch, 
     assert comment_calls == [(42, comment_calls[0][1])]
     assert "KB JSON schema validation failed" in comment_calls[0][1]
     assert "executable_template must be an object" in comment_calls[0][1]
+    assert "python3 -c" in comment_calls[0][1]
     assert (42, KB_SCHEMA_FAILED_LABEL) in label_calls
     # 第一次失败不应该标 needs-human
     assert (42, NEEDS_HUMAN_LABEL) not in label_calls
@@ -5499,6 +5500,7 @@ def test_code_task_text_includes_strict_kb_schema_example_and_validate_instructi
     # 2. 包含 pre-push validate 强制指令
     assert "validate_kb_payload" in text
     assert "MANDATORY PRE-PUSH VALIDATION" in text
+    assert "python3 -c" in text
 
     # 3. 警告 kb-schema-failed label 和重试机制
     assert "kb-schema-failed" in text
