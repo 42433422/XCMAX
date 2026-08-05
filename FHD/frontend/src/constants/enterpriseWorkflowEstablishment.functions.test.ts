@@ -45,9 +45,8 @@ describe('enterpriseWorkflowEstablishment constants and functions', () => {
       expect(Object.keys(ENTERPRISE_EMPLOYEES).length).toBeGreaterThan(0)
     })
 
-    it('contains wechat_msg employee', () => {
-      expect(ENTERPRISE_EMPLOYEES['wechat_msg']).toBeTruthy()
-      expect(ENTERPRISE_EMPLOYEES['wechat_msg'].enterprise_layer).toBe('service')
+    it('excludes wechat_msg employee (migrated to Kelailai)', () => {
+      expect(ENTERPRISE_EMPLOYEES['wechat_msg']).toBeUndefined()
     })
   })
 
