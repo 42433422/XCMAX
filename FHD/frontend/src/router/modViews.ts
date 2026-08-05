@@ -9,8 +9,11 @@ function normalizePath(p: string): string {
 }
 
 function findModViewKey(modId: string, viewFile: string): string | undefined {
+  // glob key 始终带 `.vue`，而调用方有的传 `OrdersView`、有的传 `OrdersView.vue`，
+  // 因此两种后缀都要匹配，否则 HostModBridgeView 加载 mod 视图会回退 ModRequiredView。
   const suffixes = [
     `/mods/${modId}/frontend/views/${viewFile}`,
+    `/mods/${modId}/frontend/views/${viewFile}.vue`,
   ];
   return Object.keys(modPhysicalViewGlob).find((k) => {
     const nk = normalizePath(k);
