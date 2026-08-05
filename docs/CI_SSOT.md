@@ -305,12 +305,14 @@ cd XCMAX
 仓库历史上积累了大量远端/本地分支（886 / 193），部分 `behind main` 达 121–517，
 合并冲突成本爆炸。遵循以下策略控制分支增量，并配套安全清理工具。
 
-> **2026-08-05 dry-run 实测**（`prune_stale_branches.py` 默认参数）：远端 888 分支 →
-> `active=862 / stale=6 / deletable=0 / protected=20`。已合并进 `main` 的分支仅 95 个，
-> 且均因 2026-07-21 git 历史重置而提交时间在旧阈值内，故**当前安全口径下无可自动删除项**。
-> 真正的僵尸来源是 **561 个未合并的自动 agent 分支**（`devfleet/cursor` 305 + `devfleet/codex`
-> 224 + `devfleet/trae` 32），它们领先 `main` 巨大（ahead 1389+）且从未合并，安全工具
-> **不会**自动删除未合并分支（防误删），需人工按 `--before / --behind` 框定范围逐批决策。
+> **2026-08-05 受控清理已完成**：远端分支 **888 → 324**（删除 564 个，含 32 个已合并
+> `devfleet/*sub-1*` + 530 个未合并 devfleet agent 分支，另 2 个运行中新生成）。`prune_stale_branches.py`
+> 默认 dry-run 报告曾显示 `active=862 / stale=6 / deletable=0`（因 2026-07-21 git 历史重置，
+> 所有分支提交时间均在旧阈值内，安全口径下无可自动删除项）。真正的僵尸来源是 **562 个
+> 未合并自动 agent 分支**（`devfleet/cursor` + `codex` + `trae` + `claude_code`），它们领先
+> `main` 巨大（ahead 1389+）且从未合并；本次按人工逐个审查后删除（保留当时 6 个开放 PR
+> 分支，其 PR 随清理一并关闭）。**事后约定**：devfleet 子任务分支为一次性 agent 快照，
+> 任务完成后由编排器自行清理，不再沉淀为长期分支。
 
 ### 命名规范
 - 特性分支：`feature/<module>-<short-desc>`（如 `feature/admin-orders-foundation-ui`）
