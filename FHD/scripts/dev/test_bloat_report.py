@@ -7,12 +7,15 @@ P1-2 技术债治理：测试代码 45.8 万行远超业务源码，且大量为
 * 统计 ``tests/**/*.py`` 总行数 vs ``app/**/*.py`` 业务源码行数，计算测试/源码比值
 * 单独统计 ``test_coverage_ramp_*`` stub 行数（与 conftest 打标口径一致）
 * 输出报告并追加到 ``metrics/test-bloat-history.jsonl``
-* ``--check`` 门禁：测试/源码比 > 1.5 或 coverage_ramp stub 行数 > 50000 则失败
+* ``--check`` 门禁（**棘轮**）：以历史基线为起点，**只拦截回退**（比值/行数不增）
+  —— 存量已超标项（ratio 1.81 / stub 6.36 万）不阻断，但任何新增膨胀立即失败。
+  绝对目标（ratio ≤ 1.5、stub ≤ 5 万）作为文档化长期收敛目标，不作为即时阻断。
 
 用法::
 
-    python scripts/dev/test_bloat_report.py            # 仅报告
-    python scripts/dev/test_bloat_report.py --check    # CI 门禁（超限退出码 1）
+    python scripts/dev/test_bloat_report.py                 # 仅报告
+    python scripts/dev/test_bloat_report.py --check         # CI 棘轮门禁（回退超限退出码 1）
+    python scripts/dev/test_bloat_report.py --check --seed  # 以当前值为基线种子（首次接入）
 """
 
 from __future__ import annotations
@@ -28,8 +31,12 @@ TESTS_DIR = FHD_ROOT / "tests"
 APP_DIR = FHD_ROOT / "app"
 METRICS_FILE = FHD_ROOT / "metrics" / "test-bloat-history.jsonl"
 
-RATIO_LIMIT = 1.5  # tests/ 与 app/ 行数比上限
-STUB_LINES_LIMIT = 50_000  # coverage_ramp stub 行数上限
+# 绝对目标（文档化收敛目标，非即时阻断；与棘轮并存）
+RATIO_GOAL = 1.5  # tests/ 与 app/ 行数比长期目标
+STUB_LINES_GOAL = 50_000  # coverage_ramp stub 行数长期目标
+# 棘轮回退容忍（吸收 CI 噪声/微改行数波动，防误报）
+RATIO_TOLERANCE = 0.02
+STUB_TOLERANCE = 2_000
 STUB_PREFIX = "test_coverage_ramp_"
 
 

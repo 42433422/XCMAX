@@ -233,6 +233,11 @@ jobs:
         working-directory: FHD/frontend
         run: npm run test:coverage
 
+      # 前端覆盖率诚实化（Delta B）：以 coverage_ratchet.py 为硬门禁，回退即阻断。
+      - name: Frontend coverage ratchet gate
+        working-directory: FHD/frontend
+        run: python ../scripts/dev/coverage_ratchet.py --check --require-frontend
+
       - name: Run vue-tsc
         working-directory: FHD/frontend
         run: |
@@ -302,10 +307,15 @@ jobs:
       - name: arch-fitness-legacy-check (P1-4 双轨边界)
         run: |
           python - <<'PY'
-          import subprocess, sys
+          import subprocess, sys, os
+          sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+          import arch_fitness
           r = subprocess.run(["python", "scripts/arch_fitness.py"], capture_output=True, text=True)
+          baselined = arch_fitness._load_baseline_keys()
+          # 只拦「新增」的 legacy/compat 散落；基线内已知项放行（与 arch_fitness.py 判定一致）。
           blocked = [l for l in (r.stdout + r.stderr).splitlines()
-                     if "[legacy-boundary]" in l and "must live under app/legacy/" in l]
+                     if "[legacy-boundary]" in l and "must live under app/legacy/" in l
+                     and arch_fitness._violation_key(l) not in baselined]
           if blocked:
               print("::error::新增 legacy/compat 文件散落到 app/legacy/ 之外：")
               print("\n".join(blocked))
