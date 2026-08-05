@@ -200,9 +200,7 @@ def set_pipeline_stage(
             note,
         )
     else:
-        logger.info(
-            "pipeline 已是目标阶段 uid=%s stage=%s（跳过推进）", int(market_user_id), st
-        )
+        logger.info("pipeline 已是目标阶段 uid=%s stage=%s（跳过推进）", int(market_user_id), st)
     return save_pipeline(doc)
 
 

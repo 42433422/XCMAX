@@ -30,9 +30,7 @@ async def modstore_payment_webhook(
     x_modstore_webhook_timestamp: str | None = Header(
         default=None, alias="X-Modstore-Webhook-Timestamp"
     ),
-    x_modstore_webhook_id: str | None = Header(
-        default=None, alias="X-Modstore-Webhook-Id"
-    ),
+    x_modstore_webhook_id: str | None = Header(default=None, alias="X-Modstore-Webhook-Id"),
 ):
     raw = await request.body()
     logger.info(
