@@ -355,7 +355,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { nextTick, onMounted, onUnmounted, ref } from 'vue';
 import {
   createDirectConversation,
   fetchCsInbox,
@@ -374,79 +374,27 @@ import api from '@/api';
 import { authApi } from '@/api/auth';
 import { useImSounds } from '@/composables/useImSounds';
 import { showAppToast } from '@/composables/useAppToast';
-import { productErrorMessage } from '@/utils/productErrorMessage';
-import { fetchEmployeeSsot } from '@/utils/platformShellApi';
-import {
-  dutyEmployeesFromEmployeeSsot,
-  type EmployeeSsotPayload,
-} from '@/utils/employeeSsotContacts';
 import { useXcmaxSync } from '@/composables/useXcmaxSync';
-import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
 import { isDesktopShell } from '@/utils/desktopShell';
+import { useChatSession } from '@/composables/messenger/useChatSession';
+import { useContactPicker } from '@/composables/messenger/useContactPicker';
+import { useConversationList } from '@/composables/messenger/useConversationList';
+import { useSuperEmployeeDispatch } from '@/composables/messenger/useSuperEmployeeDispatch';
 import {
-  fetchCodexSuperEmployeeMessages,
-  sendCodexSuperEmployeeMessage,
-  type CodexSuperEmployeeApiScope,
-  type CodexSuperEmployeeDispatch,
-  type CodexSuperEmployeeMessage,
-} from '@/api/codexSuperEmployee';
-import {
-  fetchClaudeSuperEmployeeMessages,
-  sendClaudeSuperEmployeeMessage,
-} from '@/api/claudeSuperEmployee';
-import {
-  fetchCursorSuperEmployeeMessages,
-  sendCursorSuperEmployeeMessage,
-} from '@/api/cursorSuperEmployee';
-import {
-  useChatSession,
-} from '@/composables/messenger/useChatSession';
-import {
-  useContactPicker,
-} from '@/composables/messenger/useContactPicker';
-import {
-  useConversationList,
-} from '@/composables/messenger/useConversationList';
-import {
-  CODEX_POLL_INTERVAL_MS,
-  CODEX_POLL_MAX_ROUNDS,
-  CODEX_STREAM_PLACEHOLDER_ID,
   CODEX_SUPER_EMPLOYEE_ENTRY,
   avatarText,
-  codexReplyFromDispatcher,
-  dutyEmployeeReplyFromExecution,
-  fallbackDutyEmployees,
   formatTime,
-  isAiGroupChatEntry,
-  isClaudeSuperEmployeeEntry,
-  isCodexDispatcherMessage,
-  isCodexDispatchStillOpen,
-  isCodexResultMessage,
   isCodexStreamingMessage,
-  isCodexSuperEmployeeEntry,
-  isCursorSuperEmployeeEntry,
   isDutyEmployeeEntry,
-  isExternalAppEntry,
   isSuperEmployeeEntry,
-  latestCodexDispatcherMessage,
-  latestCodexResultMessage,
-  normalizeDutyEmployee,
   pinnedAvatarText,
-  sanitizeCodexReplyText,
   superEmployeeAvatarKey,
   superEmployeeAvatarSrc,
   systemEntryDispatch,
   systemEntryIdentity,
   systemEntryStatusLabel,
-  uniqueDutyEmployees,
-  type ActiveSuperTool,
-  type AdminEmployeeApiItem,
-  type CodexDisplayMessage,
-  type DutyEmployeeChatMessage,
   type DutyEmployeeEntry,
-  type EmployeeExecuteResponse,
   type ExternalAppEntry,
-  type PinnedImEntry,
   type SystemEmployeeEntry,
 } from '@/composables/messenger/useMessengerEntries';
 import KellaiCustomerInbox from '@/components/im/KellaiCustomerInbox.vue';
@@ -459,50 +407,49 @@ type CurrentUserPayload = {
   market_is_admin?: boolean;
 };
 
-type MobileApiResponse<T> = {
-  success?: boolean;
-  code?: number;
-  message?: string;
-  data?: T;
-};
-
-type AdminEmployeesPayload = {
-  items?: AdminEmployeeApiItem[];
-  employees?: AdminEmployeeApiItem[];
-  count?: number;
-};
-
 const localUserId = ref<number | null>(null);
 const conversations = ref<ImConversationSummary[]>([]);
 const activeConversationId = ref<number | null>(null);
 const activeSystemEntry = ref<SystemEmployeeEntry | null>(null);
 const activeExternalEntry = ref<ExternalAppEntry | null>(null);
 const activeGroupChat = ref(false);
-const codexMessages = ref<CodexSuperEmployeeMessage[]>([]);
-const codexDraft = ref('');
-const codexBusy = ref(false);
-const codexDispatch = ref<CodexSuperEmployeeDispatch | null>(null);
-const codexStreamBody = ref('');
-const codexStreamMessageId = ref('');
-const codexStreamRequestId = ref('');
-const codexStreamCreatedAt = ref('');
-const codexStreamActive = ref(false);
+const dutyEmployees = ref<DutyEmployeeEntry[]>([]);
 const messages = ref<ImMessage[]>([]);
 const draft = ref('');
-const dutyEmployees = ref<DutyEmployeeEntry[]>([]);
-const dutyEmployeeMessages = ref<Record<string, DutyEmployeeChatMessage[]>>({});
-const dutyEmployeeDraft = ref('');
-const dutyEmployeeBusy = ref(false);
 const busy = ref(false);
 const hasMoreHistory = ref(false);
 const scrollEl = ref<HTMLElement | null>(null);
-const codexScrollEl = ref<HTMLElement | null>(null);
-const dutyEmployeeScrollEl = ref<HTMLElement | null>(null);
-const codexInputEl = ref<HTMLInputElement | null>(null);
 const isAdminCustomerServiceConsole = ref(false);
 
 const { playIncoming, playOutgoing } = useImSounds();
 const { onImMessage, onImReadState } = useXcmaxSync();
+
+function closeOverlappingAssistantFloat(): void {
+  const emitClose = () => {
+    try {
+      window.dispatchEvent(new CustomEvent('xcagi:close-assistant-float'));
+      window.dispatchEvent(new CustomEvent('xcagi:close-floating-chat'));
+      window.dispatchEvent(new CustomEvent('xcagi:suppress-floating-chat'));
+    } catch {
+      /* ignore non-browser / post-teardown environments */
+    }
+  };
+  try {
+    emitClose();
+    window.setTimeout(emitClose, 0);
+    window.setTimeout(emitClose, 250);
+  } catch {
+    /* ignore non-browser test environments */
+  }
+}
+
+function restoreOverlappingAssistantFloat(): void {
+  try {
+    window.dispatchEvent(new CustomEvent('xcagi:restore-floating-chat'));
+  } catch {
+    /* ignore non-browser test environments */
+  }
+}
 
 const {
   wsConnected,
@@ -524,6 +471,43 @@ const {
   openContactPicker,
   closeContactPicker,
 } = useContactPicker({ imApiReachable });
+
+const {
+  codexVisibleMessages,
+  codexDraft,
+  codexBusy,
+  activeDutyEmployeeMessages,
+  dutyEmployeeDraft,
+  dutyEmployeeBusy,
+  codexScrollEl,
+  dutyEmployeeScrollEl,
+  codexInputEl,
+  activatePinnedEntry,
+  loadCodexConversation,
+  loadDutyEmployees,
+  onCodexSend,
+  onDutyEmployeeSend,
+  systemEntryRuntimeStatus,
+  systemEntryLastStatus,
+  codexMessageRoleLabel,
+  stopCodexPolling,
+  stopCodexTypewriter,
+} = useSuperEmployeeDispatch({
+  activeSystemEntry,
+  activeExternalEntry,
+  activeConversationId,
+  activeGroupChat,
+  messages,
+  hasMoreHistory,
+  localUserId,
+  isAdminCustomerServiceConsole,
+  imApiReachable,
+  dutyEmployees,
+  closeContactPicker,
+  startChatWith,
+  closeOverlappingAssistantFloat,
+  restoreOverlappingAssistantFloat,
+});
 
 const {
   existingDedicatedConversation,
@@ -559,388 +543,6 @@ let offSyncMessage: (() => void) | null = null;
 let offSyncRead: (() => void) | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempt = 0;
-let codexStreamTarget = '';
-let codexStreamTimer: ReturnType<typeof setInterval> | null = null;
-let codexPollTimer: ReturnType<typeof setTimeout> | null = null;
-let codexPollRound = 0;
-
-const codexApiScope = computed<CodexSuperEmployeeApiScope>(() =>
-  isAdminConsoleSpa() ? 'admin' : 'mobile',
-);
-
-function activeSuperTool(entry: SystemEmployeeEntry | null): ActiveSuperTool | null {
-  if (!entry) return null;
-  if (isCodexSuperEmployeeEntry(entry)) return 'codex';
-  if (isClaudeSuperEmployeeEntry(entry)) return 'claude';
-  if (isCursorSuperEmployeeEntry(entry)) return 'cursor';
-  return null;
-}
-
-function fetchActiveSuperMessages(): Promise<CodexSuperEmployeeMessage[]> {
-  const tool = activeSuperTool(activeSystemEntry.value);
-  if (tool === 'claude') {
-    return fetchClaudeSuperEmployeeMessages({ scope: codexApiScope.value });
-  }
-  if (tool === 'cursor') {
-    return fetchCursorSuperEmployeeMessages({ scope: codexApiScope.value });
-  }
-  return fetchCodexSuperEmployeeMessages({ scope: codexApiScope.value });
-}
-
-function sendActiveSuperMessage(message: string, context: Record<string, unknown>) {
-  const tool = activeSuperTool(activeSystemEntry.value);
-  if (tool === 'claude') {
-    return sendClaudeSuperEmployeeMessage(message, context, { scope: codexApiScope.value });
-  }
-  if (tool === 'cursor') {
-    return sendCursorSuperEmployeeMessage(message, context, { scope: codexApiScope.value });
-  }
-  return sendCodexSuperEmployeeMessage(message, context, { scope: codexApiScope.value });
-}
-
-const codexSenderLabel = computed(() =>
-  codexApiScope.value === 'mobile' ? '手机端' : '管理端',
-);
-
-const codexContextSource = computed(() =>
-  codexApiScope.value === 'mobile' ? 'mobile_im' : 'admin_im',
-);
-
-const codexLastStatus = computed(() => {
-  const status = String(codexDispatch.value?.status || '').trim();
-  if (!status) return '等待派工';
-  if (status === 'accepted') return '已分发';
-  if (status === 'queued') return '已入队';
-  if (status === 'dispatch_failed' || status === 'dispatch_error') return '待重试';
-  return status;
-});
-
-const codexVisibleMessages = computed<CodexDisplayMessage[]>(() => {
-  const visible = codexMessages.value
-    .filter((m) => !isCodexDispatcherMessage(m))
-    .map<CodexDisplayMessage>((m) => {
-      const streaming = m.id === codexStreamMessageId.value && Boolean(codexStreamBody.value);
-      return {
-        ...m,
-        body: streaming ? codexStreamBody.value : m.body,
-        streaming: streaming && codexStreamActive.value,
-      };
-    });
-
-  if (
-    codexStreamBody.value
-    && codexStreamMessageId.value === CODEX_STREAM_PLACEHOLDER_ID
-  ) {
-    visible.push({
-      id: CODEX_STREAM_PLACEHOLDER_ID,
-      role: 'assistant',
-      body: codexStreamBody.value,
-      created_at: codexStreamCreatedAt.value || new Date().toISOString(),
-      status: 'running',
-      kind: 'codex_stream',
-      dispatch_request_id: codexStreamRequestId.value,
-      streaming: codexStreamActive.value,
-      synthetic: true,
-    });
-  }
-  return visible;
-});
-
-const activeDutyEmployeeMessages = computed<DutyEmployeeChatMessage[]>(() => {
-  const entry = activeSystemEntry.value;
-  if (!entry || !isDutyEmployeeEntry(entry)) return [];
-  return dutyEmployeeMessages.value[entry.id] || [];
-});
-
-function systemEntryRuntimeStatus(entry: SystemEmployeeEntry): string {
-  if (isSuperEmployeeEntry(entry)) {
-    return codexBusy.value ? '提交中' : codexStreamActive.value ? '回复中' : '可派工';
-  }
-  return dutyEmployeeBusy.value && activeSystemEntry.value?.id === entry.id ? '执行中' : '可对话';
-}
-
-function systemEntryLastStatus(entry: SystemEmployeeEntry): string {
-  if (isSuperEmployeeEntry(entry)) return codexLastStatus.value;
-  const last = (dutyEmployeeMessages.value[entry.id] || []).at(-1);
-  if (!last) return '等待任务';
-  return last.role === 'assistant' ? (last.status || '已回复') : '已发送';
-}
-
-function appendDutyEmployeeMessage(employeeId: string, message: DutyEmployeeChatMessage): void {
-  dutyEmployeeMessages.value = {
-    ...dutyEmployeeMessages.value,
-    [employeeId]: [...(dutyEmployeeMessages.value[employeeId] || []), message],
-  };
-  void nextTick(() => {
-    const el = dutyEmployeeScrollEl.value;
-    if (el) el.scrollTop = el.scrollHeight;
-  });
-}
-
-function codexMessageRoleLabel(message: CodexSuperEmployeeMessage): string {
-  if (message.role === 'user') return codexSenderLabel.value;
-  const tool = activeSuperTool(activeSystemEntry.value);
-  if (tool === 'claude') return 'Claude';
-  if (tool === 'cursor') return 'Cursor';
-  return 'Codex';
-}
-
-function closeOverlappingAssistantFloat(): void {
-  const emitClose = () => {
-    try {
-      window.dispatchEvent(new CustomEvent('xcagi:close-assistant-float'));
-      window.dispatchEvent(new CustomEvent('xcagi:close-floating-chat'));
-      window.dispatchEvent(new CustomEvent('xcagi:suppress-floating-chat'));
-    } catch {
-      /* ignore non-browser / post-teardown environments */
-    }
-  };
-  try {
-    emitClose();
-    window.setTimeout(emitClose, 0);
-    window.setTimeout(emitClose, 250);
-  } catch {
-    /* ignore non-browser test environments */
-  }
-}
-
-function restoreOverlappingAssistantFloat(): void {
-  try {
-    window.dispatchEvent(new CustomEvent('xcagi:restore-floating-chat'));
-  } catch {
-    /* ignore non-browser test environments */
-  }
-}
-
-function focusCodexInput(): void {
-  const tryFocus = () => {
-    if (!isSuperEmployeeEntry(activeSystemEntry.value) || codexBusy.value) return;
-    try {
-      const active = document.activeElement;
-      if (active instanceof HTMLElement && active !== codexInputEl.value) {
-        active.blur();
-      }
-      codexInputEl.value?.focus({ preventScroll: true });
-    } catch {
-      codexInputEl.value?.focus();
-    }
-  };
-  void nextTick(() => {
-    tryFocus();
-    window.setTimeout(tryFocus, 80);
-    window.setTimeout(tryFocus, 240);
-    window.setTimeout(tryFocus, 600);
-  });
-}
-
-function scrollCodexToBottom(): void {
-  const el = codexScrollEl.value;
-  if (el) el.scrollTop = el.scrollHeight;
-}
-
-function stopCodexTypewriter(clearBody = false): void {
-  if (codexStreamTimer) {
-    clearInterval(codexStreamTimer);
-    codexStreamTimer = null;
-  }
-  if (clearBody) {
-    codexStreamBody.value = '';
-    codexStreamTarget = '';
-    codexStreamMessageId.value = '';
-    codexStreamRequestId.value = '';
-    codexStreamCreatedAt.value = '';
-    codexStreamActive.value = false;
-  }
-}
-
-function stopCodexPolling(): void {
-  if (codexPollTimer) {
-    clearTimeout(codexPollTimer);
-    codexPollTimer = null;
-  }
-  codexPollRound = 0;
-}
-
-function ensureCodexTypewriter(): void {
-  if (codexStreamTimer) return;
-  codexStreamTimer = setInterval(() => {
-    if (!codexStreamTarget) {
-      stopCodexTypewriter();
-      return;
-    }
-    const current = codexStreamBody.value;
-    if (current.length >= codexStreamTarget.length) {
-      stopCodexTypewriter();
-      codexStreamActive.value = codexStreamMessageId.value === CODEX_STREAM_PLACEHOLDER_ID
-        && Boolean(codexPollTimer);
-      return;
-    }
-    const remaining = codexStreamTarget.length - current.length;
-    const step = Math.max(1, Math.min(8, Math.ceil(remaining / 18)));
-    codexStreamBody.value = codexStreamTarget.slice(0, current.length + step);
-    codexStreamActive.value = true;
-    void nextTick().then(scrollCodexToBottom);
-  }, 34);
-}
-
-function startCodexTypewriter(options: {
-  body: string;
-  messageId?: string;
-  requestId?: string;
-  createdAt?: string;
-  active?: boolean;
-  reset?: boolean;
-}): void {
-  const target = sanitizeCodexReplyText(options.body);
-  if (!target) return;
-  const nextMessageId = options.messageId || CODEX_STREAM_PLACEHOLDER_ID;
-  const messageChanged = codexStreamMessageId.value !== nextMessageId;
-  codexStreamTarget = target;
-  codexStreamMessageId.value = nextMessageId;
-  codexStreamRequestId.value = options.requestId || codexStreamRequestId.value;
-  codexStreamCreatedAt.value = options.createdAt || codexStreamCreatedAt.value || new Date().toISOString();
-  if (
-    options.reset
-    || messageChanged
-    || !target.startsWith(codexStreamBody.value)
-    || codexStreamBody.value.length > target.length
-  ) {
-    codexStreamBody.value = target.slice(0, Math.min(target.length, 10));
-  }
-  codexStreamActive.value = options.active !== false || codexStreamBody.value.length < target.length;
-  ensureCodexTypewriter();
-  void nextTick().then(scrollCodexToBottom);
-}
-
-function syncCodexStreamFromMessages(
-  items: CodexSuperEmployeeMessage[],
-  requestId = '',
-): boolean {
-  const effectiveRequestId = requestId || String(
-    latestCodexDispatcherMessage(items)?.dispatch_request_id || '',
-  );
-  const dispatcher = latestCodexDispatcherMessage(items, effectiveRequestId);
-  if (!requestId && !isCodexDispatchStillOpen(dispatcher)) {
-    return false;
-  }
-  const result = effectiveRequestId ? latestCodexResultMessage(items, effectiveRequestId) : null;
-  if (result) {
-    startCodexTypewriter({
-      body: result.body,
-      messageId: result.id,
-      requestId: String(result.dispatch_request_id || effectiveRequestId || ''),
-      createdAt: result.created_at,
-      active: false,
-      reset: codexStreamMessageId.value !== result.id,
-    });
-    return false;
-  }
-  if (!dispatcher) return false;
-  startCodexTypewriter({
-    body: codexReplyFromDispatcher(dispatcher),
-    messageId: CODEX_STREAM_PLACEHOLDER_ID,
-    requestId: String(dispatcher.dispatch_request_id || effectiveRequestId || ''),
-    createdAt: dispatcher.created_at,
-    active: isCodexDispatchStillOpen(dispatcher),
-    reset: codexStreamMessageId.value !== CODEX_STREAM_PLACEHOLDER_ID,
-  });
-  return isCodexDispatchStillOpen(dispatcher);
-}
-
-function startCodexPolling(requestId = ''): void {
-  stopCodexPolling();
-  codexPollRound = 0;
-  const poll = async () => {
-    if (!isSuperEmployeeEntry(activeSystemEntry.value)) return;
-    codexPollRound += 1;
-    try {
-      const next = await fetchActiveSuperMessages();
-      codexMessages.value = next;
-      const shouldContinue = syncCodexStreamFromMessages(next, requestId);
-      if (shouldContinue && codexPollRound < CODEX_POLL_MAX_ROUNDS) {
-        codexPollTimer = setTimeout(poll, CODEX_POLL_INTERVAL_MS);
-      } else {
-        codexPollTimer = null;
-      }
-      await nextTick();
-      scrollCodexToBottom();
-    } catch {
-      if (codexPollRound < CODEX_POLL_MAX_ROUNDS) {
-        codexPollTimer = setTimeout(poll, CODEX_POLL_INTERVAL_MS);
-      } else {
-        codexPollTimer = null;
-      }
-    }
-  };
-  codexPollTimer = setTimeout(poll, CODEX_POLL_INTERVAL_MS);
-}
-
-async function activatePinnedEntry(entry: PinnedImEntry): Promise<void> {
-  if (isAiGroupChatEntry(entry)) {
-    closeOverlappingAssistantFloat();
-    stopCodexPolling();
-    stopCodexTypewriter(true);
-    activeExternalEntry.value = null;
-    activeSystemEntry.value = null;
-    activeConversationId.value = null;
-    activeGroupChat.value = true;
-    messages.value = [];
-    hasMoreHistory.value = false;
-    closeContactPicker();
-    return;
-  }
-  if (isExternalAppEntry(entry)) {
-    closeOverlappingAssistantFloat();
-    stopCodexPolling();
-    stopCodexTypewriter(true);
-    activeExternalEntry.value = entry;
-    activeSystemEntry.value = null;
-    activeConversationId.value = null;
-    messages.value = [];
-    hasMoreHistory.value = false;
-    closeContactPicker();
-    return;
-  }
-  if (isSuperEmployeeEntry(entry)) {
-    closeOverlappingAssistantFloat();
-    stopCodexPolling();
-    stopCodexTypewriter(true);
-    activeExternalEntry.value = null;
-    activeSystemEntry.value = entry;
-    activeConversationId.value = null;
-    activeGroupChat.value = false;
-    messages.value = [];
-    codexMessages.value = [];
-    hasMoreHistory.value = false;
-    closeContactPicker();
-    await loadCodexConversation();
-    focusCodexInput();
-    return;
-  }
-  if (isDutyEmployeeEntry(entry)) {
-    closeOverlappingAssistantFloat();
-    stopCodexPolling();
-    stopCodexTypewriter(true);
-    activeExternalEntry.value = null;
-    activeSystemEntry.value = entry;
-    activeConversationId.value = null;
-    activeGroupChat.value = false;
-    messages.value = [];
-    hasMoreHistory.value = false;
-    closeContactPicker();
-    await nextTick();
-    const el = dutyEmployeeScrollEl.value;
-    if (el) el.scrollTop = el.scrollHeight;
-    return;
-  }
-  restoreOverlappingAssistantFloat();
-  stopCodexPolling();
-  stopCodexTypewriter(true);
-  activeExternalEntry.value = null;
-  activeSystemEntry.value = null;
-  activeGroupChat.value = false;
-  await startChatWith(entry);
-}
 
 async function startChatWith(contact: ImContact): Promise<void> {
   const existing = contact.is_enterprise_dedicated_cs ? existingDedicatedConversation(contact) : undefined;
@@ -959,177 +561,6 @@ async function startChatWith(contact: ImContact): Promise<void> {
     showAppToast(error instanceof Error ? error.message : '发起会话失败', 'error');
   } finally {
     busy.value = false;
-  }
-}
-
-async function loadCodexConversation(options: { syncStream?: boolean } = {}): Promise<void> {
-  if (!isAdminCustomerServiceConsole.value) return;
-  try {
-    const next = await fetchActiveSuperMessages();
-    codexMessages.value = next;
-    if (options.syncStream !== false) {
-      const shouldContinue = syncCodexStreamFromMessages(next, codexStreamRequestId.value);
-      if (shouldContinue && !codexPollTimer) {
-        const dispatcher = latestCodexDispatcherMessage(next, codexStreamRequestId.value);
-        startCodexPolling(String(dispatcher?.dispatch_request_id || codexStreamRequestId.value || ''));
-      }
-    }
-    await nextTick();
-    scrollCodexToBottom();
-  } catch (error) {
-    showAppToast(error instanceof Error ? error.message : '加载 Codex 对话失败', 'error');
-  } finally {
-    focusCodexInput();
-  }
-}
-
-async function loadDutyEmployees(): Promise<void> {
-  if (!isAdminCustomerServiceConsole.value) {
-    dutyEmployees.value = [];
-    return;
-  }
-  if (!dutyEmployees.value.length) {
-    dutyEmployees.value = uniqueDutyEmployees(fallbackDutyEmployees());
-  }
-  try {
-    const ssot = (await fetchEmployeeSsot()) as EmployeeSsotPayload;
-    const fromSsot = dutyEmployeesFromEmployeeSsot(ssot);
-    if (fromSsot.length) {
-      dutyEmployees.value = uniqueDutyEmployees(fromSsot as DutyEmployeeEntry[]);
-      imApiReachable.value = true;
-      return;
-    }
-  } catch {
-    /* fallback to mobile admin employees */
-  }
-  try {
-    const response = await api.get<MobileApiResponse<AdminEmployeesPayload>>('/api/mobile/v1/admin/employees');
-    imApiReachable.value = true;
-    const payload = response.data || {};
-    const rawItems = payload.items || payload.employees || [];
-    const normalized = rawItems
-      .map(normalizeDutyEmployee)
-      .filter((item): item is DutyEmployeeEntry => Boolean(item));
-    if (normalized.length) {
-      dutyEmployees.value = uniqueDutyEmployees(normalized);
-    }
-  } catch (error) {
-    showAppToast(
-      productErrorMessage(error, '员工通讯录暂时不可用，已使用本地编制兜底'),
-      'warning',
-    );
-  }
-}
-
-async function onCodexSend(): Promise<void> {
-  if (!isSuperEmployeeEntry(activeSystemEntry.value)) return;
-  if (codexBusy.value) return;
-  const text = codexDraft.value.trim();
-  if (!text) return;
-  closeOverlappingAssistantFloat();
-  codexBusy.value = true;
-  stopCodexPolling();
-  const localRequestId = `local-${Date.now()}`;
-  const now = new Date().toISOString();
-  codexDraft.value = '';
-  codexMessages.value = [
-    ...codexMessages.value,
-    {
-      id: `local-user-${localRequestId}`,
-      role: 'user',
-      body: text,
-      created_at: now,
-      status: 'sent',
-      dispatch_request_id: localRequestId,
-    },
-  ];
-  startCodexTypewriter({
-    body: 'Codex 正在接收任务，准备连接全设备执行环境。',
-    requestId: localRequestId,
-    createdAt: now,
-    active: true,
-    reset: true,
-  });
-  await nextTick();
-  scrollCodexToBottom();
-  try {
-    const result = await sendActiveSuperMessage(text, {
-      source: codexContextSource.value,
-      client_surface: codexApiScope.value === 'mobile' ? 'mobile' : 'admin_console',
-      target_devices: ['all'],
-    });
-    codexDispatch.value = result.dispatch ?? null;
-    codexMessages.value = result.messages;
-    const requestId = String(
-      result.message?.dispatch_request_id
-      || result.assistant_message?.dispatch_request_id
-      || result.dispatch?.request_id
-      || localRequestId,
-    );
-    const shouldContinue = syncCodexStreamFromMessages(result.messages, requestId);
-    if (shouldContinue) startCodexPolling(requestId);
-    await nextTick();
-    scrollCodexToBottom();
-    focusCodexInput();
-  } catch (error) {
-    stopCodexTypewriter(true);
-    showAppToast(error instanceof Error ? error.message : 'Codex 调用失败', 'error');
-  } finally {
-    codexBusy.value = false;
-    focusCodexInput();
-  }
-}
-
-async function onDutyEmployeeSend(): Promise<void> {
-  const entry = activeSystemEntry.value;
-  if (!entry || !isDutyEmployeeEntry(entry)) return;
-  if (dutyEmployeeBusy.value) return;
-  const text = dutyEmployeeDraft.value.trim();
-  if (!text) return;
-  const localId = `duty-${entry.id}-${Date.now()}`;
-  const now = new Date().toISOString();
-  dutyEmployeeDraft.value = '';
-  dutyEmployeeBusy.value = true;
-  appendDutyEmployeeMessage(entry.id, {
-    id: `${localId}-user`,
-    role: 'user',
-    body: text,
-    created_at: now,
-    status: 'sent',
-  });
-  try {
-    const result = await api.post<EmployeeExecuteResponse>(
-      `/api/xcmax/local/employees/${encodeURIComponent(entry.id)}/execute`,
-      {
-        task: text,
-        user_id: localUserId.value || 0,
-        input_data: {
-          source: 'admin_im',
-          client_surface: 'admin_console',
-          invoke_mode: 'interactive_chat',
-          allow_medium_risk: true,
-          employee_id: entry.id,
-          employee_name: entry.display_name,
-        },
-      },
-    );
-    appendDutyEmployeeMessage(entry.id, {
-      id: `${localId}-assistant`,
-      role: 'assistant',
-      body: dutyEmployeeReplyFromExecution(result, entry),
-      created_at: new Date().toISOString(),
-      status: result.success === false ? '失败' : '已回复',
-    });
-  } catch (error) {
-    appendDutyEmployeeMessage(entry.id, {
-      id: `${localId}-error`,
-      role: 'assistant',
-      body: error instanceof Error ? `调用失败：${error.message}` : '调用失败：未知错误',
-      created_at: new Date().toISOString(),
-      status: '失败',
-    });
-  } finally {
-    dutyEmployeeBusy.value = false;
   }
 }
 
