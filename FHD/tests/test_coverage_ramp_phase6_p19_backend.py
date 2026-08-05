@@ -707,7 +707,9 @@ class TestPerformanceOptimizerInit:
                 return_value=MagicMock(),
             ),
             patch("app.utils.resilience.rate_limiter.get_rate_limiter", return_value=MagicMock()),
-            patch("app.utils.resilience.rate_limiter.get_circuit_breaker", return_value=MagicMock()),
+            patch(
+                "app.utils.resilience.rate_limiter.get_circuit_breaker", return_value=MagicMock()
+            ),
         ):
             status = opt.initialize()
         assert status["redis_cache"] is True
@@ -731,7 +733,9 @@ class TestPerformanceOptimizerInit:
                 return_value=MagicMock(),
             ),
             patch("app.utils.resilience.rate_limiter.get_rate_limiter", return_value=MagicMock()),
-            patch("app.utils.resilience.rate_limiter.get_circuit_breaker", return_value=MagicMock()),
+            patch(
+                "app.utils.resilience.rate_limiter.get_circuit_breaker", return_value=MagicMock()
+            ),
         ):
             status = opt.initialize()
         assert status["redis_cache"] is False
@@ -777,7 +781,9 @@ class TestPerformanceOptimizerInit:
                 return_value=MagicMock(),
             ),
             patch("app.utils.resilience.rate_limiter.get_rate_limiter", return_value=MagicMock()),
-            patch("app.utils.resilience.rate_limiter.get_circuit_breaker", return_value=MagicMock()),
+            patch(
+                "app.utils.resilience.rate_limiter.get_circuit_breaker", return_value=MagicMock()
+            ),
         ):
             opt.initialize(app=mock_app)
         mock_init.assert_called_once_with(mock_app)
