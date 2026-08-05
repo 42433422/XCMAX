@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.mod_sdk.lan_compat import LAN_BRIDGE_MOD_ID, is_lan_via_mod_enabled
+from app.legacy.lan.lan_compat import LAN_BRIDGE_MOD_ID, is_lan_via_mod_enabled
 
 MOD_PAGE_PREFIX = f"/mod/{LAN_BRIDGE_MOD_ID}"
 

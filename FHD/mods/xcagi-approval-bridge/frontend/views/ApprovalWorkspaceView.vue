@@ -155,132 +155,130 @@
       </div>
     </div>
 
-    <!-- 审批详情弹窗 -->
-    <div v-if="showDetails" class="modal-overlay" @click="closeDetails">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
-          <h3>审批详情</h3>
-          <button class="btn-close" @click="closeDetails">
-            <i class="fa fa-times"></i>
-          </button>
+    <!-- 审批详情弹窗（复用宿主 Modal 原语） -->
+    <Modal
+      :model-value="showDetails"
+      title="审批详情"
+      max-width="800px"
+      @close="closeDetails"
+    >
+      <div v-if="selectedRequest" class="request-detail">
+        <div class="detail-section">
+          <h4>基本信息</h4>
+          <div class="detail-grid">
+            <div class="detail-item">
+              <label>申请编号：</label>
+              <span>{{ selectedRequest.request_no }}</span>
+            </div>
+            <div class="detail-item">
+              <label>审批标题：</label>
+              <span>{{ selectedRequest.title }}</span>
+            </div>
+            <div class="detail-item">
+              <label>业务类型：</label>
+              <span>{{ getBusinessLabel(selectedRequest.business_type) }}</span>
+            </div>
+            <div class="detail-item">
+              <label>当前状态：</label>
+              <span class="status-tag" :class="selectedRequest.status">
+                {{ getStatusLabel(selectedRequest.status) }}
+              </span>
+            </div>
+            <div class="detail-item full-width">
+              <label>申请描述：</label>
+              <p>{{ selectedRequest.description }}</p>
+            </div>
+          </div>
         </div>
-        <div class="modal-body">
-          <div v-if="selectedRequest" class="request-detail">
-            <div class="detail-section">
-              <h4>基本信息</h4>
-              <div class="detail-grid">
-                <div class="detail-item">
-                  <label>申请编号：</label>
-                  <span>{{ selectedRequest.request_no }}</span>
-                </div>
-                <div class="detail-item">
-                  <label>审批标题：</label>
-                  <span>{{ selectedRequest.title }}</span>
-                </div>
-                <div class="detail-item">
-                  <label>业务类型：</label>
-                  <span>{{ getBusinessLabel(selectedRequest.business_type) }}</span>
-                </div>
-                <div class="detail-item">
-                  <label>当前状态：</label>
-                  <span class="status-tag" :class="selectedRequest.status">
-                    {{ getStatusLabel(selectedRequest.status) }}
-                  </span>
-                </div>
-                <div class="detail-item full-width">
-                  <label>申请描述：</label>
-                  <p>{{ selectedRequest.description }}</p>
-                </div>
-              </div>
-            </div>
 
-            <div class="detail-section">
-              <h4>审批记录</h4>
-              <div class="timeline">
-                <div 
-                  v-for="record in selectedRequest.records" 
-                  :key="record.id" 
-                  class="timeline-item"
-                >
-                  <div class="timeline-dot" :class="record.action">
-                    <i :class="getActionIcon(record.action)"></i>
-                  </div>
-                  <div class="timeline-content">
-                    <div class="timeline-header">
-                      <span class="node-name">{{ record.node_name }}</span>
-                      <span class="time">{{ formatTime(record.created_at) }}</span>
-                    </div>
-                    <div class="timeline-body">
-                      <div class="approver">审批人：{{ record.approver_name || '系统' }}</div>
-                      <div class="opinion">{{ record.opinion }}</div>
-                    </div>
-                  </div>
-                </div>
+        <div class="detail-section">
+          <h4>审批记录</h4>
+          <div class="timeline">
+            <div 
+              v-for="record in selectedRequest.records" 
+              :key="record.id" 
+              class="timeline-item"
+            >
+              <div class="timeline-dot" :class="record.action">
+                <i :class="getActionIcon(record.action)"></i>
               </div>
-            </div>
-
-            <div v-if="selectedRequest.workflow_execution" class="detail-section">
-              <h4>AI 工作流执行</h4>
-              <div
-                class="workflow-execution-panel"
-                :class="{ failed: selectedRequest.workflow_execution.success === false }"
-              >
-                <div class="workflow-execution-head">
-                  <span class="workflow-execution-status">
-                    {{ getWorkflowExecutionStatusLabel(selectedRequest.workflow_execution) }}
-                  </span>
-                  <span v-if="selectedRequest.workflow_execution.plan_id" class="workflow-execution-plan">
-                    {{ selectedRequest.workflow_execution.plan_id }}
-                  </span>
+              <div class="timeline-content">
+                <div class="timeline-header">
+                  <span class="node-name">{{ record.node_name }}</span>
+                  <span class="time">{{ formatTime(record.created_at) }}</span>
                 </div>
-                <div class="workflow-execution-meta">
-                  <span v-if="selectedRequest.workflow_execution.intent">
-                    意图：{{ selectedRequest.workflow_execution.intent }}
-                  </span>
-                  <span>
-                    节点：{{ selectedRequest.workflow_execution.nodes_executed || 0 }}/{{ selectedRequest.workflow_execution.nodes_total || 0 }}
-                  </span>
+                <div class="timeline-body">
+                  <div class="approver">审批人：{{ record.approver_name || '系统' }}</div>
+                  <div class="opinion">{{ record.opinion }}</div>
                 </div>
-                <div v-if="selectedRequest.workflow_execution.message" class="workflow-execution-message">
-                  {{ selectedRequest.workflow_execution.message }}
-                </div>
-                <ul
-                  v-if="selectedRequest.workflow_execution.node_results?.length"
-                  class="workflow-execution-nodes"
-                >
-                  <li
-                    v-for="node in selectedRequest.workflow_execution.node_results"
-                    :key="node.node_id"
-                  >
-                    <span :class="['workflow-node-status', node.success ? 'ok' : 'fail']">
-                      {{ node.success ? '成功' : '失败' }}
-                    </span>
-                    <span class="workflow-node-main">
-                      {{ node.node_id }} · {{ node.tool_id }}.{{ node.action }}
-                    </span>
-                    <span v-if="node.retries" class="workflow-node-meta">
-                      重试 {{ node.retries }} 次
-                    </span>
-                    <span v-if="node.error" class="workflow-node-error">{{ node.error }}</span>
-                    <span v-if="node.recovery_hint" class="workflow-node-hint">
-                      恢复建议：{{ node.recovery_hint }}
-                    </span>
-                  </li>
-                </ul>
               </div>
             </div>
           </div>
         </div>
-        <div class="modal-footer" v-if="canApprove && selectedRequest">
-          <button class="btn btn-reject" @click="reject(selectedRequest.id)">
-            <i class="fa fa-times"></i> 拒绝
-          </button>
-          <button class="btn btn-approve" @click="approve(selectedRequest.id)">
-            <i class="fa fa-check"></i> 通过
-          </button>
+
+        <div v-if="selectedRequest.workflow_execution" class="detail-section">
+          <h4>AI 工作流执行</h4>
+          <div
+            class="workflow-execution-panel"
+            :class="{ failed: selectedRequest.workflow_execution.success === false }"
+          >
+            <div class="workflow-execution-head">
+              <span class="workflow-execution-status">
+                {{ getWorkflowExecutionStatusLabel(selectedRequest.workflow_execution) }}
+              </span>
+              <span v-if="selectedRequest.workflow_execution.plan_id" class="workflow-execution-plan">
+                {{ selectedRequest.workflow_execution.plan_id }}
+              </span>
+            </div>
+            <div class="workflow-execution-meta">
+              <span v-if="selectedRequest.workflow_execution.intent">
+                意图：{{ selectedRequest.workflow_execution.intent }}
+              </span>
+              <span>
+                节点：{{ selectedRequest.workflow_execution.nodes_executed || 0 }}/{{ selectedRequest.workflow_execution.nodes_total || 0 }}
+              </span>
+            </div>
+            <div v-if="selectedRequest.workflow_execution.message" class="workflow-execution-message">
+              {{ selectedRequest.workflow_execution.message }}
+            </div>
+            <ul
+              v-if="selectedRequest.workflow_execution.node_results?.length"
+              class="workflow-execution-nodes"
+            >
+              <li
+                v-for="node in selectedRequest.workflow_execution.node_results"
+                :key="node.node_id"
+              >
+                <span :class="['workflow-node-status', node.success ? 'ok' : 'fail']">
+                  {{ node.success ? '成功' : '失败' }}
+                </span>
+                <span class="workflow-node-main">
+                  {{ node.node_id }} · {{ node.tool_id }}.{{ node.action }}
+                </span>
+                <span v-if="node.retries" class="workflow-node-meta">
+                  重试 {{ node.retries }} 次
+                </span>
+                <span v-if="node.error" class="workflow-node-error">{{ node.error }}</span>
+                <span v-if="node.recovery_hint" class="workflow-node-hint">
+                  恢复建议：{{ node.recovery_hint }}
+                </span>
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
-    </div>
+      <template #footer>
+        <button class="btn btn-link" @click="closeDetails">
+          <i class="fa fa-times"></i> 关闭
+        </button>
+        <button v-if="canApprove && selectedRequest" class="btn btn-reject" @click="reject(selectedRequest.id)">
+          <i class="fa fa-times"></i> 拒绝
+        </button>
+        <button v-if="canApprove && selectedRequest" class="btn btn-approve" @click="approve(selectedRequest.id)">
+          <i class="fa fa-check"></i> 通过
+        </button>
+      </template>
+    </Modal>
   </div>
 </template>
 
@@ -288,6 +286,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { approvalApi, type ApprovalRequest, type ApprovalWorkflowExecution } from '@/api/approval'
 import { appAlert, appConfirm, appPrompt } from '@/utils/appDialog'
+import Modal from '@/components/Modal.vue'
 
 const FINAL_STATUSES = ['approved', 'rejected', 'withdrawn', 'cancelled'] as const
 
@@ -924,52 +923,7 @@ onMounted(() => {
   margin-bottom: 12px;
 }
 
-/* 弹窗 */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  background: white;
-  border-radius: 12px;
-  width: 800px;
-  max-height: 80vh;
-  overflow-y: auto;
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-size: 20px;
-}
-
-.btn-close {
-  background: none;
-  border: none;
-  font-size: 20px;
-  cursor: pointer;
-  color: #6b7280;
-}
-
-.modal-body {
-  padding: 20px;
-}
+/* 弹窗（结构由宿主 Modal.vue 提供，此处仅保留详情内容样式） */
 
 .detail-section {
   margin-bottom: 24px;
@@ -1229,14 +1183,6 @@ onMounted(() => {
 .workflow-node-hint {
   font-size: 12px;
   color: #92400e;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 20px;
-  border-top: 1px solid #e5e7eb;
 }
 
 .btn {

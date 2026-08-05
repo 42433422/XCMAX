@@ -104,7 +104,7 @@ class PerformanceOptimizer:
 
         # 4. 请求去重
         try:
-            from app.utils.request_deduplicator import get_request_deduplicator
+            from app.utils.resilience.request_deduplicator import get_request_deduplicator
 
             self._request_deduplicator = get_request_deduplicator()
             status["request_dedup"] = True
@@ -126,7 +126,7 @@ class PerformanceOptimizer:
 
         # 6. 限流器
         try:
-            from app.utils.rate_limiter import get_rate_limiter
+            from app.utils.resilience.rate_limiter import get_rate_limiter
 
             _test_limiter = get_rate_limiter("health_check", max_requests=1000, window_seconds=60)
             status["rate_limiter"] = True
@@ -137,7 +137,7 @@ class PerformanceOptimizer:
 
         # 7. 熔断器预加载
         try:
-            from app.utils.rate_limiter import get_circuit_breaker
+            from app.utils.resilience.rate_limiter import get_circuit_breaker
 
             _test_breaker = get_circuit_breaker(
                 "health_check", failure_threshold=10, recovery_timeout=30

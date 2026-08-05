@@ -179,7 +179,7 @@ def rate_limited(
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             try:
-                from app.utils.rate_limiter import check_rate_limit
+                from app.utils.resilience.rate_limiter import check_rate_limit
 
                 identifier = None
                 if key_func:
