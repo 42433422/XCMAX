@@ -97,7 +97,7 @@ def _repo_layout_mods_candidates() -> list[str]:
     file_here = os.path.abspath(__file__)
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(file_here))))
     out: list[str] = []
-    for rel in ("mods", "mods-admin-runtime", os.path.join("XCAGI", "mods")):
+    for rel in ("mods", os.path.join("XCAGI", "mods")):
         p = os.path.abspath(os.path.join(repo_root, rel))
         if os.path.isdir(p) and p not in out:
             out.append(p)
@@ -167,7 +167,7 @@ def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
     if path is None:
         raise FileNotFoundError(f"Mod {mod_id} backend file missing")
     safe = "".join(c if c.isalnum() else "_" for c in mod_id)
-    # 同一 mod_id 可能来自 mods/ 与 mods-admin-runtime/ 等不同物理路径；须纳入缓存键避免错用旧模块。
+    # 同一 mod_id 可能来自 mods/ 与 XCAGI/mods/ 等不同物理路径；须纳入缓存键避免错用旧模块。
     import hashlib
 
     path_digest = hashlib.sha256(os.path.normpath(os.path.abspath(mod_path)).encode()).hexdigest()[

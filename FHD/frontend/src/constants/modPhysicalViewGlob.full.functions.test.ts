@@ -13,11 +13,11 @@ describe('modPhysicalViewGlob.full loaders', () => {
     }
   })
 
-  it('all keys point to .vue files under mods or mods-admin-runtime', () => {
+  it('all keys point to .vue files under SSOT mods/', () => {
     for (const key of Object.keys(modPhysicalViewGlob)) {
       const norm = key.replace(/\\/g, '/')
       expect(norm).toContain('.vue')
-      expect(norm.includes('/mods/') || norm.includes('/mods-admin-runtime/')).toBe(true)
+      expect(norm).toContain('/mods/')
     }
   })
 

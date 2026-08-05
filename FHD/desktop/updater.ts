@@ -294,6 +294,16 @@ function enrichUpdateInfo(
  * Renderer shows a corner badge; user opens notes modal, then downloads & restarts.
  */
 export function configureUpdater(mainWindow: BrowserWindow): void {
+  // electron-updater 在初始化时校验 app 版本必须为 3 段 semver（x.y.z）。
+  // 产品版本为 4 段（如 1.0.0.1），直接访问 autoUpdater 会抛
+  // "App version is not a valid semver version" 并阻断桌面启动。
+  // 版本非法时跳过更新初始化，保证桌面能正常启动（升级检查降级为不可用）。
+  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(String(app.getVersion() || ''))) {
+    console.warn(
+      `[updater] 跳过更新初始化：app 版本 ${app.getVersion()} 非 3 段 semver。`,
+    )
+    return
+  }
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = false
   ;(autoUpdater as unknown as { allowDowngrade?: boolean }).allowDowngrade = false

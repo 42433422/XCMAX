@@ -308,7 +308,6 @@ exclude = [
     "tests*",
     "frontend*",
     "mods*",
-    "mods-admin-runtime*",
     "desktop*",
     "admin-console*",
     "sunbird-console*",
