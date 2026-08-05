@@ -44,7 +44,6 @@ PHYSICAL_VIEW_MODS: dict[str, list[str]] = {
         "OrdersView.vue",
         "CreateOrderView.vue",
         "ShipmentRecordsView.vue",
-        "WechatContactsView.vue",
         "MaterialsView.vue",
         "TraditionalModeView.vue",
         "BusinessDockingView.vue",
@@ -55,6 +54,9 @@ PHYSICAL_VIEW_MODS: dict[str, list[str]] = {
         "LabelEditorView.vue",
         "PurchaseView.vue",
         "InventoryView.vue",
+    ],
+    "xcagi-wechat-bridge": [
+        "WechatContactsView.vue",
     ],
 }
 
