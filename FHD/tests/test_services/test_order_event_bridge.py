@@ -87,9 +87,16 @@ class TestVerifySignature:
     def test_valid_signature(self):
         secret = "s3cret"
         raw = b'{"type":"payment.paid"}'
-        expected = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+        ts, eid = "1710000000", "payment.paid:MOD123"
+        # 与 MODstore webhook_dispatcher._signature 一致：HMAC(secret, "{ts}.{id}.{body}")
+        expected = hmac.new(
+            secret.encode(), f"{ts}.{eid}.".encode() + raw, hashlib.sha256
+        ).hexdigest()
         with patch("app.services.order_event_bridge.bridge_secret", return_value=secret):
-            assert verify_signature(raw, f"sha256={expected}") is True
+            assert (
+                verify_signature(raw, f"sha256={expected}", timestamp=ts, event_id=eid)
+                is True
+            )
 
     def test_invalid_signature(self):
         secret = "s3cret"
@@ -130,7 +137,13 @@ class TestIngestPaidEvent:
             patch("app.services.order_event_bridge.bridge_secret", return_value=secret),
             patch("app.services.order_event_bridge.emit_paid_event") as emit,
         ):
-            result = ingest_paid_event(_ENVELOPE, hmac_signature="sha256=bad", raw=b"{}")
+            result = ingest_paid_event(
+                _ENVELOPE,
+                hmac_signature="sha256=bad",
+                raw=b"{}",
+                timestamp="1710000000",
+                event_id="payment.paid:MOD123",
+            )
         assert result["accepted"] is False
         assert result["reason"] == "invalid_signature"
         emit.assert_not_called()

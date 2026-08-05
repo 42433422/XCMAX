@@ -27,13 +27,27 @@ async def modstore_payment_webhook(
     x_modstore_webhook_signature: str | None = Header(
         default=None, alias="X-Modstore-Webhook-Signature"
     ),
+    x_modstore_webhook_timestamp: str | None = Header(
+        default=None, alias="X-Modstore-Webhook-Timestamp"
+    ),
+    x_modstore_webhook_id: str | None = Header(
+        default=None, alias="X-Modstore-Webhook-Id"
+    ),
 ):
     raw = await request.body()
+    logger.info(
+        "收到 MODstore webhook 请求 id=%s event=%s",
+        x_modstore_webhook_id,
+        (request.headers.get("X-Modstore-Webhook-Event") or ""),
+    )
     result = ingest_paid_event(
         body,
         hmac_signature=x_modstore_webhook_signature,
         raw=raw,
+        timestamp=x_modstore_webhook_timestamp,
+        event_id=x_modstore_webhook_id,
     )
+    logger.info("MODstore webhook 处理结果 %s", result)
     if not result.get("accepted"):
         return JSONResponse({"success": False, "reason": result.get("reason")}, status_code=400)
     return JSONResponse({"success": True, "data": result})

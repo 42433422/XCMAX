@@ -31,16 +31,41 @@ def bridge_secret() -> str:
     return (os.environ.get("MODSTORE_ORDER_WEBHOOK_SECRET") or "").strip()
 
 
-def verify_signature(raw: bytes, signature: str | None) -> bool:
-    """校验 `X-Modstore-Webhook-Signature: sha256=<hmac>` 头。"""
+def verify_signature(
+    raw: bytes,
+    signature: str | None,
+    *,
+    timestamp: str | None = None,
+    event_id: str | None = None,
+) -> bool:
+    """校验 `X-Modstore-Webhook-Signature: sha256=<hmac>` 头。
+
+    与 MODstore ``webhook_dispatcher._signature`` 保持一致：
+    ``HMAC-SHA256(secret, "{timestamp}.{event_id}.{body}")``。
+    """
     secret = bridge_secret()
     if not secret:
+        logger.info(
+            "modstore webhook 未配置 MODSTORE_ORDER_WEBHOOK_SECRET，跳过验签 (event_id=%s)",
+            event_id,
+        )
         return True
     if not signature:
+        logger.warning(
+            "modstore webhook 缺少 X-Modstore-Webhook-Signature 头 (event_id=%s)", event_id
+        )
         return False
-    expected = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+    msg = f"{timestamp or ''}.{event_id or ''}.".encode("utf-8") + raw
+    expected = hmac.new(secret.encode("utf-8"), msg, hashlib.sha256).hexdigest()
     sig = signature.replace("sha256=", "").strip()
-    return hmac.compare_digest(expected, sig)
+    ok = hmac.compare_digest(expected, sig)
+    if ok:
+        logger.info("modstore webhook 验签通过 (event_id=%s)", event_id)
+    else:
+        logger.warning(
+            "modstore webhook 验签失败 (event_id=%s, timestamp=%s)", event_id, timestamp
+        )
+    return ok
 
 
 def event_dedup_key(envelope: dict[str, Any]) -> str:
@@ -60,16 +85,29 @@ def _seen_dedup() -> set[str]:
 def parse_paid_envelope(envelope: dict[str, Any]) -> dict[str, Any] | None:
     """按 PAYMENT_CONTRACT §4 解析 `payment.paid` envelope，返回 data 或 None。"""
     if not isinstance(envelope, dict):
+        logger.warning("modstore webhook body 非 dict: %r", type(envelope).__name__)
         return None
     if envelope.get("type") != PAID_EVENT_TYPE:
+        logger.warning(
+            "modstore webhook 事件类型不符，期望 %s 实际 %r",
+            PAID_EVENT_TYPE,
+            envelope.get("type"),
+        )
         return None
     data = envelope.get("data")
     if not isinstance(data, dict):
+        logger.warning("modstore webhook envelope.data 非 dict (id=%s)", envelope.get("id"))
         return None
     for field in REQUIRED_PAID_FIELDS:
         if field not in data:
-            logger.warning("payment.paid 缺必填字段: %s", field)
+            logger.warning("payment.paid 缺必填字段 %s (id=%s)", field, envelope.get("id"))
             return None
+    logger.info(
+        "modstore webhook 解析成功 type=%s id=%s out_trade_no=%s",
+        PAID_EVENT_TYPE,
+        envelope.get("id"),
+        data.get("out_trade_no"),
+    )
     return data
 
 
@@ -94,9 +132,16 @@ def emit_paid_event(data: dict[str, Any]) -> bool:
             .with_source("modstore")
             .with_domain("order")
         )
-        return bool(get_neuro_bus().publish(event))
+        ok = bool(get_neuro_bus().publish(event))
+        if ok:
+            logger.info("order.paid 已发布到 NeuroBus (out_trade_no=%s)", data["out_trade_no"])
+        else:
+            logger.warning(
+                "order.paid 发布到 NeuroBus 返回 False (out_trade_no=%s)", data["out_trade_no"]
+            )
+        return ok
     except Exception:
-        logger.exception("emit order.paid failed")
+        logger.exception("emit order.paid failed out_trade_no=%s", data.get("out_trade_no"))
         return False
 
 
@@ -115,6 +160,12 @@ def _record_reconciliation_if_user(data: dict[str, Any]) -> None:
             order_ref=str(data["out_trade_no"]),
             source="order_bridge:payment.paid",
         )
+        logger.info(
+            "payment.paid 已挂回款核销 user_id=%s out_trade_no=%s amount=%s",
+            uid,
+            data.get("out_trade_no"),
+            data.get("total_amount"),
+        )
     except Exception:
         logger.exception("record_reconciliation failed out_trade_no=%s", data["out_trade_no"])
 
@@ -124,18 +175,31 @@ def ingest_paid_event(
     *,
     hmac_signature: str | None = None,
     raw: bytes | None = None,
+    timestamp: str | None = None,
+    event_id: str | None = None,
 ) -> dict[str, Any]:
     """处理一个 `payment.paid` envelope，返回处理结果。"""
     if raw is not None and hmac_signature is not None:
-        if not verify_signature(raw, hmac_signature):
+        if not verify_signature(
+            raw, hmac_signature, timestamp=timestamp, event_id=event_id
+        ):
+            logger.warning(
+                "ingest_paid_event 拒绝：验签失败 (event_id=%s)", event_id
+            )
             return {"accepted": False, "reason": "invalid_signature"}
 
     data = parse_paid_envelope(envelope)
     if data is None:
+        logger.warning("ingest_paid_event 拒绝：envelope 无效 (event_id=%s)", event_id)
         return {"accepted": False, "reason": "invalid_envelope"}
 
     dkey = event_dedup_key(envelope)
     if dkey and dkey in _seen_dedup():
+        logger.info(
+            "ingest_paid_event 幂等去重命中，跳过 (dkey=%s out_trade_no=%s)",
+            dkey,
+            data["out_trade_no"],
+        )
         return {
             "accepted": True,
             "deduped": True,
@@ -146,6 +210,11 @@ def ingest_paid_event(
 
     emitted = emit_paid_event(data)
     _record_reconciliation_if_user(data)
+    logger.info(
+        "ingest_paid_event 处理完成 out_trade_no=%s emitted=%s",
+        data["out_trade_no"],
+        emitted,
+    )
     return {
         "accepted": True,
         "deduped": False,
