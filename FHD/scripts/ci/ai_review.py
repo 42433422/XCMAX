@@ -232,7 +232,7 @@ _RULES: list[tuple[str, str, str, str, str]] = [
     (
         "exec",
         "high",
-        re.compile(r"\bexec\s*\("),
+        re.compile(r"(?<![\w.])exec\s*\("),
         "禁止使用 exec()，重构为显式函数调用。",
         "exec() 代码注入风险",
     ),
