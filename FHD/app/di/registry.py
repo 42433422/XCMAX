@@ -181,7 +181,7 @@ class ServiceContainer:
     @property
     def materials_service(self) -> MaterialsService:
         def _factory() -> MaterialsService:
-            from app.infrastructure.persistence.material_repository_impl import (
+            from app.infrastructure.repositories.material_repository_impl import (
                 SQLAlchemyMaterialRepository,
             )
             from app.services.materials_service import MaterialsService

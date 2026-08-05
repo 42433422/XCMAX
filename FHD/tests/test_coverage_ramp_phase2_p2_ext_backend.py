@@ -17,12 +17,12 @@ from app.domain.context.session_context import (
     _sanitize_untrusted_context_line,
     format_runtime_context_for_llm,
 )
-from app.infrastructure.repositories.product_repository_impl import SQLAlchemyProductRepository
 from app.infrastructure.persistence.wechat_contact_store_impl import (
     _read_rows_from_contact_db,
     resolve_decrypt_contact_db_path,
 )
 from app.infrastructure.rag.semantic_chunker import SemanticChunker
+from app.infrastructure.repositories.product_repository_impl import SQLAlchemyProductRepository
 from app.services.conversation.context import ContextMixin, ConversationContext
 from app.services.conversation.intent import IntentMixin
 from app.services.kitten_report.chart_data_service import ChartDataService
