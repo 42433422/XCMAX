@@ -3220,6 +3220,5 @@ class TestIndustrySeedInstallFallback:
         assert result["status"] == "catalog_failed"
 
 
-
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(pytest.main([__file__, "-q"]))
