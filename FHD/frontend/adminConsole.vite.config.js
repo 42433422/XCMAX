@@ -26,7 +26,7 @@ const hostConstants = path.join(hostSrc, 'constants')
 const API_BASE = resolveApiBase(process.env.VITE_API_BASE)
 const devPort = Number(process.env.VITE_DEV_PORT || 5011)
 
-const ADMIN_MODS_ROOT = path.resolve(hostRoot, '../mods-admin-runtime')
+const ADMIN_MODS_ROOT = path.resolve(hostRoot, '../mods')
 
 function modViewsDir(modId) {
   const rel = path.join(modId, 'frontend', 'views')

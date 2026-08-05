@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Mod SSOT：开发只改 FHD/mods，FHD/XCAGI/mods 为导出副本（打包/Docker 路径）。
+"""Mod SSOT 统一派发入口（唯一源 = FHD/mods）。
+
+SSOT: FHD/mods（唯一编辑源）
+下游唯一副本: FHD/XCAGI/mods（后端运行时 / 打包路径），由本脚本单向派发。
+
+历史双副本 mods-admin-runtime 已移除（前端统一只读 mods/，见
+frontend/src/constants/mod{Route,PhysicalView}Glob.*、router/registerModRoutes.ts、
+router/modViews.ts）；冲突渠道 sync-admin-mod-runtime.sh /
+sync-enterprise-mod-seeds.sh 已删除。
 
 用法:
   python scripts/dev/mods_ssot.py sync              # 全量同步 SSOT → XCAGI/mods

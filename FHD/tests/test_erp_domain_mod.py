@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-MOD_DIR = REPO / "mods-admin-runtime" / "xcagi-erp-domain-bridge"
+MOD_DIR = REPO / "mods" / "xcagi-erp-domain-bridge"
 
 
 def test_erp_domain_mod_manifest():
@@ -108,7 +108,7 @@ def test_domain_handlers_shipment_records(monkeypatch):
             return [{"id": 9, "unit_name": unit or "all"}]
 
     monkeypatch.setattr(
-        "app.bootstrap.get_shipment_app_service",
+        "app.bootstrap.get_shipment_application_service_core",
         lambda: FakeShipment(),
     )
     out = mod.run_domain_handler("shipment", "records_list", unit="测试单位")
