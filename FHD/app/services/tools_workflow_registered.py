@@ -1175,31 +1175,6 @@ def _registered_router_template_preview(
         }
 
 
-def _registered_router_wechat(
-    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
-) -> dict:
-    from app.application import get_wechat_contact_app_service
-
-    svc = get_wechat_contact_app_service()
-    if action == "view":
-        return {"success": True, "redirect": "/console?view=wechat-contacts"}
-    if action in ("list", "query"):
-        return {
-            "success": True,
-            "data": svc.get_contacts(
-                contact_type=str(params.get("type") or "all"),
-                keyword=str(params.get("keyword") or "").strip() or None,
-                limit=int(params.get("limit") or 100),
-            ),
-        }
-    if action in ("refresh_contact_cache", "refresh_messages_cache"):
-        from app.services.wechat_contact_cache_import import (
-            ensure_decrypted_wechat_dbs as _ensure_decrypted_db,
-        )
-
-        return _ensure_decrypted_db()
-
-
 def _registered_router_print(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
@@ -2420,7 +2395,6 @@ _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMa
         "label_template_generator": _registered_router_label_template_generator,
         "document_template": _registered_router_document_template,
         "template_preview": _registered_router_template_preview,
-        "wechat": _registered_router_wechat,
         "print": _registered_router_print,
         "printer_list": _registered_router_printer_list,
         "settings": _registered_router_settings,

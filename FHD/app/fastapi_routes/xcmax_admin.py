@@ -1465,58 +1465,6 @@ async def admin_force_push_user_entitlements(
     }
 
 
-@router.get("/admin/wechat/groups", response_model=None)
-async def admin_list_wechat_groups(
-    request: Request,
-    keyword: str = Query(default=""),
-    limit: int = Query(default=80, ge=1, le=200),
-):
-    gate = _require_market_admin_session(request)
-    if gate is not None:
-        return gate
-    try:
-        from app.application.wechat_group_customer_app import list_group_contacts
-
-        rows = list_group_contacts(keyword=keyword or None, limit=limit)
-        return {"success": True, "data": rows, "total": len(rows)}
-    except RECOVERABLE_ERRORS as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
-
-
-@router.get("/admin/market/users/{user_id}/wechat-customers", response_model=None)
-async def admin_list_user_wechat_customers(request: Request, user_id: int):
-    gate = _require_market_admin_session(request)
-    if gate is not None:
-        return gate
-    try:
-        from app.application.wechat_group_customer_app import get_bindings_for_user
-
-        return {"success": True, "data": get_bindings_for_user(user_id)}
-    except RECOVERABLE_ERRORS as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
-
-
-@router.put("/admin/market/users/{user_id}/wechat-customers", response_model=None)
-async def admin_save_user_wechat_customers(
-    request: Request,
-    user_id: int,
-    body: dict[str, Any] = Body(default_factory=dict),
-):
-    gate = _require_market_admin_session(request)
-    if gate is not None:
-        return gate
-    try:
-        from app.application.wechat_group_customer_app import save_bindings_for_user
-
-        ids = body.get("contact_ids") or body.get("wechat_contact_ids") or []
-        if not isinstance(ids, list):
-            ids = []
-        result = save_bindings_for_user(user_id, ids)
-        return result
-    except RECOVERABLE_ERRORS as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
-
-
 @router.post("/admin/impersonate", response_model=None)
 async def admin_start_impersonate(
     request: Request, body: dict[str, Any] = Body(default_factory=dict)

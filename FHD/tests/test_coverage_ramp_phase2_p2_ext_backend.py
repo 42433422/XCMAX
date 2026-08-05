@@ -1,10 +1,9 @@
 """COVERAGE_RAMP Phase 2 (p2-p2-ext): conversation context/intent, chart_data,
-wechat_contact_store, deepseek/rasa, product_repository, semantic_chunker semantic path."""
+deepseek/rasa, product_repository, semantic_chunker semantic path."""
 
 from __future__ import annotations
 
 import json
-import sqlite3
 from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -16,10 +15,6 @@ from app.ai_engines.rasa.nlu_service import RasaNLUService
 from app.domain.context.session_context import (
     _sanitize_untrusted_context_line,
     format_runtime_context_for_llm,
-)
-from app.infrastructure.persistence.wechat_contact_store_impl import (
-    _read_rows_from_contact_db,
-    resolve_decrypt_contact_db_path,
 )
 from app.infrastructure.rag.semantic_chunker import SemanticChunker
 from app.infrastructure.repositories.product_repository_impl import SQLAlchemyProductRepository
@@ -134,34 +129,6 @@ def test_analysis_save_service_roundtrip(tmp_path) -> None:
     got = svc.get_analysis(saved["id"])
     assert got is not None
     assert got["type"] == "kitten"
-
-
-# ---------------------------------------------------------------------------
-# wechat_contact_store sqlite helper
-# ---------------------------------------------------------------------------
-
-
-def test_read_rows_from_contact_db(tmp_path) -> None:
-    db_path = tmp_path / "contact.db"
-    conn = sqlite3.connect(db_path)
-    conn.execute(
-        "CREATE TABLE contact (username TEXT, nick_name TEXT, remark TEXT, is_in_chat_room INT, delete_flag INT)"
-    )
-    conn.execute("INSERT INTO contact VALUES ('u1', '张三', '备注', 0, 0)")
-    conn.commit()
-    conn.close()
-    rows = _read_rows_from_contact_db(str(db_path), limit=10)
-    assert len(rows) == 1
-    assert rows[0][1] == "张三"
-
-
-def test_resolve_decrypt_contact_db_path_env(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    db_file = tmp_path / "c.db"
-    db_file.write_text("")
-    monkeypatch.setenv("WECHAT_CONTACT_DB_PATH", str(db_file))
-    with patch("app.infrastructure.plugins.wechat_plugin.get_wechat_plugin") as mock_plugin:
-        mock_plugin.return_value.is_available.return_value = False
-        assert resolve_decrypt_contact_db_path() == str(db_file)
 
 
 # ---------------------------------------------------------------------------

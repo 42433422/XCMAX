@@ -255,7 +255,6 @@ def execute_tool(tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
             "print_label": "generate",
             "excel_decompose": "decompose",
             "template_extract": "extract",
-            "wechat_send": "preview",
             "excel_schema": "analyze",
             "excel_analysis": "analyze",
             "import_excel": "import",
@@ -718,37 +717,6 @@ def _execute_template_extract_tool(params: dict[str, Any]) -> dict[str, Any]:
     return _execute_excel_decompose_tool(params)
 
 
-def _execute_wechat_preview_tool(params: dict[str, Any]) -> dict[str, Any]:
-    try:
-        from app.bootstrap import get_wechat_contact_app_service
-
-        keyword = str(params.get("keyword") or params.get("unit_name") or "").strip() or None
-        limit = int(params.get("limit", 30))
-        contacts = get_wechat_contact_app_service().get_contacts(keyword=keyword, limit=limit)
-        return {
-            "success": True,
-            "data": contacts,
-            "message": "请在客户端选择联系人完成发送" if contacts else "未找到匹配的微信联系人",
-        }
-    except ImportError as e:
-        logger.error("微信联系人服务导入失败: %s", e)
-        return {
-            "success": False,
-            "message": "微信联系人服务不可用",
-            "error_code": "service_unavailable",
-        }
-    except (ValueError, TypeError) as e:
-        logger.warning("微信联系人查询参数错误: %s", e)
-        return {
-            "success": False,
-            "message": "查询参数错误，请检查关键词",
-            "error_code": "invalid_parameters",
-        }
-    except RuntimeError as e:
-        logger.error("微信联系人查询运行时错误: %s", e)
-        return {"success": False, "message": "查询失败，请稍后重试", "error_code": "query_failed"}
-
-
 def _execute_excel_schema_tool(params: dict[str, Any]) -> dict[str, Any]:
     """分析 Excel 文件的表结构。"""
     file_path = str(params.get("file_path") or "").strip()
@@ -1202,7 +1170,6 @@ _WORKFLOW_TOOL_HANDLERS: dict[tuple[str, str], Callable[[dict[str, Any]], dict[s
     ("print_label", "generate"): _execute_print_label_tool,
     ("excel_decompose", "decompose"): _execute_excel_decompose_tool,
     ("template_extract", "extract"): _execute_template_extract_tool,
-    ("wechat_send", "preview"): _execute_wechat_preview_tool,
     ("excel_schema", "analyze"): _execute_excel_schema_tool,
     ("excel_analysis", "analyze"): _execute_excel_analysis_tool,
     ("import_excel", "import"): _execute_import_excel_tool,

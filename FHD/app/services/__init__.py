@@ -60,16 +60,10 @@ from app.services.intent_service import get_tool_key_with_negation_check, recogn
 # These are only imported when their getter functions are called
 from app.services.task_agent import TaskAgent, get_task_agent
 from app.services.user_service import UserService, get_user_service
-from app.services.wechat_task_service import WechatTaskService
 from app.services.database_service import get_database_service
 from app.utils.system_service import get_system_service
 from app.utils.task_context import TaskContextService, get_task_context_service
 from app.utils.user_memory import UserMemoryService, get_user_memory_service
-
-
-def get_wechat_task_service() -> WechatTaskService:
-    """获取微信任务服务单例"""
-    return WechatTaskService()
 
 
 from app.services.ai_product_parser import AIProductParser
@@ -174,8 +168,6 @@ __all__ = [
     "get_user_service",
     "AuthService",
     "get_auth_service",
-    "WechatTaskService",
-    "get_wechat_task_service",
     "ConversationService",
     "get_conversation_service",
     "SessionService",
