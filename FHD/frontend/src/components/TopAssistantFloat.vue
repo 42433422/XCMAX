@@ -267,12 +267,6 @@ import { WORKFLOW_EMPLOYEE_IDS } from '@/constants/workflowEmployeeMods';
 import { useWorkflowModsRuntimeContext } from '@/composables/useWorkflowModsRuntimeContext';
 import { resolveLabel } from '@/utils/workflowEmployeeRegistry';
 import { useIndustryUiText } from '@/composables/useIndustryUiText';
-import {
-  inferWechatCustomerIntent,
-  isLabelPrintRelatedWechatIntent,
-  isReceiptConfirmRelatedWechatIntent,
-} from '@/utils/wechatIntent';
-import { shouldTryWechatShipmentPreview } from '@/utils/wechatShipmentDetect';
 import { resolveErpApiPath } from '@/utils/erpDomainPaths';
 import { resolveWorkflowVisualizationLocation } from '@/utils/workflowNav';
 import { useWorkflowPanoramaNavVisible } from '@/composables/useWorkflowPanoramaNavVisible';
@@ -353,12 +347,8 @@ const popupNotice = ref(null);
 const hasUnreadPush = ref(false);
 
 const MAX_PUSH_ITEMS = 12;
-const AUTO_REFRESH_STARRED_WECHAT_KEY = 'xcagi_auto_refresh_starred_wechat';
-const FEED_POLL_INTERVAL_MS = 60 * 1000;
 const MAX_OPERATION_LOG = 30;
 const operationHistory = ref([]);
-
-const PRO_INTENT_EXPERIENCE_KEY = 'xcagi_pro_intent_experience';
 
 const workflowEmployeeDefs = computed(() => {
   const i18nResolver = (key) => {
@@ -383,160 +373,7 @@ const workflowPanoramaLinkTitle = computed(() =>
 const coreWorkflowEnabled = (id) =>
   !!workflowEmployeesEnabled.value?.[id];
 
-const isWechatMsgEmployeeEnabled = () => coreWorkflowEnabled('wechat_msg');
-const isLabelPrintEmployeeEnabled = () => coreWorkflowEnabled('label_print');
-const isReceiptConfirmEmployeeEnabled = () => coreWorkflowEnabled('receipt_confirm');
-
-/** 星标新消息是否需要跑意图链路（微信任务 / 发货预览 / 标签与收货确认信号等） */
-const shouldRunStarredWechatIntentPipeline = () =>
-  WORKFLOW_EMPLOYEE_IDS.filter((id) => id !== 'shipment_mgmt').some((id) => coreWorkflowEnabled(id));
-
-/**
- * 微信消息处理 AI 员工：星标 feed 发现新消息后，按「专业模式 AI 意图体验」走 /api/ai/intent/test，否则本地规则预处理；结果推到对话页任务列表（事件）。
- */
-const runWechatMessageAiPipeline = async (item, latestMsg) => {
-  const text = String(latestMsg?.text || '').trim();
-  if (!text) return;
-
-  const useProIntentApi = localStorage.getItem(PRO_INTENT_EXPERIENCE_KEY) === '1';
-  let intentLabel = '';
-  let intentDetail = '';
-  let primaryIntent = '';
-  let toolKey = '';
-  let sourceApi = 'local';
-
-  if (useProIntentApi) {
-    try {
-      const resp = await fetch('/api/ai/intent/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text }),
-      });
-      const data = await resp.json().catch(() => ({}));
-      if (data?.success && data?.data) {
-        const d = data.data;
-        primaryIntent = String(d.primary_intent || '').trim();
-        toolKey = String(d.tool_key || '').trim();
-        intentLabel = primaryIntent || '意图识别';
-        const hints = Array.isArray(d.intent_hints) ? d.intent_hints.filter(Boolean).join('；') : '';
-        intentDetail = hints || `confidence=${d.confidence ?? '—'}`;
-        sourceApi = 'intent_test';
-      } else {
-        const local = inferWechatCustomerIntent(text);
-        intentLabel = local.label;
-        intentDetail = `${local.detail}（意图 API 未返回有效结果，已回退本地规则）`;
-        sourceApi = 'local_fallback';
-      }
-    } catch {
-      const local = inferWechatCustomerIntent(text);
-      intentLabel = local.label;
-      intentDetail = `${local.detail}（意图 API 请求失败，已回退本地规则）`;
-      sourceApi = 'local_fallback';
-    }
-  } else {
-    const local = inferWechatCustomerIntent(text);
-    intentLabel = local.label;
-    intentDetail = local.detail;
-    sourceApi = 'local';
-  }
-
-  const we = workflowEmployeesEnabled.value;
-  if (
-    (we?.wechat_msg || we?.shipment_mgmt) &&
-    shouldTryWechatShipmentPreview(text, {
-      intentLabel,
-      primaryIntent,
-      toolKey,
-    })
-  ) {
-    try {
-      const resp = await fetch('/api/tools/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tool_id: 'normal_slot_dispatch',
-          action: 'shipment_preview',
-          params: { order_text: text },
-        }),
-      });
-      const data = await resp.json().catch(() => ({}));
-      if (data?.success && data?.task?.type === 'shipment_generate') {
-        window.dispatchEvent(
-          new CustomEvent('xcagi:wechat-shipment-preview-task', {
-            detail: {
-              task: data.task,
-              contactName: item?.contact_name || '星标联系人',
-              contactId: item?.contact_id,
-              messageText: text.slice(0, 800),
-            },
-          })
-        );
-      }
-    } catch {
-      /* 预览失败不影响意图条目写入 */
-    }
-  }
-
-  if (
-    we?.label_print &&
-    isLabelPrintRelatedWechatIntent(text, { intentLabel, primaryIntent, toolKey })
-  ) {
-    window.dispatchEvent(
-      new CustomEvent('xcagi:workflow-label-print-signal', {
-        detail: {
-          at: Date.now(),
-          line: `${item?.contact_name || '星标联系人'}：${text.replace(/\s+/g, ' ').slice(0, 120)}`,
-          contactName: item?.contact_name,
-          contactId: item?.contact_id,
-        },
-      })
-    );
-  }
-
-  if (
-    we?.receipt_confirm &&
-    isReceiptConfirmRelatedWechatIntent(text, { intentLabel, primaryIntent, toolKey })
-  ) {
-    window.dispatchEvent(
-      new CustomEvent('xcagi:workflow-receipt-feedback-signal', {
-        detail: {
-          at: Date.now(),
-          line: `${item?.contact_name || '星标联系人'}：${text.replace(/\s+/g, ' ').slice(0, 120)}`,
-          contactName: item?.contact_name,
-          contactId: item?.contact_id,
-          messageText: text.slice(0, 500),
-          intentLabel,
-          intentDetail,
-          primaryIntent,
-          toolKey,
-          sourceApi,
-        },
-      })
-    );
-  }
-
-  if (isWechatMsgEmployeeEnabled()) {
-    window.dispatchEvent(
-      new CustomEvent('xcagi:wechat-ai-task-enqueue', {
-        detail: {
-          contactId: item?.contact_id,
-          contactName: item?.contact_name || '星标联系人',
-          messageText: text.slice(0, 500),
-          intentLabel,
-          intentDetail,
-          primaryIntent,
-          toolKey,
-          sourceApi,
-        },
-      })
-    );
-  }
-};
 let noticeTimer = null;
-let feedPollTimer = null;
-let feedPolling = false;
-let feedInitialized = false;
-const lastFeedMessageByContact = new Map();
 
 /** 产品副窗查询并发序号；仅最后一次请求可结束 loading */
 let productSearchSeq = 0;
@@ -561,10 +398,6 @@ const recordOperation = (type, detail = {}) => {
 
 const toggleWorkflowEmployee = (id) => {
   workflowAiEmployeesStore.toggle(id);
-  const next = workflowAiEmployeesStore.enabled;
-  if (id === 'wechat_msg' && next.wechat_msg && isAutoRefreshEnabled()) {
-    void pollStarredFeed();
-  }
 };
 
 const tryFillChatInput = (text) => {
@@ -851,17 +684,6 @@ const openFromNotice = () => {
   }
 };
 
-const isWechatPush = (detail) => {
-  const feature = String(detail?.feature || '').trim().toLowerCase();
-  const source = String(detail?.source || '').trim().toLowerCase();
-  return (
-    feature === 'wechat' ||
-    feature === 'wechat_contacts' ||
-    feature === 'wechat-message' ||
-    source.includes('wechat')
-  );
-};
-
 const searchProducts = async () => {
   const kw = String(productKeyword.value || '').trim();
   if (!kw) {
@@ -964,7 +786,6 @@ const saveProductRow = async (row) => {
 
 const onAssistantPush = (evt) => {
   const detail = evt?.detail || {};
-  if (!isWechatPush(detail)) return;
   addPush(detail);
 };
 
@@ -1102,103 +923,6 @@ const navigateToSubjectPage = async (subject) => {
   }
 };
 
-const isAutoRefreshEnabled = () => {
-  return localStorage.getItem(AUTO_REFRESH_STARRED_WECHAT_KEY) === '1';
-};
-
-const normalizeMsgSignature = (msg) => {
-  const role = String(msg?.role || '');
-  const text = String(msg?.text || '').trim();
-  return `${role}::${text}`;
-};
-
-const pollStarredFeed = async () => {
-  if (feedPolling || !isAutoRefreshEnabled()) return;
-  feedPolling = true;
-  try {
-    const resp = await fetch(resolveErpApiPath('/api/wechat_contacts/work_mode_feed?per_contact=1'));
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok || !data?.success || !Array.isArray(data.feed)) {
-      return;
-    }
-
-    const alive = new Set();
-    for (const item of data.feed) {
-      const contactId = item?.contact_id;
-      if (!contactId) continue;
-      alive.add(String(contactId));
-      const latestMsg = Array.isArray(item.messages) && item.messages.length ? item.messages[0] : null;
-      if (!latestMsg) continue;
-
-      const signature = normalizeMsgSignature(latestMsg);
-      const oldSig = lastFeedMessageByContact.get(String(contactId));
-      if (feedInitialized && oldSig && oldSig !== signature) {
-        window.dispatchEvent(new CustomEvent('xcagi:assistant-push', { detail: {
-          title: `${item.contact_name || '星标联系人'} 有新消息`,
-          description: String(latestMsg.text || '').slice(0, 80) || '收到一条新消息',
-          feature: 'wechat',
-          source: 'wechat_contacts',
-        }}));
-        if (shouldRunStarredWechatIntentPipeline()) {
-          void runWechatMessageAiPipeline(item, latestMsg);
-        }
-      }
-      lastFeedMessageByContact.set(String(contactId), signature);
-    }
-
-    for (const key of Array.from(lastFeedMessageByContact.keys())) {
-      if (!alive.has(key)) {
-        lastFeedMessageByContact.delete(key);
-      }
-    }
-    feedInitialized = true;
-
-    window.dispatchEvent(
-      new CustomEvent('xcagi:wechat-star-feed-polled', {
-        detail: {
-          at: Date.now(),
-          intervalMs: FEED_POLL_INTERVAL_MS,
-          contactCount: Array.isArray(data.feed) ? data.feed.length : 0,
-          ok: true,
-        },
-      })
-    );
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err || '');
-    if (err instanceof TypeError && msg.includes('Failed to fetch')) {
-      console.debug('[TopAssistantFloat] pollStarredFeed network unavailable:', msg);
-      return;
-    }
-    console.warn('[TopAssistantFloat] pollStarredFeed failed:', err);
-  } finally {
-    feedPolling = false;
-  }
-};
-
-const stopFeedPolling = () => {
-  if (feedPollTimer) {
-    clearInterval(feedPollTimer);
-    feedPollTimer = null;
-  }
-};
-
-const startFeedPolling = () => {
-  stopFeedPolling();
-  if (!isAutoRefreshEnabled()) return;
-  pollStarredFeed();
-  feedPollTimer = setInterval(() => {
-    pollStarredFeed();
-  }, FEED_POLL_INTERVAL_MS);
-};
-
-const onAutoRefreshWechatChanged = () => {
-  if (!isAutoRefreshEnabled()) {
-    stopFeedPolling();
-    return;
-  }
-  startFeedPolling();
-};
-
 const onRestoreFloatState = (evt) => {
   const detail = evt?.detail || {};
   const state = detail.assistantState || null;
@@ -1250,11 +974,9 @@ onMounted(() => {
   window.addEventListener('xcagi:assistant-push', onAssistantPush);
   window.addEventListener('xcagi:open-assistant-float', onOpenAssistantFloat);
   window.addEventListener('xcagi:close-assistant-float', onCloseAssistantFloat);
-  window.addEventListener('xcagi:auto-refresh-wechat-changed', onAutoRefreshWechatChanged);
   window.addEventListener('xcagi:excel-sheet-context', onExcelSheetContext);
   window.addEventListener('xcagi:tutorial:restore-float', onRestoreFloatState);
   window.addEventListener('xcagi:tutorial:set-assistant-tab', onTutorialSetAssistantTab);
-  startFeedPolling();
   syncTopScrollMetrics();
   if (modsStore.clientModsUiOff) {
     workflowAiEmployeesStore.stripModWorkflowEmployeeKeys();
@@ -1277,11 +999,9 @@ onBeforeUnmount(() => {
   window.removeEventListener('xcagi:assistant-push', onAssistantPush);
   window.removeEventListener('xcagi:open-assistant-float', onOpenAssistantFloat);
   window.removeEventListener('xcagi:close-assistant-float', onCloseAssistantFloat);
-  window.removeEventListener('xcagi:auto-refresh-wechat-changed', onAutoRefreshWechatChanged);
   window.removeEventListener('xcagi:excel-sheet-context', onExcelSheetContext);
   window.removeEventListener('xcagi:tutorial:restore-float', onRestoreFloatState);
   window.removeEventListener('xcagi:tutorial:set-assistant-tab', onTutorialSetAssistantTab);
-  stopFeedPolling();
   if (noticeTimer) {
     clearTimeout(noticeTimer);
     noticeTimer = null;

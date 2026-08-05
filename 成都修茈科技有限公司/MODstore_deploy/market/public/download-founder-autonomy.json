@@ -1,0 +1,141 @@
+{
+  "schema": "xcagi.public_founder_autonomy/v1",
+  "generated_at": "2026-08-05T11:54:16.907255+00:00",
+  "readonly": true,
+  "overall_progress": 6,
+  "overall_remaining": 94,
+  "target_state": "founder_strategic_only",
+  "dimensions": [
+    {
+      "id": "founder",
+      "label": "创始人状态",
+      "target": "退出日常运营，只处理战略与少量例外",
+      "progress": 40,
+      "remaining": 60,
+      "status": "building",
+      "status_label": "闭环建设中",
+      "passed_gate_count": 3,
+      "total_gate_count": 8,
+      "next_gap": "AI 员工真实工作"
+    },
+    {
+      "id": "system",
+      "label": "系统状态",
+      "target": "7x24 自运转，无日常人工介入",
+      "progress": 0,
+      "remaining": 100,
+      "status": "early",
+      "status_label": "能力早期",
+      "passed_gate_count": 0,
+      "total_gate_count": 8,
+      "next_gap": "定时调度"
+    },
+    {
+      "id": "customer",
+      "label": "客户状态",
+      "target": "客户为可验证产出付费",
+      "progress": 0,
+      "remaining": 100,
+      "status": "early",
+      "status_label": "能力早期",
+      "passed_gate_count": 0,
+      "total_gate_count": 6,
+      "next_gap": "价值账本"
+    },
+    {
+      "id": "code",
+      "label": "代码状态",
+      "target": "自己写、审、验、合、部署并回读验证",
+      "progress": 0,
+      "remaining": 100,
+      "status": "early",
+      "status_label": "能力早期",
+      "passed_gate_count": 0,
+      "total_gate_count": 6,
+      "next_gap": "自己写"
+    },
+    {
+      "id": "fault",
+      "label": "故障状态",
+      "target": "自己感知、修复、验证",
+      "progress": 0,
+      "remaining": 100,
+      "status": "early",
+      "status_label": "能力早期",
+      "passed_gate_count": 0,
+      "total_gate_count": 6,
+      "next_gap": "故障感知"
+    },
+    {
+      "id": "evolution",
+      "label": "进化状态",
+      "target": "发现缺口、实现能力、部署更新到 MODstore",
+      "progress": 0,
+      "remaining": 100,
+      "status": "early",
+      "status_label": "能力早期",
+      "passed_gate_count": 0,
+      "total_gate_count": 7,
+      "next_gap": "发现缺口"
+    },
+    {
+      "id": "alignment",
+      "label": "对齐状态",
+      "target": "知道什么不能做，veto 低频但始终可用",
+      "progress": 0,
+      "remaining": 100,
+      "status": "early",
+      "status_label": "能力早期",
+      "passed_gate_count": 0,
+      "total_gate_count": 7,
+      "next_gap": "可审计"
+    }
+  ],
+  "human_intervention_rare": false,
+  "proof": {
+    "runtime_fresh": false,
+    "runtime_provenance_ok": false,
+    "active_gates_ok": false,
+    "governance_ok": false,
+    "deploy_verified": false,
+    "paid_value_verified": false,
+    "paid_delivery_verified": false,
+    "customer_acceptance_verified": false,
+    "employee_workforce_ready": false,
+    "employee_production_workforce_ready": false,
+    "employee_production_proven_count": 0,
+    "employee_production_proof_ratio": 0.0,
+    "alignment_posthoc": {
+      "status": "unknown",
+      "coverage_rate": 0.0,
+      "allow_count": 0,
+      "conclusive_count": 0,
+      "eligible_allow_count": 0,
+      "eligible_conclusive_count": 0,
+      "pending_count": 0,
+      "pending_contracts": [],
+      "maturity_minutes": 0,
+      "uncovered_count": 0,
+      "uncovered_contracts": []
+    }
+  },
+  "truth_domains": {
+    "source_capability": {
+      "label": "当前源码能力",
+      "available": true
+    },
+    "local_runtime": {
+      "label": "本机实际运行",
+      "available": false
+    },
+    "deployment_runtime": {
+      "label": "部署派发/验证",
+      "available": false
+    },
+    "production_value": {
+      "label": "真实客户付费与价值",
+      "available": false
+    }
+  },
+  "note": "官网仅展示脱敏后的证据评分；完整门禁、审批与 veto 细节只在管理端可见。"
+}

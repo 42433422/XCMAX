@@ -26,7 +26,7 @@ def test_lan_blueprints_delegate_routes():
 
 
 def test_list_lan_facade_registry_mod(monkeypatch):
-    from app.mod_sdk import lan_compat as lc
+    from app.legacy.lan import lan_compat as lc
 
     monkeypatch.setattr(lc, "is_lan_via_mod_enabled", lambda: True)
     data = lc.list_lan_facade_registry()

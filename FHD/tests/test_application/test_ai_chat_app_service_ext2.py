@@ -629,7 +629,8 @@ class TestTryHandleDynamicWorkflowExtended:
             result = service._try_handle_dynamic_workflow("u1", "打印标签", "pro", ctx, {})
         assert result is not None
 
-    def test_pro_normal_profile_no_match_returns_none(self):
+    def test_pro_normal_profile_no_match_runs_planning(self):
+        # 全局启用多步编排后：pro 源 + normal profile + 槽位未命中，仍进入 LLM 工作流规划
         service = _make_service()
         ctx = {}
         with (
@@ -643,7 +644,8 @@ class TestTryHandleDynamicWorkflowExtended:
             ),
         ):
             result = service._try_handle_dynamic_workflow("u1", "随便聊聊", "pro", ctx, {})
-        assert result is None
+        assert result is not None
+        assert result["success"] is True
 
     def test_pro_pending_workflow_confirm(self):
         service = _make_service()
@@ -961,7 +963,7 @@ class TestProcessChatExtended:
         ):
             service = _make_service()
             service.ai_service = mock_ai
-            result = service.process_chat("u1", "查产品", source=None)
+            result = service.process_chat("u1", "你好呀", source=None)
         assert result["success"] is False
 
     def test_pro_source_with_message(self):

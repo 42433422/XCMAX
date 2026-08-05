@@ -2,19 +2,13 @@
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 # 变异测试 — PR gate（作用域 app/di + app/contexts，阈值 kill rate ≥ 80%）
 # 2026-07-21：收紧 source_paths 并补测后加回 pull_request gate。
+# 2026-08-05：mutation-smoke 是 required status check。此前 pull_request 用 paths 过滤，
+#   未命中路径的 PR 不会创建该 check → 永久 BLOCKED。改为 pull_request 无条件触发，
+#   用步骤级路径检测决定是否真正跑 mutmut；未命中时快速成功以满足 required check。
 name: mutation-smoke
 
 on:
   pull_request:
-    paths:
-      - "FHD/app/di/**"
-      - "FHD/app/contexts/**"
-      - "FHD/tests/test_di/**"
-      - "FHD/tests/test_contexts/**"
-      - "FHD/tests/test_scripts/test_mutation_kill_report.py"
-      - "FHD/scripts/dev/mutation_kill_report.py"
-      - "FHD/pyproject.toml"
-      - "FHD/.github/workflows/fhd-mutation-smoke.yml"
   schedule:
     - cron: "0 3 * * 1"  # 每周一 03:00 UTC
   workflow_dispatch:
@@ -34,28 +28,54 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect mutation-scope path changes (PR only)
+        id: paths
+        if: github.event_name == 'pull_request'
+        working-directory: FHD
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          changed="$(git diff --name-only "$base" "$head" 2>/dev/null || true)"
+          if printf '%s\n' "$changed" | grep -qE '^(app/di/|app/contexts/|tests/test_di/|tests/test_contexts/|tests/test_scripts/test_mutation_kill_report\.py|scripts/dev/mutation_kill_report\.py|pyproject\.toml|\.github/workflows/mutation-smoke\.yml)'; then
+            echo "run_mutation=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_mutation=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip notice (no mutation-scope changes)
+        if: github.event_name == 'pull_request' && steps.paths.outputs.run_mutation != 'true'
+        run: echo "No mutation-scope path changes; required check satisfied without running mutmut."
 
       - name: Setup Python
+        if: github.event_name != 'pull_request' || steps.paths.outputs.run_mutation == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install uv
+        if: github.event_name != 'pull_request' || steps.paths.outputs.run_mutation == 'true'
         run: pip install uv
 
       - name: Sync dependencies
+        if: github.event_name != 'pull_request' || steps.paths.outputs.run_mutation == 'true'
         working-directory: FHD
         run: uv sync --frozen --extra server-api
 
       - name: Install mutmut
+        if: github.event_name != 'pull_request' || steps.paths.outputs.run_mutation == 'true'
         working-directory: FHD
         run: uv pip install mutmut
 
       - name: Run mutmut
+        if: github.event_name != 'pull_request' || steps.paths.outputs.run_mutation == 'true'
         working-directory: FHD
         run: uv run mutmut run 2>&1 | tee mutmut-run.log
 
       - name: Generate kill report
+        if: github.event_name != 'pull_request' || steps.paths.outputs.run_mutation == 'true'
         working-directory: FHD
         # mutmut 3.x ``results`` 默认跳过 killed；优先解析 run 日志里的 progress 摘要
         run: python scripts/dev/mutation_kill_report.py --threshold 80 --from-file mutmut-run.log

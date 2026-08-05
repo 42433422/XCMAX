@@ -253,8 +253,8 @@ class ShipmentApplicationService:
         try:
             from openpyxl import Workbook
 
+            from app.utils.excel.template_export_utils import fill_workbook_from_template
             from app.utils.path_utils import get_data_dir
-            from app.utils.template_export_utils import fill_workbook_from_template
 
             records = self.get_shipment_records(unit_name)
             normalized_status = str(status_filter or "").strip().lower()

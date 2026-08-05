@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-MOD_DIR = REPO / "mods-admin-runtime" / "xcagi-erp-domain-bridge"
+MOD_DIR = REPO / "mods" / "xcagi-erp-domain-bridge"
 
 
 def test_erp_domain_mod_manifest():
@@ -18,15 +18,18 @@ def test_erp_domain_mod_manifest():
 def test_erp_domains_config():
     cfg = json.loads((MOD_DIR / "config" / "erp_domains.json").read_text(encoding="utf-8"))
     ids = {d["id"] for d in cfg.get("domains", [])}
-    assert {"products", "customers", "shipment", "wechat"} <= ids
+    # wechat 域已从 erp-domain-bridge 移除，计划迁移至客来来
+    assert {"products", "customers", "shipment"} <= ids
+    assert "wechat" not in ids
 
 
-def test_blueprints_has_products_and_wechat():
+def test_blueprints_has_erp_domains():
     text = (MOD_DIR / "backend" / "blueprints.py").read_text(encoding="utf-8")
     assert "/products/list" in text
-    assert "/wechat/contacts" in text
     assert "/domains/registry" in text
-    assert "mount_wechat_contacts_routes" in text
+    # wechat 域已移除，不应再挂载 /wechat/contacts
+    assert "/wechat/contacts" not in text
+    assert "mount_wechat_contacts_routes" not in text
 
 
 def test_list_erp_domains_registry_host(monkeypatch):
@@ -64,7 +67,8 @@ def test_platform_shell_includes_erp_bridge():
 def test_manifest_mod_domain_handlers():
     data = json.loads((MOD_DIR / "manifest.json").read_text(encoding="utf-8"))
     handlers = data.get("config", {}).get("mod_domain_handlers") or []
-    assert {"products", "shipment", "customers", "wechat"} <= set(handlers)
+    assert {"products", "shipment", "customers"} <= set(handlers)
+    assert "wechat" not in set(handlers)
     from tests.mod_sdk_expectations import ERP_PHASE_TOKENS, ERP_REPOSITORY_ADAPTERS
 
     cfg = data.get("config", {})
@@ -85,7 +89,7 @@ def test_domain_handlers_products_list(monkeypatch):
         lambda: False,
     )
     monkeypatch.setattr(
-        "app.infrastructure.persistence.compat_db.product_queries._load_products_list_impl_pg",
+        "app.fastapi_routes.domains.db.product_queries._load_products_list_impl_pg",
         lambda page, per_page, keyword, unit: ([{"id": 1, "name": "A"}], 1, None),
     )
     monkeypatch.setattr(
@@ -108,7 +112,7 @@ def test_domain_handlers_shipment_records(monkeypatch):
             return [{"id": 9, "unit_name": unit or "all"}]
 
     monkeypatch.setattr(
-        "app.bootstrap.get_shipment_app_service",
+        "app.bootstrap.get_shipment_application_service_core",
         lambda: FakeShipment(),
     )
     out = mod.run_domain_handler("shipment", "records_list", unit="测试单位")
@@ -128,7 +132,7 @@ def test_try_invoke_products_list(monkeypatch):
         lambda: ("xcagi-erp-domain-bridge", str(MOD_DIR)),
     )
     monkeypatch.setattr(
-        "app.infrastructure.persistence.compat_db.product_queries._load_products_list_impl_pg",
+        "app.fastapi_routes.domains.db.product_queries._load_products_list_impl_pg",
         lambda page, per_page, keyword, unit: ([], 0, None),
     )
     monkeypatch.setattr(
@@ -165,7 +169,7 @@ def test_domain_handlers_customers_list(monkeypatch):
         lambda: False,
     )
     monkeypatch.setattr(
-        "app.infrastructure.persistence.compat_db.queries._load_customers_rows",
+        "app.fastapi_routes.domains.db.queries._load_customers_rows",
         lambda: [{"id": 1, "customer_name": "测试"}],
     )
     monkeypatch.setattr(
@@ -175,23 +179,4 @@ def test_domain_handlers_customers_list(monkeypatch):
     out = mod.run_domain_handler("customers", "list", page=1, per_page=10)
     assert out.get("success") is True
     assert out.get("total") == 1
-    assert out.get("source") == "mod:xcagi-erp-domain-bridge"
-
-
-def test_domain_handlers_wechat_contacts(monkeypatch):
-    from app.infrastructure.mods.mod_manager import import_mod_backend_py
-
-    mod = import_mod_backend_py(str(MOD_DIR), "xcagi-erp-domain-bridge", "domain_handlers")
-
-    class FakeWechat:
-        def get_contacts(self, **kwargs):
-            return [{"id": 3, "contact_name": "张三"}]
-
-    monkeypatch.setattr(
-        "app.application.get_wechat_contact_app_service",
-        lambda: FakeWechat(),
-    )
-    out = mod.run_domain_handler("wechat", "contacts_list", limit=50)
-    assert out.get("success") is True
-    assert out["data"][0]["id"] == 3
     assert out.get("source") == "mod:xcagi-erp-domain-bridge"

@@ -1,7 +1,6 @@
 import {
   ERP_DOMAIN_BRIDGE_MOD_ID,
   LEGACY_CLIENT_ERP_MOD_ID,
-  WECHAT_BRIDGE_MOD_ID,
   readErpDomainModFacadeEnabled,
 } from '@/constants/erpDomainMod'
 import { CLIENT_PRIMARY_ERP_MOD_ID } from '@/constants/genericModPack'
@@ -11,7 +10,6 @@ import { useModsStore } from '@/stores/mods'
 import { readActiveExtensionModIdFromStorage } from '@/utils/xcagiStorageKeys'
 
 const MOD_FACADE_BASE = `/api/mod/${ERP_DOMAIN_BRIDGE_MOD_ID}`
-const WECHAT_FACADE_BASE = `/api/mod/${WECHAT_BRIDGE_MOD_ID}`
 
 /**
  * 太阳鸟等客户 Mod 自管 API（见 mods/taiyangniao-pro/backend/blueprints.py）。
@@ -44,13 +42,7 @@ const ERP_DOMAIN_PREFIX_SOURCE = [
 const ERP_DOMAIN_PREFIX_MAP: ReadonlyArray<readonly [hostPrefix: string, facadePrefix: string]> =
   [...ERP_DOMAIN_PREFIX_SOURCE].sort((a, b) => b[0].length - a[0].length)
 
-/** 门面开启时仍走宿主 /api 的路径（Mod 未提供门面或 materials/print 等扩展 API） */
 /** 客户 Mod（太阳鸟等）未实现的 API，继续走宿主 /api */
-const CLIENT_MOD_HOST_ONLY_API_PREFIXES: readonly string[] = [
-  '/api/wechat_contacts',
-  '/api/wechat',
-]
-
 const HOST_ONLY_API_PREFIXES: readonly string[] = [
   '/api/materials',
   '/api/print',
@@ -188,33 +180,12 @@ export function resolveErpApiBase(installedModIds?: string[]): string {
   return '/api'
 }
 
-function resolveWechatContactsCompatPath(
-  pathOnly: string,
-  suffix: string,
-  installedModIds?: string[],
-): string | null {
-  if (!pathMatchesPrefixes(pathOnly, CLIENT_MOD_HOST_ONLY_API_PREFIXES)) {
-    return null
-  }
-  const ids = readInstalledModIds(installedModIds)
-  if (ids.includes(WECHAT_BRIDGE_MOD_ID)) {
-    return `${WECHAT_FACADE_BASE}${pathOnly.slice(4)}${suffix}`
-  }
-  const raw = `${pathOnly}${suffix}`
-  return raw.startsWith('/') ? raw : `/${raw}`
-}
-
 /** 将宿主路径 /api/... 映射到 Mod 门面或保持宿主（与 DOMAIN_SPECS + blueprints 一致） */
 export function resolveErpApiPath(hostPath: string, installedModIds?: string[]): string {
   const raw = hostPath.startsWith('/') ? hostPath : `/${hostPath}`
   const pathOnly = normalizeApiPath(raw)
   const suffix = pathSuffix(raw)
   const ids = readInstalledModIds(installedModIds)
-
-  const wechatCompat = resolveWechatContactsCompatPath(pathOnly, suffix, ids)
-  if (wechatCompat) {
-    return wechatCompat
-  }
 
   if (isHostOnlyApiPath(pathOnly)) {
     return raw

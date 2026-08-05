@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from app.application.shipment_app_service import ShipmentApplicationService
     from app.application.template_app_service import TemplateApplicationService
     from app.application.unit_products_import_app_service import UnitProductsImportService
-    from app.application.wechat_contact_app_service import WechatContactApplicationService
     from app.services.extract_log_service import ExtractLogService
     from app.services.materials_service import MaterialsService
     from app.services.product_import_service import ProductImportService
@@ -55,10 +54,6 @@ def get_shipment_app_service() -> (
 
 def get_template_app_service() -> TemplateApplicationService:
     return get_service_registry().template_application_service
-
-
-def get_wechat_contact_app_service() -> WechatContactApplicationService:
-    return get_service_registry().wechat_contact_application_service
 
 
 def get_materials_service() -> MaterialsService:

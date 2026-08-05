@@ -138,6 +138,17 @@ class AIChatApplicationService(
         }
 
     @staticmethod
+    def _is_pure_casual_chat(text: str) -> bool:
+        """纯闲聊判定：无任何业务/工具/实体语义，交给 legacy 单次 LLM。
+
+        全局启用多步编排后，普通对话默认进入可执行规划；仅当槽位路由完全未命中
+        （如「你好」「帮我写首诗」）才回落 legacy 聊天，避免强行编排无意义内容。
+        """
+        from app.application.normal_chat_dispatch import route_normal_mode_message
+
+        return route_normal_mode_message(str(text or "")).get("intent") == "unknown"
+
+    @staticmethod
     def _merge_tool_runtime_context(
         user_id: str,
         message: str,
@@ -729,10 +740,13 @@ class AIChatApplicationService(
         explicit_workflow_tool_intent = self._looks_like_explicit_workflow_tool_intent(text)
         smart_workflow_intent = self._looks_like_smart_workflow_intent(text, context)
         has_pending_workflow = user_id in self._pending_workflows
+        # 全局启用多步编排：普通对话（非 pro 源）也进入可执行规划（计划→查询→执行）。
+        # 仅纯闲聊（无任何业务/工具/实体语义）回落 legacy 单次 LLM，避免强行编排无意义内容。
         if (
             not self._is_pro_source(source)
             and not smart_workflow_intent
             and not has_pending_workflow
+            and self._is_pure_casual_chat(text)
         ):
             return None
 
@@ -1336,10 +1350,8 @@ class AIChatApplicationService(
                     },
                 }
 
-        # 普通工具画像（含「普通界面 + 专业意图」）：未命中槽位时勿走 LLM 工作流规划，避免长时间阻塞在 plan()；
-        # 交给下方主对话链路（DeepSeek 等），体验与普通聊天一致。
-        if profile == "normal" and not explicit_workflow_tool_intent and not smart_workflow_intent:
-            return None
+        # 全局启用多步编排：普通文件画像未命中槽位时，同样允许进入 LLM 工作流规划
+        # （计划→查询→执行）。纯闲聊已在入口处回落 legacy，此处不再二次短路。
 
         # 专业界面默认画像：发货单/开单句式与普通版槽位路由一致时，勿让 LLM 工作流规划抢先返回
         # 「我已根据语义生成动态工作流计划…节点 products.query / products.create…」，

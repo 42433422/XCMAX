@@ -115,12 +115,16 @@ class TestExecuteTool:
         assert result["success"] is False
         assert "未知工具" in result["message"]
 
-    def test_default_action_resolution(self):
+    @patch("app.bootstrap.get_products_service")
+    def test_default_action_resolution(self, mock_svc):
+        mock_svc.return_value.get_products.return_value = {"success": True, "products": []}
         result = execute_tool("products", {"_action": ""})
         # Should resolve to "query" by default
         assert isinstance(result, dict)
 
-    def test_runtime_context_removed(self):
+    @patch("app.bootstrap.get_products_service")
+    def test_runtime_context_removed(self, mock_svc):
+        mock_svc.return_value.get_products.return_value = {"success": True, "products": []}
         result = execute_tool(
             "products", {"_runtime_context": {"user_id": "x"}, "_action": "query"}
         )

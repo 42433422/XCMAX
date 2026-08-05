@@ -7,7 +7,6 @@ export const modRouteGlob = {
   ...import.meta.glob('../../../mods/coating-industry/frontend/routes.js'),
   ...import.meta.glob('../../../mods/xcagi-planner-bridge/frontend/routes.js'),
   ...import.meta.glob('../../../mods/xcagi-erp-domain-bridge/frontend/routes.js'),
-  ...import.meta.glob('../../../mods/xcagi-wechat-bridge/frontend/routes.js'),
   ...import.meta.glob('../../../mods/xcagi-workflow-visualization-bridge/frontend/routes.js'),
   ...import.meta.glob('../../../mods/xcagi-approval-bridge/frontend/routes.js'),
   ...import.meta.glob('../../../mods/xcagi-lan-license-bridge/frontend/routes.js'),
@@ -17,5 +16,4 @@ export const modRouteGlob = {
   ...import.meta.glob('../../../mods/xcagi-customer-service-bridge/frontend/routes.js'),
   ...import.meta.glob('../../../mods/xcagi-core-workflow-employees/frontend/routes.js'),
   ...import.meta.glob('../../../mods/lan-gate-ai-employee/frontend/routes.js'),
-  ...import.meta.glob('../../../mods/wechat-contacts-ai-employee/frontend/routes.js'),
 } as Record<string, RouteModuleLoader>

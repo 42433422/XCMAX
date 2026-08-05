@@ -658,67 +658,6 @@ class TestExecuteTemplateExtractTool:
 
 
 # ---------------------------------------------------------------------------
-# _execute_wechat_preview_tool — additional branches
-# ---------------------------------------------------------------------------
-
-
-class TestExecuteWechatPreviewAdditional:
-    """Cover _execute_wechat_preview_tool additional branches."""
-
-    def test_with_keyword(self):
-        from app.application.workflow.planner import _execute_wechat_preview_tool
-
-        with patch("app.bootstrap.get_wechat_contact_app_service") as mock_ws:
-            mock_svc = MagicMock()
-            mock_svc.get_contacts.return_value = [{"id": 1, "name": "Alice"}]
-            mock_ws.return_value = mock_svc
-            result = _execute_wechat_preview_tool({"keyword": "Alice"})
-        assert result["success"] is True
-        assert len(result["data"]) == 1
-
-    def test_no_contacts(self):
-        from app.application.workflow.planner import _execute_wechat_preview_tool
-
-        with patch("app.bootstrap.get_wechat_contact_app_service") as mock_ws:
-            mock_svc = MagicMock()
-            mock_svc.get_contacts.return_value = []
-            mock_ws.return_value = mock_svc
-            result = _execute_wechat_preview_tool({})
-        assert result["success"] is True
-        assert "未找到" in result["message"]
-
-    def test_import_error(self):
-        from app.application.workflow.planner import _execute_wechat_preview_tool
-
-        with patch.dict("sys.modules", {"app.bootstrap": None}):
-            result = _execute_wechat_preview_tool({})
-        assert result["success"] is False
-        assert result["error_code"] == "service_unavailable"
-
-    def test_value_error(self):
-        from app.application.workflow.planner import _execute_wechat_preview_tool
-
-        with patch("app.bootstrap.get_wechat_contact_app_service") as mock_ws:
-            mock_svc = MagicMock()
-            mock_svc.get_contacts.side_effect = ValueError("bad")
-            mock_ws.return_value = mock_svc
-            result = _execute_wechat_preview_tool({})
-        assert result["success"] is False
-        assert result["error_code"] == "invalid_parameters"
-
-    def test_runtime_error(self):
-        from app.application.workflow.planner import _execute_wechat_preview_tool
-
-        with patch("app.bootstrap.get_wechat_contact_app_service") as mock_ws:
-            mock_svc = MagicMock()
-            mock_svc.get_contacts.side_effect = RuntimeError("boom")
-            mock_ws.return_value = mock_svc
-            result = _execute_wechat_preview_tool({})
-        assert result["success"] is False
-        assert result["error_code"] == "query_failed"
-
-
-# ---------------------------------------------------------------------------
 # _filter_tool_registry_for_profile — additional branches
 # ---------------------------------------------------------------------------
 

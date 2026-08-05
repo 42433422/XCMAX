@@ -133,6 +133,20 @@ export const xcmaxAdminApi = {
   listWallets(limit = 500, offset = 0) {
     return api.get('/api/xcmax/admin/market/wallets', { limit, offset });
   },
+  listOrders(params: { status?: string; limit?: number; offset?: number } = {}) {
+    return api.get<{
+      items?: Record<string, unknown>[];
+      total?: number;
+      summary?: {
+        total_orders?: number;
+        paid_orders?: number;
+        pending_orders?: number;
+        paid_revenue?: number;
+        by_status?: Record<string, number>;
+      };
+      source?: string;
+    }>('/api/xcmax/admin/market/orders', params);
+  },
   creditWallet(userId: number, payload: { amount: number; description?: string }) {
     return api.post(`/api/xcmax/admin/market/users/${userId}/wallet/credit`, payload);
   },
@@ -167,17 +181,6 @@ export const xcmaxAdminApi = {
     return api.get<{ data?: DeployJobData; message?: string }>(
       `/api/xcmax/admin/deploy/jobs/${encodeURIComponent(jobId)}`,
     );
-  },
-  listWechatGroups(params: { keyword?: string; limit?: number } = {}) {
-    return api.get('/api/xcmax/admin/wechat/groups', params);
-  },
-  getUserWechatBindings(userId: number) {
-    return api.get(`/api/xcmax/admin/market/users/${userId}/wechat-customers`);
-  },
-  saveUserWechatBindings(userId: number, contactIds: number[]) {
-    return api.put(`/api/xcmax/admin/market/users/${userId}/wechat-customers`, {
-      contact_ids: contactIds,
-    });
   },
   fetchPendingAutonomyActions() {
     return api.get<{ ok: boolean; count: number; items: AutonomyPendingAction[] }>(

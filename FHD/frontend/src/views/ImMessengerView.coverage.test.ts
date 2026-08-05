@@ -113,8 +113,8 @@ vi.mock('@/composables/useAppToast', () => ({
 }))
 
 const syncMocks = vi.hoisted(() => ({
-  onImMessage: vi.fn(() => () => {}),
-  onImReadState: vi.fn(() => () => {}),
+  onImMessage: vi.fn(() => () => { }),
+  onImReadState: vi.fn(() => () => { }),
 }))
 
 vi.mock('@/composables/useXcmaxSync', () => ({
@@ -137,7 +137,7 @@ class MockWebSocket {
   close() {
     this.onclose?.()
   }
-  send() {}
+  send() { }
 }
 
 // ===== 辅助函数 =====
@@ -173,9 +173,9 @@ function resetMocks() {
   toastMocks.showAppToast.mockReset()
 
   syncMocks.onImMessage.mockReset()
-  syncMocks.onImMessage.mockReturnValue(() => {})
+  syncMocks.onImMessage.mockReturnValue(() => { })
   syncMocks.onImReadState.mockReset()
-  syncMocks.onImReadState.mockReturnValue(() => {})
+  syncMocks.onImReadState.mockReturnValue(() => { })
 }
 
 async function mountView() {
@@ -191,8 +191,8 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     resetMocks()
     vi.stubGlobal('WebSocket', MockWebSocket as unknown as typeof WebSocket)
     MockWebSocket.instances = []
-    // 重置 xcagiDesktop
-    ;(window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = undefined
+      // 重置 xcagiDesktop
+      ; (window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = undefined
   })
 
   afterEach(() => {
@@ -256,12 +256,13 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   // ===== 2. 会话列表与空状态 =====
 
-  it('会话列表为空且无固定联系人时显示空状态', async () => {
+  it('会话列表为空且无企业专属联系人时不渲染会话行', async () => {
     imMocks.fetchImConversations.mockResolvedValue([])
     imMocks.fetchImContacts.mockResolvedValue([normalContact])
     const wrapper = await mountView()
-    expect(wrapper.text()).toContain('还没有会话')
-    expect(wrapper.find('.im-empty--list').exists()).toBe(true)
+    // 重构后 AI 群聊恒为固定项，会话列表为空时仅渲染固定项、不渲染普通会话行
+    expect(wrapper.findAll('.im-conv-item:not(.im-conv-item--pinned)')).toHaveLength(0)
+    expect(wrapper.findAll('.im-conv-item--pinned').length).toBeGreaterThan(0)
   })
 
   it('会话列表展示标题与未读徽章', async () => {
@@ -281,9 +282,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('点击会话项触发 selectConversation 加载消息', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([sampleMessage])
     const wrapper = await mountView()
-    const item = wrapper.find('.im-conv-item')
+    const item = wrapper.find('.im-conv-item:not(.im-conv-item--pinned)')
     await item.trigger('click')
     await flushPromises()
     expect(imMocks.fetchImMessages).toHaveBeenCalledWith(1, { limit: 50 })
@@ -302,12 +304,13 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('选择会话后展示聊天头部与消息气泡', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([
       { ...sampleMessage, sender_user_id: 1, body: '我的消息' },
       { ...sampleMessage, id: 101, sender_user_id: 2, body: '对方消息' },
     ])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     expect(wrapper.find('.im-chat-head').exists()).toBe(true)
     expect(wrapper.findAll('.im-bubble-row')).toHaveLength(2)
@@ -317,41 +320,45 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('对方消息显示发送者名称', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([
       { ...sampleMessage, sender_user_id: 2, sender_display_name: '客服' },
     ])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     expect(wrapper.find('.im-sender').text()).toBe('客服')
   })
 
   it('对方消息无 sender_display_name 时显示用户+id', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([
       { ...sampleMessage, sender_user_id: 2, sender_display_name: undefined },
     ])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     expect(wrapper.find('.im-sender').text()).toBe('用户2')
   })
 
   it('消息数量达到 50 时显示加载更多按钮', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     const messages = Array.from({ length: 50 }, (_, i) => ({
       ...sampleMessage,
       id: 100 + i,
     }))
     imMocks.fetchImMessages.mockResolvedValue(messages)
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     expect(wrapper.find('.im-load-more').exists()).toBe(true)
   })
 
   it('点击加载更多按钮加载历史消息', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     const initialMessages = Array.from({ length: 50 }, (_, i) => ({
       ...sampleMessage,
       id: 100 + i,
@@ -364,7 +371,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
       .mockResolvedValueOnce(initialMessages)
       .mockResolvedValueOnce(olderMessages)
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     await wrapper.find('.im-load-more').trigger('click')
     await flushPromises()
@@ -375,6 +382,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('输入消息并提交发送', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([])
     imMocks.sendImMessage.mockResolvedValue({
       id: 200,
@@ -384,7 +392,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
       created_at: '2026-06-19T10:00:00Z',
     })
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     const input = wrapper.find('.im-compose-input')
     await input.setValue('hello')
@@ -396,9 +404,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('空消息不发送', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     await wrapper.find('form').trigger('submit.prevent')
     await flushPromises()
@@ -421,10 +430,11 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('发送消息失败时显示错误 toast', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([])
     imMocks.sendImMessage.mockRejectedValue(new Error('网络错误'))
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     const input = wrapper.find('.im-compose-input')
     await input.setValue('hello')
@@ -435,10 +445,11 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('发送消息失败且 error 非 Error 实例时显示默认提示', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([])
     imMocks.sendImMessage.mockRejectedValue('unknown')
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     const input = wrapper.find('.im-compose-input')
     await input.setValue('hello')
@@ -551,9 +562,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
     imMocks.fetchImContacts.mockResolvedValue([enterpriseCsContact])
     const wrapper = await mountView()
-    const pinned = wrapper.find('.im-conv-item--pinned')
-    expect(pinned.exists()).toBe(true)
-    await pinned.trigger('click')
+    const pinnedItems = wrapper.findAll('.im-conv-item--pinned')
+    const pinned = pinnedItems.find((el) => el.text().includes('企业专属客服'))
+    expect(pinned?.exists()).toBe(true)
+    await pinned!.trigger('click')
     await flushPromises()
     // 复用已有会话,不创建新会话
     expect(imMocks.createDirectConversation).not.toHaveBeenCalled()
@@ -564,9 +576,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
     imMocks.fetchImContacts.mockResolvedValue([enterpriseCsContact])
     const wrapper = await mountView()
-    const pinned = wrapper.find('.im-conv-item--pinned')
-    expect(pinned.exists()).toBe(true)
-    await pinned.trigger('click')
+    const pinnedItems = wrapper.findAll('.im-conv-item--pinned')
+    const pinned = pinnedItems.find((el) => el.text().includes('企业专属客服'))
+    expect(pinned?.exists()).toBe(true)
+    await pinned!.trigger('click')
     await flushPromises()
     expect(imMocks.fetchImMessages).toHaveBeenCalledWith(1, { limit: 50 })
   })
@@ -626,24 +639,27 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('selectConversation 失败时显示错误 toast', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockRejectedValue(new Error('消息加载失败'))
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     expect(toastMocks.showAppToast).toHaveBeenCalledWith('消息加载失败', 'error')
   })
 
   it('selectConversation 失败且 error 非 Error 实例时显示默认提示', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockRejectedValue('unknown')
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     expect(toastMocks.showAppToast).toHaveBeenCalledWith('加载消息失败', 'error')
   })
 
   it('loadOlderMessages 失败时显示错误 toast', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     const messages = Array.from({ length: 50 }, (_, i) => ({
       ...sampleMessage,
       id: 100 + i,
@@ -652,7 +668,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
       .mockResolvedValueOnce(messages)
       .mockRejectedValueOnce(new Error('历史加载失败'))
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     await wrapper.find('.im-load-more').trigger('click')
     await flushPromises()
@@ -661,6 +677,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('loadOlderMessages 失败且 error 非 Error 实例时显示默认提示', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     const messages = Array.from({ length: 50 }, (_, i) => ({
       ...sampleMessage,
       id: 100 + i,
@@ -669,7 +686,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
       .mockResolvedValueOnce(messages)
       .mockRejectedValueOnce('unknown')
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     await wrapper.find('.im-load-more').trigger('click')
     await flushPromises()
@@ -680,7 +697,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('loadConversations 调用 xcagiDesktop.setBadge 设置未读总数', async () => {
     const setBadge = vi.fn(async () => undefined)
-    ;(window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = { setBadge }
+      ; (window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = { setBadge }
     imMocks.fetchImConversations.mockResolvedValue([
       { ...sampleConversation, unread_count: 3 },
       { ...sampleConversation2, id: 5, unread_count: 5 },
@@ -691,7 +708,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('loadConversations 在 xcagiDesktop 存在但 setBadge 缺失时跳过', async () => {
     // xcagiDesktop 定义但无 setBadge 方法,覆盖可选链的另一个分支
-    ;(window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = {}
+    ; (window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = {}
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
     imMocks.fetchImContacts.mockResolvedValue([])
     await mountView()
@@ -713,9 +730,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('WebSocket 接收 im.message 类型消息时处理 incoming', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     const ws = MockWebSocket.instances[0]
     const newMsg = { ...sampleMessage, id: 999, body: '新消息' }
@@ -732,9 +750,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('WebSocket 接收 message 类型消息时处理 incoming', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     const ws = MockWebSocket.instances[0]
     const newMsg = { ...sampleMessage, id: 998, body: '新消息2' }
@@ -760,9 +779,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('WebSocket 接收 im.read 类型消息时处理已读状态', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     // 重置 markImRead 调用计数
     imMocks.markImRead.mockClear()
@@ -782,9 +802,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('WebSocket 接收 im.read 但 user_id 不是当前用户时忽略', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     imMocks.markImRead.mockClear()
     const ws = MockWebSocket.instances[0]
@@ -802,9 +823,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('WebSocket 接收 im.read 但 last_message_id 为 0 时仅 loadConversations', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     imMocks.markImRead.mockClear()
     const ws = MockWebSocket.instances[0]
@@ -866,9 +888,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('WebSocket 接收 im.message 但消息已存在时不重复添加', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([sampleMessage])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     const ws = MockWebSocket.instances[0]
     // 发送已存在的消息
@@ -886,9 +909,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('WebSocket 接收自己发送的消息时不播放 incoming 音效', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     const ws = MockWebSocket.instances[0]
     const myMsg = { ...sampleMessage, id: 888, sender_user_id: 1 }
@@ -909,12 +933,13 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     let imMessageHandler: ((detail: { conversation_id: number; message: typeof sampleMessage }) => void) | null = null
     syncMocks.onImMessage.mockImplementation((cb: typeof imMessageHandler) => {
       imMessageHandler = cb
-      return () => {}
+      return () => { }
     })
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     expect(imMessageHandler).not.toBeNull()
     const newMsg = { ...sampleMessage, id: 777, body: 'sync 消息' }
@@ -927,12 +952,13 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     let imReadHandler: ((detail: { conversation_id: number; user_id: number; last_message_id: number }) => void) | null = null
     syncMocks.onImReadState.mockImplementation((cb: typeof imReadHandler) => {
       imReadHandler = cb
-      return () => {}
+      return () => { }
     })
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     expect(imReadHandler).not.toBeNull()
     imMocks.markImRead.mockClear()
@@ -945,12 +971,13 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     let imReadHandler: ((detail: { conversation_id: number; user_id: number; last_message_id: number }) => void) | null = null
     syncMocks.onImReadState.mockImplementation((cb: typeof imReadHandler) => {
       imReadHandler = cb
-      return () => {}
+      return () => { }
     })
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     imMocks.markImRead.mockClear()
     imReadHandler!({ conversation_id: 1, user_id: 999, last_message_id: 100 })
@@ -967,7 +994,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     ])
     imMocks.fetchImContacts.mockResolvedValue([])
     const wrapper = await mountView()
-    const avatar = wrapper.find('.im-conv-item .im-avatar')
+    const avatar = wrapper.find('.im-conv-item:not(.im-conv-item--pinned) .im-avatar')
     expect(avatar.text()).toBe('?')
   })
 
@@ -977,7 +1004,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     ])
     imMocks.fetchImContacts.mockResolvedValue([])
     const wrapper = await mountView()
-    const avatar = wrapper.find('.im-conv-item .im-avatar')
+    const avatar = wrapper.find('.im-conv-item:not(.im-conv-item--pinned) .im-avatar')
     expect(avatar.text()).toBe('?')
   })
 
@@ -987,17 +1014,18 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     ])
     imMocks.fetchImContacts.mockResolvedValue([])
     const wrapper = await mountView()
-    const avatar = wrapper.find('.im-conv-item .im-avatar')
+    const avatar = wrapper.find('.im-conv-item:not(.im-conv-item--pinned) .im-avatar')
     expect(avatar.text()).toBe('张')
   })
 
   it('formatTime 处理 null 返回空字符串', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([
       { ...sampleMessage, created_at: null },
     ])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     const time = wrapper.find('.im-bubble time')
     expect(time.text()).toBe('')
@@ -1005,9 +1033,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('formatTime 处理有效 ISO 字符串返回本地时间', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([sampleMessage])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     const time = wrapper.find('.im-bubble time')
     expect(time.text()).not.toBe('')
@@ -1020,11 +1049,12 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     }
     try {
       imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+      imMocks.fetchImContacts.mockResolvedValue([])
       imMocks.fetchImMessages.mockResolvedValue([
         { ...sampleMessage, created_at: 'invalid-iso' },
       ])
       const wrapper = await mountView()
-      await wrapper.find('.im-conv-item').trigger('click')
+      await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
       await flushPromises()
       const time = wrapper.find('.im-bubble time')
       // 抛错时返回原始 iso 字符串
@@ -1036,9 +1066,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('activeTitle 在会话不存在时返回默认值', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     // activeTitle 应为会话标题
     expect(wrapper.find('.im-chat-title').text()).toBe('企业专属客服')
@@ -1056,11 +1087,12 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     authMocks.getCurrentUser.mockResolvedValue({ data: { user: null } })
     const wrapper = await mountView()
     // 即使有会话项可点(此时不会渲染),也不会触发 selectConversation
-    expect(wrapper.find('.im-conv-item').exists()).toBe(false)
+    expect(wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').exists()).toBe(false)
   })
 
   it('loadOlderMessages 在无消息时不执行', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     // 模拟 50 条消息以显示加载更多按钮
     const messages = Array.from({ length: 50 }, (_, i) => ({
       ...sampleMessage,
@@ -1068,7 +1100,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     }))
     imMocks.fetchImMessages.mockResolvedValueOnce(messages)
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     // 通过 devtoolsRawSetupState 访问原始 ref 并清空消息
     const rawState = (wrapper.vm as unknown as { $: { devtoolsRawSetupState: Record<string, { value: unknown }> } }).$.devtoolsRawSetupState
@@ -1082,6 +1114,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('loadOlderMessages 加载历史为空时不合并', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     const messages = Array.from({ length: 50 }, (_, i) => ({
       ...sampleMessage,
       id: 100 + i,
@@ -1090,7 +1123,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
       .mockResolvedValueOnce(messages)
       .mockResolvedValueOnce([])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     const rawState = (wrapper.vm as unknown as { $: { devtoolsRawSetupState: Record<string, { value: unknown }> } }).$.devtoolsRawSetupState
     const beforeCount = (rawState.messages.value as typeof sampleMessage[]).length
@@ -1114,7 +1147,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([])
     const wrapper = await mountView()
-    const items = wrapper.findAll('.im-conv-item')
+    const items = wrapper.findAll('.im-conv-item:not(.im-conv-item--pinned)')
     await items[0].trigger('click')
     await flushPromises()
     expect(wrapper.find('.im-chat-title').text()).toBe('企业专属客服')
@@ -1125,9 +1158,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('发送按钮在 busy 时禁用', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     const rawState = (wrapper.vm as unknown as { $: { devtoolsRawSetupState: Record<string, { value: unknown }> } }).$.devtoolsRawSetupState
     rawState.busy.value = true
@@ -1138,9 +1172,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('发送按钮在 draft 为空时禁用', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     const submitBtn = wrapper.find('button[type="submit"]')
     expect(submitBtn.attributes('disabled')).toBeDefined()
@@ -1161,7 +1196,8 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     imMocks.fetchImConversations.mockResolvedValue([])
     imMocks.fetchImContacts.mockResolvedValue([normalContact])
     const wrapper = await mountView()
-    const btn = wrapper.find('.im-empty--list .im-btn--primary')
+    // 重构后无会话时发起会话按钮位于侧栏头部
+    const btn = wrapper.find('.im-sidebar-head .im-icon-btn')
     expect(btn.exists()).toBe(true)
     await btn.trigger('click')
     await flushPromises()
@@ -1169,7 +1205,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
   })
 
   it('联系人加载中时显示加载中提示', async () => {
-    let resolveContacts: (value: typeof normalContact[]) => void = () => {}
+    let resolveContacts: (value: typeof normalContact[]) => void = () => { }
     imMocks.fetchImConversations.mockResolvedValue([])
     imMocks.fetchImContacts.mockReturnValue(
       new Promise((resolve) => {
@@ -1239,18 +1275,20 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('selectConversation 加载消息后调用 markImRead', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([sampleMessage])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     expect(imMocks.markImRead).toHaveBeenCalledWith(1, sampleMessage.id)
   })
 
   it('selectConversation 加载空消息时不调用 markImRead', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([])
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     expect(imMocks.markImRead).not.toHaveBeenCalled()
   })
@@ -1261,7 +1299,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     imMocks.fetchImMessages.mockResolvedValue([])
     const wrapper = await mountView()
     // 选择会话 1
-    const items = wrapper.findAll('.im-conv-item')
+    const items = wrapper.findAll('.im-conv-item:not(.im-conv-item--pinned)')
     await items[0].trigger('click')
     await flushPromises()
     imMocks.fetchImMessages.mockClear()
@@ -1313,9 +1351,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     imMocks.fetchImContacts.mockResolvedValue([csContactWithTitle])
     const wrapper = await mountView()
     // 企业专属客服显示在固定联系人区域
-    const pinned = wrapper.find('.im-conv-item--pinned')
-    expect(pinned.exists()).toBe(true)
-    await pinned.trigger('click')
+    const pinnedItems = wrapper.findAll('.im-conv-item--pinned')
+    const pinned = pinnedItems.find((el) => el.text().includes('客服小张'))
+    expect(pinned?.exists()).toBe(true)
+    await pinned!.trigger('click')
     await flushPromises()
     // 复用已有会话(通过 title 匹配),不创建新会话
     expect(imMocks.createDirectConversation).not.toHaveBeenCalled()

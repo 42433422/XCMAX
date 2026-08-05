@@ -12,7 +12,7 @@ from app.http.response_envelope import read_success
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MOD_ID = "xcagi-core-workflow-employees"
-EMPLOYEE_IDS = ("label_print", "shipment_mgmt", "receipt_confirm", "wechat_msg")
+EMPLOYEE_IDS = ("label_print", "shipment_mgmt", "receipt_confirm")
 
 MOD_DIRS = [
     REPO_ROOT / "mods" / MOD_ID,
@@ -61,7 +61,6 @@ _EMPLOYEE_ACTIONS = {
     "label_print": ("status", "signal_ack"),
     "shipment_mgmt": ("status", "audit_summary"),
     "receipt_confirm": ("status", "feedback_ack"),
-    "wechat_msg": ("status", "enqueue_ack"),
 }
 
 

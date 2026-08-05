@@ -334,12 +334,6 @@ describe('router/index 覆盖率补齐', () => {
       expect(router.currentRoute.value.query.section).toBe('model-payment')
     })
 
-    it('/wechat-contacts 打开独立微信 bridge 宿主页', async () => {
-      await router.push('/wechat-contacts')
-      expect(router.currentRoute.value.name).toBe('wechat-contacts')
-      expect(router.currentRoute.value.meta.title).toBe('微信联系人')
-    })
-
     it('/other-tools 重定向到 workflow-employee-space', async () => {
       await router.push('/other-tools')
       expect(router.currentRoute.value.name).toBe('workflow-employee-space')

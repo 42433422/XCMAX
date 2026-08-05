@@ -73,10 +73,6 @@ from app.application.facades.user_cs_employee_facade import (
     EMPLOYEE_MOD_ID,
     run_user_cs_employee,
 )
-from app.application.facades.wechat_facade import (
-    refresh_wechat_contacts_from_decrypt,
-    wechat_message_source_size_payload,
-)
 
 __all__ = [
     "ShipmentApplicationServiceEventPrimary",
@@ -119,8 +115,6 @@ __all__ = [
     "get_session_service",
     "get_system_service",
     "get_ocr_service",
-    "refresh_wechat_contacts_from_decrypt",
-    "wechat_message_source_size_payload",
     "printer_service",
     "register_desktop_relay",
     "run_user_cs_employee",

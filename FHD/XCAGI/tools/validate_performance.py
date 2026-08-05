@@ -110,7 +110,7 @@ def check_request_dedup():
     """检查请求去重"""
     print("\n🔄 [4/6] 检查请求去重...")
     try:
-        from app.utils.request_deduplicator import get_request_deduplicator
+        from app.utils.resilience.request_deduplicator import get_request_deduplicator
 
         deduplicator = get_request_deduplicator()
         stats = deduplicator.stats
@@ -229,7 +229,7 @@ def run_performance_test():
     # 测试3: 去重操作
     start = time.perf_counter()
     try:
-        from app.utils.request_deduplicator import get_request_deduplicator
+        from app.utils.resilience.request_deduplicator import get_request_deduplicator
         dedup = get_request_deduplicator()
 
         def dummy_func(x):

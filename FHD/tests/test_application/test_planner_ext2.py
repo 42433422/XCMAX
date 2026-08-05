@@ -42,14 +42,6 @@ class TestExecuteToolDeep:
         # Should use default action "extract"
         assert isinstance(result, dict)
 
-    def test_default_action_for_wechat_send(self):
-        mock_svc = Mock()
-        mock_svc.get_contacts.return_value = []
-        with patch("app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc):
-            result = execute_tool("wechat_send", {})
-        # Should use default action "preview"
-        assert isinstance(result, dict)
-
     def test_default_action_for_excel_schema(self):
         result = execute_tool("excel_schema", {})
         # Should use default action "analyze"

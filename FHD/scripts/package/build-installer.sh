@@ -172,12 +172,13 @@ build_one_sku() {
     x86_64) artifact_arch="x64" ;;
     *) artifact_arch="$(uname -m)" ;;
   esac
-  local dmg_volume_name="XCAGI ${label}"
-  # Local acceptance machines can have a previous release DMG still mounted.
-  # Keep the public release label stable, while allowing an isolated candidate
-  # to opt into a unique volume name without altering the artifact name.
+  # hdiutil rejects volume names containing spaces on this macOS build
+  # ("could not access /Volumes/XCAGI Enterprise/XCAGI.app - 操作不被允许").
+  # Use a hyphenated, space-free volume name for the mount, while keeping the
+  # public artifact file name unchanged.
+  local dmg_volume_name="XCAGI-${label}"
   if [ -n "${XCAGI_DMG_VOLUME_SUFFIX:-}" ]; then
-    dmg_volume_name="${dmg_volume_name} ${XCAGI_DMG_VOLUME_SUFFIX}"
+    dmg_volume_name="${dmg_volume_name}-${XCAGI_DMG_VOLUME_SUFFIX}"
   fi
   scripts/package/create-mac-dmg.sh \
     "${app_path}" \

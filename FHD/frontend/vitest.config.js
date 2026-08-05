@@ -84,10 +84,11 @@ export default defineConfig({
       // 2026-06-24：全量补测（~1100+ 测试，60+ 文件）恢复真实覆盖至 89.64/79.75/77.9/89.64，
       //   阈值恢复至 ratchet baseline floor（89/79/77/89），棘轮门禁通过。
       // 2026-07-21：PR241 合入前实测 functions 89.85%，短暂回落棘轮至 89.8，避免门禁误杀。
+      // 2026-08-05：实测 functions 91.39%，对齐 SSOT baseline floor 回提升至 90（只升不降）。
       thresholds: {
         lines: 92,
         branches: 81,
-        functions: 89.8,
+        functions: 90,
         statements: 92,
       },
     },

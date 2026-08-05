@@ -35,9 +35,6 @@ from app.application.ports.shipment_record_store import (
 from app.application.ports.shipment_repository import ShipmentRepository as ShipmentChannel
 from app.application.ports.template_store import TemplateStorePort as TemplateStoreChannel
 from app.application.ports.vector_store import VectorStorePort as VectorStoreChannel
-from app.application.ports.wechat_contact_store import (
-    WechatContactStorePort as WechatContactStoreChannel,
-)
 
 MaterialRepository = MaterialChannel
 ProductRepository = ProductChannel
@@ -48,7 +45,6 @@ ShipmentRecordQueryPort = ShipmentRecordQueryChannel
 ShipmentRecordStorePort = ShipmentRecordStoreChannel
 PurchaseUnitQueryPort = PurchaseUnitQueryChannel
 TemplateStorePort = TemplateStoreChannel
-WechatContactStorePort = WechatContactStoreChannel
 ExtractLogStorePort = ExtractLogStoreChannel
 FileAnalysisPort = FileAnalysisChannel
 EmbedderPort = EmbedderChannel
@@ -64,7 +60,6 @@ __all__ = [
     "ShipmentRecordStoreChannel",
     "PurchaseUnitQueryChannel",
     "TemplateStoreChannel",
-    "WechatContactStoreChannel",
     "ExtractLogStoreChannel",
     "FileAnalysisChannel",
     "EmbedderChannel",
@@ -78,7 +73,6 @@ __all__ = [
     "ShipmentRecordStorePort",
     "PurchaseUnitQueryPort",
     "TemplateStorePort",
-    "WechatContactStorePort",
     "ExtractLogStorePort",
     "FileAnalysisPort",
     "EmbedderPort",

@@ -23,9 +23,11 @@ from app.services.user_cs_pipeline import (
     _write_pipeline_file,
     analyze_customer_pipeline,
     auto_advance_pipeline_if_ready,
+    build_closed_loop_status,
     build_pipeline_funnel_summary,
     list_pipeline_client_summaries,
     load_pipeline,
+    record_reconciliation,
     repair_all_pipelines,
     repair_pipeline_crm,
     save_pipeline,
@@ -68,8 +70,9 @@ class TestPipelineStages:
     def test_idle_is_first_stage(self):
         assert _STAGE_ORDER[0] == "idle"
 
-    def test_delivered_is_last_stage(self):
-        assert _STAGE_ORDER[-1] == "delivered"
+    def test_reconciled_is_final_stage(self):
+        assert _STAGE_ORDER[-1] == "reconciled"
+        assert _STAGE_ORDER[-2] == "delivered"
 
 
 class TestStageRank:
@@ -484,3 +487,55 @@ class TestBuildPipelineFunnelSummary:
     def test_funnel_summary_empty(self, mock_pipeline_roots):
         summary = build_pipeline_funnel_summary()
         assert summary["total_clients"] == 0
+
+
+class TestRecordReconciliation:
+    """测试回款核销闭环。"""
+
+    def test_record_sets_reconciled_stage(self, mock_pipeline_roots):
+        doc = record_reconciliation(1, amount_yuan="1000.00", order_ref="MOD001")
+        assert doc["stage"] == "reconciled"
+        assert doc["reconciliation"]["status"] == "reconciled"
+        assert doc["reconciliation"]["amount_yuan"] == "1000.00"
+        assert doc["reconciliation"]["order_ref"] == "MOD001"
+
+    def test_record_advances_from_delivered(self, mock_pipeline_roots):
+        set_pipeline_stage(1, "delivered")
+        doc = record_reconciliation(1, amount_yuan="88.00", order_ref="MOD002")
+        assert doc["stage"] == "reconciled"
+
+    def test_record_idempotent_overwrites(self, mock_pipeline_roots):
+        record_reconciliation(1, amount_yuan="100.00", order_ref="MOD001")
+        doc = record_reconciliation(1, amount_yuan="200.00", order_ref="MOD001")
+        assert doc["reconciliation"]["amount_yuan"] == "200.00"
+        assert doc["stage"] == "reconciled"
+
+    def test_record_keeps_source(self, mock_pipeline_roots):
+        doc = record_reconciliation(
+            1, amount_yuan="5.00", order_ref="MOD003", source="order_bridge:payment.paid"
+        )
+        assert doc["reconciliation"]["source"] == "order_bridge:payment.paid"
+
+
+class TestBuildClosedLoopStatus:
+    """测试 AGI 闭环查询。"""
+
+    def test_idle_not_closed(self, mock_pipeline_roots):
+        status = build_closed_loop_status(1)
+        assert status["closed"] is False
+        assert status["delivered"] is False
+        assert status["reconciled"] is False
+
+    def test_reconciled_is_closed(self, mock_pipeline_roots):
+        record_reconciliation(1, amount_yuan="100.00", order_ref="MOD001")
+        status = build_closed_loop_status(1)
+        assert status["closed"] is True
+        assert status["delivered"] is True
+        assert status["reconciled"] is True
+        assert status["reconciliation"]["amount_yuan"] == "100.00"
+
+    def test_returns_stage_label(self, mock_pipeline_roots):
+        record_reconciliation(1, amount_yuan="100.00", order_ref="MOD001")
+        status = build_closed_loop_status(1)
+        assert status["stage"] == "reconciled"
+        assert status["stage_label"] == "已核销"
