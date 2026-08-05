@@ -216,26 +216,26 @@ import { get } from '@/api'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import { useServiceBridge } from '@/composables/useServiceBridge'
 
-import CustomerFunnelBar from '../components/CustomerFunnelBar.vue'
-import CustomerEnterpriseCredsPanel from '../components/CustomerEnterpriseCredsPanel.vue'
-import CustomerPipelineProgressPanel from '../components/CustomerPipelineProgressPanel.vue'
-import CustomerDemandIntakePanel from '../components/CustomerDemandIntakePanel.vue'
-import CustomerContractPanel from '../components/CustomerContractPanel.vue'
-import CustomerDeliveryPanel from '../components/CustomerDeliveryPanel.vue'
-import CustomerChangeRequestsPanel from '../components/CustomerChangeRequestsPanel.vue'
-import CustomerAddCustomerModal from '../components/CustomerAddCustomerModal.vue'
+import CustomerFunnelBar from '@mod-frontend/xcagi-customer-service-bridge/components/CustomerFunnelBar.vue'
+import CustomerEnterpriseCredsPanel from '@mod-frontend/xcagi-customer-service-bridge/components/CustomerEnterpriseCredsPanel.vue'
+import CustomerPipelineProgressPanel from '@mod-frontend/xcagi-customer-service-bridge/components/CustomerPipelineProgressPanel.vue'
+import CustomerDemandIntakePanel from '@mod-frontend/xcagi-customer-service-bridge/components/CustomerDemandIntakePanel.vue'
+import CustomerContractPanel from '@mod-frontend/xcagi-customer-service-bridge/components/CustomerContractPanel.vue'
+import CustomerDeliveryPanel from '@mod-frontend/xcagi-customer-service-bridge/components/CustomerDeliveryPanel.vue'
+import CustomerChangeRequestsPanel from '@mod-frontend/xcagi-customer-service-bridge/components/CustomerChangeRequestsPanel.vue'
+import CustomerAddCustomerModal from '@mod-frontend/xcagi-customer-service-bridge/components/CustomerAddCustomerModal.vue'
 
-import { useCustomerList } from '../composables/useCustomerList'
-import { useCustomerWorkbench, type CustomerPipelineState } from '../composables/useCustomerWorkbench'
-import { useChangeRequests } from '../composables/useChangeRequests'
-import { useEnterpriseCredentials } from '../composables/useEnterpriseCredentials'
-import { useFinanceLedger } from '../composables/useFinanceLedger'
+import { useCustomerList } from '@mod-frontend/xcagi-customer-service-bridge/composables/useCustomerList'
+import { useCustomerWorkbench, type CustomerPipelineState } from '@mod-frontend/xcagi-customer-service-bridge/composables/useCustomerWorkbench'
+import { useChangeRequests } from '@mod-frontend/xcagi-customer-service-bridge/composables/useChangeRequests'
+import { useEnterpriseCredentials } from '@mod-frontend/xcagi-customer-service-bridge/composables/useEnterpriseCredentials'
+import { useFinanceLedger } from '@mod-frontend/xcagi-customer-service-bridge/composables/useFinanceLedger'
 import {
   DEFAULT_PIPELINE_STAGES,
   PHASE_GUIDES,
   type PhaseCheckKey,
-} from '../composables/usePipelineGuide'
-import type { ClientSummaries, EnterpriseUserRow } from '../composables/internalCsTypes'
+} from '@mod-frontend/xcagi-customer-service-bridge/composables/usePipelineGuide'
+import type { ClientSummaries, EnterpriseUserRow } from '@mod-frontend/xcagi-customer-service-bridge/composables/internalCsTypes'
 
 const route = useRoute()
 

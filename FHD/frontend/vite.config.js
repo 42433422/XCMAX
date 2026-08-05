@@ -84,6 +84,11 @@ export default defineConfig(({ mode }) => {
           replacement: path.resolve(__dirname, './src/views/adminDutyRosterGraphView.stub.vue'),
         },
         { find: '@', replacement: path.resolve(__dirname, './src') },
+        // 客服桥接 Mod 自有组件/composable 别名（其物理视图不得用 ../ 相对导入）
+        {
+          find: '@mod-frontend/xcagi-customer-service-bridge',
+          replacement: path.resolve(__dirname, '../mods/xcagi-customer-service-bridge/frontend'),
+        },
         // 干净通用版：Mod 已迁出 mods-export-2026-06-07/，开发时按需恢复单条 alias
         // {
         //   find: '@mod-views/xcagi-lan-license-bridge',

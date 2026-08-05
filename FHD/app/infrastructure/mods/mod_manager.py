@@ -20,6 +20,7 @@ from .artifact_package import (
     validate_bundle_manifest,
     validate_employee_pack_manifest,
 )
+from .employee_pack_runtime import ensure_employee_pack_api_ready
 from .enterprise_entitlement_restore import restore_entitlements_from_session_id
 from .manifest import ModMetadata, parse_manifest, validate_dependencies
 from .missing_local_state import clear_mod_missing_locally, mark_mod_missing_locally
@@ -1327,6 +1328,14 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
         return False
 
     mm = get_mod_manager()
+    employee_pack_ready = ensure_employee_pack_api_ready(
+        mm,
+        mid,
+        registered_pack_ids=_employee_pack_routes_registered,
+        register_routes=register_employee_pack_routes,
+    )
+    if employee_pack_ready is not None:
+        return employee_pack_ready
     if mid not in mm._loaded_mods:
         if mm.resolve_mod_directory(mid) is None:
             mark_mod_missing_locally(mid)
