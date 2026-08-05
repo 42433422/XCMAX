@@ -148,6 +148,103 @@ onMounted(loadOrders)
 </script>
 
 <style scoped>
+/* 以下类与 XCmaxAdminView.vue 的 scoped 样式同名，但 Vue scoped 不会注入父级 scope 属性，
+   必须在本组件内显式补齐，否则订单面板的卡片/标题/按钮等失去样式。 */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.page-header h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: #172033;
+}
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 18px;
+}
+.admin-card {
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 16px;
+  border: 1px solid rgba(15, 76, 129, 0.1);
+  box-shadow: 0 4px 18px rgba(15, 76, 129, 0.07);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.card-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #172033;
+  flex: 1;
+}
+.card-icon {
+  font-size: 18px;
+  color: #1890ff;
+  width: 22px;
+  text-align: center;
+}
+.card-info {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  margin: 0;
+  font-size: 13px;
+}
+.card-info dt {
+  color: rgba(23, 32, 51, 0.55);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.card-info dd {
+  margin: 0;
+  color: #172033;
+  word-break: break-all;
+}
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.badge-ok { background: #e6f9f0; color: #10b759; }
+.badge-warn { background: #fff7e0; color: #d97706; }
+.badge-err { background: #fff1f0; color: #e53e3e; }
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn-secondary { background: rgba(24, 144, 255, 0.1); color: #1890ff; }
+.btn-secondary:not(:disabled):hover { background: rgba(24, 144, 255, 0.18); }
+
 .order-table {
   width: 100%;
   border-collapse: collapse;

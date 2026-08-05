@@ -30,7 +30,7 @@ from app.infrastructure.persistence.compat_db.writes import (
     _products_delete_by_unit_pg,
     _purchase_units_delete_by_norm_unit_pg,
 )
-from app.infrastructure.persistence.product_repository_impl import SQLAlchemyProductRepository
+from app.infrastructure.repositories.product_repository_impl import SQLAlchemyProductRepository
 from app.infrastructure.persistence.sqlite_vector_store import SQLiteVectorStore
 from app.infrastructure.rag.rag_service import RagService, is_rag_enabled
 from app.services.deepseek_intent_service import _make_intent_cache_key, cn_to_number

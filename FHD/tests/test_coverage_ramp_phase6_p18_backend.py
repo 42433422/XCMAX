@@ -48,7 +48,7 @@ from app.application.workflow.types import (
     PlanGraph,
     WorkflowNode,
 )
-from app.infrastructure.persistence.product_repository_impl import (
+from app.infrastructure.repositories.product_repository_impl import (
     TRIVIAL_MEASURE_UNITS,
     SQLAlchemyProductRepository,
 )
@@ -265,7 +265,7 @@ class TestProductRepositoryProductToDict:
         mock_col3 = MagicMock()
         mock_col3.name = "price"
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_mapper = MagicMock()
             mock_mapper.columns = [mock_col1, mock_col2, mock_col3]
             mock_insp.return_value = mock_mapper
@@ -279,7 +279,7 @@ class TestProductRepositoryProductToDict:
         mock_col = MagicMock()
         mock_col.name = "name"
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_mapper = MagicMock()
             mock_mapper.columns = [mock_col]
             mock_insp.return_value = mock_mapper
@@ -292,7 +292,7 @@ class TestProductRepositoryProductToDict:
         mock_col = MagicMock()
         mock_col.name = "price"
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_mapper = MagicMock()
             mock_mapper.columns = [mock_col]
             mock_insp.return_value = mock_mapper
@@ -310,7 +310,7 @@ class TestProductRepositoryProductToDict:
         mock_col3 = MagicMock()
         mock_col3.name = "missing_col"
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_mapper = MagicMock()
             mock_mapper.columns = [mock_col1, mock_col2, mock_col3]
             mock_insp.return_value = mock_mapper
@@ -327,13 +327,13 @@ class TestProductRepositoryFindAll:
     def repo(self):
         return SQLAlchemyProductRepository()
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_products_table_not_exists_returns_empty(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.__dict__["bind"] = MagicMock()
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_bind_insp = MagicMock()
             mock_bind_insp.get_table_names.return_value = []
             mock_insp.return_value = mock_bind_insp
@@ -343,14 +343,14 @@ class TestProductRepositoryFindAll:
         assert result["data"] == []
         assert result["total"] == 0
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_recoverable_error_returns_failure(self, mock_get_db, repo):
         mock_get_db.side_effect = OSError("DB connection lost")
         result = repo.find_all()
         assert result["success"] is False
         assert "查询失败" in result["message"]
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_with_unit_name_filter(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.__dict__["bind"] = MagicMock()
@@ -365,7 +365,7 @@ class TestProductRepositoryFindAll:
         mock_query.all.return_value = []
         mock_db.query.return_value = mock_query
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_bind_insp = MagicMock()
             mock_bind_insp.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_bind_insp
@@ -373,7 +373,7 @@ class TestProductRepositoryFindAll:
 
         assert result["success"] is True
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_with_model_number_filter_normalized(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.__dict__["bind"] = MagicMock()
@@ -388,7 +388,7 @@ class TestProductRepositoryFindAll:
         mock_query.all.return_value = []
         mock_db.query.return_value = mock_query
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_bind_insp = MagicMock()
             mock_bind_insp.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_bind_insp
@@ -396,7 +396,7 @@ class TestProductRepositoryFindAll:
 
         assert result["success"] is True
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_with_keyword_multiple_segments(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.__dict__["bind"] = MagicMock()
@@ -411,7 +411,7 @@ class TestProductRepositoryFindAll:
         mock_query.all.return_value = []
         mock_db.query.return_value = mock_query
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_bind_insp = MagicMock()
             mock_bind_insp.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_bind_insp
@@ -419,7 +419,7 @@ class TestProductRepositoryFindAll:
 
         assert result["success"] is True
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_pagination(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.__dict__["bind"] = MagicMock()
@@ -434,7 +434,7 @@ class TestProductRepositoryFindAll:
         mock_query.all.return_value = []
         mock_db.query.return_value = mock_query
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_bind_insp = MagicMock()
             mock_bind_insp.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_bind_insp
@@ -443,20 +443,20 @@ class TestProductRepositoryFindAll:
         assert result["page"] == 3
         assert result["per_page"] == 10
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_recoverable_error_on_table_names_check(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.__dict__["bind"] = MagicMock()
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_insp.side_effect = RuntimeError("inspect failed")
             result = repo.find_all()
 
         assert result["success"] is True
         assert result["data"] == []
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_bind_with_get_table_names_method(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_bind = MagicMock()
@@ -476,7 +476,7 @@ class TestProductRepositoryFindAll:
         result = repo.find_all()
         assert result["success"] is True
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_table_names_not_list_returns_empty(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_bind = MagicMock()
@@ -496,14 +496,14 @@ class TestProductRepositoryCreateUpdate:
     def repo(self):
         return SQLAlchemyProductRepository()
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_create_success(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_product = MagicMock()
         mock_product.id = 42
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.Product") as MockProduct:
+        with patch("app.infrastructure.repositories.product_repository_impl.Product") as MockProduct:
             MockProduct.return_value = mock_product
             result = repo.create({"product_name": "新产品", "price": 10.0})
 
@@ -519,27 +519,27 @@ class TestProductRepositoryCreateUpdate:
         result = repo.create({"name": "", "price": 0})
         assert result["success"] is False
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_create_with_name_key(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_product = MagicMock()
         mock_product.id = 1
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.Product") as MockProduct:
+        with patch("app.infrastructure.repositories.product_repository_impl.Product") as MockProduct:
             MockProduct.return_value = mock_product
             result = repo.create({"name": "用name键创建"})
 
         assert result["success"] is True
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_create_db_error(self, mock_get_db, repo):
         mock_get_db.side_effect = OSError("DB error")
         result = repo.create({"product_name": "测试"})
         assert result["success"] is False
         assert "创建失败" in result["message"]
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_update_success(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_product = MagicMock()
@@ -549,7 +549,7 @@ class TestProductRepositoryCreateUpdate:
         result = repo.update(1, {"product_name": "新名称"})
         assert result["success"] is True
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_update_not_found(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -559,7 +559,7 @@ class TestProductRepositoryCreateUpdate:
         assert result["success"] is False
         assert "产品不存在" in result["message"]
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_update_no_fields(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_product = MagicMock()
@@ -570,7 +570,7 @@ class TestProductRepositoryCreateUpdate:
         assert result["success"] is False
         assert "没有要更新的字段" in result["message"]
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_update_multiple_fields(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_product = MagicMock()
@@ -593,7 +593,7 @@ class TestProductRepositoryCreateUpdate:
         )
         assert result["success"] is True
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_update_db_error(self, mock_get_db, repo):
         mock_get_db.side_effect = OSError("DB error")
         result = repo.update(1, {"price": 10})
@@ -613,7 +613,7 @@ class TestProductRepositoryBatchOps:
         assert result["success"] is False
         assert "产品列表不能为空" in result["message"]
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_batch_create_success(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.bulk_insert_mappings.return_value = None
@@ -629,7 +629,7 @@ class TestProductRepositoryBatchOps:
         assert result["success"] is True
         assert result["success_count"] == 2
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_batch_create_with_empty_name(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.bulk_insert_mappings.return_value = None
@@ -645,14 +645,14 @@ class TestProductRepositoryBatchOps:
         assert result["success"] is False
         assert result["failed_count"] == 1
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_batch_create_db_error(self, mock_get_db, repo):
         mock_get_db.side_effect = OSError("DB error")
         result = repo.batch_create([{"product_name": "产品1"}])
         assert result["success"] is False
         assert "批量添加失败" in result["message"]
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_batch_create_bulk_insert_fallback(self, mock_get_db, repo):
         """bulk_insert_mappings raises SQLAlchemyError → fallback to single insert."""
         from sqlalchemy.exc import SQLAlchemyError
@@ -665,7 +665,7 @@ class TestProductRepositoryBatchOps:
         mock_db.flush.return_value = None
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.Product") as MockProduct:
+        with patch("app.infrastructure.repositories.product_repository_impl.Product") as MockProduct:
             MockProduct.return_value = mock_product
             result = repo.batch_create([{"product_name": "产品1"}])
 
@@ -676,7 +676,7 @@ class TestProductRepositoryBatchOps:
         assert result["success"] is False
         assert "产品 ID 列表不能为空" in result["message"]
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_batch_delete_success(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_products = [MagicMock(), MagicMock()]
@@ -687,7 +687,7 @@ class TestProductRepositoryBatchOps:
         assert result["success"] is True
         assert result["deleted_count"] == 2
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_batch_delete_not_found(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.all.return_value = []
@@ -705,7 +705,7 @@ class TestProductRepositoryExistsAndNames:
     def repo(self):
         return SQLAlchemyProductRepository()
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_exists_true(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = MagicMock()
@@ -713,7 +713,7 @@ class TestProductRepositoryExistsAndNames:
 
         assert repo.exists(1) is True
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_exists_false(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -721,12 +721,12 @@ class TestProductRepositoryExistsAndNames:
 
         assert repo.exists(999) is False
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_exists_db_error(self, mock_get_db, repo):
         mock_get_db.side_effect = OSError("DB error")
         assert repo.exists(1) is False
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_find_names_success(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.query.return_value.distinct.return_value.all.return_value = [
@@ -736,24 +736,24 @@ class TestProductRepositoryExistsAndNames:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_insp.return_value.get_table_names.return_value = ["products"]
             result = repo.find_names()
 
         assert result == ["产品A", "产品B"]
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_find_names_no_table(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_insp.return_value.get_table_names.return_value = []
             result = repo.find_names()
 
         assert result == []
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_find_names_db_error(self, mock_get_db, repo):
         mock_get_db.side_effect = OSError("DB error")
         result = repo.find_names()
@@ -767,7 +767,7 @@ class TestProductRepositoryFindProductUnits:
     def repo(self):
         return SQLAlchemyProductRepository()
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_fallback_to_products_unit(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.bind = MagicMock()
@@ -778,7 +778,7 @@ class TestProductRepositoryFindProductUnits:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_insp_obj
@@ -793,14 +793,14 @@ class TestProductRepositoryFindProductUnits:
         assert "件" not in result
         assert "箱" not in result
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_empty_units(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.bind = MagicMock()
         mock_db.query.return_value.distinct.return_value.all.return_value = []
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_insp_obj
@@ -813,7 +813,7 @@ class TestProductRepositoryFindProductUnits:
 
         assert result == []
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_deduplication(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.bind = MagicMock()
@@ -824,7 +824,7 @@ class TestProductRepositoryFindProductUnits:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_insp_obj
@@ -837,14 +837,14 @@ class TestProductRepositoryFindProductUnits:
 
         assert result.count("客户A") == 1
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_recoverable_error_in_fallback(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.bind = MagicMock()
         mock_db.query.return_value.distinct.return_value.all.return_value = []
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_insp_obj
