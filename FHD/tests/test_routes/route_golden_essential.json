@@ -350,6 +350,7 @@
   "/api/xcmax/sync/receive",
   "/api/xcmax/sync/status",
   "/api/xcmax/sync/stream",
+  "/api/xcmax/webhooks/modstore/payment",
   "/bootstrap-edition-pack",
   "/catalog",
   "/dependencies",
