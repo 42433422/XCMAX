@@ -50,6 +50,9 @@ jobs:
       XCAGI_LLM_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
       MODSTORE_EVOLUTION_LEDGER_PATH: ${{ github.workspace }}/FHD/evolution_decisions.jsonl
       MODSTORE_REPO_ROOT: ${{ github.workspace }}
+      MODSTORE_LEGACY_REPORT_PATH: ${{ github.workspace }}/FHD/metrics/legacy-usage-168h.json
+      MODSTORE_INTENT_REPORT_PATH: ${{ github.workspace }}/FHD/metrics/intent_benchmark_latest.json
+      MODSTORE_SLO_REPORT_PATH: ${{ github.workspace }}/FHD/metrics/slo-latest.json
     steps:
       - uses: actions/checkout@v4
         with:
@@ -70,6 +73,18 @@ jobs:
         if: ${{ inputs.dry-run == true }}
         run: |
           python scripts/autonomy/evolution_decision_ledger.py dry-run
+
+      - name: Resolve latest committed SLO report
+        if: ${{ inputs.dry-run != true }}
+        working-directory: .
+        run: |
+          latest=$(ls FHD/metrics/slo-measured-*.json 2>/dev/null | sort | tail -1 || true)
+          if [ -n "${latest:-}" ]; then
+            cp "$latest" FHD/metrics/slo-latest.json
+            echo "Using SLO report: $latest"
+          else
+            echo "No committed SLO report found; SLO signal stays healthy."
+          fi
 
       - name: Run evolution aggregator (real)
         if: ${{ inputs.dry-run != true }}
