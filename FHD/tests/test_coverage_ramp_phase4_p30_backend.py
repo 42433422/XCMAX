@@ -114,32 +114,6 @@ def test_im_list_conversations_server_error(im_client_error: TestClient) -> None
 
 
 # ---------------------------------------------------------------------------
-# wechat — groups sync
-# ---------------------------------------------------------------------------
-
-
-@patch("app.services.wechat_group_customer_bridge.sync_group_messages")
-def test_wechat_groups_sync_success(mock_sync: MagicMock) -> None:
-    from app.fastapi_routes.domains.wechat import routes as wechat_routes
-
-    mock_sync.return_value = {"success": True, "synced": 2, "failed": 0}
-    out = wechat_routes.wechat_groups_sync_messages(body={"group_limit": 10}, market_user_id=None)
-    assert out.status_code == 200
-    body = out.body.decode()
-    assert "success" in body
-
-
-@patch("app.services.wechat_group_customer_bridge.sync_group_messages")
-def test_wechat_groups_sync_all_failed(mock_sync: MagicMock) -> None:
-    from app.fastapi_routes.domains.wechat import routes as wechat_routes
-
-    mock_sync.return_value = {"success": True, "synced": 0, "failed": 3}
-    out = wechat_routes.wechat_groups_sync_messages(body=None, market_user_id=None)
-    payload = out.body.decode()
-    assert "false" in payload.lower() or "失败" in payload
-
-
-# ---------------------------------------------------------------------------
 # normal_chat — empty result messages
 # ---------------------------------------------------------------------------
 

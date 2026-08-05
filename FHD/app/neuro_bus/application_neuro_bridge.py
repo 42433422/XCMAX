@@ -49,8 +49,6 @@ _APPLICATION_SERVICE_DOMAIN: tuple[tuple[str, str], ...] = (
     ("PrintApplicationService", "print"),
     ("TemplateApplicationService", "print"),
     ("OCRApplicationService", "ocr"),
-    ("WechatTaskApplicationService", "wechat"),
-    ("WechatContactApplicationService", "wechat"),
     ("CustomerApplicationService", "customer"),
     ("UserApplicationService", "customer"),
     ("UserPreferenceApplicationService", "customer"),
@@ -287,23 +285,6 @@ def neuro_notify_user_changed(
             "username": (username or "")[:120],
         },
         domain="customer",
-    )
-
-
-def neuro_notify_wechat_task_changed(
-    action: str,
-    task_id: str | int = "",
-    status: str = "",
-) -> None:
-    """微信任务应用服务：WechatTask 创建/状态更新后广播。"""
-    _publish(
-        "application.wechat_task.changed",
-        {
-            "action": action,
-            "task_id": str(task_id),
-            "status": status,
-        },
-        domain="wechat",
     )
 
 

@@ -161,26 +161,6 @@ class TestEnsureSqlitePerModDatabaseCopies:
 
 
 # ---------------------------------------------------------------------------
-# init_wechat_tasks_table
-# ---------------------------------------------------------------------------
-class TestInitWechatTasksTable:
-    def test_creates_table(self, tmp_dir):
-        from app.db.init_db import init_wechat_tasks_table
-
-        db_path = os.path.join(tmp_dir, "test.db")
-        init_wechat_tasks_table(db_path)
-
-        import sqlite3
-
-        conn = sqlite3.connect(db_path)
-        tables = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='wechat_tasks'"
-        ).fetchall()
-        conn.close()
-        assert len(tables) == 1
-
-
-# ---------------------------------------------------------------------------
 # init_distillation_tables
 # ---------------------------------------------------------------------------
 class TestInitDistillationTables:
