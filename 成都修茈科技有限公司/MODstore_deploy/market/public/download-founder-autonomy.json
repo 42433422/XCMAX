@@ -1,20 +1,20 @@
 {
   "schema": "xcagi.public_founder_autonomy/v1",
-  "generated_at": "2026-08-05T11:31:55.746380+00:00",
+  "generated_at": "2026-08-05T11:54:16.907255+00:00",
   "readonly": true,
-  "overall_progress": 51,
-  "overall_remaining": 49,
+  "overall_progress": 6,
+  "overall_remaining": 94,
   "target_state": "founder_strategic_only",
   "dimensions": [
     {
       "id": "founder",
       "label": "创始人状态",
       "target": "退出日常运营，只处理战略与少量例外",
-      "progress": 55,
-      "remaining": 45,
+      "progress": 40,
+      "remaining": 60,
       "status": "building",
       "status_label": "闭环建设中",
-      "passed_gate_count": 4,
+      "passed_gate_count": 3,
       "total_gate_count": 8,
       "next_gap": "AI 员工真实工作"
     },
@@ -22,107 +22,101 @@
       "id": "system",
       "label": "系统状态",
       "target": "7x24 自运转，无日常人工介入",
-      "progress": 85,
-      "remaining": 15,
-      "status": "approaching",
-      "status_label": "基本成形",
-      "passed_gate_count": 7,
+      "progress": 0,
+      "remaining": 100,
+      "status": "early",
+      "status_label": "能力早期",
+      "passed_gate_count": 0,
       "total_gate_count": 8,
-      "next_gap": "运行来源可信"
+      "next_gap": "定时调度"
     },
     {
       "id": "customer",
       "label": "客户状态",
       "target": "客户为可验证产出付费",
-      "progress": 25,
-      "remaining": 75,
+      "progress": 0,
+      "remaining": 100,
       "status": "early",
       "status_label": "能力早期",
-      "passed_gate_count": 2,
+      "passed_gate_count": 0,
       "total_gate_count": 6,
-      "next_gap": "真实付费"
+      "next_gap": "价值账本"
     },
     {
       "id": "code",
       "label": "代码状态",
       "target": "自己写、审、验、合、部署并回读验证",
-      "progress": 45,
-      "remaining": 55,
-      "status": "building",
-      "status_label": "闭环建设中",
-      "passed_gate_count": 3,
+      "progress": 0,
+      "remaining": 100,
+      "status": "early",
+      "status_label": "能力早期",
+      "passed_gate_count": 0,
       "total_gate_count": 6,
-      "next_gap": "自己合"
+      "next_gap": "自己写"
     },
     {
       "id": "fault",
       "label": "故障状态",
       "target": "自己感知、修复、验证",
-      "progress": 50,
-      "remaining": 50,
-      "status": "building",
-      "status_label": "闭环建设中",
-      "passed_gate_count": 3,
+      "progress": 0,
+      "remaining": 100,
+      "status": "early",
+      "status_label": "能力早期",
+      "passed_gate_count": 0,
       "total_gate_count": 6,
-      "next_gap": "自动分诊"
+      "next_gap": "故障感知"
     },
     {
       "id": "evolution",
       "label": "进化状态",
       "target": "发现缺口、实现能力、部署更新到 MODstore",
-      "progress": 40,
-      "remaining": 60,
-      "status": "building",
-      "status_label": "闭环建设中",
-      "passed_gate_count": 3,
+      "progress": 0,
+      "remaining": 100,
+      "status": "early",
+      "status_label": "能力早期",
+      "passed_gate_count": 0,
       "total_gate_count": 7,
-      "next_gap": "实现能力"
+      "next_gap": "发现缺口"
     },
     {
       "id": "alignment",
       "label": "对齐状态",
       "target": "知道什么不能做，veto 低频但始终可用",
-      "progress": 60,
-      "remaining": 40,
-      "status": "building",
-      "status_label": "闭环建设中",
-      "passed_gate_count": 4,
+      "progress": 0,
+      "remaining": 100,
+      "status": "early",
+      "status_label": "能力早期",
+      "passed_gate_count": 0,
       "total_gate_count": 7,
-      "next_gap": "禁止项零漏放"
+      "next_gap": "可审计"
     }
   ],
   "human_intervention_rare": false,
   "proof": {
-    "runtime_fresh": true,
+    "runtime_fresh": false,
     "runtime_provenance_ok": false,
-    "active_gates_ok": true,
-    "governance_ok": true,
+    "active_gates_ok": false,
+    "governance_ok": false,
     "deploy_verified": false,
     "paid_value_verified": false,
     "paid_delivery_verified": false,
     "customer_acceptance_verified": false,
-    "employee_workforce_ready": true,
+    "employee_workforce_ready": false,
     "employee_production_workforce_ready": false,
-    "employee_production_proven_count": 31,
-    "employee_production_proof_ratio": 0.5636,
+    "employee_production_proven_count": 0,
+    "employee_production_proof_ratio": 0.0,
     "alignment_posthoc": {
       "status": "unknown",
-      "coverage_rate": 90.7,
-      "allow_count": 43,
-      "conclusive_count": 39,
-      "eligible_allow_count": 43,
-      "eligible_conclusive_count": 39,
+      "coverage_rate": 0.0,
+      "allow_count": 0,
+      "conclusive_count": 0,
+      "eligible_allow_count": 0,
+      "eligible_conclusive_count": 0,
       "pending_count": 0,
       "pending_contracts": [],
-      "maturity_minutes": 90,
-      "uncovered_count": 4,
-      "uncovered_contracts": [
-        {
-          "action": "daily_digest",
-          "source": "daily_digest.cron",
-          "count": 4
-        }
-      ]
+      "maturity_minutes": 0,
+      "uncovered_count": 0,
+      "uncovered_contracts": []
     }
   },
   "truth_domains": {
@@ -132,7 +126,7 @@
     },
     "local_runtime": {
       "label": "本机实际运行",
-      "available": true
+      "available": false
     },
     "deployment_runtime": {
       "label": "部署派发/验证",

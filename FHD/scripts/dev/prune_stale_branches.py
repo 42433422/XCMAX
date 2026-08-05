@@ -30,7 +30,6 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import subprocess
-import sys
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -280,7 +279,6 @@ def print_report(infos: list[BranchInfo], *, apply: bool, prune_local: bool, lis
         if info.category in (ACTIVE, PROTECTED) and not list_all:
             continue
         action = _action_label(info, apply)
-        pr = " (PR)" if info.open_pr else ""
         print(
             f"{info.category:<11}{info.name:<46}{info.last_commit_iso:<12}"
             f"{info.behind:>7}{info.ahead:>6}  {action}"

@@ -84,6 +84,10 @@ class TestCheckBehavior:
     ):
         cr.PYPROJECT.write_text(_write_pyproject(88), encoding="utf-8")
         cr.BASELINE.write_text(_write_behavior_floors(), encoding="utf-8")
+        # 写 coverage.json（backend 通过），但缺 coverage-behavior.json → 行为 gate 失败
+        cr.BACKEND_JSON_DEFAULT.write_text(
+            json.dumps(_write_backend_json(num_st=100, cov_ln=88, cov_br=81)), encoding="utf-8"
+        )
         code = cr.cmd_check(self._make_args(require_backend=True))
         assert code == 1
         err = capsys.readouterr().err
@@ -151,13 +155,18 @@ class TestCheckBehavior:
         # 不带 --behavior：即便 coverage-behavior.json 存在且低于 floor 也不检查
         cr.PYPROJECT.write_text(_write_pyproject(88), encoding="utf-8")
         cr.BASELINE.write_text(_write_behavior_floors(lines=80, branches=70), encoding="utf-8")
+        cr.BACKEND_JSON_DEFAULT.write_text(
+            json.dumps(_write_backend_json(num_st=100, cov_ln=88, cov_br=81)), encoding="utf-8"
+        )
         cr.BEHAVIOR_JSON_DEFAULT.write_text(
             json.dumps(_write_backend_json(num_st=100, cov_ln=10, cov_br=5)), encoding="utf-8"
         )
         code = cr.cmd_check(self._make_args(behavior=False))
         assert code == 0
         out = capsys.readouterr().out
-        assert "跳过行为覆盖率" in out
+        # 行为分支覆盖 5% 远低于 floor 70，但不带 --behavior 时不应触发失败
+        assert "OK" in out
+        assert "behavior" not in out
 
     def test_no_behavior_floors_in_baseline_does_not_fail(self, isolated_ratchet: Path, capsys):
         # baseline 无 behavior_floors 时，行为检查打印 floor None 但不阻断
@@ -233,7 +242,8 @@ class TestBumpBehavior:
 
     def test_bump_without_behavior_flag_ignores_behavior_json(self, isolated_ratchet: Path, capsys):
         cr.PYPROJECT.write_text(_write_pyproject(88), encoding="utf-8")
-        cr.BASELINE.write_text(_write_behavior_floors(lines=90, branches=85), encoding="utf-8")
+        # baseline 不含 behavior_floors
+        cr.BASELINE.write_text(json.dumps({"backend_branch_floor": 81}), encoding="utf-8")
         cr.BEHAVIOR_JSON_DEFAULT.write_text(
             json.dumps(_write_backend_json(num_st=100, cov_ln=95, cov_br=90)), encoding="utf-8"
         )

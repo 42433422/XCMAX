@@ -38,11 +38,11 @@ WIP 数字仅供内部跟踪；对外材料、棘轮 `--bump`、发版门禁仍�
 
 | 项 | floor | 来源 |
 |----|------:|------|
-| 后端行 | **84%** | `pyproject.toml` `fail_under` |
-| 后端分支 | **73%** | `coverage_ratchet_baseline.json` |
-| 前端 lines / statements | **54%** | `vitest.config.js` + ratchet |
-| 前端 branches | **62%** | 同上 |
-| 前端 functions | **50%** | 同上 |
+| 后端行 | **88%** | `pyproject.toml` `fail_under` |
+| 后端分支 | **81%** | `coverage_ratchet_baseline.json` |
+| 前端 lines / statements | **92%** | `vitest.config.js` + ratchet |
+| 前端 branches | **81%** | 同上 |
+| 前端 functions | **90%** | 同上 |
 
 详见 [`COVERAGE_GAP.md`](COVERAGE_GAP.md)（Top-N 未覆盖清单）。
 

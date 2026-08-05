@@ -342,40 +342,15 @@
       </main>
     </div>
 
-    <div v-if="contactPickerOpen" class="im-modal" @click.self="closeContactPicker">
-      <div class="im-modal-card">
-        <header class="im-modal-head">
-          <span>选择联系人</span>
-          <button type="button" class="im-icon-btn" @click="closeContactPicker">
-            <i class="fa fa-times" aria-hidden="true"></i>
-          </button>
-        </header>
-        <input
-          v-model="contactKeyword"
-          type="text"
-          class="im-compose-input"
-          placeholder="搜索姓名或账号"
-          @input="onContactSearch"
-        />
-        <ul v-if="filteredContacts.length" class="im-contact-list">
-          <li
-            v-for="ct in filteredContacts"
-            :key="ct.id"
-            class="im-contact-item"
-            @click="startChatWith(ct)"
-          >
-            <span class="im-avatar im-avatar--sm" aria-hidden="true">{{ avatarText(ct.display_name) }}</span>
-            <div class="im-contact-main">
-              <div class="im-contact-name">{{ ct.display_name }}</div>
-              <div class="im-contact-sub">@{{ ct.username }}</div>
-            </div>
-          </li>
-        </ul>
-        <div v-else class="im-empty">
-          <p>{{ contactsLoading ? '加载中…' : '未找到联系人' }}</p>
-        </div>
-      </div>
-    </div>
+    <MessengerContactPicker
+      :open="contactPickerOpen"
+      :keyword="contactKeyword"
+      :filtered-contacts="filteredContacts"
+      :contacts-loading="contactsLoading"
+      @close="closeContactPicker"
+      @update:keyword="contactKeyword = $event"
+      @select="startChatWith"
+    />
   </div>
 </template>
 
@@ -385,7 +360,6 @@ import {
   createDirectConversation,
   fetchCsInbox,
   fetchCsInboxMessages,
-  fetchImContacts,
   fetchImConversations,
   fetchImMessages,
   imWebSocketUrl,
@@ -410,15 +384,6 @@ import { useXcmaxSync } from '@/composables/useXcmaxSync';
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
 import { isDesktopShell } from '@/utils/desktopShell';
 import {
-  YUANGON_AREAS,
-  YUANGON_PKG_DESCRIPTIONS,
-  YUANGON_PKG_ROLE_LABELS,
-} from '@/domain/yuangonDutyRoster';
-import {
-  superEmployeeAvatarSrcForId,
-  type SuperEmployeeAvatarKey,
-} from '@/constants/superEmployeeAvatars';
-import {
   fetchCodexSuperEmployeeMessages,
   sendCodexSuperEmployeeMessage,
   type CodexSuperEmployeeApiScope,
@@ -433,77 +398,65 @@ import {
   fetchCursorSuperEmployeeMessages,
   sendCursorSuperEmployeeMessage,
 } from '@/api/cursorSuperEmployee';
+import {
+  useChatSession,
+} from '@/composables/messenger/useChatSession';
+import {
+  useContactPicker,
+} from '@/composables/messenger/useContactPicker';
+import {
+  useConversationList,
+} from '@/composables/messenger/useConversationList';
+import {
+  CODEX_POLL_INTERVAL_MS,
+  CODEX_POLL_MAX_ROUNDS,
+  CODEX_STREAM_PLACEHOLDER_ID,
+  CODEX_SUPER_EMPLOYEE_ENTRY,
+  avatarText,
+  codexReplyFromDispatcher,
+  dutyEmployeeReplyFromExecution,
+  fallbackDutyEmployees,
+  formatTime,
+  isAiGroupChatEntry,
+  isClaudeSuperEmployeeEntry,
+  isCodexDispatcherMessage,
+  isCodexDispatchStillOpen,
+  isCodexResultMessage,
+  isCodexStreamingMessage,
+  isCodexSuperEmployeeEntry,
+  isCursorSuperEmployeeEntry,
+  isDutyEmployeeEntry,
+  isExternalAppEntry,
+  isSuperEmployeeEntry,
+  latestCodexDispatcherMessage,
+  latestCodexResultMessage,
+  normalizeDutyEmployee,
+  pinnedAvatarText,
+  sanitizeCodexReplyText,
+  superEmployeeAvatarKey,
+  superEmployeeAvatarSrc,
+  systemEntryDispatch,
+  systemEntryIdentity,
+  systemEntryStatusLabel,
+  uniqueDutyEmployees,
+  type ActiveSuperTool,
+  type AdminEmployeeApiItem,
+  type CodexDisplayMessage,
+  type DutyEmployeeChatMessage,
+  type DutyEmployeeEntry,
+  type EmployeeExecuteResponse,
+  type ExternalAppEntry,
+  type PinnedImEntry,
+  type SystemEmployeeEntry,
+} from '@/composables/messenger/useMessengerEntries';
 import KellaiCustomerInbox from '@/components/im/KellaiCustomerInbox.vue';
 import AiGroupChatView from '@/views/AiGroupChatView.vue';
+import MessengerContactPicker from '@/views/im/MessengerContactPicker.vue';
 
 type CurrentUserPayload = {
   user?: { id?: number };
   account_kind?: string;
   market_is_admin?: boolean;
-};
-
-type CodexSuperEmployeeEntry = {
-  id: 'codex-super-employee';
-  display_name: '超级员工-Codex';
-  username: 'codex-super-employee';
-  subtitle: '全设备协同调度';
-  is_codex_super_employee: true;
-};
-
-type ClaudeSuperEmployeeEntry = {
-  id: 'claude-super-employee';
-  display_name: '超级员工-Claude';
-  username: 'claude-super-employee';
-  subtitle: '全设备协同 · 排比派工';
-  is_claude_super_employee: true;
-};
-
-type CursorSuperEmployeeEntry = {
-  id: 'cursor-super-employee';
-  display_name: '超级员工-Cursor';
-  username: 'cursor-super-employee';
-  subtitle: '全设备协同 · Agent 派工';
-  is_cursor_super_employee: true;
-};
-
-type DutyEmployeeEntry = {
-  id: string;
-  display_name: string;
-  username: string;
-  subtitle: string;
-  description: string;
-  area: string;
-  status: string;
-  api_base_path: string;
-  phone_channel: string;
-  is_duty_employee_entry: true;
-};
-
-type ExternalAppEntry = {
-  id: 'kellai-customer-im';
-  display_name: '客户消息 · 客来来';
-  username: 'kellai-customer-im';
-  subtitle: '在 XCMAX 内只读查看客户会话';
-  target_url: string;
-  is_external_app_entry: true;
-};
-
-type AiGroupChatEntry = {
-  id: 'ai-group-chat';
-  display_name: '我的群聊';
-  username: 'ai-group-chat';
-  subtitle: '多 AI 员工协同群聊';
-  is_ai_group_chat_entry: true;
-};
-
-type SystemEmployeeEntry = CodexSuperEmployeeEntry | ClaudeSuperEmployeeEntry | CursorSuperEmployeeEntry | DutyEmployeeEntry;
-type PinnedImEntry = ImContact | SystemEmployeeEntry | ExternalAppEntry | AiGroupChatEntry;
-type ImSidebarListItem =
-  | { kind: 'pinned'; key: string; entry: PinnedImEntry }
-  | { kind: 'conversation'; key: string; conversation: ImConversationSummary };
-type CodexDisplayMessage = CodexSuperEmployeeMessage & {
-  streaming?: boolean;
-  synthetic?: boolean;
 };
 
 type MobileApiResponse<T> = {
@@ -513,91 +466,11 @@ type MobileApiResponse<T> = {
   data?: T;
 };
 
-type AdminEmployeeApiItem = {
-  id?: string;
-  name?: string;
-  label?: string;
-  title?: string;
-  description?: string;
-  panel_summary?: string;
-  yuangon_area?: string;
-  industry?: string;
-  status?: string;
-  api_base_path?: string;
-  phone_channel?: string;
-};
-
 type AdminEmployeesPayload = {
   items?: AdminEmployeeApiItem[];
   employees?: AdminEmployeeApiItem[];
   count?: number;
 };
-
-type DutyEmployeeChatMessage = {
-  id: string;
-  role: 'user' | 'assistant';
-  body: string;
-  created_at: string;
-  status?: string;
-};
-
-type EmployeeExecuteResponse = {
-  success?: boolean;
-  message?: string;
-  source?: string;
-  data?: unknown;
-};
-
-const CODEX_STREAM_PLACEHOLDER_ID = '__codex_streaming_reply__';
-const CODEX_POLL_INTERVAL_MS = 2400;
-const CODEX_POLL_MAX_ROUNDS = 60;
-
-const CODEX_SUPER_EMPLOYEE_ENTRY: CodexSuperEmployeeEntry = {
-  id: 'codex-super-employee',
-  display_name: '超级员工-Codex',
-  username: 'codex-super-employee',
-  subtitle: '全设备协同调度',
-  is_codex_super_employee: true,
-};
-
-const CLAUDE_SUPER_EMPLOYEE_ENTRY: ClaudeSuperEmployeeEntry = {
-  id: 'claude-super-employee',
-  display_name: '超级员工-Claude',
-  username: 'claude-super-employee',
-  subtitle: '全设备协同 · 排比派工',
-  is_claude_super_employee: true,
-};
-
-const CURSOR_SUPER_EMPLOYEE_ENTRY: CursorSuperEmployeeEntry = {
-  id: 'cursor-super-employee',
-  display_name: '超级员工-Cursor',
-  username: 'cursor-super-employee',
-  subtitle: '全设备协同 · Agent 派工',
-  is_cursor_super_employee: true,
-};
-
-const KELLAI_CUSTOMER_IM_ENTRY: ExternalAppEntry = {
-  id: 'kellai-customer-im',
-  display_name: '客户消息 · 客来来',
-  username: 'kellai-customer-im',
-  subtitle: '在 XCMAX 内只读查看客户会话',
-  target_url: 'kellai://messages?source=xcmax',
-  is_external_app_entry: true,
-};
-
-const AI_GROUP_CHAT_ENTRY: AiGroupChatEntry = {
-  id: 'ai-group-chat',
-  display_name: '我的群聊',
-  username: 'ai-group-chat',
-  subtitle: '多 AI 员工协同群聊',
-  is_ai_group_chat_entry: true,
-};
-
-const SUPER_CLI_TOOLS: SystemEmployeeEntry[] = [
-  CODEX_SUPER_EMPLOYEE_ENTRY,
-  CURSOR_SUPER_EMPLOYEE_ENTRY,
-  CLAUDE_SUPER_EMPLOYEE_ENTRY,
-];
 
 const localUserId = ref<number | null>(null);
 const conversations = ref<ImConversationSummary[]>([]);
@@ -621,23 +494,65 @@ const dutyEmployeeMessages = ref<Record<string, DutyEmployeeChatMessage[]>>({});
 const dutyEmployeeDraft = ref('');
 const dutyEmployeeBusy = ref(false);
 const busy = ref(false);
-const wsConnected = ref(false);
-const wsConnecting = ref(false);
-const imApiReachable = ref(false);
 const hasMoreHistory = ref(false);
 const scrollEl = ref<HTMLElement | null>(null);
 const codexScrollEl = ref<HTMLElement | null>(null);
 const dutyEmployeeScrollEl = ref<HTMLElement | null>(null);
 const codexInputEl = ref<HTMLInputElement | null>(null);
-
-const contactPickerOpen = ref(false);
-const contacts = ref<ImContact[]>([]);
-const contactKeyword = ref('');
-const contactsLoading = ref(false);
 const isAdminCustomerServiceConsole = ref(false);
 
 const { playIncoming, playOutgoing } = useImSounds();
 const { onImMessage, onImReadState } = useXcmaxSync();
+
+const {
+  wsConnected,
+  wsConnecting,
+  imApiReachable,
+  activeTitle,
+  isMyMessage,
+  imConnectionClass,
+  imConnectionLabel,
+} = useChatSession({ conversations, activeConversationId, localUserId });
+
+const {
+  contactPickerOpen,
+  contacts,
+  contactKeyword,
+  filteredContacts,
+  contactsLoading,
+  loadContacts,
+  openContactPicker,
+  closeContactPicker,
+} = useContactPicker({ imApiReachable });
+
+const {
+  existingDedicatedConversation,
+  externalChannelEntries,
+  sidebarListItems,
+  superCliTools,
+  superCliToolLabel,
+  sidebarItemClasses,
+  sidebarItemAvatarClasses,
+  sidebarItemPinClasses,
+  sidebarItemShowsPin,
+  sidebarItemTitle,
+  sidebarItemPreview,
+  sidebarItemAvatarText,
+  sidebarItemSuperAvatarSrc,
+  sidebarItemUnread,
+  selectSidebarItem,
+} = useConversationList({
+  conversations,
+  contacts,
+  dutyEmployees,
+  activeConversationId,
+  activeSystemEntry,
+  activeExternalEntry,
+  activeGroupChat,
+  isAdminCustomerServiceConsole,
+  selectConversation,
+  activatePinnedEntry,
+});
 
 let ws: WebSocket | null = null;
 let offSyncMessage: (() => void) | null = null;
@@ -649,43 +564,9 @@ let codexStreamTimer: ReturnType<typeof setInterval> | null = null;
 let codexPollTimer: ReturnType<typeof setTimeout> | null = null;
 let codexPollRound = 0;
 
-const activeTitle = computed(() => {
-  const conv = conversations.value.find((c) => c.id === activeConversationId.value);
-  return conv?.title || '会话';
-});
-
-/** 气泡我方/对方判定:CS 收件箱会话里运营者以「企业专属客服」身份,非客户发的即我方。 */
-function isMyMessage(m: ImMessage): boolean {
-  const conv = conversations.value.find((c) => c.id === activeConversationId.value);
-  if (conv?.is_cs_inbox) {
-    return m.sender_user_id !== conv.customer_user_id;
-  }
-  return m.sender_user_id === localUserId.value;
-}
-
-const visibleConversations = computed(() =>
-  conversations.value.filter(
-    (c) => !isAdminCustomerServiceConsole.value || !isEnterpriseDedicatedConversation(c),
-  ),
-);
-
-const imConnectionClass = computed(() => {
-  if (wsConnected.value) return 'is-on';
-  if (imApiReachable.value) return 'is-api-on';
-  return wsConnecting.value ? 'is-off' : 'is-error';
-});
-
-const imConnectionLabel = computed(() => {
-  if (wsConnected.value) return '实时已连接';
-  if (imApiReachable.value) return '接口已连接';
-  return wsConnecting.value ? '正在连接...' : '连接失败';
-});
-
 const codexApiScope = computed<CodexSuperEmployeeApiScope>(() =>
   isAdminConsoleSpa() ? 'admin' : 'mobile',
 );
-
-type ActiveSuperTool = 'codex' | 'claude' | 'cursor';
 
 function activeSuperTool(entry: SystemEmployeeEntry | null): ActiveSuperTool | null {
   if (!entry) return null;
@@ -765,161 +646,11 @@ const codexVisibleMessages = computed<CodexDisplayMessage[]>(() => {
   return visible;
 });
 
-const filteredContacts = computed(() => {
-  const kw = contactKeyword.value.trim().toLowerCase();
-  const pool = contacts.value.filter((c) => !isEnterpriseDedicatedContact(c));
-  if (!kw) return pool;
-  return pool.filter(
-    (c) =>
-      c.display_name.toLowerCase().includes(kw) || c.username.toLowerCase().includes(kw),
-  );
-});
-
-const pinnedContacts = computed<PinnedImEntry[]>(() => {
-  if (isAdminCustomerServiceConsole.value) {
-    return [AI_GROUP_CHAT_ENTRY, CODEX_SUPER_EMPLOYEE_ENTRY, CURSOR_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY, ...dutyEmployees.value];
-  }
-  return [AI_GROUP_CHAT_ENTRY, ...contacts.value.filter((c) => isEnterpriseDedicatedContact(c))];
-});
-
-const externalChannelEntries = computed<ExternalAppEntry[]>(() => [
-  // 企业端与管理端信息列表顶部均展示客来来客户通道
-  KELLAI_CUSTOMER_IM_ENTRY,
-]);
-
-const sidebarListItems = computed<ImSidebarListItem[]>(() => {
-  const pinnedConversationIds = new Set<number>();
-  for (const entry of pinnedContacts.value) {
-    if (isSuperEmployeeEntry(entry) || isDutyEmployeeEntry(entry) || isExternalAppEntry(entry) || isAiGroupChatEntry(entry)) {
-      continue;
-    }
-    const conv = existingDedicatedConversation(entry);
-    if (conv) pinnedConversationIds.add(conv.id);
-  }
-  return [
-    ...pinnedContacts.value.map((entry) => ({
-      kind: 'pinned' as const,
-      key: `pinned-${entry.id}`,
-      entry,
-    })),
-    ...visibleConversations.value
-      .filter((conversation) => !pinnedConversationIds.has(conversation.id))
-      .map((conversation) => ({
-        kind: 'conversation' as const,
-        key: `conversation-${conversation.id}`,
-        conversation,
-      })),
-  ];
-});
-
-const superCliTools = computed(() =>
-  isAdminCustomerServiceConsole.value ? SUPER_CLI_TOOLS : [],
-);
-
-function superCliToolLabel(entry: SystemEmployeeEntry): string {
-  if (isCodexSuperEmployeeEntry(entry)) return 'Codex';
-  if (isCursorSuperEmployeeEntry(entry)) return 'Cursor';
-  if (isClaudeSuperEmployeeEntry(entry)) return 'Claude';
-  return entry.display_name;
-}
-
 const activeDutyEmployeeMessages = computed<DutyEmployeeChatMessage[]>(() => {
   const entry = activeSystemEntry.value;
   if (!entry || !isDutyEmployeeEntry(entry)) return [];
   return dutyEmployeeMessages.value[entry.id] || [];
 });
-
-function isCodexSuperEmployeeEntry(entry: PinnedImEntry): entry is CodexSuperEmployeeEntry {
-  return 'is_codex_super_employee' in entry && entry.is_codex_super_employee;
-}
-
-function isClaudeSuperEmployeeEntry(entry: PinnedImEntry): entry is ClaudeSuperEmployeeEntry {
-  return 'is_claude_super_employee' in entry && entry.is_claude_super_employee;
-}
-
-function isCursorSuperEmployeeEntry(entry: PinnedImEntry): entry is CursorSuperEmployeeEntry {
-  return 'is_cursor_super_employee' in entry && entry.is_cursor_super_employee;
-}
-
-/** 超级员工（Codex / Claude / Cursor）共用同一套合成器、消息管线与轮询。 */
-function isSuperEmployeeEntry(
-  entry: PinnedImEntry | null,
-): entry is CodexSuperEmployeeEntry | ClaudeSuperEmployeeEntry | CursorSuperEmployeeEntry {
-  return Boolean(
-    entry
-    && (
-      isCodexSuperEmployeeEntry(entry)
-      || isClaudeSuperEmployeeEntry(entry)
-      || isCursorSuperEmployeeEntry(entry)
-    ),
-  );
-}
-
-function isDutyEmployeeEntry(entry: PinnedImEntry | null): entry is DutyEmployeeEntry {
-  return Boolean(entry && 'is_duty_employee_entry' in entry && entry.is_duty_employee_entry);
-}
-
-function isExternalAppEntry(entry: PinnedImEntry | null): entry is ExternalAppEntry {
-  return Boolean(entry && 'is_external_app_entry' in entry && entry.is_external_app_entry);
-}
-
-function isAiGroupChatEntry(entry: PinnedImEntry | null): entry is AiGroupChatEntry {
-  return Boolean(entry && 'is_ai_group_chat_entry' in entry && entry.is_ai_group_chat_entry);
-}
-
-function pinnedEntryPreview(entry: PinnedImEntry): string {
-  if (isSuperEmployeeEntry(entry)) return entry.subtitle;
-  if (isDutyEmployeeEntry(entry)) return entry.subtitle;
-  if (isExternalAppEntry(entry)) return entry.subtitle;
-  if (isAiGroupChatEntry(entry)) return entry.subtitle;
-  return `@${entry.username}`;
-}
-
-function superEmployeeAvatarKey(entry: PinnedImEntry): SuperEmployeeAvatarKey | null {
-  if (isCodexSuperEmployeeEntry(entry)) return 'codex';
-  if (isClaudeSuperEmployeeEntry(entry)) return 'claude';
-  if (isCursorSuperEmployeeEntry(entry)) return 'cursor';
-  return null;
-}
-
-function superEmployeeAvatarSrc(entry: PinnedImEntry): string | null {
-  return superEmployeeAvatarSrcForId(String(entry.id || '').trim());
-}
-
-function pinnedAvatarText(entry: PinnedImEntry): string {
-  if (isCodexSuperEmployeeEntry(entry)) return 'Codex';
-  if (isClaudeSuperEmployeeEntry(entry)) return 'Claude';
-  if (isCursorSuperEmployeeEntry(entry)) return 'Cursor';
-  if (isExternalAppEntry(entry)) return '客';
-  if (isAiGroupChatEntry(entry)) return '群';
-  if (isDutyEmployeeEntry(entry)) return avatarText(entry.display_name);
-  return avatarText(entry.display_name);
-}
-
-function dutyContactLabel(channel: string): string {
-  const raw = String(channel || '').trim();
-  if (raw === 'admin-duty') return '管理端工作台';
-  if (raw === 'mobile' || raw === 'mobile-chat') return '手机端会话';
-  return raw || '员工通讯录';
-}
-
-function systemEntryStatusLabel(entry: SystemEmployeeEntry): string {
-  if (isSuperEmployeeEntry(entry)) return '多设备调度';
-  return entry.status === 'on_duty' ? '在岗员工' : '编制员工';
-}
-
-function systemEntryIdentity(entry: SystemEmployeeEntry): string {
-  if (isSuperEmployeeEntry(entry)) return '跨设备协作开发员工';
-  return entry.area || '管理端编制员工';
-}
-
-function systemEntryDispatch(entry: SystemEmployeeEntry): string {
-  if (isCodexSuperEmployeeEntry(entry)) return '全设备 Codex';
-  if (isClaudeSuperEmployeeEntry(entry)) return '全设备 Claude';
-  if (isCursorSuperEmployeeEntry(entry)) return '全设备 Cursor';
-  if (entry.api_base_path) return `${dutyContactLabel(entry.phone_channel)} · ${entry.api_base_path}`;
-  return dutyContactLabel(entry.phone_channel);
-}
 
 function systemEntryRuntimeStatus(entry: SystemEmployeeEntry): string {
   if (isSuperEmployeeEntry(entry)) {
@@ -935,62 +666,6 @@ function systemEntryLastStatus(entry: SystemEmployeeEntry): string {
   return last.role === 'assistant' ? (last.status || '已回复') : '已发送';
 }
 
-function dutyAreaLabelForId(id: string): string {
-  for (const area of Object.values(YUANGON_AREAS)) {
-    if (area.ids.includes(id)) return area.label;
-  }
-  return '管理端编制';
-}
-
-function normalizeDutyEmployee(raw: AdminEmployeeApiItem): DutyEmployeeEntry | null {
-  const id = String(raw.id || '').trim();
-  if (!id) return null;
-  const name = String(raw.name || raw.label || raw.title || YUANGON_PKG_ROLE_LABELS[id] || id).trim();
-  const description = String(
-    raw.panel_summary || raw.description || YUANGON_PKG_DESCRIPTIONS[id] || '',
-  ).trim();
-  const area = String(raw.yuangon_area || raw.industry || dutyAreaLabelForId(id)).trim();
-  return {
-    id,
-    display_name: name || id,
-    username: id,
-    subtitle: `${dutyContactLabel(raw.phone_channel || 'admin-duty')} · AI号 ${id}`,
-    description,
-    area,
-    status: String(raw.status || 'on_duty').trim(),
-    api_base_path: String(raw.api_base_path || `/api/admin/employees/${id}`).trim(),
-    phone_channel: String(raw.phone_channel || 'admin-duty').trim(),
-    is_duty_employee_entry: true,
-  };
-}
-
-function fallbackDutyEmployees(): DutyEmployeeEntry[] {
-  const rows: AdminEmployeeApiItem[] = [];
-  for (const area of Object.values(YUANGON_AREAS)) {
-    for (const id of area.ids) {
-      rows.push({
-        id,
-        name: YUANGON_PKG_ROLE_LABELS[id] || id,
-        description: YUANGON_PKG_DESCRIPTIONS[id] || '',
-        yuangon_area: area.label,
-        status: 'on_duty',
-        api_base_path: `/api/admin/employees/${id}`,
-        phone_channel: 'admin-duty',
-      });
-    }
-  }
-  return rows.map(normalizeDutyEmployee).filter((item): item is DutyEmployeeEntry => Boolean(item));
-}
-
-function uniqueDutyEmployees(items: DutyEmployeeEntry[]): DutyEmployeeEntry[] {
-  const seen = new Set<string>();
-  return items.filter((item) => {
-    if (seen.has(item.id)) return false;
-    seen.add(item.id);
-    return true;
-  });
-}
-
 function appendDutyEmployeeMessage(employeeId: string, message: DutyEmployeeChatMessage): void {
   dutyEmployeeMessages.value = {
     ...dutyEmployeeMessages.value,
@@ -1002,243 +677,12 @@ function appendDutyEmployeeMessage(employeeId: string, message: DutyEmployeeChat
   });
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-function firstTextFromRecord(record: Record<string, unknown> | null, keys: string[]): string {
-  if (!record) return '';
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === 'string' && value.trim()) return value.trim();
-    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  }
-  return '';
-}
-
-function textFromEmployeeOutputs(record: Record<string, unknown> | null): string {
-  const outputs = Array.isArray(record?.outputs) ? record.outputs : [];
-  const parts: string[] = [];
-  for (const item of outputs) {
-    const out = asRecord(item);
-    if (!out) continue;
-    const directText = firstTextFromRecord(out, ['output', 'message', 'summary', 'error', 'result']);
-    if (directText) {
-      parts.push(directText);
-      continue;
-    }
-    const nestedOutput = asRecord(out.output);
-    const nestedText = firstTextFromRecord(nestedOutput, ['reply', 'response', 'message', 'summary', 'result', 'error']);
-    if (nestedText) parts.push(nestedText);
-  }
-  return parts.join('\n\n').trim();
-}
-
-function shortJson(value: unknown): string {
-  try {
-    const text = JSON.stringify(value, null, 2);
-    return text.length > 1200 ? `${text.slice(0, 1200)}…` : text;
-  } catch {
-    return '';
-  }
-}
-
-function dutyEmployeeReplyFromExecution(result: EmployeeExecuteResponse, entry: DutyEmployeeEntry): string {
-  const root = asRecord(result);
-  const data = asRecord(result.data);
-  const nestedResult = asRecord(data?.result);
-  const success = result.success !== false && data?.success !== false;
-  const text =
-    textFromEmployeeOutputs(nestedResult)
-    || textFromEmployeeOutputs(data)
-    || firstTextFromRecord(data, ['message', 'output', 'reply', 'response', 'stdout'])
-    || firstTextFromRecord(nestedResult, ['message', 'output', 'reply', 'response'])
-    || firstTextFromRecord(data, ['result', 'summary'])
-    || firstTextFromRecord(nestedResult, ['result', 'summary'])
-    || firstTextFromRecord(root, ['message']);
-  const errorText =
-    firstTextFromRecord(data, ['error', 'detail'])
-    || firstTextFromRecord(nestedResult, ['error', 'detail'])
-    || firstTextFromRecord(root, ['error', 'detail']);
-  if (!success) return `执行失败：${errorText || text || '员工运行时未返回详细原因'}`;
-  if (text) return text;
-  return `${entry.display_name} 已完成执行，但没有返回可读文本。${shortJson(result.data) ? `\n${shortJson(result.data)}` : ''}`;
-}
-
-function isEnterpriseDedicatedContact(contact: ImContact): boolean {
-  return Boolean(contact.is_enterprise_dedicated_cs)
-    || contact.username.trim().toLowerCase() === 'enterprise-cs';
-}
-
-function isEnterpriseDedicatedConversation(conversation: ImConversationSummary): boolean {
-  return Boolean(conversation.is_enterprise_dedicated_cs)
-    || conversation.title.trim() === '企业专属客服';
-}
-
-function avatarText(name: string): string {
-  const s = String(name || '').trim();
-  return s ? s.slice(0, 1).toUpperCase() : '?';
-}
-
-function isCodexDispatcherMessage(message: CodexSuperEmployeeMessage): boolean {
-  if (message.role === 'system' || message.kind === 'dispatcher') return true;
-  if (message.role !== 'assistant') return false;
-  const status = String(message.status || '').toLowerCase();
-  const body = String(message.body || '');
-  return (
-    ['accepted', 'queued', 'running', 'dispatch_failed', 'dispatch_error'].includes(status)
-    && /调度器|调用队列|已派发|已调用全设备|未发现在线|Para 任务/.test(body)
-  );
-}
-
-function isCodexResultMessage(message: CodexSuperEmployeeMessage): boolean {
-  if (typeof message.kind === 'string' && message.kind.endsWith('_result')) return true;
-  return message.role === 'assistant' && !isCodexDispatcherMessage(message);
-}
-
-function isCodexStreamingMessage(message: CodexDisplayMessage): boolean {
-  return Boolean(message.streaming);
-}
-
 function codexMessageRoleLabel(message: CodexSuperEmployeeMessage): string {
   if (message.role === 'user') return codexSenderLabel.value;
   const tool = activeSuperTool(activeSystemEntry.value);
   if (tool === 'claude') return 'Claude';
   if (tool === 'cursor') return 'Cursor';
   return 'Codex';
-}
-
-function formatTime(iso: string | null): string {
-  if (!iso) return '';
-  try {
-    return new Date(iso).toLocaleString();
-  } catch {
-    return iso;
-  }
-}
-
-async function openContactPicker(): Promise<void> {
-  contactPickerOpen.value = true;
-  contactKeyword.value = '';
-  await loadContacts();
-}
-
-function closeContactPicker(): void {
-  contactPickerOpen.value = false;
-}
-
-function onContactSearch(): void {
-  /* 本地过滤，filteredContacts 已响应式处理 */
-}
-
-function existingDedicatedConversation(contact: ImContact): ImConversationSummary | undefined {
-  const username = contact.username.trim().toLowerCase();
-  return conversations.value.find((c) => {
-    if (c.is_enterprise_dedicated_cs) return true;
-    return username && c.title.trim().toLowerCase() === contact.display_name.trim().toLowerCase();
-  });
-}
-
-function isPinnedContactActive(contact: PinnedImEntry): boolean {
-  if (isExternalAppEntry(contact)) return activeExternalEntry.value?.id === contact.id;
-  if (isAiGroupChatEntry(contact)) return activeGroupChat.value;
-  if (isSuperEmployeeEntry(contact)) {
-    return activeSystemEntry.value?.id === contact.id;
-  }
-  if (isDutyEmployeeEntry(contact)) {
-    return activeSystemEntry.value?.id === contact.id;
-  }
-  const conv = existingDedicatedConversation(contact);
-  return !!conv && conv.id === activeConversationId.value;
-}
-
-function isSidebarItemActive(item: ImSidebarListItem): boolean {
-  return item.kind === 'pinned'
-    ? isPinnedContactActive(item.entry)
-    : item.conversation.id === activeConversationId.value;
-}
-
-function sidebarItemClasses(item: ImSidebarListItem) {
-  return [
-    'im-conv-item',
-    { 'im-conv-item--pinned': item.kind === 'pinned' },
-    { 'im-conv-item--admin-contact': item.kind === 'pinned' && isAdminCustomerServiceConsole.value },
-    { active: isSidebarItemActive(item) },
-  ];
-}
-
-function sidebarItemAvatarClasses(item: ImSidebarListItem) {
-  if (item.kind === 'conversation') return ['im-avatar'];
-  const entry = item.entry;
-  const avatarKey = superEmployeeAvatarKey(entry);
-  return [
-    'im-avatar',
-    {
-      'im-avatar--super-tool': avatarKey,
-      [`im-avatar--${avatarKey}`]: avatarKey,
-      'im-avatar--employee': isDutyEmployeeEntry(entry),
-      'im-avatar--external': isExternalAppEntry(entry),
-      'im-avatar--group': isAiGroupChatEntry(entry),
-    },
-  ];
-}
-
-function sidebarItemPinClasses(item: ImSidebarListItem) {
-  if (item.kind !== 'pinned') return [];
-  return [
-    'fa',
-    isAiGroupChatEntry(item.entry)
-      ? 'fa-users'
-      : isExternalAppEntry(item.entry)
-        ? 'fa-comments-o'
-        : isDutyEmployeeEntry(item.entry)
-          ? 'fa-id-badge'
-          : 'fa-thumb-tack',
-    'im-pin',
-    {
-      'im-pin--group': isAiGroupChatEntry(item.entry),
-      'im-pin--employee': isDutyEmployeeEntry(item.entry),
-      'im-pin--external': isExternalAppEntry(item.entry),
-    },
-  ];
-}
-
-function sidebarItemShowsPin(item: ImSidebarListItem): boolean {
-  return item.kind === 'pinned' && (isExternalAppEntry(item.entry) || !isAdminCustomerServiceConsole.value);
-}
-
-function sidebarItemTitle(item: ImSidebarListItem): string {
-  return item.kind === 'pinned' ? item.entry.display_name : item.conversation.title;
-}
-
-function sidebarItemPreview(item: ImSidebarListItem): string {
-  return item.kind === 'pinned'
-    ? pinnedEntryPreview(item.entry)
-    : item.conversation.last_message_preview || '暂无消息';
-}
-
-function sidebarItemAvatarText(item: ImSidebarListItem): string {
-  return item.kind === 'pinned'
-    ? pinnedAvatarText(item.entry)
-    : avatarText(item.conversation.title);
-}
-
-function sidebarItemSuperAvatarSrc(item: ImSidebarListItem): string | null {
-  return item.kind === 'pinned' ? superEmployeeAvatarSrc(item.entry) : null;
-}
-
-function sidebarItemUnread(item: ImSidebarListItem): number {
-  return item.kind === 'conversation' ? item.conversation.unread_count || 0 : 0;
-}
-
-function selectSidebarItem(item: ImSidebarListItem): void {
-  if (item.kind === 'pinned') {
-    void activatePinnedEntry(item.entry);
-    return;
-  }
-  void selectConversation(item.conversation.id);
 }
 
 function closeOverlappingAssistantFloat(): void {
@@ -1315,65 +759,6 @@ function stopCodexPolling(): void {
     codexPollTimer = null;
   }
   codexPollRound = 0;
-}
-
-function sanitizeCodexReplyText(text: string): string {
-  return String(text || '')
-    .replace(/排比\s*Para\/Codex\s*多设备调度器/g, '全设备 Codex')
-    .replace(/跨设备调度器/g, '全设备 Codex')
-    .replace(/多设备调度器/g, '全设备 Codex')
-    .replace(/调度器/g, 'Codex')
-    .replace(/Para\/Codex/g, 'Codex')
-    .replace(/Para\s*任务/g, 'Codex 任务')
-    .replace(/调用队列/g, '任务队列')
-    .replace(/任务\s*ID[:：]\s*[0-9a-f-]+/gi, '')
-    .replace(/\s+。/g, '。')
-    .trim();
-}
-
-function codexReplyFromDispatcher(message: CodexSuperEmployeeMessage | null): string {
-  if (!message) return 'Codex 已收到任务，正在连接全设备执行环境。';
-  const body = String(message.body || '');
-  const status = String(message.task_status || message.status || '').toLowerCase();
-  if (/未发现在线可用 Codex 设备/.test(body)) {
-    return 'Codex 暂未检测到在线工作设备，任务已保留，等待设备上线后继续。';
-  }
-  if (/任务运行中|进度\s*\d+%/.test(body)) {
-    return sanitizeCodexReplyText(body);
-  }
-  if (status === 'queued') {
-    return 'Codex 已收到任务，正在排队等待可用设备。';
-  }
-  if (status === 'accepted' || status === 'running') {
-    return 'Codex 已收到任务，正在连接全设备执行环境。';
-  }
-  return sanitizeCodexReplyText(body) || 'Codex 已收到任务，正在处理。';
-}
-
-function latestCodexDispatcherMessage(
-  items: CodexSuperEmployeeMessage[],
-  requestId = '',
-): CodexSuperEmployeeMessage | null {
-  const pool = requestId
-    ? items.filter((m) => String(m.dispatch_request_id || '') === requestId)
-    : items;
-  return [...pool].reverse().find((m) => isCodexDispatcherMessage(m)) ?? null;
-}
-
-function latestCodexResultMessage(
-  items: CodexSuperEmployeeMessage[],
-  requestId = '',
-): CodexSuperEmployeeMessage | null {
-  const pool = requestId
-    ? items.filter((m) => String(m.dispatch_request_id || '') === requestId)
-    : items;
-  return [...pool].reverse().find((m) => isCodexResultMessage(m)) ?? null;
-}
-
-function isCodexDispatchStillOpen(message: CodexSuperEmployeeMessage | null): boolean {
-  if (!message) return false;
-  const status = String(message.task_status || message.status || '').toLowerCase();
-  return !['completed', 'merged', 'failed', 'merge_conflict', 'dispatch_failed', 'dispatch_error'].includes(status);
 }
 
 function ensureCodexTypewriter(): void {
@@ -1761,18 +1146,6 @@ async function resolveLocalUserId(): Promise<number | null> {
     return Number.isFinite(id) && id > 0 ? id : null;
   } catch {
     return null;
-  }
-}
-
-async function loadContacts(): Promise<void> {
-  contactsLoading.value = true;
-  try {
-    contacts.value = await fetchImContacts();
-    imApiReachable.value = true;
-  } catch (error) {
-    showAppToast(error instanceof Error ? error.message : '加载联系人失败', 'error');
-  } finally {
-    contactsLoading.value = false;
   }
 }
 

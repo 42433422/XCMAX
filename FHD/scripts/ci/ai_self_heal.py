@@ -1246,17 +1246,21 @@ def main(argv: list[str] | None = None) -> int:
         llm_fixes = call_llm(needs_human_errors)
         if llm_fixes is not None:
             print(f"[heal] LLM 兜底生成 {len(llm_fixes)} 个候选修复")
-            # LLM 提供的修复替换原 needs-human fix，但 LLM 强制 r3 永不自动合并
+            # LLM 提供的修复替换原 needs-human fix。
+            # 全量自主修复：LLM 修复从 r3 降为 r1（可自动合并），但保留
+            # 三层护栏：hold-merge veto 通道 + 二次守卫（CI 全绿/体量/文件
+            # 类型/禁止路径）+ 48h 观察期。bandit 安全告警仍强制 r3 永不自动合并。
             for lf in llm_fixes:
                 # 找到原 fix 替换 patch
                 for i, orig in enumerate(fixes):
                     if orig.error is lf.error:
+                        is_security = orig.error.tool == "bandit"
                         fixes[i] = Fix(
                             error=lf.error,
                             patch=lf.patch or orig.patch,
-                            needs_human=True,  # LLM 修复仍标 needs-human
+                            needs_human=is_security,  # 仅安全类保留 needs-human
                             description=f"[LLM] {lf.description}",
-                            risk_level="r3",
+                            risk_level="r3" if is_security else "r1",
                         )
                         break
         else:

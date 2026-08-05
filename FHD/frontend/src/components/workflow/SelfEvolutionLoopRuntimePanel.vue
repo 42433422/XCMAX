@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter, type RouteLocationRaw } from 'vue-router'
 import xcmaxMarketProxy from '@/api/xcmaxMarketProxy'
 import {
@@ -7,6 +7,10 @@ import {
   overlayDeployGap,
   type AutonomyGapStatus,
 } from '@/constants/autonomyL4Readiness'
+import { useLoopRuntimePanel, type AnyRecord } from '@/composables/useLoopRuntimePanel'
+import LoopStageFlow from './self-evolution/LoopStageFlow.vue'
+import LoopDecisionGrid from './self-evolution/LoopDecisionGrid.vue'
+import LoopTeamLanes from './self-evolution/LoopTeamLanes.vue'
 
 const props = withDefaults(defineProps<{
   compact?: boolean
@@ -16,54 +20,15 @@ const props = withDefaults(defineProps<{
   surface: 'employee-space',
 })
 
-type AnyRecord = Record<string, unknown>
-
 const router = useRouter()
-const raw = ref<AnyRecord | null>(null)
-const loading = ref(false)
-const error = ref('')
+const {
+  raw, loading, error, refresh,
+  asRecord, asArray, asString, asNumber, firstText,
+} = useLoopRuntimePanel(() => props.compact ? 40 : 80)
 const paraCopied = ref(false)
 const governanceReviewBusy = ref(false)
 const governanceReviewError = ref('')
 const governanceReviewResult = ref<AnyRecord | null>(null)
-let timer: number | null = null
-
-function asRecord(v: unknown): AnyRecord {
-  return v && typeof v === 'object' && !Array.isArray(v) ? v as AnyRecord : {}
-}
-
-function asArray(v: unknown): unknown[] {
-  return Array.isArray(v) ? v : []
-}
-
-function asString(v: unknown): string {
-  return String(v ?? '').trim()
-}
-
-function asNumber(v: unknown, fallback = 0): number {
-  const n = Number(v)
-  return Number.isFinite(n) ? n : fallback
-}
-
-function firstText(...values: unknown[]): string {
-  for (const value of values) {
-    const s = asString(value)
-    if (s) return s
-  }
-  return ''
-}
-
-async function refresh() {
-  loading.value = true
-  error.value = ''
-  try {
-    raw.value = await xcmaxMarketProxy.selfMaintenanceRuntimeStatus(props.compact ? 40 : 80) as AnyRecord
-  } catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    loading.value = false
-  }
-}
 
 async function copyParaTaskId() {
   const value = paraTaskId.value
@@ -92,18 +57,6 @@ async function reviewGovernanceAudit() {
     governanceReviewBusy.value = false
   }
 }
-
-onMounted(() => {
-  void refresh()
-  timer = window.setInterval(() => {
-    void refresh()
-  }, 30000)
-})
-
-onBeforeUnmount(() => {
-  if (timer != null) window.clearInterval(timer)
-  timer = null
-})
 
 const evidence = computed<AnyRecord>(() => asRecord(raw.value?.evidence))
 const memory = computed<AnyRecord>(() => asRecord(raw.value?.memory))
@@ -1167,28 +1120,9 @@ function gapTone(status: AutonomyGapStatus): string {
       </div>
     </div>
 
-    <div class="selp-flow" role="list" aria-label="自进化循环阶段">
-      <div
-        v-for="stage in loopStages"
-        :key="stage.key"
-        class="selp-stage"
-        :class="`selp-stage--${stage.tone}`"
-        role="listitem"
-      >
-        <span class="selp-stage-dot" aria-hidden="true" />
-        <span class="selp-stage-title">{{ stage.title }}</span>
-        <strong class="selp-stage-value">{{ stage.value }}</strong>
-        <span class="selp-stage-meta">{{ stage.meta }}</span>
-      </div>
-    </div>
+    <LoopStageFlow :stages="loopStages" />
 
-    <div class="selp-decision" role="list" aria-label="自动合并决策">
-      <div v-for="card in decisionCards" :key="card.key" class="selp-decision-card" role="listitem">
-        <span>{{ card.label }}</span>
-        <strong>{{ card.value }}</strong>
-        <small>{{ card.sub }}</small>
-      </div>
-    </div>
+    <LoopDecisionGrid :cards="decisionCards" />
 
     <div class="selp-kb" aria-label="修复知识库与 RedisVL">
       <div class="selp-kb-cards" role="list">
@@ -1295,22 +1229,7 @@ function gapTone(status: AutonomyGapStatus): string {
       </ul>
     </div>
 
-    <div class="selp-team" role="list" aria-label="循环参与员工">
-      <div class="selp-team-head">
-        <span>参与员工泳道</span>
-        <strong>{{ teamLanes.length ? `${teamLanes.length} 名` : '等待记录回写' }}</strong>
-      </div>
-      <div v-if="teamLanes.length" class="selp-team-list">
-        <span v-for="lane in teamLanes" :key="`${lane.id}-${lane.stage}`" class="selp-team-chip" :class="{ 'selp-team-chip--outside': lane.rosterStatus === 'out_of_roster' || lane.dutyRegistered === false }" role="listitem">
-          <strong>{{ lane.id }}</strong>
-          <small>{{ lane.stage }} · {{ lane.source }}</small>
-          <small v-if="lane.rosterLabel || lane.dutyRegisteredLabel || lane.department">{{ lane.rosterLabel || '排班未知' }}<template v-if="lane.dutyRegisteredLabel"> · {{ lane.dutyRegisteredLabel }}</template><template v-if="lane.department"> · {{ lane.department }}</template></small>
-        </span>
-      </div>
-      <p v-else class="selp-team-empty">
-        当前状态数据尚未暴露员工 ID；后端记录一旦写入 employee_id / actor / assignee 会自动显示。
-      </p>
-    </div>
+    <LoopTeamLanes :lanes="teamLanes" />
 
     <div v-if="runTimeline" class="selp-timeline" aria-label="自进化运行时间线">
       <div class="selp-timeline-head">
@@ -1497,7 +1416,6 @@ function gapTone(status: AutonomyGapStatus): string {
 }
 
 .selp-meta-card,
-.selp-stage,
 .selp-policy {
   min-width: 0;
   border: 1px solid #e2e8f0;
@@ -1513,7 +1431,6 @@ function gapTone(status: AutonomyGapStatus): string {
 }
 
 .selp-meta-card span,
-.selp-stage-meta,
 .selp-policy span,
 .selp-policy small {
   color: var(--selp-muted);
@@ -1601,47 +1518,6 @@ function gapTone(status: AutonomyGapStatus): string {
   color: #991b1b !important;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-weight: 800;
-}
-
-.selp-flow {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 9px;
-}
-
-.selp-decision {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.selp-decision-card {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-  padding: 10px 11px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.78);
-}
-
-.selp-decision-card span,
-.selp-decision-card small {
-  overflow: hidden;
-  color: var(--selp-muted);
-  font-size: 11px;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.selp-decision-card strong {
-  overflow: hidden;
-  color: #0f172a;
-  font-size: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .selp-kb {
@@ -1927,70 +1803,10 @@ function gapTone(status: AutonomyGapStatus): string {
   font-size: 11px;
 }
 
-.selp-stage {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 12px;
-  overflow: hidden;
-}
-
-.selp-stage::after {
-  content: "";
-  position: absolute;
-  inset: auto -18px -28px auto;
-  width: 70px;
-  height: 70px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--stage-color, #64748b) 14%, transparent);
-}
-
-.selp-stage--ok { --stage-color: #16a34a; }
-.selp-stage--warn { --stage-color: #f59e0b; }
-.selp-stage--bad { --stage-color: #ef4444; }
-.selp-stage--running { --stage-color: #2563eb; }
-.selp-stage--idle { --stage-color: #64748b; }
-
-.selp-stage-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  background: var(--stage-color, #64748b);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--stage-color, #64748b) 50%, transparent);
-}
-
-.selp-stage-title {
-  color: #334155;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.selp-stage-value {
-  position: relative;
-  z-index: 1;
-  overflow: hidden;
-  color: #0f172a;
-  font-size: 15px;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .selp-bottom {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 9px;
-}
-
-.selp-team {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 11px 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.78);
 }
 
 .selp-timeline {
@@ -2091,37 +1907,6 @@ function gapTone(status: AutonomyGapStatus): string {
   color: #991b1b;
 }
 
-.selp-team-head,
-.selp-team-list {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.selp-team-head {
-  justify-content: space-between;
-  color: #334155;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.selp-team-chip {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 2px;
-  max-width: 220px;
-  padding: 7px 9px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--selp-accent) 10%, #fff);
-  color: #0f172a;
-}
-
-.selp-team-chip--outside {
-  background: #fef2f2;
-  color: #991b1b;
-}
-
 .selp-timeline-roster {
   align-self: flex-start;
   padding: 3px 7px;
@@ -2134,21 +1919,6 @@ function gapTone(status: AutonomyGapStatus): string {
 .selp-timeline-roster--outside {
   background: #fef2f2;
   color: #991b1b;
-}
-
-.selp-team-chip strong {
-  overflow: hidden;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.selp-team-chip small,
-.selp-team-empty {
-  margin: 0;
-  color: var(--selp-muted);
-  font-size: 11px;
-  line-height: 1.35;
 }
 
 .selp-policy {
@@ -2168,8 +1938,6 @@ function gapTone(status: AutonomyGapStatus): string {
 
 @media (max-width: 980px) {
   .selp-meta,
-  .selp-flow,
-  .selp-decision,
   .selp-kb-cards,
   .selp-proactive-cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2186,8 +1954,6 @@ function gapTone(status: AutonomyGapStatus): string {
   }
 
   .selp-meta,
-  .selp-flow,
-  .selp-decision,
   .selp-kb-cards,
   .selp-proactive-cards {
     grid-template-columns: 1fr;

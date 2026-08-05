@@ -17,7 +17,6 @@ eggs/
 lib/
 !scripts/deploy/lib/
 !scripts/deploy/lib/**
-scripts/deploy/lib/**/__pycache__/
 !mobile-flutter-poc/lib/
 !mobile-flutter-poc/lib/**
 lib64/
@@ -271,7 +270,3 @@ mutants/
 # 稳定设备标识运行时文件（device_identity.get_stable_device_id 写入 app data dir；
 # dev 模式回落到仓库根，勿提交）
 device_id
-
-# AI 员工生成/自省运行时产物（勿提交）
-.xcagi/
-resources/routing_policies/reflection_ledger.jsonl

@@ -263,7 +263,9 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 
 `fhd-ci-cd.yml` → job `backend-test` 上传 `coverage.xml` 至 Codecov。**可选**：需在 GitHub **Settings → Secrets → Actions** 配置 `CODECOV_TOKEN`；无 token 时步骤 `continue-on-error`（不阻断 CI）。本地 `coverage.xml` / `htmlcov/` 仍为 SSOT。
 
-**覆盖率门槛 SSOT**：唯一真值 = `FHD/pyproject.toml` → `[tool.coverage.report] fail_under`（当前 `90`，对应 `source=[app]` 全量行覆盖 floor，2026-07-05 bump 自 89）。分支 floor（85）与前端 floor 见 `FHD/metrics/coverage_ratchet_baseline.json`；对外现状口径见 `FHD/metrics/coverage-dual-summary.json`。`backend-test` **不再**用 CLI `--cov-fail-under` 硬编码阈值；标准命令传 `--cov-fail-under=0`，再由 `coverage_ratchet.py --check` 同时检查行/分支（行 ≥ 90 / 分支 ≥ 85）。旧 `35/58/窄包70/77.4%` 等窄 include 或误报口径已退役，禁止再引用为当前值。
+**覆盖率门槛 SSOT**：唯一真值 = `FHD/pyproject.toml` → `[tool.coverage.report] fail_under`（当前 `88`，对应 `source=[app]` 全量行覆盖 floor，2026-07-25 bump 收录）。分支 floor（81）与前端 floor 见 `FHD/metrics/coverage_ratchet_baseline.json`；对外现状口径见 `FHD/metrics/coverage-dual-summary.json`。
+
+**后端覆盖率门禁唯一硬 gate = 行为口径（Delta A，2026-08-05）**：`backend-test` 的 `Behavior coverage gate` 步骤用 `coverage_ratchet.py --check --behavior --require-backend --record` 排除 `coverage_ramp` 注水 stub（`-m 'not coverage_ramp'`）后做硬阻断，floor 见 `coverage_ratchet_baseline.json` 的 `behavior_floors {lines, branches}`。全量 `coverage.json` + `fail_under` 保留为参考/趋势口径，不再作为唯一硬 gate。`backend-test` **不再**用 CLI `--cov-fail-under` 硬编码阈值；标准命令传 `--cov-fail-under=0`。
 
 `FHD/scripts/ci/check_coverage_ssot.py` 在 smoke/full CI 中校验上述三个文件互相一致，并禁止 `pyproject.toml` 复制动态 pytest passed/failed 快照；动态实测只允许出现在 `coverage-dual-summary.json`。
 
@@ -296,6 +298,47 @@ cd XCMAX
 ```
 
 历史子仓 remote（`ai-excel-helper`、`XCMAX-roadmap`、`xcagi-modstore`）已退役；旧 `.git` 备份见 `~/XCMAX-archives/nested-git-backup-20260608/`。
+
+
+## 分支生命周期策略（branch lifecycle）
+
+仓库历史上积累了大量远端/本地分支（886 / 193），部分 `behind main` 达 121–517，
+合并冲突成本爆炸。遵循以下策略控制分支增量，并配套安全清理工具。
+
+### 命名规范
+- 特性分支：`feature/<module>-<short-desc>`（如 `feature/admin-orders-foundation-ui`）
+- 修复分支：`fix/<short-desc>`（如 `fix/lane-payload-loop`）
+- 热修分支：`hotfix/<short-desc>`（如 `hotfix/cvm-autonomy-watcher-incident`）
+- 发布分支：`release/<version>`（**受保护，永不删除**）
+- 自动化/工具分支：`auto/`、`codex/`、`devfleet/`、`trae/`、`backup/`、`recover/`、`split/`、`merge/` 等
+- 长期主线：`main`、`develop`（**受保护，永不删除**）
+
+### 合并即删
+- 合并进 `main` 的功能/修复分支，合并完成后原则上立即删除远端+本地分支。
+- 有开放 PR 的分支**永不删除**（防止误删进行中的工作）。
+
+### 陈旧阈值
+- 默认：超过 **30 天无提交** 即视为 `stale`。
+- `deletable` = 已合并进 `main` + 超过陈旧阈值无提交 + `behind main` 超过阈值。
+- 人工清理时可按需放宽（`--stale-days` / `--before` / `--behind`）。
+
+### 清理工具（安全 dry-run 优先）
+`FHD/scripts/dev/prune_stale_branches.py` 默认 **dry-run 只输出分类报告**，
+仅 `--apply` 才真正 `git push origin --delete`。分类：`active` / `stale` /
+`deletable` / `protected`。保护清单（main / develop / release/* / 当前分支 /
+开放 PR 分支）永不删除。
+
+```bash
+cd FHD
+.venv/bin/python scripts/dev/prune_stale_branches.py            # dry-run 报告
+.venv/bin/python scripts/dev/prune_stale_branches.py --list-all # 全量清单（dry-run）
+.venv/bin/python scripts/dev/prune_stale_branches.py --apply    # 真正删除可删远端分支
+.venv/bin/python scripts/dev/prune_stale_branches.py --apply --prune-local  # 追加清本地
+.venv/bin/python scripts/dev/prune_stale_branches.py --before 2026-06-01 --behind 50 --stale-days 60
+```
+
+> **安全护栏**：删除前务必先跑 dry-run 核对报告；`--apply` 是不可逆操作，建议
+> 分阶段（先 `--before` 框定范围）执行。
 
 
 ## 单机部署速查（替代已删除的 K8s/Helm 节）

@@ -585,11 +585,16 @@ def _commit_and_pr(
     )
     _git("push", "origin", branch, cwd=str(base))
     # Domain pre-authorization allows execution, not a claim that arbitrary LLM
-    # code is mechanically safe.  Independent review/CI is always required.
-    pr_labels = ["needs-human", "ai-generated", "risk:r2"]
+    # code is mechanically safe.  Independent CI/review is still required.
+    # 全量自主修复：标 risk:r1（可自动合并），但受三层护栏约束——
+    #   - 来源门禁：本 entry 仅由 owner 确认评论或 allowlist 预授权触发
+    #   - SLA 二次守卫：CI 全绿 + 体量 + 文件类型 + 禁止路径
+    #   - 48h 观察期 + `hold-merge` veto 通道
+    pr_labels = ["ai-generated", "risk:r1"]
     pr_footer = (
         f"_本 PR 由 ai-issue-implement workflow 生成（授权来源：{auth_source or 'owner'}），"
-        "标 `needs-human` + `risk:r2`，禁止按低风险代码自动合并。_"
+        "标 `ai-generated` + `risk:r1`，经 SLA 二次守卫（CI 全绿/体量/路径）+ "
+        "`hold-merge` veto 通道后自动合并。_"
     )
     pr_body = (
         f"## 关联 issue\n\nCloses #{issue_number}\n\n"
@@ -802,12 +807,12 @@ def run(args: argparse.Namespace) -> ImplementResult:
         result.pr_number = pr_num
         result.status = "pr_created"
         result.ok = True
-        result.reason = f"PR #{pr_num} 已创建（LLM 代码 → needs-human + risk:r2）"
+        result.reason = f"PR #{pr_num} 已创建（LLM 代码 → risk:r1 自动合并）"
         pr_comment = (
             f"✅ 已创建 PR #{pr_num}: {pr_url}\n\n"
             f"授权来源：**{auth_source or 'owner'}**。\n"
-            "PR 已标 `needs-human` + `ai-generated` + `risk:r2`，"
-            "必须经过独立审查和 CI，不按低风险代码自动合并。"
+            "PR 已标 `ai-generated` + `risk:r1`，"
+            "经 SLA 二次守卫（CI 全绿/体量/路径）+ 48h 观察期 + `hold-merge` veto 后自动合并。"
         )
         _gh_post(
             f"https://api.github.com/repos/{repo}/issues/{issue_number}/comments",

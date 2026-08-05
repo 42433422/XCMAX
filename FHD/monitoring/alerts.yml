@@ -1,0 +1,66 @@
+# Prometheus 告警规则 — 基于 app/utils/metrics.py 真实暴露的指标名
+# 命名与 metrics.py 一致（api_requests_total / api_request_duration_seconds / ...）
+
+groups:
+  - name: fhd_backend_alerts
+    interval: 30s
+    rules:
+      # 服务下线（Prometheus 内置 up 指标）
+      - alert: FhdBackendDown
+        expr: up{job="fhd-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "FHD 后端不可达"
+          description: "Prometheus 已 {{ $value }} 分钟无法抓取 fhd-backend 的 /metrics 端点。"
+
+      # P95 响应时间过高
+      - alert: HighP95Latency
+        expr: histogram_quantile(0.95, sum(rate(api_request_duration_seconds_bucket[5m])) by (le)) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 响应时间过高"
+          description: "API 全局 P95 响应时间为 {{ $value }}s，超过阈值 0.5s。"
+
+      # 5xx 错误率过高
+      - alert: High5xxErrorRate
+        expr: sum(rate(api_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(api_requests_total[5m])), 1) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "5xx 错误率过高"
+          description: "5xx 错误率 {{ $value | humanizePercentage }}，超过阈值 5%。"
+
+      # 熔断器全开
+      - alert: CircuitBreakerOpen
+        expr: circuit_breaker_state == 2
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "熔断器已断开"
+          description: "熔断器 {{ $labels.name }} 处于 open 状态，下游依赖可能不可用。"
+
+      # AI 服务错误率过高
+      - alert: HighAiErrorRate
+        expr: sum(rate(ai_requests_total{status="error"}[5m])) / clamp_min(sum(rate(ai_requests_total[5m])), 1) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI 服务错误率过高"
+          description: "AI 请求错误率 {{ $value | humanizePercentage }}，超过阈值 5%。"
+
+      # 活跃请求数异常高
+      - alert: HighActiveRequests
+        expr: active_requests > 500
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "活跃请求数过高"
+          description: "当前活跃请求数为 {{ $value }}，超过阈值 500。"
