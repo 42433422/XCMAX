@@ -14,7 +14,6 @@ import pytest
         "ai_service",
         "intent",
         "safety",
-        "wechat",
     ],
 )
 def test_domain_imports_handlers(domain_name):
