@@ -10,7 +10,21 @@ interface Window {
   xcagiDesktop?: {
     platform: NodeJS.Platform;
     versions: Record<string, string>;
+    getAppIdentity?: () => Promise<{
+      name?: string;
+      version?: string;
+      isPackaged?: boolean;
+      install?: {
+        appPath?: string | null;
+        canonicalAppPath?: string | null;
+        isCanonical?: boolean;
+        canSelfUpdate?: boolean;
+        reason?: string;
+      };
+    }>;
     getDataDir: () => Promise<string>;
+    /** One-shot, local-only renderer entry hint from Electron's persisted cookie store. */
+    consumeBootstrapSessionHint?: () => Promise<boolean>;
     checkForUpdates: () => Promise<unknown>;
     getUpdateStatus?: () => Promise<{ type: string; data?: unknown } | null>;
     downloadUpdate: () => Promise<unknown>;

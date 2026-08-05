@@ -272,7 +272,7 @@ const viewTitlesBase = {
   'shipment-records': '业务记录',
   customers: '组织管理',
   'data-sources': '数据来源',
-  'wechat-contacts': '数据来源',
+  'wechat-contacts': '微信联系人',
   print: '模板与打印',
   'printer-list': '打印机列表',
   'template-preview': '模板库',
@@ -408,6 +408,7 @@ const ensureSidebarExpandedForTutorial = () => {
 
 const scheduleSidebarAutoCollapse = () => {
   clearSidebarCollapseTimer()
+  if (document.documentElement.classList.contains('xcagi-electron')) return void (sidebarCollapsed.value = false)
   if (isAnyTutorialActive.value) return
   if (!isSidebarFeatureEnabled.value || sidebarCollapsed.value) return
   sidebarCollapseTimer = window.setTimeout(() => {
@@ -415,7 +416,6 @@ const scheduleSidebarAutoCollapse = () => {
     sidebarCollapsed.value = true
   }, SIDEBAR_INACTIVITY_MS)
 }
-
 watch(isAnyTutorialActive, (active) => {
   if (active) {
     ensureSidebarExpandedForTutorial()

@@ -3,9 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from modstore_server.ppt_generate_pipeline import run_ppt_generate
-
-
 async def convert_file(
     src_path: Path,
     output_path: Path,
@@ -15,6 +12,17 @@ async def convert_file(
     ctx: Dict[str, Any],
     rule_spec: Dict[str, Any],
 ) -> Dict[str, Any]:
+    try:
+        from modstore_server.ppt_generate_pipeline import run_ppt_generate
+    except ImportError:
+        return await _legacy_convert_file(
+            src_path,
+            output_path,
+            template_path=template_path,
+            payload=payload,
+            ctx=ctx,
+            rule_spec=rule_spec,
+        )
     return await run_ppt_generate(
         src_path,
         output_path,
@@ -34,7 +42,7 @@ async def _legacy_convert_file(
     ctx: Dict[str, Any],
     rule_spec: Dict[str, Any],
 ) -> Dict[str, Any]:
-    from modstore_server.office_plaintext_generate import resolve_presentation_spec
+    from app.application.office_plaintext_generate import resolve_presentation_spec
 
     table, _warnings = await resolve_presentation_spec(src_path, payload or {}, ctx or {}, rule_spec or {})
     slides = table.get("slides") if isinstance(table.get("slides"), list) else []

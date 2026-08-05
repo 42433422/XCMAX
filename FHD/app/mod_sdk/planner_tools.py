@@ -241,8 +241,16 @@ def execute_planner_tool_from_body(body: dict[str, Any] | None) -> dict[str, Any
         return {"success": False, "error": "tool_name required"}
 
     args = payload.get("arguments") or payload.get("args") or {}
+    # A packaged desktop backend runs with its CWD inside the read-only app
+    # bundle.  Tool calls that do not explicitly provide a workspace must
+    # therefore default to the user's data directory, not ``os.getcwd()``;
+    # otherwise the bundled Office employees cannot write their verified
+    # artifacts on a fresh install.
     workspace_root = str(
-        payload.get("workspace_root") or os.environ.get("WORKSPACE_ROOT") or os.getcwd()
+        payload.get("workspace_root")
+        or os.environ.get("WORKSPACE_ROOT")
+        or os.environ.get("XCAGI_DATA_DIR")
+        or os.getcwd()
     ).strip()
     db_write_token = payload.get("db_write_token")
     if db_write_token is not None:
@@ -261,9 +269,13 @@ def execute_planner_tool_from_body(body: dict[str, Any] | None) -> dict[str, Any
 
     execution_path = "host.workflow"
     handler_mod: str | None = None
+    tool_success = False
+    tool_error = "工具执行返回了无效结果"
     try:
         probe = json.loads(raw)
         if isinstance(probe, dict):
+            tool_success = bool(probe.get("success"))
+            tool_error = str(probe.get("error") or probe.get("message") or tool_error)
             src = str(probe.get("source") or "")
             if src.startswith("mod:"):
                 execution_path = "mod_native"
@@ -275,12 +287,16 @@ def execute_planner_tool_from_body(body: dict[str, Any] | None) -> dict[str, Any
         handler_mod = PLANNER_FACADE_MOD_ID
 
     return {
-        "success": True,
+        # A planner facade must report the actual employee/tool outcome.  Do
+        # not turn a structured failure (or malformed response) into a
+        # completed task merely because dispatch itself returned normally.
+        "success": tool_success,
         "tool_name": name,
         "result": raw,
         "execution_path": execution_path,
         "mod_id": handler_mod,
         "delegate": "host.workflow" if execution_path != "mod_native" else None,
+        **({"error": tool_error} if not tool_success else {}),
     }
 
 
@@ -305,6 +321,16 @@ def list_planner_tools_registry_detail() -> dict[str, Any]:
 
     native_summary = list_native_planner_tools_summary()
     try:
+        from app.application.tools.registered_capabilities import (
+            ERP_CAPABILITY_TOOL_NAME,
+            registered_capability_catalog,
+        )
+
+        product_capabilities = registered_capability_catalog()
+    except RECOVERABLE_ERRORS:
+        product_capabilities = {}
+        ERP_CAPABILITY_TOOL_NAME = "execute_erp_capability"
+    try:
         from app.mod_sdk.employee_tool_registry import build_employee_tools_status
 
         employee_status = build_employee_tools_status()
@@ -318,6 +344,9 @@ def list_planner_tools_registry_detail() -> dict[str, Any]:
         "mod_extension_names": ext_names,
         "employee_planner": employee_status,
         "employee_pack_tools": employee_status.get("employee_pack_tools") or [],
+        "registered_capability_tool": ERP_CAPABILITY_TOOL_NAME,
+        "registered_capability_count": int(product_capabilities.get("capability_count") or 0),
+        "registered_capability_ids": product_capabilities.get("capability_ids") or [],
         "execution_via_mod_facade": via_mod,
         "native_planner_tools": native_summary,
         "execution_path": (

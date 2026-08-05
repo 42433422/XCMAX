@@ -1,4 +1,4 @@
-"""里程碑 C/G：产品 / 出货 / 微信等领域 API 经 ``xcagi-erp-domain-bridge`` 门面。"""
+"""里程碑 C/G：产品、客户与出货 API 经 ``xcagi-erp-domain-bridge`` 门面。"""
 
 from __future__ import annotations
 
@@ -32,12 +32,6 @@ DOMAIN_SPECS: tuple[dict[str, Any], ...] = (
         "label": "出货/订单",
         "host_prefixes": ["/api/orders", "/api/shipment"],
         "facade_prefix": f"/api/mod/{ERP_DOMAIN_BRIDGE_MOD_ID}/shipment",
-    },
-    {
-        "domain_id": "wechat",
-        "label": "微信",
-        "host_prefixes": ["/api/wechat", "/api/wechat_contacts"],
-        "facade_prefix": f"/api/mod/{ERP_DOMAIN_BRIDGE_MOD_ID}/wechat",
     },
 )
 
@@ -175,7 +169,7 @@ def list_erp_domains_registry() -> dict[str, Any]:
         "mod_domain_handler_domains": sorted(handler_domains),
         "registry_endpoint": f"/api/mod/{ERP_DOMAIN_BRIDGE_MOD_ID}/domains/registry",
         "note": (
-            "里程碑 G2：产品/客户/出货/微信 handler 均在 Mod backend；DB/Service 仍宿主。"
+            "里程碑 G2：产品/客户/出货 handler 均在 Mod backend；DB/Service 仍宿主。"
             if handlers_on
             else (
                 "里程碑 C：领域 HTTP 入口在 Mod；handler 仍委托宿主路由。"

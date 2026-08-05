@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from modstore_server.office_plaintext_generate import resolve_table_spec
+from app.application.office_plaintext_generate import resolve_table_spec
 
 
 async def convert_file(

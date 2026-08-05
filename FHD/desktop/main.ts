@@ -5,7 +5,6 @@ import {
   Tray,
   app,
   clipboard,
-  crashReporter,
   dialog,
   globalShortcut,
   ipcMain,
@@ -49,6 +48,11 @@ import { DesktopAutonomyAdapter } from './autonomy/desktop-adapter'
 import { backendCrashPolicy } from './autonomy/policies/backend-crash.policy'
 import { degradedRemediationPolicy } from './autonomy/policies/degraded-remediation.policy'
 import { updateRollbackPolicy } from './autonomy/policies/update-rollback.policy'
+import { createForceUpgradeHandler, initializeLocalCrashReporting } from './desktop-resilience'
+import { readJsonTextFile, sanitizeBackendProxyEnv } from './backend-env-utils'
+import { desktopWindowOpenAction, isBenignDesktopLoadAbort, isTrustedDesktopOrigin } from './desktop-navigation'
+import { assertSelfUpdateInstallSupported, getDesktopInstallIdentity } from './desktop-install-update'
+import { warmPersistedDesktopSessionCookieStore } from './session-cookie-warmup'
 
 const APP_NAME = 'XCAGI'
 const KELLAI_BUNDLE_ID = 'com.kellai.desktop'
@@ -322,36 +326,6 @@ export function readPackagedProductSku(): ProductSku | null {
   return null
 }
 
-export function readJsonTextFile(filePath: string): string {
-  const buffer = fs.readFileSync(filePath)
-  let text: string
-  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
-    text = buffer.toString('utf16le')
-  } else {
-    text = buffer.toString('utf8')
-  }
-  return text.replace(/^\uFEFF/, '')
-}
-
-function sanitizeBackendProxyEnv(
-  env: NodeJS.ProcessEnv | Record<string, string | undefined>
-): Record<string, string | undefined> {
-  const next: Record<string, string | undefined> = { ...env }
-  for (const key of ['ALL_PROXY', 'all_proxy'] as const) {
-    const raw = String(next[key] || '').trim().toLowerCase()
-    if (
-      raw.startsWith('socks://') ||
-      raw.startsWith('socks4://') ||
-      raw.startsWith('socks5://') ||
-      raw.startsWith('socks5h://')
-    ) {
-      // Prefer HTTP_PROXY for backend httpx; SOCKS needs optional socksio.
-      delete next[key]
-    }
-  }
-  return next
-}
-
 export function backendEditionEnv(): Record<string, string> {
   const sku = readPackagedProductSku()
   if (!sku) {
@@ -389,6 +363,10 @@ let tray: Tray | null = null
 let restartCount = 0
 let backendShutdownComplete = false
 let backendShutdownPromise: Promise<void> | null = null
+// A one-shot, renderer-visible entry hint derived only from an existing local
+// Chromium cookie. It never authorizes an API request or replaces official
+// validation; consuming it avoids replaying a saved password after an update.
+let desktopBootstrapSessionHintAvailable = false
 
 // 自治控制器（与现有更新观察期/backend 重启逻辑共存，零回归；阶段 1 接入）
 let autonomyController: AutonomyController | null = null
@@ -540,115 +518,12 @@ function writeBackendLog(line: string): void {
   }
 }
 
-/** 上传崩溃报告到后端。启动时触发，异步不阻塞。 */
-async function uploadCrashReports(): Promise<void> {
-  const crashDir = app.getPath('crashDumps')
-  try {
-    const entries = fs.readdirSync(crashDir, { withFileTypes: true })
-    const pending = entries.filter(
-      ent => ent.isFile() && !ent.name.endsWith('.uploaded') && !ent.name.endsWith('.uploading')
-    )
-    if (!pending.length) return
-
-    const markerDir = path.join(crashDir, '.uploaded-markers')
-    fs.mkdirSync(markerDir, { recursive: true })
-
-    for (const ent of pending) {
-      const filePath = path.join(crashDir, ent.name)
-      const markerPath = path.join(markerDir, `${ent.name}.ok`)
-      if (fs.existsSync(markerPath)) continue
-      try {
-        const url = `http://127.0.0.1:${DEFAULT_PORT}/api/desktop/crash-report`
-        const fileBuffer = fs.readFileSync(filePath)
-        const formData = new FormData()
-        const blob = new Blob([fileBuffer], { type: 'application/octet-stream' })
-        formData.append('minidump', blob, ent.name)
-        await fetch(url, { method: 'POST', body: formData, signal: AbortSignal.timeout(10_000) })
-        fs.writeFileSync(markerPath, new Date().toISOString(), 'utf8')
-        writeBackendLog(`[crash] uploaded ${ent.name} to backend\n`)
-      } catch {
-        writeBackendLog(`[crash] upload failed for ${ent.name}, will retry next startup\n`)
-      }
-    }
-  } catch {
-    // crash dir not created yet or no pending files
-  }
-}
-
-/** 发送 JS 级异常到后端崩溃报告端点。 */
-async function sendJsCrashReport(payload: { type: string; error: string; stack?: string }): Promise<void> {
-  try {
-    await fetch(`http://127.0.0.1:${DEFAULT_PORT}/api/desktop/crash-report`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...payload, ts: new Date().toISOString(), appVersion: app.getVersion() }),
-      signal: AbortSignal.timeout(5_000),
-    })
-  } catch {
-    // backend offline, will be logged locally
-  }
-}
-
-/** 检查是否需要强制升级，如果是则弹阻塞对话框并自动下载安装。 */
-async function checkForceUpgrade(): Promise<void> {
-  if (!isForceUpgradeRequired()) return
-  writeBackendLog('[force-upgrade] 当前版本低于最低兼容版本，触发强制升级\n')
-  try {
-    const { response } = await dialog.showMessageBox({
-      type: 'warning',
-      title: APP_NAME,
-      message: '当前版本过低，需要更新',
-      detail:
-        '当前使用的 XCAGI 版本已低于最低兼容版本，部分功能可能不可用。\n\n' +
-        '请点击「立即更新」下载最新版本，或从官网下载安装包手动更新。',
-      buttons: ['立即更新', '退出'],
-      defaultId: 0,
-      cancelId: 1,
-    })
-    if (response !== 0) {
-      app.quit()
-      return
-    }
-    writeBackendLog('[force-upgrade] 用户确认强制升级，开始下载…\n')
-    await downloadUpdate()
-    writeBackendLog('[force-upgrade] 下载完成，准备安装…\n')
-    await installUpdate(runBackendMigrationWithRollback, cancelPreparedRollback)
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error)
-    writeBackendLog(`[force-upgrade] 强制升级失败: ${msg}\n`)
-    await dialog.showMessageBox({
-      type: 'error',
-      title: APP_NAME,
-      message: '强制升级失败',
-      detail: `${msg}\n\n请从官网下载最新安装包手动更新。`,
-    })
-  }
-}
-
-function initializeLocalCrashReporting(): void {
-  try {
-    const crashDir = path.join(app.getPath('userData'), 'crash-dumps')
-    fs.mkdirSync(crashDir, { recursive: true })
-    app.setPath('crashDumps', crashDir)
-    crashReporter.start({ uploadToServer: false, compress: true })
-    writeBackendLog(`[crash] local crash capture enabled dir=${crashDir}\n`)
-  } catch (error) {
-    writeBackendLog(`[crash] initialization failed: ${error instanceof Error ? error.message : String(error)}\n`)
-  }
-  process.on('uncaughtExceptionMonitor', error => {
-    const msg = `[crash] main uncaughtException: ${error.stack || error.message}\n`
-    writeBackendLog(msg)
-    void sendJsCrashReport({ type: 'uncaughtException', error: error.message, stack: error.stack })
-  })
-  process.on('unhandledRejection', reason => {
-    const msg = reason instanceof Error ? reason.stack || reason.message : String(reason)
-    writeBackendLog(`[crash] main unhandledRejection: ${msg}\n`)
-    void sendJsCrashReport({ type: 'unhandledRejection', error: String(reason), stack: reason instanceof Error ? reason.stack : undefined })
-  })
-  // 启动后异步上传之前未发送的崩溃 dump
-  // 延迟 30 秒，让后端先就绪
-  setTimeout(() => void uploadCrashReports(), 30_000)
-}
+const checkForceUpgrade = createForceUpgradeHandler({
+  appName: APP_NAME,
+  writeLog: writeBackendLog,
+  beforeInstall: runBackendMigrationWithRollback,
+  onInstallFailed: cancelPreparedRollback,
+})
 
 function packagedBackendHealthTimeoutMs(): number {
   if (!app.isPackaged) {
@@ -1168,25 +1043,6 @@ function tagDesktopWebContents(win: BrowserWindow): void {
     .catch(() => { })
 }
 
-export function isTrustedDesktopOrigin(rawUrl: string | undefined, expectedPort?: number): boolean {
-  if (!rawUrl) return false
-  try {
-    const parsed = new URL(rawUrl)
-    const hostAllowed = parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost'
-    const port = expectedPort ?? DEFAULT_PORT
-    return parsed.protocol === 'http:' && hostAllowed && parsed.port === String(port)
-  } catch {
-    return false
-  }
-}
-
-export function desktopWindowOpenAction(
-  rawUrl: string,
-  expectedPort = DEFAULT_PORT,
-): 'allow' | 'deny' {
-  return isTrustedDesktopOrigin(rawUrl, expectedPort) ? 'allow' : 'deny'
-}
-
 function configureDesktopMediaPermissions(): void {
   const ses = session.defaultSession
   ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
@@ -1197,7 +1053,7 @@ function configureDesktopMediaPermissions(): void {
       (mediaTypes.length === 0 || mediaTypes.includes('audio') || mediaTypes.includes('microphone'))
     const requestUrl =
       (details as { requestingUrl?: string } | undefined)?.requestingUrl || webContents.getURL()
-    callback(wantsAudio && isTrustedDesktopOrigin(requestUrl))
+    callback(wantsAudio && isTrustedDesktopOrigin(requestUrl, DEFAULT_PORT))
   })
   ses.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
     const mediaTypes = ((details as { mediaTypes?: string[] } | undefined)?.mediaTypes || [])
@@ -1206,7 +1062,7 @@ function configureDesktopMediaPermissions(): void {
       permission === 'media' &&
       (mediaTypes.length === 0 || mediaTypes.includes('audio') || mediaTypes.includes('microphone'))
     const origin = requestingOrigin || webContents?.getURL() || ''
-    return wantsAudio && isTrustedDesktopOrigin(origin)
+    return wantsAudio && isTrustedDesktopOrigin(origin, DEFAULT_PORT)
   })
 }
 
@@ -1332,7 +1188,7 @@ async function createWindow(): Promise<void> {
     }
   })
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    const action = desktopWindowOpenAction(url)
+    const action = desktopWindowOpenAction(url, DEFAULT_PORT)
     if (action === 'deny') {
       console.warn(`[xcagi-desktop] blocked window open to ${url}`)
     }
@@ -1390,6 +1246,11 @@ async function createWindow(): Promise<void> {
       }
       mainWindow.focus()
     } catch (error) {
+      const currentUrl = mainWindow?.webContents.getURL()
+      if (isBenignDesktopLoadAbort(error, currentUrl, DEFAULT_PORT)) {
+        console.warn('[xcagi-desktop] ignored transient local-page navigation abort', error)
+        return
+      }
       console.error('[xcagi-desktop] load main application failed', error)
       throw error
     }
@@ -1416,19 +1277,29 @@ async function createWindow(): Promise<void> {
     updateSplashProgress(creep, '正在加载业务模块…')
   }, 400)
 
-  const ready = waitForBackendPing(DEFAULT_PORT)
+  const pingReady = waitForBackendPing(DEFAULT_PORT)
     .then(() => {
       splashPhase = 'routes'
       phaseStarted = Date.now()
-      updateSplashProgress(58, '本地服务已就绪，正在加载业务模块…')
-      return waitForBackendApplicationReady(DEFAULT_PORT, undefined, { skipPing: true })
+      updateSplashProgress(58, '本地服务已就绪，正在打开工作台…')
     })
-    .then(() => {
+
+  // 登录后的工作台不必等待全部 Mod 和业务路由完成。先在本地服务
+  // 可响应时打开界面，模块继续在后台完成；更新观察期仍会等待两者。
+  const mainUiReady = pingReady.then(() => {
       splashPhase = 'done'
       updateSplashProgress(88, '正在加载应用…')
       return loadMainApplication()
     })
+  const backendApplicationReady = pingReady.then(() =>
+    waitForBackendApplicationReady(DEFAULT_PORT, undefined, { skipPing: true }),
+  )
+  const ready = Promise.all([mainUiReady, backendApplicationReady]).then(() => undefined)
   mainApplicationReady = ready
+  void mainUiReady.then(
+    () => clearInterval(splashTicker),
+    () => clearInterval(splashTicker),
+  )
   void ready
     .catch(error => {
       console.error('[xcagi-desktop] backend readiness wait failed', error)
@@ -1438,7 +1309,6 @@ async function createWindow(): Promise<void> {
         void dialog.showErrorBox(APP_NAME, error instanceof Error ? error.message : String(error))
       }
     })
-    .finally(() => clearInterval(splashTicker))
 
   mainWindow.webContents.on('did-finish-load', () => {
     if (mainWindow) tagDesktopWebContents(mainWindow)
@@ -1455,12 +1325,7 @@ async function createWindow(): Promise<void> {
     void showDbRecoveryDialogIfNeeded(status)
   })
 
-  configureUpdater(mainWindow)
-
-  // 延迟一段时间后检测强制升级（等更新元数据 fetch 完成）
-  setTimeout(() => {
-    void checkForceUpgrade()
-  }, 90_000)
+  configureUpdater(mainWindow, { onForceUpgradeRequired: checkForceUpgrade })
 }
 
 async function waitForMainApplicationReady(): Promise<void> {
@@ -1584,7 +1449,7 @@ function bootstrap(): void {
   if (!gotLock) {
     app.quit()
   } else {
-    initializeLocalCrashReporting()
+    initializeLocalCrashReporting({ port: DEFAULT_PORT, writeLog: writeBackendLog })
     app.on('second-instance', () => {
       if (mainWindow) {
         if (mainWindow.isMinimized()) mainWindow.restore()
@@ -1614,6 +1479,10 @@ function bootstrap(): void {
 
     app.whenReady().then(async () => {
       await applyOtaProxyBypass()
+      desktopBootstrapSessionHintAvailable = await warmPersistedDesktopSessionCookieStore(DEFAULT_PORT)
+      if (desktopBootstrapSessionHintAvailable) {
+        writeBackendLog('[session] restored persisted desktop session cookie before renderer startup\n')
+      }
       const sku = readPackagedProductSku()
       if (sku && !process.env.XCAGI_UPDATE_URL) {
         process.env.XCAGI_UPDATE_URL = SKU_UPDATE_URL[sku]
@@ -1658,14 +1527,29 @@ function bootstrap(): void {
       })
 
       ipcMain.handle('xcagi:get-data-dir', () => app.getPath('userData'))
+      ipcMain.handle('xcagi:consume-bootstrap-session-hint', () => {
+        const available = desktopBootstrapSessionHintAvailable
+        desktopBootstrapSessionHintAvailable = false
+        return available
+      })
+      ipcMain.handle('xcagi:get-app-identity', () => ({
+        name: app.getName(),
+        version: readPackagedAppVersion(),
+        isPackaged: app.isPackaged,
+        install: getDesktopInstallIdentity(),
+      }))
       ipcMain.handle('xcagi:open-kellai-desktop', () => openKellaiDesktop())
       ipcMain.handle('xcagi:export-support-bundle', () => exportSupportBundleInteractive())
       ipcMain.handle('xcagi:check-for-updates', () => runUpdateCheckWithDirectNet())
       ipcMain.handle('xcagi:get-update-status', () => getUpdateStatus())
-      ipcMain.handle('xcagi:download-update', () => downloadUpdate())
-      ipcMain.handle('xcagi:install-update', () =>
-        installUpdate(runBackendMigrationWithRollback, cancelPreparedRollback),
-      )
+      ipcMain.handle('xcagi:download-update', () => {
+        assertSelfUpdateInstallSupported()
+        return downloadUpdate()
+      })
+      ipcMain.handle('xcagi:install-update', () => {
+        assertSelfUpdateInstallSupported()
+        return installUpdate(runBackendMigrationWithRollback, cancelPreparedRollback)
+      })
       ipcMain.handle('xcagi:set-badge', (_event, count: number) => {
         const n = Math.max(0, Math.floor(Number(count) || 0))
         if (process.platform === 'darwin' || process.platform === 'linux') {

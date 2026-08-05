@@ -9,8 +9,8 @@ VERSION="${VERSION#v}"
 VERSION="${VERSION#V}"
 # workflow_dispatch on branch can leave ref_name=main; never feed that to npm version
 if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
-  echo "[warn] invalid VERSION='${VERSION}', falling back to 1.0.0.0" >&2
-  VERSION="1.0.0.0"
+  echo "[warn] invalid VERSION='${VERSION}', falling back to 1.0.0.1" >&2
+  VERSION="1.0.0.1"
 fi
 TOOLCHAIN_VERSION="$(printf '%s' "${VERSION}" | cut -d. -f1-3)"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -87,6 +87,16 @@ build_one_sku() {
   mkdir -p "${out_dir}"
   rm -rf "${package_stage}"
   mkdir -p "${package_stage}"
+  # Keep macOS bundle metadata on the customer-facing product version even
+  # though desktop/package.json must retain npm's three-part SemVer.  The
+  # generated config stays next to the source config so its relative build
+  # hooks and resource paths continue to resolve from desktop/.
+  local builder_config="desktop/.electron-builder.release.yml"
+  sed "s/__XCAGI_PRODUCT_VERSION__/${VERSION}/g" desktop/electron-builder.yml > "${builder_config}"
+  if grep -Fq "__XCAGI_PRODUCT_VERSION__" "${builder_config}"; then
+    echo "[err] macOS product version was not resolved in ${builder_config}" >&2
+    exit 1
+  fi
 
   echo "========== Building macOS SKU: ${sku} =========="
   if [ "${SKIP_BACKEND:-0}" != "1" ]; then
@@ -127,7 +137,7 @@ build_one_sku() {
   local package_attempt
   local package_ok=0
   for package_attempt in 1 2 3; do
-    if (cd desktop && PATH="${ROOT}/scripts/package/codesign-retry-bin:${PATH}" npx electron-builder --mac zip --publish never \
+    if (cd desktop && PATH="${ROOT}/scripts/package/codesign-retry-bin:${PATH}" npx electron-builder --config .electron-builder.release.yml --mac zip --publish never \
       "--config.electronDist=node_modules/electron/dist" \
       "--config.directories.output=${package_stage}" \
       "--config.artifactName=${artifact_name}" \
@@ -143,9 +153,11 @@ build_one_sku() {
     fi
   done
   if [ "${package_ok}" != "1" ]; then
+    rm -f "${builder_config}"
     echo "[err] macOS signing/package failed after 3 attempts" >&2
     exit 1
   fi
+  rm -f "${builder_config}"
   local app_path="${package_stage}/mac-arm64/XCAGI.app"
   if [ ! -d "${app_path}" ]; then
     app_path="$(find "${package_stage}" -maxdepth 2 -type d -name 'XCAGI.app' -print | head -n 1 || true)"
@@ -160,10 +172,17 @@ build_one_sku() {
     x86_64) artifact_arch="x64" ;;
     *) artifact_arch="$(uname -m)" ;;
   esac
+  local dmg_volume_name="XCAGI ${label}"
+  # Local acceptance machines can have a previous release DMG still mounted.
+  # Keep the public release label stable, while allowing an isolated candidate
+  # to opt into a unique volume name without altering the artifact name.
+  if [ -n "${XCAGI_DMG_VOLUME_SUFFIX:-}" ]; then
+    dmg_volume_name="${dmg_volume_name} ${XCAGI_DMG_VOLUME_SUFFIX}"
+  fi
   scripts/package/create-mac-dmg.sh \
     "${app_path}" \
     "${package_stage}/XCAGI-${label}-${VERSION}-mac-${artifact_arch}.dmg" \
-    "XCAGI ${label}"
+    "${dmg_volume_name}"
   # Publish only sealed archive artifacts. A loose .app copied back into this
   # Desktop/FileProvider checkout receives com.apple.FinderInfo again almost
   # immediately, which makes codesign reject that copy even though the ZIP and

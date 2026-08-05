@@ -37,6 +37,7 @@ const downloadPercent = ref(0)
 const errorMessage = ref('')
 const modalOpen = ref(false)
 const busy = ref(false)
+const selfUpdateBlockReason = ref('')
 
 let unsubscribe: (() => void) | undefined
 let listeners = 0
@@ -49,6 +50,7 @@ export function __resetDesktopAppUpdaterForTest(): void {
   errorMessage.value = ''
   modalOpen.value = false
   busy.value = false
+  selfUpdateBlockReason.value = ''
   unsubscribe?.()
   unsubscribe = undefined
   listeners = 0
@@ -153,6 +155,16 @@ function releaseSubscribe() {
 async function syncUpdateStatusFromHost() {
   if (!isDesktopShell()) return
   try {
+    const identity = await window.xcagiDesktop?.getAppIdentity?.()
+    const install = identity?.install
+    if (install?.canSelfUpdate === false) {
+      selfUpdateBlockReason.value = install.reason
+        || '当前不是“应用程序”目录中的正式安装副本，请安装到 /Applications/XCAGI.app 后再更新。'
+    }
+  } catch {
+    // Identity is advisory for the UI. The main process remains the authority.
+  }
+  try {
     const status = await window.xcagiDesktop?.getUpdateStatus?.()
     if (status?.type) {
       onUpdateEvent(status)
@@ -217,6 +229,7 @@ export function useDesktopAppUpdater() {
   })
 
   const mediaSlides = computed(() => normalizeReleaseMedia(updateInfo.value?.releaseMedia))
+  const isSelfUpdateSupported = computed(() => !selfUpdateBlockReason.value)
 
   function openModal() {
     modalOpen.value = true
@@ -240,6 +253,10 @@ export function useDesktopAppUpdater() {
   }
 
   async function startDownload() {
+    if (selfUpdateBlockReason.value) {
+      errorMessage.value = selfUpdateBlockReason.value
+      return
+    }
     if (!window.xcagiDesktop?.downloadUpdate) {
       errorMessage.value = '当前环境不支持下载更新'
       return
@@ -257,6 +274,10 @@ export function useDesktopAppUpdater() {
   }
 
   async function installAndReload() {
+    if (selfUpdateBlockReason.value) {
+      errorMessage.value = selfUpdateBlockReason.value
+      return
+    }
     if (!window.xcagiDesktop?.installUpdate) {
       errorMessage.value = '当前环境不支持安装更新'
       return
@@ -291,6 +312,8 @@ export function useDesktopAppUpdater() {
     badgeLabel,
     notesText,
     mediaSlides,
+    selfUpdateBlockReason,
+    isSelfUpdateSupported,
     openModal,
     closeModal,
     dismiss,
