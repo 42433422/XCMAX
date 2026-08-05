@@ -48,6 +48,7 @@ from .self_evolution_knowledge import (
     salvage_kb_from_workspace,
     validate_kb_payload,
 )
+from .self_maintenance_jsonl import read_jsonl_tail
 from .self_maintenance_merge_policy import (
     DEFAULT_FORBIDDEN_GLOBS as DEFAULT_AUTO_MERGE_FORBIDDEN_GLOBS,
 )
@@ -343,23 +344,7 @@ def _append_ledger(record: Dict[str, Any]) -> None:
 
 def _read_ledger(limit: int = 100) -> List[Dict[str, Any]]:
     path = ledger_path()
-    if not path.exists():
-        return []
-    rows: List[Dict[str, Any]] = []
-    try:
-        with path.open("r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rows.append(json.loads(line))
-                except json.JSONDecodeError:
-                    continue
-    except OSError:
-        logger.exception("failed to read self-maintenance ledger")
-        return []
-    return rows[-limit:]
+    return read_jsonl_tail(path, limit=limit)
 
 
 def _ledger_row_timestamp(row: Dict[str, Any]) -> Optional[datetime]:
@@ -521,25 +506,7 @@ def _load_loop_memory() -> Dict[str, Any]:
 
 def _read_governance_audit(limit: int = 10) -> List[Dict[str, Any]]:
     path = governance_audit_path()
-    if not path.exists():
-        return []
-    rows: List[Dict[str, Any]] = []
-    try:
-        with path.open("r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    row = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(row, dict):
-                    rows.append(row)
-    except OSError:
-        logger.exception("failed to read self-maintenance governance audit")
-        return []
-    return rows[-limit:]
+    return read_jsonl_tail(path, limit=limit)
 
 
 def _append_governance_audit(record: Dict[str, Any]) -> Path:

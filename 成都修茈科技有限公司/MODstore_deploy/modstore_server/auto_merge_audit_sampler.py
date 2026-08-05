@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
+from .self_maintenance_jsonl import read_jsonl_tail
+
 PHASES = ("phase_a", "phase_b", "phase_c", "phase_d")
 DEFAULT_SAMPLE_SIZE = 100
 
@@ -46,24 +48,7 @@ def _env_int(name: str, default: int) -> int:
 
 
 def _read_jsonl(path: Path, *, max_rows: int = 20000) -> List[Dict[str, Any]]:
-    if not path.exists():
-        return []
-    rows: List[Dict[str, Any]] = []
-    try:
-        with path.open("r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(data, dict):
-                    rows.append(data)
-    except OSError:
-        return []
-    return rows[-max_rows:]
+    return read_jsonl_tail(path, limit=max_rows)
 
 
 def _write_json(path: Path, data: Dict[str, Any]) -> None:
