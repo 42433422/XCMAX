@@ -5,11 +5,16 @@ on:
     - cron: "0 8 * * 1"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   report:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.CI_COMMIT_TOKEN || github.token }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -19,11 +24,34 @@ jobs:
       - name: Legacy usage report (168h)
         working-directory: FHD
         run: |
-          python scripts/dev/legacy_usage_report.py --since 168 > legacy-usage-168h.txt 2>&1 || true
-          head -80 legacy-usage-168h.txt
+          mkdir -p metrics
+          python scripts/dev/legacy_usage_report.py --since 168 --json > metrics/legacy-usage-168h.json 2>legacy-usage-168h.err || true
+          echo "--- report ---"
+          cat metrics/legacy-usage-168h.json
+          echo "--- stderr ---"
+          head -80 legacy-usage-168h.err
+
+      - name: Commit legacy usage report
+        env:
+          GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::CI_COMMIT_TOKEN is required to commit the legacy report on protected main."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add FHD/metrics/legacy-usage-168h.json
+          if git diff --staged --quiet; then
+            echo "No legacy report changes"
+            exit 0
+          fi
+          git commit -m "chore(metrics): update legacy usage weekly report"
+          git push
 
       - name: Upload report
         uses: actions/upload-artifact@v4
         with:
           name: legacy-usage-168h
-          path: FHD/legacy-usage-168h.txt
+          path: FHD/metrics/legacy-usage-168h.json
