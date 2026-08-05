@@ -29,6 +29,7 @@ PIPELINE_STAGES: list[dict[str, str]] = [
     {"id": "signed", "label": "已签"},
     {"id": "delivering", "label": "交付中"},
     {"id": "delivered", "label": "已交付"},
+    {"id": "reconciled", "label": "已核销"},
 ]
 
 _STAGE_ORDER = [s["id"] for s in PIPELINE_STAGES]
@@ -114,6 +115,7 @@ def _default_pipeline(market_user_id: int, username: str = "") -> dict[str, Any]
         "crm_funnel_synced_at": "",
         "crm_db_synced_at": "",
         "crm_invoice_id": 0,
+        "reconciliation": None,
         "updated_at": _now_iso(),
     }
 
@@ -366,6 +368,59 @@ def repair_all_pipelines() -> dict[str, Any]:
     return {"repaired": repaired}
 
 
+def record_reconciliation(
+    market_user_id: int,
+    *,
+    amount_yuan: str,
+    order_ref: str,
+    username: str = "",
+    source: str = "manual",
+) -> dict[str, Any]:
+    """记录回款核销，并把流水线推进到「已核销」阶段（闭环终点）。
+
+    - 若尚未交付，先推进到 delivered，再置为 reconciled。
+    - 幂等：重复核销会覆盖 reconciliation 记录与时间戳。
+    """
+    uid = int(market_user_id)
+    doc = load_pipeline(uid, username=username)
+    if _stage_rank(doc.get("stage")) < _stage_rank("delivered"):
+        doc = set_pipeline_stage(
+            uid, "delivered", username=username, source=source, note="交付完成待核销"
+        )
+    doc = set_pipeline_stage(uid, "reconciled", username=username, source=source, note="回款核销")
+    doc["reconciliation"] = {
+        "status": "reconciled",
+        "amount_yuan": str(amount_yuan or "").strip(),
+        "order_ref": str(order_ref or "").strip(),
+        "reconciled_at": _now_iso(),
+        "source": str(source or "manual").strip(),
+    }
+    return save_pipeline(doc)
+
+
+def build_closed_loop_status(market_user_id: int, *, username: str = "") -> dict[str, Any]:
+    """输出「订单 → 交付 → 签收 → 回款核销」闭环状态，供 AGI 编排层观察。"""
+    doc = load_pipeline(int(market_user_id), username=username)
+    stage = str(doc.get("stage") or "idle")
+    delivery = doc.get("delivery")
+    delivery = delivery if isinstance(delivery, dict) else {}
+    rec = doc.get("reconciliation")
+    rec = rec if isinstance(rec, dict) else {}
+    return {
+        "market_user_id": int(market_user_id),
+        "stage": stage,
+        "stage_label": _STAGE_LABELS.get(stage, stage),
+        "delivered": stage in ("delivered", "reconciled"),
+        "signoff": {
+            "signoff_id": delivery.get("signoff_id"),
+            "confirmed_at": delivery.get("signoff_confirmed_at"),
+        },
+        "reconciled": rec.get("status") == "reconciled",
+        "reconciliation": rec,
+        "closed": stage == "reconciled",
+    }
+
+
 __all__ = [
     "PIPELINE_STAGES",
     "PipelineCrmGateError",
@@ -373,9 +428,11 @@ __all__ = [
     "_pipeline_roots",
     "analyze_customer_pipeline",
     "auto_advance_pipeline_if_ready",
+    "build_closed_loop_status",
     "build_pipeline_funnel_summary",
     "list_pipeline_client_summaries",
     "load_pipeline",
+    "record_reconciliation",
     "repair_all_pipelines",
     "repair_pipeline_crm",
     "save_pipeline",
