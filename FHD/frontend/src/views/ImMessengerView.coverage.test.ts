@@ -256,12 +256,13 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   // ===== 2. 会话列表与空状态 =====
 
-  it('会话列表为空且无固定联系人时显示空状态', async () => {
+  it('会话列表为空且无企业专属联系人时不渲染会话行', async () => {
     imMocks.fetchImConversations.mockResolvedValue([])
     imMocks.fetchImContacts.mockResolvedValue([normalContact])
     const wrapper = await mountView()
-    expect(wrapper.text()).toContain('还没有会话')
-    expect(wrapper.find('.im-empty--list').exists()).toBe(true)
+    // 重构后 AI 群聊恒为固定项，会话列表为空时仅渲染固定项、不渲染普通会话行
+    expect(wrapper.findAll('.im-conv-item:not(.im-conv-item--pinned)')).toHaveLength(0)
+    expect(wrapper.findAll('.im-conv-item--pinned').length).toBeGreaterThan(0)
   })
 
   it('会话列表展示标题与未读徽章', async () => {
@@ -429,10 +430,11 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('发送消息失败时显示错误 toast', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([])
     imMocks.sendImMessage.mockRejectedValue(new Error('网络错误'))
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     const input = wrapper.find('.im-compose-input')
     await input.setValue('hello')
@@ -443,10 +445,11 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('发送消息失败且 error 非 Error 实例时显示默认提示', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([])
     imMocks.sendImMessage.mockRejectedValue('unknown')
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     const input = wrapper.find('.im-compose-input')
     await input.setValue('hello')
@@ -559,9 +562,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
     imMocks.fetchImContacts.mockResolvedValue([enterpriseCsContact])
     const wrapper = await mountView()
-    const pinned = wrapper.find('.im-conv-item--pinned')
-    expect(pinned.exists()).toBe(true)
-    await pinned.trigger('click')
+    const pinnedItems = wrapper.findAll('.im-conv-item--pinned')
+    const pinned = pinnedItems.find((el) => el.text().includes('企业专属客服'))
+    expect(pinned?.exists()).toBe(true)
+    await pinned!.trigger('click')
     await flushPromises()
     // 复用已有会话,不创建新会话
     expect(imMocks.createDirectConversation).not.toHaveBeenCalled()
@@ -572,9 +576,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
     imMocks.fetchImContacts.mockResolvedValue([enterpriseCsContact])
     const wrapper = await mountView()
-    const pinned = wrapper.find('.im-conv-item--pinned')
-    expect(pinned.exists()).toBe(true)
-    await pinned.trigger('click')
+    const pinnedItems = wrapper.findAll('.im-conv-item--pinned')
+    const pinned = pinnedItems.find((el) => el.text().includes('企业专属客服'))
+    expect(pinned?.exists()).toBe(true)
+    await pinned!.trigger('click')
     await flushPromises()
     expect(imMocks.fetchImMessages).toHaveBeenCalledWith(1, { limit: 50 })
   })
@@ -634,18 +639,20 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('selectConversation 失败时显示错误 toast', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockRejectedValue(new Error('消息加载失败'))
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     expect(toastMocks.showAppToast).toHaveBeenCalledWith('消息加载失败', 'error')
   })
 
   it('selectConversation 失败且 error 非 Error 实例时显示默认提示', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockRejectedValue('unknown')
     const wrapper = await mountView()
-    await wrapper.find('.im-conv-item').trigger('click')
+    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     expect(toastMocks.showAppToast).toHaveBeenCalledWith('加载消息失败', 'error')
   })
@@ -1189,7 +1196,8 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     imMocks.fetchImConversations.mockResolvedValue([])
     imMocks.fetchImContacts.mockResolvedValue([normalContact])
     const wrapper = await mountView()
-    const btn = wrapper.find('.im-empty--list .im-btn--primary')
+    // 重构后无会话时发起会话按钮位于侧栏头部
+    const btn = wrapper.find('.im-sidebar-head .im-icon-btn')
     expect(btn.exists()).toBe(true)
     await btn.trigger('click')
     await flushPromises()
@@ -1343,9 +1351,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     imMocks.fetchImContacts.mockResolvedValue([csContactWithTitle])
     const wrapper = await mountView()
     // 企业专属客服显示在固定联系人区域
-    const pinned = wrapper.find('.im-conv-item--pinned')
-    expect(pinned.exists()).toBe(true)
-    await pinned.trigger('click')
+    const pinnedItems = wrapper.findAll('.im-conv-item--pinned')
+    const pinned = pinnedItems.find((el) => el.text().includes('客服小张'))
+    expect(pinned?.exists()).toBe(true)
+    await pinned!.trigger('click')
     await flushPromises()
     // 复用已有会话(通过 title 匹配),不创建新会话
     expect(imMocks.createDirectConversation).not.toHaveBeenCalled()
