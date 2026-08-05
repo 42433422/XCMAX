@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.application import private_mod_delivery_app as delivery
+from app.application.private_mod_delivery_sync import apply_private_mod_delivery as sync_apply
 
 
 def _use_temp_state(monkeypatch, tmp_path):
@@ -199,3 +200,79 @@ def test_private_mod_version_comparison_handles_common_versions():
     assert delivery.is_newer_version("v1.10.0", "1.9.9") is True
     assert delivery.is_newer_version("1.2.0", "v1.2.0") is False
     assert delivery.version_key("1.2.0") < delivery.version_key("1.2.0-beta")
+
+
+# --------------------------------------------------------------------------- #
+# apply_private_mod_delivery（inbox 应用器）— private_mod_delivery_sync.py
+# --------------------------------------------------------------------------- #
+
+
+def test_sync_apply_ignores_non_dict_payload(monkeypatch, tmp_path):
+    _use_temp_state(monkeypatch, tmp_path)
+    sync_apply({"payload": ["not", "a", "dict"]})  # 非 dict → 直接返回
+    sync_apply({"payload": None})  # 空 payload → 直接返回
+    # 未应用任何快照 → 项目保持默认 production
+    project = delivery.project_state("market:7", "customer-mod")
+    assert project["tracks"]["modules"]["status"] == "production"
+
+
+def test_sync_apply_requires_entity_id(monkeypatch, tmp_path):
+    _use_temp_state(monkeypatch, tmp_path)
+    # 无 market_user_id 也无 entity_id → 直接返回
+    sync_apply({"payload": {"username": "alice", "projects": {}}})
+    project = delivery.project_state("market:7", "customer-mod")
+    assert project["tracks"]["modules"]["status"] == "production"
+
+
+def test_sync_apply_applies_snapshot_to_market_scope(monkeypatch, tmp_path):
+    _use_temp_state(monkeypatch, tmp_path)
+    sync_apply(
+        {
+            "payload": {
+                "market_user_id": 7,
+                "username": "alice",
+                "projects": {
+                    "customer-mod": {
+                        "name": "客户 Mod",
+                        "tracks": {
+                            "modules": {"status": "testing", "nodes": {}},
+                            "employees": {"status": "production", "nodes": {}},
+                        },
+                    }
+                },
+            }
+        }
+    )
+    project = delivery.project_state("market:7", "customer-mod")
+    assert project["tracks"]["modules"]["status"] == "testing"
+    assert project["tracks"]["employees"]["status"] == "production"
+
+
+def test_sync_apply_falls_back_to_entity_id(monkeypatch, tmp_path):
+    _use_temp_state(monkeypatch, tmp_path)
+    sync_apply(
+        {
+            "entity_id": "8",
+            "payload": {
+                "projects": {
+                    "customer-mod": {
+                        "name": "客户 Mod",
+                        "tracks": {
+                            "modules": {"status": "acceptance", "nodes": {}},
+                            "employees": {"status": "production", "nodes": {}},
+                        },
+                    }
+                }
+            },
+        }
+    )
+    project = delivery.project_state("market:8", "customer-mod")
+    assert project["tracks"]["modules"]["status"] == "acceptance"
+
+
+def test_sync_apply_swallows_invalid_entity_id(monkeypatch, tmp_path):
+    _use_temp_state(monkeypatch, tmp_path)
+    # market_user_id 非法 int → int() 抛 ValueError，属 OPERATIONAL_ERRORS，被吞掉
+    sync_apply({"payload": {"market_user_id": "not-an-int", "projects": {}}})
+    project = delivery.project_state("market:7", "customer-mod")
+    assert project["tracks"]["modules"]["status"] == "production"
