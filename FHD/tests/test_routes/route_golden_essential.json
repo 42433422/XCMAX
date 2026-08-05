@@ -290,6 +290,7 @@
   "/api/xcmax/admin/impersonate/activate-enterprise",
   "/api/xcmax/admin/impersonate/end",
   "/api/xcmax/admin/market/assignable-mods",
+  "/api/xcmax/admin/market/orders",
   "/api/xcmax/admin/market/users",
   "/api/xcmax/admin/market/users/{user_id}/admin",
   "/api/xcmax/admin/market/users/{user_id}/enterprise",
