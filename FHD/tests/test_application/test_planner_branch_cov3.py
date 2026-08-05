@@ -11,7 +11,6 @@
 - _execute_print_label_tool：缺 products / ImportError / ValueError / OSError / RuntimeError / 成功
 - _execute_excel_decompose_tool：缺 file_path / ImportError / ValueError / OSError / RuntimeError / 成功
 - _execute_template_extract_tool：委托 excel_decompose
-- _execute_wechat_preview_tool：ImportError / ValueError / RuntimeError / 成功（有/无联系人）
 - _execute_excel_schema_tool：缺 file_path / ImportError / RECOVERABLE_ERRORS / openpyxl 回退 / 各异常
 - _execute_excel_analysis_tool：缺 file_path / ImportError / RECOVERABLE_ERRORS / openpyxl 回退 / 各异常
 - _execute_employee_list_tool / _execute_employee_execute_tool / _execute_business_db_read_tool / _execute_business_db_write_tool：委托 facade
@@ -43,7 +42,6 @@ from app.application.workflow.planner import (
     _execute_shipment_generate_tool,
     _execute_shipment_records_tool,
     _execute_template_extract_tool,
-    _execute_wechat_preview_tool,
     execute_tool,
 )
 from app.application.workflow.types import PlanGraph, WorkflowNode
@@ -1077,100 +1075,6 @@ class TestExecuteTemplateExtractTool:
             mock_decompose.assert_called_once_with(
                 {"file_path": "/tmp/t.xlsx", "template_type": "order"}
             )
-
-
-# ---------------------------------------------------------------------------
-# _execute_wechat_preview_tool
-# ---------------------------------------------------------------------------
-
-
-class TestExecuteWechatPreviewTool:
-    """_execute_wechat_preview_tool 分支覆盖。"""
-
-    def test_successful_query_with_contacts(self) -> None:
-        mock_svc = MagicMock()
-        mock_svc.get_contacts.return_value = [{"name": "张三"}]
-        with patch("app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc):
-            result = _execute_wechat_preview_tool({"keyword": "张"})
-            assert result["success"] is True
-            assert len(result["data"]) == 1
-            assert "选择联系人" in result["message"]
-
-    def test_successful_query_no_contacts(self) -> None:
-        mock_svc = MagicMock()
-        mock_svc.get_contacts.return_value = []
-        with patch("app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc):
-            result = _execute_wechat_preview_tool({"keyword": "不存在"})
-            assert result["success"] is True
-            assert "未找到" in result["message"]
-
-    def test_keyword_from_unit_name_alias(self) -> None:
-        mock_svc = MagicMock()
-        mock_svc.get_contacts.return_value = []
-        with patch("app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc):
-            _execute_wechat_preview_tool({"unit_name": "ABC公司"})
-            call_kwargs = mock_svc.get_contacts.call_args.kwargs
-            assert call_kwargs["keyword"] == "ABC公司"
-
-    def test_empty_keyword_passes_none(self) -> None:
-        mock_svc = MagicMock()
-        mock_svc.get_contacts.return_value = []
-        with patch("app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc):
-            _execute_wechat_preview_tool({"keyword": "  "})
-            call_kwargs = mock_svc.get_contacts.call_args.kwargs
-            assert call_kwargs["keyword"] is None
-
-    def test_custom_limit(self) -> None:
-        mock_svc = MagicMock()
-        mock_svc.get_contacts.return_value = []
-        with patch("app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc):
-            _execute_wechat_preview_tool({"limit": 10})
-            call_kwargs = mock_svc.get_contacts.call_args.kwargs
-            assert call_kwargs["limit"] == 10
-
-    def test_default_limit_30(self) -> None:
-        mock_svc = MagicMock()
-        mock_svc.get_contacts.return_value = []
-        with patch("app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc):
-            _execute_wechat_preview_tool({})
-            call_kwargs = mock_svc.get_contacts.call_args.kwargs
-            assert call_kwargs["limit"] == 30
-
-    def test_import_error_returns_service_unavailable(self) -> None:
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service",
-            side_effect=ImportError("no module"),
-        ):
-            result = _execute_wechat_preview_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "service_unavailable"
-
-    def test_value_error_returns_invalid_parameters(self) -> None:
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service",
-            side_effect=ValueError("bad"),
-        ):
-            result = _execute_wechat_preview_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "invalid_parameters"
-
-    def test_type_error_returns_invalid_parameters(self) -> None:
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service",
-            side_effect=TypeError("bad"),
-        ):
-            result = _execute_wechat_preview_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "invalid_parameters"
-
-    def test_runtime_error_returns_query_failed(self) -> None:
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service",
-            side_effect=RuntimeError("fail"),
-        ):
-            result = _execute_wechat_preview_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "query_failed"
 
 
 # ---------------------------------------------------------------------------

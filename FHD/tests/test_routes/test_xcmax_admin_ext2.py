@@ -6,8 +6,7 @@ daily-digests single, daily-digests artifacts, action-items stats, action-items 
 local read failure), _remote_duty_health (dict passthrough, JSONResponse body parsing,
 fallback), admin routes (admin_list_market_users, admin_bind_user_mod, admin_unbind_user_mod,
 admin_set_user_admin, admin_set_user_enterprise, admin_list_user_mods,
-admin_list_assignable_mods, admin_list_user_wechat_customers, admin_save_user_wechat_customers,
-admin_start_impersonate success, admin_end_impersonate, get_digest_identity 404 fallback,
+admin_list_assignable_mods, admin_start_impersonate success, admin_end_impersonate, get_digest_identity 404 fallback,
 get_digest_identity dict passthrough, ops_duty_health, ops_dispatch, ops_jobs, ops_duty_runs,
 ops_duty_run_detail, ops_closure_status, ops_staffing_onboard, ops_staffing_install_local,
 ops_staffing_close_gap), _xcmax_market_proxy_impl, _sync_sse_generator.
@@ -488,131 +487,6 @@ class TestAdminRouteHandlers:
         ):
             response = client.put("/api/xcmax/admin/market/users/1/enterprise?is_enterprise=false")
         assert response.status_code == 200
-
-    @pytest.mark.asyncio
-    async def test_admin_list_user_wechat_customers_no_session(self, client: TestClient):
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value=None,
-        ):
-            response = client.get("/api/xcmax/admin/market/users/1/wechat-customers")
-        assert response.status_code == 401
-
-    @pytest.mark.asyncio
-    async def test_admin_list_user_wechat_customers_with_session(self, client: TestClient):
-        with (
-            patch(
-                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                return_value="sid123",
-            ),
-            patch(
-                "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "admin", "market_is_admin": True},
-            ),
-            patch(
-                "app.services.wechat_group_customer_bridge.get_bindings_for_user",
-                return_value=[{"id": 1}],
-            ),
-        ):
-            response = client.get("/api/xcmax/admin/market/users/1/wechat-customers")
-        assert response.status_code == 200
-
-    @pytest.mark.asyncio
-    async def test_admin_list_user_wechat_customers_error(self, client: TestClient):
-        with (
-            patch(
-                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                return_value="sid123",
-            ),
-            patch(
-                "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "admin", "market_is_admin": True},
-            ),
-            patch(
-                "app.services.wechat_group_customer_bridge.get_bindings_for_user",
-                side_effect=RuntimeError("fail"),
-            ),
-            patch(
-                "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
-                (RuntimeError,),
-            ),
-        ):
-            response = client.get("/api/xcmax/admin/market/users/1/wechat-customers")
-        assert response.status_code == 500
-
-    @pytest.mark.asyncio
-    async def test_admin_save_user_wechat_customers(self, client: TestClient):
-        with (
-            patch(
-                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                return_value="sid123",
-            ),
-            patch(
-                "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "admin", "market_is_admin": True},
-            ),
-            patch(
-                "app.services.wechat_group_customer_bridge.save_bindings_for_user",
-                return_value={"success": True},
-            ),
-        ):
-            response = client.put(
-                "/api/xcmax/admin/market/users/1/wechat-customers",
-                json={"contact_ids": [1, 2]},
-            )
-        assert response.status_code == 200
-
-    @pytest.mark.asyncio
-    async def test_admin_save_user_wechat_customers_invalid_ids(self, client: TestClient):
-        with (
-            patch(
-                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                return_value="sid123",
-            ),
-            patch(
-                "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "admin", "market_is_admin": True},
-            ),
-            patch(
-                "app.services.wechat_group_customer_bridge.save_bindings_for_user",
-                return_value={"success": True},
-            ) as mock_save,
-        ):
-            response = client.put(
-                "/api/xcmax/admin/market/users/1/wechat-customers",
-                json={"contact_ids": "not a list"},
-            )
-        assert response.status_code == 200
-        # Verify empty list passed
-        mock_save.assert_called_once()
-        args, _ = mock_save.call_args
-        assert args[1] == []
-
-    @pytest.mark.asyncio
-    async def test_admin_save_user_wechat_customers_error(self, client: TestClient):
-        with (
-            patch(
-                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                return_value="sid123",
-            ),
-            patch(
-                "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "admin", "market_is_admin": True},
-            ),
-            patch(
-                "app.services.wechat_group_customer_bridge.save_bindings_for_user",
-                side_effect=RuntimeError("fail"),
-            ),
-            patch(
-                "app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS",
-                (RuntimeError,),
-            ),
-        ):
-            response = client.put(
-                "/api/xcmax/admin/market/users/1/wechat-customers",
-                json={"contact_ids": [1]},
-            )
-        assert response.status_code == 500
 
 
 # ---------------------------------------------------------------------------
