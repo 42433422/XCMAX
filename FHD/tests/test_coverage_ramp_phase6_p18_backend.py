@@ -186,307 +186,158 @@ def ext_mod():
 # ===========================================================================
 
 
-class TestProductRepositoryApiScalar:
-    """Cover ``_api_scalar`` edge cases."""
-
-    def test_api_scalar_none_returns_none(self):
-        assert SQLAlchemyProductRepository._api_scalar(None) is None
-
-    def test_api_scalar_float_nan_returns_none(self):
-        assert SQLAlchemyProductRepository._api_scalar(float("nan")) is None
-
-    def test_api_scalar_string_nan_returns_none(self):
-        assert SQLAlchemyProductRepository._api_scalar("nan") is None
-
-    def test_api_scalar_string_none_returns_none(self):
-        assert SQLAlchemyProductRepository._api_scalar("none") is None
-
-    def test_api_scalar_string_nat_returns_none(self):
-        assert SQLAlchemyProductRepository._api_scalar("NaT") is None
-
-    def test_api_scalar_string_na_angle_returns_none(self):
-        assert SQLAlchemyProductRepository._api_scalar("<NA>") is None
-
-    def test_api_scalar_string_null_returns_none(self):
-        assert SQLAlchemyProductRepository._api_scalar("null") is None
-
-    def test_api_scalar_string_with_whitespace_nan_returns_none(self):
-        assert SQLAlchemyProductRepository._api_scalar("  nan  ") is None
-
-    def test_api_scalar_normal_string_returns_stripped(self):
-        assert SQLAlchemyProductRepository._api_scalar("  hello  ") == "hello"
-
-    def test_api_scalar_integer_returns_integer(self):
-        assert SQLAlchemyProductRepository._api_scalar(42) == 42
-
-    def test_api_scalar_normal_float_returns_float(self):
-        assert SQLAlchemyProductRepository._api_scalar(3.14) == 3.14
-
-    def test_api_scalar_zero_returns_zero(self):
-        assert SQLAlchemyProductRepository._api_scalar(0) == 0
-
-    def test_api_scalar_empty_string_returns_empty(self):
-        assert SQLAlchemyProductRepository._api_scalar("") == ""
-
-    def test_api_scalar_object_with_float_nan_conversion_returns_none(self):
-        class NanLike:
-            def __float__(self):
-                return float("nan")
-
-        assert SQLAlchemyProductRepository._api_scalar(NanLike()) is None
-
-    def test_api_scalar_object_without_float_conversion_returns_self(self):
-        class Weird:
-            pass
-
-        w = Weird()
-        assert SQLAlchemyProductRepository._api_scalar(w) is w
-
-    def test_api_scalar_bool_true_returns_true(self):
-        assert SQLAlchemyProductRepository._api_scalar(True) is True
-
-    def test_api_scalar_bool_false_returns_false(self):
-        assert SQLAlchemyProductRepository._api_scalar(False) is False
-
-
 class TestProductRepositoryProductToDict:
-    """Cover ``_product_to_dict`` branches."""
+    """Cover ``find_all_dict`` dict output branches.
+
+    旧版私有辅助 _product_to_dict 已删除，改为直接断言 find_all_dict 的字典输出字段。
+    """
 
     @pytest.fixture
     def repo(self):
         return SQLAlchemyProductRepository()
 
-    def test_basic_conversion_includes_product_name(self, repo):
+    def _query(self, models, total):
+        mock_db = MagicMock()
+        mock_query = MagicMock()
+        mock_query.filter.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.offset.return_value = mock_query
+        mock_query.count.return_value = total
+        mock_query.all.return_value = models
+        mock_db.query.return_value = mock_query
+        return mock_db
+
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
+    def test_basic_conversion_includes_product_name(self, mock_get_db, repo):
         mock_product = _make_mock_product()
-        mock_col1 = MagicMock()
-        mock_col1.name = "id"
-        mock_col2 = MagicMock()
-        mock_col2.name = "name"
-        mock_col3 = MagicMock()
-        mock_col3.name = "price"
+        mock_get_db.return_value = _mock_db_ctx(self._query([mock_product], 1))
 
-        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
-            mock_mapper = MagicMock()
-            mock_mapper.columns = [mock_col1, mock_col2, mock_col3]
-            mock_insp.return_value = mock_mapper
-            result = repo._product_to_dict(mock_product)
+        dicts, total = repo.find_all_dict()
+        assert total == 1
+        assert dicts[0]["name"] == "测试产品"
+        assert dicts[0]["model_number"] == "MOD-001"
+        assert dicts[0]["price"] == 99.5
 
-        assert result["name"] == "测试产品"
-        assert result["product_name"] == "测试产品"
-
-    def test_empty_name_no_product_name(self, repo):
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
+    def test_empty_name_defaults_to_empty_string(self, mock_get_db, repo):
         mock_product = _make_mock_product(name="")
-        mock_col = MagicMock()
-        mock_col.name = "name"
+        mock_get_db.return_value = _mock_db_ctx(self._query([mock_product], 1))
 
-        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
-            mock_mapper = MagicMock()
-            mock_mapper.columns = [mock_col]
-            mock_insp.return_value = mock_mapper
-            result = repo._product_to_dict(mock_product)
+        dicts, total = repo.find_all_dict()
+        assert dicts[0]["name"] == ""
 
-        assert "product_name" not in result
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
+    def test_none_price_converted_to_zero(self, mock_get_db, repo):
+        mock_product = _make_mock_product(price=None)
+        mock_get_db.return_value = _mock_db_ctx(self._query([mock_product], 1))
 
-    def test_nan_price_converted_to_none(self, repo):
-        mock_product = _make_mock_product(price=float("nan"))
-        mock_col = MagicMock()
-        mock_col.name = "price"
+        dicts, total = repo.find_all_dict()
+        assert dicts[0]["price"] == 0
 
-        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
-            mock_mapper = MagicMock()
-            mock_mapper.columns = [mock_col]
-            mock_insp.return_value = mock_mapper
-            result = repo._product_to_dict(mock_product)
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
+    def test_no_rows_returns_empty_dict_list(self, mock_get_db, repo):
+        mock_get_db.return_value = _mock_db_ctx(self._query([], 0))
 
-        assert result["price"] is None
-
-    def test_column_not_in_dict_skipped(self, repo):
-        mock_product = MagicMock()
-        mock_product.__dict__ = {"id": 1, "name": "X"}
-        mock_col1 = MagicMock()
-        mock_col1.name = "id"
-        mock_col2 = MagicMock()
-        mock_col2.name = "name"
-        mock_col3 = MagicMock()
-        mock_col3.name = "missing_col"
-
-        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
-            mock_mapper = MagicMock()
-            mock_mapper.columns = [mock_col1, mock_col2, mock_col3]
-            mock_insp.return_value = mock_mapper
-            result = repo._product_to_dict(mock_product)
-
-        assert "missing_col" not in result
-        assert result["id"] == 1
+        dicts, total = repo.find_all_dict()
+        assert dicts == []
+        assert total == 0
 
 
 class TestProductRepositoryFindAll:
-    """Cover ``find_all`` branches."""
+    """Cover ``find_all`` branches.
+
+    新版 find_all 返回 (list[Product], total) 元组（不再返回 dict），
+    且不再做表存在性检查，DB 异常直接向上抛出。
+    """
 
     @pytest.fixture
     def repo(self):
         return SQLAlchemyProductRepository()
 
-    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
-    def test_products_table_not_exists_returns_empty(self, mock_get_db, repo):
+    def _query(self, models, total):
         mock_db = MagicMock()
-        mock_db.__dict__["bind"] = MagicMock()
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
+        mock_query = MagicMock()
+        mock_query.filter.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.offset.return_value = mock_query
+        mock_query.count.return_value = total
+        mock_query.all.return_value = models
+        mock_db.query.return_value = mock_query
+        return mock_db
 
-        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
-            mock_bind_insp = MagicMock()
-            mock_bind_insp.get_table_names.return_value = []
-            mock_insp.return_value = mock_bind_insp
-            result = repo.find_all()
+    @patch("app.infrastructure.repositories.product_repository_impl.product_to_domain")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
+    def test_empty_result_returns_tuple(self, mock_get_db, mock_to_domain, repo):
+        mock_get_db.return_value = _mock_db_ctx(self._query([], 0))
 
-        assert result["success"] is True
-        assert result["data"] == []
-        assert result["total"] == 0
+        result = repo.find_all()
+
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        assert result[0] == []
+        assert result[1] == 0
 
     @patch("app.infrastructure.repositories.product_repository_impl.get_db")
-    def test_recoverable_error_returns_failure(self, mock_get_db, repo):
+    def test_recoverable_error_is_raised(self, mock_get_db, repo):
         mock_get_db.side_effect = OSError("DB connection lost")
-        result = repo.find_all()
-        assert result["success"] is False
-        assert "查询失败" in result["message"]
+        with pytest.raises(OSError):
+            repo.find_all()
 
+    @patch("app.infrastructure.repositories.product_repository_impl.product_to_domain")
     @patch("app.infrastructure.repositories.product_repository_impl.get_db")
-    def test_with_unit_name_filter(self, mock_get_db, repo):
-        mock_db = MagicMock()
-        mock_db.__dict__["bind"] = MagicMock()
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
+    def test_with_unit_name_filter(self, mock_get_db, mock_to_domain, repo):
+        mock_get_db.return_value = _mock_db_ctx(self._query([], 0))
 
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.count.return_value = 0
-        mock_query.all.return_value = []
-        mock_db.query.return_value = mock_query
+        result = repo.find_all(unit_name="箱")
 
-        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
-            mock_bind_insp = MagicMock()
-            mock_bind_insp.get_table_names.return_value = ["products"]
-            mock_insp.return_value = mock_bind_insp
-            result = repo.find_all(unit_name="箱")
+        assert result[1] == 0
+        assert result[0] == []
 
-        assert result["success"] is True
-
+    @patch("app.infrastructure.repositories.product_repository_impl.product_to_domain")
     @patch("app.infrastructure.repositories.product_repository_impl.get_db")
-    def test_with_model_number_filter_normalized(self, mock_get_db, repo):
-        mock_db = MagicMock()
-        mock_db.__dict__["bind"] = MagicMock()
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
+    def test_with_model_number_filter_normalized(self, mock_get_db, mock_to_domain, repo):
+        mock_get_db.return_value = _mock_db_ctx(self._query([], 0))
 
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.count.return_value = 0
-        mock_query.all.return_value = []
-        mock_db.query.return_value = mock_query
+        result = repo.find_all(model_number="ABC-123")
 
-        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
-            mock_bind_insp = MagicMock()
-            mock_bind_insp.get_table_names.return_value = ["products"]
-            mock_insp.return_value = mock_bind_insp
-            result = repo.find_all(model_number="ABC-123")
+        assert result[1] == 0
+        assert result[0] == []
 
-        assert result["success"] is True
-
+    @patch("app.infrastructure.repositories.product_repository_impl.product_to_domain")
     @patch("app.infrastructure.repositories.product_repository_impl.get_db")
-    def test_with_keyword_multiple_segments(self, mock_get_db, repo):
-        mock_db = MagicMock()
-        mock_db.__dict__["bind"] = MagicMock()
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
+    def test_with_keyword_multiple_segments(self, mock_get_db, mock_to_domain, repo):
+        mock_get_db.return_value = _mock_db_ctx(self._query([], 0))
 
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.count.return_value = 0
-        mock_query.all.return_value = []
-        mock_db.query.return_value = mock_query
+        result = repo.find_all(keyword="测试 9803")
 
-        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
-            mock_bind_insp = MagicMock()
-            mock_bind_insp.get_table_names.return_value = ["products"]
-            mock_insp.return_value = mock_bind_insp
-            result = repo.find_all(keyword="测试 9803")
+        assert result[1] == 0
+        assert result[0] == []
 
-        assert result["success"] is True
-
+    @patch("app.infrastructure.repositories.product_repository_impl.product_to_domain")
     @patch("app.infrastructure.repositories.product_repository_impl.get_db")
-    def test_pagination(self, mock_get_db, repo):
-        mock_db = MagicMock()
-        mock_db.__dict__["bind"] = MagicMock()
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
+    def test_pagination_returns_total(self, mock_get_db, mock_to_domain, repo):
+        mock_get_db.return_value = _mock_db_ctx(self._query([], 100))
 
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.count.return_value = 100
-        mock_query.all.return_value = []
-        mock_db.query.return_value = mock_query
+        result = repo.find_all(page=3, per_page=10)
 
-        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
-            mock_bind_insp = MagicMock()
-            mock_bind_insp.get_table_names.return_value = ["products"]
-            mock_insp.return_value = mock_bind_insp
-            result = repo.find_all(page=3, per_page=10)
+        assert result[1] == 100
+        assert result[0] == []
 
-        assert result["page"] == 3
-        assert result["per_page"] == 10
-
+    @patch("app.infrastructure.repositories.product_repository_impl.product_to_domain")
     @patch("app.infrastructure.repositories.product_repository_impl.get_db")
-    def test_recoverable_error_on_table_names_check(self, mock_get_db, repo):
-        mock_db = MagicMock()
-        mock_db.__dict__["bind"] = MagicMock()
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
-
-        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
-            mock_insp.side_effect = RuntimeError("inspect failed")
-            result = repo.find_all()
-
-        assert result["success"] is True
-        assert result["data"] == []
-
-    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
-    def test_bind_with_get_table_names_method(self, mock_get_db, repo):
-        mock_db = MagicMock()
-        mock_bind = MagicMock()
-        mock_bind.get_table_names.return_value = ["products"]
-        mock_db.__dict__["bind"] = mock_bind
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
-
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.count.return_value = 0
-        mock_query.all.return_value = []
-        mock_db.query.return_value = mock_query
+    def test_returns_domain_objects(self, mock_get_db, mock_to_domain, repo):
+        mock_model = _make_mock_product()
+        mock_domain = MagicMock()
+        mock_to_domain.return_value = mock_domain
+        mock_get_db.return_value = _mock_db_ctx(self._query([mock_model], 1))
 
         result = repo.find_all()
-        assert result["success"] is True
 
-    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
-    def test_table_names_not_list_returns_empty(self, mock_get_db, repo):
-        mock_db = MagicMock()
-        mock_bind = MagicMock()
-        mock_bind.get_table_names.return_value = "not a list"
-        mock_db.__dict__["bind"] = mock_bind
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
-
-        result = repo.find_all()
-        assert result["success"] is True
-        assert result["data"] == []
+        assert result[1] == 1
+        assert result[0] == [mock_domain]
+        mock_to_domain.assert_called_once_with(mock_model)
 
 
 class TestProductRepositoryCreateUpdate:
@@ -503,8 +354,10 @@ class TestProductRepositoryCreateUpdate:
         mock_product.id = 42
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.repositories.product_repository_impl.Product") as MockProduct:
-            MockProduct.return_value = mock_product
+        with patch(
+            "app.infrastructure.repositories.product_repository_impl.ProductModel"
+        ) as MockProductModel:
+            MockProductModel.return_value = mock_product
             result = repo.create({"product_name": "新产品", "price": 10.0})
 
         assert result["success"] is True
@@ -526,8 +379,10 @@ class TestProductRepositoryCreateUpdate:
         mock_product.id = 1
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.repositories.product_repository_impl.Product") as MockProduct:
-            MockProduct.return_value = mock_product
+        with patch(
+            "app.infrastructure.repositories.product_repository_impl.ProductModel"
+        ) as MockProductModel:
+            MockProductModel.return_value = mock_product
             result = repo.create({"name": "用name键创建"})
 
         assert result["success"] is True
@@ -2718,7 +2573,18 @@ class TestMobileExtCsRoutes:
         mock_user = MagicMock()
         mock_user.id = 1
         mock_request = MagicMock()
-        result = await ext_mod.get_cs_messages(request=mock_request, user=mock_user)
+        mock_db = MagicMock()
+        mock_db.__enter__ = MagicMock(return_value=mock_db)
+        mock_db.__exit__ = MagicMock(return_value=False)
+        mock_svc = MagicMock()
+        mock_svc._ensure_enterprise_dedicated_cs_user.return_value = SimpleNamespace(id=99)
+        mock_svc.get_or_create_direct.return_value = {"id": 7}
+        mock_svc.list_messages.return_value = []
+        with (
+            patch("app.db.session.get_db", return_value=mock_db),
+            patch("app.application.im_app_service.ImApplicationService", return_value=mock_svc),
+        ):
+            result = await ext_mod.get_cs_messages(request=mock_request, user=mock_user)
         if hasattr(result, "body"):
             data = json.loads(result.body)
         else:

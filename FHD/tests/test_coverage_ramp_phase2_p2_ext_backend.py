@@ -169,13 +169,56 @@ def test_resolve_decrypt_contact_db_path_env(tmp_path, monkeypatch: pytest.Monke
 # ---------------------------------------------------------------------------
 
 
-def test_product_repository_product_to_dict() -> None:
-    from app.db.models.product import Product
+def _mock_db_ctx(mock_db):
+    @contextmanager
+    def _ctx():
+        yield mock_db
 
-    product = Product(id=1, name="漆A", price=12.5, quantity=3)
+    return _ctx()
+
+
+def test_product_repository_find_all_dict_output() -> None:
+    """新版仓储 find_all_dict 返回 (list[dict], total) 元组，字典字段对齐新版契约。
+
+    旧版私有辅助 _product_to_dict 已删除，改为直接断言字典输出字段。
+    """
+    from datetime import datetime
+
     repo = SQLAlchemyProductRepository()
-    out = repo._product_to_dict(product)
-    assert out.get("product_name") == "漆A" or out.get("name") == "漆A"
+    mock_model = MagicMock()
+    mock_model.id = 1
+    mock_model.model_number = "MOD-001"
+    mock_model.name = "漆A"
+    mock_model.specification = "100x200"
+    mock_model.price = 12.5
+    mock_model.quantity = 3
+    mock_model.description = "描述"
+    mock_model.category = "电子"
+    mock_model.brand = "品牌A"
+    mock_model.unit = "个"
+    mock_model.is_active = 1
+    mock_model.created_at = datetime(2026, 1, 1)
+    mock_model.updated_at = datetime(2026, 1, 2)
+
+    mock_db = MagicMock()
+    mock_query = MagicMock()
+    mock_query.filter.return_value = mock_query
+    mock_query.order_by.return_value = mock_query
+    mock_query.limit.return_value = mock_query
+    mock_query.offset.return_value = mock_query
+    mock_query.count.return_value = 1
+    mock_query.all.return_value = [mock_model]
+    mock_db.query.return_value = mock_query
+
+    with patch("app.infrastructure.repositories.product_repository_impl.get_db") as mock_get_db:
+        mock_get_db.return_value = _mock_db_ctx(mock_db)
+        dicts, total = repo.find_all_dict(page=1, per_page=20)
+
+    assert isinstance((dicts, total), tuple)
+    assert total == 1
+    assert dicts[0]["name"] == "漆A"
+    assert dicts[0]["model_number"] == "MOD-001"
+    assert dicts[0]["price"] == 12.5
 
 
 # ---------------------------------------------------------------------------
