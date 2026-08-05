@@ -38,7 +38,10 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
     # enterprise=full 的构建由 build-frontend.sh 保证，这里校验委托关系与 admin-console 禁令。
     sh_frontend = (scripts / "build-frontend.sh").read_text(encoding="utf-8")
     assert "build-frontend.sh" in sh_backend
-    assert "VITE_XCAGI_PRODUCT_SKU=\"${VITE_SKU}\" VITE_XCAGI_EDITION=full npm run build:full" in sh_frontend
+    assert (
+        'VITE_XCAGI_PRODUCT_SKU="${VITE_SKU}" VITE_XCAGI_EDITION=full npm run build:full'
+        in sh_frontend
+    )
     assert "VITE_XCAGI_PRODUCT_SKU=enterprise npm run build" not in sh_backend
     assert "admin-console && npm run build" not in sh_backend
     assert "(cd admin-console && npm run build)" not in sh_backend

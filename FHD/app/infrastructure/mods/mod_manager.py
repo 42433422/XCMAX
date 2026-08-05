@@ -20,6 +20,7 @@ from .artifact_package import (
     validate_bundle_manifest,
     validate_employee_pack_manifest,
 )
+from .enterprise_entitlement_restore import restore_entitlements_from_session_id
 from .manifest import ModMetadata, parse_manifest, validate_dependencies
 from .missing_local_state import clear_mod_missing_locally, mark_mod_missing_locally
 from .package import ModPackage, ModPackageError, ModSignatureError
@@ -1287,34 +1288,8 @@ def _register_single_mod_http_routes(
 
 
 def _restore_entitlements_from_session_id(session_id: str | None) -> None:
-    """无市场 token 时从 session 行恢复权益（供 Mod API 按需挂载）。"""
-    sid = (session_id or "").strip()
-    if not sid:
-        return
-    try:
-        from app.enterprise.mod_entitlements import (
-            _augment_entitled_for_username,
-            _session_username_for_entitlements,
-            get_cached_entitled_client_mod_ids,
-            get_cached_market_identity,
-            restore_entitlements_from_session_row,
-            set_session_entitlements,
-        )
-
-        restore_entitlements_from_session_row(sid)
-        uname = _session_username_for_entitlements(sid)
-        market_user_id, market_username = get_cached_market_identity()
-        cached = _augment_entitled_for_username(
-            uname, get_cached_entitled_client_mod_ids() or set()
-        )
-        if cached:
-            set_session_entitlements(
-                market_user_id=market_user_id,
-                market_username=uname or market_username,
-                entitled_client_mod_ids=cached,
-            )
-    except RECOVERABLE_ERRORS:
-        logger.debug("restore entitlements from session failed", exc_info=True)
+    """恢复企业 Mod 权益（委托给 dedicated 模块，保留旧调用方兼容）。"""
+    restore_entitlements_from_session_id(session_id)
 
 
 def _mod_allowed_for_api_load(mod_id: str, session_id: str | None = None) -> bool:

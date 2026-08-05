@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useRouter, type RouteLocationRaw } from 'vue-router'
 import xcmaxMarketProxy from '@/api/xcmaxMarketProxy'
 import { AUTONOMY_L4_READINESS, overlayDeployGap } from '@/constants/autonomyL4Readiness'
@@ -331,7 +331,7 @@ export function useSelfEvolutionRuntimePanelState(surface: SelfEvolutionSurface,
   const l4P0Count = computed(() => l4Gaps.value.filter((g) => g.severity === 'P0' && g.status !== 'ok').length)
   const l4BlockedCount = computed(() => l4Gaps.value.filter((g) => g.status === 'blocked').length)
 
-  return {
+  return reactive({
     raw, loading, error, refresh,
     asRecord, asArray, asString, asNumber, firstText,
     evidence, memory, policy, gate, cron,
@@ -357,7 +357,7 @@ export function useSelfEvolutionRuntimePanelState(surface: SelfEvolutionSurface,
     l4Closure, autoDispatchDeploy, l4Gaps, l4P0Count, l4BlockedCount,
     paraCopied, governanceReviewBusy, governanceReviewError, governanceReviewResult,
     copyParaTaskId, reviewGovernanceAudit,
-  }
+  })
 }
 
 export type SelfEvolutionRuntimePanelState = ReturnType<typeof useSelfEvolutionRuntimePanelState>

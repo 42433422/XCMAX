@@ -1,4 +1,4 @@
-import { computed } from 'vue'
+import { computed, reactive } from 'vue'
 import type { SelfEvolutionRuntimePanelState } from './useSelfEvolutionRuntimePanelState'
 import type { AnyRecord } from './useLoopRuntimePanel'
 
@@ -7,65 +7,65 @@ import type { AnyRecord } from './useLoopRuntimePanel'
  * 把 `useSelfEvolutionRuntimePanelState` 解析出的领域状态，
  * 收敛为模板可直接渲染的卡片数组 / 阶段 / 标签（statusTone、decisionCards、
  * loopStages、proactiveCards、rosterAlignmentCards 等）。
+ *
+ * 注意：`state` 是 reactive 对象，其属性访问会自动解包 ref。因此这里必须在
+ * computed 求值函数内部通过 `state.xxx` 读取，以保持响应式；不能在函数顶部
+ * 解构 reactive 值（会退化为一次性快照）。
  */
 export function useSelfEvolutionRuntimePresenters(state: SelfEvolutionRuntimePanelState) {
-  const {
-    error, gate, policy, cron, raw, openRunIds, openItems, recentRuns,
-    latestComplete, latestSkip, lastRun, decision, mergeDecision,
-    currentGovernanceGate, kbSummary, evolutionMetrics, rosterAlignment,
-    asRecord, asArray, asString, asNumber, firstText,
-  } = state
+  // 纯函数工具稳定不变，可安全解构；reactive 值一律在 computed 内经 state.xxx 读取。
+  const { asRecord, asArray, asString, asNumber, firstText } = state
 
   const statusTone = computed(() => {
-    if (error.value) return 'bad'
-    if (openRunIds.value.length > 0) return 'running'
-    if (gate.value.should_run === true) return 'warn'
-    if (asString(latestComplete.value.phase) === 'complete') return 'ok'
+    if (state.error) return 'bad'
+    if (state.openRunIds.length > 0) return 'running'
+    if (state.gate.should_run === true) return 'warn'
+    if (asString(state.latestComplete.phase) === 'complete') return 'ok'
     return 'idle'
   })
 
   const statusLabel = computed(() => {
-    if (error.value) return '接口异常'
-    if (openRunIds.value.length > 0) return '运行中'
-    if (gate.value.should_run === true) return '达到触发阈值'
-    if (asString(gate.value.reason) === 'cooldown') return '冷却中'
-    if (asString(latestComplete.value.phase) === 'complete') return '最近完成'
+    if (state.error) return '接口异常'
+    if (state.openRunIds.length > 0) return '运行中'
+    if (state.gate.should_run === true) return '达到触发阈值'
+    if (asString(state.gate.reason) === 'cooldown') return '冷却中'
+    if (asString(state.latestComplete.phase) === 'complete') return '最近完成'
     return '待命'
   })
 
   const cronLine = computed(() => {
-    const hour = asNumber(cron.value.hour, 3)
-    const minute = asNumber(cron.value.minute, 0)
-    const tz = firstText(cron.value.timezone, 'Asia/Shanghai')
+    const hour = asNumber(state.cron.hour, 3)
+    const minute = asNumber(state.cron.minute, 0)
+    const tz = firstText(state.cron.timezone, 'Asia/Shanghai')
     return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} ${tz}`
   })
 
-  const signalCount = computed(() => asNumber(gate.value.signal_count, 0))
-  const threshold = computed(() => asNumber(gate.value.threshold, asNumber(policy.value.threshold, 1)))
+  const signalCount = computed(() => asNumber(state.gate.signal_count, 0))
+  const threshold = computed(() => asNumber(state.gate.threshold, asNumber(state.policy.threshold, 1)))
   const riskScore = computed(() => {
-    const v3 = asRecord(decision.value.safety_score_v3)
-    const v2 = asRecord(decision.value.safety_score_v2)
-    const v1 = asRecord(decision.value.risk_score)
+    const v3 = asRecord(state.decision.safety_score_v3)
+    const v2 = asRecord(state.decision.safety_score_v2)
+    const v1 = asRecord(state.decision.risk_score)
     if (v3.score != null) return { label: 'V3 安全分', value: asNumber(v3.score), goodHigh: true }
     if (v2.score != null) return { label: 'V2 安全分', value: asNumber(v2.score), goodHigh: true }
     if (v1.score != null) return { label: 'V1 风险分', value: asNumber(v1.score), goodHigh: false }
     return null
   })
   const qaVerdict = computed(() => {
-    const qa = asRecord(decision.value.qa)
-    const reviewGate = asRecord(decision.value.structured_gate)
-    return firstText(qa.verdict, reviewGate.qa_verdict, lastRun.value.qa_verdict, '待回写')
+    const qa = asRecord(state.decision.qa)
+    const reviewGate = asRecord(state.decision.structured_gate)
+    return firstText(qa.verdict, reviewGate.qa_verdict, state.lastRun.qa_verdict, '待回写')
   })
 
   const evidenceCards = computed(() => [
-    { label: 'Para 任务', value: state.paraTaskId.value || '无进行中任务' },
-    { label: '待处理项', value: String(openItems.value.length) },
-    { label: '最近运行', value: String(recentRuns.value.length) },
-    { label: '冷却', value: `${asNumber(policy.value.cooldown_minutes, 360)} 分钟` },
+    { label: 'Para 任务', value: state.paraTaskId || '无进行中任务' },
+    { label: '待处理项', value: String(state.openItems.length) },
+    { label: '最近运行', value: String(state.recentRuns.length) },
+    { label: '冷却', value: `${asNumber(state.policy.cooldown_minutes, 360)} 分钟` },
   ])
 
   const decisionCards = computed(() => {
-    const md = mergeDecision.value
+    const md = state.mergeDecision
     const cards = [
       {
         key: 'action',
@@ -80,7 +80,7 @@ export function useSelfEvolutionRuntimePresenters(state: SelfEvolutionRuntimePan
     const roster = asRecord(md.roster_gate)
     const governance = Object.keys(asRecord(md.governance_gate)).length
       ? asRecord(md.governance_gate)
-      : currentGovernanceGate.value
+      : state.currentGovernanceGate
     const evolution = asRecord(md.evolution_gate)
     if (v1.score != null) cards.push({
       key: 'v1',
@@ -137,22 +137,22 @@ export function useSelfEvolutionRuntimePresenters(state: SelfEvolutionRuntimePan
       key: 'signals',
       title: '信号感知',
       value: `${signalCount.value}/${threshold.value}`,
-      meta: firstText(gate.value.reason, '未达标'),
+      meta: firstText(state.gate.reason, '未达标'),
       tone: signalCount.value >= threshold.value ? 'warn' : 'idle',
     },
     {
       key: 'incident',
       title: '异常记录',
-      value: String(asNumber(gate.value.incident_count, 0)),
-      meta: `${asNumber(gate.value.lookback_hours, 24)}h 窗口`,
-      tone: asNumber(gate.value.incident_count, 0) > 0 ? 'running' : 'idle',
+      value: String(asNumber(state.gate.incident_count, 0)),
+      meta: `${asNumber(state.gate.lookback_hours, 24)}h 窗口`,
+      tone: asNumber(state.gate.incident_count, 0) > 0 ? 'running' : 'idle',
     },
     {
       key: 'team',
       title: '三员工执行',
-      value: openRunIds.value.length ? `${openRunIds.value.length} 轮` : '待命',
+      value: state.openRunIds.length ? `${state.openRunIds.length} 轮` : '待命',
       meta: '侦察 / 修复 / QA',
-      tone: openRunIds.value.length ? 'running' : 'idle',
+      tone: state.openRunIds.length ? 'running' : 'idle',
     },
     {
       key: 'qa',
@@ -171,14 +171,14 @@ export function useSelfEvolutionRuntimePresenters(state: SelfEvolutionRuntimePan
     {
       key: 'merge',
       title: '合并/审批',
-      value: state.actionLabel.value,
-      meta: state.branchName.value || '分支待回写',
-      tone: /merge|merged|pass|auto/i.test(state.actionLabel.value) ? 'ok' : 'idle',
+      value: state.actionLabel,
+      meta: state.branchName || '分支待回写',
+      tone: /merge|merged|pass|auto/i.test(state.actionLabel) ? 'ok' : 'idle',
     },
   ])
 
   const kbCards = computed(() => {
-    const kb = kbSummary.value
+    const kb = state.kbSummary
     const redis = asRecord(kb.redisvl_status)
     return [
       {
@@ -206,11 +206,11 @@ export function useSelfEvolutionRuntimePresenters(state: SelfEvolutionRuntimePan
   })
 
   const kbHitLines = computed(() => {
-    const fixes = asArray(kbSummary.value.top_fix_hits).map((item) => {
+    const fixes = asArray(state.kbSummary.top_fix_hits).map((item) => {
       const row = asRecord(item)
       return firstText(row.symptom, row.root_cause, row.path)
     }).filter(Boolean)
-    const patterns = asArray(kbSummary.value.top_pattern_hits).map((item) => {
+    const patterns = asArray(state.kbSummary.top_pattern_hits).map((item) => {
       const row = asRecord(item)
       return firstText(row.summary, row.pattern, row.path)
     }).filter(Boolean)
@@ -218,14 +218,14 @@ export function useSelfEvolutionRuntimePresenters(state: SelfEvolutionRuntimePan
   })
 
   const kbFixHitDetails = computed(() =>
-    asArray(kbSummary.value.top_fix_hits).map((item) => asRecord(item)).slice(0, 3),
+    asArray(state.kbSummary.top_fix_hits).map((item) => asRecord(item)).slice(0, 3),
   )
 
   const kbPatternHitDetails = computed(() =>
-    asArray(kbSummary.value.top_pattern_hits).map((item) => asRecord(item)).slice(0, 3),
+    asArray(state.kbSummary.top_pattern_hits).map((item) => asRecord(item)).slice(0, 3),
   )
 
-  const proactiveSignals = computed<AnyRecord>(() => asRecord(gate.value.proactive_signals))
+  const proactiveSignals = computed<AnyRecord>(() => asRecord(state.gate.proactive_signals))
   const proactiveCandidates = computed(() =>
     asArray(proactiveSignals.value.candidates)
       .map((item) => asRecord(item))
@@ -233,7 +233,7 @@ export function useSelfEvolutionRuntimePresenters(state: SelfEvolutionRuntimePan
   )
 
   const proactiveCards = computed(() => {
-    const count = asNumber(gate.value.proactive_task_count, proactiveCandidates.value.length)
+    const count = asNumber(state.gate.proactive_task_count, proactiveCandidates.value.length)
     const kinds = new Set(
       proactiveCandidates.value
         .map((item) => firstText(item.task_type, item.kind, item.category, item.signal_type))
@@ -265,79 +265,83 @@ export function useSelfEvolutionRuntimePresenters(state: SelfEvolutionRuntimePan
   })
 
   const metricWindows = computed(() =>
-    asArray(evolutionMetrics.value.windows).map((item) => asRecord(item)).slice(-2),
+    asArray(state.evolutionMetrics.windows).map((item) => asRecord(item)).slice(-2),
   )
 
   const rosterCoverage = computed(() =>
-    asArray(rosterAlignment.value.department_coverage)
+    asArray(state.rosterAlignment.department_coverage)
       .map((item) => asRecord(item))
       .filter((item) => String(item.key || item.label || '').trim()),
   )
 
-  const rosterGate = computed<AnyRecord>(() => asRecord(rosterAlignment.value.gate))
-  const rosterRemediation = computed<AnyRecord>(() => asRecord(rosterAlignment.value.remediation))
+  const rosterGate = computed<AnyRecord>(() => asRecord(state.rosterAlignment.gate))
+  const rosterRemediation = computed<AnyRecord>(() => asRecord(state.rosterAlignment.remediation))
 
-  const rosterAlignmentCards = computed(() => [
-    {
-      key: 'planned',
-      label: '编制基线',
-      value: `${rosterAlignment.value.planned_count ?? '—'}`,
-      sub: firstText(rosterAlignment.value.source, 'duty_roster.py'),
-      tone: 'ok',
-    },
-    {
-      key: 'participants',
-      label: '排班匹配',
-      value: `${rosterAlignment.value.in_roster_count ?? '—'}`,
-      sub: `运行时参与 ${rosterAlignment.value.participant_count ?? 0}`,
-      tone: Number(rosterAlignment.value.in_roster_count || 0) > 0 ? 'run' : 'warn',
-    },
-    {
-      key: 'deployed',
-      label: '上岗匹配',
-      value: `${rosterAlignment.value.in_deployed_count ?? '—'}`,
-      sub: `已登记上岗 ${rosterAlignment.value.deployed_count ?? 0}`,
-      tone: Number(rosterAlignment.value.in_deployed_count || 0) > 0 ? 'run' : 'warn',
-    },
-    {
-      key: 'outside',
-      label: '非编制混入',
-      value: `${rosterAlignment.value.out_of_roster_count ?? 0}`,
-      sub: asArray(rosterAlignment.value.out_of_roster_ids).map((id) => String(id)).filter(Boolean).slice(0, 3).join(' / ') || '未混入',
-      tone: Number(rosterAlignment.value.out_of_roster_count || 0) > 0 ? 'bad' : 'ok',
-    },
-    {
-      key: 'not-deployed',
-      label: '未登记上岗',
-      value: `${rosterAlignment.value.not_deployed_count ?? 0}`,
-      sub: asArray(rosterAlignment.value.not_deployed_ids).map((id) => String(id)).filter(Boolean).slice(0, 3).join(' / ') || '全部已登记',
-      tone: Number(rosterAlignment.value.not_deployed_count || 0) > 0 ? 'bad' : 'ok',
-    },
-    {
-      key: 'coverage',
-      label: '部门覆盖',
-      value: `${rosterCoverage.value.length}`,
-      sub: firstText(rosterAlignment.value.status, '排班匹配'),
-      tone: rosterCoverage.value.length > 0 ? 'run' : 'warn',
-    },
-    {
-      key: 'gate',
-      label: '隔离策略',
-      value: firstText(rosterGate.value.action, '—'),
-      sub: firstText(rosterGate.value.reason, rosterGate.value.policy, '排班检查'),
-      tone: rosterGate.value.blocking === true ? 'bad' : rosterGate.value.action === 'allow' ? 'ok' : 'warn',
-    },
-  ])
+  const rosterAlignmentCards = computed(() => {
+    const roster = state.rosterAlignment
+    return [
+      {
+        key: 'planned',
+        label: '编制基线',
+        value: `${roster.planned_count ?? '—'}`,
+        sub: firstText(roster.source, 'duty_roster.py'),
+        tone: 'ok',
+      },
+      {
+        key: 'participants',
+        label: '排班匹配',
+        value: `${roster.in_roster_count ?? '—'}`,
+        sub: `运行时参与 ${roster.participant_count ?? 0}`,
+        tone: Number(roster.in_roster_count || 0) > 0 ? 'run' : 'warn',
+      },
+      {
+        key: 'deployed',
+        label: '上岗匹配',
+        value: `${roster.in_deployed_count ?? '—'}`,
+        sub: `已登记上岗 ${roster.deployed_count ?? 0}`,
+        tone: Number(roster.in_deployed_count || 0) > 0 ? 'run' : 'warn',
+      },
+      {
+        key: 'outside',
+        label: '非编制混入',
+        value: `${roster.out_of_roster_count ?? 0}`,
+        sub: asArray(roster.out_of_roster_ids).map((id) => String(id)).filter(Boolean).slice(0, 3).join(' / ') || '未混入',
+        tone: Number(roster.out_of_roster_count || 0) > 0 ? 'bad' : 'ok',
+      },
+      {
+        key: 'not-deployed',
+        label: '未登记上岗',
+        value: `${roster.not_deployed_count ?? 0}`,
+        sub: asArray(roster.not_deployed_ids).map((id) => String(id)).filter(Boolean).slice(0, 3).join(' / ') || '全部已登记',
+        tone: Number(roster.not_deployed_count || 0) > 0 ? 'bad' : 'ok',
+      },
+      {
+        key: 'coverage',
+        label: '部门覆盖',
+        value: `${rosterCoverage.value.length}`,
+        sub: firstText(roster.status, '排班匹配'),
+        tone: rosterCoverage.value.length > 0 ? 'run' : 'warn',
+      },
+      {
+        key: 'gate',
+        label: '隔离策略',
+        value: firstText(rosterGate.value.action, '—'),
+        sub: firstText(rosterGate.value.reason, rosterGate.value.policy, '排班检查'),
+        tone: rosterGate.value.blocking === true ? 'bad' : rosterGate.value.action === 'allow' ? 'ok' : 'warn',
+      },
+    ]
+  })
 
   const evolutionMetricCards = computed(() => {
     const latest = metricWindows.value[metricWindows.value.length - 1] || {}
+    const metrics = state.evolutionMetrics
     return [
       {
         key: 'pause',
         label: '自进化状态',
-        value: evolutionMetrics.value.pause === true ? '暂停' : '允许运行',
-        sub: firstText(evolutionMetrics.value.reason, '指标检查'),
-        tone: evolutionMetrics.value.pause === true ? 'bad' : 'ok',
+        value: metrics.pause === true ? '暂停' : '允许运行',
+        sub: firstText(metrics.reason, '指标检查'),
+        tone: metrics.pause === true ? 'bad' : 'ok',
       },
       {
         key: 'coverage',
@@ -350,21 +354,21 @@ export function useSelfEvolutionRuntimePresenters(state: SelfEvolutionRuntimePan
         key: 'pytest',
         label: 'pytest 通过数',
         value: latest.passed_delta == null ? '—' : `${latest.passed_delta}`,
-        sub: `历史 ${evolutionMetrics.value.history_count ?? 0}`,
+        sub: `历史 ${metrics.history_count ?? 0}`,
         tone: latest.passed_delta != null && Number(latest.passed_delta) >= 0 ? 'ok' : 'warn',
       },
       {
         key: 'debt',
         label: '类型债务变化',
         value: latest.debt_delta == null ? '—' : `${latest.debt_delta}`,
-        sub: firstText(evolutionMetrics.value.metrics_path, 'evolution_metrics.jsonl'),
+        sub: firstText(metrics.metrics_path, 'evolution_metrics.jsonl'),
         tone: latest.debt_delta != null && Number(latest.debt_delta) <= -5 ? 'ok' : 'warn',
       },
     ]
   })
 
   const openApprovalItems = computed(() =>
-    openItems.value
+    state.openItems
       .map((item) => asRecord(item))
       .filter((item) => firstText(item.kind, item.reason, item.run_id))
       .slice(-5)
@@ -372,12 +376,12 @@ export function useSelfEvolutionRuntimePresenters(state: SelfEvolutionRuntimePan
   )
 
   const runTimeline = computed(() => {
-    const timelines = asArray(raw.value?.run_timelines).map((item) => asRecord(item))
+    const timelines = asArray(state.raw?.run_timelines).map((item) => asRecord(item))
     const open = timelines.find((item) => item.open === true)
     const picked = open || timelines[timelines.length - 1]
     if (!picked) return null
     const items = asArray(picked.items).map((item) => asRecord(item))
-    const md = mergeDecision.value
+    const md = state.mergeDecision
     if (md.action || md.reason) {
       items.push({
         phase: 'policy',
@@ -396,13 +400,13 @@ export function useSelfEvolutionRuntimePresenters(state: SelfEvolutionRuntimePan
     }
   })
 
-  return {
+  return reactive({
     statusTone, statusLabel, cronLine, signalCount, threshold, riskScore, qaVerdict,
     evidenceCards, decisionCards, loopStages, kbCards, kbHitLines, kbFixHitDetails,
     kbPatternHitDetails, proactiveSignals, proactiveCandidates, proactiveCards,
     metricWindows, rosterCoverage, rosterGate, rosterRemediation, rosterAlignmentCards,
     evolutionMetricCards, openApprovalItems, runTimeline,
-  }
+  })
 }
 
 export type SelfEvolutionRuntimePresenters = ReturnType<typeof useSelfEvolutionRuntimePresenters>
