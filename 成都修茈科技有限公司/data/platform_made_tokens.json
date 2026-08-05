@@ -1,45 +1,45 @@
 {
   "schema": "xiu-ci.platform-made-tokens/v1",
-  "generated_at": "2026-07-21T10:09:08.293919+00:00",
-  "collected_at": "2026-07-21 18:09:08",
-  "platform_made_tokens": 13955998446,
-  "platform_made_prompt_tokens": 11672038928,
-  "platform_made_completion_tokens": 187381330,
+  "generated_at": "2026-08-05T10:24:20.556732+00:00",
+  "collected_at": "2026-08-05 18:24:20",
+  "platform_made_tokens": 100,
+  "platform_made_prompt_tokens": 0,
+  "platform_made_completion_tokens": 0,
   "sources": [
     {
       "key": "local",
       "label": "FHD 本地账本",
-      "available": true,
-      "total_tokens": 165,
+      "available": false,
+      "total_tokens": 0,
       "estimated": false
     },
     {
       "key": "cursor",
       "label": "Cursor",
-      "available": true,
-      "total_tokens": 2087446094,
+      "available": false,
+      "total_tokens": 0,
       "estimated": false
     },
     {
       "key": "codex",
       "label": "Codex",
-      "available": true,
-      "total_tokens": 8679930282,
+      "available": false,
+      "total_tokens": 0,
       "estimated": false
     },
     {
       "key": "trae",
       "label": "Trae",
-      "available": true,
-      "total_tokens": 3108000000,
-      "estimated": true
+      "available": false,
+      "total_tokens": 0,
+      "estimated": false
     },
     {
       "key": "mimo",
       "label": "mimo",
       "available": true,
-      "total_tokens": 80621905,
-      "estimated": true
+      "total_tokens": 100,
+      "estimated": false
     }
   ],
   "definition": "管理端同源算法：FHD 本地账本 + Cursor + Codex + Trae + mimo 五源合计；与线上对话/AI 员工「平台使用 Token」分开统计"

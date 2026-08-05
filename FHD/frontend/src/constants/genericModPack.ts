@@ -318,7 +318,6 @@ const HOST_BRIDGE_ID_SET = new Set<string>([
   ...GENERIC_HOST_MOD_IDS,
   'xcagi-core-workflow-employees',
   'xcagi-planner-excel-tools',
-  'wechat-contacts-ai-employee',
 ])
 
 /** 宿主基础设施 bridge：应作为「基础预装包」整体管理，不参与设置页「当前扩展包」单选。 */
@@ -338,7 +337,6 @@ export function isWorkflowEmployeeModId(modId: string): boolean {
 
 /** 商店「AI 员工」上架的触点/授权类扩展（非 workflow-employee 前缀） */
 export const AUX_EMPLOYEE_PACK_MOD_IDS = [
-  'wechat-contacts-ai-employee',
   'lan-gate-ai-employee',
 ] as const
 

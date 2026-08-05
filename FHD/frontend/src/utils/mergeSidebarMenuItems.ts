@@ -75,17 +75,6 @@ function isRetiredCustomerServiceMenuItem(item: ResolvedSidebarMenuItem): boolea
   return pathOnly.includes('/enterprise-customer-service') || pathOnly.includes('/internal-customer-service')
 }
 
-function isRetiredWechatContactsMenuItem(item: ResolvedSidebarMenuItem): boolean {
-  const key = normalizeModSidebarNavKey(String(item.key || '').trim())
-  if (
-    key === 'wechat-contacts' ||
-    key === 'mod-erp-wechat-contacts' ||
-    key === 'wechat-contacts-ai-employee-entry'
-  ) return true
-  const path = String(item.path || '').trim().split('?')[0].split('#')[0]
-  return path === '/wechat-contacts' || path.endsWith('/wechat-contacts')
-}
-
 function isRetiredMaterialsListMenuItem(item: ResolvedSidebarMenuItem): boolean {
   const key = normalizeModSidebarNavKey(String(item.key || '').trim())
   if (key === 'materials-list' || key === 'mod-erp-materials-list') return true
@@ -172,7 +161,6 @@ export function mergeSidebarMenuItems(
     if (!key || seen.has(key)) return
     if (
       isRetiredCustomerServiceMenuItem(item) ||
-      isRetiredWechatContactsMenuItem(item) ||
       isRetiredMaterialsListMenuItem(item) ||
       isConsolidatedCapabilityMenuItem(item)
     ) return

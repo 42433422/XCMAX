@@ -162,25 +162,6 @@ class TestExecuteExcelDecomposeTool:
 
 
 # ---------------------------------------------------------------------------
-# _execute_wechat_preview_tool
-# ---------------------------------------------------------------------------
-
-
-class TestExecuteWechatPreviewTool:
-    def test_empty_params(self):
-        from app.application.workflow.planner import _execute_wechat_preview_tool
-
-        mock_svc = MagicMock()
-        mock_svc.get_contacts.return_value = []
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service",
-            return_value=mock_svc,
-        ):
-            result = _execute_wechat_preview_tool({})
-        assert isinstance(result, dict)
-
-
-# ---------------------------------------------------------------------------
 # _filter_tool_registry_for_profile
 # ---------------------------------------------------------------------------
 

@@ -1,7 +1,6 @@
 /** 里程碑 C：通用 ERP 领域门面 Mod */
 
 export const ERP_DOMAIN_BRIDGE_MOD_ID = 'xcagi-erp-domain-bridge'
-export const WECHAT_BRIDGE_MOD_ID = 'xcagi-wechat-bridge'
 
 export const LS_ERP_DOMAIN_MOD_FACADE_ENABLED = 'xcagi_erp_domain_mod_facade_enabled'
 

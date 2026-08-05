@@ -86,7 +86,6 @@ function _idMatchesAnyPrefix(id: string, prefixes: string[]): boolean {
 export const CUSTOM_PHASE_EMPLOYEE_CARRIER_MOD_IDS = new Set([
   'xcagi-core-workflow-employees',
   'xcagi-office-employee-pack-bridge',
-  'wechat-contacts-ai-employee',
   'lan-gate-ai-employee',
 ])
 

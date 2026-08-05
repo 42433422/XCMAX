@@ -889,11 +889,9 @@ export const useModsStore = defineStore('mods', () => {
       const mod = mods.value.find((m) => String(m.id || '').trim() === modId);
       const proEntry =
         String(mod?.frontend?.pro_entry_path || '').trim() ||
-        (modId === 'wechat-contacts-ai-employee'
-          ? '/wechat-contacts'
-          : modId === 'lan-gate-ai-employee'
-            ? '/lan-gate'
-            : '');
+        (modId === 'lan-gate-ai-employee'
+          ? '/lan-gate'
+          : '');
       if (isHostMountedModMenuPath(path, proEntry)) continue;
       const warnKey = `${modId}\0${path}`;
       if (warnedModMenuPathKeys.has(warnKey)) continue;

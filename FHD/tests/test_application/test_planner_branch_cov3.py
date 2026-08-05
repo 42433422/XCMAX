@@ -1532,13 +1532,6 @@ class TestExecuteToolHandlerDispatch:
             assert result["success"] is True
             mock_handler.assert_called_once()
 
-    def test_wechat_send_dispatches_to_preview(self) -> None:
-        patch_ctx, mock_handler = self._patch_handler("wechat_send", "preview")
-        with patch_ctx:
-            result = execute_tool("wechat_send", {"keyword": "张"})
-            assert result["success"] is True
-            mock_handler.assert_called_once()
-
     def test_excel_schema_dispatches_to_analyze(self) -> None:
         patch_ctx, mock_handler = self._patch_handler("excel_schema", "analyze")
         with patch_ctx:
