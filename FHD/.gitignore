@@ -277,3 +277,4 @@ resources/routing_policies/reflection_ledger.jsonl
 
 # scripts/deploy/lib 由 !scripts/deploy/lib/** 放行，需重新排除缓存
 scripts/deploy/lib/**/__pycache__/
+coverage-behavior.json

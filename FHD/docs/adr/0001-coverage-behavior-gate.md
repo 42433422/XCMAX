@@ -42,10 +42,15 @@ CI 后端覆盖率门禁此前测的是**含 87 个 `coverage_ramp` stub 的全�
 | 口径 | 行覆盖率 | 分支覆盖率 | 说明 |
 |------|--------:|--------:|------|
 | 全量（含 87 stub） | ~88% | ~81% | 历史基线，含注水 |
-| 行为（排除 stub） | （见下方） | （见下方） | Delta A 采纳后唯一硬 gate |
+| 行为（排除 stub） | **79.26%** | **70.87%** | Delta A 采纳后唯一硬 gate |
 
-> 行为实测值由本次 `XCAGI_SKIP_LEGACY_COMPAT_ROUTES=1 python -m pytest tests/ -q -m 'not coverage_ramp' --cov --cov-branch --cov-report=json:coverage-behavior.json --cov-fail-under=0`
-> 实测得到，记录于 `coverage_ratchet_baseline.json` 的 `last_measured.behavior_*`。
+> 实测命令：`XCAGI_SKIP_LEGACY_COMPAT_ROUTES=1 python -m pytest tests/ -q -m 'not coverage_ramp' --cov --cov-branch --cov-report=json:coverage-behavior.json --cov-fail-under=0`
+>
+> **环境限制（诚实披露）**：本次本地实测 826 失败 / 28670 通过 / 121 错误，失败与错误均为
+> 本地 `.venv` 缺失 SQLite 方言插件（`sqlalchemy.exc.NoSuchModuleError: Can't load plugin: sqlalchemy.dialects:sqlite`）
+> 所致（环境问题，非代码问题）。因此 79.26% / 70.87% 是**行为覆盖率的保守下界**：
+> CI 健康环境（sqlite 方言可用）下行为实测会更高。首次 CI 运行应执行
+> `coverage_ratchet.py --bump --behavior` 把 floor 棘轮到真实值（只升不降）。
 
 ## 新 floor（诚实值）
 
@@ -53,14 +58,15 @@ CI 后端覆盖率门禁此前测的是**含 87 个 `coverage_ramp` stub 的全�
 
 ```json
 "behavior_floors": {
-  "lines": <行为行实测 - margin>,
-  "branches": <行为分支实测 - margin>
+  "lines": 78,
+  "branches": 69
 }
 ```
 
-行为行实测低于全量 `fail_under`（88），故 `pyproject.toml` 的 `fail_under` 是否需要下调
-以本 ADR 为前提条件（`guard_coverage_floor.py` 强制把关）。此处不再下调 `fail_under`
-字符串本身——它保留为全量口径的行 floor SSOT；行为硬 gate 由 `behavior_floors` 独立承担。
+取值依据：本次实测（下界）79.26 / 70.87 减安全余量（margin=1）取整。由于设的是**新字段**
+`behavior_floors`（非下调既有 floor），不触发 `guard_coverage_floor.py`，但保留本 ADR 作为
+决策记录。`pyproject.toml` 的 `fail_under` 不调整——它保留为全量口径的行 floor SSOT；
+行为硬 gate 由 `behavior_floors` 独立承担，CI 后续通过 `--bump --behavior` 只升不降收口。
 
 ## 后果
 
