@@ -32,7 +32,7 @@ export type EnterpriseEmployeeMeta = {
 export const ENTERPRISE_ORG_LAYERS: readonly EnterpriseOrgLayer[] = [
   { id: 'tools', code: 'L1', label: '工具层', desc: '连接、授权、技能与通用工具 Mod', color: '#4f46e5' },
   { id: 'execution', code: 'L2', label: '执行层', desc: '出货、打单、单据与履约执行', color: '#d97706' },
-  { id: 'service', code: 'L3', label: '服务层', desc: '微信触达、客服沟通与人事服务', color: '#059669' },
+  { id: 'service', code: 'L3', label: '服务层', desc: '客服沟通与人事服务', color: '#059669' },
   { id: 'management', code: 'L4', label: '管理层', desc: '流程编排、路由协同与自治监控', color: '#7c3aed' },
 ] as const
 export const ENTERPRISE_EMPLOYEES: Record<string, EnterpriseEmployeeMeta> = {
@@ -40,7 +40,6 @@ export const ENTERPRISE_EMPLOYEES: Record<string, EnterpriseEmployeeMeta> = {
   'label_print': { id: 'label_print', label: '标签打印', enterprise_layer: 'execution', listing: 'unlisted', source: 'custom', mod_id: 'xcagi-core-workflow-employees' },
   'shipment_mgmt': { id: 'shipment_mgmt', label: '出货管理', enterprise_layer: 'execution', listing: 'unlisted', source: 'custom', mod_id: 'xcagi-core-workflow-employees' },
   'receipt_confirm': { id: 'receipt_confirm', label: '签收确认', enterprise_layer: 'execution', listing: 'unlisted', source: 'custom', mod_id: 'xcagi-core-workflow-employees' },
-  'wechat_msg': { id: 'wechat_msg', label: '微信消息', enterprise_layer: 'service', listing: 'unlisted', source: 'custom', mod_id: 'xcagi-core-workflow-employees' },
   'workflow_automator': { id: 'workflow_automator', label: '流程自动化', enterprise_layer: 'management', listing: 'unlisted', source: 'custom', mod_id: 'xcagi-core-workflow-employees' },
   'task_router_officer': { id: 'task_router_officer', label: '任务派发', enterprise_layer: 'management', listing: 'unlisted', source: 'custom', mod_id: 'xcagi-core-workflow-employees' },
   'daily_orchestrator': { id: 'daily_orchestrator', label: '每日编排', enterprise_layer: 'management', listing: 'unlisted', source: 'custom', mod_id: 'xcagi-core-workflow-employees' },
