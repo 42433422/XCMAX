@@ -352,7 +352,7 @@ def _release_train_snapshot() -> dict[str, Any]:
     def _default_snapshot(*, note: str | None = None) -> dict[str, Any]:
         data: dict[str, Any] = {
             "epoch": "1.0.0.0",
-            "current": "1.0.0.1",
+            "current": "1.0.0.0",
             "started_at": "2026-06-04",
             "day_index": 0,
         }
@@ -813,7 +813,7 @@ CORE_MODULES = [
     },
     {
         "module_id": "business-docking",
-        "display_name": "业务对接",
+        "display_name": "数据对接中心",
         "route": "/business-docking",
         "source": "core",
         "sync_scope": "none",
@@ -1060,6 +1060,23 @@ async def admin_list_wallets(request: Request):
     return await _market_admin_proxy(
         request, "GET", f"/api/admin/wallets?limit={limit}&offset={offset}"
     )
+
+
+@router.get("/admin/market/orders", response_model=None)
+async def admin_list_orders(request: Request):
+    """经营看板：代理 MODstore ``/api/admin/orders``（订单列表 + 经营聚合）。
+
+    打通「AI 不知道订单」断点：管理端经此接口读取平台订单数据，供 AI 员工感知与处理。
+    """
+    q = []
+    if request.query_params.get("status"):
+        q.append(f"status={request.query_params['status']}")
+    if request.query_params.get("limit"):
+        q.append(f"limit={request.query_params['limit']}")
+    if request.query_params.get("offset"):
+        q.append(f"offset={request.query_params['offset']}")
+    query = ("?" + "&".join(q)) if q else ""
+    return await _market_admin_proxy(request, "GET", f"/api/admin/orders{query}")
 
 
 @router.post("/admin/market/users/{user_id}/wallet/credit", response_model=None)

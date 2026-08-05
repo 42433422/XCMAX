@@ -133,6 +133,20 @@ export const xcmaxAdminApi = {
   listWallets(limit = 500, offset = 0) {
     return api.get('/api/xcmax/admin/market/wallets', { limit, offset });
   },
+  listOrders(params: { status?: string; limit?: number; offset?: number } = {}) {
+    return api.get<{
+      items?: Record<string, unknown>[];
+      total?: number;
+      summary?: {
+        total_orders?: number;
+        paid_orders?: number;
+        pending_orders?: number;
+        paid_revenue?: number;
+        by_status?: Record<string, number>;
+      };
+      source?: string;
+    }>('/api/xcmax/admin/market/orders', params);
+  },
   creditWallet(userId: number, payload: { amount: number; description?: string }) {
     return api.post(`/api/xcmax/admin/market/users/${userId}/wallet/credit`, payload);
   },
