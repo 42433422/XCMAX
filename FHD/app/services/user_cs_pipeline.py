@@ -187,9 +187,22 @@ def set_pipeline_stage(
     if st not in _STAGE_ORDER:
         raise ValueError(f"未知阶段: {st}")
     doc = load_pipeline(market_user_id, username=username)
-    if doc.get("stage") != st:
+    before = str(doc.get("stage") or "idle")
+    if before != st:
         doc["stage"] = st
         _append_timeline(doc, st, source, note=note)
+        logger.info(
+            "pipeline 阶段推进 uid=%s %s -> %s (source=%s, note=%s)",
+            int(market_user_id),
+            before,
+            st,
+            source,
+            note,
+        )
+    else:
+        logger.info(
+            "pipeline 已是目标阶段 uid=%s stage=%s（跳过推进）", int(market_user_id), st
+        )
     return save_pipeline(doc)
 
 
@@ -382,20 +395,36 @@ def record_reconciliation(
     - 幂等：重复核销会覆盖 reconciliation 记录与时间戳。
     """
     uid = int(market_user_id)
+    amount = str(amount_yuan or "").strip()
+    ref = str(order_ref or "").strip()
     doc = load_pipeline(uid, username=username)
     if _stage_rank(doc.get("stage")) < _stage_rank("delivered"):
+        logger.info(
+            "回款核销触发阶段补齐 uid=%s stage=%s -> delivered (source=%s)",
+            uid,
+            doc.get("stage"),
+            source,
+        )
         doc = set_pipeline_stage(
             uid, "delivered", username=username, source=source, note="交付完成待核销"
         )
     doc = set_pipeline_stage(uid, "reconciled", username=username, source=source, note="回款核销")
     doc["reconciliation"] = {
         "status": "reconciled",
-        "amount_yuan": str(amount_yuan or "").strip(),
-        "order_ref": str(order_ref or "").strip(),
+        "amount_yuan": amount,
+        "order_ref": ref,
         "reconciled_at": _now_iso(),
         "source": str(source or "manual").strip(),
     }
-    return save_pipeline(doc)
+    saved = save_pipeline(doc)
+    logger.info(
+        "回款核销完成 uid=%s amount=%s order_ref=%s source=%s",
+        uid,
+        amount,
+        ref,
+        source,
+    )
+    return saved
 
 
 def build_closed_loop_status(market_user_id: int, *, username: str = "") -> dict[str, Any]:
@@ -406,6 +435,15 @@ def build_closed_loop_status(market_user_id: int, *, username: str = "") -> dict
     delivery = delivery if isinstance(delivery, dict) else {}
     rec = doc.get("reconciliation")
     rec = rec if isinstance(rec, dict) else {}
+    closed = stage == "reconciled"
+    logger.info(
+        "闭环状态查询 uid=%s stage=%s delivered=%s reconciled=%s closed=%s",
+        int(market_user_id),
+        stage,
+        stage in ("delivered", "reconciled"),
+        rec.get("status") == "reconciled",
+        closed,
+    )
     return {
         "market_user_id": int(market_user_id),
         "stage": stage,
@@ -417,7 +455,7 @@ def build_closed_loop_status(market_user_id: int, *, username: str = "") -> dict
         },
         "reconciled": rec.get("status") == "reconciled",
         "reconciliation": rec,
-        "closed": stage == "reconciled",
+        "closed": closed,
     }
 
 
