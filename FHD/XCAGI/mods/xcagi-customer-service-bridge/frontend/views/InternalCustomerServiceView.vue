@@ -2788,10 +2788,6 @@ async function refresh() {
   }
 }
 
-function goAdminEntitlements() {
-  router.push({ name: 'admin-entitlements' })
-}
-
 type MarketUserPickerRow = {
   id: number
   username: string
@@ -3293,19 +3289,6 @@ onMounted(async () => {
   width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 10px;
   font-size: 13px; box-sizing: border-box; background: #fff;
 }
-.cs-group-list-hint { font-size: 11px; margin: 6px 0 4px; }
-.cs-group-list { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
-.cs-group-item { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; padding: 4px 0; }
-.cs-feed { list-style: none; margin: 0; padding: 0; }
-.cs-feed.compact .cs-feed-item { grid-template-columns: 1fr auto; }
-.cs-feed-item {
-  display: grid; grid-template-columns: 1fr 2fr auto; gap: 8px; padding: 8px 10px;
-  border-radius: 8px; font-size: 12px; cursor: pointer; background: #fff; margin-bottom: 4px;
-}
-.cs-feed-item:hover { background: #eff6ff; }
-.cs-feed-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cs-feed-text { color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cs-feed-time { color: #94a3b8; font-size: 11px; white-space: nowrap; }
 .cs-preview {
   font-size: 12px; line-height: 1.55; padding: 10px; background: #fff; border-radius: 8px;
   border: 1px solid #e2e8f0; white-space: pre-wrap; max-height: 160px; overflow: auto; margin: 0;

@@ -163,6 +163,9 @@ jobs:
       - name: coverage_ramp stub quota (只减不增)
         run: python scripts/dev/count_coverage_ramp_stubs.py --check
 
+      - name: test-bloat gate (P1-2 测试膨胀门禁)
+        run: python scripts/dev/test_bloat_report.py --check
+
       - name: Coverage ratchet check (行/分支只升不降)
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
@@ -302,6 +305,20 @@ jobs:
 
       - name: Run architecture fitness checks
         run: python scripts/arch_fitness.py
+
+      - name: arch-fitness-legacy-check (P1-4 双轨边界)
+        run: |
+          python - <<'PY'
+          import subprocess, sys
+          r = subprocess.run(["python", "scripts/arch_fitness.py"], capture_output=True, text=True)
+          blocked = [l for l in (r.stdout + r.stderr).splitlines()
+                     if "[legacy-boundary]" in l and "must live under app/legacy/" in l]
+          if blocked:
+              print("::error::新增 legacy/compat 文件散落到 app/legacy/ 之外：")
+              print("\n".join(blocked))
+              sys.exit(1)
+          print("arch-fitness-legacy-check OK")
+          PY
 
       - name: docs-ssot-lint
         run: python scripts/dev/docs_ssot_lint.py --strict
