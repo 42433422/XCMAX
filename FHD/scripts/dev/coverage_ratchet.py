@@ -306,7 +306,11 @@ def append_history(be: dict | None, fe: dict | None, note: str = "", beh: dict |
 # --------------------------------------------------------------------------- #
 def cmd_check(args: argparse.Namespace) -> int:
     be = read_backend(args.coverage_json)
-    beh = read_backend(args.behavior_json) if args.behavior else None
+    beh = (
+        read_backend(getattr(args, "behavior_json", BEHAVIOR_JSON_DEFAULT))
+        if getattr(args, "behavior", False)
+        else None
+    )
     fe = read_frontend(args.frontend_summary)
     base = load_baseline()
     line_floor = read_fail_under(PYPROJECT)
@@ -446,7 +450,11 @@ def cmd_check(args: argparse.Namespace) -> int:
 
 def cmd_bump(args: argparse.Namespace) -> int:
     be = read_backend(args.coverage_json)
-    beh = read_backend(args.behavior_json) if args.behavior else None
+    beh = (
+        read_backend(getattr(args, "behavior_json", BEHAVIOR_JSON_DEFAULT))
+        if getattr(args, "behavior", False)
+        else None
+    )
     fe = read_frontend(args.frontend_summary)
     base = load_baseline()
     changed = False
@@ -524,7 +532,11 @@ def cmd_bump(args: argparse.Namespace) -> int:
 def cmd_history(args: argparse.Namespace) -> int:
     if args.record:
         be = read_backend(args.coverage_json)
-        beh = read_backend(args.behavior_json) if args.behavior else None
+        beh = (
+        read_backend(getattr(args, "behavior_json", BEHAVIOR_JSON_DEFAULT))
+        if getattr(args, "behavior", False)
+        else None
+    )
         fe = read_frontend(args.frontend_summary)
         append_history(be, fe, note="record", beh=beh)
         print("[cov-ratchet] 已追加快照到 coverage-history.jsonl")

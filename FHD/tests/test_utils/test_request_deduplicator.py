@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.utils.request_deduplicator import (
+from app.utils.resilience.request_deduplicator import (
     DedupRecord,
     RequestDeduplicator,
     deduplicate_request,
@@ -281,7 +281,7 @@ class TestStats:
 
 class TestGetRequestDeduplicator:
     def test_returns_instance(self):
-        import app.utils.request_deduplicator as rd
+        import app.utils.resilience.request_deduplicator as rd
 
         old = rd._deduplicator_instance
         rd._deduplicator_instance = None
@@ -321,7 +321,7 @@ class TestDeduplicateRequestDecorator:
 
 class TestIdempotentOperationDecorator:
     def test_decorates_function(self):
-        import app.utils.request_deduplicator as rd
+        import app.utils.resilience.request_deduplicator as rd
 
         # Reset the global deduplicator to avoid state from other tests
         rd._deduplicator_instance = None
@@ -343,7 +343,7 @@ class TestIdempotentOperationDecorator:
         rd._deduplicator_instance = None
 
     def test_without_key_func(self):
-        import app.utils.request_deduplicator as rd
+        import app.utils.resilience.request_deduplicator as rd
 
         rd._deduplicator_instance = None
 

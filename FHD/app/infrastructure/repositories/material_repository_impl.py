@@ -236,8 +236,8 @@ class SQLAlchemyMaterialRepository(MaterialRepository):
 
             from openpyxl import Workbook
 
+            from app.utils.excel.template_export_utils import fill_workbook_from_template
             from app.utils.path_utils import get_data_dir
-            from app.utils.template_export_utils import fill_workbook_from_template
 
             with get_db() as db:
                 query = db.query(Material).filter(Material.is_active == 1)

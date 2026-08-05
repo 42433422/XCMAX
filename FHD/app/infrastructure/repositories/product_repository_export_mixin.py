@@ -26,7 +26,7 @@ class ProductExportMixin:
 
             from openpyxl import Workbook
 
-            from app.utils.template_export_utils import fill_workbook_from_template
+            from app.utils.excel.template_export_utils import fill_workbook_from_template
 
             with get_db() as db:
                 inspector = inspect(db.bind)
