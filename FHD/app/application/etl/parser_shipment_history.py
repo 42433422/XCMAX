@@ -107,11 +107,7 @@ def _looks_like_product(value: Any) -> bool:
 
 def _looks_like_model(value: Any) -> bool:
     text = clean_cell_text(value)
-    if (
-        not text
-        or re.fullmatch(r"\d+号?", text)
-        or _NON_MODEL_ANNOTATION_RE.fullmatch(text)
-    ):
+    if not text or re.fullmatch(r"\d+号?", text) or _NON_MODEL_ANNOTATION_RE.fullmatch(text):
         return False
     return bool(re.search(r"[\u4e00-\u9fffA-Za-z0-9]", text))
 
@@ -328,7 +324,9 @@ def parse_structured_shipment_history_rows(
     mapping: dict[str, int] = {}
     customer_column: int | None = None
     date_column: int | None = None
-    for row_number, raw_values in enumerate(worksheet.iter_rows(max_row=60, values_only=True), start=1):
+    for row_number, raw_values in enumerate(
+        worksheet.iter_rows(max_row=60, values_only=True), start=1
+    ):
         values = tuple(raw_values)
         fields = _field_mapping(values)
         customer = _customer_column(values)
@@ -347,14 +345,28 @@ def parse_structured_shipment_history_rows(
         start=header_row + 1,
     ):
         values = tuple(raw_values)
-        customer_raw = clean_cell_text(values[customer_column - 1] if len(values) >= customer_column else "")
-        product_name = clean_cell_text(values[mapping["name"] - 1] if len(values) >= mapping["name"] else "")
-        quantity = _number(values[mapping["quantity_tins"] - 1] if len(values) >= mapping["quantity_tins"] else "")
-        specification = _number(values[mapping["specification"] - 1] if len(values) >= mapping["specification"] else "")
+        customer_raw = clean_cell_text(
+            values[customer_column - 1] if len(values) >= customer_column else ""
+        )
+        product_name = clean_cell_text(
+            values[mapping["name"] - 1] if len(values) >= mapping["name"] else ""
+        )
+        quantity = _number(
+            values[mapping["quantity_tins"] - 1] if len(values) >= mapping["quantity_tins"] else ""
+        )
+        specification = _number(
+            values[mapping["specification"] - 1] if len(values) >= mapping["specification"] else ""
+        )
         price = _number(values[mapping["price"] - 1] if len(values) >= mapping["price"] else "")
         if not customer_raw or not _looks_like_product(product_name):
             continue
-        if quantity is None or quantity <= 0 or specification is None or specification <= 0 or price is None:
+        if (
+            quantity is None
+            or quantity <= 0
+            or specification is None
+            or specification <= 0
+            or price is None
+        ):
             continue
         model_number = clean_cell_text(
             values[mapping["model_number"] - 1]
@@ -427,7 +439,9 @@ def parse_quote_rows(
         return []
     header_row = 0
     mapping: dict[str, int] = {}
-    for row_number, raw_values in enumerate(worksheet.iter_rows(max_row=30, values_only=True), start=1):
+    for row_number, raw_values in enumerate(
+        worksheet.iter_rows(max_row=30, values_only=True), start=1
+    ):
         candidate = _field_mapping(tuple(raw_values))
         if {"name", "specification", "price"} <= set(candidate):
             header_row, mapping = row_number, candidate
@@ -435,11 +449,7 @@ def parse_quote_rows(
     if not header_row:
         return []
     source_date, source_date_column = _source_date_from_values(
-        tuple(
-            value
-            for row in worksheet.iter_rows(max_row=3, values_only=True)
-            for value in row
-        ),
+        tuple(value for row in worksheet.iter_rows(max_row=3, values_only=True) for value in row),
         max_columns=80,
     )
     rows: list[ParsedRow] = []
@@ -448,8 +458,12 @@ def parse_quote_rows(
         start=header_row + 1,
     ):
         values = tuple(raw_values)
-        name = clean_cell_text(values[mapping["name"] - 1] if len(values) >= mapping["name"] else "")
-        specification = _number(values[mapping["specification"] - 1] if len(values) >= mapping["specification"] else "")
+        name = clean_cell_text(
+            values[mapping["name"] - 1] if len(values) >= mapping["name"] else ""
+        )
+        specification = _number(
+            values[mapping["specification"] - 1] if len(values) >= mapping["specification"] else ""
+        )
         price = _number(values[mapping["price"] - 1] if len(values) >= mapping["price"] else "")
         if not _looks_like_product(name) or specification is None or price is None:
             continue
