@@ -46,6 +46,7 @@ async def test_execute_compat_chat_attaches_agent_run_id() -> None:
             "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
             return_value=repo,
         ),
+        patch("app.application.normal_chat_dispatch.try_normal_slot_read_payload", return_value=None),
         patch("app.application.planner_compat_service.set_llm_mode"),
         patch(
             "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
@@ -123,6 +124,7 @@ async def test_execute_compat_chat_uses_ai_chat_mainline_when_enabled() -> None:
     body = XcagiCompatChatBody(message="查询产品库", user_id="u42", source="desktop")
 
     with (
+        patch("app.application.normal_chat_dispatch.try_normal_slot_read_payload", return_value=None),
         patch("app.application.planner_compat_service.set_llm_mode"),
         patch(
             "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
@@ -207,6 +209,7 @@ async def test_execute_compat_chat_observes_reply_tool_records_across_thread() -
             "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
             return_value=repo,
         ),
+        patch("app.application.normal_chat_dispatch.try_normal_slot_read_payload", return_value=None),
         patch("app.application.planner_compat_service.set_llm_mode"),
         patch(
             "app.application.planner_compat_service._merge_runtime_context_with_message_paths",

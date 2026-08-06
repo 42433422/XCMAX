@@ -240,11 +240,12 @@ class TestAuthSessionValidate:
         from app.fastapi_routes.domains.auth.routes import auth_session_validate
 
         request = MagicMock()
+        background_tasks = MagicMock()
         with patch(
             "app.fastapi_routes.domains.auth.routes.session_id_from_request",
             return_value=None,
         ):
-            result = await auth_session_validate(request)
+            result = await auth_session_validate(request, background_tasks)
         assert isinstance(result, JSONResponse)
         assert result.status_code == 200
 
@@ -253,6 +254,7 @@ class TestAuthSessionValidate:
         from app.fastapi_routes.domains.auth.routes import auth_session_validate
 
         request = MagicMock()
+        background_tasks = MagicMock()
         with (
             patch(
                 "app.fastapi_routes.domains.auth.routes.session_id_from_request",
@@ -263,7 +265,7 @@ class TestAuthSessionValidate:
             mock_service = MagicMock()
             mock_service.session_manager.get_session_info.return_value = None
             mock_get.return_value = mock_service
-            result = await auth_session_validate(request)
+            result = await auth_session_validate(request, background_tasks)
         assert isinstance(result, JSONResponse)
         assert result.status_code == 200
 
@@ -272,6 +274,7 @@ class TestAuthSessionValidate:
         from app.fastapi_routes.domains.auth.routes import auth_session_validate
 
         request = MagicMock()
+        background_tasks = MagicMock()
         with (
             patch(
                 "app.fastapi_routes.domains.auth.routes.session_id_from_request",
@@ -280,7 +283,7 @@ class TestAuthSessionValidate:
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
             patch(
-                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token_fast",
                 new=AsyncMock(return_value=None),
             ),
             patch(
@@ -303,7 +306,7 @@ class TestAuthSessionValidate:
             mock_service = MagicMock()
             mock_service.session_manager.get_session_info.return_value = {"user_id": 1}
             mock_get.return_value = mock_service
-            result = await auth_session_validate(request)
+            result = await auth_session_validate(request, background_tasks)
         assert isinstance(result, JSONResponse)
         assert result.status_code == 200
 
@@ -312,6 +315,7 @@ class TestAuthSessionValidate:
         from app.fastapi_routes.domains.auth.routes import auth_session_validate
 
         request = MagicMock()
+        background_tasks = MagicMock()
         with (
             patch(
                 "app.fastapi_routes.domains.auth.routes.session_id_from_request",
@@ -320,7 +324,7 @@ class TestAuthSessionValidate:
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
             patch(
-                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token_fast",
                 new=AsyncMock(return_value="Bearer xyz"),
             ),
             patch(
@@ -329,7 +333,7 @@ class TestAuthSessionValidate:
             ),
             patch(
                 "app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids",
-                return_value=None,
+                return_value=["mod1", "mod2"],
             ),
             patch(
                 "app.fastapi_routes.domains.auth.routes.resolve_session_user",
@@ -343,7 +347,7 @@ class TestAuthSessionValidate:
             mock_service = MagicMock()
             mock_service.session_manager.get_session_info.return_value = {"user_id": 1}
             mock_get.return_value = mock_service
-            result = await auth_session_validate(request)
+            result = await auth_session_validate(request, background_tasks)
         assert isinstance(result, dict)
         assert result["success"] is True
         assert result["entitled_mod_ids"] == ["mod1", "mod2"]
@@ -353,6 +357,7 @@ class TestAuthSessionValidate:
         from app.fastapi_routes.domains.auth.routes import auth_session_validate
 
         request = MagicMock()
+        background_tasks = MagicMock()
         with (
             patch(
                 "app.fastapi_routes.domains.auth.routes.session_id_from_request",
@@ -361,7 +366,7 @@ class TestAuthSessionValidate:
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
             patch(
-                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token_fast",
                 new=AsyncMock(return_value="Bearer xyz"),
             ),
             patch(
@@ -384,7 +389,7 @@ class TestAuthSessionValidate:
             mock_service = MagicMock()
             mock_service.session_manager.get_session_info.return_value = {"user_id": 1}
             mock_get.return_value = mock_service
-            result = await auth_session_validate(request)
+            result = await auth_session_validate(request, background_tasks)
         assert isinstance(result, dict)
         assert result["entitled_mod_ids"] == ["cached_mod"]
 
