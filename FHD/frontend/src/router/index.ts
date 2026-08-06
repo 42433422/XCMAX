@@ -329,12 +329,6 @@ allRoutes.push(
     meta: { title: '信息' }
   },
   {
-    path: '/ai-groups',
-    name: 'ai-groups',
-    component: () => import('../views/AiGroupChatView.vue'),
-    meta: { title: 'AI群聊' }
-  },
-  {
     path: isAdminConsoleSpa() ? '/entitlements' : '/admin/entitlements',
     name: 'admin-entitlements',
     component: () => import('../views/AdminEntitlementsView.vue'),
