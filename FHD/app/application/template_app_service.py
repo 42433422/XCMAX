@@ -6,6 +6,7 @@
 
 from typing import Any, cast
 
+from app.application.starter_template_catalog import merge_starter_templates
 from app.di.registry import get_service_registry
 
 
@@ -29,8 +30,10 @@ class TemplateApplicationService:
             模板列表
         """
         if category and category != "all":
-            return {"templates": self._template_service.list_by_type(category) or []}
-        return {"templates": self._template_service.list_templates() or []}
+            rows = self._template_service.list_by_type(category) or []
+            return {"templates": merge_starter_templates(rows, category)}
+        rows = self._template_service.list_templates() or []
+        return {"templates": merge_starter_templates(rows)}
 
     def get_template(self, template_id: int) -> dict[str, Any]:
         """

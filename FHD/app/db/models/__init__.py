@@ -57,7 +57,6 @@ from app.db.models.shipment import ShipmentRecord
 from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
-from app.db.models.wechat import WechatContact, WechatContactContext, WechatTask
 from app.db.models.workflow import (
     WorkflowDefinition,
     WorkflowRun,
@@ -90,9 +89,6 @@ __all__ = [
     "EtlRunRow",
     "EtlTargetConfig",
     "FinancialTransaction",
-    "WechatTask",
-    "WechatContact",
-    "WechatContactContext",
     "User",
     "UserSession",
     "Permission",

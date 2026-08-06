@@ -205,6 +205,37 @@ def test_health_scan_evolution_records_are_cooled_down(fresh_db, monkeypatch):
     assert records[0].triggered_by == "employee_health_scan"
 
 
+def test_health_scan_notifications_are_deduplicated_per_admin_and_title(fresh_db):
+    from modstore_server.employee_health_scan import _notify_admins
+
+    sf = models.get_session_factory()
+    with sf() as session:
+        _add_user(session)
+
+    payload = {
+        "event": "employee_health.warning",
+        "employee_id": "real-worker",
+        "fail_count": 3,
+    }
+    _notify_admins(
+        "AI 员工失败预警：real-worker",
+        "员工 real-worker 最近执行失败 3 次。",
+        kind="warning",
+        payload=payload,
+    )
+    _notify_admins(
+        "AI 员工失败预警：real-worker",
+        "员工 real-worker 最近执行失败 4 次。",
+        kind="warning",
+        payload={**payload, "fail_count": 4},
+    )
+
+    with sf() as session:
+        rows = session.query(models.Notification).all()
+    assert len(rows) == 1
+    assert rows[0].title == "AI 员工失败预警：real-worker"
+
+
 def test_llm_catalog_merge_accepts_dict_entries(monkeypatch):
     from modstore_server import llm_catalog
 

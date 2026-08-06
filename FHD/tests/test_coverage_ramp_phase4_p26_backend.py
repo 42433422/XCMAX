@@ -20,7 +20,6 @@ from app.services.tools_workflow_registered import (
     _registered_router_settings,
     _registered_router_shipment_records,
     _registered_router_template_preview,
-    _registered_router_wechat,
     execute_registered_workflow_tool,
 )
 
@@ -211,14 +210,8 @@ def test_template_preview_list(mock_get: MagicMock) -> None:
 
 
 # ---------------------------------------------------------------------------
-# wechat / print / printer_list / settings
+# print / printer_list / settings
 # ---------------------------------------------------------------------------
-
-
-@patch("app.application.get_wechat_contact_app_service")
-def test_wechat_view_redirect(mock_get: MagicMock) -> None:
-    out = _registered_router_wechat("view", {}, {}, "pro", "")
-    assert "wechat-contacts" in out["redirect"]
 
 
 @patch("app.services.get_printer_service")

@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "preserve",
+    "strict": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "*": ["./node_modules/*"]
+    },
+    "types": ["vite/client"]
+  },
+  "include": [
+    "../mods/xcagi-customer-service-bridge/frontend/views/InternalCustomerServiceView.vue",
+    "../mods/xcagi-customer-service-bridge/frontend/composables/**/*.ts",
+    "../mods/xcagi-customer-service-bridge/frontend/components/**/*.vue"
+  ]
+}

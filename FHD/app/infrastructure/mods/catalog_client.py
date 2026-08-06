@@ -68,7 +68,11 @@ def _catalog_url(path: str) -> str:
     return f"{catalog_base_url()}{clean}"
 
 
-async def _http_get_json(url: str) -> dict[str, Any]:
+async def _http_get_json(
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """GET 远端 catalog JSON。远端 5xx/SSL 握手超时短退避重试，4xx 直接抛。"""
     max_attempts = 3
     # 精细化超时：连接 5s（避免 SSL 握手卡 60s）、读取 15s、写入 5s、连接池 5s
@@ -76,7 +80,10 @@ async def _http_get_json(url: str) -> dict[str, Any]:
     for attempt in range(1, max_attempts + 1):
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
-                resp = await client.get(url, headers=_catalog_headers())
+                request_headers = _catalog_headers()
+                if headers:
+                    request_headers.update(headers)
+                resp = await client.get(url, headers=request_headers)
         except httpx.RequestError as exc:
             # 网络层错误（含 SSL 握手超时）：最后一次直接抛，中间次退避后重试
             if attempt == max_attempts:
@@ -110,9 +117,13 @@ async def _http_get_json(url: str) -> dict[str, Any]:
     return data
 
 
-async def catalog_get_json(path: str) -> dict[str, Any]:
-    """GET a JSON document from the remote /v1 catalog."""
-    return await _http_get_json(_catalog_url(path))
+async def catalog_get_json(
+    path: str,
+    *,
+    headers: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """GET a JSON document from the remote catalog, optionally with account auth."""
+    return await _http_get_json(_catalog_url(path), headers=headers)
 
 
 def _market_item_to_package_row(item: dict[str, Any]) -> dict[str, Any] | None:

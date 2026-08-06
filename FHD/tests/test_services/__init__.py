@@ -37,17 +37,6 @@ class TestOCRService:
         assert service is not None
 
 
-class TestWechatTaskService:
-    """微信任务服务测试"""
-
-    def test_service_import(self):
-        """测试服务类可以导入"""
-        from app.services.wechat_task_service import WechatTaskService
-
-        service = WechatTaskService()
-        assert service is not None
-
-
 class TestPrinterService:
     """打印服务测试"""
 

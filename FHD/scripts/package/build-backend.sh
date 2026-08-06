@@ -23,19 +23,15 @@ if [[ -n "${PRODUCT_SKU}" ]]; then
   printf '{"sku":"%s","schema_version":1}\n' "${PRODUCT_SKU}" > build/product-sku.json
 fi
 
+# 前端唯一构建：templates/vue-dist 是 Web 与桌面端共享的 SSOT 产物。
+# 默认不重建（复用已由 build-frontend.sh 产出的那份，避免从 dirty 工作区静默重建导致漂移/回退）；
+# 仅当产物缺失、或显式 FHD_REBUILD_FRONTEND=1 时才重建。CI 桌面包应传入 SKIP_FRONTEND=1 直接复用。
 if [ "${SKIP_FRONTEND:-0}" != "1" ]; then
-  (cd frontend && [ -d node_modules ] || npm install)
-  case "${PRODUCT_SKU}" in
-    personal)
-      (cd frontend && VITE_XCAGI_PRODUCT_SKU=personal VITE_XCAGI_EDITION=minimal npm run build:minimal)
-      ;;
-    enterprise)
-      (cd frontend && VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full)
-      ;;
-    *)
-      (cd frontend && npm run build)
-      ;;
-  esac
+  if [ "${FHD_USE_PREBUILT_VUE_DIST:-1}" = "1" ] && [ -f "templates/vue-dist/index.html" ]; then
+    echo "[info] 复用已有 templates/vue-dist（$(grep -oE 'index-[A-Za-z0-9_-]+\.js' templates/vue-dist/index.html | head -1 || echo 'unknown')）—— 如需重建请设 FHD_REBUILD_FRONTEND=1"
+  elif [ "${FHD_REBUILD_FRONTEND:-0}" = "1" ] || [ ! -f "templates/vue-dist/index.html" ]; then
+    bash scripts/package/build-frontend.sh "${PRODUCT_SKU:-generic}"
+  fi
   # 桌面包不构建 admin-console（管理端仅网页；进程级 is_desktop_mode 禁 /admin）
 fi
 

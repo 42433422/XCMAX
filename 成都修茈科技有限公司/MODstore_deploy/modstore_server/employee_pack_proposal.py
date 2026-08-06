@@ -179,10 +179,10 @@ def _catalog_gap_fallback(signals: Dict[str, Any]) -> Dict[str, Any]:
                 "output names at least one failed scorecard gate when a failed gate exists",
                 "every recommendation cites an evidence receipt or explicitly says missing",
                 "output never converts missing customer payment evidence into a passed gate",
-                "runtime contract exposes only supported llm_md and echo handlers",
+                "runtime contract exposes one self-contained direct_python handler",
             ],
         },
-        "estimated_files": 3,
+        "estimated_files": 5,
         "estimated_tokens": 12000,
         "target_version": version,
         "proposal_mode": "deterministic_safe_fallback",
@@ -204,7 +204,7 @@ def _normalize_catalog_gap_proposal(
         proposal["employee_pack"] = pack
     pack["name"] = package_id
     proposal["target_version"] = version
-    proposal["estimated_files"] = min(int(proposal.get("estimated_files") or 3), 3)
+    proposal["estimated_files"] = 5
     proposal["estimated_tokens"] = min(
         int(proposal.get("estimated_tokens") or 12000), MAX_TOKENS_PER_PROPOSAL
     )
@@ -275,9 +275,10 @@ Output JSON only:
   "estimated_tokens": <int <= 100000>
 }}
 
-The generated source will be restricted to manifest.json, prompt.txt and
-skills.json, reviewed through a pull request, and may use only supported
-llm_md and echo runtime handlers. Never weaken governance or invent evidence.
+The generated source will be restricted to five files: manifest.json,
+prompt.txt, skills.json, one direct_python employee entrypoint, and one
+deterministic scorecard analyzer. It is reviewed through a pull request and
+must remain self-contained. Never weaken governance or invent evidence.
 """
 
 

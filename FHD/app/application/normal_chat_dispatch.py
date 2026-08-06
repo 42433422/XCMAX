@@ -56,6 +56,18 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
             "slots": {"keyword": ""},
         }
 
+    # 删除/移除类操作
+    delete_keywords = ("删除", "移除", "删掉", "删了")
+    if any(k in text for k in delete_keywords):
+        del_target = ""
+        target_match = re.search(r"(?:删除|移除|删掉|删了)\s*([^\s，,。]{2,})", text)
+        if target_match:
+            del_target = target_match.group(1).strip()
+        return {
+            "intent": "delete_entity",
+            "slots": {"keyword": del_target},
+        }
+
     # 库存预警
     inventory_keywords = ("库存", "库存预警", "低库存", "库存不足", "缺货", "原材料库存", "仓库")
     if any(k in text for k in inventory_keywords):

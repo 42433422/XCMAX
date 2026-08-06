@@ -662,8 +662,8 @@ class CustomerApplicationService:
 
             from openpyxl import Workbook
 
+            from app.utils.excel.template_export_utils import fill_workbook_from_template
             from app.utils.path_utils import get_data_dir
-            from app.utils.template_export_utils import fill_workbook_from_template
 
             session = self._get_session()
             try:

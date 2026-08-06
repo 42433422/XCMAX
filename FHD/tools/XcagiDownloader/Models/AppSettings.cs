@@ -12,9 +12,9 @@ public sealed class AppSettings
     {
         var version = raw?.Trim();
         if (string.IsNullOrWhiteSpace(version))
-            return "1.0.0.0";
+            return "1.0.0.1";
         version = version.TrimStart('v', 'V');
-        return string.IsNullOrWhiteSpace(version) ? "1.0.0.0" : version;
+        return string.IsNullOrWhiteSpace(version) ? "1.0.0.1" : version;
     }
 
     private static string DefaultUpdateBaseUrl()

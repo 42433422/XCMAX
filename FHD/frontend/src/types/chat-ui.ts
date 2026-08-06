@@ -1,5 +1,12 @@
 /** 聊天 UI 层消息（localStorage / 组件展示；role 用 ai 而非 API 的 assistant） */
 
+export interface ChatExecutionProgressItem {
+  phase: string
+  label: string
+  status: 'running' | 'success' | 'retrying' | 'waiting' | 'failed' | 'cancelled'
+  at: string
+}
+
 export interface ChatApprovalCard {
   version?: number
   kind?: string
@@ -40,6 +47,8 @@ export interface UiChatMessage {
   contextSummary?: string
   streamingShell?: boolean
   toolProgressLabel?: string
+  /** Agent 执行时间线（计划-查询-执行 步骤），流式时实时更新，类似 Codex 对话 */
+  executionProgress?: ChatExecutionProgressItem[]
   downloadUrl?: string
   /** 发货单文档下载链接（与右侧任务卡一致，便于在对话内直接下载） */
   shipmentDownloadUrl?: string

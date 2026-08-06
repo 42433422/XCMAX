@@ -78,12 +78,13 @@ jobs:
         env:
           TARGET_SHA: ${{ steps.target.outputs.sha }}
           STRICT_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.require_platform_key == 'false' && '0' || '1' }}
+          REPOSITORY_SLUG: ${{ github.repository }}
         with:
           host: ${{ secrets.FHD_PUSH_HOST }}
           username: root
           key: ${{ secrets.FHD_PUSH_SSH_KEY }}
           command_timeout: 45m
-          envs: TARGET_SHA,STRICT_KEY
+          envs: TARGET_SHA,STRICT_KEY,REPOSITORY_SLUG
           script: |
             set -euo pipefail
             SOURCE_ROOT="${XCMAX_REMOTE_ROOT:-/root/XCMAX}"
@@ -93,7 +94,8 @@ jobs:
             trap 'rm -f "$BOOTSTRAP"' EXIT
             git -C "$SOURCE_ROOT" show "${TARGET_SHA}:成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-immutable-release.sh" > "$BOOTSTRAP"
             chmod 700 "$BOOTSTRAP"
-            XCMAX_SOURCE_ROOT="$SOURCE_ROOT" XCMAX_TARGET_SHA="$TARGET_SHA" bash "$BOOTSTRAP"
+            XCMAX_SOURCE_ROOT="$SOURCE_ROOT" XCMAX_TARGET_SHA="$TARGET_SHA" \
+              XCMAX_GITHUB_REPOSITORY="$REPOSITORY_SLUG" bash "$BOOTSTRAP"
             CURRENT_DEPLOY="/opt/xcmax/current/成都修茈科技有限公司/MODstore_deploy"
             STRICT_PLATFORM_KEY="$STRICT_KEY" MODSTORE_DEPLOY_DIR="$CURRENT_DEPLOY" \
               XCMAX_MONOREPO_ROOT=/opt/xcmax/current bash "$CURRENT_DEPLOY/scripts/diagnose_production_landing.sh"

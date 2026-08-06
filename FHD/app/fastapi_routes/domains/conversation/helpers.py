@@ -24,6 +24,7 @@ from openai import APIConnectionError, APIError, AuthenticationError, RateLimitE
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from app.application.agent_orchestrator.chat_trace import attach_chat_trace_run
+from app.application.chat_reply_safety import sanitize_model_chat_reply
 from app.application.modstore_conversation_app import create_modstore_openai_client_from_request
 from app.application.workflow.multimodal_user_content import (
     EmptyMultimodalResponseError,
@@ -521,10 +522,17 @@ def _xcagi_guarded_planner_stream_events(
     first_token_timeout = min(_xcagi_stream_first_token_timeout_seconds(), total_timeout)
     idle_notice_seconds = _xcagi_stream_idle_notice_seconds()
     started_at = time.monotonic()
-    # Market SSE often spends >20s on meta/failover before the first delta. Acknowledge
-    # immediately so the UI shows idle notices instead of a hard 首包超时.
+    # The HTTP/SSE connection is already established at this point.  Upstream
+    # market routing can legitimately take longer than the first visible model
+    # token, so acknowledge the accepted task immediately instead of treating
+    # "no text token yet" as a broken first packet.
     first_event_seen = True
-    yield {"type": "token", "text": "", "ephemeral": True, "phase": "connecting"}
+    yield {
+        "type": "tool_progress",
+        "label": "模型服务",
+        "text": "模型服务已接收任务，正在思考…",
+        "phase": "accepted",
+    }
 
     while True:
         elapsed = time.monotonic() - started_at
@@ -717,7 +725,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 yield _sse_event_line(ev)
         if halted_for_write_token:
             return
-        merged = "".join(reply_parts)
+        merged = sanitize_model_chat_reply("".join(reply_parts))
         if not merged.strip():
             msg = (
                 "模型服务已完成请求，但没有返回可显示的正文。"

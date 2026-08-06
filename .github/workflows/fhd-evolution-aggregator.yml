@@ -3,12 +3,14 @@
 name: Evolution Aggregator
 
 # 演化闭环 5 连接点统一入口 — 每周一 05:00 UTC 触发（错开 evolution-orchestrator 的 04:00）：
-#   - schedule: 跑完整 dry-run（默认），只写 ledger 不真实触发
-#   - workflow_dispatch: 手动触发，可选 dry-run=false 真实执行
+#   - schedule: 默认真实执行（collect-signals 采集真实信号写入 ledger，
+#     闭环其余步骤由 evolution-orchestrator.yml 继续，避免重复开 issue）
+#   - workflow_dispatch: 手动触发，可选 dry-run=true 走干跑验证
 #
 # 与 evolution-orchestrator.yml 的关系：
-#   - evolution-orchestrator.yml 是 "signal → issue → PR 合并 → 上架" 直通管道
-#   - evolution-aggregator.yml (本 workflow) 是 5 连接点 dry-run + ledger trace 验证入口
+#   - evolution-orchestrator.yml 是 "signal → issue → PR 合并 → 上架" 直通真实管道
+#   - evolution-aggregator.yml (本 workflow) 是 5 连接点 ledger trace 入口，
+#     默认真实执行 collect-signals；dry-run 仅作手动验证
 #   - 两者共享 evolution_decisions.jsonl ledger
 #
 # 接通的 5 个连接点：
@@ -28,7 +30,7 @@ on:
       dry-run:
         description: 'Dry-run mode (只写 ledger 不真实触发)'
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: write
@@ -50,6 +52,9 @@ jobs:
       XCAGI_LLM_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
       MODSTORE_EVOLUTION_LEDGER_PATH: ${{ github.workspace }}/FHD/evolution_decisions.jsonl
       MODSTORE_REPO_ROOT: ${{ github.workspace }}
+      MODSTORE_LEGACY_REPORT_PATH: ${{ github.workspace }}/FHD/metrics/legacy-usage-168h.json
+      MODSTORE_INTENT_REPORT_PATH: ${{ github.workspace }}/FHD/metrics/intent_benchmark_latest.json
+      MODSTORE_SLO_REPORT_PATH: ${{ github.workspace }}/FHD/metrics/slo-latest.json
     steps:
       - uses: actions/checkout@v4
         with:
@@ -67,12 +72,24 @@ jobs:
           pip install httpx apscheduler 2>/dev/null || true
 
       - name: Run evolution aggregator (dry-run)
-        if: ${{ inputs.dry-run != false }}
+        if: ${{ inputs.dry-run == true }}
         run: |
           python scripts/autonomy/evolution_decision_ledger.py dry-run
 
+      - name: Resolve latest committed SLO report
+        if: ${{ inputs.dry-run != true }}
+        working-directory: .
+        run: |
+          latest=$(ls FHD/metrics/slo-measured-*.json 2>/dev/null | sort | tail -1 || true)
+          if [ -n "${latest:-}" ]; then
+            cp "$latest" FHD/metrics/slo-latest.json
+            echo "Using SLO report: $latest"
+          else
+            echo "No committed SLO report found; SLO signal stays healthy."
+          fi
+
       - name: Run evolution aggregator (real)
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.dry-run != true }}
         run: |
           # 5 连接点逐个执行（实模式）
           python scripts/autonomy/evolution_decision_ledger.py collect-signals --triggered-by weekly-cron

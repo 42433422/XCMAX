@@ -79,6 +79,7 @@ def assess_retort_scope_diff_contract(
     contract = retort_scope_remediation_contract()
     scoped_files, excluded_hits = _retort_scope_scoped_changed_files(changed_files)
     scoped_file_count = len(scoped_files)
+    changed_file_count = scoped_file_count + len(excluded_hits)
     scoped_line_changes = _retort_scope_line_changes(diff_stats)
     diff_chars = int((diff_stats or {}).get("git_diff_chars") or 0)
     if diff_chars <= 0 and diff_excerpt:
@@ -87,7 +88,7 @@ def assess_retort_scope_diff_contract(
     violations: list[str] = []
     if excluded_hits:
         violations.append("excluded_paths_present")
-    if scoped_file_count > int(contract["max_changed_files"]):
+    if changed_file_count > int(contract["max_changed_files"]):
         violations.append("max_changed_files")
     if scoped_line_changes > int(contract["max_changed_lines"]):
         violations.append("max_changed_lines")
@@ -98,6 +99,7 @@ def assess_retort_scope_diff_contract(
 
     return {
         "contract": contract,
+        "changed_file_count": changed_file_count,
         "excluded_paths": excluded_hits,
         "git_diff_chars": diff_chars,
         "reason": "retort_scope_diff_contract_exceeded",
@@ -150,6 +152,17 @@ def reconcile_retort_scope_remediations(memory: dict[str, Any]) -> dict[str, Any
         and item.get("kind") == "automated_remediation"
         and str(item.get("reason") or "").strip() == RETORT_SCOPE_REASON
     }
+    closed_items = memory.get("closed_items")
+    if isinstance(closed_items, list):
+        existing_run_ids.update(
+            str(original_item.get("run_id") or "").strip()
+            for item in closed_items
+            if isinstance(item, dict)
+            for original_item in [item.get("original_item")]
+            if isinstance(original_item, dict)
+            and original_item.get("kind") == "automated_remediation"
+            and str(original_item.get("reason") or "").strip() == RETORT_SCOPE_REASON
+        )
     added_run_ids: list[str] = []
     for row in runner._read_ledger(limit=500):
         run_id = str(row.get("run_id") or "").strip()
@@ -167,15 +180,19 @@ def reconcile_retort_scope_remediations(memory: dict[str, Any]) -> dict[str, Any
         para_task_id = str(row.get("para_task_id") or "").strip()
         if not branch or not para_task_id:
             continue
-        changed_file_count = int(
-            (retort if isinstance(retort, dict) else {}).get("changed_file_count") or 0
+        raw_changed_file_count = (retort if isinstance(retort, dict) else {}).get(
+            "changed_file_count"
         )
+        try:
+            changed_file_label = str(max(int(raw_changed_file_count or 0), 0))
+        except (TypeError, ValueError):
+            changed_file_label = "unknown"
         open_items.append(
             {
                 "branch": branch,
                 "created_at": runner._iso(runner._utc_now()),
                 "detail": (
-                    f"Retort requested risk acceptance for {changed_file_count} changed files; "
+                    f"Retort requested risk acceptance for {changed_file_label} changed files; "
                     "rebuild the smallest valid fix from the clean base."
                 ),
                 "kind": "automated_remediation",

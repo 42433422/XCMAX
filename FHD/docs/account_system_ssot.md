@@ -161,6 +161,7 @@ Persona 不作为用户可随意填写的字段持久化，统一运行时派生
 | 行业 UI 词表 | [config/industry_presets.json](../config/industry_presets.json) | 欢迎语、快捷按钮、菜单名、业务对象称呼 | 禁止只改页面文案不改 SSOT |
 | 行业能力包 | [config/industry_baseline.json](../config/industry_baseline.json) | 核心 Mod、可选 Mod、行业包绑定、开放状态 | 禁止无 Mod/服务支撑就标成正式行业 |
 | 行业别名 | [config/industry_mod_aliases.json](../config/industry_mod_aliases.json) | 行业与 Mod/市场别名兼容 | 禁止把别名当成新行业 |
+| 客户私有交付 | [config/customer_delivery.json](../config/customer_delivery.json) | 客户品牌、`legacy_mod_id`（定制）与 `industry_mod_id`（通用行业包）映射；生产员工私有交付入口只暴露定制包；转返工开现有客服变更工单（`user_cs_change_request` · `bug_fix`）；**交付面 = 通用 Enterprise 包 + 私有交付进度** | 禁止把 `attendance-industry` 等通用行业包当作生产员工/私有交付项目；禁止另建返工工单系统；**禁止再发太阳鸟定制安装包（`太阳鸟-Setup`）作为正式交付** |
 
 当前行业分层：
 

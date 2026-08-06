@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from modstore_server.employee_cron_registration_ledger import REGISTRATION_PREFIX
+from modstore_server.employee_cron_registration_ledger import DEFERRED_STATUS, REGISTRATION_PREFIX
 from modstore_server.scheduler_runtime import get_runtime_status
 
 router = APIRouter(tags=["scheduler-runtime"])
@@ -31,6 +31,11 @@ def scheduler_runtime(stale_after_seconds: int | None = None) -> dict:
         for employee_id, item in registrations.items()
         if str(item.get("last_status") or "") == "failed"
     }
+    approval_required = {
+        employee_id
+        for employee_id, item in registrations.items()
+        if str(item.get("last_status") or "") == DEFERRED_STATUS
+    }
     observed = {
         str(item.get("job_id") or "").removeprefix(_EXECUTION_PREFIX): item
         for item in runtime.get("jobs") or []
@@ -42,14 +47,70 @@ def scheduler_runtime(stale_after_seconds: int | None = None) -> dict:
         for employee_id in observed_registered
         if str(observed[employee_id].get("last_status") or "") == "failed"
     }
+    failure_code_counts: dict[str, int] = {}
+    for employee_id in failing:
+        code = str(observed[employee_id].get("last_error_code") or "").strip()
+        if code:
+            failure_code_counts[code] = failure_code_counts.get(code, 0) + 1
+    deferred_observed = approval_required.intersection(observed)
+    policy_held_execution_ids = {
+        f"{_EXECUTION_PREFIX}{employee_id}" for employee_id in deferred_observed
+    }
+    policy_held_failed_execution_ids = {
+        job_id
+        for job_id in policy_held_execution_ids
+        if str(observed[job_id.removeprefix(_EXECUTION_PREFIX)].get("state") or "") == "failing"
+    }
+    policy_held_stale_execution_ids = {
+        job_id
+        for job_id in policy_held_execution_ids
+        if str(observed[job_id.removeprefix(_EXECUTION_PREFIX)].get("state") or "") == "stale"
+    }
+
+    # Keep the raw scheduler ledger summary intact: historical executions are
+    # still evidence. Expose current policy context separately so callers alert
+    # only on failures or stale duties actionable without human approval.
+    jobs = runtime.get("jobs") or []
+
+    def _actionable_count(state: str) -> int:
+        return sum(
+            1
+            for item in jobs
+            if isinstance(item, dict)
+            and str(item.get("state") or "") == state
+            and str(item.get("job_id") or "") not in policy_held_execution_ids
+        )
+
+    summary = runtime.get("summary")
+    if isinstance(summary, dict):
+        summary["policy_held_failures"] = len(policy_held_failed_execution_ids)
+        summary["policy_held_stale"] = len(policy_held_stale_execution_ids)
+        summary["actionable_failing"] = _actionable_count("failing")
+        summary["actionable_stale"] = _actionable_count("stale")
+
     runtime["employee_duty"] = {
         "registration_observable": bool(registrations),
         "registered_cron_count": len(registered_ids),
         "registration_failing_count": len(registration_failing),
+        "approval_required_count": len(approval_required),
         "observed_cron_count": len(observed_registered),
         "last_success_count": len(observed_registered - failing),
         "failing_count": len(failing),
+        "failure_code_counts": dict(sorted(failure_code_counts.items())),
         "never_run_count": len(registered_ids - observed_registered),
-        "unregistered_observed_count": len(set(observed) - registered_ids),
+        "approval_required_observed_execution_count": len(deferred_observed),
+        "policy_held_observed_failure_count": len(policy_held_failed_execution_ids),
+        "policy_held_observed_stale_count": len(policy_held_stale_execution_ids),
+        "unregistered_observed_count": len(set(observed) - registered_ids - approval_required),
     }
+    try:
+        from modstore_server.storage_pressure_self_heal import get_storage_pressure_status
+
+        runtime["storage_pressure"] = get_storage_pressure_status(limit=20)
+    except Exception as exc:  # pragma: no cover - observability must remain failure-safe.
+        runtime["storage_pressure"] = {
+            "ok": False,
+            "reason": "storage_pressure_status_unavailable",
+            "error": type(exc).__name__,
+        }
     return runtime

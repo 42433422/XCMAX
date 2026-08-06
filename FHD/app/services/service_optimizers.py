@@ -49,7 +49,7 @@ class AIOptimizedService(NeuroEventPublisherMixin):
             if optimizer.performance_monitor:
                 self._monitor = optimizer.performance_monitor
             if hasattr(optimizer, "get_rate_limiter"):
-                from app.utils.rate_limiter import get_rate_limiter
+                from app.utils.resilience.rate_limiter import get_rate_limiter
 
                 self._rate_limiter = get_rate_limiter("ai_chat", max_requests=30, window_seconds=60)
 
@@ -87,7 +87,7 @@ class AIOptimizedService(NeuroEventPublisherMixin):
         # 限流检查
         if self._rate_limiter:
             rate_result = __import__(
-                "app.utils.rate_limiter", fromlist=["check_rate_limit"]
+                "app.utils.resilience.rate_limiter", fromlist=["check_rate_limit"]
             ).check_rate_limit(user_id, "ai_chat", max_requests=30, window_seconds=60)
             if not rate_result.get("allowed", True):
                 return {

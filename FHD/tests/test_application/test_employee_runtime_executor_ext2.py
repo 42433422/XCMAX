@@ -252,7 +252,8 @@ class TestActionVendorConvert:
         assert out["error"] == "转换失败，请查看服务日志"
         assert "boom" not in out["error"]
 
-    def test_convert_ignores_explicit_output_path(self, tmp_path):
+    def test_convert_ignores_explicit_output_path(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
         backend = tmp_path / "backend" / "vendor" / "csv"
         backend.mkdir(parents=True)
         (backend / "convert.py").write_text(
@@ -268,6 +269,25 @@ class TestActionVendorConvert:
         assert out["ok"] is True
         assert out["output_path"] == str(tmp_path / "outputs" / "data.json")
         assert out["output_path"] != str(out_path)
+
+    def test_rejects_workspace_outside_the_trusted_sandbox(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+        backend = tmp_path / "backend" / "vendor" / "csv"
+        backend.mkdir(parents=True)
+        (backend / "convert.py").write_text(
+            "def convert_file(src, out, *, template_path=None, payload=None, ctx=None, rule_spec=None):\n"
+            "    return {'ok': True}\n"
+        )
+
+        out = exec_mod._action_vendor_convert(
+            tmp_path, "emp-generate-1", {"user_request": "hi"}, "/"
+        )
+
+        assert out == {
+            "handler": "direct_python",
+            "ok": False,
+            "error": "工作区不在允许范围",
+        }
 
 
 # ── _action_direct_python_module ─────────────────────────────────────────────

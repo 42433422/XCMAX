@@ -26,7 +26,10 @@
       "@/*": ["./src/*"],
       "@admin-console-inject/adminHostRoutes": ["./src/router/adminHostRoutes.stub.ts"],
       "@/data/workflow-employee-docs.json": ["./public/workflow-employee-docs.json"],
-      "@/data/workflow-employees.json": ["./public/workflow-employees.json"]
+      "@/data/workflow-employees.json": ["./public/workflow-employees.json"],
+      "@mod-frontend/xcagi-customer-service-bridge/*": [
+        "./../mods/xcagi-customer-service-bridge/frontend/*"
+      ]
     },
     "types": ["vite/client"]
   },

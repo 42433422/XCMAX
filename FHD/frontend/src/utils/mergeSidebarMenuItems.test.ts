@@ -24,32 +24,6 @@ describe('mergeSidebarMenuItems', () => {
     expect(keys).not.toContain('internal-customer-service')
   })
 
-  it('drops stale WeChat contact entries now represented by data sources', () => {
-    const merged = mergeSidebarMenuItems(
-      [{ key: 'data-sources', name: '数据来源', iconClass: 'fa-database' }],
-      [
-        {
-          key: 'mod-erp-wechat-contacts',
-          name: '企业微信联系人',
-          iconClass: 'fa-weixin',
-          modId: 'xcagi-erp-domain-bridge',
-          path: '/mod/xcagi-erp-domain-bridge/wechat-contacts',
-        },
-        {
-          key: 'wechat-contacts-ai-employee-entry',
-          name: '微信联系人',
-          iconClass: 'fa-weixin',
-          modId: 'wechat-contacts-ai-employee',
-          path: '/wechat-contacts',
-        },
-      ],
-      [],
-      [],
-      [],
-    )
-    expect(merged.map((item) => item.key)).toEqual(['data-sources'])
-  })
-
   it('drops stale materials-list entries now represented by materials', () => {
     const merged = mergeSidebarMenuItems(
       [{ key: 'materials', name: '资源库', iconClass: 'fa-archive' }],

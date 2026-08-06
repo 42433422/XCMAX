@@ -99,18 +99,26 @@ jobs:
               chmod u+w "${LIVE_SITE}" 2>/dev/null || true
               mkdir -p "${LIVE_SITE}/partials" "${LIVE_SITE}/assets"
               chmod u+w "${LIVE_SITE}/partials" "${LIVE_SITE}/assets" 2>/dev/null || true
-              # Runtime DB projections (action-board / company-hall JSON) must not be
-              # overwritten by git snapshots — refresh them after publish instead.
+              # Runtime projections and the release pointer must not be overwritten by
+              # git snapshots.  `fhd-release-desktop.yml` publishes the latter only
+              # after both platform artifacts pass verification.
               for f in "${GIT_SITE}"/*.html "${GIT_SITE}/styles.css" "${GIT_SITE}/main.js" "${GIT_SITE}/contact-intake.js" \
                        "${GIT_SITE}/contact-channels.js" "${GIT_SITE}/visualization.js" \
                        "${GIT_SITE}/world-will.js" "${GIT_SITE}/world-will-ticker.js" \
                        "${GIT_SITE}/world-will-ticker.css" \
-                       "${GIT_SITE}/download-release.json" "${GIT_SITE}/download-action-board.js"; do
+                       "${GIT_SITE}/download-action-board.js"; do
                 [ -e "$f" ] || continue
                 base="$(basename "$f")"
                 chmod u+w "${LIVE_SITE}/${base}" 2>/dev/null || true
                 cp -f "$f" "${LIVE_SITE}/${base}"
               done
+              # Bootstrap an empty site once, but never roll a verified release back
+              # to the repository's historical fallback pointer on a later web deploy.
+              if [ ! -e "${LIVE_SITE}/download-release.json" ] && [ -f "${GIT_SITE}/download-release.json" ]; then
+                cp -f "${GIT_SITE}/download-release.json" "${LIVE_SITE}/download-release.json"
+              else
+                echo "[info] preserving release-managed download-release.json"
+              fi
               if [ -d "${GIT_SITE}/partials" ]; then
                 cp -af "${GIT_SITE}/partials/." "${LIVE_SITE}/partials/"
               fi
@@ -125,6 +133,8 @@ jobs:
             NGINX_SRC="${SITE_ROOT}/nginx-xiu-ci-root.conf"
             if [ -f /etc/nginx/conf.d/xiu-ci.com.conf ]; then
               echo "[info] canonical xiu-ci.com.conf exists; skip conflicting standalone corp vhost"
+              # 同步版本化 XCAGI 下载路由；否则新版本 /xcagi-vX.Y.Z.W/ 会落入官网首页。
+              bash "${SITE_ROOT}/deploy/scripts/sync-nginx-xiu-ci-snippets.sh"
               # HTTPS whitelist never included /partials/; pin it on the live conf.
               python3 "${SITE_ROOT}/MODstore_deploy/scripts/fix-nginx-corp-partials.py"
               python3 "${SITE_ROOT}/MODstore_deploy/scripts/fix-nginx-corp-download-routes.py"

@@ -2,13 +2,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useChatStore } from '@/stores/chat'
 
+const jarvisMocks = vi.hoisted(() => ({
+  sendMessage: vi.fn().mockResolvedValue(undefined),
+  setCurrentTask: vi.fn(),
+  clearMessages: vi.fn(),
+}))
+
 vi.mock('@/stores/jarvisChat', () => ({
   useJarvisChatStore: () => ({
     messages: [{ id: 1, content: 'Hello', type: 'ai' }],
     currentTask: null,
-    sendMessage: vi.fn().mockResolvedValue(undefined),
-    setCurrentTask: vi.fn(),
-    clearMessages: vi.fn(),
+    sendMessage: jarvisMocks.sendMessage,
+    setCurrentTask: jarvisMocks.setCurrentTask,
+    clearMessages: jarvisMocks.clearMessages,
   }),
 }))
 
@@ -17,6 +23,7 @@ describe('useChatStore', () => {
 
   beforeEach(() => {
     setActivePinia(createPinia())
+    vi.clearAllMocks()
     store = useChatStore()
   })
 
@@ -51,12 +58,11 @@ describe('useChatStore', () => {
 
   it('clearTask calls jarvis setCurrentTask', () => {
     store.clearTask()
-    // The mock jarvis store's setCurrentTask was called
-    expect(true).toBe(true) // Just verify no error
+    expect(jarvisMocks.setCurrentTask).toHaveBeenCalledWith(null)
   })
 
   it('initChat calls jarvis clearMessages', () => {
     store.initChat()
-    expect(true).toBe(true) // Just verify no error
+    expect(jarvisMocks.clearMessages).toHaveBeenCalled()
   })
 })

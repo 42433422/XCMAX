@@ -63,9 +63,7 @@
     "xcagi-erp-domain-bridge": [
       "/api/mod/xcagi-erp-domain-bridge/products",
       "/api/mod/xcagi-erp-domain-bridge/customers",
-      "/api/mod/xcagi-erp-domain-bridge/shipment",
-      "/api/mod/xcagi-erp-domain-bridge/wechat",
-      "/api/mod/xcagi-erp-domain-bridge/wechat_contacts"
+      "/api/mod/xcagi-erp-domain-bridge/shipment"
     ],
     "xcagi-office-employee-pack-bridge": [
       "/api/mod/xcagi-office-employee-pack-bridge/catalog",

@@ -294,6 +294,10 @@ class TestWorkingMemory:
                 return_value=[],
             ),
             patch(
+                "app.domain.neuro.cognition.working_memory._long_term_recall_provider",
+                return_value=mock_svc,
+            ),
+            patch(
                 "app.application.user_memory_vector_app_service.get_user_memory_rag_app_service",
                 return_value=mock_svc,
             ),
@@ -320,6 +324,10 @@ class TestWorkingMemory:
             patch(
                 "app.services.conversation_service.ConversationService.get_session_messages",
                 return_value=[],
+            ),
+            patch(
+                "app.domain.neuro.cognition.working_memory._long_term_recall_provider",
+                return_value=mock_svc,
             ),
             patch(
                 "app.application.user_memory_vector_app_service.get_user_memory_rag_app_service",

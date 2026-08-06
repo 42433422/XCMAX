@@ -28,7 +28,9 @@ from app.application.agent_orchestrator.chat_trace import (
     finalize_legacy_chat_run,
     start_legacy_chat_run,
 )
+from app.application.chat_reply_safety import sanitize_model_chat_reply
 from app.application.modstore_conversation_app import create_modstore_openai_client_from_request
+from app.application.stream_status_events import MODEL_STREAM_ACCEPTED_EVENT
 from app.application.workflow.multimodal_user_content import (
     EmptyMultimodalResponseError,
     UnsupportedMultimodalModelError,
@@ -44,11 +46,9 @@ from app.legacy.chat.legacy_chat_adapter import chat_stream_sse_events
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-
 _CHAT_DB_READ_GRACE_SEC = 5 * 60
 _chat_db_read_grace_lock = threading.Lock()
 _chat_db_read_grace_until: dict[str, float] = {}
-
 _CHAT_DB_READ_ACTION_RE = re.compile(r"(查看|查询|检索|读取|看|浏览|导出)", re.IGNORECASE)
 _CHAT_RAW_DB_SUBJECT_RE = re.compile(
     r"(数据库|数据表|表结构|schema|sql|SQL|raw|原始|全库|整库|数据库文件)",
@@ -529,11 +529,8 @@ def _xcagi_guarded_planner_stream_events(
     first_token_timeout = min(_xcagi_stream_first_token_timeout_seconds(), total_timeout)
     idle_notice_seconds = _xcagi_stream_idle_notice_seconds()
     started_at = time.monotonic()
-    # Market SSE often spends >20s on meta/failover before the first delta. Acknowledge
-    # immediately so the UI shows idle notices instead of a hard 首包超时.
     first_event_seen = True
-    yield {"type": "token", "text": "", "ephemeral": True, "phase": "connecting"}
-
+    yield MODEL_STREAM_ACCEPTED_EVENT
     while True:
         elapsed = time.monotonic() - started_at
         if elapsed >= total_timeout:
@@ -800,7 +797,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 yield _sse_event_line(ev)
         if halted_for_write_token:
             return
-        merged = "".join(reply_parts)
+        merged = sanitize_model_chat_reply("".join(reply_parts))
         if not merged.strip():
             msg = (
                 "模型服务已完成请求，但没有返回可显示的正文。"

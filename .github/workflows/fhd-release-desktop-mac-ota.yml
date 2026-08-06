@@ -11,9 +11,10 @@ on:
       version:
         description: "Release version"
         required: true
-        default: "1.0.0.0"
+        default: "1.0.0.1"
         type: choice
         options:
+          - "1.0.0.1"
           - "1.0.0.0"
 
 permissions:
@@ -149,7 +150,10 @@ jobs:
           publish_mac_payload() {
             local dest="$1"
             ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p '$dest'"
-            timeout 2400 rsync -avz --delay-updates --timeout=120 \
+            # macOS runners do not provide GNU `timeout`. The step already has
+            # a 45-minute Actions timeout and rsync enforces a 120-second I/O
+            # timeout, so invoking rsync directly is both bounded and portable.
+            rsync -avz --delay-updates --timeout=120 \
               --include='*.dmg' \
               --include='*.dmg.blockmap' \
               --include='*.zip' \

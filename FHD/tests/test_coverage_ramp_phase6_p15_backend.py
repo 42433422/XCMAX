@@ -2645,50 +2645,6 @@ class TestTWRBusinessDocking:
             assert result["sheet_names"] == ["Sheet1"]
 
 
-class TestTWRWechat:
-    """Cover ``_registered_router_wechat``."""
-
-    def test_wechat_view(self) -> None:
-        with patch("app.application.get_wechat_contact_app_service") as mock_get:
-            svc = MagicMock()
-            mock_get.return_value = svc
-            result = twr._registered_router_wechat("view", {}, {}, "normal", "")
-            assert result["success"] is True
-            assert "redirect" in result
-
-    def test_wechat_list(self) -> None:
-        with patch("app.application.get_wechat_contact_app_service") as mock_get:
-            svc = MagicMock()
-            svc.get_contacts.return_value = []
-            mock_get.return_value = svc
-            result = twr._registered_router_wechat("list", {}, {}, "normal", "")
-            assert result["success"] is True
-
-    def test_wechat_query_alias(self) -> None:
-        with patch("app.application.get_wechat_contact_app_service") as mock_get:
-            svc = MagicMock()
-            svc.get_contacts.return_value = []
-            mock_get.return_value = svc
-            twr._registered_router_wechat("query", {}, {}, "normal", "")
-            svc.get_contacts.assert_called_once()
-
-    def test_wechat_refresh_contact_cache(self) -> None:
-        with patch(
-            "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs"
-        ) as mock_ensure:
-            mock_ensure.return_value = {"success": True}
-            result = twr._registered_router_wechat("refresh_contact_cache", {}, {}, "normal", "")
-            assert result["success"] is True
-
-    def test_wechat_refresh_messages_cache(self) -> None:
-        with patch(
-            "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs"
-        ) as mock_ensure:
-            mock_ensure.return_value = {"success": True}
-            result = twr._registered_router_wechat("refresh_messages_cache", {}, {}, "normal", "")
-            assert result["success"] is True
-
-
 class TestTWRPrint:
     """Cover ``_registered_router_print``."""
 
@@ -2990,7 +2946,6 @@ class TestTWRExecuteRegisteredWorkflowTool:
             "template_preview",
             "document_template",
             "label_template_generator",
-            "wechat",
             "print",
             "printer_list",
             "settings",

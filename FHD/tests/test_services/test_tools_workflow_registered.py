@@ -18,7 +18,6 @@ from app.services.tools_workflow_registered import (
     _registered_router_products,
     _registered_router_settings,
     _registered_router_shipment_records,
-    _registered_router_wechat,
     execute_registered_workflow_tool,
 )
 
@@ -341,32 +340,6 @@ class TestShipmentRecordsRouter:
 
 
 # ---------------------------------------------------------------------------
-# _registered_router_wechat
-# ---------------------------------------------------------------------------
-
-
-class TestWechatRouter:
-    def test_view_action(self):
-        result = _registered_router_wechat("view", {}, {}, "admin", "")
-        assert result["success"] is True
-        assert "redirect" in result
-
-    def test_list_action(self):
-        mock_svc = MagicMock()
-        mock_svc.get_contacts.return_value = []
-        with patch("app.application.get_wechat_contact_app_service", return_value=mock_svc):
-            result = _registered_router_wechat("list", {"type": "all"}, {}, "admin", "")
-            assert result["success"] is True
-
-    def test_refresh_cache_action(self):
-        mock_module = MagicMock()
-        mock_module.ensure_decrypted_wechat_dbs.return_value = {"success": True}
-        with patch.dict("sys.modules", {"app.services.wechat_contact_cache_import": mock_module}):
-            result = _registered_router_wechat("refresh_contact_cache", {}, {}, "admin", "")
-            assert result["success"] is True
-
-
-# ---------------------------------------------------------------------------
 # _registered_router_print
 # ---------------------------------------------------------------------------
 
@@ -582,7 +555,6 @@ class TestExecuteRegisteredWorkflowTool:
             "template_preview",
             "document_template",
             "label_template_generator",
-            "wechat",
             "print",
             "printer_list",
             "settings",

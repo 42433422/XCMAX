@@ -22,7 +22,11 @@ import { resolvePlannerChatHomePath, resolvePlannerPagePath } from '@/utils/plan
 import { readActiveExtensionModId } from '@/utils/erpDomainPaths';
 import { isProtectedClientModId } from '@/constants/protectedMods';
 import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku';
-import { validateEnterpriseSessionCached } from '@/utils/authSessionCache';
+import {
+  consumeDesktopSessionBootstrapHint,
+  hasRecentEnterpriseSessionHint,
+  validateEnterpriseSessionCached,
+} from '@/utils/authSessionCache';
 import { useModsStore } from '@/stores/mods';
 import {
   DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
@@ -37,21 +41,9 @@ import {
 } from '@/constants/adminOperatorNav';
 import { buildRoleMenuProfile, canShowCoreMenuKey } from '@/utils/roleMenuProfile';
 import { isClientErpSidebarContext } from '@/constants/genericModPack';
-const isSandbox = new URLSearchParams(window.location.search).has('sandbox');
-
-const SANDBOX_ALLOWED = new Set([
-  'login',
-  'login-help',
-  'login-register',
-  'login-forgot-account',
-  'login-forgot-password',
-  'chat',
-  'workflow-employee-space',
-  'workflow-employee-stitch-full',
-  'mod-landing',
-  'chat-debug',
-  'tools',
-]);
+import { AI_DELIVERY_ROUTES } from './privateModDeliveryRoutes';
+import { resolveInitialRoutes } from './initialRouteSelection';
+import { refreshDesktopSessionInBackground } from '@/utils/desktopSessionRestore';
 
 const DEFAULT_DUTY_ROSTER_GRAPH_VIEW = 'department';
 
@@ -128,12 +120,7 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
       component: () => import('../views/AIEcosystemView.vue'),
       meta: { title: '智能生态' },
     },
-    {
-      path: '/brain',
-      name: 'brain',
-      component: () => import('../views/BrainView.vue'),
-      meta: { title: '智脑集成' },
-    },
+    ...AI_DELIVERY_ROUTES,
     {
       path: '/project-factory',
       name: 'project-factory',
@@ -208,12 +195,6 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
       path: '/data-sources',
       name: 'data-sources',
       component: () => import('../views/DataSourcesView.vue'),
-      meta: { title: '数据来源' },
-    },
-    {
-      path: '/wechat-contacts',
-      name: 'wechat-contacts',
-      redirect: { name: 'data-sources', query: { source: 'wechat_local_db' } },
       meta: { title: '数据来源' },
     },
     {
@@ -429,43 +410,14 @@ if (import.meta.env.VITE_XCMAX_ADMIN_CONSOLE === '1') {
   allRoutes.push(...ADMIN_HOST_ROUTE_RECORDS);
 }
 
-function filterSandboxRoutes(routes: RouteRecordRaw[]): RouteRecordRaw[] {
-  return routes.filter((r) => {
-    if (!r.name) return false;
-    if (SANDBOX_ALLOWED.has(r.name as string)) return true;
-    if (r.path === '/employee-workspace' || r.path === '/yuangong-stitch') return true;
-    return false;
-  });
-}
-
-function filterPlatformShellRoutes(routes: RouteRecordRaw[]): RouteRecordRaw[] {
-  return routes.filter((r) => {
-    if (!r.name) return false;
-    if (SHELL_CORE_ROUTE_NAMES.has(r.name as string)) return true;
-    if (INDUSTRY_DELIVERY_ROUTE_NAMES.has(r.name as string)) return true;
-    if (r.meta?.mod === true) return true;
-    if (r.meta?.hostAdmin === true) return true;
-    if (r.path === '/employee-workspace' || r.path === '/yuangong-stitch') return true;
-    if (r.path?.startsWith('/mod/')) return true;
-    return false;
-  });
-}
-
-function resolveInitialRoutes(): RouteRecordRaw[] {
-  if (isAdminConsoleSpa()) return allRoutes;
-  if (isSandbox) return filterSandboxRoutes(allRoutes);
-  if (isPlatformShellModeEnabled()) return filterPlatformShellRoutes(allRoutes);
-  return allRoutes;
-}
-
-const routes = resolveInitialRoutes();
+const routes = resolveInitialRoutes(allRoutes);
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes
 });
-
 router.beforeEach(async (to, _from, next) => {
+  let provisionalDesktopEntry = false
   if (to.name === 'duty-roster-graph') {
     const nextView = normalizeDutyRosterGraphView(to.query.view);
     const currentView = String(Array.isArray(to.query.view) ? to.query.view[0] : to.query.view || '').trim().toLowerCase();
@@ -668,10 +620,16 @@ router.beforeEach(async (to, _from, next) => {
     try {
       const { useAccountProfileStore } = await import('@/stores/accountProfile');
       const profile = useAccountProfileStore();
-      if (!profile.loaded) {
+      const useSessionHint = !profile.loaded && (
+        hasRecentEnterpriseSessionHint() || await consumeDesktopSessionBootstrapHint()
+      )
+      if (useSessionHint) {
+        provisionalDesktopEntry = true
+        refreshDesktopSessionInBackground(router, profile, to.fullPath !== '/login' ? to.fullPath : '/')
+      } else if (!profile.loaded) {
         await profile.refreshFromServer();
       }
-      if (profile.isAdminAccount && to.name !== 'login') {
+      if (!provisionalDesktopEntry && profile.isAdminAccount && to.name !== 'login') {
         try {
           const { authApi } = await import('@/api/auth');
           await authApi.logout().catch(() => undefined);
@@ -713,7 +671,11 @@ router.beforeEach(async (to, _from, next) => {
     try {
       const sku = await fetchProductSku();
       if (isEnterpriseEdition(sku)) {
-        const valid = await validateEnterpriseSessionCached();
+        const useSessionHint = isDesktopShell() && provisionalDesktopEntry
+        if (useSessionHint) {
+          provisionalDesktopEntry = true
+        }
+        const valid = useSessionHint ? true : await validateEnterpriseSessionCached();
         if (!valid) {
           next({
             name: 'login',
@@ -724,10 +686,17 @@ router.beforeEach(async (to, _from, next) => {
         try {
           const { useAccountProfileStore } = await import('@/stores/accountProfile');
           const profile = useAccountProfileStore();
-          if (!profile.loaded) {
+          if (provisionalDesktopEntry && !profile.loaded) {
+            refreshDesktopSessionInBackground(router, profile, to.fullPath !== '/login' ? to.fullPath : '/')
+          } else if (!profile.loaded) {
             await profile.refreshFromServer();
           }
-          if (!isAdminConsoleSpa() && profile.isAdminAccount && to.name !== 'login') {
+          if (
+            !provisionalDesktopEntry &&
+            !isAdminConsoleSpa() &&
+            profile.isAdminAccount &&
+            to.name !== 'login'
+          ) {
             // 非桌面：网页企业壳把 admin 会话导向独立管理端；桌面已在上方拒入
             if (isDesktopShell()) {
               try {
@@ -776,6 +745,13 @@ router.beforeEach(async (to, _from, next) => {
       });
       return;
     }
+  }
+
+  // Do not turn an existing desktop user into a first-run user while the
+  // background validation and tenant preference hydration are still running.
+  if (provisionalDesktopEntry) {
+    next()
+    return
   }
 
   if (

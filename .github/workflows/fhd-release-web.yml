@@ -9,6 +9,11 @@ on:
         description: "Release version"
         required: true
         default: "1.0.0.0"
+      frontend_run_id:
+        description: "Run ID of the orchestrator's build-frontend job producing the shared xcagi-vue-dist artifact"
+        required: false
+        default: ""
+        type: string
   # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml (gated on
   # verify-version-anchors, then dispatches this workflow) — avoids the double-run.
 
@@ -25,10 +30,55 @@ defaults:
     working-directory: FHD
 
 jobs:
+  # 网页端实际服务路径：把共享 vue-dist（与桌面端内嵌同一份）发布到 update 站。
+  # 生效后网页端与桌面端是同一份前端产物，彻底消除"网页≠桌面"。
+  publish-frontend:
+    if: ${{ inputs.frontend_run_id != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download shared vue-dist
+        uses: actions/download-artifact@v4
+        with:
+          name: xcagi-vue-dist
+          path: FHD/templates/vue-dist
+          run-id: ${{ inputs.frontend_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Assert shared vue-dist present (fail closed)
+        run: |
+          test -f FHD/templates/vue-dist/index.html || {
+            echo "::error::Shared vue-dist missing from artifact (frontend_run_id=${{ inputs.frontend_run_id }})."
+            exit 1
+          }
+          echo "index=$(grep -oE 'index-[A-Za-z0-9_-]+\.js' FHD/templates/vue-dist/index.html | head -1)"
+      - name: Publish shared vue-dist to update 站
+        shell: bash
+        env:
+          FHD_VUE_DIST: ${{ github.workspace }}/FHD/templates/vue-dist
+          FHD_PUSH_HOST: ${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}
+          FHD_PUSH_USER: ${{ vars.FHD_PUSH_USER || 'root' }}
+          FHD_PUSH_SSH_KEY: ${{ secrets.FHD_PUSH_SSH_KEY || secrets.SERVER_SSH_KEY }}
+          FHD_RELEASE_CHANNEL: ${{ contains(github.ref, '-rc') && 'staging' || 'stable' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FHD_PUSH_SSH_KEY:-}" ]; then
+            echo "::warning::FHD_PUSH_SSH_KEY/SERVER_SSH_KEY missing; skipping vue-dist publish (web keeps current served version)."
+            exit 0
+          fi
+          bash FHD/scripts/deploy/fhd-push-frontend-dist.sh
+
   docker:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Download shared vue-dist (for frontend image)
+        if: ${{ inputs.frontend_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: xcagi-vue-dist
+          path: FHD/templates/vue-dist
+          run-id: ${{ inputs.frontend_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Compute lowercase image prefix
         run: echo "IMAGE_PREFIX=ghcr.io/$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
       - uses: docker/setup-buildx-action@v3
@@ -49,7 +99,9 @@ jobs:
       - name: Build and push frontend
         uses: docker/build-push-action@v6
         with:
-          context: FHD/frontend
+          # 上下文为 FHD/：镜像内直接 COPY 共享 templates/vue-dist（不再 vite build）。
+          # 非 tag 触发的 workflow_dispatch（无共享产物）时，改用上下文 FHD（含已构建 vue-dist 或退化为空）。
+          context: FHD
           file: FHD/frontend/Dockerfile
           push: true
           tags: |

@@ -90,6 +90,22 @@ export default [
     files: ['**/*.test.js', '**/*.spec.js', '**/*.test.ts', '**/*.spec.ts'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
+      // 防注水：禁止空断言占位（2026-08-01 清理 35 处 expect(true) 后上锁）
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.object.callee.name='expect'][callee.object.arguments.0.value=true][callee.property.name='toBe'][arguments.0.value=true]",
+          message:
+            '禁止空断言 expect(true).toBe(true)：请断言真实行为/状态，或删除该占位测试。',
+        },
+        {
+          selector:
+            "CallExpression[callee.object.callee.name='expect'][callee.object.arguments.0.value=true][callee.property.name='toBeTruthy']",
+          message:
+            '禁止空断言 expect(true).toBeTruthy()：请断言真实行为/状态，或删除该占位测试。',
+        },
+      ],
     },
   },
 ]

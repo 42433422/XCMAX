@@ -2,14 +2,29 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import logging
 import os
+import re
+import secrets
 import tempfile
+import threading
+from concurrent.futures import Future
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Body, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import (
+    APIRouter,
+    Body,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    UploadFile,
+)
 from pydantic import BaseModel, Field
 
 from modstore_server.catalog_store import (
@@ -17,21 +32,34 @@ from modstore_server.catalog_store import (
     get_package,
     list_packages,
     list_versions,
-    load_store,
     packages_path,
     promote_draft_to_stable,
 )
 from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
-from modstore_server.employee_config_v2 import extract_or_upgrade_v2_config, validate_v2_config
+from modstore_server.duty_roster import is_planned_duty_employee_pack
+from modstore_server.employee_config_v2 import (
+    extract_or_upgrade_v2_config,
+    validate_v2_config,
+)
 from modstore_server.industry_taxonomy import get_industry_tree
 from modstore_server.models import get_session_factory
 from modstore_server.vector_store import insert_embedding, query_similar
 
 router = APIRouter(prefix="/v1", tags=["catalog"])
+logger = logging.getLogger(__name__)
+_semantic_index_lock = threading.Lock()
+_semantic_index_future: Future[bool] | None = None
 
 
 def _is_customer_delivery_seed(row: Dict[str, Any] | None) -> bool:
     return str((row or {}).get("artifact") or "").strip().lower() == "customer_delivery_seed"
+
+
+def _catalog_cache_scope() -> str:
+    """Separate cache entries for each configured catalog store root."""
+
+    path = str(packages_path().resolve())
+    return hashlib.sha1(path.encode()).hexdigest()[:12]
 
 
 def _invalidate_catalog_list_caches(pkg_id: Any = None, version: Any = None) -> None:
@@ -44,19 +72,169 @@ def _invalidate_catalog_list_caches(pkg_id: Any = None, version: Any = None) -> 
     from modstore_server import cache
 
     if pkg_id and version:
-        cache.delete(f"catalog:v1:pkg:{pkg_id}:{version}")
+        cache.delete(f"catalog:v1:{_catalog_cache_scope()}:pkg:{pkg_id}:{version}")
+
+
+def _semantic_index_timeout_seconds() -> float:
+    raw = (os.environ.get("MODSTORE_CATALOG_INDEX_TIMEOUT_SECONDS") or "5").strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 5.0
+    return min(max(value, 0.05), 30.0)
+
+
+def _index_catalog_item(record: Dict[str, Any]) -> bool:
+    """Run one best-effort semantic-index attempt in a worker thread."""
+
+    embedding_text = f"{record.get('name', '')} {record.get('description', '')}"
+    if not embedding_text.strip():
+        return False
+    try:
+        item_id = f"{record.get('id')}:{record.get('version')}"
+        insert_embedding(
+            item_id=item_id,
+            text=embedding_text,
+            metadata={
+                "pkg_id": record.get("id"),
+                "version": record.get("version"),
+                "artifact": record.get("artifact", "mod"),
+                "industry": record.get("industry", "通用"),
+            },
+        )
+    except Exception:
+        logger.exception(
+            "catalog semantic indexing degraded pkg_id=%s version=%s",
+            record.get("id"),
+            record.get("version"),
+        )
+        return False
+    return True
+
+
+def _start_semantic_index(record: Dict[str, Any]) -> Future[bool] | None:
+    """Start at most one in-flight index attempt per API worker process."""
+
+    global _semantic_index_future
+    with _semantic_index_lock:
+        if _semantic_index_future is not None and not _semantic_index_future.done():
+            return None
+        future: Future[bool] = Future()
+        _semantic_index_future = future
+
+        def run() -> None:
+            future.set_result(_index_catalog_item(dict(record)))
+
+        threading.Thread(
+            target=run,
+            name="catalog-semantic-index",
+            daemon=True,
+        ).start()
+        return future
+
+
+async def _try_index_catalog_item(record: Dict[str, Any]) -> bool:
+    """Bound optional semantic indexing without delaying durable publication.
+
+    Catalog publication and its public download are the source of truth.  A
+    vector provider outage or first-run model download must not keep the upload
+    request open until the publisher times out.  A timed-out attempt continues
+    in one daemon thread, while concurrent uploads fail open instead of starting
+    more downloads.  A later idempotent retry starts a fresh attempt after the
+    prior one finishes.
+    """
+
+    future = _start_semantic_index(record)
+    if future is None:
+        logger.warning(
+            "catalog semantic indexing already in flight; publication continues pkg_id=%s version=%s",
+            record.get("id"),
+            record.get("version"),
+        )
+        return False
+    timeout = _semantic_index_timeout_seconds()
+    try:
+        return await asyncio.wait_for(
+            asyncio.shield(asyncio.wrap_future(future)),
+            timeout=timeout,
+        )
+    except asyncio.TimeoutError:
+        logger.warning(
+            "catalog semantic indexing exceeded %.2fs; publication continues pkg_id=%s version=%s",
+            timeout,
+            record.get("id"),
+            record.get("version"),
+        )
+        return False
 
 
 def _upload_token() -> str:
     return (os.environ.get("MODSTORE_CATALOG_UPLOAD_TOKEN") or "").strip()
 
 
+def _auto_publish_token() -> str:
+    return (os.environ.get("MODSTORE_AUTO_PUBLISH_TOKEN") or "").strip()
+
+
+def _authorize_upload(authorization: Optional[str]) -> str:
+    supplied = (authorization or "").strip()
+    upload = _upload_token()
+    auto = _auto_publish_token()
+    if auto and secrets.compare_digest(supplied, f"Bearer {auto}"):
+        return "auto_publish"
+    if upload and secrets.compare_digest(supplied, f"Bearer {upload}"):
+        return "upload"
+    if not upload and not auto:
+        raise HTTPException(503, "未配置 Catalog 上传凭证，拒绝写入")
+    raise HTTPException(401, "无效的上传凭证")
+
+
 def _require_upload(authorization: Optional[str]) -> None:
-    tok = _upload_token()
-    if not tok:
-        raise HTTPException(503, "未配置 MODSTORE_CATALOG_UPLOAD_TOKEN，拒绝写入")
-    if (authorization or "").strip() != f"Bearer {tok}":
-        raise HTTPException(401, "无效的上传凭证")
+    _authorize_upload(authorization)
+
+
+def _validated_automation_provenance(value: Any, *, package_sha256: str) -> Dict[str, str]:
+    if not isinstance(value, dict):
+        raise HTTPException(400, "自动上架必须提供 automation_provenance")
+    repository = str(value.get("source_repository") or "").strip()
+    expected_repository = (
+        os.environ.get("MODSTORE_AUTO_PUBLISH_REPOSITORY") or "42433422/XCMAX"
+    ).strip()
+    source_sha = str(value.get("source_sha") or "").strip()
+    workflow_run_id = str(value.get("workflow_run_id") or "").strip()
+    claimed_sha = str(value.get("package_sha256") or "").strip()
+    if repository != expected_repository:
+        raise HTTPException(403, "自动上架来源仓库不在允许范围")
+    if not re.fullmatch(r"[0-9a-f]{40}", source_sha):
+        raise HTTPException(400, "automation_provenance.source_sha 无效")
+    if not re.fullmatch(r"[1-9][0-9]*", workflow_run_id):
+        raise HTTPException(400, "automation_provenance.workflow_run_id 无效")
+    if not secrets.compare_digest(claimed_sha, package_sha256):
+        raise HTTPException(400, "automation_provenance.package_sha256 与上传包不一致")
+    return {
+        "source_repository": repository,
+        "source_sha": source_sha,
+        "workflow_run_id": workflow_run_id,
+        "package_sha256": package_sha256,
+    }
+
+
+def _upsert_market_listing(saved: Dict[str, Any], *, public_listing: bool) -> None:
+    from modstore_server.models import CatalogItem
+
+    sf = get_session_factory()
+    with sf() as db:
+        upsert_catalog_item_from_xc_package_dict(db, saved, author_id=None)
+        row = db.query(CatalogItem).filter(CatalogItem.pkg_id == str(saved.get("id"))).first()
+        if row and public_listing:
+            row.is_public = True
+            row.compliance_status = "approved"
+            row.delist_reason = ""
+        db.commit()
+    if public_listing:
+        from modstore_server.market_catalog_api import _invalidate_market_catalog_caches
+
+        _invalidate_market_catalog_caches()
 
 
 def _params_hash(*args: Any) -> str:
@@ -73,7 +251,10 @@ def api_list_packages(
 ):
     from modstore_server import cache
 
-    ck = f"catalog:v1:packages:list:{_params_hash(artifact, q, limit, offset)}"
+    ck = (
+        f"catalog:v1:{_catalog_cache_scope()}:packages:list:"
+        f"{_params_hash(artifact, q, limit, offset)}"
+    )
     cached = cache.get_json(ck)
     if cached is not None:
         return cached
@@ -90,7 +271,7 @@ def api_list_packages(
 def api_get_package(pkg_id: str, version: str):
     from modstore_server import cache
 
-    ck = f"catalog:v1:pkg:{pkg_id}:{version}"
+    ck = f"catalog:v1:{_catalog_cache_scope()}:pkg:{pkg_id}:{version}"
     cached = cache.get_json(ck)
     if cached is not None:
         return cached
@@ -115,7 +296,8 @@ class PromoteBody(BaseModel):
 
 
 @router.post(
-    "/packages/{pkg_id}/promote", summary="将 draft 版本复制为新的 stable（semver patch+1）"
+    "/packages/{pkg_id}/promote",
+    summary="将 draft 版本复制为新的 stable（semver patch+1）",
 )
 def api_promote_package(
     pkg_id: str,
@@ -147,7 +329,7 @@ def api_index_json():
     # Key includes file mtime so a new upload naturally produces a new cache key;
     # old key expires in 60 s, effectively rate-limiting filesystem reads.
     mtime = int(p.stat().st_mtime) if p.is_file() else 0
-    ck = f"catalog:v1:index:{mtime}"
+    ck = f"catalog:v1:{_catalog_cache_scope()}:index:{mtime}"
     cached = cache.get_json(ck)
     if cached is not None:
         return cached
@@ -184,7 +366,7 @@ async def api_upload_package(
     metadata: str = Form(..., description="JSON 字符串，字段与 PackageRecord 一致"),
     file: UploadFile = File(...),
 ):
-    _require_upload(authorization)
+    auth_mode = _authorize_upload(authorization)
     import json
 
     try:
@@ -196,7 +378,21 @@ async def api_upload_package(
     if not (str(meta.get("id") or "").strip() and str(meta.get("version") or "").strip()):
         raise HTTPException(400, "metadata 须含 id 与 version")
     rec: Dict[str, Any] = dict(meta)
+    requested_public_listing = rec.pop("public_listing", False)
+    if not isinstance(requested_public_listing, bool):
+        raise HTTPException(400, "public_listing 必须为 boolean")
+    public_listing = requested_public_listing
+    if public_listing and auth_mode != "auto_publish":
+        raise HTTPException(403, "公开上架必须使用自动发布专用凭证")
     artifact = str(rec.get("artifact") or "").strip().lower()
+    pkg_id = str(rec.get("id") or "").strip()
+    version = str(rec.get("version") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", pkg_id):
+        raise HTTPException(400, "metadata.id 格式无效")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,31}", version):
+        raise HTTPException(400, "metadata.version 格式无效")
+    if public_listing and is_planned_duty_employee_pack(pkg_id, artifact):
+        raise HTTPException(403, "编制内运维员工禁止公开上架")
     has_explicit_v2 = isinstance(rec.get("employee_config_v2"), dict)
     is_employee_upload = artifact == "employee_pack" or has_explicit_v2
     v2cfg = extract_or_upgrade_v2_config(rec) if is_employee_upload else {}
@@ -218,6 +414,12 @@ async def api_upload_package(
         raise HTTPException(400, "file 须为 .xcmod / .xcemp / .zip")
 
     raw_bytes = await file.read()
+    raw_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+    automation_provenance: Dict[str, str] | None = None
+    if public_listing:
+        automation_provenance = _validated_automation_provenance(
+            rec.get("automation_provenance"), package_sha256=raw_sha256
+        )
     audit_meta: Dict[str, Any] = {}
     art = str(rec.get("artifact") or "").strip().lower()
     if art in ("mod", "employee_pack"):
@@ -230,12 +432,43 @@ async def api_upload_package(
 
     from modstore_server.package_sandbox_audit import run_package_audit_async
 
+    existing = get_package(str(rec.get("id")), str(rec.get("version")))
+    existing_review = existing.get("review") if isinstance(existing, dict) else None
+    if (
+        existing
+        and str(existing.get("sha256") or "") == raw_sha256
+        and isinstance(existing_review, dict)
+        and bool((existing_review.get("summary") or {}).get("pass"))
+    ):
+        if automation_provenance is not None:
+            existing["automation_provenance"] = automation_provenance
+            existing = append_package(existing, None)
+        _upsert_market_listing(existing, public_listing=public_listing)
+        _invalidate_catalog_list_caches(existing.get("id"), existing.get("version"))
+        semantic_indexed = await _try_index_catalog_item(existing)
+        return {
+            "ok": True,
+            "idempotent": True,
+            "package": existing,
+            "review": existing_review,
+            "public_listing": public_listing,
+            "semantic_indexed": semantic_indexed,
+        }
+
     rep = await run_package_audit_async(raw_bytes, audit_meta if audit_meta else None)
     if not rep.get("ok"):
         raise HTTPException(400, str(rep.get("error") or "包审核失败"))
     summary = rep.get("summary") or {}
     if not summary.get("pass"):
         raise HTTPException(400, "五维审核未通过，禁止上架")
+    review = {
+        "summary": summary,
+        "dimensions": rep.get("dimensions") or {},
+        "functional_tests": rep.get("functional_tests") or [],
+    }
+    rec["review"] = review
+    if automation_provenance is not None:
+        rec["automation_provenance"] = automation_provenance
 
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td) / (file.filename or "upload.bin")
@@ -246,34 +479,26 @@ async def api_upload_package(
             align_errs = package_manifest_alignment_errors(rec, tmp)
             if align_errs:
                 raise HTTPException(
-                    400, "员工包 metadata 与包内 manifest 不一致: " + "; ".join(align_errs)
+                    400,
+                    "员工包 metadata 与包内 manifest 不一致: " + "; ".join(align_errs),
                 )
         saved = append_package(rec, tmp)
 
-    if str(saved.get("artifact") or "").strip().lower() == "employee_pack":
-        sf2 = get_session_factory()
-        with sf2() as db:
-            upsert_catalog_item_from_xc_package_dict(db, saved, author_id=None)
-            db.commit()
+    _upsert_market_listing(saved, public_listing=public_listing)
 
     # Invalidate all list/index caches; individual detail keys expire on their own TTL.
     _invalidate_catalog_list_caches(saved.get("id"), saved.get("version"))
 
-    embedding_text = f"{saved.get('name', '')} {saved.get('description', '')}"
-    if embedding_text.strip():
-        item_id = f"{saved.get('id')}:{saved.get('version')}"
-        insert_embedding(
-            item_id=item_id,
-            text=embedding_text,
-            metadata={
-                "pkg_id": saved.get("id"),
-                "version": saved.get("version"),
-                "artifact": saved.get("artifact", "mod"),
-                "industry": saved.get("industry", "通用"),
-            },
-        )
+    semantic_indexed = await _try_index_catalog_item(saved)
 
-    return {"ok": True, "package": saved}
+    return {
+        "ok": True,
+        "idempotent": False,
+        "package": saved,
+        "review": review,
+        "public_listing": public_listing,
+        "semantic_indexed": semantic_indexed,
+    }
 
 
 @router.get("/catalog/industries", summary="获取标准化行业分类树")

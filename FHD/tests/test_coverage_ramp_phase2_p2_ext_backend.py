@@ -1,10 +1,9 @@
 """COVERAGE_RAMP Phase 2 (p2-p2-ext): conversation context/intent, chart_data,
-wechat_contact_store, deepseek/rasa, product_repository, semantic_chunker semantic path."""
+deepseek/rasa, product_repository, semantic_chunker semantic path."""
 
 from __future__ import annotations
 
 import json
-import sqlite3
 from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -17,12 +16,8 @@ from app.domain.context.session_context import (
     _sanitize_untrusted_context_line,
     format_runtime_context_for_llm,
 )
-from app.infrastructure.persistence.product_repository_impl import SQLAlchemyProductRepository
-from app.infrastructure.persistence.wechat_contact_store_impl import (
-    _read_rows_from_contact_db,
-    resolve_decrypt_contact_db_path,
-)
 from app.infrastructure.rag.semantic_chunker import SemanticChunker
+from app.infrastructure.repositories.product_repository_impl import SQLAlchemyProductRepository
 from app.services.conversation.context import ContextMixin, ConversationContext
 from app.services.conversation.intent import IntentMixin
 from app.services.kitten_report.chart_data_service import ChartDataService
@@ -137,45 +132,60 @@ def test_analysis_save_service_roundtrip(tmp_path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# wechat_contact_store sqlite helper
-# ---------------------------------------------------------------------------
-
-
-def test_read_rows_from_contact_db(tmp_path) -> None:
-    db_path = tmp_path / "contact.db"
-    conn = sqlite3.connect(db_path)
-    conn.execute(
-        "CREATE TABLE contact (username TEXT, nick_name TEXT, remark TEXT, is_in_chat_room INT, delete_flag INT)"
-    )
-    conn.execute("INSERT INTO contact VALUES ('u1', '张三', '备注', 0, 0)")
-    conn.commit()
-    conn.close()
-    rows = _read_rows_from_contact_db(str(db_path), limit=10)
-    assert len(rows) == 1
-    assert rows[0][1] == "张三"
-
-
-def test_resolve_decrypt_contact_db_path_env(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    db_file = tmp_path / "c.db"
-    db_file.write_text("")
-    monkeypatch.setenv("WECHAT_CONTACT_DB_PATH", str(db_file))
-    with patch("app.infrastructure.plugins.wechat_plugin.get_wechat_plugin") as mock_plugin:
-        mock_plugin.return_value.is_available.return_value = False
-        assert resolve_decrypt_contact_db_path() == str(db_file)
-
-
-# ---------------------------------------------------------------------------
 # product_repository helpers
 # ---------------------------------------------------------------------------
 
 
-def test_product_repository_product_to_dict() -> None:
-    from app.db.models.product import Product
+def _mock_db_ctx(mock_db):
+    @contextmanager
+    def _ctx():
+        yield mock_db
 
-    product = Product(id=1, name="漆A", price=12.5, quantity=3)
+    return _ctx()
+
+
+def test_product_repository_find_all_dict_output() -> None:
+    """新版仓储 find_all_dict 返回 (list[dict], total) 元组，字典字段对齐新版契约。
+
+    旧版私有辅助 _product_to_dict 已删除，改为直接断言字典输出字段。
+    """
+    from datetime import datetime
+
     repo = SQLAlchemyProductRepository()
-    out = repo._product_to_dict(product)
-    assert out.get("product_name") == "漆A" or out.get("name") == "漆A"
+    mock_model = MagicMock()
+    mock_model.id = 1
+    mock_model.model_number = "MOD-001"
+    mock_model.name = "漆A"
+    mock_model.specification = "100x200"
+    mock_model.price = 12.5
+    mock_model.quantity = 3
+    mock_model.description = "描述"
+    mock_model.category = "电子"
+    mock_model.brand = "品牌A"
+    mock_model.unit = "个"
+    mock_model.is_active = 1
+    mock_model.created_at = datetime(2026, 1, 1)
+    mock_model.updated_at = datetime(2026, 1, 2)
+
+    mock_db = MagicMock()
+    mock_query = MagicMock()
+    mock_query.filter.return_value = mock_query
+    mock_query.order_by.return_value = mock_query
+    mock_query.limit.return_value = mock_query
+    mock_query.offset.return_value = mock_query
+    mock_query.count.return_value = 1
+    mock_query.all.return_value = [mock_model]
+    mock_db.query.return_value = mock_query
+
+    with patch("app.infrastructure.repositories.product_repository_impl.get_db") as mock_get_db:
+        mock_get_db.return_value = _mock_db_ctx(mock_db)
+        dicts, total = repo.find_all_dict(page=1, per_page=20)
+
+    assert isinstance((dicts, total), tuple)
+    assert total == 1
+    assert dicts[0]["name"] == "漆A"
+    assert dicts[0]["model_number"] == "MOD-001"
+    assert dicts[0]["price"] == 12.5
 
 
 # ---------------------------------------------------------------------------

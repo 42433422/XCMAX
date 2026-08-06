@@ -112,7 +112,6 @@ async function replaceWithRefreshTarget(router: Router): Promise<void> {
 function findGlobKeyForMod(modId: string): string | undefined {
   const suffixes = [
     `/mods/${modId}/frontend/routes.js`,
-    `/mods-admin-runtime/${modId}/frontend/routes.js`,
   ];
   const norm = (s: string) => s.replace(/\\/g, '/');
   return Object.keys(modRouteLoaders).find((k) => {
@@ -123,7 +122,7 @@ function findGlobKeyForMod(modId: string): string | undefined {
 
 function modIdFromGlobKey(key: string): string | null {
   const norm = key.replace(/\\/g, '/');
-  const m = norm.match(/\/(?:mods|mods-admin-runtime)\/([^/]+)\/frontend\/routes\.js$/);
+  const m = norm.match(/\/(?:mods)\/([^/]+)\/frontend\/routes\.js$/);
   return m?.[1] ? m[1] : null;
 }
 
@@ -161,7 +160,7 @@ export async function registerModRoutes(
       if (import.meta.env.DEV && !missingBundleNotifiedModIds.has(mod_id)) {
         missingBundleNotifiedModIds.add(mod_id);
         console.info(
-          `[mods] Skip mod "${mod_id}": no frontend routes bundle (expected mods/${mod_id}/frontend/routes.js or mods-admin-runtime/${mod_id}/frontend/routes.js)`
+          `[mods] Skip mod "${mod_id}": no frontend routes bundle (expected mods/${mod_id}/frontend/routes.js)`
         );
       }
       continue;

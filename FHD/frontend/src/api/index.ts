@@ -20,7 +20,6 @@ export { ordersApi } from './orders';
 export { printApi } from './print';
 export { ocrApi } from './ocr';
 export { excelApi, normalizeTemplateDtoList } from './excel';
-export { wechatApi } from './wechat';
 export { mediaApi } from './media';
 export { systemApi } from './system';
 export { intentPackagesApi } from './intentPackages';

@@ -63,7 +63,6 @@ export const SHELL_VIEW_TITLE_BASE: Record<string, string> = {
   'shipment-records': '业务记录',
   customers: '组织管理',
   'data-sources': '数据来源',
-  'wechat-contacts': '数据来源',
   print: '模板与打印',
   'printer-list': '打印机列表',
   'template-preview': '模板库',

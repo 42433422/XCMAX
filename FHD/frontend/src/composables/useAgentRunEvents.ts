@@ -3,10 +3,7 @@ import agentRunsApi from '@/api/agentRuns'
 import type { TaskItem } from './useChatPersistence'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { normalizeTaskDisplayText } from '@/utils/chatTaskLabels'
-import {
-  buildAgentRunTraceFromEvents,
-  isTrivialChatTrace,
-} from '@/utils/agentRunTraceModel'
+import { hasAgentRunExecutionEvidence, hasConfirmedAgentRunExecution } from '@/utils/agentRunExecution'
 
 type UpsertTask = (
   item: Partial<TaskItem> & { id: string; title: string; source: TaskItem['source']; type: string },
@@ -14,6 +11,7 @@ type UpsertTask = (
 
 export interface UseAgentRunEventSyncOptions {
   upsertTask: UpsertTask
+  removeTask?: (id: string) => void
   getLastAiMessageRef?: () => string
 }
 
@@ -62,11 +60,13 @@ function eventLabel(event: AgentRunEvent): string {
 }
 
 function statusFromEvents(events: AgentRunEvent[]): TaskItem['status'] {
-  if (events.some((event) => event.event_type === 'run.completed')) return 'success'
   if (events.some((event) => ['run.failed', 'tool.failed', 'planner.blocked', 'step.blocked'].includes(event.event_type))) {
     return 'failed'
   }
   if (events.some((event) => event.event_type === 'step.waiting_user')) return 'queued'
+  if (events.some((event) => event.event_type === 'run.completed')) {
+    return hasConfirmedAgentRunExecution(events) ? 'success' : 'failed'
+  }
   return events.length ? 'running' : 'queued'
 }
 
@@ -87,11 +87,15 @@ export function buildAgentRunTaskUpdate(params: {
   userText?: string
   events?: AgentRunEvent[]
   messageRef?: string
-}): Partial<TaskItem> & { id: string; title: string; source: TaskItem['source']; type: string } {
+}): (Partial<TaskItem> & { id: string; title: string; source: TaskItem['source']; type: string }) | null {
   const events = asArray<AgentRunEvent>(params.events)
+  if (!hasAgentRunExecutionEvidence(events)) return null
   const last = events[events.length - 1]
   const status = statusFromEvents(events)
-  const stage = last ? eventLabel(last) : '等待执行状态'
+  const unconfirmedCompletion = status === 'failed'
+    && events.some((event) => event.event_type === 'run.completed')
+    && !hasConfirmedAgentRunExecution(events)
+  const stage = unconfirmedCompletion ? '未确认执行结果' : (last ? eventLabel(last) : '等待执行状态')
   const errorEvent = [...events].reverse().find((event) =>
     ['run.failed', 'tool.failed', 'planner.blocked', 'step.blocked'].includes(event.event_type),
   )
@@ -105,7 +109,9 @@ export function buildAgentRunTaskUpdate(params: {
     progress: progressFromEvents(events),
     stage,
     summary: status === 'success' ? '智能任务执行完成' : stage,
-    error: errorEvent ? eventLabel(errorEvent) : '',
+    error: errorEvent
+      ? eventLabel(errorEvent)
+      : (status === 'failed' ? '未收到可确认的工具执行结果' : ''),
     messageRef: params.messageRef,
     payload: {
       agentRunId: params.runId,
@@ -118,8 +124,32 @@ export function buildAgentRunTaskUpdate(params: {
 
 export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
   const lastEventByRunId = new Map<string, string>()
-  /** 累积 events（按 runId），保证流式轮询时 trace 不丢历史 */
   const eventsByRunId = new Map<string, AgentRunEvent[]>()
+
+  function mergeEvents(runId: string, incoming: AgentRunEvent[]): AgentRunEvent[] {
+    const known = eventsByRunId.get(runId) || []
+    const seen = new Set(known.map((event) => asString(event.event_id).trim()).filter(Boolean))
+    const merged = [...known]
+    incoming.forEach((event) => {
+      const eventId = asString(event.event_id).trim()
+      if (eventId && seen.has(eventId)) return
+      if (eventId) seen.add(eventId)
+      merged.push(event)
+    })
+    eventsByRunId.set(runId, merged)
+    return merged
+  }
+
+  function syncTaskPanel(runId: string, userText: string, events: AgentRunEvent[]): void {
+    const update = buildAgentRunTaskUpdate({
+      runId,
+      userText,
+      events,
+      messageRef: options.getLastAiMessageRef?.() || '',
+    })
+    if (update) options.upsertTask(update)
+    else options.removeTask?.(`agent_${runId}`)
+  }
 
   async function syncAgentRunEvents(runId: string, userText = ''): Promise<void> {
     const normalizedRunId = String(runId || '').trim()
@@ -130,39 +160,16 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
         normalizedRunId,
         afterEventId ? { after_event_id: afterEventId } : {},
       )
-      const fresh = Array.isArray(response?.data) ? response.data : []
-      // 累积：第一次全量，后续增量追加
-      const accumulated = afterEventId
-        ? [...(eventsByRunId.get(normalizedRunId) || []), ...fresh]
-        : fresh
-      if (accumulated.length) {
-        eventsByRunId.set(normalizedRunId, accumulated)
-      }
-      const last = accumulated[accumulated.length - 1]
+      const incoming = Array.isArray(response?.data) ? response.data : []
+      if (!incoming.length) return
+      const events = mergeEvents(normalizedRunId, incoming)
+      const last = incoming[incoming.length - 1]
       if (last?.event_id) {
         lastEventByRunId.set(normalizedRunId, last.event_id)
       }
-      if (!accumulated.length) return
-      // 闲聊无工具、或单次成功只读工具：不灌「智能任务」侧栏 / 气泡剧场
-      const previewTrace = buildAgentRunTraceFromEvents(accumulated, normalizedRunId)
-      if (isTrivialChatTrace(previewTrace)) return
-      options.upsertTask(buildAgentRunTaskUpdate({
-        runId: normalizedRunId,
-        userText,
-        events: accumulated,
-        messageRef: options.getLastAiMessageRef?.() || '',
-      }))
+      syncTaskPanel(normalizedRunId, userText, events)
     } catch {
-      const fallbackEvents = eventsByRunId.get(normalizedRunId) || []
-      if (!fallbackEvents.length) return
-      const previewTrace = buildAgentRunTraceFromEvents(fallbackEvents, normalizedRunId)
-      if (isTrivialChatTrace(previewTrace)) return
-      options.upsertTask(buildAgentRunTaskUpdate({
-        runId: normalizedRunId,
-        userText,
-        events: fallbackEvents,
-        messageRef: options.getLastAiMessageRef?.() || '',
-      }))
+      options.removeTask?.(`agent_${normalizedRunId}`)
     }
   }
 

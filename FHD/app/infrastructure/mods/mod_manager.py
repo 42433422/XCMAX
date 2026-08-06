@@ -1,6 +1,4 @@
-"""
-Mod Manager - Core manager for scanning, loading, and managing mods
-"""
+"""Core manager for scanning, loading, and managing MODs."""
 
 import importlib
 import importlib.util
@@ -22,12 +20,14 @@ from .artifact_package import (
     validate_bundle_manifest,
     validate_employee_pack_manifest,
 )
+from .employee_pack_runtime import ensure_employee_pack_api_ready
+from .enterprise_entitlement_restore import restore_entitlements_from_session_id
 from .manifest import ModMetadata, parse_manifest, validate_dependencies
+from .missing_local_state import clear_mod_missing_locally, mark_mod_missing_locally
 from .package import ModPackage, ModPackageError, ModSignatureError
 from .registry import get_mod_registry
 
 logger = logging.getLogger(__name__)
-
 _MOD_API_FAILURE_RETRY_AT: dict[str, float] = {}
 _MOD_API_FAILURE_BACKOFF_SECONDS = 15.0
 
@@ -39,18 +39,14 @@ def is_mods_disabled() -> bool:
 
 
 def _default_mods_root() -> str:
-    """
-    解析 mods 根目录。
-    源码树：app/infrastructure/mods/mod_manager.py；默认 mods 目录为 XCAGI/mods（由 run.py 设置 XCAGI_MODS_ROOT）
-    若包装进 site-packages，上一级不再是项目根，需回退到环境变量或从 cwd 向上查找。
-    """
-    logger.info("[_default_mods_root] Resolving mods root, CWD: %s", os.getcwd())
+    """Resolve the MOD root across source and packaged layouts."""
+    logger.debug("[_default_mods_root] Resolving mods root, CWD: %s", os.getcwd())
 
     env = (os.environ.get("XCAGI_MODS_ROOT") or os.environ.get("XCAGI_MODS_DIR") or "").strip()
     if env:
         p = os.path.abspath(env)
         if os.path.isdir(p):
-            logger.info("[_default_mods_root] Mods root from env: %s", p)
+            logger.debug("[_default_mods_root] Mods root from env: %s", p)
             return p
         logger.warning(
             "[_default_mods_root] XCAGI_MODS_ROOT / XCAGI_MODS_DIR is set but not a directory: %s",
@@ -61,29 +57,29 @@ def _default_mods_root() -> str:
     from_pkg_layout = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(file_here)))), "mods"
     )
-    logger.info(
+    logger.debug(
         "[_default_mods_root] Checking package-relative path: %s, exists: %s",
         from_pkg_layout,
         os.path.isdir(from_pkg_layout),
     )
     if os.path.isdir(from_pkg_layout):
-        logger.info("[_default_mods_root] Mods root (next to app package): %s", from_pkg_layout)
+        logger.debug("[_default_mods_root] Mods root (next to app package): %s", from_pkg_layout)
         return from_pkg_layout
 
     cwd_mods = os.path.join(os.getcwd(), "mods")
-    logger.info(
+    logger.debug(
         "[_default_mods_root] Checking CWD mods: %s, exists: %s", cwd_mods, os.path.isdir(cwd_mods)
     )
     if os.path.isdir(cwd_mods):
-        logger.info("[_default_mods_root] Mods root (./mods from cwd): %s", cwd_mods)
+        logger.debug("[_default_mods_root] Mods root (./mods from cwd): %s", cwd_mods)
         return cwd_mods
 
     cur = os.path.abspath(os.getcwd())
     for i in range(8):
         trial = os.path.join(cur, "mods")
-        logger.info("[_default_mods_root] Walking up: %s, exists: %s", trial, os.path.isdir(trial))
+        logger.debug("[_default_mods_root] Walking up: %s, exists: %s", trial, os.path.isdir(trial))
         if os.path.isdir(trial):
-            logger.info("[_default_mods_root] Mods root (walk up from cwd): %s", trial)
+            logger.debug("[_default_mods_root] Mods root (walk up from cwd): %s", trial)
             return trial
         parent = os.path.dirname(cur)
         if parent == cur:
@@ -99,14 +95,11 @@ def _default_mods_root() -> str:
 
 
 def _repo_layout_mods_candidates() -> list[str]:
-    """
-    开发树常见双份 mods（FHD/mods 与 XCAGI/mods）。
-    部署/桥接包仅含 xcagi-* 时，主 XCAGI_MODS_ROOT 可能缺客户 Mod（如 taiyangniao-pro）。
-    """
+    """Find additional repository MOD roots missing from a packaged deployment."""
     file_here = os.path.abspath(__file__)
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(file_here))))
     out: list[str] = []
-    for rel in ("mods", "mods-admin-runtime", os.path.join("XCAGI", "mods")):
+    for rel in ("mods", os.path.join("XCAGI", "mods")):
         p = os.path.abspath(os.path.join(repo_root, rel))
         if os.path.isdir(p) and p not in out:
             out.append(p)
@@ -176,7 +169,7 @@ def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
     if path is None:
         raise FileNotFoundError(f"Mod {mod_id} backend file missing")
     safe = "".join(c if c.isalnum() else "_" for c in mod_id)
-    # 同一 mod_id 可能来自 mods/ 与 mods-admin-runtime/ 等不同物理路径；须纳入缓存键避免错用旧模块。
+    # 同一 mod_id 可能来自 mods/ 与 XCAGI/mods/ 等不同物理路径；须纳入缓存键避免错用旧模块。
     import hashlib
 
     path_digest = hashlib.sha256(os.path.normpath(os.path.abspath(mod_path)).encode()).hexdigest()[
@@ -1130,11 +1123,16 @@ def register_employee_pack_routes(
         return False
     if normalize_artifact(data) != ARTIFACT_EMPLOYEE_PACK:
         return False
+    from app.mod_sdk.product_plane import employee_pack_allowed_in_runtime
+
+    resolved_id = str(data.get("id") or pid).strip()
+    if not employee_pack_allowed_in_runtime(resolved_id, data):
+        logger.debug("skip control-plane employee route in enterprise client: %s", resolved_id)
+        return False
     backend = data.get("backend") or {}
     entry = str(backend.get("entry") or "").strip()
     if not entry:
         return False
-    resolved_id = str(data.get("id") or pid).strip()
     if not resolved_id:
         return False
     try:
@@ -1291,34 +1289,8 @@ def _register_single_mod_http_routes(
 
 
 def _restore_entitlements_from_session_id(session_id: str | None) -> None:
-    """无市场 token 时从 session 行恢复权益（供 Mod API 按需挂载）。"""
-    sid = (session_id or "").strip()
-    if not sid:
-        return
-    try:
-        from app.enterprise.mod_entitlements import (
-            _augment_entitled_for_username,
-            _session_username_for_entitlements,
-            get_cached_entitled_client_mod_ids,
-            get_cached_market_identity,
-            restore_entitlements_from_session_row,
-            set_session_entitlements,
-        )
-
-        restore_entitlements_from_session_row(sid)
-        uname = _session_username_for_entitlements(sid)
-        market_user_id, market_username = get_cached_market_identity()
-        cached = _augment_entitled_for_username(
-            uname, get_cached_entitled_client_mod_ids() or set()
-        )
-        if cached:
-            set_session_entitlements(
-                market_user_id=market_user_id,
-                market_username=uname or market_username,
-                entitled_client_mod_ids=cached,
-            )
-    except RECOVERABLE_ERRORS:
-        logger.debug("restore entitlements from session failed", exc_info=True)
+    """恢复企业 Mod 权益（委托给 dedicated 模块，保留旧调用方兼容）。"""
+    restore_entitlements_from_session_id(session_id)
 
 
 def _mod_allowed_for_api_load(mod_id: str, session_id: str | None = None) -> bool:
@@ -1356,7 +1328,19 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
         return False
 
     mm = get_mod_manager()
+    employee_pack_ready = ensure_employee_pack_api_ready(
+        mm,
+        mid,
+        registered_pack_ids=_employee_pack_routes_registered,
+        register_routes=register_employee_pack_routes,
+    )
+    if employee_pack_ready is not None:
+        return employee_pack_ready
     if mid not in mm._loaded_mods:
+        if mm.resolve_mod_directory(mid) is None:
+            mark_mod_missing_locally(mid)
+            return False
+        clear_mod_missing_locally(mid)
         retry_at = _MOD_API_FAILURE_RETRY_AT.get(mid, 0.0)
         if retry_at > time.monotonic():
             logger.debug(

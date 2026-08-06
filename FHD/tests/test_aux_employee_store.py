@@ -46,6 +46,5 @@ def test_lan_gate_ai_employee_manifest_and_store_row() -> None:
     inject_aux_employee_pack_rows(available, set())
     ids = {r["id"] for r in available}
     assert "lan-gate-ai-employee" in ids
-    assert "wechat-contacts-ai-employee" in ids
     row = next(r for r in available if r["id"] == "lan-gate-ai-employee")
     assert row.get("store_collection") == "workflow_employee"

@@ -639,9 +639,10 @@ describe('tutorial store – 覆盖率补齐', () => {
       const s = useTutorialStore()
       s.startTutorial({ track: 'basic' })
       s.currentStepIndex = 999
-      s.markCurrentStepClicked()
-      // 不应崩溃
-      expect(true).toBe(true)
+      // 不应崩溃，且状态保持不变
+      const before = { ...s.testResults }
+      expect(() => s.markCurrentStepClicked()).not.toThrow()
+      expect(s.testResults).toEqual(before)
     })
 
     it('blockOutsideClick 在 observe 步骤时为空操作', () => {

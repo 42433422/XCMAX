@@ -33,14 +33,7 @@ if ! python3 "$VERIFY"; then
 fi
 deploy_emit verify ok
 
-VERSION="$(
-  python3 - <<'PY' "$FHD_ROOT/pyproject.toml" 2>/dev/null || echo "1.0.0.0"
-import re, sys
-text = open(sys.argv[1], encoding="utf-8").read()
-m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
-print(m.group(1) if m else "1.0.0.0")
-PY
-)"
+VERSION="$(. "$SCRIPT_DIR/lib/version.sh" && product_version)"
 
 GIT_SHA="${FHD_RELEASE_GIT_SHA:-local}"
 if [[ "$GIT_SHA" == "local" ]] && command -v git >/dev/null 2>&1 && git -C "$FHD_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then

@@ -145,6 +145,7 @@ vi.mock('@/utils/productSku', () => ({
 }))
 
 vi.mock('@/utils/authSessionCache', () => ({
+  hasRecentEnterpriseSessionHint: vi.fn(() => false),
   validateEnterpriseSessionCached: mockValidateEnterpriseSession,
 }))
 
@@ -331,12 +332,6 @@ describe('router/index 覆盖率补齐', () => {
       await router.push('/model-payment')
       expect(router.currentRoute.value.name).toBe('settings')
       expect(router.currentRoute.value.query.section).toBe('model-payment')
-    })
-
-    it('/wechat-contacts 重定向到 data-sources 带 source query', async () => {
-      await router.push('/wechat-contacts')
-      expect(router.currentRoute.value.name).toBe('data-sources')
-      expect(router.currentRoute.value.query.source).toBe('wechat_local_db')
     })
 
     it('/other-tools 重定向到 workflow-employee-space', async () => {

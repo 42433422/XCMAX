@@ -160,7 +160,7 @@ describe('modRouteGlob variants', () => {
     }
   })
 
-  it('modRouteGlob.full uses wildcard glob over mods and mods-admin-runtime', () => {
+  it('modRouteGlob.full uses wildcard glob over SSOT mods/', () => {
     const keys = Object.keys(modRouteGlobFull)
     expect(keys.length).toBeGreaterThanOrEqual(0)
     for (const k of keys) {

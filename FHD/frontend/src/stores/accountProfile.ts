@@ -32,7 +32,7 @@ function syncTenantScopedStoresFromProfile(
   localUserId: number | null,
   accountKind: AccountKind,
   marketUsername: string,
-) {
+): Promise<void> {
   const input = buildScopeInput(
     tenantId,
     marketUserId,
@@ -41,7 +41,7 @@ function syncTenantScopedStoresFromProfile(
     marketUsername,
   );
   setRuntimeTenantStorageScopeInput(input);
-  refreshTenantScopedClientStores(input);
+  return refreshTenantScopedClientStores(input);
 }
 
 export const useAccountProfileStore = defineStore('accountProfile', () => {
@@ -75,7 +75,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     return '';
   });
 
-  function applySessionFields(data: Record<string, unknown>) {
+  function applySessionFields(data: Record<string, unknown>): Promise<void> {
     const kind = String(data.account_kind || 'enterprise').trim();
     if (kind === 'personal' || kind === 'enterprise' || kind === 'admin') {
       accountKind.value = kind;
@@ -117,7 +117,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     marketMembershipTier.value =
       mmt === null || mmt === undefined || mmt === '' ? null : String(mmt).trim();
     loaded.value = true;
-    syncTenantScopedStoresFromProfile(
+    return syncTenantScopedStoresFromProfile(
       tenantId.value,
       marketUserId.value,
       localUserId.value,
@@ -126,17 +126,17 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     );
   }
 
-  function applyFromMeData(data: Record<string, unknown> | null | undefined) {
-    if (!data || typeof data !== 'object') return;
-    applySessionFields(data);
+  function applyFromMeData(data: Record<string, unknown> | null | undefined): Promise<void> {
+    if (!data || typeof data !== 'object') return Promise.resolve();
+    return applySessionFields(data);
   }
 
-  function applyFromLoginPayload(raw: Record<string, unknown>) {
+  function applyFromLoginPayload(raw: Record<string, unknown>): Promise<void> {
     const payload =
       raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data)
         ? (raw.data as Record<string, unknown>)
         : raw;
-    applySessionFields(payload);
+    return applySessionFields(payload);
   }
 
   async function refreshFromServer() {
@@ -156,7 +156,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
       }
       const res = await authApi.getCurrentUser();
       if (res?.success && res.data) {
-        applyFromMeData(res.data as Record<string, unknown>);
+        await applyFromMeData(res.data as Record<string, unknown>);
         return;
       }
       invalidateEnterpriseSessionCache();

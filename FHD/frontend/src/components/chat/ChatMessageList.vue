@@ -7,7 +7,12 @@
         :class="['message', msg.role]"
         :style="{ minHeight: messageHeights.get(idx) ? messageHeights.get(idx) + 'px' : 'auto' }"
       >
+        <ChatTypingIndicator
+          v-if="msg.role === 'ai' && msg.streamingShell"
+          label="正在思考…"
+        />
         <div
+          v-else
           class="message-html"
           v-html="
             msg.role === 'ai'
@@ -15,6 +20,35 @@
               : sanitizeChatBubbleHtml(msg.content)
           "
         ></div>
+        <details
+          v-if="msg.role === 'ai' && (msg.toolProgressLabel || msg.executionProgress?.length)"
+          class="execution-timeline"
+          :open="!!msg.streamingShell"
+        >
+          <summary>
+            <i
+              v-if="msg.streamingShell"
+              class="fa fa-spinner fa-spin execution-timeline__spinner"
+              aria-hidden="true"
+            ></i>
+            <span class="execution-timeline__current">
+              {{ msg.toolProgressLabel || latestExecutionLabel(msg) }}
+            </span>
+            <span v-if="msg.executionProgress?.length" class="execution-timeline__count">
+              {{ msg.executionProgress.length }} 步
+            </span>
+          </summary>
+          <ol v-if="msg.executionProgress?.length" class="execution-timeline__list">
+            <li
+              v-for="(item, progressIndex) in msg.executionProgress"
+              :key="`${item.at}-${progressIndex}`"
+              :class="`is-${item.status}`"
+            >
+              <span class="execution-timeline__marker">{{ executionMarker(item.status) }}</span>
+              <span>{{ item.label }}</span>
+            </li>
+          </ol>
+        </details>
         <div
           v-if="msg.role === 'ai' && msg.shipmentDownloadUrl"
           class="message-shipment-actions"
@@ -118,6 +152,7 @@ import type { ChatMessage } from '@/composables/useChatMessages'
 import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown } from '@/utils/sanitizeHtml'
 import { aiMarkdownSourceFromContent } from '@/utils/chatBubbleDisplay'
 import ChatApprovalInlineCard from '@/components/chat/ChatApprovalInlineCard.vue'
+import ChatTypingIndicator from '@/components/chat/ChatTypingIndicator.vue'
 
 useI18n()
 
@@ -148,6 +183,20 @@ defineEmits<{
 
 const messagesHostRef = ref<HTMLElement | null>(null)
 
+function latestExecutionLabel(message: ChatMessage): string {
+  const list = message.executionProgress || []
+  return list[list.length - 1]?.label || '查看执行过程'
+}
+
+function executionMarker(status: string): string {
+  if (status === 'success') return '✓'
+  if (status === 'failed') return '×'
+  if (status === 'cancelled') return '■'
+  if (status === 'waiting') return 'Ⅱ'
+  if (status === 'retrying') return '↻'
+  return '●'
+}
+
 watch(messagesHostRef, (el) => {
   const bag = props.chatMessagesRef
   if (!bag) return
@@ -173,5 +222,95 @@ watch(messagesHostRef, (el) => {
 .chat-loading-spinner {
   color: var(--xc-color-primary, #0d47a1);
   font-size: 14px;
+}
+
+.execution-timeline {
+  margin-top: 10px;
+  border-top: 1px dashed #d1d5db;
+  padding-top: 8px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.execution-timeline summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.execution-timeline summary::-webkit-details-marker {
+  display: none;
+}
+
+.execution-timeline__spinner {
+  color: var(--xc-color-primary, #0d47a1);
+  font-size: 12px;
+}
+
+.execution-timeline__current {
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+}
+
+.execution-timeline__count {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #6b7280;
+  background: #f3f4f6;
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.execution-timeline__list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.execution-timeline__list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.5;
+}
+
+.execution-timeline__marker {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.execution-timeline__list li.is-success .execution-timeline__marker {
+  color: #16a34a;
+}
+
+.execution-timeline__list li.is-failed .execution-timeline__marker {
+  color: #dc2626;
+}
+
+.execution-timeline__list li.is-cancelled .execution-timeline__marker {
+  color: #6b7280;
+}
+
+.execution-timeline__list li.is-waiting .execution-timeline__marker {
+  color: #d97706;
+}
+
+.execution-timeline__list li.is-retrying .execution-timeline__marker {
+  color: #d97706;
+}
+
+.execution-timeline__list li.is-running .execution-timeline__marker {
+  color: var(--xc-color-primary, #0d47a1);
 }
 </style>

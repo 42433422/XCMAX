@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from app.middleware.auth_rate_limit import AuthRateLimitMiddleware
 from app.middleware.global_rate_limit import GlobalRateLimitMiddleware
-from app.utils import rate_limiter as rate_limiter_mod
+from app.utils.resilience import rate_limiter as rate_limiter_mod
 
 
 @pytest.fixture(autouse=True)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from .self_maintenance_para_merge_remediation import (
@@ -19,6 +20,7 @@ __all__ = [
     "external_review_remediation_prompt",
     "para_merge_conflict_continues_on_rejected_branch",
     "qa_executor_retry_prompt",
+    "structured_report_remediation_prompt",
 ]
 
 
@@ -130,6 +132,114 @@ def external_merge_remediation_prompt(resume_candidate: Any) -> str:
         f"Reason: {remediation_reason or '(missing)'}. "
         f"Rejected reference branch: {rejected_branch or '(missing)'}. "
         f"Exact failure detail: {feedback or '(missing)'}"
+    )
+
+
+def _structured_gate_for_remediation_item(
+    memory: Any,
+    matched_item: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Resolve structured_gate for a hold even when last_policy_decision is stale."""
+
+    embedded = matched_item.get("structured_gate")
+    if isinstance(embedded, dict):
+        return embedded
+
+    hold_reason = str(matched_item.get("reason") or "").strip()
+    selected_run_id = str(matched_item.get("run_id") or "").strip()
+    selected_task_id = str(
+        matched_item.get("task_id") or matched_item.get("para_task_id") or ""
+    ).strip()
+
+    recent_runs = memory.get("recent_runs") if isinstance(memory, dict) else None
+    if isinstance(recent_runs, list):
+        for run in reversed(recent_runs):
+            if not isinstance(run, dict):
+                continue
+            run_gate = run.get("structured_gate")
+            if not isinstance(run_gate, dict):
+                continue
+            if selected_run_id and str(run.get("run_id") or "").strip() == selected_run_id:
+                return run_gate
+            if selected_task_id and str(run.get("para_task_id") or "").strip() == selected_task_id:
+                return run_gate
+
+    decision = memory.get("last_policy_decision") if isinstance(memory, dict) else {}
+    if isinstance(decision, dict) and str(decision.get("reason") or "").strip() == hold_reason:
+        decision_gate = decision.get("structured_gate")
+        if isinstance(decision_gate, dict):
+            return decision_gate
+
+    return None
+
+
+def _matched_structured_remediation_open_item(
+    memory: Any,
+    resume_candidate: dict[str, Any],
+) -> dict[str, Any] | None:
+    open_items = memory.get("open_items") if isinstance(memory, dict) else None
+    if not isinstance(open_items, list):
+        return None
+    selected_branch = str(resume_candidate.get("branch") or "").strip()
+    selected_run_id = str(resume_candidate.get("failed_run_id") or "").strip()
+    selected_task_id = str(resume_candidate.get("para_task_id") or "").strip()
+    for item in reversed(open_items):
+        if not isinstance(item, dict) or item.get("kind") != "automated_remediation":
+            continue
+        reason = str(item.get("reason") or "").strip()
+        if not (reason.startswith("structured_review_") or reason.startswith("structured_qa_")):
+            continue
+        item_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
+        if (
+            (selected_branch and str(item.get("branch") or "").strip() == selected_branch)
+            or (selected_run_id and str(item.get("run_id") or "").strip() == selected_run_id)
+            or (selected_task_id and item_task_id == selected_task_id)
+        ):
+            return item
+    return None
+
+
+def structured_report_remediation_prompt(memory: Any, resume_candidate: Any) -> str:
+    """Surface report-only review/QA blocking findings for code remediation."""
+
+    candidate = resume_candidate if isinstance(resume_candidate, dict) else {}
+    if candidate.get("reason") != "resume_automated_remediation_candidate":
+        return ""
+    matched_item = _matched_structured_remediation_open_item(memory, candidate)
+    hold_reason = str((matched_item or {}).get("reason") or "").strip()
+    if not hold_reason.startswith("structured_review_") and not hold_reason.startswith(
+        "structured_qa_"
+    ):
+        return ""
+    structured_gate = (
+        _structured_gate_for_remediation_item(memory, matched_item)
+        if isinstance(matched_item, dict)
+        else None
+    )
+    if not isinstance(structured_gate, dict):
+        return ""
+    review = (
+        structured_gate.get("review") if isinstance(structured_gate.get("review"), dict) else {}
+    )
+    qa = structured_gate.get("qa") if isinstance(structured_gate.get("qa"), dict) else {}
+    review_blocking = review.get("blocking_findings")
+    qa_blocking = qa.get("blocking_findings")
+    failed_dimensions = structured_gate.get("failed_dimensions")
+    evidence = {
+        "failed_dimensions": failed_dimensions if isinstance(failed_dimensions, list) else [],
+        "hold_reason": hold_reason,
+        "qa_blocking_findings": qa_blocking if isinstance(qa_blocking, list) else [],
+        "qa_verdict": str(qa.get("verdict") or "").strip(),
+        "review_blocking_findings": (review_blocking if isinstance(review_blocking, list) else []),
+        "review_max_severity": str(review.get("max_severity") or "").strip(),
+    }
+    return (
+        "\n\n=== STRUCTURED REVIEW/QA REMEDIATION ===\n"
+        "The independent report-only review/QA employee blocked the previous loop with "
+        f"hold reason `{hold_reason}`. Address every blocking finding below with the "
+        "smallest production fix plus focused regression tests. Do not weaken safety "
+        "gates, submit marker-only deltas, or fabricate review/QA evidence. "
+        f"Structured gate evidence: {json.dumps(evidence, ensure_ascii=False, sort_keys=True)}"
     )
 
 

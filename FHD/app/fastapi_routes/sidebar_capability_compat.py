@@ -55,16 +55,6 @@ def data_sources_alias() -> dict[str, Any]:
     """数据来源页实际走微信/私有库适配器；此处返回可发现的来源目录。"""
     sources = [
         {
-            "id": "wechat_local_db",
-            "name": "微信本地数据库",
-            "kind": "wechat",
-            "route": "/mod/xcagi-erp-domain-bridge/data-sources?source=wechat_local_db",
-            "apis": [
-                "/api/wechat_contacts/decrypt_status",
-                "/api/mod/xcagi-erp-domain-bridge/wechat/contacts",
-            ],
-        },
-        {
             "id": "private_db_assistant",
             "name": "私有库助手",
             "kind": "private_db",

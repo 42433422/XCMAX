@@ -752,6 +752,33 @@
       "market_visible": true,
       "created_at": "2026-07-28T21:14:36.579437+00:00",
       "source_commit_sha": "1ed712a2a2ce91c81f375a527dac75524cfd53c1"
+    },
+    {
+      "id": "autonomy-gap-analyst",
+      "name": "autonomy-gap-analyst",
+      "version": "1.0.1",
+      "description": "Analyze the founder-autonomy scorecard evidence and identify the highest-priority capability gap without fabricating completion.",
+      "department": "quality",
+      "artifact": "employee_pack",
+      "release_channel": "stable",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "sha256": "4b96705f7b2e3c78d071ff9f41e9c60020ab9188876bd2cc0a8842b2a0e2ac5c",
+      "file_size": 3805,
+      "stored_filename": "autonomy-gap-analyst-1.0.1.xcemp",
+      "employee_scope": "store",
+      "employee_source": "autonomous_evolution",
+      "is_duty_employee": false,
+      "is_store_employee": true,
+      "market_visible": true,
+      "created_at": "2026-08-01T19:02:42.075153+00:00",
+      "source_commit_sha": "24ec08bbf2a696404a64156de42690cfcc1d972f"
     }
   ]
 }

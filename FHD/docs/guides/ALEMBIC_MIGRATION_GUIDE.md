@@ -6,6 +6,36 @@
 
 ---
 
+## 📌 现状与公约（2026-08-01 更新，以此节为准）
+
+下文「迁移脚本列表」等章节为 2026-03 旧快照，**已过时**。当前真实状态：
+
+- **迁移链**：`alembic/versions/` 下单一活链，根为 `2026_06_22_baseline`（squashed baseline，
+  `upgrade()` 内 `Base.metadata.create_all` 覆盖全部 ORM 表 + PG-only raw SQL 表），
+  其后依次为 `2026_06_25_mobile_outbox` → `2026_07_05_employee_run_logs` →
+  `2026_07_21_workflow_persistence` → `2026_07_24_shipment_etl_fingerprints`（head）。
+  归档前的旧迁移保留在 `alembic/versions/_archive_pre_baseline_2026_06_22/`（Alembic 不加载）。
+- **既有库接入**：历史库执行一次性 `python -m alembic stamp 2026_06_22_baseline --purge`
+  重定基线，之后正常 `alembic upgrade head`。
+
+**治理公约（强制）**：
+
+1. **新模型 / 新字段必须同时提交迁移脚本**：改 `app/db/models/` 后，
+   `DATABASE_URL=sqlite:////tmp/xcagi_autogen.db alembic stamp head &&
+    DATABASE_URL=sqlite:////tmp/xcagi_autogen.db alembic revision --autogenerate -m '<说明>'`，
+   人工审查生成脚本（删噪音、确认无意外 DROP），与模型改动同 PR 提交。
+2. **auto-init（`app/db/init_db.py` 的 `create_all`）保留为桌面端（SQLite）运行时兜底**，
+   不是 schema 演进手段——演进必须走迁移。
+3. **生产 PostgreSQL 的 schema 变更统一通过 Alembic 迁移链管理**。
+4. **防漂移门禁**：
+   - 本地/CI：`python scripts/dev/check_schema_drift.py`（临时 SQLite 库 `upgrade head`
+     后 autogenerate 对比模型，漂移则打印缺失表/列并退出码 1）；
+   - CI 权威 parity：`fhd-alembic-ssot.yml`（`alembic upgrade head` + `alembic check`）；
+   - `fhd-ci-cd.yml` backend-test 含 `[观察期] Schema drift check` 步骤（观察期内
+     `continue-on-error: true`，稳定后转硬门禁）。
+
+---
+
 ## 📋 概述
 
 本项目已配置完整的 Alembic 数据库迁移体系，包含：

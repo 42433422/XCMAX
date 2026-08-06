@@ -13,7 +13,7 @@ const basePlan: IndustryBaselinePlan = {
   industry_package: { mod_id: 'coating-industry', product_name: '涂料行业包' },
   groups: [],
   required_mod_ids: ['xcagi-erp-domain-bridge'],
-  optional_mod_ids: ['wechat-contacts-ai-employee'],
+  optional_mod_ids: [],
   industry_mod_ids: ['coating-industry'],
   account_custom_mod_ids: [],
   custom_mod_ids: ['coating-industry'],
@@ -27,7 +27,7 @@ const basePlan: IndustryBaselinePlan = {
 describe('workflowEmployeeScope', () => {
   it('does not treat arbitrary market employee packs as workflow carriers', () => {
     expect(isWorkflowCarrierModId('artifact-generate-ai-employee')).toBe(false)
-    expect(isWorkflowCarrierModId('wechat-contacts-ai-employee')).toBe(true)
+    expect(isWorkflowCarrierModId('wechat-contacts-ai-employee')).toBe(false)
   })
 
   it('filters registry entries to enterprise package mods', () => {
@@ -60,7 +60,7 @@ describe('workflowEmployeeScope', () => {
       industry_package: { mod_id: 'attendance-industry', product_name: '考勤行业包' },
       groups: [],
       required_mod_ids: ['xcagi-erp-domain-bridge', 'xcagi-planner-excel-tools'],
-      optional_mod_ids: ['wechat-contacts-ai-employee'],
+      optional_mod_ids: [],
       industry_mod_ids: ['attendance-industry'],
       account_custom_mod_ids: ['taiyangniao-pro'],
       custom_mod_ids: ['attendance-industry', 'taiyangniao-pro'],

@@ -14,7 +14,7 @@ from app.auth_decorators import get_current_user, login_required
 from app.http.json_response import json_response
 from app.http.request_context import get_current_http_request
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.rate_limiter import check_rate_limit
+from app.utils.resilience.rate_limiter import check_rate_limit
 
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",

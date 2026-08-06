@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -54,13 +55,30 @@ def _catalog_pack(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path
 def test_verify_catalog_package_reads_exact_archive_and_runtime_contract(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _catalog_pack(tmp_path, monkeypatch)
+    catalog, _ = _catalog_pack(tmp_path, monkeypatch)
+    archive = catalog / "files" / "pilot-low-risk-clerk-1.0.0.xcemp"
+    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
 
-    result = verify_catalog_package("pilot-low-risk-clerk", "1.0.0")
+    result = verify_catalog_package(
+        "pilot-low-risk-clerk",
+        "1.0.0",
+        market_lookup=lambda _package_id, _version: {
+            "catalog_item_id": 42,
+            "package_id": "pilot-low-risk-clerk",
+            "version": "1.0.0",
+            "artifact": "employee_pack",
+            "stored_filename": "pilot-low-risk-clerk-1.0.0.xcemp",
+            "package_sha256": digest,
+            "is_public": True,
+            "compliance_status": "approved",
+        },
+    )
 
     assert result["catalog_readback_verified"] is True
     assert result["installability_verified"] is True
     assert result["runtime_contract_verified"] is True
+    assert result["market_listing_verified"] is True
+    assert result["market_catalog_item_id"] == 42
     assert len(result["package_sha256"]) == 64
 
 
@@ -75,6 +93,19 @@ def test_verify_catalog_package_rejects_digest_drift(
         verify_catalog_package("pilot-low-risk-clerk", "1.0.0")
 
 
+def test_verify_catalog_package_rejects_missing_public_market_listing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _catalog_pack(tmp_path, monkeypatch)
+
+    with pytest.raises(EvolutionDeploymentReceiptError, match="market_listing_not_found"):
+        verify_catalog_package(
+            "pilot-low-risk-clerk",
+            "1.0.0",
+            market_lookup=lambda _package_id, _version: {},
+        )
+
+
 def test_record_evolution_receipt_is_strong_and_idempotent(monkeypatch) -> None:
     verified = {
         "package_id": "pilot-low-risk-clerk",
@@ -84,6 +115,8 @@ def test_record_evolution_receipt_is_strong_and_idempotent(monkeypatch) -> None:
         "catalog_readback_verified": True,
         "installability_verified": True,
         "runtime_contract_verified": True,
+        "market_catalog_item_id": 42,
+        "market_listing_verified": True,
     }
     monkeypatch.setattr(
         "modstore_server.modstore_evolution_deploy_receipts.verify_catalog_package",
@@ -117,7 +150,9 @@ def test_record_evolution_receipt_is_strong_and_idempotent(monkeypatch) -> None:
     assert len(events) == 1
 
 
-def test_source_bound_pack_records_one_autonomous_code_qa_deploy_run(monkeypatch) -> None:
+def test_source_bound_pack_records_one_autonomous_code_qa_deploy_run(
+    monkeypatch,
+) -> None:
     verified = {
         "package_id": "autonomy-gap-analyst",
         "version": "1.0.0",
@@ -127,6 +162,8 @@ def test_source_bound_pack_records_one_autonomous_code_qa_deploy_run(monkeypatch
         "catalog_readback_verified": True,
         "installability_verified": True,
         "runtime_contract_verified": True,
+        "market_catalog_item_id": 43,
+        "market_listing_verified": True,
     }
     monkeypatch.setattr(
         "modstore_server.modstore_evolution_deploy_receipts.verify_catalog_package",

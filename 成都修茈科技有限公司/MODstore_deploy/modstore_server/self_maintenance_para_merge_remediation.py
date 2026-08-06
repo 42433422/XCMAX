@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Mapping, Optional
 
@@ -35,6 +36,7 @@ _GIT_CONTENT_CONFLICT_MARKERS = ("cannot update pr branch due to conflicts",)
 _PR_CLOSED_WITHOUT_MERGE_MARKERS = ("closed without merge",)
 # merge_worker.mjs throws when update-branch leaves zero PR changed files.
 _CHANGED_FILES_EMPTY_MARKERS = ("changed-files-empty",)
+_MANUAL_MERGE_VETO_TOKEN = "manual-veto-active:"
 _MODSTORE_SERVER_SCOPE = "成都修茈科技有限公司/MODstore_deploy/modstore_server/"
 _ABSORPTION_ELIGIBLE_REASONS = frozenset(
     {
@@ -70,6 +72,66 @@ def operational_merge_reason_candidates(detail: str) -> list[str]:
     return candidates
 
 
+def reconcile_para_merge_failure_state(
+    memory: Dict[str, Any],
+    changed: bool,
+    detail: str,
+    source: str,
+    task_id: str,
+    task_status: str,
+) -> tuple[str, str, list[Dict[str, Any]], bool]:
+    """Classify a merge failure and migrate a same-task manual veto atomically."""
+
+    manual_veto = _MANUAL_MERGE_VETO_TOKEN in str(detail or "").lower()
+    if manual_veto:
+        reason = "manual_merge_veto_active"
+    elif source == "ai-review-veto":
+        reason = "para_ai_review_rejected"
+    elif task_status == "merge_conflict":
+        reason = "para_merge_conflict"
+    else:
+        reason = "para_merge_task_failed"
+    item_kind = "human_strategy_approval" if manual_veto else "automated_remediation"
+
+    open_items = memory.get("open_items")
+    if not isinstance(open_items, list):
+        open_items = []
+    stale_same_task = manual_veto and any(
+        isinstance(item, dict)
+        and str(item.get("task_id") or item.get("para_task_id") or "") == task_id
+        and (item.get("kind") != item_kind or item.get("reason") != reason)
+        for item in open_items
+    )
+    if not stale_same_task:
+        return reason, item_kind, open_items, changed
+
+    closed_at = datetime.now(timezone.utc).isoformat()
+    kept_items: list[Dict[str, Any]] = []
+    newly_closed: list[Dict[str, Any]] = []
+    for item in open_items:
+        if not isinstance(item, dict):
+            continue
+        item_task_id = str(item.get("task_id") or item.get("para_task_id") or "")
+        if item_task_id == task_id:
+            newly_closed.append(
+                {
+                    "actor": "para_merge_reconciler",
+                    "closed_at": closed_at,
+                    "original_item": item,
+                    "resolution_reason": "reclassified_as_manual_merge_veto_active",
+                }
+            )
+        else:
+            kept_items.append(item)
+    closed_items = memory.get("closed_items")
+    if not isinstance(closed_items, list):
+        closed_items = []
+    memory["open_items"] = kept_items[-50:]
+    memory["closed_items"] = (closed_items + newly_closed)[-200:]
+    memory["updated_at"] = closed_at
+    return reason, item_kind, memory["open_items"], True
+
+
 def is_branch_preserving_para_merge_failure_detail(detail: str) -> bool:
     """True when merge-worker failed without invalidating the candidate branch delta."""
 
@@ -93,7 +155,14 @@ def para_merge_conflict_continues_on_rejected_branch(detail: str) -> bool:
 def resume_from_clean_baseline_for_para_merge(reason: str, detail: str) -> bool:
     """Whether automated remediation must restart from the configured clean base."""
 
-    if reason in _ABSORPTION_ELIGIBLE_REASONS and (
+    normalized = str(reason or "").strip()
+    if normalized == "para_ai_review_rejected":
+        # AI review vetoes always restart from the clean base unless merge-worker
+        # already proved the rejected branch has no remaining executable delta.
+        if is_changed_files_empty_detail(detail) or is_pr_closed_without_merge_detail(detail):
+            return False
+        return True
+    if normalized.startswith("para_merge_") and (
         is_branch_preserving_para_merge_failure_detail(detail)
         or is_changed_files_empty_detail(detail)
         or is_pr_closed_without_merge_detail(detail)

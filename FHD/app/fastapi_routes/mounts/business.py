@@ -132,6 +132,23 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     )
     _mount(
         registry,
+        "order_bridge_webhook",
+        lambda: __import__("app.fastapi_routes.order_event_webhook", fromlist=["router"]).router,
+        priority=10,
+    )
+    _mount(
+        registry,
+        "xcmax_private_delivery_admin",
+        lambda: (
+            __import__(
+                "app.fastapi_routes.xcmax_private_delivery_admin_routes",
+                fromlist=["router"],
+            ).router
+        ),
+        priority=10,
+    )
+    _mount(
+        registry,
         "founder_autonomy",
         lambda: __import__("app.fastapi_routes.founder_autonomy_api", fromlist=["router"]).router,
         priority=10,

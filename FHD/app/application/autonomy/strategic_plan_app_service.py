@@ -148,7 +148,9 @@ async def build_quarterly_plan(
     chat = None
     if use_llm:
         try:
+            # 组装：导入 registry 触发其向 domain LLMPort 的自注册
             from app.domain.neuro.cognition.llm_port import get_llm_port
+            from app.infrastructure.llm.providers import registry as _llm_registry  # noqa: F401
 
             chat = get_llm_port()
         except RECOVERABLE_ERRORS:

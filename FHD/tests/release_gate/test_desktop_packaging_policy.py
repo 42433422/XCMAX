@@ -25,7 +25,7 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
     assert "personal   = 'minimal'" in ps_sync
     assert "enterprise = 'full'" in ps_sync
 
-    for script in (sh_backend, sh_windows, sh_thin):
+    for script in (sh_windows, sh_thin):
         assert (
             "VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full"
         ) in script
@@ -33,6 +33,18 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
         # 桌面包不得构建 admin-console
         assert "admin-console && npm run build" not in script
         assert "(cd admin-console && npm run build)" not in script
+
+    # build-backend.sh 自 4c724dae8 起把前端构建委托给 build-frontend.sh（SSOT 单点构建），
+    # enterprise=full 的构建由 build-frontend.sh 保证，这里校验委托关系与 admin-console 禁令。
+    sh_frontend = (scripts / "build-frontend.sh").read_text(encoding="utf-8")
+    assert "build-frontend.sh" in sh_backend
+    assert (
+        'VITE_XCAGI_PRODUCT_SKU="${VITE_SKU}" VITE_XCAGI_EDITION=full npm run build:full'
+        in sh_frontend
+    )
+    assert "VITE_XCAGI_PRODUCT_SKU=enterprise npm run build" not in sh_backend
+    assert "admin-console && npm run build" not in sh_backend
+    assert "(cd admin-console && npm run build)" not in sh_backend
 
     assert "admin-console" not in ps_backend or "不构建 admin-console" in ps_backend
     assert 'Push-Location (Join-Path $Root "admin-console")' not in ps_backend
@@ -251,7 +263,7 @@ def test_macos_after_pack_uses_unambiguous_developer_id_and_fails_closed() -> No
     assert "log(`native sign warn" not in after_pack
 
 
-def test_desktop_package_includes_commercial_safe_pdf_runtime() -> None:
+def test_desktop_package_includes_commercial_safe_office_employee_runtimes() -> None:
     spec = (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(encoding="utf-8")
     pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     entrypoint = (REPO_ROOT / "XCAGI" / "run_fastapi.py").read_text(encoding="utf-8")
@@ -269,7 +281,11 @@ def test_desktop_package_includes_commercial_safe_pdf_runtime() -> None:
     assert '"reportlab>=5,<6"' in pyproject
     assert "PyMuPDF" not in pyproject
     assert "collect_submodules(module)" in spec
-    assert 'for module in ["pypdf", "reportlab"]' in spec
+    assert 'for module in ["docx", "openpyxl", "pptx", "xlsxwriter", "pypdf", "reportlab"]' in spec
+    assert '"app.application.office_plaintext_generate"' in spec
+    assert '"python-docx>=1.1.0"' in pyproject
+    assert "openpyxl==3.1.5" in pyproject
+    assert '"python-pptx>=1.0.2"' in pyproject
     assert "import fitz" not in employee_runtime
     assert "from pypdf import PdfReader" in employee_runtime
     assert "from reportlab.pdfgen import canvas" in employee_runtime
@@ -326,7 +342,13 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
     assert 'for staged_file in "${package_stage}"/*' in installer
     assert 'ditto --norsrc "${staged_file}" "${out_dir}/$(basename "${staged_file}")"' in installer
     assert 'ditto --norsrc "${package_stage}" "${out_dir}"' not in installer
-    assert "electron-builder --mac zip" in installer
+    assert "--config .electron-builder.release.yml --mac zip" in installer
+    assert 'builder_config="desktop/.electron-builder.release.yml"' in installer
+    assert (
+        'sed "s/__XCAGI_PRODUCT_VERSION__/${VERSION}/g" desktop/electron-builder.yml > "${builder_config}"'
+        in installer
+    )
+    assert 'rm -f "${builder_config}"' in installer
     assert "electron-builder --mac dmg" not in installer
     assert "scripts/package/create-mac-dmg.sh" in installer
     assert "hdiutil create" in dmg_builder

@@ -1,7 +1,7 @@
 # SSOT 索引（唯一真相源登记表）
 
 > **本文件为 SSOT 索引的 SSOT**。任何文档声称 SSOT 必须在此登记。
-> 最后更新：2026-07-24
+> 最后更新：2026-07-31
 
 ## 登记规则
 
@@ -28,6 +28,7 @@
 | ssot-framework（SSOT 框架） | [SSOT_FRAMEWORK.md](SSOT_FRAMEWORK.md) | 统一注册表 ssot.yaml + ssot_cli 编排器 |
 | claimed-vs-actual（对外声称 vs 实测） | [CLAIMED_VS_ACTUAL.md](CLAIMED_VS_ACTUAL.md) | 对外声称 vs 实测对照，由 scripts/dev/gen_claimed_vs_actual.py 自动生成 |
 | coverage-metrics（覆盖率唯一数字） | [../metrics/coverage-dual-summary.json](../metrics/coverage-dual-summary.json) | 覆盖率唯一数字 SSOT（committed_head / 棘轮 floor / 目标 / 退役口径） |
+| coverage-behavior-gate（行为覆盖率门禁决策） | [adr/0001-coverage-behavior-gate.md](adr/0001-coverage-behavior-gate.md) | ADR-0001 决策记录：覆盖率门禁从全量口径切换为行为口径（排除 coverage_ramp stub）；`fail_under` 保留为全量行 floor SSOT |
 | account（产品端与账号体系） | [account_system_ssot.md](account_system_ssot.md) | 产品端矩阵、账号体系四维真相源（身份/行业/会员/账号等级）、行业/Persona 派生、字段写入权限矩阵、多租户隔离与账户安全；**定价文档 SSOT** |
 | pricing-enterprise（企业宿主授权价） | [../config/saas_plans.json](../config/saas_plans.json) | 体验 ¥99；永久授权 ¥49,999–¥999,999；收银与 `model-payment` / 企业开户读取 |
 | pricing-membership（市场会员价） | [../../成都修茈科技有限公司/MODstore_deploy/modstore_server/db/base.py](../../成都修茈科技有限公司/MODstore_deploy/modstore_server/db/base.py) | `init_default_plan_templates()` → `PlanTemplate`；VIP ¥9.9 – SVIP8 ¥4,999 |
@@ -41,6 +42,9 @@
 | customer-ticket-bus（客服工单闭环） | [architecture/CUSTOMER_TICKET_BUS_SSOT.md](architecture/CUSTOMER_TICKET_BUS_SSOT.md) | 客服工单总线/告警闭环的唯一事实源：MODstore incident_bus + incident_team 与入场边界 |
 | deployment-modes（AI 部署模式） | [../config/deployment_modes.yaml](../config/deployment_modes.yaml) | 三档部署模式唯一真相源：绝对安全、安全、性能；统一内网/外网、手机局域网直连与移动端超级员工 LAN 优先策略 |
 | database-storage（数据库存储） | [../config/database_storage_modes.yaml](../config/database_storage_modes.yaml) | SQLite/PG 存储模式唯一真相源：桌面 database.json profile、SQLite→PostgreSQL 同步计划、重启生效策略 |
+| customer-delivery（客户私有交付） | [../config/customer_delivery.json](../config/customer_delivery.json) | 客户品牌；`legacy_mod_id` vs `industry_mod_id`；**双轨** `modules` / `employees` 及轨道节点进度；生产员工只列定制包；太阳鸟「考勤表转化」= 模块轨节点 |
+| process-flow（业务流程与交付流程） | [architecture/PROCESS_FLOW_SSOT.md](architecture/PROCESS_FLOW_SSOT.md) | 业务工作流程 + 对外交付流程唯一真相源；供 AGI 编排（Agent Orchestrator / Workflow Engine / NeuroBus 事件驱动）消费；含统一单据生命周期、自动化就绪度矩阵、断点行动项 |
+| utils-boundary（app/utils 职责域） | [devex/utils-domain-boundaries.md](devex/utils-domain-boundaries.md) | app/utils 47 模块职责域归类 + 目标包结构唯一真相源；excel/resilience 已迁移，其余待后续 Stage |
 
 ## 机器注册表（ssot.yaml）
 
@@ -68,6 +72,7 @@
 | mobile-tri-platform | `FHD/docs/mobile_tri_platform_ssot.md` | blocking |
 | neuro-bus-events | `FHD/config/neuro_bus_events.yaml` | blocking |
 | runtime-inventory | `FHD/config/service_topology.yaml` | blocking |
+| repository-ssot | `FHD/app/infrastructure/repositories/` | blocking |
 
 ## 已退役 SSOT（指针化）
 

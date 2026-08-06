@@ -22,7 +22,6 @@ from app.db.init_db import (
     init_extract_logs_tables,
     init_service_bridge_tables,
     init_template_tables,
-    init_wechat_tasks_table,
     initialize_databases,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -102,6 +101,14 @@ async def lifespan(app: FastAPI):
                 start_backup_scheduler()
             except RECOVERABLE_ERRORS as exc:
                 logger.warning("⚠️ 桌面端定时备份调度器启动失败: %s", exc)
+            try:
+                from app.desktop_runtime.sync_outbox_scheduler import (
+                    start_sync_outbox_scheduler,
+                )
+
+                start_sync_outbox_scheduler()
+            except RECOVERABLE_ERRORS as exc:
+                logger.warning("⚠️ 同步 outbox 补推调度器启动失败: %s", exc)
 
     mark_startup("lifespan_ready")
     logger.info("✅ FastAPI 应用启动完成%s", "（重服务后台加载）" if fast_start else "")
@@ -119,6 +126,12 @@ async def lifespan(app: FastAPI):
         stop_backup_scheduler()
     except RECOVERABLE_ERRORS as exc:
         logger.warning("⚠️ 桌面端定时备份调度器关闭失败: %s", exc)
+    try:
+        from app.desktop_runtime.sync_outbox_scheduler import stop_sync_outbox_scheduler
+
+        stop_sync_outbox_scheduler()
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("⚠️ 同步 outbox 补推调度器关闭失败: %s", exc)
     try:
         from app.application.employee_runtime.scheduler import stop_employee_scheduler
 
@@ -193,10 +206,8 @@ def _initialize_databases_sync(app: FastAPI):
                 logger.warning("SQLite 按 Mod 拆分母库副本时跳过: %s", mod_db_exc)
             sqlite_file = sqlite_db_file_from_url(database_url)
             if sqlite_file:
-                init_wechat_tasks_table(sqlite_file)
                 init_template_tables(sqlite_file)
             else:
-                init_wechat_tasks_table()
                 init_template_tables()
 
         init_distillation_tables(engine)
@@ -330,6 +341,20 @@ async def _init_neuro_ddd_async(app: FastAPI):
 
 async def _init_employee_runtime_async(app: FastAPI):
     """Initialize local AI employee triggers and cron scheduler."""
+    from app.mod_sdk.product_plane import automatic_employee_runtime_enabled
+
+    if not automatic_employee_runtime_enabled():
+        app.state.employee_triggers = {
+            "registered": [],
+            "active_employees": [],
+            "disabled_by_product_plane": True,
+        }
+        app.state.employee_scheduler = {
+            "running": False,
+            "disabled_by_product_plane": True,
+        }
+        logger.info("enterprise client: employee triggers and scheduler are disabled")
+        return
     if passive_node_enabled():
         logger.info("被动应用节点：跳过员工触发器与本地调度器")
         return

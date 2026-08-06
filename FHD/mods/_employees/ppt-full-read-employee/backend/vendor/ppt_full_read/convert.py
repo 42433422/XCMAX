@@ -297,9 +297,18 @@ async def convert_file(
         notes_lines.append(str(slide.get("notes_generated") or slide.get("notes_existing") or "（未生成）"))
         notes_lines.append("")
 
-    from modstore_server.ppt_read_shapes import enrich_presentation_v2
-
-    presentation = enrich_presentation_v2(presentation, src_path)
+    try:
+        from modstore_server.ppt_read_shapes import enrich_presentation_v2
+    except ImportError:
+        # The bundled desktop must remain readable without MODstore's server
+        # source tree.  Core slide extraction above is already complete; keep
+        # the v2 envelope and mark advanced shape/timing enrichment unavailable.
+        presentation = dict(presentation or {})
+        presentation.setdefault("schema_version", 2)
+        presentation.setdefault("has_timing", False)
+        presentation.setdefault("animation_hints", [])
+    else:
+        presentation = enrich_presentation_v2(presentation, src_path)
 
     json_path.write_text(json.dumps(presentation, ensure_ascii=False, indent=2), encoding="utf-8")
     notes_md_path.write_text("\n".join(notes_lines), encoding="utf-8")

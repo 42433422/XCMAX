@@ -10,6 +10,7 @@ from typing import Any, cast
 import httpx
 
 from app.services import get_ai_conversation_service
+from app.services.tools_workflow_registered import execute_registered_workflow_tool
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import ensure_fhd_repo_on_syspath
 
@@ -254,7 +255,6 @@ def execute_tool(tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
             "print_label": "generate",
             "excel_decompose": "decompose",
             "template_extract": "extract",
-            "wechat_send": "preview",
             "excel_schema": "analyze",
             "excel_analysis": "analyze",
             "import_excel": "import",
@@ -267,11 +267,18 @@ def execute_tool(tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
     if handler is not None:
         return handler(merged)
 
-    return {
-        "success": False,
-        "message": f"未知工具或动作: {tool_name}.{action}",
-        "error_code": "unknown_tool_action",
-    }
+    # 未在 _WORKFLOW_TOOL_HANDLERS 中注册 custom handler 时，
+    # 交给 execute_registered_workflow_tool 统一调度（从 risk_actions.registry.json 读取）。
+    # 覆盖 delete / batch_delete / create / update 等 100+ 个动作。
+    result = execute_registered_workflow_tool(tool_name, action, merged)
+    if not result.get("success") and str(result.get("message", "")).startswith("未注册"):
+        # 未知工具/动作统一包装为失败，便于上层识别与一致展示。
+        return {
+            "success": False,
+            "message": f"未知工具动作: {tool_name}.{action}",
+            "error_code": "unknown_tool_action",
+        }
+    return result
 
 
 def _execute_price_list_tool(params: dict[str, Any]) -> dict[str, Any]:
@@ -708,37 +715,6 @@ def _execute_excel_decompose_tool(params: dict[str, Any]) -> dict[str, Any]:
 def _execute_template_extract_tool(params: dict[str, Any]) -> dict[str, Any]:
     """与 excel_decompose 共用模板分解能力。"""
     return _execute_excel_decompose_tool(params)
-
-
-def _execute_wechat_preview_tool(params: dict[str, Any]) -> dict[str, Any]:
-    try:
-        from app.bootstrap import get_wechat_contact_app_service
-
-        keyword = str(params.get("keyword") or params.get("unit_name") or "").strip() or None
-        limit = int(params.get("limit", 30))
-        contacts = get_wechat_contact_app_service().get_contacts(keyword=keyword, limit=limit)
-        return {
-            "success": True,
-            "data": contacts,
-            "message": "请在客户端选择联系人完成发送" if contacts else "未找到匹配的微信联系人",
-        }
-    except ImportError as e:
-        logger.error("微信联系人服务导入失败: %s", e)
-        return {
-            "success": False,
-            "message": "微信联系人服务不可用",
-            "error_code": "service_unavailable",
-        }
-    except (ValueError, TypeError) as e:
-        logger.warning("微信联系人查询参数错误: %s", e)
-        return {
-            "success": False,
-            "message": "查询参数错误，请检查关键词",
-            "error_code": "invalid_parameters",
-        }
-    except RuntimeError as e:
-        logger.error("微信联系人查询运行时错误: %s", e)
-        return {"success": False, "message": "查询失败，请稍后重试", "error_code": "query_failed"}
 
 
 def _execute_excel_schema_tool(params: dict[str, Any]) -> dict[str, Any]:
@@ -1194,7 +1170,6 @@ _WORKFLOW_TOOL_HANDLERS: dict[tuple[str, str], Callable[[dict[str, Any]], dict[s
     ("print_label", "generate"): _execute_print_label_tool,
     ("excel_decompose", "decompose"): _execute_excel_decompose_tool,
     ("template_extract", "extract"): _execute_template_extract_tool,
-    ("wechat_send", "preview"): _execute_wechat_preview_tool,
     ("excel_schema", "analyze"): _execute_excel_schema_tool,
     ("excel_analysis", "analyze"): _execute_excel_analysis_tool,
     ("import_excel", "import"): _execute_import_excel_tool,
@@ -2077,6 +2052,23 @@ class LLMWorkflowPlanner:
                         depends_on=["check_or_create_unit"] if nodes else [],
                     )
                 )
+
+        if not nodes and any(k in message for k in ("删除", "移除", "删掉", "delete", "del")):
+            entity = _infer_business_db_entity(message)
+            keyword = _extract_business_db_read_keyword(message, entity)
+            intent = "business_db_read"
+            todo = ["识别要删除的目标", "查询确认目标信息"]
+            nodes.append(
+                WorkflowNode(
+                    node_id="query_for_delete",
+                    tool_id="business_db",
+                    action="read",
+                    params={"entity": entity, "keyword": keyword},
+                    risk="low",
+                    description=f"查询要删除的{entity}",
+                    idempotent=True,
+                )
+            )
 
         if not nodes:
             # 兜底：挑一个低风险查询，避免空图

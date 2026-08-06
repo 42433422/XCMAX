@@ -32,7 +32,8 @@ describe('genericModPack predicate branches', () => {
   })
 
   it('isAuxEmployeePackModId checks listing', () => {
-    expect(isAuxEmployeePackModId('wechat-contacts-ai-employee')).toBe(true)
+    expect(isAuxEmployeePackModId('lan-gate-ai-employee')).toBe(true)
+    expect(isAuxEmployeePackModId('wechat-contacts-ai-employee')).toBe(false)
     expect(isAuxEmployeePackModId('nope')).toBe(false)
   })
 

@@ -117,24 +117,6 @@ vi.mock('@/utils/syncEnterpriseWorkflowRegistry', () => ({
   syncEnterpriseWorkflowRegistry: vi.fn(async () => undefined),
 }))
 
-const mockInferWechatCustomerIntent = vi.fn((text: string) => ({
-  label: '通用意图',
-  detail: `本地规则识别：${String(text).slice(0, 30)}`,
-}))
-const mockIsLabelPrintRelatedWechatIntent = vi.fn(() => false)
-const mockIsReceiptConfirmRelatedWechatIntent = vi.fn(() => false)
-
-vi.mock('@/utils/wechatIntent', () => ({
-  inferWechatCustomerIntent: (...args: unknown[]) => mockInferWechatCustomerIntent(...(args as [string])),
-  isLabelPrintRelatedWechatIntent: (...args: unknown[]) => mockIsLabelPrintRelatedWechatIntent(...args as []),
-  isReceiptConfirmRelatedWechatIntent: (...args: unknown[]) => mockIsReceiptConfirmRelatedWechatIntent(...args as []),
-}))
-
-const mockShouldTryWechatShipmentPreview = vi.fn(() => false)
-vi.mock('@/utils/wechatShipmentDetect', () => ({
-  shouldTryWechatShipmentPreview: (...args: unknown[]) => mockShouldTryWechatShipmentPreview(...(args as [])),
-}))
-
 vi.mock('@/constants/productFlow', () => ({
   DEFAULT_TUTORIAL_TRACK_ID: 'host',
 }))
@@ -402,69 +384,6 @@ describe('TopAssistantFloat functions – recordOperation', () => {
   })
 })
 
-describe('TopAssistantFloat functions – isWechatPush', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
-    localStorage.clear()
-    vi.clearAllMocks()
-  })
-  afterEach(() => {
-    vi.unstubAllGlobals()
-    localStorage.clear()
-  })
-
-  it('feature 为 wechat 时返回 true', async () => {
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    expect(vm.isWechatPush({ feature: 'wechat' })).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('feature 为 wechat_contacts 时返回 true', async () => {
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    expect(vm.isWechatPush({ feature: 'wechat_contacts' })).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('feature 为 wechat-message 时返回 true', async () => {
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    expect(vm.isWechatPush({ feature: 'wechat-message' })).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('source 包含 wechat 时返回 true', async () => {
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    expect(vm.isWechatPush({ source: 'some_wechat_source' })).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('非微信推送返回 false', async () => {
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    expect(vm.isWechatPush({ feature: 'other', source: 'other_source' })).toBe(false)
-    wrapper.unmount()
-  })
-
-  it('空对象返回 false', async () => {
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    expect(vm.isWechatPush({})).toBe(false)
-    wrapper.unmount()
-  })
-
-  it('null/undefined 返回 false', async () => {
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    expect(vm.isWechatPush(null)).toBe(false)
-    expect(vm.isWechatPush(undefined)).toBe(false)
-    wrapper.unmount()
-  })
-})
-
 describe('TopAssistantFloat functions – addPush', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -660,7 +579,7 @@ describe('TopAssistantFloat functions – onAssistantPush', () => {
     localStorage.clear()
   })
 
-  it('微信推送事件添加到 pushFeed', async () => {
+  it('推送事件添加到 pushFeed', async () => {
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
     vm.onAssistantPush({ detail: { title: '微信消息', description: '内容', feature: 'wechat' } })
@@ -669,19 +588,21 @@ describe('TopAssistantFloat functions – onAssistantPush', () => {
     wrapper.unmount()
   })
 
-  it('非微信推送事件被忽略', async () => {
+  it('无标题推送使用默认标题', async () => {
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
-    vm.onAssistantPush({ detail: { title: '其他', description: '内容', feature: 'other' } })
-    expect(vm.pushFeed.length).toBe(0)
+    vm.onAssistantPush({ detail: { feature: 'other' } })
+    expect(vm.pushFeed.length).toBe(1)
+    expect(vm.pushFeed[0].title).toBe('新推送')
     wrapper.unmount()
   })
 
-  it('空 detail 被忽略', async () => {
+  it('空 detail 使用默认标题', async () => {
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
     vm.onAssistantPush({ detail: null })
-    expect(vm.pushFeed.length).toBe(0)
+    expect(vm.pushFeed.length).toBe(1)
+    expect(vm.pushFeed[0].title).toBe('新推送')
     wrapper.unmount()
   })
 })
@@ -1083,83 +1004,6 @@ describe('TopAssistantFloat functions – navigateToSubjectPage', () => {
   })
 })
 
-describe('TopAssistantFloat functions – isAutoRefreshEnabled', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
-    localStorage.clear()
-    vi.clearAllMocks()
-  })
-  afterEach(() => {
-    vi.unstubAllGlobals()
-    localStorage.clear()
-  })
-
-  it('localStorage 为 1 时返回 true', async () => {
-    localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    expect(vm.isAutoRefreshEnabled()).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('localStorage 为其他值时返回 false', async () => {
-    localStorage.setItem('xcagi_auto_refresh_starred_wechat', '0')
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    expect(vm.isAutoRefreshEnabled()).toBe(false)
-    wrapper.unmount()
-  })
-
-  it('localStorage 为空时返回 false', async () => {
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    expect(vm.isAutoRefreshEnabled()).toBe(false)
-    wrapper.unmount()
-  })
-})
-
-describe('TopAssistantFloat functions – normalizeMsgSignature', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
-    localStorage.clear()
-    vi.clearAllMocks()
-  })
-  afterEach(() => {
-    vi.unstubAllGlobals()
-    localStorage.clear()
-  })
-
-  it('正常消息返回 role::text 签名', async () => {
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    expect(vm.normalizeMsgSignature({ role: 'user', text: 'hello' })).toBe('user::hello')
-    wrapper.unmount()
-  })
-
-  it('空 text 返回 role:: 签名', async () => {
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    expect(vm.normalizeMsgSignature({ role: 'user', text: '' })).toBe('user::')
-    wrapper.unmount()
-  })
-
-  it('null 消息返回空签名', async () => {
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    expect(vm.normalizeMsgSignature(null)).toBe('::')
-    wrapper.unmount()
-  })
-
-  it('text 有空白时 trim', async () => {
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    expect(vm.normalizeMsgSignature({ role: 'ai', text: '  hello  ' })).toBe('ai::hello')
-    wrapper.unmount()
-  })
-})
-
 describe('TopAssistantFloat functions – onRestoreFloatState', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -1338,7 +1182,7 @@ describe('TopAssistantFloat functions – tryFillChatInput', () => {
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
     const fillFn = vi.fn(() => true)
-    ;(window as any).__VUE_CHAT_FILL__ = fillFn
+      ; (window as any).__VUE_CHAT_FILL__ = fillFn
     expect(vm.tryFillChatInput('hello')).toBe(true)
     expect(fillFn).toHaveBeenCalledWith('hello')
     delete (window as any).__VUE_CHAT_FILL__
@@ -1350,38 +1194,6 @@ describe('TopAssistantFloat functions – tryFillChatInput', () => {
     const vm = wrapper.vm as any
     delete (window as any).__VUE_CHAT_FILL__
     expect(vm.tryFillChatInput('hello')).toBe(false)
-    wrapper.unmount()
-  })
-})
-
-describe('TopAssistantFloat functions – onAutoRefreshWechatChanged', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
-    localStorage.clear()
-    vi.clearAllMocks()
-  })
-  afterEach(() => {
-    vi.unstubAllGlobals()
-    localStorage.clear()
-  })
-
-  it('auto refresh 关闭时调用 stopFeedPolling', async () => {
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    vm.onAutoRefreshWechatChanged()
-    // 不报错即通过
-    expect(true).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('auto refresh 开启时调用 startFeedPolling', async () => {
-    localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    vm.onAutoRefreshWechatChanged()
-    await flushPromises()
-    expect(true).toBe(true)
     wrapper.unmount()
   })
 })
@@ -1595,26 +1407,6 @@ describe('TopAssistantFloat functions – coreWorkflowEnabled', () => {
   })
 })
 
-describe('TopAssistantFloat functions – shouldRunStarredWechatIntentPipeline', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
-    localStorage.clear()
-    vi.clearAllMocks()
-  })
-  afterEach(() => {
-    vi.unstubAllGlobals()
-    localStorage.clear()
-  })
-
-  it('默认无 enabled 时返回 false', async () => {
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    expect(vm.shouldRunStarredWechatIntentPipeline()).toBe(false)
-    wrapper.unmount()
-  })
-})
-
 describe('TopAssistantFloat functions – toggleWorkflowEmployee', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -1628,188 +1420,14 @@ describe('TopAssistantFloat functions – toggleWorkflowEmployee', () => {
   })
 
   it('切换工作流员工状态', async () => {
+    const { useWorkflowAiEmployeesStore } = await import('@/stores/workflowAiEmployees')
+    const empStore = useWorkflowAiEmployeesStore()
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
     vm.toggleWorkflowEmployee('wechat_msg')
-    // 不报错即通过
-    expect(true).toBe(true)
-    wrapper.unmount()
-  })
-})
-
-describe('TopAssistantFloat functions – pollStarredFeed', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    vi.clearAllMocks()
-  })
-  afterEach(() => {
-    vi.unstubAllGlobals()
-    localStorage.clear()
-  })
-
-  it('auto refresh 关闭时不执行', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    await vm.pollStarredFeed()
-    expect(vi.mocked(globalThis.fetch)).not.toHaveBeenCalled()
-    wrapper.unmount()
-  })
-
-  it('auto refresh 开启时执行 fetch', async () => {
-    localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
-    const mockFetch = vi.fn(async () => makeFetchResponse({ success: true, feed: [] }))
-    vi.stubGlobal('fetch', mockFetch)
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    await vm.pollStarredFeed()
-    expect(mockFetch).toHaveBeenCalled()
-    wrapper.unmount()
-  })
-
-  it('fetch 失败时不报错', async () => {
-    localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
-    const mockFetch = vi.fn(async () => { throw new TypeError('Failed to fetch') })
-    vi.stubGlobal('fetch', mockFetch)
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    await vm.pollStarredFeed()
-    // 不报错即通过
-    expect(true).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('返回非 ok 时不处理', async () => {
-    localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
-    const mockFetch = vi.fn(async () => makeFetchResponse({ success: false }, false))
-    vi.stubGlobal('fetch', mockFetch)
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    await vm.pollStarredFeed()
-    expect(true).toBe(true)
-    wrapper.unmount()
-  })
-})
-
-describe('TopAssistantFloat functions – runWechatMessageAiPipeline', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    vi.clearAllMocks()
-  })
-  afterEach(() => {
-    vi.unstubAllGlobals()
-    localStorage.clear()
-  })
-
-  it('空 text 时不执行', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    await vm.runWechatMessageAiPipeline({ contact_name: 'test' }, { text: '' })
-    expect(vi.mocked(globalThis.fetch)).not.toHaveBeenCalled()
-    wrapper.unmount()
-  })
-
-  it('使用本地规则识别意图（非 pro 模式）', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    await vm.runWechatMessageAiPipeline(
-      { contact_name: '联系人', contact_id: 'c1' },
-      { text: '帮我发货' }
-    )
-    expect(mockInferWechatCustomerIntent).toHaveBeenCalledWith('帮我发货')
-    wrapper.unmount()
-  })
-
-  it('pro 模式调用 intent API', async () => {
-    localStorage.setItem('xcagi_pro_intent_experience', '1')
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({
-      success: true,
-      data: {
-        primary_intent: 'shipment',
-        tool_key: 'shipment_tool',
-        intent_hints: ['hint1', 'hint2'],
-        confidence: 0.9,
-      },
-    })))
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    await vm.runWechatMessageAiPipeline(
-      { contact_name: '联系人', contact_id: 'c1' },
-      { text: '帮我发货' }
-    )
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalled()
-    wrapper.unmount()
-  })
-
-  it('pro 模式 API 失败时回退本地规则', async () => {
-    localStorage.setItem('xcagi_pro_intent_experience', '1')
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({ success: false })))
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    await vm.runWechatMessageAiPipeline(
-      { contact_name: '联系人', contact_id: 'c1' },
-      { text: '帮我发货' }
-    )
-    expect(mockInferWechatCustomerIntent).toHaveBeenCalled()
-    wrapper.unmount()
-  })
-
-  it('pro 模式 fetch 抛异常时回退本地规则', async () => {
-    localStorage.setItem('xcagi_pro_intent_experience', '1')
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network') }))
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    await vm.runWechatMessageAiPipeline(
-      { contact_name: '联系人', contact_id: 'c1' },
-      { text: '帮我发货' }
-    )
-    expect(mockInferWechatCustomerIntent).toHaveBeenCalled()
-    wrapper.unmount()
-  })
-})
-
-describe('TopAssistantFloat functions – startFeedPolling / stopFeedPolling', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    vi.clearAllMocks()
-  })
-  afterEach(() => {
-    vi.unstubAllGlobals()
-    localStorage.clear()
-  })
-
-  it('stopFeedPolling 不报错', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    vm.stopFeedPolling()
-    expect(true).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('startFeedPolling 在 auto refresh 关闭时不执行', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    vm.startFeedPolling()
-    expect(vi.mocked(globalThis.fetch)).not.toHaveBeenCalled()
-    wrapper.unmount()
-  })
-
-  it('startFeedPolling 在 auto refresh 开启时执行', async () => {
-    localStorage.setItem('xcagi_auto_refresh_starred_wechat', '1')
-    const mockFetch = vi.fn(async () => makeFetchResponse({ success: true, feed: [] }))
-    vi.stubGlobal('fetch', mockFetch)
-    const { wrapper } = await mountComponent()
-    const vm = wrapper.vm as any
-    vm.startFeedPolling()
-    await flushPromises()
-    expect(mockFetch).toHaveBeenCalled()
+    expect(empStore.enabled.wechat_msg).toBe(true)
+    vm.toggleWorkflowEmployee('wechat_msg')
+    expect(empStore.enabled.wechat_msg).toBe(false)
     wrapper.unmount()
   })
 })
@@ -1829,16 +1447,14 @@ describe('TopAssistantFloat functions – onTopScroll / onExcelScroll', () => {
   it('onTopScroll 无 excelContainer 时不报错', async () => {
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
-    vm.onTopScroll({ target: { scrollLeft: 100 } })
-    expect(true).toBe(true)
+    expect(() => vm.onTopScroll({ target: { scrollLeft: 100 } })).not.toThrow()
     wrapper.unmount()
   })
 
   it('onExcelScroll 无 excelContainer 时不报错', async () => {
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
-    vm.onExcelScroll()
-    expect(true).toBe(true)
+    expect(() => vm.onExcelScroll()).not.toThrow()
     wrapper.unmount()
   })
 })
@@ -1879,8 +1495,11 @@ describe('TopAssistantFloat functions – fillChatInputWithRetry', () => {
   it('空 text 不执行', async () => {
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
+    const fillFn = vi.fn(() => true)
+      ; (window as any).__VUE_CHAT_FILL__ = fillFn
     await vm.fillChatInputWithRetry('')
-    expect(true).toBe(true)
+    expect(fillFn).not.toHaveBeenCalled()
+    delete (window as any).__VUE_CHAT_FILL__
     wrapper.unmount()
   })
 
@@ -1888,7 +1507,7 @@ describe('TopAssistantFloat functions – fillChatInputWithRetry', () => {
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
     const fillFn = vi.fn(() => true)
-    ;(window as any).__VUE_CHAT_FILL__ = fillFn
+      ; (window as any).__VUE_CHAT_FILL__ = fillFn
     await vm.fillChatInputWithRetry('hello')
     expect(fillFn).toHaveBeenCalledWith('hello')
     delete (window as any).__VUE_CHAT_FILL__
@@ -1903,7 +1522,7 @@ describe('TopAssistantFloat functions – fillChatInputWithRetry', () => {
       callCount++
       return callCount >= 2
     })
-    ;(window as any).__VUE_CHAT_FILL__ = fillFn
+      ; (window as any).__VUE_CHAT_FILL__ = fillFn
     await vm.fillChatInputWithRetry('hello')
     expect(fillFn).toHaveBeenCalledTimes(2)
     delete (window as any).__VUE_CHAT_FILL__

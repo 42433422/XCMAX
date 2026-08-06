@@ -11,6 +11,7 @@ import {
 } from '@/utils/chatStorageKeys'
 import { asRecord, asArray, asString, asBoolean } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
+import { stripModelToolProtocol } from '@/utils/chatModelProtocol'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
 const VOICE_PLAY_TIMEOUT_MS = 30_000
@@ -204,6 +205,7 @@ export function useChatMessages(sessionId: Ref<string>) {
   function hasRenderableSidecar(row: Record<string, unknown>): boolean {
     if (asBoolean(row.streamingShell)) return true
     if (asString(row.toolProgressLabel).trim()) return true
+    if (asArray(row.executionProgress).length) return true
     if (asString(row.downloadUrl).trim()) return true
     if (asString(row.shipmentDownloadUrl).trim()) return true
     if (asString(row.thinkingSteps).trim()) return true
@@ -220,6 +222,25 @@ export function useChatMessages(sessionId: Ref<string>) {
 
     const toolProgressLabel = asString(row.toolProgressLabel).trim()
     if (toolProgressLabel) extras.toolProgressLabel = toolProgressLabel
+
+    const executionProgress = asArray(row.executionProgress)
+      .map((raw) => {
+        const item = asRecord(raw)
+        const label = asString(item.label).trim()
+        if (!label) return null
+        const rawStatus = asString(item.status).trim()
+        const allowedStatuses = new Set(['running', 'success', 'retrying', 'waiting', 'failed', 'cancelled'])
+        return {
+          phase: asString(item.phase).trim() || 'working',
+          label,
+          status: allowedStatuses.has(rawStatus) ? rawStatus : 'running',
+          at: asString(item.at).trim() || new Date().toISOString(),
+        }
+      })
+      .filter(Boolean) as NonNullable<ChatMessageExtras['executionProgress']>
+    if (executionProgress.length) {
+      extras.executionProgress = executionProgress as NonNullable<ChatMessageExtras['executionProgress']>
+    }
 
     const downloadUrl = asString(row.downloadUrl).trim()
     if (downloadUrl) extras.downloadUrl = downloadUrl
@@ -315,7 +336,9 @@ export function useChatMessages(sessionId: Ref<string>) {
         const row = asRecord(msg)
         const roleRaw = asString(row.role)
         const role = (roleRaw === 'user' || roleRaw === 'task') ? roleRaw : 'ai'
-        const content = asString(row.content)
+        const content = role === 'ai'
+          ? stripModelToolProtocol(row.content)
+          : asString(row.content)
         const streamingShell = asBoolean(row.streamingShell)
         const toolProgressLabel = asString(row.toolProgressLabel).trim()
         if (!hasMeaningfulContent(content) && !streamingShell && !toolProgressLabel) return null
@@ -344,9 +367,10 @@ export function useChatMessages(sessionId: Ref<string>) {
     extras?: ChatMessageExtras,
     options?: { speak?: boolean }
   ) {
-    if (!hasMeaningfulContent(content)) return
+    const visibleContent = role === 'ai' ? stripModelToolProtocol(content) : content
+    if (!hasMeaningfulContent(visibleContent)) return
     const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    const safeContent = escapeHtml(content).replace(/\n/g, '<br>')
+    const safeContent = escapeHtml(visibleContent).replace(/\n/g, '<br>')
     messages.value.push({
       role,
       content: safeContent,
@@ -362,13 +386,14 @@ export function useChatMessages(sessionId: Ref<string>) {
   }
 
   async function saveMessage(role: 'user' | 'ai' | 'task', content: string): Promise<void> {
-    if (!hasMeaningfulContent(content)) return
+    const visibleContent = role === 'ai' ? stripModelToolProtocol(content) : content
+    if (!hasMeaningfulContent(visibleContent)) return
     try {
       await chatApi.saveMessage({
         session_id: sessionId.value,
         user_id: 'default',
         role,
-        content
+        content: visibleContent
       })
     } catch (e) {
       console.error('保存消息失败:', e)
@@ -401,7 +426,7 @@ export function useChatMessages(sessionId: Ref<string>) {
 
   /** 将纯文本安全转为气泡 HTML 并写入指定下标（用于 SSE token 追加） */
   function applyPlainTextToMessageIndex(index: number, plain: string) {
-    const safe = escapeHtml(plain).replace(/\n/g, '<br>')
+    const safe = escapeHtml(stripModelToolProtocol(plain)).replace(/\n/g, '<br>')
     const row = messages.value[index]
     if (!row) return
     row.content = safe
@@ -435,9 +460,12 @@ export function useChatMessages(sessionId: Ref<string>) {
       const mapped: ChatMessage[] = serverMessages.map((msg: unknown) => {
         const row = asRecord(msg)
         const roleRaw = asString(row.role)
+        const role = (roleRaw === 'user' || roleRaw === 'task') ? roleRaw : 'ai'
         return {
-          role: (roleRaw === 'user' || roleRaw === 'task') ? roleRaw : 'ai',
-          content: normalizeServerContentToHtml(row.content),
+          role,
+          content: normalizeServerContentToHtml(
+            role === 'ai' ? stripModelToolProtocol(row.content) : row.content,
+          ),
           time: formatChatMessageTime(
             row.time ?? row.timestamp ?? row.created_at ?? row.createdAt ?? row.updated_at,
           ),

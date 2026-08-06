@@ -4,8 +4,9 @@ import {
   Notification,
   Tray,
   app,
-  crashReporter,
+  clipboard,
   dialog,
+  globalShortcut,
   ipcMain,
   nativeImage,
   screen,
@@ -23,6 +24,7 @@ import {
   downloadUpdate,
   getUpdateStatus,
   installUpdate,
+  isForceUpgradeRequired,
   readLocalBuildSha,
   runUpdateCheckWithDirectNet,
 } from './updater'
@@ -38,11 +40,19 @@ import {
 } from './rollback'
 import { terminateChildProcess, waitForChildExit } from './backend-lifecycle'
 import { clampWindowBounds, readWindowState, writeWindowState } from './window-state'
+import { desktopBackendEnv } from './backend-env'
+import { desktopOfflineDbPath, queryOffline } from './data-bridge'
+import { deleteSecret, getSecret, listSecrets, setSecret } from './secure-store'
 import { AutonomyController } from './autonomy/controller'
 import { DesktopAutonomyAdapter } from './autonomy/desktop-adapter'
 import { backendCrashPolicy } from './autonomy/policies/backend-crash.policy'
 import { degradedRemediationPolicy } from './autonomy/policies/degraded-remediation.policy'
 import { updateRollbackPolicy } from './autonomy/policies/update-rollback.policy'
+import { createForceUpgradeHandler, initializeLocalCrashReporting } from './desktop-resilience'
+import { readJsonTextFile, sanitizeBackendProxyEnv } from './backend-env-utils'
+import { desktopWindowOpenAction, isBenignDesktopLoadAbort, isTrustedDesktopOrigin } from './desktop-navigation'
+import { assertSelfUpdateInstallSupported, getDesktopInstallIdentity } from './desktop-install-update'
+import { warmPersistedDesktopSessionCookieStore } from './session-cookie-warmup'
 
 const APP_NAME = 'XCAGI'
 const KELLAI_BUNDLE_ID = 'com.kellai.desktop'
@@ -316,51 +326,6 @@ export function readPackagedProductSku(): ProductSku | null {
   return null
 }
 
-export function readJsonTextFile(filePath: string): string {
-  const buffer = fs.readFileSync(filePath)
-  let text: string
-  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
-    text = buffer.toString('utf16le')
-  } else {
-    text = buffer.toString('utf8')
-  }
-  return text.replace(/^\uFEFF/, '')
-}
-
-export function sanitizeBackendProxyEnv(
-  env: NodeJS.ProcessEnv | Record<string, string | undefined>
-): Record<string, string | undefined> {
-  const next: Record<string, string | undefined> = { ...env }
-  // Desktop backend talks to xiu-ci.com for chat SSE. Clash/HTTP_PROXY often
-  // returns 502 HTML for that stream and the UI shows 首包超时. Chromium OTA
-  // already has its own PAC bypass; the Python child must not inherit proxies.
-  // Note: Clash TUN (utun + 198.18.0.0/16) still intercepts at OS route level —
-  // env sanitize cannot bypass TUN; prefer DIRECT rule for xiu-ci.com.
-  for (const key of [
-    'ALL_PROXY',
-    'all_proxy',
-    'HTTP_PROXY',
-    'HTTPS_PROXY',
-    'http_proxy',
-    'https_proxy',
-    'XCMAX_CLI_PROXY',
-  ] as const) {
-    delete next[key]
-  }
-  const bypass = OTA_PROXY_BYPASS_RULES.split(',')
-    .map(s => s.trim())
-    .filter(s => s && s !== '<local>')
-  const existing = String(next.NO_PROXY || next.no_proxy || '')
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean)
-  const merged = Array.from(new Set([...existing, ...bypass, '::1']))
-  const joined = merged.join(',')
-  next.NO_PROXY = joined
-  next.no_proxy = joined
-  return next
-}
-
 export function backendEditionEnv(): Record<string, string> {
   const sku = readPackagedProductSku()
   if (!sku) {
@@ -402,9 +367,31 @@ let tray: Tray | null = null
 let restartCount = 0
 let backendShutdownComplete = false
 let backendShutdownPromise: Promise<void> | null = null
+// A one-shot, renderer-visible entry hint derived only from an existing local
+// Chromium cookie. It never authorizes an API request or replaces official
+// validation; consuming it avoids replaying a saved password after an update.
+let desktopBootstrapSessionHintAvailable = false
 
 // 自治控制器（与现有更新观察期/backend 重启逻辑共存，零回归；阶段 1 接入）
 let autonomyController: AutonomyController | null = null
+
+/**
+ * 常驻模式下切换主窗口的显示/隐藏。
+ * 窗口隐藏时后端保持常驻（不随窗口销毁），实现"关窗到托盘 + 秒开"。
+ */
+function toggleMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    void createWindow()
+    return
+  }
+  if (mainWindow.isVisible()) {
+    mainWindow.hide()
+  } else {
+    mainWindow.show()
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+  }
+}
 
 function repoRoot(): string {
   return app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '..', '..')
@@ -535,23 +522,12 @@ function writeBackendLog(line: string): void {
   }
 }
 
-function initializeLocalCrashReporting(): void {
-  try {
-    const crashDir = path.join(app.getPath('userData'), 'crash-dumps')
-    fs.mkdirSync(crashDir, { recursive: true })
-    app.setPath('crashDumps', crashDir)
-    crashReporter.start({ uploadToServer: false, compress: true })
-    writeBackendLog(`[crash] local crash capture enabled dir=${crashDir}\n`)
-  } catch (error) {
-    writeBackendLog(`[crash] initialization failed: ${error instanceof Error ? error.message : String(error)}\n`)
-  }
-  process.on('uncaughtExceptionMonitor', error => {
-    writeBackendLog(`[crash] main uncaughtException: ${error.stack || error.message}\n`)
-  })
-  process.on('unhandledRejection', reason => {
-    writeBackendLog(`[crash] main unhandledRejection: ${reason instanceof Error ? reason.stack || reason.message : String(reason)}\n`)
-  })
-}
+const checkForceUpgrade = createForceUpgradeHandler({
+  appName: APP_NAME,
+  writeLog: writeBackendLog,
+  beforeInstall: runBackendMigrationWithRollback,
+  onInstallFailed: cancelPreparedRollback,
+})
 
 function packagedBackendHealthTimeoutMs(): number {
   if (!app.isPackaged) {
@@ -744,7 +720,7 @@ export function markFrontendCacheCleared(): void {
 }
 
 /** 分阶段就绪：TCP 后即可出窗；desktop/status 软等待，不阻塞 60s 全量 Mod。 */
-async function waitForBackendStatus(port: number, timeoutMs = 15_000): Promise<Record<string, unknown> | null> {
+async function waitForBackendStatus(port: number, timeoutMs = 60_000): Promise<Record<string, unknown> | null> {
   const started = Date.now()
   while (Date.now() - started <= timeoutMs) {
     try {
@@ -834,7 +810,7 @@ async function startBackend(): Promise<void> {
   writeBackendLog(`[cwd] ${executable.cwd}\n`)
   backendProcess = spawn(executable.command, executable.args, {
     cwd: executable.cwd,
-    env: {
+    env: desktopBackendEnv({
       ...sanitizeBackendProxyEnv(process.env),
       XCAGI_DESKTOP_MODE: '1',
       XCAGI_DATA_DIR: app.getPath('userData'),
@@ -848,10 +824,9 @@ async function startBackend(): Promise<void> {
       XCAGI_DESKTOP_FAST_START: '1',
       ...backendEditionEnv(),
       PYTHONUTF8: '1'
-    },
+    }),
     windowsHide: true
   })
-
   backendProcess.stdout.on('data', data => {
     process.stdout.write(`[xcagi-backend] ${data}`)
     writeBackendLog(`[stdout] ${data}`)
@@ -923,7 +898,7 @@ function runBackendMigration(): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(executable.command, [...executable.args, '--migrate-only', '--backup'], {
       cwd: executable.cwd,
-      env: {
+      env: desktopBackendEnv({
         ...sanitizeBackendProxyEnv(process.env),
         XCAGI_DESKTOP_MODE: '1',
         XCAGI_DATA_DIR: app.getPath('userData'),
@@ -931,7 +906,7 @@ function runBackendMigration(): Promise<string> {
         XCAGI_GLOBAL_RATE_LIMIT: '0',
         ...backendEditionEnv(),
         PYTHONUTF8: '1'
-      },
+      }),
       windowsHide: true
     })
     let stderr = ''
@@ -1075,25 +1050,6 @@ function tagDesktopWebContents(win: BrowserWindow): void {
     .catch(() => { })
 }
 
-export function isTrustedDesktopOrigin(rawUrl: string | undefined, expectedPort?: number): boolean {
-  if (!rawUrl) return false
-  try {
-    const parsed = new URL(rawUrl)
-    const hostAllowed = parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost'
-    const port = expectedPort ?? DEFAULT_PORT
-    return parsed.protocol === 'http:' && hostAllowed && parsed.port === String(port)
-  } catch {
-    return false
-  }
-}
-
-export function desktopWindowOpenAction(
-  rawUrl: string,
-  expectedPort = DEFAULT_PORT,
-): 'allow' | 'deny' {
-  return isTrustedDesktopOrigin(rawUrl, expectedPort) ? 'allow' : 'deny'
-}
-
 function configureDesktopMediaPermissions(): void {
   const ses = session.defaultSession
   ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
@@ -1104,7 +1060,7 @@ function configureDesktopMediaPermissions(): void {
       (mediaTypes.length === 0 || mediaTypes.includes('audio') || mediaTypes.includes('microphone'))
     const requestUrl =
       (details as { requestingUrl?: string } | undefined)?.requestingUrl || webContents.getURL()
-    callback(wantsAudio && isTrustedDesktopOrigin(requestUrl))
+    callback(wantsAudio && isTrustedDesktopOrigin(requestUrl, DEFAULT_PORT))
   })
   ses.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
     const mediaTypes = ((details as { mediaTypes?: string[] } | undefined)?.mediaTypes || [])
@@ -1113,7 +1069,7 @@ function configureDesktopMediaPermissions(): void {
       permission === 'media' &&
       (mediaTypes.length === 0 || mediaTypes.includes('audio') || mediaTypes.includes('microphone'))
     const origin = requestingOrigin || webContents?.getURL() || ''
-    return wantsAudio && isTrustedDesktopOrigin(origin)
+    return wantsAudio && isTrustedDesktopOrigin(origin, DEFAULT_PORT)
   })
 }
 
@@ -1204,7 +1160,15 @@ async function createWindow(): Promise<void> {
   }
   createdWindow.on('move', scheduleWindowStateWrite)
   createdWindow.on('resize', scheduleWindowStateWrite)
-  createdWindow.on('close', persistWindowState)
+  // 常驻：非退出时关窗仅隐藏到托盘，后端保持常驻实现"秒开"；仅托盘"退出"或
+  // app.quit() 才真正关闭（isQuitting 已在 before-quit 置位）。
+  createdWindow.on('close', (event) => {
+    persistWindowState()
+    if (!app.isQuitting) {
+      event.preventDefault()
+      createdWindow.hide()
+    }
+  })
   if (process.platform !== 'darwin') {
     mainWindow.setAutoHideMenuBar(true)
     mainWindow.setMenuBarVisibility(false)
@@ -1231,7 +1195,7 @@ async function createWindow(): Promise<void> {
     }
   })
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    const action = desktopWindowOpenAction(url)
+    const action = desktopWindowOpenAction(url, DEFAULT_PORT)
     if (action === 'deny') {
       console.warn(`[xcagi-desktop] blocked window open to ${url}`)
     }
@@ -1289,6 +1253,11 @@ async function createWindow(): Promise<void> {
       }
       mainWindow.focus()
     } catch (error) {
+      const currentUrl = mainWindow?.webContents.getURL()
+      if (isBenignDesktopLoadAbort(error, currentUrl, DEFAULT_PORT)) {
+        console.warn('[xcagi-desktop] ignored transient local-page navigation abort', error)
+        return
+      }
       console.error('[xcagi-desktop] load main application failed', error)
       throw error
     }
@@ -1315,19 +1284,29 @@ async function createWindow(): Promise<void> {
     updateSplashProgress(creep, '正在加载业务模块…')
   }, 400)
 
-  const ready = waitForBackendPing(DEFAULT_PORT)
+  const pingReady = waitForBackendPing(DEFAULT_PORT)
     .then(() => {
       splashPhase = 'routes'
       phaseStarted = Date.now()
-      updateSplashProgress(58, '本地服务已就绪，正在加载业务模块…')
-      return waitForBackendApplicationReady(DEFAULT_PORT, undefined, { skipPing: true })
+      updateSplashProgress(58, '本地服务已就绪，正在打开工作台…')
     })
-    .then(() => {
+
+  // 登录后的工作台不必等待全部 Mod 和业务路由完成。先在本地服务
+  // 可响应时打开界面，模块继续在后台完成；更新观察期仍会等待两者。
+  const mainUiReady = pingReady.then(() => {
       splashPhase = 'done'
       updateSplashProgress(88, '正在加载应用…')
       return loadMainApplication()
     })
+  const backendApplicationReady = pingReady.then(() =>
+    waitForBackendApplicationReady(DEFAULT_PORT, undefined, { skipPing: true }),
+  )
+  const ready = Promise.all([mainUiReady, backendApplicationReady]).then(() => undefined)
   mainApplicationReady = ready
+  void mainUiReady.then(
+    () => clearInterval(splashTicker),
+    () => clearInterval(splashTicker),
+  )
   void ready
     .catch(error => {
       console.error('[xcagi-desktop] backend readiness wait failed', error)
@@ -1337,7 +1316,6 @@ async function createWindow(): Promise<void> {
         void dialog.showErrorBox(APP_NAME, error instanceof Error ? error.message : String(error))
       }
     })
-    .finally(() => clearInterval(splashTicker))
 
   mainWindow.webContents.on('did-finish-load', () => {
     if (mainWindow) tagDesktopWebContents(mainWindow)
@@ -1354,7 +1332,7 @@ async function createWindow(): Promise<void> {
     void showDbRecoveryDialogIfNeeded(status)
   })
 
-  configureUpdater(mainWindow)
+  configureUpdater(mainWindow, { onForceUpgradeRequired: checkForceUpgrade })
 }
 
 async function waitForMainApplicationReady(): Promise<void> {
@@ -1450,7 +1428,7 @@ function createTray(): void {
   tray.setToolTip(APP_NAME)
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: '显示 XCAGI', click: () => mainWindow?.show() },
+      { label: '显示 / 隐藏 XCAGI', click: () => toggleMainWindow() },
       { label: '打开数据目录', click: () => void shell.openPath(app.getPath('userData')) },
       { label: '导出诊断包…', click: () => void exportSupportBundleInteractive() },
       { label: '检查更新', click: () => void runUpdateCheckWithDirectNet() },
@@ -1478,7 +1456,7 @@ function bootstrap(): void {
   if (!gotLock) {
     app.quit()
   } else {
-    initializeLocalCrashReporting()
+    initializeLocalCrashReporting({ port: DEFAULT_PORT, writeLog: writeBackendLog })
     app.on('second-instance', () => {
       if (mainWindow) {
         if (mainWindow.isMinimized()) mainWindow.restore()
@@ -1493,6 +1471,7 @@ function bootstrap(): void {
     // will-quit runs after BrowserWindows have closed, so renderer keep-alive
     // connections no longer prevent the backend from shutting down gracefully.
     app.on('will-quit', event => {
+      globalShortcut.unregisterAll()
       if (backendShutdownComplete) {
         return
       }
@@ -1507,6 +1486,10 @@ function bootstrap(): void {
 
     app.whenReady().then(async () => {
       await applyOtaProxyBypass()
+      desktopBootstrapSessionHintAvailable = await warmPersistedDesktopSessionCookieStore(DEFAULT_PORT)
+      if (desktopBootstrapSessionHintAvailable) {
+        writeBackendLog('[session] restored persisted desktop session cookie before renderer startup\n')
+      }
       const sku = readPackagedProductSku()
       if (sku && !process.env.XCAGI_UPDATE_URL) {
         process.env.XCAGI_UPDATE_URL = SKU_UPDATE_URL[sku]
@@ -1551,14 +1534,29 @@ function bootstrap(): void {
       })
 
       ipcMain.handle('xcagi:get-data-dir', () => app.getPath('userData'))
+      ipcMain.handle('xcagi:consume-bootstrap-session-hint', () => {
+        const available = desktopBootstrapSessionHintAvailable
+        desktopBootstrapSessionHintAvailable = false
+        return available
+      })
+      ipcMain.handle('xcagi:get-app-identity', () => ({
+        name: app.getName(),
+        version: readPackagedAppVersion(),
+        isPackaged: app.isPackaged,
+        install: getDesktopInstallIdentity(),
+      }))
       ipcMain.handle('xcagi:open-kellai-desktop', () => openKellaiDesktop())
       ipcMain.handle('xcagi:export-support-bundle', () => exportSupportBundleInteractive())
       ipcMain.handle('xcagi:check-for-updates', () => runUpdateCheckWithDirectNet())
       ipcMain.handle('xcagi:get-update-status', () => getUpdateStatus())
-      ipcMain.handle('xcagi:download-update', () => downloadUpdate())
-      ipcMain.handle('xcagi:install-update', () =>
-        installUpdate(runBackendMigrationWithRollback, cancelPreparedRollback),
-      )
+      ipcMain.handle('xcagi:download-update', () => {
+        assertSelfUpdateInstallSupported()
+        return downloadUpdate()
+      })
+      ipcMain.handle('xcagi:install-update', () => {
+        assertSelfUpdateInstallSupported()
+        return installUpdate(runBackendMigrationWithRollback, cancelPreparedRollback)
+      })
       ipcMain.handle('xcagi:set-badge', (_event, count: number) => {
         const n = Math.max(0, Math.floor(Number(count) || 0))
         if (process.platform === 'darwin' || process.platform === 'linux') {
@@ -1577,14 +1575,63 @@ function bootstrap(): void {
           if (!Notification.isSupported()) {
             return { ok: false, reason: 'unsupported' }
           }
-          new Notification({ title, body }).show()
+          const notification = new Notification({ title, body })
+          notification.on('click', () => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.show()
+              mainWindow.focus()
+            }
+          })
+          notification.show()
           return { ok: true }
         }
       )
 
+      // 原生本地数据桥（离线只读）：后端 HTTP 不可用时前端可直读本地 SQLite。
+      ipcMain.handle('xcagi:offline-query', (_event, params: unknown) => {
+        const p = (params && typeof params === 'object' ? params : {}) as {
+          kind?: string
+          keyword?: string
+          limit?: number
+        }
+        return queryOffline(desktopOfflineDbPath(), {
+          kind: String(p.kind || ''),
+          keyword: p.keyword,
+          limit: p.limit,
+        })
+      })
+
+      // 端侧密钥链（safeStorage）：敏感配置加密落盘，明文只驻内存。
+      ipcMain.handle('xcagi:secure-get', (_event, key: string) => getSecret(String(key)))
+      ipcMain.handle('xcagi:secure-set', (_event, key: string, value: string) =>
+        setSecret(String(key), value === undefined ? '' : String(value)),
+      )
+      ipcMain.handle('xcagi:secure-delete', (_event, key: string) => deleteSecret(String(key)))
+      ipcMain.handle('xcagi:secure-list', () => listSecrets())
+
+      // 剪贴板原生读写（P2 高频微交互）。
+      ipcMain.handle('xcagi:clipboard-read-text', () => clipboard.readText())
+      ipcMain.handle('xcagi:clipboard-write-text', (_event, text: string) => {
+        clipboard.writeText(String(text ?? ''))
+        return { ok: true }
+      })
+      // 原生打开本地路径（文件/目录），供拖拽文件、导出等场景系统级打开。
+      ipcMain.handle('xcagi:open-path', async (_event, target: string) => {
+        const p = String(target || '')
+        if (!p || !fs.existsSync(p)) return { ok: false, reason: 'not_found' }
+        const err = await shell.openPath(p)
+        return { ok: !err, reason: err || undefined }
+      })
+
       configureDesktopMediaPermissions()
       createMenu()
       createTray()
+      // 全局快捷键：唤起 / 隐藏主窗口（常驻模式直达）
+      try {
+        globalShortcut.register('CommandOrControl+Shift+X', () => toggleMainWindow())
+      } catch {
+        /* 全局快捷键注册失败不阻塞启动 */
+      }
 
       // 更新后首次启动观察期：检查 rollback marker
       const pendingRollback = checkPendingRollback()
@@ -1689,6 +1736,12 @@ function bootstrap(): void {
     })
 
     app.on('activate', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show()
+        if (mainWindow.isMinimized()) mainWindow.restore()
+        mainWindow.focus()
+        return
+      }
       if (BrowserWindow.getAllWindows().length === 0) {
         void createWindow()
       }

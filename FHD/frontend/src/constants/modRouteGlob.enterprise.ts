@@ -16,5 +16,4 @@ export const modRouteGlob = {
   ...import.meta.glob('../../../mods/xcagi-customer-service-bridge/frontend/routes.js'),
   ...import.meta.glob('../../../mods/xcagi-core-workflow-employees/frontend/routes.js'),
   ...import.meta.glob('../../../mods/lan-gate-ai-employee/frontend/routes.js'),
-  ...import.meta.glob('../../../mods/wechat-contacts-ai-employee/frontend/routes.js'),
 } as Record<string, RouteModuleLoader>

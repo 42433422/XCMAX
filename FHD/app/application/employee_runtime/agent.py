@@ -33,6 +33,11 @@ from app.application.employee_runtime.loader import (
     resolve_pack_dir,
 )
 from app.application.employee_runtime.memory import EmployeeMemoryManager, MemoryContext
+from app.application.employee_runtime.office_workers import is_deterministic_office_worker
+from app.application.employee_runtime.result_builders import (
+    build_blocked_result,
+    build_cognition_failed_result,
+)
 from app.application.employee_runtime.risk_gate import gate_action_or_block
 from app.domain.employee.memory_scope import MemoryScope
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -225,6 +230,21 @@ class EmployeeAgent:
         try:
             pack = load_employee_pack_from_disk(employee_id)
             manifest = pack.get("manifest") or {}
+            from app.mod_sdk.product_plane import employee_execution_block_reason
+
+            boundary_reason = employee_execution_block_reason(employee_id, manifest)
+            if boundary_reason:
+                return {
+                    "employee_id": employee_id,
+                    "pack": {"id": pack["pack_id"], "version": pack.get("version")},
+                    "duration_ms": round((time.perf_counter() - t0) * 1000, 3),
+                    "success": False,
+                    "blocked_by_product_plane": True,
+                    "error": boundary_reason,
+                    "error_code": "control_plane_employee_not_available",
+                    "retryable": False,
+                    "executed_at": datetime.now(UTC).isoformat(),
+                }
             pack_root = Path(str(pack.get("pack_dir") or resolve_pack_dir(employee_id) or ""))
             config = parse_employee_config_v2(manifest)
             actions_cfg = _ex._normalize_actions_cfg(config)
@@ -266,7 +286,9 @@ class EmployeeAgent:
             perceived = self._perceive(config, payload)
 
             file_path_fast = str(payload.get("file_path") or payload.get("path") or "").strip()
-            direct_only = handler_list == ["direct_python"] and bool(file_path_fast)
+            direct_only = handler_list == ["direct_python"] and (
+                bool(file_path_fast) or is_deterministic_office_worker(employee_id, handler_list)
+            )
             if direct_only:
                 reasoning: dict[str, Any] = {
                     "input": dict(payload),
@@ -446,21 +468,7 @@ class EmployeeAgent:
         gate: dict[str, Any],
         t0: float,
     ) -> dict[str, Any]:
-        return {
-            "employee_id": self.employee_id,
-            "pack": {"id": pack["pack_id"], "version": pack.get("version")},
-            "duration_ms": round((time.perf_counter() - t0) * 1000, 3),
-            "result": {
-                "task": task,
-                "handlers": handler_list,
-                "outputs": [],
-                "summary": "blocked by risk middleware",
-                "risk_gate": gate,
-            },
-            "executed_at": datetime.now(UTC).isoformat(),
-            "blocked_by_risk_gate": True,
-            "success": False,
-        }
+        return build_blocked_result(self.employee_id, pack, task, handler_list, gate, t0)
 
     def _cognition_failed_result(
         self,
@@ -470,20 +478,9 @@ class EmployeeAgent:
         reasoning: dict[str, Any],
         t0: float,
     ) -> dict[str, Any]:
-        return {
-            "employee_id": self.employee_id,
-            "pack": {"id": pack["pack_id"], "version": pack.get("version")},
-            "duration_ms": round((time.perf_counter() - t0) * 1000, 3),
-            "success": False,
-            "result": {
-                "task": task,
-                "handlers": handler_list,
-                "outputs": [],
-                "summary": "cognition failed",
-                "cognition_error": reasoning.get("error"),
-            },
-            "executed_at": datetime.now(UTC).isoformat(),
-        }
+        return build_cognition_failed_result(
+            self.employee_id, pack, task, handler_list, reasoning, t0
+        )
 
 
 __all__ = ["EmployeeAgent"]

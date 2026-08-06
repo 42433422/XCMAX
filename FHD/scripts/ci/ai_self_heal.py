@@ -25,6 +25,7 @@ import sys
 import time
 import zipfile
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -64,7 +65,7 @@ class Fix:
     patch: str  # unified diff 片段（或空字符串表示 needs-human）
     needs_human: bool
     description: str
-    risk_level: str = "r3"  # r0/r1/r2/r3 — 分级合并 SLA 依据（LLM 修复强制 r3）
+    risk_level: str = "r3"  # r0/r1/r2/r3 — 分级合并 SLA 依据（bandit 安全类强制 r3，LLM 业务修复降 r1）
 
 
 @dataclass
@@ -78,11 +79,26 @@ class FingerprintRecord:
     workflow: str
 
 
+@dataclass(frozen=True)
+class IncidentBudgetDecision:
+    """Durable GitHub-side circuit-breaker decision for incident creation."""
+
+    allowed: bool
+    reason: str
+    open_total: int = 0
+    open_for_workflow: int = 0
+    recent_total: int = 0
+
+
 # =====================================================================
 # 日志下载与解析
 # =====================================================================
 
 GITHUB_API = "https://api.github.com"
+DEFAULT_MAX_OPEN_INCIDENTS = 20
+DEFAULT_MAX_OPEN_INCIDENTS_PER_WORKFLOW = 5
+DEFAULT_MAX_RECENT_INCIDENTS = 20
+DEFAULT_INCIDENT_BUDGET_HOURS = 24
 
 
 def fetch_workflow_logs(
@@ -315,6 +331,219 @@ def compute_fingerprint(repo: str, workflow: str, job: str, error_line: str) -> 
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def canonical_fingerprint_evidence(errors: list[ErrorEntry], log_text: str) -> str:
+    """Build stable root-cause evidence when Actions only exposes a generic exit line."""
+
+    def normalize(raw: str) -> str:
+        line = re.sub(r"\x1b\[[0-9;]*m", "", raw)
+        line = re.sub(
+            r"\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b",
+            "<timestamp>",
+            line,
+        )
+        line = re.sub(r"\brun(?:_id| id)?[=: ]+\d+\b", "run_id=<id>", line, flags=re.I)
+        line = re.sub(r"\b[0-9a-f]{40,64}\b", "<digest>", line, flags=re.I)
+        line = re.sub(
+            r"\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b",
+            "<uuid>",
+            line,
+            flags=re.I,
+        )
+        return " ".join(line.split())
+
+    meaningful_errors = [
+        normalize(error.raw)
+        for error in errors
+        if "process completed with exit code" not in error.raw.casefold()
+    ]
+    if meaningful_errors:
+        return "\n".join(meaningful_errors)
+
+    excerpt = select_incident_log_excerpt(log_text)
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in excerpt.splitlines():
+        line = normalize(raw)
+        folded = line.casefold()
+        if not line or any(
+            noise in folded
+            for noise in (
+                "process completed with exit code",
+                "node 20 is being deprecated",
+                "post job cleanup",
+                "[command]/usr/bin/git version",
+            )
+        ):
+            continue
+        if line in seen:
+            continue
+        seen.add(line)
+        normalized.append(line)
+    if normalized:
+        return "\n".join(normalized)
+    return "\n".join(error.raw for error in errors) or "unclassified-workflow-failure"
+
+
+def _positive_env_int(name: str, default: int) -> int:
+    raw = str(os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def check_incident_budget(
+    workflow: str,
+    *,
+    token: str | None = None,
+    repo: str | None = None,
+    client: Any = None,
+    now_ts: float | None = None,
+    max_open: int | None = None,
+    max_open_per_workflow: int | None = None,
+    max_recent: int | None = None,
+    budget_hours: int | None = None,
+) -> IncidentBudgetDecision:
+    """Fail closed when the durable incident queue exceeds a bounded budget.
+
+    Hosted-runner JSONL state disappears after every run, so the circuit breaker
+    must use GitHub issues as its coordination plane.  A lookup failure also
+    blocks creation: the original failed workflow remains authoritative evidence,
+    while blindly creating another issue would amplify an outage.
+    """
+
+    repo = repo or os.environ.get("GITHUB_REPOSITORY", "")
+    token = token or os.environ.get("GITHUB_TOKEN", "")
+    max_open = max_open or _positive_env_int(
+        "AI_SELF_HEAL_MAX_OPEN_INCIDENTS", DEFAULT_MAX_OPEN_INCIDENTS
+    )
+    max_open_per_workflow = max_open_per_workflow or _positive_env_int(
+        "AI_SELF_HEAL_MAX_OPEN_PER_WORKFLOW",
+        DEFAULT_MAX_OPEN_INCIDENTS_PER_WORKFLOW,
+    )
+    max_recent = max_recent or _positive_env_int(
+        "AI_SELF_HEAL_MAX_RECENT_INCIDENTS", DEFAULT_MAX_RECENT_INCIDENTS
+    )
+    budget_hours = budget_hours or _positive_env_int(
+        "AI_SELF_HEAL_INCIDENT_BUDGET_HOURS", DEFAULT_INCIDENT_BUDGET_HOURS
+    )
+    if not repo or not token:
+        return IncidentBudgetDecision(False, "budget_lookup_missing_repo_or_token")
+    if now_ts is None:
+        now_ts = time.time()
+    if client is None:
+        if httpx is None:
+            return IncidentBudgetDecision(False, "budget_lookup_httpx_unavailable")
+        client = httpx.Client(timeout=30.0)
+        close_after = True
+    else:
+        close_after = False
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+    }
+    workflow_marker = f"- Workflow: `{workflow or 'unknown'}`"
+    cutoff = now_ts - budget_hours * 3600
+    open_total = 0
+    open_for_workflow = 0
+    recent_total = 0
+    try:
+        for page in range(1, 11):
+            response = client.get(
+                f"{GITHUB_API}/repos/{repo}/issues",
+                headers=headers,
+                params={
+                    "state": "open",
+                    "labels": "auto-incident",
+                    "sort": "created",
+                    "direction": "desc",
+                    "per_page": 100,
+                    "page": page,
+                },
+            )
+            if response.status_code != 200:
+                return IncidentBudgetDecision(
+                    False,
+                    f"budget_lookup_http_{response.status_code}",
+                    open_total,
+                    open_for_workflow,
+                    recent_total,
+                )
+            payload = response.json()
+            if not isinstance(payload, list):
+                return IncidentBudgetDecision(
+                    False,
+                    "budget_lookup_invalid_payload",
+                    open_total,
+                    open_for_workflow,
+                    recent_total,
+                )
+            for item in payload:
+                if not isinstance(item, dict) or item.get("pull_request"):
+                    continue
+                open_total += 1
+                body = str(item.get("body") or "")
+                if workflow_marker in body:
+                    open_for_workflow += 1
+                created_at = str(item.get("created_at") or "")
+                try:
+                    created_ts = datetime.fromisoformat(created_at.replace("Z", "+00:00")).timestamp()
+                except ValueError:
+                    created_ts = 0.0
+                if created_ts >= cutoff:
+                    recent_total += 1
+            if open_total >= max_open:
+                return IncidentBudgetDecision(
+                    False,
+                    f"global_open_incidents:{open_total}>={max_open}",
+                    open_total,
+                    open_for_workflow,
+                    recent_total,
+                )
+            if open_for_workflow >= max_open_per_workflow:
+                return IncidentBudgetDecision(
+                    False,
+                    f"workflow_open_incidents:{open_for_workflow}>={max_open_per_workflow}",
+                    open_total,
+                    open_for_workflow,
+                    recent_total,
+                )
+            if recent_total >= max_recent:
+                return IncidentBudgetDecision(
+                    False,
+                    f"recent_incidents:{recent_total}>={max_recent}/{budget_hours}h",
+                    open_total,
+                    open_for_workflow,
+                    recent_total,
+                )
+            if len(payload) < 100:
+                break
+    except Exception as exc:  # noqa: BLE001 - circuit breaker must fail closed
+        return IncidentBudgetDecision(
+            False,
+            f"budget_lookup_error:{type(exc).__name__}",
+            open_total,
+            open_for_workflow,
+            recent_total,
+        )
+    finally:
+        if close_after:
+            try:
+                client.close()
+            except Exception:  # pragma: no cover
+                pass
+    return IncidentBudgetDecision(
+        True,
+        "within_budget",
+        open_total,
+        open_for_workflow,
+        recent_total,
+    )
+
+
 def _fingerprint_path(store_path: str | Path | None = None) -> Path:
     if store_path:
         return Path(store_path)
@@ -375,6 +604,80 @@ def record_fingerprint(
     )
     with p.open("a", encoding="utf-8") as f:
         f.write(json.dumps(rec.__dict__) + "\n")
+
+
+def find_existing_remediation_issue(
+    fingerprint: str,
+    *,
+    budget_hours: int = 24,
+    token: str | None = None,
+    repo: str | None = None,
+    client: Any = None,
+    now_ts: float | None = None,
+) -> str:
+    """Return a recent GitHub incident carrying the same fingerprint.
+
+    The runner-local JSONL store disappears after every hosted Actions run, so
+    it cannot provide cross-run deduplication.  GitHub issues are the durable
+    coordination plane already used by the remediation loop; query that plane
+    before creating another incident.  API failures deliberately fail open so
+    an outage in the dedup lookup never suppresses a real incident.
+    """
+
+    repo = repo or os.environ.get("GITHUB_REPOSITORY", "")
+    token = token or os.environ.get("GITHUB_TOKEN", "")
+    if not fingerprint or not repo or not token:
+        return ""
+    if now_ts is None:
+        now_ts = time.time()
+    since = datetime.fromtimestamp(now_ts - budget_hours * 3600, tz=UTC).isoformat()
+    if client is None:
+        if httpx is None:
+            return ""
+        client = httpx.Client(timeout=30.0)
+        close_after = True
+    else:
+        close_after = False
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+    }
+    marker = f"Correlation/Fingerprint: `{fingerprint}`"
+    try:
+        for page in range(1, 11):
+            response = client.get(
+                f"{GITHUB_API}/repos/{repo}/issues",
+                headers=headers,
+                params={
+                    "state": "all",
+                    "labels": "auto-incident",
+                    "sort": "created",
+                    "direction": "desc",
+                    "since": since,
+                    "per_page": 100,
+                    "page": page,
+                },
+            )
+            if response.status_code != 200:
+                return ""
+            payload = response.json()
+            if not isinstance(payload, list):
+                return ""
+            for item in payload:
+                if not isinstance(item, dict) or marker not in str(item.get("body") or ""):
+                    continue
+                return str(item.get("html_url") or "")
+            if len(payload) < 100:
+                break
+    except Exception:
+        return ""
+    finally:
+        if close_after:
+            try:
+                client.close()
+            except Exception:  # pragma: no cover
+                pass
+    return ""
 
 
 # =====================================================================
@@ -703,6 +1006,7 @@ def create_remediation_issue(
     fingerprint: str,
     log_excerpt: str,
     errors: list[ErrorEntry],
+    head_repo: str = "",
     token: str | None = None,
     repo: str | None = None,
     client: Any = None,
@@ -733,6 +1037,7 @@ def create_remediation_issue(
         f"- Workflow: `{workflow or 'unknown'}`\n"
         f"- Run ID: `{run_id}`\n"
         f"- Branch: `{branch or 'unknown'}`\n"
+        f"- Head Repository: `{head_repo or repo}`\n"
         f"- Correlation/Fingerprint: `{fingerprint}`\n\n"
         "### 提取结果\n\n"
         f"{error_lines}\n\n"
@@ -773,6 +1078,7 @@ def dispatch_issue_implementation(
     token: str | None = None,
     repo: str | None = None,
     ref: str = "main",
+    target_branch: str = "main",
     client: Any = None,
 ) -> bool:
     """Explicitly dispatch the implementation loop for a token-created issue.
@@ -805,7 +1111,10 @@ def dispatch_issue_implementation(
             headers=headers,
             json={
                 "ref": str(ref).strip(),
-                "inputs": {"issue_number": match.group("number")},
+                "inputs": {
+                    "issue_number": match.group("number"),
+                    "target_branch": str(target_branch or "main").strip(),
+                },
             },
         )
         return response.status_code == 204
@@ -841,6 +1150,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--run-id", type=int, default=None, help="失败 workflow run id")
     parser.add_argument("--workflow", default="", help="workflow 名称")
     parser.add_argument("--branch", default="", help="失败 workflow 所在分支")
+    parser.add_argument("--head-repo", default="", help="失败 workflow 的 head 仓库")
     parser.add_argument(
         "--store",
         default=None,
@@ -880,35 +1190,14 @@ def main(argv: list[str] | None = None) -> int:
     needs_human_count = sum(1 for f in fixes if f.needs_human)
     print(f"[heal] rules matched: {len(fixes)} fix(es), {needs_human_count} need human")
 
-    # LLM 兜底（仅对 needs-human 的 fix）
-    needs_human_errors = [f.error for f in fixes if f.needs_human]
-    if needs_human_errors:
-        llm_fixes = call_llm(needs_human_errors)
-        if llm_fixes is not None:
-            print(f"[heal] LLM 兜底生成 {len(llm_fixes)} 个候选修复")
-            # LLM 提供的修复替换原 needs-human fix，但 LLM 强制 r3 永不自动合并
-            for lf in llm_fixes:
-                # 找到原 fix 替换 patch
-                for i, orig in enumerate(fixes):
-                    if orig.error is lf.error:
-                        fixes[i] = Fix(
-                            error=lf.error,
-                            patch=lf.patch or orig.patch,
-                            needs_human=True,  # LLM 修复仍标 needs-human
-                            description=f"[LLM] {lf.description}",
-                            risk_level="r3",
-                        )
-                        break
-        else:
-            print("[heal] LLM unavailable (fail-open), 仅使用规则匹配结果")
-
-    # 计算指纹 & 去重
-    error_lines = [e.raw for e in errors]
+    # 先计算指纹、去重并检查持久化预算，再调用 LLM。否则同一故障风暴会在
+    # 确认是否值得新建 incident 之前反复消耗模型、Actions 与 artifact 配额。
+    fingerprint_evidence = canonical_fingerprint_evidence(errors, log_text)
     fingerprint = compute_fingerprint(
         repo=repo,
         workflow=args.workflow,
-        job="",  # job 信息从 logs 解析较复杂，此处留空
-        error_line="\n".join(error_lines),
+        job=args.branch,
+        error_line=fingerprint_evidence,
     )
     if is_already_processed(fingerprint, store_path=args.store):
         print(f"[skip] fingerprint {fingerprint[:8]} already processed within 24h")
@@ -921,10 +1210,67 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
+    budget = check_incident_budget(
+        args.workflow,
+        token=token,
+        repo=repo,
+    )
+    if not budget.allowed:
+        print(
+            "::error::[heal] incident circuit open; no issue or LLM dispatch created: "
+            f"{budget.reason} "
+            f"(open={budget.open_total}, workflow_open={budget.open_for_workflow}, "
+            f"recent={budget.recent_total})"
+        )
+        return 2
+
+    existing_issue = find_existing_remediation_issue(
+        fingerprint,
+        token=token,
+        repo=repo,
+    )
+    if existing_issue:
+        record_fingerprint(
+            fingerprint=fingerprint,
+            pr_url=existing_issue,
+            repo=repo,
+            workflow=args.workflow,
+            store_path=args.store,
+        )
+        print(f"[skip] durable fingerprint {fingerprint[:8]} already tracked by {existing_issue}")
+        return 0
+
+    # LLM 兜底（仅对通过去重与预算门禁的 needs-human fix）
+    needs_human_errors = [f.error for f in fixes if f.needs_human]
+    if needs_human_errors:
+        llm_fixes = call_llm(needs_human_errors)
+        if llm_fixes is not None:
+            print(f"[heal] LLM 兜底生成 {len(llm_fixes)} 个候选修复")
+            # LLM 提供的修复替换原 needs-human fix。
+            # 全量自主修复：LLM 修复从 r3 降为 r1（可自动合并），但保留
+            # 三层护栏：hold-merge veto 通道 + 二次守卫（CI 全绿/体量/文件
+            # 类型/禁止路径）+ 48h 观察期。bandit 安全告警仍强制 r3 永不自动合并。
+            for lf in llm_fixes:
+                # 找到原 fix 替换 patch
+                for i, orig in enumerate(fixes):
+                    if orig.error is lf.error:
+                        is_security = orig.error.tool == "bandit"
+                        fixes[i] = Fix(
+                            error=lf.error,
+                            patch=lf.patch or orig.patch,
+                            needs_human=is_security,  # 仅安全类保留 needs-human
+                            description=f"[LLM] {lf.description}",
+                            risk_level="r3" if is_security else "r1",
+                        )
+                        break
+        else:
+            print("[heal] LLM unavailable (fail-open), 仅使用规则匹配结果")
+
     issue_url = create_remediation_issue(
         run_id=run_id,
         workflow=args.workflow,
         branch=args.branch,
+        head_repo=args.head_repo,
         fingerprint=fingerprint,
         log_excerpt=select_incident_log_excerpt(log_text),
         errors=errors,
@@ -935,11 +1281,20 @@ def main(argv: list[str] | None = None) -> int:
         print("::error::[heal] remediation incident creation failed")
         return 2
 
-    implementation_dispatched = dispatch_issue_implementation(
-        issue_url,
-        token=token,
-        repo=repo,
-    )
+    same_repo_head = not args.head_repo or args.head_repo.casefold() == repo.casefold()
+    implementation_dispatched = False
+    if same_repo_head:
+        implementation_dispatched = dispatch_issue_implementation(
+            issue_url,
+            token=token,
+            repo=repo,
+            target_branch=args.branch or "main",
+        )
+    else:
+        print(
+            "::warning::[heal] incident came from a fork; automatic implementation "
+            f"is disabled for unowned head repository {args.head_repo}"
+        )
     if implementation_dispatched:
         print(f"[heal] implementation workflow dispatched for {issue_url}")
     else:

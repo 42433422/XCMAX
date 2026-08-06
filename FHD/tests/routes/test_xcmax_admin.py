@@ -154,7 +154,7 @@ class TestReleaseTrainSnapshot:
     def test_file_missing_returns_default(self, tmp_path: Path) -> None:
         with patch.dict("os.environ", {"XCMAX_MONOREPO_ROOT": str(tmp_path)}):
             out = admin_routes._release_train_snapshot()
-        assert out["current"] == "1.0.0.0"
+        assert out["current"] == "1.0.0.1"
         assert out.get("note") == "ssot missing"
 
     def test_bad_json_returns_default(self, tmp_path: Path) -> None:
@@ -163,7 +163,7 @@ class TestReleaseTrainSnapshot:
         (cfg_dir / "release_train.json").write_text("not json")
         with patch.dict("os.environ", {"XCMAX_MONOREPO_ROOT": str(tmp_path)}):
             out = admin_routes._release_train_snapshot()
-        assert out["current"] == "1.0.0.0"
+        assert out["current"] == "1.0.0.1"
 
     def test_file_returns_non_dict_returns_default(self, tmp_path: Path) -> None:
         cfg_dir = tmp_path / "FHD" / "config"
@@ -171,7 +171,7 @@ class TestReleaseTrainSnapshot:
         (cfg_dir / "release_train.json").write_text(json.dumps([1, 2, 3]))
         with patch.dict("os.environ", {"XCMAX_MONOREPO_ROOT": str(tmp_path)}):
             out = admin_routes._release_train_snapshot()
-        assert out["current"] == "1.0.0.0"
+        assert out["current"] == "1.0.0.1"
 
     def test_no_monorepo_root_uses_path_relative(self, tmp_path: Path) -> None:
         with patch.dict("os.environ", {"XCMAX_MONOREPO_ROOT": ""}, clear=False):
@@ -596,141 +596,6 @@ class TestAdminSetUserEnterprise:
         assert resp.status_code == 200
         call_args = mock_proxy.call_args
         assert "true" in call_args[0][2]
-
-
-class TestAdminWechatGroups:
-    def test_unauthenticated_returns_401(self, client: TestClient) -> None:
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value=None,
-        ):
-            resp = client.get("/api/xcmax/admin/wechat/groups")
-        assert resp.status_code == 401
-
-    def test_authenticated_returns_groups(self, client: TestClient) -> None:
-        with (
-            patch(
-                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                return_value="sess1",
-            ),
-            patch(
-                "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "admin", "market_is_admin": True},
-            ),
-            patch(
-                "app.services.wechat_group_customer_bridge.list_group_contacts",
-                return_value=[{"id": 1, "name": "group1"}],
-            ),
-        ):
-            resp = client.get("/api/xcmax/admin/wechat/groups")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["success"] is True
-        assert len(data["data"]) == 1
-
-    def test_service_error_returns_500(self, client: TestClient) -> None:
-        with (
-            patch(
-                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                return_value="sess1",
-            ),
-            patch(
-                "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "admin", "market_is_admin": True},
-            ),
-            patch(
-                "app.services.wechat_group_customer_bridge.list_group_contacts",
-                side_effect=RuntimeError("db down"),
-            ),
-        ):
-            resp = client.get("/api/xcmax/admin/wechat/groups")
-        assert resp.status_code == 500
-
-
-class TestAdminUserWechatCustomers:
-    def test_unauthenticated_returns_401(self, client: TestClient) -> None:
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value=None,
-        ):
-            resp = client.get("/api/xcmax/admin/market/users/1/wechat-customers")
-        assert resp.status_code == 401
-
-    def test_authenticated_returns_bindings(self, client: TestClient) -> None:
-        with (
-            patch(
-                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                return_value="sess1",
-            ),
-            patch(
-                "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "admin", "market_is_admin": True},
-            ),
-            patch(
-                "app.services.wechat_group_customer_bridge.get_bindings_for_user",
-                return_value=[{"contact_id": "c1"}],
-            ),
-        ):
-            resp = client.get("/api/xcmax/admin/market/users/1/wechat-customers")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["success"] is True
-
-
-class TestAdminSaveUserWechatCustomers:
-    def test_unauthenticated_returns_401(self, client: TestClient) -> None:
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value=None,
-        ):
-            resp = client.put(
-                "/api/xcmax/admin/market/users/1/wechat-customers",
-                json={"contact_ids": ["c1"]},
-            )
-        assert resp.status_code == 401
-
-    def test_authenticated_saves_bindings(self, client: TestClient) -> None:
-        with (
-            patch(
-                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                return_value="sess1",
-            ),
-            patch(
-                "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "admin", "market_is_admin": True},
-            ),
-            patch(
-                "app.services.wechat_group_customer_bridge.save_bindings_for_user",
-                return_value={"success": True},
-            ),
-        ):
-            resp = client.put(
-                "/api/xcmax/admin/market/users/1/wechat-customers",
-                json={"contact_ids": ["c1"]},
-            )
-        assert resp.status_code == 200
-
-    def test_non_list_contact_ids_treated_as_empty(self, client: TestClient) -> None:
-        with (
-            patch(
-                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                return_value="sess1",
-            ),
-            patch(
-                "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "admin", "market_is_admin": True},
-            ),
-            patch(
-                "app.services.wechat_group_customer_bridge.save_bindings_for_user",
-                return_value={"success": True},
-            ) as mock_save,
-        ):
-            resp = client.put(
-                "/api/xcmax/admin/market/users/1/wechat-customers",
-                json={"contact_ids": "not-a-list"},
-            )
-        assert resp.status_code == 200
-        mock_save.assert_called_once_with(1, [])
 
 
 class TestAdminImpersonate:

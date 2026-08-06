@@ -21,7 +21,15 @@ from urllib.parse import urlparse
 import httpx
 
 from modstore_server.catalog_store import files_dir
-from modstore_server.duty_burn_in_handlers import bind_reviewed_burn_in_handlers
+from modstore_server.duty_burn_in_handlers import (
+    bind_reviewed_burn_in_handlers,
+)
+from modstore_server.duty_burn_in_handlers import (
+    deterministic_direct_input_ready as _deterministic_direct_input_ready,
+)
+from modstore_server.duty_burn_in_handlers import (
+    is_reviewed_direct_burn_in,
+)
 from modstore_server.employee_runtime import (
     build_employee_context,
     load_employee_pack_resolved,
@@ -1871,11 +1879,23 @@ def _actions_real(
         and requested_handler == "direct_python"
         and "direct_python" in handlers
     )
-    if (
-        employee_id in ("vibe-coding-maintainer", "change-request-auditor", "test-qa-runner")
-        and not deterministic_council_review
-    ):
-        # Para 优先，但绝不能独占 handlers（Mac Bridge 离线时需本地回退）
+    direct_input = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
+    reviewed_direct_burn_in = is_reviewed_direct_burn_in(
+        actions_cfg,
+        direct_input,
+        requested_handler,
+        handlers,
+        burn_in=_flag_enabled(direct_input.get("burn_in")),
+        read_only=_flag_enabled(direct_input.get("burn_in_read_only")),
+    )
+    if employee_id in (
+        "vibe-coding-maintainer",
+        "change-request-auditor",
+        "test-qa-runner",
+    ) and not (deterministic_council_review or reviewed_direct_burn_in):
+        # Para 优先，但绝不能独占 handlers（Mac Bridge 离线时需本地回退）。
+        # 已审阅的只读 burn-in 则必须保留唯一确定性处理器，否则回执会被
+        # 普通任务委派路径吞掉，不能作为能力证明。
         handlers = _prefer_para_with_local_fallback(list(handlers), list(handlers))
     if employee_id == "vibe-coding-maintainer":
         handlers = _filter_handlers_vibe_coding_maintainer(handlers, reasoning, task)
@@ -2315,27 +2335,6 @@ def _evaluate_employee_risk_gate(
             "reason": "risk middleware unavailable; fail-closed",
             "detail": f"risk middleware error ({type(exc).__name__})",
         }
-
-
-def _deterministic_direct_input_ready(actions_cfg: Dict[str, Any], payload: Dict[str, Any]) -> bool:
-    """Return true only for a reviewed read-only employee-module contract."""
-
-    direct = (
-        actions_cfg.get("direct_python")
-        if isinstance(actions_cfg.get("direct_python"), dict)
-        else {}
-    )
-    if (
-        str(direct.get("implementation") or "").strip().lower() != "employee_module"
-        or str(direct.get("execution_mode") or "").strip().lower() != "deterministic"
-        or direct.get("read_only") is not True
-    ):
-        return False
-    schema = direct.get("input_schema") if isinstance(direct.get("input_schema"), dict) else {}
-    required = schema.get("required") if isinstance(schema.get("required"), list) else []
-    if not required:
-        return False
-    return all(str(key).strip() and str(key) in payload for key in required)
 
 
 def execute_employee_task(

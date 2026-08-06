@@ -22,7 +22,7 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -257,7 +257,7 @@ def build_inventory(*, host: str = "127.0.0.1") -> dict[str, Any]:
     unknown = sum(1 for i in items if i.get("actual") == "unknown")
     return {
         "schema": SCHEMA,
-        "generated_at": datetime.now(UTC).isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "host": host,
         "source": {
             "topology": (

@@ -19,7 +19,7 @@ class MaterialApplicationService:
         repository: Optional["MaterialRepository"] = None,
     ):
         if repository is None:
-            from app.infrastructure.persistence.material_repository_impl import (
+            from app.infrastructure.repositories.material_repository_impl import (
                 SQLAlchemyMaterialRepository,
             )
 

@@ -43,7 +43,10 @@ def test_workflow_comment_trigger_requires_open_issue_owner_confirmation() -> No
         workflow = workflow_path.read_text(encoding="utf-8")
         assert "github.event.issue.state == 'open'" in workflow
         assert "github.event.comment.author_association == 'OWNER'" in workflow
-        assert "contains(github.event.comment.body, '确认')" in workflow
+        assert "github.event.comment.body == '确认实现'" in workflow
+        assert "github.event.comment.body == '/approve-implementation'" in workflow
+        assert "target_branch:" in workflow
+        assert "--base-branch" in workflow
 
 
 class TestHasAimplementLabel:
@@ -77,62 +80,75 @@ class TestOwnerConfirmed:
     def test_no_comments_not_confirmed(self) -> None:
         ok, msg = _ai_impl._owner_confirmed(self._issue(), [], "owner/repo")
         assert ok is False
-        assert "未在评论中确认" in msg
+        assert "精确批准命令" in msg
 
     def test_other_user_comment_not_confirmed(self) -> None:
         issue = self._issue(login="owner")
-        comments = [{"user": {"login": "someone-else"}, "body": "确认"}]
+        comments = [
+            {
+                "user": {"login": "someone-else"},
+                "author_association": "CONTRIBUTOR",
+                "body": "确认实现",
+            }
+        ]
         ok, _ = _ai_impl._owner_confirmed(issue, comments, "owner/repo")
         assert ok is False
 
-    def test_owner_chinese_confirm_keyword(self) -> None:
-        issue = self._issue(login="owner")
-        comments = [{"user": {"login": "owner"}, "body": "确认，开始执行吧"}]
+    def test_repository_owner_chinese_exact_command(self) -> None:
+        issue = self._issue(login="github-actions[bot]")
+        comments = [
+            {
+                "user": {"login": "repo-owner"},
+                "author_association": "OWNER",
+                "body": "确认实现",
+            }
+        ]
         ok, msg = _ai_impl._owner_confirmed(issue, comments, "owner/repo")
         assert ok is True
-        assert "owner" in msg
+        assert "repo-owner" in msg
 
-    def test_owner_english_confirm(self) -> None:
+    def test_repository_owner_english_exact_command(self) -> None:
         issue = self._issue(login="alice")
-        comments = [{"user": {"login": "alice"}, "body": "approved, go ahead"}]
+        comments = [
+            {
+                "user": {"login": "alice"},
+                "author_association": "OWNER",
+                "body": "/APPROVE-IMPLEMENTATION",
+            }
+        ]
         ok, _ = _ai_impl._owner_confirmed(issue, comments, "alice/repo")
         assert ok is True
 
-    def test_owner_plus_one(self) -> None:
-        issue = self._issue(login="bob")
-        comments = [{"user": {"login": "bob"}, "body": "+1"}]
-        ok, _ = _ai_impl._owner_confirmed(issue, comments, "bob/repo")
-        assert ok is True
+    @pytest.mark.parametrize("body", ["确认", "已确认，请执行", "approved", "+1", "OK", "go"])
+    def test_ambiguous_owner_comment_does_not_authorize(self, body: str) -> None:
+        issue = self._issue(login="frank")
+        comments = [
+            {
+                "user": {"login": "frank"},
+                "author_association": "OWNER",
+                "body": body,
+            }
+        ]
+        ok, _ = _ai_impl._owner_confirmed(issue, comments, "frank/repo")
+        assert ok is False
 
-    def test_owner_ok_keyword(self) -> None:
-        issue = self._issue(login="carol")
-        comments = [{"user": {"login": "carol"}, "body": "OK"}]
-        ok, _ = _ai_impl._owner_confirmed(issue, comments, "carol/repo")
-        assert ok is True
-
-    def test_owner_go_keyword(self) -> None:
-        issue = self._issue(login="dan")
-        comments = [{"user": {"login": "dan"}, "body": "go"}]
-        ok, _ = _ai_impl._owner_confirmed(issue, comments, "dan/repo")
-        assert ok is True
-
-    def test_case_insensitive(self) -> None:
-        issue = self._issue(login="eve")
-        comments = [{"user": {"login": "eve"}, "body": "CONFIRM"}]
-        ok, _ = _ai_impl._owner_confirmed(issue, comments, "eve/repo")
-        assert ok is True
-
-    def test_issue_body_contains_confirm_keyword(self) -> None:
-        # issue 本身 body 含确认也算（owner 自己写的）
+    def test_issue_body_never_authorizes_itself(self) -> None:
         issue = self._issue(login="frank", body="已确认，请执行")
         ok, _ = _ai_impl._owner_confirmed(issue, [], "frank/repo")
-        assert ok is True
-
-    def test_no_author_not_confirmed(self) -> None:
-        issue = {"user": {}, "body": "确认"}
-        ok, msg = _ai_impl._owner_confirmed(issue, [], "owner/repo")
         assert ok is False
-        assert "未解析" in msg
+
+    def test_issue_author_is_not_repository_owner_proof(self) -> None:
+        issue = {"user": {"login": "owner"}, "body": "确认实现"}
+        comments = [
+            {
+                "user": {"login": "owner"},
+                "author_association": "NONE",
+                "body": "确认实现",
+            }
+        ]
+        ok, msg = _ai_impl._owner_confirmed(issue, comments, "owner/repo")
+        assert ok is False
+        assert "精确批准命令" in msg
 
 
 class TestAllowlistPreauthorized:
@@ -213,7 +229,13 @@ class TestIsAuthorized:
         try:
             ok, _, source = _ai_impl._is_authorized(
                 issue,
-                [{"user": {"login": "owner"}, "body": "确认"}],
+                [
+                    {
+                        "user": {"login": "owner"},
+                        "author_association": "OWNER",
+                        "body": "确认实现",
+                    }
+                ],
                 "owner/repo",
             )
             assert ok is True
@@ -248,7 +270,13 @@ class TestIsAuthorized:
         try:
             ok, _, source = _ai_impl._is_authorized(
                 issue,
-                [{"user": {"login": "owner"}, "body": "确认"}],
+                [
+                    {
+                        "user": {"login": "owner"},
+                        "author_association": "OWNER",
+                        "body": "确认实现",
+                    }
+                ],
                 "owner/repo",
             )
             assert ok is True
@@ -260,7 +288,7 @@ class TestIsAuthorized:
 class TestCommitAndPrLabelRouting:
     """LLM code remains review-gated regardless of execution authorization."""
 
-    def test_allowlist_source_still_requires_r2_review(
+    def test_allowlist_source_labels_r1_automerge(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         captured: dict[str, Any] = {}
@@ -289,16 +317,98 @@ class TestCommitAndPrLabelRouting:
             "o/r",
             "tok",
             auth_source="allowlist",
+            base_branch="feature/failing-ci",
         )
         assert pr_num == 1
         assert "ai-generated" in captured["labels_payload"]["labels"]
-        assert "risk:r2" in captured["labels_payload"]["labels"]
-        assert "needs-human" in captured["labels_payload"]["labels"]
-        assert "risk:r0" not in captured["labels_payload"]["labels"]
+        assert "risk:r1" in captured["labels_payload"]["labels"]
+        assert "risk:r2" not in captured["labels_payload"]["labels"]
         # PR body 必须含 allowlist 来源说明
         assert "allowlist" in captured["pr_payload"]["body"]
+        assert captured["pr_payload"]["base"] == "feature/failing-ci"
 
-    def test_owner_source_labels_r2_needs_human(
+
+class TestRepairBaseBranch:
+    @pytest.mark.parametrize(
+        "branch",
+        ["feature/x", "codex/fix-123", "release-2026.08"],
+    )
+    def test_normalizes_safe_same_repo_branch(self, branch: str) -> None:
+        assert _ai_impl._normalize_base_branch(branch) == branch
+
+    @pytest.mark.parametrize(
+        "branch",
+        ["-bad", "refs/heads/main", "HEAD", "bad branch", "a..b", "a//b", "x.lock"],
+    )
+    def test_rejects_unsafe_branch(self, branch: str) -> None:
+        with pytest.raises(ValueError):
+            _ai_impl._normalize_base_branch(branch)
+
+    def test_fetches_exact_remote_branch_refspec(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[tuple[str, ...]] = []
+
+        def fake_git(*args: str, cwd: str | None = None, check: bool = True) -> Any:
+            calls.append(args)
+            return type("Result", (), {"stdout": ""})()
+
+        monkeypatch.setattr(_ai_impl, "_git", fake_git)
+
+        branch, ref = _ai_impl._fetch_remote_base("/repo", "feature/failing-ci")
+
+        assert branch == "feature/failing-ci"
+        assert ref == "refs/remotes/origin/feature/failing-ci"
+        assert calls[0][-1] == (
+            "+refs/heads/feature/failing-ci:refs/remotes/origin/feature/failing-ci"
+        )
+        assert any("refs/heads/main:refs/remotes/origin/main" in call[-1] for call in calls)
+
+    def test_branch_context_contains_target_delta(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        outputs = iter([" file.py | 2 +-\n", "@@ -1 +1 @@\n-old\n+new\n"])
+
+        def fake_git(*args: str, cwd: str | None = None, check: bool = True) -> Any:
+            return type("Result", (), {"stdout": next(outputs)})()
+
+        monkeypatch.setattr(_ai_impl, "_git", fake_git)
+
+        context = _ai_impl._collect_branch_context(
+            "/repo",
+            "feature/failing-ci",
+            "refs/remotes/origin/feature/failing-ci",
+        )
+
+        assert "file.py" in context
+        assert "+new" in context
+
+    def test_real_git_repair_branch_starts_from_failed_branch(self, tmp_path: Path) -> None:
+        remote = tmp_path / "remote.git"
+        seed = tmp_path / "seed"
+        runner = tmp_path / "runner"
+        _ai_impl._git("init", "--bare", str(remote))
+        _ai_impl._git("init", str(seed))
+        _ai_impl._git("config", "user.name", "test", cwd=str(seed))
+        _ai_impl._git("config", "user.email", "test@example.com", cwd=str(seed))
+        (seed / "README.md").write_text("main\n", encoding="utf-8")
+        _ai_impl._git("add", "README.md", cwd=str(seed))
+        _ai_impl._git("commit", "-m", "main", cwd=str(seed))
+        _ai_impl._git("branch", "-M", "main", cwd=str(seed))
+        _ai_impl._git("remote", "add", "origin", str(remote), cwd=str(seed))
+        _ai_impl._git("push", "origin", "main", cwd=str(seed))
+        _ai_impl._git("checkout", "-b", "feature/failing-ci", cwd=str(seed))
+        (seed / "failure.txt").write_text("branch-only\n", encoding="utf-8")
+        _ai_impl._git("add", "failure.txt", cwd=str(seed))
+        _ai_impl._git("commit", "-m", "failing branch", cwd=str(seed))
+        failed_sha = _ai_impl._git("rev-parse", "HEAD", cwd=str(seed)).stdout.strip()
+        _ai_impl._git("push", "origin", "feature/failing-ci", cwd=str(seed))
+        _ai_impl._git("clone", str(remote), str(runner))
+
+        branch, ref = _ai_impl._fetch_remote_base(str(runner), "feature/failing-ci")
+        repair_branch = _ai_impl._create_branch(str(runner), 123, ref)
+
+        assert branch == "feature/failing-ci"
+        assert repair_branch.startswith("ai-impl/123-")
+        assert _ai_impl._git("rev-parse", "HEAD", cwd=str(runner)).stdout.strip() == failed_sha
+
+    def test_owner_source_labels_r1_automerge(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         captured: dict[str, Any] = {}
@@ -330,10 +440,9 @@ class TestCommitAndPrLabelRouting:
         )
         assert pr_num == 2
         labels = captured["labels_payload"]["labels"]
-        assert "needs-human" in labels
         assert "ai-generated" in labels
-        assert "risk:r2" in labels
-        assert "risk:r0" not in labels
+        assert "risk:r1" in labels
+        assert "risk:r2" not in labels
         # PR body 必须含 owner 来源说明
         assert "owner" in captured["pr_payload"]["body"]
 
@@ -367,9 +476,9 @@ class TestCommitAndPrLabelRouting:
             "tok",
         )
         labels = captured["labels_payload"]["labels"]
-        assert "needs-human" in labels
-        assert "risk:r2" in labels
-        assert "risk:r0" not in labels
+        assert "ai-generated" in labels
+        assert "risk:r1" in labels
+        assert "risk:r2" not in labels
 
 
 class TestEstimateFiles:
@@ -531,6 +640,7 @@ class TestImplementResultDataclass:
         assert r.ok is False
         assert r.status == "init"
         assert r.changed_files == []
+        assert r.base_branch == "main"
         assert r.pr_number == 0
         assert r.llm_used is False
 
@@ -597,8 +707,11 @@ class TestCallLlmStrictJsonRetry:
         assert result == {"files": [], "estimated_files": 0, "ok": True}
         assert len(requests) == 2
         assert requests[0]["temperature"] == 0.2
+        assert requests[0]["max_tokens"] == 4000
         assert requests[1]["temperature"] == 0
+        assert requests[1]["max_tokens"] == 6000
         assert "严格 JSON" in requests[1]["messages"][-1]["content"]
+        assert "确保完整 JSON 不被截断" in requests[1]["messages"][-1]["content"]
 
     def test_two_invalid_responses_fail_closed_after_one_retry(
         self, monkeypatch: pytest.MonkeyPatch

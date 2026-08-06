@@ -26,25 +26,38 @@ describe('useAgentRunEvents', () => {
     expect(extractAgentRunId({})).toBe('')
   })
 
-  it('maps completed events to a successful task update', () => {
+  it('does not turn an ordinary chat lifecycle into a task', () => {
+    expect(buildAgentRunTaskUpdate({
+      runId: 'run_chat_only',
+      events: [
+        { event_id: 'evt_1', run_id: 'run_chat_only', event_type: 'planner.started' },
+        { event_id: 'evt_2', run_id: 'run_chat_only', event_type: 'run.completed', message: '完成' },
+      ],
+    })).toBeNull()
+  })
+
+  it('maps a confirmed tool result to a successful task update', () => {
     const update = buildAgentRunTaskUpdate({
       runId: 'run_1',
       userText: '查数据库产品 XG-5003',
       messageRef: '2',
       events: [
         { event_id: 'evt_1', run_id: 'run_1', event_type: 'planner.started' },
-        { event_id: 'evt_2', run_id: 'run_1', event_type: 'run.completed', message: '完成' },
+        { event_id: 'evt_2', run_id: 'run_1', event_type: 'tool.completed', message: '查询完成' },
+        { event_id: 'evt_3', run_id: 'run_1', event_type: 'run.completed', message: '完成' },
       ],
     })
 
-    expect(update.id).toBe('agent_run_1')
-    expect(update.source).toBe('agent')
-    expect(update.status).toBe('success')
-    expect(update.progress).toBe(100)
-    expect(update.payload?.lastAgentEventId).toBe('evt_2')
-    expect(update.title).toContain('智能任务')
-    expect(update.summary).toBe('智能任务执行完成')
-    expect(String(update.title)).not.toContain('Agent')
+    expect(update).toMatchObject({
+      id: 'agent_run_1',
+      source: 'agent',
+      status: 'success',
+      progress: 100,
+      title: expect.stringContaining('智能任务'),
+      summary: '智能任务执行完成',
+    })
+    expect(update?.payload?.lastAgentEventId).toBe('evt_3')
+    expect(String(update?.title)).not.toContain('Agent')
   })
 
   it('sanitizes legacy backend event messages before showing them to users', () => {
@@ -57,29 +70,15 @@ describe('useAgentRunEvents', () => {
         message: 'Legacy planner run 执行完成',
       }],
     })
-    expect(update.stage).toBe('智能任务 执行完成')
-    expect(String(update.stage)).not.toContain('Legacy')
+    expect(update).toBeNull()
   })
 
-  it('fetches run events and upserts a task panel row for multi-tool runs', async () => {
+  it('fetches run events and upserts a task panel row', async () => {
     agentRunsApiMock.listEvents.mockResolvedValueOnce({
       success: true,
       data: [
         { event_id: 'evt_1', run_id: 'run_1', event_type: 'planner.completed' },
-        {
-          event_id: 'evt_2',
-          run_id: 'run_1',
-          event_type: 'tool.started',
-          message: '开始执行工具',
-          data: { node_id: 'n1', tool_id: 't1' },
-        },
-        {
-          event_id: 'evt_3',
-          run_id: 'run_1',
-          event_type: 'tool.started',
-          message: '开始执行工具',
-          data: { node_id: 'n2', tool_id: 't2' },
-        },
+        { event_id: 'evt_2', run_id: 'run_1', event_type: 'tool.started', message: '开始执行工具' },
       ],
     })
     const upsertTask = vi.fn()
@@ -98,55 +97,41 @@ describe('useAgentRunEvents', () => {
     }))
   })
 
-  it('skips task panel upsert for trivial legacy chat with no tools', async () => {
-    agentRunsApiMock.listEvents.mockResolvedValueOnce({
-      success: true,
-      data: [
-        { event_id: 'evt_1', run_id: 'run_chat', event_type: 'run.created', message: 'Legacy planner run 已创建' },
-        { event_id: 'evt_2', run_id: 'run_chat', event_type: 'planner.started' },
-        { event_id: 'evt_3', run_id: 'run_chat', event_type: 'planner.completed' },
-        { event_id: 'evt_4', run_id: 'run_chat', event_type: 'run.completed', message: 'Legacy planner run 执行完成' },
-      ],
-    })
+  it('keeps prior tool evidence when later polling returns only terminal events', async () => {
+    agentRunsApiMock.listEvents
+      .mockResolvedValueOnce({
+        success: true,
+        data: [{ event_id: 'evt_tool', run_id: 'run_1', event_type: 'tool.completed' }],
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: [{ event_id: 'evt_done', run_id: 'run_1', event_type: 'run.completed' }],
+      })
     const upsertTask = vi.fn()
     const sync = useAgentRunEventSync({ upsertTask })
-    await sync.syncAgentRunFromPayload({ data: { run_id: 'run_chat' } }, '你可以做什么')
-    expect(upsertTask).not.toHaveBeenCalled()
+
+    await sync.syncAgentRunEvents('run_1', '查产品')
+    await sync.syncAgentRunEvents('run_1', '查产品')
+
+    expect(agentRunsApiMock.listEvents).toHaveBeenLastCalledWith('run_1', { after_event_id: 'evt_tool' })
+    expect(upsertTask).toHaveBeenLastCalledWith(expect.objectContaining({
+      status: 'success',
+      payload: expect.objectContaining({ lastAgentEventId: 'evt_done' }),
+    }))
   })
 
-  it('skips task panel upsert for single successful customers.query tool', async () => {
+  it('removes a stale task row when a run has no execution evidence', async () => {
     agentRunsApiMock.listEvents.mockResolvedValueOnce({
       success: true,
-      data: [
-        {
-          event_id: 'evt_1',
-          run_id: 'run_c',
-          event_type: 'run.created',
-          message: 'Legacy planner 工具调用已进入 AgentRun 追踪',
-        },
-        {
-          event_id: 'evt_2',
-          run_id: 'run_c',
-          event_type: 'tool.started',
-          data: { node_id: 'n1', tool_id: 'customers', action: 'query' },
-        },
-        {
-          event_id: 'evt_3',
-          run_id: 'run_c',
-          event_type: 'tool.completed',
-          data: { node_id: 'n1', tool_id: 'customers' },
-        },
-        {
-          event_id: 'evt_4',
-          run_id: 'run_c',
-          event_type: 'run.completed',
-          message: 'Legacy planner 工具调用追踪完成',
-        },
-      ],
+      data: [{ event_id: 'evt_done', run_id: 'run_plain', event_type: 'run.completed' }],
     })
     const upsertTask = vi.fn()
-    const sync = useAgentRunEventSync({ upsertTask })
-    await sync.syncAgentRunFromPayload({ data: { run_id: 'run_c' } }, '查客户')
+    const removeTask = vi.fn()
+    const sync = useAgentRunEventSync({ upsertTask, removeTask })
+
+    await sync.syncAgentRunEvents('run_plain', '删除侯雪梅')
+
     expect(upsertTask).not.toHaveBeenCalled()
+    expect(removeTask).toHaveBeenCalledWith('agent_run_plain')
   })
 })

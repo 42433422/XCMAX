@@ -139,7 +139,16 @@ cleanup() {
 trap cleanup EXIT
 
 rm -f "${DMG_PATH}"
+# iCloud/Desktop FileProvider can re-attach com.apple.provenance / FinderInfo
+# xattrs to the app bundle, which makes hdiutil reject it with "操作不被允许 /
+# operation not permitted". Strip them on the staged copy before assembling.
+if command -v xattr >/dev/null 2>&1; then
+  xattr -cr "${APP_PATH}" 2>/dev/null || true
+fi
 ditto --norsrc "${APP_PATH}" "${DMG_ROOT}/$(basename "${APP_PATH}")"
+if command -v xattr >/dev/null 2>&1; then
+  xattr -cr "${DMG_ROOT}/$(basename "${APP_PATH}")" 2>/dev/null || true
+fi
 ln -s /Applications "${DMG_ROOT}/Applications"
 hdiutil create \
   -volname "${VOLUME_NAME}" \

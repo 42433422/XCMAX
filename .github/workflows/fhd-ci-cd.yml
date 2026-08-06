@@ -133,6 +133,10 @@ jobs:
           python scripts/dev/count_type_debt.py --max-type-ignore 69 --max-ts-nocheck 0 --max-any 99999
           python scripts/dev/count_raw_sql.py
 
+      - name: "[观察期] Schema drift check（模型 vs 迁移链）"
+        continue-on-error: true
+        run: python scripts/dev/check_schema_drift.py
+
       - name: Big files ratchet (巨文件只减不增)
         run: python scripts/dev/count_big_files.py
 
@@ -156,10 +160,25 @@ jobs:
             --cov-report=xml --cov-report=json:coverage.json \
             --cov-report=html --cov-report=term-missing
 
+      - name: Coverage floor guard (下调必须有 ADR)
+        if: github.event_name == 'pull_request'
+        run: |
+          # PR checkout 是 merge commit，工作区==HEAD，必须对比目标分支才能识别下调。
+          git fetch --depth=1 origin "${{ github.base_ref }}"
+          python scripts/dev/guard_coverage_floor.py --base FETCH_HEAD
+
+      - name: coverage_ramp stub quota (只减不增)
+        run: python scripts/dev/count_coverage_ramp_stubs.py --check
+
+      - name: test-bloat gate (P1-2 测试膨胀门禁)
+        run: python scripts/dev/test_bloat_report.py --check
+
       - name: Coverage ratchet check (行/分支只升不降)
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: python scripts/dev/coverage_ratchet.py --check --require-backend --record
+        # 注意：暂不追加 --peak-floor —— 历史峰值与当前实测差距 > 0.5pt，启用即全红；
+        # 启用条件见 scripts/dev/guard_coverage_floor.py docstring。
 
       # Codecov policy: optional until CODECOV_TOKEN is in repo secrets
       # (Settings → Secrets and variables → Actions). Without token this step is
@@ -173,6 +192,17 @@ jobs:
           flags: backend
           name: xcagi-backend
           fail_ci_if_error: false
+
+      # 行为覆盖率诚实化（Delta A）：排除 coverage_ramp 注水 stub 后的真实行为口径。
+      # 这是后端覆盖率门禁的唯一硬 gate（--behavior --require-backend），回退即阻断。
+      - name: Behavior coverage gate (排除 coverage_ramp stub，硬门禁)
+        env:
+          XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
+        run: |
+          python -m pytest tests/ -q -m 'not coverage_ramp' \
+            --cov --cov-branch --cov-report=json:coverage-behavior.json \
+            --cov-fail-under=0
+          python scripts/dev/coverage_ratchet.py --check --behavior --require-backend --record
 
   frontend-test:
     needs: guard-temp-scripts
@@ -202,6 +232,11 @@ jobs:
       - name: Run unit tests with coverage
         working-directory: FHD/frontend
         run: npm run test:coverage
+
+      # 前端覆盖率诚实化（Delta B）：以 coverage_ratchet.py 为硬门禁，回退即阻断。
+      - name: Frontend coverage ratchet gate
+        working-directory: FHD/frontend
+        run: python ../scripts/dev/coverage_ratchet.py --check --require-frontend
 
       - name: Run vue-tsc
         working-directory: FHD/frontend
@@ -268,6 +303,25 @@ jobs:
 
       - name: Run architecture fitness checks
         run: python scripts/arch_fitness.py
+
+      - name: arch-fitness-legacy-check (P1-4 双轨边界)
+        run: |
+          python - <<'PY'
+          import subprocess, sys, os
+          sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+          import arch_fitness
+          r = subprocess.run(["python", "scripts/arch_fitness.py"], capture_output=True, text=True)
+          baselined = arch_fitness._load_baseline_keys()
+          # 只拦「新增」的 legacy/compat 散落；基线内已知项放行（与 arch_fitness.py 判定一致）。
+          blocked = [l for l in (r.stdout + r.stderr).splitlines()
+                     if "[legacy-boundary]" in l and "must live under app/legacy/" in l
+                     and arch_fitness._violation_key(l) not in baselined]
+          if blocked:
+              print("::error::新增 legacy/compat 文件散落到 app/legacy/ 之外：")
+              print("\n".join(blocked))
+              sys.exit(1)
+          print("arch-fitness-legacy-check OK")
+          PY
 
       - name: docs-ssot-lint
         run: python scripts/dev/docs_ssot_lint.py --strict
@@ -632,51 +686,9 @@ jobs:
             --ref main \
             -f force_run=false
 
-  # Docker Build & Push
-  docker-build:
-    needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,prefix=sha-
-            type=semver,pattern={{version}}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: FHD
-          file: FHD/Dockerfile
-          target: production
-          push: ${{ github.ref == format('refs/heads/{0}', 'main') }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+  # Docker Build & Push（全仓镜像）已于 2026-07-20 退役：推 <repo>:sha-xxx 无人引用，
+  # 实际制品由 docker-build-fhd-api（GHCR fhd-api 镜像）与 pack-verify（tarball）承担。
+  # 2026-08-01 移除残留 job 定义（无下游 needs，branch protection 未引用）。
 
   release-verify:
     name: release-verify

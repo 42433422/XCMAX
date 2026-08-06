@@ -148,7 +148,8 @@ def test_release_workflow_notarizes_outer_dmg_and_hard_fails_gatekeeper() -> Non
 
     assert 'xcrun notarytool submit "${DMG_PATH}"' in finalize_script
     assert 'xcrun stapler staple "${DMG_PATH}"' in finalize_script
-    assert "executeAppBuilderAsJson" in finalize_script
+    assert "buildBlockMap" in finalize_script
+    assert "executeAppBuilderAsJson" not in finalize_script
     assert "generate-update-metadata.mjs" in finalize_script
 
 

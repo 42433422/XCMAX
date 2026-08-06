@@ -5,9 +5,12 @@ import { ref, type Ref } from 'vue'
 import chatApi, { parseChatStreamErrorResponse } from '@/api/chat'
 import { readPlannerSseResponse, type PlannerSseEvent } from '@/utils/chatSseStream'
 import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
+import type { ChatExecutionProgressItem } from '@/types/chat-ui'
 import { asRecord, asString } from '@/utils/typeGuards'
 import { stripInternalMarkers } from '@/utils/lightMarkdown'
 import { stripPlannerDisplayMarkers } from '@/utils/chatBubbleDisplay'
+import { buildChatSoftwareCapabilities } from '@/utils/chatCapabilityCatalog'
+import { openDocumentPreviewFromResult } from '@/state/documentPreviewPip'
 
 export type ChatStreamRoundDeps = {
   pushStreamingAiShell: () => number
@@ -64,6 +67,27 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
     activeStreamController = controller
     const killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
     const msgIndex = deps.pushStreamingAiShell()
+    const executionProgress: ChatExecutionProgressItem[] = []
+    const updateExecutionProgress = (
+      phase: string,
+      label: string,
+      status: ChatExecutionProgressItem['status'] = 'running',
+    ) => {
+      const previous = executionProgress[executionProgress.length - 1]
+      if (previous && previous.phase === phase && previous.label === label) {
+        previous.status = status
+        previous.at = new Date().toISOString()
+      } else {
+        if (previous?.status === 'running') previous.status = 'success'
+        executionProgress.push({ phase, label, status, at: new Date().toISOString() })
+        if (executionProgress.length > 12) executionProgress.splice(0, executionProgress.length - 12)
+      }
+      deps.patchMessageAtIndex(msgIndex, {
+        toolProgressLabel: label,
+        executionProgress: executionProgress.map((item) => ({ ...item })),
+      })
+    }
+    updateExecutionProgress('accepted', '已接收任务，正在理解你的需求…')
     let streamPlain = ''
     let doneResult: Record<string, unknown> | null = null
     let sseError: string | null = null
@@ -96,6 +120,12 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
       const { body } = deps.buildPlannerChatRequestPayload(primaryForStream, {
         fromWriteUnlock: !!opts?.fromWriteUnlock,
       })
+      const softwareCapabilities = buildChatSoftwareCapabilities()
+      body.software_capabilities = softwareCapabilities
+      body.runtime_context = {
+        ...asRecord(body.runtime_context),
+        software_capabilities: softwareCapabilities,
+      }
       const res = await chatApi.sendChatStream(
         { ...body, message: String(body.message || primaryForStream) } as ChatRequest &
           Record<string, unknown>,
@@ -110,14 +140,16 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
           streamPlain += ev.text || ''
           deps.applyPlainTextToMessageIndex(msgIndex, streamPlain)
           flushTtsFromStream(streamPlain, false)
+          updateExecutionProgress('generating', '正在生成回复…')
           deps.setLoadingProgress('正在生成回复…')
           deps.scrollToBottom()
         } else if (ev.type === 'tool_progress') {
-          const label = String(ev.label || ev.text || ev.phase || '工具').trim()
-          deps.patchMessageAtIndex(msgIndex, {
-            toolProgressLabel: label ? `正在调用 ${label}…` : '正在调用工具…',
-          })
-          deps.setLoadingProgress(label ? `正在调用 ${label}…` : '正在调用工具…')
+          const label = String(ev.text || ev.label || ev.phase || '工具').trim()
+          const progressText = ev.phase === 'accepted'
+            ? label
+            : label ? `正在调用 ${label}…` : '正在调用工具…'
+          updateExecutionProgress(ev.phase || 'working', progressText)
+          deps.setLoadingProgress(progressText)
           deps.scrollToBottom()
         } else if (ev.type === 'done') {
           doneResult = asRecord(ev.result)
@@ -143,6 +175,7 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
         cleanStreamDisplayText(String(asString(doneResult?.['response']) || streamPlain)) ||
         streamPlain ||
         '（无内容）'
+      updateExecutionProgress('completed', '任务已完成', 'success')
       deps.patchMessageAtIndex(msgIndex, { toolProgressLabel: undefined })
       deps.applyPlainTextToMessageIndex(msgIndex, finalText)
       if (ttsShouldSpeak && deps.ttsEnabled.value) {
@@ -156,11 +189,13 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
           : { success: true, response: finalText }
       await deps.onStreamDone(wrap, primaryForStream, msgIndex)
       deps.persistMessagesCache()
+      openDocumentPreviewFromResult(doneResult)
       return true
     } catch (err: unknown) {
       const errObj = err as { name?: string; message?: string }
       if (errObj?.name === 'AbortError' && abortedByUser) {
         const partial = cleanStreamDisplayText(streamPlain)
+        updateExecutionProgress('cancelled', '已停止生成', 'cancelled')
         deps.patchMessageAtIndex(msgIndex, { toolProgressLabel: undefined })
         if (partial) {
           deps.applyPlainTextToMessageIndex(msgIndex, partial)
@@ -175,6 +210,8 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
         errObj?.name === 'AbortError'
           ? `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
           : errObj?.message || '流式对话失败'
+      updateExecutionProgress('failed', `处理失败：${errText}`, 'failed')
+      deps.patchMessageAtIndex(msgIndex, { toolProgressLabel: undefined })
       deps.applyPlainTextToMessageIndex(msgIndex, `处理失败：${errText}`)
       await deps.saveMessage('ai', `处理失败：${errText}`)
       return false

@@ -6,7 +6,7 @@ import tempfile
 
 import pytest
 
-from app.utils import rate_limiter as rate_limiter_mod
+from app.utils.resilience import rate_limiter as rate_limiter_mod
 
 
 @pytest.fixture(autouse=True)
@@ -46,7 +46,7 @@ def test_password_hash_roundtrip():
 
 
 def test_rate_limiter_memory_backend():
-    from app.utils.rate_limiter import check_rate_limit
+    from app.utils.resilience.rate_limiter import check_rate_limit
 
     r1 = check_rate_limit("u1", "ep-test-mem", max_requests=2, window_seconds=60)
     assert r1["allowed"] is True

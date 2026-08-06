@@ -1,4 +1,4 @@
-"""Branch coverage tests for app.utils.excel_template_analyzer.
+"""Branch coverage tests for app.utils.excel.excel_template_analyzer.
 
 Uses real openpyxl workbooks (created in tmp_path) to exercise branches in:
 _guess_merged_purpose, _classify_cell_type, _classify_row_type,
@@ -17,7 +17,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from app.utils.excel_template_analyzer import (
+from app.utils.excel.excel_template_analyzer import (
     CellStyle,
     ExcelTemplateAnalyzer,
     analyze_template,

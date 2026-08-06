@@ -371,8 +371,16 @@ def aggregate_signals() -> Dict[str, Any]:
     legacy_score = max(0.0, legacy_ratio - _LEGACY_RATIO_THRESHOLD) if legacy_below else 0.0
 
     # SLO: availability < 0.99 或 error_rate > 0.01 触发
-    slo_avail = float(slo.get("availability") or 1.0)
+    # 兼容两种报告格式：
+    #   - 显式字段 availability/error_rate（汇总格式）
+    #   - slo-measured readings 字典：availability = 满足目标项占比，error_rate = 1 - availability
+    slo_avail = float(slo.get("availability") if slo.get("availability") is not None else 1.0)
     slo_err = float(slo.get("error_rate") or 0.0)
+    readings = slo.get("readings") or {}
+    if isinstance(readings, dict) and readings and slo.get("availability") is None:
+        met = [1 for r in readings.values() if r.get("meets_target")]
+        slo_avail = len(met) / len(readings)
+        slo_err = 1.0 - slo_avail
     slo_below = (slo_avail < _SLO_AVAILABILITY_THRESHOLD) or (slo_err > _SLO_ERROR_RATE_THRESHOLD)
     slo_score = 0.0
     if slo_below:
