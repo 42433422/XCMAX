@@ -326,54 +326,6 @@ export function readPackagedProductSku(): ProductSku | null {
   return null
 }
 
-<<<<<<< HEAD
-=======
-export function readJsonTextFile(filePath: string): string {
-  const buffer = fs.readFileSync(filePath)
-  let text: string
-  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
-    text = buffer.toString('utf16le')
-  } else {
-    text = buffer.toString('utf8')
-  }
-  return text.replace(/^\uFEFF/, '')
-}
-
-export function sanitizeBackendProxyEnv(
-  env: NodeJS.ProcessEnv | Record<string, string | undefined>
-): Record<string, string | undefined> {
-  const next: Record<string, string | undefined> = { ...env }
-  // Desktop backend talks to xiu-ci.com for chat SSE. Clash/HTTP_PROXY often
-  // returns 502 HTML for that stream and the UI shows 首包超时. Chromium OTA
-  // already has its own PAC bypass; the Python child must not inherit proxies.
-  // Note: Clash TUN (utun + 198.18.0.0/16) still intercepts at OS route level —
-  // env sanitize cannot bypass TUN; prefer DIRECT rule for xiu-ci.com.
-  for (const key of [
-    'ALL_PROXY',
-    'all_proxy',
-    'HTTP_PROXY',
-    'HTTPS_PROXY',
-    'http_proxy',
-    'https_proxy',
-    'XCMAX_CLI_PROXY',
-  ] as const) {
-    delete next[key]
-  }
-  const bypass = OTA_PROXY_BYPASS_RULES.split(',')
-    .map(s => s.trim())
-    .filter(s => s && s !== '<local>')
-  const existing = String(next.NO_PROXY || next.no_proxy || '')
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean)
-  const merged = Array.from(new Set([...existing, ...bypass, '::1']))
-  const joined = merged.join(',')
-  next.NO_PROXY = joined
-  next.no_proxy = joined
-  return next
-}
-
->>>>>>> ba02a5d6f (fix(desktop): bypass HTTP proxy for market LLM SSE)
 export function backendEditionEnv(): Record<string, string> {
   const sku = readPackagedProductSku()
   if (!sku) {
