@@ -1,7 +1,7 @@
 /**
  * Planner SSE 流式一轮对话（从 useChatOrchestration 拆出）。
  */
-import { ref, type Ref } from 'vue'
+import { type Ref } from 'vue'
 import chatApi, { parseChatStreamErrorResponse } from '@/api/chat'
 import { readPlannerSseResponse, type PlannerSseEvent } from '@/utils/chatSseStream'
 import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'

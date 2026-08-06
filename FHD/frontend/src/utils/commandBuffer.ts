@@ -1,5 +1,5 @@
 export type CommandIntentType = 'sales_contract' | 'price_list' | 'start_print'
-import { asRecord, asArray, asString, asBoolean, asDisposable, asNumber } from '@/utils/typeGuards'
+import { asRecord, asString, asNumber } from '@/utils/typeGuards'
 
 export type CommandHandlerKey =
   | 'handleSalesContractCommand'

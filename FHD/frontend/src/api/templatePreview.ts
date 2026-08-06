@@ -1,7 +1,5 @@
 import api, { ApiError } from './core';
 import type { RequestOptions } from './core';
-import { asRecord, asArray, asString } from '@/utils/typeGuards'
-
 /**
  * 开发环境下若把 VITE_TEMPLATE_* 配成 http://127.0.0.1:5000/api/... 绝对地址，
  * 用户从局域网 IP 打开前端时，api 封装会跨域直连 5000，预检 Origin（192.168.*）不在白名单则整页 API 全挂。
