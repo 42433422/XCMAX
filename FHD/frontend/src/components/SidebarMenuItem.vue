@@ -108,7 +108,7 @@ const props = defineProps({
 
 const hasChildren = computed(() => Boolean(props.item.children?.length))
 
-/** hover 提示：有 description 时显示「名称 · 一句说明」，帮用户分清相似入口（如智能对话/信息/AI群聊）。 */
+/** hover 提示：有 description 时显示「名称 · 一句说明」，帮用户分清相似入口（如智能对话/信息）。 */
 const itemTooltip = computed(() =>
   props.item.description ? `${props.item.name} · ${props.item.description}` : props.item.name,
 )

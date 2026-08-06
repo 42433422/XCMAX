@@ -5,14 +5,6 @@
         <div class="im-sidebar-head">
           <h2 class="im-title">信息</h2>
           <div class="im-sidebar-actions">
-            <router-link
-              v-if="isAdminCustomerServiceConsole"
-              to="/ai-groups"
-              class="im-icon-btn"
-              title="我的群聊"
-            >
-              <i class="fa fa-users" aria-hidden="true"></i>
-            </router-link>
             <button
               type="button"
               class="im-icon-btn"
