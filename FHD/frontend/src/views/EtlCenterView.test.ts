@@ -296,7 +296,7 @@ describe('EtlCenterView folder workflow', () => {
     wrapper.unmount()
   })
 
-  it('opens a ready auto-detected shipment preview with the companion preview action', async () => {
+  it('opens a ready auto-detected shipment preview and auto-writes valid rows on upload', async () => {
     const shipment = {
       ...previewRun('auto-shipment-run'),
       file_name: '侯雪梅.xlsx',
@@ -329,6 +329,13 @@ describe('EtlCenterView folder workflow', () => {
       sha256: 'source-hash',
     })
     etlApiMock.preview.mockResolvedValue(shipment)
+    etlApiMock.execute.mockResolvedValue({
+      ...shipment,
+      status: 'executing',
+      stage: 'executing',
+      summary: { ...shipment.summary, executed: 1 },
+    })
+    etlApiMock.runs.mockResolvedValue([])
     const wrapper = await mountView()
     const input = wrapper.find('input[type="file"][multiple]')
     const source = new File(['data'], '侯雪梅.xlsx', {
@@ -336,20 +343,16 @@ describe('EtlCenterView folder workflow', () => {
     })
     Object.defineProperty(input.element, 'files', { value: [source] })
     await input.trigger('change')
-    await buttonByText(wrapper, '上传并开始预演')?.trigger('click')
+    await buttonByText(wrapper, '上传并写入数据库')?.trigger('click')
     await flushPromises()
 
     expect(etlApiMock.preview).toHaveBeenCalledWith(expect.objectContaining({
       upload_id: 'upload-houxuemei',
       target_type: 'auto',
     }))
-    expect(wrapper.text()).toContain('写入目标')
-    expect(wrapper.text()).toContain('发货记录')
-    expect(wrapper.text()).toContain('已获取送货单版式候选：金汉武家私-发货单版式')
-    expect(wrapper.text()).toContain('尚未保存')
-    expect(wrapper.text()).toContain('要同时补全客户库和产品库？')
-    expect(buttonByText(wrapper, '预演客户及产品')).toBeTruthy()
-    expect(etlApiMock.execute).not.toHaveBeenCalled()
+    // 解析就绪后自动写入业务库；存在 1 行错误，仅写入正确行。
+    expect(etlApiMock.execute).toHaveBeenCalledWith(shipment.id, true)
+    expect(wrapper.text()).toContain('运行历史')
     wrapper.unmount()
   })
 
@@ -373,7 +376,7 @@ describe('EtlCenterView folder workflow', () => {
     })
     Object.defineProperty(input.element, 'files', { value: [file] })
     await input.trigger('change')
-    await buttonByText(wrapper, '上传并开始预演')?.trigger('click')
+    await buttonByText(wrapper, '上传并写入数据库')?.trigger('click')
     await flushPromises()
 
     expect(etlApiMock.preview).toHaveBeenCalledWith(expect.objectContaining({
@@ -426,7 +429,7 @@ describe('EtlCenterView folder workflow', () => {
     expect(wrapper.text()).toContain('华东批次 · 2 个可处理文件')
     expect(wrapper.text()).toContain('华东批次/客户/customers.csv')
     expect(wrapper.text()).toContain('华东批次/产品/products.csv')
-    expect(wrapper.text()).toContain('批量上传并创建 2 个预演')
+    expect(wrapper.text()).toContain('批量上传并写入 2 个文件')
     wrapper.unmount()
   })
 
@@ -450,7 +453,7 @@ describe('EtlCenterView folder workflow', () => {
     Object.defineProperty(input.element, 'files', { value: files })
     await input.trigger('change')
     const start = wrapper.findAll('button').find((button) => (
-      button.text().includes('批量上传并创建 2 个预演')
+      button.text().includes('批量上传并写入 2 个文件')
     ))
     await start?.trigger('click')
     await flushPromises()
@@ -479,7 +482,7 @@ describe('EtlCenterView folder workflow', () => {
     expect(wrapper.text()).toContain('客户 → 产品关系')
     expect(wrapper.text()).toContain('OCR 第 2 页 · 表格行 7')
     expect(wrapper.text()).toContain('默认阻断整批')
-    expect(buttonByText(wrapper, '确认执行')?.attributes('disabled')).toBeDefined()
+    expect(buttonByText(wrapper, '写入数据库')?.attributes('disabled')).toBeDefined()
 
     await buttonByText(wrapper, '字段映射')?.trigger('click')
     const transformSelect = wrapper.find('tbody select')
@@ -522,7 +525,7 @@ describe('EtlCenterView folder workflow', () => {
       input.element.parentElement?.textContent?.includes('仅写入正确行')
     ))
     await validRowsCheckbox?.setValue(true)
-    await buttonByText(wrapper, '确认执行')?.trigger('click')
+    await buttonByText(wrapper, '写入数据库')?.trigger('click')
     await flushPromises()
 
     expect(etlApiMock.execute).toHaveBeenCalledWith(run.id, true)
@@ -824,7 +827,7 @@ describe('EtlCenterView folder workflow', () => {
     etlApiMock.preview.mockResolvedValue(customerProductPreview)
 
     const wrapper = await mountView(shipment.id)
-    await buttonByText(wrapper, '预演客户及产品')?.trigger('click')
+    await buttonByText(wrapper, '导入客户及产品')?.trigger('click')
     await flushPromises()
 
     expect(etlApiMock.preview).toHaveBeenCalledWith({
@@ -832,8 +835,8 @@ describe('EtlCenterView folder workflow', () => {
       target_type: 'customer_products',
     })
     expect(etlApiMock.execute).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('客户及产品预演已创建')
-    expect(wrapper.text()).toContain('不会写入客户库或产品库')
+    expect(wrapper.text()).toContain('客户及产品导入任务已创建')
+    expect(wrapper.text()).toContain('已从同一上传文件创建客户及产品导入任务')
     expect(wrapper.text()).toContain('正在规划客户与产品附表')
     wrapper.unmount()
   })
@@ -867,18 +870,18 @@ describe('EtlCenterView folder workflow', () => {
     ))
 
     const wrapper = await mountView(shipment.id)
-    expect(wrapper.text()).toContain('已自动规划客户库和产品库预演')
-    expect(buttonByText(wrapper, '查看客户及产品预演')).toBeTruthy()
+    expect(wrapper.text()).toContain('已自动规划客户库和产品库导入')
+    expect(buttonByText(wrapper, '查看客户及产品导入')).toBeTruthy()
     etlApiMock.preview.mockClear()
     etlApiMock.execute.mockClear()
 
-    await buttonByText(wrapper, '查看客户及产品预演')?.trigger('click')
+    await buttonByText(wrapper, '查看客户及产品导入')?.trigger('click')
     await flushPromises()
 
     expect(etlApiMock.run).toHaveBeenLastCalledWith('customer-products-linked-run')
     expect(etlApiMock.preview).not.toHaveBeenCalled()
     expect(etlApiMock.execute).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('这是同一上传文件自动建立的客户及产品预演')
+    expect(wrapper.text()).toContain('这是同一上传文件自动建立的客户及产品导入任务')
     expect(wrapper.text()).toContain('客户及产品')
     wrapper.unmount()
   })
@@ -915,7 +918,7 @@ describe('EtlCenterView folder workflow', () => {
 
     await buttonByText(wrapper, '失败.xlsx')?.trigger('click')
     await flushPromises()
-    await buttonByText(wrapper, '重新预演')?.trigger('click')
+    await buttonByText(wrapper, '重新导入')?.trigger('click')
     await flushPromises()
     expect(etlApiMock.retry).toHaveBeenCalledWith(failed.id)
     wrapper.unmount()
