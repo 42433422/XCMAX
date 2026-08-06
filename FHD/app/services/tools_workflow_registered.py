@@ -410,6 +410,25 @@ def _registered_router_purchase(
 
         svc = PurchaseService()
 
+    if action in ("list_suppliers", "get_suppliers", "query_suppliers"):
+        return svc.get_suppliers(
+            status=params.get("status"),
+            keyword=str(params.get("keyword") or params.get("search") or "").strip() or None,
+        )
+    if action in ("list_orders", "get_orders", "list_purchase_orders", "query_orders"):
+        return svc.get_purchase_orders(
+            supplier_id=params.get("supplier_id"),
+            status=params.get("status"),
+            page=int(params.get("page") or 1),
+            per_page=int(params.get("per_page") or 20),
+        )
+    if action in ("list_inbounds", "get_inbounds", "list_purchase_inbounds"):
+        return svc.get_purchase_inbounds(
+            supplier_id=params.get("supplier_id"),
+            order_id=params.get("order_id"),
+            page=int(params.get("page") or 1),
+            per_page=int(params.get("per_page") or 20),
+        )
     if action == "create_supplier":
         return svc.create_supplier(dict(params or {}))
     if action == "update_supplier":
@@ -448,6 +467,13 @@ def _registered_router_finance(
 
         svc = FinanceAppService()
 
+    if action in ("list_transactions", "list", "query", "get_transactions"):
+        return svc.list_transactions(
+            transaction_type=params.get("transaction_type"),
+            status=params.get("status"),
+            page=int(params.get("page") or 1),
+            per_page=int(params.get("per_page") or 20),
+        )
     if action == "create_transaction":
         return svc.create_transaction(dict(params or {}))
     if action == "update_transaction":
