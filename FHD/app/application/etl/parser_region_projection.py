@@ -52,15 +52,11 @@ def region_source_features(
     excluded = [region for region in regions if region.get("status") == "excluded"]
     return {
         "kind": (
-            "workbook_delivery_regions"
-            if target_type == "shipment_records"
-            else "workbook_regions"
+            "workbook_delivery_regions" if target_type == "shipment_records" else "workbook_regions"
         ),
         "business_document_type": "delivery_note",
         "suggested_target_type": (
-            "shipment_records"
-            if target_type == "shipment_records"
-            else "customer_products"
+            "shipment_records" if target_type == "shipment_records" else "customer_products"
         ),
         "region_summary": {
             "candidates": len(regions),
