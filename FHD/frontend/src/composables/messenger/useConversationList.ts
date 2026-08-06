@@ -8,7 +8,6 @@
 import { computed, type Ref } from 'vue';
 import { type ImContact, type ImConversationSummary } from '@/api/im';
 import {
-  AI_GROUP_CHAT_ENTRY,
   CLAUDE_SUPER_EMPLOYEE_ENTRY,
   CODEX_SUPER_EMPLOYEE_ENTRY,
   CURSOR_SUPER_EMPLOYEE_ENTRY,
@@ -76,9 +75,9 @@ export function useConversationList(params: UseConversationListParams) {
 
   const pinnedContacts = computed<PinnedImEntry[]>(() => {
     if (isAdminCustomerServiceConsole.value) {
-      return [AI_GROUP_CHAT_ENTRY, CODEX_SUPER_EMPLOYEE_ENTRY, CURSOR_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY, ...dutyEmployees.value];
+      return [CODEX_SUPER_EMPLOYEE_ENTRY, CURSOR_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY, ...dutyEmployees.value];
     }
-    return [AI_GROUP_CHAT_ENTRY, ...contacts.value.filter((c) => isEnterpriseDedicatedContact(c))];
+    return [...contacts.value.filter((c) => isEnterpriseDedicatedContact(c))];
   });
 
   const externalChannelEntries = computed<ExternalAppEntry[]>(() => [
