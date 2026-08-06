@@ -34,15 +34,15 @@
   },
   "overrides": {
     "@noble/hashes": "$@noble/hashes",
-    "brace-expansion@^1.0.0": "1.1.16",
-    "brace-expansion@^2.0.0": "2.1.2",
-    "brace-expansion@>=5.0.0": "5.0.8",
+    "brace-expansion@^1.0.0": "1.1.18",
+    "brace-expansion@^2.0.0": "2.1.4",
+    "brace-expansion@>=5.0.0": "5.0.9",
     "builder-util-runtime": "9.7.0",
     "form-data": "4.0.6",
     "js-yaml": "4.3.0",
     "tar": "7.5.21",
-    "postcss": "8.5.18",
+    "postcss": "8.5.25",
     "tmp": "0.2.7",
-    "undici": "6.27.0"
+    "undici": "6.28.0"
   }
 }
