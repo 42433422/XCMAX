@@ -1,4 +1,4 @@
-import type { RouteRecordRaw } from 'vue-router';
+
 import { modPhysicalViewGlob } from '@/constants/modPhysicalViewGlob';
 import { hostViewGlob } from '@/constants/hostViewGlob';
 

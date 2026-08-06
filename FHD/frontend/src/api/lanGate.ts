@@ -1,7 +1,5 @@
 import api, { ApiError } from './core';
 import { resolveLanApiPath } from '@/utils/lanPaths';
-import { asRecord, asArray, asString } from '@/utils/typeGuards'
-
 const lp = (path: string) => resolveLanApiPath(path);
 
 export interface LanHostInfo {

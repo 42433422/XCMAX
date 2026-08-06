@@ -1,6 +1,6 @@
 import { ref, computed, onUnmounted } from 'vue';
 import { useJarvisChatStore } from '@/stores/jarvisChat';
-import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 
 type SpeechRecognitionLike = {
   lang: string;

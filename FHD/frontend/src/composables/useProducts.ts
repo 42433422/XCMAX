@@ -1,6 +1,6 @@
 import { ref, computed, type Ref, type ComputedRef } from 'vue';
 import productsApi from '../api/products';
-import { useApi, useMutation } from './useApi';
+import { useApi } from './useApi';
 import type { Product, ProductCreateDTO, ProductUpdateDTO, ProductQueryParams } from '@/types/product';
 import type { ApiResponse } from '@/types/api';
 

@@ -21,7 +21,7 @@ import {
   dutyEmployeesFromEmployeeSsot,
   type EmployeeSsotPayload,
 } from '@/utils/employeeSsotContacts';
-import { type ImContact, type ImConversationSummary, type ImMessage } from '@/api/im';
+import { type ImContact, type ImMessage } from '@/api/im';
 import {
   fetchCodexSuperEmployeeMessages,
   sendCodexSuperEmployeeMessage,

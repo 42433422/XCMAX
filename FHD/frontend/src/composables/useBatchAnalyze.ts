@@ -1,8 +1,8 @@
-import { ref, computed, type Ref } from 'vue'
+import { ref } from 'vue'
 import { useBatchAnalyzeStore, type SheetInfo, type SheetGroup } from '../stores/batchAnalyze'
 import templatePreviewApi from '../api/templatePreview'
 import templateScopeRules from '../shared/templateScopeRules.json'
-import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
+import { asRecord, asString } from '@/utils/typeGuards'
 
 interface TemplateScopeRule {
   label: string
