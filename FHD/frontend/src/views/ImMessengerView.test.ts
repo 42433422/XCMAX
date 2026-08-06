@@ -301,7 +301,14 @@ describe('ImMessengerView.vue', () => {
     })
     await flushPromises()
 
-    expect(wrapper.find('a[title="我的群聊"]').exists()).toBe(true)
+    // 激活超级员工（Codex）后，SystemEmployeeChat 渲染 CLI 切换卡片
+    const codexItem = wrapper
+      .findAll('.im-conv-item--pinned')
+      .find((li) => li.text().includes('Codex'))
+    expect(codexItem).toBeTruthy()
+    await codexItem!.trigger('click')
+    await flushPromises()
+
     expect(wrapper.text()).toContain('超级开发组 · CLI')
     expect(wrapper.find('.im-cli-model-switch__btn.active').text()).toContain('Codex')
 

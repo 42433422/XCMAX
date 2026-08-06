@@ -208,15 +208,15 @@
       "lines": 1837,
       "soft_cap": 500
     },
+    "FHD/desktop/main.ts": {
+      "stack": "electron",
+      "lines": 1836,
+      "soft_cap": 600
+    },
     "成都修茈科技有限公司/MODstore_deploy/market/src/views/public/HomeView.vue": {
       "stack": "modstore_vue",
       "lines": 1770,
       "soft_cap": 500
-    },
-    "FHD/desktop/main.ts": {
-      "stack": "electron",
-      "lines": 1768,
-      "soft_cap": 600
     },
     "FHD/mods/xcagi-planner-bridge/frontend/views/BrainView.vue": {
       "stack": "fhd_vue",
@@ -330,7 +330,7 @@
     },
     "FHD/frontend/src/views/ProductOnboardingView.vue": {
       "stack": "fhd_vue",
-      "lines": 1384,
+      "lines": 1382,
       "soft_cap": 500
     },
     "FHD/app/neuro_bus/dead_letter_queue.py": {
@@ -788,11 +788,6 @@
       "lines": 811,
       "soft_cap": 500
     },
-    "FHD/frontend/src/router/index.ts": {
-      "stack": "fhd_vue",
-      "lines": 804,
-      "soft_cap": 600
-    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/ppt_extract_runtime.py": {
       "stack": "modstore_backend",
       "lines": 803,
@@ -807,6 +802,11 @@
       "stack": "fhd_backend",
       "lines": 801,
       "soft_cap": 800
+    },
+    "FHD/frontend/src/router/index.ts": {
+      "stack": "fhd_vue",
+      "lines": 801,
+      "soft_cap": 600
     },
     "FHD/frontend/src/composables/useChatOfficeDocking.ts": {
       "stack": "fhd_vue",
@@ -830,7 +830,7 @@
     },
     "FHD/frontend/src/views/EtlCenterView.vue": {
       "stack": "fhd_vue",
-      "lines": 762,
+      "lines": 761,
       "soft_cap": 500
     },
     "成都修茈科技有限公司/MODstore_deploy/market/src/views/AdminAiAccountsView.vue": {
@@ -1010,7 +1010,7 @@
     },
     "FHD/frontend/src/components/chat/MessageBody.vue": {
       "stack": "fhd_vue",
-      "lines": 576,
+      "lines": 575,
       "soft_cap": 500
     },
     "成都修茈科技有限公司/MODstore_deploy/market/src/components/workbench/MessageBody.vue": {
