@@ -89,6 +89,56 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
             },
         }
 
+    # 物料/原材料库
+    material_keywords = ("物料", "原材料", "材料")
+    if any(k in text for k in material_keywords):
+        return {
+            "intent": "materials_query",
+            "slots": {"keyword": ""},
+        }
+
+    # 出货/发货记录（区别于 shipment：那是开单/打单流程）
+    shipment_record_keywords = (
+        "出货记录",
+        "发货记录",
+        "出货历史",
+        "出货列表",
+        "发货列表",
+        "出货查询",
+        "发货查询",
+        "出货明细",
+        "发货明细",
+    )
+    if any(k in text for k in shipment_record_keywords):
+        return {
+            "intent": "shipment_records_query",
+            "slots": {"keyword": ""},
+        }
+
+    # 采购 / 供应商 / 进货
+    purchase_keywords = ("采购", "供应商", "进货", "采购单", "采购订单", "采购入库")
+    if any(k in text for k in purchase_keywords):
+        return {
+            "intent": "purchase_query",
+            "slots": {"keyword": ""},
+        }
+
+    # 财务 / 凭证 / 收支流水
+    finance_keywords = ("财务", "凭证", "收支", "应收", "应付", "交易流水", "资金", "对账")
+    if any(k in text for k in finance_keywords):
+        return {
+            "intent": "finance_query",
+            "slots": {},
+        }
+
+    # 知识库 / 帮助文档
+    knowledge_keywords = ("知识库", "资料库", "帮助文档", "使用文档", "操作手册", "帮助中心")
+    if any(k in text for k in knowledge_keywords):
+        return {
+            "intent": "knowledge_query",
+            "slots": {},
+        }
+
     if any(k in text for k in query_keywords) or model_signal or unit_model_signal:
         slots: dict[str, Any] = {}
 
@@ -390,6 +440,16 @@ def try_normal_slot_read_payload(
                 payload = build_inventory_alert_response_dict(rr)
             elif intent == "label_print":
                 payload = build_label_print_response_dict(rr)
+            elif intent == "materials_query":
+                payload = build_materials_query_response_dict(rr)
+            elif intent == "shipment_records_query":
+                payload = build_shipment_records_query_response_dict(rr)
+            elif intent == "purchase_query":
+                payload = build_purchase_query_response_dict(rr, message=text)
+            elif intent == "finance_query":
+                payload = build_finance_query_response_dict(rr)
+            elif intent == "knowledge_query":
+                payload = build_knowledge_query_response_dict(rr)
             else:
                 return None
     finally:
@@ -596,3 +656,203 @@ def build_label_print_response_dict(route_result: dict[str, Any]) -> dict[str, A
             "data": {},
             "normal_slot_dispatch": True,
         }
+
+
+def build_materials_query_response_dict(route_result: dict[str, Any]) -> dict[str, Any] | None:
+    """物料/原材料库查询：确定性调用 materials.query（list）。"""
+    if route_result.get("intent") != "materials_query":
+        return None
+    keyword = str((route_result.get("slots") or {}).get("keyword") or "").strip()
+    try:
+        from app.application import get_material_application_service
+
+        result = get_material_application_service().get_all_materials(
+            search=keyword or None,
+            category=None,
+            page=1,
+            per_page=20,
+        )
+        if isinstance(result, dict) and result.get("success") is False:
+            return {
+                "success": False,
+                "response": str(result.get("message") or "物料查询工具执行失败"),
+                "data": {"intent": "materials_query"},
+                "normal_slot_dispatch": True,
+            }
+        items = result.get("data") or []
+        total = int(result.get("total") or len(items))
+        if not items:
+            msg = "当前物料库暂无数据。" if not keyword else f"没有查到与「{keyword}」匹配的物料。"
+        else:
+            lines = [
+                f"- {m.get('name', '')} 库存 {m.get('quantity', 0)} {m.get('unit', '')}"
+                f"（{m.get('material_code', '')}）"
+                for m in items[:10]
+            ]
+            msg = f"当前共有 {total} 种物料：\n" + "\n".join(lines)
+            if total > 10:
+                msg += f"\n…其余 {total - 10} 种请到「物料管理」查看"
+        return {
+            "success": True,
+            "response": msg,
+            "data": {"intent": "materials_query", "materials": items[:20], "total": total},
+            "normal_slot_dispatch": True,
+        }
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("materials.query 工具失败: %s", e)
+        return {
+            "success": False,
+            "response": "物料查询服务暂时不可用，请稍后重试。",
+            "data": {},
+            "normal_slot_dispatch": True,
+        }
+
+
+def build_shipment_records_query_response_dict(
+    route_result: dict[str, Any],
+) -> dict[str, Any] | None:
+    """出货/发货记录查询：确定性调用 shipment_records.list。"""
+    if route_result.get("intent") != "shipment_records_query":
+        return None
+    keyword = str((route_result.get("slots") or {}).get("keyword") or "").strip()
+    try:
+        from app.bootstrap import get_shipment_app_service
+
+        records = get_shipment_app_service().get_shipment_records(keyword or None, limit=100)
+        if not records:
+            msg = "当前没有出货记录。" if not keyword else f"没有查到与「{keyword}」相关的出货记录。"
+        else:
+            lines = []
+            for r in records[:10]:
+                unit = str(r.get("unit_name") or r.get("purchase_unit") or "") or "-"
+                date = str(r.get("date") or r.get("created_at") or "")[:10]
+                lines.append(f"- {date} {unit}")
+            msg = f"共 {len(records)} 条出货记录：\n" + "\n".join(lines)
+            if len(records) > 10:
+                msg += f"\n…其余 {len(records) - 10} 条请到「出货记录」查看"
+        return {
+            "success": True,
+            "response": msg,
+            "data": {"intent": "shipment_records_query", "records": records[:20]},
+            "normal_slot_dispatch": True,
+        }
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("shipment_records.list 工具失败: %s", e)
+        return {
+            "success": False,
+            "response": "出货记录查询服务暂时不可用，请稍后重试。",
+            "data": {},
+            "normal_slot_dispatch": True,
+        }
+
+
+def build_purchase_query_response_dict(
+    route_result: dict[str, Any],
+    *,
+    message: str = "",
+) -> dict[str, Any] | None:
+    """采购/供应商/进货查询：按关键词命中供应商或采购订单。"""
+    if route_result.get("intent") != "purchase_query":
+        return None
+    text = str(message or "").strip()
+    try:
+        from app.application.facades.inventory_facade import PurchaseService
+
+        svc = PurchaseService()
+        if "供应商" in text or "供应商" in str((route_result.get("slots") or {}).get("keyword") or ""):
+            keyword = re.sub(r"(?:供应商|进货|采购|有哪些|哪些|一下|查询|查)", "", text).strip()
+            result = svc.get_suppliers(keyword=keyword or None)
+            suppliers = result.get("data") or []
+            if not suppliers:
+                msg = "当前没有供应商数据。" if not keyword else f"没有查到与「{keyword}」匹配的供应商。"
+            else:
+                lines = [f"- {s.get('name', '')} {s.get('contact_person', '')}".rstrip() for s in suppliers[:10]]
+                msg = f"共 {len(suppliers)} 家供应商：\n" + "\n".join(lines)
+            return {
+                "success": True,
+                "response": msg,
+                "data": {"intent": "purchase_query", "suppliers": suppliers[:20]},
+                "normal_slot_dispatch": True,
+            }
+        result = svc.get_purchase_orders(page=1, per_page=20)
+        orders = result.get("data") or []
+        total = int(result.get("total") or len(orders))
+        if not orders:
+            msg = "当前没有采购订单。"
+        else:
+            lines = [
+                f"- {o.get('order_no', '')} {o.get('supplier_name', '')} ￥{format_money(safe_float(o.get('total_amount')))}"
+                for o in orders[:10]
+            ]
+            msg = f"共 {total} 条采购订单：\n" + "\n".join(lines)
+            if total > 10:
+                msg += f"\n…其余 {total - 10} 条请到「采购管理」查看"
+        return {
+            "success": True,
+            "response": msg,
+            "data": {"intent": "purchase_query", "orders": orders[:20], "total": total},
+            "normal_slot_dispatch": True,
+        }
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("purchase.query 工具失败: %s", e)
+        return {
+            "success": False,
+            "response": "采购查询服务暂时不可用，请稍后重试。",
+            "data": {},
+            "normal_slot_dispatch": True,
+        }
+
+
+def build_finance_query_response_dict(route_result: dict[str, Any]) -> dict[str, Any] | None:
+    """财务/凭证/收支流水查询。"""
+    if route_result.get("intent") != "finance_query":
+        return None
+    try:
+        from app.application.finance_app_service import FinanceAppService
+
+        result = FinanceAppService().list_transactions(page=1, per_page=20)
+        items = result.get("data") or []
+        total = int(result.get("total") or len(items))
+        if not items:
+            msg = "当前没有财务收支记录。"
+        else:
+            lines = []
+            for t in items[:10]:
+                t_type = str(t.get("transaction_type") or "")
+                direction = "收入" if "in" in str(t_type).lower() or "收款" in str(t_type) else "支出"
+                lines.append(
+                    f"- {str(t.get('transaction_date') or '')[:10]} {direction} "
+                    f"￥{format_money(safe_float(t.get('amount')))} {t.get('counterparty_name', '')}"
+                )
+            msg = f"共 {total} 条收支记录：\n" + "\n".join(lines)
+            if total > 10:
+                msg += f"\n…其余 {total - 10} 条请到「财务」查看"
+        return {
+            "success": True,
+            "response": msg,
+            "data": {"intent": "finance_query", "transactions": items[:20], "total": total},
+            "normal_slot_dispatch": True,
+        }
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("finance.query 工具失败: %s", e)
+        return {
+            "success": False,
+            "response": "财务查询服务暂时不可用，请稍后重试。",
+            "data": {},
+            "normal_slot_dispatch": True,
+        }
+
+
+def build_knowledge_query_response_dict(route_result: dict[str, Any]) -> dict[str, Any] | None:
+    """知识库/帮助文档：引导直达资料库（无数据库读取）。"""
+    if route_result.get("intent") != "knowledge_query":
+        return None
+    return {
+        "success": True,
+        "response": (
+            "你可以在「知识库」查看产品型号说明、操作手册与常见问题。"
+            "模块入口：产品 → 型号详情；设置 → 帮助中心。"
+        ),
+        "data": {"intent": "knowledge_query", "autoAction": {"type": "open_knowledge", "feature": "knowledge"}},
+        "normal_slot_dispatch": True,
+    }
