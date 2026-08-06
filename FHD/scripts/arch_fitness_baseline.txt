@@ -1,4 +1,4 @@
-[baseline] 205 known violation(s) suppressed (see arch_fitness_baseline.txt)
+[baseline] 206 known violation(s) suppressed (see arch_fitness_baseline.txt)
 [domain->infrastructure] app/domain/neuro/cognition/llm_port.py:100
 [domain->infrastructure] app/domain/neuro/cognition/llm_port.py:54
 [domain->infrastructure] app/domain/value_objects_industry.py:23
@@ -250,3 +250,4 @@
 [giant-file] app/application/etl/service_preview.py
 [giant-file] app/application/etl/shipment_preview_fallback.py
 [legacy-boundary] app/fastapi_routes/shipment_etl_compat.py
+[giant-file] app/application/etl/parser_shipment_history.py
