@@ -312,7 +312,7 @@ describe('main — OTA proxy PAC', () => {
   })
 
   it('injects market hosts into backend NO_PROXY', async () => {
-    const { sanitizeBackendProxyEnv } = await import('./main.js')
+    const { sanitizeBackendProxyEnv } = await import('./backend-env-utils.js')
     const env = sanitizeBackendProxyEnv({
       HTTP_PROXY: 'http://127.0.0.1:7890',
       HTTPS_PROXY: 'http://127.0.0.1:7890',
