@@ -34,7 +34,8 @@ def test_route_shipment_number_style_order() -> None:
 def test_route_customers_query_with_keyword() -> None:
     rr = route_normal_mode_message("查询甲公司的客户")
     assert rr["intent"] == "customers_query"
-    assert "甲公司" in str(rr["slots"].get("keyword", ""))
+    # 客户类问题实体路由到 Agent customers.query；此处只选工具，keyword 由 Agent 填。
+    assert "甲公司" not in str(rr["slots"].get("keyword", ""))
 
 
 def test_route_inventory_alert() -> None:
@@ -98,14 +99,17 @@ def test_build_product_query_wrong_intent() -> None:
 
 
 def test_build_customers_query_response_dict(monkeypatch: pytest.MonkeyPatch) -> None:
-    mock_cls = MagicMock()
-    mock_cls.return_value.search.return_value = [
-        {"customer_name": "甲公司", "contact_person": "张三"}
-    ]
-    fake_mod = types.ModuleType("app.services.customers_service")
-    fake_mod.CustomerService = mock_cls  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "app.services.customers_service", fake_mod)
-    rr = route_normal_mode_message("查甲公司客户")
+    from app.mod_sdk import erp_domain_dispatch as erp_domain_dispatch_mod
+
+    monkeypatch.setattr(
+        erp_domain_dispatch_mod,
+        "try_invoke_erp_domain_handler",
+        lambda *a, **kw: {
+            "success": True,
+            "data": [{"customer_name": "甲公司", "contact_person": "张三"}],
+        },
+    )
+    rr = {"intent": "customers_query", "slots": {"keyword": "甲公司"}}
     body = build_customers_query_response_dict(rr)
     assert body is not None
     assert body["success"] is True

@@ -7,6 +7,7 @@ import os
 from typing import Any, cast
 
 from fastapi import APIRouter, Body, Depends, File, Query, Request, UploadFile
+from fastapi.background import BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.http.error_codes import (
@@ -235,7 +236,7 @@ def auth_token_refresh(body: dict = Body(default_factory=dict)):
 
 
 @router.get("/api/auth/session/validate")
-async def auth_session_validate(request: Request):
+async def auth_session_validate(request: Request, background_tasks: BackgroundTasks):
     from app.application.auth_app_service import get_auth_app_service
     from app.application.desktop_admin_gate import assert_desktop_allows_session_id
 
@@ -261,9 +262,12 @@ async def auth_session_validate(request: Request):
         from app.mod_sdk.product_skus import resolve_product_sku
 
         if resolve_product_sku() == "enterprise":
-            from app.fastapi_routes.market_account import resolve_valid_market_access_token
+            from app.fastapi_routes.market_account import (
+                resolve_valid_market_access_token_fast,
+            )
 
-            market_tok = await resolve_valid_market_access_token(session_id)
+            # 快速校验：短超时 + fail-open，绝不因市场慢而阻塞导航。
+            market_tok = await resolve_valid_market_access_token_fast(session_id)
             if not market_tok:
                 return JSONResponse(
                     {
@@ -288,13 +292,11 @@ async def auth_session_validate(request: Request):
             sync_entitlements_for_session,
         )
 
-        entitled = await sync_entitlements_for_session(session_id)
-        if entitled:
-            entitled_mod_ids = sorted(entitled)
-        else:
-            cached = get_cached_entitled_client_mod_ids()
-            if cached is not None:
-                entitled_mod_ids = sorted(cached)
+        # 权益同步移到后台任务，避免同步刷新市场权益 + 重载 mod 阻塞响应。
+        background_tasks.add_task(sync_entitlements_for_session, session_id)
+        cached = get_cached_entitled_client_mod_ids()
+        if cached is not None:
+            entitled_mod_ids = sorted(cached)
     except INFRA_TRANSIENT:
         logger.exception("sync enterprise entitlements on validate failed")
     user = resolve_session_user(request)
