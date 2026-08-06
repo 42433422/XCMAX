@@ -1,4 +1,5 @@
 /** 聊天 UI 层消息（localStorage / 组件展示；role 用 ai 而非 API 的 assistant） */
+import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
 
 export interface ChatExecutionProgressItem {
   phase: string
@@ -54,6 +55,8 @@ export interface UiChatMessage {
   shipmentDownloadUrl?: string
   /** 结构化工作流/审批确认卡片（Wave 2） */
   approvalCard?: ChatApprovalCard
+  /** Agent 执行时间线（Codex 风格，由事件流构建） */
+  agentRunTrace?: AgentRunTraceData
   /** 附件（Excel 分析等 Mod 回传的结构化数据） */
   attachments?: Record<string, unknown>[]
 }
