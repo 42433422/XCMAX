@@ -1,10 +1,7 @@
 import { createRouter, createWebHistory, START_LOCATION, type NavigationGuardNext, type RouteLocationNormalized, type RouteRecordRaw } from 'vue-router';
 import { useLanGate } from '@/composables/useLanGate';
-import {
-  isPlatformShellModeEnabled,
-  isShellEditionBuild,
+import {isPlatformShellModeEnabled,
   isIndustryDeliveryRouteName,
-  INDUSTRY_DELIVERY_ROUTE_NAMES,
   SHELL_CORE_ROUTE_NAMES,
 } from '@/constants/platformShellMode';
 import { shouldRouteToProductOnboarding } from '@/composables/useProductFlow';
@@ -15,9 +12,9 @@ import {
 } from '@/utils/hostPackOnboardingGate';
 import { resolveHostBusinessPageRedirect } from '@/utils/hostBusinessPageRedirect';
 import { customerServiceHostPathFromModPath } from '@/utils/customerServicePagePaths';
-import { readErpDomainModFacadeEnabled } from '@/constants/erpDomainMod';
-import { readCoreWorkflowModPagesEnabled } from '@/constants/coreWorkflowMod';
-import { resolveWorkflowPageRedirectForRouteName } from '@/utils/workflowPagePaths';
+
+
+
 import { resolvePlannerChatHomePath, resolvePlannerPagePath } from '@/utils/plannerPagePaths';
 import { readActiveExtensionModId } from '@/utils/erpDomainPaths';
 import { isProtectedClientModId } from '@/constants/protectedMods';

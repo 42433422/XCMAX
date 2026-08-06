@@ -1,9 +1,7 @@
 import { defineStore } from 'pinia'
-import { ref, computed, type Ref } from 'vue'
+import { ref, computed } from 'vue'
 import { productsApi } from '@/api/products'
 import type { ProductUpdateDTO } from '@/types/product'
-import { asRecord, asArray, asString } from '@/utils/typeGuards'
-
 export interface Company {
   id: number | string;
   name: string;

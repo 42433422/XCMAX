@@ -13,14 +13,10 @@ import {
   type EtlTemplate,
 } from '@/api/etl'
 import {
-  batchFileStatusLabel,
-  ignoredReasonLabel,
   useEtlFolderBatch,
 } from '@/composables/useEtlFolderBatch'
 import { useEtlTemplateSelection } from '@/composables/useEtlTemplateSelection'
 import { tabForRunStatus, type EtlRunTab } from '@/utils/etlRunView'
-import { ETL_FILE_ACCEPT, formatEtlBytes } from '@/utils/etlFileSelection'
-
 type TabId = EtlRunTab
 
 const route = useRoute()

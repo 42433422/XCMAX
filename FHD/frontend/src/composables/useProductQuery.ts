@@ -1,8 +1,6 @@
 import { computed } from 'vue';
 import { useProductQueryStore } from '@/stores/productQuery';
 import type { Company, LocalProduct } from '@/stores/productQuery'
-import { asRecord, asArray, asString } from '@/utils/typeGuards'
-
 export function useProductQuery(): unknown {
   const store = useProductQueryStore();
 

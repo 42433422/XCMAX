@@ -1,6 +1,6 @@
 import { apiFetch } from '@/utils/apiBase';
 import { clearDeliverableStatusCache } from '@/utils/platformShellApi';
-import type { ModCatalogItem, ModCatalogItemUi } from '@/types/modCatalog';
+import type { ModCatalogItemUi } from '@/types/modCatalog';
 
 export type { ModCatalogItem, ModCatalogItemUi } from '@/types/modCatalog';
 

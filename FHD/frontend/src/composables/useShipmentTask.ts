@@ -1,7 +1,7 @@
 import { ref, type Ref } from 'vue'
 import type { ChatMessageExtras } from './useChatMessages'
-import { normalizeModel, toNumber, parseShipmentCommand, extractModelQtySpec } from '../utils/textParser'
-import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
+import { normalizeModel, toNumber, parseShipmentCommand } from '../utils/textParser'
+import { asRecord, asString } from '@/utils/typeGuards'
 
 export interface ShipmentProduct {
   quantity?: number
