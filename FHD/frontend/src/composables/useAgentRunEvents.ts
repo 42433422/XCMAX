@@ -17,6 +17,25 @@ export interface UseAgentRunEventSyncOptions {
 
 const TERMINAL_EVENT_TYPES = new Set(['run.completed', 'run.failed', 'planner.blocked'])
 
+/** 视为「只读查询」的工具 action（答案优先，不创建任务面板行）。 */
+const READONLY_QUERY_ACTIONS = new Set(['query', 'list', 'search', 'read', 'get', 'count'])
+
+/**
+ * 单次只读查询工具（如 customers.query）成功后，不创建「智能任务」任务面板行。
+ * 与 agentRunTraceModel.isTrivialChatTrace 语义对齐：答案正文为主，避免剧场抢视线。
+ */
+function isTrivialReadOnlyQueryRun(events: AgentRunEvent[]): boolean {
+  const toolStarted = events.filter((event) => event.event_type === 'tool.started')
+  if (toolStarted.length !== 1) return false
+  const data = asRecord(toolStarted[0].data)
+  const action = asString(data.action).trim().toLowerCase()
+  if (!READONLY_QUERY_ACTIONS.has(action)) return false
+  const blocked = events.some((event) =>
+    ['tool.failed', 'step.blocked', 'step.waiting_user', 'planner.blocked'].includes(event.event_type),
+  )
+  return !blocked
+}
+
 export function extractAgentRunId(payload: unknown): string {
   const root = asRecord(payload)
   const data = asRecord(root.data)
@@ -90,6 +109,7 @@ export function buildAgentRunTaskUpdate(params: {
 }): (Partial<TaskItem> & { id: string; title: string; source: TaskItem['source']; type: string }) | null {
   const events = asArray<AgentRunEvent>(params.events)
   if (!hasAgentRunExecutionEvidence(events)) return null
+  if (isTrivialReadOnlyQueryRun(events)) return null
   const last = events[events.length - 1]
   const status = statusFromEvents(events)
   const unconfirmedCompletion = status === 'failed'
