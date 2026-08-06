@@ -720,7 +720,9 @@ def build_shipment_records_query_response_dict(
 
         records = get_shipment_app_service().get_shipment_records(keyword or None, limit=100)
         if not records:
-            msg = "当前没有出货记录。" if not keyword else f"没有查到与「{keyword}」相关的出货记录。"
+            msg = (
+                "当前没有出货记录。" if not keyword else f"没有查到与「{keyword}」相关的出货记录。"
+            )
         else:
             lines = []
             for r in records[:10]:
@@ -759,14 +761,23 @@ def build_purchase_query_response_dict(
         from app.application.facades.inventory_facade import PurchaseService
 
         svc = PurchaseService()
-        if "供应商" in text or "供应商" in str((route_result.get("slots") or {}).get("keyword") or ""):
+        if "供应商" in text or "供应商" in str(
+            (route_result.get("slots") or {}).get("keyword") or ""
+        ):
             keyword = re.sub(r"(?:供应商|进货|采购|有哪些|哪些|一下|查询|查)", "", text).strip()
             result = svc.get_suppliers(keyword=keyword or None)
             suppliers = result.get("data") or []
             if not suppliers:
-                msg = "当前没有供应商数据。" if not keyword else f"没有查到与「{keyword}」匹配的供应商。"
+                msg = (
+                    "当前没有供应商数据。"
+                    if not keyword
+                    else f"没有查到与「{keyword}」匹配的供应商。"
+                )
             else:
-                lines = [f"- {s.get('name', '')} {s.get('contact_person', '')}".rstrip() for s in suppliers[:10]]
+                lines = [
+                    f"- {s.get('name', '')} {s.get('contact_person', '')}".rstrip()
+                    for s in suppliers[:10]
+                ]
                 msg = f"共 {len(suppliers)} 家供应商：\n" + "\n".join(lines)
             return {
                 "success": True,
@@ -819,7 +830,9 @@ def build_finance_query_response_dict(route_result: dict[str, Any]) -> dict[str,
             lines = []
             for t in items[:10]:
                 t_type = str(t.get("transaction_type") or "")
-                direction = "收入" if "in" in str(t_type).lower() or "收款" in str(t_type) else "支出"
+                direction = (
+                    "收入" if "in" in str(t_type).lower() or "收款" in str(t_type) else "支出"
+                )
                 lines.append(
                     f"- {str(t.get('transaction_date') or '')[:10]} {direction} "
                     f"￥{format_money(safe_float(t.get('amount')))} {t.get('counterparty_name', '')}"
@@ -853,6 +866,9 @@ def build_knowledge_query_response_dict(route_result: dict[str, Any]) -> dict[st
             "你可以在「知识库」查看产品型号说明、操作手册与常见问题。"
             "模块入口：产品 → 型号详情；设置 → 帮助中心。"
         ),
-        "data": {"intent": "knowledge_query", "autoAction": {"type": "open_knowledge", "feature": "knowledge"}},
+        "data": {
+            "intent": "knowledge_query",
+            "autoAction": {"type": "open_knowledge", "feature": "knowledge"},
+        },
         "normal_slot_dispatch": True,
     }
