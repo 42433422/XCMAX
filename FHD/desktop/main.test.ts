@@ -678,3 +678,47 @@ describe('main — backend spawn failure', () => {
     electronMocks.app.isQuitting = false
   })
 })
+
+describe('main — desktop CSP defense-in-depth injection', () => {
+  it('injects fallback CSP for a trusted local mainFrame without an existing CSP', async () => {
+    const { resolveDesktopCspInjection } = await import('./main.js')
+    const csp = resolveDesktopCspInjection({
+      responseHeaders: {},
+      resourceType: 'mainFrame',
+      url: 'http://127.0.0.1:17500/',
+    })
+    expect(csp).toContain("default-src 'self'")
+    expect(csp).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval'")
+    expect(csp).toContain("connect-src 'self' ws: wss: http: https:")
+  })
+
+  it('does not override an existing CSP header (avoid intersection becoming stricter)', async () => {
+    const { resolveDesktopCspInjection } = await import('./main.js')
+    const csp = resolveDesktopCspInjection({
+      responseHeaders: { 'Content-Security-Policy': ["default-src 'self'"] },
+      resourceType: 'mainFrame',
+      url: 'http://127.0.0.1:17500/',
+    })
+    expect(csp).toBeNull()
+  })
+
+  it('does not inject for sub-resources (non-mainFrame)', async () => {
+    const { resolveDesktopCspInjection } = await import('./main.js')
+    const csp = resolveDesktopCspInjection({
+      responseHeaders: {},
+      resourceType: 'script',
+      url: 'http://127.0.0.1:17500/assets/app.js',
+    })
+    expect(csp).toBeNull()
+  })
+
+  it('does not inject for untrusted origins', async () => {
+    const { resolveDesktopCspInjection } = await import('./main.js')
+    const csp = resolveDesktopCspInjection({
+      responseHeaders: {},
+      resourceType: 'mainFrame',
+      url: 'https://evil.example.com/',
+    })
+    expect(csp).toBeNull()
+  })
+})
