@@ -17,6 +17,7 @@ import {
 } from '@/composables/useEtlFolderBatch'
 import { useEtlTemplateSelection } from '@/composables/useEtlTemplateSelection'
 import { tabForRunStatus, type EtlRunTab } from '@/utils/etlRunView'
+import { formatEtlBytes } from '@/utils/etlFileSelection'
 type TabId = EtlRunTab
 
 const route = useRoute()
