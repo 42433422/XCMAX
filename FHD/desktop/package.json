@@ -27,7 +27,7 @@
     "@noble/hashes": "^1.8.0",
     "@types/node": "25.6.0",
     "@vitest/coverage-v8": "^3.2.6",
-    "electron": "41.3.0",
+    "electron": "41.10.3",
     "electron-builder": "26.15.3",
     "typescript": "6.0.3",
     "vitest": "^3.2.6"
@@ -38,6 +38,7 @@
     "brace-expansion@^2.0.0": "2.1.4",
     "brace-expansion@>=5.0.0": "5.0.9",
     "builder-util-runtime": "9.7.0",
+    "fast-uri": "3.1.5",
     "form-data": "4.0.6",
     "js-yaml": "4.3.0",
     "tar": "7.5.21",
