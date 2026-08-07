@@ -400,6 +400,58 @@ class TestCallLlmApi:
 
 
 # ---------------------------------------------------------------------------
+# _ensure_modstore_from_session（登录即自动可用）
+# ---------------------------------------------------------------------------
+class TestEnsureModstoreFromSession:
+    def test_no_session_returns_without_change(self):
+        svc = _ConcreteApi()
+        svc._active_session_id = None
+        svc._ensure_modstore_from_session()
+        assert getattr(svc, "modstore_adapter", None) is None
+
+    def test_existing_adapter_not_overwritten(self):
+        svc = _ConcreteApi()
+        svc._active_session_id = "some-session"
+        existing = MagicMock()
+        existing.auth_token = "already-set"
+        svc.modstore_adapter = existing
+        with patch(
+            "app.services.conversation.modstore_adapter.ModstorePlatformAdapter.from_session"
+        ) as mock_from_session:
+            svc._ensure_modstore_from_session()
+        mock_from_session.assert_not_called()
+        assert svc.modstore_adapter == existing
+
+    def test_configures_from_session(self):
+        svc = _ConcreteApi()
+        svc._active_session_id = "3386d9c7-56f6-4079-ac4d-33f6d36fe5f0"
+        mock_adapter = MagicMock()
+        mock_adapter.auth_token = "valid_token"
+        mock_adapter.platform_url = "https://xiu-ci.com"
+        with patch(
+            "app.services.conversation.modstore_adapter.ModstorePlatformAdapter.from_session",
+            return_value=mock_adapter,
+        ) as mock_from_session:
+            svc._ensure_modstore_from_session()
+        mock_from_session.assert_called_once_with(
+            session_id="3386d9c7-56f6-4079-ac4d-33f6d36fe5f0"
+        )
+        assert svc.modstore_adapter == mock_adapter
+
+    def test_adapter_without_token_not_assigned(self):
+        svc = _ConcreteApi()
+        svc._active_session_id = "some-session"
+        mock_adapter = MagicMock()
+        mock_adapter.auth_token = ""
+        with patch(
+            "app.services.conversation.modstore_adapter.ModstorePlatformAdapter.from_session",
+            return_value=mock_adapter,
+        ):
+            svc._ensure_modstore_from_session()
+        assert getattr(svc, "modstore_adapter", None) is None
+
+
+# ---------------------------------------------------------------------------
 # ContextWindowManager 集成测试（验证 call_llm_api 与 CWM 的衔接）
 # ---------------------------------------------------------------------------
 class TestContextWindowManagerIntegration:
