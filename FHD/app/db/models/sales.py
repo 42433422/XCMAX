@@ -117,5 +117,3 @@ class SalesOrderItem(IntegerPrimaryKeyMixin, TenantScopedMixin, Base):
         }
 
 
-from app.db.models.customer import Customer  # noqa: E402
-from app.db.models.product import Product  # noqa: E402

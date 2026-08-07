@@ -27,6 +27,10 @@ import pytest
 from openpyxl import Workbook
 
 from app.application import shipment_excel_etl_app_service as svc_mod
+from app.application.shipment_etl_profile import (
+    CompiledMetaPatterns,
+    ShipmentEtlProfile,
+)
 from app.application.shipment_excel_etl_app_service import (
     ShipmentExcelEtlApplicationService,
     batch_execute_shipment_excel_etl,
@@ -39,10 +43,6 @@ from app.application.shipment_excel_etl_app_service import (
     regenerate_delivery_notes_from_file,
     write_delivery_note_workbook,
     write_ledger_workbook,
-)
-from app.application.shipment_etl_profile import (
-    CompiledMetaPatterns,
-    ShipmentEtlProfile,
 )
 
 MOD = "app.application.shipment_excel_etl_app_service"
@@ -91,14 +91,14 @@ def _patterns():
 
 
 def _make_profile(**overrides):
-    base = dict(
-        id="test",
-        kind="document",
-        label="测试",
-        target="shipment",
-        raw={},
-        meta_patterns=_patterns(),
-        detect={
+    base = {
+        "id": "test",
+        "kind": "document",
+        "label": "测试",
+        "target": "shipment",
+        "raw": {},
+        "meta_patterns": _patterns(),
+        "detect": {
             "delivery": {
                 "probe_rows": 8,
                 "title_weight": 50,
@@ -123,7 +123,7 @@ def _make_profile(**overrides):
                 "bonus_weight": 5,
             },
         },
-        header_detect={
+        "header_detect": {
             "delivery": {
                 "max_scan_rows": 12,
                 "require_groups": [
@@ -138,7 +138,7 @@ def _make_profile(**overrides):
                 "and_any_groups": [["型号", "名称"]],
             },
         },
-        columns={
+        "columns": {
             "model_number": [{"contains_any": ["型号", "货号"]}],
             "product_name": [{"contains_any": ["名称", "品名"]}],
             "quantity_tins": [{"contains_any": ["数量", "件数"]}],
@@ -149,9 +149,9 @@ def _make_profile(**overrides):
             "order_number": [{"contains_any": ["单号", "订单"]}],
             "order_date": [{"contains_any": ["日期"]}],
         },
-        ledger={"title_template": "{unit}/{order_no}"},
-        write={},
-    )
+        "ledger": {"title_template": "{unit}/{order_no}"},
+        "write": {},
+    }
     base.update(overrides)
     return ShipmentEtlProfile(**base)
 
