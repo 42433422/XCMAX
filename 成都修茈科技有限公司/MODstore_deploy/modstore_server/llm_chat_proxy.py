@@ -68,6 +68,8 @@ def _openai_chat_body(
     max_tokens: Optional[int] = None,
     response_format: Optional[Dict[str, str]] = None,
     stream: bool = False,
+    tools: Optional[List[Dict[str, Any]]] = None,
+    tool_choice: Any = None,
 ) -> Dict[str, Any]:
     body: Dict[str, Any] = {"model": model, "messages": messages}
     if stream:
@@ -80,6 +82,10 @@ def _openai_chat_body(
             body.setdefault("thinking", {"type": "disabled"})
     if response_format:
         body["response_format"] = response_format
+    if tools:
+        body["tools"] = tools
+    if tool_choice is not None:
+        body["tool_choice"] = tool_choice
     return body
 
 
@@ -169,11 +175,14 @@ async def stream_openai_compatible(
     *,
     provider: str = "openai",
     max_tokens: Optional[int] = None,
+    tools: Optional[List[Dict[str, Any]]] = None,
+    tool_choice: Any = None,
 ) -> AsyncIterator[Dict[str, Any]]:
     """Stream OpenAI-compatible chat completions as normalized events.
 
     Yields:
       {"type": "delta", "delta": "..."}
+      {"type": "toolcall", "choices": [{"index":0,"delta":{"tool_calls":[...]},"finish_reason":"tool_calls"}]}
       {"type": "usage", "usage": {...}} when upstream provides stream_options.include_usage
     """
     url = f"{base_url.rstrip('/')}/chat/completions"
@@ -183,6 +192,8 @@ async def stream_openai_compatible(
         messages,
         max_tokens=max_tokens,
         stream=True,
+        tools=tools,
+        tool_choice=tool_choice,
     )
     async with httpx.AsyncClient(timeout=None, limits=_STREAM_LIMITS) as client:
         async with client.stream(
@@ -199,6 +210,7 @@ async def stream_openai_compatible(
                     "error": text.decode("utf-8", errors="ignore")[:2000],
                 }
                 return
+            tool_calls_accum: dict[int, dict[str, Any]] = {}
             async for line in r.aiter_lines():
                 if not line:
                     continue
@@ -220,6 +232,37 @@ async def stream_openai_compatible(
                 content = delta.get("content")
                 if content:
                     yield {"type": "delta", "delta": str(content)}
+                for tc in delta.get("tool_calls") or []:
+                    if not isinstance(tc, dict):
+                        continue
+                    idx = int(tc.get("index") or 0)
+                    cur = tool_calls_accum.get(idx)
+                    if cur is None:
+                        cur = {
+                            "id": tc.get("id") or "",
+                            "type": tc.get("type") or "function",
+                            "function": {"name": "", "arguments": ""},
+                        }
+                        tool_calls_accum[idx] = cur
+                    fn = tc.get("function") or {}
+                    if fn.get("name"):
+                        cur["function"]["name"] = str(fn["name"])
+                    if fn.get("arguments"):
+                        cur["function"]["arguments"] += str(fn["arguments"])
+                    if tc.get("id"):
+                        cur["id"] = str(tc["id"])
+                if choice0.get("finish_reason") == "tool_calls" and tool_calls_accum:
+                    ordered = [tool_calls_accum[i] for i in sorted(tool_calls_accum)]
+                    yield {
+                        "type": "toolcall",
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {"tool_calls": ordered},
+                                "finish_reason": "tool_calls",
+                            }
+                        ],
+                    }
 
 
 def _oai_to_anthropic(messages: List[Dict[str, str]]) -> tuple[str, List[Dict[str, Any]]]:
@@ -499,6 +542,8 @@ async def chat_dispatch_stream(
     model: str,
     messages: List[Dict[str, Any]],
     max_tokens: Optional[int] = None,
+    tools: Optional[List[Dict[str, Any]]] = None,
+    tool_choice: Any = None,
 ) -> AsyncIterator[Dict[str, Any]]:
     model = normalize_model(provider, model)
     if messages_use_openai_multipart_content(messages) and (
@@ -531,7 +576,14 @@ async def chat_dispatch_stream(
     if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
         b = _normalize_openai_base(provider, base_url)
         async for ev in stream_openai_compatible(
-            b, api_key, model, messages, provider=provider, max_tokens=max_tokens
+            b,
+            api_key,
+            model,
+            messages,
+            provider=provider,
+            max_tokens=max_tokens,
+            tools=tools,
+            tool_choice=tool_choice,
         ):
             yield ev
         return

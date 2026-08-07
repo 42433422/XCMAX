@@ -447,7 +447,7 @@ class TestXcagiStreamFirstTokenTimeoutSeconds:
 class TestXcagiStreamIdleNoticeSeconds:
     def test_default(self, monkeypatch):
         monkeypatch.delenv("XCAGI_CHAT_STREAM_IDLE_NOTICE_SEC", raising=False)
-        assert helpers._xcagi_stream_idle_notice_seconds() == 12.0
+        assert helpers._xcagi_stream_idle_notice_seconds() == 5.0
 
     def test_custom(self, monkeypatch):
         monkeypatch.setenv("XCAGI_CHAT_STREAM_IDLE_NOTICE_SEC", "15")
