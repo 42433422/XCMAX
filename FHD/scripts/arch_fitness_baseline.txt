@@ -251,3 +251,5 @@
 [giant-file] app/application/etl/shipment_preview_fallback.py
 [legacy-boundary] app/fastapi_routes/shipment_etl_compat.py
 [giant-file] app/application/etl/parser_shipment_history.py
+# 2026-08-07 ERP Odoo18 升级：workflow clarification_node 571 行略超 500，后续拆分
+[giant-file] app/application/workflow/clarification_node.py
