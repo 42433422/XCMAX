@@ -17,7 +17,6 @@ from sqlalchemy import or_
 from app.db.models import Customer, Product, SalesOrder, SalesOrderItem
 from app.db.models.sales import SALES_ORDER_STATUS_FLOW
 from app.db.session import get_db
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
