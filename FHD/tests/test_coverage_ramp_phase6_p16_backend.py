@@ -544,12 +544,13 @@ class TestInitDbRuntimeAuthBootstrap:
             "ledger": 0,
             "conversation": 0,
             "push": 0,
+            "erp": 0,
         }
 
         # Mock every bootstrap helper the postgres branch calls so no real
         # PostgreSQL connection (port 5432) is attempted; the branch fans out to
         # ensure_postgresql_auth_bootstrap + ensure_user_preferences_bootstrap +
-        # ensure_neuro_event_log_bootstrap.
+        # ensure_neuro_event_log_bootstrap + ensure_erp_bootstrap.
         def fake_pg(engine, *, database_url=None):
             called["pg"] += 1
 
@@ -571,6 +572,9 @@ class TestInitDbRuntimeAuthBootstrap:
         def fake_push(engine, *, database_url=None, swallow_errors=True):
             called["push"] += 1
 
+        def fake_erp(engine, *, database_url=None, swallow_errors=True):
+            called["erp"] += 1
+
         monkeypatch.setattr("app.db.init_db.ensure_postgresql_auth_bootstrap", fake_pg)
         monkeypatch.setattr("app.db.init_db.ensure_user_preferences_bootstrap", fake_prefs)
         monkeypatch.setattr("app.db.init_db.ensure_neuro_event_log_bootstrap", fake_neuro)
@@ -578,6 +582,7 @@ class TestInitDbRuntimeAuthBootstrap:
         monkeypatch.setattr("app.db.init_db.ensure_employee_run_log_bootstrap", fake_ledger)
         monkeypatch.setattr("app.db.init_db.ensure_ai_conversation_bootstrap", fake_conversation)
         monkeypatch.setattr("app.db.init_db.ensure_mobile_push_bootstrap", fake_push)
+        monkeypatch.setattr("app.db.init_db.ensure_erp_bootstrap", fake_erp)
 
         ensure_runtime_auth_bootstrap()
         assert called == {
@@ -588,6 +593,7 @@ class TestInitDbRuntimeAuthBootstrap:
             "ledger": 1,
             "conversation": 1,
             "push": 1,
+            "erp": 1,
         }
 
 
