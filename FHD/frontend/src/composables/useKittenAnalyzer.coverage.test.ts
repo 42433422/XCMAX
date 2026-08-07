@@ -26,6 +26,14 @@ vi.mock('@/api/core', () => ({
   buildFullApiUrl: (path: string) => `http://localhost:5000${path}`,
 }))
 
+vi.mock('@/api/kitten', () => ({
+  kittenApi: {
+    exportReport: vi.fn(),
+    exportReportDocx: vi.fn(),
+    generateDocument: vi.fn(),
+  },
+}))
+
 vi.mock('@/utils', () => ({
   downloadBlob: vi.fn(),
   getFilenameFromDisposition: vi.fn((_hdr: unknown, fallback: string) => fallback),
@@ -79,6 +87,7 @@ import { safeJsonRequest } from '@/utils/safeJsonRequest'
 import { parseDatasetFile } from '@/utils/kittenDatasetParser'
 import { isChatStreamEnabled, readPlannerSseResponse } from '@/utils/chatSseStream'
 import { chatApi } from '@/api/chat'
+import { kittenApi } from '@/api/kitten'
 import { downloadBlob } from '@/utils'
 import { appAlert } from '@/utils/appDialog'
 import { openDocumentPreviewFromBlob } from '@/state/documentPreviewPip'
@@ -600,12 +609,12 @@ describe('useKittenAnalyzer - coverage ramp', () => {
     })
 
     it('generateAiOfficeDocument 遇 JSON content-type 抛错并调用 appAlert', async () => {
-      global.fetch = vi.fn().mockResolvedValueOnce(
+      vi.mocked(kittenApi.generateDocument).mockResolvedValueOnce(
         makeResponse({
           ok: true,
           contentType: 'application/json',
           blob: makeTextBlob('{"message":"生成失败原因"}'),
-        })
+        }) as never
       )
 
       await analyzer.generateAiOfficeDocument('写一份合同', 'docx')
@@ -1230,30 +1239,16 @@ describe('useKittenAnalyzer - coverage ramp', () => {
   // ════════════════════════════════════════════════════════════════════
 
   describe('generateAiOfficeDocument 边界', () => {
-    it('resp.json() 抛异常时回退到 resp.text()', async () => {
-      global.fetch = vi.fn().mockResolvedValueOnce(
-        makeResponse({
-          ok: false,
-          status: 500,
-          jsonThrows: true,
-          text: 'plain text error',
-        })
-      )
+    it('generateDocument 抛异常：回退到 appAlert 错误消息', async () => {
+      vi.mocked(kittenApi.generateDocument).mockRejectedValueOnce(new Error('plain text error'))
       await analyzer.generateAiOfficeDocument('写合同', 'docx')
       expect(appAlert).toHaveBeenCalledWith(
         expect.stringContaining('plain text error')
       )
     })
 
-    it('resp.json() 抛异常且 text 为空：使用状态码错误消息', async () => {
-      global.fetch = vi.fn().mockResolvedValueOnce(
-        makeResponse({
-          ok: false,
-          status: 500,
-          jsonThrows: true,
-          text: '',
-        })
-      )
+    it('generateDocument 抛状态码错误消息', async () => {
+      vi.mocked(kittenApi.generateDocument).mockRejectedValueOnce(new Error('生成失败（500）'))
       await analyzer.generateAiOfficeDocument('写合同', 'xlsx')
       expect(appAlert).toHaveBeenCalledWith(
         expect.stringContaining('生成失败（500）')
@@ -1261,12 +1256,12 @@ describe('useKittenAnalyzer - coverage ramp', () => {
     })
 
     it('xlsx 格式成功生成：打开预览并调用 downloadBlob', async () => {
-      global.fetch = vi.fn().mockResolvedValueOnce(
+      vi.mocked(kittenApi.generateDocument).mockResolvedValueOnce(
         makeResponse({
           ok: true,
           contentType: 'application/octet-stream',
           blob: makePkBlob(),
-        })
+        }) as never
       )
       await analyzer.generateAiOfficeDocument('生成表格', 'xlsx')
       expect(openDocumentPreviewFromBlob).toHaveBeenCalled()
@@ -1274,12 +1269,12 @@ describe('useKittenAnalyzer - coverage ramp', () => {
     })
 
     it('docx 格式成功生成：打开预览、下载并添加 AI 消息', async () => {
-      global.fetch = vi.fn().mockResolvedValueOnce(
+      vi.mocked(kittenApi.generateDocument).mockResolvedValueOnce(
         makeResponse({
           ok: true,
           contentType: 'application/octet-stream',
           blob: makePkBlob(),
-        })
+        }) as never
       )
       await analyzer.generateAiOfficeDocument('生成文档', 'docx')
       expect(openDocumentPreviewFromBlob).toHaveBeenCalled()
@@ -1297,13 +1292,13 @@ describe('useKittenAnalyzer - coverage ramp', () => {
 
   describe('exportDocxViaBackend 成功路径', () => {
     it('后端 Word 导出成功：调用 downloadBlob', async () => {
-      global.fetch = vi.fn().mockResolvedValueOnce(
+      vi.mocked(kittenApi.exportReportDocx).mockResolvedValueOnce(
         makeResponse({
           ok: true,
           contentType: 'application/octet-stream',
           disposition: 'attachment; filename="report.docx"',
           blob: makePkBlob(),
-        })
+        }) as never
       )
       analyzer.currentResult.value = {
         id: 1,
