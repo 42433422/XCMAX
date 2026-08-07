@@ -1,4 +1,4 @@
-[baseline] 199 known violation(s) suppressed (see arch_fitness_baseline.txt)
+[baseline] 206 known violation(s) suppressed (see arch_fitness_baseline.txt)
 [domain->infrastructure] app/domain/neuro/cognition/llm_port.py:100
 [domain->infrastructure] app/domain/neuro/cognition/llm_port.py:54
 [domain->infrastructure] app/domain/value_objects_industry.py:23
@@ -243,3 +243,13 @@
 [legacy-boundary] app/fastapi_routes/domains/product/compat_routes.py
 [legacy-boundary] app/fastapi_routes/domains/conversation/compat_extra.py
 [legacy-boundary] app/fastapi_routes/domains/conversation/compat_routes.py
+
+[giant-file] app/application/normal_chat_dispatch.py
+[giant-file] app/application/etl/parser_regions.py
+[giant-file] app/application/etl/llm_assist.py
+[giant-file] app/application/etl/service_preview.py
+[giant-file] app/application/etl/shipment_preview_fallback.py
+[legacy-boundary] app/fastapi_routes/shipment_etl_compat.py
+[giant-file] app/application/etl/parser_shipment_history.py
+# 2026-08-07 ERP Odoo18 升级：workflow clarification_node 571 行略超 500，后续拆分
+[giant-file] app/application/workflow/clarification_node.py

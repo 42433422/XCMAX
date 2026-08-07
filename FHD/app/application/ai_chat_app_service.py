@@ -156,6 +156,10 @@ class AIChatApplicationService(
     ) -> dict[str, Any]:
         runtime_ctx: dict[str, Any] = {"user_id": user_id, "message": message}
         if isinstance(context, dict):
+            # 会话级标识透传，供计划持久化（跨会话续跑）与记忆落盘使用。
+            for key in ("session_id", "conversation_id"):
+                if key in context and context[key]:
+                    runtime_ctx[key] = str(context[key]).strip()
             for key in ("ui_surface", "intent_channel", "tool_execution_profile"):
                 if key in context and context[key] is not None:
                     runtime_ctx[key] = context[key]
@@ -737,6 +741,7 @@ class AIChatApplicationService(
         text = str(message or "").strip()
         if not text:
             return None
+        self._sweep_expired_clarifications()
         explicit_workflow_tool_intent = self._looks_like_explicit_workflow_tool_intent(text)
         smart_workflow_intent = self._looks_like_smart_workflow_intent(text, context)
         has_pending_workflow = user_id in self._pending_workflows
@@ -1267,10 +1272,34 @@ class AIChatApplicationService(
                     }
 
         # 处理混合模式下的确认/取消
+        confirm_words = {"确认", "是", "好的", "继续", "执行", "ok", "yes"}
+        cancel_words = {"取消", "否", "不要", "停止", "no"}
+        # 跨会话续跑：内存无待确认工作流，但用户本次是「确认/取消」且 DB 有待续跑计划时，
+        # 从 DB 水合（进程重启/换会话后仍可恢复长任务）。
+        _resume_msg = (message or "").strip().lower()
+        if user_id not in self._pending_workflows and (
+            _resume_msg in {w.lower() for w in confirm_words}
+            or _resume_msg in {w.lower() for w in cancel_words}
+        ):
+            self._hydrate_pending_workflow(user_id)
         pending = self._pending_workflows.get(user_id)
         if pending:
-            confirm_words = {"确认", "是", "好的", "继续", "执行", "ok", "yes"}
-            cancel_words = {"取消", "否", "不要", "停止", "no"}
+            if pending.get("kind") == "clarification":
+                # 反问澄清待确认：用户回复即确认答案。解析出唯一目标后丰富参数并继续执行；
+                # 无法唯一确定则继续追问（pending 保留，TTL 过期自动取消）。
+                continued = self._continue_after_clarification(user_id, pending, message)
+                if continued is not None:
+                    return continued
+                return {
+                    "success": True,
+                    "message": "需要澄清",
+                    "response": "仍无法唯一确定操作目标，请回复候选序号或唯一 ID（例如「1」）。",
+                    "data": {
+                        "text": "仍无法唯一确定操作目标，请回复候选序号或唯一 ID。",
+                        "action": "clarification_required",
+                        "data": {"requires_confirmation": True},
+                    },
+                }
             if text.lower() in confirm_words or text in confirm_words:
                 plan = pending.get("plan")
                 runtime_ctx = pending.get("runtime_context", {})
@@ -1328,14 +1357,15 @@ class AIChatApplicationService(
                             user_message=str(runtime_ctx.get("message") or ""),
                         )
 
-                run_result = self.workflow_engine.run(
-                    plan=plan, runtime_context=runtime_ctx, max_retries=1
+                run_result, state_updates = self._run_workflow_with_state_updates(
+                    plan=plan, runtime_context=runtime_ctx, max_retries=1, resume=True
                 )
                 self._pending_workflows.pop(user_id, None)
                 return self._format_workflow_run_response(
                     plan,
                     run_result,
                     user_message=str(runtime_ctx.get("message") or ""),
+                    state_updates=state_updates,
                 )
             if text.lower() in cancel_words or text in cancel_words:
                 self._pending_workflows.pop(user_id, None)
@@ -1406,6 +1436,19 @@ class AIChatApplicationService(
             plan=plan, decision_reason=decision.reason
         )
 
+        # 反问澄清门控：写/高风险操作参数缺失或多候选目标歧义时先反问，收到确认后再执行（防 ERP 误操作）。
+        if user_id not in self._pending_workflows:
+            clarify_result = self._open_clarification_gate(
+                user_id=user_id,
+                plan=plan,
+                tool_registry=tool_registry,
+                runtime_context=runtime_ctx,
+                thinking_steps=thinking_steps,
+                message=message,
+            )
+            if clarify_result is not None:
+                return clarify_result
+
         approval_required_nodes = self.approval_service.get_approval_required_nodes(plan)
         has_approval_requirement = bool(approval_required_nodes)
         approval_info = ""
@@ -1445,6 +1488,7 @@ class AIChatApplicationService(
                 "approval_required": False,
                 "approval_nodes": [],
             }
+            self._persist_plan_state(plan, runtime_ctx, status="pending_awaiting")
             todo_text = "\n".join(f"- {step}" for step in (plan.todo_steps or []))
             reason = decision.reason or "工具策略要求用户确认"
             response_text = (
@@ -1521,6 +1565,7 @@ class AIChatApplicationService(
                     for n in approval_required_nodes
                 ],
             }
+            self._persist_plan_state(plan, runtime_ctx, status="pending_awaiting")
             todo_text = "\n".join(f"- {step}" for step in (plan.todo_steps or []))
             response_text = (
                 "我已根据语义生成动态工作流计划：\n"
@@ -1578,7 +1623,7 @@ class AIChatApplicationService(
             except RECOVERABLE_ERRORS:
                 logger.debug("Agentic workflow AgentRun pre-create skipped", exc_info=True)
 
-        run_result = self.workflow_engine.run(
+        run_result, state_updates = self._run_workflow_with_state_updates(
             plan=plan,
             runtime_context=runtime_ctx,
             max_retries=1,
@@ -1606,6 +1651,7 @@ class AIChatApplicationService(
             run_result,
             thinking_steps=thinking_steps,
             user_message=str(message or ""),
+            state_updates=state_updates,
         )
 
     def _build_workflow_thinking_steps(self, plan, decision_reason: str) -> str:
@@ -1961,6 +2007,273 @@ class AIChatApplicationService(
                 exc_info=True,
             )
             return {"success": False, "message": str(err)}
+
+    def _hydrate_pending_workflow(self, user_id: str) -> bool:
+        """从 DB 载入用户最近的可续跑计划并水合到内存待确认槽。
+
+        配合 ``WorkflowPlanStore`` 落库的计划，实现进程重启/换会话后仍能恢复长任务。
+        水合成 ``kind="workflow"`` 的待确认记录，进入通用确认分支并用 ``resume`` 续跑。
+        返回是否成功水合。
+        """
+        try:
+            from app.application.workflow.plan_store import WorkflowPlanStore
+            from app.application.workflow.types import plan_from_dict
+
+            active = WorkflowPlanStore().list_active(user_id, limit=1)
+            if not active:
+                return False
+            plan = plan_from_dict(active[0].get("plan") or {})
+            if plan is None or not plan.nodes:
+                return False
+            self._pending_workflows[user_id] = {
+                "plan": plan,
+                "runtime_context": dict(active[0].get("runtime_context") or {}),
+                "pending_id": uuid.uuid4().hex,
+                "thinking_steps": "",
+                "kind": "workflow",
+                "agent_run_id": "",
+                "approval_required": False,
+                "approval_nodes": [],
+                "hydrated_from_db": True,
+            }
+            return True
+        except Exception:  # noqa: BLE001 - 水合失败应回退到正常流程，不阻断
+            logger.debug("DB 待续跑计划水合失败 user_id=%s", user_id)
+            return False
+
+    def _persist_plan_state(
+        self,
+        plan,
+        runtime_context: dict[str, Any] | None,
+        status: str,
+        message: str | None = None,
+    ) -> None:
+        """把动态工作流计划（含 runtime_context）落库，供跨会话续跑。
+
+        从 ``runtime_context`` 提取 ``user_id``/``session_id``；保存失败仅告警，不阻断主流程。
+        """
+        try:
+            from app.application.workflow.plan_store import WorkflowPlanStore
+
+            rc = dict(runtime_context or {})
+            user_id = str(rc.get("user_id") or "").strip() or None
+            session_id = (
+                str(rc.get("session_id") or rc.get("conversation_id") or "").strip() or None
+            )
+            WorkflowPlanStore().save(
+                plan=plan,
+                runtime_context=rc,
+                status=status,
+                user_id=user_id,
+                session_id=session_id,
+                message=message,
+            )
+        except Exception:  # noqa: BLE001 - 计划持久化尽力而为，失败不阻断对话
+            logger.warning(
+                "计划持久化失败 plan_id=%s status=%s", getattr(plan, "plan_id", "?"), status
+            )
+
+    def _run_workflow_with_state_updates(
+        self,
+        *,
+        plan,
+        runtime_context: dict[str, Any],
+        max_retries: int = 1,
+        resume: bool = False,
+        **kwargs: Any,
+    ) -> tuple[Any, list[dict[str, Any]]]:
+        """运行工作流引擎，并收集每步节点完成后的 ``state.update`` 事件。
+
+        ``resume=True`` 时从该计划在 DB 中的最新 checkpoint 断点续跑（不重复执行已完成节点），
+        用于跨会话/中断恢复的长任务；返回 ``(run_result, state_updates)``。
+        """
+        state_updates: list[dict[str, Any]] = []
+        from app.application.workflow.checkpointer import DatabaseWorkflowCheckpointer
+
+        # 运行前落库计划（running），失败亦不阻断；运行后更新终态。
+        self._persist_plan_state(plan, runtime_context, status="running")
+        checkpointer = DatabaseWorkflowCheckpointer()
+        if resume:
+            latest = checkpointer.latest_checkpoint(plan.plan_id)
+            if latest is not None:
+                run_result = self.workflow_engine.resume_run(
+                    plan,
+                    latest["checkpoint_id"],
+                    checkpointer=checkpointer,
+                    max_retries=max_retries,
+                )
+            else:
+                run_result = self.workflow_engine.run(
+                    plan=plan,
+                    runtime_context=runtime_context,
+                    max_retries=max_retries,
+                    state_event_callback=state_updates.append,
+                    checkpointer=checkpointer,
+                    **kwargs,
+                )
+        else:
+            run_result = self.workflow_engine.run(
+                plan=plan,
+                runtime_context=runtime_context,
+                max_retries=max_retries,
+                state_event_callback=state_updates.append,
+                checkpointer=checkpointer,
+                **kwargs,
+            )
+        self._persist_plan_state(
+            plan,
+            runtime_context,
+            status="succeeded" if run_result.success else "failed",
+            message=str(run_result.message or ""),
+        )
+        return run_result, state_updates
+
+    def _sweep_expired_clarifications(self) -> list[str]:
+        """扫描并移除过期的"澄清待确认"记录（TTL 防堆积）。"""
+        from app.application.workflow.clarification_node import sweep_expired
+
+        return sweep_expired(self._pending_workflows)
+
+    def _open_clarification_gate(
+        self,
+        *,
+        user_id: str,
+        plan,
+        tool_registry,
+        runtime_context: dict[str, Any],
+        thinking_steps: str,
+        message: str,
+    ) -> dict[str, Any] | None:
+        """写/高风险操作参数缺失或多候选歧义时：插入反问节点 → 执行暂停 → 记录待确认。
+
+        返回澄清响应；无需澄清则返回 None（继续正常流程）。
+        """
+        from app.application.workflow.clarification_node import (
+            build_clarify_node,
+            insert_clarify_node,
+            make_pending_entry,
+            needs_clarification,
+        )
+
+        clarify_items = needs_clarification(plan, tool_registry)
+        if not clarify_items:
+            return None
+        item = clarify_items[0]
+        target = next((n for n in plan.nodes if n.node_id == item["node_id"]), None)
+        if target is None:
+            return None
+
+        clarify_node = build_clarify_node(
+            item.get("question") or "请确认目标后再执行写操作。",
+            ambient={
+                "target_node_id": target.node_id,
+                "answer_key": item.get("field") or "confirmed",
+            },
+        )
+        insert_clarify_node(plan, clarify_node)
+        runtime_context["_clarify_node_id"] = clarify_node.node_id
+
+        # 执行反问节点：不真正调用业务工具，仅产出 requires_confirmation 并暂停工作流。
+        from app.application.workflow.checkpointer import DatabaseWorkflowCheckpointer
+
+        self.workflow_engine.run(
+            plan=plan,
+            runtime_context=runtime_context,
+            max_retries=1,
+            checkpointer=DatabaseWorkflowCheckpointer(),
+        )
+
+        self._pending_workflows[user_id] = make_pending_entry(
+            plan=plan,
+            runtime_context=runtime_context,
+            thinking_steps=thinking_steps,
+            clarification=item,
+            clarify_node_id=clarify_node.node_id,
+            target_node_id=target.node_id,
+        )
+        self._persist_plan_state(plan, runtime_context, status="pending_awaiting")
+
+        question = item.get("question") or "请确认目标后再执行写操作。"
+        clarify_inner = {
+            "plan_id": plan.plan_id,
+            "intent": plan.intent,
+            "requires_confirmation": True,
+            "reason": item.get("reason"),
+            "field": item.get("field"),
+            "candidates": item.get("candidates") or [],
+            "missing_fields": item.get("missing_fields") or [],
+            "target_node_id": target.node_id,
+            "ttl_seconds": self._pending_workflows[user_id]["ttl_seconds"],
+        }
+        return {
+            "success": True,
+            "message": "需要澄清",
+            "response": question,
+            "data": {
+                "text": question,
+                "action": "clarification_required",
+                "data": clarify_inner,
+            },
+        }
+
+    def _continue_after_clarification(
+        self,
+        user_id: str,
+        pending: dict[str, Any],
+        message: str,
+    ) -> dict[str, Any] | None:
+        """处理澄清待确认的回复：取消 / 解析唯一目标后继续执行。
+
+        已处理（取消或继续执行）返回响应；无法唯一确定目标返回 None（保留 pending 继续追问）。
+        """
+        text = str(message or "").strip()
+        cancel_words = {"取消", "否", "不要", "停止", "no"}
+        if text.lower() in cancel_words or text in cancel_words:
+            self._pending_workflows.pop(user_id, None)
+            return {
+                "success": True,
+                "message": "处理完成",
+                "response": "已取消本次待澄清操作。",
+                "data": {
+                    "text": "已取消本次待澄清操作。",
+                    "action": "workflow_cancelled",
+                    "data": {},
+                },
+            }
+
+        from app.application.workflow.clarification_node import resolve_confirmed_target
+
+        plan = pending.get("plan")
+        runtime_ctx = dict(pending.get("runtime_context") or {})
+        item = pending.get("clarification") or {}
+        clarify_node_id = pending.get("clarify_node_id")
+        target_node_id = pending.get("target_node_id")
+        target = next((n for n in plan.nodes if n.node_id == target_node_id), None)
+        if target is None:
+            self._pending_workflows.pop(user_id, None)
+            return None
+
+        candidates = item.get("candidates") or []
+        confirmed = resolve_confirmed_target(text, candidates)
+        if confirmed is None:
+            return None  # 无法唯一确定目标，保留 pending 继续追问
+
+        # 用确认答案丰富目标节点参数，再经条件边路由回原操作节点继续执行。
+        target.params.update(confirmed)
+        target.params.pop("candidates", None)
+        target.params.pop("_candidates", None)
+        runtime_ctx["_clarify_answers"] = {clarify_node_id: {"confirmed": True, **confirmed}}
+        self._pending_workflows.pop(user_id, None)
+        run_result, state_updates = self._run_workflow_with_state_updates(
+            plan=plan, runtime_context=runtime_ctx, max_retries=1, resume=True
+        )
+        return self._format_workflow_run_response(
+            plan,
+            run_result,
+            thinking_steps=str(pending.get("thinking_steps") or ""),
+            user_message=str(runtime_ctx.get("message") or ""),
+            state_updates=state_updates,
+        )
 
     def _handle_confirmation_flow(
         self, user_id: str, message: str, file_context: dict[str, Any] | None

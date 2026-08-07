@@ -531,6 +531,7 @@ def _xcagi_guarded_planner_stream_events(
     started_at = time.monotonic()
     first_event_seen = True
     yield MODEL_STREAM_ACCEPTED_EVENT
+
     while True:
         elapsed = time.monotonic() - started_at
         if elapsed >= total_timeout:

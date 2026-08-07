@@ -87,6 +87,35 @@ function scheduleRouterAddressSync(reason: string): void {
 }
 
 /**
+ * 后台分批预取静态路由的懒加载 chunk，使侧栏切换页面时无需等待 JS 拉取，消除「卡顿」。
+ * 每次预取 4 个，交还主线程避免启动瞬间雪崩；仅预取非公开、非裸壳的业务/核心页面。
+ */
+function prefetchStaticRouteChunks(): void {
+  const routes = router.getRoutes();
+  const jobs = routes
+    .filter((r) => r.meta?.publicAccess !== true && r.meta?.hideChrome !== true)
+    .map((r) => r.components?.default)
+    .filter((c): c is () => Promise<unknown> => typeof c === 'function');
+  if (!jobs.length) return;
+  const idle = (cb: () => void): void => {
+    const win = window as typeof window & {
+      requestIdleCallback?: (task: () => void) => unknown;
+    };
+    if (win.requestIdleCallback) win.requestIdleCallback(cb);
+    else window.setTimeout(cb, 60);
+  };
+  let index = 0;
+  const step = (): void => {
+    const end = Math.min(index + 4, jobs.length);
+    for (; index < end; index++) {
+      jobs[index]().catch(() => {});
+    }
+    if (index < jobs.length) idle(step);
+  };
+  step();
+}
+
+/**
  * 与 mount 并行预取 Mod 路由，避免在 bootstrap 里 await 网络导致整页长时间不挂载（用户感觉「卡死」）。
  * 深链直达 Mod 页时若此请求晚于首跳，仍可由 modsStore.initialize 内 registerModRoutes 补齐。
  */
@@ -152,6 +181,15 @@ async function bootstrap() {
 
   if (typeof performance !== 'undefined' && performance.mark) {
     performance.mark('bootstrap_mount');
+  }
+
+  // 侧栏切换页面「卡顿」根因之一：路由组件均为懒加载 chunk，首次进入某页需现拉 JS。
+  // 桌面壳（localhost）下后台分批预取静态路由 chunk，让点击即切、无首访拉取等待。
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (import.meta.env.DEV || host === '127.0.0.1' || host === 'localhost') {
+      prefetchStaticRouteChunks();
+    }
   }
 
   if (!readVanillaNoModUi()) {

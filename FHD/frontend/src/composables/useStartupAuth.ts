@@ -6,7 +6,7 @@ import { readEntitledModIdsFromAuthPayload } from '@/stores/mods'
 import type { useModsStore } from '@/stores/mods'
 import { buildLoginLocation } from '@/utils/startupRedirect'
 import { clearHostPackSkippedSession } from '@/utils/hostPackOnboardingGate'
-import { asRecord, asArray, asString } from '@/utils/typeGuards'
+import { asRecord, asString } from '@/utils/typeGuards'
 
 export type StartupAuthResult = {
   ok: boolean

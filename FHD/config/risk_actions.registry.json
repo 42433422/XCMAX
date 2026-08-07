@@ -246,6 +246,51 @@
           ],
           "availability": "shared",
           "action_class": "delete.batch"
+        },
+        "add_address": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "customer_id",
+            "address_type",
+            "address"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "set_credit_limit": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "customer_id",
+            "credit_limit"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "get_addresses": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        }
+      }
+    },
+    "suppliers": {
+      "description": "供应商管理",
+      "availability": "shared",
+      "actions": {
+        "query_suppliers": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "get_supplier": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
         }
       }
     },
@@ -485,6 +530,34 @@
             "quantity"
           ],
           "availability": "shared"
+        },
+        "low_stock_alert": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "replenishment_suggest": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "inventory_count": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "product_id",
+            "warehouse_id",
+            "actual_quantity"
+          ],
+          "availability": "shared"
+        },
+        "query_transactions": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
         }
       }
     },
@@ -549,11 +622,133 @@
           "idempotent": false,
           "required_params": [],
           "availability": "shared"
+        },
+        "query_suppliers": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "query_orders": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "query_inbounds": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        }
+      }
+    },
+    "sales": {
+      "description": "销售订单与销售到收款闭环管理（报价→确认→发货→开票→收款）",
+      "availability": "shared",
+      "actions": {
+        "query": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "quote": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "customer_id",
+            "items"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "confirm": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "order_id"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "deliver": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "order_id"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "invoice": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "order_id"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "payment": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "order_id",
+            "amount"
+          ],
+          "availability": "shared",
+          "action_class": "payment.charge"
+        },
+        "cancel": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "order_id"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        }
+      }
+    },
+    "reports": {
+      "description": "ERP 业务报表中心（销售/库存/采购汇总、经营看板、导出）",
+      "availability": "shared",
+      "actions": {
+        "sales_summary": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "inventory_summary": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "purchase_summary": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "dashboard": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "export": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
         }
       }
     },
     "finance": {
-      "description": "财务凭证交易管理",
+      "description": "财务凭证交易与复式记账管理",
       "availability": "shared",
       "actions": {
         "create_transaction": {
@@ -579,6 +774,121 @@
           "required_params": [
             "transaction_id"
           ],
+          "availability": "shared"
+        },
+        "ledger_query": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "journal_entry_create": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "lines"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "journal_entry_reverse": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "entry_id"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "aging_report": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "account_type",
+            "days"
+          ],
+          "availability": "shared"
+        },
+        "chart_seed": {
+          "risk": "medium",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        }
+      }
+    },
+    "mrp": {
+      "description": "生产制造管理",
+      "availability": "shared",
+      "actions": {
+        "create_bom": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "product_id",
+            "lines"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "query_boms": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "get_bom": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "bom_id"
+          ],
+          "availability": "shared"
+        },
+        "create_order": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "bom_id",
+            "quantity"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "confirm_order": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "order_id"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "consume": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "order_id",
+            "warehouse_id"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "finish": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "order_id",
+            "warehouse_id"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "query_orders": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
           "availability": "shared"
         }
       }

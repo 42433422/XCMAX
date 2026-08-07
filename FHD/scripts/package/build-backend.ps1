@@ -55,6 +55,18 @@ if (-not $SkipFrontend) {
   # 桌面包不构建 admin-console（管理端仅网页 SSOT）
 }
 
+# 硬门禁：缺 Vite 产物会打出「白屏/无页面」桌面包。
+$vueDist = Join-Path $Root 'templates\vue-dist'
+$vueIndex = Join-Path $vueDist 'index.html'
+if (-not (Test-Path $vueIndex)) {
+  throw "missing $vueIndex; refuse to package empty frontend. Build frontend first (or omit -SkipFrontend)."
+}
+$jsCount = @(Get-ChildItem -Path (Join-Path $vueDist 'assets\js') -Filter '*.js' -File -ErrorAction SilentlyContinue).Count
+if ($jsCount -lt 1) {
+  throw "$vueDist\assets\js has no *.js (count=$jsCount); refuse empty vue-dist package."
+}
+Write-Host "[ok] vue-dist gate: index.html present, assets/js count=$jsCount"
+
 python -m pip install --upgrade pip
 python -m pip install -e ".[server-api]"
 if ($LASTEXITCODE -ne 0) { throw "pip install -e FHD[server-api] failed" }
@@ -81,6 +93,17 @@ if ($ProductSku) {
 }
 python -m PyInstaller --noconfirm --clean "scripts\package\xcagi_backend.spec"
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller xcagi_backend.spec failed" }
+
+$bundledIndex = Join-Path $Root 'dist\xcagi-backend\_internal\templates\vue-dist\index.html'
+if (-not (Test-Path $bundledIndex)) {
+  throw "PyInstaller output missing bundled vue-dist index: $bundledIndex"
+}
+$bundledJs = @(Get-ChildItem -Path (Join-Path $Root 'dist\xcagi-backend\_internal\templates\vue-dist\assets\js') -Filter '*.js' -File -ErrorAction SilentlyContinue).Count
+if ($bundledJs -lt 1) {
+  throw 'bundled vue-dist/assets/js empty — desktop would show no page'
+}
+Write-Host "[ok] bundled vue-dist ($bundledJs js)"
+
 if ($ProductSku) {
   Remove-Item Env:XCAGI_STAGED_MODS_DIR -ErrorAction SilentlyContinue
   Remove-Item Env:XCAGI_STAGED_INDUSTRY_SEEDS_DIR -ErrorAction SilentlyContinue

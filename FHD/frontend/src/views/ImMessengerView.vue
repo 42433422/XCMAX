@@ -108,7 +108,6 @@ import {
   type ImConversationSummary,
   type ImMessage,
 } from '@/api/im';
-import api from '@/api';
 import { authApi } from '@/api/auth';
 import { useImSounds } from '@/composables/useImSounds';
 import { showAppToast } from '@/composables/useAppToast';

@@ -19,6 +19,7 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from app.db.etl_bootstrap import ensure_sqlite_etl_bootstrap
 from app.utils.external_sqlite import sqlite_conn
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -1228,6 +1229,16 @@ def ensure_runtime_auth_bootstrap(
             database_url=url,
             swallow_errors=swallow_errors,
         )
+        ensure_sqlite_etl_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
+        ensure_erp_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
     else:
         ensure_postgresql_auth_bootstrap(engine, database_url=url)
         ensure_user_preferences_bootstrap(
@@ -1260,6 +1271,69 @@ def ensure_runtime_auth_bootstrap(
             database_url=url,
             swallow_errors=swallow_errors,
         )
+        ensure_erp_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
+
+
+def ensure_erp_bootstrap(
+    engine: Engine | None = None,
+    *,
+    database_url: str | None = None,
+    swallow_errors: bool = True,
+) -> None:
+    """Idempotently create ERP tables absorbed from Odoo 18 (sales + double-entry accounting).
+
+    ``SalesOrder``/``SalesOrderItem`` back the sales-to-payment closed loop;
+    ``ChartOfAccount``/``JournalEntry``/``JournalEntryLine`` back double-entry
+    bookkeeping.  These models are autoloaded by the app but have no dedicated
+    ``ensure_*_bootstrap``, so PostgreSQL/SQLite would otherwise fail on query.
+    """
+    from sqlalchemy import inspect
+
+    from app.db.base import Base
+    from app.db.models.accounting import (
+        ChartOfAccount,
+        JournalEntry,
+        JournalEntryLine,
+    )
+    from app.db.models.crm import CustomerAddress
+    from app.db.models.mrp import (
+        Bom,
+        BomLine,
+        ManufacturingOrder,
+        ManufacturingOrderLine,
+    )
+    from app.db.models.sales import SalesOrder, SalesOrderItem
+
+    real_engine = _resolve_auth_bootstrap_engine(engine, database_url=database_url)
+    if real_engine is None:
+        return
+    try:
+        tables = set(inspect(real_engine).get_table_names() or [])
+        model_tables = [
+            SalesOrder.__table__,
+            SalesOrderItem.__table__,
+            ChartOfAccount.__table__,
+            JournalEntry.__table__,
+            JournalEntryLine.__table__,
+            Bom.__table__,
+            BomLine.__table__,
+            ManufacturingOrder.__table__,
+            ManufacturingOrderLine.__table__,
+            CustomerAddress.__table__,
+        ]
+        missing = [table for table in model_tables if table.name not in tables]
+        if missing:
+            logger.info("缺少 ERP 表 %s，正在通过 ORM 创建 …", [t.name for t in missing])
+            Base.metadata.create_all(real_engine, tables=missing, checkfirst=True)
+    except RECOVERABLE_ERRORS as exc:
+        if swallow_errors:
+            logger.warning("ensure_erp_bootstrap 失败: %s", exc, exc_info=True)
+            return
+        raise
 
 
 def ensure_postgresql_auth_bootstrap(

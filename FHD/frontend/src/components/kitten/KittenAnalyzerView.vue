@@ -252,7 +252,7 @@ import KittenLauncherIcon from '@/components/kitten/KittenLauncherIcon.vue'
 import KittenVizEmployeeStrip from '@/components/kitten/KittenVizEmployeeStrip.vue'
 import { useKittenVizEmployees } from '@/composables/useKittenVizEmployees'
 import type { KittenChartType } from '@/composables/useKittenAnalyzer'
-import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
+import { asRecord, asArray, asString } from '@/utils/typeGuards'
 import {
   useKittenAnalyzer,
   kittenQuickActions,

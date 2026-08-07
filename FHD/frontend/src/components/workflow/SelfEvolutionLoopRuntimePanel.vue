@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { reactive } from 'vue'
 import { useSelfEvolutionRuntimePanelState } from '@/composables/useSelfEvolutionRuntimePanelState'
 import { useSelfEvolutionRuntimePresenters } from '@/composables/useSelfEvolutionRuntimePresenters'
 import {

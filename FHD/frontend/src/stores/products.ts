@@ -2,8 +2,6 @@ import { defineStore } from 'pinia'
 import { ref, computed, type Ref } from 'vue'
 import productsApi from '../api/products'
 import type { Product, ProductCreateDTO, ProductUpdateDTO, ProductQueryParams } from '@/types/product'
-import type { ApiResponse } from '@/types/api'
-
 interface OperationResult {
   success: boolean;
   data?: unknown;

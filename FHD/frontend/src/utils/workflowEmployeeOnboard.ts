@@ -2,9 +2,7 @@
  * AI 市场安装员工包后自动上岗，并挂靠当前企业 Mod 栈（行业通用 + 定制）。
  */
 import { reloadEmployeePacks } from '@/api/modStore'
-import {
-  defaultHostModIdForMarketEmployee,
-  type EnterpriseModStack,
+import {defaultHostModIdForMarketEmployee,
 } from '@/constants/enterpriseModStack'
 import { useModsStore } from '@/stores/mods'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'

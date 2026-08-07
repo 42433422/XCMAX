@@ -63,11 +63,44 @@ function codesign(target, identity, entitlements) {
   }
 }
 
+function assertBundledVueDist(root, platform) {
+  const candidates =
+    platform === 'darwin'
+      ? [path.join(root, 'Contents/Resources/backend/_internal/templates/vue-dist')]
+      : [path.join(root, 'resources/backend/_internal/templates/vue-dist')]
+  let vueDist = ''
+  for (const c of candidates) {
+    if (fs.existsSync(path.join(c, 'index.html'))) {
+      vueDist = c
+      break
+    }
+  }
+  if (!vueDist) {
+    throw new Error(
+      `[after-pack] bundled vue-dist/index.html missing under ${root} — desktop would show no page`
+    )
+  }
+  const jsDir = path.join(vueDist, 'assets/js')
+  const jsCount = fs.existsSync(jsDir)
+    ? fs.readdirSync(jsDir).filter((n) => n.endsWith('.js')).length
+    : 0
+  if (jsCount < 1) {
+    throw new Error(`[after-pack] ${jsDir} has no *.js — desktop would show no page`)
+  }
+  log(`vue-dist gate ok (${jsCount} js): ${vueDist}`)
+}
+
 exports.default = async function afterPack(context) {
+  const appName = context.packager.appInfo.productFilename
+  const probeRoot =
+    context.electronPlatformName === 'darwin'
+      ? path.join(context.appOutDir, `${appName}.app`)
+      : context.appOutDir
+  assertBundledVueDist(probeRoot, context.electronPlatformName)
+
   if (context.electronPlatformName !== 'darwin') return
 
-  const appName = context.packager.appInfo.productFilename
-  const appPath = path.join(context.appOutDir, `${appName}.app`)
+  const appPath = probeRoot
   // Cached Electron archives may also carry com.apple.provenance/quarantine.
   // None of these attributes belongs in a distributable app bundle, and codesign
   // rejects inherited Finder/resource metadata before the final seal is written.
