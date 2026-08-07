@@ -68,6 +68,22 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
             "slots": {"keyword": del_target},
         }
 
+    # 报表 / 汇总 / 看板（吸收 Odoo 18 报表中心）——须在销售/库存/采购之前，避免「销售报表」等被宽泛词截胡
+    report_keywords = ("报表", "销售报表", "库存报表", "采购报表", "汇总", "经营看板", "数据看板", "统计")
+    if any(k in text for k in report_keywords):
+        return {
+            "intent": "reports_query",
+            "slots": {"keyword": ""},
+        }
+
+    # 库存盘点（区别库存预警：盘点需确认，须在「库存」宽泛词之前判断，避免「库存盘点」被截胡）
+    inventory_count_keywords = ("库存盘点", "盘点", "实盘")
+    if any(k in text for k in inventory_count_keywords):
+        return {
+            "intent": "inventory_count",
+            "slots": {"product_id": "", "warehouse_id": "", "actual_quantity": ""},
+        }
+
     # 库存预警
     inventory_keywords = ("库存", "库存预警", "低库存", "库存不足", "缺货", "原材料库存", "仓库")
     if any(k in text for k in inventory_keywords):
@@ -115,6 +131,22 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
             "slots": {"keyword": ""},
         }
 
+    # 补货建议 / 采购建议（吸收 Odoo 18 补货逻辑）——须在采购之前，避免「采购建议」被采购词截胡
+    replenish_keywords = ("补货", "补货建议", "采购建议", "建议采购", "补多少")
+    if any(k in text for k in replenish_keywords):
+        return {
+            "intent": "replenishment_suggest",
+            "slots": {},
+        }
+
+    # 生产制造 / 工单 / BOM（吸收 Odoo 18 MRP）——须在采购/财务/销售之前，避免「生产工单」被宽泛词截胡
+    mrp_keywords = ("生产工单", "生产", "工单", "BOM", "领料", "完工")
+    if any(k in text for k in mrp_keywords):
+        return {
+            "intent": "mrp_production",
+            "slots": {"order_id": "", "bom_id": ""},
+        }
+
     # 采购 / 供应商 / 进货
     purchase_keywords = ("采购", "供应商", "进货", "采购单", "采购订单", "采购入库")
     if any(k in text for k in purchase_keywords):
@@ -123,12 +155,28 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
             "slots": {"keyword": ""},
         }
 
+    # 账龄分析（区别于财务流水：按账期分组未结余额，须在「应收/应付」财务词之前判断）
+    aging_keywords = ("账龄", "应收账龄", "应付账龄")
+    if any(k in text for k in aging_keywords):
+        return {
+            "intent": "aging_report",
+            "slots": {"account_type": "应收", "days": 30},
+        }
+
     # 财务 / 凭证 / 收支流水
-    finance_keywords = ("财务", "凭证", "收支", "应收", "应付", "交易流水", "资金", "对账")
+    finance_keywords = ("财务", "凭证", "收支", "应收", "应付", "交易流水", "资金", "对账", "总账", "记账")
     if any(k in text for k in finance_keywords):
         return {
             "intent": "finance_query",
             "slots": {},
+        }
+
+    # 销售 / 报价 / 销售订单（Sales-to-Payment 闭环，吸收 Odoo 18）
+    sales_keywords = ("销售订单", "报价单", "销售单", "销售", "下单", "收款", "开票", "发货单确认", "销售明细")
+    if any(k in text for k in sales_keywords):
+        return {
+            "intent": "sales_query",
+            "slots": {"keyword": ""},
         }
 
     # 知识库 / 帮助文档
@@ -438,6 +486,12 @@ def try_normal_slot_read_payload(
                 payload = build_product_query_response_dict(rr)
             elif intent == "inventory_alert":
                 payload = build_inventory_alert_response_dict(rr)
+            elif intent == "inventory_count":
+                payload = build_inventory_count_response_dict(rr)
+            elif intent == "mrp_production":
+                payload = build_mrp_production_response_dict(rr)
+            elif intent == "aging_report":
+                payload = build_aging_report_response_dict(rr)
             elif intent == "label_print":
                 payload = build_label_print_response_dict(rr)
             elif intent == "materials_query":
@@ -450,6 +504,12 @@ def try_normal_slot_read_payload(
                 payload = build_finance_query_response_dict(rr)
             elif intent == "knowledge_query":
                 payload = build_knowledge_query_response_dict(rr)
+            elif intent == "sales_query":
+                payload = build_sales_query_response_dict(rr)
+            elif intent == "reports_query":
+                payload = build_reports_query_response_dict(rr, message=text)
+            elif intent == "replenishment_suggest":
+                payload = build_replenishment_suggest_response_dict(rr)
             else:
                 return None
     finally:
@@ -611,6 +671,126 @@ def build_inventory_alert_response_dict(route_result: dict[str, Any]) -> dict[st
         return {
             "success": False,
             "response": "库存查询服务暂时不可用，请稍后重试。",
+            "data": {},
+            "normal_slot_dispatch": True,
+        }
+
+
+def build_inventory_count_response_dict(route_result: dict[str, Any]) -> dict[str, Any] | None:
+    """库存盘点：盘点为写/高风险操作，命中后引导提供产品/仓库/实盘数量并请求确认。"""
+    if route_result.get("intent") != "inventory_count":
+        return None
+    return {
+        "success": True,
+        "response": (
+            "库存盘点需先确认：请提供产品（型号/名称）、仓库及实盘数量，"
+            "例如「盘点 A001 主仓 实盘 120」。系统会核对账面数量并显示差异，确认后再执行调整。"
+        ),
+        "data": {
+            "intent": "inventory_count",
+            "awaiting_params": ["product_id", "warehouse_id", "actual_quantity"],
+        },
+        "requires_confirmation": True,
+        "normal_slot_dispatch": True,
+    }
+
+
+def build_mrp_production_response_dict(route_result: dict[str, Any]) -> dict[str, Any] | None:
+    """生产制造/工单：确定性调用 ManufacturingService.query_orders（吸收 Odoo 18 MRP）。"""
+    if route_result.get("intent") != "mrp_production":
+        return None
+    try:
+        from app.services.manufacturing_service import ManufacturingService
+
+        result = ManufacturingService().query_orders(page=1, per_page=20)
+        if isinstance(result, dict) and result.get("success") is False:
+            return {
+                "success": False,
+                "response": str(result.get("message") or "生产工单查询工具执行失败"),
+                "data": {"intent": "mrp_production"},
+                "normal_slot_dispatch": True,
+            }
+        orders = result.get("data") or []
+        total = int(result.get("total") or len(orders))
+        if not orders:
+            msg = "当前没有生产工单。"
+        else:
+            lines = [
+                f"- {o.get('order_no', '')} {o.get('product_name', '')} ×{o.get('quantity', 0)}"
+                f"（{o.get('status', '')}）"
+                for o in orders[:10]
+            ]
+            msg = f"共 {total} 条生产工单：\n" + "\n".join(lines)
+            if total > 10:
+                msg += f"\n…其余 {total - 10} 条请到「生产制造」查看"
+        return {
+            "success": True,
+            "response": msg,
+            "data": {"intent": "mrp_production", "orders": orders[:20], "total": total},
+            "normal_slot_dispatch": True,
+        }
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("mrp.query_orders 工具失败: %s", e)
+        return {
+            "success": False,
+            "response": "生产工单查询服务暂时不可用，请稍后重试。",
+            "data": {},
+            "normal_slot_dispatch": True,
+        }
+
+
+def build_aging_report_response_dict(route_result: dict[str, Any]) -> dict[str, Any] | None:
+    """账龄分析：无 party_id 时引导指定客户/供应商；有则确定性调用 accounting_services.aging_report。"""
+    if route_result.get("intent") != "aging_report":
+        return None
+    slots = route_result.get("slots") or {}
+    account_type = str(slots.get("account_type") or "应收").strip()
+    party_id = slots.get("party_id")
+    if not party_id:
+        return {
+            "success": True,
+            "response": (
+                f"账龄分析（{account_type}）需要指定客户/供应商。请提供客户或供应商名称/ID，"
+                "例如「查看 XX 客户的应收账龄」，我会按账期分组汇总未结余额。"
+            ),
+            "data": {"intent": "aging_report", "account_type": account_type, "party_id": None},
+            "normal_slot_dispatch": True,
+        }
+    try:
+        from app.services.accounting_services import aging_report
+
+        party_type = (
+            "receivable" if account_type in ("应收", "receivable", "客户") else "payable"
+        )
+        result = aging_report(party_type=party_type, party_id=int(party_id))
+        if isinstance(result, dict) and result.get("success") is False:
+            return {
+                "success": False,
+                "response": str(result.get("message") or "账龄分析工具执行失败"),
+                "data": {"intent": "aging_report"},
+                "normal_slot_dispatch": True,
+            }
+        buckets = result.get("data") or []
+        lines = [
+            f"- {b.get('bucket', '')}：￥{format_money(safe_float(b.get('amount')))}"
+            for b in buckets
+        ]
+        msg = (
+            f"{account_type}账龄（截至 {result.get('as_of_date', '')}）：\n"
+            + "\n".join(lines)
+            + f"\n未结合计 ￥{format_money(safe_float(result.get('total_outstanding')))}"
+        )
+        return {
+            "success": True,
+            "response": msg,
+            "data": {"intent": "aging_report", **result},
+            "normal_slot_dispatch": True,
+        }
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("aging_report 工具失败: %s", e)
+        return {
+            "success": False,
+            "response": "账龄分析服务暂时不可用，请稍后重试。",
             "data": {},
             "normal_slot_dispatch": True,
         }
@@ -872,3 +1052,165 @@ def build_knowledge_query_response_dict(route_result: dict[str, Any]) -> dict[st
         },
         "normal_slot_dispatch": True,
     }
+
+
+def build_sales_query_response_dict(route_result: dict[str, Any]) -> dict[str, Any] | None:
+    """销售订单/报价单查询：确定性调用 sales.query（Sales-to-Payment 闭环）。"""
+    if route_result.get("intent") != "sales_query":
+        return None
+    keyword = str((route_result.get("slots") or {}).get("keyword") or "").strip()
+    try:
+        from app.application.sales_app_service import SalesAppService
+
+        result = SalesAppService().query(
+            keyword=keyword or None,
+            page=1,
+            per_page=20,
+        )
+        if isinstance(result, dict) and result.get("success") is False:
+            return {
+                "success": False,
+                "response": str(result.get("message") or "销售查询工具执行失败"),
+                "data": {"intent": "sales_query"},
+                "normal_slot_dispatch": True,
+            }
+        orders = result.get("data") or []
+        total = int(result.get("total") or len(orders))
+        if not orders:
+            msg = "当前没有销售订单。" if not keyword else f"没有查到与「{keyword}」匹配的销售订单。"
+        else:
+            lines = []
+            for o in orders[:10]:
+                status = str(o.get("status") or "")
+                lines.append(
+                    f"- {o.get('order_no', '')} {o.get('customer_name', '')} "
+                    f"￥{format_money(safe_float(o.get('total_amount')))}（{status}）"
+                )
+            msg = f"共 {total} 条销售订单：\n" + "\n".join(lines)
+            if total > 10:
+                msg += f"\n…其余 {total - 10} 条请到「销售订单」查看"
+        return {
+            "success": True,
+            "response": msg,
+            "data": {"intent": "sales_query", "orders": orders[:20], "total": total},
+            "normal_slot_dispatch": True,
+        }
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("sales.query 工具失败: %s", e)
+        return {
+            "success": False,
+            "response": "销售查询服务暂时不可用，请稍后重试。",
+            "data": {},
+            "normal_slot_dispatch": True,
+        }
+
+
+def build_reports_query_response_dict(
+    route_result: dict[str, Any],
+    *,
+    message: str = "",
+) -> dict[str, Any] | None:
+    """报表/汇总/看板查询：按关键词命中销售/库存/采购/经营看板报表。"""
+    if route_result.get("intent") != "reports_query":
+        return None
+    text = str(message or "").strip()
+    try:
+        from app.services.report_service import ReportService
+
+        svc = ReportService()
+        if "库存" in text or "库存报表" in text:
+            result = svc.get_inventory_report()
+            label = "库存"
+        elif "采购" in text or "采购报表" in text:
+            result = svc.get_purchase_report()
+            label = "采购"
+        elif "看板" in text or "经营" in text or "数据" in text:
+            result = svc.get_dashboard_summary()
+            label = "经营看板"
+        else:
+            result = svc.get_sales_report(group_by="product")
+            label = "销售"
+
+        if isinstance(result, dict) and result.get("success") is False:
+            return {
+                "success": False,
+                "response": str(result.get("message") or "报表工具执行失败"),
+                "data": {"intent": "reports_query"},
+                "normal_slot_dispatch": True,
+            }
+        rows = result.get("data") or []
+        summary = result.get("summary") or {}
+        if not rows:
+            msg = f"当前{label}报表暂无数据。"
+        else:
+            lines = [f"- {r}" for r in [str(r) for r in rows[:5]]]
+            msg = f"{label}报表共 {len(rows)} 条：\n" + "\n".join(lines)
+            if summary:
+                bits = [f"{k}={v}" for k, v in summary.items()][:4]
+                msg += f"\n汇总：{'，'.join(bits)}"
+        return {
+            "success": True,
+            "response": msg,
+            "data": {"intent": "reports_query", "report_type": label, "rows": rows[:20], "summary": summary},
+            "normal_slot_dispatch": True,
+        }
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("reports.* 工具失败: %s", e)
+        return {
+            "success": False,
+            "response": "报表服务暂时不可用，请稍后重试。",
+            "data": {},
+            "normal_slot_dispatch": True,
+        }
+
+
+def build_replenishment_suggest_response_dict(
+    route_result: dict[str, Any],
+) -> dict[str, Any] | None:
+    """补货/采购建议：确定性调用 suggest_replenishment（吸收 Odoo 18 补货逻辑）。"""
+    if route_result.get("intent") != "replenishment_suggest":
+        return None
+    try:
+        from app.services.replenishment_service import suggest_replenishment
+
+        result = suggest_replenishment()
+        if isinstance(result, dict) and result.get("success") is False:
+            return {
+                "success": False,
+                "response": str(result.get("message") or "补货建议工具执行失败"),
+                "data": {"intent": "replenishment_suggest"},
+                "normal_slot_dispatch": True,
+            }
+        suggestions = result.get("data") or []
+        summary = result.get("summary") or {}
+        if not suggestions:
+            msg = "当前没有需要补货的物料，库存状态正常。"
+        else:
+            lines = [
+                f"- {s.get('name', '')} 当前 {s.get('current_quantity', 0)} {s.get('unit', '')}，"
+                f"建议补 {s.get('suggest_quantity', 0)}"
+                for s in suggestions[:10]
+            ]
+            msg = (
+                f"发现 {len(suggestions)} 种物料需要补货：\n"
+                + "\n".join(lines)
+                + f"\n合计建议采购金额 ￥{format_money(safe_float(summary.get('total_suggest_amount')))}"
+            )
+        return {
+            "success": True,
+            "response": msg,
+            "data": {
+                "intent": "replenishment_suggest",
+                "suggestions": suggestions[:20],
+                "summary": summary,
+            },
+            "normal_slot_dispatch": True,
+        }
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("replenishment.suggest 工具失败: %s", e)
+        return {
+            "success": False,
+            "response": "补货建议服务暂时不可用，请稍后重试。",
+            "data": {},
+            "normal_slot_dispatch": True,
+        }

@@ -10,14 +10,21 @@ from app.services.tools_workflow_registered import (
     _REGISTERED_WORKFLOW_ROUTERS,
     _registered_router_business_docking_family,
     _registered_router_customers,
+    _registered_router_finance,
     _registered_router_generate_office_document,
+    _registered_router_inventory,
     _registered_router_materials,
+    _registered_router_mrp,
     _registered_router_normal_slot_dispatch,
     _registered_router_print,
     _registered_router_printer_list,
     _registered_router_products,
+    _registered_router_purchase,
+    _registered_router_reports,
+    _registered_router_sales,
     _registered_router_settings,
     _registered_router_shipment_records,
+    _registered_router_suppliers,
     execute_registered_workflow_tool,
 )
 
@@ -567,10 +574,435 @@ class TestExecuteRegisteredWorkflowTool:
             "unit_products_import",
             "inventory",
             "purchase",
+            "sales",
+            "reports",
             "finance",
+            "mrp",
+            "suppliers",
             "ocr",
             "dataset_rag",
             "memory_v2",
             "system_maintenance",
         }
         assert set(_REGISTERED_WORKFLOW_ROUTERS.keys()) == expected_keys
+
+
+# ---------------------------------------------------------------------------
+# ERP 工具注册表扩容（Task 5，吸收 Odoo 18）
+# ---------------------------------------------------------------------------
+
+
+def _workflow_registry():
+    from resources.config.risk_actions_loader import get_workflow_tools_from_registry
+
+    return get_workflow_tools_from_registry()
+
+
+class TestErpToolRegistry:
+    """config/risk_actions.registry.json 中新增 ERP 工具与必填参数。"""
+
+    def test_sales_tool_registered(self):
+        reg = _workflow_registry()
+        assert "sales" in reg
+        actions = set(reg["sales"]["actions"])
+        assert {"quote", "confirm", "deliver", "invoice", "payment", "cancel", "query"} <= actions
+
+    def test_sales_actions_risk_and_idempotency(self):
+        reg = _workflow_registry()
+        sales = reg["sales"]["actions"]
+        assert sales["query"]["risk"] == "low" and sales["query"]["idempotent"] is True
+        assert sales["quote"]["risk"] == "medium" and sales["quote"]["idempotent"] is False
+        for a in ("confirm", "deliver", "invoice", "payment", "cancel"):
+            assert sales[a]["idempotent"] is False
+
+    def test_sales_required_params(self):
+        reg = _workflow_registry()
+        sales = reg["sales"]["actions"]
+        assert set(sales["quote"]["required_params"]) == {"customer_id", "items"}
+        assert set(sales["payment"]["required_params"]) == {"order_id", "amount"}
+        assert sales["confirm"]["required_params"] == ["order_id"]
+
+    def test_reports_tool_registered(self):
+        reg = _workflow_registry()
+        assert "reports" in reg
+        actions = set(reg["reports"]["actions"])
+        assert {
+            "sales_summary",
+            "inventory_summary",
+            "purchase_summary",
+            "dashboard",
+            "export",
+        } <= actions
+        # 报表动作均为只读低风险幂等
+        for action in reg["reports"]["actions"].values():
+            assert action["risk"] == "low" and action["idempotent"] is True
+
+    def test_inventory_extended_with_alerts(self):
+        reg = _workflow_registry()
+        inventory = reg["inventory"]["actions"]
+        assert "low_stock_alert" in inventory and "replenishment_suggest" in inventory
+        assert inventory["low_stock_alert"]["risk"] == "low"
+        assert inventory["replenishment_suggest"]["idempotent"] is True
+
+    def test_finance_extended_with_ledger(self):
+        reg = _workflow_registry()
+        finance = reg["finance"]["actions"]
+        assert "ledger_query" in finance and "journal_entry_create" in finance
+        assert finance["ledger_query"]["risk"] == "low" and finance["ledger_query"]["idempotent"] is True
+        assert finance["journal_entry_create"]["risk"] == "high"
+        assert set(finance["journal_entry_create"]["required_params"]) == {"lines"}
+
+
+class TestErpCapabilityGate:
+    """resolve_registered_capability_call 对新增 ERP 工具的校验。"""
+
+    def test_sales_quote_valid(self):
+        from app.application.tools.registered_capabilities import (
+            resolve_registered_capability_call,
+        )
+
+        r = resolve_registered_capability_call(
+            {
+                "tool_id": "sales",
+                "action": "quote",
+                "params": {"customer_id": 1, "items": [{"product_id": 1, "quantity": 1}]},
+            }
+        )
+        assert r["success"] is True
+        assert r["risk"] == "medium"
+        assert r["idempotent"] is False
+
+    def test_sales_payment_missing_amount(self):
+        from app.application.tools.registered_capabilities import (
+            resolve_registered_capability_call,
+        )
+
+        r = resolve_registered_capability_call(
+            {"tool_id": "sales", "action": "payment", "params": {"order_id": 1}}
+        )
+        assert r["success"] is False
+        assert set(r.get("required_params") or []) == {"order_id", "amount"}
+
+    def test_journal_entry_create_rejects_unbalanced_via_required(self):
+        from app.application.tools.registered_capabilities import (
+            resolve_registered_capability_call,
+        )
+
+        r = resolve_registered_capability_call(
+            {"tool_id": "finance", "action": "journal_entry_create", "params": {}}
+        )
+        assert r["success"] is False
+
+
+class TestErpRouterDispatch:
+    """新 ERP 工具路由分发到对应服务。"""
+
+    def test_sales_router_quotes_via_service(self):
+        from app.application.sales_app_service import SalesAppService
+
+        with patch.object(SalesAppService, "quote", return_value={"success": True}) as mock:
+            r = _registered_router_sales(
+                "quote",
+                {"customer_id": 1, "items": [{"product_id": 1, "quantity": 1, "unit_price": 1}]},
+                {},
+                "shared",
+                "",
+            )
+            assert r["success"] is True
+            mock.assert_called_once()
+
+    def test_sales_router_unknown_action(self):
+        r = _registered_router_sales("hack", {}, {}, "shared", "")
+        assert r["success"] is False
+
+    def test_reports_router_sales_summary(self):
+        from app.services.report_service import ReportService
+
+        with patch.object(ReportService, "get_sales_report", return_value={"success": True}) as m:
+            r = _registered_router_reports("sales_summary", {}, {}, "shared", "")
+            assert r["success"] is True
+            m.assert_called_once()
+
+    def test_finance_router_ledger_query(self):
+        from app.services import accounting_services
+
+        with patch.object(accounting_services, "query_financial_ledger", return_value={"success": True}) as m:
+            r = _registered_router_finance("ledger_query", {}, {}, "shared", "")
+            assert r["success"] is True
+            m.assert_called_once()
+
+    def test_inventory_router_low_stock(self):
+        with patch(
+            "app.application.material_app_service.get_material_app_service",
+            return_value=MagicMock(
+                get_low_stock_materials=MagicMock(return_value={"success": True})
+            ),
+        ):
+            r = _registered_router_inventory("low_stock_alert", {}, {}, "shared", "")
+            assert r["success"] is True
+
+
+# ---------------------------------------------------------------------------
+# Task 6 新动作路由：mrp / suppliers / inventory_count / customers / finance / purchase
+# ---------------------------------------------------------------------------
+
+
+class TestMrpRouter:
+    """_registered_router_mrp：建 BOM → 工单 → 领料 → 完工全链路路由。"""
+
+    def test_create_bom(self):
+        mock_svc = MagicMock()
+        mock_svc.create_bom.return_value = {"success": True, "data": {"id": 1}}
+        with patch(
+            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+        ):
+            r = _registered_router_mrp(
+                "create_bom", {"product_id": 1, "lines": []}, {}, "shared", ""
+            )
+        assert r["success"] is True
+        mock_svc.create_bom.assert_called_once()
+
+    def test_query_boms(self):
+        mock_svc = MagicMock()
+        mock_svc.query_boms.return_value = {"success": True, "data": [], "total": 0}
+        with patch(
+            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+        ):
+            r = _registered_router_mrp("query_boms", {}, {}, "shared", "")
+        assert r["success"] is True
+
+    def test_get_bom(self):
+        mock_svc = MagicMock()
+        mock_svc.get_bom.return_value = {"success": True, "data": {"id": 9}}
+        with patch(
+            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+        ):
+            r = _registered_router_mrp("get_bom", {"bom_id": 9}, {}, "shared", "")
+        assert r["success"] is True
+
+    def test_get_bom_missing_id(self):
+        r = _registered_router_mrp("get_bom", {}, {}, "shared", "")
+        assert r["success"] is False
+
+    def test_create_order(self):
+        mock_svc = MagicMock()
+        mock_svc.create_order.return_value = {"success": True, "data": {"id": 1}}
+        with patch(
+            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+        ):
+            r = _registered_router_mrp(
+                "create_order", {"bom_id": 1, "quantity": 2}, {}, "shared", ""
+            )
+        assert r["success"] is True
+
+    def test_confirm_order(self):
+        mock_svc = MagicMock()
+        mock_svc.confirm_order.return_value = {"success": True}
+        with patch(
+            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+        ):
+            r = _registered_router_mrp("confirm_order", {"order_id": 1}, {}, "shared", "")
+        assert r["success"] is True
+
+    def test_consume(self):
+        mock_svc = MagicMock()
+        mock_svc.consume.return_value = {"success": True}
+        with patch(
+            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+        ):
+            r = _registered_router_mrp(
+                "consume", {"order_id": 1, "warehouse_id": 2}, {}, "shared", ""
+            )
+        assert r["success"] is True
+        mock_svc.consume.assert_called_once_with(
+            order_id=1, warehouse_id=2, operator=None
+        )
+
+    def test_finish(self):
+        mock_svc = MagicMock()
+        mock_svc.finish.return_value = {"success": True}
+        with patch(
+            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+        ):
+            r = _registered_router_mrp(
+                "finish", {"order_id": 1, "warehouse_id": 2}, {}, "shared", ""
+            )
+        assert r["success"] is True
+
+    def test_query_orders(self):
+        mock_svc = MagicMock()
+        mock_svc.query_orders.return_value = {"success": True, "data": [], "total": 0}
+        with patch(
+            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+        ):
+            r = _registered_router_mrp("query_orders", {}, {}, "shared", "")
+        assert r["success"] is True
+
+    def test_unknown_action(self):
+        r = _registered_router_mrp("hack", {}, {}, "shared", "")
+        assert r["success"] is False
+
+
+class TestSuppliersRouter:
+    """_registered_router_suppliers：供应商查询。"""
+
+    def test_query_suppliers(self):
+        mock_svc = MagicMock()
+        mock_svc.get_suppliers.return_value = {"success": True, "data": []}
+        with patch(
+            "app.application.facades.inventory_facade.PurchaseService", return_value=mock_svc
+        ):
+            r = _registered_router_suppliers("query_suppliers", {}, {}, "shared", "")
+        assert r["success"] is True
+
+    def test_get_supplier(self):
+        mock_svc = MagicMock()
+        mock_svc.get_supplier.return_value = {"success": True, "data": {"id": 1}}
+        with patch(
+            "app.application.facades.inventory_facade.PurchaseService", return_value=mock_svc
+        ):
+            r = _registered_router_suppliers("get_supplier", {"supplier_id": 1}, {}, "shared", "")
+        assert r["success"] is True
+
+    def test_get_supplier_missing_id(self):
+        r = _registered_router_suppliers("get_supplier", {}, {}, "shared", "")
+        assert r["success"] is False
+
+
+class TestInventoryCountAndTransactionsRouter:
+    """inventory_count / query_transactions 走 InventoryService。"""
+
+    def test_inventory_count(self):
+        mock_inv = MagicMock()
+        mock_inv.inventory_count.return_value = {
+            "success": True,
+            "difference": 2,
+            "confirmed": False,
+        }
+        with patch("app.services.inventory_service.InventoryService", return_value=mock_inv):
+            r = _registered_router_inventory(
+                "inventory_count",
+                {"product_id": 1, "warehouse_id": 1, "actual_quantity": 10},
+                {},
+                "shared",
+                "",
+            )
+        assert r["success"] is True
+        mock_inv.inventory_count.assert_called_once()
+
+    def test_query_transactions(self):
+        mock_inv = MagicMock()
+        mock_inv.query_transactions.return_value = {"success": True, "data": []}
+        with patch("app.services.inventory_service.InventoryService", return_value=mock_inv):
+            r = _registered_router_inventory(
+                "query_transactions", {"warehouse_id": 1}, {}, "shared", ""
+            )
+        assert r["success"] is True
+
+
+class TestCustomersCreditAndAddressRouter:
+    """customers add_address / set_credit_limit / get_addresses。"""
+
+    def test_add_address(self):
+        mock_svc = MagicMock()
+        mock_svc.add_address.return_value = {"success": True}
+        with patch("app.application.get_customer_app_service", return_value=mock_svc):
+            r = _registered_router_customers(
+                "add_address",
+                {"customer_id": 1, "address_type": "送货", "address": "xx"},
+                {},
+                "shared",
+                "",
+            )
+        assert r["success"] is True
+
+    def test_set_credit_limit(self):
+        mock_svc = MagicMock()
+        mock_svc.set_credit_limit.return_value = {"success": True}
+        with patch("app.application.get_customer_app_service", return_value=mock_svc):
+            r = _registered_router_customers(
+                "set_credit_limit", {"customer_id": 1, "credit_limit": 5000}, {}, "shared", ""
+            )
+        assert r["success"] is True
+
+    def test_set_credit_limit_missing_id(self):
+        r = _registered_router_customers("set_credit_limit", {}, {}, "shared", "")
+        assert r["success"] is False
+
+    def test_get_addresses(self):
+        mock_svc = MagicMock()
+        mock_svc.get_addresses.return_value = {"success": True, "data": []}
+        with patch("app.application.get_customer_app_service", return_value=mock_svc):
+            r = _registered_router_customers("get_addresses", {"customer_id": 1}, {}, "shared", "")
+        assert r["success"] is True
+
+
+class TestFinanceNewActionsRouter:
+    """finance journal_entry_reverse / aging_report / chart_seed。"""
+
+    def test_journal_entry_reverse(self):
+        from app.services import accounting_services
+
+        with patch.object(
+            accounting_services, "journal_entry_reverse", return_value={"success": True}
+        ) as m:
+            r = _registered_router_finance(
+                "journal_entry_reverse", {"entry_id": 1}, {}, "shared", ""
+            )
+        assert r["success"] is True
+        m.assert_called_once()
+
+    def test_journal_entry_reverse_missing_id(self):
+        r = _registered_router_finance("journal_entry_reverse", {}, {}, "shared", "")
+        assert r["success"] is False
+
+    def test_aging_report(self):
+        from app.services import accounting_services
+
+        with patch.object(accounting_services, "aging_report", return_value={"success": True}) as m:
+            r = _registered_router_finance(
+                "aging_report", {"account_type": "应收", "party_id": 1}, {}, "shared", ""
+            )
+        assert r["success"] is True
+        m.assert_called_once()
+
+    def test_chart_seed(self):
+        from app.services import accounting_services
+
+        with patch.object(
+            accounting_services, "seed_default_chart_of_accounts", return_value={"success": True}
+        ) as m:
+            r = _registered_router_finance("chart_seed", {}, {}, "shared", "")
+        assert r["success"] is True
+        m.assert_called_once()
+
+
+class TestPurchaseReadOnlyRouter:
+    """purchase query_suppliers / query_orders / query_inbounds 只读动作。"""
+
+    def test_query_suppliers(self):
+        mock_svc = MagicMock()
+        mock_svc.get_suppliers.return_value = {"success": True, "data": []}
+        with patch(
+            "app.application.facades.inventory_facade.PurchaseService", return_value=mock_svc
+        ):
+            r = _registered_router_purchase("query_suppliers", {}, {}, "shared", "")
+        assert r["success"] is True
+
+    def test_query_orders(self):
+        mock_svc = MagicMock()
+        mock_svc.get_purchase_orders.return_value = {"success": True, "data": []}
+        with patch(
+            "app.application.facades.inventory_facade.PurchaseService", return_value=mock_svc
+        ):
+            r = _registered_router_purchase("query_orders", {}, {}, "shared", "")
+        assert r["success"] is True
+
+    def test_query_inbounds(self):
+        mock_svc = MagicMock()
+        mock_svc.get_purchase_inbounds.return_value = {"success": True, "data": []}
+        with patch(
+            "app.application.facades.inventory_facade.PurchaseService", return_value=mock_svc
+        ):
+            r = _registered_router_purchase("query_inbounds", {}, {}, "shared", "")
+        assert r["success"] is True

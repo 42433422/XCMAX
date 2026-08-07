@@ -530,6 +530,121 @@ class TestCreatePurchaseInbound:
             )
         assert result["success"] is True
 
+    def test_creates_ap_posting_with_balanced_lines(self, svc):
+        """采购入库后生成『借：库存 / 贷：应付账款』复式分录，借贷平衡。"""
+        mock_supplier = MagicMock()
+        mock_supplier.name = "供应商A"
+        mock_inbound = _make_mock_model(
+            id=1,
+            inbound_no="PTEST",
+            supplier_id=1,
+            total_amount=2000.0,
+            status="completed",
+        )
+        mock_inbound.supplier = mock_supplier
+
+        mock_product = MagicMock()
+        mock_product.name = "产品A"
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_product
+        mock_db.refresh.side_effect = lambda obj: obj
+
+        captured = {}
+
+        def _fake_create_journal_entry(data):
+            captured["data"] = data
+            return {"success": True, "data": {"entry_no": "JE-001"}}
+
+        with (
+            patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)),
+            patch("app.services.purchase_service.InventoryService") as MockInvSvc,
+            patch(
+                "app.services.purchase_service.PurchaseInbound",
+                return_value=mock_inbound,
+            ),
+            patch(
+                "app.services.accounting_services.create_journal_entry",
+                side_effect=_fake_create_journal_entry,
+            ) as MockCreateEntry,
+        ):
+            MockInvSvc.return_value.inventory_in.return_value = {"success": True}
+            result = svc.create_purchase_inbound(
+                {
+                    "inbound_no": "PTEST",
+                    "supplier_id": 1,
+                    "warehouse_id": 1,
+                    "items": [
+                        {"product_id": 1, "quantity": 10, "unit_price": 100},
+                        {"product_id": 2, "quantity": 5, "unit_price": 200},
+                    ],
+                }
+            )
+        assert result["success"] is True
+        MockCreateEntry.assert_called_once()
+        data = captured["data"]
+        assert data["description"] == "采购入库: PTEST"
+        assert data["reference_type"] == "purchase_inbound"
+        assert data["reference_id"] == 1
+        assert len(data["lines"]) >= 2
+        debit_total = sum(line.get("debit", 0) for line in data["lines"])
+        credit_total = sum(line.get("credit", 0) for line in data["lines"])
+        assert debit_total == credit_total == 2000.0
+        # 借：库存商品 1401
+        assert any(
+            line.get("account_code") == "1401"
+            and line.get("debit") == 2000.0
+            and line.get("credit") == 0
+            for line in data["lines"]
+        )
+        # 贷：应付账款 2201，带 partner 信息
+        assert any(
+            line.get("account_code") == "2201"
+            and line.get("credit") == 2000.0
+            and line.get("debit") == 0
+            and line.get("partner_id") == 1
+            and line.get("partner_name") == "供应商A"
+            for line in data["lines"]
+        )
+
+    def test_skips_ap_posting_when_total_is_zero(self, svc):
+        """total_amount 为 0 时不触发应付记账。"""
+        mock_db = MagicMock()
+        with (
+            patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)),
+            patch("app.services.purchase_service.InventoryService"),
+            patch(
+                "app.services.accounting_services.create_journal_entry",
+            ) as MockCreateEntry,
+        ):
+            result = svc.create_purchase_inbound({"supplier_id": 1})
+        assert result["success"] is True
+        MockCreateEntry.assert_not_called()
+
+    def test_ap_posting_failure_does_not_block_inbound(self, svc):
+        """应付记账失败仅告警，不阻断入库主流程。"""
+        mock_product = MagicMock()
+        mock_product.name = "产品A"
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_product
+        with (
+            patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)),
+            patch("app.services.purchase_service.InventoryService") as MockInvSvc,
+            patch(
+                "app.services.accounting_services.create_journal_entry",
+                return_value={"success": False, "message": "借贷不平衡"},
+            ),
+        ):
+            MockInvSvc.return_value.inventory_in.return_value = {"success": True}
+            result = svc.create_purchase_inbound(
+                {
+                    "supplier_id": 1,
+                    "warehouse_id": 1,
+                    "items": [{"product_id": 1, "quantity": 10, "unit_price": 100}],
+                }
+            )
+        assert result["success"] is True
+        assert "入库成功" in result["message"]
+
 
 class TestUpdateOrderReceivedQuantity:
     def test_marks_item_completed_when_fully_received(self, svc):
