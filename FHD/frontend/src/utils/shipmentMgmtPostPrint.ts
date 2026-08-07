@@ -1,5 +1,7 @@
 /** 打印完成后拉取出货记录并生成「统计 + 审计 + 保存/推送建议」文案（出货管理 AI 员工） */
 
+import { shipmentApi } from '@/api/shipment'
+
 export type ShipmentRecordRow = {
   id?: number
   purchase_unit?: string
@@ -94,12 +96,9 @@ export async function fetchShipmentRecordsForUnit(purchaseUnit: string): Promise
   const u = String(purchaseUnit || '').trim()
   if (!u) return []
   try {
-    const q = encodeURIComponent(u)
-    const { resolveErpApiPath } = await import('@/utils/erpDomainPaths')
-    const resp = await fetch(resolveErpApiPath(`/api/shipment/shipment-records/records?unit=${q}`))
-    const data = await resp.json().catch(() => ({}))
-    if (!resp.ok || data?.success === false) return []
-    const arr = data?.data
+    const res = await shipmentApi.getShipmentRecordsForUnit(u)
+    if (res?.success === false) return []
+    const arr = res?.data
     return Array.isArray(arr) ? arr : []
   } catch {
     return []

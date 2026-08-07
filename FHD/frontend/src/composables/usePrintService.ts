@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { resolveErpApiPath } from '@/utils/erpDomainPaths'
+import { printApi } from '@/api/print'
 
 export interface PrintResult {
   success: boolean
@@ -16,12 +16,6 @@ export interface PrintSummary {
   message: string
 }
 
-type ApiResultPayload = {
-  success?: boolean
-  message?: string
-  updated?: boolean
-}
-
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error || '未知错误')
 }
@@ -31,81 +25,41 @@ export function usePrintService() {
 
   async function printLabel(filePath: string, copies: number = 1): Promise<PrintResult> {
     try {
-      const resp = await fetch(resolveErpApiPath('/api/print/label'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file_path: filePath, copies })
-      })
-      const data = (await resp.json().catch(() => ({}))) as ApiResultPayload
-
-      if (resp.ok && data?.success) {
+      const res = await printApi.printLabel({ file_path: filePath, copies })
+      if (res?.success) {
         return { success: true, message: '标签打印成功' }
-      } else {
-        return {
-          success: false,
-          message: data?.message || `HTTP ${resp.status}`
-        }
       }
+      return { success: false, message: res?.message || '打印失败' }
     } catch (e: unknown) {
-      return {
-        success: false,
-        message: errorMessage(e)
-      }
+      return { success: false, message: errorMessage(e) }
     }
   }
 
   async function printDocument(filePath: string): Promise<PrintResult> {
     try {
-      const resp = await fetch(resolveErpApiPath('/api/print/document'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file_path: filePath })
-      })
-      const data = (await resp.json().catch(() => ({}))) as ApiResultPayload
-
-      if (resp.ok && data?.success) {
+      const res = await printApi.printDocument({ file_path: filePath })
+      if (res?.success) {
         return { success: true, message: '发货单打印成功' }
-      } else {
-        return {
-          success: false,
-          message: data?.message || `HTTP ${resp.status}`
-        }
       }
+      return { success: false, message: res?.message || '打印失败' }
     } catch (e: unknown) {
-      return {
-        success: false,
-        message: errorMessage(e)
-      }
+      return { success: false, message: errorMessage(e) }
     }
   }
 
   async function markAsPrinted(filePath: string, orderId?: number): Promise<PrintResult> {
     try {
-      const payload: Record<string, unknown> = { file_path: filePath }
+      const payload: { file_path: string; order_id?: number } = { file_path: filePath }
       if (orderId) {
         payload.order_id = orderId
       }
-
-      const resp = await fetch(resolveErpApiPath('/api/shipment/print'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-      const data = (await resp.json().catch(() => ({}))) as ApiResultPayload
-
-      if (resp.ok && data?.success && data?.updated !== false) {
+      const res = await printApi.markShipmentPrinted(payload)
+      if (res?.success && res?.updated !== false) {
         return { success: true, message: '打印状态已更新' }
-      } else {
-        return {
-          success: false,
-          message: data?.message || '更新失败'
-        }
       }
+      return { success: false, message: res?.message || '更新失败' }
     } catch (e: unknown) {
-      return {
-        success: false,
-        message: errorMessage(e)
-      }
+      return { success: false, message: errorMessage(e) }
     }
   }
 
