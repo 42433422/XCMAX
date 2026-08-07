@@ -14,7 +14,6 @@ def _now_iso() -> str:
 
 def _primary_contact_name(market_user_id: int) -> str:
     from app.services.user_cs_pipeline import load_pipeline
-    from app.services.wechat_group_customer_bridge import get_bindings_for_user
 
     doc = load_pipeline(int(market_user_id))
     intake = doc.get("intake_form") if isinstance(doc.get("intake_form"), dict) else {}
@@ -25,11 +24,6 @@ def _primary_contact_name(market_user_id: int) -> str:
     erp = str(doc.get("erp_customer_name") or "").strip()
     if erp:
         return erp
-    bindings = get_bindings_for_user(int(market_user_id))
-    if bindings:
-        first = bindings[0]
-        if isinstance(first, dict):
-            return str(first.get("name") or first.get("contact_name") or "").strip()
     return str(doc.get("username") or "").strip()
 
 

@@ -8,7 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from app.utils.rate_limiter import check_rate_limit
+from app.utils.resilience.rate_limiter import check_rate_limit
 
 _AUTH_PREFIXES = (
     "/api/auth/login",

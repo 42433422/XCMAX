@@ -26,7 +26,8 @@ const modRoutes = [
   route('/materials', 'mod-erp-materials', 'MaterialsView.vue', '排班资源'),
   { path: `${PREFIX}/materials-list`, name: 'mod-erp-materials-list', redirect: `${PREFIX}/materials` },
   route('/traditional-mode', 'mod-erp-traditional-mode', 'TraditionalModeView.vue', '表格模式'),
-  route('/business-docking', 'mod-erp-business-docking', 'BusinessDockingView.vue', '数据对接中心'),
+// 旧「业务对接」页已退役；数据对接中心由宿主 EtlCenterView（/business-docking）承担
+  { path: `${PREFIX}/business-docking`, name: 'mod-erp-business-docking', redirect: '/business-docking' },
   route('/data-sources', 'mod-erp-data-sources', 'DataSourcesView.vue', '数据来源'),
   route('/print', 'mod-erp-print', 'PrintView.vue', '考勤表打印'),
   route('/printer-list', 'mod-erp-printer-list', 'PrinterListView.vue', '打印机列表'),

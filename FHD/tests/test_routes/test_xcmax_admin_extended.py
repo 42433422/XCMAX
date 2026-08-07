@@ -899,46 +899,6 @@ class TestMarketAdminProxyEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# WeChat group routes
-# ---------------------------------------------------------------------------
-
-
-class TestWeChatGroupRoutes:
-    """Tests for WeChat group admin routes."""
-
-    def test_list_wechat_groups_no_session(self, client: TestClient):
-        """Should return 401 when no admin session."""
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value=None,
-        ):
-            response = client.get("/api/xcmax/admin/wechat/groups")
-            assert response.status_code == 401
-
-    def test_list_wechat_groups_with_session(self, client: TestClient):
-        """Should return groups when admin session exists."""
-        with (
-            patch(
-                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                return_value="sid123",
-            ),
-            patch(
-                "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "admin", "market_is_admin": True},
-            ),
-            patch(
-                "app.services.wechat_group_customer_bridge.list_group_contacts",
-                return_value=[{"id": 1, "name": "Group1"}],
-            ),
-        ):
-            response = client.get("/api/xcmax/admin/wechat/groups")
-            assert response.status_code == 200
-            data = response.json()
-            assert data["success"] is True
-            assert data["total"] == 1
-
-
-# ---------------------------------------------------------------------------
 # Impersonate routes
 # ---------------------------------------------------------------------------
 

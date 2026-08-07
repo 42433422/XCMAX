@@ -11,7 +11,6 @@
 - _execute_print_label_tool：缺 products / ImportError / ValueError / OSError / RuntimeError / 成功
 - _execute_excel_decompose_tool：缺 file_path / ImportError / ValueError / OSError / RuntimeError / 成功
 - _execute_template_extract_tool：委托 excel_decompose
-- _execute_wechat_preview_tool：ImportError / ValueError / RuntimeError / 成功（有/无联系人）
 - _execute_excel_schema_tool：缺 file_path / ImportError / RECOVERABLE_ERRORS / openpyxl 回退 / 各异常
 - _execute_excel_analysis_tool：缺 file_path / ImportError / RECOVERABLE_ERRORS / openpyxl 回退 / 各异常
 - _execute_employee_list_tool / _execute_employee_execute_tool / _execute_business_db_read_tool / _execute_business_db_write_tool：委托 facade
@@ -43,7 +42,6 @@ from app.application.workflow.planner import (
     _execute_shipment_generate_tool,
     _execute_shipment_records_tool,
     _execute_template_extract_tool,
-    _execute_wechat_preview_tool,
     execute_tool,
 )
 from app.application.workflow.types import PlanGraph, WorkflowNode
@@ -1080,100 +1078,6 @@ class TestExecuteTemplateExtractTool:
 
 
 # ---------------------------------------------------------------------------
-# _execute_wechat_preview_tool
-# ---------------------------------------------------------------------------
-
-
-class TestExecuteWechatPreviewTool:
-    """_execute_wechat_preview_tool 分支覆盖。"""
-
-    def test_successful_query_with_contacts(self) -> None:
-        mock_svc = MagicMock()
-        mock_svc.get_contacts.return_value = [{"name": "张三"}]
-        with patch("app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc):
-            result = _execute_wechat_preview_tool({"keyword": "张"})
-            assert result["success"] is True
-            assert len(result["data"]) == 1
-            assert "选择联系人" in result["message"]
-
-    def test_successful_query_no_contacts(self) -> None:
-        mock_svc = MagicMock()
-        mock_svc.get_contacts.return_value = []
-        with patch("app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc):
-            result = _execute_wechat_preview_tool({"keyword": "不存在"})
-            assert result["success"] is True
-            assert "未找到" in result["message"]
-
-    def test_keyword_from_unit_name_alias(self) -> None:
-        mock_svc = MagicMock()
-        mock_svc.get_contacts.return_value = []
-        with patch("app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc):
-            _execute_wechat_preview_tool({"unit_name": "ABC公司"})
-            call_kwargs = mock_svc.get_contacts.call_args.kwargs
-            assert call_kwargs["keyword"] == "ABC公司"
-
-    def test_empty_keyword_passes_none(self) -> None:
-        mock_svc = MagicMock()
-        mock_svc.get_contacts.return_value = []
-        with patch("app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc):
-            _execute_wechat_preview_tool({"keyword": "  "})
-            call_kwargs = mock_svc.get_contacts.call_args.kwargs
-            assert call_kwargs["keyword"] is None
-
-    def test_custom_limit(self) -> None:
-        mock_svc = MagicMock()
-        mock_svc.get_contacts.return_value = []
-        with patch("app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc):
-            _execute_wechat_preview_tool({"limit": 10})
-            call_kwargs = mock_svc.get_contacts.call_args.kwargs
-            assert call_kwargs["limit"] == 10
-
-    def test_default_limit_30(self) -> None:
-        mock_svc = MagicMock()
-        mock_svc.get_contacts.return_value = []
-        with patch("app.bootstrap.get_wechat_contact_app_service", return_value=mock_svc):
-            _execute_wechat_preview_tool({})
-            call_kwargs = mock_svc.get_contacts.call_args.kwargs
-            assert call_kwargs["limit"] == 30
-
-    def test_import_error_returns_service_unavailable(self) -> None:
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service",
-            side_effect=ImportError("no module"),
-        ):
-            result = _execute_wechat_preview_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "service_unavailable"
-
-    def test_value_error_returns_invalid_parameters(self) -> None:
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service",
-            side_effect=ValueError("bad"),
-        ):
-            result = _execute_wechat_preview_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "invalid_parameters"
-
-    def test_type_error_returns_invalid_parameters(self) -> None:
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service",
-            side_effect=TypeError("bad"),
-        ):
-            result = _execute_wechat_preview_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "invalid_parameters"
-
-    def test_runtime_error_returns_query_failed(self) -> None:
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service",
-            side_effect=RuntimeError("fail"),
-        ):
-            result = _execute_wechat_preview_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "query_failed"
-
-
-# ---------------------------------------------------------------------------
 # _execute_excel_schema_tool
 # ---------------------------------------------------------------------------
 
@@ -1625,13 +1529,6 @@ class TestExecuteToolHandlerDispatch:
         )
         with patch_ctx:
             result = execute_tool("template_extract", {"file_path": "/tmp/t.xlsx"})
-            assert result["success"] is True
-            mock_handler.assert_called_once()
-
-    def test_wechat_send_dispatches_to_preview(self) -> None:
-        patch_ctx, mock_handler = self._patch_handler("wechat_send", "preview")
-        with patch_ctx:
-            result = execute_tool("wechat_send", {"keyword": "张"})
             assert result["success"] is True
             mock_handler.assert_called_once()
 
@@ -2553,15 +2450,19 @@ class TestPlanWithReactMultiagentProbeOutputs:
                     "choices": [{"message": {"content": json.dumps(repaired_payload)}}]
                 }
                 mock_client.return_value.post.return_value = resp
-                result = planner._plan_with_react_multiagent(
-                    plan_id="pid",
-                    user_id="u1",
-                    message="test",
-                    tool_registry=_sample_registry(),
-                    context={},
-                )
-                assert result is not None
-                assert result.nodes[0].params["entity"] == "products"
+                with patch(
+                    "app.application.facades.tools_facade.execute_registered_workflow_tool",
+                    return_value={"success": True, "data": []},
+                ):
+                    result = planner._plan_with_react_multiagent(
+                        plan_id="pid",
+                        user_id="u1",
+                        message="test",
+                        tool_registry=_sample_registry(),
+                        context={},
+                    )
+                    assert result is not None
+                    assert result.nodes[0].params["entity"] == "products"
 
     def test_critic_repair_still_invalid_returns_none(self) -> None:
         """critic 修复后仍无效时返回 None。"""
@@ -2606,14 +2507,18 @@ class TestPlanWithReactMultiagentProbeOutputs:
                     "choices": [{"message": {"content": json.dumps(bad_repaired_payload)}}]
                 }
                 mock_client.return_value.post.return_value = resp
-                result = planner._plan_with_react_multiagent(
-                    plan_id="pid",
-                    user_id="u1",
-                    message="test",
-                    tool_registry=_sample_registry(),
-                    context={},
-                )
-                assert result is None
+                with patch(
+                    "app.application.facades.tools_facade.execute_registered_workflow_tool",
+                    return_value={"success": True, "data": []},
+                ):
+                    result = planner._plan_with_react_multiagent(
+                        plan_id="pid",
+                        user_id="u1",
+                        message="test",
+                        tool_registry=_sample_registry(),
+                        context={},
+                    )
+                    assert result is None
 
     def test_critic_repair_returns_none_falls_back(self) -> None:
         """critic 修复返回 None 时回退 fallback。"""
@@ -2634,14 +2539,18 @@ class TestPlanWithReactMultiagentProbeOutputs:
         )
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, invalid_final]):
             with patch.object(planner, "_critic_repair_with_llm", return_value=None):
-                result = planner._plan_with_react_multiagent(
-                    plan_id="pid",
-                    user_id="u1",
-                    message="test",
-                    tool_registry=_sample_registry(),
-                    context={},
-                )
-                assert result is None
+                with patch(
+                    "app.application.facades.tools_facade.execute_registered_workflow_tool",
+                    return_value={"success": True, "data": []},
+                ):
+                    result = planner._plan_with_react_multiagent(
+                        plan_id="pid",
+                        user_id="u1",
+                        message="test",
+                        tool_registry=_sample_registry(),
+                        context={},
+                    )
+                    assert result is None
 
 
 # ---------------------------------------------------------------------------
@@ -3425,8 +3334,9 @@ class TestFallbackPlanAdditional:
         result = planner._fallback_plan("pid", "新增产品", reg)
         # 无 products 工具，但 intent 仍是 add_product_to_unit
         assert result.intent == "add_product_to_unit"
-        # 只有 customers 节点
-        assert all(n.tool_id == "customers" for n in result.nodes)
+        # 不生成 products 节点；写操作缺必填参数会插入 clarify 反问节点，其余均为 customers 节点
+        assert not any(n.tool_id == "products" for n in result.nodes)
+        assert all(n.tool_id in ("customers", "clarify") for n in result.nodes)
 
     def test_risk_level_high_with_high_risk_node(self) -> None:
         """有 high risk 节点时 risk_level=high。"""

@@ -44,7 +44,7 @@ def test_core_workflow_mod_four_employees() -> None:
         (MODS_ROOT / "xcagi-core-workflow-employees" / "manifest.json").read_text(encoding="utf-8")
     )
     ids = {e["id"] for e in m.get("workflow_employees") or []}
-    assert ids == {"label_print", "shipment_mgmt", "receipt_confirm", "wechat_msg"}
+    assert ids == {"label_print", "shipment_mgmt", "receipt_confirm"}
 
 
 @pytest.mark.parametrize(

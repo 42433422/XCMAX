@@ -55,6 +55,7 @@ def _handle_excel_chart_recommend(_args: dict[str, Any]) -> str:
     return json.dumps(
         _tag_source(
             {
+                "success": True,
                 "suggestions": [
                     {"chart_type": "bar", "title": "分类对比"},
                     {"chart_type": "line", "title": "趋势分析"},

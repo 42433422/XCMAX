@@ -19,7 +19,6 @@ from app.application.workflow.planner import (
 from app.services.purchase_service import PurchaseService
 from app.services.tools_payload_legacy import dispatch_legacy_tool_payload
 from app.services.tools_workflow_registered import _registered_router_customers
-from app.services.wechat_contact_service import WechatContactService
 
 # ---------------------------------------------------------------------------
 # DB mock helpers
@@ -48,104 +47,6 @@ def _contact_row(**kw):
     }
     defaults.update(kw)
     return SimpleNamespace(**defaults)
-
-
-# ---------------------------------------------------------------------------
-# WechatContactService
-# ---------------------------------------------------------------------------
-
-
-@patch("app.services.wechat_contact_service.get_db")
-def test_wechat_get_contacts_keyword(mock_get_db: MagicMock) -> None:
-    db = MagicMock()
-    q = MagicMock()
-    q.filter.return_value = q
-    q.order_by.return_value = q
-    q.limit.return_value = q
-    q.all.return_value = [_contact_row()]
-    db.query.return_value = q
-    mock_get_db.return_value = _db_ctx(db)
-    out = WechatContactService().get_contacts(keyword="张")
-    assert len(out) == 1
-    assert out[0]["contact_name"] == "张三"
-
-
-@patch("app.services.wechat_contact_service.get_db")
-def test_wechat_get_contacts_starred_all(mock_get_db: MagicMock) -> None:
-    db = MagicMock()
-    q = MagicMock()
-    q.filter.return_value = q
-    q.order_by.return_value = q
-    q.limit.return_value = q
-    q.all.return_value = []
-    db.query.return_value = q
-    mock_get_db.return_value = _db_ctx(db)
-    out = WechatContactService().get_contacts(contact_type="all")
-    assert out == []
-
-
-@patch("app.services.wechat_contact_service.get_db")
-def test_wechat_get_contact_by_id(mock_get_db: MagicMock) -> None:
-    db = MagicMock()
-    q = MagicMock()
-    q.filter.return_value = q
-    q.first.return_value = _contact_row(id=9)
-    db.query.return_value = q
-    mock_get_db.return_value = _db_ctx(db)
-    out = WechatContactService().get_contact_by_id(9)
-    assert out is not None
-    assert out["id"] == 9
-
-
-@patch("app.services.wechat_contact_service.get_db")
-def test_wechat_add_and_delete_contact(mock_get_db: MagicMock) -> None:
-    db = MagicMock()
-    q = MagicMock()
-    q.filter.return_value = q
-    q.first.return_value = None
-    db.query.return_value = q
-    mock_get_db.return_value = _db_ctx(db)
-    add = WechatContactService().add_contact(
-        contact_name="李四",
-        wechat_id="wx_li",
-        contact_type="contact",
-    )
-    assert add["success"] is True
-
-    q.first.return_value = _contact_row(id=2, contact_name="李四")
-    del_out = WechatContactService().delete_contact(2)
-    assert del_out["success"] is True
-
-
-@patch("app.services.wechat_contact_service.get_db")
-def test_wechat_star_and_unstar_all(mock_get_db: MagicMock) -> None:
-    db = MagicMock()
-    q = MagicMock()
-    q.filter.return_value = q
-    q.first.return_value = _contact_row()
-    db.query.return_value = q
-    mock_get_db.return_value = _db_ctx(db)
-    star = WechatContactService().star_contact(1, starred=True)
-    assert star["success"] is True
-
-    q.update.return_value = 3
-    unstar = WechatContactService().unstar_all()
-    assert unstar["success"] is True
-
-
-@patch("app.services.wechat_contact_service.get_db")
-def test_wechat_resolve_send_message(mock_get_db: MagicMock) -> None:
-    db = MagicMock()
-    q = MagicMock()
-    q.filter.return_value = q
-    q.order_by.return_value = q
-    q.limit.return_value = q
-    q.all.return_value = [_contact_row(contact_name="张三")]
-    db.query.return_value = q
-    mock_get_db.return_value = _db_ctx(db)
-    contact, text = WechatContactService().resolve_send_message("给张三发送：你好世界")
-    assert contact == "张三"
-    assert text == "你好世界"
 
 
 # ---------------------------------------------------------------------------

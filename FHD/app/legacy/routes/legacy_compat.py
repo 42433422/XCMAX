@@ -161,31 +161,12 @@ def _register_early_critical_routes(app: FastAPI) -> None:
     )
 
 
-def _register_wechat_compat_routes(app: FastAPI) -> None:
-    """Mount wechat / personnel compat routes (register_*_routes pattern + wechat_decrypt)."""
-    _register_compat_func(
-        app,
-        "app.fastapi_routes.private_db_read_assistant_compat",
-        register_func_name="register_private_db_read_assistant_routes",
-    )
-
+def _register_personnel_compat_routes(app: FastAPI) -> None:
+    """Mount personnel compat routes (register_*_routes pattern)."""
     _register_compat_func(
         app,
         "app.fastapi_routes.xcmax_personnel_compat",
         register_func_name="register_xcmax_personnel_routes",
-    )
-
-    _register_compat_func(
-        app,
-        "app.fastapi_routes.user_cs_wechat_passive_compat",
-        register_func_name="register_user_cs_wechat_passive_routes",
-    )
-
-    _mount_router(
-        app,
-        "app.fastapi_routes.wechat_decrypt_routes",
-        log_name="wechat_decrypt_router (/api/wechat/decrypt/*)",
-        strategy="broad",
     )
 
 
@@ -443,14 +424,14 @@ def register_legacy_compat_routes(app: FastAPI) -> None:
 
     Mount order is critical:
     1. early_critical — market_account + legacy_auth must precede xcagi_compat
-    2. wechat_compat — compat register functions
+    2. personnel_compat — compat register functions
     3. xcagi_compat — aggregator (prefix=/api)
     4. document / shipment / ai / excel / infra / payment — business domains
     5. legacy_gap — conditional (debug only)
     6. approval + service_bridge — must mount last (service_bridge CI-strict)
     """
     _register_early_critical_routes(app)
-    _register_wechat_compat_routes(app)
+    _register_personnel_compat_routes(app)
     _register_xcagi_compat_routes(app)
     _register_document_routes(app)
     _register_shipment_routes(app)

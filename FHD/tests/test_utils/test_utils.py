@@ -11,7 +11,7 @@ import pytest
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)
 
-from app.utils.excel_utils import (
+from app.utils.excel.excel_utils import (
     cell_str,
     get_header_indices,
     merged_cell_value,

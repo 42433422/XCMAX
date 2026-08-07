@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
-import type { ModInfo, ModWorkflowEmployee } from '@/types/modInfo';
+import type { ModInfo } from '@/types/modInfo';
 import {
   apiFetch,
   DEFAULT_MOD_API_TIMEOUT_MS,
@@ -50,7 +50,7 @@ import { useAccountProfileStore } from '@/stores/accountProfile';
 import { buildAttendanceIndustryModStub } from '@/constants/sunbirdClientMod';
 import { isProtectedClientModId } from '@/constants/protectedMods';
 import { bootstrapHostConfig, clientModPolicies } from '@/stores/hostConfig';
-import { XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY, readActiveExtensionModIdFromStorage, writeActiveExtensionModIdToStorage } from '@/utils/xcagiStorageKeys';
+import { readActiveExtensionModIdFromStorage, writeActiveExtensionModIdToStorage } from '@/utils/xcagiStorageKeys';
 
 type FetchModsOptions = {
   /** 为 true 时只更新 mods 列表，不再调用 applyEntitledActiveMod（打破递归） */
@@ -889,11 +889,9 @@ export const useModsStore = defineStore('mods', () => {
       const mod = mods.value.find((m) => String(m.id || '').trim() === modId);
       const proEntry =
         String(mod?.frontend?.pro_entry_path || '').trim() ||
-        (modId === 'wechat-contacts-ai-employee'
-          ? '/wechat-contacts'
-          : modId === 'lan-gate-ai-employee'
-            ? '/lan-gate'
-            : '');
+        (modId === 'lan-gate-ai-employee'
+          ? '/lan-gate'
+          : '');
       if (isHostMountedModMenuPath(path, proEntry)) continue;
       const warnKey = `${modId}\0${path}`;
       if (warnedModMenuPathKeys.has(warnKey)) continue;

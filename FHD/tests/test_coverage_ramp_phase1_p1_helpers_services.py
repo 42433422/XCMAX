@@ -216,28 +216,8 @@ def test_product_parse_edge_cases() -> None:
 
 
 # ---------------------------------------------------------------------------
-# wechat_task + approval_workspace app_service snippets
+# approval_workspace app_service snippets
 # ---------------------------------------------------------------------------
-
-
-@patch("app.db.session.get_db")
-def test_wechat_task_app_service_list(mock_get_db: MagicMock) -> None:
-    from app.application.wechat_task_app_service import WechatTaskApplicationService
-
-    mock_db = MagicMock()
-    cm = MagicMock()
-    cm.__enter__.return_value = mock_db
-    cm.__exit__.return_value = None
-    mock_get_db.return_value = cm
-    q = MagicMock()
-    q.filter.return_value = q
-    q.order_by.return_value = q
-    q.limit.return_value = q
-    q.all.return_value = []
-    mock_db.query.return_value = q
-    svc = WechatTaskApplicationService()
-    tasks = svc.get_tasks(status="pending", limit=10)
-    assert tasks == []
 
 
 def test_approval_workspace_normalize_statuses() -> None:

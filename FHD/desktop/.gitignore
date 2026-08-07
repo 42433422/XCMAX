@@ -7,3 +7,5 @@ dist/
 /preload.js
 /coverage/
 /.vitest-cache/
+# build-installer.sh 生成的临时 electron-builder 配置，构建后即删除，不入仓
+/.electron-builder.release.yml

@@ -63,7 +63,6 @@ export const SHELL_VIEW_TITLE_BASE: Record<string, string> = {
   'shipment-records': '业务记录',
   customers: '组织管理',
   'data-sources': '数据来源',
-  'wechat-contacts': '微信联系人',
   print: '模板与打印',
   'printer-list': '打印机列表',
   'template-preview': '模板库',
@@ -140,7 +139,7 @@ export const SHELL_INDUSTRY_MENU_OVERRIDES: Record<string, Record<string, string
     'shipment-records': '考勤与排班',
     customers: '协作关系',
     print: '标签打印',
-    'business-docking': '人事对接',
+    'business-docking': '数据对接中心',
     'other-tools': '员工视图',
     'approval-rules': '审批流程规则'
   }

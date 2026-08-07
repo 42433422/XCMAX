@@ -1,4 +1,4 @@
-"""Tests for app.mod_sdk.lan_pages_compat."""
+"""Tests for app.legacy.lan.lan_pages_compat."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.mod_sdk.lan_pages_compat import (
+from app.legacy.lan.lan_pages_compat import (
     HOST_PAGES,
     MOD_PAGE_PREFIX,
     list_lan_pages_registry,
@@ -26,7 +26,7 @@ class TestConstants:
 class TestListLanPagesRegistry:
     """Tests for list_lan_pages_registry."""
 
-    @patch("app.mod_sdk.lan_pages_compat.is_lan_via_mod_enabled", return_value=True)
+    @patch("app.legacy.lan.lan_pages_compat.is_lan_via_mod_enabled", return_value=True)
     def test_registry_with_mod_enabled(self, mock_enabled: MagicMock) -> None:
         result = list_lan_pages_registry()
         assert result["success"] is True
@@ -35,19 +35,19 @@ class TestListLanPagesRegistry:
         assert result["execution_path"] == "mod_pages"
         assert result["phase"] == "K"
 
-    @patch("app.mod_sdk.lan_pages_compat.is_lan_via_mod_enabled", return_value=False)
+    @patch("app.legacy.lan.lan_pages_compat.is_lan_via_mod_enabled", return_value=False)
     def test_registry_with_mod_disabled(self, mock_enabled: MagicMock) -> None:
         result = list_lan_pages_registry()
         assert result["success"] is True
         assert result["pages_via_mod"] is False
         assert result["execution_path"] == "host.routes"
 
-    @patch("app.mod_sdk.lan_pages_compat.is_lan_via_mod_enabled", return_value=True)
+    @patch("app.legacy.lan.lan_pages_compat.is_lan_via_mod_enabled", return_value=True)
     def test_registry_has_page_count(self, mock_enabled: MagicMock) -> None:
         result = list_lan_pages_registry()
         assert result["page_count"] == len(HOST_PAGES)
 
-    @patch("app.mod_sdk.lan_pages_compat.is_lan_via_mod_enabled", return_value=True)
+    @patch("app.legacy.lan.lan_pages_compat.is_lan_via_mod_enabled", return_value=True)
     def test_registry_has_mod_id(self, mock_enabled: MagicMock) -> None:
         result = list_lan_pages_registry()
         assert "mod_id" in result

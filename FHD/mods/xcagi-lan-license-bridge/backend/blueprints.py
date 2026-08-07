@@ -49,13 +49,13 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.get("/status")
     def mod_status_meta():
-        from app.mod_sdk.lan_compat import list_lan_facade_registry
+        from app.legacy.lan.lan_compat import list_lan_facade_registry
 
         return {"success": True, "data": {**list_lan_facade_registry(), "mod_id": mod_id, "phase": "J"}}
 
     @router.get("/registry")
     def mod_registry():
-        from app.mod_sdk.lan_compat import list_lan_facade_registry
+        from app.legacy.lan.lan_compat import list_lan_facade_registry
 
         return {"success": True, "data": list_lan_facade_registry()}
 

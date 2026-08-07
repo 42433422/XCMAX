@@ -13,7 +13,6 @@
 - _registered_router_excel_analyzer / excel_toolkit / label_template_generator
 - _registered_router_document_template（create / update / delete / 未知）
 - _registered_router_template_preview（view / list）
-- _registered_router_wechat（view / list / refresh）
 - _registered_router_print（workflow_label_dispatch / view / list / print_label / save_printer_selection）
 - _registered_router_printer_list / settings
 - _registered_router_employee（list / execute / 未知）
@@ -73,7 +72,6 @@ _registered_router_shipment_records = _twr._registered_router_shipment_records
 _registered_router_system_maintenance = _twr._registered_router_system_maintenance
 _registered_router_template_preview = _twr._registered_router_template_preview
 _registered_router_unit_products_import = _twr._registered_router_unit_products_import
-_registered_router_wechat = _twr._registered_router_wechat
 execute_registered_workflow_tool = _twr.execute_registered_workflow_tool
 
 
@@ -976,35 +974,6 @@ class TestTemplatePreviewRouter:
             result = _registered_router_template_preview("query", {}, _ctx(), "normal", "")
             assert result["success"] is True
             assert result["data"] == [{"id": 1}]
-
-
-class TestWechatRouter:
-    """_registered_router_wechat 分支覆盖。"""
-
-    def test_view_redirect(self) -> None:
-        with patch("app.application.get_wechat_contact_app_service"):
-            result = _registered_router_wechat("view", {}, _ctx(), "normal", "")
-            assert result["success"] is True
-
-    def test_list_query(self) -> None:
-        mock_svc = MagicMock()
-        mock_svc.get_contacts.return_value = [{"id": 1}]
-        with patch("app.application.get_wechat_contact_app_service", return_value=mock_svc):
-            result = _registered_router_wechat(
-                "list", {"type": "friend", "keyword": "a"}, _ctx(), "normal", ""
-            )
-            assert result["success"] is True
-
-    def test_refresh_contact_cache(self) -> None:
-        with (
-            patch("app.application.get_wechat_contact_app_service"),
-            patch(
-                "app.services.wechat_contact_cache_import.ensure_decrypted_wechat_dbs"
-            ) as mock_fn,
-        ):
-            mock_fn.return_value = {"success": True}
-            result = _registered_router_wechat("refresh_contact_cache", {}, _ctx(), "normal", "")
-            assert result["success"] is True
 
 
 class TestPrintRouter:

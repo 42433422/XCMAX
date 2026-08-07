@@ -813,7 +813,7 @@ CORE_MODULES = [
     },
     {
         "module_id": "business-docking",
-        "display_name": "业务对接",
+        "display_name": "数据对接中心",
         "route": "/business-docking",
         "source": "core",
         "sync_scope": "none",
@@ -1060,6 +1060,23 @@ async def admin_list_wallets(request: Request):
     return await _market_admin_proxy(
         request, "GET", f"/api/admin/wallets?limit={limit}&offset={offset}"
     )
+
+
+@router.get("/admin/market/orders", response_model=None)
+async def admin_list_orders(request: Request):
+    """经营看板：代理 MODstore ``/api/admin/orders``（订单列表 + 经营聚合）。
+
+    打通「AI 不知道订单」断点：管理端经此接口读取平台订单数据，供 AI 员工感知与处理。
+    """
+    q = []
+    if request.query_params.get("status"):
+        q.append(f"status={request.query_params['status']}")
+    if request.query_params.get("limit"):
+        q.append(f"limit={request.query_params['limit']}")
+    if request.query_params.get("offset"):
+        q.append(f"offset={request.query_params['offset']}")
+    query = ("?" + "&".join(q)) if q else ""
+    return await _market_admin_proxy(request, "GET", f"/api/admin/orders{query}")
 
 
 @router.post("/admin/market/users/{user_id}/wallet/credit", response_model=None)
@@ -1446,58 +1463,6 @@ async def admin_force_push_user_entitlements(
             "push": push_result,
         },
     }
-
-
-@router.get("/admin/wechat/groups", response_model=None)
-async def admin_list_wechat_groups(
-    request: Request,
-    keyword: str = Query(default=""),
-    limit: int = Query(default=80, ge=1, le=200),
-):
-    gate = _require_market_admin_session(request)
-    if gate is not None:
-        return gate
-    try:
-        from app.application.wechat_group_customer_app import list_group_contacts
-
-        rows = list_group_contacts(keyword=keyword or None, limit=limit)
-        return {"success": True, "data": rows, "total": len(rows)}
-    except RECOVERABLE_ERRORS as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
-
-
-@router.get("/admin/market/users/{user_id}/wechat-customers", response_model=None)
-async def admin_list_user_wechat_customers(request: Request, user_id: int):
-    gate = _require_market_admin_session(request)
-    if gate is not None:
-        return gate
-    try:
-        from app.application.wechat_group_customer_app import get_bindings_for_user
-
-        return {"success": True, "data": get_bindings_for_user(user_id)}
-    except RECOVERABLE_ERRORS as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
-
-
-@router.put("/admin/market/users/{user_id}/wechat-customers", response_model=None)
-async def admin_save_user_wechat_customers(
-    request: Request,
-    user_id: int,
-    body: dict[str, Any] = Body(default_factory=dict),
-):
-    gate = _require_market_admin_session(request)
-    if gate is not None:
-        return gate
-    try:
-        from app.application.wechat_group_customer_app import save_bindings_for_user
-
-        ids = body.get("contact_ids") or body.get("wechat_contact_ids") or []
-        if not isinstance(ids, list):
-            ids = []
-        result = save_bindings_for_user(user_id, ids)
-        return result
-    except RECOVERABLE_ERRORS as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
 
 @router.post("/admin/impersonate", response_model=None)

@@ -37,9 +37,9 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "is_professional_mode": ("app.utils.ai_helpers", "is_professional_mode"),
     "route_normal_mode_message": ("app.utils.ai_helpers", "route_normal_mode_message"),
     "safe_float": ("app.utils.ai_helpers", "safe_float"),
-    "CircuitBreakerOpen": ("app.utils.circuit_breaker", "CircuitBreakerOpen"),
-    "circuit_breaker": ("app.utils.circuit_breaker", "circuit_breaker"),
-    "get_circuit_breaker": ("app.utils.circuit_breaker", "get_circuit_breaker"),
+    "CircuitBreakerOpen": ("app.utils.resilience.circuit_breaker", "CircuitBreakerOpen"),
+    "circuit_breaker": ("app.utils.resilience.circuit_breaker", "circuit_breaker"),
+    "get_circuit_breaker": ("app.utils.resilience.circuit_breaker", "get_circuit_breaker"),
     "get_logger": ("app.utils.logger", "get_logger"),
     "log_operation": ("app.utils.logger", "log_operation"),
     "setup_structured_logging": ("app.utils.logger", "setup_structured_logging"),
@@ -47,9 +47,9 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "metrics_endpoint": ("app.utils.metrics", "metrics_endpoint"),
     "track_ai_request": ("app.utils.metrics", "track_ai_request"),
     "track_request_duration": ("app.utils.metrics", "track_request_duration"),
-    "retry_ai_service": ("app.utils.retry", "retry_ai_service"),
-    "retry_network_operation": ("app.utils.retry", "retry_network_operation"),
-    "retry_on_exception": ("app.utils.retry", "retry_on_exception"),
+    "retry_ai_service": ("app.utils.resilience.retry", "retry_ai_service"),
+    "retry_network_operation": ("app.utils.resilience.retry", "retry_network_operation"),
+    "retry_on_exception": ("app.utils.resilience.retry", "retry_on_exception"),
 }
 
 

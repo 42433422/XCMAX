@@ -253,7 +253,7 @@ def test_process_chat_timeout(chat_svc: AIChatApplicationService) -> None:
         raise TimeoutError("slow")
 
     chat_svc.ai_service.chat = _fail
-    out = chat_svc.process_chat("u1", "查产品")
+    out = chat_svc.process_chat("u1", "今天天气怎么样")
     assert out["success"] is False
     assert "超时" in out["response"]
 

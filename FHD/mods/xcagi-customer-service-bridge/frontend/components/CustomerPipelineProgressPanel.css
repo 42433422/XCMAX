@@ -1,0 +1,129 @@
+.cs-progress-panel {
+  background: linear-gradient(180deg, #f8faff 0%, #fff 100%);
+  border: 1px solid #e0e7ff;
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cs-progress-bar { margin-bottom: 2px; }
+.cs-progress-track { height: 8px; background: #eef2f7; border-radius: 4px; overflow: hidden; margin-bottom: 10px; }
+.cs-progress-fill { height: 100%; background: linear-gradient(90deg, #6366f1, #4a6cf7); border-radius: 4px; transition: width 0.3s; }
+.cs-progress-steps {
+  display: flex; gap: 2px; list-style: none; margin: 0; padding: 0;
+  overflow-x: auto; scrollbar-width: thin;
+}
+.cs-progress-step {
+  flex: 1; min-width: 52px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  text-align: center;
+}
+.cs-progress-dot {
+  width: 22px; height: 22px; border-radius: 50%; font-size: 10px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  background: #e2e8f0; color: #64748b; flex-shrink: 0;
+}
+.cs-progress-label { font-size: 10px; color: #94a3b8; line-height: 1.2; white-space: nowrap; }
+.cs-progress-step.is-done .cs-progress-dot { background: #dcfce7; color: #16a34a; }
+.cs-progress-step.is-done .cs-progress-label { color: #64748b; }
+.cs-progress-step.is-current .cs-progress-dot {
+  background: #4a6cf7; color: #fff; box-shadow: 0 0 0 3px rgba(74,108,247,0.18);
+}
+.cs-progress-step.is-current .cs-progress-label { color: #4a6cf7; font-weight: 600; }
+.cs-progress-step.is-pick:not(.is-current) .cs-progress-dot {
+  box-shadow: 0 0 0 2px rgba(74, 108, 247, 0.35);
+}
+.cs-progress-step[role='button'] { cursor: pointer; }
+.cs-progress-step[role='button']:hover .cs-progress-label { color: #475569; }
+.cs-stage-intro {
+  background: #fff; border: 1px solid #e8ecf2; border-radius: 10px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.cs-stage-intro-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+}
+.cs-audit-code-row {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px;
+  margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(148, 163, 184, 0.45);
+}
+.cs-audit-code-label { display: flex; flex-direction: column; gap: 4px; flex: 1 1 160px; min-width: 140px; }
+.cs-audit-code-input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.04em; }
+.cs-audit-code-error { margin: 4px 0 0; width: 100%; }
+.cs-audit-preview { margin-top: 10px; }
+.cs-audit-preview-hint { margin: 8px 0 0; font-size: 12px; }
+.cs-stage-intake-quick { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cs-stage-intro-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cs-stage-edit { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.cs-stage-select { font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid #e2e8f0; max-width: 120px; }
+.cs-stage-edit-hint { margin: 0; font-size: 11px; line-height: 1.45; }
+.cs-auto-advance-hint { margin: 8px 0 0; font-size: 12px; color: #4a6cf7; }
+.cs-stage-intro-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cs-stage-intro-title strong { font-size: 15px; color: #1e293b; }
+.cs-stage-badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #eff6ff; color: #4a6cf7; font-weight: 500; }
+.cs-stage-viewing-from { font-size: 12px; font-weight: 400; }
+.cs-stage-lead { margin: 0; font-size: 13px; font-weight: 500; color: #334155; }
+.cs-stage-desc { margin: 0; font-size: 12px; color: #64748b; line-height: 1.55; }
+.cs-stage-hint { margin: 0; font-size: 12px; color: #475569; line-height: 1.5; }
+.cs-stage-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cs-stage-done-hint { margin: 0; font-size: 12px; color: #16a34a; }
+.cs-stage-warn-hint { color: #b45309; }
+.cs-intake-done-actions { flex-wrap: wrap; gap: 6px; }
+.cs-crm-panel { margin: 10px 0 0; padding: 10px 12px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; }
+.cs-crm-panel__title { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: #334155; }
+.cs-crm-panel__dl { margin: 0 0 8px; display: grid; grid-template-columns: 5.5em 1fr; gap: 4px 10px; font-size: 12px; }
+.cs-crm-panel__dl dt { color: #64748b; margin: 0; }
+.cs-crm-panel__dl dd { margin: 0; color: #1e293b; }
+.cs-finance-panel { margin-top: 10px; }
+.cs-external-crm { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e2e8f0; }
+.cs-external-crm__title { margin: 0 0 4px; font-size: 11px; }
+.cs-external-crm__hint { margin: 0 0 8px; font-size: 12px; line-height: 1.45; }
+.cs-external-crm__meta { margin: 0 0 6px; font-size: 12px; }
+.cs-external-crm__meta code { font-size: 11px; }
+.cs-external-crm__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cs-finance-table { width: 100%; font-size: 11px; border-collapse: collapse; margin-top: 6px; }
+.cs-finance-table th, .cs-finance-table td { border: 1px solid #e2e8f0; padding: 4px 6px; text-align: left; }
+.cs-crm-quote-sum { display: block; margin-top: 2px; color: #475569; }
+.cs-stage-checklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cs-stage-checklist li { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; color: #64748b; line-height: 1.45; }
+.cs-stage-checklist li.is-done { color: #16a34a; }
+.cs-check-mark { width: 14px; flex-shrink: 0; text-align: center; font-size: 11px; }
+.cs-analyze-btn { flex-shrink: 0; }
+.cs-stage-roadmap { font-size: 12px; }
+.cs-stage-roadmap summary { cursor: pointer; color: #4a6cf7; font-weight: 500; padding: 4px 0; list-style: none; }
+.cs-stage-roadmap summary::-webkit-details-marker { display: none; }
+.cs-stage-roadmap summary::before { content: '▸ '; }
+.cs-stage-roadmap[open] summary::before { content: '▾ '; }
+.cs-roadmap-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+@media (max-width: 900px) { .cs-roadmap-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .cs-roadmap-grid { grid-template-columns: 1fr; } }
+.cs-roadmap-item { background: #fff; border: 1px solid #e8ecf2; border-radius: 8px; padding: 10px; }
+.cs-roadmap-item.is-current { border-color: #93c5fd; background: #f8fbff; }
+.cs-roadmap-item.is-done { border-color: #bbf7d0; }
+.cs-roadmap-title { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: #334155; }
+.cs-roadmap-headline { margin: 0 0 6px; font-size: 11px; color: #64748b; line-height: 1.4; }
+.cs-roadmap-todos { margin: 0; padding-left: 16px; color: #94a3b8; font-size: 11px; line-height: 1.45; }
+.cs-roadmap-todos li { margin-bottom: 2px; }
+.cs-coming-soon-inline { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 10px; }
+.cs-stage-group-tip { margin: 8px 0 0; padding: 8px 10px; font-size: 12px; line-height: 1.45; color: #1e40af; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; }
+.cs-stage-actions--quote { margin-top: 8px; }
+.cs-stage-pending-hint { margin: 6px 0 0; font-size: 12px; color: #b45309; }
+.cpp-btn-xs.cpp-btn-accent.is-pending { box-shadow: 0 0 0 2px rgba(74, 108, 247, 0.35); }
+.cs-coming-soon { font-size: 12px; color: #b45309; margin: 0; }
+.cs-intake-summary { margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: #f0fdf4; border: 1px solid #bbf7d0; }
+.cs-intake-summary__title { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: #166534; }
+.cs-intake-summary__time { font-weight: 400; color: #64748b; margin-left: 6px; }
+.cs-intake-summary__dl { margin: 0; display: grid; grid-template-columns: 4.5em 1fr; gap: 4px 10px; font-size: 12px; }
+.cs-intake-summary__dl dt { color: #64748b; margin: 0; }
+.cs-intake-summary__dl dd { margin: 0; color: #1e293b; white-space: pre-wrap; }
+.cpp-muted { color: #94a3b8; }
+.cpp-form-error { color: #b91c1c; font-size: 12px; margin: 0; }
+.cs-input { width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 10px; font-size: 13px; box-sizing: border-box; background: #fff; }
+.cpp-btn-xs { padding: 5px 12px; font-size: 12px; border-radius: 6px; border: 1px solid #e8ecf2; background: #fff; cursor: pointer; }
+.cpp-btn-xs:hover { border-color: #cbd5e1; }
+.cpp-btn-accent { background: #4a6cf7; border-color: #4a6cf7; color: #fff; }
+.cpp-btn-accent:hover { opacity: 0.92; }
+.cpp-btn-accent:disabled { opacity: 0.5; cursor: not-allowed; }
+.cpp-btn-ghost { background: transparent; border: 1px solid #e8ecf2; color: #64748b; }
+.cpp-btn-ghost:hover { border-color: #4a6cf7; color: #4a6cf7; }
+.cpp-btn-secondary { background: #fff; border: 1px solid #e8ecf2; color: #334155; }
+.cpp-btn-secondary:hover { border-color: #cbd5e1; }

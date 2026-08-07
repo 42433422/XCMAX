@@ -58,7 +58,7 @@ def build_decoupling_progress_payload(installed_mod_ids: list[str] | None = None
         ),
         "lan": _safe(
             lambda: __import__(
-                "app.mod_sdk.lan_compat", fromlist=["list_lan_facade_registry"]
+                "app.legacy.lan.lan_compat", fromlist=["list_lan_facade_registry"]
             ).list_lan_facade_registry()
         ),
         "model_payment": _safe(

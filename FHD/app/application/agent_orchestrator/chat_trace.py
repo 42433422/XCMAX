@@ -1505,12 +1505,12 @@ def start_legacy_chat_run(
     )
     run.add_event(
         "run.created",
-        "Legacy planner run 已创建",
+        "智能任务已创建",
         {"channel": channel, "source": str(source or "").strip()},
     )
     run.add_event(
         "planner.started",
-        "Legacy planner 开始执行",
+        "正在生成执行计划",
         {"channel": channel, "source": str(source or "").strip()},
     )
     return get_agent_run_repository().save(run)
@@ -1553,7 +1553,7 @@ def finalize_legacy_chat_run(
     run.metadata["runtime_context"] = _trace_safe_value(runtime_context or {})
     run.add_event(
         "planner.completed",
-        "Legacy planner 执行完成",
+        "执行计划已生成",
         {"status": status, "observed_tool_records": len(records)},
     )
 
@@ -1589,7 +1589,7 @@ def finalize_legacy_chat_run(
         run.error = run.error or _payload_error_message(payload)
         run.add_event("run.failed", run.error, run.final_output)
     else:
-        run.add_event("run.completed", "Legacy planner run 执行完成", run.final_output)
+        run.add_event("run.completed", "智能任务执行完成", run.final_output)
     repository.save(run)
     return _attach_run_id(payload, run.run_id)
 

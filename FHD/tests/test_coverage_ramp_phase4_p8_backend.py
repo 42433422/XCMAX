@@ -12,7 +12,7 @@ import openpyxl
 import pytest
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
-from app.utils.excel_template_analyzer import (
+from app.utils.excel.excel_template_analyzer import (
     analyze_template,
     extract_entries,
 )

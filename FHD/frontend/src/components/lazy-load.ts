@@ -1,6 +1,4 @@
 import { defineAsyncComponent, type App, type Component } from 'vue';
-import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
-
 const loadingComponent = {
   template: '<div class="async-loading"></div>'
 };
@@ -101,11 +99,6 @@ export const ProModeComponents: AsyncComponentMap = {
     errorComponent,
     delay: 300
   }),
-  WeChatLoginPanel: defineAsyncComponent({
-    loader: () => import('./pro-feature-widget/WeChatLoginPanel.vue'),
-    loadingComponent,
-    errorComponent
-  }),
   UserListPanel: defineAsyncComponent({
     loader: () => import('./pro-feature-widget/UserListPanel.vue'),
     loadingComponent,
@@ -158,7 +151,7 @@ export function preloadAllComponents() {
 
 export const componentPreloadMap: Record<string, string[]> = {
   ProModeOverlay: ['JarvisCore', 'WireRings', 'EnergyParticles'],
-  ProFeatureWidget: ['WeChatLoginPanel', 'UserListPanel', 'ProductQueryPanel'],
+  ProFeatureWidget: ['UserListPanel', 'ProductQueryPanel'],
   StarkGrid: []
 };
 

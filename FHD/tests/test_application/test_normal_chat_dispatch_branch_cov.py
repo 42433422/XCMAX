@@ -20,10 +20,21 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.application.normal_chat_dispatch import (
+    build_aging_report_response_dict,
     build_customers_query_response_dict,
+    build_finance_query_response_dict,
     build_inventory_alert_response_dict,
+    build_inventory_count_response_dict,
+    build_knowledge_query_response_dict,
     build_label_print_response_dict,
+    build_materials_query_response_dict,
+    build_mrp_production_response_dict,
     build_product_query_response_dict,
+    build_purchase_query_response_dict,
+    build_replenishment_suggest_response_dict,
+    build_reports_query_response_dict,
+    build_sales_query_response_dict,
+    build_shipment_records_query_response_dict,
     resolve_tool_execution_profile,
     route_normal_mode_message,
     run_normal_slot_product_query_from_message,
@@ -124,27 +135,60 @@ class TestRouteNormalModeMessageCustomersQuery:
     def test_customer_keyword_有哪些客户(self):
         result = route_normal_mode_message("有哪些客户")
         assert result["intent"] == "customers_query"
+        assert result["slots"]["keyword"] == ""
+
+    def test_customer_keyword_有哪些客户_question(self):
+        result = route_normal_mode_message("有哪些客户？")
+        assert result["intent"] == "customers_query"
+        assert result["slots"]["keyword"] == ""
+
+    def test_customer_count_ask_查看我有多少个客户(self):
+        """计数问法：实体路由到 customers.query，keyword 必须为空（禁止把前缀当客户名）。"""
+        result = route_normal_mode_message("查看我有多少个客户")
+        assert result["intent"] == "customers_query"
+        assert result["slots"]["keyword"] == ""
 
     def test_customer_keyword_客户名单(self):
         result = route_normal_mode_message("客户名单")
         assert result["intent"] == "customers_query"
+        assert result["slots"]["keyword"] == ""
 
-    def test_customer_with_keyword_match(self):
-        """regex 贪婪匹配会包含 '的'，验证 keyword 非空即可。"""
+    def test_customer_named_ask_does_not_regex_extract_keyword(self):
+        """指名句也不再靠正则抽 keyword；由 Agent 工具参数决定过滤。"""
         result = route_normal_mode_message("七彩乐园的客户")
         assert result["intent"] == "customers_query"
-        assert result["slots"]["keyword"]  # 非空
+        assert result["slots"]["keyword"] == ""
 
     def test_customer_without_keyword_match_empty_slot(self):
         result = route_normal_mode_message("客户")
         assert result["intent"] == "customers_query"
         assert result["slots"]["keyword"] == ""
 
-    def test_customer_keyword_match_simple(self):
-        """无 '的' 时 keyword 应等于捕获组。"""
+    def test_customer_entity_route_keeps_keyword_empty(self):
         result = route_normal_mode_message("七彩乐园客户")
         assert result["intent"] == "customers_query"
-        assert result["slots"]["keyword"] == "七彩乐园"
+        assert result["slots"]["keyword"] == ""
+
+    def test_try_normal_slot_read_payload_customers(self):
+        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+
+        with patch(
+            "app.application.normal_chat_dispatch.build_customers_query_response_dict",
+            return_value={
+                "success": True,
+                "response": "当前共有 2 位客户：\n- 甲\n- 乙",
+                "data": {"intent": "customers_query", "customers": []},
+                "agent_tool_dispatch": True,
+            },
+        ):
+            payload = try_normal_slot_read_payload("有哪些客户？")
+        assert payload is not None
+        assert "当前共有 2 位客户" in payload["response"]
+
+    def test_try_normal_slot_read_payload_unknown(self):
+        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+
+        assert try_normal_slot_read_payload("今天天气怎么样") is None
 
 
 # ---------------------------------------------------------------------------
@@ -779,15 +823,21 @@ class TestBuildCustomersQueryResponseDict:
 
     @staticmethod
     def _patch_customer_service(monkeypatch, mock_svc):
-        """通过 sys.modules 注入 fake 模块，避免触发 app.services 包循环导入。"""
-        import sys
-        import types
+        """注入 customers 列表（与 GET /api/customers 同源：domain handler → facade）。"""
 
-        mock_cls = MagicMock(return_value=mock_svc)
-        fake_mod = types.ModuleType("app.services.customers_service")
-        fake_mod.CustomerService = mock_cls  # type: ignore[attr-defined]
-        monkeypatch.setitem(sys.modules, "app.services.customers_service", fake_mod)
-        return mock_cls
+        def _list(request=None, *, page=1, per_page=20, keyword=None):
+            return mock_svc.get_all(keyword=keyword, page=page, per_page=per_page)
+
+        # 槽位优先走 erp domain handler；测试里直接短路为 facade 同款结果
+        monkeypatch.setattr(
+            "app.mod_sdk.erp_domain_dispatch.try_invoke_erp_domain_handler",
+            lambda *_a, **_k: None,
+        )
+        monkeypatch.setattr(
+            "app.mod_sdk.erp_customers_facade.customers_list",
+            _list,
+        )
+        return mock_svc
 
     def test_non_customers_query_returns_none(self):
         result = build_customers_query_response_dict({"intent": "shipment", "slots": {}})
@@ -796,60 +846,77 @@ class TestBuildCustomersQueryResponseDict:
     def test_with_keyword_no_customers(self, monkeypatch):
         route = {"intent": "customers_query", "slots": {"keyword": "不存在客户"}}
         mock_svc = MagicMock()
-        mock_svc.search.return_value = []
+        mock_svc.get_all.return_value = {"success": True, "data": [], "total": 0}
         self._patch_customer_service(monkeypatch, mock_svc)
         result = build_customers_query_response_dict(route)
         assert result["success"] is True
-        assert "未找到" in result["response"]
+        assert "没有查到" in result["response"]
+        assert "未找到关键词" not in result["response"]
+        assert result["legacy_tool_records"][0]["tool_id"] == "customers"
 
     def test_with_keyword_has_customers(self, monkeypatch):
         route = {"intent": "customers_query", "slots": {"keyword": "七彩"}}
         mock_svc = MagicMock()
-        mock_svc.search.return_value = [
-            {"customer_name": "七彩乐园", "contact_person": "张三"},
-            {"customer_name": "七彩集团", "contact_person": "李四"},
-        ]
+        mock_svc.get_all.return_value = {
+            "success": True,
+            "data": [
+                {"customer_name": "七彩乐园", "contact_person": "张三"},
+                {"customer_name": "七彩集团", "contact_person": "李四"},
+            ],
+            "total": 2,
+        }
         self._patch_customer_service(monkeypatch, mock_svc)
         result = build_customers_query_response_dict(route)
         assert result["success"] is True
-        assert "共找到 2 位客户" in result["response"]
+        assert "当前共有 2 位客户" in result["response"]
+        assert result["agent_tool_dispatch"] is True
 
     def test_no_keyword_uses_get_all_empty(self, monkeypatch):
         route = {"intent": "customers_query", "slots": {"keyword": ""}}
         mock_svc = MagicMock()
-        mock_svc.get_all.return_value = []
+        mock_svc.get_all.return_value = {"success": True, "data": [], "total": 0}
         self._patch_customer_service(monkeypatch, mock_svc)
         result = build_customers_query_response_dict(route)
         assert result["success"] is True
-        assert "暂无客户数据" in result["response"]
+        assert "暂无数据" in result["response"]
 
     def test_no_keyword_uses_get_all_with_customers(self, monkeypatch):
         route = {"intent": "customers_query", "slots": {"keyword": ""}}
         mock_svc = MagicMock()
-        mock_svc.get_all.return_value = [{"customer_name": "客户A", "contact_person": "联系人A"}]
+        mock_svc.get_all.return_value = {
+            "success": True,
+            "data": [{"customer_name": "客户A", "contact_person": "联系人A"}],
+            "total": 1,
+        }
         self._patch_customer_service(monkeypatch, mock_svc)
         result = build_customers_query_response_dict(route)
         assert result["success"] is True
-        assert "共找到 1 位客户" in result["response"]
+        assert "当前共有 1 位客户" in result["response"]
+        assert "暂无数据" not in result["response"]
+        assert "关键词" not in result["response"]
+        assert result["legacy_tool_records"][0]["action"] == "query"
+        assert result["legacy_tool_records"][0]["output"]["total"] == 1
 
     def test_customers_not_list_returns_empty(self, monkeypatch):
         route = {"intent": "customers_query", "slots": {"keyword": ""}}
         mock_svc = MagicMock()
-        mock_svc.get_all.return_value = "not a list"
+        mock_svc.get_all.return_value = {"success": True, "data": "not a list", "total": 0}
         self._patch_customer_service(monkeypatch, mock_svc)
         result = build_customers_query_response_dict(route)
         assert result["success"] is True
-        assert "暂无客户数据" in result["response"]
+        assert "暂无数据" in result["response"]
 
     def test_service_failure_returns_error(self, monkeypatch):
         route = {"intent": "customers_query", "slots": {"keyword": "x"}}
-        mock_cls = MagicMock(side_effect=RuntimeError("service down"))
-        import sys
-        import types
 
-        fake_mod = types.ModuleType("app.services.customers_service")
-        fake_mod.CustomerService = mock_cls  # type: ignore[attr-defined]
-        monkeypatch.setitem(sys.modules, "app.services.customers_service", fake_mod)
+        def _boom(*_a, **_k):
+            raise RuntimeError("service down")
+
+        monkeypatch.setattr(
+            "app.mod_sdk.erp_domain_dispatch.try_invoke_erp_domain_handler",
+            lambda *_a, **_k: None,
+        )
+        monkeypatch.setattr("app.mod_sdk.erp_customers_facade.customers_list", _boom)
         result = build_customers_query_response_dict(route)
         assert result["success"] is False
         assert "暂时不可用" in result["response"]
@@ -861,13 +928,14 @@ class TestBuildCustomersQueryResponseDict:
             {"customer_name": f"客户{i}", "contact_person": f"联系人{i}"} for i in range(15)
         ]
         mock_svc = MagicMock()
-        mock_svc.get_all.return_value = customers
+        mock_svc.get_all.return_value = {"success": True, "data": customers, "total": 15}
         self._patch_customer_service(monkeypatch, mock_svc)
         result = build_customers_query_response_dict(route)
         assert result["success"] is True
         # 响应里只列前 10 个，但 data 里前 20 个
-        assert "共找到 15 位客户" in result["response"]
+        assert "当前共有 15 位客户" in result["response"]
         assert len(result["data"]["customers"]) == 15
+        assert "未找到关键词" not in result["response"]
 
 
 # ---------------------------------------------------------------------------
@@ -1041,3 +1109,867 @@ class TestBuildLabelPrintResponseDict:
             mock_get.return_value = mock_svc
             result = build_label_print_response_dict(route)
         assert result["success"] is True
+
+
+# ---------------------------------------------------------------------------
+# ERP 槽位路由与响应（Task 7，吸收 Odoo 18：销售/报表/补货预警）
+# ---------------------------------------------------------------------------
+
+
+class TestRouteErpIntents:
+    """route_normal_mode_message 销售/报表/补货预警槽位分支。"""
+
+    def test_sales_keyword_销售订单(self):
+        result = route_normal_mode_message("销售订单")
+        assert result["intent"] == "sales_query"
+
+    def test_sales_keyword_报价单(self):
+        result = route_normal_mode_message("报价单")
+        assert result["intent"] == "sales_query"
+
+    def test_sales_keyword_销售(self):
+        result = route_normal_mode_message("销售明细")
+        assert result["intent"] == "sales_query"
+
+    def test_sales_keyword_收款(self):
+        result = route_normal_mode_message("收款记录")
+        assert result["intent"] == "sales_query"
+
+    def test_sales_keyword_开票(self):
+        result = route_normal_mode_message("开票情况")
+        assert result["intent"] == "sales_query"
+
+    def test_report_keyword_报表(self):
+        result = route_normal_mode_message("报表")
+        assert result["intent"] == "reports_query"
+
+    def test_report_keyword_销售报表(self):
+        result = route_normal_mode_message("销售报表")
+        assert result["intent"] == "reports_query"
+
+    def test_report_keyword_库存报表(self):
+        result = route_normal_mode_message("库存报表")
+        assert result["intent"] == "reports_query"
+
+    def test_report_keyword_看板(self):
+        result = route_normal_mode_message("经营看板")
+        assert result["intent"] == "reports_query"
+
+    def test_report_keyword_汇总(self):
+        result = route_normal_mode_message("月度汇总")
+        assert result["intent"] == "reports_query"
+
+    def test_replenish_keyword_补货(self):
+        result = route_normal_mode_message("补货建议")
+        assert result["intent"] == "replenishment_suggest"
+
+    def test_replenish_keyword_采购建议(self):
+        result = route_normal_mode_message("采购建议")
+        assert result["intent"] == "replenishment_suggest"
+
+
+class TestBuildSalesQueryResponseDict:
+    """build_sales_query_response_dict 分支测试。"""
+
+    def test_non_sales_query_returns_none(self):
+        result = build_sales_query_response_dict({"intent": "shipment", "slots": {}})
+        assert result is None
+
+    def test_no_orders(self):
+        route = {"intent": "sales_query", "slots": {"keyword": ""}}
+        with patch("app.application.sales_app_service.SalesAppService") as mock_cls:
+            mock_cls.return_value.query.return_value = {
+                "success": True,
+                "data": [],
+                "total": 0,
+            }
+            result = build_sales_query_response_dict(route)
+        assert result["success"] is True
+        assert "当前没有销售订单" in result["response"]
+
+    def test_with_orders(self):
+        route = {"intent": "sales_query", "slots": {"keyword": ""}}
+        with patch("app.application.sales_app_service.SalesAppService") as mock_cls:
+            mock_cls.return_value.query.return_value = {
+                "success": True,
+                "data": [
+                    {
+                        "order_no": "SO001",
+                        "customer_name": "七彩乐园",
+                        "total_amount": 100.0,
+                        "status": "paid",
+                    }
+                ],
+                "total": 1,
+            }
+            result = build_sales_query_response_dict(route)
+        assert result["success"] is True
+        assert "SO001" in result["response"]
+        assert "七彩乐园" in result["response"]
+
+    def test_service_failure(self):
+        route = {"intent": "sales_query", "slots": {"keyword": ""}}
+        with patch(
+            "app.application.sales_app_service.SalesAppService",
+            side_effect=RuntimeError("boom"),
+        ):
+            result = build_sales_query_response_dict(route)
+        assert result["success"] is False
+        assert "暂时不可用" in result["response"]
+        assert result["normal_slot_dispatch"] is True
+
+
+class TestBuildReportsQueryResponseDict:
+    """build_reports_query_response_dict 分支测试。"""
+
+    def test_non_reports_query_returns_none(self):
+        result = build_reports_query_response_dict({"intent": "shipment", "slots": {}})
+        assert result is None
+
+    def test_sales_report_default(self):
+        route = {"intent": "reports_query", "slots": {}}
+        with patch("app.services.report_service.ReportService") as mock_cls:
+            mock_svc = mock_cls.return_value
+            mock_svc.get_sales_report.return_value = {
+                "success": True,
+                "data": [{"product_name": "涂料", "quantity": 10, "amount": 100}],
+                "summary": {"total_quantity": 10, "total_amount": 100},
+            }
+            result = build_reports_query_response_dict(route, message="销售报表")
+        assert result["success"] is True
+        assert result["data"]["report_type"] == "销售"
+        assert result["normal_slot_dispatch"] is True
+
+    def test_inventory_report(self):
+        route = {"intent": "reports_query", "slots": {}}
+        with patch("app.services.report_service.ReportService") as mock_cls:
+            mock_svc = mock_cls.return_value
+            mock_svc.get_inventory_report.return_value = {
+                "success": True,
+                "data": [],
+                "summary": {},
+            }
+            result = build_reports_query_response_dict(route, message="库存报表")
+        assert result["success"] is True
+        assert result["data"]["report_type"] == "库存"
+
+    def test_purchase_report(self):
+        route = {"intent": "reports_query", "slots": {}}
+        with patch("app.services.report_service.ReportService") as mock_cls:
+            mock_svc = mock_cls.return_value
+            mock_svc.get_purchase_report.return_value = {
+                "success": True,
+                "data": [],
+                "summary": {},
+            }
+            result = build_reports_query_response_dict(route, message="采购报表")
+        assert result["success"] is True
+        assert result["data"]["report_type"] == "采购"
+
+    def test_dashboard_report(self):
+        route = {"intent": "reports_query", "slots": {}}
+        with patch("app.services.report_service.ReportService") as mock_cls:
+            mock_svc = mock_cls.return_value
+            mock_svc.get_dashboard_summary.return_value = {
+                "success": True,
+                "data": [],
+                "summary": {},
+            }
+            result = build_reports_query_response_dict(route, message="经营看板")
+        assert result["success"] is True
+        assert result["data"]["report_type"] == "经营看板"
+
+    def test_service_failure(self):
+        route = {"intent": "reports_query", "slots": {}}
+        with patch(
+            "app.services.report_service.ReportService",
+            side_effect=RuntimeError("boom"),
+        ):
+            result = build_reports_query_response_dict(route, message="报表")
+        assert result["success"] is False
+        assert "暂时不可用" in result["response"]
+
+
+class TestBuildReplenishmentSuggestResponseDict:
+    """build_replenishment_suggest_response_dict 分支测试。"""
+
+    def test_non_replenishment_returns_none(self):
+        result = build_replenishment_suggest_response_dict({"intent": "shipment", "slots": {}})
+        assert result is None
+
+    def test_no_suggestions(self):
+        route = {"intent": "replenishment_suggest", "slots": {}}
+        with patch(
+            "app.services.replenishment_service.suggest_replenishment",
+            return_value={"success": True, "data": [], "summary": {}},
+        ):
+            result = build_replenishment_suggest_response_dict(route)
+        assert result["success"] is True
+        assert "库存状态正常" in result["response"]
+
+    def test_with_suggestions(self):
+        route = {"intent": "replenishment_suggest", "slots": {}}
+        with patch(
+            "app.services.replenishment_service.suggest_replenishment",
+            return_value={
+                "success": True,
+                "data": [
+                    {
+                        "name": "原料A",
+                        "current_quantity": 5,
+                        "unit": "kg",
+                        "suggest_quantity": 10,
+                    }
+                ],
+                "summary": {"total_suggest_amount": 100.0},
+            },
+        ):
+            result = build_replenishment_suggest_response_dict(route)
+        assert result["success"] is True
+        assert "原料A" in result["response"]
+        assert "建议补 10" in result["response"]
+
+    def test_service_failure(self):
+        route = {"intent": "replenishment_suggest", "slots": {}}
+        with patch(
+            "app.services.replenishment_service.suggest_replenishment",
+            side_effect=RuntimeError("boom"),
+        ):
+            result = build_replenishment_suggest_response_dict(route)
+        assert result["success"] is False
+        assert "暂时不可用" in result["response"]
+        assert result["normal_slot_dispatch"] is True
+
+
+# ---------------------------------------------------------------------------
+# route_normal_mode_message — 其余分支（删除/物料/出货记录/采购/财务/知识库）
+# ---------------------------------------------------------------------------
+
+
+class TestRouteNormalModeMessageRemaining:
+    """route_normal_mode_message 删除/物料/出货记录/采购/财务/知识库分支。"""
+
+    def test_delete_keyword_删除(self):
+        result = route_normal_mode_message("删除A001")
+        assert result["intent"] == "delete_entity"
+        assert result["slots"]["keyword"] == "A001"
+
+    def test_delete_keyword_移除(self):
+        result = route_normal_mode_message("移除七彩乐园")
+        assert result["intent"] == "delete_entity"
+        assert result["slots"]["keyword"] == "七彩乐园"
+
+    def test_delete_keyword_without_target(self):
+        result = route_normal_mode_message("删除")
+        assert result["intent"] == "delete_entity"
+        assert result["slots"]["keyword"] == ""
+
+    def test_materials_keyword_物料(self):
+        result = route_normal_mode_message("物料")
+        assert result["intent"] == "materials_query"
+
+    def test_materials_keyword_原材料(self):
+        result = route_normal_mode_message("原材料")
+        assert result["intent"] == "materials_query"
+
+    def test_materials_keyword_材料(self):
+        result = route_normal_mode_message("材料")
+        assert result["intent"] == "materials_query"
+
+    def test_shipment_records_keyword_出货记录(self):
+        result = route_normal_mode_message("出货记录")
+        assert result["intent"] == "shipment_records_query"
+
+    def test_shipment_records_keyword_发货记录(self):
+        result = route_normal_mode_message("发货记录")
+        assert result["intent"] == "shipment_records_query"
+
+    def test_shipment_records_keyword_出货明细(self):
+        result = route_normal_mode_message("出货明细")
+        assert result["intent"] == "shipment_records_query"
+
+    def test_purchase_keyword_采购(self):
+        result = route_normal_mode_message("采购")
+        assert result["intent"] == "purchase_query"
+
+    def test_purchase_keyword_供应商(self):
+        result = route_normal_mode_message("供应商")
+        assert result["intent"] == "purchase_query"
+
+    def test_purchase_keyword_进货(self):
+        result = route_normal_mode_message("进货")
+        assert result["intent"] == "purchase_query"
+
+    def test_finance_keyword_财务(self):
+        result = route_normal_mode_message("财务")
+        assert result["intent"] == "finance_query"
+
+    def test_finance_keyword_凭证(self):
+        result = route_normal_mode_message("凭证")
+        assert result["intent"] == "finance_query"
+
+    def test_finance_keyword_对账(self):
+        result = route_normal_mode_message("对账")
+        assert result["intent"] == "finance_query"
+
+    def test_knowledge_keyword_知识库(self):
+        result = route_normal_mode_message("知识库")
+        assert result["intent"] == "knowledge_query"
+
+    def test_knowledge_keyword_帮助文档(self):
+        result = route_normal_mode_message("帮助文档")
+        assert result["intent"] == "knowledge_query"
+
+
+# ---------------------------------------------------------------------------
+# build_materials_query_response_dict
+# ---------------------------------------------------------------------------
+
+
+class TestBuildMaterialsQueryResponseDict:
+    """build_materials_query_response_dict 分支测试。"""
+
+    def test_non_materials_query_returns_none(self):
+        result = build_materials_query_response_dict({"intent": "shipment", "slots": {}})
+        assert result is None
+
+    def test_empty_no_keyword(self):
+        route = {"intent": "materials_query", "slots": {"keyword": ""}}
+        with patch("app.application.get_material_application_service") as mock_get:
+            mock_svc = MagicMock()
+            mock_svc.get_all_materials.return_value = {"success": True, "data": [], "total": 0}
+            mock_get.return_value = mock_svc
+            result = build_materials_query_response_dict(route)
+        assert result["success"] is True
+        assert "暂无数据" in result["response"]
+
+    def test_with_keyword_no_match(self):
+        route = {"intent": "materials_query", "slots": {"keyword": "xyz"}}
+        with patch("app.application.get_material_application_service") as mock_get:
+            mock_svc = MagicMock()
+            mock_svc.get_all_materials.return_value = {"success": True, "data": [], "total": 0}
+            mock_get.return_value = mock_svc
+            result = build_materials_query_response_dict(route)
+        assert result["success"] is True
+        assert "没有查到" in result["response"]
+
+    def test_with_items(self):
+        route = {"intent": "materials_query", "slots": {"keyword": ""}}
+        with patch("app.application.get_material_application_service") as mock_get:
+            mock_svc = MagicMock()
+            mock_svc.get_all_materials.return_value = {
+                "success": True,
+                "data": [{"name": "原料A", "quantity": 5, "unit": "kg", "material_code": "M001"}],
+                "total": 1,
+            }
+            mock_get.return_value = mock_svc
+            result = build_materials_query_response_dict(route)
+        assert result["success"] is True
+        assert "原料A" in result["response"]
+        assert result["data"]["total"] == 1
+
+    def test_service_failure_flag(self):
+        route = {"intent": "materials_query", "slots": {"keyword": ""}}
+        with patch("app.application.get_material_application_service") as mock_get:
+            mock_svc = MagicMock()
+            mock_svc.get_all_materials.return_value = {
+                "success": False,
+                "message": "物料工具失败",
+            }
+            mock_get.return_value = mock_svc
+            result = build_materials_query_response_dict(route)
+        assert result["success"] is False
+        assert "物料工具失败" in result["response"]
+
+    def test_service_failure_exception(self):
+        route = {"intent": "materials_query", "slots": {"keyword": ""}}
+        with patch(
+            "app.application.get_material_application_service",
+            side_effect=RuntimeError("boom"),
+        ):
+            result = build_materials_query_response_dict(route)
+        assert result["success"] is False
+        assert "暂时不可用" in result["response"]
+
+    def test_more_than_10_truncated(self):
+        route = {"intent": "materials_query", "slots": {"keyword": ""}}
+        items = [
+            {"name": f"原料{i}", "quantity": i, "unit": "kg", "material_code": f"M{i}"}
+            for i in range(15)
+        ]
+        with patch("app.application.get_material_application_service") as mock_get:
+            mock_svc = MagicMock()
+            mock_svc.get_all_materials.return_value = {
+                "success": True,
+                "data": items,
+                "total": 15,
+            }
+            mock_get.return_value = mock_svc
+            result = build_materials_query_response_dict(route)
+        assert result["success"] is True
+        assert "当前共有 15 种物料" in result["response"]
+
+
+# ---------------------------------------------------------------------------
+# build_shipment_records_query_response_dict
+# ---------------------------------------------------------------------------
+
+
+class TestBuildShipmentRecordsQueryResponseDict:
+    """build_shipment_records_query_response_dict 分支测试。"""
+
+    def test_non_shipment_records_returns_none(self):
+        result = build_shipment_records_query_response_dict({"intent": "shipment", "slots": {}})
+        assert result is None
+
+    def test_empty_no_keyword(self):
+        route = {"intent": "shipment_records_query", "slots": {"keyword": ""}}
+        with patch("app.bootstrap.get_shipment_app_service") as mock_get:
+            mock_svc = MagicMock()
+            mock_svc.get_shipment_records.return_value = []
+            mock_get.return_value = mock_svc
+            result = build_shipment_records_query_response_dict(route)
+        assert result["success"] is True
+        assert "没有出货记录" in result["response"]
+
+    def test_with_keyword_no_match(self):
+        route = {"intent": "shipment_records_query", "slots": {"keyword": "xyz"}}
+        with patch("app.bootstrap.get_shipment_app_service") as mock_get:
+            mock_svc = MagicMock()
+            mock_svc.get_shipment_records.return_value = []
+            mock_get.return_value = mock_svc
+            result = build_shipment_records_query_response_dict(route)
+        assert result["success"] is True
+        assert "没有查到" in result["response"]
+
+    def test_with_records(self):
+        route = {"intent": "shipment_records_query", "slots": {"keyword": ""}}
+        with patch("app.bootstrap.get_shipment_app_service") as mock_get:
+            mock_svc = MagicMock()
+            mock_svc.get_shipment_records.return_value = [
+                {"unit_name": "七彩乐园", "date": "2026-08-01"},
+                {"purchase_unit": "甲公司", "created_at": "2026-08-02"},
+            ]
+            mock_get.return_value = mock_svc
+            result = build_shipment_records_query_response_dict(route)
+        assert result["success"] is True
+        assert "七彩乐园" in result["response"]
+        assert "共 2 条出货记录" in result["response"]
+
+    def test_service_failure(self):
+        route = {"intent": "shipment_records_query", "slots": {"keyword": ""}}
+        with patch(
+            "app.bootstrap.get_shipment_app_service",
+            side_effect=RuntimeError("boom"),
+        ):
+            result = build_shipment_records_query_response_dict(route)
+        assert result["success"] is False
+        assert "暂时不可用" in result["response"]
+
+    def test_records_no_unit_field(self):
+        route = {"intent": "shipment_records_query", "slots": {"keyword": ""}}
+        with patch("app.bootstrap.get_shipment_app_service") as mock_get:
+            mock_svc = MagicMock()
+            mock_svc.get_shipment_records.return_value = [{"id": 1}]
+            mock_get.return_value = mock_svc
+            result = build_shipment_records_query_response_dict(route)
+        assert result["success"] is True
+        assert "-" in result["response"]
+
+
+# ---------------------------------------------------------------------------
+# build_purchase_query_response_dict
+# ---------------------------------------------------------------------------
+
+
+class TestBuildPurchaseQueryResponseDict:
+    """build_purchase_query_response_dict 分支测试。"""
+
+    def test_non_purchase_returns_none(self):
+        result = build_purchase_query_response_dict({"intent": "shipment", "slots": {}})
+        assert result is None
+
+    def test_supplier_empty(self):
+        route = {"intent": "purchase_query", "slots": {"keyword": ""}}
+        with patch("app.application.facades.inventory_facade.PurchaseService") as mock_cls:
+            mock_svc = mock_cls.return_value
+            mock_svc.get_suppliers.return_value = {"data": []}
+            result = build_purchase_query_response_dict(route, message="有哪些供应商")
+        assert result["success"] is True
+        assert "没有供应商数据" in result["response"]
+
+    def test_supplier_with_keyword_no_match(self):
+        route = {"intent": "purchase_query", "slots": {"keyword": ""}}
+        with patch("app.application.facades.inventory_facade.PurchaseService") as mock_cls:
+            mock_svc = mock_cls.return_value
+            mock_svc.get_suppliers.return_value = {"data": []}
+            result = build_purchase_query_response_dict(route, message="供应商 不存在")
+        assert result["success"] is True
+        assert "没有查到" in result["response"]
+
+    def test_supplier_with_items(self):
+        route = {"intent": "purchase_query", "slots": {"keyword": ""}}
+        with patch("app.application.facades.inventory_facade.PurchaseService") as mock_cls:
+            mock_svc = mock_cls.return_value
+            mock_svc.get_suppliers.return_value = {
+                "data": [{"name": "供方A", "contact_person": "张三"}]
+            }
+            result = build_purchase_query_response_dict(route, message="供应商")
+        assert result["success"] is True
+        assert "供方A" in result["response"]
+
+    def test_orders_empty(self):
+        route = {"intent": "purchase_query", "slots": {"keyword": ""}}
+        with patch("app.application.facades.inventory_facade.PurchaseService") as mock_cls:
+            mock_svc = mock_cls.return_value
+            mock_svc.get_purchase_orders.return_value = {"data": [], "total": 0}
+            result = build_purchase_query_response_dict(route, message="采购订单")
+        assert result["success"] is True
+        assert "没有采购订单" in result["response"]
+
+    def test_orders_with_items(self):
+        route = {"intent": "purchase_query", "slots": {"keyword": ""}}
+        with patch("app.application.facades.inventory_facade.PurchaseService") as mock_cls:
+            mock_svc = mock_cls.return_value
+            mock_svc.get_purchase_orders.return_value = {
+                "data": [{"order_no": "PO01", "supplier_name": "供方A", "total_amount": "100.5"}],
+                "total": 1,
+            }
+            result = build_purchase_query_response_dict(route, message="采购")
+        assert result["success"] is True
+        assert "PO01" in result["response"]
+
+    def test_orders_more_than_10(self):
+        route = {"intent": "purchase_query", "slots": {"keyword": ""}}
+        orders = [
+            {"order_no": f"PO{i}", "supplier_name": f"S{i}", "total_amount": i} for i in range(15)
+        ]
+        with patch("app.application.facades.inventory_facade.PurchaseService") as mock_cls:
+            mock_svc = mock_cls.return_value
+            mock_svc.get_purchase_orders.return_value = {"data": orders, "total": 15}
+            result = build_purchase_query_response_dict(route, message="采购")
+        assert result["success"] is True
+        assert "其余 5 条" in result["response"]
+
+    def test_service_failure(self):
+        route = {"intent": "purchase_query", "slots": {"keyword": ""}}
+        with patch(
+            "app.application.facades.inventory_facade.PurchaseService",
+            side_effect=RuntimeError("boom"),
+        ):
+            result = build_purchase_query_response_dict(route, message="采购")
+        assert result["success"] is False
+        assert "暂时不可用" in result["response"]
+
+
+# ---------------------------------------------------------------------------
+# build_finance_query_response_dict
+# ---------------------------------------------------------------------------
+
+
+class TestBuildFinanceQueryResponseDict:
+    """build_finance_query_response_dict 分支测试。"""
+
+    def test_non_finance_returns_none(self):
+        result = build_finance_query_response_dict({"intent": "shipment", "slots": {}})
+        assert result is None
+
+    def test_empty(self):
+        route = {"intent": "finance_query", "slots": {}}
+        with patch("app.application.finance_app_service.FinanceAppService") as mock_cls:
+            mock_cls.return_value.list_transactions.return_value = {
+                "data": [],
+                "total": 0,
+            }
+            result = build_finance_query_response_dict(route)
+        assert result["success"] is True
+        assert "没有财务收支" in result["response"]
+
+    def test_with_items_income_expense(self):
+        route = {"intent": "finance_query", "slots": {}}
+        with patch("app.application.finance_app_service.FinanceAppService") as mock_cls:
+            mock_cls.return_value.list_transactions.return_value = {
+                "data": [
+                    {
+                        "transaction_type": "income",
+                        "amount": 100,
+                        "transaction_date": "2026-08-01",
+                        "counterparty_name": "甲",
+                    },
+                    {
+                        "transaction_type": "expense",
+                        "amount": "50",
+                        "transaction_date": "2026-08-02",
+                        "counterparty_name": "乙",
+                    },
+                ],
+                "total": 2,
+            }
+            result = build_finance_query_response_dict(route)
+        assert result["success"] is True
+        assert "收入" in result["response"]
+        assert "支出" in result["response"]
+
+    def test_more_than_10(self):
+        route = {"intent": "finance_query", "slots": {}}
+        items = [
+            {
+                "transaction_type": "income",
+                "amount": i,
+                "transaction_date": "2026-08-01",
+                "counterparty_name": "",
+            }
+            for i in range(15)
+        ]
+        with patch("app.application.finance_app_service.FinanceAppService") as mock_cls:
+            mock_cls.return_value.list_transactions.return_value = {
+                "data": items,
+                "total": 15,
+            }
+            result = build_finance_query_response_dict(route)
+        assert result["success"] is True
+        assert "其余 5 条" in result["response"]
+
+    def test_service_failure(self):
+        route = {"intent": "finance_query", "slots": {}}
+        with patch(
+            "app.application.finance_app_service.FinanceAppService",
+            side_effect=RuntimeError("boom"),
+        ):
+            result = build_finance_query_response_dict(route)
+        assert result["success"] is False
+        assert "暂时不可用" in result["response"]
+
+
+# ---------------------------------------------------------------------------
+# build_knowledge_query_response_dict
+# ---------------------------------------------------------------------------
+
+
+class TestBuildKnowledgeQueryResponseDict:
+    """build_knowledge_query_response_dict 分支测试。"""
+
+    def test_non_knowledge_returns_none(self):
+        result = build_knowledge_query_response_dict({"intent": "shipment", "slots": {}})
+        assert result is None
+
+    def test_knowledge_returns_guide(self):
+        result = build_knowledge_query_response_dict({"intent": "knowledge_query", "slots": {}})
+        assert result["success"] is True
+        assert "知识库" in result["response"]
+        assert result["data"]["autoAction"]["type"] == "open_knowledge"
+
+
+# ---------------------------------------------------------------------------
+# _request_tenant_id
+# ---------------------------------------------------------------------------
+
+
+class TestRequestTenantId:
+    """_request_tenant_id 分支测试。"""
+
+    def test_none_request(self):
+        from app.application.normal_chat_dispatch import _request_tenant_id
+
+        assert _request_tenant_id(None) is None
+
+    def test_state_tenant_id(self):
+        from app.application.normal_chat_dispatch import _request_tenant_id
+
+        request = MagicMock()
+        request.state.tenant_id = 7
+        assert _request_tenant_id(request) == 7
+
+    def test_state_tenant_id_zero(self):
+        from app.application.normal_chat_dispatch import _request_tenant_id
+
+        request = MagicMock()
+        request.state.tenant_id = 0
+        assert _request_tenant_id(request) == 0
+
+    def test_state_tenant_id_str(self):
+        from app.application.normal_chat_dispatch import _request_tenant_id
+
+        request = MagicMock()
+        request.state.tenant_id = "9"
+        assert _request_tenant_id(request) == 9
+
+    def test_state_tenant_id_none_falls_back(self):
+        from app.application.normal_chat_dispatch import _request_tenant_id
+
+        request = MagicMock()
+        request.state.tenant_id = None
+        with patch(
+            "app.infrastructure.auth.tenant_context.resolve_tenant_id",
+            return_value=3,
+        ):
+            assert _request_tenant_id(request) == 3
+
+    def test_state_tenant_id_invalid_falls_back(self):
+        from app.application.normal_chat_dispatch import _request_tenant_id
+
+        request = MagicMock()
+        request.state.tenant_id = "abc"
+        with patch(
+            "app.infrastructure.auth.tenant_context.resolve_tenant_id",
+            return_value=4,
+        ):
+            assert _request_tenant_id(request) == 4
+
+    def test_resolve_raises_returns_none(self):
+        from app.application.normal_chat_dispatch import _request_tenant_id
+
+        request = MagicMock()
+        request.state.tenant_id = None
+        with patch(
+            "app.infrastructure.auth.tenant_context.resolve_tenant_id",
+            side_effect=RuntimeError("boom"),
+        ):
+            assert _request_tenant_id(request) is None
+
+
+# ---------------------------------------------------------------------------
+# try_normal_slot_read_payload — 更多路径
+# ---------------------------------------------------------------------------
+
+
+class TestTryNormalSlotReadPayloadMore:
+    """try_normal_slot_read_payload 更多意图分支测试。"""
+
+    def test_empty_message(self):
+        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+
+        assert try_normal_slot_read_payload("") is None
+
+    def test_product_query(self):
+        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+
+        with patch(
+            "app.application.normal_chat_dispatch.build_product_query_response_dict",
+            return_value={"success": True, "response": "产品结果"},
+        ):
+            payload = try_normal_slot_read_payload("查询A001")
+        assert payload is not None
+        assert payload["response"] == "产品结果"
+
+    def test_inventory_alert(self):
+        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+
+        with patch(
+            "app.application.normal_chat_dispatch.build_inventory_alert_response_dict",
+            return_value={"success": True, "response": "库存正常"},
+        ):
+            payload = try_normal_slot_read_payload("库存")
+        assert payload is not None
+        assert payload["response"] == "库存正常"
+
+    def test_label_print(self):
+        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+
+        with patch(
+            "app.application.normal_chat_dispatch.build_label_print_response_dict",
+            return_value={"success": False, "response": "请补充型号"},
+        ):
+            payload = try_normal_slot_read_payload("标签")
+        assert payload is not None
+        assert "请补充型号" in payload["response"]
+
+    def test_materials_query(self):
+        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+
+        with patch(
+            "app.application.normal_chat_dispatch.build_materials_query_response_dict",
+            return_value={"success": True, "response": "物料结果"},
+        ):
+            payload = try_normal_slot_read_payload("物料")
+        assert payload is not None
+
+    def test_shipment_records_query(self):
+        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+
+        with patch(
+            "app.application.normal_chat_dispatch.build_shipment_records_query_response_dict",
+            return_value={"success": True, "response": "出货记录"},
+        ):
+            payload = try_normal_slot_read_payload("出货记录")
+        assert payload is not None
+
+    def test_purchase_query(self):
+        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+
+        with patch(
+            "app.application.normal_chat_dispatch.build_purchase_query_response_dict",
+            return_value={"success": True, "response": "采购结果"},
+        ):
+            payload = try_normal_slot_read_payload("采购")
+        assert payload is not None
+
+    def test_finance_query(self):
+        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+
+        with patch(
+            "app.application.normal_chat_dispatch.build_finance_query_response_dict",
+            return_value={"success": True, "response": "财务结果"},
+        ):
+            payload = try_normal_slot_read_payload("财务")
+        assert payload is not None
+
+    def test_knowledge_query(self):
+        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+
+        with patch(
+            "app.application.normal_chat_dispatch.build_knowledge_query_response_dict",
+            return_value={"success": True, "response": "知识库"},
+        ):
+            payload = try_normal_slot_read_payload("知识库")
+        assert payload is not None
+
+    def test_sales_query(self):
+        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+
+        with patch(
+            "app.application.normal_chat_dispatch.build_sales_query_response_dict",
+            return_value={"success": True, "response": "销售结果"},
+        ):
+            payload = try_normal_slot_read_payload("销售订单")
+        assert payload is not None
+
+    def test_reports_query(self):
+        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+
+        with patch(
+            "app.application.normal_chat_dispatch.build_reports_query_response_dict",
+            return_value={"success": True, "response": "报表结果"},
+        ):
+            payload = try_normal_slot_read_payload("报表")
+        assert payload is not None
+
+    def test_replenishment_suggest(self):
+        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+
+        with patch(
+            "app.application.normal_chat_dispatch.build_replenishment_suggest_response_dict",
+            return_value={"success": True, "response": "补货结果"},
+        ):
+            payload = try_normal_slot_read_payload("补货建议")
+        assert payload is not None
+
+    def test_payload_success_false_no_response_returns_none(self):
+        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+
+        with patch(
+            "app.application.normal_chat_dispatch.build_product_query_response_dict",
+            return_value={"success": False},
+        ):
+            payload = try_normal_slot_read_payload("查询A001")
+        assert payload is None
+
+    def test_payload_not_dict_returns_none(self):
+        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+
+        with patch(
+            "app.application.normal_chat_dispatch.build_product_query_response_dict",
+            return_value="not a dict",
+        ):
+            payload = try_normal_slot_read_payload("查询A001")
+        assert payload is None

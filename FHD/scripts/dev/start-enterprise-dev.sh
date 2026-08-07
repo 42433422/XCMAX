@@ -17,12 +17,10 @@ source "${SCRIPT_DIR}/ensure_dev_proxy_bypass.sh"
 export XCAGI_PRODUCT_SKU="${XCAGI_PRODUCT_SKU:-enterprise}"
 export XCAGI_DATA_DIR="${XCAGI_DATA_DIR:-${XCAGI_DIR}/data/desktop-dev}"
 export XCAGI_MODS_ROOT="${XCAGI_MODS_ROOT:-${FHD_ROOT}/mods}"
-ADMIN_MODS_RUNTIME="${FHD_ROOT}/mods-admin-runtime"
+ADMIN_MODS_RUNTIME="${FHD_ROOT}/mods"
 
-if [[ ! -d "${ADMIN_MODS_RUNTIME}/xcagi-planner-bridge" ]]; then
-  echo "[prep] 同步管理端 Mod 包 → mods-admin-runtime/ ..."
-  bash "${SCRIPT_DIR}/sync-admin-mod-runtime.sh"
-fi
+# 统一派发：SSOT mods/ → XCAGI/mods（后端运行时副本），保证开发启动时副本不漂移
+"${PYTHON:-python3}" "${SCRIPT_DIR}/mods_ssot.py" sync >/dev/null && echo "[prep] mods_ssot.py sync OK" || echo "[warn] mods_ssot.py sync 未执行（忽略）"
 export XCAGI_MODS_ADMIN_RUNTIME="${XCAGI_MODS_ADMIN_RUNTIME:-${ADMIN_MODS_RUNTIME}}"
 
 # 桌面开发默认走本地 MODstore :8788；演示号已在官网注册，无本地市场时用 XCAGI_USE_REMOTE_MARKET=1
