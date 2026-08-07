@@ -480,16 +480,18 @@ class TestUnifiedChatSinglePayload:
             result = unified_chat_single_payload("查询产品", "user1", "127.0.0.1", "normal", None)
             assert "success" in result
 
-    def test_other_intent_default_response(self):
+    def test_other_intent_runs_planning(self):
+        # 全局启用多步编排后：unified_chat 对普通消息兜底走 process_chat(source="pro")，
+        # 进入多步编排（计划→查询→执行），而非 legacy 默认响应。
         with (
             patch("app.utils.ai_helpers.is_pro_source", return_value=False),
             patch("app.utils.ai_helpers.is_professional_mode", return_value=False),
             patch("app.utils.ai_helpers.is_qclaw_source", return_value=False),
             patch(
                 "app.application.normal_chat_dispatch.route_normal_mode_message",
-                return_value={"intent": "other"},
+                return_value={"intent": "unknown"},
             ),
         ):
             result = unified_chat_single_payload("你好", "user1", "127.0.0.1", "normal", None)
             assert result["success"] is True
-            assert "两套独立能力" in result["response"]
+            assert "工作流" in result["response"]

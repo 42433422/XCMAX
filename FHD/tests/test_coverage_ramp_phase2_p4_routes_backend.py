@@ -12,7 +12,6 @@ import pytest
 
 from app.contexts.context_notifier import get_context_notifier
 from app.infrastructure.persistence.extract_log_store_impl import SQLAlchemyExtractLogStore
-from app.infrastructure.persistence.wechat_contact_store_impl import SQLAlchemyWechatContactStore
 
 
 def _fake_extract_row(**kwargs):
@@ -83,49 +82,6 @@ def test_extract_log_delete_success() -> None:
     with _mock_extract_db(rowcount=1):
         out = SQLAlchemyExtractLogStore().delete(1)
     assert out["success"] is True
-
-
-@contextmanager
-def _mock_wechat_db(rows=None):
-    db = MagicMock()
-    db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = (
-        rows or []
-    )
-
-    @contextmanager
-    def fake_get_db():
-        yield db
-
-    with patch("app.infrastructure.persistence.wechat_contact_store_impl.get_db", fake_get_db):
-        yield db
-
-
-def test_wechat_contact_list_empty() -> None:
-    with _mock_wechat_db():
-        out = SQLAlchemyWechatContactStore().list_contacts(keyword="张", limit=10)
-    assert out == []
-
-
-def test_wechat_contact_list_with_row() -> None:
-    row = SimpleNamespace(
-        id=1,
-        username="wxid_1",
-        wechat_id="wxid_1",
-        contact_name="张三",
-        nickname="张三",
-        remark="客户A",
-        contact_type="friend",
-        is_starred=1,
-        is_active=1,
-        tags=None,
-        last_message_at=None,
-        created_at=datetime(2026, 1, 1),
-        updated_at=datetime(2026, 1, 2),
-    )
-    with _mock_wechat_db([row]):
-        out = SQLAlchemyWechatContactStore().list_contacts(limit=5)
-    assert len(out) == 1
-    assert out[0]["contact_name"] == "张三" or out[0].get("nickname") == "张三"
 
 
 def test_context_notifier_default_none() -> None:

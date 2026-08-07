@@ -239,6 +239,7 @@ class AIChatWorkflowResponseMixin:
         run_result,
         thinking_steps: str = "",
         user_message: str = "",
+        state_updates: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         lines = [f"工作流: {plan.intent}", f"计划ID: {plan.plan_id}"]
         if thinking_steps:
@@ -331,6 +332,7 @@ class AIChatWorkflowResponseMixin:
                     )
                     if isinstance(getattr(run_result, "final_context", {}), dict)
                     else [],
+                    "state_updates": state_updates or [],
                 },
             },
         }

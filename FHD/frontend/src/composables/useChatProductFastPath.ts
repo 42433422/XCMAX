@@ -1,8 +1,6 @@
 /** 产品关键词快路径（跳过完整 Planner，直接查产品库）。 */
 import productsApi from '@/api/products'
 import type { ChatPlannerPayload } from '@/types/chat'
-import { asRecord } from '@/utils/typeGuards'
-
 export type ChatProductFastPathDeps = {
   addAndSaveMessage: (content: string, role: 'ai') => Promise<void>
   syncTaskFromChatResponse: (payload: ChatPlannerPayload, userText: string) => void

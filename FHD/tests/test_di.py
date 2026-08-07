@@ -32,14 +32,6 @@ class TestServiceContainer:
         container.invalidate_customer_application_service()
         assert container._customer_application_service is None
 
-    def test_invalidate_wechat_contact_application_service(self):
-        container = ServiceContainer()
-        container._wechat_contact_application_service = MagicMock()
-        container._wechat_contact_store = MagicMock()
-        container.invalidate_wechat_contact_application_service()
-        assert container._wechat_contact_application_service is None
-        assert container._wechat_contact_store is None
-
     def test_invalidate_shipment_wiring(self):
         container = ServiceContainer()
         container._shipment_application_service_core = MagicMock()

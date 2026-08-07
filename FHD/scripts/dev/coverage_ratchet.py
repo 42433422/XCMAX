@@ -21,7 +21,16 @@
 数据来源（由测试命令预先产出，棘轮不跑测试）
 --------------------------------------------
 * 后端：``coverage.json``（``pytest --cov --cov-branch --cov-report=json:coverage.json``）
+* 行为：``coverage-behavior.json``（``pytest -m 'not coverage_ramp' --cov --cov-branch
+  --cov-report=json:coverage-behavior.json``，排除行覆盖率填充 stub 的真实行为口径）
 * 前端：``frontend/coverage/coverage-summary.json``（vitest ``json-summary`` reporter）
+
+``--behavior``（Delta A，2026-08-05）
+------------------------------------
+后端覆盖率门禁唯一硬 gate 已切换为**行为口径**（排除 ``coverage_ramp`` stub 注水）。
+``--check --behavior`` 读 ``coverage-behavior.json`` 计算行/分支，与
+``metrics/coverage_ratchet_baseline.json`` 新增的 ``behavior_floors {lines, branches}``
+比对，回退即退出码 1。不带 ``--behavior`` 时行为完全不变（向后兼容）。
 
 由于开启 branch 后 coverage 自带 fail_under 会按合并指标拦截，标准测量命令应传
 ``--cov-fail-under=0`` 把门禁交给本棘轮（``--check``）。
@@ -31,6 +40,7 @@
 用法::
 
     python scripts/dev/coverage_ratchet.py --check     # CI 门禁：回退即失败
+    python scripts/dev/coverage_ratchet.py --check --behavior --require-backend --record  # 行为 gate（Delta A）
     python scripts/dev/coverage_ratchet.py --bump      # 提升基线到当前值（只升）
     python scripts/dev/coverage_ratchet.py --history    # 查看趋势（--record 追加快照）
 """
@@ -50,6 +60,7 @@ FHD_ROOT = Path(__file__).resolve().parents[2]
 PYPROJECT = FHD_ROOT / "pyproject.toml"
 VITEST_CONFIG = FHD_ROOT / "frontend" / "vitest.config.js"
 BACKEND_JSON_DEFAULT = FHD_ROOT / "coverage.json"
+BEHAVIOR_JSON_DEFAULT = FHD_ROOT / "coverage-behavior.json"
 FRONTEND_SUMMARY_DEFAULT = FHD_ROOT / "frontend" / "coverage" / "coverage-summary.json"
 BASELINE = FHD_ROOT / "metrics" / "coverage_ratchet_baseline.json"
 DUAL_SUMMARY = FHD_ROOT / "metrics" / "coverage-dual-summary.json"
@@ -269,13 +280,15 @@ def read_history_peaks() -> dict[str, float]:
     return peaks
 
 
-def append_history(be: dict | None, fe: dict | None, note: str = "") -> None:
+def append_history(be: dict | None, fe: dict | None, note: str = "", beh: dict | None = None) -> None:
     rec = {
         "date": date.today().isoformat(),
         "ts": datetime.now(timezone.utc).isoformat(),
         "backend_lines": be["line_pct"] if be else None,
         "backend_branches": be["branch_pct"] if be else None,
         "backend_statements": be["num_statements"] if be else None,
+        "behavior_lines": beh["line_pct"] if beh else None,
+        "behavior_branches": beh["branch_pct"] if beh else None,
         "frontend_lines": fe["lines"] if fe else None,
         "frontend_branches": fe["branches"] if fe else None,
         "frontend_functions": fe["functions"] if fe else None,
@@ -293,6 +306,11 @@ def append_history(be: dict | None, fe: dict | None, note: str = "") -> None:
 # --------------------------------------------------------------------------- #
 def cmd_check(args: argparse.Namespace) -> int:
     be = read_backend(args.coverage_json)
+    beh = (
+        read_backend(getattr(args, "behavior_json", BEHAVIOR_JSON_DEFAULT))
+        if getattr(args, "behavior", False)
+        else None
+    )
     fe = read_frontend(args.frontend_summary)
     base = load_baseline()
     line_floor = read_fail_under(PYPROJECT)
@@ -301,6 +319,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     if branch_floor is None:
         branch_floor = base.get("backend_branch_floor")
     fe_floors = base.get("frontend_floors", {})
+    behavior_floors = base.get("behavior_floors", {})
     
     # 峰值硬阻断：读取历史峰值
     peaks = read_history_peaks() if args.peak_floor else {}
@@ -381,17 +400,54 @@ def cmd_check(args: argparse.Namespace) -> int:
                 )
                 failed = True
 
+    # 行为覆盖率（排除 coverage_ramp stub 口径）：唯一硬 gate（Delta A）。
+    if getattr(args, "behavior", False):
+        beh_line_floor = behavior_floors.get("lines")
+        beh_branch_floor = behavior_floors.get("branches")
+        if beh is None:
+            if args.require_backend:
+                print(
+                    f"ERROR: 缺行为覆盖率 coverage-behavior.json：{getattr(args, 'behavior_json', BEHAVIOR_JSON_DEFAULT)}",
+                    file=sys.stderr,
+                )
+                return 1
+            print(
+                f"[cov-ratchet] 跳过行为覆盖率（无 {getattr(args, 'behavior_json', BEHAVIOR_JSON_DEFAULT)}）"
+            )
+        else:
+            bp = "n/a" if beh["branch_pct"] is None else f"{beh['branch_pct']}%"
+            print(
+                f"[cov-ratchet] behavior line={beh['line_pct']}% (floor {beh_line_floor}) "
+                f"branch={bp} (floor {beh_branch_floor}) jitter={jitter}%"
+            )
+            if beh_line_floor is not None and beh["line_pct"] + jitter + eps < float(beh_line_floor):
+                print(
+                    f"FAIL: behavior line coverage regression — 行为行覆盖率 {beh['line_pct']}% < floor {beh_line_floor}% (−jitter {jitter}%)",
+                    file=sys.stderr,
+                )
+                failed = True
+            if (
+                beh_branch_floor is not None
+                and beh["branch_pct"] is not None
+                and beh["branch_pct"] + jitter + eps < float(beh_branch_floor)
+            ):
+                print(
+                    f"FAIL: behavior branch coverage regression — 行为分支覆盖率 {beh['branch_pct']}% < floor {beh_branch_floor}% (−jitter {jitter}%)",
+                    file=sys.stderr,
+                )
+                failed = True
+
     if failed:
         print("[cov-ratchet] 覆盖率回退被阻断；请补测后再提交。", file=sys.stderr)
         # 即使回退也记录 history（note=check-fail），让趋势线反映回退事件。
-        if args.record and (be is not None or fe is not None):
-            append_history(be, fe, note="check-fail")
+        if args.record and (be is not None or fe is not None or beh is not None):
+            append_history(be, fe, note="check-fail", beh=beh)
             print("[cov-ratchet] 已追加快照到 coverage-history.jsonl (note=check-fail)")
         return 1
     # check 通过时若显式 --record，也写 history（note=check），让趋势线连续。
     # CI 应传 --record；本地开发者默认不传，避免噪音。
-    if args.record and (be is not None or fe is not None):
-        append_history(be, fe, note="check")
+    if args.record and (be is not None or fe is not None or beh is not None):
+        append_history(be, fe, note="check", beh=beh)
         print("[cov-ratchet] 已追加快照到 coverage-history.jsonl (note=check)")
     print("[cov-ratchet] OK — 覆盖率未回退")
     return 0
@@ -399,6 +455,11 @@ def cmd_check(args: argparse.Namespace) -> int:
 
 def cmd_bump(args: argparse.Namespace) -> int:
     be = read_backend(args.coverage_json)
+    beh = (
+        read_backend(getattr(args, "behavior_json", BEHAVIOR_JSON_DEFAULT))
+        if getattr(args, "behavior", False)
+        else None
+    )
     fe = read_frontend(args.frontend_summary)
     base = load_baseline()
     changed = False
@@ -434,6 +495,23 @@ def cmd_bump(args: argparse.Namespace) -> int:
             if sync_vitest_thresholds({k: int(v) for k, v in ff.items()}):
                 print("[cov-ratchet] vitest.config.js thresholds 已同步")
 
+    # 行为覆盖率 floor 只升不降（Delta A 口径）
+    if beh is not None:
+        bf = base.setdefault("behavior_floors", {})
+        cur_l = float(bf.get("lines", 0) or 0)
+        new_l = _floor(beh["line_pct"], args.margin)
+        if new_l > cur_l:
+            bf["lines"] = new_l
+            print(f"[cov-ratchet] behavior 行 floor {cur_l:g} -> {new_l}")
+            changed = True
+        if beh["branch_pct"] is not None:
+            cur_b = float(bf.get("branches", 0) or 0)
+            new_b = _floor(beh["branch_pct"], args.margin)
+            if new_b > cur_b:
+                bf["branches"] = new_b
+                print(f"[cov-ratchet] behavior 分支 floor {cur_b:g} -> {new_b}")
+                changed = True
+
     if changed:
         # 补齐可复现性元数据：镜像行 floor、时间戳、最近实测值
         base["updated"] = date.today().isoformat()
@@ -442,11 +520,14 @@ def cmd_bump(args: argparse.Namespace) -> int:
         if be:
             measured["backend_lines"] = be["line_pct"]
             measured["backend_branches"] = be["branch_pct"]
+        if beh:
+            measured["behavior_lines"] = beh["line_pct"]
+            measured["behavior_branches"] = beh["branch_pct"]
         if fe:
             for key in FE_KEYS:
                 measured[f"frontend_{key}"] = fe[key]
         save_baseline(base)
-        append_history(be, fe, note="bump")
+        append_history(be, fe, note="bump", beh=beh)
         print("[cov-ratchet] 基线已提升并记录历史。")
     else:
         print("[cov-ratchet] 无提升（未超过现有 floor），基线不变。")
@@ -456,8 +537,13 @@ def cmd_bump(args: argparse.Namespace) -> int:
 def cmd_history(args: argparse.Namespace) -> int:
     if args.record:
         be = read_backend(args.coverage_json)
+        beh = (
+        read_backend(getattr(args, "behavior_json", BEHAVIOR_JSON_DEFAULT))
+        if getattr(args, "behavior", False)
+        else None
+    )
         fe = read_frontend(args.frontend_summary)
-        append_history(be, fe, note="record")
+        append_history(be, fe, note="record", beh=beh)
         print("[cov-ratchet] 已追加快照到 coverage-history.jsonl")
     if not HISTORY.is_file():
         print("(暂无历史)")
@@ -470,7 +556,9 @@ def cmd_history(args: argparse.Namespace) -> int:
             continue
         print(
             f"{r.get('date','')} be_line={r.get('backend_lines')}% "
-            f"be_branch={r.get('backend_branches')}% fe_lines={r.get('frontend_lines')}% "
+            f"be_branch={r.get('backend_branches')}% "
+            f"bh_line={r.get('behavior_lines')}% bh_branch={r.get('behavior_branches')}% "
+            f"fe_lines={r.get('frontend_lines')}% "
             f"fe_func={r.get('frontend_functions')}% {r.get('commit') or ''} {r.get('note','')}"
         )
     return 0
@@ -483,6 +571,14 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--bump", action="store_true", help="把当前实测提升为新 floor（只升不降）")
     mode.add_argument("--history", action="store_true", help="打印趋势（配合 --record 追加快照）")
     parser.add_argument("--coverage-json", type=Path, default=BACKEND_JSON_DEFAULT, help="后端 coverage.json 路径")
+    parser.add_argument(
+        "--behavior-json", type=Path, default=BEHAVIOR_JSON_DEFAULT, help="行为（排除 stub）coverage-behavior.json 路径"
+    )
+    parser.add_argument(
+        "--behavior",
+        action="store_true",
+        help="check/bump/history：启用行为覆盖率口径（排除 coverage_ramp stub，唯一硬 gate）",
+    )
     parser.add_argument(
         "--frontend-summary", type=Path, default=FRONTEND_SUMMARY_DEFAULT, help="前端 coverage-summary.json 路径"
     )

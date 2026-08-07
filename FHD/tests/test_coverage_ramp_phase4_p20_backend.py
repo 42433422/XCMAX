@@ -62,7 +62,7 @@ def test_chat_rate_limited() -> None:
     opt = _bare_ai()
     opt._rate_limiter = MagicMock()
     with patch(
-        "app.utils.rate_limiter.check_rate_limit",
+        "app.utils.resilience.rate_limiter.check_rate_limit",
         return_value={"allowed": False, "retry_after": 5},
     ):
         out = opt.chat("u1", "hello")

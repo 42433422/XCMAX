@@ -34,6 +34,9 @@ library/*
 !library/avatar-generation-employee/**
 !library/trademark-generation-employee/
 !library/trademark-generation-employee/**
+# 重新包含 library 代码后，仍显式忽略其 Python 运行时产物（避免覆盖上方 __pycache__/ 忽略）
+library/**/__pycache__/
+library/**/*.py[cod]
 debug_sandbox/
 web/node_modules/
 web/dist/

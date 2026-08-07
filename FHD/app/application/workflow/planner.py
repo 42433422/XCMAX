@@ -10,10 +10,12 @@ from typing import Any, cast
 import httpx
 
 from app.services import get_ai_conversation_service
+from app.services.tools_workflow_registered import execute_registered_workflow_tool
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import ensure_fhd_repo_on_syspath
 
-from .types import PlanGraph, WorkflowNode, validate_plan_graph
+from .clarification_node import build_clarify_node, needs_clarification
+from .types import Branch, PlanGraph, WorkflowNode, validate_plan_graph
 
 logger = logging.getLogger(__name__)
 
@@ -254,7 +256,6 @@ def execute_tool(tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
             "print_label": "generate",
             "excel_decompose": "decompose",
             "template_extract": "extract",
-            "wechat_send": "preview",
             "excel_schema": "analyze",
             "excel_analysis": "analyze",
             "import_excel": "import",
@@ -267,11 +268,18 @@ def execute_tool(tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
     if handler is not None:
         return handler(merged)
 
-    return {
-        "success": False,
-        "message": f"未知工具或动作: {tool_name}.{action}",
-        "error_code": "unknown_tool_action",
-    }
+    # 未在 _WORKFLOW_TOOL_HANDLERS 中注册 custom handler 时，
+    # 交给 execute_registered_workflow_tool 统一调度（从 risk_actions.registry.json 读取）。
+    # 覆盖 delete / batch_delete / create / update 等 100+ 个动作。
+    result = execute_registered_workflow_tool(tool_name, action, merged)
+    if not result.get("success") and str(result.get("message", "")).startswith("未注册"):
+        # 未知工具/动作统一包装为失败，便于上层识别与一致展示。
+        return {
+            "success": False,
+            "message": f"未知工具动作: {tool_name}.{action}",
+            "error_code": "unknown_tool_action",
+        }
+    return result
 
 
 def _execute_price_list_tool(params: dict[str, Any]) -> dict[str, Any]:
@@ -708,37 +716,6 @@ def _execute_excel_decompose_tool(params: dict[str, Any]) -> dict[str, Any]:
 def _execute_template_extract_tool(params: dict[str, Any]) -> dict[str, Any]:
     """与 excel_decompose 共用模板分解能力。"""
     return _execute_excel_decompose_tool(params)
-
-
-def _execute_wechat_preview_tool(params: dict[str, Any]) -> dict[str, Any]:
-    try:
-        from app.bootstrap import get_wechat_contact_app_service
-
-        keyword = str(params.get("keyword") or params.get("unit_name") or "").strip() or None
-        limit = int(params.get("limit", 30))
-        contacts = get_wechat_contact_app_service().get_contacts(keyword=keyword, limit=limit)
-        return {
-            "success": True,
-            "data": contacts,
-            "message": "请在客户端选择联系人完成发送" if contacts else "未找到匹配的微信联系人",
-        }
-    except ImportError as e:
-        logger.error("微信联系人服务导入失败: %s", e)
-        return {
-            "success": False,
-            "message": "微信联系人服务不可用",
-            "error_code": "service_unavailable",
-        }
-    except (ValueError, TypeError) as e:
-        logger.warning("微信联系人查询参数错误: %s", e)
-        return {
-            "success": False,
-            "message": "查询参数错误，请检查关键词",
-            "error_code": "invalid_parameters",
-        }
-    except RuntimeError as e:
-        logger.error("微信联系人查询运行时错误: %s", e)
-        return {"success": False, "message": "查询失败，请稍后重试", "error_code": "query_failed"}
 
 
 def _execute_excel_schema_tool(params: dict[str, Any]) -> dict[str, Any]:
@@ -1194,7 +1171,6 @@ _WORKFLOW_TOOL_HANDLERS: dict[tuple[str, str], Callable[[dict[str, Any]], dict[s
     ("print_label", "generate"): _execute_print_label_tool,
     ("excel_decompose", "decompose"): _execute_excel_decompose_tool,
     ("template_extract", "extract"): _execute_template_extract_tool,
-    ("wechat_send", "preview"): _execute_wechat_preview_tool,
     ("excel_schema", "analyze"): _execute_excel_schema_tool,
     ("excel_analysis", "analyze"): _execute_excel_analysis_tool,
     ("import_excel", "import"): _execute_import_excel_tool,
@@ -1266,7 +1242,12 @@ class LLMWorkflowPlanner:
         context: dict[str, Any] | None = None,
     ) -> PlanGraph:
         context = dict(context or {})
-        plan_id = uuid.uuid4().hex
+        # 会话级持久化标识：带稳定 session 前缀，便于跨会话按 plan_id 找到同一任务续跑；
+        # 无 session 时退化为纯随机 id（仍唯一）。
+        session_key = str(context.get("session_id") or context.get("conversation_id") or "").strip()
+        plan_id = (
+            f"wp-{session_key}-{uuid.uuid4().hex[:8]}" if session_key else f"wp-{uuid.uuid4().hex}"
+        )
 
         from app.application.normal_chat_dispatch import resolve_tool_execution_profile
 
@@ -1306,14 +1287,99 @@ class LLMWorkflowPlanner:
 
         from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 
+        planned = self._plan_with_react_multiagent(
+            plan_id, user_id, message, registry_for_plan, context
+        )
         return finalize_planned_graph(
-            self._plan_with_react_multiagent(plan_id, user_id, message, registry_for_plan, context),
+            self._decorate_plan(planned, message, registry_for_plan),
             plan_id=plan_id,
             context=context,
             validate=validate_plan_graph,
             fallback_factory=lambda: self._fallback_plan(plan_id, message, registry_for_plan),
             warn=logger.warning,
         )
+
+    def _decorate_plan(
+        self,
+        plan: PlanGraph | None,
+        message: str,
+        tool_registry: dict[str, Any],
+    ) -> PlanGraph | None:
+        """对规划产出的 PlanGraph 追加确定性条件边与反问澄清节点。
+
+        不强行依赖 LLM 输出：条件边/反问节点由规则派生，保证行为可测、向后兼容。
+        """
+        if plan is None:
+            return None
+        plan = self._apply_conditional_edge_rules(plan, message, tool_registry)
+        plan = self._apply_clarify_rules(plan, tool_registry)
+        return plan
+
+    def _apply_conditional_edge_rules(
+        self,
+        plan: PlanGraph,
+        message: str,
+        tool_registry: dict[str, Any],
+    ) -> PlanGraph:
+        """确定性条件边规则：把"检查/查询 + 后续决策"表达为 branches。
+
+        当前规则：计划含库存检查（query/read/check_stock）且消息带采购意图时，
+        为检查节点挂上 ``{"key": "low_stock", "equals": true}`` → 采购节点 的条件边。
+        """
+        if any(k in message for k in ("库存", "stock", "Stock")):
+            check_nodes = [
+                n
+                for n in plan.nodes
+                if str(n.action or "").lower() in ("query", "read", "check", "check_stock")
+                and "stock" in str(n.tool_id or "").lower()
+            ]
+            purchase_nodes = [
+                n
+                for n in plan.nodes
+                if "purchase" in str(n.tool_id or "").lower() or "采购" in (n.description or "")
+            ]
+            if check_nodes and purchase_nodes:
+                check = check_nodes[0]
+                if not check.branches:
+                    check.branches.append(
+                        Branch(
+                            target=purchase_nodes[0].node_id,
+                            condition={"key": "low_stock", "equals": True},
+                        )
+                    )
+        return plan
+
+    def _apply_clarify_rules(
+        self,
+        plan: PlanGraph,
+        tool_registry: dict[str, Any],
+    ) -> PlanGraph:
+        """确定性反问规则：写/高风险节点存在关键参数缺失或多候选歧义时，在图首部插入 clarify 节点。
+
+        复用 ``clarification_node.needs_clarification`` 检测，并用 ``build_clarify_node``
+        生成反问节点，其 ``branches`` 依据用户确认结果路由回原操作节点。
+        """
+        items = needs_clarification(plan, tool_registry)
+        # ERP 业务澄清（Task 6：盘点差异复审 / 凭证冲销确认 / 信用额度超限）并入同一澄清门控。
+        from .clarification_node import detect_erp_clarification
+
+        items = list(items) + detect_erp_clarification(plan)
+        if not items:
+            return plan
+        inserted: list[WorkflowNode] = []
+        for item in items:
+            clarify = build_clarify_node(
+                item["question"],
+                ambient={"target_node_id": item["node_id"]},
+            )
+            plan.nodes.insert(0, clarify)
+            inserted.append(clarify)
+        # 插入后若破坏图结构（如成环），则回退移除已插入的 clarify 节点。
+        if validate_plan_graph(plan) is not None:
+            for clarify in inserted:
+                if clarify in plan.nodes:
+                    plan.nodes.remove(clarify)
+        return plan
 
     def _plan_with_react_multiagent(
         self,
@@ -1482,10 +1548,18 @@ class LLMWorkflowPlanner:
                                 str(message or "")
                             )
                             if isinstance(cust_slots, dict):
-                                params.update(cust_slots)
+                                # 仅采纳非空、且非整句原话的检索词；空 keyword = 全量列表
+                                extracted_kw = str(
+                                    cust_slots.get("keyword")
+                                    or cust_slots.get("customer_name")
+                                    or ""
+                                ).strip()
+                                msg_trim = str(message or "").strip()
+                                if extracted_kw and extracted_kw != msg_trim:
+                                    params["keyword"] = extracted_kw
                         except (ImportError, RuntimeError):
-                            if not params.get("keyword"):
-                                params["keyword"] = str(message or "").strip()[:80]
+                            # 无槽位时保持 keyword 空，走全量列表（禁止把原话当客户名）
+                            params.pop("keyword", None)
 
                 from app.application.facades.tools_facade import execute_registered_workflow_tool
 
@@ -1805,7 +1879,8 @@ class LLMWorkflowPlanner:
                     "员工相关意图：若用户只是问有哪些员工，使用 employee.list；若明确指定 employee_id/pack_id 并要求执行，使用 employee.execute 并填写 task；不知道员工 ID 时先 list，不要编造。",
                     "数据库相关意图：读数据库/查库使用 business_db.read，并填写 entity；写入/新增/更新/删除/入库才使用 business_db.write，并填写 entity、operation、payload。",
                     "business_db 只能访问 customers/products/materials/shipment_records；禁止生成 sql/raw_sql/query_sql 或任意 SQL。",
-                    "对 products.query / customers.query：必须在 params 填入 keyword 或 model_number 等检索词，"
+                    "对 products.query：必须在 params 填入 keyword 或 model_number 等检索词；"
+                    "对 customers.query：列表/计数问法可不填 keyword（空=全部客户）；指名查询再填 keyword，"
                     "从用户话中提取（如「七彩乐园的9803」→ keyword 含单位+型号），禁止留空对象 {}。",
                     "如果 context 中包含 tool_probe_outputs 且其中 success=true，请优先使用其中 data_preview 的信息来补全 nodes.params。",
                     "如果 context 中包含 memory_v2.summary，只能把其中已确认 active 记忆用于补全偏好、客户别名、产品习惯或任务上下文；禁止使用未确认候选或编造记忆。",
@@ -2069,6 +2144,60 @@ class LLMWorkflowPlanner:
                     )
                 )
 
+        if not nodes and any(k in message for k in ("删除", "移除", "删掉", "delete", "del")):
+            entity = _infer_business_db_entity(message)
+            keyword = _extract_business_db_read_keyword(message, entity)
+            intent = "business_db_read"
+            todo = ["识别要删除的目标", "查询确认目标信息"]
+            nodes.append(
+                WorkflowNode(
+                    node_id="query_for_delete",
+                    tool_id="business_db",
+                    action="read",
+                    params={"entity": entity, "keyword": keyword},
+                    risk="low",
+                    description=f"查询要删除的{entity}",
+                    idempotent=True,
+                )
+            )
+
+        if (
+            not nodes
+            and any(k in message for k in ("库存", "stock", "Stock"))
+            and any(k in message for k in ("采购", "购买", "补充", "备货", "进货"))
+        ):
+            # 确定性条件边规则示例：查库存 → low_stock == true → 采购节点。
+            intent = "inventory_purchase"
+            todo = ["检查库存", "按 low_stock 决定是否采购", "输出采购建议"]
+            purchase_node = WorkflowNode(
+                node_id="purchase_advice",
+                tool_id="purchase",
+                action="advice",
+                params={},
+                risk="low",
+                description="采购建议",
+                idempotent=True,
+                depends_on=["check_stock"],
+            )
+            nodes.append(
+                WorkflowNode(
+                    node_id="check_stock",
+                    tool_id="inventory",
+                    action="check_stock",
+                    params={},
+                    risk="low",
+                    description="检查库存",
+                    idempotent=True,
+                    branches=[
+                        Branch(
+                            target="purchase_advice",
+                            condition={"key": "low_stock", "equals": True},
+                        )
+                    ],
+                )
+            )
+            nodes.append(purchase_node)
+
         if not nodes:
             # 兜底：挑一个低风险查询，避免空图
             if "products" in tool_registry:
@@ -2102,11 +2231,16 @@ class LLMWorkflowPlanner:
         elif any(node.risk == "medium" for node in nodes):
             risk = "medium"
 
-        return PlanGraph(
+        plan = PlanGraph(
             plan_id=plan_id,
             intent=intent,
             todo_steps=todo,
             nodes=nodes,
             risk_level=risk,
             metadata={"planner": "fallback", "message": message},
+        )
+        # 与 ReAct 路径一致：追加确定性条件边与反问澄清节点。
+        return self._apply_clarify_rules(
+            self._apply_conditional_edge_rules(plan, message, tool_registry),
+            tool_registry,
         )

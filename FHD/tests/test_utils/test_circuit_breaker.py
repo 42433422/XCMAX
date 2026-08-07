@@ -8,7 +8,7 @@ import time
 import pytest
 
 from app.errors import DatabaseLockError
-from app.utils.circuit_breaker import (
+from app.utils.resilience.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerOpen,
     CircuitState,
@@ -20,7 +20,7 @@ from app.utils.circuit_breaker import (
 
 @pytest.fixture(autouse=True)
 def _reset_breakers():
-    cb_mod = importlib.import_module("app.utils.circuit_breaker")
+    cb_mod = importlib.import_module("app.utils.resilience.circuit_breaker")
     cb_mod._circuit_breakers.clear()
     yield
     cb_mod._circuit_breakers.clear()

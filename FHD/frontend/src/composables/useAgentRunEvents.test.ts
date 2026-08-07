@@ -73,12 +73,25 @@ describe('useAgentRunEvents', () => {
     expect(update).toBeNull()
   })
 
-  it('fetches run events and upserts a task panel row', async () => {
+  it('fetches run events and upserts a task panel row for multi-tool runs', async () => {
     agentRunsApiMock.listEvents.mockResolvedValueOnce({
       success: true,
       data: [
         { event_id: 'evt_1', run_id: 'run_1', event_type: 'planner.completed' },
-        { event_id: 'evt_2', run_id: 'run_1', event_type: 'tool.started', message: '开始执行工具' },
+        {
+          event_id: 'evt_2',
+          run_id: 'run_1',
+          event_type: 'tool.started',
+          message: '开始执行工具',
+          data: { node_id: 'n1', tool_id: 't1' },
+        },
+        {
+          event_id: 'evt_3',
+          run_id: 'run_1',
+          event_type: 'tool.started',
+          message: '开始执行工具',
+          data: { node_id: 'n2', tool_id: 't2' },
+        },
       ],
     })
     const upsertTask = vi.fn()
@@ -133,5 +146,41 @@ describe('useAgentRunEvents', () => {
 
     expect(upsertTask).not.toHaveBeenCalled()
     expect(removeTask).toHaveBeenCalledWith('agent_run_plain')
+  })
+
+  it('skips task panel upsert for single successful customers.query tool', async () => {
+    agentRunsApiMock.listEvents.mockResolvedValueOnce({
+      success: true,
+      data: [
+        {
+          event_id: 'evt_1',
+          run_id: 'run_c',
+          event_type: 'run.created',
+          message: 'Legacy planner 工具调用已进入 AgentRun 追踪',
+        },
+        {
+          event_id: 'evt_2',
+          run_id: 'run_c',
+          event_type: 'tool.started',
+          data: { node_id: 'n1', tool_id: 'customers', action: 'query' },
+        },
+        {
+          event_id: 'evt_3',
+          run_id: 'run_c',
+          event_type: 'tool.completed',
+          data: { node_id: 'n1', tool_id: 'customers' },
+        },
+        {
+          event_id: 'evt_4',
+          run_id: 'run_c',
+          event_type: 'run.completed',
+          message: 'Legacy planner 工具调用追踪完成',
+        },
+      ],
+    })
+    const upsertTask = vi.fn()
+    const sync = useAgentRunEventSync({ upsertTask })
+    await sync.syncAgentRunFromPayload({ data: { run_id: 'run_c' } }, '查客户')
+    expect(upsertTask).not.toHaveBeenCalled()
   })
 })

@@ -1,9 +1,8 @@
 import { defineStore } from 'pinia'
-import { ref, computed, type Ref } from 'vue'
+import { ref, computed } from 'vue'
 import materialsApi from '../api/materials'
 import type { Material, MaterialCreateDTO, MaterialUpdateDTO } from '@/types/material'
-import type { ApiResponse } from '@/types/api'
-import { asRecord, asArray, asString } from '@/utils/typeGuards'
+import { asRecord } from '@/utils/typeGuards'
 
 interface OperationResult {
   success: boolean;

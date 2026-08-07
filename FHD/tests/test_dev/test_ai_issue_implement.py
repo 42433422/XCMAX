@@ -288,7 +288,7 @@ class TestIsAuthorized:
 class TestCommitAndPrLabelRouting:
     """LLM code remains review-gated regardless of execution authorization."""
 
-    def test_allowlist_source_still_requires_r2_review(
+    def test_allowlist_source_labels_r1_automerge(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         captured: dict[str, Any] = {}
@@ -321,9 +321,8 @@ class TestCommitAndPrLabelRouting:
         )
         assert pr_num == 1
         assert "ai-generated" in captured["labels_payload"]["labels"]
-        assert "risk:r2" in captured["labels_payload"]["labels"]
-        assert "needs-human" in captured["labels_payload"]["labels"]
-        assert "risk:r0" not in captured["labels_payload"]["labels"]
+        assert "risk:r1" in captured["labels_payload"]["labels"]
+        assert "risk:r2" not in captured["labels_payload"]["labels"]
         # PR body 必须含 allowlist 来源说明
         assert "allowlist" in captured["pr_payload"]["body"]
         assert captured["pr_payload"]["base"] == "feature/failing-ci"
@@ -409,7 +408,7 @@ class TestRepairBaseBranch:
         assert repair_branch.startswith("ai-impl/123-")
         assert _ai_impl._git("rev-parse", "HEAD", cwd=str(runner)).stdout.strip() == failed_sha
 
-    def test_owner_source_labels_r2_needs_human(
+    def test_owner_source_labels_r1_automerge(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         captured: dict[str, Any] = {}
@@ -441,10 +440,9 @@ class TestRepairBaseBranch:
         )
         assert pr_num == 2
         labels = captured["labels_payload"]["labels"]
-        assert "needs-human" in labels
         assert "ai-generated" in labels
-        assert "risk:r2" in labels
-        assert "risk:r0" not in labels
+        assert "risk:r1" in labels
+        assert "risk:r2" not in labels
         # PR body 必须含 owner 来源说明
         assert "owner" in captured["pr_payload"]["body"]
 
@@ -478,9 +476,9 @@ class TestRepairBaseBranch:
             "tok",
         )
         labels = captured["labels_payload"]["labels"]
-        assert "needs-human" in labels
-        assert "risk:r2" in labels
-        assert "risk:r0" not in labels
+        assert "ai-generated" in labels
+        assert "risk:r1" in labels
+        assert "risk:r2" not in labels
 
 
 class TestEstimateFiles:

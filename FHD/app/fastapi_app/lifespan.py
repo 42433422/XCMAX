@@ -22,7 +22,6 @@ from app.db.init_db import (
     init_extract_logs_tables,
     init_service_bridge_tables,
     init_template_tables,
-    init_wechat_tasks_table,
     initialize_databases,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -207,10 +206,8 @@ def _initialize_databases_sync(app: FastAPI):
                 logger.warning("SQLite 按 Mod 拆分母库副本时跳过: %s", mod_db_exc)
             sqlite_file = sqlite_db_file_from_url(database_url)
             if sqlite_file:
-                init_wechat_tasks_table(sqlite_file)
                 init_template_tables(sqlite_file)
             else:
-                init_wechat_tasks_table()
                 init_template_tables()
 
         init_distillation_tables(engine)

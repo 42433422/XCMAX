@@ -12,4 +12,3 @@ export * from './modInfo';
 export * from './modCatalog';
 export * from './json';
 export * from './excel';
-export * from './wechat';

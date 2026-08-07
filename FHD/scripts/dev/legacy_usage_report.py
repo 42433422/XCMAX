@@ -72,6 +72,9 @@ def build_report(path: Path, since_hours: int) -> dict:
         "log_path": str(path),
         "since_hours": since_hours,
         "total_events": total,
+        # 启发式"遗留活动压力"：近 N 小时 legacy 事件量 / 基线(1000 事件/周期) 归一化到 [0,1]。
+        # 供演化信号聚合（aggregate_signals 读取 legacy_ratio）判断是否低于阈值触发提案。
+        "legacy_ratio": round(min(1.0, total / 1000.0), 4),
         "modules": [],
     }
     for mod, count in module_counter.most_common():

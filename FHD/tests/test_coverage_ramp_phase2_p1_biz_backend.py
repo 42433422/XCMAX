@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from contextlib import contextmanager
 from datetime import date
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -30,9 +31,9 @@ from app.infrastructure.persistence.compat_db.writes import (
     _products_delete_by_unit_pg,
     _purchase_units_delete_by_norm_unit_pg,
 )
-from app.infrastructure.persistence.product_repository_impl import SQLAlchemyProductRepository
 from app.infrastructure.persistence.sqlite_vector_store import SQLiteVectorStore
 from app.infrastructure.rag.rag_service import RagService, is_rag_enabled
+from app.infrastructure.repositories.product_repository_impl import SQLAlchemyProductRepository
 from app.services.deepseek_intent_service import _make_intent_cache_key, cn_to_number
 
 # ---------------------------------------------------------------------------
@@ -155,22 +156,61 @@ def test_aibiz_compact_surface_pages_passthrough() -> None:
 
 
 # ---------------------------------------------------------------------------
-# product_repository _api_scalar
+# product_repository find_all_dict 字典输出
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "value,expected",
-    [
-        (None, None),
-        (float("nan"), None),
-        ("nan", None),
-        ("  hello ", "hello"),
-        (42, 42),
-    ],
-)
-def test_product_repository_api_scalar(value, expected) -> None:
-    assert SQLAlchemyProductRepository._api_scalar(value) == expected
+def _mock_db_ctx(mock_db):
+    @contextmanager
+    def _ctx():
+        yield mock_db
+
+    return _ctx()
+
+
+def test_product_repository_find_all_dict_output() -> None:
+    """新版仓储 find_all_dict 返回 (list[dict], total) 元组，字典字段对齐新版契约。
+
+    旧版私有辅助 _api_scalar/_product_to_dict 已删除，改为直接断言字典输出。
+    """
+    from datetime import datetime
+
+    repo = SQLAlchemyProductRepository()
+    mock_model = MagicMock()
+    mock_model.id = 1
+    mock_model.model_number = "MOD-001"
+    mock_model.name = "测试产品"
+    mock_model.specification = "100x200"
+    mock_model.price = 99.5
+    mock_model.quantity = 50
+    mock_model.description = "描述"
+    mock_model.category = "电子"
+    mock_model.brand = "品牌A"
+    mock_model.unit = "个"
+    mock_model.is_active = 1
+    mock_model.created_at = datetime(2026, 1, 1)
+    mock_model.updated_at = datetime(2026, 1, 2)
+
+    mock_db = MagicMock()
+    mock_query = MagicMock()
+    mock_query.filter.return_value = mock_query
+    mock_query.order_by.return_value = mock_query
+    mock_query.limit.return_value = mock_query
+    mock_query.offset.return_value = mock_query
+    mock_query.count.return_value = 1
+    mock_query.all.return_value = [mock_model]
+    mock_db.query.return_value = mock_query
+
+    with patch("app.infrastructure.repositories.product_repository_impl.get_db") as mock_get_db:
+        mock_get_db.return_value = _mock_db_ctx(mock_db)
+        dicts, total = repo.find_all_dict(page=1, per_page=20)
+
+    assert isinstance((dicts, total), tuple)
+    assert total == 1
+    assert dicts[0]["name"] == "测试产品"
+    assert dicts[0]["model_number"] == "MOD-001"
+    assert dicts[0]["price"] == 99.5
+    assert dicts[0]["unit"] == "个"
 
 
 # ---------------------------------------------------------------------------

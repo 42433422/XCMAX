@@ -108,7 +108,7 @@
 </template>
 
 <script setup lang="ts">
-import { asRecord, asArray, asString } from '@/utils/typeGuards'
+import { asRecord, asString } from '@/utils/typeGuards'
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { ElMessage, ElDialog } from 'element-plus'
 import { api, ApiError } from '@/api'

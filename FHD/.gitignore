@@ -77,6 +77,8 @@ coverage/
 data/dev-db/
 XCAGI/data/desktop-dev/
 XCAGI/data/enterprise-desktop/
+XCAGI/data/admin-web-dev/
+XCAGI/data/
 data/model_payment_orders.json
 customer_products_final_corrected.db
 
@@ -268,3 +270,14 @@ mutants/
 # 稳定设备标识运行时文件（device_identity.get_stable_device_id 写入 app data dir；
 # dev 模式回落到仓库根，勿提交）
 device_id
+
+# AI 员工生成/自省运行时产物（勿提交）
+.xcagi/*
+!.xcagi/
+!.xcagi/employee-inputs/
+!.xcagi/employee-inputs/**
+resources/routing_policies/reflection_ledger.jsonl
+
+# scripts/deploy/lib 由 !scripts/deploy/lib/** 放行，需重新排除缓存
+scripts/deploy/lib/**/__pycache__/
+coverage-behavior.json

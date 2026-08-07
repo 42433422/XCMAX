@@ -180,7 +180,7 @@ class TestRateLimited:
             "allowed": False,
             "retry_after": 30,
         }
-        with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+        with patch.dict("sys.modules", {"app.utils.resilience.rate_limiter": fake_rl_module}):
             fake_json_module = MagicMock()
             fake_json_module.json_response.return_value = ({"message": "rate"}, 429)
             with patch.dict("sys.modules", {"app.http.json_response": fake_json_module}):
@@ -196,7 +196,7 @@ class TestRateLimited:
     def test_allows_when_under_limit(self):
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.return_value = {"allowed": True}
-        with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+        with patch.dict("sys.modules", {"app.utils.resilience.rate_limiter": fake_rl_module}):
 
             @dec.rate_limited(max_requests=10)
             def fn(x):
@@ -207,7 +207,7 @@ class TestRateLimited:
     def test_uses_key_func(self):
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.return_value = {"allowed": True}
-        with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+        with patch.dict("sys.modules", {"app.utils.resilience.rate_limiter": fake_rl_module}):
 
             @dec.rate_limited(max_requests=10, key_func=lambda *a, **k: "custom-key")
             def fn(x):
@@ -219,7 +219,7 @@ class TestRateLimited:
     def test_uses_first_arg_when_no_key_func(self):
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.return_value = {"allowed": True}
-        with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+        with patch.dict("sys.modules", {"app.utils.resilience.rate_limiter": fake_rl_module}):
 
             @dec.rate_limited(max_requests=10)
             def fn(user_id, x):
@@ -231,7 +231,7 @@ class TestRateLimited:
     def test_uses_object_id_when_self_present(self):
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.return_value = {"allowed": True}
-        with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+        with patch.dict("sys.modules", {"app.utils.resilience.rate_limiter": fake_rl_module}):
 
             @dec.rate_limited(max_requests=10)
             def method(self_, x):
@@ -244,7 +244,7 @@ class TestRateLimited:
     def test_handles_limiter_error(self):
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.side_effect = RuntimeError("redis down")
-        with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+        with patch.dict("sys.modules", {"app.utils.resilience.rate_limiter": fake_rl_module}):
 
             @dec.rate_limited(max_requests=10)
             def fn(x):

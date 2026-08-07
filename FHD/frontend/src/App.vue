@@ -86,7 +86,7 @@ const {
 
 .route-fade-enter-active,
 .route-fade-leave-active {
-  transition: opacity 250ms ease;
+  transition: opacity 100ms ease;
 }
 
 .route-fade-enter-from,

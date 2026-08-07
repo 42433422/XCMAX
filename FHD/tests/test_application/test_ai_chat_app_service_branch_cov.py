@@ -3189,9 +3189,18 @@ class TestTryHandleDynamicWorkflow:
             "agent_run_id": "",
             "thinking_steps": "thinking",
         }
-        with patch.object(svc.workflow_engine, "run", return_value=_make_run_result()):
-            with patch.object(svc, "_format_workflow_run_response", return_value={"success": True}):
-                result = svc._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
+        with (
+            patch.object(svc.workflow_engine, "run", return_value=_make_run_result()),
+            patch.object(svc, "_format_workflow_run_response", return_value={"success": True}),
+            patch(
+                "app.application.ai_chat_app_service.AIChatApplicationService._persist_plan_state"
+            ),
+            patch(
+                "app.application.workflow.checkpointer.DatabaseWorkflowCheckpointer.latest_checkpoint",
+                return_value=None,
+            ),
+        ):
+            result = svc._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
         assert result == {"success": True}
         assert "u1" not in svc._pending_workflows
 

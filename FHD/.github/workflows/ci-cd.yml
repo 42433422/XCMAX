@@ -163,6 +163,9 @@ jobs:
       - name: coverage_ramp stub quota (只减不增)
         run: python scripts/dev/count_coverage_ramp_stubs.py --check
 
+      - name: test-bloat gate (P1-2 测试膨胀门禁)
+        run: python scripts/dev/test_bloat_report.py --check
+
       - name: Coverage ratchet check (行/分支只升不降)
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
@@ -183,30 +186,16 @@ jobs:
           name: xcagi-backend
           fail_ci_if_error: false
 
-      # 行为覆盖率透明化：排除 coverage_ramp 注水 stub 后的真实口径。
-      # 信息性输出，不阻断 CI（continue-on-error）；数据供人工/报告追踪注水占比。
-      - name: Behavior coverage (排除 coverage_ramp stub，信息性)
-        continue-on-error: true
+      # 行为覆盖率诚实化（Delta A）：排除 coverage_ramp 注水 stub 后的真实行为口径。
+      # 这是后端覆盖率门禁的唯一硬 gate（--behavior --require-backend），回退即阻断。
+      - name: Behavior coverage gate (排除 coverage_ramp stub，硬门禁)
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: |
           python -m pytest tests/ -q -m 'not coverage_ramp' \
             --cov --cov-branch --cov-report=json:coverage-behavior.json \
-            --cov-fail-under=0 || true
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          p = Path("coverage-behavior.json")
-          if not p.is_file():
-              print("[behavior-coverage] 无 coverage-behavior.json（行为套件未跑完）")
-              raise SystemExit(0)
-          t = json.loads(p.read_text(encoding="utf-8"))["totals"]
-          ns = t.get("num_statements", 0) or 0
-          nb = t.get("num_branches", 0) or 0
-          ln = t.get("covered_lines", 0) / ns * 100 if ns else 0.0
-          br = t.get("covered_branches", 0) / nb * 100 if nb else 0.0
-          print(f"[behavior-coverage] 排除 coverage_ramp stub：行 {ln:.2f}% / 分支 {br:.2f}%（信息性，不阻断）")
-          PY
+            --cov-fail-under=0
+          python scripts/dev/coverage_ratchet.py --check --behavior --require-backend --record
 
   frontend-test:
     needs: guard-temp-scripts
@@ -236,6 +225,11 @@ jobs:
       - name: Run unit tests with coverage
         working-directory: frontend
         run: npm run test:coverage
+
+      # 前端覆盖率诚实化（Delta B）：以 coverage_ratchet.py 为硬门禁，回退即阻断。
+      - name: Frontend coverage ratchet gate
+        working-directory: frontend
+        run: python ../scripts/dev/coverage_ratchet.py --check --require-frontend
 
       - name: Run vue-tsc
         working-directory: frontend
@@ -302,6 +296,25 @@ jobs:
 
       - name: Run architecture fitness checks
         run: python scripts/arch_fitness.py
+
+      - name: arch-fitness-legacy-check (P1-4 双轨边界)
+        run: |
+          python - <<'PY'
+          import subprocess, sys, os
+          sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+          import arch_fitness
+          r = subprocess.run(["python", "scripts/arch_fitness.py"], capture_output=True, text=True)
+          baselined = arch_fitness._load_baseline_keys()
+          # 只拦「新增」的 legacy/compat 散落；基线内已知项放行（与 arch_fitness.py 判定一致）。
+          blocked = [l for l in (r.stdout + r.stderr).splitlines()
+                     if "[legacy-boundary]" in l and "must live under app/legacy/" in l
+                     and arch_fitness._violation_key(l) not in baselined]
+          if blocked:
+              print("::error::新增 legacy/compat 文件散落到 app/legacy/ 之外：")
+              print("\n".join(blocked))
+              sys.exit(1)
+          print("arch-fitness-legacy-check OK")
+          PY
 
       - name: docs-ssot-lint
         run: python scripts/dev/docs_ssot_lint.py --strict
@@ -728,6 +741,24 @@ jobs:
         run: |
           npm ci
           npm run build
+
+  desktop-test:
+    name: desktop-test
+    needs: [frontend-test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Install desktop deps
+        working-directory: desktop
+        run: npm ci
+      - name: Run full desktop unit-test suite
+        working-directory: desktop
+        run: npm test
 
   desktop-windows-release-script-smoke:
     name: desktop-windows-release-script-smoke

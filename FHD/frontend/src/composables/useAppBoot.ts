@@ -1,9 +1,8 @@
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useModsStore } from '@/stores/mods'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
-import { isPlatformShellModeEnabled } from '@/constants/platformShellMode'
 import { isClientModeTiersUiEnabled } from '@/constants/clientModeTiers'
 import { useStartupAuth, type StartupAuthResult } from '@/composables/useStartupAuth'
 import {

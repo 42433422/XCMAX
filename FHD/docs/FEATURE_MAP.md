@@ -16,7 +16,7 @@
 |------|------|------|
 | [XCAGI/](../XCAGI/) | 启动外壳 | `run.py` 入口、alembic、mods、部署配置、资源。**不含业务代码**(通过 sys.path 加载根 `app/`)。 |
 | [app/](../app/) | 服务端唯一代码 | Neuro-DDD 分层:`domain/` / `application/` / `infrastructure/` / `neuro_bus/` / `fastapi_app.py` / `fastapi_routes/`(含历史兼容子集) / `shell/`. |
-| [app/legacy/](../app/legacy/) | legacy 模块唯一收容目录 | 所有 `legacy_*` 命名的过渡期模块必须迁入此目录；禁止在 `app/` 其他子目录新增 `legacy_*` 文件。 |
+| [app/legacy/](../app/legacy/) | legacy 模块唯一收容目录 | 所有 `legacy_*` 命名的过渡期模块必须迁入此目录；禁止在 `app/` 其他子目录新增 `legacy_*` 文件。P1-4 已迁入:`app/legacy/lan/lan_compat.py`、`app/legacy/lan/lan_pages_compat.py`(原 `app/mod_sdk/`)。 |
 | [frontend/](../frontend/) | 前端唯一代码 | Vue 3 + Vite,`package.json` name = `xcagi-frontend`。 |
 | [mods/](../mods/) | 模块包（**唯一编辑源**） | 行业包与 bridge Mod；**日常只改此处**。本地 dev 与 Vite 优先加载。 |
 | [XCAGI/mods/](../XCAGI/mods/) | Mod 导出副本 | 由 `scripts/dev/mods_ssot.py sync` 从 `mods/` 同步；供 Docker/打包路径，**禁止手改**。 |

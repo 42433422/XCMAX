@@ -1,4 +1,4 @@
-import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
+import { asRecord, asDisposable } from '@/utils/typeGuards'
 
 export interface ResourceEntry {
   resource: unknown;

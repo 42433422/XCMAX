@@ -332,37 +332,6 @@ class TestOcrTool:
         assert result["_response"]["success"] is True
 
 
-# ========================= wechat tool ===================================
-
-
-class TestWechatTool:
-    def test_contacts_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "wechat",
-                "contacts",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
-
-    def test_other_action(self):
-        result = _unwrap(
-            dispatch_legacy_tool_payload(
-                "wechat",
-                "other",
-                {},
-                json_response_fn=_json_fn,
-                hdr_getter=_hdr_getter,
-                parse_order_text_fn=_parse_order_text,
-            )
-        )
-        assert result["_response"]["success"] is True
-
-
 # ========================= excel_decompose tool ==========================
 
 

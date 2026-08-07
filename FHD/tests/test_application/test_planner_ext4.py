@@ -64,15 +64,19 @@ class TestExecuteTool:
 
 
 class TestExecuteProductsTool:
-    def test_empty_params(self):
+    @patch("app.bootstrap.get_products_service")
+    def test_empty_params(self, mock_svc):
         from app.application.workflow.planner import _execute_products_tool
 
+        mock_svc.return_value.get_products.return_value = {"success": True, "products": []}
         result = _execute_products_tool({})
         assert isinstance(result, dict)
 
-    def test_with_keyword(self):
+    @patch("app.bootstrap.get_products_service")
+    def test_with_keyword(self, mock_svc):
         from app.application.workflow.planner import _execute_products_tool
 
+        mock_svc.return_value.get_products.return_value = {"success": True, "products": []}
         result = _execute_products_tool({"keyword": "测试"})
         assert isinstance(result, dict)
 
@@ -158,25 +162,6 @@ class TestExecuteExcelDecomposeTool:
         from app.application.workflow.planner import _execute_excel_decompose_tool
 
         result = _execute_excel_decompose_tool({})
-        assert isinstance(result, dict)
-
-
-# ---------------------------------------------------------------------------
-# _execute_wechat_preview_tool
-# ---------------------------------------------------------------------------
-
-
-class TestExecuteWechatPreviewTool:
-    def test_empty_params(self):
-        from app.application.workflow.planner import _execute_wechat_preview_tool
-
-        mock_svc = MagicMock()
-        mock_svc.get_contacts.return_value = []
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service",
-            return_value=mock_svc,
-        ):
-            result = _execute_wechat_preview_tool({})
         assert isinstance(result, dict)
 
 

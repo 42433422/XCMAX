@@ -1,4 +1,4 @@
-"""Tests for app.infrastructure.persistence.material_repository_impl — coverage ramp."""
+"""Tests for app.infrastructure.repositories.material_repository_impl — coverage ramp."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.infrastructure.persistence.material_repository_impl import SQLAlchemyMaterialRepository
+from app.infrastructure.repositories.material_repository_impl import SQLAlchemyMaterialRepository
 
 
 @pytest.fixture
@@ -79,7 +79,7 @@ class TestFindAll:
             _make_material()
         ]
         with patch(
-            "app.infrastructure.persistence.material_repository_impl.get_db",
+            "app.infrastructure.repositories.material_repository_impl.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = repo.find_all()
@@ -95,7 +95,7 @@ class TestFindAll:
         mock_query.count.return_value = 0
         mock_query.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
         with patch(
-            "app.infrastructure.persistence.material_repository_impl.get_db",
+            "app.infrastructure.repositories.material_repository_impl.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = repo.find_all(search="测试", category="化工")
@@ -103,7 +103,7 @@ class TestFindAll:
 
     def test_db_error_returns_failure(self, repo):
         with patch(
-            "app.infrastructure.persistence.material_repository_impl.get_db",
+            "app.infrastructure.repositories.material_repository_impl.get_db",
             side_effect=RuntimeError("DB error"),
         ):
             result = repo.find_all()
@@ -119,7 +119,7 @@ class TestFindById:
         mock_query.filter.return_value = mock_query
         mock_query.first.return_value = _make_material()
         with patch(
-            "app.infrastructure.persistence.material_repository_impl.get_db",
+            "app.infrastructure.repositories.material_repository_impl.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = repo.find_by_id(1)
@@ -133,7 +133,7 @@ class TestFindById:
         mock_query.filter.return_value = mock_query
         mock_query.first.return_value = None
         with patch(
-            "app.infrastructure.persistence.material_repository_impl.get_db",
+            "app.infrastructure.repositories.material_repository_impl.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = repo.find_by_id(999)
@@ -141,7 +141,7 @@ class TestFindById:
 
     def test_db_error(self, repo):
         with patch(
-            "app.infrastructure.persistence.material_repository_impl.get_db",
+            "app.infrastructure.repositories.material_repository_impl.get_db",
             side_effect=RuntimeError("err"),
         ):
             result = repo.find_by_id(1)
@@ -157,11 +157,11 @@ class TestCreate:
         mock_db.refresh = MagicMock()
         with (
             patch(
-                "app.infrastructure.persistence.material_repository_impl.get_db",
+                "app.infrastructure.repositories.material_repository_impl.get_db",
                 return_value=_mock_db_ctx(mock_db),
             ),
             patch(
-                "app.infrastructure.persistence.material_repository_impl.Material",
+                "app.infrastructure.repositories.material_repository_impl.Material",
                 return_value=mat,
             ),
         ):
@@ -170,7 +170,7 @@ class TestCreate:
 
     def test_db_error(self, repo):
         with patch(
-            "app.infrastructure.persistence.material_repository_impl.get_db",
+            "app.infrastructure.repositories.material_repository_impl.get_db",
             side_effect=RuntimeError("fail"),
         ):
             result = repo.create({"name": "x"})
@@ -188,7 +188,7 @@ class TestUpdate:
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
         with patch(
-            "app.infrastructure.persistence.material_repository_impl.get_db",
+            "app.infrastructure.repositories.material_repository_impl.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = repo.update(1, {"name": "更新后"})
@@ -201,7 +201,7 @@ class TestUpdate:
         mock_query.filter.return_value = mock_query
         mock_query.first.return_value = None
         with patch(
-            "app.infrastructure.persistence.material_repository_impl.get_db",
+            "app.infrastructure.repositories.material_repository_impl.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = repo.update(999, {"name": "x"})
@@ -209,7 +209,7 @@ class TestUpdate:
 
     def test_db_error(self, repo):
         with patch(
-            "app.infrastructure.persistence.material_repository_impl.get_db",
+            "app.infrastructure.repositories.material_repository_impl.get_db",
             side_effect=RuntimeError("fail"),
         ):
             result = repo.update(1, {"name": "x"})
@@ -226,7 +226,7 @@ class TestDelete:
         mock_query.first.return_value = mat
         mock_db.commit = MagicMock()
         with patch(
-            "app.infrastructure.persistence.material_repository_impl.get_db",
+            "app.infrastructure.repositories.material_repository_impl.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = repo.delete(1)
@@ -239,7 +239,7 @@ class TestDelete:
         mock_query.filter.return_value = mock_query
         mock_query.first.return_value = None
         with patch(
-            "app.infrastructure.persistence.material_repository_impl.get_db",
+            "app.infrastructure.repositories.material_repository_impl.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = repo.delete(999)
@@ -256,7 +256,7 @@ class TestBatchDelete:
         mock_query.all.return_value = [mat]
         mock_db.commit = MagicMock()
         with patch(
-            "app.infrastructure.persistence.material_repository_impl.get_db",
+            "app.infrastructure.repositories.material_repository_impl.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = repo.batch_delete([1, 2])
@@ -264,7 +264,7 @@ class TestBatchDelete:
 
     def test_db_error(self, repo):
         with patch(
-            "app.infrastructure.persistence.material_repository_impl.get_db",
+            "app.infrastructure.repositories.material_repository_impl.get_db",
             side_effect=RuntimeError("fail"),
         ):
             result = repo.batch_delete([1])
@@ -279,7 +279,7 @@ class TestFindLowStock:
         mock_query.filter.return_value = mock_query
         mock_query.order_by.return_value.all.return_value = [_make_material()]
         with patch(
-            "app.infrastructure.persistence.material_repository_impl.get_db",
+            "app.infrastructure.repositories.material_repository_impl.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = repo.find_low_stock(threshold=5.0)
@@ -292,7 +292,7 @@ class TestFindLowStock:
         mock_query.filter.return_value = mock_query
         mock_query.order_by.return_value.all.return_value = []
         with patch(
-            "app.infrastructure.persistence.material_repository_impl.get_db",
+            "app.infrastructure.repositories.material_repository_impl.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = repo.find_low_stock()
@@ -300,7 +300,7 @@ class TestFindLowStock:
 
     def test_db_error(self, repo):
         with patch(
-            "app.infrastructure.persistence.material_repository_impl.get_db",
+            "app.infrastructure.repositories.material_repository_impl.get_db",
             side_effect=RuntimeError("fail"),
         ):
             result = repo.find_low_stock()
@@ -346,7 +346,7 @@ class TestExportToExcel:
 
         with (
             patch(
-                "app.infrastructure.persistence.material_repository_impl.get_db",
+                "app.infrastructure.repositories.material_repository_impl.get_db",
                 return_value=GuardedContext(),
             ),
             patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),

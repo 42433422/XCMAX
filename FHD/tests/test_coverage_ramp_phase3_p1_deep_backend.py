@@ -28,7 +28,6 @@ from app.application.workflow.planner import (
     _execute_import_excel_tool,
     _execute_print_label_tool,
     _execute_template_extract_tool,
-    _execute_wechat_preview_tool,
     execute_tool,
 )
 from app.infrastructure.documents.price_list_export import (
@@ -354,14 +353,6 @@ def test_execute_template_extract_delegates() -> None:
     ):
         out = _execute_template_extract_tool({"file_path": "a.xlsx"})
     assert out["success"] is True
-
-
-@patch("app.bootstrap.get_wechat_contact_app_service")
-def test_execute_wechat_preview_tool(mock_get: MagicMock) -> None:
-    mock_get.return_value.get_contacts.return_value = [{"name": "张三"}]
-    out = _execute_wechat_preview_tool({"keyword": "张"})
-    assert out["success"] is True
-    assert out["data"]
 
 
 def test_execute_excel_schema_openpyxl_fallback(tmp_path) -> None:

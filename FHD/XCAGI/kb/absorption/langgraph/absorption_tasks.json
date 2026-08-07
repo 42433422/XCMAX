@@ -1,0 +1,100 @@
+{
+  "schema_version": "1.0",
+  "kind": "absorption_tasks",
+  "target_project": "LangGraph",
+  "own_project": "FHD",
+  "created_at": "2026-08-06T13:57:33.280410+00:00",
+  "policy": "analysis_only_within_retort_frontier",
+  "policy_note": "仅生成待吸收能力清单（LangGraph 做法 → FHD 现状 → 吸收落点），不改写 FHD 业务代码、不 auto-merge、不跑 git 分支合并。每项含 acceptance 供后续实施校验。",
+  "task_count": 8,
+  "tasks": [
+    {
+      "task_id": "lg-absorb-01-typed-state",
+      "title": "为 NeuroBus 事件/工作流引入有类型状态与 reducer 语义（Typed State + Reducer）",
+      "dimension": "comparative_analysis_depth",
+      "priority": "P0",
+      "langgraph_way": "StateGraph 用 TypedDict 定义状态 schema，字段可用 Annotated[T, reducer] 声明合并语义；并发写入同一字段时由 reducer（如 add_messages）确定合并结果，替代『最后写入覆盖』。",
+      "fhd_current": "NeuroBus 事件/处理器载荷是无类型 dict（app/neuro_bus/events/base.py NeuroEvent.payload），处理器链没有统一的『状态 schema + 合并 reducer』；多处理器并发写同一字段时无确定合并语义。",
+      "absorb_to": "app/neuro_bus/state/schema.py（新增）+ app/neuro_bus/events/base.py（payload 类型化）",
+      "why": "把『事件流』升级为『有类型的可合并状态』，是后续条件路由/续跑/回放的地基。",
+      "acceptance": "新增一个 TypedDict 状态 schema 与 ≥2 个 reducer（list 追加 / 字段覆盖），并有行为测试证明并发写按 reducer 合并而非覆盖。"
+    },
+    {
+      "task_id": "lg-absorb-02-conditional-routing",
+      "title": "用条件路由（Conditional Edges）替代硬编码的处理器优先级链",
+      "dimension": "comparative_analysis_depth",
+      "priority": "P0",
+      "langgraph_way": "add_conditional_edges(node, path_map) 依据当前状态返回后续节点名，路由是显式、可测试、可插拔的（VS Code 可画图）。",
+      "fhd_current": "意图处理走 ReflexArc + ProcessorCoordinator 的线性/优先级链（app/domain/neuro/reflex_arc.py、app/domain/neuro/processors/coordinator.py），路由硬编码在处理器顺序里，缺少基于状态的条件分支。",
+      "absorb_to": "app/domain/neuro/processors/coordinator.py（将链改造为条件路由）+ 新增 app/domain/neuro/routing/ 路由函数",
+      "why": "让『下一步走哪个处理器』由状态决定，可测试且可扩展，降低硬编码耦合。",
+      "acceptance": "存在一个纯函数路由：给定状态返回下一处理器名；行为测试覆盖主要分支，且不依赖硬编码顺序命中。"
+    },
+    {
+      "task_id": "lg-absorb-03-parallel-fanout",
+      "title": "引入确定性并行扇出（Parallel Fan-out / superstep）",
+      "dimension": "comparative_analysis_depth",
+      "priority": "P1",
+      "langgraph_way": "一个节点可向多个下游节点并行 send()，pregel 以 superstep 组织『并发写 + 屏障合并』，多个写入在 reducer 处汇合。",
+      "fhd_current": "NeuroBus 用 PriorityEventQueue + ThreadPoolExecutor 并发执行处理器（app/neuro_bus/bus.py），但无『一次任务扇出 N 个并行者并在屏障处合并』的确定性语义。",
+      "absorb_to": "app/neuro_bus/bus.py（新增并行扇出原语）",
+      "why": "为『一个意图并行触发多个域的处理器并汇总』提供确定语义，替代无屏障的线程池。",
+      "acceptance": "一个 fan-out 场景：N 个子处理并行执行、屏障处 reducer 汇总；行为测试证明结果与顺序无关且全部完成才进入下一步。"
+    },
+    {
+      "task_id": "lg-absorb-04-checkpoint-resume",
+      "title": "为长工作流引入 checkpoint 断点续跑（Checkpoint / durable resume）",
+      "dimension": "operational_readiness",
+      "priority": "P0",
+      "langgraph_way": "compile(checkpointer=...) 每次超步后把完整状态写入 checkpointer（sqlite/postgres/redis 的 BaseCheckpointSaver）；进程崩溃后从最后一个 checkpoint 续跑，不重头来。",
+      "fhd_current": "app/neuro_bus/retry_handler.py 有指数退避+抖动重试，但无『工作流级状态持久化』；长流程中途失败需整体重放，无法从最近已完成步骤续跑。",
+      "absorb_to": "新增 app/neuro_bus/checkpoint/（BaseCheckpointSaver + SQLite 实现），接线进 retry_handler.py",
+      "why": "把『事件重试』升级为『工作流断点续跑』，提升长流程鲁棒性。",
+      "acceptance": "模拟一次长流程：第 k 步后进程退出，重启后从第 k 步 checkpoint 继续而非重头执行；有持久化证据与恢复测试。"
+    },
+    {
+      "task_id": "lg-absorb-05-time-travel-replay",
+      "title": "提供状态历史与时间旅行重放（get_state_history / update_state / replay）",
+      "dimension": "feedback_loop_closure",
+      "priority": "P1",
+      "langgraph_way": "get_state_history 列出某一 thread 的所有 checkpoint；update_state 回写/修正某一步状态；可从任意历史 checkpoint 重放，用于调试与‘改写历史’。",
+      "fhd_current": "NeuroBus 有事件持久化缓冲与 tracer（app/neuro_bus/tracer.py），但只记录 span，无『可回退/可修正的完整状态历史』。",
+      "absorb_to": "app/neuro_bus/tracer.py（扩展为状态历史）+ app/neuro_bus/checkpoint/（复用）",
+      "why": "为 AI 员工/自愈流程提供‘先看历史→回退到某步→修正重跑’的闭环调试能力。",
+      "acceptance": "能列出某 thread 的状态历史、回退到指定 checkpoint、做出修正并重放；行为测试覆盖回退+改写+重放。"
+    },
+    {
+      "task_id": "lg-absorb-06-stream-state-events",
+      "title": "暴露流式状态事件（Streaming state events）",
+      "dimension": "product_operability",
+      "priority": "P1",
+      "langgraph_way": "astream_events / stream 按节点粒度推送状态变更事件，前端可实时渲染每一步，而非等整图结束。",
+      "fhd_current": "NeuroBus 集成提供同步 HTTP 健康/统计端点（app/neuro_bus/integrations/fastapi_integration.py），无每次状态变更的流式事件投影。",
+      "absorb_to": "app/neuro_bus/integrations/fastapi_integration.py（新增 stream 端点）",
+      "why": "让前端/桌面端在长流程执行时看到逐步状态，改善可观测性与产品体验。",
+      "acceptance": "新增一个可按节点推送状态变更的流式端点；测试证明客户端能按序收到各步状态事件。"
+    },
+    {
+      "task_id": "lg-absorb-07-human-in-the-loop-interrupt",
+      "title": "引入 human-in-the-loop 中断/恢复原语（interrupt / resume）",
+      "dimension": "product_operability",
+      "priority": "P1",
+      "langgraph_way": "interrupt(value) 挂起图执行并持久化，外部（人）审批后以 Command(resume=...) 恢复，天然配合 checkpoint 断点。",
+      "fhd_current": "已有审批流程（mods/xcagi-approval-bridge），但它是独立审批工作流，与 AI 执行链之间没有‘图内中断→恢复’原语。",
+      "absorb_to": "app/domain/neuro/processors/coordinator.py（新增 interrupt 语义）+ 审批桥接",
+      "why": "把人类审批作为图执行中的一等公民中断点，而非割裂的旁路流程。",
+      "acceptance": "一个 AI 链执行到审批节点时挂起并持久化，人工确认后恢复继续；行为测试覆盖中断+恢复+恢复路径续跑。"
+    },
+    {
+      "task_id": "lg-absorb-08-subgraph-composition",
+      "title": "支持可复用 subgraph 组合与子图本地状态隔离",
+      "dimension": "comparative_analysis_depth",
+      "priority": "P2",
+      "langgraph_way": "把子图作为一个节点 add_node，子图可自带独立 checkpointer 与状态，实现模块化复用与状态隔离。",
+      "fhd_current": "各 NeuroDomain handler（app/neuro_bus/domains/*.py）是平铺注册，无‘可复用子图 + 本地状态隔离’的组合抽象。",
+      "absorb_to": "app/neuro_bus/bus.py + app/neuro_bus/domains/*（引入子图组合）",
+      "why": "让领域流程可打包成可复用/可独立验证的子图，降低平铺耦合。",
+      "acceptance": "一个领域流程被封装为可复用子图并作为节点接入上层图；子图状态与父图隔离，有组合与隔离测试。"
+    }
+  ]
+}

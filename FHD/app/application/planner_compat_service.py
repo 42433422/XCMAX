@@ -389,6 +389,23 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> di
     except RECOVERABLE_ERRORS:
         logger.debug("kitten planner context enrich skipped", exc_info=True)
         kitten_extra = {}
+
+    from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+
+    slot_payload = try_normal_slot_read_payload(body.message, request=request)
+    if isinstance(slot_payload, dict) and slot_payload.get("response"):
+        return _attach_compat_chat_trace(
+            slot_payload,
+            body,
+            message=body.message,
+            runtime_context=runtime_context,
+            channel=(
+                "compat_chat_agent_tool"
+                if slot_payload.get("agent_tool_dispatch")
+                else "compat_chat_slot"
+            ),
+        )
+
     ok_read, read_req = _ensure_chat_db_read_authorized(
         request,
         message=body.message,
@@ -917,6 +934,32 @@ def _resolve_chat_user_id(request: Request, body: XcagiCompatChatBody) -> str:
 async def compat_chat_stream_async(
     request: Request, body: XcagiCompatChatBody, *, ai_tier: str | None = None
 ):
+    # 客户等只读业务：请求线程内确定性 Agent 工具（customers.query），避免 ContextVar 丢租户读空。
+    from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+    from app.fastapi_routes.xcagi_compat_chat_helpers import _sse_event_line
+
+    slot_payload = try_normal_slot_read_payload(body.message, request=request)
+    if isinstance(slot_payload, dict) and slot_payload.get("response"):
+        runtime_context, _ = _merge_runtime_context_with_message_paths(body.context, body.message)
+        channel = (
+            "compat_chat_stream_agent_tool"
+            if slot_payload.get("agent_tool_dispatch")
+            else "compat_chat_stream_slot"
+        )
+        traced = attach_chat_trace_run(
+            slot_payload,
+            message=body.message,
+            runtime_context=runtime_context,
+            user_id=getattr(body, "user_id", None),
+            source=getattr(body, "source", None),
+            channel=channel,
+            intent=str((slot_payload.get("data") or {}).get("intent") or "agent_tool"),
+        )
+        response_text = str(slot_payload.get("response") or "")
+        yield _sse_event_line({"type": "token", "text": response_text})
+        yield _sse_event_line({"type": "done", "result": traced})
+        return
+
     # 注入 persona system_prompt（前端没传时用 persona 系统生成去客服腔 prompt）
     if not body.system_prompt and body.message:
         try:

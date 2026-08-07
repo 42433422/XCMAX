@@ -519,6 +519,104 @@ class InventoryService:
                 logger.error("调拨失败: %s", e)
                 return {"success": False, "message": str(e)}
 
+    def inventory_count(
+        self,
+        product_id: int,
+        warehouse_id: int,
+        actual_quantity: float,
+        batch_no: str | None = None,
+        location_id: int | None = None,
+        operator: str | None = None,
+        remark: str | None = None,
+        confirmed: bool = False,
+    ) -> dict[str, Any]:
+        """盘点功能。
+
+        查询当前台账账面数量，计算差异 diff = actual_quantity - book_quantity。
+        - confirmed=False：仅返回差异供对话层反问确认，不实际改动库存。
+        - confirmed=True：按实际数量调整台账并写入一条 transaction_type="count" 流水。
+        """
+        with get_db() as db:
+            try:
+                ledger = (
+                    db.query(InventoryLedger)
+                    .filter(
+                        InventoryLedger.product_id == product_id,
+                        InventoryLedger.warehouse_id == warehouse_id,
+                        InventoryLedger.batch_no == batch_no,
+                    )
+                    .first()
+                )
+                if not ledger:
+                    return {"success": False, "message": "库存台账记录不存在，请先入库"}
+
+                book_quantity = float(ledger.quantity or 0)
+                actual_quantity = float(actual_quantity)
+                diff = actual_quantity - book_quantity
+
+                if not confirmed:
+                    return {
+                        "success": True,
+                        "confirmed": False,
+                        "message": "盘点待确认",
+                        "data": {
+                            "product_id": product_id,
+                            "warehouse_id": warehouse_id,
+                            "batch_no": batch_no,
+                            "book_quantity": book_quantity,
+                            "actual_quantity": actual_quantity,
+                            "diff": diff,
+                        },
+                    }
+
+                now = datetime.now()
+                before_quantity = book_quantity
+                ledger.quantity = actual_quantity
+                ledger.available_quantity = float(ledger.available_quantity or 0) + diff
+                if location_id:
+                    ledger.location_id = location_id
+                ledger.updated_at = now
+
+                db.flush()
+
+                transaction = InventoryTransaction(
+                    ledger_id=ledger.id,
+                    transaction_type="count",
+                    product_id=product_id,
+                    warehouse_id=warehouse_id,
+                    location_id=location_id,
+                    batch_no=batch_no,
+                    quantity=diff,
+                    before_quantity=before_quantity,
+                    after_quantity=actual_quantity,
+                    reference_type="inventory_count",
+                    transaction_date=now,
+                    operator=operator,
+                    remark=remark,
+                    created_at=now,
+                )
+                db.add(transaction)
+                db.commit()
+
+                return {
+                    "success": True,
+                    "confirmed": True,
+                    "message": "盘点确认成功",
+                    "data": {
+                        "product_id": product_id,
+                        "warehouse_id": warehouse_id,
+                        "batch_no": batch_no,
+                        "book_quantity": before_quantity,
+                        "actual_quantity": actual_quantity,
+                        "diff": diff,
+                        "total_quantity": float(ledger.quantity),
+                    },
+                }
+            except RECOVERABLE_ERRORS as e:
+                db.rollback()
+                logger.error("盘点失败: %s", e)
+                return {"success": False, "message": str(e)}
+
     def get_inventory_transactions(
         self,
         product_id: int | None = None,
@@ -566,6 +664,10 @@ class InventoryService:
                 "page": page,
                 "per_page": per_page,
             }
+
+    def query_transactions(self, **kwargs: Any) -> dict[str, Any]:
+        """流水查询薄封装，动作名与 get_inventory_transactions 保持一致。"""
+        return self.get_inventory_transactions(**kwargs)
 
     def get_inventory_alert(self) -> dict[str, Any]:
         with get_db() as db:

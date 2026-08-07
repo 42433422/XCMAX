@@ -8,7 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from starlette.requests import Request
 
-from app.mod_sdk import approval_compat, lan_compat, neuro_bus_compat, planner_compat
+from app.legacy.lan import lan_compat
+from app.mod_sdk import approval_compat, neuro_bus_compat, planner_compat
 
 
 def _http_request() -> Request:

@@ -55,7 +55,6 @@ GENERATED_NAME_MARKERS = (".generated.", ".freezed.", ".g.dart")
 # These are materialized build/export trees, not independent editing sources.
 DUPLICATE_EXCLUDED_PREFIXES = (
     "FHD/XCAGI/mods/",
-    "FHD/mods-admin-runtime/",
     "FHD/templates/",
 )
 

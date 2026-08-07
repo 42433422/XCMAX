@@ -37,11 +37,9 @@ llm_reasoning: "auto"
 
 capabilities:
   - demand.intake
-  - wechat.relay
 
 skills:
   - skills/skill-demand-intake.md
-  - skills/skill-wechat-relay.md
 
 actions:
   handlers: ["llm_md", "echo"]

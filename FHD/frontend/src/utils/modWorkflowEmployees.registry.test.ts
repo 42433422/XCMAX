@@ -90,10 +90,6 @@ describe('workflow registry mod/employee separation', () => {
         workflow_employees: [{ id: 'label_print', label: '标签打印' }],
       },
       {
-        id: 'wechat-contacts-ai-employee',
-        workflow_employees: [{ id: 'wechat_contacts', label: '微信' }],
-      },
-      {
         id: 'taiyangniao-pro',
         workflow_employees: [{ id: 'attendance_ai', label: '考勤助手' }],
       },
