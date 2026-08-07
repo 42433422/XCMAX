@@ -62,10 +62,7 @@ class SalesAppService:
                 )
             total = q.count()
             orders = (
-                q.order_by(SalesOrder.id.desc())
-                .offset((page - 1) * per_page)
-                .limit(per_page)
-                .all()
+                q.order_by(SalesOrder.id.desc()).offset((page - 1) * per_page).limit(per_page).all()
             )
             return {
                 "success": True,
@@ -123,9 +120,7 @@ class SalesAppService:
                     SalesOrderItem(
                         order_id=order.id,
                         product_id=product_id,
-                        product_name=(
-                            product.name if product else item_data.get("product_name")
-                        ),
+                        product_name=(product.name if product else item_data.get("product_name")),
                         specification=item_data.get("specification"),
                         quantity=Decimal(str(quantity)),
                         unit=item_data.get("unit", "个"),
@@ -195,9 +190,7 @@ class SalesAppService:
             db.refresh(order)
             return {
                 "success": True,
-                "message": (
-                    f"已登记收款 ¥{pay_amount}，累计 ¥{new_paid}，订单状态 {order.status}"
-                ),
+                "message": (f"已登记收款 ¥{pay_amount}，累计 ¥{new_paid}，订单状态 {order.status}"),
                 "data": order.to_dict(),
             }
 

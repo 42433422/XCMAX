@@ -28,9 +28,7 @@ from app.services import accounting_services as svc
 @pytest.fixture(scope="function")
 def db_session():
     """真实 sqlite 内存库会话。"""
-    engine = create_engine(
-        "sqlite:///:memory:", connect_args={"check_same_thread": False}
-    )
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = SessionLocal()
@@ -52,7 +50,9 @@ def _override_get_db(monkeypatch, db_session):
     yield
 
 
-def _create_entry(source_id: int, journal_date: date, partner_id: int, amount: float) -> JournalEntry:
+def _create_entry(
+    source_id: int, journal_date: date, partner_id: int, amount: float
+) -> JournalEntry:
     """创建一个『借应收 / 贷主营业务收入』的销售凭证（含 partner，供账龄/冲销用）。"""
     result = svc.create_journal_entry(
         {
@@ -100,11 +100,7 @@ class TestSeedDefaultChartOfAccounts:
         """默认科目 code 齐全且类型正确。"""
         with tenant_scope(1):
             svc.seed_default_chart_of_accounts()
-            payable = (
-                db_session.query(ChartOfAccount)
-                .filter(ChartOfAccount.code == "2201")
-                .first()
-            )
+            payable = db_session.query(ChartOfAccount).filter(ChartOfAccount.code == "2201").first()
             assert payable is not None
             assert payable.type == "liability"
             assert payable.debit_credit == "credit"
@@ -142,7 +138,9 @@ class TestJournalEntryReverse:
 
             svc.journal_entry_reverse(original["id"])
 
-            reloaded = db_session.query(JournalEntry).filter(JournalEntry.id == original["id"]).first()
+            reloaded = (
+                db_session.query(JournalEntry).filter(JournalEntry.id == original["id"]).first()
+            )
             assert reloaded.reversed_at is not None
 
     def test_duplicate_reverse_rejected(self, db_session):

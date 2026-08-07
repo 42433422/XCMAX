@@ -324,9 +324,7 @@ class TestErpClarification:
     def test_multi_unit_asks_question(self):
         from app.application.workflow.clarification_node import detect_erp_clarification
 
-        items = detect_erp_clarification(
-            _stock_out_plan("500"), user_message="出 500 斤"
-        )
+        items = detect_erp_clarification(_stock_out_plan("500"), user_message="出 500 斤")
         assert items, "「出 500 斤」应触发多单位反问"
         assert items[0]["reason"] == "multi_unit"
         assert items[0]["severity"] in ("high", "medium")
@@ -337,7 +335,9 @@ class TestErpClarification:
         items = detect_erp_clarification(_stock_out_plan("500"), user_message="出 500 斤")
         assert items, "反问存在，说明未直接执行"
         # 反问节点语义：不调用业务工具，仅产出 requires_confirmation=true
-        clarify = build_clarify_node(items[0]["question"], {"node_id": "c1", "target_node_id": "out_node"})
+        clarify = build_clarify_node(
+            items[0]["question"], {"node_id": "c1", "target_node_id": "out_node"}
+        )
         assert clarify.tool_id == "clarify" and clarify.action == "ask"
 
     def test_no_ambiguity_when_plain_quantity(self):

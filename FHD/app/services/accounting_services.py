@@ -308,9 +308,7 @@ _AGING_BUCKETS: list[tuple[str, int, int]] = [
 ]
 
 
-def aging_report(
-    party_type: str, party_id: int, as_of_date: date | None = None
-) -> dict[str, Any]:
+def aging_report(party_type: str, party_id: int, as_of_date: date | None = None) -> dict[str, Any]:
     """应收/应付账龄分析。
 
     - party_type: "receivable"(应收/客户) 或 "payable"(应付/供应商)。
@@ -346,7 +344,9 @@ def aging_report(
                 if lo <= days <= hi:
                     bucket_amounts[name] += amount
                     break
-    data = [{"bucket": name, "amount": round(bucket_amounts[name], 2)} for name, _, _ in _AGING_BUCKETS]
+    data = [
+        {"bucket": name, "amount": round(bucket_amounts[name], 2)} for name, _, _ in _AGING_BUCKETS
+    ]
     total = round(sum(bucket_amounts.values()), 2)
     return {
         "success": True,

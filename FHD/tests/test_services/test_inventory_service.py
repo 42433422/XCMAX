@@ -599,9 +599,7 @@ class TestInventoryCountConfirmed:
         db.refresh(ledger)
         return wh, prod, ledger
 
-    def test_confirmed_adjusts_stock_and_writes_count_transaction(
-        self, test_session, test_engine
-    ):
+    def test_confirmed_adjusts_stock_and_writes_count_transaction(self, test_session, test_engine):
         wh, prod, ledger = self._seed(test_session)
 
         # 用绑定到内存引擎的 get_db 替换 service 内的 get_db
@@ -638,9 +636,7 @@ class TestInventoryCountConfirmed:
 
         # 验证台账已调整为实盘数量
         updated = (
-            test_session.query(InventoryLedger)
-            .filter(InventoryLedger.id == ledger.id)
-            .first()
+            test_session.query(InventoryLedger).filter(InventoryLedger.id == ledger.id).first()
         )
         assert float(updated.quantity) == 120.0
         # available_quantity 也按 diff 同步调整（90 + 20）
@@ -691,9 +687,7 @@ class TestInventoryCountConfirmed:
         test_session.expire_all()
 
         updated = (
-            test_session.query(InventoryLedger)
-            .filter(InventoryLedger.id == ledger.id)
-            .first()
+            test_session.query(InventoryLedger).filter(InventoryLedger.id == ledger.id).first()
         )
         assert float(updated.quantity) == 80.0
         assert float(updated.available_quantity) == 70.0

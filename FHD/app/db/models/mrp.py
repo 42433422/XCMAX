@@ -76,9 +76,7 @@ class BomLine(IntegerPrimaryKeyMixin, TenantScopedMixin, Base):
         }
 
 
-class ManufacturingOrder(
-    IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base
-):
+class ManufacturingOrder(IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
     """生产工单（Odoo mrp.production 吸收）。"""
 
     __tablename__ = "manufacturing_orders"

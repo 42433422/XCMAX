@@ -1277,9 +1277,9 @@ class AIChatApplicationService(
         # 跨会话续跑：内存无待确认工作流，但用户本次是「确认/取消」且 DB 有待续跑计划时，
         # 从 DB 水合（进程重启/换会话后仍可恢复长任务）。
         _resume_msg = (message or "").strip().lower()
-        if (
-            user_id not in self._pending_workflows
-            and (_resume_msg in {w.lower() for w in confirm_words} or _resume_msg in {w.lower() for w in cancel_words})
+        if user_id not in self._pending_workflows and (
+            _resume_msg in {w.lower() for w in confirm_words}
+            or _resume_msg in {w.lower() for w in cancel_words}
         ):
             self._hydrate_pending_workflow(user_id)
         pending = self._pending_workflows.get(user_id)
@@ -2057,9 +2057,9 @@ class AIChatApplicationService(
 
             rc = dict(runtime_context or {})
             user_id = str(rc.get("user_id") or "").strip() or None
-            session_id = str(
-                rc.get("session_id") or rc.get("conversation_id") or ""
-            ).strip() or None
+            session_id = (
+                str(rc.get("session_id") or rc.get("conversation_id") or "").strip() or None
+            )
             WorkflowPlanStore().save(
                 plan=plan,
                 runtime_context=rc,

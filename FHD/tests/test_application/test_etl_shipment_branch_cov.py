@@ -60,7 +60,10 @@ class TestTransforms:
         assert transforms.apply_transform("是", {"op": "cast", "type": "boolean"}, {}) is True
         assert transforms.apply_transform("否", {"op": "cast", "type": "boolean"}, {}) is False
         assert transforms.apply_transform("no", {"op": "cast", "type": "boolean"}, {}) is False
-        assert transforms.apply_transform("2026-08-01", {"op": "cast", "type": "date"}, {}) == "2026-08-01"
+        assert (
+            transforms.apply_transform("2026-08-01", {"op": "cast", "type": "date"}, {})
+            == "2026-08-01"
+        )
         with pytest.raises(EtlError):
             transforms.apply_transform("maybe", {"op": "cast", "type": "boolean"}, {})
         with pytest.raises(EtlError):
@@ -68,18 +71,16 @@ class TestTransforms:
 
     def test_apply_transform_date(self):
         assert transforms.apply_transform(None, {"op": "date"}, {}) == ""
-        assert transforms.apply_transform(datetime(2026, 8, 1, 12, 0), {"op": "date"}, {}) == "2026-08-01"
+        assert (
+            transforms.apply_transform(datetime(2026, 8, 1, 12, 0), {"op": "date"}, {})
+            == "2026-08-01"
+        )
         assert transforms.apply_transform(date(2026, 8, 2), {"op": "date"}, {}) == "2026-08-02"
         assert transforms.apply_transform("20260801", {"op": "date"}, {}) == "2026-08-01"
         assert transforms.apply_transform("2026年08月03日", {"op": "date"}, {}) == "2026-08-03"
         # %d/%m/%Y is tried before %m/%d/%Y in the default format list
         assert transforms.apply_transform("01/02/2026", {"op": "date"}, {"f": "x"}) == "2026-02-01"
-        assert (
-            transforms.apply_transform(
-                "2026-08-04T10:00:00", {"op": "date"}, {}
-            )
-            == "2026-08-04"
-        )
+        assert transforms.apply_transform("2026-08-04T10:00:00", {"op": "date"}, {}) == "2026-08-04"
         with pytest.raises(EtlError):
             transforms.apply_transform("not-adate", {"op": "date"}, {})
 
@@ -95,15 +96,30 @@ class TestTransforms:
 
     def test_apply_transform_map_split_concat(self):
         assert transforms.apply_transform("a", {"op": "map", "values": {"a": "甲"}}, {}) == "甲"
-        assert transforms.apply_transform("z", {"op": "map", "values": {"a": "甲"}, "fallback": "F"}, {}) == "F"
+        assert (
+            transforms.apply_transform(
+                "z", {"op": "map", "values": {"a": "甲"}, "fallback": "F"}, {}
+            )
+            == "F"
+        )
         assert transforms.apply_transform("z", {"op": "map", "values": {"a": "甲"}}, {}) == "z"
         with pytest.raises(EtlError):
             transforms.apply_transform("a", {"op": "map", "values": []}, {})
-        assert transforms.apply_transform("x,y,z", {"op": "split", "delimiter": ",", "index": 1}, {}) == "y"
-        assert transforms.apply_transform("x,y", {"op": "split", "delimiter": ",", "index": 9}, {}) == ""
+        assert (
+            transforms.apply_transform("x,y,z", {"op": "split", "delimiter": ",", "index": 1}, {})
+            == "y"
+        )
+        assert (
+            transforms.apply_transform("x,y", {"op": "split", "delimiter": ",", "index": 9}, {})
+            == ""
+        )
         assert transforms.apply_transform(None, {"op": "split", "delimiter": ","}, {}) == ""
         assert (
-            transforms.apply_transform("IGN", {"op": "concat", "fields": ["a", "b"], "separator": "-"}, {"a": "甲", "b": "乙"})
+            transforms.apply_transform(
+                "IGN",
+                {"op": "concat", "fields": ["a", "b"], "separator": "-"},
+                {"a": "甲", "b": "乙"},
+            )
             == "甲-乙"
         )
         with pytest.raises(EtlError):
@@ -111,19 +127,68 @@ class TestTransforms:
 
     def test_apply_transform_formula(self):
         row = {"a": 10, "b": 5}
-        assert transforms.apply_transform(None, {"op": "formula", "operator": "add", "operands": [{"field": "a"}, {"literal": 2}]}, row) == "12"
-        assert transforms.apply_transform(None, {"op": "formula", "operator": "sub", "operands": [{"field": "a"}, {"field": "b"}]}, row) == "5"
-        assert transforms.apply_transform(None, {"op": "formula", "operator": "mul", "operands": [{"field": "a"}, {"field": "b"}]}, row) == "50"
-        assert transforms.apply_transform(None, {"op": "formula", "operator": "div", "operands": [{"field": "a"}, {"field": "b"}]}, row) == "2"
-        assert transforms.apply_transform(None, {"op": "formula", "operator": "coalesce", "operands": [{"field": "missing"}, {"literal": "fallback"}]}, row) == "fallback"
+        assert (
+            transforms.apply_transform(
+                None,
+                {"op": "formula", "operator": "add", "operands": [{"field": "a"}, {"literal": 2}]},
+                row,
+            )
+            == "12"
+        )
+        assert (
+            transforms.apply_transform(
+                None,
+                {"op": "formula", "operator": "sub", "operands": [{"field": "a"}, {"field": "b"}]},
+                row,
+            )
+            == "5"
+        )
+        assert (
+            transforms.apply_transform(
+                None,
+                {"op": "formula", "operator": "mul", "operands": [{"field": "a"}, {"field": "b"}]},
+                row,
+            )
+            == "50"
+        )
+        assert (
+            transforms.apply_transform(
+                None,
+                {"op": "formula", "operator": "div", "operands": [{"field": "a"}, {"field": "b"}]},
+                row,
+            )
+            == "2"
+        )
+        assert (
+            transforms.apply_transform(
+                None,
+                {
+                    "op": "formula",
+                    "operator": "coalesce",
+                    "operands": [{"field": "missing"}, {"literal": "fallback"}],
+                },
+                row,
+            )
+            == "fallback"
+        )
         with pytest.raises(EtlError):
-            transforms.apply_transform(None, {"op": "formula", "operator": "div", "operands": [{"field": "a"}, {"literal": 0}]}, row)
+            transforms.apply_transform(
+                None,
+                {"op": "formula", "operator": "div", "operands": [{"field": "a"}, {"literal": 0}]},
+                row,
+            )
         with pytest.raises(EtlError):
-            transforms.apply_transform(None, {"op": "formula", "operator": "pow", "operands": [{"field": "a"}]}, row)
+            transforms.apply_transform(
+                None, {"op": "formula", "operator": "pow", "operands": [{"field": "a"}]}, row
+            )
         with pytest.raises(EtlError):
-            transforms.apply_transform(None, {"op": "formula", "operator": "add", "operands": []}, row)
+            transforms.apply_transform(
+                None, {"op": "formula", "operator": "add", "operands": []}, row
+            )
         with pytest.raises(EtlError):
-            transforms.apply_transform(None, {"op": "formula", "operator": "add", "operands": [{"both": 1}]}, row)
+            transforms.apply_transform(
+                None, {"op": "formula", "operator": "add", "operands": [{"both": 1}]}, row
+            )
         with pytest.raises(EtlError):
             transforms.apply_transform(None, {"op": "evil"}, row)
 
@@ -144,7 +209,9 @@ class TestTransforms:
             transforms.apply_mapping({"a": 1}, [{"target": "t", "source": "a", "transforms": "x"}])
         # rule must be dict
         with pytest.raises(EtlError):
-            transforms.apply_mapping({"a": 1}, [{"target": "t", "source": "a", "transforms": ["x"]}])
+            transforms.apply_mapping(
+                {"a": 1}, [{"target": "t", "source": "a", "transforms": ["x"]}]
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +220,9 @@ class TestTransforms:
 class TestProductIdentity:
     def test_product_name_key_and_token(self):
         assert product_identity.product_name_key({"unit": " 甲 ", "name": " 漆 "}) == ("甲", "漆")
-        assert product_identity.product_name_key({"customer_name": "甲", "name": "漆"}, unit_field="customer_name") == ("甲", "漆")
+        assert product_identity.product_name_key(
+            {"customer_name": "甲", "name": "漆"}, unit_field="customer_name"
+        ) == ("甲", "漆")
         assert product_identity.model_token("  ABC  ") == "abc"
         assert product_identity.model_token(None) == ""
 
@@ -203,7 +272,12 @@ class TestProductIdentity:
         assert product_identity.candidate_model_token(_Obj()) == "m3"
 
     def test_database_model_ambiguity_issue(self):
-        assert product_identity.database_model_ambiguity_issue({"model_number": "M1"}, [], exact_match=True) is None
+        assert (
+            product_identity.database_model_ambiguity_issue(
+                {"model_number": "M1"}, [], exact_match=True
+            )
+            is None
+        )
         # incoming missing model but known candidate -> issue
         issue = product_identity.database_model_ambiguity_issue(
             {"model_number": ""}, [{"model_number": "M1"}], exact_match=False
@@ -215,9 +289,12 @@ class TestProductIdentity:
         )
         assert issue2 is not None
         # incoming model and all candidates have models, inexact -> safe
-        assert product_identity.database_model_ambiguity_issue(
-            {"model_number": "M2"}, [{"model_number": "M9"}], exact_match=False
-        ) is None
+        assert (
+            product_identity.database_model_ambiguity_issue(
+                {"model_number": "M2"}, [{"model_number": "M9"}], exact_match=False
+            )
+            is None
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -296,8 +373,14 @@ class TestParserShipmentHistory:
         assert parser_shipment_history.customer_alias_key(None) == ""
 
     def test_product_match_key(self):
-        assert parser_shipment_history.product_match_key({"customer_name": "甲", "model_number": "M1"}) == ("甲", "model", "M1")
-        assert parser_shipment_history.product_match_key({"customer_name": "甲", "name": "漆"}) == ("甲", "name", "漆")
+        assert parser_shipment_history.product_match_key(
+            {"customer_name": "甲", "model_number": "M1"}
+        ) == ("甲", "model", "M1")
+        assert parser_shipment_history.product_match_key({"customer_name": "甲", "name": "漆"}) == (
+            "甲",
+            "name",
+            "漆",
+        )
 
     def test_parse_shipment_history_rows(self):
         ws = _make_sheet(
@@ -321,16 +404,28 @@ class TestParserShipmentHistory:
 
     def test_parse_shipment_history_finance_sheet(self):
         ws = _make_sheet("对账表", [["客户甲", "漆", 1, 10, 10, 5, 50]])
-        assert parser_shipment_history.parse_shipment_history_rows(ws, canonical_by_alias={}, max_rows=5) == []
+        assert (
+            parser_shipment_history.parse_shipment_history_rows(
+                ws, canonical_by_alias={}, max_rows=5
+            )
+            == []
+        )
 
     def test_parse_shipment_history_finance_row(self):
         # sheet ok but a row explicitly names a finance concept
         ws = _make_sheet("出货单", [["回款", "漆", 1, 10, 10, 5, 50]])
-        assert parser_shipment_history.parse_shipment_history_rows(ws, canonical_by_alias={}, max_rows=5) == []
+        assert (
+            parser_shipment_history.parse_shipment_history_rows(
+                ws, canonical_by_alias={}, max_rows=5
+            )
+            == []
+        )
 
     def test_parse_shipment_history_unnamed_low_evidence(self):
         ws = _make_sheet("明细", [["客户甲", "漆", 1, 10, 10, 5, 50]])
-        rows = parser_shipment_history.parse_shipment_history_rows(ws, canonical_by_alias={}, max_rows=5)
+        rows = parser_shipment_history.parse_shipment_history_rows(
+            ws, canonical_by_alias={}, max_rows=5
+        )
         assert rows == []
 
     def test_parse_shipment_history_max_rows(self):
@@ -342,7 +437,9 @@ class TestParserShipmentHistory:
                 ["客户甲", "漆C", 1, 10, 10, 5, 50],
             ],
         )
-        rows = parser_shipment_history.parse_shipment_history_rows(ws, canonical_by_alias={}, max_rows=2)
+        rows = parser_shipment_history.parse_shipment_history_rows(
+            ws, canonical_by_alias={}, max_rows=2
+        )
         assert len(rows) == 2
 
     def test_parse_structured_shipment_history_rows(self):
@@ -365,14 +462,18 @@ class TestParserShipmentHistory:
     def test_parse_structured_finance_sheet(self):
         ws = _make_sheet("对账", [["客户", "品名", "规格", "数量桶", "单价"]])
         assert (
-            parser_shipment_history.parse_structured_shipment_history_rows(ws, canonical_by_alias={}, max_rows=5)
+            parser_shipment_history.parse_structured_shipment_history_rows(
+                ws, canonical_by_alias={}, max_rows=5
+            )
             == []
         )
 
     def test_parse_structured_no_header(self):
         ws = _make_sheet("出货明细", [["a", "b", "c", "d", "e", "f"]])
         assert (
-            parser_shipment_history.parse_structured_shipment_history_rows(ws, canonical_by_alias={}, max_rows=5)
+            parser_shipment_history.parse_structured_shipment_history_rows(
+                ws, canonical_by_alias={}, max_rows=5
+            )
             == []
         )
 
@@ -386,7 +487,9 @@ class TestParserShipmentHistory:
                 ["清漆", "", 10],
             ],
         )
-        rows = parser_shipment_history.parse_quote_rows(ws, canonical_by_alias={"客户甲": "客户甲"}, max_rows=5)
+        rows = parser_shipment_history.parse_quote_rows(
+            ws, canonical_by_alias={"客户甲": "客户甲"}, max_rows=5
+        )
         assert len(rows) == 1
         assert rows[0].values["customer_name"] == "客户甲"
         assert rows[0].values["name"] == "面漆"
@@ -394,7 +497,12 @@ class TestParserShipmentHistory:
 
     def test_parse_quote_not_quote(self):
         ws = _make_sheet("普通", [["客户甲"], ["品名", "规格", "单价"], ["面漆", 20, 15]])
-        assert parser_shipment_history.parse_quote_rows(ws, canonical_by_alias={"客户甲": "客户甲"}, max_rows=5) == []
+        assert (
+            parser_shipment_history.parse_quote_rows(
+                ws, canonical_by_alias={"客户甲": "客户甲"}, max_rows=5
+            )
+            == []
+        )
 
     def test_parse_quote_no_customer(self):
         ws = _make_sheet("报价B", [["品名", "规格", "单价"], ["面漆", 20, 15]])
@@ -475,7 +583,11 @@ class TestShipmentCompatParser:
     def test_not_success_or_bad_shape(self, tmp_path, monkeypatch):
         path = tmp_path / "a.xlsx"
         path.write_text("x")
-        for result in ({"success": False, "notes": []}, {"success": True, "notes": "x"}, {"success": True, "notes": []}):
+        for result in (
+            {"success": False, "notes": []},
+            {"success": True, "notes": "x"},
+            {"success": True, "notes": []},
+        ):
             self._patched_preview(monkeypatch, result)
             assert (
                 shipment_compat_parser.parse_delivery_note_with_compat_profile(
@@ -540,8 +652,17 @@ class TestShipmentCompatParser:
         assert bool(row.values["source_fingerprint"])
 
     def test_inherited_unit(self, tmp_path, monkeypatch):
-        reliable = {"unit_name": "客户甲", "order_number": "ORD-1", "sheet": "送货单", "items": [{"product_name": "漆", "model_number": "M1"}]}
-        unreliable = {"unit_name": "客户甲", "sheet": "明细", "items": [{"product_name": "底漆", "model_number": "M2"}]}
+        reliable = {
+            "unit_name": "客户甲",
+            "order_number": "ORD-1",
+            "sheet": "送货单",
+            "items": [{"product_name": "漆", "model_number": "M1"}],
+        }
+        unreliable = {
+            "unit_name": "客户甲",
+            "sheet": "明细",
+            "items": [{"product_name": "底漆", "model_number": "M2"}],
+        }
         self._patched_preview(monkeypatch, {"success": True, "notes": [reliable, unreliable]})
         path = tmp_path / "客户甲.xlsx"
         path.write_text("x")
@@ -656,7 +777,9 @@ class TestShipmentTemplateExtractor:
         dest = tmp_path / "o.xlsx"
         with pytest.raises(EtlError) as exc:
             shipment_template_extractor.extract_shipment_template(
-                src, source_features={"regions": [{"id": "r1", "status": "rejected", "header_row": 3}]}, destination=dest
+                src,
+                source_features={"regions": [{"id": "r1", "status": "rejected", "header_row": 3}]},
+                destination=dest,
             )
         assert exc.value.code == "ETL_SHIPMENT_TEMPLATE_REGION_MISSING"
 
@@ -685,7 +808,9 @@ class TestShipmentTemplateExtractor:
             ]
         }
         with pytest.raises(EtlError) as exc:
-            shipment_template_extractor.extract_shipment_template(src, source_features=features, destination=dest)
+            shipment_template_extractor.extract_shipment_template(
+                src, source_features=features, destination=dest
+            )
         assert exc.value.code == "ETL_SHIPMENT_TEMPLATE_SHEET_MISSING"
 
     def test_extract_total_missing(self, tmp_path):
@@ -752,7 +877,13 @@ class TestMappingAssist:
                 used_llm=True,
                 data={
                     "mappings": [
-                        {"target": "name", "source": "hdr1", "confidence": 0.9, "transform": "trim", "reason": "r"},
+                        {
+                            "target": "name",
+                            "source": "hdr1",
+                            "confidence": 0.9,
+                            "transform": "trim",
+                            "reason": "r",
+                        },
                         # current confidence too high -> skip
                         {"target": "price", "source": "p2", "confidence": 0.9},
                         # source already used -> skip
@@ -788,7 +919,9 @@ class TestMappingAssist:
 class TestShipmentPreviewFallback:
     def test_normalize_customer_name(self):
         assert shipment_preview_fallback._normalize_customer_name(None) == ""
-        assert shipment_preview_fallback._normalize_customer_name("星光家具（华南）有限公司") == "星光"
+        assert (
+            shipment_preview_fallback._normalize_customer_name("星光家具（华南）有限公司") == "星光"
+        )
         assert shipment_preview_fallback._normalize_customer_name("  甲  ") == "甲"
 
     def test_normalize_product_name(self):
@@ -955,13 +1088,17 @@ class TestShipmentPreviewFallback:
         monkeypatch.setattr(mod, "get_db", self._db_cm(db))
         monkeypatch.setattr(mod, "current_tenant_id", lambda: "123")
         monkeypatch.setattr(mod, "_preview_runs", lambda *a, **k: [_Run()])
-        out = mod.resolve_preview_product_candidate_outcome(owner_user_id=7, unit_name="甲", product_name="漆")
+        out = mod.resolve_preview_product_candidate_outcome(
+            owner_user_id=7, unit_name="甲", product_name="漆"
+        )
         assert out["status"] == "conflict"
 
     def test_resolve_preview_unavailable_scope(self, monkeypatch):
         mod = shipment_preview_fallback
         monkeypatch.setattr(mod, "current_tenant_id", lambda: None)
-        out = mod.resolve_preview_product_candidate_outcome(owner_user_id=0, unit_name="甲", product_name="漆")
+        out = mod.resolve_preview_product_candidate_outcome(
+            owner_user_id=0, unit_name="甲", product_name="漆"
+        )
         assert out["status"] == "unavailable"
 
     def test_resolve_preview_recoverable_error(self, monkeypatch):
@@ -973,7 +1110,9 @@ class TestShipmentPreviewFallback:
         monkeypatch.setattr(mod, "get_db", lambda: (_ for _ in ()).throw(RuntimeError("x")))
         monkeypatch.setattr(mod, "current_tenant_id", lambda: "123")
         monkeypatch.setattr(mod, "_preview_runs", _boom)
-        out = mod.resolve_preview_product_candidate_outcome(owner_user_id=7, unit_name="甲", product_name="漆")
+        out = mod.resolve_preview_product_candidate_outcome(
+            owner_user_id=7, unit_name="甲", product_name="漆"
+        )
         assert out["status"] == "unavailable"
 
     def test_resolve_preview_product_candidate_wrapper(self, monkeypatch):
@@ -983,11 +1122,20 @@ class TestShipmentPreviewFallback:
             "resolve_preview_product_candidate_outcome",
             lambda **k: {"status": "resolved", "candidate": {"name": "漆"}},
         )
-        assert mod.resolve_preview_product_candidate(owner_user_id=1, unit_name="甲", product_name="漆") == {"name": "漆"}
+        assert mod.resolve_preview_product_candidate(
+            owner_user_id=1, unit_name="甲", product_name="漆"
+        ) == {"name": "漆"}
         monkeypatch.setattr(
-            mod, "resolve_preview_product_candidate_outcome", lambda **k: {"status": "not_found", "candidate": None}
+            mod,
+            "resolve_preview_product_candidate_outcome",
+            lambda **k: {"status": "not_found", "candidate": None},
         )
-        assert mod.resolve_preview_product_candidate(owner_user_id=1, unit_name="甲", product_name="漆") is None
+        assert (
+            mod.resolve_preview_product_candidate(
+                owner_user_id=1, unit_name="甲", product_name="漆"
+            )
+            is None
+        )
 
     def test_safe_owned_upload_path(self, tmp_path, monkeypatch):
         mod = shipment_preview_fallback
@@ -1001,21 +1149,35 @@ class TestShipmentPreviewFallback:
         # outside sandbox
         outside = Path(tmp_path) / "out.xlsx"
         outside.write_text("x")
-        assert mod._safe_owned_upload_path(str(outside), ".xlsx", None, tenant_id=1, owner_user_id=7) is None
+        assert (
+            mod._safe_owned_upload_path(str(outside), ".xlsx", None, tenant_id=1, owner_user_id=7)
+            is None
+        )
         # bad suffix
         txt = root / "a.txt"
         txt.write_text("x")
-        assert mod._safe_owned_upload_path(str(txt), ".xlsx", None, tenant_id=1, owner_user_id=7) is None
+        assert (
+            mod._safe_owned_upload_path(str(txt), ".xlsx", None, tenant_id=1, owner_user_id=7)
+            is None
+        )
         # expired
         from datetime import UTC, datetime, timedelta
 
         expired = datetime.now(UTC) - timedelta(hours=1)
-        assert mod._safe_owned_upload_path(str(f), ".xlsx", expired, tenant_id=1, owner_user_id=7) is None
+        assert (
+            mod._safe_owned_upload_path(str(f), ".xlsx", expired, tenant_id=1, owner_user_id=7)
+            is None
+        )
         # naive expiry in future ok
         future_naive = datetime.now() + timedelta(hours=1)
-        assert mod._safe_owned_upload_path(str(f), ".xlsx", future_naive, tenant_id=1, owner_user_id=7) == f.resolve()
+        assert (
+            mod._safe_owned_upload_path(str(f), ".xlsx", future_naive, tenant_id=1, owner_user_id=7)
+            == f.resolve()
+        )
         # path resolution raises ValueError -> None
-        assert mod._safe_owned_upload_path("\x00", ".xlsx", None, tenant_id=1, owner_user_id=7) is None
+        assert (
+            mod._safe_owned_upload_path("\x00", ".xlsx", None, tenant_id=1, owner_user_id=7) is None
+        )
 
     def test_selected_region(self):
         mod = shipment_preview_fallback
@@ -1035,7 +1197,9 @@ class TestShipmentPreviewFallback:
     def test_preview_runs(self):
         mod = shipment_preview_fallback
         db = MagicMock()
-        db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = ["run"]
+        db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [
+            "run"
+        ]
         assert mod._preview_runs(db, tenant_id=1, owner_user_id=2, target_type="t") == ["run"]
 
     def test_public_layout_candidate(self):
@@ -1071,7 +1235,15 @@ class TestShipmentPreviewFallback:
                             "header_row": 3,
                         }
                     ],
-                    "regions": [{"id": "r1", "status": "selected", "customer_name": "甲", "sheet": "送货单", "header_row": 3}],
+                    "regions": [
+                        {
+                            "id": "r1",
+                            "status": "selected",
+                            "customer_name": "甲",
+                            "sheet": "送货单",
+                            "header_row": 3,
+                        }
+                    ],
                 }
             )
             id = 1
@@ -1090,7 +1262,9 @@ class TestShipmentPreviewFallback:
         upload.expires_at = None
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = upload
-        out = mod._layout_candidate_for_run(db, run=run, tenant_id=1, owner_user_id=2, unit_name="甲")
+        out = mod._layout_candidate_for_run(
+            db, run=run, tenant_id=1, owner_user_id=2, unit_name="甲"
+        )
         assert out is not None
         assert out["run_id"] == "1"
         assert out["sheet"] == "送货单"
@@ -1100,6 +1274,7 @@ class TestShipmentPreviewFallback:
         import json as _json
 
         mod = shipment_preview_fallback
+
         # source_features not dict
         class _RunBad:
             source_features_json = "not-json"
@@ -1107,7 +1282,12 @@ class TestShipmentPreviewFallback:
             id = 1
             file_sha256 = "abc"
 
-        assert mod._layout_candidate_for_run(MagicMock(), run=_RunBad(), tenant_id=1, owner_user_id=2, unit_name="甲") is None
+        assert (
+            mod._layout_candidate_for_run(
+                MagicMock(), run=_RunBad(), tenant_id=1, owner_user_id=2, unit_name="甲"
+            )
+            is None
+        )
 
         # candidate not detected -> None
         class _RunRejected(_RunBad):
@@ -1120,9 +1300,12 @@ class TestShipmentPreviewFallback:
             )
 
         assert (
-            mod._layout_candidate_for_run(MagicMock(), run=_RunRejected(), tenant_id=1, owner_user_id=2, unit_name="甲")
+            mod._layout_candidate_for_run(
+                MagicMock(), run=_RunRejected(), tenant_id=1, owner_user_id=2, unit_name="甲"
+            )
             is None
         )
+
         # region not selected -> None
         class _RunNoRegion(_RunBad):
             source_features_json = _json.dumps(
@@ -1134,9 +1317,12 @@ class TestShipmentPreviewFallback:
             )
 
         assert (
-            mod._layout_candidate_for_run(MagicMock(), run=_RunNoRegion(), tenant_id=1, owner_user_id=2, unit_name="甲")
+            mod._layout_candidate_for_run(
+                MagicMock(), run=_RunNoRegion(), tenant_id=1, owner_user_id=2, unit_name="甲"
+            )
             is None
         )
+
         # upload missing -> None
         class _RunOk(_RunBad):
             source_features_json = _json.dumps(
@@ -1144,13 +1330,26 @@ class TestShipmentPreviewFallback:
                     "shipment_template_candidates": [
                         {"status": "detected", "customer_name": "甲", "source_region_id": "r1"}
                     ],
-                    "regions": [{"id": "r1", "status": "selected", "customer_name": "甲", "sheet": "s", "header_row": 2}],
+                    "regions": [
+                        {
+                            "id": "r1",
+                            "status": "selected",
+                            "customer_name": "甲",
+                            "sheet": "s",
+                            "header_row": 2,
+                        }
+                    ],
                 }
             )
 
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = None
-        assert mod._layout_candidate_for_run(db, run=_RunOk(), tenant_id=1, owner_user_id=2, unit_name="甲") is None
+        assert (
+            mod._layout_candidate_for_run(
+                db, run=_RunOk(), tenant_id=1, owner_user_id=2, unit_name="甲"
+            )
+            is None
+        )
 
         # single candidate (shipment_template_candidate) + matching region -> resolved
         class _RunSingle(_RunBad):
@@ -1161,7 +1360,15 @@ class TestShipmentPreviewFallback:
                         "customer_name": "甲",
                         "source_region_id": "r1",
                     },
-                    "regions": [{"id": "r1", "status": "selected", "customer_name": "甲", "sheet": "s", "header_row": 2}],
+                    "regions": [
+                        {
+                            "id": "r1",
+                            "status": "selected",
+                            "customer_name": "甲",
+                            "sheet": "s",
+                            "header_row": 2,
+                        }
+                    ],
                 }
             )
 
@@ -1173,14 +1380,26 @@ class TestShipmentPreviewFallback:
         upload.expires_at = None
         db_single.query.return_value.filter.return_value.first.return_value = upload
         assert (
-            mod._layout_candidate_for_run(db_single, run=_RunSingle(), tenant_id=1, owner_user_id=2, unit_name="甲")
+            mod._layout_candidate_for_run(
+                db_single, run=_RunSingle(), tenant_id=1, owner_user_id=2, unit_name="甲"
+            )
             is not None
         )
 
         # no embedded candidates -> fall back to shipment_template_candidates
         class _RunFallback(_RunBad):
             source_features_json = _json.dumps(
-                {"regions": [{"id": "r1", "status": "selected", "customer_name": "甲", "sheet": "s", "header_row": 2}]}
+                {
+                    "regions": [
+                        {
+                            "id": "r1",
+                            "status": "selected",
+                            "customer_name": "甲",
+                            "sheet": "s",
+                            "header_row": 2,
+                        }
+                    ]
+                }
             )
 
         monkeypatch.setattr(
@@ -1195,7 +1414,9 @@ class TestShipmentPreviewFallback:
         upload_fb.expires_at = None
         db_fb.query.return_value.filter.return_value.first.return_value = upload_fb
         assert (
-            mod._layout_candidate_for_run(db_fb, run=_RunFallback(), tenant_id=1, owner_user_id=2, unit_name="甲")
+            mod._layout_candidate_for_run(
+                db_fb, run=_RunFallback(), tenant_id=1, owner_user_id=2, unit_name="甲"
+            )
             is not None
         )
 
@@ -1204,7 +1425,9 @@ class TestShipmentPreviewFallback:
             source_features_json = "[]"
 
         assert (
-            mod._layout_candidate_for_run(MagicMock(), run=_RunList(), tenant_id=1, owner_user_id=2, unit_name="甲")
+            mod._layout_candidate_for_run(
+                MagicMock(), run=_RunList(), tenant_id=1, owner_user_id=2, unit_name="甲"
+            )
             is None
         )
 
@@ -1223,7 +1446,9 @@ class TestShipmentPreviewFallback:
         db.query.return_value.filter.return_value.first.return_value = run
         monkeypatch.setattr(mod, "get_db", partial_context(db))
         monkeypatch.setattr(mod, "_layout_candidate_for_run", lambda *a, **k: {"rec": True})
-        assert mod._find_preview_layout_record(owner_user_id=1, unit_name="甲", run_id="r") == {"rec": True}
+        assert mod._find_preview_layout_record(owner_user_id=1, unit_name="甲", run_id="r") == {
+            "rec": True
+        }
 
         # run_id path, run missing
         db2 = MagicMock()
@@ -1336,7 +1561,9 @@ class TestShipmentPreviewFallback:
         class _Row:
             final_action = "new"
             validation_json = "[]"
-            normalized_json = '{"name": "漆", "model_number": "M1", "price": 10, "customer_name": "其他"}'
+            normalized_json = (
+                '{"name": "漆", "model_number": "M1", "price": 10, "customer_name": "其他"}'
+            )
             provenance_json = '{"source_date": "2026-08-01"}'
             source_sheet = "s"
             source_row = 1
@@ -1347,7 +1574,9 @@ class TestShipmentPreviewFallback:
         monkeypatch.setattr(mod, "get_db", partial_context(db))
         monkeypatch.setattr(mod, "current_tenant_id", lambda: "123")
         monkeypatch.setattr(mod, "_preview_runs", lambda *a, **k: [_Run()])
-        out = mod.resolve_preview_product_candidate_outcome(owner_user_id=7, unit_name="甲", product_name="漆")
+        out = mod.resolve_preview_product_candidate_outcome(
+            owner_user_id=7, unit_name="甲", product_name="漆"
+        )
         assert out["status"] == "not_found"
 
     def test_resolve_preview_legacy_path(self, monkeypatch):
@@ -1360,7 +1589,9 @@ class TestShipmentPreviewFallback:
         class _Row:
             final_action = "new"
             validation_json = "[]"
-            normalized_json = '{"name": "漆", "model_number": "M1", "price": 10, "customer_name": "甲"}'
+            normalized_json = (
+                '{"name": "漆", "model_number": "M1", "price": 10, "customer_name": "甲"}'
+            )
             provenance_json = "{}"
             source_sheet = "s"
             source_row = 1
@@ -1371,7 +1602,9 @@ class TestShipmentPreviewFallback:
         monkeypatch.setattr(mod, "get_db", partial_context(db))
         monkeypatch.setattr(mod, "current_tenant_id", lambda: "123")
         monkeypatch.setattr(mod, "_preview_runs", lambda *a, **k: [_Run()])
-        out = mod.resolve_preview_product_candidate_outcome(owner_user_id=7, unit_name="甲", product_name="漆")
+        out = mod.resolve_preview_product_candidate_outcome(
+            owner_user_id=7, unit_name="甲", product_name="漆"
+        )
         assert out["status"] == "resolved"
 
 

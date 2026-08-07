@@ -852,7 +852,6 @@ class CustomerApplicationService:
             logger.exception("匹配购买单位失败：%s", e)
             return None
 
-
     def add_address(self, data: dict[str, Any]) -> dict[str, Any]:
         """新增客户地址（送货 delivery / 发票 invoice）。
 
@@ -868,11 +867,7 @@ class CustomerApplicationService:
                 if customer_id is None:
                     return {"success": False, "message": "客户ID不能为空"}
 
-                customer = (
-                    session.query(Customer)
-                    .filter(Customer.id == customer_id)
-                    .first()
-                )
+                customer = session.query(Customer).filter(Customer.id == customer_id).first()
                 if not customer:
                     return {"success": False, "message": "客户不存在"}
 
@@ -937,9 +932,7 @@ class CustomerApplicationService:
             try:
                 from app.db.models.customer import Customer
 
-                customer = (
-                    session.query(Customer).filter(Customer.id == customer_id).first()
-                )
+                customer = session.query(Customer).filter(Customer.id == customer_id).first()
                 if not customer:
                     return {"success": False, "message": "客户不存在"}
 

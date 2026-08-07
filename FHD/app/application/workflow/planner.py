@@ -1244,13 +1244,9 @@ class LLMWorkflowPlanner:
         context = dict(context or {})
         # 会话级持久化标识：带稳定 session 前缀，便于跨会话按 plan_id 找到同一任务续跑；
         # 无 session 时退化为纯随机 id（仍唯一）。
-        session_key = str(
-            context.get("session_id") or context.get("conversation_id") or ""
-        ).strip()
+        session_key = str(context.get("session_id") or context.get("conversation_id") or "").strip()
         plan_id = (
-            f"wp-{session_key}-{uuid.uuid4().hex[:8]}"
-            if session_key
-            else f"wp-{uuid.uuid4().hex}"
+            f"wp-{session_key}-{uuid.uuid4().hex[:8]}" if session_key else f"wp-{uuid.uuid4().hex}"
         )
 
         from app.application.normal_chat_dispatch import resolve_tool_execution_profile

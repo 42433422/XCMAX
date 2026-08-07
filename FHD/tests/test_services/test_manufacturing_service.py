@@ -154,9 +154,7 @@ class TestManufacturingFullChain:
         assert plan_lines[env["raw2_id"]] == 10  # 1 * 10
 
         # 未下达前不可领料
-        consume_fail = svc.consume(
-            order_id, env["warehouse_id"], operator="测试员"
-        )
+        consume_fail = svc.consume(order_id, env["warehouse_id"], operator="测试员")
         assert consume_fail["success"] is False
 
         # 3. 下达

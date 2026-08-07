@@ -66,9 +66,7 @@ def suggest_replenishment(
             "count": len(suggestions),
             "summary": {
                 "total_low_stock": len(suggestions),
-                "total_suggest_amount": round(
-                    sum(s["suggest_amount"] for s in suggestions), 2
-                ),
+                "total_suggest_amount": round(sum(s["suggest_amount"] for s in suggestions), 2),
             },
         }
 

@@ -44,19 +44,32 @@ def session_factory():
 def _plan() -> PlanGraph:
     nodes = [
         WorkflowNode(
-            node_id="n1", tool_id="inv", action="query", params={}, risk="low",
-            idempotent=True, depends_on=[], branches=[
+            node_id="n1",
+            tool_id="inv",
+            action="query",
+            params={},
+            risk="low",
+            idempotent=True,
+            depends_on=[],
+            branches=[
                 Branch(target="n2", condition={"inv.low_stock": True}),
             ],
         ),
         WorkflowNode(
-            node_id="n2", tool_id="po", action="suggest", params={}, risk="low",
-            idempotent=True, depends_on=["n1"],
+            node_id="n2",
+            tool_id="po",
+            action="suggest",
+            params={},
+            risk="low",
+            idempotent=True,
+            depends_on=["n1"],
         ),
     ]
     return PlanGraph(
-        plan_id="wp-sess-abc12345", intent="low_stock_suggest",
-        todo_steps=["查库存", "采购建议"], nodes=nodes,
+        plan_id="wp-sess-abc12345",
+        intent="low_stock_suggest",
+        todo_steps=["查库存", "采购建议"],
+        nodes=nodes,
     )
 
 
@@ -93,8 +106,11 @@ class TestWorkflowPlanStore:
         store = WorkflowPlanStore(session_factory=session_factory)
         plan = _plan()
         store.save(
-            plan=plan, runtime_context={"user_id": "u1", "message": "hi"},
-            status="pending_awaiting", user_id="u1", session_id="sess",
+            plan=plan,
+            runtime_context={"user_id": "u1", "message": "hi"},
+            status="pending_awaiting",
+            user_id="u1",
+            session_id="sess",
         )
         data = store.load(plan.plan_id)
         assert data is not None
@@ -109,8 +125,15 @@ class TestWorkflowPlanStore:
     def test_list_active_and_update_status(self, session_factory):
         store = WorkflowPlanStore(session_factory=session_factory)
         plan = _plan()
-        store.save(plan=plan, runtime_context={"user_id": "u1"}, status="pending_awaiting", user_id="u1")
-        store.save(plan=plan_from_dict({**plan_to_dict(plan), "plan_id": "wp-other-1"}), runtime_context={"user_id": "u1"}, status="succeeded", user_id="u1")
+        store.save(
+            plan=plan, runtime_context={"user_id": "u1"}, status="pending_awaiting", user_id="u1"
+        )
+        store.save(
+            plan=plan_from_dict({**plan_to_dict(plan), "plan_id": "wp-other-1"}),
+            runtime_context={"user_id": "u1"},
+            status="succeeded",
+            user_id="u1",
+        )
         active = store.list_active("u1")
         assert [p["plan_id"] for p in active] == ["wp-sess-abc12345"]
         store.update_status(plan.plan_id, "cancelled")
@@ -136,9 +159,16 @@ class TestCrossSessionResume:
         # 会话 A：运行到 n2 中断（n3 未执行），同时计划落库。
         first_calls: list[str] = []
         engine = _engine_with_recording(first_calls, fail_on="t3.tool")
-        first = engine.run(plan, runtime_context={"user_id": "u1", "session_id": "sess"}, checkpointer=cp)
+        first = engine.run(
+            plan, runtime_context={"user_id": "u1", "session_id": "sess"}, checkpointer=cp
+        )
         assert first.success is False
-        store.save(plan=plan, runtime_context={"user_id": "u1", "session_id": "sess"}, status="pending_awaiting", user_id="u1")
+        store.save(
+            plan=plan,
+            runtime_context={"user_id": "u1", "session_id": "sess"},
+            status="pending_awaiting",
+            user_id="u1",
+        )
 
         # 会话 B：全新 store + checkpointer 实例，载入计划，从最新 checkpoint 续跑。
         store2 = WorkflowPlanStore(session_factory=session_factory)
@@ -163,8 +193,13 @@ class TestCrossSessionResume:
 def _sequential_plan() -> PlanGraph:
     nodes = [
         WorkflowNode(
-            node_id=f"n{i}", tool_id=f"t{i}", action="tool", params={}, risk="low",
-            idempotent=True, depends_on=[] if i == 1 else [f"n{i - 1}"],
+            node_id=f"n{i}",
+            tool_id=f"t{i}",
+            action="tool",
+            params={},
+            risk="low",
+            idempotent=True,
+            depends_on=[] if i == 1 else [f"n{i - 1}"],
         )
         for i in range(1, 4)
     ]

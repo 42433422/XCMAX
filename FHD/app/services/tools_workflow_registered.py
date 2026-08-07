@@ -132,7 +132,9 @@ def _registered_router_customers(
         if customer_id <= 0:
             return {"success": False, "message": "缺少 customer_id"}
         return dict(
-            svc.set_credit_limit(customer_id, params.get("credit_limit") or params.get("limit") or 0)
+            svc.set_credit_limit(
+                customer_id, params.get("credit_limit") or params.get("limit") or 0
+            )
             or {}
         )
 
@@ -540,7 +542,9 @@ def _registered_router_sales(
         return svc.invoice(int(params.get("order_id")))
     if action == "payment":
         amount = params.get("amount")
-        return svc.payment(int(params.get("order_id")), float(amount) if amount is not None else None)
+        return svc.payment(
+            int(params.get("order_id")), float(amount) if amount is not None else None
+        )
     if action == "cancel":
         return svc.cancel(int(params.get("order_id")))
     return {"success": False, "message": f"未注册的 sales 动作: {action}"}
