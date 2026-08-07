@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed, type Ref } from 'vue'
+import { ref, computed } from 'vue'
 
 export interface SheetInfo {
   fileName: string

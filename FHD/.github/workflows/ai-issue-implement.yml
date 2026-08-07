@@ -4,7 +4,7 @@ name: AI Issue Implement
 #   - issue 打 `ai-implement` 标签时触发
 #   - 授权：命中 config/auto-implement-allowlist.yaml 域标签，或 owner 评论「确认」
 #   - 预估变更 >5 文件时拒做
-#   - 实现后创建 PR 标 `needs-human` + `risk:r2`，必须独立审查
+#   - 实现后创建 PR 标 `ai-generated` + `risk:r1`，经 SLA 二次守卫 + 48h 观察期 + `hold-merge` veto 后自动合并
 #
 # 触发条件：
 #   1. issues 事件（labeled: ai-implement）

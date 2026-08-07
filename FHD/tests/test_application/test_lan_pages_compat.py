@@ -1,4 +1,4 @@
-"""Tests for app.mod_sdk.lan_pages_compat."""
+"""Tests for app.legacy.lan.lan_pages_compat."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.mod_sdk.lan_pages_compat import (
+from app.legacy.lan.lan_pages_compat import (
     HOST_PAGES,
     MOD_PAGE_PREFIX,
     list_lan_pages_registry,
@@ -14,7 +14,7 @@ from app.mod_sdk.lan_pages_compat import (
 
 
 class TestLanPagesRegistry:
-    @patch("app.mod_sdk.lan_pages_compat.is_lan_via_mod_enabled", return_value=True)
+    @patch("app.legacy.lan.lan_pages_compat.is_lan_via_mod_enabled", return_value=True)
     def test_mod_enabled(self, mock_enabled):
         result = list_lan_pages_registry()
         assert result["success"] is True
@@ -22,7 +22,7 @@ class TestLanPagesRegistry:
         assert result["execution_path"] == "mod_pages"
         assert result["phase"] == "K"
 
-    @patch("app.mod_sdk.lan_pages_compat.is_lan_via_mod_enabled", return_value=False)
+    @patch("app.legacy.lan.lan_pages_compat.is_lan_via_mod_enabled", return_value=False)
     def test_mod_disabled(self, mock_enabled):
         result = list_lan_pages_registry()
         assert result["success"] is True
@@ -35,12 +35,12 @@ class TestLanPagesRegistry:
     def test_mod_page_prefix(self):
         assert "mod/" in MOD_PAGE_PREFIX
 
-    @patch("app.mod_sdk.lan_pages_compat.is_lan_via_mod_enabled", return_value=True)
+    @patch("app.legacy.lan.lan_pages_compat.is_lan_via_mod_enabled", return_value=True)
     def test_host_route_preserved(self, mock_enabled):
         result = list_lan_pages_registry()
         assert result["host_route_preserved"] is True
 
-    @patch("app.mod_sdk.lan_pages_compat.is_lan_via_mod_enabled", return_value=True)
+    @patch("app.legacy.lan.lan_pages_compat.is_lan_via_mod_enabled", return_value=True)
     def test_page_count(self, mock_enabled):
         result = list_lan_pages_registry()
         assert result["page_count"] == len(HOST_PAGES)

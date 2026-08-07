@@ -23,6 +23,7 @@ _DESKTOP_REQUIRED_ROUTES = {
     "workspace_prefs",
     "business_bridge",
     "mod_store",
+    "etl",
 }
 
 
@@ -131,6 +132,12 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     )
     _mount(
         registry,
+        "order_bridge_webhook",
+        lambda: __import__("app.fastapi_routes.order_event_webhook", fromlist=["router"]).router,
+        priority=10,
+    )
+    _mount(
+        registry,
         "xcmax_private_delivery_admin",
         lambda: (
             __import__(
@@ -187,6 +194,20 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
         "knowledge_v1",
         lambda: __import__("app.fastapi_routes.knowledge_v1", fromlist=["router"]).router,
         priority=13,
+    )
+    _mount(
+        registry,
+        "etl",
+        lambda: __import__("app.fastapi_routes.etl", fromlist=["router"]).router,
+        priority=13,
+        required_in_ci=True,
+    )
+    _mount(
+        registry,
+        "etl_targets",
+        lambda: __import__("app.fastapi_routes.etl_targets", fromlist=["router"]).router,
+        priority=13,
+        required_in_ci=True,
     )
     _mount(
         registry,

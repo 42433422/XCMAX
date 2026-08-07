@@ -1,0 +1,111 @@
+{
+  "schema_version": "1.0",
+  "kind": "absorption_tasks",
+  "target_project": "Odoo 18",
+  "own_project": "FHD",
+  "created_at": "2026-08-06T15:29:37.147585+00:00",
+  "policy": "analysis_only_within_retort_frontier",
+  "policy_note": "仅生成待吸收能力清单（Odoo 做法 → FHD 现状 → 吸收落点 → 验收标准），不改写 FHD 业务代码、不 auto-merge、不跑 git 分支合并。每项含 acceptance 供后续实施校验；实际落地应核对 .trae/specs/absorb-odoo18-erp-agent/tasks.md（Task 2-8）。",
+  "task_count": 9,
+  "tasks": [
+    {
+      "task_id": "od-absorb-01-sales-to-payment",
+      "title": "销售到收款闭环（Sales-to-Payment state machine）",
+      "dimension": "product_operability",
+      "priority": "P0",
+      "odoo_way": "sale/models/sale_order.py 用 state=Selection([draft,sent,sale,done,cancel]) 表达报价→确认→执行→完成；invoice_ids Many2many 关联 account.move，订单确认后自动生成发票，收款后回写 paid_amount。",
+      "fhd_current": "无销售单模型；customers 仅作购买单位，products 有 price，出货走 shipment_records，无『报价→确认→发货→开票→收款』状态机。",
+      "absorb_to": "app/db/models/sales.py（新增 SalesOrder/SalesOrderItem）+ app/db/models/__init__.py 导出 + reports.py 现有销售报表打通",
+      "why": "让 Agent 能『说话就下一个销售单并推进到收款』，是 ERP 最核心闭环。",
+      "acceptance": "存在 SalesOrder 状态机（quote→confirm→deliver→invoice→payment）；单测证明建单→确认→发货→开票→收款状态推进且报表可查。"
+    },
+    {
+      "task_id": "od-absorb-02-double-entry",
+      "title": "财务复式记账（Double-entry bookkeeping）",
+      "dimension": "comparative_analysis_depth",
+      "priority": "P0",
+      "odoo_way": "account/models/account_move.py + account_move_line.py：account.move 凭证由一组借贷平衡的 move.line（account_id/debit/credit/partner_id）组成，account.account 为会计科目表；每笔业务（采购/销售/收款）自动生成借贷对照分录。",
+      "fhd_current": "financial_transactions 只是流水（transaction_type/amount/currency），无科目表、无借贷对照、无凭证概念。",
+      "absorb_to": "app/db/models/accounting.py（新增 ChartOfAccount/JournalEntry/JournalEntryLine）+ financial_transactions 增加 journal_entry_id 关联",
+      "why": "把财务从『流水』升级为『可借贷对照的记账』，支持采购/销售自动生成分录。",
+      "acceptance": "存在 ChartOfAccount/JournalEntry/JournalEntryLine；单测证明采购入库生成『借库存/贷应付』借贷平衡分录且与 financial_transactions 关联。"
+    },
+    {
+      "task_id": "od-absorb-03-reporting-tools",
+      "title": "报表中心工具化（Reporting/BI as tools）",
+      "dimension": "product_operability",
+      "priority": "P0",
+      "odoo_way": "销售/库存/应付应收/看板等报表中心，支持批量导出；报表是独立可查询、可导出的中心。",
+      "fhd_current": "app/fastapi_routes/reports.py 已有 /api/report/sales|inventory|purchase|dashboard|export 端点，但未注册为 Agent 工具，Agent 无法『出报表』。",
+      "absorb_to": "config/risk_actions.registry.json 新增 reports 工具（sales_summary/inventory_summary/purchase_summary/dashboard/export）+ registry.py REQUIRED_PARAMS 同步",
+      "why": "让 Agent 用自然语言『查本月库存报表/出销售看板』并通过工具返回结构化结果。",
+      "acceptance": "reports 工具已注册且 ReportService 返回聚合结构；单测证明 get_inventory_report/get_sales_report 返回字段齐全。"
+    },
+    {
+      "task_id": "od-absorb-04-multi-unit-uom",
+      "title": "多单位换算（Multi-unit / UOM）",
+      "dimension": "comparative_analysis_depth",
+      "priority": "P1",
+      "odoo_way": "product/models/uom_uom.py 提供单位换算（uom），产品可多单位（件/箱/斤），换算率明确。",
+      "fhd_current": "Product.unit 是单值字符串，InventoryLedger.unit 亦如此；无换算表，『500 斤』这类多单位歧义无法处理。",
+      "absorb_to": "app/db/models/product.py（新增 unit 换算映射或辅助表）+ 澄清门控接入",
+      "why": "支撑多单位业务与『出 500 斤』的反问澄清。",
+      "acceptance": "同一产品存在多单位与换算关系；单测证明多单位歧义时澄清反问而非按默认单位执行。"
+    },
+    {
+      "task_id": "od-absorb-05-multi-address",
+      "title": "客户多地址（发票 / 送货地址分离）",
+      "dimension": "comparative_analysis_depth",
+      "priority": "P1",
+      "odoo_way": "res.partner 支持发票地址(invoice_address)与送货地址(delivery_address)分离，同一客户多个地址。",
+      "fhd_current": "Customer 只有单一 contact_address 字段，无发票/送货地址分离。",
+      "absorb_to": "app/db/models/customer.py（新增 CustomerAddress 或 invoice_address/delivery_address 字段）",
+      "why": "ERP 标配维度，支撑开票/送货地址不同场景。",
+      "acceptance": "客户可记录发票地址与送货地址；单测证明可独立读写两类地址。"
+    },
+    {
+      "task_id": "od-absorb-06-replenishment-alert",
+      "title": "库存补货预警（Replenishment alert）",
+      "dimension": "comparative_analysis_depth",
+      "priority": "P1",
+      "odoo_way": "stock/models/stock_replenish_mixin.py 基于最小/最大数量(reordering_min/max)评估缺货并生成补货建议。",
+      "fhd_current": "InventoryLedger 有 quantity/available_quantity，但无 min/max 阈值与补货预警；spec 期待用已有 min_stock/max_stock。",
+      "absorb_to": "inventory 工具新增 low_stock_alert/replenishment_suggest + Registry 注册",
+      "why": "库存不足时 Agent 主动预警并反问是否生成采购建议。",
+      "acceptance": "inventory 工具含 low_stock_alert；单测证明库存低于 min_stock 时返回缺货列表并提示补货。"
+    },
+    {
+      "task_id": "od-absorb-07-agent-registry-expansion",
+      "title": "Agent 工具注册表扩容（Registry expansion）",
+      "dimension": "product_operability",
+      "priority": "P0",
+      "odoo_way": "Odoo 以模块化 action/menu 暴露全量业务能力；Agent 需能发现并调用销售/报表/记账/补货工具。",
+      "fhd_current": "config/risk_actions.registry.json 只暴露进销存子集；REQUIRED_PARAMS_BY_TOOL_ACTION 未含 sales/reports/补货预警/记账。",
+      "absorb_to": "config/risk_actions.registry.json + app/services/tools_execution/registry.py REQUIRED_PARAMS_BY_TOOL_ACTION + app/application/workflow/_base_registry()/extend_workflow_tool_registry()",
+      "why": "让 Agent 工具面覆盖 ERP 全集，是本次吸收的『核心落点』。",
+      "acceptance": "sales/reports/finance(ledger)+inventory(补货) 均已注册且 risk/idempotent/required_params 标注齐全；单测 test_tools_workflow_registered.py 覆盖。"
+    },
+    {
+      "task_id": "od-absorb-08-clarification-erp",
+      "title": "反问澄清业务化（ERP clarification gate）",
+      "dimension": "feedback_loop_closure",
+      "priority": "P1",
+      "odoo_way": "Odoo 在多单位/多地址/多币种等歧义场景要求明确参数，避免默认臆测。",
+      "fhd_current": "app/application/workflow/clarification_node.py 已有参数缺失/同名歧义澄清，但未覆盖 ERP 业务决策（多单位、报表口径、盘点/冲销、批量范围）。",
+      "absorb_to": "app/application/workflow/clarification_node.py 扩展 ERP 业务澄清检测，复用 TTL 防堆积",
+      "why": "让『出 500 斤（多单位）』『冲销一批』这类歧义先反问再执行。",
+      "acceptance": "澄清门控识别多单位/报表口径/冲销/批量歧义；单测证明『出 500 斤』时反问确认单位而非直接执行。"
+    },
+    {
+      "task_id": "od-absorb-09-chat-routing",
+      "title": "对话路由与响应接入（Chat slot routing）",
+      "dimension": "product_operability",
+      "priority": "P1",
+      "odoo_way": "Odoo 以统一入口承载销售/报表/库存等业务操作。",
+      "fhd_current": "app/application/normal_chat_dispatch.py 已有 products/customers 槽位路由，未覆盖销售/报表/补货预警；ai_chat_app_service._dispatch_workflow_tool 未规划新工具。",
+      "absorb_to": "app/application/normal_chat_dispatch.py 增加销售/报表/补货预警槽位 + ai_chat_app_service.py 确认新工具可执行",
+      "why": "让普通/专业模式对话能路由到新 ERP 工具并返回结构化响应。",
+      "acceptance": "『销售/报表/预警』关键词命中对应槽位；单测覆盖路由命中。"
+    }
+  ]
+}

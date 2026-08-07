@@ -123,6 +123,27 @@ def _registered_router_customers(
             result["skipped"] = list(result.get("skipped") or []) + skipped
         return result
 
+    if action == "add_address":
+        payload = dict(params or {})
+        return dict(svc.add_address(payload) or {})
+
+    if action == "set_credit_limit":
+        customer_id = int(params.get("customer_id") or params.get("id") or 0)
+        if customer_id <= 0:
+            return {"success": False, "message": "缺少 customer_id"}
+        return dict(
+            svc.set_credit_limit(
+                customer_id, params.get("credit_limit") or params.get("limit") or 0
+            )
+            or {}
+        )
+
+    if action == "get_addresses":
+        customer_id = int(params.get("customer_id") or params.get("id") or 0)
+        if customer_id <= 0:
+            return {"success": False, "message": "缺少 customer_id"}
+        return dict(svc.get_addresses(customer_id) or {})
+
     return {"success": False, "message": f"未注册的 customers 动作: {action}"}
 
 
@@ -395,6 +416,46 @@ def _registered_router_inventory(
             operator=params.get("operator"),
             remark=params.get("remark"),
         )
+    if action == "low_stock_alert":
+        from app.application.material_app_service import get_material_app_service
+
+        threshold = params.get("threshold")
+        return get_material_app_service().get_low_stock_materials(
+            float(threshold) if threshold is not None else None
+        )
+    if action == "replenishment_suggest":
+        from app.services.replenishment_service import suggest_replenishment
+
+        return suggest_replenishment(
+            threshold=params.get("threshold"),
+            per_page=int(params.get("per_page") or 50),
+        )
+    if action == "inventory_count":
+        from app.services.inventory_service import InventoryService
+
+        inv_svc = InventoryService()
+        return inv_svc.inventory_count(
+            product_id=params.get("product_id"),
+            warehouse_id=params.get("warehouse_id"),
+            actual_quantity=float(params.get("actual_quantity", 0)),
+            batch_no=params.get("batch_no"),
+            location_id=params.get("location_id"),
+            operator=params.get("operator"),
+            remark=params.get("remark"),
+            confirmed=bool(params.get("confirmed", False)),
+        )
+    if action == "query_transactions":
+        from app.services.inventory_service import InventoryService
+
+        inv_svc = InventoryService()
+        return inv_svc.query_transactions(
+            product_id=params.get("product_id"),
+            warehouse_id=params.get("warehouse_id"),
+            start_date=params.get("start_date"),
+            end_date=params.get("end_date"),
+            page=int(params.get("page") or 1),
+            per_page=int(params.get("per_page") or 20),
+        )
     return {"success": False, "message": f"未注册的 inventory 动作: {action}"}
 
 
@@ -410,6 +471,25 @@ def _registered_router_purchase(
 
         svc = PurchaseService()
 
+    if action in ("list_suppliers", "get_suppliers", "query_suppliers"):
+        return svc.get_suppliers(
+            status=params.get("status"),
+            keyword=str(params.get("keyword") or params.get("search") or "").strip() or None,
+        )
+    if action in ("list_orders", "get_orders", "list_purchase_orders", "query_orders"):
+        return svc.get_purchase_orders(
+            supplier_id=params.get("supplier_id"),
+            status=params.get("status"),
+            page=int(params.get("page") or 1),
+            per_page=int(params.get("per_page") or 20),
+        )
+    if action in ("list_inbounds", "get_inbounds", "list_purchase_inbounds", "query_inbounds"):
+        return svc.get_purchase_inbounds(
+            supplier_id=params.get("supplier_id"),
+            order_id=params.get("order_id"),
+            page=int(params.get("page") or 1),
+            per_page=int(params.get("per_page") or 20),
+        )
     if action == "create_supplier":
         return svc.create_supplier(dict(params or {}))
     if action == "update_supplier":
@@ -436,6 +516,76 @@ def _registered_router_purchase(
     return {"success": False, "message": f"未注册的 purchase 动作: {action}"}
 
 
+def _registered_router_sales(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    from app.application.sales_app_service import SalesAppService
+
+    svc = SalesAppService()
+
+    if action in ("query", "list", "get_orders"):
+        return svc.query(
+            status=params.get("status"),
+            customer_id=params.get("customer_id"),
+            customer_name=params.get("customer_name"),
+            keyword=str(params.get("keyword") or params.get("search") or "").strip() or None,
+            page=int(params.get("page") or 1),
+            per_page=int(params.get("per_page") or 20),
+        )
+    if action == "quote":
+        return svc.quote(dict(params or {}))
+    if action == "confirm":
+        return svc.confirm(int(params.get("order_id")))
+    if action == "deliver":
+        return svc.deliver(int(params.get("order_id")))
+    if action == "invoice":
+        return svc.invoice(int(params.get("order_id")))
+    if action == "payment":
+        amount = params.get("amount")
+        return svc.payment(
+            int(params.get("order_id")), float(amount) if amount is not None else None
+        )
+    if action == "cancel":
+        return svc.cancel(int(params.get("order_id")))
+    return {"success": False, "message": f"未注册的 sales 动作: {action}"}
+
+
+def _registered_router_reports(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    from app.services.report_service import ReportService
+
+    svc = ReportService()
+
+    if action == "sales_summary":
+        return svc.get_sales_report(
+            start_date=params.get("start_date"),
+            end_date=params.get("end_date"),
+            group_by=str(params.get("group_by") or "product"),
+            customer_id=params.get("customer_id"),
+        )
+    if action == "inventory_summary":
+        return svc.get_inventory_report(
+            warehouse_id=params.get("warehouse_id"),
+            category=params.get("category"),
+        )
+    if action == "purchase_summary":
+        return svc.get_purchase_report(
+            start_date=params.get("start_date"),
+            end_date=params.get("end_date"),
+            group_by=str(params.get("group_by") or "supplier"),
+        )
+    if action == "dashboard":
+        return svc.get_dashboard_summary()
+    if action == "export":
+        return svc.export_to_excel(
+            report_type=str(params.get("report_type") or "report"),
+            data=params.get("data") or [],
+            filename=str(params.get("filename") or "report"),
+        )
+    return {"success": False, "message": f"未注册的 reports 动作: {action}"}
+
+
 def _registered_router_finance(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
@@ -448,6 +598,13 @@ def _registered_router_finance(
 
         svc = FinanceAppService()
 
+    if action in ("list_transactions", "list", "query", "get_transactions"):
+        return svc.list_transactions(
+            transaction_type=params.get("transaction_type"),
+            status=params.get("status"),
+            page=int(params.get("page") or 1),
+            per_page=int(params.get("per_page") or 20),
+        )
     if action == "create_transaction":
         return svc.create_transaction(dict(params or {}))
     if action == "update_transaction":
@@ -456,7 +613,126 @@ def _registered_router_finance(
         return svc.update_transaction(transaction_id, payload)
     if action == "delete_transaction":
         return svc.delete_transaction(int(params.get("transaction_id")))
+    if action in ("ledger_query", "query_ledger"):
+        from app.services.accounting_services import query_financial_ledger
+
+        return query_financial_ledger(**dict(params or {}))
+    if action == "journal_entry_create":
+        from app.services.accounting_services import create_journal_entry
+
+        return create_journal_entry(dict(params or {}))
+    if action == "journal_entry_reverse":
+        from app.services.accounting_services import journal_entry_reverse
+
+        entry_id = int(params.get("entry_id") or params.get("id") or 0)
+        if entry_id <= 0:
+            return {"success": False, "message": "缺少 entry_id"}
+        return journal_entry_reverse(entry_id, description=params.get("description"))
+    if action == "aging_report":
+        from app.services.accounting_services import aging_report
+
+        raw_type = str(params.get("account_type") or params.get("party_type") or "应收").strip()
+        if raw_type in ("应收", "receivable", "客户"):
+            party_type = "receivable"
+        elif raw_type in ("应付", "payable", "供应商"):
+            party_type = "payable"
+        else:
+            party_type = raw_type
+        party_id = int(params.get("party_id") or params.get("customer_id") or 0)
+        return aging_report(party_type=party_type, party_id=party_id)
+    if action == "chart_seed":
+        from app.services.accounting_services import seed_default_chart_of_accounts
+
+        return seed_default_chart_of_accounts()
     return {"success": False, "message": f"未注册的 finance 动作: {action}"}
+
+
+def _registered_router_mrp(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    from app.services.manufacturing_service import ManufacturingService
+
+    svc = ManufacturingService()
+
+    def _opt_int(value: Any) -> int | None:
+        if value in (None, ""):
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    if action == "create_bom":
+        return svc.create_bom(dict(params or {}))
+    if action == "query_boms":
+        return svc.query_boms(
+            status=params.get("status"),
+            product_id=_opt_int(params.get("product_id")),
+            page=int(params.get("page") or 1),
+            per_page=int(params.get("per_page") or 50),
+        )
+    if action == "get_bom":
+        bom_id = int(params.get("bom_id") or params.get("id") or 0)
+        if bom_id <= 0:
+            return {"success": False, "message": "缺少 bom_id"}
+        return svc.get_bom(bom_id)
+    if action == "create_order":
+        return svc.create_order(dict(params or {}))
+    if action == "confirm_order":
+        order_id = int(params.get("order_id") or 0)
+        if order_id <= 0:
+            return {"success": False, "message": "缺少 order_id"}
+        return svc.confirm_order(order_id)
+    if action == "consume":
+        order_id = int(params.get("order_id") or 0)
+        warehouse_id = int(params.get("warehouse_id") or 0)
+        if order_id <= 0:
+            return {"success": False, "message": "缺少 order_id"}
+        return svc.consume(
+            order_id=order_id,
+            warehouse_id=warehouse_id,
+            operator=params.get("operator"),
+        )
+    if action == "finish":
+        order_id = int(params.get("order_id") or 0)
+        warehouse_id = int(params.get("warehouse_id") or 0)
+        if order_id <= 0:
+            return {"success": False, "message": "缺少 order_id"}
+        return svc.finish(
+            order_id=order_id,
+            warehouse_id=warehouse_id,
+            operator=params.get("operator"),
+        )
+    if action == "query_orders":
+        return svc.query_orders(
+            status=params.get("status"),
+            product_id=_opt_int(params.get("product_id")),
+            page=int(params.get("page") or 1),
+            per_page=int(params.get("per_page") or 50),
+        )
+    return {"success": False, "message": f"未注册的 mrp 动作: {action}"}
+
+
+def _registered_router_suppliers(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    from app.application.facades.inventory_facade import PurchaseService
+
+    svc = PurchaseService()
+    if action in ("query", "query_suppliers", "list", "list_suppliers"):
+        return svc.get_suppliers(
+            status=params.get("status"),
+            keyword=str(params.get("keyword") or params.get("search") or "").strip() or None,
+        )
+    if action == "get_supplier":
+        supplier_id = int(params.get("supplier_id") or params.get("id") or 0)
+        if supplier_id <= 0:
+            return {"success": False, "message": "缺少 supplier_id"}
+        result = svc.get_supplier(supplier_id)
+        if isinstance(result, dict):
+            return result
+        return {"success": True, "data": result}
+    return {"success": False, "message": f"未注册的 suppliers 动作: {action}"}
 
 
 def _registered_router_shipment_records(
@@ -1173,31 +1449,6 @@ def _registered_router_template_preview(
                 "preview_data": preview_data,
             },
         }
-
-
-def _registered_router_wechat(
-    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
-) -> dict:
-    from app.application import get_wechat_contact_app_service
-
-    svc = get_wechat_contact_app_service()
-    if action == "view":
-        return {"success": True, "redirect": "/console?view=wechat-contacts"}
-    if action in ("list", "query"):
-        return {
-            "success": True,
-            "data": svc.get_contacts(
-                contact_type=str(params.get("type") or "all"),
-                keyword=str(params.get("keyword") or "").strip() or None,
-                limit=int(params.get("limit") or 100),
-            ),
-        }
-    if action in ("refresh_contact_cache", "refresh_messages_cache"):
-        from app.services.wechat_contact_cache_import import (
-            ensure_decrypted_wechat_dbs as _ensure_decrypted_db,
-        )
-
-        return _ensure_decrypted_db()
 
 
 def _registered_router_print(
@@ -2408,7 +2659,11 @@ _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMa
         "materials": _registered_router_materials,
         "inventory": _registered_router_inventory,
         "purchase": _registered_router_purchase,
+        "sales": _registered_router_sales,
+        "reports": _registered_router_reports,
         "finance": _registered_router_finance,
+        "mrp": _registered_router_mrp,
+        "suppliers": _registered_router_suppliers,
         "shipment_records": _registered_router_shipment_records,
         "shipment_orders": _registered_router_shipment_orders,
         "business_event": _registered_router_business_event,
@@ -2420,7 +2675,6 @@ _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMa
         "label_template_generator": _registered_router_label_template_generator,
         "document_template": _registered_router_document_template,
         "template_preview": _registered_router_template_preview,
-        "wechat": _registered_router_wechat,
         "print": _registered_router_print,
         "printer_list": _registered_router_printer_list,
         "settings": _registered_router_settings,

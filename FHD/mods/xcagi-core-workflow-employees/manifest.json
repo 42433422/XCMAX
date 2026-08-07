@@ -1,9 +1,9 @@
 {
   "id": "xcagi-core-workflow-employees",
-  "name": "XCAGI 核心工作流（四名内置员工）",
+  "name": "XCAGI 核心工作流（三名内置员工）",
   "version": "1.0.0.0",
   "author": "成都修茈科技有限公司",
-  "description": "Mod（房子）：承载原 FHD 焊死的四名工作流副窗 AI 员工。员工（家具）：label_print、shipment_mgmt、receipt_confirm、wechat_msg。前端事件链仍在宿主；本包提供 manifest 名片与 backend/employees/*.py，供 MODstore 制作与 mod:sync 安装。",
+  "description": "Mod（房子）：承载原 FHD 焊死的三名工作流副窗 AI 员工。员工（家具）：label_print、shipment_mgmt、receipt_confirm。前端事件链仍在宿主；本包提供 manifest 名片与 backend/employees/*.py，供 MODstore 制作与 mod:sync 安装。",
   "primary": false,
   "dependencies": {
     "xcagi": ">=1.0.0.0"
@@ -62,13 +62,6 @@
       "panel_title": "工作流 · 收货确认 AI 员工",
       "panel_summary": "星标意图 → 收货/对账类客户反馈写入工作流进程；对话跟进确认。",
       "api_base_path": "employees/receipt_confirm"
-    },
-    {
-      "id": "wechat_msg",
-      "label": "微信消息处理 AI 员工",
-      "panel_title": "工作流 · 微信消息处理 AI 员工",
-      "panel_summary": "主动意识启用 → 新消息 → 意图 API 或本地规则 → 任务列表。",
-      "api_base_path": "employees/wechat_msg"
     }
   ]
 }

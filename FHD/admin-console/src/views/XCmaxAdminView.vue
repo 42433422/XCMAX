@@ -261,6 +261,9 @@
       </div>
     </div>
 
+    <div v-show="activeTab === 'orders'" class="page-content admin-tab-panel">
+      <XCmaxAdminOrdersTab />
+    </div>
     <div v-show="activeTab === 'autonomy'" class="page-content admin-tab-panel">
       <XCmaxAdminAutonomyTab />
     </div>
@@ -296,6 +299,7 @@ import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref }
 import XCmaxAdminInfraTab from '@/components/admin/XCmaxAdminInfraTab.vue'
 import XCmaxAdminDutyTab from '@/components/admin/XCmaxAdminDutyTab.vue'
 import XCmaxAdminAutonomyTab from '@/components/admin/XCmaxAdminAutonomyTab.vue'
+import XCmaxAdminOrdersTab from '@/components/admin/XCmaxAdminOrdersTab.vue'
 import XcmaxDashboardEmbed from '@/components/admin/XcmaxDashboardEmbed.vue'
 import AdminDeployUpdateModal from '@host/components/admin/AdminDeployUpdateModal.vue'
 import {
@@ -307,6 +311,7 @@ import xcmaxMarketProxy from '@/api/xcmaxMarketProxy'
 
 const adminTabs = [
   { id: 'overview', label: '总览' },
+  { id: 'orders', label: '订单经营' },
   { id: 'autonomy', label: '自治总览' },
   { id: 'infra', label: '基础设施' },
   { id: 'duty', label: '编制与调度' },

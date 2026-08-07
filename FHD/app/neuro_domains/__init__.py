@@ -31,7 +31,6 @@ from app.neuro_bus.domains.print_domain import PrintNeuroDomain, get_print_domai
 from app.neuro_bus.domains.product_domain import ProductNeuroDomain, get_product_domain
 from app.neuro_bus.domains.safety_domain import SafetyNeuroDomain, get_safety_domain
 from app.neuro_bus.domains.shipment_domain import ShipmentNeuroDomain, get_shipment_domain
-from app.neuro_bus.domains.wechat_domain import WechatNeuroDomain, get_wechat_domain
 
 __all__ = [
     "AIServiceNeuroDomain",
@@ -48,7 +47,6 @@ __all__ = [
     "ProductNeuroDomain",
     "SafetyNeuroDomain",
     "ShipmentNeuroDomain",
-    "WechatNeuroDomain",
     "ProcessorCoordinator",
     "ProcessorType",
     "NeuroUnitOfWork",
@@ -66,5 +64,4 @@ __all__ = [
     "get_safety_domain",
     "get_shipment_domain",
     "get_processor_coordinator",
-    "get_wechat_domain",
 ]

@@ -152,6 +152,10 @@ export default defineConfig(() => ({
         replacement: modViewsDir('xcagi-customer-service-bridge'),
       },
       {
+        find: '@mod-frontend/xcagi-customer-service-bridge',
+        replacement: path.resolve(__dirname, '../mods/xcagi-customer-service-bridge/frontend'),
+      },
+      {
         find: '@mod-views/xcagi-approval-bridge',
         replacement: modViewsDir('xcagi-approval-bridge'),
       },

@@ -2,13 +2,44 @@
 
 from __future__ import annotations
 
+import contextlib
 from datetime import datetime
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
+from app.db.base import Base
+from app.db.models import InventoryLedger, InventoryTransaction, Product, Warehouse
 from app.services.inventory_service import InventoryService
+
+
+def _mock_get_db(mock_db):
+    """Create a contextmanager mock for get_db generator."""
+
+    @contextlib.contextmanager
+    def _get_db():
+        yield mock_db
+
+    return _get_db
+
+
+@pytest.fixture(scope="function")
+def test_engine():
+    return create_engine("sqlite:///:memory:")
+
+
+@pytest.fixture(scope="function")
+def test_session(test_engine):
+    Base.metadata.create_all(test_engine)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -493,3 +524,227 @@ class TestGetInventoryAlert:
         result = svc.get_inventory_alert()
         assert result["success"] is True
         assert result["count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# inventory_count — Mock 风格（未确认）
+# ---------------------------------------------------------------------------
+class TestInventoryCountUnconfirmed:
+    @patch("app.services.inventory_service.get_db")
+    def test_unconfirmed_returns_diff_without_changing_stock(self, mock_get_db):
+        """盘点未确认：库存不变，返回差异供对话层反问确认。"""
+        mock_ledger = MagicMock()
+        mock_ledger.quantity = Decimal("100")
+        mock_ledger.available_quantity = Decimal("90")
+        mock_ledger.id = 1
+
+        mock_db = MagicMock()
+        mock_db.__enter__ = MagicMock(return_value=mock_db)
+        mock_db.__exit__ = MagicMock(return_value=False)
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_ledger
+        mock_get_db.return_value = mock_db
+
+        svc = InventoryService()
+        result = svc.inventory_count(
+            product_id=1, warehouse_id=1, actual_quantity=110, confirmed=False
+        )
+
+        assert result["success"] is True
+        assert result["confirmed"] is False
+        assert result["data"]["book_quantity"] == 100.0
+        assert result["data"]["actual_quantity"] == 110.0
+        assert result["data"]["diff"] == 10.0
+        # 未确认不应改动库存
+        mock_db.commit.assert_not_called()
+        mock_db.add.assert_not_called()
+
+    @patch("app.services.inventory_service.get_db")
+    def test_ledger_not_found(self, mock_get_db):
+        mock_db = MagicMock()
+        mock_db.__enter__ = MagicMock(return_value=mock_db)
+        mock_db.__exit__ = MagicMock(return_value=False)
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+        mock_get_db.return_value = mock_db
+
+        svc = InventoryService()
+        result = svc.inventory_count(product_id=1, warehouse_id=1, actual_quantity=10)
+        assert result["success"] is False
+        assert "不存在" in result["message"]
+
+
+# ---------------------------------------------------------------------------
+# inventory_count — 确认（真实 sqlite :memory:）
+# ---------------------------------------------------------------------------
+class TestInventoryCountConfirmed:
+    def _seed(self, db):
+        wh = Warehouse(code="WH01", name="主仓", status="active")
+        prod = Product(name="商品A", model_number="P-001", unit="个")
+        db.add_all([wh, prod])
+        db.commit()
+        db.refresh(wh)
+        db.refresh(prod)
+        ledger = InventoryLedger(
+            product_id=prod.id,
+            warehouse_id=wh.id,
+            batch_no=None,
+            quantity=Decimal("100"),
+            available_quantity=Decimal("90"),
+            reserved_quantity=Decimal("10"),
+            unit="个",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        db.add(ledger)
+        db.commit()
+        db.refresh(ledger)
+        return wh, prod, ledger
+
+    def test_confirmed_adjusts_stock_and_writes_count_transaction(self, test_session, test_engine):
+        wh, prod, ledger = self._seed(test_session)
+
+        # 用绑定到内存引擎的 get_db 替换 service 内的 get_db
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+
+        @contextlib.contextmanager
+        def _get_db():
+            db = SessionLocal()
+            try:
+                yield db
+                db.commit()
+            finally:
+                db.close()
+
+        svc = InventoryService()
+        with patch("app.services.inventory_service.get_db", _get_db):
+            result = svc.inventory_count(
+                product_id=prod.id,
+                warehouse_id=wh.id,
+                actual_quantity=120,
+                confirmed=True,
+                operator="tester",
+                remark="年末盘点",
+            )
+
+        assert result["success"] is True
+        assert result["confirmed"] is True
+        assert result["data"]["book_quantity"] == 100.0
+        assert result["data"]["actual_quantity"] == 120.0
+        assert result["data"]["diff"] == 20.0
+
+        # 使 test_session 身份映射过期，重新从库中读取最新值
+        test_session.expire_all()
+
+        # 验证台账已调整为实盘数量
+        updated = (
+            test_session.query(InventoryLedger).filter(InventoryLedger.id == ledger.id).first()
+        )
+        assert float(updated.quantity) == 120.0
+        # available_quantity 也按 diff 同步调整（90 + 20）
+        assert float(updated.available_quantity) == 110.0
+
+        # 验证写入一条 count 流水
+        txns = (
+            test_session.query(InventoryTransaction)
+            .filter(InventoryTransaction.ledger_id == ledger.id)
+            .all()
+        )
+        assert len(txns) == 1
+        txn = txns[0]
+        assert txn.transaction_type == "count"
+        assert float(txn.quantity) == 20.0
+        assert float(txn.before_quantity) == 100.0
+        assert float(txn.after_quantity) == 120.0
+        assert txn.reference_type == "inventory_count"
+        assert txn.operator == "tester"
+
+    def test_confirmed_negative_diff_reduces_stock(self, test_session, test_engine):
+        """实盘小于账面（盘亏）时 diff 为负，库存下调并写负值 count 流水。"""
+        wh, prod, ledger = self._seed(test_session)
+
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+
+        @contextlib.contextmanager
+        def _get_db():
+            db = SessionLocal()
+            try:
+                yield db
+                db.commit()
+            finally:
+                db.close()
+
+        svc = InventoryService()
+        with patch("app.services.inventory_service.get_db", _get_db):
+            result = svc.inventory_count(
+                product_id=prod.id,
+                warehouse_id=wh.id,
+                actual_quantity=80,
+                confirmed=True,
+            )
+
+        assert result["success"] is True
+        assert result["data"]["diff"] == -20.0
+
+        test_session.expire_all()
+
+        updated = (
+            test_session.query(InventoryLedger).filter(InventoryLedger.id == ledger.id).first()
+        )
+        assert float(updated.quantity) == 80.0
+        assert float(updated.available_quantity) == 70.0
+
+        txns = (
+            test_session.query(InventoryTransaction)
+            .filter(InventoryTransaction.ledger_id == ledger.id)
+            .all()
+        )
+        assert len(txns) == 1
+        assert float(txns[0].quantity) == -20.0
+
+
+# ---------------------------------------------------------------------------
+# query_transactions
+# ---------------------------------------------------------------------------
+class TestQueryTransactions:
+    def test_wraps_get_inventory_transactions(self):
+        """query_transactions 返回与 get_inventory_transactions 相同结构。"""
+        svc = InventoryService()
+        with patch.object(
+            svc,
+            "get_inventory_transactions",
+            return_value={
+                "success": True,
+                "data": [],
+                "total": 0,
+                "page": 1,
+                "per_page": 50,
+            },
+        ) as mock_get:
+            result = svc.query_transactions(product_id=1, warehouse_id=2)
+        mock_get.assert_called_once_with(product_id=1, warehouse_id=2)
+        assert result["total"] == 0
+
+    @patch("app.services.inventory_service.get_db")
+    def test_filters_by_warehouse_id(self, mock_get_db):
+        """多仓库场景下按 warehouse_id 过滤流水。"""
+        mock_item = MagicMock()
+        mock_item.__table__ = MagicMock()
+        mock_item.__table__.columns = []
+        mock_item.product = MagicMock(name="Product A")
+        mock_item.warehouse = MagicMock(name="WH02")
+        mock_item.location = MagicMock(name="B-1")
+
+        mock_db = MagicMock()
+        mock_db.__enter__ = MagicMock(return_value=mock_db)
+        mock_db.__exit__ = MagicMock(return_value=False)
+        mock_db.query.return_value.filter.return_value.order_by.return_value.offset.return_value.limit.return_value.all.return_value = [
+            mock_item
+        ]
+        mock_db.query.return_value.filter.return_value.count.return_value = 1
+        mock_get_db.return_value = mock_db
+
+        svc = InventoryService()
+        result = svc.query_transactions(warehouse_id=2)
+        filter_call = mock_db.query.return_value.filter
+        filter_call.assert_called()
+        assert result["success"] is True
+        assert result["total"] == 1

@@ -31,11 +31,6 @@ describe('API Module Tests', () => {
     expect(printApi).toBeDefined()
   })
 
-  it('should have wechat API', async () => {
-    const wechatApi = await import('../src/api/wechat')
-    expect(wechatApi).toBeDefined()
-  })
-
   it('should have materials API', async () => {
     const materialsApi = await import('../src/api/materials')
     expect(materialsApi).toBeDefined()

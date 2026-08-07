@@ -6,7 +6,7 @@ import { readEntitledModIdsFromAuthPayload } from '@/stores/mods'
 import type { useModsStore } from '@/stores/mods'
 import { buildLoginLocation } from '@/utils/startupRedirect'
 import { clearHostPackSkippedSession } from '@/utils/hostPackOnboardingGate'
-import { asRecord, asArray, asString } from '@/utils/typeGuards'
+import { asRecord, asString } from '@/utils/typeGuards'
 
 export type StartupAuthResult = {
   ok: boolean
@@ -44,13 +44,12 @@ export function useStartupAuth(options: {
         || dataRow.valid === true
       ) {
         clearHostPackSkippedSession()
-        await syncMarketTokensFromSession()
-        try {
-          const { useAccountProfileStore } = await import('@/stores/accountProfile')
-          await useAccountProfileStore().refreshFromServer()
-        } catch {
-          /* ignore */
-        }
+        // P0 优化3：Market token 同步与账户资料刷新彼此无依赖，并行执行节省 ~1RT
+        const marketPromise = syncMarketTokensFromSession()
+        const profilePromise = import('@/stores/accountProfile')
+          .then((m) => m.useAccountProfileStore().refreshFromServer())
+          .catch(() => { /* ignore */ })
+        await Promise.all([marketPromise, profilePromise])
         let entitledModIds: string[] = []
         let accountUsername = ''
         try {
@@ -83,13 +82,10 @@ export function useStartupAuth(options: {
 
   async function runEnterpriseStartupAuth(isPublicEntryRoute: () => boolean): Promise<boolean> {
     if (isPublicEntryRoute()) return true
-    let sku = 'generic'
-    try {
-      sku = await fetchProductSku()
-    } catch {
-      /* ignore */
-    }
-    const authResult = await ensureStartupAuthenticated()
+    // P0 优化3：fetchProductSku 与 auth 校验互相无依赖，并行执行节省 ~1RT
+    const skuPromise = fetchProductSku().catch(() => 'generic' as string)
+    const authPromise = ensureStartupAuthenticated()
+    const [sku, authResult] = await Promise.all([skuPromise, authPromise])
     if (!authResult.ok) return false
     if (!isEnterpriseEdition(sku)) return true
     try {

@@ -15,7 +15,6 @@ _LEGACY_GAP_DOMAIN_MODULES: tuple[str, ...] = (
     "app.fastapi_routes.domains.product.routes",
     "app.fastapi_routes.domains.static.routes",
     "app.fastapi_routes.domains.system.routes",
-    "app.fastapi_routes.domains.wechat.routes",
     "app.fastapi_routes.domains.shipment.routes",
 )
 

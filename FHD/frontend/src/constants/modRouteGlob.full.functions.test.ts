@@ -13,11 +13,11 @@ describe('modRouteGlob.full loaders', () => {
     }
   })
 
-  it('all keys point to routes.js files under mods or mods-admin-runtime', () => {
+  it('all keys point to routes.js files under SSOT mods/', () => {
     for (const key of Object.keys(modRouteGlob)) {
       const norm = key.replace(/\\/g, '/')
       expect(norm).toContain('routes.js')
-      expect(norm.includes('/mods/') || norm.includes('/mods-admin-runtime/')).toBe(true)
+      expect(norm).toContain('/mods/')
     }
   })
 

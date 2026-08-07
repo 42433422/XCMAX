@@ -709,12 +709,12 @@ describe('mods store – coverage 补齐', () => {
       store.mods = [
         ...sampleMods,
         {
-          id: 'wechat-contacts-ai-employee',
-          name: 'WeChat Contacts',
+          id: 'test-extension-mod',
+          name: 'Test Extension',
           version: '1.0',
           author: '',
           description: '',
-          menu: [{ id: 'mod-wechat-panel', label: '微信面板', icon: 'box', path: '/mod/wechat-contacts-ai-employee/panel' }],
+          menu: [{ id: 'mod-test-panel', label: '测试面板', icon: 'box', path: '/mod/test-extension-mod/panel' }],
         },
       ] as never[];
       store.setActiveModId('attendance-industry');
@@ -764,7 +764,7 @@ describe('mods store – coverage 补齐', () => {
       // 使用 vi.doMock 让 modsForUi 返回空数组（通过 isAdminConsoleSpa）
       mockIsAdminConsoleSpa.mockReturnValue(true);
       mockIsAuxEmployeePackModId.mockImplementation((id: string) =>
-        id === 'wechat-contacts-ai-employee',
+        id === 'test-aux-pack',
       );
       // isAdminConsoleSpa=true 使 modsForUi=[]，但 modsContributingSidebarMenu 用 full
       // 实际上 isAdminConsoleSpa 会让 modsForUi=[]，但 active 仍可走 fromFull 路径
@@ -777,12 +777,12 @@ describe('mods store – coverage 补齐', () => {
       store.mods = [
         ...sampleMods,
         {
-          id: 'wechat-contacts-ai-employee',
-          name: 'WeChat Contacts',
+          id: 'test-aux-pack',
+          name: 'Test Aux Pack',
           version: '1.0',
           author: '',
           description: '',
-          menu: [{ id: 'mod-wechat-panel', label: '微信面板', icon: 'box', path: '/mod/wechat-contacts-ai-employee/panel' }],
+          menu: [{ id: 'mod-test-aux-panel', label: '测试面板', icon: 'box', path: '/mod/test-aux-pack/panel' }],
         },
       ] as never[];
       // active 设为一个不在 mods.value 中的可选扩展
@@ -791,7 +791,7 @@ describe('mods store – coverage 补齐', () => {
       const menu = store.getModMenu();
       const modIds = menu.map((m) => m.modId);
       // fromUi 路径：modsForUi 返回全部 mods，pickForActive 匹配 aux pack
-      expect(modIds).toContain('wechat-contacts-ai-employee');
+      expect(modIds).toContain('test-aux-pack');
     });
 
     it('getModMenu 在 active 为 CLIENT_PRIMARY_ERP_MOD_ID 且不在列表时使用 stub', () => {
@@ -911,19 +911,19 @@ describe('mods store – coverage 补齐', () => {
       warnSpy.mockRestore();
     });
 
-    it('validateModMenuPaths 对 wechat-contacts-ai-employee 员工包路径不警告', () => {
-      // isHostMountedModMenuPath('/wechat-contacts', '/wechat-contacts') 应返回 true
+    it('validateModMenuPaths 对 host-mounted 员工包路径不警告', () => {
+      // isHostMountedModMenuPath('/host-mounted-page', '/host-mounted-page') 应返回 true
       mockIsHostMountedModMenuPath.mockReturnValue(true);
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const store = useModsStore();
       store.mods = [
         {
-          id: 'wechat-contacts-ai-employee',
-          name: 'WeChat Contacts',
+          id: 'host-mounted-employee',
+          name: 'Host Mounted',
           version: '1.0',
           author: '',
           description: '',
-          menu: [{ id: 'mod-wechat-contacts', label: '微信联系人', icon: 'x', path: '/wechat-contacts' }],
+          menu: [{ id: 'mod-host-mounted', label: '宿主挂载页', icon: 'x', path: '/host-mounted-page' }],
         },
       ] as never[];
 

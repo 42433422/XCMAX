@@ -71,6 +71,9 @@ jobs:
       MODSTORE_EVOLUTION_LEDGER_PATH: ${{ github.workspace }}/FHD/evolution_decisions.jsonl
       MODSTORE_REPO_ROOT: ${{ github.workspace }}
       MODSTORE_ENABLE_CATALOG_GAP_SCAN: 'true'
+      MODSTORE_LEGACY_REPORT_PATH: ${{ github.workspace }}/FHD/metrics/legacy-usage-168h.json
+      MODSTORE_INTENT_REPORT_PATH: ${{ github.workspace }}/FHD/metrics/intent_benchmark_latest.json
+      MODSTORE_SLO_REPORT_PATH: ${{ github.workspace }}/FHD/metrics/slo-latest.json
       EVOLUTION_PROPOSAL_PATH: ${{ github.workspace }}/.evolution-proposal.json
     steps:
       - uses: actions/checkout@v4
@@ -124,6 +127,18 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install httpx
+
+      - name: Resolve latest committed SLO report
+        if: steps.scan_scope.outputs.should_scan == 'true'
+        working-directory: .
+        run: |
+          latest=$(ls FHD/metrics/slo-measured-*.json 2>/dev/null | sort | tail -1 || true)
+          if [ -n "${latest:-}" ]; then
+            cp "$latest" FHD/metrics/slo-latest.json
+            echo "Using SLO report: $latest"
+          else
+            echo "No committed SLO report found; SLO signal stays healthy."
+          fi
 
       - name: Aggregate evolution signals + LLM propose + open issue
         if: steps.scan_scope.outputs.should_scan == 'true'

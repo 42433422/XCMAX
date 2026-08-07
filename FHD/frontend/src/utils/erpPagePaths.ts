@@ -1,12 +1,10 @@
 import type { RouteLocationRaw, Router } from 'vue-router'
 import {
   ERP_DOMAIN_BRIDGE_MOD_ID,
-  WECHAT_BRIDGE_MOD_ID,
   readErpDomainModFacadeEnabled,
 } from '@/constants/erpDomainMod'
 
 const MOD_PREFIX = `/mod/${ERP_DOMAIN_BRIDGE_MOD_ID}`
-const WECHAT_MOD_PREFIX = `/mod/${WECHAT_BRIDGE_MOD_ID}`
 
 /** 宿主业务 path → Mod 子路径（K+ 扩展考勤/物料/打印等页） */
 const HOST_PATH_TO_MOD: Record<string, string> = {
@@ -15,11 +13,10 @@ const HOST_PATH_TO_MOD: Record<string, string> = {
   '/orders': '/orders',
   '/orders/create': '/orders/create',
   '/shipment-records': '/shipment-records',
-  '/wechat-contacts': '/wechat-contacts',
   '/materials': '/materials',
   '/materials-list': '/materials',
   '/traditional-mode': '/traditional-mode',
-  '/business-docking': '/business-docking',
+  // 数据对接中心 = 宿主 EtlCenter（/api/etl）；勿再映射到已退役的业务对接/模板库
   '/data-sources': '/data-sources',
   '/print': '/print',
   '/printer-list': '/printer-list',
@@ -36,11 +33,9 @@ const HOST_ROUTE_NAME_TO_MOD: Record<string, string> = {
   orders: '/orders',
   'orders-create': '/orders/create',
   'shipment-records': '/shipment-records',
-  'wechat-contacts': '/wechat-contacts',
   materials: '/materials',
   'materials-list': '/materials',
   'traditional-mode': '/traditional-mode',
-  'business-docking': '/business-docking',
   'data-sources': '/data-sources',
   print: '/print',
   'printer-list': '/printer-list',
@@ -59,9 +54,6 @@ export function resolveErpPagePath(hostPath: string): string {
   const raw = hostPath.startsWith('/') ? hostPath : `/${hostPath}`
   const pathOnly = raw.split('?')[0]?.split('#')[0] || raw
   if (!useErpModPages()) return raw
-  if (pathOnly === '/wechat-contacts') {
-    return `${WECHAT_MOD_PREFIX}/wechat-contacts${raw.slice(pathOnly.length)}`
-  }
   const seg = HOST_PATH_TO_MOD[pathOnly]
   if (!seg) return raw
   return `${MOD_PREFIX}${seg}${raw.slice(pathOnly.length)}`
@@ -72,9 +64,6 @@ export function resolveErpPageRedirectForRouteName(routeName: string): string | 
   if (!useErpModPages()) return null
   const seg = HOST_ROUTE_NAME_TO_MOD[routeName]
   if (!seg) return null
-  if (routeName === 'wechat-contacts') {
-    return `${WECHAT_MOD_PREFIX}/wechat-contacts`
-  }
   return `${MOD_PREFIX}${seg}`
 }
 

@@ -23,6 +23,8 @@ class FinancialTransaction(TenantScopedMixin, Base):
 
     reference_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     reference_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    # 复式记账关联（Odoo 吸收：流水升级为记账凭证关联）
+    journal_entry_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
 
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     transaction_date: Mapped[datetime] = mapped_column(
@@ -54,6 +56,7 @@ class FinancialTransaction(TenantScopedMixin, Base):
             "currency": self.currency,
             "reference_type": self.reference_type,
             "reference_id": self.reference_id,
+            "journal_entry_id": self.journal_entry_id,
             "description": self.description,
             "transaction_date": (
                 self.transaction_date.isoformat() if self.transaction_date else None

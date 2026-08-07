@@ -275,3 +275,16 @@ domains:
     mode: verify
     check: python scripts/ops/runtime_inventory.py check
     sync: null
+
+  - name: repository-ssot
+    owner: backend
+    enabled: true
+    # 仓储实现唯一真相源：禁止同一 <Entity>Repository port 重复实现（保新建删/DDD 演进）。
+    # 唯一规范目录 = app/infrastructure/repositories/；persistence/ 仅保留非 domain 仓储实现。
+    ssot: FHD/app/infrastructure/repositories/
+    derived:
+      - FHD/app/infrastructure/persistence/
+      - FHD/app/application/ports/
+    mode: lint
+    check: python scripts/dev/ssot_plugins/repository_ssot.py check
+    sync: null

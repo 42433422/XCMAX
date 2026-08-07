@@ -76,7 +76,6 @@ from app.mod_sdk import (  # noqa: F401
     services,
     state,
     tts,
-    wechat_bridge,
     workspace,
 )
 
@@ -93,6 +92,5 @@ __all__ = [
     "services",
     "state",
     "tts",
-    "wechat_bridge",
     "workspace",
 ]

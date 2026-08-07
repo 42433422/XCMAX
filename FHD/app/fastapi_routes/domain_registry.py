@@ -24,7 +24,6 @@ BUSINESS_DOMAINS: tuple[str, ...] = (
     "static",
     "system",
     "template",
-    "wechat",
     "workflow",
     "db",
 )
@@ -42,7 +41,6 @@ DOMAIN_TO_DIR: dict[str, str] = {
     "static": "app/fastapi_routes/domains/static/",
     "system": "app/fastapi_routes/domains/system/",
     "template": "app/fastapi_routes/domains/template/",
-    "wechat": "app/fastapi_routes/domains/wechat/",
     "workflow": "app/fastapi_routes/domains/workflow/",
     "db": "app/fastapi_routes/domains/db/",
 }
@@ -105,7 +103,6 @@ LEGACY_ROUTE_REGISTRY: tuple[LegacyRoute, ...] = (
     _doc("static", "app.fastapi_routes.domains.static.routes", "静态资源"),
     _doc("system", "app.fastapi_routes.domains.system.routes", "系统/管理"),
     _doc("template", "app.fastapi_routes.domains.template.routes", "模板"),
-    _doc("wechat", "app.fastapi_routes.domains.wechat.routes", "微信域"),
     _doc("workflow", "app.fastapi_routes.domains.workflow.routes", "工作流/审批"),
     _doc("db", "app.fastapi_routes.domains.db.base", "DB 查询/写入（base 入口）"),
 )
