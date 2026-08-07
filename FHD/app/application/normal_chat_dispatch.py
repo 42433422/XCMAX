@@ -69,7 +69,16 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
         }
 
     # 报表 / 汇总 / 看板（吸收 Odoo 18 报表中心）——须在销售/库存/采购之前，避免「销售报表」等被宽泛词截胡
-    report_keywords = ("报表", "销售报表", "库存报表", "采购报表", "汇总", "经营看板", "数据看板", "统计")
+    report_keywords = (
+        "报表",
+        "销售报表",
+        "库存报表",
+        "采购报表",
+        "汇总",
+        "经营看板",
+        "数据看板",
+        "统计",
+    )
     if any(k in text for k in report_keywords):
         return {
             "intent": "reports_query",
@@ -164,7 +173,18 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
         }
 
     # 财务 / 凭证 / 收支流水
-    finance_keywords = ("财务", "凭证", "收支", "应收", "应付", "交易流水", "资金", "对账", "总账", "记账")
+    finance_keywords = (
+        "财务",
+        "凭证",
+        "收支",
+        "应收",
+        "应付",
+        "交易流水",
+        "资金",
+        "对账",
+        "总账",
+        "记账",
+    )
     if any(k in text for k in finance_keywords):
         return {
             "intent": "finance_query",
@@ -172,7 +192,17 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
         }
 
     # 销售 / 报价 / 销售订单（Sales-to-Payment 闭环，吸收 Odoo 18）
-    sales_keywords = ("销售订单", "报价单", "销售单", "销售", "下单", "收款", "开票", "发货单确认", "销售明细")
+    sales_keywords = (
+        "销售订单",
+        "报价单",
+        "销售单",
+        "销售",
+        "下单",
+        "收款",
+        "开票",
+        "发货单确认",
+        "销售明细",
+    )
     if any(k in text for k in sales_keywords):
         return {
             "intent": "sales_query",
@@ -759,9 +789,7 @@ def build_aging_report_response_dict(route_result: dict[str, Any]) -> dict[str, 
     try:
         from app.services.accounting_services import aging_report
 
-        party_type = (
-            "receivable" if account_type in ("应收", "receivable", "客户") else "payable"
-        )
+        party_type = "receivable" if account_type in ("应收", "receivable", "客户") else "payable"
         result = aging_report(party_type=party_type, party_id=int(party_id))
         if isinstance(result, dict) and result.get("success") is False:
             return {
@@ -1077,7 +1105,9 @@ def build_sales_query_response_dict(route_result: dict[str, Any]) -> dict[str, A
         orders = result.get("data") or []
         total = int(result.get("total") or len(orders))
         if not orders:
-            msg = "当前没有销售订单。" if not keyword else f"没有查到与「{keyword}」匹配的销售订单。"
+            msg = (
+                "当前没有销售订单。" if not keyword else f"没有查到与「{keyword}」匹配的销售订单。"
+            )
         else:
             lines = []
             for o in orders[:10]:
@@ -1151,7 +1181,12 @@ def build_reports_query_response_dict(
         return {
             "success": True,
             "response": msg,
-            "data": {"intent": "reports_query", "report_type": label, "rows": rows[:20], "summary": summary},
+            "data": {
+                "intent": "reports_query",
+                "report_type": label,
+                "rows": rows[:20],
+                "summary": summary,
+            },
             "normal_slot_dispatch": True,
         }
     except RECOVERABLE_ERRORS as e:

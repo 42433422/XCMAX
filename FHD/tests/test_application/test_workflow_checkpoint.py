@@ -135,9 +135,7 @@ class TestWorkflowCheckpointReplay:
         assert [r.node_id for r in replay.node_results] == [
             r.node_id for r in original.node_results
         ]
-        assert [r.output for r in replay.node_results] == [
-            r.output for r in original.node_results
-        ]
+        assert [r.output for r in replay.node_results] == [r.output for r in original.node_results]
         assert replay.final_context["node_outputs"] == original.final_context["node_outputs"]
 
     def test_replay_does_not_execute_tools(self):

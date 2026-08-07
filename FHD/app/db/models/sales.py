@@ -36,7 +36,10 @@ class SalesOrder(IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base
     remark: Mapped[Optional[str]] = mapped_column(Text)
 
     items: Mapped[list[SalesOrderItem]] = relationship(
-        "SalesOrderItem", back_populates="sales_order", cascade="all, delete-orphan", lazy="selectin"
+        "SalesOrderItem",
+        back_populates="sales_order",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
     def advance(self, new_status: str) -> None:
@@ -47,9 +50,7 @@ class SalesOrder(IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base
         if new_status not in flow:
             raise ValueError(f"非法销售订单状态: {new_status}")
         if self.status in flow and flow.index(new_status) < flow.index(self.status):
-            raise ValueError(
-                f"销售订单状态不允许回退: {self.status} -> {new_status}"
-            )
+            raise ValueError(f"销售订单状态不允许回退: {self.status} -> {new_status}")
         self.status = new_status
 
     def to_dict(self) -> dict:
@@ -92,9 +93,7 @@ class SalesOrderItem(IntegerPrimaryKeyMixin, TenantScopedMixin, Base):
     remark: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
-    sales_order: Mapped[Optional[SalesOrder]] = relationship(
-        "SalesOrder", back_populates="items"
-    )
+    sales_order: Mapped[Optional[SalesOrder]] = relationship("SalesOrder", back_populates="items")
 
     def to_dict(self) -> dict:
         return {
@@ -115,5 +114,3 @@ class SalesOrderItem(IntegerPrimaryKeyMixin, TenantScopedMixin, Base):
             ),
             "status": self.status,
         }
-
-

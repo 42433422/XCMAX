@@ -117,14 +117,11 @@ class TestPlaceholderAndFields:
 
 class TestCollectOoxmlText:
     def test_collects_text_and_tail(self):
-        xml = (
-            '<?xml version="1.0"?><root><a:t>Hello</a:t></root>'
-            '<?xml version="1.0"?>'
-        )
+        xml = '<?xml version="1.0"?><root><a:t>Hello</a:t></root><?xml version="1.0"?>'
         # 包含 t 与 tail
         xml2 = (
             '<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
-            '<a:t>One</a:t>tail<a:p><a:t>Two</a:t></a:p></root>'
+            "<a:t>One</a:t>tail<a:p><a:t>Two</a:t></a:p></root>"
         )
         out = bridge._collect_ooxml_text(xml2.encode(), bridge._A_T)
         assert out == "OnetailTwo"
@@ -162,7 +159,10 @@ class TestExtractPptxViaLib:
 
         slide = MagicMock()
         slide.shapes = [
-            SimpleNamespace(has_text_frame=True, text_frame=SimpleNamespace(paragraphs=[SimpleNamespace(text="Title")])),
+            SimpleNamespace(
+                has_text_frame=True,
+                text_frame=SimpleNamespace(paragraphs=[SimpleNamespace(text="Title")]),
+            ),
             SimpleNamespace(has_text_frame=False),
         ]
         slide.has_notes_slide = True
@@ -249,9 +249,7 @@ class TestExtractPptxViaZip:
             "ppt/notesSlides/notesSlide1.xml": b"n1",
             "ppt/slides/slide2.xml": b"s2",
         }
-        monkeypatch.setattr(
-            bridge.zipfile, "ZipFile", lambda path, mode: _FakeZip(names, reads)
-        )
+        monkeypatch.setattr(bridge.zipfile, "ZipFile", lambda path, mode: _FakeZip(names, reads))
         monkeypatch.setattr(
             bridge,
             "_collect_ooxml_text",
@@ -263,9 +261,7 @@ class TestExtractPptxViaZip:
 
     def test_zip_skips_failed_parts(self, monkeypatch):
         names = ["ppt/slides/slide1.xml", "ppt/slides/slide2.xml"]
-        monkeypatch.setattr(
-            bridge.zipfile, "ZipFile", lambda path, mode: _FakeZip(names, {})
-        )
+        monkeypatch.setattr(bridge.zipfile, "ZipFile", lambda path, mode: _FakeZip(names, {}))
         called = []
 
         def _collect(xml, tag):
@@ -288,9 +284,7 @@ class TestExtractPptxViaZip:
 
 class TestExtractPptxDocumentText:
     def test_uses_lib_engine(self, monkeypatch):
-        monkeypatch.setattr(
-            bridge, "_extract_pptx_text_via_lib", lambda fp: ("hello", 2)
-        )
+        monkeypatch.setattr(bridge, "_extract_pptx_text_via_lib", lambda fp: ("hello", 2))
         meta = bridge.extract_pptx_document_text("x.pptx")
         assert meta["engine"] == "python-pptx"
         assert meta["text"] == "hello"
@@ -302,9 +296,7 @@ class TestExtractPptxDocumentText:
             raise ImportError("no pptx")
 
         monkeypatch.setattr(bridge, "_extract_pptx_text_via_lib", _boom)
-        monkeypatch.setattr(
-            bridge, "_extract_pptx_text_via_zip", lambda fp: ("ziptext", 3)
-        )
+        monkeypatch.setattr(bridge, "_extract_pptx_text_via_zip", lambda fp: ("ziptext", 3))
         meta = bridge.extract_pptx_document_text("x.pptx")
         assert meta["engine"] == "zip_ooxml"
         assert meta["text"] == "ziptext"
@@ -316,9 +308,7 @@ class TestExtractPptxDocumentText:
             "_extract_pptx_text_via_lib",
             lambda fp: (_ for _ in ()).throw(RuntimeError("boom")),
         )
-        monkeypatch.setattr(
-            bridge, "_extract_pptx_text_via_zip", lambda fp: ("ziptext", 1)
-        )
+        monkeypatch.setattr(bridge, "_extract_pptx_text_via_zip", lambda fp: ("ziptext", 1))
         meta = bridge.extract_pptx_document_text("x.pptx")
         assert meta["engine"] == "zip_ooxml"
         assert meta["text"] == "ziptext"
@@ -403,9 +393,7 @@ class TestOcrPdfPlaintext:
         assert out["workbook_path"] == "/tmp/out.xlsx"
 
     def test_ocr_workbook_read_failure(self, monkeypatch):
-        fake = _fake_ocr_module(
-            ocr_result={"success": True, "workbook_path": "/tmp/out.xlsx"}
-        )
+        fake = _fake_ocr_module(ocr_result={"success": True, "workbook_path": "/tmp/out.xlsx"})
         _install_fake_module(monkeypatch, "app.application.shipment_excel_etl_ocr", fake)
 
         def _boom(*a, **k):
@@ -491,9 +479,7 @@ class TestSyncVlmDescribe:
             raise RuntimeError("no loop")
 
         monkeypatch.setattr(asyncio, "get_running_loop", _no_loop)
-        self._install_llm(
-            monkeypatch, {"success": False, "error": "llm error"}
-        )
+        self._install_llm(monkeypatch, {"success": False, "error": "llm error"})
         out = bridge._sync_vlm_describe_first_image(b"data", hint="h")
         assert out["vlm_ok"] is False
         assert "llm error" in out["message"]
@@ -501,7 +487,9 @@ class TestSyncVlmDescribe:
     def test_llm_success(self, monkeypatch):
         monkeypatch.setenv("FHD_TEMPLATE_VLM_ENRICH", "1")
         self._install_route(monkeypatch, {"ok": True, "provider": "px", "model": "mx"})
-        monkeypatch.setattr(asyncio, "get_running_loop", lambda: (_ for _ in ()).throw(RuntimeError()))
+        monkeypatch.setattr(
+            asyncio, "get_running_loop", lambda: (_ for _ in ()).throw(RuntimeError())
+        )
         self._install_llm(monkeypatch, {"success": True, "content": " 描述文本  "})
         out = bridge._sync_vlm_describe_first_image(b"data", hint="h")
         assert out["vlm_ok"] is True
@@ -576,7 +564,9 @@ class TestBuildPptxTemplateAnalysis:
         assert out["preview_data"]["engine"] == "zip_ooxml"
 
     def test_no_fields_fails(self, monkeypatch):
-        monkeypatch.setattr(bridge, "extract_pptx_document_text", lambda fp: {"text": "", "engine": "zip_ooxml"})
+        monkeypatch.setattr(
+            bridge, "extract_pptx_document_text", lambda fp: {"text": "", "engine": "zip_ooxml"}
+        )
         out = bridge.build_pptx_template_analysis("pres.pptx")
         assert out["success"] is False
         assert "未能从 PPTX" in out["message"]
@@ -584,7 +574,9 @@ class TestBuildPptxTemplateAnalysis:
     def test_snippet_truncated_and_name_from_filename(self, monkeypatch):
         long_text = " ".join(["x" * 10] * 100) + " {{a}}"
         monkeypatch.setattr(
-            bridge, "extract_pptx_document_text", lambda fp: {"text": long_text, "engine": "python-pptx"}
+            bridge,
+            "extract_pptx_document_text",
+            lambda fp: {"text": long_text, "engine": "python-pptx"},
         )
         out = bridge.build_pptx_template_analysis("dir/my_pres.pptx")
         assert out["template_name"] == "my_pres"
@@ -594,7 +586,9 @@ class TestBuildPptxTemplateAnalysis:
 
     def test_original_filename_fallback_to_path_name(self, monkeypatch):
         monkeypatch.setattr(
-            bridge, "extract_pptx_document_text", lambda fp: {"text": "{{a}}", "engine": "python-pptx"}
+            bridge,
+            "extract_pptx_document_text",
+            lambda fp: {"text": "{{a}}", "engine": "python-pptx"},
         )
         out = bridge.build_pptx_template_analysis("dir/x.pptx", original_filename="")
         assert out["preview_data"]["original_filename"] == "x.pptx"
@@ -618,12 +612,19 @@ class TestBuildPdfTemplateAnalysis:
 
     def test_ocr_success_merges_text(self, monkeypatch):
         monkeypatch.setattr(
-            bridge, "extract_pdf_document_text", lambda fp: {"text": "short", "engine": "pypdf", "page_count": 1}
+            bridge,
+            "extract_pdf_document_text",
+            lambda fp: {"text": "short", "engine": "pypdf", "page_count": 1},
         )
         monkeypatch.setattr(
             bridge,
             "_ocr_pdf_plaintext",
-            lambda fp: {"success": True, "text": "OCR 文本 {{field}}", "workbook_path": "/w.xlsx", "char_count": 9},
+            lambda fp: {
+                "success": True,
+                "text": "OCR 文本 {{field}}",
+                "workbook_path": "/w.xlsx",
+                "char_count": 9,
+            },
         )
         monkeypatch.setattr(bridge, "_maybe_pdf_page_image_bytes", lambda fp: None)
         out = bridge.build_pdf_template_analysis("x.pdf")
@@ -634,7 +635,9 @@ class TestBuildPdfTemplateAnalysis:
 
     def test_ocr_fail_warns_no_vlm(self, monkeypatch):
         monkeypatch.setattr(
-            bridge, "extract_pdf_document_text", lambda fp: {"text": "short", "engine": "pypdf", "page_count": 1}
+            bridge,
+            "extract_pdf_document_text",
+            lambda fp: {"text": "short", "engine": "pypdf", "page_count": 1},
         )
         monkeypatch.setattr(
             bridge, "_ocr_pdf_plaintext", lambda fp: {"success": False, "message": "OCR 未产出文本"}
@@ -648,9 +651,13 @@ class TestBuildPdfTemplateAnalysis:
     def test_vlm_enrich_merges_description(self, monkeypatch):
         monkeypatch.setenv("FHD_TEMPLATE_VLM_ENRICH", "1")
         monkeypatch.setattr(
-            bridge, "extract_pdf_document_text", lambda fp: {"text": "long-enough-text", "engine": "pypdf", "page_count": 1}
+            bridge,
+            "extract_pdf_document_text",
+            lambda fp: {"text": "long-enough-text", "engine": "pypdf", "page_count": 1},
         )
-        monkeypatch.setattr(bridge, "_ocr_pdf_plaintext", lambda fp: {"success": False, "message": "x"})
+        monkeypatch.setattr(
+            bridge, "_ocr_pdf_plaintext", lambda fp: {"success": False, "message": "x"}
+        )
         monkeypatch.setattr(bridge, "_maybe_pdf_page_image_bytes", lambda fp: b"PNG")
         monkeypatch.setattr(
             bridge,
@@ -666,7 +673,9 @@ class TestBuildPdfTemplateAnalysis:
     def test_vlm_no_image_bytes(self, monkeypatch):
         monkeypatch.setenv("FHD_TEMPLATE_VLM_ENRICH", "1")
         monkeypatch.setattr(
-            bridge, "extract_pdf_document_text", lambda fp: {"text": "long-enough", "engine": "pypdf", "page_count": 1}
+            bridge,
+            "extract_pdf_document_text",
+            lambda fp: {"text": "long-enough", "engine": "pypdf", "page_count": 1},
         )
         monkeypatch.setattr(bridge, "_maybe_pdf_page_image_bytes", lambda fp: None)
         out = bridge.build_pdf_template_analysis("x.pdf", template_name="t1")
@@ -676,7 +685,9 @@ class TestBuildPdfTemplateAnalysis:
 
     def test_no_fields_fails(self, monkeypatch):
         monkeypatch.setattr(
-            bridge, "extract_pdf_document_text", lambda fp: {"text": "", "engine": "pypdf", "page_count": 1}
+            bridge,
+            "extract_pdf_document_text",
+            lambda fp: {"text": "", "engine": "pypdf", "page_count": 1},
         )
         monkeypatch.setattr(bridge, "_maybe_pdf_page_image_bytes", lambda fp: None)
         monkeypatch.setattr(
@@ -691,7 +702,9 @@ class TestBuildPdfTemplateAnalysis:
     def test_snippet_truncation_and_name(self, monkeypatch):
         long_text = " ".join(["y" * 10] * 100)
         monkeypatch.setattr(
-            bridge, "extract_pdf_document_text", lambda fp: {"text": long_text, "engine": "pypdf", "page_count": 5}
+            bridge,
+            "extract_pdf_document_text",
+            lambda fp: {"text": long_text, "engine": "pypdf", "page_count": 5},
         )
         monkeypatch.setattr(bridge, "_maybe_pdf_page_image_bytes", lambda fp: None)
         out = bridge.build_pdf_template_analysis("dir/report.pdf")
@@ -703,7 +716,9 @@ class TestBuildPdfTemplateAnalysis:
     def test_vlm_sidecar_not_ok_keeps_text(self, monkeypatch):
         monkeypatch.setenv("FHD_TEMPLATE_VLM_ENRICH", "1")
         monkeypatch.setattr(
-            bridge, "extract_pdf_document_text", lambda fp: {"text": "long-enough", "engine": "pypdf", "page_count": 1}
+            bridge,
+            "extract_pdf_document_text",
+            lambda fp: {"text": "long-enough", "engine": "pypdf", "page_count": 1},
         )
         monkeypatch.setattr(bridge, "_maybe_pdf_page_image_bytes", lambda fp: b"PNG")
         monkeypatch.setattr(

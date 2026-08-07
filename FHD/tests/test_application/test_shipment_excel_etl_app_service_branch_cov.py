@@ -289,9 +289,10 @@ def delivery_profile():
 @pytest.fixture
 def no_llm(monkeypatch):
     monkeypatch.setattr(f"{LLM}.needs_llm_assist", lambda **kw: (False, "rules_confident"))
-    monkeypatch.setattr(f"{LLM}.assist_sheet_layout", lambda probe: SimpleNamespace(
-        as_public_dict=lambda: {"ok": False}
-    ) or None)
+    monkeypatch.setattr(
+        f"{LLM}.assist_sheet_layout",
+        lambda probe: SimpleNamespace(as_public_dict=lambda: {"ok": False}) or None,
+    )
     monkeypatch.setattr(f"{LLM}.unit_name_is_weak", lambda *a, **kw: False)
 
 
@@ -385,7 +386,9 @@ def test_remember_sheet_layout_branches(monkeypatch):
     monkeypatch.setattr(f"{MOD}.get_excel_etl_kb", lambda: kb)
     prof = _make_profile()
     # empty mapping -> ""
-    assert svc_mod._remember_sheet_layout(_delivery_ws(), header_row=3, mapping={}, profile=prof) == ""
+    assert (
+        svc_mod._remember_sheet_layout(_delivery_ws(), header_row=3, mapping={}, profile=prof) == ""
+    )
     # <2 headers -> ""
     assert (
         svc_mod._remember_sheet_layout(
@@ -441,9 +444,7 @@ def test_find_header_row_known():
 
 def test_find_header_row_unknown_fallback():
     prof = _make_profile()
-    prof.header_detect = {
-        "delivery": {"max_scan_rows": 12, "require_groups": [["编号", "SKU"]]}
-    }
+    prof.header_detect = {"delivery": {"max_scan_rows": 12, "require_groups": [["编号", "SKU"]]}}
     ws = FakeWS(
         [
             ["标题", "", "", ""],
@@ -535,9 +536,12 @@ def test_classify_sheet_role(monkeypatch):
     assert svc_mod._classify_sheet_role(l_ws, prof, d_score=dl, l_score=ll) == "ledger"
 
     # ignore when both low & price-list title
-    assert svc_mod._classify_sheet_role(
-        FakeWS([["报价单"], ["x"]], title="报价单"), prof, d_score=5, l_score=5
-    ) == "ignore"
+    assert (
+        svc_mod._classify_sheet_role(
+            FakeWS([["报价单"], ["x"]], title="报价单"), prof, d_score=5, l_score=5
+        )
+        == "ignore"
+    )
     # ignore default branch
     assert (
         svc_mod._classify_sheet_role(
@@ -640,9 +644,7 @@ def test_build_item_from_row(monkeypatch):
     )
     # year-as-qty + titleish name -> None
     m_y = {"model_number": 1, "product_name": 2, "quantity_tins": 3}
-    assert (
-        svc_mod._build_item_from_row(FakeWS([["h"], [None, "title", 2024]]), 2, m_y) is None
-    )
+    assert svc_mod._build_item_from_row(FakeWS([["h"], [None, "title", 2024]]), 2, m_y) is None
     # computed tin_spec from qty
     m_c = {"model_number": 1, "product_name": 2, "quantity_tins": 3, "quantity_kg": 4}
     itemc = svc_mod._build_item_from_row(FakeWS([["h"], ["M", "面", 2, 40]]), 2, m_c)
@@ -731,7 +733,9 @@ def test_is_fingerprint_imported(monkeypatch):
 def test_record_fingerprint_now(monkeypatch):
     rec = MagicMock()
     monkeypatch.setattr(f"{FP}.record_fingerprint", rec)
-    svc_mod._record_fingerprint_now("t", "fp", shipment_id=1, unit_name="u", order_number="o", file_name="f")
+    svc_mod._record_fingerprint_now(
+        "t", "fp", shipment_id=1, unit_name="u", order_number="o", file_name="f"
+    )
     rec.assert_called_once_with(
         "t", "fp", shipment_id=1, unit_name="u", order_number="o", file_name="f"
     )
@@ -760,7 +764,9 @@ def test_merge_meta():
     base = {"unit_name": "a", "contact_person": "b"}
     assert svc_mod._merge_meta(base, {"unit_name": "A", "title": "t"})["unit_name"] == "a"
     assert (
-        svc_mod._merge_meta(base, {"unit_name": "A", "title": "t"}, prefer_overlay=True)["unit_name"]
+        svc_mod._merge_meta(base, {"unit_name": "A", "title": "t"}, prefer_overlay=True)[
+            "unit_name"
+        ]
         == "A"
     )
     assert svc_mod._merge_meta(base, {"unit_name": ""})["unit_name"] == "a"
@@ -773,8 +779,15 @@ def test_apply_llm_assist_to_layout(monkeypatch):
     # not needed -> early return
     monkeypatch.setattr(f"{LLM}.needs_llm_assist", lambda **kw: (False, "ok"))
     res = svc_mod._apply_llm_assist_to_layout(
-        ws, prof, delivery_score=10, ledger_score=0, min_score=40,
-        header_row=3, mapping={"a": 1}, meta={"unit_name": "x"}, prefer_kind="delivery_note",
+        ws,
+        prof,
+        delivery_score=10,
+        ledger_score=0,
+        min_score=40,
+        header_row=3,
+        mapping={"a": 1},
+        meta={"unit_name": "x"},
+        prefer_kind="delivery_note",
     )
     assert res[0] == 3 and res[4]["ok"] is True
 
@@ -792,8 +805,15 @@ def test_apply_llm_assist_to_layout(monkeypatch):
         ),
     )
     res2 = svc_mod._apply_llm_assist_to_layout(
-        ws, prof, delivery_score=10, ledger_score=0, min_score=40,
-        header_row=3, mapping={"a": 1}, meta={"unit_name": "x"}, prefer_kind="delivery_note",
+        ws,
+        prof,
+        delivery_score=10,
+        ledger_score=0,
+        min_score=40,
+        header_row=3,
+        mapping={"a": 1},
+        meta={"unit_name": "x"},
+        prefer_kind="delivery_note",
     )
     assert res2[0] == 3
 
@@ -810,8 +830,15 @@ def test_apply_llm_assist_to_layout(monkeypatch):
         ),
     )
     res3 = svc_mod._apply_llm_assist_to_layout(
-        ws, prof, delivery_score=10, ledger_score=0, min_score=40,
-        header_row=3, mapping={"a": 1}, meta={"unit_name": "x"}, prefer_kind="delivery_note",
+        ws,
+        prof,
+        delivery_score=10,
+        ledger_score=0,
+        min_score=40,
+        header_row=3,
+        mapping={"a": 1},
+        meta={"unit_name": "x"},
+        prefer_kind="delivery_note",
     )
     assert res3[0] == 2
     assert res3[1]["product_name"] == 2
@@ -831,8 +858,15 @@ def test_apply_llm_assist_to_layout(monkeypatch):
         ),
     )
     res4 = svc_mod._apply_llm_assist_to_layout(
-        ws, prof, delivery_score=10, ledger_score=0, min_score=40,
-        header_row=3, mapping={"a": 1}, meta={}, prefer_kind="shipment_ledger",
+        ws,
+        prof,
+        delivery_score=10,
+        ledger_score=0,
+        min_score=40,
+        header_row=3,
+        mapping={"a": 1},
+        meta={},
+        prefer_kind="shipment_ledger",
     )
     assert res4[3] == "shipment_ledger"
 
@@ -856,7 +890,10 @@ def test_notes_to_product_records():
                 {"model_number": "M1", "product_name": "面漆", "unit_price": 10},  # dup (upper)
             ],
         },
-        {"unit_name": "A", "items": [{"model_number": "M2", "product_name": "底漆", "unit_price": 8}]},
+        {
+            "unit_name": "A",
+            "items": [{"model_number": "M2", "product_name": "底漆", "unit_price": 8}],
+        },
     ]
     records = svc_mod._notes_to_product_records(notes)
     assert len(records) == 2
@@ -888,8 +925,12 @@ def test_parse_delivery_sheet_llm_ignore(monkeypatch, no_kb):
     monkeypatch.setattr(
         f"{LLM}.assist_sheet_layout",
         lambda probe: SimpleNamespace(
-            ok=True, as_public_dict=lambda: {"ok": True, "used_llm": True},
-            header_row=3, columns={}, meta={}, source_kind="ignore",
+            ok=True,
+            as_public_dict=lambda: {"ok": True, "used_llm": True},
+            header_row=3,
+            columns={},
+            meta={},
+            source_kind="ignore",
         ),
     )
     assert (
@@ -904,8 +945,12 @@ def test_parse_delivery_sheet_llm_ledger_reclass(monkeypatch, no_kb):
     monkeypatch.setattr(
         f"{LLM}.assist_sheet_layout",
         lambda probe: SimpleNamespace(
-            ok=True, as_public_dict=lambda: {"ok": True, "used_llm": True},
-            header_row=3, columns={}, meta={}, source_kind="shipment_ledger",
+            ok=True,
+            as_public_dict=lambda: {"ok": True, "used_llm": True},
+            header_row=3,
+            columns={},
+            meta={},
+            source_kind="shipment_ledger",
         ),
     )
     assert (
@@ -915,7 +960,9 @@ def test_parse_delivery_sheet_llm_ledger_reclass(monkeypatch, no_kb):
 
 
 def test_parse_ledger_sheet(monkeypatch, no_llm, no_kb):
-    notes = svc_mod._parse_ledger_sheet(_ledger_ws(), fallback_unit="ledger", profile=_make_profile())
+    notes = svc_mod._parse_ledger_sheet(
+        _ledger_ws(), fallback_unit="ledger", profile=_make_profile()
+    )
     assert len(notes) == 2
     assert all(n["source_kind"] == "shipment_ledger" for n in notes)
     assert notes[0]["unit_name"] == "ledger"
@@ -934,11 +981,17 @@ def test_parse_ledger_sheet_llm_ignore(monkeypatch, no_kb):
     monkeypatch.setattr(
         f"{LLM}.assist_sheet_layout",
         lambda probe: SimpleNamespace(
-            ok=True, as_public_dict=lambda: {"ok": True},
-            header_row=2, columns={}, meta={}, source_kind="ignore",
+            ok=True,
+            as_public_dict=lambda: {"ok": True},
+            header_row=2,
+            columns={},
+            meta={},
+            source_kind="ignore",
         ),
     )
-    assert svc_mod._parse_ledger_sheet(_ledger_ws(), fallback_unit="u", profile=_make_profile()) == []
+    assert (
+        svc_mod._parse_ledger_sheet(_ledger_ws(), fallback_unit="u", profile=_make_profile()) == []
+    )
 
 
 def test_parse_ledger_sheet_missing_order(monkeypatch, no_llm, no_kb):
@@ -1076,7 +1129,9 @@ def test_parse_delivery_notes_ocr_route(tmp_path, monkeypatch, delivery_profile)
     assert res["success"] is True
 
 
-def test_parse_delivery_notes_ocr_exception_falls_back(tmp_path, monkeypatch, delivery_profile, no_llm, no_kb):
+def test_parse_delivery_notes_ocr_exception_falls_back(
+    tmp_path, monkeypatch, delivery_profile, no_llm, no_kb
+):
     OCR = "app.application.shipment_excel_etl_ocr"
     path = _write_delivery_xlsx(tmp_path / "d.xlsx")
     monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
@@ -1092,7 +1147,9 @@ def test_parse_delivery_notes_ocr_exception_falls_back(tmp_path, monkeypatch, de
     assert res["success"] is True  # fell back to excel parse
 
 
-def test_parse_delivery_notes_no_notes_skipped(tmp_path, monkeypatch, delivery_profile, no_llm, no_kb):
+def test_parse_delivery_notes_no_notes_skipped(
+    tmp_path, monkeypatch, delivery_profile, no_llm, no_kb
+):
     wb = Workbook()
     ws = wb.active
     ws.title = "报价单"
@@ -1115,13 +1172,16 @@ def test_parse_delivery_notes_no_notes_skipped(tmp_path, monkeypatch, delivery_p
 
 def test_preview_shipment_excel_etl_happy(tmp_path, monkeypatch):
     monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: tmp_path / "d.xlsx")
-    monkeypatch.setattr(f"{MOD}.parse_delivery_notes", lambda *a, **k: {
-        "success": True,
-        "notes": [_delivery_note()],
-        "message": "识别到 1 张单据",
-        "ledger_available_count": 0,
-        "ledger_note_count": 0,
-    })
+    monkeypatch.setattr(
+        f"{MOD}.parse_delivery_notes",
+        lambda *a, **k: {
+            "success": True,
+            "notes": [_delivery_note()],
+            "message": "识别到 1 张单据",
+            "ledger_available_count": 0,
+            "ledger_note_count": 0,
+        },
+    )
     monkeypatch.setattr(f"{SEC}.tenant_key_for_etl", lambda: "tenant:1")
     monkeypatch.setattr(f"{MOD}._is_fingerprint_imported", lambda a, b: False)
     res = preview_shipment_excel_etl(tmp_path / "d.xlsx")
@@ -1149,13 +1209,16 @@ def test_preview_shipment_excel_etl_duplicate_and_ledger_risk(tmp_path, monkeypa
     monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: tmp_path / "d.xlsx")
     note = _delivery_note()
     note["fingerprint"] = "fp-1"
-    monkeypatch.setattr(f"{MOD}.parse_delivery_notes", lambda *a, **k: {
-        "success": True,
-        "notes": [note],
-        "message": "识别到 1 张单据",
-        "ledger_available_count": 2,
-        "ledger_note_count": 0,
-    })
+    monkeypatch.setattr(
+        f"{MOD}.parse_delivery_notes",
+        lambda *a, **k: {
+            "success": True,
+            "notes": [note],
+            "message": "识别到 1 张单据",
+            "ledger_available_count": 2,
+            "ledger_note_count": 0,
+        },
+    )
     monkeypatch.setattr(f"{SEC}.tenant_key_for_etl", lambda: "tenant:1")
     monkeypatch.setattr(f"{MOD}._is_fingerprint_imported", lambda a, b: True)
     res = preview_shipment_excel_etl(tmp_path / "d.xlsx")
@@ -1205,9 +1268,14 @@ def test_execute_missing_path(monkeypatch, delivery_profile, tmp_path):
 def test_execute_parsed_not_success(monkeypatch, delivery_profile, tmp_path):
     _patch_execute(monkeypatch, tmp_path, delivery_profile)
     monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: tmp_path / "d.xlsx")
-    monkeypatch.setattr(f"{MOD}.parse_delivery_notes", lambda *a, **k: {
-        "success": False, "message": "文件不存在", "notes": [],
-    })
+    monkeypatch.setattr(
+        f"{MOD}.parse_delivery_notes",
+        lambda *a, **k: {
+            "success": False,
+            "message": "文件不存在",
+            "notes": [],
+        },
+    )
     res = execute_shipment_excel_etl("d.xlsx")
     assert res["success"] is False
 
@@ -1314,7 +1382,10 @@ def test_execute_compensate_on_failure(monkeypatch, delivery_profile, tmp_path):
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     notes = [_delivery_note(), _delivery_note()]
     res = execute_shipment_excel_etl(
-        "d.xlsx", notes=notes, import_products=False, import_shipments=True,
+        "d.xlsx",
+        notes=notes,
+        import_products=False,
+        import_shipments=True,
         compensate_on_failure=True,
     )
     assert res["success"] is False
@@ -1389,7 +1460,10 @@ def test_execute_partial_no_compensate(monkeypatch, delivery_profile, tmp_path):
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     notes = [_delivery_note(), _delivery_note()]
     res = execute_shipment_excel_etl(
-        "d.xlsx", notes=notes, import_products=False, import_shipments=True,
+        "d.xlsx",
+        notes=notes,
+        import_products=False,
+        import_shipments=True,
         compensate_on_failure=False,
     )
     assert res["success"] is False
@@ -1421,8 +1495,12 @@ def test_execute_force_shipment_target(monkeypatch, delivery_profile, tmp_path):
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     note = _delivery_note(profile_target="preview_only")
     res = execute_shipment_excel_etl(
-        "d.xlsx", notes=[note], direct=True, force_shipment_target=True,
-        import_products=False, import_shipments=True,
+        "d.xlsx",
+        notes=[note],
+        direct=True,
+        force_shipment_target=True,
+        import_products=False,
+        import_shipments=True,
     )
     assert res["success"] is True
     assert res["audit"]["force_shipment_target"] is True
@@ -1435,7 +1513,11 @@ def test_execute_direct_allowed_success(monkeypatch, delivery_profile, tmp_path)
     svc.create_shipment.return_value = {"success": True, "shipment": {"id": 1}}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     res = execute_shipment_excel_etl(
-        "d.xlsx", notes=[_delivery_note()], direct=True, import_products=False, import_shipments=True
+        "d.xlsx",
+        notes=[_delivery_note()],
+        direct=True,
+        import_products=False,
+        import_shipments=True,
     )
     assert res["success"] is True
 
@@ -1575,19 +1657,29 @@ def test_write_ledger_workbook_import_error(monkeypatch):
 
 def test_regenerate_happy(tmp_path, monkeypatch):
     prof = _make_profile()
-    monkeypatch.setattr(f"{MOD}.parse_delivery_notes", lambda *a, **k: {
-        "success": True,
-        "notes": [svc_mod._enrich_note(_delivery_note())],
-    })
+    monkeypatch.setattr(
+        f"{MOD}.parse_delivery_notes",
+        lambda *a, **k: {
+            "success": True,
+            "notes": [svc_mod._enrich_note(_delivery_note())],
+        },
+    )
     written = {"success": True}
     monkeypatch.setattr(f"{MOD}.write_delivery_note_workbook", lambda *a, **k: written)
-    monkeypatch.setattr(f"{MOD}.parse_delivery_notes", lambda *a, **k: {
-        "success": True,
-        "notes": [svc_mod._enrich_note(_delivery_note())],
-    } if str(a[0]).endswith("_out.xlsx") else {
-        "success": True,
-        "notes": [svc_mod._enrich_note(_delivery_note())],
-    })
+    monkeypatch.setattr(
+        f"{MOD}.parse_delivery_notes",
+        lambda *a, **k: (
+            {
+                "success": True,
+                "notes": [svc_mod._enrich_note(_delivery_note())],
+            }
+            if str(a[0]).endswith("_out.xlsx")
+            else {
+                "success": True,
+                "notes": [svc_mod._enrich_note(_delivery_note())],
+            }
+        ),
+    )
     res = regenerate_delivery_notes_from_file("in.xlsx", tmp_path / "out.xlsx", profile=prof)
     assert res["success"] is True
     assert res["fingerprint_match"] is True
@@ -1595,18 +1687,27 @@ def test_regenerate_happy(tmp_path, monkeypatch):
 
 def test_regenerate_not_success(monkeypatch):
     prof = _make_profile()
-    monkeypatch.setattr(f"{MOD}.parse_delivery_notes", lambda *a, **k: {
-        "success": False, "message": "文件不存在", "notes": [],
-    })
+    monkeypatch.setattr(
+        f"{MOD}.parse_delivery_notes",
+        lambda *a, **k: {
+            "success": False,
+            "message": "文件不存在",
+            "notes": [],
+        },
+    )
     res = regenerate_delivery_notes_from_file("in.xlsx", "out.xlsx", profile=prof)
     assert res["success"] is False
 
 
 def test_regenerate_no_notes(monkeypatch):
     prof = _make_profile()
-    monkeypatch.setattr(f"{MOD}.parse_delivery_notes", lambda *a, **k: {
-        "success": True, "notes": [],
-    })
+    monkeypatch.setattr(
+        f"{MOD}.parse_delivery_notes",
+        lambda *a, **k: {
+            "success": True,
+            "notes": [],
+        },
+    )
     res = regenerate_delivery_notes_from_file("in.xlsx", "out.xlsx", profile=prof)
     assert res["success"] is False
     assert res["error_code"] == "no_delivery_notes"
@@ -1614,13 +1715,21 @@ def test_regenerate_no_notes(monkeypatch):
 
 def test_regenerate_write_failed(monkeypatch):
     prof = _make_profile()
-    monkeypatch.setattr(f"{MOD}.parse_delivery_notes", lambda *a, **k: {
-        "success": True,
-        "notes": [svc_mod._enrich_note(_delivery_note())],
-    })
-    monkeypatch.setattr(f"{MOD}.write_delivery_note_workbook", lambda *a, **k: {
-        "success": False, "error_code": "write_failed", "message": "写入失败",
-    })
+    monkeypatch.setattr(
+        f"{MOD}.parse_delivery_notes",
+        lambda *a, **k: {
+            "success": True,
+            "notes": [svc_mod._enrich_note(_delivery_note())],
+        },
+    )
+    monkeypatch.setattr(
+        f"{MOD}.write_delivery_note_workbook",
+        lambda *a, **k: {
+            "success": False,
+            "error_code": "write_failed",
+            "message": "写入失败",
+        },
+    )
     res = regenerate_delivery_notes_from_file("in.xlsx", "out.xlsx", profile=prof)
     assert res["success"] is False
     assert res["error_code"] == "write_failed"

@@ -34,6 +34,7 @@ from app.db.base import Base
 
 # --------------------------------------------------------------------------- fixtures
 
+
 @pytest.fixture(autouse=True)
 def _reset_llm_circuit():
     from app.application.etl.llm_assist import clear_etl_llm_circuit
@@ -70,6 +71,7 @@ def session():
 
 # --------------------------------------------------------------------------- errors.py
 
+
 def test_etl_errors():
     e = EtlError("CODE", "msg")
     assert e.code == "CODE" and e.message == "msg" and e.status_code == 400
@@ -83,6 +85,7 @@ def test_etl_errors():
 
 # --------------------------------------------------------------------------- base helpers
 
+
 def test_base_json_safe():
     assert json_safe({"a": Decimal("1.5"), "b": [date(2024, 1, 1)], "c": datetime(2024, 1, 1, 1)})
     assert json_safe(Decimal("1.5")) == "1.5"
@@ -90,7 +93,9 @@ def test_base_json_safe():
 
 
 def test_target_field_and_capability():
-    f = TargetField("price", "价格", type="number", required=True, aliases=("单价",), updatable=True)
+    f = TargetField(
+        "price", "价格", type="number", required=True, aliases=("单价",), updatable=True
+    )
     assert f.required is True and f.type == "number"
     a = TargetAdapter()
     a.type = "demo"
@@ -115,7 +120,9 @@ def test_target_adapter_validate_and_defaults():
     dec = a.preview(MagicMock(), {"k": "v"}, allowed_update_fields=set(), context={})
     assert dec.action == "new"
     with pytest.raises(EtlError) as ex:
-        a.execute_row(MagicMock(), {}, action="new", match_ref="", allowed_update_fields=set(), context={})
+        a.execute_row(
+            MagicMock(), {}, action="new", match_ref="", allowed_update_fields=set(), context={}
+        )
     assert ex.value.code == "ETL_TARGET_NOT_IMPLEMENTED"
     with pytest.raises(EtlError) as ex2:
         a.rollback_row(MagicMock(), match_ref="", before={}, after={}, context={})
@@ -124,6 +131,7 @@ def test_target_adapter_validate_and_defaults():
 
 
 # --------------------------------------------------------------------------- llm_assist.py
+
 
 def test_llm_assist_mode_and_limits(monkeypatch):
     from app.application.etl import llm_assist
@@ -170,7 +178,9 @@ def test_llm_assist_public_metadata():
     r.model = "m1"
     r.billing = {"a": 1}
     meta2 = r.public_metadata()
-    assert meta2["degradation_code"] == "X" and meta2["model"] == "m1" and meta2["billing"] == {"a": 1}
+    assert (
+        meta2["degradation_code"] == "X" and meta2["model"] == "m1" and meta2["billing"] == {"a": 1}
+    )
 
 
 def test_llm_assist_degradation_code_exception_types():
@@ -225,7 +235,9 @@ def test_llm_assist_bounded_completion_success(monkeypatch):
 
     def fake_complete(messages, **kw):
         captured["kw"] = kw
-        return StructuredResult(data={"ok": True}, attempts=1, repaired=False, model="m", billing={"b": 1})
+        return StructuredResult(
+            data={"ok": True}, attempts=1, repaired=False, model="m", billing={"b": 1}
+        )
 
     monkeypatch.setattr(
         "app.infrastructure.llm.structured_output.complete_structured_sync", fake_complete
@@ -286,32 +298,46 @@ def test_llm_assist_active_software_llm(monkeypatch):
         assert configured is True and service is None and provider is not None
 
     # registry active provider path
-    with patch(
-        "app.application.etl.llm_session_provider.current_owner_market_provider", return_value=None
-    ), patch(
-        "app.infrastructure.llm.providers.registry.get_active_provider", return_value=FakeProvider()
+    with (
+        patch(
+            "app.application.etl.llm_session_provider.current_owner_market_provider",
+            return_value=None,
+        ),
+        patch(
+            "app.infrastructure.llm.providers.registry.get_active_provider",
+            return_value=FakeProvider(),
+        ),
     ):
         assert llm_assist._active_software_llm() == (True, None, None)
 
     # conversation service path
-    with patch(
-        "app.application.etl.llm_session_provider.current_owner_market_provider", return_value=None
-    ), patch(
-        "app.infrastructure.llm.providers.registry.get_active_provider",
-        side_effect=lambda *a, **k: FakeProvider() if "conversation_service" in k else None,
-    ), patch(
-        "app.services.ai_conversation_service.get_ai_conversation_service", return_value=object()
+    with (
+        patch(
+            "app.application.etl.llm_session_provider.current_owner_market_provider",
+            return_value=None,
+        ),
+        patch(
+            "app.infrastructure.llm.providers.registry.get_active_provider",
+            side_effect=lambda *a, **k: FakeProvider() if "conversation_service" in k else None,
+        ),
+        patch(
+            "app.services.ai_conversation_service.get_ai_conversation_service",
+            return_value=object(),
+        ),
     ):
         configured, service, provider = llm_assist._active_software_llm()
         assert configured is True and service is not None and provider is None
 
     # none configured
-    with patch(
-        "app.application.etl.llm_session_provider.current_owner_market_provider", return_value=None
-    ), patch(
-        "app.infrastructure.llm.providers.registry.get_active_provider", return_value=None
-    ), patch(
-        "app.services.ai_conversation_service.get_ai_conversation_service", return_value=None
+    with (
+        patch(
+            "app.application.etl.llm_session_provider.current_owner_market_provider",
+            return_value=None,
+        ),
+        patch("app.infrastructure.llm.providers.registry.get_active_provider", return_value=None),
+        patch(
+            "app.services.ai_conversation_service.get_ai_conversation_service", return_value=None
+        ),
     ):
         assert llm_assist._active_software_llm() == (False, None, None)
 
@@ -329,12 +355,18 @@ def test_llm_assist_enabled(monkeypatch):
     monkeypatch.setenv("FHD_ETL_LLM", "off")
     assert llm_assist.etl_llm_enabled() is False
     monkeypatch.setenv("FHD_ETL_LLM", "auto")
-    with patch("app.application.etl.llm_assist._active_software_llm", return_value=(True, None, None)):
+    with patch(
+        "app.application.etl.llm_assist._active_software_llm", return_value=(True, None, None)
+    ):
         assert llm_assist.etl_llm_enabled() is True
-    with patch("app.application.etl.llm_assist._active_software_llm", return_value=(False, None, None)):
+    with patch(
+        "app.application.etl.llm_assist._active_software_llm", return_value=(False, None, None)
+    ):
         assert llm_assist.etl_llm_enabled() is False
     monkeypatch.setenv("FHD_ETL_LLM", "on")
-    with patch("app.application.etl.llm_assist._active_software_llm", return_value=(False, None, None)):
+    with patch(
+        "app.application.etl.llm_assist._active_software_llm", return_value=(False, None, None)
+    ):
         assert llm_assist.etl_llm_enabled() is True
 
 
@@ -355,12 +387,16 @@ def test_llm_assist_complete_off_and_not_configured(monkeypatch):
     assert r.used_llm is False and r.degraded is False
 
     monkeypatch.setenv("FHD_ETL_LLM", "on")
-    with patch("app.application.etl.llm_assist._active_software_llm", return_value=(False, None, None)):
+    with patch(
+        "app.application.etl.llm_assist._active_software_llm", return_value=(False, None, None)
+    ):
         r2 = llm_assist._complete([], schema={}, max_tokens=1)
         assert r2.degraded is True and r2.degradation_code == "ETL_LLM_UNAVAILABLE"
 
     monkeypatch.setenv("FHD_ETL_LLM", "auto")
-    with patch("app.application.etl.llm_assist._active_software_llm", return_value=(False, None, None)):
+    with patch(
+        "app.application.etl.llm_assist._active_software_llm", return_value=(False, None, None)
+    ):
         r3 = llm_assist._complete([], schema={}, max_tokens=1)
         assert r3.degraded is False and r3.degradation_code == ""
 
@@ -370,7 +406,9 @@ def test_llm_assist_complete_success_and_circuit(monkeypatch):
 
     monkeypatch.setenv("FHD_ETL_LLM", "on")
     _patch_complete(monkeypatch, {"regions": []})
-    with patch("app.application.etl.llm_assist._active_software_llm", return_value=(True, None, None)):
+    with patch(
+        "app.application.etl.llm_assist._active_software_llm", return_value=(True, None, None)
+    ):
         r = llm_assist._complete([], schema={}, max_tokens=1)
         assert r.used_llm is True and r.model == "m" and r.billing == {"b": 1}
 
@@ -379,7 +417,9 @@ def test_llm_assist_complete_success_and_circuit(monkeypatch):
         raise RuntimeError("quota exhausted")
 
     monkeypatch.setattr("app.infrastructure.llm.structured_output.complete_structured_sync", boom)
-    with patch("app.application.etl.llm_assist._active_software_llm", return_value=(True, None, None)):
+    with patch(
+        "app.application.etl.llm_assist._active_software_llm", return_value=(True, None, None)
+    ):
         r2 = llm_assist._complete([], schema={}, max_tokens=1)
         assert r2.degraded is True and r2.degradation_code == "ETL_LLM_QUOTA_EXHAUSTED"
         r3 = llm_assist._complete([], schema={}, max_tokens=1)
@@ -406,7 +446,12 @@ def test_llm_assist_advise_workbook_regions(monkeypatch):
         {
             "regions": [
                 {"region_id": "r1", "role": "delivery_note", "confidence": 0.9, "reason": "ok"},
-                {"region_id": "bad", "role": "delivery_note", "confidence": 0.5, "reason": "not allowed"},
+                {
+                    "region_id": "bad",
+                    "role": "delivery_note",
+                    "confidence": 0.5,
+                    "reason": "not allowed",
+                },
                 {"region_id": "r1", "role": "not_a_role", "confidence": 0.5, "reason": "bad role"},
                 {"region_id": "r2", "role": "finance", "confidence": "x", "reason": "bad conf"},
                 "not-a-dict",
@@ -425,7 +470,9 @@ def test_llm_assist_advise_workbook_regions(monkeypatch):
         },
         {"region_id": "r2", "sheet": "S2"},
     ]
-    with patch("app.application.etl.llm_assist._active_software_llm", return_value=(True, None, None)):
+    with patch(
+        "app.application.etl.llm_assist._active_software_llm", return_value=(True, None, None)
+    ):
         out = llm_assist.advise_workbook_regions(probes)
     assert out.used_llm is True
     ids = {item["region_id"] for item in out.data["regions"]}
@@ -436,24 +483,53 @@ def test_llm_assist_advise_workbook_regions(monkeypatch):
 def test_llm_assist_advise_field_mappings(monkeypatch):
     from app.application.etl import llm_assist
 
-    assert llm_assist.advise_field_mappings(headers=[], samples={}, target_fields=[]).used_llm is False
-    assert llm_assist.advise_field_mappings(
-        headers=["a"], samples={}, target_fields=[]
-    ).used_llm is False
+    assert (
+        llm_assist.advise_field_mappings(headers=[], samples={}, target_fields=[]).used_llm is False
+    )
+    assert (
+        llm_assist.advise_field_mappings(headers=["a"], samples={}, target_fields=[]).used_llm
+        is False
+    )
     monkeypatch.setenv("FHD_ETL_LLM", "on")
     _patch_complete(
         monkeypatch,
         {
             "mappings": [
-                {"source": "a", "target": "f1", "transform": "trim", "confidence": 0.8, "reason": "m"},
-                {"source": "zz", "target": "f1", "transform": "trim", "confidence": 0.8, "reason": "bad src"},
-                {"source": "a", "target": "zz", "transform": "trim", "confidence": 0.8, "reason": "bad tgt"},
-                {"source": "a", "target": "f1", "transform": "evil", "confidence": "x", "reason": "bad t"},
+                {
+                    "source": "a",
+                    "target": "f1",
+                    "transform": "trim",
+                    "confidence": 0.8,
+                    "reason": "m",
+                },
+                {
+                    "source": "zz",
+                    "target": "f1",
+                    "transform": "trim",
+                    "confidence": 0.8,
+                    "reason": "bad src",
+                },
+                {
+                    "source": "a",
+                    "target": "zz",
+                    "transform": "trim",
+                    "confidence": 0.8,
+                    "reason": "bad tgt",
+                },
+                {
+                    "source": "a",
+                    "target": "f1",
+                    "transform": "evil",
+                    "confidence": "x",
+                    "reason": "bad t",
+                },
                 "x",
             ]
         },
     )
-    with patch("app.application.etl.llm_assist._active_software_llm", return_value=(True, None, None)):
+    with patch(
+        "app.application.etl.llm_assist._active_software_llm", return_value=(True, None, None)
+    ):
         out = llm_assist.advise_field_mappings(
             headers=["a"], samples={"a": ["v1", "v2"]}, target_fields=[{"key": "f1"}]
         )
@@ -488,12 +564,15 @@ def test_llm_assist_advise_row_decisions(monkeypatch):
         }
         for _ in range(2)
     ]
-    with patch("app.application.etl.llm_assist._active_software_llm", return_value=(True, None, None)):
+    with patch(
+        "app.application.etl.llm_assist._active_software_llm", return_value=(True, None, None)
+    ):
         out = llm_assist.advise_row_decisions(payloads)
     assert out.data["items"] == [{"index": 0, "action": "new", "reason": "ok"}]
 
 
 # --------------------------------------------------------------------------- llm_session_provider.py
+
 
 def test_session_provider_is_configured():
     from app.application.etl.llm_session_provider import SessionMarketProvider
@@ -569,7 +648,9 @@ def test_session_provider_chat_completion_success(monkeypatch):
         "app.services.conversation.modstore_adapter.ModstorePlatformAdapter", FakeAdapter
     )
     prov = SessionMarketProvider(1, "tok", timeout_seconds=4.0)
-    out = asyncio.run(prov.chat_completion([{"role": "user", "content": "hi"}], temperature=0, max_tokens=5))
+    out = asyncio.run(
+        prov.chat_completion([{"role": "user", "content": "hi"}], temperature=0, max_tokens=5)
+    )
     assert out == {"ok": True}
 
 
@@ -604,6 +685,7 @@ def test_session_provider_chat_completion_route_failure(monkeypatch):
 
 # --------------------------------------------------------------------------- adviser.py
 
+
 def test_etl_row_adviser_fallback():
     from app.application.etl.adviser import EtlRowAdviser
 
@@ -614,14 +696,18 @@ def test_etl_row_adviser_fallback():
         before={},
         after={},
     )
-    assert fb["action"] == "new" and fb["reason"] == "deterministic_rule" and fb["used_llm"] is False
+    assert (
+        fb["action"] == "new" and fb["reason"] == "deterministic_rule" and fb["used_llm"] is False
+    )
 
 
 def test_etl_row_adviser_no_provider():
     from app.application.etl.adviser import EtlRowAdviser
 
     adv = EtlRowAdviser()
-    out = adv.suggest(deterministic_action="skip", deterministic_reason="r", normalized={}, before={}, after={})
+    out = adv.suggest(
+        deterministic_action="skip", deterministic_reason="r", normalized={}, before={}, after={}
+    )
     assert out["action"] == "skip" and out["used_llm"] is False
 
 
@@ -630,22 +716,34 @@ def test_etl_row_adviser_provider_branches():
 
     # provider raises
     adv = EtlRowAdviser(provider=lambda row: (_ for _ in ()).throw(RuntimeError("boom")))
-    out = adv.suggest(deterministic_action="new", deterministic_reason="r", normalized={"a": 1}, before={}, after={})
+    out = adv.suggest(
+        deterministic_action="new",
+        deterministic_reason="r",
+        normalized={"a": 1},
+        before={},
+        after={},
+    )
     assert out["degraded"] is True and out["degradation_code"] == "ETL_LLM_UNAVAILABLE"
 
     # provider returns non-dict
     adv2 = EtlRowAdviser(provider=lambda row: "nope")
-    out2 = adv2.suggest(deterministic_action="new", deterministic_reason="r", normalized={}, before={}, after={})
+    out2 = adv2.suggest(
+        deterministic_action="new", deterministic_reason="r", normalized={}, before={}, after={}
+    )
     assert out2["degradation_code"] == "ETL_LLM_INVALID_RESPONSE"
 
     # invalid action
     adv3 = EtlRowAdviser(provider=lambda row: {"action": "delete", "reason": "x"})
-    out3 = adv3.suggest(deterministic_action="new", deterministic_reason="r", normalized={}, before={}, after={})
+    out3 = adv3.suggest(
+        deterministic_action="new", deterministic_reason="r", normalized={}, before={}, after={}
+    )
     assert out3["degradation_code"] == "ETL_LLM_INVALID_ACTION"
 
     # valid
     adv4 = EtlRowAdviser(provider=lambda row: {"action": "update", "reason": "good"})
-    out4 = adv4.suggest(deterministic_action="new", deterministic_reason="r", normalized={}, before={}, after={})
+    out4 = adv4.suggest(
+        deterministic_action="new", deterministic_reason="r", normalized={}, before={}, after={}
+    )
     assert out4["used_llm"] is True and out4["action"] == "update" and out4["reason"] == "good"
 
 
@@ -690,7 +788,10 @@ def test_etl_row_adviser_suggest_many():
 
     # degraded metadata
     adv5 = EtlRowAdviser(
-        batch_provider=lambda p: {"items": [], "metadata": {"degraded": True, "degradation_code": "X"}}
+        batch_provider=lambda p: {
+            "items": [],
+            "metadata": {"degraded": True, "degradation_code": "X"},
+        }
     )
     outs5 = adv5.suggest_many(rows)
     assert outs5[0]["degraded"] is True and outs5[0]["degradation_code"] == "X"
@@ -732,6 +833,7 @@ def test_etl_row_adviser_default_batch_provider(monkeypatch):
 
 # --------------------------------------------------------------------------- compatibility_presets.py
 
+
 def test_validate_compatibility_preset(monkeypatch):
     from app.application.etl import compatibility_presets as cp
 
@@ -746,14 +848,18 @@ def test_validate_compatibility_preset(monkeypatch):
     with patch("app.application.shipment_etl_profile.list_profiles", side_effect=RuntimeError("x")):
         with pytest.raises(EtlError) as ex:
             cp.validate_compatibility_preset("p", target_type="customers", upload_suffix=".xlsx")
-        assert ex.value.code == "ETL_COMPATIBILITY_PRESET_UNAVAILABLE" and ex.value.status_code == 503
+        assert (
+            ex.value.code == "ETL_COMPATIBILITY_PRESET_UNAVAILABLE" and ex.value.status_code == 503
+        )
 
     with patch(
         "app.application.shipment_etl_profile.list_profiles",
         return_value=[{"id": "a"}, {"id": "b"}, "junk"],
     ):
         with pytest.raises(EtlError) as ex:
-            cp.validate_compatibility_preset("missing", target_type="customers", upload_suffix=".xlsx")
+            cp.validate_compatibility_preset(
+                "missing", target_type="customers", upload_suffix=".xlsx"
+            )
         assert ex.value.code == "ETL_COMPATIBILITY_PRESET_NOT_FOUND" and ex.value.status_code == 404
 
         # valid path
@@ -761,6 +867,7 @@ def test_validate_compatibility_preset(monkeypatch):
 
 
 # --------------------------------------------------------------------------- targets/helpers.py
+
 
 def test_helpers_issue_optional_decimal():
     from app.application.etl.targets import helpers
@@ -799,7 +906,11 @@ def test_helpers_model_values_and_compare():
     obj = MagicMock()
     obj.price = Decimal("1.50")
     obj.name = "x"
-    fields = (TargetField("price", "价格"), TargetField("name", "名称"), TargetField("missing", "缺"))
+    fields = (
+        TargetField("price", "价格"),
+        TargetField("name", "名称"),
+        TargetField("missing", "缺"),
+    )
     vals = helpers.model_values(obj, fields)
     assert vals["price"] == "1.50" and vals["name"] == "x" and "missing" in vals
 
@@ -845,7 +956,10 @@ def test_helpers_uploaded_document_path(tmp_path):
     p = tmp_path / "f.xlsx"
     p.write_bytes(b"x")
     assert helpers.is_uploaded_document_path(str(p), {"upload_path": str(p)}) is True
-    assert helpers.is_uploaded_document_path(str(p), {"upload_path": str(tmp_path / "other.xlsx")}) is False
+    assert (
+        helpers.is_uploaded_document_path(str(p), {"upload_path": str(tmp_path / "other.xlsx")})
+        is False
+    )
 
 
 def test_helpers_webhook_url(monkeypatch):
@@ -863,7 +977,9 @@ def test_helpers_webhook_url(monkeypatch):
     assert ex.value.code == "ETL_WEBHOOK_HTTPS_REQUIRED"
 
     monkeypatch.setenv("FHD_ETL_ALLOW_HTTP_WEBHOOK", "1")
-    with patch("app.application.etl.targets.helpers.socket.getaddrinfo", side_effect=OSError("dns")):
+    with patch(
+        "app.application.etl.targets.helpers.socket.getaddrinfo", side_effect=OSError("dns")
+    ):
         with pytest.raises(EtlError) as ex:
             helpers.assert_safe_webhook_url("http://nope.invalid")
         assert ex.value.code == "ETL_WEBHOOK_DNS_FAILED"
@@ -897,6 +1013,7 @@ def test_helpers_truthy_env(monkeypatch):
 
 # --------------------------------------------------------------------------- targets/__init__.py
 
+
 def test_get_adapter_registry():
     from app.application.etl.targets import get_adapter, target_capabilities
 
@@ -921,6 +1038,7 @@ def test_get_adapter_registry():
 
 # --------------------------------------------------------------------------- targets/customers.py
 
+
 def _make_customer(db, name="客户A", **kw):
     from app.db.models.purchase_unit import PurchaseUnit
 
@@ -942,16 +1060,22 @@ def test_customers_preview_branches(session):
 
     # not found -> new
     ctx_virtual = {}
-    d2 = a.preview(session, {"customer_name": "新客户"}, allowed_update_fields=set(), context=ctx_virtual)
+    d2 = a.preview(
+        session, {"customer_name": "新客户"}, allowed_update_fields=set(), context=ctx_virtual
+    )
     assert d2.action == "new"
 
     # reuse cache -> virtual dict -> skip duplicate_in_source_file
-    d3 = a.preview(session, {"customer_name": "新客户"}, allowed_update_fields=set(), context=ctx_virtual)
+    d3 = a.preview(
+        session, {"customer_name": "新客户"}, allowed_update_fields=set(), context=ctx_virtual
+    )
     assert d3.action == "skip" and d3.reason == "duplicate_in_source_file"
 
     # existing obj, no updates -> skip duplicate_customer
     _make_customer(session, "老客户")
-    d4 = a.preview(session, {"customer_name": "老客户"}, allowed_update_fields={"contact_person"}, context={})
+    d4 = a.preview(
+        session, {"customer_name": "老客户"}, allowed_update_fields={"contact_person"}, context={}
+    )
     assert d4.action == "skip" and d4.reason == "duplicate_customer"
 
     # existing obj with update
@@ -969,22 +1093,50 @@ def test_customers_execute_row(session):
 
     a = CustomerAdapter()
     # new
-    r = a.execute_row(session, {"customer_name": "新客户", "contact_person": "王"}, action="new", match_ref="", allowed_update_fields=set(), context={})
+    r = a.execute_row(
+        session,
+        {"customer_name": "新客户", "contact_person": "王"},
+        action="new",
+        match_ref="",
+        allowed_update_fields=set(),
+        context={},
+    )
     assert "match_ref" in r
 
     # new with existing -> ETL_MATCH_CHANGED
     with pytest.raises(EtlError) as ex:
-        a.execute_row(session, {"customer_name": "新客户"}, action="new", match_ref="", allowed_update_fields=set(), context={})
+        a.execute_row(
+            session,
+            {"customer_name": "新客户"},
+            action="new",
+            match_ref="",
+            allowed_update_fields=set(),
+            context={},
+        )
     assert ex.value.code == "ETL_MATCH_CHANGED"
 
     # update existing
     obj = _make_customer(session, "老客户")
-    r2 = a.execute_row(session, {"customer_name": "老客户", "contact_person": "李"}, action="update", match_ref=str(obj.id), allowed_update_fields={"contact_person"}, context={})
+    r2 = a.execute_row(
+        session,
+        {"customer_name": "老客户", "contact_person": "李"},
+        action="update",
+        match_ref=str(obj.id),
+        allowed_update_fields={"contact_person"},
+        context={},
+    )
     assert r2["after"]["contact_person"] == "李"
 
     # disappear
     with pytest.raises(EtlError) as ex2:
-        a.execute_row(session, {"customer_name": "无"}, action="update", match_ref="999999", allowed_update_fields=set(), context={})
+        a.execute_row(
+            session,
+            {"customer_name": "无"},
+            action="update",
+            match_ref="999999",
+            allowed_update_fields=set(),
+            context={},
+        )
     assert ex2.value.code == "ETL_MATCH_DISAPPEARED"
 
 
@@ -994,22 +1146,42 @@ def test_customers_rollback_row(session):
     a = CustomerAdapter()
     # before present, missing obj -> ETL_ROLLBACK_TARGET_MISSING
     with pytest.raises(EtlError) as ex:
-        a.rollback_row(session, match_ref="999999", before={"customer_name": "x"}, after={"customer_name": "y"}, context={})
+        a.rollback_row(
+            session,
+            match_ref="999999",
+            before={"customer_name": "x"},
+            after={"customer_name": "y"},
+            context={},
+        )
     assert ex.value.code == "ETL_ROLLBACK_TARGET_MISSING"
 
     # before present, mismatch -> concurrent change
     obj = _make_customer(session, "客户X", contact_person="A")
     with pytest.raises(EtlError) as ex2:
-        a.rollback_row(session, match_ref=str(obj.id), before={"contact_person": "B"}, after={"contact_person": "C"}, context={})
+        a.rollback_row(
+            session,
+            match_ref=str(obj.id),
+            before={"contact_person": "B"},
+            after={"contact_person": "C"},
+            context={},
+        )
     assert ex2.value.code == "ETL_ROLLBACK_CONCURRENT_CHANGE"
 
     # before present, match -> restore
-    r = a.rollback_row(session, match_ref=str(obj.id), before={"contact_person": "原始"}, after={"contact_person": "原始"}, context={})
+    r = a.rollback_row(
+        session,
+        match_ref=str(obj.id),
+        before={"contact_person": "原始"},
+        after={"contact_person": "原始"},
+        context={},
+    )
     assert obj.contact_person == "原始"
 
     # before empty, obj deleted
     obj2 = _make_customer(session, "客户Y")
-    a.rollback_row(session, match_ref=str(obj2.id), before={}, after={"customer_name": "客户Y"}, context={})
+    a.rollback_row(
+        session, match_ref=str(obj2.id), before={}, after={"customer_name": "客户Y"}, context={}
+    )
     session.flush()
     session.expire_all()
     assert session.query(type(obj2)).filter(type(obj2).id == obj2.id).first() is None
@@ -1017,11 +1189,14 @@ def test_customers_rollback_row(session):
     # before empty, mismatch -> concurrent
     obj3 = _make_customer(session, "客户Z")
     with pytest.raises(EtlError) as ex3:
-        a.rollback_row(session, match_ref=str(obj3.id), before={}, after={"customer_name": "改过"}, context={})
+        a.rollback_row(
+            session, match_ref=str(obj3.id), before={}, after={"customer_name": "改过"}, context={}
+        )
     assert ex3.value.code == "ETL_ROLLBACK_CONCURRENT_CHANGE"
 
 
 # --------------------------------------------------------------------------- targets/orders.py
+
 
 def _make_product(db, name="漆", model=None):
     from app.db.models.product import Product
@@ -1081,11 +1256,21 @@ def test_purchase_order_preview(session):
     assert d3.action == "skip" and d3.reason == "existing_order_v1_no_update"
 
     # missing supplier
-    d4 = a.preview(session, {**good, "external_order_no": "PO-2", "supplier_name": "无人"}, allowed_update_fields=set(), context={})
+    d4 = a.preview(
+        session,
+        {**good, "external_order_no": "PO-2", "supplier_name": "无人"},
+        allowed_update_fields=set(),
+        context={},
+    )
     assert d4.action == "error" and d4.reason == "reference_missing"
 
     # missing product (by name)
-    d5 = a.preview(session, {**good, "external_order_no": "PO-3", "product_name": "无此产品", "product_model": ""}, allowed_update_fields=set(), context={})
+    d5 = a.preview(
+        session,
+        {**good, "external_order_no": "PO-3", "product_name": "无此产品", "product_model": ""},
+        allowed_update_fields=set(),
+        context={},
+    )
     assert d5.action == "error" and d5.reason == "reference_missing"
 
 
@@ -1107,21 +1292,39 @@ def test_purchase_order_execute_and_rollback(session):
         "unit_price": "10",
         "unit": "桶",
     }
-    r = a.execute_row(session, good, action="new", match_ref="", allowed_update_fields=set(), context={})
+    r = a.execute_row(
+        session, good, action="new", match_ref="", allowed_update_fields=set(), context={}
+    )
     assert r["after"]["order_created"] is True and r["after"]["item_id"]
 
     # execute again -> created=False (existing order)
-    r2 = a.execute_row(session, good, action="update", match_ref="", allowed_update_fields=set(), context={})
+    r2 = a.execute_row(
+        session, good, action="update", match_ref="", allowed_update_fields=set(), context={}
+    )
     assert r2["after"]["order_created"] is False
 
     # missing supplier
     with pytest.raises(EtlError) as ex:
-        a.execute_row(session, {**good, "external_order_no": "PO-2", "supplier_name": "无人"}, action="new", match_ref="", allowed_update_fields=set(), context={})
+        a.execute_row(
+            session,
+            {**good, "external_order_no": "PO-2", "supplier_name": "无人"},
+            action="new",
+            match_ref="",
+            allowed_update_fields=set(),
+            context={},
+        )
     assert ex.value.code == "ETL_SUPPLIER_NOT_FOUND"
 
     # missing product
     with pytest.raises(EtlError) as ex2:
-        a.execute_row(session, {**good, "external_order_no": "PO-3", "product_name": "无", "product_model": ""}, action="new", match_ref="", allowed_update_fields=set(), context={})
+        a.execute_row(
+            session,
+            {**good, "external_order_no": "PO-3", "product_name": "无", "product_model": ""},
+            action="new",
+            match_ref="",
+            allowed_update_fields=set(),
+            context={},
+        )
     assert ex2.value.code == "ETL_PRODUCT_NOT_FOUND"
 
     # rollback deletes item + order
@@ -1161,7 +1364,12 @@ def test_shipment_preview_branches(session):
     assert d.action == "error"
 
     # quantity missing
-    d2 = a.preview(session, {**base, "quantity_kg": "", "quantity_tins": ""}, allowed_update_fields=set(), context={})
+    d2 = a.preview(
+        session,
+        {**base, "quantity_kg": "", "quantity_tins": ""},
+        allowed_update_fields=set(),
+        context={},
+    )
     assert d2.action == "error"
 
     # new
@@ -1174,7 +1382,11 @@ def test_shipment_preview_branches(session):
     fp = a._fingerprint(base, {})
     session.add(
         ShipmentEtlImportFingerprint(
-            tenant_key="tenant:1", fingerprint=fp, shipment_id=1, unit_name="客户A", source_kind="general_etl"
+            tenant_key="tenant:1",
+            fingerprint=fp,
+            shipment_id=1,
+            unit_name="客户A",
+            source_kind="general_etl",
         )
     )
     session.flush()
@@ -1192,7 +1404,12 @@ def test_shipment_preview_branches(session):
         )
     )
     session.flush()
-    d5 = a.preview(session, {**base, "legacy_note_fingerprint": "legacy-note-fp"}, allowed_update_fields=set(), context={})
+    d5 = a.preview(
+        session,
+        {**base, "legacy_note_fingerprint": "legacy-note-fp"},
+        allowed_update_fields=set(),
+        context={},
+    )
     assert d5.action == "skip" and d5.reason == "legacy_note_fingerprint_duplicate"
 
     # legacy_query match (order_no branch)
@@ -1202,7 +1419,11 @@ def test_shipment_preview_branches(session):
     session.flush()
     session.add(
         ShipmentEtlImportFingerprint(
-            tenant_key="tenant:1", fingerprint="legacy-order", shipment_id=3, order_number="SO-1", source_kind=None
+            tenant_key="tenant:1",
+            fingerprint="legacy-order",
+            shipment_id=3,
+            order_number="SO-1",
+            source_kind=None,
         )
     )
     session.flush()
@@ -1225,7 +1446,12 @@ def test_shipment_preview_branches(session):
         )
     )
     session.flush()
-    d7 = a.preview(session, {**base, "external_order_no": ""}, allowed_update_fields=set(), context={"file_name": "a.xlsx"})
+    d7 = a.preview(
+        session,
+        {**base, "external_order_no": ""},
+        allowed_update_fields=set(),
+        context={"file_name": "a.xlsx"},
+    )
     assert d7.action == "skip" and d7.reason == "legacy_source_duplicate"
 
     # external order duplicate (record from another run)
@@ -1235,7 +1461,12 @@ def test_shipment_preview_branches(session):
     session.flush()
     _make_shipment_record(session, "SO-X", "other-run")
     session.flush()
-    d8 = a.preview(session, {**base, "external_order_no": "SO-X"}, allowed_update_fields=set(), context={"run_id": "mine"})
+    d8 = a.preview(
+        session,
+        {**base, "external_order_no": "SO-X"},
+        allowed_update_fields=set(),
+        context={"run_id": "mine"},
+    )
     assert d8.action == "skip" and d8.reason == "external_order_duplicate"
 
 
@@ -1273,13 +1504,17 @@ def test_shipment_execute_and_rollback(session):
         "external_order_no": "SO-1",
     }
     context = {"run_id": "run1", "file_name": "a.xlsx", "file_sha256": "f", "source_row": 1}
-    r = a.execute_row(session, data, action="new", match_ref="", allowed_update_fields=set(), context=context)
+    r = a.execute_row(
+        session, data, action="new", match_ref="", allowed_update_fields=set(), context=context
+    )
     session.flush()
     assert r["match_ref"] and r["after"]["id"]
 
     # second execute -> preview not new -> ETL_MATCH_CHANGED
     with pytest.raises(EtlError) as ex:
-        a.execute_row(session, data, action="new", match_ref="", allowed_update_fields=set(), context=context)
+        a.execute_row(
+            session, data, action="new", match_ref="", allowed_update_fields=set(), context=context
+        )
     assert ex.value.code == "ETL_MATCH_CHANGED"
 
     # rollback
@@ -1294,6 +1529,7 @@ def test_shipment_execute_and_rollback(session):
 
 
 # --------------------------------------------------------------------------- targets/customer_products.py
+
 
 def _make_cp_customer(db, name="客户A"):
     from app.db.models.purchase_unit import PurchaseUnit
@@ -1325,23 +1561,48 @@ def test_customer_products_preview(session):
     assert d.action == "error"
 
     # new (both not found)
-    d2 = a.preview(session, {"customer_name": "新客", "name": "新漆", "model_number": "N1"}, allowed_update_fields=set(), context={})
+    d2 = a.preview(
+        session,
+        {"customer_name": "新客", "name": "新漆", "model_number": "N1"},
+        allowed_update_fields=set(),
+        context={},
+    )
     assert d2.action == "new" and d2.reason == "customer_and_product_not_found"
 
     # product exists as new customer -> orphan product requires repair
     _make_cp_product(session, "漆", "M1", unit="新客")
-    d3 = a.preview(session, {"customer_name": "新客", "name": "漆", "model_number": "M1"}, allowed_update_fields=set(), context={})
+    d3 = a.preview(
+        session,
+        {"customer_name": "新客", "name": "漆", "model_number": "M1"},
+        allowed_update_fields=set(),
+        context={},
+    )
     assert d3.action == "error" and d3.reason == "orphan_product_requires_repair"
 
     # customer exists, product new -> linked_product_not_found
     _make_cp_customer(session, "客户A")
-    d4 = a.preview(session, {"customer_name": "客户A", "name": "新漆2", "model_number": "N2"}, allowed_update_fields=set(), context={"c": 1})
+    d4 = a.preview(
+        session,
+        {"customer_name": "客户A", "name": "新漆2", "model_number": "N2"},
+        allowed_update_fields=set(),
+        context={"c": 1},
+    )
     assert d4.action == "new" and d4.reason == "linked_product_not_found"
 
     # duplicate product in source (same match key twice in one context)
     ctx = {}
-    d5a = a.preview(session, {"customer_name": "客户A", "name": "漆", "model_number": "M1"}, allowed_update_fields=set(), context=ctx)
-    d5b = a.preview(session, {"customer_name": "客户A", "name": "漆", "model_number": "M1"}, allowed_update_fields=set(), context=ctx)
+    d5a = a.preview(
+        session,
+        {"customer_name": "客户A", "name": "漆", "model_number": "M1"},
+        allowed_update_fields=set(),
+        context=ctx,
+    )
+    d5b = a.preview(
+        session,
+        {"customer_name": "客户A", "name": "漆", "model_number": "M1"},
+        allowed_update_fields=set(),
+        context=ctx,
+    )
     assert d5b.action == "skip" and d5b.reason == "duplicate_product_in_source_file"
 
     # update: customer exists, product exists, changed update field
@@ -1355,7 +1616,12 @@ def test_customer_products_preview(session):
     assert d6.action == "update"
 
     # skip duplicate_customer_product_link
-    d7 = a.preview(session, {"customer_name": "客户A", "name": "漆B", "model_number": "M1B"}, allowed_update_fields=set(), context={})
+    d7 = a.preview(
+        session,
+        {"customer_name": "客户A", "name": "漆B", "model_number": "M1B"},
+        allowed_update_fields=set(),
+        context={},
+    )
     assert d7.action == "skip" and d7.reason == "duplicate_customer_product_link"
 
 
@@ -1434,13 +1700,27 @@ def test_customer_products_rollback(session):
 
     a = CustomerProductsAdapter()
     # product_created -> delete product
-    r = a.execute_row(session, {"customer_name": "新客R", "name": "新漆R", "model_number": "NR"}, action="new", match_ref="", allowed_update_fields=set(), context={})
+    r = a.execute_row(
+        session,
+        {"customer_name": "新客R", "name": "新漆R", "model_number": "NR"},
+        action="new",
+        match_ref="",
+        allowed_update_fields=set(),
+        context={},
+    )
     a.rollback_row(session, match_ref=r["match_ref"], before={}, after=r["after"], context={})
 
     # customer_created with remaining products -> concurrent change
     cust = _make_cp_customer(session, "客户RC")
     prod = _make_cp_product(session, "剩漆", "RM", unit="客户RC")
-    r2 = a.execute_row(session, {"customer_name": "客户RC", "name": "另漆", "model_number": "RM2"}, action="new", match_ref="", allowed_update_fields=set(), context={})
+    r2 = a.execute_row(
+        session,
+        {"customer_name": "客户RC", "name": "另漆", "model_number": "RM2"},
+        action="new",
+        match_ref="",
+        allowed_update_fields=set(),
+        context={},
+    )
     r2["after"]["_etl"]["customer_created"] = True
     with pytest.raises(EtlError) as ex:
         a.rollback_row(session, match_ref=r2["match_ref"], before={}, after=r2["after"], context={})
@@ -1512,7 +1792,13 @@ def test_customer_products_execute_product_update_loop(session):
     prod = _make_cp_product(session, "漆U", "M1", unit="客U")
     r = a.execute_row(
         session,
-        {"customer_name": "客U", "name": "漆U", "model_number": "M1", "specification": "V2", "price": "5"},
+        {
+            "customer_name": "客U",
+            "name": "漆U",
+            "model_number": "M1",
+            "specification": "V2",
+            "price": "5",
+        },
         action="update",
         match_ref=json.dumps({"customer_id": cust.id, "product_id": prod.id}),
         allowed_update_fields={"specification", "price"},
@@ -1569,7 +1855,10 @@ def test_customer_products_rollback_product_updated(session):
         session,
         match_ref=json.dumps({"customer_id": cust.id, "product_id": prod.id}),
         before={},
-        after={"product": {"specification": "V9"}, "_etl": {"product_updated": True, "product_before": {"specification": "V1"}}},
+        after={
+            "product": {"specification": "V9"},
+            "_etl": {"product_updated": True, "product_before": {"specification": "V1"}},
+        },
         context={},
     )
     session.flush()
@@ -1588,7 +1877,10 @@ def test_customer_products_rollback_customer_updated(session):
         session,
         match_ref=json.dumps({"customer_id": cust.id, "product_id": None}),
         before={},
-        after={"customer": {"contact_person": "后"}, "_etl": {"customer_updated": True, "customer_before": {"contact_person": "前"}}},
+        after={
+            "customer": {"contact_person": "后"},
+            "_etl": {"customer_updated": True, "customer_before": {"contact_person": "前"}},
+        },
         context={},
     )
     session.flush()
@@ -1631,6 +1923,7 @@ def test_customer_products_rollback_customer_created_modified(session):
 
 # --------------------------------------------------------------------------- targets/batch.py
 
+
 def test_attendance_adapter_preview(session, monkeypatch, tmp_path):
     from app.application.etl.targets.batch import AttendanceAdapter
 
@@ -1645,7 +1938,11 @@ def test_attendance_adapter_preview(session, monkeypatch, tmp_path):
     assert d2.action == "new" and d2.reason == "new_attendance_source"
 
     # existing batch via cache
-    ctx3 = {"upload_path": str(tmp_path / "a.xlsx"), "file_sha256": "f", "_preview_cache": {"attendance_batch:f:a.xlsx": {"batch_id": 1}}}
+    ctx3 = {
+        "upload_path": str(tmp_path / "a.xlsx"),
+        "file_sha256": "f",
+        "_preview_cache": {"attendance_batch:f:a.xlsx": {"batch_id": 1}},
+    }
     d3 = a.preview(MagicMock(), [], allowed_update_fields=set(), context=ctx3)
     assert d3.action == "skip" and d3.reason == "duplicate_attendance_source"
 
@@ -1657,19 +1954,27 @@ def test_attendance_existing_batch_db(session, tmp_path):
     db_path = tmp_path / "data" / "mod_dbs" / "taiyangniao-pro.db"
     db_path.parent.mkdir(parents=True)
     conn = sqlite3.connect(str(db_path))
-    conn.execute("CREATE TABLE attendance_import_batches (id INTEGER, rows_written INTEGER, imported_at TEXT, source_file TEXT)")
+    conn.execute(
+        "CREATE TABLE attendance_import_batches (id INTEGER, rows_written INTEGER, imported_at TEXT, source_file TEXT)"
+    )
     conn.execute("INSERT INTO attendance_import_batches VALUES (5, 3, '2024-01-01', 'f:a.xlsx')")
     conn.commit()
     conn.close()
 
     with patch.object(AttendanceAdapter, "_db_path", return_value=db_path):
-        match = a._existing_batch({"upload_path": str(tmp_path / "a.xlsx"), "file_sha256": "f", "_preview_cache": {}})
+        match = a._existing_batch(
+            {"upload_path": str(tmp_path / "a.xlsx"), "file_sha256": "f", "_preview_cache": {}}
+        )
         assert match["batch_id"] == 5
 
         # cached
         cache = {}
-        match2 = a._existing_batch({"upload_path": str(tmp_path / "a.xlsx"), "file_sha256": "f", "_preview_cache": cache})
-        match3 = a._existing_batch({"upload_path": str(tmp_path / "a.xlsx"), "file_sha256": "f", "_preview_cache": cache})
+        match2 = a._existing_batch(
+            {"upload_path": str(tmp_path / "a.xlsx"), "file_sha256": "f", "_preview_cache": cache}
+        )
+        match3 = a._existing_batch(
+            {"upload_path": str(tmp_path / "a.xlsx"), "file_sha256": "f", "_preview_cache": cache}
+        )
         assert match2["batch_id"] == 5 and match3["batch_id"] == 5
 
         # operational error (valid sqlite db but missing the query table)
@@ -1679,7 +1984,9 @@ def test_attendance_existing_batch_db(session, tmp_path):
         conn2.commit()
         conn2.close()
         with patch.object(AttendanceAdapter, "_db_path", return_value=db_path2):
-            m = a._existing_batch({"upload_path": str(tmp_path / "a.xlsx"), "file_sha256": "f", "_preview_cache": {}})
+            m = a._existing_batch(
+                {"upload_path": str(tmp_path / "a.xlsx"), "file_sha256": "f", "_preview_cache": {}}
+            )
             assert m is None
 
 
@@ -1695,14 +2002,26 @@ def test_attendance_execute_and_rollback(tmp_path, monkeypatch):
     assert ex.value.code == "ETL_ATTENDANCE_FILE_INVALID"
 
     # existing batch -> ETL_MATCH_CHANGED
-    ctx = {"upload_path": str(tmp_path / "a.xlsx"), "file_sha256": "f", "_preview_cache": {"attendance_batch:f:a.xlsx": {"batch_id": 1}}}
+    ctx = {
+        "upload_path": str(tmp_path / "a.xlsx"),
+        "file_sha256": "f",
+        "_preview_cache": {"attendance_batch:f:a.xlsx": {"batch_id": 1}},
+    }
     with pytest.raises(EtlError) as ex2:
         a.execute_batch([], ctx)
     assert ex2.value.code == "ETL_MATCH_CHANGED"
 
     # success
-    ctx2 = {"upload_path": str(tmp_path / "a.xlsx"), "file_sha256": "f", "row_count": 3, "progress_callback": lambda *a: None}
-    with patch("app.application.attendance_import_app_service.import_attendance_workbook", return_value={"ok": True}):
+    ctx2 = {
+        "upload_path": str(tmp_path / "a.xlsx"),
+        "file_sha256": "f",
+        "row_count": 3,
+        "progress_callback": lambda *a: None,
+    }
+    with patch(
+        "app.application.attendance_import_app_service.import_attendance_workbook",
+        return_value={"ok": True},
+    ):
         r = a.execute_batch([], ctx2)
     assert r["executed"] == 3
 
@@ -1747,7 +2066,9 @@ def test_export_csv_empty_rows(tmp_path, monkeypatch):
     from app.application.etl.targets.batch import ExportCsvAdapter
 
     monkeypatch.setattr("app.application.etl.targets.batch.get_app_data_dir", lambda: tmp_path)
-    r = ExportCsvAdapter().execute_batch([], {"run_id": "r2", "row_count": 0, "output_headers": ["h1"]})
+    r = ExportCsvAdapter().execute_batch(
+        [], {"run_id": "r2", "row_count": 0, "output_headers": ["h1"]}
+    )
     assert r["executed"] == 0
 
 
@@ -1794,7 +2115,12 @@ def test_webhook_adapter_success(monkeypatch):
     with patch("app.application.etl.targets._assert_safe_webhook_url", lambda url: None):
         r = WebhookAdapter().execute_batch(
             [{"a": 1} for _ in range(501)],
-            {"run_id": "w1", "target_config": {"endpoint_url": "https://x.com"}, "row_count": 501, "progress_callback": lambda c, t: None},
+            {
+                "run_id": "w1",
+                "target_config": {"endpoint_url": "https://x.com"},
+                "row_count": 501,
+                "progress_callback": lambda c, t: None,
+            },
         )
     assert r["executed"] == 501
     assert calls and "Authorization" in calls[0]
@@ -1825,7 +2151,11 @@ def test_webhook_adapter_failure(monkeypatch):
         with pytest.raises(EtlError) as ex:
             WebhookAdapter().execute_batch(
                 [{"a": 1}],
-                {"run_id": "w2", "target_config": {"endpoint_url": "https://x.com"}, "row_count": 1},
+                {
+                    "run_id": "w2",
+                    "target_config": {"endpoint_url": "https://x.com"},
+                    "row_count": 1,
+                },
             )
     assert ex.value.code == "ETL_WEBHOOK_DELIVERY_FAILED"
 
@@ -1854,7 +2184,11 @@ def test_webhook_adapter_http_error_retry(monkeypatch):
         with pytest.raises(EtlError) as ex:
             WebhookAdapter().execute_batch(
                 [{"a": 1}],
-                {"run_id": "w3", "target_config": {"endpoint_url": "https://x.com"}, "row_count": 1},
+                {
+                    "run_id": "w3",
+                    "target_config": {"endpoint_url": "https://x.com"},
+                    "row_count": 1,
+                },
             )
     assert ex.value.code == "ETL_WEBHOOK_DELIVERY_FAILED"
 
@@ -1883,6 +2217,11 @@ def test_webhook_adapter_connectivity_test(monkeypatch):
     with patch("app.application.etl.targets._assert_safe_webhook_url", lambda url: None):
         r = WebhookAdapter().execute_batch(
             [],
-            {"run_id": "w4", "target_config": {"endpoint_url": "https://x.com"}, "row_count": 0, "connectivity_test": True},
+            {
+                "run_id": "w4",
+                "target_config": {"endpoint_url": "https://x.com"},
+                "row_count": 0,
+                "connectivity_test": True,
+            },
         )
         assert r["executed"] == 0

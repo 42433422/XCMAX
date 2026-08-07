@@ -370,61 +370,89 @@ def detect_erp_clarification(
                 params = node.params or {}
                 quantity = params.get("quantity") or params.get("items")
                 if _has_multi_unit_text(quantity) or _has_multi_unit_text(message):
-                    items.append(_erp_clar(
-                        node.node_id, "multi_unit",
-                        "单位",
-                        "检测到数量涉及多个单位（斤/KG/吨等），请确认实际操作单位与换算口径后我再执行。",
-                        severity="high",
-                    ))
+                    items.append(
+                        _erp_clar(
+                            node.node_id,
+                            "multi_unit",
+                            "单位",
+                            "检测到数量涉及多个单位（斤/KG/吨等），请确认实际操作单位与换算口径后我再执行。",
+                            severity="high",
+                        )
+                    )
                     break
 
     # 2) 报表口径缺失
     for node in plan.nodes or []:
         if node.tool_id == "reports" and node.action in (
-            "sales_summary", "inventory_summary", "purchase_summary", "dashboard",
+            "sales_summary",
+            "inventory_summary",
+            "purchase_summary",
+            "dashboard",
         ):
             params = node.params or {}
             if not params.get("start_date") or not params.get("end_date"):
-                items.append(_erp_clar(
-                    node.node_id, "report_scope", "日期范围",
-                    "报表口径未指定日期范围，请确认统计起止日期后我再汇总。",
-                    severity="medium",
-                ))
+                items.append(
+                    _erp_clar(
+                        node.node_id,
+                        "report_scope",
+                        "日期范围",
+                        "报表口径未指定日期范围，请确认统计起止日期后我再汇总。",
+                        severity="medium",
+                    )
+                )
             if node.action != "dashboard" and not params.get("group_by"):
-                items.append(_erp_clar(
-                    node.node_id, "report_scope", "group_by",
-                    "报表未指定分组口径（按产品/客户/供应商/日期），请确认后再输出。",
-                    severity="low",
-                ))
+                items.append(
+                    _erp_clar(
+                        node.node_id,
+                        "report_scope",
+                        "group_by",
+                        "报表未指定分组口径（按产品/客户/供应商/日期），请确认后再输出。",
+                        severity="low",
+                    )
+                )
 
     # 3) 冲销/盘点确认
     for node in plan.nodes or []:
         if node.tool_id in ("finance", "inventory") and node.action in (
-            "journal_entry_create", "delete_transaction", "stock_out", "transfer",
+            "journal_entry_create",
+            "delete_transaction",
+            "stock_out",
+            "transfer",
         ):
             reversal_hint = _has_reversal_hint(message) or _has_reversal_hint(
                 str(ctx.get("intent") or ctx.get("action") or "")
             )
             if reversal_hint:
-                items.append(_erp_clar(
-                    node.node_id, "reversal_confirm", "确认",
-                    "该操作疑似冲销/盘点/作废类改动，确认后不可撤回。请明确确认后我再执行。",
-                    severity="high",
-                ))
+                items.append(
+                    _erp_clar(
+                        node.node_id,
+                        "reversal_confirm",
+                        "确认",
+                        "该操作疑似冲销/盘点/作废类改动，确认后不可撤回。请明确确认后我再执行。",
+                        severity="high",
+                    )
+                )
 
     # 4) 批量操作范围
     for node in plan.nodes or []:
         if node.tool_id in ("sales", "inventory", "purchase", "business_event") and node.action in (
-            "batch_delete", "generate_batch", "import_records", "execute_import",
+            "batch_delete",
+            "generate_batch",
+            "import_records",
+            "execute_import",
         ):
             params = node.params or {}
             ids = params.get("ids") or params.get("shipments") or params.get("records")
             if isinstance(ids, list) and len(ids) > 50:
-                items.append(_erp_clar(
-                    node.node_id, "batch_scope", "范围",
-                    f"批量操作涉及 {len(ids)} 条记录，请确认操作范围无误后再执行。",
-                    severity="high",
-                ))
+                items.append(
+                    _erp_clar(
+                        node.node_id,
+                        "batch_scope",
+                        "范围",
+                        f"批量操作涉及 {len(ids)} 条记录，请确认操作范围无误后再执行。",
+                        severity="high",
+                    )
+                )
 
     # 5) ERP 业务确认（Task 6：盘点差异复审 / 凭证冲销确认 / 信用额度超限）
     for node in plan.nodes or []:
@@ -437,21 +465,31 @@ def detect_erp_clarification(
                 system = params.get("system_quantity")
                 actual = params.get("actual_quantity")
                 if system is not None and actual is not None and float(actual) != float(system):
-                    diff_desc = f"系统 {system} vs 实盘 {actual}，存在差异 {float(actual) - float(system)}"
+                    diff_desc = (
+                        f"系统 {system} vs 实盘 {actual}，存在差异 {float(actual) - float(system)}"
+                    )
                 else:
                     diff_desc = "需确认实盘数量与差异调整"
-                items.append(_erp_clar(
-                    node.node_id, "inventory_count_diff", "确认",
-                    f"库存盘点操作需确认：{diff_desc}。请确认实盘数量与差异调整后再执行。",
-                    severity="high",
-                ))
+                items.append(
+                    _erp_clar(
+                        node.node_id,
+                        "inventory_count_diff",
+                        "确认",
+                        f"库存盘点操作需确认：{diff_desc}。请确认实盘数量与差异调整后再执行。",
+                        severity="high",
+                    )
+                )
         # 凭证冲销确认：journal_entry_reverse 执行前二次确认（不可逆）
         if node.tool_id == "finance" and node.action == "journal_entry_reverse":
-            items.append(_erp_clar(
-                node.node_id, "journal_entry_reverse", "确认",
-                "凭证冲销操作不可逆，确认后将生成反向分录并标记原凭证已冲销。请明确确认后我再执行。",
-                severity="high",
-            ))
+            items.append(
+                _erp_clar(
+                    node.node_id,
+                    "journal_entry_reverse",
+                    "确认",
+                    "凭证冲销操作不可逆，确认后将生成反向分录并标记原凭证已冲销。请明确确认后我再执行。",
+                    severity="high",
+                )
+            )
         # 信用额度超限：设置额度低于已用额度时澄清
         if node.tool_id == "customers" and node.action == "set_credit_limit":
             params = node.params or {}
@@ -463,15 +501,21 @@ def detect_erp_clarification(
             except (TypeError, ValueError):
                 limit_num, used_num = None, None
             if limit_num is not None and used_num > limit_num:
-                items.append(_erp_clar(
-                    node.node_id, "credit_limit_exceed", "确认",
-                    f"设置信用额度 {limit_num} 低于当前已用额度 {used_num}，是否仍要保存？",
-                    severity="high",
-                ))
+                items.append(
+                    _erp_clar(
+                        node.node_id,
+                        "credit_limit_exceed",
+                        "确认",
+                        f"设置信用额度 {limit_num} 低于当前已用额度 {used_num}，是否仍要保存？",
+                        severity="high",
+                    )
+                )
     return items
 
 
-def _erp_clar(node_id: str, reason: str, field: str, question: str, severity: str) -> dict[str, Any]:
+def _erp_clar(
+    node_id: str, reason: str, field: str, question: str, severity: str
+) -> dict[str, Any]:
     return {
         "node_id": node_id or f"erp_clarify_{why_uuid()}",
         "reason": reason,
@@ -493,9 +537,7 @@ def _has_multi_unit_text(value: Any) -> bool:
     if not text:
         return False
     # 数量+单位：数字（含小数）后紧跟单位字面量
-    quantity_unit = re.compile(
-        rf"\d+(\.\d+)?\s*({_ERP_UNIT_RE})"
-    )
+    quantity_unit = re.compile(rf"\d+(\.\d+)?\s*({_ERP_UNIT_RE})")
     if quantity_unit.search(text):
         return True
     # 多个不同单位字面量同时出现

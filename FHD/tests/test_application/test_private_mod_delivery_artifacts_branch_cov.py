@@ -271,7 +271,9 @@ class TestInstallCustomDeliveryArtifact:
             stack.enter_context(cm)
 
     def _extract_mod(self, manifest):
-        ModPackage = __import__("app.infrastructure.mods.package", fromlist=["ModPackage"]).ModPackage
+        ModPackage = __import__(
+            "app.infrastructure.mods.package", fromlist=["ModPackage"]
+        ).ModPackage
         return patch.object(
             ModPackage,
             "extract_package",
@@ -327,8 +329,11 @@ class TestInstallCustomDeliveryArtifact:
 
     async def test_employee_success(self):
         token = "a" * 20
-        download = _resp(200, content=_zip_bytes({"id": "emp-1", "version": "1.2.3"}),
-                         headers={"X-Delivery-Receipt-Token": token})
+        download = _resp(
+            200,
+            content=_zip_bytes({"id": "emp-1", "version": "1.2.3"}),
+            headers={"X-Delivery-Receipt-Token": token},
+        )
         receipt = _resp(200, body={"ok": True, "id": 99})
         client = _async_client(get_resp=download, request_resp=receipt)
         registry = MagicMock()
@@ -373,8 +378,11 @@ class TestInstallCustomDeliveryArtifact:
 
     async def test_employee_install_fail(self):
         token = "a" * 20
-        download = _resp(200, content=_zip_bytes({"id": "emp-1", "version": "1.2.3"}),
-                         headers={"X-Delivery-Receipt-Token": token})
+        download = _resp(
+            200,
+            content=_zip_bytes({"id": "emp-1", "version": "1.2.3"}),
+            headers={"X-Delivery-Receipt-Token": token},
+        )
         client = _async_client(get_resp=download)
         registry = MagicMock()
         registry.install_from_package.return_value = (False, "install boom")
@@ -397,8 +405,11 @@ class TestInstallCustomDeliveryArtifact:
 
     async def test_employee_missing_id(self):
         token = "a" * 20
-        download = _resp(200, content=_zip_bytes({"version": "1.0.0"}),
-                         headers={"X-Delivery-Receipt-Token": token})
+        download = _resp(
+            200,
+            content=_zip_bytes({"version": "1.0.0"}),
+            headers={"X-Delivery-Receipt-Token": token},
+        )
         client = _async_client(get_resp=download)
         registry = MagicMock()
         registry.install_from_package.return_value = (True, "ok")
@@ -421,12 +432,15 @@ class TestInstallCustomDeliveryArtifact:
 
     async def test_module_success(self):
         token = "a" * 20
-        download = _resp(200, content=b"modbytes",
-                         headers={"X-Delivery-Receipt-Token": token})
+        download = _resp(200, content=b"modbytes", headers={"X-Delivery-Receipt-Token": token})
         receipt = _resp(200, body={"ok": True})
         client = _async_client(get_resp=download, request_resp=receipt)
         manager = MagicMock()
-        manager.install_mod_package.return_value = (True, "installed", SimpleNamespace(version="2.0.0"))
+        manager.install_mod_package.return_value = (
+            True,
+            "installed",
+            SimpleNamespace(version="2.0.0"),
+        )
         with ExitStack() as stack:
             self._enter(
                 stack,
@@ -449,8 +463,7 @@ class TestInstallCustomDeliveryArtifact:
 
     async def test_module_install_fail(self):
         token = "a" * 20
-        download = _resp(200, content=b"modbytes",
-                         headers={"X-Delivery-Receipt-Token": token})
+        download = _resp(200, content=b"modbytes", headers={"X-Delivery-Receipt-Token": token})
         client = _async_client(get_resp=download)
         manager = MagicMock()
         manager.install_mod_package.return_value = (False, "mod install boom", None)
@@ -470,8 +483,7 @@ class TestInstallCustomDeliveryArtifact:
 
     async def test_module_metadata_version_empty_falls_back(self):
         token = "a" * 20
-        download = _resp(200, content=b"modbytes",
-                         headers={"X-Delivery-Receipt-Token": token})
+        download = _resp(200, content=b"modbytes", headers={"X-Delivery-Receipt-Token": token})
         receipt = _resp(200, body={"ok": True})
         client = _async_client(get_resp=download, request_resp=receipt)
         manager = MagicMock()
@@ -495,8 +507,7 @@ class TestInstallCustomDeliveryArtifact:
 
     async def test_module_api_ready_recoverable_error_logged(self):
         token = "a" * 20
-        download = _resp(200, content=b"modbytes",
-                         headers={"X-Delivery-Receipt-Token": token})
+        download = _resp(200, content=b"modbytes", headers={"X-Delivery-Receipt-Token": token})
         receipt = _resp(200, body={"ok": True})
         client = _async_client(get_resp=download, request_resp=receipt)
         manager = MagicMock()
@@ -520,8 +531,7 @@ class TestInstallCustomDeliveryArtifact:
 
     async def test_module_missing_id(self):
         token = "a" * 20
-        download = _resp(200, content=b"modbytes",
-                         headers={"X-Delivery-Receipt-Token": token})
+        download = _resp(200, content=b"modbytes", headers={"X-Delivery-Receipt-Token": token})
         client = _async_client(get_resp=download)
         manager = MagicMock()
         manager.install_mod_package.return_value = (True, "ok", SimpleNamespace(version="1.0.0"))
@@ -541,8 +551,7 @@ class TestInstallCustomDeliveryArtifact:
 
     async def test_finally_unlink_oserror_swallowed(self, monkeypatch):
         token = "a" * 20
-        download = _resp(200, content=b"modbytes",
-                         headers={"X-Delivery-Receipt-Token": token})
+        download = _resp(200, content=b"modbytes", headers={"X-Delivery-Receipt-Token": token})
         client = _async_client(get_resp=download, request_resp=_resp(200, body={"ok": True}))
         manager = MagicMock()
         manager.install_mod_package.return_value = (True, "ok", SimpleNamespace(version="1.0.0"))
@@ -637,11 +646,17 @@ class TestUpdatePrivateModFromLibrary:
     def _manager(self, scan_rows=None, install_result=None):
         manager = MagicMock()
         manager.scan_mods.return_value = scan_rows or []
-        manager.install_mod_package.return_value = install_result or (True, "ok", SimpleNamespace(version="2.0.0"))
+        manager.install_mod_package.return_value = install_result or (
+            True,
+            "ok",
+            SimpleNamespace(version="2.0.0"),
+        )
         return manager
 
     def _extract(self, manifest):
-        ModPackage = __import__("app.infrastructure.mods.package", fromlist=["ModPackage"]).ModPackage
+        ModPackage = __import__(
+            "app.infrastructure.mods.package", fromlist=["ModPackage"]
+        ).ModPackage
         return patch.object(
             ModPackage,
             "extract_package",
@@ -654,9 +669,7 @@ class TestUpdatePrivateModFromLibrary:
                 await mod.update_private_mod_from_library(bad, "tok")
 
     async def test_remote_not_found(self):
-        with patch(
-            f"{BASE}.fetch_private_mod_library", AsyncMock(return_value=[{"id": "other"}])
-        ):
+        with patch(f"{BASE}.fetch_private_mod_library", AsyncMock(return_value=[{"id": "other"}])):
             with pytest.raises(LookupError):
                 await mod.update_private_mod_from_library("m1", "tok")
 
@@ -677,30 +690,38 @@ class TestUpdatePrivateModFromLibrary:
                 await mod.update_private_mod_from_library("m1", "tok", expected_version="1.0.0")
 
     async def test_already_latest_local(self):
-        with patch(
-            f"{BASE}.fetch_private_mod_library",
-            AsyncMock(return_value=[{"id": "m1", "version": "1.0.0"}]),
-        ), patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager",
-            return_value=self._manager(scan_rows=[SimpleNamespace(id="m1", version="1.0.0")]),
+        with (
+            patch(
+                f"{BASE}.fetch_private_mod_library",
+                AsyncMock(return_value=[{"id": "m1", "version": "1.0.0"}]),
+            ),
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_manager",
+                return_value=self._manager(scan_rows=[SimpleNamespace(id="m1", version="1.0.0")]),
+            ),
         ):
             result = await mod.update_private_mod_from_library("m1", "tok")
         assert result["success"] is True
         assert result["updated"] is False
 
     async def test_empty_token_raises_permission(self):
-        with patch(
-            f"{BASE}.fetch_private_mod_library",
-            AsyncMock(return_value=[{"id": "m1", "version": "2.0.0"}]),
-        ), patch(
-            "app.infrastructure.mods.mod_manager.get_mod_manager",
-            return_value=self._manager(scan_rows=[]),
+        with (
+            patch(
+                f"{BASE}.fetch_private_mod_library",
+                AsyncMock(return_value=[{"id": "m1", "version": "2.0.0"}]),
+            ),
+            patch(
+                "app.infrastructure.mods.mod_manager.get_mod_manager",
+                return_value=self._manager(scan_rows=[]),
+            ),
         ):
             with pytest.raises(PermissionError):
                 await mod.update_private_mod_from_library("m1", "")
 
     async def test_successful_update(self):
-        manager = self._manager(scan_rows=[], install_result=(True, "installed", SimpleNamespace(version="2.0.0")))
+        manager = self._manager(
+            scan_rows=[], install_result=(True, "installed", SimpleNamespace(version="2.0.0"))
+        )
         with (
             patch(
                 f"{BASE}.fetch_private_mod_library",
@@ -730,7 +751,9 @@ class TestUpdatePrivateModFromLibrary:
 
     async def test_verify_signature_env_enabled(self, monkeypatch):
         monkeypatch.setenv("XCAGI_REQUIRE_SIGNED_MODS", "1")
-        manager = self._manager(scan_rows=[], install_result=(True, "ok", SimpleNamespace(version="2.0.0")))
+        manager = self._manager(
+            scan_rows=[], install_result=(True, "ok", SimpleNamespace(version="2.0.0"))
+        )
         with (
             patch(
                 f"{BASE}.fetch_private_mod_library",
@@ -815,7 +838,9 @@ class TestUpdatePrivateModFromLibrary:
                 await mod.update_private_mod_from_library("m1", "tok")
 
     async def test_api_ready_recoverable_error_logged(self):
-        manager = self._manager(scan_rows=[], install_result=(True, "ok", SimpleNamespace(version="2.0.0")))
+        manager = self._manager(
+            scan_rows=[], install_result=(True, "ok", SimpleNamespace(version="2.0.0"))
+        )
         with (
             patch(
                 f"{BASE}.fetch_private_mod_library",

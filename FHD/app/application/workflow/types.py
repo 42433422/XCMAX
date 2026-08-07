@@ -331,9 +331,7 @@ def validate_plan_graph(plan: PlanGraph) -> str | None:
     return None
 
 
-def _find_conditional_cycle(
-    nodes: list[WorkflowNode], node_ids: set[str]
-) -> str | None:
+def _find_conditional_cycle(nodes: list[WorkflowNode], node_ids: set[str]) -> str | None:
     """沿 next / branches[].target 下游边做 DFS 环检测；有环返回错误信息，否则 None。"""
     adj: dict[str, list[str]] = {nid: [] for nid in node_ids}
     for node in nodes:

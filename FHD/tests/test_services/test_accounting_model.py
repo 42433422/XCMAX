@@ -178,9 +178,7 @@ class TestJournalEntryToDict:
             JournalEntryLine(account_code=inventory.code, account_name=inventory.name, debit=500.0)
         )
         entry.lines.append(
-            JournalEntryLine(
-                account_code=payable.code, account_name=payable.name, credit=500.0
-            )
+            JournalEntryLine(account_code=payable.code, account_name=payable.name, credit=500.0)
         )
         test_session.add(entry)
         test_session.commit()

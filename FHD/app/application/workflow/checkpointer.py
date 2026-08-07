@@ -44,9 +44,7 @@ class WorkflowCheckpointer:
     ) -> str:
         """记录一次 checkpoint，返回唯一 ``checkpoint_id``。"""
         executed = list(executed_nodes or [])
-        checkpoint_id = (
-            f"cp-{datetime.now(UTC).strftime('%Y%m%d%H%M%S%f')}-{len(executed)}"
-        )
+        checkpoint_id = f"cp-{datetime.now(UTC).strftime('%Y%m%d%H%M%S%f')}-{len(executed)}"
         data: dict[str, Any] = {
             "plan_id": plan_id,
             "checkpoint_id": checkpoint_id,
@@ -67,9 +65,7 @@ class WorkflowCheckpointer:
     def list_checkpoints(self, plan_id: str) -> list[dict[str, Any]]:
         """列出某 plan 的逐步 checkpoint（按 ``step_index`` 升序）。"""
         checkpoints = self._store.get(plan_id, {})
-        ordered = sorted(
-            checkpoints.values(), key=lambda cp: int(cp.get("step_index", 0))
-        )
+        ordered = sorted(checkpoints.values(), key=lambda cp: int(cp.get("step_index", 0)))
         return [copy.deepcopy(cp) for cp in ordered]
 
     def latest_checkpoint(self, plan_id: str) -> dict[str, Any] | None:
@@ -117,7 +113,9 @@ class DatabaseWorkflowCheckpointer:
                 bind=session.get_bind(), tables=[WorkflowCheckpoint.__table__], checkfirst=True
             )
         except Exception:  # noqa: BLE001 - 建表失败不阻断工作流，仅告警
-            logger.warning("workflow_checkpoints 建表失败，checkpoint 将记录告警降级", exc_info=True)
+            logger.warning(
+                "workflow_checkpoints 建表失败，checkpoint 将记录告警降级", exc_info=True
+            )
         finally:
             # 无论成败只尝试一次，避免每次工作流执行都重复 DDL。
             self._schema_ensured = True

@@ -119,9 +119,7 @@ class WorkflowEngine:
             return node.risk == "high" or not node.idempotent
 
         def _ready(node: WorkflowNode) -> bool:
-            return node.node_id not in blocked and all(
-                dep in executed for dep in node.depends_on
-            )
+            return node.node_id not in blocked and all(dep in executed for dep in node.depends_on)
 
         while pending:
             stalled = True
@@ -175,9 +173,7 @@ class WorkflowEngine:
 
             # 每轮（一个节点或一批）执行完后记录一次 checkpoint。
             if progressed:
-                self._maybe_checkpoint(
-                    checkpointer, plan, runtime_context, executed, blocked
-                )
+                self._maybe_checkpoint(checkpointer, plan, runtime_context, executed, blocked)
 
             if stalled:
                 stalled_rounds += 1
@@ -356,9 +352,7 @@ class WorkflowEngine:
                     batch_results.append(future_map[node.node_id].result())
         else:
             for node in read_nodes:
-                batch_results.append(
-                    self._run_node(node, runtime_context, max_retries=max_retries)
-                )
+                batch_results.append(self._run_node(node, runtime_context, max_retries=max_retries))
 
         # 写/高风险节点始终串行，按依赖保序。
         for node in write_nodes:

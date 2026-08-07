@@ -156,9 +156,7 @@ class WorkflowPlanStore:
         finally:
             session.close()
 
-    def update_status(
-        self, plan_id: str, status: str, message: str | None = None
-    ) -> None:
+    def update_status(self, plan_id: str, status: str, message: str | None = None) -> None:
         """更新计划终态/状态；计划不存在则忽略。"""
         session = self._get_session()
         try:

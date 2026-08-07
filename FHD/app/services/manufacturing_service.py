@@ -78,10 +78,7 @@ class ManufacturingService:
                 query = query.filter(Bom.product_id == product_id)
             total = query.count()
             items = (
-                query.order_by(Bom.id.desc())
-                .offset((page - 1) * per_page)
-                .limit(per_page)
-                .all()
+                query.order_by(Bom.id.desc()).offset((page - 1) * per_page).limit(per_page).all()
             )
             return {
                 "success": True,
@@ -149,7 +146,9 @@ class ManufacturingService:
         """工单下达：draft → confirmed。"""
         with get_db() as db:
             try:
-                order = db.query(ManufacturingOrder).filter(ManufacturingOrder.id == order_id).first()
+                order = (
+                    db.query(ManufacturingOrder).filter(ManufacturingOrder.id == order_id).first()
+                )
                 if not order:
                     return {"success": False, "message": "工单不存在"}
                 if order.status != "draft":
@@ -164,7 +163,9 @@ class ManufacturingService:
                 logger.error("下达工单失败: %s", e)
                 return {"success": False, "message": str(e)}
 
-    def consume(self, order_id: int, warehouse_id: int, operator: str | None = None) -> dict[str, Any]:
+    def consume(
+        self, order_id: int, warehouse_id: int, operator: str | None = None
+    ) -> dict[str, Any]:
         """领料：校验原料库存，足够则扣减原料并更新已领料量，工单 → in_progress。"""
         # Phase 1: 校验工单状态与原料库存
         with get_db() as db:
@@ -224,7 +225,9 @@ class ManufacturingService:
                 "consumed": [qty for _line_id, _pid, _name, qty in lines_data],
             }
 
-    def finish(self, order_id: int, warehouse_id: int, operator: str | None = None) -> dict[str, Any]:
+    def finish(
+        self, order_id: int, warehouse_id: int, operator: str | None = None
+    ) -> dict[str, Any]:
         """完工：成品入库 → done。"""
         with get_db() as db:
             order = db.query(ManufacturingOrder).filter(ManufacturingOrder.id == order_id).first()

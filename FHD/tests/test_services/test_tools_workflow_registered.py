@@ -648,7 +648,10 @@ class TestErpToolRegistry:
         reg = _workflow_registry()
         finance = reg["finance"]["actions"]
         assert "ledger_query" in finance and "journal_entry_create" in finance
-        assert finance["ledger_query"]["risk"] == "low" and finance["ledger_query"]["idempotent"] is True
+        assert (
+            finance["ledger_query"]["risk"] == "low"
+            and finance["ledger_query"]["idempotent"] is True
+        )
         assert finance["journal_entry_create"]["risk"] == "high"
         assert set(finance["journal_entry_create"]["required_params"]) == {"lines"}
 
@@ -726,7 +729,9 @@ class TestErpRouterDispatch:
     def test_finance_router_ledger_query(self):
         from app.services import accounting_services
 
-        with patch.object(accounting_services, "query_financial_ledger", return_value={"success": True}) as m:
+        with patch.object(
+            accounting_services, "query_financial_ledger", return_value={"success": True}
+        ) as m:
             r = _registered_router_finance("ledger_query", {}, {}, "shared", "")
             assert r["success"] is True
             m.assert_called_once()
@@ -814,9 +819,7 @@ class TestMrpRouter:
                 "consume", {"order_id": 1, "warehouse_id": 2}, {}, "shared", ""
             )
         assert r["success"] is True
-        mock_svc.consume.assert_called_once_with(
-            order_id=1, warehouse_id=2, operator=None
-        )
+        mock_svc.consume.assert_called_once_with(order_id=1, warehouse_id=2, operator=None)
 
     def test_finish(self):
         mock_svc = MagicMock()

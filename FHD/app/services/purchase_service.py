@@ -476,17 +476,13 @@ class PurchaseService(NeuroEventPublisherMixin):
                                         "debit": 0,
                                         "credit": total_amount,
                                         "partner_id": inbound.supplier_id,
-                                        "partner_name": (
-                                            supplier.name if supplier else None
-                                        ),
+                                        "partner_name": (supplier.name if supplier else None),
                                     },
                                 ],
                             }
                         )
                         if not journal_result.get("success"):
-                            logger.warning(
-                                "应付账款记账失败: %s", journal_result.get("message")
-                            )
+                            logger.warning("应付账款记账失败: %s", journal_result.get("message"))
                     except Exception:  # noqa: BLE001 - 记账失败不阻断入库主流程
                         logger.warning("应付账款记账失败", exc_info=True)
 

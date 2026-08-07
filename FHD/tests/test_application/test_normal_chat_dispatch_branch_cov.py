@@ -1493,7 +1493,10 @@ class TestBuildMaterialsQueryResponseDict:
 
     def test_more_than_10_truncated(self):
         route = {"intent": "materials_query", "slots": {"keyword": ""}}
-        items = [{"name": f"原料{i}", "quantity": i, "unit": "kg", "material_code": f"M{i}"} for i in range(15)]
+        items = [
+            {"name": f"原料{i}", "quantity": i, "unit": "kg", "material_code": f"M{i}"}
+            for i in range(15)
+        ]
         with patch("app.application.get_material_application_service") as mock_get:
             mock_svc = MagicMock()
             mock_svc.get_all_materials.return_value = {
@@ -1588,9 +1591,7 @@ class TestBuildPurchaseQueryResponseDict:
 
     def test_supplier_empty(self):
         route = {"intent": "purchase_query", "slots": {"keyword": ""}}
-        with patch(
-            "app.application.facades.inventory_facade.PurchaseService"
-        ) as mock_cls:
+        with patch("app.application.facades.inventory_facade.PurchaseService") as mock_cls:
             mock_svc = mock_cls.return_value
             mock_svc.get_suppliers.return_value = {"data": []}
             result = build_purchase_query_response_dict(route, message="有哪些供应商")
@@ -1599,9 +1600,7 @@ class TestBuildPurchaseQueryResponseDict:
 
     def test_supplier_with_keyword_no_match(self):
         route = {"intent": "purchase_query", "slots": {"keyword": ""}}
-        with patch(
-            "app.application.facades.inventory_facade.PurchaseService"
-        ) as mock_cls:
+        with patch("app.application.facades.inventory_facade.PurchaseService") as mock_cls:
             mock_svc = mock_cls.return_value
             mock_svc.get_suppliers.return_value = {"data": []}
             result = build_purchase_query_response_dict(route, message="供应商 不存在")
@@ -1610,9 +1609,7 @@ class TestBuildPurchaseQueryResponseDict:
 
     def test_supplier_with_items(self):
         route = {"intent": "purchase_query", "slots": {"keyword": ""}}
-        with patch(
-            "app.application.facades.inventory_facade.PurchaseService"
-        ) as mock_cls:
+        with patch("app.application.facades.inventory_facade.PurchaseService") as mock_cls:
             mock_svc = mock_cls.return_value
             mock_svc.get_suppliers.return_value = {
                 "data": [{"name": "供方A", "contact_person": "张三"}]
@@ -1623,9 +1620,7 @@ class TestBuildPurchaseQueryResponseDict:
 
     def test_orders_empty(self):
         route = {"intent": "purchase_query", "slots": {"keyword": ""}}
-        with patch(
-            "app.application.facades.inventory_facade.PurchaseService"
-        ) as mock_cls:
+        with patch("app.application.facades.inventory_facade.PurchaseService") as mock_cls:
             mock_svc = mock_cls.return_value
             mock_svc.get_purchase_orders.return_value = {"data": [], "total": 0}
             result = build_purchase_query_response_dict(route, message="采购订单")
@@ -1634,9 +1629,7 @@ class TestBuildPurchaseQueryResponseDict:
 
     def test_orders_with_items(self):
         route = {"intent": "purchase_query", "slots": {"keyword": ""}}
-        with patch(
-            "app.application.facades.inventory_facade.PurchaseService"
-        ) as mock_cls:
+        with patch("app.application.facades.inventory_facade.PurchaseService") as mock_cls:
             mock_svc = mock_cls.return_value
             mock_svc.get_purchase_orders.return_value = {
                 "data": [{"order_no": "PO01", "supplier_name": "供方A", "total_amount": "100.5"}],
@@ -1648,10 +1641,10 @@ class TestBuildPurchaseQueryResponseDict:
 
     def test_orders_more_than_10(self):
         route = {"intent": "purchase_query", "slots": {"keyword": ""}}
-        orders = [{"order_no": f"PO{i}", "supplier_name": f"S{i}", "total_amount": i} for i in range(15)]
-        with patch(
-            "app.application.facades.inventory_facade.PurchaseService"
-        ) as mock_cls:
+        orders = [
+            {"order_no": f"PO{i}", "supplier_name": f"S{i}", "total_amount": i} for i in range(15)
+        ]
+        with patch("app.application.facades.inventory_facade.PurchaseService") as mock_cls:
             mock_svc = mock_cls.return_value
             mock_svc.get_purchase_orders.return_value = {"data": orders, "total": 15}
             result = build_purchase_query_response_dict(route, message="采购")
@@ -1697,8 +1690,18 @@ class TestBuildFinanceQueryResponseDict:
         with patch("app.application.finance_app_service.FinanceAppService") as mock_cls:
             mock_cls.return_value.list_transactions.return_value = {
                 "data": [
-                    {"transaction_type": "income", "amount": 100, "transaction_date": "2026-08-01", "counterparty_name": "甲"},
-                    {"transaction_type": "expense", "amount": "50", "transaction_date": "2026-08-02", "counterparty_name": "乙"},
+                    {
+                        "transaction_type": "income",
+                        "amount": 100,
+                        "transaction_date": "2026-08-01",
+                        "counterparty_name": "甲",
+                    },
+                    {
+                        "transaction_type": "expense",
+                        "amount": "50",
+                        "transaction_date": "2026-08-02",
+                        "counterparty_name": "乙",
+                    },
                 ],
                 "total": 2,
             }
@@ -1709,7 +1712,15 @@ class TestBuildFinanceQueryResponseDict:
 
     def test_more_than_10(self):
         route = {"intent": "finance_query", "slots": {}}
-        items = [{"transaction_type": "income", "amount": i, "transaction_date": "2026-08-01", "counterparty_name": ""} for i in range(15)]
+        items = [
+            {
+                "transaction_type": "income",
+                "amount": i,
+                "transaction_date": "2026-08-01",
+                "counterparty_name": "",
+            }
+            for i in range(15)
+        ]
         with patch("app.application.finance_app_service.FinanceAppService") as mock_cls:
             mock_cls.return_value.list_transactions.return_value = {
                 "data": items,

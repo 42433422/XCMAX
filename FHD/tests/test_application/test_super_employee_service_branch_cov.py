@@ -89,8 +89,15 @@ def _mock_response(status_code: int = 200, json_data=None, text: str = "", conte
     return resp
 
 
-def _mock_http_client(*, post_resp=None, get_resp=None, request_resp=None, post_exc=None,
-                      get_exc=None, request_exc=None):
+def _mock_http_client(
+    *,
+    post_resp=None,
+    get_resp=None,
+    request_resp=None,
+    post_exc=None,
+    get_exc=None,
+    request_exc=None,
+):
     client = MagicMock()
     client.__enter__ = MagicMock(return_value=client)
     client.__exit__ = MagicMock(return_value=False)
@@ -142,7 +149,7 @@ class _FakeStream:
 
     def __init__(self, lines):
         self._lines = list(lines)
-        self._read_data = (b"stderr data" if lines == [] else b"")
+        self._read_data = b"stderr data" if lines == [] else b""
 
     async def readline(self):
         if self._lines:
@@ -203,7 +210,9 @@ class TestInvokeStream:
             patch.object(svc, "_dev_loop_enabled", return_value=True),
             patch.object(svc, "_run_dev_task_loop", return_value="任务完成啦"),
         ):
-            events = _run_agen(svc.invoke_stream(user_id=1, message="修复 bug", context={"mode": "code"}))
+            events = _run_agen(
+                svc.invoke_stream(user_id=1, message="修复 bug", context={"mode": "code"})
+            )
         assert events[0]["type"] == "status"
         assert events[-1]["type"] == "done"
         assert events[-1]["result"]["dispatcher"] == "dev_loop"
@@ -217,7 +226,9 @@ class TestInvokeStream:
             patch.object(svc, "_dev_loop_enabled", return_value=True),
             patch.object(svc, "_run_dev_task_loop", side_effect=RuntimeError("boom")),
         ):
-            events = _run_agen(svc.invoke_stream(user_id=1, message="修复 bug", context={"mode": "code"}))
+            events = _run_agen(
+                svc.invoke_stream(user_id=1, message="修复 bug", context={"mode": "code"})
+            )
         assert events[-1]["type"] == "error"
         assert "boom" in events[-1]["message"]
 
@@ -230,6 +241,7 @@ class TestInvokeStream:
             patch.object(svc, "_cli_prompt", return_value="prompt"),
             patch.object(svc, "_run_cli_streaming") as stream,
         ):
+
             async def _fake_stream(cli_path, prompt, cwd):
                 yield {"type": "status", "text": "thinking"}
                 yield {"type": "token", "text": "part1"}
@@ -237,7 +249,9 @@ class TestInvokeStream:
                 yield {"type": "done"}
 
             stream.return_value = _fake_stream("/fake/codex", "prompt", "cwd")
-            events = _run_agen(svc.invoke_stream(user_id=1, message="讲个故事吧", context={"mode": "chat"}))
+            events = _run_agen(
+                svc.invoke_stream(user_id=1, message="讲个故事吧", context={"mode": "chat"})
+            )
         assert events[-1]["type"] == "done"
         assert events[-1]["result"]["response"] == "part1part2"
         assert events[-1]["result"]["dispatcher"] == "cli_stream"
@@ -250,12 +264,15 @@ class TestInvokeStream:
             patch.object(svc, "_is_task_intent", return_value=False),
             patch.object(svc, "_run_cli_streaming") as stream,
         ):
+
             async def _fake_stream(cli_path, prompt, cwd):
                 yield {"type": "error", "message": "cli crashed"}
                 yield {"type": "done"}
 
             stream.return_value = _fake_stream("/fake/codex", "prompt", "cwd")
-            events = _run_agen(svc.invoke_stream(user_id=1, message="讲个故事吧", context={"mode": "chat"}))
+            events = _run_agen(
+                svc.invoke_stream(user_id=1, message="讲个故事吧", context={"mode": "chat"})
+            )
         assert events[-1]["type"] == "error"
         assert events[-1]["message"] == "cli crashed"
 
@@ -267,12 +284,15 @@ class TestInvokeStream:
             patch.object(svc, "_is_task_intent", return_value=False),
             patch.object(svc, "_run_cli_streaming") as stream,
         ):
+
             async def _fake_stream(cli_path, prompt, cwd):
                 yield {"type": "status", "text": "thinking"}
                 yield {"type": "done"}
 
             stream.return_value = _fake_stream("/fake/codex", "prompt", "cwd")
-            events = _run_agen(svc.invoke_stream(user_id=1, message="讲讲天气", context={"mode": "chat"}))
+            events = _run_agen(
+                svc.invoke_stream(user_id=1, message="讲讲天气", context={"mode": "chat"})
+            )
         assert events[-1]["type"] == "done"
         assert "暂时没有返回内容" in events[-1]["result"]["response"]
 
@@ -312,9 +332,13 @@ class TestRunCliStreaming:
         proc = _fake_proc([], returncode=0)
         # 让 output_path.read_text 返回内容：patch Path.read_text
         with (
-            patch("app.application.super_employee_service.asyncio.create_subprocess_exec",
-                  return_value=proc),
-            patch("app.application.super_employee_service.Path.read_text", return_value="file body"),
+            patch(
+                "app.application.super_employee_service.asyncio.create_subprocess_exec",
+                return_value=proc,
+            ),
+            patch(
+                "app.application.super_employee_service.Path.read_text", return_value="file body"
+            ),
             patch("app.application.super_employee_service.Path.exists", return_value=True),
         ):
             events = _run_agen(svc._run_cli_streaming("/cli", "prompt", str(tmp_path)))
@@ -348,17 +372,23 @@ class TestRunCliStreaming:
 class TestParseStreamJsonLine:
     def test_assistant_text_block(self, tmp_path):
         svc = _make_svc(tmp_path)
-        line = json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "hi"}]}})
+        line = json.dumps(
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "hi"}]}}
+        )
         assert svc._parse_stream_json_line(line) == "hi"
 
     def test_assistant_text_block_empty(self, tmp_path):
         svc = _make_svc(tmp_path)
-        line = json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": ""}]}})
+        line = json.dumps(
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": ""}]}}
+        )
         assert svc._parse_stream_json_line(line) == ""
 
     def test_result_string(self, tmp_path):
         svc = _make_svc(tmp_path)
-        assert svc._parse_stream_json_line(json.dumps({"type": "result", "result": "done"})) == "done"
+        assert (
+            svc._parse_stream_json_line(json.dumps({"type": "result", "result": "done"})) == "done"
+        )
 
     def test_result_empty_string(self, tmp_path):
         svc = _make_svc(tmp_path)
@@ -371,7 +401,10 @@ class TestParseStreamJsonLine:
 
     def test_message_delta(self, tmp_path):
         svc = _make_svc(tmp_path)
-        assert svc._parse_stream_json_line(json.dumps({"type": "message_delta", "text": "delta"})) == "delta"
+        assert (
+            svc._parse_stream_json_line(json.dumps({"type": "message_delta", "text": "delta"}))
+            == "delta"
+        )
 
     def test_unknown_type(self, tmp_path):
         svc = _make_svc(tmp_path)
@@ -512,8 +545,11 @@ class TestInvoke:
         dispatch = {"request_id": "req-1", "status": "queued", "accepted": False}
         with (
             patch.object(svc, "_dispatch", return_value=dispatch),
-            patch.object(svc, "_compose_direct_chat_reply",
-                          return_value=(f"{svc._p.display_tool} CLI 暂时没有返回内容 xxx", "codex_cli")),
+            patch.object(
+                svc,
+                "_compose_direct_chat_reply",
+                return_value=(f"{svc._p.display_tool} CLI 暂时没有返回内容 xxx", "codex_cli"),
+            ),
         ):
             result = svc.invoke(user_id=1, message="修复 bug", context={"mode": "code"})
         # body starts with placeholder → 不落 assistant 兜底，走 dispatcher 消息
@@ -522,7 +558,9 @@ class TestInvoke:
     def test_factory_token_rejected_logs_warning(self, tmp_path, caplog):
         svc = _make_svc(tmp_path)
         with patch("app.application.super_employee_service.logger") as mock_logger:
-            svc.invoke(user_id=1, message="增强功能", context={"mode": "code", CONTEXT_TOKEN_KEY: "wrong"})
+            svc.invoke(
+                user_id=1, message="增强功能", context={"mode": "code", CONTEXT_TOKEN_KEY: "wrong"}
+            )
         mock_logger.warning.assert_called_once()
         # token 不应流入持久化
         rows = svc._read_all_message_rows()
@@ -537,7 +575,11 @@ class TestBuildDispatchRequest:
     def test_product_scope_empty_workspace(self, tmp_path):
         svc = _make_svc(tmp_path)
         req = svc._build_dispatch_request(
-            request_id="r1", created_at="t", user_id=1, message="hi", context={"source": "mobile_app"}
+            request_id="r1",
+            created_at="t",
+            user_id=1,
+            message="hi",
+            context={"source": "mobile_app"},
         )
         assert req["workspace_root"] == ""
         assert req["source"] == "xcagi_mobile_im"
@@ -558,12 +600,19 @@ class TestBuildDispatchRequest:
     def test_target_devices_list_and_default(self, tmp_path):
         svc = _make_svc(tmp_path)
         req = svc._build_dispatch_request(
-            request_id="r1", created_at="t", user_id=1, message="hi",
+            request_id="r1",
+            created_at="t",
+            user_id=1,
+            message="hi",
             context={"target_devices": ["d1", "d2"]},
         )
         assert req["target_devices"] == ["d1", "d2"]
         req2 = svc._build_dispatch_request(
-            request_id="r2", created_at="t", user_id=1, message="hi", context={"target_devices": "oops"}
+            request_id="r2",
+            created_at="t",
+            user_id=1,
+            message="hi",
+            context={"target_devices": "oops"},
         )
         assert req2["target_devices"] == ["all"]
 
@@ -582,12 +631,20 @@ class TestDeviceEligible:
 
     def test_tool_not_installed(self, tmp_path):
         svc = _make_svc(tmp_path)
-        device = {"id": "d1", "status": "online", "tools": [{"toolName": "codex", "status": "not_installed"}]}
+        device = {
+            "id": "d1",
+            "status": "online",
+            "tools": [{"toolName": "codex", "status": "not_installed"}],
+        }
         assert svc._device_eligible(device) is False
 
     def test_tool_running_with_task(self, tmp_path):
         svc = _make_svc(tmp_path)
-        device = {"id": "d1", "status": "online", "tools": [{"toolName": "codex", "status": "running", "currentTask": "t"}]}
+        device = {
+            "id": "d1",
+            "status": "online",
+            "tools": [{"toolName": "codex", "status": "running", "currentTask": "t"}],
+        }
         assert svc._device_eligible(device) is False
 
     def test_no_tool_and_no_capability(self, tmp_path):
@@ -601,7 +658,11 @@ class TestDeviceEligible:
 
     def test_eligible_via_tool(self, tmp_path):
         svc = _make_svc(tmp_path)
-        device = {"id": "d1", "status": "online", "tools": [{"toolName": "codex", "status": "idle"}]}
+        device = {
+            "id": "d1",
+            "status": "online",
+            "tools": [{"toolName": "codex", "status": "idle"}],
+        }
         assert svc._device_eligible(device) is True
 
 
@@ -609,7 +670,13 @@ class TestSelectParaDevices:
     def test_filters_by_target_and_workers(self, tmp_path):
         svc = _make_svc(tmp_path)
         devices = [
-            {"id": "d1", "name": "dev1", "status": "online", "capabilities": {"codex_cli": True}, "isPrimary": True},
+            {
+                "id": "d1",
+                "name": "dev1",
+                "status": "online",
+                "capabilities": {"codex_cli": True},
+                "isPrimary": True,
+            },
             {"id": "d2", "name": "dev2", "status": "online", "capabilities": {"codex_cli": True}},
             {"id": "d3", "name": "dev3", "status": "offline", "capabilities": {"codex_cli": True}},
         ]
@@ -703,7 +770,12 @@ class TestSelectLocalDevice:
     def test_primary_device(self, tmp_path):
         svc = _make_svc(tmp_path)
         devices = [
-            {"id": "d1", "isPrimary": True, "status": "online", "capabilities": {"codex_cli": True}},
+            {
+                "id": "d1",
+                "isPrimary": True,
+                "status": "online",
+                "capabilities": {"codex_cli": True},
+            },
             {"id": "d2", "status": "online", "capabilities": {"codex_cli": True}},
         ]
         selected = svc._select_local_device(devices, _make_request())
@@ -891,8 +963,12 @@ class TestParaTaskStatusReply:
     def test_running_with_progress(self, tmp_path):
         svc = _make_svc(tmp_path)
         task = {
-            "id": "t1", "status": "running",
-            "subTasks": [{"status": "completed", "progress": 50}, {"status": "running", "progress": 100}],
+            "id": "t1",
+            "status": "running",
+            "subTasks": [
+                {"status": "completed", "progress": 50},
+                {"status": "running", "progress": 100},
+            ],
         }
         out = svc._para_task_status_reply(task)
         assert "运行中" in out
@@ -907,7 +983,12 @@ class TestParaTaskStatusReply:
 class TestResultBody:
     def test_with_tail(self, tmp_path):
         svc = _make_svc(tmp_path)
-        subtask = {"device_name": "dev1", "title": "子任", "status": "completed", "logs": [{"content": "日志内容"}]}
+        subtask = {
+            "device_name": "dev1",
+            "title": "子任",
+            "status": "completed",
+            "logs": [{"content": "日志内容"}],
+        }
         out = svc._result_body({"title": "总任务"}, subtask)
         assert "dev1 / 子任" in out
         assert "日志内容" in out
@@ -928,7 +1009,8 @@ class TestResultBody:
     def test_skips_dispatcher_logs(self, tmp_path):
         svc = _make_svc(tmp_path)
         subtask = {
-            "device_name": "dev1", "status": "completed",
+            "device_name": "dev1",
+            "status": "completed",
             "logs": [{"content": "子任务「x」派发"}, {"content": "真实结果"}],
         }
         out = svc._result_body({"title": "总任务"}, subtask)
@@ -965,14 +1047,21 @@ class TestSyncParaTaskUpdates:
         svc = _make_svc(tmp_path)
         rows = [
             {
-                "user_id": 1, "role": "system", "kind": DISPATCHER_MESSAGE_KIND,
-                "task_id": "t1", "task_status": "completed", "status": "completed",
+                "user_id": 1,
+                "role": "system",
+                "kind": DISPATCHER_MESSAGE_KIND,
+                "task_id": "t1",
+                "task_status": "completed",
+                "status": "completed",
                 "dispatch_request_id": "r1",
             },
             # 已有 result 消息 → result_task_ids 含 t1 → 终态则跳过 fetch
             {
-                "user_id": 1, "role": "assistant", "kind": svc._p.result_kind,
-                "task_id": "t1", "dispatch_request_id": "r1",
+                "user_id": 1,
+                "role": "assistant",
+                "kind": svc._p.result_kind,
+                "task_id": "t1",
+                "dispatch_request_id": "r1",
             },
         ]
         with patch.object(svc, "_fetch_para_task") as fetch:
@@ -981,11 +1070,18 @@ class TestSyncParaTaskUpdates:
 
     def test_fetches_and_writes_when_changed(self, tmp_path):
         svc = _make_svc(tmp_path)
-        rows = [{
-            "user_id": 1, "role": "system", "kind": DISPATCHER_MESSAGE_KIND,
-            "task_id": "t1", "task_status": "", "status": "queued",
-            "dispatch_request_id": "r1", "body": "x",
-        }]
+        rows = [
+            {
+                "user_id": 1,
+                "role": "system",
+                "kind": DISPATCHER_MESSAGE_KIND,
+                "task_id": "t1",
+                "task_status": "",
+                "status": "queued",
+                "dispatch_request_id": "r1",
+                "body": "x",
+            }
+        ]
         task = {"id": "t1", "status": "running"}
         with (
             patch.object(svc, "_fetch_para_task", return_value=task),
@@ -1049,7 +1145,12 @@ class TestUpsertDirectReplyMessages:
         svc = _make_svc(tmp_path)
         rows = [
             {"user_id": 1, "role": "user", "dispatch_request_id": "r1", "body": "你好"},
-            {"user_id": 1, "role": "assistant", "dispatch_request_id": "r1", "kind": "codex_direct"},
+            {
+                "user_id": 1,
+                "role": "assistant",
+                "dispatch_request_id": "r1",
+                "kind": "codex_direct",
+            },
         ]
         changed = svc._upsert_direct_reply_messages(user_id=1, rows=rows)
         assert changed is False
@@ -1061,7 +1162,9 @@ class TestUpsertDirectReplyMessages:
             {"user_id": 1, "role": "user", "dispatch_request_id": "r1", "body": "随便聊点什么"},
             {"user_id": 1, "role": "user", "dispatch_request_id": "r2", "body": "再聊点别的"},
         ]
-        with patch.object(svc, "_compose_direct_chat_reply", return_value=("cli 回填", "codex_cli")):
+        with patch.object(
+            svc, "_compose_direct_chat_reply", return_value=("cli 回填", "codex_cli")
+        ):
             changed = svc._upsert_direct_reply_messages(user_id=1, rows=rows)
         assert changed is True
         assert len(rows) == 3  # 只回填一条（cli_backfills < 1）
@@ -1103,16 +1206,20 @@ class TestComposeDirectChatReply:
 
     def test_cli_body(self, tmp_path):
         svc = _make_svc(tmp_path)
-        with patch.object(svc, "_direct_reply_body", return_value=""), \
-             patch.object(svc, "_cli_reply_body", return_value="cli 结果"):
+        with (
+            patch.object(svc, "_direct_reply_body", return_value=""),
+            patch.object(svc, "_cli_reply_body", return_value="cli 结果"),
+        ):
             body, dispatcher = svc._compose_direct_chat_reply("随意", {})
         assert dispatcher == "codex_cli"
         assert body == "cli 结果"
 
     def test_fallback_message(self, tmp_path):
         svc = _make_svc(tmp_path)
-        with patch.object(svc, "_direct_reply_body", return_value=""), \
-             patch.object(svc, "_cli_reply_body", return_value=""):
+        with (
+            patch.object(svc, "_direct_reply_body", return_value=""),
+            patch.object(svc, "_cli_reply_body", return_value=""),
+        ):
             body, dispatcher = svc._compose_direct_chat_reply("随意", {})
         assert "暂时没有返回内容" in body
         assert dispatcher == "codex_cli"
@@ -1182,8 +1289,11 @@ class TestRunConversationTurn:
     def test_success(self, tmp_path):
         svc = _make_svc(tmp_path, profile=CLAUDE_PROFILE)
         with (
-            patch.object(svc, "_run_cli_idle",
-                         return_value=(0, '{"type":"result","result":"ok","session_id":"s1"}', "", "")),
+            patch.object(
+                svc,
+                "_run_cli_idle",
+                return_value=(0, '{"type":"result","result":"ok","session_id":"s1"}', "", ""),
+            ),
             patch.object(svc, "_session_get", return_value={}),
             patch.object(svc, "_session_set") as sset,
         ):
@@ -1214,11 +1324,14 @@ class TestRunConversationTurn:
         svc = _make_svc(tmp_path, profile=CLAUDE_PROFILE)
         with (
             patch.object(svc, "_session_get", return_value={"session_id": "old-sess"}),
-            patch.object(svc, "_run_cli_idle",
-                         side_effect=[
-                             (0, "no conversation found", "", ""),
-                             (0, '{"type":"result","result":"retried","session_id":"new"}', "", ""),
-                         ]),
+            patch.object(
+                svc,
+                "_run_cli_idle",
+                side_effect=[
+                    (0, "no conversation found", "", ""),
+                    (0, '{"type":"result","result":"retried","session_id":"new"}', "", ""),
+                ],
+            ),
             patch.object(svc, "_session_set") as sset,
         ):
             result = svc._run_conversation_turn("/cli", "hello", {})
@@ -1253,6 +1366,7 @@ class TestCliWorkspace:
         svc._grant = CapabilityGrant(ExecutionScope.FACTORY, "unknown")
         with patch("app.application.super_employee_service.get_workspace_registry") as reg:
             from app.application.workspaces import WorkspaceError
+
             fake_reg = MagicMock()
 
             def _get(ws):
@@ -1293,6 +1407,7 @@ class TestFactoryWorkspaceRoot:
         svc._grant = CapabilityGrant(ExecutionScope.FACTORY, "unknown")
         with patch("app.application.super_employee_service.get_workspace_registry") as reg:
             from app.application.workspaces import WorkspaceError
+
             fake_reg = MagicMock()
             fake_reg.get.side_effect = WorkspaceError("boom")
             reg.return_value = fake_reg
@@ -1314,14 +1429,18 @@ class TestRelayRealWorkspace:
 
     def test_relay_force_direct(self, tmp_path):
         svc = _make_svc(tmp_path)
-        with patch("app.application.super_employee_service.resolve_verified_relay_workspace_root",
-                   return_value="/relay/root"):
+        with patch(
+            "app.application.super_employee_service.resolve_verified_relay_workspace_root",
+            return_value="/relay/root",
+        ):
             assert svc._relay_real_workspace({"force_cli_direct": True}) == "/relay/root"
 
     def test_relay_mobile_source(self, tmp_path):
         svc = _make_svc(tmp_path)
-        with patch("app.application.super_employee_service.resolve_verified_relay_workspace_root",
-                   return_value="/relay/root"):
+        with patch(
+            "app.application.super_employee_service.resolve_verified_relay_workspace_root",
+            return_value="/relay/root",
+        ):
             assert svc._relay_real_workspace({"source": "mobile_relay"}) == "/relay/root"
 
 
@@ -1468,4 +1587,7 @@ class TestPreparePersistentWorktree:
     def test_exception_returns_none(self, tmp_path):
         svc = _make_svc(tmp_path)
         with patch.object(svc, "_git", side_effect=Exception("crash")):
-            assert svc._prepare_persistent_worktree(str(tmp_path), str(tmp_path / "wt"), "branch") is None
+            assert (
+                svc._prepare_persistent_worktree(str(tmp_path), str(tmp_path / "wt"), "branch")
+                is None
+            )

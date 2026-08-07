@@ -312,23 +312,17 @@ class TestMRPProductionChain:
 
         with erp_env["test_db"]() as db:
             fg_ledger = (
-                db.query(InventoryLedger)
-                .filter_by(product_id=fg_id, warehouse_id=wh_id)
-                .first()
+                db.query(InventoryLedger).filter_by(product_id=fg_id, warehouse_id=wh_id).first()
             )
             assert float(fg_ledger.available_quantity) == 10  # 成品 +M
 
             raw1_ledger = (
-                db.query(InventoryLedger)
-                .filter_by(product_id=raw1_id, warehouse_id=wh_id)
-                .first()
+                db.query(InventoryLedger).filter_by(product_id=raw1_id, warehouse_id=wh_id).first()
             )
             assert float(raw1_ledger.available_quantity) == 80  # 100 - 20
 
             raw2_ledger = (
-                db.query(InventoryLedger)
-                .filter_by(product_id=raw2_id, warehouse_id=wh_id)
-                .first()
+                db.query(InventoryLedger).filter_by(product_id=raw2_id, warehouse_id=wh_id).first()
             )
             assert float(raw2_ledger.available_quantity) == 40  # 50 - 10
 
@@ -352,9 +346,7 @@ class TestCRMCustomerAddressChain:
         def _session():
             return erp_env["session_factory"]()
 
-        monkeypatch.setattr(
-            CustomerApplicationService, "_get_session", lambda self: _session()
-        )
+        monkeypatch.setattr(CustomerApplicationService, "_get_session", lambda self: _session())
         svc = CustomerApplicationService()
 
         result = svc.add_address(
@@ -399,8 +391,13 @@ class TestJournalReverseChain:
                 "reference_type": "sale",
                 "reference_id": 1,
                 "lines": [
-                    {"account_code": "1122", "partner_id": 100, "partner_name": "客户A",
-                     "debit": 800.0, "credit": 0},
+                    {
+                        "account_code": "1122",
+                        "partner_id": 100,
+                        "partner_name": "客户A",
+                        "debit": 800.0,
+                        "credit": 0,
+                    },
                     {"account_code": "6001", "debit": 0, "credit": 800.0},
                 ],
             }
