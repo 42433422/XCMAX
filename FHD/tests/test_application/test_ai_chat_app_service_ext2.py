@@ -670,6 +670,13 @@ class TestTryHandleDynamicWorkflowExtended:
                 "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
                 return_value="full",
             ),
+            patch(
+                "app.application.ai_chat_app_service.AIChatApplicationService._persist_plan_state"
+            ),
+            patch(
+                "app.application.workflow.checkpointer.DatabaseWorkflowCheckpointer.latest_checkpoint",
+                return_value=None,
+            ),
         ):
             result = service._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
         assert result is not None
