@@ -161,8 +161,15 @@ def test_chat_dispatch_stream_forwards_tools_to_openai_branch():
     captured = {}
 
     async def fake_stream_openai_compatible(
-        base_url, api_key, model, messages, *, provider="openai",
-        max_tokens=None, tools=None, tool_choice=None,
+        base_url,
+        api_key,
+        model,
+        messages,
+        *,
+        provider="openai",
+        max_tokens=None,
+        tools=None,
+        tool_choice=None,
     ):
         captured["base_url"] = base_url
         captured["tools"] = tools

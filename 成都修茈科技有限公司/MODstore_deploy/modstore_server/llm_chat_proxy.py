@@ -252,9 +252,7 @@ async def stream_openai_compatible(
                     if tc.get("id"):
                         cur["id"] = str(tc["id"])
                 if choice0.get("finish_reason") == "tool_calls" and tool_calls_accum:
-                    ordered = [
-                        tool_calls_accum[i] for i in sorted(tool_calls_accum)
-                    ]
+                    ordered = [tool_calls_accum[i] for i in sorted(tool_calls_accum)]
                     yield {
                         "type": "toolcall",
                         "choices": [
