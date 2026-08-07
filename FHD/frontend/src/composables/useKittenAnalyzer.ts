@@ -1,5 +1,5 @@
 import { ref, computed, nextTick, onMounted, watch, type Ref } from 'vue'
-import { buildFullApiUrl } from '@/api/core'
+import { kittenApi } from '@/api/kitten'
 import { KITTEN_PHASE, type KittenPhase } from '@/composables/useKittenWorkflowState'
 import { downloadBlob, getFilenameFromDisposition } from '@/utils'
 import { safeJsonRequest } from '@/utils/safeJsonRequest'
@@ -690,21 +690,7 @@ export function useKittenAnalyzer() {
       industry: localStorage.getItem('currentIndustry') || '通用行业',
       web_search_results: lastWebSearchHits.value.length ? lastWebSearchHits.value : undefined
     }
-    const resp = await fetch(buildFullApiUrl('/api/ai/kitten/report/export'), {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-    if (!resp.ok) {
-      let errText = ''
-      try {
-        errText = await resp.text()
-      } catch {
-        errText = ''
-      }
-      throw new Error(`后端导出失败（${resp.status}）${errText ? `：${errText.slice(0, 160)}` : ''}`)
-    }
+    const resp = await kittenApi.exportReport(payload)
     const blob = await resp.blob()
     await assertKittenFileBlob(resp, blob, 'Excel 导出')
     const filename = getFilenameFromDisposition(
@@ -724,21 +710,7 @@ export function useKittenAnalyzer() {
       industry: localStorage.getItem('currentIndustry') || '通用行业',
       web_search_results: lastWebSearchHits.value.length ? lastWebSearchHits.value : undefined
     }
-    const resp = await fetch(buildFullApiUrl('/api/ai/kitten/report/export-docx'), {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-    if (!resp.ok) {
-      let errText = ''
-      try {
-        errText = await resp.text()
-      } catch {
-        errText = ''
-      }
-      throw new Error(`Word 导出失败（${resp.status}）${errText ? `：${errText.slice(0, 160)}` : ''}`)
-    }
+    const resp = await kittenApi.exportReportDocx(payload)
     const blob = await resp.blob()
     await assertKittenFileBlob(resp, blob, 'Word 导出')
     const filename = getFilenameFromDisposition(
@@ -758,22 +730,7 @@ export function useKittenAnalyzer() {
     }
     isDocGenLoading.value = true
     try {
-      const resp = await fetch(buildFullApiUrl('/api/ai/kitten/document/generate'), {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: p, format })
-      })
-      if (!resp.ok) {
-        let msg = ''
-        try {
-          const j = await resp.json()
-          msg = typeof j?.message === 'string' ? j.message : ''
-        } catch {
-          msg = await resp.text()
-        }
-        throw new Error(msg || `生成失败（${resp.status}）`)
-      }
+      const resp = await kittenApi.generateDocument({ prompt: p, format })
       const blob = await resp.blob()
       await assertKittenFileBlob(resp, blob, format === 'xlsx' ? '表格生成' : '文档生成')
       const filename = getFilenameFromDisposition(

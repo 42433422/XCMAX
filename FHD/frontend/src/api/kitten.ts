@@ -18,8 +18,14 @@ export const kittenApi = {
   generateFinancialReport: (metadata = {}) =>
     api.post('/api/ai/kitten/financial/report', { metadata }),
 
-  exportReport: (payload: Record<string, unknown> = {}) =>
-    api.post('/api/ai/kitten/report/export', payload, { responseType: 'blob' }),
+  exportReport: (payload: Record<string, unknown> = {}): Promise<Response> =>
+    api.post<Response>('/api/ai/kitten/report/export', payload, { responseType: 'blob' }),
+
+  exportReportDocx: (payload: Record<string, unknown> = {}): Promise<Response> =>
+    api.post<Response>('/api/ai/kitten/report/export-docx', payload, { responseType: 'blob' }),
+
+  generateDocument: (payload: { prompt: string; format: 'docx' | 'xlsx' }): Promise<Response> =>
+    api.post<Response>('/api/ai/kitten/document/generate', payload, { responseType: 'blob' }),
 
   getSavedAnalyses: (type?: string) =>
     api.get(`/api/ai/kitten/saved/list${type ? `?type=${type}` : ''}`),
