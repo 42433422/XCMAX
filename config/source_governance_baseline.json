@@ -438,15 +438,15 @@
       "lines": 1243,
       "soft_cap": 500
     },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api.py": {
+      "stack": "modstore_backend",
+      "lines": 1230,
+      "soft_cap": 800
+    },
     "FHD/mobile-flutter-poc/lib/src/features/profile/profile_screen.dart": {
       "stack": "flutter",
       "lines": 1220,
       "soft_cap": 500
-    },
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api.py": {
-      "stack": "modstore_backend",
-      "lines": 1220,
-      "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/market/src/views/developer/DeveloperTokensPanel.vue": {
       "stack": "modstore_vue",
@@ -528,11 +528,6 @@
       "lines": 1094,
       "soft_cap": 800
     },
-    "FHD/frontend/src/composables/useKittenAnalyzer.ts": {
-      "stack": "fhd_vue",
-      "lines": 1082,
-      "soft_cap": 600
-    },
     "FHD/app/application/aiopen/service.py": {
       "stack": "fhd_backend",
       "lines": 1080,
@@ -587,6 +582,11 @@
       "stack": "flutter",
       "lines": 1042,
       "soft_cap": 500
+    },
+    "FHD/frontend/src/composables/useKittenAnalyzer.ts": {
+      "stack": "fhd_vue",
+      "lines": 1039,
+      "soft_cap": 600
     },
     "FHD/frontend/src/stores/mods.ts": {
       "stack": "fhd_vue",

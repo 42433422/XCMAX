@@ -1031,11 +1031,7 @@ async def llm_usage(
 
 
 class ChatMessageDTO(BaseModel):
-    """``content`` 可为纯文本或 OpenAI vision 多段格式（``type: text|image_url`` 数组）。
-
-    ``extra="allow"``：透传函数调用多轮消息所需的 ``tool_calls`` / ``tool_call_id`` /
-    ``name`` 字段，使市场网关能承载 OpenAI 工具调用（tool 角色与 assistant tool_calls）。
-    """
+    """content 可为文本/vision 多段；extra=allow 透传 tool_calls/tool_call_id/name。"""
 
     model_config = ConfigDict(extra="allow")
 
