@@ -12,6 +12,14 @@ vi.mock('@/api/core', () => ({
   buildFullApiUrl: (path: string) => `http://localhost:5000${path}`,
 }))
 
+vi.mock('@/api/kitten', () => ({
+  kittenApi: {
+    exportReport: vi.fn(),
+    exportReportDocx: vi.fn(),
+    generateDocument: vi.fn(),
+  },
+}))
+
 vi.mock('@/utils', () => ({
   downloadBlob: vi.fn(),
   getFilenameFromDisposition: vi.fn((_hdr, fallback) => fallback),
@@ -428,19 +436,17 @@ describe('useKittenAnalyzer', () => {
   })
 
   it('exportResult calls backend export', async () => {
-    const pkBuffer = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00])
-    const pkBlob = new Blob([pkBuffer])
-    global.fetch = vi.fn().mockResolvedValueOnce({
+    const { kittenApi } = await import('@/api/kitten')
+    vi.mocked(kittenApi.exportReport).mockResolvedValueOnce({
       ok: true,
-      status: 200,
       headers: {
-        get: (name: string) => name === 'content-type' ? 'application/octet-stream' : 'attachment; filename="report.xlsx"',
+        get: (name: string) => (name === 'content-type' ? 'application/octet-stream' : 'attachment; filename="report.xlsx"'),
       },
-      blob: async () => pkBlob,
+      blob: async () => new Blob([new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00])]),
     } as unknown as Response)
     analyzer.currentResult.value = { id: 1, title: 'test', summary: 's', chart: false, type: 't', kind: 'k' }
     await analyzer.exportResult()
-    expect(global.fetch).toHaveBeenCalled()
+    expect(kittenApi.exportReport).toHaveBeenCalled()
   })
 
   it('exportDocx does nothing without currentResult', async () => {
