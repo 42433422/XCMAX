@@ -62,6 +62,12 @@ vi.mock('@/composables/useModRoutes', async () => {
           path: '/mod/xcagi-erp-domain-bridge/products',
           modId: 'xcagi-erp-domain-bridge',
         },
+        {
+          key: 'mod-erp-business-docking',
+          name: '业务对接',
+          path: '/mod/xcagi-erp-domain-bridge/business-docking',
+          modId: 'xcagi-erp-domain-bridge',
+        },
       ]),
     }),
   }
@@ -92,6 +98,7 @@ describe('useVisibleNavItems · 平台壳第三步完成后长出行业菜单', 
     const keys = visibleNavItems.value.map((i) => i.key)
     expect(keys).not.toContain('products')
     expect(keys).not.toContain('customers')
+    expect(keys).toContain('business-docking')
     expect(keys).toContain('chat')
   })
 
@@ -102,11 +109,13 @@ describe('useVisibleNavItems · 平台壳第三步完成后长出行业菜单', 
     expect(keys).toContain('products')
     expect(keys).toContain('customers')
     expect(keys).toContain('orders')
+    expect(keys).toContain('business-docking')
     expect(keys).toContain('data-sources')
     expect(keys).toContain('template-preview')
     expect(keys).toContain('printer-list')
     expect(keys).toContain('print')
     expect(keys).not.toContain('mod-erp-print')
+    expect(keys).not.toContain('mod-erp-business-docking')
     expect(keys).not.toContain('enterprise-customer-service')
 
     const products = visibleNavItems.value.find((i) => i.key === 'products')
@@ -123,5 +132,9 @@ describe('useVisibleNavItems · 平台壳第三步完成后长出行业菜单', 
       (i) => i.key === 'print' || i.key === 'mod-erp-print',
     )
     expect(printSlots.length).toBe(1)
+    const businessDockingSlots = visibleNavItems.value.filter(
+      (i) => i.key === 'business-docking' || i.key === 'mod-erp-business-docking',
+    )
+    expect(businessDockingSlots.length).toBe(1)
   })
 })

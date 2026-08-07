@@ -43,7 +43,7 @@ describe('mergeSidebarMenuItems', () => {
     expect(merged.map((item) => item.key)).toEqual(['materials'])
   })
 
-  it('keeps model service in settings; suppresses Mod business-docking; host ETL stays', () => {
+it('keeps model service in settings; suppresses Mod business-docking; host ETL stays', () => {
     const merged = mergeSidebarMenuItems(
       [
         { key: 'chat', name: '智能对话', iconClass: 'fa-comments-o' },

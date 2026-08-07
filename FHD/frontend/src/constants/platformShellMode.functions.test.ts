@@ -77,6 +77,7 @@ describe('platformShellMode constants', () => {
   it('SHELL_CORE_MENU_KEYS contains expected core keys', () => {
     expect(SHELL_CORE_MENU_KEYS.has('chat')).toBe(true)
     expect(SHELL_CORE_MENU_KEYS.has('persy-knowledge')).toBe(true)
+    expect(SHELL_CORE_MENU_KEYS.has('business-docking')).toBe(true)
     expect(SHELL_CORE_MENU_KEYS.has('settings')).toBe(true)
     expect(SHELL_CORE_MENU_KEYS.has('mod-store')).toBe(true)
     expect(SHELL_CORE_MENU_KEYS.has('login')).toBe(true)
@@ -108,6 +109,7 @@ describe('platformShellMode constants', () => {
   })
 
   it('INDUSTRY_DELIVERY_ROUTE_NAMES contains extra routes like inventory', () => {
+    expect(SHELL_CORE_ROUTE_NAMES.has('business-docking')).toBe(true)
     expect(INDUSTRY_DELIVERY_ROUTE_NAMES.has('inventory')).toBe(true)
     expect(INDUSTRY_DELIVERY_ROUTE_NAMES.has('kitten-finance')).toBe(true)
     expect(INDUSTRY_DELIVERY_ROUTE_NAMES.has('workflow-visualization')).toBe(true)
