@@ -14,7 +14,8 @@ from app.services.tools_workflow_registered import execute_registered_workflow_t
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import ensure_fhd_repo_on_syspath
 
-from .types import PlanGraph, WorkflowNode, validate_plan_graph
+from .clarification_node import build_clarify_node, needs_clarification
+from .types import Branch, PlanGraph, WorkflowNode, validate_plan_graph
 
 logger = logging.getLogger(__name__)
 
@@ -1241,7 +1242,16 @@ class LLMWorkflowPlanner:
         context: dict[str, Any] | None = None,
     ) -> PlanGraph:
         context = dict(context or {})
-        plan_id = uuid.uuid4().hex
+        # 会话级持久化标识：带稳定 session 前缀，便于跨会话按 plan_id 找到同一任务续跑；
+        # 无 session 时退化为纯随机 id（仍唯一）。
+        session_key = str(
+            context.get("session_id") or context.get("conversation_id") or ""
+        ).strip()
+        plan_id = (
+            f"wp-{session_key}-{uuid.uuid4().hex[:8]}"
+            if session_key
+            else f"wp-{uuid.uuid4().hex}"
+        )
 
         from app.application.normal_chat_dispatch import resolve_tool_execution_profile
 
@@ -1281,14 +1291,99 @@ class LLMWorkflowPlanner:
 
         from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 
+        planned = self._plan_with_react_multiagent(
+            plan_id, user_id, message, registry_for_plan, context
+        )
         return finalize_planned_graph(
-            self._plan_with_react_multiagent(plan_id, user_id, message, registry_for_plan, context),
+            self._decorate_plan(planned, message, registry_for_plan),
             plan_id=plan_id,
             context=context,
             validate=validate_plan_graph,
             fallback_factory=lambda: self._fallback_plan(plan_id, message, registry_for_plan),
             warn=logger.warning,
         )
+
+    def _decorate_plan(
+        self,
+        plan: PlanGraph | None,
+        message: str,
+        tool_registry: dict[str, Any],
+    ) -> PlanGraph | None:
+        """对规划产出的 PlanGraph 追加确定性条件边与反问澄清节点。
+
+        不强行依赖 LLM 输出：条件边/反问节点由规则派生，保证行为可测、向后兼容。
+        """
+        if plan is None:
+            return None
+        plan = self._apply_conditional_edge_rules(plan, message, tool_registry)
+        plan = self._apply_clarify_rules(plan, tool_registry)
+        return plan
+
+    def _apply_conditional_edge_rules(
+        self,
+        plan: PlanGraph,
+        message: str,
+        tool_registry: dict[str, Any],
+    ) -> PlanGraph:
+        """确定性条件边规则：把"检查/查询 + 后续决策"表达为 branches。
+
+        当前规则：计划含库存检查（query/read/check_stock）且消息带采购意图时，
+        为检查节点挂上 ``{"key": "low_stock", "equals": true}`` → 采购节点 的条件边。
+        """
+        if any(k in message for k in ("库存", "stock", "Stock")):
+            check_nodes = [
+                n
+                for n in plan.nodes
+                if str(n.action or "").lower() in ("query", "read", "check", "check_stock")
+                and "stock" in str(n.tool_id or "").lower()
+            ]
+            purchase_nodes = [
+                n
+                for n in plan.nodes
+                if "purchase" in str(n.tool_id or "").lower() or "采购" in (n.description or "")
+            ]
+            if check_nodes and purchase_nodes:
+                check = check_nodes[0]
+                if not check.branches:
+                    check.branches.append(
+                        Branch(
+                            target=purchase_nodes[0].node_id,
+                            condition={"key": "low_stock", "equals": True},
+                        )
+                    )
+        return plan
+
+    def _apply_clarify_rules(
+        self,
+        plan: PlanGraph,
+        tool_registry: dict[str, Any],
+    ) -> PlanGraph:
+        """确定性反问规则：写/高风险节点存在关键参数缺失或多候选歧义时，在图首部插入 clarify 节点。
+
+        复用 ``clarification_node.needs_clarification`` 检测，并用 ``build_clarify_node``
+        生成反问节点，其 ``branches`` 依据用户确认结果路由回原操作节点。
+        """
+        items = needs_clarification(plan, tool_registry)
+        # ERP 业务澄清（Task 6：盘点差异复审 / 凭证冲销确认 / 信用额度超限）并入同一澄清门控。
+        from .clarification_node import detect_erp_clarification
+
+        items = list(items) + detect_erp_clarification(plan)
+        if not items:
+            return plan
+        inserted: list[WorkflowNode] = []
+        for item in items:
+            clarify = build_clarify_node(
+                item["question"],
+                ambient={"target_node_id": item["node_id"]},
+            )
+            plan.nodes.insert(0, clarify)
+            inserted.append(clarify)
+        # 插入后若破坏图结构（如成环），则回退移除已插入的 clarify 节点。
+        if validate_plan_graph(plan) is not None:
+            for clarify in inserted:
+                if clarify in plan.nodes:
+                    plan.nodes.remove(clarify)
+        return plan
 
     def _plan_with_react_multiagent(
         self,
@@ -2070,6 +2165,43 @@ class LLMWorkflowPlanner:
                 )
             )
 
+        if (
+            not nodes
+            and any(k in message for k in ("库存", "stock", "Stock"))
+            and any(k in message for k in ("采购", "购买", "补充", "备货", "进货"))
+        ):
+            # 确定性条件边规则示例：查库存 → low_stock == true → 采购节点。
+            intent = "inventory_purchase"
+            todo = ["检查库存", "按 low_stock 决定是否采购", "输出采购建议"]
+            purchase_node = WorkflowNode(
+                node_id="purchase_advice",
+                tool_id="purchase",
+                action="advice",
+                params={},
+                risk="low",
+                description="采购建议",
+                idempotent=True,
+                depends_on=["check_stock"],
+            )
+            nodes.append(
+                WorkflowNode(
+                    node_id="check_stock",
+                    tool_id="inventory",
+                    action="check_stock",
+                    params={},
+                    risk="low",
+                    description="检查库存",
+                    idempotent=True,
+                    branches=[
+                        Branch(
+                            target="purchase_advice",
+                            condition={"key": "low_stock", "equals": True},
+                        )
+                    ],
+                )
+            )
+            nodes.append(purchase_node)
+
         if not nodes:
             # 兜底：挑一个低风险查询，避免空图
             if "products" in tool_registry:
@@ -2103,11 +2235,16 @@ class LLMWorkflowPlanner:
         elif any(node.risk == "medium" for node in nodes):
             risk = "medium"
 
-        return PlanGraph(
+        plan = PlanGraph(
             plan_id=plan_id,
             intent=intent,
             todo_steps=todo,
             nodes=nodes,
             risk_level=risk,
             metadata={"planner": "fallback", "message": message},
+        )
+        # 与 ReAct 路径一致：追加确定性条件边与反问澄清节点。
+        return self._apply_clarify_rules(
+            self._apply_conditional_edge_rules(plan, message, tool_registry),
+            tool_registry,
         )

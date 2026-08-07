@@ -127,6 +127,12 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const isLoading = ref(false)
   const isStreamingReply = ref(false)
   const isExecuting = ref(false)
+  // 工作流「步骤进度」：消费后方 state.update 事件，维护正在执行/已完成的节点列表
+  const stateSteps = ref<Array<{
+    node_id: string
+    status: 'succeeded' | 'failed'
+    output_summary: string
+  }>>([])
   const latestAssistantPush = ref<{ title: string; description: string } | null>(null)
   const proRuntimeTask = ref<{ title: string; statusText: string; statusClass: string; description: string } | null>(null)
   const chatMessagesRef = ref<HTMLElement | null>(null)
@@ -1050,6 +1056,32 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       legacyAutoActionHandler(autoAction, userMessage)
     }
   }
+
+  /** 消费后端 state.update 事件（payload.data.data.state_updates），维护「步骤进度」UI 状态 */
+  function consumeStateUpdates(payload: ChatPlannerPayload): void {
+    const row = asRecord(payload)
+    const data = asRecord(row.data)
+    const inner = asRecord(data.data ?? data)
+    const updates = asArray<Record<string, unknown>>(inner.state_updates ?? row.state_updates)
+    if (!updates.length) return
+    for (const u of updates) {
+      if (String(u.type || '') !== 'state.update') continue
+      const nodeId = String(u.node_id || '')
+      if (!nodeId) continue
+      const entry = {
+        node_id: nodeId,
+        status: String(u.status || 'succeeded') === 'failed' ? ('failed' as const) : ('succeeded' as const),
+        output_summary: String(u.output_summary || ''),
+      }
+      const idx = stateSteps.value.findIndex((s) => s.node_id === nodeId)
+      if (idx >= 0) {
+        stateSteps.value[idx] = entry
+      } else {
+        stateSteps.value.push(entry)
+      }
+    }
+  }
+
   function maybePrefetchProductAssistantFloat(userText: string) {
     // 教程进行中也需要与聊天请求并行预开产品副窗；否则会出现「不开教程立刻出副窗、走了教程反而要等 AI」的体验差。
     // 副窗切到「协助/产品查询」若与某步高亮冲突，用户仍可用教程卡片「下一步」或退出教程。
@@ -1262,6 +1294,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
             : { success: true, response: finalText }
         syncTaskFromChatResponse(wrap, primaryText)
         await syncAgentRunFromPayload(wrap, primaryText)
+        consumeStateUpdates(wrap)
         attachContextSummaryToLastAiMessage()
         attachThinkingStepsToLastAiMessage(wrap)
         attachTodoStepsToLastAiMessage(wrap)
@@ -1368,6 +1401,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         attachContextSummaryToLastAiMessage()
         const lastOk = [...results].reverse().find((p) => p && p.success)
         if (lastOk) {
+          consumeStateUpdates(lastOk)
           attachThinkingStepsToLastAiMessage(lastOk)
           attachTodoStepsToLastAiMessage(lastOk)
           attachWorkflowTraceToLastAiMessage(lastOk)
@@ -1409,6 +1443,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       await addAndSaveMessage(data.response || '', 'ai')
       syncTaskFromChatResponse(data, primaryText)
       await syncAgentRunFromPayload(data, primaryText)
+      consumeStateUpdates(data)
       attachContextSummaryToLastAiMessage()
       attachThinkingStepsToLastAiMessage(data)
       attachTodoStepsToLastAiMessage(data)
@@ -1561,6 +1596,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     isLoading,
     isStreamingReply,
     isExecuting,
+    stateSteps,
     latestAssistantPush,
     proRuntimeTask,
     taskList,

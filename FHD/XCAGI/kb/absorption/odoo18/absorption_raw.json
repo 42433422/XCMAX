@@ -1,0 +1,1424 @@
+{
+  "absorption_state": {
+    "active": true,
+    "closed_loop_proof": {
+      "evidence": [],
+      "flags": {
+        "branch_diff_verified": false,
+        "employee_execution_verified": false,
+        "external_advantage_reassessed": false,
+        "merge_verified": false,
+        "post_absorption_tests_passed": false
+      },
+      "missing": [
+        "branch_diff_verified",
+        "employee_execution_verified",
+        "post_absorption_tests_passed",
+        "merge_verified",
+        "external_advantage_reassessed"
+      ],
+      "verified": false
+    },
+    "external_path": "/private/tmp/odoo18",
+    "pending_dimensions": [
+      "comparative_analysis_depth",
+      "diff_hunk_review",
+      "feedback_loop_closure",
+      "operational_readiness",
+      "product_operability"
+    ],
+    "source": "/tmp/odoo18",
+    "status": "pending_llm_reassessment"
+  },
+  "absorption_visual": {
+    "external": {
+      "file_count": 43564,
+      "score": null
+    },
+    "own": {
+      "file_count": 127000,
+      "pre_score": null,
+      "score": null
+    },
+    "source": "/tmp/odoo18"
+  },
+  "branch_workflow": {
+    "enabled": false,
+    "status": "disabled"
+  },
+  "devour_session": {
+    "absorption_execution": {
+      "branch": {
+        "enabled": false,
+        "status": "disabled"
+      },
+      "changed_files": [],
+      "gates": [],
+      "status": "disabled",
+      "summary": "Real CLI absorption is disabled for this request.",
+      "tasks": [
+        {
+          "acceptance": "Own map covers symbols TestProjectBase, TestProjectCommon or records a justified deferral.",
+          "dimension": "diff_hunk_review",
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P0",
+          "task_id": "retort-gap-01",
+          "title": "Close repository gap from addons/project/tests/test_project_base.py",
+          "why": "External exposes symbols missing locally: TestProjectBase, TestProjectCommon."
+        },
+        {
+          "acceptance": "Gap for addons/hr_timesheet/models/project_task.py is closed or deferred with evidence.",
+          "dimension": "comparative_analysis_depth",
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P1",
+          "task_id": "retort-gap-02",
+          "title": "Close repository gap from addons/hr_timesheet/models/project_task.py",
+          "why": "External file addons/hr_timesheet/models/project_task.py is a graph-ranked absorption candidate."
+        },
+        {
+          "acceptance": "Gap for addons/project/models/project_task.py is closed or deferred with evidence.",
+          "dimension": "comparative_analysis_depth",
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P1",
+          "task_id": "retort-gap-03",
+          "title": "Close repository gap from addons/project/models/project_task.py",
+          "why": "External file addons/project/models/project_task.py is a graph-ranked absorption candidate."
+        },
+        {
+          "acceptance": "Own map covers symbols TestProjectFlow or records a justified deferral.",
+          "dimension": "diff_hunk_review",
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P0",
+          "task_id": "retort-gap-04",
+          "title": "Close repository gap from addons/project/tests/test_project_flow.py",
+          "why": "External exposes symbols missing locally: TestProjectFlow."
+        },
+        {
+          "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
+          "dimension": "comparative_analysis_depth",
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P0",
+          "task_id": "retort-depth-review-pipeline",
+          "title": "Deepen review_pipeline",
+          "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+        },
+        {
+          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+          "dimension": "comparative_analysis_depth",
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P0",
+          "task_id": "retort-depth-diff-hunk-review",
+          "title": "Deepen diff_hunk_review",
+          "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+        },
+        {
+          "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
+          "dimension": "feedback_loop_closure",
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P1",
+          "task_id": "retort-depth-benchmark-eval",
+          "title": "Deepen benchmark_eval",
+          "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+        },
+        {
+          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+          "dimension": "operational_readiness",
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P1",
+          "task_id": "retort-depth-safety-policy",
+          "title": "Deepen safety_policy",
+          "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+        },
+        {
+          "acceptance": "Retort has executable, tested static_analysis behavior in the absorption or PR-review path.",
+          "dimension": "product_operability",
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P0",
+          "task_id": "retort-depth-static-analysis",
+          "title": "Deepen static_analysis",
+          "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+        },
+        {
+          "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
+          "dimension": "operational_readiness",
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P1",
+          "task_id": "retort-depth-workflow-ci",
+          "title": "Deepen workflow_ci",
+          "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+        },
+        {
+          "acceptance": "Retort has executable, tested semantic_index behavior in the absorption or PR-review path.",
+          "dimension": "product_operability",
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P0",
+          "task_id": "retort-depth-semantic-index",
+          "title": "Deepen semantic_index",
+          "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+        },
+        {
+          "acceptance": "Retort has executable, tested codebase_graph behavior in the absorption or PR-review path.",
+          "dimension": "comparative_analysis_depth",
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P0",
+          "task_id": "retort-depth-codebase-graph",
+          "title": "Deepen codebase_graph",
+          "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+        },
+        {
+          "dimension": "comparative_analysis_depth",
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P1",
+          "task_id": "retort-absorb-review-pipeline",
+          "title": "Adopt deterministic review pipeline stages",
+          "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
+        },
+        {
+          "dimension": "feedback_loop_closure",
+          "owner_hint": "test-qa-runner",
+          "priority": "P2",
+          "task_id": "retort-absorb-benchmarking",
+          "title": "Add absorption quality benchmark counters",
+          "why": "External project has benchmark or precision/recall signals; Retort should measure whether absorbed tasks actually improve later scores."
+        },
+        {
+          "dimension": "product_operability",
+          "owner_hint": "market-frontend-dev",
+          "priority": "P2",
+          "task_id": "retort-absorb-plugin-surface",
+          "title": "Expose Retort absorption through plugin friendly commands",
+          "why": "External project exposes plugin or CLI surfaces; Retort should keep blackhole UI and automation APIs aligned."
+        },
+        {
+          "dimension": "product_operability",
+          "owner_hint": "market-frontend-dev",
+          "priority": "P1",
+          "task_id": "retort-absorb-planet-visual",
+          "title": "Absorb better blackhole planet visual system",
+          "why": "External project has planet, atmosphere, procedural surface, or WebGL scene signals; Retort should make the absorbed project planet look richer without copying assets."
+        }
+      ]
+    },
+    "final_self_review": {
+      "llm_dispatch_status": "disabled",
+      "llm_task_id": "",
+      "record_policy": "只有排比 LLM 返回结构化分数时，最终评分才保留。",
+      "score": null,
+      "score_source": "paibi_llm_pending",
+      "scores": [],
+      "status": "paibi_llm_required_not_scored"
+    },
+    "improvement_proof": {
+      "after_score": null,
+      "before_score": null,
+      "behavior_source_files": [],
+      "behavior_test_files": [],
+      "capability_absorption_blockers": [
+        "insufficient_cross_project_reproduction",
+        "no_real_absorption_run"
+      ],
+      "capability_absorption_local_score_removed": true,
+      "capability_absorption_risk_level": "medium",
+      "capability_absorption_status": "needs_llm_project_level_review",
+      "changed_file_count": 0,
+      "changed_files": [],
+      "closed_loop_flags": {
+        "branch_diff_verified": false,
+        "employee_execution_verified": false,
+        "external_advantage_reassessed": false,
+        "merge_verified": false,
+        "post_absorption_tests_passed": false
+      },
+      "gate_count": 0,
+      "gate_passed_count": 0,
+      "generated_evidence_files": [],
+      "generated_only": false,
+      "missing_closed_loop": [
+        "branch_diff_verified",
+        "employee_execution_verified",
+        "post_absorption_tests_passed",
+        "merge_verified",
+        "external_advantage_reassessed"
+      ],
+      "reason": "no_real_absorption_run",
+      "score_delta": null,
+      "status": "pending_execution",
+      "support_behavior_source_files": [],
+      "support_behavior_test_files": [],
+      "test_to_source_ratio": 0.839
+    },
+    "overlap_comparison": {
+      "absorb_targets": [
+        {
+          "dimension": "diff_hunk_review",
+          "priority": "P0",
+          "title": "Close repository gap from addons/project/tests/test_project_base.py",
+          "why": "External exposes symbols missing locally: TestProjectBase, TestProjectCommon."
+        },
+        {
+          "dimension": "comparative_analysis_depth",
+          "priority": "P1",
+          "title": "Close repository gap from addons/hr_timesheet/models/project_task.py",
+          "why": "External file addons/hr_timesheet/models/project_task.py is a graph-ranked absorption candidate."
+        },
+        {
+          "dimension": "comparative_analysis_depth",
+          "priority": "P1",
+          "title": "Close repository gap from addons/project/models/project_task.py",
+          "why": "External file addons/project/models/project_task.py is a graph-ranked absorption candidate."
+        },
+        {
+          "dimension": "diff_hunk_review",
+          "priority": "P0",
+          "title": "Close repository gap from addons/project/tests/test_project_flow.py",
+          "why": "External exposes symbols missing locally: TestProjectFlow."
+        },
+        {
+          "dimension": "comparative_analysis_depth",
+          "priority": "P0",
+          "title": "Deepen review_pipeline",
+          "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+        },
+        {
+          "dimension": "comparative_analysis_depth",
+          "priority": "P0",
+          "title": "Deepen diff_hunk_review",
+          "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+        },
+        {
+          "dimension": "feedback_loop_closure",
+          "priority": "P1",
+          "title": "Deepen benchmark_eval",
+          "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+        },
+        {
+          "dimension": "operational_readiness",
+          "priority": "P1",
+          "title": "Deepen safety_policy",
+          "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+        },
+        {
+          "dimension": "product_operability",
+          "priority": "P0",
+          "title": "Deepen static_analysis",
+          "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+        },
+        {
+          "dimension": "operational_readiness",
+          "priority": "P1",
+          "title": "Deepen workflow_ci",
+          "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+        },
+        {
+          "dimension": "product_operability",
+          "priority": "P0",
+          "title": "Deepen semantic_index",
+          "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+        },
+        {
+          "dimension": "comparative_analysis_depth",
+          "priority": "P0",
+          "title": "Deepen codebase_graph",
+          "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+        },
+        {
+          "dimension": "comparative_analysis_depth",
+          "priority": "P1",
+          "title": "Adopt deterministic review pipeline stages",
+          "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
+        },
+        {
+          "dimension": "feedback_loop_closure",
+          "priority": "P2",
+          "title": "Add absorption quality benchmark counters",
+          "why": "External project has benchmark or precision/recall signals; Retort should measure whether absorbed tasks actually improve later scores."
+        },
+        {
+          "dimension": "product_operability",
+          "priority": "P2",
+          "title": "Expose Retort absorption through plugin friendly commands",
+          "why": "External project exposes plugin or CLI surfaces; Retort should keep blackhole UI and automation APIs aligned."
+        },
+        {
+          "dimension": "product_operability",
+          "priority": "P1",
+          "title": "Absorb better blackhole planet visual system",
+          "why": "External project has planet, atmosphere, procedural surface, or WebGL scene signals; Retort should make the absorbed project planet look richer without copying assets."
+        }
+      ],
+      "deferred_breadth": [
+        "非重合方向暂不进入 Retort 主线",
+        "可上架为未来 AI 员工或市场候选"
+      ],
+      "depth_policy": "只吸收与 Retort 当前吸收、评估、证据闭环重合的深度，不扩主线广度。",
+      "external_depth_signals": [
+        "审查流水线",
+        "质量基准",
+        "CLI/插件入口"
+      ],
+      "overlap_dimensions": [
+        "comparative_analysis_depth",
+        "diff_hunk_review",
+        "feedback_loop_closure",
+        "operational_readiness",
+        "product_operability"
+      ],
+      "source": "/tmp/odoo18",
+      "status": "depth_overlap_found"
+    },
+    "pre_dual_review": {
+      "context_policy": "isolated_before_absorption",
+      "panels": [
+        {
+          "evidence_highlights": [
+            "source_files=127000",
+            "test_functions=112005",
+            "git_tracking_state=untracked",
+            "lint=False",
+            "test=False",
+            "closed_loop_verified=False",
+            "closed_loop_missing=branch_diff_verified,employee_execution_verified,post_absorption_tests_passed,merge_verified,external_advantage_reassessed",
+            "absorption_active=True"
+          ],
+          "feature_highlights": [
+            "license_gate"
+          ],
+          "file_count": 127000,
+          "llm_task_id": "",
+          "project": "/Users/a4243342/Desktop/XCMAX/FHD",
+          "role": "own_before",
+          "score": null,
+          "score_count": 0,
+          "score_source": "paibi_llm_prompt_only",
+          "score_status": "paibi_llm_required_not_scored",
+          "source": "/Users/a4243342/Desktop/XCMAX/FHD",
+          "title": "主项目吞噬前深评"
+        },
+        {
+          "evidence_highlights": [
+            "source_files=43564",
+            "test_functions=13206",
+            "git_tracking_state=tracked_clean",
+            "lint=False",
+            "test=False",
+            "closed_loop_verified=False",
+            "closed_loop_missing=branch_diff_verified,employee_execution_verified,post_absorption_tests_passed,merge_verified,external_advantage_reassessed",
+            "absorption_active=False"
+          ],
+          "feature_highlights": [
+            "license_gate"
+          ],
+          "file_count": 43564,
+          "llm_task_id": "",
+          "project": "/private/tmp/odoo18",
+          "role": "external",
+          "score": null,
+          "score_count": 0,
+          "score_source": "external_evidence_only",
+          "score_status": "external_evidence_collected_needs_llm",
+          "source": "/tmp/odoo18",
+          "title": "外部项目深评"
+        }
+      ],
+      "status": "ready"
+    },
+    "source": "/tmp/odoo18",
+    "stage_order": [
+      "pre_dual_review",
+      "overlap_comparison",
+      "absorption_execution",
+      "improvement_proof",
+      "final_self_review"
+    ],
+    "status": "pre_review_ready"
+  },
+  "execution": {
+    "changed_files": [],
+    "gates": [],
+    "gates_passed": false,
+    "status": "disabled",
+    "summary": "Real CLI absorption is disabled for this request."
+  },
+  "external_assessment": {
+    "evidence": [
+      "source_files=43564",
+      "test_functions=13206",
+      "git_tracking_state=tracked_clean",
+      "lint=False",
+      "test=False",
+      "closed_loop_verified=False",
+      "closed_loop_missing=branch_diff_verified,employee_execution_verified,post_absorption_tests_passed,merge_verified,external_advantage_reassessed",
+      "absorption_active=False",
+      "absorption_status=empty",
+      "core_refactor_execution_status=blocked",
+      "core_refactor_implemented_tasks=0/0",
+      "blackhole_ui=False",
+      "folder_project_picker=False",
+      "github_or_folder_source=False",
+      "branch_workflow=False",
+      "employee_queue=False",
+      "license_gate=True",
+      "license_boundary_tests=False",
+      "service_api=False",
+      "self_evolution=False",
+      "real_absorption_cli=False",
+      "execution_proof_recorder=False",
+      "component_review_pipeline=False",
+      "api_contract_schemas=False",
+      "feedback_audit=False",
+      "diff_hunk_review=False",
+      "pr_review_runtime=False",
+      "pr_review_api=False",
+      "incremental_pr_review=False",
+      "pr_dry_run=False",
+      "pr_publish_dry_run=False",
+      "pr_publish_sandbox=False",
+      "pr_live_publish_probe=False",
+      "pr_low_permission_probe=False",
+      "pr_long_run_review=False",
+      "pr_holdout_blind_eval=False",
+      "pr_failure_rollback_replay=False",
+      "cross_project_replay=False",
+      "multi_project_absorption_replay=False",
+      "absorption_continuity_probe=False",
+      "post_absorption_hardening_run=False",
+      "complex_pr_replay=False",
+      "task_prioritization=False",
+      "task_dispatch_plan=False",
+      "review_quality_benchmark=False",
+      "external_advantage_matrix=False",
+      "external_advantage_ci_regression=False",
+      "external_process_adjudication=False",
+      "external_advantage_repeat=False",
+      "upstream_pr_ci_probe=False",
+      "competitor_runtime_comparison=False",
+      "competitor_blind_adjudication=False",
+      "competitor_behavior_regression=False",
+      "paibi_cli_cross_adjudication=False",
+      "cross_domain_end_to_end=False",
+      "cross_domain_ci_regression=False",
+      "contract_stability_stress=False",
+      "review_adjudication_calibration=False",
+      "review_calibration_policy=False",
+      "codebase_graph=False",
+      "architecture_contracts=False",
+      "employee_scheduler_stress=False",
+      "employee_patch_closure=False",
+      "employee_patch_stress=False",
+      "product_mainline_absorption_proof=False",
+      "production_recovery_drill=False",
+      "absorption_release_decision=False",
+      "real_github_case=False"
+    ],
+    "metadata": {
+      "absorption_state": {
+        "active": false,
+        "status": "empty"
+      },
+      "blackhole_ui_structure": {
+        "app_exists": false,
+        "canvas_visual": "",
+        "frontend_root": "/private/tmp/odoo18/frontend",
+        "has_animation_loop": false,
+        "has_app_script": false,
+        "has_canvas_context": false,
+        "index_exists": false,
+        "missing_functions": [
+          "beginAbsorption",
+          "draw",
+          "drawAbsorptionPlanet",
+          "drawAbsorptionScene",
+          "renderDevourSession",
+          "renderLiveRuntimePanel",
+          "renderUpstreamCiPanel"
+        ],
+        "missing_ids": [
+          "blackholeCanvas",
+          "deepProgress",
+          "eventList",
+          "liveRuntimePanel",
+          "progressFill",
+          "progressSteps",
+          "proofPanel",
+          "sessionState",
+          "upstreamCiPanel"
+        ],
+        "required_functions_present": [],
+        "required_ids_present": []
+      },
+      "capability_absorption_audit": {
+        "behavior_source_files": [],
+        "behavior_test_files": [],
+        "blockers": [
+          "insufficient_cross_project_reproduction",
+          "no_real_absorption_run"
+        ],
+        "changed_files": [],
+        "external_project_count": 0,
+        "external_projects": [],
+        "generated_evidence_files": [],
+        "local_score_removed": true,
+        "reason": "no_real_absorption_run",
+        "risk_level": "medium",
+        "self_assessment_risk_checks": {
+          "checks": [],
+          "failed": []
+        },
+        "source_file_count": 8800,
+        "source_line_count": 1192835,
+        "status": "needs_llm_project_level_review",
+        "test_file_count": 3660,
+        "test_line_count": 824615,
+        "test_to_source_ratio": 0.691
+      },
+      "closed_loop_proof": {
+        "evidence": [],
+        "flags": {
+          "branch_diff_verified": false,
+          "employee_execution_verified": false,
+          "external_advantage_reassessed": false,
+          "merge_verified": false,
+          "post_absorption_tests_passed": false
+        },
+        "missing": [
+          "branch_diff_verified",
+          "employee_execution_verified",
+          "post_absorption_tests_passed",
+          "merge_verified",
+          "external_advantage_reassessed"
+        ],
+        "verified": false
+      },
+      "core_refactor_execution": {
+        "components": [],
+        "implemented_task_count": 0,
+        "missing": [],
+        "status": "blocked",
+        "task_count": 0
+      },
+      "features": {
+        "absorption_continuity_probe": false,
+        "absorption_release_decision": false,
+        "api_contract_schemas": false,
+        "architecture_contracts": false,
+        "blackhole_ui": false,
+        "branch_workflow": false,
+        "codebase_graph": false,
+        "competitor_behavior_regression": false,
+        "competitor_blind_adjudication": false,
+        "competitor_runtime_comparison": false,
+        "complex_pr_replay": false,
+        "component_review_pipeline": false,
+        "contract_stability_stress": false,
+        "cross_domain_ci_regression": false,
+        "cross_domain_end_to_end": false,
+        "cross_project_replay": false,
+        "diff_hunk_review": false,
+        "employee_patch_closure": false,
+        "employee_patch_stress": false,
+        "employee_queue": false,
+        "employee_scheduler_stress": false,
+        "execution_proof_recorder": false,
+        "external_advantage_ci_regression": false,
+        "external_advantage_matrix": false,
+        "external_advantage_repeat": false,
+        "external_process_adjudication": false,
+        "feedback_audit": false,
+        "folder_project_picker": false,
+        "github_or_folder_source": false,
+        "incremental_pr_review": false,
+        "license_boundary_tests": false,
+        "license_gate": true,
+        "multi_project_absorption_replay": false,
+        "paibi_cli_cross_adjudication": false,
+        "post_absorption_hardening_run": false,
+        "pr_dry_run": false,
+        "pr_failure_rollback_replay": false,
+        "pr_holdout_blind_eval": false,
+        "pr_live_publish_probe": false,
+        "pr_long_run_review": false,
+        "pr_low_permission_probe": false,
+        "pr_publish_dry_run": false,
+        "pr_publish_sandbox": false,
+        "pr_review_api": false,
+        "pr_review_runtime": false,
+        "product_mainline_absorption_proof": false,
+        "production_recovery_drill": false,
+        "real_absorption_cli": false,
+        "real_github_case": false,
+        "review_adjudication_calibration": false,
+        "review_calibration_policy": false,
+        "review_quality_benchmark": false,
+        "self_evolution": false,
+        "service_api": false,
+        "task_dispatch_plan": false,
+        "task_prioritization": false,
+        "upstream_pr_ci_probe": false
+      },
+      "git_tracking_state": "tracked_clean",
+      "local_scores_removed": true,
+      "score_authority": "paibi_llm_prompt_only",
+      "score_source": "external_evidence_only"
+    },
+    "project": "/private/tmp/odoo18",
+    "scores": []
+  },
+  "external_ref": {
+    "local_path": "/private/tmp/odoo18",
+    "source": "/tmp/odoo18"
+  },
+  "llm_review": {
+    "dispatch": {
+      "status": "disabled"
+    },
+    "enabled": false,
+    "provider": "paibi",
+    "reason": "llm_not_requested",
+    "score_source": "paibi_llm_disabled",
+    "status": "disabled"
+  },
+  "own_assessment": {
+    "evidence": [
+      "source_files=127000",
+      "test_functions=112005",
+      "git_tracking_state=untracked",
+      "lint=False",
+      "test=False",
+      "closed_loop_verified=False",
+      "closed_loop_missing=branch_diff_verified,employee_execution_verified,post_absorption_tests_passed,merge_verified,external_advantage_reassessed",
+      "absorption_active=True",
+      "absorption_status=pending_llm_reassessment",
+      "core_refactor_execution_status=blocked",
+      "core_refactor_implemented_tasks=0/0",
+      "blackhole_ui=False",
+      "folder_project_picker=False",
+      "github_or_folder_source=False",
+      "branch_workflow=False",
+      "employee_queue=False",
+      "license_gate=True",
+      "license_boundary_tests=False",
+      "service_api=False",
+      "self_evolution=False",
+      "real_absorption_cli=False",
+      "execution_proof_recorder=False",
+      "component_review_pipeline=False",
+      "api_contract_schemas=False",
+      "feedback_audit=False",
+      "diff_hunk_review=False",
+      "pr_review_runtime=False",
+      "pr_review_api=False",
+      "incremental_pr_review=False",
+      "pr_dry_run=False",
+      "pr_publish_dry_run=False",
+      "pr_publish_sandbox=False",
+      "pr_live_publish_probe=False",
+      "pr_low_permission_probe=False",
+      "pr_long_run_review=False",
+      "pr_holdout_blind_eval=False",
+      "pr_failure_rollback_replay=False",
+      "cross_project_replay=False",
+      "multi_project_absorption_replay=False",
+      "absorption_continuity_probe=False",
+      "post_absorption_hardening_run=False",
+      "complex_pr_replay=False",
+      "task_prioritization=False",
+      "task_dispatch_plan=False",
+      "review_quality_benchmark=False",
+      "external_advantage_matrix=False",
+      "external_advantage_ci_regression=False",
+      "external_process_adjudication=False",
+      "external_advantage_repeat=False",
+      "upstream_pr_ci_probe=False",
+      "competitor_runtime_comparison=False",
+      "competitor_blind_adjudication=False",
+      "competitor_behavior_regression=False",
+      "paibi_cli_cross_adjudication=False",
+      "cross_domain_end_to_end=False",
+      "cross_domain_ci_regression=False",
+      "contract_stability_stress=False",
+      "review_adjudication_calibration=False",
+      "review_calibration_policy=False",
+      "codebase_graph=False",
+      "architecture_contracts=False",
+      "employee_scheduler_stress=False",
+      "employee_patch_closure=False",
+      "employee_patch_stress=False",
+      "product_mainline_absorption_proof=False",
+      "production_recovery_drill=False",
+      "absorption_release_decision=False",
+      "real_github_case=False"
+    ],
+    "metadata": {
+      "absorption_state": {
+        "active": true,
+        "closed_loop_proof": {
+          "evidence": [],
+          "flags": {
+            "branch_diff_verified": false,
+            "employee_execution_verified": false,
+            "external_advantage_reassessed": false,
+            "merge_verified": false,
+            "post_absorption_tests_passed": false
+          },
+          "missing": [
+            "branch_diff_verified",
+            "employee_execution_verified",
+            "post_absorption_tests_passed",
+            "merge_verified",
+            "external_advantage_reassessed"
+          ],
+          "verified": false
+        },
+        "external_path": "/private/tmp/odoo18",
+        "pending_dimensions": [
+          "comparative_analysis_depth",
+          "diff_hunk_review",
+          "feedback_loop_closure",
+          "operational_readiness",
+          "product_operability"
+        ],
+        "source": "/tmp/odoo18",
+        "status": "pending_llm_reassessment"
+      },
+      "blackhole_ui_structure": {
+        "app_exists": false,
+        "canvas_visual": "",
+        "frontend_root": "/Users/a4243342/Desktop/XCMAX/FHD/frontend",
+        "has_animation_loop": false,
+        "has_app_script": false,
+        "has_canvas_context": false,
+        "index_exists": true,
+        "missing_functions": [
+          "beginAbsorption",
+          "draw",
+          "drawAbsorptionPlanet",
+          "drawAbsorptionScene",
+          "renderDevourSession",
+          "renderLiveRuntimePanel",
+          "renderUpstreamCiPanel"
+        ],
+        "missing_ids": [
+          "blackholeCanvas",
+          "deepProgress",
+          "eventList",
+          "liveRuntimePanel",
+          "progressFill",
+          "progressSteps",
+          "proofPanel",
+          "sessionState",
+          "upstreamCiPanel"
+        ],
+        "required_functions_present": [],
+        "required_ids_present": []
+      },
+      "capability_absorption_audit": {
+        "behavior_source_files": [],
+        "behavior_test_files": [],
+        "blockers": [
+          "insufficient_cross_project_reproduction",
+          "no_real_absorption_run"
+        ],
+        "changed_files": [],
+        "external_project_count": 0,
+        "external_projects": [],
+        "generated_evidence_files": [],
+        "local_score_removed": true,
+        "reason": "no_real_absorption_run",
+        "risk_level": "medium",
+        "self_assessment_risk_checks": {
+          "checks": [],
+          "failed": []
+        },
+        "source_file_count": 6124,
+        "source_line_count": 886840,
+        "status": "needs_llm_project_level_review",
+        "test_file_count": 2417,
+        "test_line_count": 744018,
+        "test_to_source_ratio": 0.839
+      },
+      "closed_loop_proof": {
+        "evidence": [],
+        "flags": {
+          "branch_diff_verified": false,
+          "employee_execution_verified": false,
+          "external_advantage_reassessed": false,
+          "merge_verified": false,
+          "post_absorption_tests_passed": false
+        },
+        "missing": [
+          "branch_diff_verified",
+          "employee_execution_verified",
+          "post_absorption_tests_passed",
+          "merge_verified",
+          "external_advantage_reassessed"
+        ],
+        "verified": false
+      },
+      "core_refactor_execution": {
+        "components": [],
+        "implemented_task_count": 0,
+        "missing": [],
+        "status": "blocked",
+        "task_count": 0
+      },
+      "features": {
+        "absorption_continuity_probe": false,
+        "absorption_release_decision": false,
+        "api_contract_schemas": false,
+        "architecture_contracts": false,
+        "blackhole_ui": false,
+        "branch_workflow": false,
+        "codebase_graph": false,
+        "competitor_behavior_regression": false,
+        "competitor_blind_adjudication": false,
+        "competitor_runtime_comparison": false,
+        "complex_pr_replay": false,
+        "component_review_pipeline": false,
+        "contract_stability_stress": false,
+        "cross_domain_ci_regression": false,
+        "cross_domain_end_to_end": false,
+        "cross_project_replay": false,
+        "diff_hunk_review": false,
+        "employee_patch_closure": false,
+        "employee_patch_stress": false,
+        "employee_queue": false,
+        "employee_scheduler_stress": false,
+        "execution_proof_recorder": false,
+        "external_advantage_ci_regression": false,
+        "external_advantage_matrix": false,
+        "external_advantage_repeat": false,
+        "external_process_adjudication": false,
+        "feedback_audit": false,
+        "folder_project_picker": false,
+        "github_or_folder_source": false,
+        "incremental_pr_review": false,
+        "license_boundary_tests": false,
+        "license_gate": true,
+        "multi_project_absorption_replay": false,
+        "paibi_cli_cross_adjudication": false,
+        "post_absorption_hardening_run": false,
+        "pr_dry_run": false,
+        "pr_failure_rollback_replay": false,
+        "pr_holdout_blind_eval": false,
+        "pr_live_publish_probe": false,
+        "pr_long_run_review": false,
+        "pr_low_permission_probe": false,
+        "pr_publish_dry_run": false,
+        "pr_publish_sandbox": false,
+        "pr_review_api": false,
+        "pr_review_runtime": false,
+        "product_mainline_absorption_proof": false,
+        "production_recovery_drill": false,
+        "real_absorption_cli": false,
+        "real_github_case": false,
+        "review_adjudication_calibration": false,
+        "review_calibration_policy": false,
+        "review_quality_benchmark": false,
+        "self_evolution": false,
+        "service_api": false,
+        "task_dispatch_plan": false,
+        "task_prioritization": false,
+        "upstream_pr_ci_probe": false
+      },
+      "git_tracking_state": "untracked",
+      "local_scores_removed": true,
+      "score_authority": "paibi_llm_prompt_only"
+    },
+    "project": "/Users/a4243342/Desktop/XCMAX/FHD",
+    "scores": []
+  },
+  "pre_absorption_assessment": {
+    "evidence": [
+      "source_files=127000",
+      "test_functions=112005",
+      "git_tracking_state=untracked",
+      "lint=False",
+      "test=False",
+      "closed_loop_verified=False",
+      "closed_loop_missing=branch_diff_verified,employee_execution_verified,post_absorption_tests_passed,merge_verified,external_advantage_reassessed",
+      "absorption_active=True",
+      "absorption_status=pending_llm_reassessment",
+      "core_refactor_execution_status=blocked",
+      "core_refactor_implemented_tasks=0/0",
+      "blackhole_ui=False",
+      "folder_project_picker=False",
+      "github_or_folder_source=False",
+      "branch_workflow=False",
+      "employee_queue=False",
+      "license_gate=True",
+      "license_boundary_tests=False",
+      "service_api=False",
+      "self_evolution=False",
+      "real_absorption_cli=False",
+      "execution_proof_recorder=False",
+      "component_review_pipeline=False",
+      "api_contract_schemas=False",
+      "feedback_audit=False",
+      "diff_hunk_review=False",
+      "pr_review_runtime=False",
+      "pr_review_api=False",
+      "incremental_pr_review=False",
+      "pr_dry_run=False",
+      "pr_publish_dry_run=False",
+      "pr_publish_sandbox=False",
+      "pr_live_publish_probe=False",
+      "pr_low_permission_probe=False",
+      "pr_long_run_review=False",
+      "pr_holdout_blind_eval=False",
+      "pr_failure_rollback_replay=False",
+      "cross_project_replay=False",
+      "multi_project_absorption_replay=False",
+      "absorption_continuity_probe=False",
+      "post_absorption_hardening_run=False",
+      "complex_pr_replay=False",
+      "task_prioritization=False",
+      "task_dispatch_plan=False",
+      "review_quality_benchmark=False",
+      "external_advantage_matrix=False",
+      "external_advantage_ci_regression=False",
+      "external_process_adjudication=False",
+      "external_advantage_repeat=False",
+      "upstream_pr_ci_probe=False",
+      "competitor_runtime_comparison=False",
+      "competitor_blind_adjudication=False",
+      "competitor_behavior_regression=False",
+      "paibi_cli_cross_adjudication=False",
+      "cross_domain_end_to_end=False",
+      "cross_domain_ci_regression=False",
+      "contract_stability_stress=False",
+      "review_adjudication_calibration=False",
+      "review_calibration_policy=False",
+      "codebase_graph=False",
+      "architecture_contracts=False",
+      "employee_scheduler_stress=False",
+      "employee_patch_closure=False",
+      "employee_patch_stress=False",
+      "product_mainline_absorption_proof=False",
+      "production_recovery_drill=False",
+      "absorption_release_decision=False",
+      "real_github_case=False"
+    ],
+    "metadata": {
+      "absorption_state": {
+        "active": true,
+        "closed_loop_proof": {
+          "evidence": [],
+          "flags": {
+            "branch_diff_verified": false,
+            "employee_execution_verified": false,
+            "external_advantage_reassessed": false,
+            "merge_verified": false,
+            "post_absorption_tests_passed": false
+          },
+          "missing": [
+            "branch_diff_verified",
+            "employee_execution_verified",
+            "post_absorption_tests_passed",
+            "merge_verified",
+            "external_advantage_reassessed"
+          ],
+          "verified": false
+        },
+        "external_path": "/private/tmp/odoo18",
+        "pending_dimensions": [
+          "comparative_analysis_depth",
+          "diff_hunk_review",
+          "feedback_loop_closure",
+          "operational_readiness",
+          "product_operability"
+        ],
+        "source": "/tmp/odoo18",
+        "status": "pending_llm_reassessment"
+      },
+      "blackhole_ui_structure": {
+        "app_exists": false,
+        "canvas_visual": "",
+        "frontend_root": "/Users/a4243342/Desktop/XCMAX/FHD/frontend",
+        "has_animation_loop": false,
+        "has_app_script": false,
+        "has_canvas_context": false,
+        "index_exists": true,
+        "missing_functions": [
+          "beginAbsorption",
+          "draw",
+          "drawAbsorptionPlanet",
+          "drawAbsorptionScene",
+          "renderDevourSession",
+          "renderLiveRuntimePanel",
+          "renderUpstreamCiPanel"
+        ],
+        "missing_ids": [
+          "blackholeCanvas",
+          "deepProgress",
+          "eventList",
+          "liveRuntimePanel",
+          "progressFill",
+          "progressSteps",
+          "proofPanel",
+          "sessionState",
+          "upstreamCiPanel"
+        ],
+        "required_functions_present": [],
+        "required_ids_present": []
+      },
+      "capability_absorption_audit": {
+        "behavior_source_files": [],
+        "behavior_test_files": [],
+        "blockers": [
+          "insufficient_cross_project_reproduction",
+          "no_real_absorption_run"
+        ],
+        "changed_files": [],
+        "external_project_count": 0,
+        "external_projects": [],
+        "generated_evidence_files": [],
+        "local_score_removed": true,
+        "reason": "no_real_absorption_run",
+        "risk_level": "medium",
+        "self_assessment_risk_checks": {
+          "checks": [],
+          "failed": []
+        },
+        "source_file_count": 6124,
+        "source_line_count": 886840,
+        "status": "needs_llm_project_level_review",
+        "test_file_count": 2417,
+        "test_line_count": 744018,
+        "test_to_source_ratio": 0.839
+      },
+      "closed_loop_proof": {
+        "evidence": [],
+        "flags": {
+          "branch_diff_verified": false,
+          "employee_execution_verified": false,
+          "external_advantage_reassessed": false,
+          "merge_verified": false,
+          "post_absorption_tests_passed": false
+        },
+        "missing": [
+          "branch_diff_verified",
+          "employee_execution_verified",
+          "post_absorption_tests_passed",
+          "merge_verified",
+          "external_advantage_reassessed"
+        ],
+        "verified": false
+      },
+      "core_refactor_execution": {
+        "components": [],
+        "implemented_task_count": 0,
+        "missing": [],
+        "status": "blocked",
+        "task_count": 0
+      },
+      "features": {
+        "absorption_continuity_probe": false,
+        "absorption_release_decision": false,
+        "api_contract_schemas": false,
+        "architecture_contracts": false,
+        "blackhole_ui": false,
+        "branch_workflow": false,
+        "codebase_graph": false,
+        "competitor_behavior_regression": false,
+        "competitor_blind_adjudication": false,
+        "competitor_runtime_comparison": false,
+        "complex_pr_replay": false,
+        "component_review_pipeline": false,
+        "contract_stability_stress": false,
+        "cross_domain_ci_regression": false,
+        "cross_domain_end_to_end": false,
+        "cross_project_replay": false,
+        "diff_hunk_review": false,
+        "employee_patch_closure": false,
+        "employee_patch_stress": false,
+        "employee_queue": false,
+        "employee_scheduler_stress": false,
+        "execution_proof_recorder": false,
+        "external_advantage_ci_regression": false,
+        "external_advantage_matrix": false,
+        "external_advantage_repeat": false,
+        "external_process_adjudication": false,
+        "feedback_audit": false,
+        "folder_project_picker": false,
+        "github_or_folder_source": false,
+        "incremental_pr_review": false,
+        "license_boundary_tests": false,
+        "license_gate": true,
+        "multi_project_absorption_replay": false,
+        "paibi_cli_cross_adjudication": false,
+        "post_absorption_hardening_run": false,
+        "pr_dry_run": false,
+        "pr_failure_rollback_replay": false,
+        "pr_holdout_blind_eval": false,
+        "pr_live_publish_probe": false,
+        "pr_long_run_review": false,
+        "pr_low_permission_probe": false,
+        "pr_publish_dry_run": false,
+        "pr_publish_sandbox": false,
+        "pr_review_api": false,
+        "pr_review_runtime": false,
+        "product_mainline_absorption_proof": false,
+        "production_recovery_drill": false,
+        "real_absorption_cli": false,
+        "real_github_case": false,
+        "review_adjudication_calibration": false,
+        "review_calibration_policy": false,
+        "review_quality_benchmark": false,
+        "self_evolution": false,
+        "service_api": false,
+        "task_dispatch_plan": false,
+        "task_prioritization": false,
+        "upstream_pr_ci_probe": false
+      },
+      "git_tracking_state": "untracked",
+      "local_scores_removed": true,
+      "score_authority": "paibi_llm_prompt_only"
+    },
+    "project": "/Users/a4243342/Desktop/XCMAX/FHD",
+    "scores": []
+  },
+  "status": "tasks_generated",
+  "summary": "Generated 16 absorption task(s). Retort now requires PaiBi LLM reassessment before any score is shown.",
+  "tasks": [
+    {
+      "acceptance": "Own map covers symbols TestProjectBase, TestProjectCommon or records a justified deferral.",
+      "dimension": "diff_hunk_review",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P0",
+      "task_id": "retort-gap-01",
+      "title": "Close repository gap from addons/project/tests/test_project_base.py",
+      "why": "External exposes symbols missing locally: TestProjectBase, TestProjectCommon."
+    },
+    {
+      "acceptance": "Gap for addons/hr_timesheet/models/project_task.py is closed or deferred with evidence.",
+      "dimension": "comparative_analysis_depth",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P1",
+      "task_id": "retort-gap-02",
+      "title": "Close repository gap from addons/hr_timesheet/models/project_task.py",
+      "why": "External file addons/hr_timesheet/models/project_task.py is a graph-ranked absorption candidate."
+    },
+    {
+      "acceptance": "Gap for addons/project/models/project_task.py is closed or deferred with evidence.",
+      "dimension": "comparative_analysis_depth",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P1",
+      "task_id": "retort-gap-03",
+      "title": "Close repository gap from addons/project/models/project_task.py",
+      "why": "External file addons/project/models/project_task.py is a graph-ranked absorption candidate."
+    },
+    {
+      "acceptance": "Own map covers symbols TestProjectFlow or records a justified deferral.",
+      "dimension": "diff_hunk_review",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P0",
+      "task_id": "retort-gap-04",
+      "title": "Close repository gap from addons/project/tests/test_project_flow.py",
+      "why": "External exposes symbols missing locally: TestProjectFlow."
+    },
+    {
+      "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
+      "dimension": "comparative_analysis_depth",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P0",
+      "task_id": "retort-depth-review-pipeline",
+      "title": "Deepen review_pipeline",
+      "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+    },
+    {
+      "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+      "dimension": "comparative_analysis_depth",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P0",
+      "task_id": "retort-depth-diff-hunk-review",
+      "title": "Deepen diff_hunk_review",
+      "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+    },
+    {
+      "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
+      "dimension": "feedback_loop_closure",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P1",
+      "task_id": "retort-depth-benchmark-eval",
+      "title": "Deepen benchmark_eval",
+      "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+    },
+    {
+      "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+      "dimension": "operational_readiness",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P1",
+      "task_id": "retort-depth-safety-policy",
+      "title": "Deepen safety_policy",
+      "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+    },
+    {
+      "acceptance": "Retort has executable, tested static_analysis behavior in the absorption or PR-review path.",
+      "dimension": "product_operability",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P0",
+      "task_id": "retort-depth-static-analysis",
+      "title": "Deepen static_analysis",
+      "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+    },
+    {
+      "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
+      "dimension": "operational_readiness",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P1",
+      "task_id": "retort-depth-workflow-ci",
+      "title": "Deepen workflow_ci",
+      "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+    },
+    {
+      "acceptance": "Retort has executable, tested semantic_index behavior in the absorption or PR-review path.",
+      "dimension": "product_operability",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P0",
+      "task_id": "retort-depth-semantic-index",
+      "title": "Deepen semantic_index",
+      "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+    },
+    {
+      "acceptance": "Retort has executable, tested codebase_graph behavior in the absorption or PR-review path.",
+      "dimension": "comparative_analysis_depth",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P0",
+      "task_id": "retort-depth-codebase-graph",
+      "title": "Deepen codebase_graph",
+      "why": "Depth workflow prioritized absorption from /tmp/odoo18."
+    },
+    {
+      "dimension": "comparative_analysis_depth",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P1",
+      "task_id": "retort-absorb-review-pipeline",
+      "title": "Adopt deterministic review pipeline stages",
+      "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
+    },
+    {
+      "dimension": "feedback_loop_closure",
+      "owner_hint": "test-qa-runner",
+      "priority": "P2",
+      "task_id": "retort-absorb-benchmarking",
+      "title": "Add absorption quality benchmark counters",
+      "why": "External project has benchmark or precision/recall signals; Retort should measure whether absorbed tasks actually improve later scores."
+    },
+    {
+      "dimension": "product_operability",
+      "owner_hint": "market-frontend-dev",
+      "priority": "P2",
+      "task_id": "retort-absorb-plugin-surface",
+      "title": "Expose Retort absorption through plugin friendly commands",
+      "why": "External project exposes plugin or CLI surfaces; Retort should keep blackhole UI and automation APIs aligned."
+    },
+    {
+      "dimension": "product_operability",
+      "owner_hint": "market-frontend-dev",
+      "priority": "P1",
+      "task_id": "retort-absorb-planet-visual",
+      "title": "Absorb better blackhole planet visual system",
+      "why": "External project has planet, atmosphere, procedural surface, or WebGL scene signals; Retort should make the absorbed project planet look richer without copying assets."
+    }
+  ],
+  "workspace_closure": {
+    "cleaned": {
+      "errors": [],
+      "kept": [
+        ".retort/absorption_state.json"
+      ],
+      "project": "/Users/a4243342/Desktop/XCMAX/FHD",
+      "removed": [],
+      "residue": {
+        "clean": true,
+        "policy": {
+          "durable_paths": [
+            "absorption_state.json"
+          ],
+          "ephemeral_dirs": [
+            "cache",
+            "employee_patch_closures",
+            "employee_patch_stress",
+            "employee_results",
+            "employee_runtime_requests",
+            "execution_requests",
+            "external_merge_landings",
+            "external_process_adjudications",
+            "operator_journey_replays",
+            "paibi_cli_cross_adjudications",
+            "real_absorption_runs",
+            "review_family_behavior_replays",
+            "runs",
+            "self_bootstrap_absorptions",
+            "trajectories"
+          ],
+          "ephemeral_files": [
+            "employee_queue.jsonl",
+            "llm_reviews.jsonl",
+            "paibi_llm_outbox.jsonl",
+            "pre_frontier_baseline.json",
+            "retort_history.sqlite",
+            "self_evolution_actions.jsonl"
+          ],
+          "first_principle": "clean_workspace_after_every_closed_run"
+        },
+        "residue_bytes": 0,
+        "residue_count": 0,
+        "residues": []
+      },
+      "runtime_root": "/Users/a4243342/Desktop/XCMAX/FHD/.retort",
+      "status": "clean",
+      "summary": {
+        "clean": true,
+        "error_count": 0,
+        "kept_count": 1,
+        "removed_count": 0,
+        "residue_bytes": 0
+      }
+    },
+    "proof": {
+      "clean": true,
+      "policy": {
+        "durable_paths": [
+          "absorption_state.json"
+        ],
+        "ephemeral_dirs": [
+          "cache",
+          "employee_patch_closures",
+          "employee_patch_stress",
+          "employee_results",
+          "employee_runtime_requests",
+          "execution_requests",
+          "external_merge_landings",
+          "external_process_adjudications",
+          "operator_journey_replays",
+          "paibi_cli_cross_adjudications",
+          "real_absorption_runs",
+          "review_family_behavior_replays",
+          "runs",
+          "self_bootstrap_absorptions",
+          "trajectories"
+        ],
+        "ephemeral_files": [
+          "employee_queue.jsonl",
+          "llm_reviews.jsonl",
+          "paibi_llm_outbox.jsonl",
+          "pre_frontier_baseline.json",
+          "retort_history.sqlite",
+          "self_evolution_actions.jsonl"
+        ],
+        "first_principle": "clean_workspace_after_every_closed_run"
+      },
+      "residue_bytes": 0,
+      "residue_count": 0,
+      "residues": []
+    },
+    "run_id": "",
+    "status": "closed",
+    "summary": {
+      "closed": true,
+      "removed_count": 0,
+      "residue_bytes": 0
+    }
+  }
+}

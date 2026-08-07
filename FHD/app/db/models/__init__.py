@@ -12,6 +12,12 @@ from app.db.models.ai import (
     AIToolCategory,
     UserPreference,
 )
+from app.db.models.accounting import (
+    ACCOUNT_TYPES,
+    ChartOfAccount,
+    JournalEntry,
+    JournalEntryLine,
+)
 from app.db.models.ai_business_evidence import (
     ContractExpiryNotification,
     ShipmentAuditEvent,
@@ -23,7 +29,14 @@ from app.db.models.approval import (
     ApprovalRecord,
     ApprovalRequest,
 )
+from app.db.models.crm import CustomerAddress
 from app.db.models.customer import Customer
+from app.db.models.mrp import (
+    Bom,
+    BomLine,
+    ManufacturingOrder,
+    ManufacturingOrderLine,
+)
 from app.db.models.etl import (
     EtlRun,
     EtlRunRow,
@@ -52,13 +65,16 @@ from app.db.models.purchase import (
     Supplier,
 )
 from app.db.models.purchase_unit import PurchaseUnit
+from app.db.models.sales import SALES_ORDER_STATUS_FLOW, SalesOrder, SalesOrderItem
 from app.db.models.service_request import ServiceBridgeConfig, ServiceRequest
 from app.db.models.shipment import ShipmentRecord
 from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
 from app.db.models.workflow import (
+    WorkflowCheckpoint,
     WorkflowDefinition,
+    WorkflowPlan,
     WorkflowRun,
     WorkflowRunStep,
 )
@@ -69,6 +85,9 @@ from app.db import tenant_filter as _tenant_filter  # noqa: E402,F401
 
 __all__ = [
     "PurchaseUnit",
+    "SalesOrder",
+    "SalesOrderItem",
+    "SALES_ORDER_STATUS_FLOW",
     "AgentRunRecord",
     "AiCirclePost",
     "AiCircleReaction",
@@ -82,6 +101,11 @@ __all__ = [
     "ShipmentRecord",
     "ShipmentEtlImportFingerprint",
     "Customer",
+    "CustomerAddress",
+    "Bom",
+    "BomLine",
+    "ManufacturingOrder",
+    "ManufacturingOrderLine",
     "EtlUpload",
     "EtlTemplate",
     "EtlTemplateVersion",
@@ -89,6 +113,10 @@ __all__ = [
     "EtlRunRow",
     "EtlTargetConfig",
     "FinancialTransaction",
+    "ChartOfAccount",
+    "JournalEntry",
+    "JournalEntryLine",
+    "ACCOUNT_TYPES",
     "User",
     "UserSession",
     "Permission",
@@ -123,4 +151,6 @@ __all__ = [
     "WorkflowDefinition",
     "WorkflowRun",
     "WorkflowRunStep",
+    "WorkflowCheckpoint",
+    "WorkflowPlan",
 ]

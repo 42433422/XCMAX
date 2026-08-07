@@ -3334,8 +3334,9 @@ class TestFallbackPlanAdditional:
         result = planner._fallback_plan("pid", "新增产品", reg)
         # 无 products 工具，但 intent 仍是 add_product_to_unit
         assert result.intent == "add_product_to_unit"
-        # 只有 customers 节点
-        assert all(n.tool_id == "customers" for n in result.nodes)
+        # 不生成 products 节点；写操作缺必填参数会插入 clarify 反问节点，其余均为 customers 节点
+        assert not any(n.tool_id == "products" for n in result.nodes)
+        assert all(n.tool_id in ("customers", "clarify") for n in result.nodes)
 
     def test_risk_level_high_with_high_risk_node(self) -> None:
         """有 high risk 节点时 risk_level=high。"""
