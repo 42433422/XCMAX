@@ -7,6 +7,7 @@ import {
   trackTutorialOfficeUploadPath,
 } from '@/constants/tutorialSamples'
 import { readWordViaOfficePack, uploadTutorialOfficeFile } from '@/utils/officeEmployeeReadApi'
+import { api } from '@/api/core'
 import { sleep } from './demoHelpers'
 
 export async function fetchTutorialSampleFile(url: string, filename: string): Promise<File> {
@@ -82,12 +83,7 @@ export async function waitForChatContains(text: string, maxMs = 120_000): Promis
 export async function cleanupQuickStartImportDemo(): Promise<void> {
   const paths = readTutorialOfficeUploadPaths()
   if (paths.length) {
-    await fetch('/api/platform-shell/office-sample-cleanup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'same-origin',
-      body: JSON.stringify({ file_paths: paths }),
-    }).catch(() => {})
+    await api.post('/api/platform-shell/office-sample-cleanup', { file_paths: paths }).catch(() => {})
   }
   clearTutorialOfficeUploadPaths()
   const btn = document.getElementById('newConversationBtn')
