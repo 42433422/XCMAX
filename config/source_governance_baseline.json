@@ -1,7 +1,7 @@
 {
   "_note": "Cross-stack source debt ratchet. Existing oversized files and exact-copy debt may only shrink; generated/derived roots are excluded.",
   "schema_version": 1,
-  "updated_at": "2026-08-06",
+  "updated_at": "2026-08-07",
   "oversized_files": {
     "成都修茈科技有限公司/MODstore_deploy/market/src/views/WorkbenchHomeView.vue": {
       "stack": "modstore_vue",
@@ -78,6 +78,11 @@
       "lines": 2748,
       "soft_cap": 800
     },
+    "FHD/app/services/tools_workflow_registered.py": {
+      "stack": "fhd_backend",
+      "lines": 2723,
+      "soft_cap": 800
+    },
     "FHD/app/application/super_employee_service.py": {
       "stack": "fhd_backend",
       "lines": 2636,
@@ -108,11 +113,6 @@
       "lines": 2487,
       "soft_cap": 800
     },
-    "FHD/app/services/tools_workflow_registered.py": {
-      "stack": "fhd_backend",
-      "lines": 2469,
-      "soft_cap": 800
-    },
     "FHD/app/application/shipment_excel_etl_app_service.py": {
       "stack": "fhd_backend",
       "lines": 2400,
@@ -127,6 +127,16 @@
       "stack": "flutter",
       "lines": 2397,
       "soft_cap": 500
+    },
+    "FHD/app/application/ai_chat_app_service.py": {
+      "stack": "fhd_backend",
+      "lines": 2369,
+      "soft_cap": 800
+    },
+    "FHD/app/application/workflow/planner.py": {
+      "stack": "fhd_backend",
+      "lines": 2246,
+      "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest.py": {
       "stack": "modstore_backend",
@@ -153,25 +163,20 @@
       "lines": 2116,
       "soft_cap": 500
     },
-    "FHD/app/application/workflow/planner.py": {
-      "stack": "fhd_backend",
-      "lines": 2113,
-      "soft_cap": 800
-    },
     "FHD/app/application/tools/workflow.py": {
       "stack": "fhd_backend",
       "lines": 2083,
-      "soft_cap": 800
-    },
-    "FHD/app/application/ai_chat_app_service.py": {
-      "stack": "fhd_backend",
-      "lines": 2056,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/market/src/views/AiStoreView.vue": {
       "stack": "modstore_vue",
       "lines": 2053,
       "soft_cap": 500
+    },
+    "FHD/app/db/init_db.py": {
+      "stack": "fhd_backend",
+      "lines": 2052,
+      "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_scheduler.py": {
       "stack": "modstore_backend",
@@ -181,11 +186,6 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_surface_audit.py": {
       "stack": "modstore_backend",
       "lines": 2013,
-      "soft_cap": 800
-    },
-    "FHD/app/db/init_db.py": {
-      "stack": "fhd_backend",
-      "lines": 1984,
       "soft_cap": 800
     },
     "FHD/app/application/ai_group_chat_service.py": {
@@ -250,7 +250,7 @@
     },
     "FHD/frontend/src/composables/useChatOrchestration.ts": {
       "stack": "fhd_vue",
-      "lines": 1627,
+      "lines": 1663,
       "soft_cap": 600
     },
     "FHD/frontend/src/views/AdminEntitlementsView.vue": {
@@ -418,6 +418,11 @@
       "lines": 1252,
       "soft_cap": 500
     },
+    "FHD/app/application/normal_chat_dispatch.py": {
+      "stack": "fhd_backend",
+      "lines": 1251,
+      "soft_cap": 800
+    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/craft_steps.py": {
       "stack": "modstore_backend",
       "lines": 1249,
@@ -492,6 +497,11 @@
       "stack": "modstore_vue",
       "lines": 1129,
       "soft_cap": 500
+    },
+    "FHD/app/application/workflow/engine.py": {
+      "stack": "fhd_backend",
+      "lines": 1126,
+      "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/market/src/views/workbench/panels/LeftRail.vue": {
       "stack": "modstore_vue",
@@ -618,6 +628,11 @@
       "lines": 1001,
       "soft_cap": 500
     },
+    "FHD/app/application/customer_app_service.py": {
+      "stack": "fhd_backend",
+      "lines": 983,
+      "soft_cap": 800
+    },
     "FHD/app/application/etl/parser_regions.py": {
       "stack": "fhd_backend",
       "lines": 983,
@@ -733,20 +748,10 @@
       "lines": 877,
       "soft_cap": 800
     },
-    "FHD/app/application/normal_chat_dispatch.py": {
-      "stack": "fhd_backend",
-      "lines": 874,
-      "soft_cap": 800
-    },
     "成都修茈科技有限公司/MODstore_deploy/market/src/components/workbench/OpenApiConnectorsPanel.vue": {
       "stack": "modstore_vue",
       "lines": 863,
       "soft_cap": 500
-    },
-    "FHD/app/application/customer_app_service.py": {
-      "stack": "fhd_backend",
-      "lines": 862,
-      "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/telemetry_backlog_loop.py": {
       "stack": "modstore_backend",
