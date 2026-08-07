@@ -11,7 +11,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user, _require_admin
@@ -1031,7 +1031,13 @@ async def llm_usage(
 
 
 class ChatMessageDTO(BaseModel):
-    """``content`` 可为纯文本或 OpenAI vision 多段格式（``type: text|image_url`` 数组）。"""
+    """``content`` 可为纯文本或 OpenAI vision 多段格式（``type: text|image_url`` 数组）。
+
+    ``extra="allow"``：透传函数调用多轮消息所需的 ``tool_calls`` / ``tool_call_id`` /
+    ``name`` 字段，使市场网关能承载 OpenAI 工具调用（tool 角色与 assistant tool_calls）。
+    """
+
+    model_config = ConfigDict(extra="allow")
 
     role: str
     content: Union[str, List[Dict[str, Any]]]
@@ -1044,6 +1050,12 @@ class LlmChatDTO(BaseModel):
     max_tokens: Optional[int] = Field(None, ge=1, le=32000)
     conversation_id: Optional[int] = Field(None, ge=1)
     allow_failover: bool = True
+    tools: Optional[List[Any]] = Field(
+        None, description="OpenAI function-calling tools 定义（透传给上游模型）"
+    )
+    tool_choice: Optional[Any] = Field(
+        None, description="OpenAI tool_choice，如 'auto' 或 {'type':'function','function':{...}}"
+    )
 
 
 class LlmImageDTO(BaseModel):
@@ -1112,7 +1124,7 @@ async def llm_chat_stream(
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
 ):
-    msgs = [{"role": m.role, "content": m.content} for m in body.messages]
+    msgs = [m.model_dump(exclude_none=True) for m in body.messages]
     return await stream_billed_llm_chat(
         request,
         db,
@@ -1123,6 +1135,8 @@ async def llm_chat_stream(
         max_tokens=body.max_tokens,
         conversation_id=body.conversation_id,
         allow_failover=bool(body.allow_failover),
+        tools=body.tools,
+        tool_choice=body.tool_choice,
     )
 
 
