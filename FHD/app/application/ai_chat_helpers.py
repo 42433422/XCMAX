@@ -277,6 +277,9 @@ def unified_chat_single_payload(
 
     from app.application.normal_chat_dispatch import (
         build_product_query_response_dict,
+        build_replenishment_suggest_response_dict,
+        build_reports_query_response_dict,
+        build_sales_query_response_dict,
         route_normal_mode_message,
     )
 
@@ -317,6 +320,17 @@ def unified_chat_single_payload(
 
     if route_intent == "product_query":
         body = build_product_query_response_dict(route_result)
+        if body:
+            return body
+
+    # ERP 业务意图（吸收 Odoo 18）：销售/报表/补货预警走确定性工具，不落入 workflow 计划器
+    if route_intent in ("sales_query", "reports_query", "replenishment_suggest"):
+        if route_intent == "sales_query":
+            body = build_sales_query_response_dict(route_result)
+        elif route_intent == "reports_query":
+            body = build_reports_query_response_dict(route_result, message=text)
+        else:
+            body = build_replenishment_suggest_response_dict(route_result)
         if body:
             return body
 

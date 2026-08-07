@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { RouteLocationRaw } from 'vue-router'
-import { asArray, asRecord, asString, firstText, type AnyRecord } from '@/composables/useLoopRuntimePanel'
+import { asArray, firstText, type AnyRecord } from '@/composables/useLoopRuntimePanel'
 
 defineProps<{
   ok: boolean

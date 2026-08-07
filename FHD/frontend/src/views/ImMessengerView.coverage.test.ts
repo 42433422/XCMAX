@@ -260,9 +260,9 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     imMocks.fetchImConversations.mockResolvedValue([])
     imMocks.fetchImContacts.mockResolvedValue([normalContact])
     const wrapper = await mountView()
-    // 重构后 AI 群聊恒为固定项，会话列表为空时仅渲染固定项、不渲染普通会话行
+    // AI 群聊已从信息侧栏固定项移除；会话列表为空且无企业专属联系人时不渲染任何会话行（含固定项）
     expect(wrapper.findAll('.im-conv-item:not(.im-conv-item--pinned)')).toHaveLength(0)
-    expect(wrapper.findAll('.im-conv-item--pinned').length).toBeGreaterThan(0)
+    expect(wrapper.findAll('.im-conv-item--pinned')).toHaveLength(0)
   })
 
   it('会话列表展示标题与未读徽章', async () => {

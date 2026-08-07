@@ -642,29 +642,28 @@ class TestMergeRuntimeFallbackParamsBranches:
         assert params["keyword"] == "find bolts"
 
     def test_customers_branch_entered(self):
-        """Lines 581-582: node.tool_id == 'customers' and action == 'query'."""
+        """customers.query 无检索词 → 全量列表，禁止注入用户原话。"""
         engine = _make_engine()
         node = _node(tool_id="customers", action="query")
         params = {}
         engine._merge_runtime_fallback_params(node, params, {"message": "Alice"})
-        # Should inject because no keyword params present.
-        assert params["keyword"] == "Alice"
+        assert "keyword" not in params
 
     def test_customers_query_non_empty_keyword_no_injection(self):
-        """Lines 583-584: customers.query but keyword present → no injection."""
+        """customers.query 已有 keyword → 保留。"""
         engine = _make_engine()
         node = _node(tool_id="customers", action="query")
         params = {"keyword": "Bob"}
         engine._merge_runtime_fallback_params(node, params, {"message": "Alice"})
         assert params["keyword"] == "Bob"
 
-    def test_customers_query_empty_keyword_injects(self):
-        """Lines 587-588: customers.query, empty keyword → inject."""
+    def test_customers_query_empty_keyword_lists_all(self):
+        """customers.query keyword 空串 → 清空而非注入原话。"""
         engine = _make_engine()
         node = _node(tool_id="customers", action="query")
         params = {"keyword": ""}
         engine._merge_runtime_fallback_params(node, params, {"message": "Charlie"})
-        assert params["keyword"] == "Charlie"
+        assert "keyword" not in params
 
     def test_other_tool_not_injected(self):
         """Lines 589-591: else branch — other tool_id → nothing injected."""

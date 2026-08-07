@@ -276,9 +276,7 @@ import {
   fetchIndustryBaseline,
   fetchOnboardingIndustryCatalog,
 } from '@/utils/platformShellApi'
-import {
-  promptAdvancedTutorialAfterInstall,
-  resolveRouteNameFromPath,
+import {promptAdvancedTutorialAfterInstall,
 } from '@/tutorial/promptAdvancedTutorial'
 import { useTutorialCatalog } from '@/composables/useTutorialCatalog'
 import {

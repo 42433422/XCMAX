@@ -9,7 +9,7 @@
 import { apiFetch } from './apiBase'
 import { readCsrfTokenFromCookie } from './csrfCookie'
 import { playOfflinePcm, synthesizeOffline, ensureOfflineReady, isOfflineReady, isOfflineLoading, getOfflineProgress, stopOffline } from './offlineTts'
-import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
+import { asRecord, asString } from '@/utils/typeGuards'
 
 const VOICE_PREF_KEY = 'xcagi_tts_voice'
 const ENGINE_PREF_KEY = 'xcagi_tts_engine' // 'auto' | 'system' | 'offline' | 'online'

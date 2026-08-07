@@ -454,6 +454,38 @@ class PurchaseService(NeuroEventPublisherMixin):
                 db.commit()
                 db.refresh(inbound)
 
+                # 采购入库 → 应付账款闭环：借：库存商品 / 贷：应付账款（复式记账）
+                if total_amount > 0:
+                    try:
+                        from app.services.accounting_services import create_journal_entry
+
+                        supplier = getattr(inbound, "supplier", None)
+                        journal_result = create_journal_entry(
+                            {
+                                "description": f"采购入库: {inbound_no}",
+                                "reference_type": "purchase_inbound",
+                                "reference_id": inbound.id,
+                                "lines": [
+                                    {
+                                        "account_code": "1401",  # 库存商品
+                                        "debit": total_amount,
+                                        "credit": 0,
+                                    },
+                                    {
+                                        "account_code": "2201",  # 应付账款
+                                        "debit": 0,
+                                        "credit": total_amount,
+                                        "partner_id": inbound.supplier_id,
+                                        "partner_name": (supplier.name if supplier else None),
+                                    },
+                                ],
+                            }
+                        )
+                        if not journal_result.get("success"):
+                            logger.warning("应付账款记账失败: %s", journal_result.get("message"))
+                    except Exception:  # noqa: BLE001 - 记账失败不阻断入库主流程
+                        logger.warning("应付账款记账失败", exc_info=True)
+
                 if data.get("order_id"):
                     self._update_order_received_quantity(db, data.get("order_id"))
 

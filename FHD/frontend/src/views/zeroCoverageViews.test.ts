@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 
 // OtherToolsView 动态导入 @admin-console-inject/views/DutyRosterGraphView.vue，
@@ -23,7 +23,6 @@ const hostBridgeViews = [
   { name: 'ApprovalRulesView', modId: 'xcagi-approval-bridge', view: 'ApprovalRulesView', title: '审批' },
   { name: 'ApprovalWorkspaceView', modId: 'xcagi-approval-bridge', view: 'ApprovalWorkspaceView', title: '审批' },
   { name: 'BatchAnalyzeView', modId: 'xcagi-erp-domain-bridge', view: 'BatchAnalyzeView', title: 'ERP 业务页' },
-  { name: 'BusinessDockingView', modId: 'xcagi-erp-domain-bridge', view: 'BusinessDockingView', title: 'ERP 业务页' },
   { name: 'ChatDebugView', modId: 'xcagi-planner-bridge', view: 'ChatDebugView', title: 'Planner 页' },
   { name: 'LabelEditorView', modId: 'xcagi-erp-domain-bridge', view: 'LabelEditorView', title: 'ERP 业务页' },
   { name: 'TemplatePreviewView', modId: 'xcagi-erp-domain-bridge', view: 'TemplatePreviewView', title: 'ERP 业务页' },
@@ -44,6 +43,26 @@ describe('HostModBridge stub views (zero coverage)', () => {
       expect(bridge.attributes('data-title')).toBe(spec.title)
     })
   }
+})
+
+describe('BusinessDockingView', () => {
+  it('renders an empty redirect stub and navigates to the ETL data docking center', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/business-docking', name: 'business-docking', component: { template: '<div />' } },
+      ],
+    })
+    await router.push('/')
+    await router.isReady()
+    const replaceSpy = vi.spyOn(router, 'replace')
+    const mod = await import('./BusinessDockingView.vue')
+    const wrapper = mount(mod.default, { global: { plugins: [router] } })
+    await flushPromises()
+    expect(wrapper.find('.page-view').exists()).toBe(true)
+    expect(replaceSpy).toHaveBeenCalledWith({ name: 'business-docking' })
+    wrapper.unmount()
+  })
 })
 
 describe('OtherToolsView', () => {

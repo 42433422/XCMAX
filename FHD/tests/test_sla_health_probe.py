@@ -81,8 +81,28 @@ def test_health_endpoint_latency_probe(client):
     _write_snapshot(client, result)
 
 
+def _market_reachable() -> bool:
+    """Fast liveness check of the market service.
+
+    The login probe proxies ``/api/auth/login`` to the market service; when that
+    service is unreachable (e.g. standard CI backend-test has no market server),
+    the proxy call can hang until the proxy timeout and blow the latency budget.
+    Skip the probe when the market server is down rather than failing the suite.
+    """
+    import httpx
+
+    base = os.environ.get("XCAGI_MARKET_BASE_URL") or "http://127.0.0.1:8765"
+    try:
+        resp = httpx.get(f"{base.rstrip('/')}/api/health", timeout=2.0)
+        return resp.status_code < 500
+    except httpx.HTTPError:
+        return False
+
+
 def test_login_endpoint_reachable(client):
     """Optional login probe for SLO-API-02 metric path (non-blocking on 401/403)."""
+    if not _market_reachable():
+        pytest.skip("market service unreachable; login probe requires it")
     started = time.perf_counter()
     resp = client.post(
         "/api/auth/login",

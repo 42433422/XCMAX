@@ -749,6 +749,24 @@ jobs:
           npm ci
           npm run build
 
+  desktop-test:
+    name: desktop-test
+    needs: [frontend-test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: FHD/desktop/package-lock.json
+      - name: Install desktop deps
+        working-directory: FHD/desktop
+        run: npm ci
+      - name: Run full desktop unit-test suite
+        working-directory: FHD/desktop
+        run: npm test
+
   desktop-windows-release-script-smoke:
     name: desktop-windows-release-script-smoke
     needs: [guard-temp-scripts]

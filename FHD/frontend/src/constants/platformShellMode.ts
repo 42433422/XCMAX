@@ -1,6 +1,4 @@
-import {
-  readBuildEdition,
-  shouldAutoEnableEditionPlatformShell,
+import {readBuildEdition,
   shouldAutoEnableMinimalPlatformShell,
   shouldAutoEnablePlatformShell,
   hasInstalledAccountCustomMod,

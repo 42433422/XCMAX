@@ -257,6 +257,10 @@ class TestExecuteCompatChatDbReadToken:
         }
 
         with (
+            patch(
+                "app.application.normal_chat_dispatch.try_normal_slot_read_payload",
+                return_value=None,
+            ),
             patch("app.application.planner_compat_service.set_llm_mode"),
             patch(
                 "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
