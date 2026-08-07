@@ -127,6 +127,19 @@ python scripts/dev/ssot_cli.py enable <domain> --on|--off
 > `fhd-alembic-ssot.yml` 的 `ssot-parity` job 单独把关（advisory，待一次 PG 绿后转 blocking）；
 > 注册表内的 check 只做轻量结构守卫，避免 `ssot gate` 依赖 DB。
 
+### 统一入口 2 域（2026-08-07，收编游离的规范性"轮子"）
+
+| 领域 | 模式 | SSOT | check 适配 | sync | 当前状态 |
+|------|------|------|-----------|------|---------|
+| dev-inventory | lint | FHD/scripts/dev/ | ssot_inventory.py --check（盘点规范性脚本，棘轮只拦新增游离） | 无 | 盘点 registered=10 / managed=63 / orphan=0 |
+| dev-guards | lint | FHD/scripts/dev/ | dev_guards.py check（聚合游离守卫，blocking 子集） | 无 | blocking 全绿；3 项既有漂移 advisory |
+
+> `dev-guards` 聚合 `check_layer_ratchet` / `count_type_debt` / `count_raw_sql` / `count_big_files` /
+> `count_coverage_ramp_stubs` / `test_bloat_report` / `check_requirements_lock` / `guard_mods_inline_ui` /
+> `guard_utils_boundary` / `check_mod_import_boundaries` / `arch_fitness`。其中 `big-files`、
+> `mod-import-boundaries`、`arch-fitness` 当前存在既有漂移，以 advisory 报告；其余为硬阻断。
+> 依赖覆盖率实测的 `guard_coverage_floor` / `coverage_ratchet` 保留在 `backend-test`，不进聚合。
+
 ## 安全护栏
 
 1. **dry-run 默认**：`ssot sync` 不加 `--apply` 只打印，不写盘；`version_sync.py` 默认 dry-run

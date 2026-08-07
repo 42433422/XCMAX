@@ -2,6 +2,7 @@ import { ref, type Ref } from 'vue'
 import type { ChatMessageExtras } from './useChatMessages'
 import { normalizeModel, toNumber, parseShipmentCommand } from '../utils/textParser'
 import { asRecord, asString } from '@/utils/typeGuards'
+import { shipmentApi } from '@/api/shipment'
 
 export interface ShipmentProduct {
   quantity?: number
@@ -211,24 +212,16 @@ export function useShipmentTask(
     const normalizedModel = normalizeModel(model)
     if (!normalizedModel) return null
 
-    const buildUrl = (unit: string) => {
-      const query = new URLSearchParams({
-        keyword: normalizedModel,
-        model_number: normalizedModel,
-        page: '1',
-        per_page: '20'
-      })
-      if (unit) query.set('unit', unit)
-      return `/api/products/list?${query.toString()}`
-    }
-
-    const requestUrls = unitName ? [buildUrl(unitName), buildUrl('')] : [buildUrl('')]
-    for (const url of requestUrls) {
+    // 先按单位查，未命中再回退到不带单位查询（保持原有裸 fetch 的降级顺序）
+    const unitCandidates = unitName ? [unitName, ''] : ['']
+    for (const unit of unitCandidates) {
       try {
-        const resp = await fetch(url)
-        const data = await resp.json().catch(() => ({}))
-        if (!resp.ok || !data?.success) continue
-        const rows = Array.isArray(data?.data) ? data.data : []
+        const res = await shipmentApi.getProductMetaForPreview({
+          model: normalizedModel,
+          unitName: unit || undefined,
+        })
+        if (!res?.success) continue
+        const rows = Array.isArray(res.data) ? res.data : []
         const best = pickBestProductRecord(rows, normalizedModel)
         if (!best) continue
 
@@ -321,31 +314,7 @@ export function useShipmentTask(
   }
 
   async function fetchNextOrderNumber(): Promise<string> {
-    const endpointCandidates = [
-      '/api/shipment/orders/next_number?suffix=A',
-      '/orders/next_number?suffix=A',
-      '/api/orders/next_number?suffix=A'
-    ]
-
-    for (const url of endpointCandidates) {
-      try {
-        const resp = await fetch(url)
-        const data = await resp.json().catch(() => ({}))
-        const orderNo = String(
-          data?.data?.order_number
-          || data?.order_number
-          || data?.data?.next_number
-          || ''
-        ).trim()
-        // 兼容：部分路由可能省略 success 字段，只要 HTTP 成功且拿到编号即采用
-        if (resp.ok && orderNo && (data?.success !== false)) {
-          return orderNo
-        }
-      } catch (_err) {
-        // Ignore single endpoint failures, continue trying next candidates.
-      }
-    }
-    return ''
+    return shipmentApi.fetchNextOrderNumber()
   }
 
   async function hydrateTaskOrderNumber(task: ShipmentTask, options?: { force?: boolean }): Promise<void> {

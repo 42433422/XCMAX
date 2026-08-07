@@ -73,6 +73,8 @@
 | neuro-bus-events | `FHD/config/neuro_bus_events.yaml` | blocking |
 | runtime-inventory | `FHD/config/service_topology.yaml` | blocking |
 | repository-ssot | `FHD/app/infrastructure/repositories/` | blocking |
+| dev-inventory | `FHD/scripts/dev/` | blocking |
+| dev-guards | `FHD/scripts/dev/` | blocking |
 
 ## 已退役 SSOT（指针化）
 
