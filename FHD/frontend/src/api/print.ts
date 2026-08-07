@@ -1,5 +1,6 @@
 import { api } from './core';
 import type { ApiResponse } from '@/types/api';
+import { resolveErpApiPath } from '@/utils/erpDomainPaths';
 
 export interface Printer {
   id: number;
@@ -8,6 +9,26 @@ export interface Printer {
   is_default: boolean;
   status: 'online' | 'offline' | 'error';
   [key: string]: unknown;
+}
+
+export interface PrintLabelPayload {
+  file_path: string;
+  copies?: number;
+}
+
+export interface PrintDocumentPayload {
+  file_path: string;
+}
+
+export interface MarkShipmentPrintedPayload {
+  file_path: string;
+  order_id?: number;
+}
+
+export interface PrintOperationResult {
+  success?: boolean;
+  message?: string;
+  updated?: boolean;
 }
 
 export const printApi = {
@@ -19,12 +40,16 @@ export const printApi = {
     return api.get<ApiResponse<Printer>>('/api/print/default');
   },
 
-  printDocument(data: unknown): Promise<ApiResponse<unknown>> {
-    return api.post<ApiResponse<unknown>>('/api/print/document', data);
+  printDocument(data: PrintDocumentPayload): Promise<ApiResponse<PrintOperationResult>> {
+    return api.post<ApiResponse<PrintOperationResult>>(resolveErpApiPath('/api/print/document'), data);
   },
 
-  printLabel(data: unknown): Promise<ApiResponse<unknown>> {
-    return api.post<ApiResponse<unknown>>('/api/print/label', data);
+  printLabel(data: PrintLabelPayload): Promise<ApiResponse<PrintOperationResult>> {
+    return api.post<ApiResponse<PrintOperationResult>>(resolveErpApiPath('/api/print/label'), data);
+  },
+
+  markShipmentPrinted(data: MarkShipmentPrintedPayload): Promise<ApiResponse<PrintOperationResult> & { updated?: boolean }> {
+    return api.post<ApiResponse<PrintOperationResult> & { updated?: boolean }>(resolveErpApiPath('/api/shipment/print'), data);
   },
 
   listLabels(): Promise<ApiResponse<unknown[]>> {
