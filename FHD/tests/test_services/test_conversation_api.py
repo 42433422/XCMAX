@@ -433,9 +433,7 @@ class TestEnsureModstoreFromSession:
             return_value=mock_adapter,
         ) as mock_from_session:
             svc._ensure_modstore_from_session()
-        mock_from_session.assert_called_once_with(
-            session_id="3386d9c7-56f6-4079-ac4d-33f6d36fe5f0"
-        )
+        mock_from_session.assert_called_once_with(session_id="3386d9c7-56f6-4079-ac4d-33f6d36fe5f0")
         assert svc.modstore_adapter == mock_adapter
 
     def test_adapter_without_token_not_assigned(self):
