@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { pinMenuKeyFirst, PRIMARY_CHAT_MENU_KEY, sidebarLayoutSeedKeys } from './coreMenuCatalog'
+import {
+  CORE_MENU_ITEMS_BASE,
+  pinMenuKeyFirst,
+  PRIMARY_CHAT_MENU_KEY,
+  sidebarLayoutSeedKeys,
+} from './coreMenuCatalog'
 
 describe('coreMenuCatalog', () => {
+  it('exposes business docking as a core menu item', () => {
+    expect(CORE_MENU_ITEMS_BASE).toContainEqual(
+      expect.objectContaining({ key: 'business-docking', name: '数据对接中心' }),
+    )
+  })
+
   it('pinMenuKeyFirst moves chat to front', () => {
     const rows = [
       { key: 'mod-a', name: 'A' },
