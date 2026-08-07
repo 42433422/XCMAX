@@ -472,12 +472,12 @@ def _xcagi_stream_first_token_timeout_seconds() -> float:
 
 
 def _xcagi_stream_idle_notice_seconds() -> float:
-    raw = os.environ.get("XCAGI_CHAT_STREAM_IDLE_NOTICE_SEC", "12").strip()
+    raw = os.environ.get("XCAGI_CHAT_STREAM_IDLE_NOTICE_SEC", "5").strip()
     try:
         value = float(raw)
     except ValueError:
-        value = 12.0
-    return max(5.0, min(value, 60.0))
+        value = 5.0
+    return max(3.0, min(value, 60.0))
 
 
 def _xcagi_chat_timeout_error_payload(timeout: float) -> dict:
