@@ -26,7 +26,7 @@ const hostConstants = path.join(hostSrc, 'constants')
 const API_BASE = resolveApiBase(process.env.VITE_API_BASE)
 const devPort = Number(process.env.VITE_DEV_PORT || 5011)
 
-const ADMIN_MODS_ROOT = path.resolve(hostRoot, '../mods-admin-runtime')
+const ADMIN_MODS_ROOT = path.resolve(hostRoot, '../mods')
 
 function modViewsDir(modId) {
   const rel = path.join(modId, 'frontend', 'views')
@@ -157,6 +157,11 @@ export default defineConfig(() => ({
       { find: '@host', replacement: hostSrc },
       { find: '@', replacement: hostSrc },
       { find: '@amin', replacement: path.resolve(hostRoot, '../AMIN') },
+      {
+        // 客服桥接 Mod 自有组件/composable 别名（与主 frontend/vite.config.js 保持一致）
+        find: '@mod-frontend/xcagi-customer-service-bridge',
+        replacement: path.resolve(hostRoot, '../mods/xcagi-customer-service-bridge/frontend'),
+      },
       {
         find: '@mod-views/xcagi-lan-license-bridge',
         replacement: modViewsDir('xcagi-lan-license-bridge'),

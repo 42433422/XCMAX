@@ -169,7 +169,6 @@ def test_import_domain_event_modules_for_coverage() -> None:
     import app.neuro_bus.events.payment_events  # noqa: F401
     import app.neuro_bus.events.print_events  # noqa: F401
     import app.neuro_bus.events.shipment_events as shipment_events  # noqa: F401
-    import app.neuro_bus.events.wechat_events  # noqa: F401
 
     assert shipment_events.ShipmentCreatedEvent.event_type == "shipment.created"
     assert customer_events.CustomerRegisteredEvent.event_type == "customer.registered"

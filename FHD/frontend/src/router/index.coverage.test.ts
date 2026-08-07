@@ -323,21 +323,15 @@ describe('router/index 覆盖率补齐', () => {
       expect(router.currentRoute.value.name).toBe('materials')
     })
 
-    it('/business-docking 重定向到 template-preview', async () => {
+    it('/business-docking 进入 ETL 数据对接中心', async () => {
       await router.push('/business-docking')
-      expect(router.currentRoute.value.name).toBe('template-preview')
+      expect(router.currentRoute.value.name).toBe('business-docking')
     })
 
     it('/model-payment 重定向到 settings 带 section query', async () => {
       await router.push('/model-payment')
       expect(router.currentRoute.value.name).toBe('settings')
       expect(router.currentRoute.value.query.section).toBe('model-payment')
-    })
-
-    it('/wechat-contacts 打开独立微信 bridge 宿主页', async () => {
-      await router.push('/wechat-contacts')
-      expect(router.currentRoute.value.name).toBe('wechat-contacts')
-      expect(router.currentRoute.value.meta.title).toBe('微信联系人')
     })
 
     it('/other-tools 重定向到 workflow-employee-space', async () => {

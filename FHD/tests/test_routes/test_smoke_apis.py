@@ -7,8 +7,6 @@ ENDPOINTS = [
     ("/api/customers/list", "GET", None),
     ("/api/products/list", "GET", None),
     ("/api/shipment/list", "GET", None),
-    ("/api/wechat/contacts", "GET", None),
-    ("/api/wechat/tasks", "GET", None),
     ("/api/print/printers", "GET", None),
     ("/api/print/default", "GET", None),
     ("/api/print/validate", "GET", None),

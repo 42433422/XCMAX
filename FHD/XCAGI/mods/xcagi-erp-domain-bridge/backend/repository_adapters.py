@@ -30,7 +30,7 @@ class ModProductRepositoryAdapter:
 
     def __init__(self, inner: Any | None = None) -> None:
         if inner is None:
-            from app.infrastructure.persistence.product_repository_impl import (
+            from app.infrastructure.repositories.product_repository_impl import (
                 SQLAlchemyProductRepository,
             )
 

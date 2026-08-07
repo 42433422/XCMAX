@@ -78,11 +78,11 @@ def test_read_excel_dataframe_passes_header(mock_read: MagicMock, tmp_path) -> N
 
 
 def test_execute_products_tool_list() -> None:
-    with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.json.return_value = {"success": True, "data": [{"id": 1, "name": "漆"}]}
-        mock_client.return_value.get.return_value = resp
+    with patch("app.bootstrap.get_products_service") as mock_svc:
+        mock_svc.return_value.get_products.return_value = {
+            "success": True,
+            "data": [{"id": 1, "name": "漆"}],
+        }
         out = _execute_products_tool({"action": "list", "keyword": "漆"})
     assert out.get("success") is True or "data" in out
 

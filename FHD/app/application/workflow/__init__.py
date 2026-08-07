@@ -3,6 +3,7 @@ from .approval_service import (
     get_approval_service,
     reload_approval_service,
 )
+from .checkpointer import DatabaseWorkflowCheckpointer, WorkflowCheckpointer
 from .engine import WorkflowEngine
 from .planner import LLMWorkflowPlanner
 from .risk_gate import HybridRiskGate, RiskDecision
@@ -21,6 +22,8 @@ from .types import (
 
 __all__ = [
     "WorkflowEngine",
+    "WorkflowCheckpointer",
+    "DatabaseWorkflowCheckpointer",
     "LLMWorkflowPlanner",
     "HybridRiskGate",
     "RiskDecision",

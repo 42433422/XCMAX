@@ -356,27 +356,6 @@ def test_xcmax_require_admin_session_unauthorized(
     assert gate.status_code == 401
 
 
-def test_xcmax_wechat_groups_forbidden(xcmax_client, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        xcmax_routes,
-        "_require_market_admin_session",
-        lambda request: xcmax_routes.JSONResponse({"success": False}, status_code=403),
-    )
-    r = xcmax_client.get("/api/xcmax/admin/wechat/groups")
-    assert r.status_code == 403
-
-
-def test_xcmax_wechat_groups_ok(xcmax_client, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(xcmax_routes, "_require_market_admin_session", lambda request: None)
-    monkeypatch.setattr(
-        "app.services.wechat_group_customer_bridge.list_group_contacts",
-        lambda **kw: [{"id": 1}],
-    )
-    r = xcmax_client.get("/api/xcmax/admin/wechat/groups")
-    assert r.status_code == 200
-    assert r.json()["total"] == 1
-
-
 def test_xcmax_digest_identity_404_fallback(xcmax_client, monkeypatch: pytest.MonkeyPatch) -> None:
     from fastapi.responses import JSONResponse
 

@@ -21,9 +21,6 @@ from app.db.models import (
     ShipmentRecord,
     User,
     UserSession,
-    WechatContact,
-    WechatContactContext,
-    WechatTask,
 )
 
 
@@ -133,48 +130,6 @@ class TestShipmentRecordModel:
         assert shipment.quantity_kg == 50.0
         assert shipment.quantity_tins == 2
         assert shipment.status == "pending"
-
-
-class TestWechatContactModel:
-    """微信联系人模型测试"""
-
-    def test_create_wechat_contact(self, test_session):
-        """测试创建微信联系人"""
-        contact = WechatContact(
-            contact_name="测试联系人", wechat_id="test_wx_001", contact_type="customer", is_active=1
-        )
-        test_session.add(contact)
-        test_session.commit()
-        test_session.refresh(contact)
-
-        assert contact.id is not None
-        assert contact.contact_name == "测试联系人"
-        assert contact.wechat_id == "test_wx_001"
-        assert contact.contact_type == "customer"
-
-
-class TestWechatTaskModel:
-    """微信任务模型测试"""
-
-    def test_create_wechat_task(self, test_session):
-        """测试创建微信任务"""
-        task = WechatTask(
-            username="test_user",
-            display_name="测试用户",
-            message_id="msg_001",
-            msg_timestamp=1234567890,
-            raw_text="测试消息内容",
-            task_type="shipment_order",
-            status="pending",
-        )
-        test_session.add(task)
-        test_session.commit()
-        test_session.refresh(task)
-
-        assert task.id is not None
-        assert task.username == "test_user"
-        assert task.raw_text == "测试消息内容"
-        assert task.status == "pending"
 
 
 class TestUserModel:
@@ -330,40 +285,6 @@ class TestShipmentRecordValidation:
             assert shipment.status == status
 
 
-class TestWechatContactValidation:
-    """微信联系人验证测试"""
-
-    def test_contact_soft_delete(self, test_session):
-        """测试微信联系人软删除"""
-        contact = WechatContact(contact_name="测试联系人", wechat_id="wx_test", is_active=1)
-        test_session.add(contact)
-        test_session.commit()
-
-        contact.is_active = 0
-        test_session.commit()
-        test_session.refresh(contact)
-
-        assert contact.is_active == 0
-
-    def test_contact_context_relationship(self, test_session):
-        """测试联系人上下文关系"""
-        contact = WechatContact(contact_name="测试联系人", wechat_id="wx_001")
-        test_session.add(contact)
-        test_session.commit()
-
-        context = WechatContactContext(
-            contact_id=contact.id,
-            wechat_id=contact.wechat_id,
-            context_json='{"last_message": "hello"}',
-            message_count=1,
-        )
-        test_session.add(context)
-        test_session.commit()
-
-        assert context.contact_id == contact.id
-        assert context.message_count == 1
-
-
 class TestMaterialValidation:
     """原材料验证测试"""
 
@@ -435,16 +356,16 @@ class TestBulkOperations:
         count = test_session.query(Product).count()
         assert count >= 10
 
-    def test_bulk_insert_contacts(self, test_session):
-        """测试批量插入联系人"""
-        contacts = [
-            WechatContact(contact_name=f"联系人_{i}", wechat_id=f"wx_{i}", is_active=1)
+    def test_bulk_insert_users(self, test_session):
+        """测试批量插入用户"""
+        users = [
+            User(username=f"user_{i}", password=f"pwd{i}", role="user", is_active=1)
             for i in range(5)
         ]
-        test_session.bulk_save_objects(contacts)
+        test_session.bulk_save_objects(users)
         test_session.commit()
 
-        count = test_session.query(WechatContact).filter(WechatContact.is_active == 1).count()
+        count = test_session.query(User).filter(User.is_active == 1).count()
         assert count >= 5
 
 

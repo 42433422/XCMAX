@@ -105,33 +105,36 @@
       </div>
     </div>
 
-    <div class="edit-modal" v-if="editingIndex !== null" @click.self="closeEdit">
-      <div class="modal-content">
-        <h3>编辑规则</h3>
-        <div class="form-group">
-          <label>描述</label>
-          <input type="text" v-model="editForm.description" />
-        </div>
-        <div class="form-group">
-          <label>触发方式</label>
-          <select v-model="editForm.trigger">
-            <option value="always">始终审批</option>
-            <option value="conditional">条件审批</option>
-            <option value="never">从不审批</option>
-          </select>
-        </div>
-        <div class="modal-actions">
-          <button class="btn-cancel" @click="closeEdit">取消</button>
-          <button class="btn-save" @click="saveEdit">保存</button>
-        </div>
+    <Modal
+      :model-value="editingIndex !== null"
+      title="编辑规则"
+      max-width="420px"
+      @close="closeEdit"
+    >
+      <div class="form-group">
+        <label>描述</label>
+        <input type="text" v-model="editForm.description" />
       </div>
-    </div>
+      <div class="form-group">
+        <label>触发方式</label>
+        <select v-model="editForm.trigger">
+          <option value="always">始终审批</option>
+          <option value="conditional">条件审批</option>
+          <option value="never">从不审批</option>
+        </select>
+      </div>
+      <template #footer>
+        <button class="btn-cancel" @click="closeEdit">取消</button>
+        <button class="btn-save" @click="saveEdit">保存</button>
+      </template>
+    </Modal>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { appAlert } from '@/utils/appDialog'
+import Modal from '@/components/Modal.vue'
 
 const enabled = ref(true)
 const rules = ref([])
@@ -602,38 +605,6 @@ onMounted(() => {
 .btn-reject {
   background: #f44336;
   color: white;
-}
-
-.edit-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0,0,0,0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  background: white;
-  padding: 25px;
-  border-radius: 8px;
-  width: 400px;
-  max-width: 90%;
-}
-
-.modal-content h3 {
-  margin: 0 0 20px 0;
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
 }
 
 .btn-cancel {

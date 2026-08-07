@@ -1,4 +1,4 @@
-[baseline] 199 known violation(s) suppressed (see arch_fitness_baseline.txt)
+[baseline] 206 known violation(s) suppressed (see arch_fitness_baseline.txt)
 [domain->infrastructure] app/domain/neuro/cognition/llm_port.py:100
 [domain->infrastructure] app/domain/neuro/cognition/llm_port.py:54
 [domain->infrastructure] app/domain/value_objects_industry.py:23
@@ -91,6 +91,7 @@
 [giant-file] app/services/xcmax_sync_service.py
 [giant-file] app/utils/async_tasks.py
 [giant-file] app/utils/decorators.py
+[giant-file] app/utils/excel/excel_template_analyzer.py
 [giant-file] app/utils/excel_template_analyzer.py
 [giant-file] app/utils/print_utils.py
 [giant-file] app/utils/redis_cache.py
@@ -214,3 +215,41 @@
 # 2026-07-25 PR #616: 发货模版解析 / 编号模式服务略超 500，后续拆分
 [giant-file] app/application/shipment_template_resolve.py
 [giant-file] app/services/shipment_number_mode_service.py
+# 2026-08-05 P1-4 双轨治理：存量 *_compat 文件散落各目录，纳入基线（禁止新增，存量待迁 app/legacy/）
+[legacy-boundary] app/mod_sdk/lan_compat.py
+[legacy-boundary] app/mod_sdk/neuro_bus_compat.py
+[legacy-boundary] app/mod_sdk/lan_pages_compat.py
+[legacy-boundary] app/mod_sdk/employee_pack_compat.py
+[legacy-boundary] app/mod_sdk/planner_pages_compat.py
+[legacy-boundary] app/mod_sdk/model_payment_compat.py
+[legacy-boundary] app/mod_sdk/office_employee_pages_compat.py
+[legacy-boundary] app/mod_sdk/approval_pages_compat.py
+[legacy-boundary] app/mod_sdk/model_payment_pages_compat.py
+[legacy-boundary] app/mod_sdk/planner_compat.py
+[legacy-boundary] app/mod_sdk/erp_pages_compat.py
+[legacy-boundary] app/mod_sdk/mod_views_compat.py
+[legacy-boundary] app/mod_sdk/workflow_pages_compat.py
+[legacy-boundary] app/mod_sdk/approval_compat.py
+[legacy-boundary] app/mod_sdk/customer_service_pages_compat.py
+[legacy-boundary] app/mod_sdk/erp_domain_compat.py
+[legacy-boundary] app/fastapi_routes/openapi_route_compat.py
+[legacy-boundary] app/fastapi_routes/taiyangniao_attendance_compat.py
+[legacy-boundary] app/fastapi_routes/document_templates_compat.py
+[legacy-boundary] app/fastapi_routes/xcmax_personnel_compat.py
+[legacy-boundary] app/fastapi_routes/xcagi_compat.py
+[legacy-boundary] app/fastapi_routes/sidebar_capability_compat.py
+[legacy-boundary] app/fastapi_routes/mounts/essential_compat.py
+[legacy-boundary] app/domain/value_objects_compat.py
+[legacy-boundary] app/fastapi_routes/domains/product/compat_routes.py
+[legacy-boundary] app/fastapi_routes/domains/conversation/compat_extra.py
+[legacy-boundary] app/fastapi_routes/domains/conversation/compat_routes.py
+
+[giant-file] app/application/normal_chat_dispatch.py
+[giant-file] app/application/etl/parser_regions.py
+[giant-file] app/application/etl/llm_assist.py
+[giant-file] app/application/etl/service_preview.py
+[giant-file] app/application/etl/shipment_preview_fallback.py
+[legacy-boundary] app/fastapi_routes/shipment_etl_compat.py
+[giant-file] app/application/etl/parser_shipment_history.py
+# 2026-08-07 ERP Odoo18 升级：workflow clarification_node 571 行略超 500，后续拆分
+[giant-file] app/application/workflow/clarification_node.py

@@ -3,7 +3,6 @@
 </template>
 
 <script setup lang="ts">
-import { asRecord, asArray, asString } from '@/utils/typeGuards'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { renderMarkdown } from '@/utils/lightMarkdown'
 import { sanitizeMermaidSource } from '@/utils/mermaidSanitize'

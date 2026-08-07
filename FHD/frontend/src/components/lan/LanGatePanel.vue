@@ -152,7 +152,7 @@ import { useRouter } from 'vue-router';
 import { lanGateApi, type AccessRequestEntry, type LanHostInfo } from '@/api/lanGate';
 import { useLanGate } from '@/composables/useLanGate';
 import { useModsStore } from '@/stores/mods';
-import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
+import { asRecord, asString } from '@/utils/typeGuards'
 import { ApiError } from '@/api/core'
 
 function errorDetail(e: unknown, fallback = ''): string {

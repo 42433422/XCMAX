@@ -31,10 +31,8 @@ def test_session_candidates_prefer_host_cookie_over_market_bearer() -> None:
         authorization="Bearer market-access-token",
     )
 
-    assert _request_session_candidates(request) == [
-        "local-host-session",
-        "market-access-token",
-    ]
+    # 市场 Bearer 不再当作 host session 候选（会盖掉本地 session 租户读数）。
+    assert _request_session_candidates(request) == ["local-host-session"]
 
 
 def test_industry_uses_cookie_session_workspace_when_bearer_is_market_token() -> None:

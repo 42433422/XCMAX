@@ -277,6 +277,9 @@ def unified_chat_single_payload(
 
     from app.application.normal_chat_dispatch import (
         build_product_query_response_dict,
+        build_replenishment_suggest_response_dict,
+        build_reports_query_response_dict,
+        build_sales_query_response_dict,
         route_normal_mode_message,
     )
 
@@ -320,17 +323,49 @@ def unified_chat_single_payload(
         if body:
             return body
 
-    return {
-        "success": True,
-        "message": "处理完成",
-        "response": (
-            "普通版里这是两套独立能力，请分开描述："
-            "① 发货单/开单：用编号或口语描述订单（说法里常带「发货单、开单、打印」等）。"
-            "② 产品库查询：查型号、价格（例如「查询七彩乐园的9803」），不会生成发货单。"
-        ),
-        "data": {
-            "text": "普通版：发货单开单 与 产品库查询 为两套独立能力，请分开描述。",
-            "action": "followup",
-            "data": {"mode": "normal_slot_dispatch"},
-        },
-    }
+    # ERP 业务意图（吸收 Odoo 18）：销售/报表/补货预警走确定性工具，不落入 workflow 计划器
+    if route_intent in ("sales_query", "reports_query", "replenishment_suggest"):
+        if route_intent == "sales_query":
+            body = build_sales_query_response_dict(route_result)
+        elif route_intent == "reports_query":
+            body = build_reports_query_response_dict(route_result, message=text)
+        else:
+            body = build_replenishment_suggest_response_dict(route_result)
+        if body:
+            return body
+
+    if route_intent == "delete_entity":
+        slots = route_result.get("slots") or {}
+        keyword = str(slots.get("keyword") or "").strip()
+        if not keyword:
+            return {
+                "success": True,
+                "message": "处理完成",
+                "response": "你想删除哪条记录？请告诉我名称，比如「删除侯雪梅」「删除七彩乐园」。",
+                "data": {
+                    "text": "请告诉我要删除的记录名称。",
+                    "action": "followup",
+                    "data": {"mode": "delete_await_name"},
+                },
+            }
+        from app.application import get_ai_chat_app_service
+
+        ai_chat_service = get_ai_chat_app_service()
+        return ai_chat_service.process_chat(
+            user_id=_resolve_mode_scoped_user_id(requested_user_id, remote_addr, "normal"),
+            message=message,
+            context=context,
+            source="pro",
+            file_context={},
+        )
+
+    from app.application import get_ai_chat_app_service
+
+    ai_chat_service = get_ai_chat_app_service()
+    return ai_chat_service.process_chat(
+        user_id=_resolve_mode_scoped_user_id(requested_user_id, remote_addr, "normal"),
+        message=message,
+        context=context,
+        source="pro",
+        file_context={},
+    )

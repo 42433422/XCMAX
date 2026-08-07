@@ -141,18 +141,6 @@ def test_invalidate_customer_clears_only_customer():
     assert c._auth_service is not None  # noqa: SLF001  其他属性不受影响
 
 
-def test_invalidate_wechat_clears_both_service_and_store():
-    """杀死 invalidate 只清除一个属性的变异。"""
-    c = ServiceContainer()
-    svc = object()
-    store = object()
-    c._wechat_contact_application_service = svc  # noqa: SLF001
-    c._wechat_contact_store = store  # noqa: SLF001
-    c.invalidate_wechat_contact_application_service()
-    assert c._wechat_contact_application_service is None  # noqa: SLF001
-    assert c._wechat_contact_store is None  # noqa: SLF001
-
-
 def test_invalidate_shipment_clears_both_core_and_facade():
     """杀死 invalidate_shipment_wiring 只清除一个的变异。"""
     c = ServiceContainer()
@@ -263,8 +251,6 @@ def test_slots_count_matches_expected():
         "_products_service",
         "_extract_log_service",
         "_product_import_service",
-        "_wechat_contact_store",
-        "_wechat_contact_application_service",
         "_shipment_application_service_core",
         "_shipment_event_primary_facade",
     }

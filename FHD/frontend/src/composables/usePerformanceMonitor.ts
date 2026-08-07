@@ -1,6 +1,4 @@
 import { ref, onMounted, onUnmounted } from 'vue';
-import { asRecord, asArray, asString } from '@/utils/typeGuards'
-
 interface PerformanceUpdateEvent {
   type: string;
   value?: unknown;

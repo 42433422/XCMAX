@@ -487,6 +487,8 @@ async def _proxy_json(
     authorization: str = "",
     extra_headers: dict[str, str] | None = None,
     return_error_payload: bool = False,
+    timeout: float | None = None,
+    retries: int | None = None,
 ):
     url = f"{_market_base_url()}{path}"
     headers: dict[str, str] = {"Accept": "application/json"}
@@ -496,8 +498,8 @@ async def _proxy_json(
         for key, val in extra_headers.items():
             if key and val:
                 headers[str(key)] = str(val)
-    timeout = _market_http_timeout()
-    retries = _market_http_retries()
+    timeout = _market_http_timeout() if timeout is None else float(timeout)
+    retries = _market_http_retries() if retries is None else max(0, int(retries))
     last_exc: Exception | None = None
     mutating = str(method).upper() in {"POST", "PUT", "PATCH", "DELETE"}
     for attempt in range(retries):
@@ -843,6 +845,62 @@ async def resolve_valid_market_access_token(session_id: str) -> str:
     # expired access token; otherwise a stale token is cached forever and all
     # downstream admin evidence calls fail with 401 despite a valid persisted
     # refresh token.
+    if isinstance(me, dict) and (me.get("ok") is False or me.get("success") is False):
+        refreshed = await refresh_session_market_token(sid)
+        return _normalize_bearer_token(refreshed)
+    return tok
+
+
+def _market_validate_fast_timeout() -> float:
+    """会话校验专用快速超时：宁可 fail-open 也不阻塞导航。"""
+    try:
+        return max(0.5, float(os.environ.get("XCAGI_MARKET_VALIDATE_TIMEOUT", "2")))
+    except ValueError:
+        return 2.0
+
+
+async def resolve_valid_market_access_token_fast(session_id: str) -> str:
+    """返回市场 token，但绝不因市场慢而阻塞调用方。
+
+    供路由守卫/会话校验等对延迟敏感的路径使用：用短超时 + 零重试探测
+    /api/auth/me，任何瞬时失败（超时/连接不上/5xx）都直接返回本地 token
+    （fail-open），因为本地会话本身已有效。仅当市场明确返回 401 判定
+    token 过期时才尝试刷新。
+    """
+    from app.application.surface_audit_demo_account import is_local_demo_market_token
+
+    sid = (session_id or "").strip()
+    user_id = _user_id_from_session(sid)
+    tok = _normalize_bearer_token(session_market_token(sid))
+    if not tok and user_id is not None:
+        tok = _normalize_bearer_token(latest_session_market_token(user_id=user_id))
+    if not tok:
+        return ""
+    if is_local_demo_market_token(tok):
+        return tok
+    try:
+        me = await _proxy_json(
+            "GET",
+            "/api/auth/me",
+            authorization=f"Bearer {tok}",
+            return_error_payload=True,
+            timeout=_market_validate_fast_timeout(),
+            retries=0,
+        )
+    except RECOVERABLE_ERRORS:
+        logger.warning(
+            "market token fast-validate transport error (session_id=%s), fail-open to local token",
+            sid[:8] if sid else "",
+        )
+        return tok
+    if isinstance(me, JSONResponse):
+        # 连接失败/超时：fail-open，返回本地 token，不刷新（避免二次慢请求）。
+        return tok
+    if isinstance(me, dict) and me.get("__proxy_error__"):
+        if _proxy_error_http_status(me) == 401:
+            refreshed = await refresh_session_market_token(sid)
+            return _normalize_bearer_token(refreshed)
+        return tok
     if isinstance(me, dict) and (me.get("ok") is False or me.get("success") is False):
         refreshed = await refresh_session_market_token(sid)
         return _normalize_bearer_token(refreshed)

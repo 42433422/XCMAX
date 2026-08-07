@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import app.utils.rate_limiter as rl
+import app.utils.resilience.rate_limiter as rl
 
 
 @pytest.fixture(autouse=True)

@@ -205,6 +205,7 @@ export function useChatMessages(sessionId: Ref<string>) {
   function hasRenderableSidecar(row: Record<string, unknown>): boolean {
     if (asBoolean(row.streamingShell)) return true
     if (asString(row.toolProgressLabel).trim()) return true
+    if (asArray(row.executionProgress).length) return true
     if (asString(row.downloadUrl).trim()) return true
     if (asString(row.shipmentDownloadUrl).trim()) return true
     if (asString(row.thinkingSteps).trim()) return true
@@ -221,6 +222,25 @@ export function useChatMessages(sessionId: Ref<string>) {
 
     const toolProgressLabel = asString(row.toolProgressLabel).trim()
     if (toolProgressLabel) extras.toolProgressLabel = toolProgressLabel
+
+    const executionProgress = asArray(row.executionProgress)
+      .map((raw) => {
+        const item = asRecord(raw)
+        const label = asString(item.label).trim()
+        if (!label) return null
+        const rawStatus = asString(item.status).trim()
+        const allowedStatuses = new Set(['running', 'success', 'retrying', 'waiting', 'failed', 'cancelled'])
+        return {
+          phase: asString(item.phase).trim() || 'working',
+          label,
+          status: allowedStatuses.has(rawStatus) ? rawStatus : 'running',
+          at: asString(item.at).trim() || new Date().toISOString(),
+        }
+      })
+      .filter(Boolean) as NonNullable<ChatMessageExtras['executionProgress']>
+    if (executionProgress.length) {
+      extras.executionProgress = executionProgress as NonNullable<ChatMessageExtras['executionProgress']>
+    }
 
     const downloadUrl = asString(row.downloadUrl).trim()
     if (downloadUrl) extras.downloadUrl = downloadUrl

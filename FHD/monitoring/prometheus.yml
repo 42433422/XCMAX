@@ -1,0 +1,23 @@
+# Prometheus 配置 — FHD 主 compose 集成版
+# target 使用 compose 服务名 backend（容器内 /metrics 监听 5000）。
+# 指标由 app/utils/metrics.py 通过 /metrics 端点暴露（register_prometheus_metrics）。
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'xcagi-fhd'
+
+rule_files:
+  - "alerts.yml"
+
+scrape_configs:
+  - job_name: 'fhd-backend'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['backend:5000']
+    scrape_interval: 10s
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

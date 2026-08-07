@@ -653,27 +653,6 @@ def dispatch_legacy_tool_payload(
             return _j({"success": True, "redirect": "/console?view=ocr"})
         return _j({"success": True, "message": "图片 OCR"})
 
-    elif tool_id == "wechat":
-        from app.application import get_wechat_contact_app_service
-
-        svc = get_wechat_contact_app_service()
-        if action == "view":
-            return _j({"success": True, "redirect": "/console?view=wechat-contacts"})
-        if action in ("list", "query"):
-            contacts = svc.get_contacts(
-                contact_type=str(params.get("type") or "all"),
-                keyword=str(params.get("keyword") or "").strip() or None,
-                limit=int(params.get("limit") or 100),
-            )
-            return _j({"success": True, "data": contacts, "total": len(contacts)}, 200)
-        if action in ("refresh_contact_cache", "refresh_messages_cache"):
-            from app.services.wechat_contact_cache_import import (
-                ensure_decrypted_wechat_dbs as _ensure_decrypted_db,
-            )
-
-            return _j(_ensure_decrypted_db(), 200)
-        return _j({"success": True, "message": "微信任务"})
-
     elif tool_id == "excel_decompose":
         if action == "view":
             return _j({"success": True, "redirect": "/console?view=excel"})

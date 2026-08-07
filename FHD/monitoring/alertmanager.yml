@@ -1,0 +1,43 @@
+# Alertmanager 配置 — FHD 主 compose
+# staging 无 SMTP，默认 receiver 仅记录；生产可通过环境变量 SMTP 配置启用邮件。
+
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ['alertname']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'default-receiver'
+  routes:
+    - match:
+        severity: critical
+      receiver: 'critical-receiver'
+    - match:
+        severity: warning
+      receiver: 'warning-receiver'
+
+receivers:
+  - name: 'default-receiver'
+    # 占位 webhook；生产环境请替换为真实通知渠道（企业微信/钉钉/Slack/邮件）
+    webhook_configs:
+      - url: 'http://localhost:9000/alert'
+        send_resolved: true
+
+  - name: 'critical-receiver'
+    webhook_configs:
+      - url: 'http://localhost:9000/alert'
+        send_resolved: true
+
+  - name: 'warning-receiver'
+    webhook_configs:
+      - url: 'http://localhost:9000/alert'
+        send_resolved: true
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname']
