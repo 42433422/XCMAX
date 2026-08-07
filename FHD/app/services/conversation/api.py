@@ -155,6 +155,36 @@ class ApiMixin(NeuroEventPublisherMixin):
             },
         }
 
+    def _ensure_modstore_from_session(self) -> None:
+        """按当前 session 自动补齐修茈市场适配器（登录即自动可用）。
+
+        对话服务是启动时创建的单例，其 ``modstore_adapter`` 仅按环境变量初始化
+        （通常无 Token，导致 LLM 路由为空、智能对话不可用）。这里在每次 LLM
+        调用前，若尚未配置则从当前登录 session 获取市场 Token 并重建适配器。
+        """
+        try:
+            if getattr(self, "modstore_adapter", None) is not None and getattr(
+                self.modstore_adapter, "auth_token", ""
+            ):
+                return
+            session_id = getattr(self, "_active_session_id", None) or ""
+            if not session_id:
+                return
+            from app.services.conversation.modstore_adapter import (
+                ModstorePlatformAdapter,
+            )
+
+            adapter = ModstorePlatformAdapter.from_session(session_id=session_id)
+            if adapter is not None and getattr(adapter, "auth_token", ""):
+                self.modstore_adapter = adapter
+                logger.info(
+                    "已从 session 自动配置修茈市场平台 Token（%s chars, url=%s）",
+                    len(adapter.auth_token),
+                    adapter.platform_url,
+                )
+        except RECOVERABLE_ERRORS as e:
+            logger.warning("从 session 配置市场适配器失败: %s", e)
+
     async def call_llm_api(
         self,
         messages: list[dict[str, str]],
@@ -173,6 +203,11 @@ class ApiMixin(NeuroEventPublisherMixin):
         t0 = time.perf_counter()
 
         try:
+            # 登录即自动可用：对话服务是启动时创建的单例，其 modstore 适配器按环境
+            # 变量初始化（通常无 Token）。这里在每次调用前按当前 session 补齐，使
+            # 登录市场后绑定的 Token 自动生效，无需手动配置 LLM API Key。
+            self._ensure_modstore_from_session()
+
             from app.infrastructure.llm.providers.registry import get_active_provider
 
             provider = get_active_provider(conversation_service=self)

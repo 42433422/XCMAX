@@ -326,6 +326,13 @@ class AIConversationService(
         context: dict[str, Any] | None = None,
         source: str | None = None,
     ) -> dict[str, Any]:
+        # 记录当前会话 ID：桌面/网页登录市场后，Token 绑定到 FHD session，
+        # 供 call_llm_api 按会话自动补齐 modstore 适配器（登录即自动可用）。
+        self._active_session_id = str(
+            (context or {}).get("session_id")
+            or (context or {}).get("conversation_id")
+            or ""
+        ).strip() or None
         try:
             conv_context = await self._get_or_create_context_async(user_id, context, message)
 
