@@ -1997,21 +1997,7 @@ class AIChatApplicationService(
         try:
             from app.application.facades.tools_facade import execute_registered_workflow_tool
 
-            result = execute_registered_workflow_tool(tool_id=tool_id, action=action, params=params)
-            if isinstance(result, dict):
-                out = result.get("output")
-                row_count = None
-                if isinstance(out, dict):
-                    row_count = out.get("row_count") or out.get("count") or out.get("total")
-                logger.info(
-                    "TOOL_EXEC tool=%s action=%s success=%s message=%s rows=%s",
-                    tool_id,
-                    action,
-                    result.get("success"),
-                    str(result.get("message") or "")[:200],
-                    row_count,
-                )
-            return result
+            return execute_registered_workflow_tool(tool_id=tool_id, action=action, params=params)
         except RECOVERABLE_ERRORS as err:
             logger.error(
                 "workflow 工具调度失败 tool=%s action=%s err=%s",
