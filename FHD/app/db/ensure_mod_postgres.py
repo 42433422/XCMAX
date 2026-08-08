@@ -44,6 +44,28 @@ def _skip_mod_db_create() -> bool:
     )
 
 
+def _clone_db_has_schema(mod_url: str, marker_table: str = "products") -> bool:
+    """克隆目标库是否已含基库业务表（缺则视为空库/失败克隆，可安全重建）。"""
+    try:
+        from sqlalchemy import create_engine, text
+
+        eng = create_engine(mod_url, isolation_level="AUTOCOMMIT", future=True)
+        try:
+            with eng.connect() as c:
+                row = c.execute(
+                    text(
+                        "SELECT 1 FROM information_schema.tables "
+                        "WHERE table_schema = 'public' AND table_name = :t"
+                    ),
+                    {"t": marker_table},
+                ).fetchone()
+                return bool(row)
+        finally:
+            eng.dispose()
+    except RECOVERABLE_ERRORS:
+        return False
+
+
 def ensure_postgres_per_mod_databases(
     *,
     mod_ids: list[str] | None = None,
@@ -98,6 +120,18 @@ def ensure_postgres_per_mod_databases(
                     continue
                 dbn = f"{base_db}__{suf}"
                 if boot._db_exists(conn, dbn):
+                    # 克隆目标库存在但缺基库业务表 => 空库/失败克隆，自基库重建以修复业务工具无数据
+                    if mid in clone_mod_ids and not _clone_db_has_schema(
+                        boot._url_for_database(base_u, dbn)
+                    ):
+                        logger.warning(
+                            "Recreating empty clone mod database from base: %s (mod=%s)",
+                            dbn,
+                            mid,
+                        )
+                        boot._drop_database(conn, dbn)
+                        boot._create_db_from_template(conn, dbn, base_db, owner)
+                        created_dbnames.append(dbn)
                     continue
                 if mid in clone_mod_ids:
                     logger.info("Cloning mod database from base: %s (mod=%s)", dbn, mid)

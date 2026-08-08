@@ -25,6 +25,7 @@ Mod 发现顺序：
 备份建议（先跑一次）：
     docker exec <pg_container> pg_dump -U xcagi xcagi > backup_xcagi.sql
 """
+
 from __future__ import annotations
 
 import argparse
@@ -47,9 +48,12 @@ except ImportError:
 
 PRIMARY_CLONE_MOD_ID_DEFAULT = "taiyangniao-pro"
 # 需完整 ERP/产品域表结构的 Mod：从基库 TEMPLATE 克隆（空库 + alembic 无法补齐 products 等历史表）
+# xcagi-planner-bridge 是对话编排外观（facade），作为 active mod 时工具会路由到它的分库；
+# 空库缺少 customers/products 等业务表导致业务工具「执行了但无数据/报错」，故须克隆基库 schema。
 DEFAULT_CLONE_FROM_BASE_MOD_IDS = (
     PRIMARY_CLONE_MOD_ID_DEFAULT,
     "xcagi-erp-domain-bridge",
+    "xcagi-planner-bridge",
 )
 
 
