@@ -25,7 +25,6 @@ const ENTERPRISE_GENERIC_CORE_KEYS = new Set([
   'persy-knowledge',
   'employee-workflow',
   'workflow-employee-space',
-  'workflow-visualization',
   'mod-store',
   'settings',
   'desktop-runtime',
