@@ -23,7 +23,6 @@ export function pinMenuKeyFirst<T extends { key: string }>(
 
 export const EMPLOYEE_WORKFLOW_MENU_CHILDREN: CoreMenuCatalogItem[] = [
   { key: 'workflow-employee-space', name: '员工空间', iconClass: 'fa-th-large', description: '看工位实况与员工上岗状态' },
-  { key: 'workflow-visualization', name: '流程可视化', iconClass: 'fa-share-alt', description: '看任务流程图与执行进度' },
 ]
 
 /** 管理端「员工工作台」额外子项（企业端不可见） */
@@ -36,7 +35,7 @@ export const EMPLOYEE_WORKFLOW_MENU_ITEM: CoreMenuCatalogItem = {
   key: 'employee-workflow',
   name: '员工工作台',
   iconClass: 'fa-users',
-  description: '看员工空间与流程可视化',
+  description: '看员工空间',
   children: EMPLOYEE_WORKFLOW_MENU_CHILDREN,
 }
 
