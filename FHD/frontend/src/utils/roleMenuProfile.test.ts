@@ -13,7 +13,8 @@ describe('roleMenuProfile', () => {
     expect(canShowCoreMenuKey(profile, 'workflow-employee-space')).toBe(true)
     expect(canShowCoreMenuKey(profile, 'other-tools')).toBe(false)
     // 2026-08 菜单修复：企业用户即使无行业 Mod，也应能看到「智能体任务编排」和「数据对接中心」
-    expect(canShowCoreMenuKey(profile, 'workflow-visualization')).toBe(true)
+    // 「流程可视化」非企业端功能，企业用户侧边栏隐藏（管理端运维壳保留）
+    expect(canShowCoreMenuKey(profile, 'workflow-visualization')).toBe(false)
     expect(canShowCoreMenuKey(profile, 'business-docking')).toBe(true)
     expect(canShowCoreMenuKey(profile, 'products')).toBe(false)
     expect(canShowCoreMenuKey(profile, 'orders')).toBe(false)
