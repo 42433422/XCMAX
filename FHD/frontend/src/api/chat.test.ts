@@ -26,6 +26,7 @@ beforeEach(() => {
   apiMock.post.mockReset().mockResolvedValue({ success: true })
   sse.readPlannerSseResponse.mockClear()
   globalThis.fetch = vi.fn()
+  document.cookie = 'csrf_token=desktop-csrf'
 })
 
 describe('chatApi thin wrappers', () => {
@@ -52,6 +53,7 @@ describe('chatApi thin wrappers', () => {
     await chatApi.sendChat({ message: 'hi' } as never)
     const [, , options] = apiMock.post.mock.calls[0]
     expect((options as { headers: Record<string, string> }).headers.Authorization).toContain('Bearer')
+    expect((options as { headers: Record<string, string> }).headers['X-CSRF-Token']).toBe('desktop-csrf')
     window.localStorage.removeItem('xcagi_market_access_token')
   })
 })
@@ -93,8 +95,23 @@ describe('chatApi stream methods', () => {
     await chatApi.sendChatStream({ message: 'hi' } as never)
     expect(globalThis.fetch).toHaveBeenCalledWith(
       'http://x/api/ai/chat/stream',
-      expect.objectContaining({ method: 'POST' }),
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'X-CSRF-Token': 'desktop-csrf' }),
+      }),
     )
+  })
+
+  it('keeps csrf header when market bearer is present', async () => {
+    window.localStorage.setItem('xcagi_market_access_token', 'market-token')
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ ok: true } as Response)
+    await chatApi.sendChatStream({ message: 'hi' } as never)
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(init.headers).toMatchObject({
+      Authorization: 'Bearer market-token',
+      'X-CSRF-Token': 'desktop-csrf',
+    })
+    window.localStorage.removeItem('xcagi_market_access_token')
   })
 
   it('consumeChatStream reads sse when ok', async () => {
