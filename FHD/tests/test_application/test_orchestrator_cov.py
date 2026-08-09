@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -768,3 +769,28 @@ def test_attach_artifacts_from_payload_empty_artifact_type_skipped():
 
     assert len(run.artifacts) == 1
     assert run.artifacts[0].artifact_type == "document"
+
+
+def test_dataset_sqlite_failure_does_not_abort_artifact_attachment():
+    """Dataset indexing is best effort when its SQLite store is unavailable."""
+    orch, _, _ = _make_orchestrator()
+    run = _make_run()
+    payload = {
+        "artifacts": {
+            "artifact_type": "excel_records",
+            "name": "import-preview",
+            "metadata": {"text": "one row"},
+        }
+    }
+    service = MagicMock()
+    service.ingest_document.side_effect = sqlite3.OperationalError("database unavailable")
+
+    with patch(
+        "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
+        return_value=service,
+    ):
+        orch._attach_artifacts_from_payload(run, payload, source="test")
+
+    assert len(run.artifacts) == 1
+    assert run.artifacts[0].metadata["dataset_ingest"]["success"] is False
+    assert run.events[-1].event_type == "dataset.ingest_failed"
