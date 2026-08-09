@@ -19,6 +19,7 @@ export interface ChatApprovalCard {
   approval_required?: boolean
   approval_nodes?: Array<{ node_id?: string; tool_id?: string; action?: string }>
   approval_request_ids?: string[]
+  approval_path?: string
   todo?: string[]
   reason?: string
   confirm_mode?: 'interactive' | 'approval' | string

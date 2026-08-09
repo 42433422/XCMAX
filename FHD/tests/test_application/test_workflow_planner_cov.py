@@ -257,10 +257,12 @@ class TestExtractBusinessDbWriteNode:
         result = _extract_business_db_write_node("产品写入数据库")
         assert result is None
 
-    def test_materials_entity_returns_none(self) -> None:
-        # materials entity has no write handler → returns None
+    def test_materials_entity_returns_create_node(self) -> None:
         result = _extract_business_db_write_node("原材料钢板入库数据库写入")
-        assert result is None
+        assert result is not None
+        assert result.tool_id == "business_db"
+        assert result.params["entity"] == "materials"
+        assert result.params["operation"] == "create"
 
     def test_model_number_extracted(self) -> None:
         node = _extract_business_db_write_node(

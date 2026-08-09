@@ -18,6 +18,7 @@ AI 聊天应用服务
 """
 
 import asyncio
+import copy
 import json
 import logging
 import re
@@ -157,7 +158,7 @@ class AIChatApplicationService(
         runtime_ctx: dict[str, Any] = {"user_id": user_id, "message": message}
         if isinstance(context, dict):
             # 会话级标识透传，供计划持久化（跨会话续跑）与记忆落盘使用。
-            for key in ("session_id", "conversation_id"):
+            for key in ("session_id", "conversation_id", "local_user_id", "actor_id"):
                 if key in context and context[key]:
                     runtime_ctx[key] = str(context[key]).strip()
             for key in ("ui_surface", "intent_channel", "tool_execution_profile"):
@@ -1307,31 +1308,103 @@ class AIChatApplicationService(
                 approval_nodes = pending.get("approval_nodes", [])
 
                 if approval_required and approval_nodes:
-                    for node_info in approval_nodes:
-                        node = None
-                        for n in plan.nodes:
-                            if n.node_id == node_info.get("node_id"):
-                                node = n
-                                break
-                        if node:
-                            self.approval_service.create_approval_request(
-                                plan_id=plan.plan_id,
-                                node=node,
-                                runtime_context=runtime_ctx,
-                                plan=plan,
-                            )
+                    approval_request_ids: list[str] = []
+                    approval_requests: list[dict[str, Any]] = []
+                    try:
+                        from app.application.agent_orchestrator import AgentOrchestrator
+                        from app.application.workflow.types import PlanGraph
 
+                        for node_info in approval_nodes:
+                            node = None
+                            for n in plan.nodes:
+                                if n.node_id == node_info.get("node_id"):
+                                    node = n
+                                    break
+                            if node:
+                                approved_node = copy.deepcopy(node)
+                                approved_node.depends_on = []
+                                approved_node.next = None
+                                approved_node.branches = []
+                                approved_plan = PlanGraph(
+                                    plan_id=f"{plan.plan_id}:{node.node_id}",
+                                    intent=plan.intent,
+                                    todo_steps=[
+                                        node.description or f"{node.tool_id}.{node.action}"
+                                    ],
+                                    nodes=[approved_node],
+                                    risk_level=node.risk,
+                                    metadata=dict(plan.metadata or {}),
+                                )
+                                agent_run = AgentOrchestrator().start_run_from_plan(
+                                    user_id=user_id,
+                                    message=str(runtime_ctx.get("message") or message),
+                                    plan=approved_plan,
+                                    runtime_context=runtime_ctx,
+                                    auto_execute=True,
+                                )
+                                if agent_run.status != "waiting_user":
+                                    raise RuntimeError(
+                                        f"审批节点未进入安全等待态：{node.node_id} "
+                                        f"({agent_run.status})"
+                                    )
+                                request = self.approval_service.create_approval_request(
+                                    plan_id=plan.plan_id,
+                                    node=node,
+                                    runtime_context=runtime_ctx,
+                                    plan=approved_plan,
+                                    require_persistence=True,
+                                )
+                                request_id = str(request.request_id or "").strip()
+                                if not request_id:
+                                    raise RuntimeError("审批请求缺少请求号")
+                                self.approval_service.attach_pending_agent_run(
+                                    request_id,
+                                    agent_run_id=agent_run.run_id,
+                                    approved_step_id=approved_node.node_id,
+                                )
+                                approval_request_ids.append(request_id)
+                                metadata = self.approval_service.get_request_metadata(
+                                    request_id
+                                ) or {"request_no": request_id}
+                                metadata["agent_run_id"] = agent_run.run_id
+                                approval_requests.append(metadata)
+                    except RuntimeError as exc:
+                        self._pending_workflows.pop(user_id, None)
+                        return {
+                            "success": False,
+                            "message": "审批请求创建失败",
+                            "response": f"审批请求创建失败，数据库未写入：{exc}",
+                            "data": {
+                                "text": f"审批请求创建失败，数据库未写入：{exc}",
+                                "action": "approval_failed",
+                                "data": {"plan_id": plan.plan_id},
+                            },
+                        }
+                    self._pending_workflows.pop(user_id, None)
+                    approval_path = str(
+                        (approval_requests[0] if approval_requests else {}).get("approval_path")
+                        or "/mod/xcagi-approval-bridge/approval-hub/workspace"
+                    )
                     approval_inner = {
                         "plan_id": plan.plan_id,
                         "approval_required": True,
                         "approval_nodes": approval_nodes,
+                        "approval_request_ids": approval_request_ids,
+                        "approval_requests": approval_requests,
+                        "approval_path": approval_path,
                     }
                     return {
                         "success": True,
                         "message": "处理完成",
-                        "response": "已提交审批请求，请等待审批完成后继续。",
+                        "response": (
+                            "已提交审批请求："
+                            f"{', '.join(approval_request_ids)}。请前往审批工作台逐笔处理。"
+                        ),
                         "data": {
-                            "text": "已提交审批请求，请等待审批完成后继续。",
+                            "text": (
+                                "已提交审批请求："
+                                f"{', '.join(approval_request_ids)}。请前往审批工作台逐笔处理。"
+                            ),
                             "action": "approval_pending",
                             "data": _enrich_confirmation_inner(
                                 approval_inner, action="approval_pending"
@@ -1420,9 +1493,43 @@ class AIChatApplicationService(
         from app.application.facades.tools_facade import get_workflow_tool_registry
 
         tool_registry = get_workflow_tool_registry()
+        planner_message = message
+        if "刚才" in str(message or "") and any(
+            token in str(message or "")
+            for token in ("修改", "更新", "改为", "改成", "删除", "移除")
+        ):
+            from app.services.tools_workflow_registered import get_recent_business_db_target
+
+            recent_target = get_recent_business_db_target(user_id)
+            if recent_target is None:
+                return {
+                    "success": True,
+                    "message": "需要澄清",
+                    "response": "当前会话没有可安全引用的上一条数据库记录，请提供实体名称和唯一 ID。",
+                    "data": {
+                        "text": "当前会话没有可安全引用的上一条数据库记录，请提供实体名称和唯一 ID。",
+                        "action": "clarification_required",
+                        "data": {
+                            "requires_confirmation": True,
+                            "reason": "missing_recent_database_target",
+                            "field": "id",
+                        },
+                    },
+                }
+            entity_labels = {
+                "customers": "客户",
+                "products": "产品",
+                "materials": "原材料",
+                "shipment_records": "发货记录",
+            }
+            entity = str(recent_target.get("entity") or "")
+            planner_message = (
+                f"{message}；数据库{entity_labels.get(entity, entity)} "
+                f"ID: {int(recent_target['id'])}"
+            )
         plan = self.workflow_planner.plan(
             user_id=user_id,
-            message=message,
+            message=planner_message,
             tool_registry=tool_registry,
             context=context,
         )
@@ -2255,11 +2362,43 @@ class AIChatApplicationService(
 
         candidates = item.get("candidates") or []
         confirmed = resolve_confirmed_target(text, candidates)
+        if confirmed is None and target.tool_id == "business_db" and not candidates:
+            from app.services.tools_workflow_registered import (
+                prepare_business_db_write_target,
+            )
+
+            entity = str(target.params.get("entity") or "")
+            selector: dict[str, Any]
+            if text.isdigit():
+                selector = {"id": int(text)}
+            else:
+                natural_fields = {
+                    "customers": "customer_name",
+                    "products": "product_name",
+                    "materials": "material_name",
+                }
+                natural_field = natural_fields.get(entity)
+                selector = {natural_field: text} if natural_field else {}
+            payload = dict(target.params.get("payload") or {})
+            payload["selector"] = selector
+            resolved = prepare_business_db_write_target(
+                entity,
+                str(target.params.get("operation") or ""),
+                payload,
+            )
+            if resolved.get("success"):
+                target.params["payload"] = resolved["payload"]
+                confirmed = {"id": int(resolved["payload"]["id"])}
         if confirmed is None:
             return None  # 无法唯一确定目标，保留 pending 继续追问
 
         # 用确认答案丰富目标节点参数，再经条件边路由回原操作节点继续执行。
-        target.params.update(confirmed)
+        if target.tool_id == "business_db":
+            payload = dict(target.params.get("payload") or {})
+            payload["id"] = int(confirmed["id"])
+            target.params["payload"] = payload
+        else:
+            target.params.update(confirmed)
         target.params.pop("candidates", None)
         target.params.pop("_candidates", None)
         runtime_ctx["_clarify_answers"] = {clarify_node_id: {"confirmed": True, **confirmed}}

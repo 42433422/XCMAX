@@ -33,6 +33,12 @@ _DB_WRITE_KEYWORDS = frozenset(
         "添加到数据库",
         "保存到数据库",
         "入库",
+        "修改",
+        "更新",
+        "改为",
+        "改成",
+        "删除",
+        "移除",
     }
 )
 
@@ -49,8 +55,14 @@ def _clean_db_slot_value(value: str) -> str:
         "数据库",
     ):
         text = text.replace(token, "")
-    text = re.sub(r"^(新增|添加|创建|写入|保存|客户|单位|购买单位|产品|商品)\s*", "", text)
-    text = re.sub(r"\s*(客户|单位|购买单位|产品|商品)$", "", text)
+    if text in {"原材料", "物料"}:
+        return text
+    text = re.sub(
+        r"^(新增|添加|创建|写入|保存|修改|更新|删除|移除|客户|单位|购买单位|产品|商品|原材料|物料|发货单)\s*",
+        "",
+        text,
+    )
+    text = re.sub(r"\s*(客户|单位|购买单位|产品|商品|原材料|物料|发货单)$", "", text)
     return text.strip(" \t\r\n，,。；;：:")
 
 
@@ -69,7 +81,7 @@ def _extract_named_slot(message: str, patterns: tuple[str, ...]) -> str:
 
 def _looks_like_business_db_write(message: str, lower: str) -> bool:
     if not any(k in message for k in _DB_WRITE_KEYWORDS) and not any(
-        k in lower for k in ("add", "create", "insert", "upsert")
+        k in lower for k in ("add", "create", "insert", "upsert", "update", "delete", "remove")
     ):
         return False
     return (
@@ -80,19 +92,153 @@ def _looks_like_business_db_write(message: str, lower: str) -> bool:
 
 
 def _infer_business_db_entity(message: str) -> str:
+    if any(k in message for k in ("出货", "发货", "发货单")):
+        return "shipment_records"
+    if any(k in message for k in ("原材料", "物料")):
+        return "materials"
     if any(k in message for k in ("产品", "商品")):
         return "products"
     if any(k in message for k in ("客户", "单位", "购买单位")):
         return "customers"
-    if any(k in message for k in ("原材料", "物料")):
-        return "materials"
-    if any(k in message for k in ("出货", "发货", "发货单")):
-        return "shipment_records"
     return "products"
+
+
+def _infer_business_db_operation(message: str) -> str:
+    lower = str(message or "").lower()
+    if any(k in message for k in ("删除", "移除")) or any(k in lower for k in ("delete", "remove")):
+        return "delete"
+    if any(k in message for k in ("修改", "更新", "改为", "改成")) or "update" in lower:
+        return "update"
+    return "create"
+
+
+def _extract_business_db_id(message: str) -> int | None:
+    match = re.search(
+        r"(?:记录|客户|产品|原材料|物料|发货单|订单)?\s*(?:id|ID|编号)\s*[:：#]?\s*(\d+)", message
+    )
+    if not match:
+        return None
+    try:
+        value = int(match.group(1))
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def _extract_marked_value(message: str, labels: tuple[str, ...]) -> str:
+    label_pattern = "|".join(re.escape(label) for label in labels)
+    match = re.search(
+        rf"(?:{label_pattern})\s*[:：是为]?\s*[「“\"']?([^，,。；;\n]+?)[」”\"']?(?=\s+(?:联系人|电话|地址|型号|规格|单价|价格|数量|库存|单位|状态|客户|产品|原材料|物料|发货单|ID|id)\s*[:：是为]?|[，,。；;]|$)",
+        message,
+        flags=re.I,
+    )
+    return _clean_db_slot_value(match.group(1)) if match else ""
+
+
+def _extract_number(message: str, labels: tuple[str, ...]) -> float | None:
+    label_pattern = "|".join(re.escape(label) for label in labels)
+    match = re.search(rf"(?:{label_pattern})\s*[:：是为]?\s*(-?\d+(?:\.\d+)?)", message, re.I)
+    if not match:
+        return None
+    try:
+        return float(match.group(1))
+    except (TypeError, ValueError):
+        return None
+
+
+def _selector_for_business_db_message(entity: str, message: str) -> dict[str, Any]:
+    numeric_id = _extract_business_db_id(message)
+    if numeric_id:
+        return {"id": numeric_id}
+    if entity == "customers":
+        name = _extract_marked_value(message, ("客户", "购买单位"))
+        return {"customer_name": name} if name else {}
+    if entity == "products":
+        model = _extract_marked_value(message, ("型号", "model"))
+        if model:
+            return {"model_number": model.upper()}
+        name = _extract_marked_value(message, ("产品", "商品"))
+        return {"product_name": name} if name else {}
+    if entity == "materials":
+        code = _extract_marked_value(message, ("物料编码", "原材料编码", "material_code"))
+        if code:
+            return {"material_code": code}
+        name = _extract_marked_value(message, ("原材料", "物料"))
+        return {"material_name": name} if name else {}
+    return {}
+
+
+def _changes_for_business_db_message(entity: str, message: str) -> dict[str, Any]:
+    changes: dict[str, Any] = {}
+    if entity == "customers":
+        person = _extract_marked_value(message, ("联系人",))
+        phone = _extract_marked_value(message, ("联系电话", "电话"))
+        address = _extract_marked_value(message, ("联系地址", "地址"))
+        if person:
+            changes["contact_person"] = person
+        if phone:
+            changes["contact_phone"] = phone
+        if address:
+            changes["contact_address"] = address
+    elif entity == "products":
+        spec = _extract_marked_value(message, ("规格",))
+        price = _extract_number(message, ("单价", "价格"))
+        quantity = _extract_number(message, ("数量", "库存"))
+        unit = _extract_marked_value(message, ("计量单位",))
+        if spec:
+            changes["specification"] = spec
+        if price is not None:
+            changes["price"] = price
+        if quantity is not None:
+            changes["quantity"] = int(quantity)
+        if unit:
+            changes["unit"] = unit
+    elif entity == "materials":
+        price = _extract_number(message, ("单价", "价格"))
+        quantity = _extract_number(message, ("数量", "库存"))
+        spec = _extract_marked_value(message, ("规格",))
+        if price is not None:
+            changes["unit_price"] = price
+        if quantity is not None:
+            changes["quantity"] = quantity
+        if spec:
+            changes["specification"] = spec
+    elif entity == "shipment_records":
+        tins = _extract_number(message, ("桶数", "数量"))
+        status = _extract_marked_value(message, ("状态",))
+        price = _extract_number(message, ("单价", "价格"))
+        if tins is not None:
+            changes["quantity_tins"] = int(tins)
+        if status:
+            changes["status"] = status
+        if price is not None:
+            changes["unit_price"] = price
+    return changes
 
 
 def _extract_business_db_write_node(message: str) -> WorkflowNode | None:
     entity = _infer_business_db_entity(message)
+    operation = _infer_business_db_operation(message)
+    if operation in {"update", "delete"}:
+        selector = _selector_for_business_db_message(entity, message)
+        if not selector:
+            return None
+        payload: dict[str, Any] = {"selector": selector}
+        if operation == "update":
+            changes = _changes_for_business_db_message(entity, message)
+            if not changes:
+                return None
+            payload["changes"] = changes
+        return WorkflowNode(
+            node_id=f"{operation}_business_{entity.rstrip('s')}",
+            tool_id="business_db",
+            action="write",
+            params={"entity": entity, "operation": operation, "payload": payload},
+            risk="high" if operation == "delete" else "medium",
+            description=f"{operation} {entity}",
+            idempotent=False,
+        )
+
     if entity == "customers":
         unit_name = _extract_named_slot(
             message,
@@ -125,21 +271,22 @@ def _extract_business_db_write_node(message: str) -> WorkflowNode | None:
                 r"(?:新增|添加|创建|写入|保存)\s*([^\s，,。；;]+)\s*(?:产品|商品)",
             ),
         )
-        unit_name = _extract_named_slot(
-            message,
-            (
-                r"(?:客户|单位|购买单位)\s*[:：是为]?\s*([^\s，,。；;]+)",
-                r"(?:给|到|为)\s*([^\s，,。；;]+)\s*(?:客户|单位)?",
-            ),
-        )
-        if not product_name or not unit_name:
+        if not product_name:
             return None
         model_match = re.search(r"(?:型号|model)\s*[:：]?\s*([A-Za-z0-9._-]+)", message, re.I)
         payload: dict[str, Any] = {
             "name_or_model": product_name,
             "product_name": product_name,
-            "unit_name": unit_name,
         }
+        unit = _extract_marked_value(message, ("计量单位",))
+        price = _extract_number(message, ("单价", "价格"))
+        specification = _extract_marked_value(message, ("规格",))
+        if unit:
+            payload["unit"] = unit
+        if price is not None:
+            payload["price"] = price
+        if specification:
+            payload["specification"] = specification
         if model_match:
             payload["model_number"] = model_match.group(1).strip().upper()
         return WorkflowNode(
@@ -149,6 +296,67 @@ def _extract_business_db_write_node(message: str) -> WorkflowNode | None:
             params={"entity": "products", "operation": "create", "payload": payload},
             risk="medium",
             description=f"写入产品 {product_name}",
+            idempotent=False,
+        )
+
+    if entity == "materials":
+        name = _extract_marked_value(message, ("原材料", "物料"))
+        if not name:
+            return None
+        payload = {"name": name}
+        code = _extract_marked_value(message, ("物料编码", "原材料编码", "material_code"))
+        unit = _extract_marked_value(message, ("计量单位",))
+        quantity = _extract_number(message, ("数量", "库存"))
+        price = _extract_number(message, ("单价", "价格"))
+        if code:
+            payload["material_code"] = code
+        if unit:
+            payload["unit"] = unit
+        if quantity is not None:
+            payload["quantity"] = quantity
+        if price is not None:
+            payload["unit_price"] = price
+        return WorkflowNode(
+            node_id="write_business_material",
+            tool_id="business_db",
+            action="write",
+            params={"entity": "materials", "operation": "create", "payload": payload},
+            risk="medium",
+            description=f"写入原材料 {name}",
+            idempotent=False,
+        )
+
+    if entity == "shipment_records":
+        unit_name = _extract_marked_value(message, ("客户", "购买单位"))
+        product_name = _extract_marked_value(message, ("产品", "商品"))
+        tins = _extract_number(message, ("桶数", "数量"))
+        if not unit_name or not product_name or tins is None:
+            return None
+        item: dict[str, Any] = {
+            "product_name": product_name,
+            "name": product_name,
+            "quantity_tins": int(tins),
+        }
+        model = _extract_marked_value(message, ("型号", "model"))
+        spec = _extract_number(message, ("桶规格", "规格"))
+        price = _extract_number(message, ("单价", "价格"))
+        if model:
+            item["model_number"] = model.upper()
+        if spec is not None:
+            item["tin_spec"] = spec
+        if price is not None:
+            item["unit_price"] = price
+        return WorkflowNode(
+            node_id="write_business_shipment_record",
+            tool_id="business_db",
+            action="write",
+            params={
+                "entity": "shipment_records",
+                "operation": "create",
+                "payload": {"unit_name": unit_name, "products": [item]},
+            },
+            risk="medium",
+            description=f"为 {unit_name} 创建 {product_name} 出货记录",
             idempotent=False,
         )
 

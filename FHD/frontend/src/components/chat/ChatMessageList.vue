@@ -86,6 +86,7 @@
           :card="msg.approvalCard"
           @confirm="$emit('approval-confirm')"
           @cancel="$emit('approval-cancel')"
+          @open-approval="(path) => $emit('approval-open', path)"
         />
         <div
           v-if="showDiagnosticMetadata && msg.role === 'ai' && (msg.workflowAction || (msg.nodeResults && msg.nodeResults.length))"
@@ -179,6 +180,7 @@ defineEmits<{
   'shipment-download-click': []
   'approval-confirm': []
   'approval-cancel': []
+  'approval-open': [path: string]
 }>()
 
 const messagesHostRef = ref<HTMLElement | null>(null)

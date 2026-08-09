@@ -28,6 +28,7 @@ from app.db.models.approval import (
     ApprovalRequest,
     ApprovalStatus,
 )
+from app.db.models.user import User
 from app.db.session import get_db
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
@@ -129,6 +130,27 @@ def _is_ai_workflow_request(req: ApprovalRequest) -> bool:
     return str(getattr(req, "business_type", "") or "").strip() == AI_WORKFLOW_BUSINESS_TYPE
 
 
+def _can_review_ai_workflow_request(db, req: ApprovalRequest, actor: int) -> bool:
+    if int(req.applicant_id or 0) == int(actor):
+        return True
+    user = db.query(User).filter(User.id == int(actor), User.is_active == True).first()  # noqa: E712
+    return str(getattr(user, "role", "") or "").strip().lower() in {
+        "admin",
+        "superadmin",
+        "super_admin",
+        "owner",
+    }
+
+
+def _ai_workflow_audit_node(db, req: ApprovalRequest) -> ApprovalFlowNode | None:
+    return (
+        db.query(ApprovalFlowNode)
+        .filter(ApprovalFlowNode.flow_id == req.flow_id, ApprovalFlowNode.is_active == True)  # noqa: E712
+        .order_by(ApprovalFlowNode.node_order.asc())
+        .first()
+    )
+
+
 def _has_pending_ai_workflow(request_no: str | None) -> bool:
     approval_request_id = str(request_no or "").strip()
     if not approval_request_id:
@@ -156,6 +178,11 @@ def _next_node(nodes: list[ApprovalFlowNode], current_order: int) -> ApprovalFlo
 def _request_to_dict(req: ApprovalRequest, *, include_records: bool = False) -> dict[str, Any]:
     """统一序列化（含 ``records`` 时间线，便于详情视图渲染）。"""
     base = req.to_dict()
+    business_data = base.get("business_data")
+    if isinstance(business_data, dict) and isinstance(
+        business_data.get("workflow_execution"), dict
+    ):
+        base["workflow_execution"] = business_data["workflow_execution"]
     if _is_ai_workflow_request(req) and not getattr(req, "current_node", None):
         base["is_ai_workflow_approval"] = True
         base["current_node_name"] = base.get("current_node_name") or AI_WORKFLOW_NODE_NAME
@@ -226,6 +253,8 @@ def list_requests(
                     ):
                         continue
                     if not _has_pending_ai_workflow(req.request_no):
+                        continue
+                    if not _can_review_ai_workflow_request(db, req, approver_id):
                         continue
                     data["current_node_name"] = AI_WORKFLOW_NODE_NAME
                     data["current_approvers"] = [int(approver_id)]
@@ -472,7 +501,7 @@ def _close_request_if_needed(
 
 
 def _resume_pending_ai_workflow_after_approval(
-    *, request_no: str, opinion: str
+    *, request_no: str, opinion: str, approved_by: str = ""
 ) -> dict[str, Any] | None:
     """工作台审批通过后，继续执行由 AI 工作流创建的 pending workflow。"""
     approval_request_id = str(request_no or "").strip()
@@ -490,6 +519,45 @@ def _resume_pending_ai_workflow_after_approval(
 
         plan_obj = workflow_data.get("plan")
         runtime_ctx = workflow_data.get("runtime_context", {})
+        agent_run_id = str(workflow_data.get("agent_run_id") or "").strip()
+        approved_step_id = str(workflow_data.get("approved_step_id") or "").strip()
+        if agent_run_id:
+            from app.application.agent_orchestrator import AgentOrchestrator
+
+            agent_run = AgentOrchestrator().continue_run(
+                agent_run_id,
+                approved_by=approved_by,
+                approved_step_id=approved_step_id,
+                runtime_context=runtime_ctx,
+            )
+            approval_service.remove_pending_workflow(approval_request_id)
+            if agent_run is None:
+                return {
+                    "workflow_executed": False,
+                    "approval_request_id": approval_request_id,
+                    "agent_run_id": agent_run_id,
+                    "success": False,
+                    "message": "审批已通过，但 Agent Run 不存在",
+                }
+            return {
+                "workflow_executed": True,
+                "approval_request_id": approval_request_id,
+                "agent_run_id": agent_run.run_id,
+                "approved_in_memory": approved_in_memory,
+                "success": agent_run.status == "completed",
+                "plan_id": str(agent_run.plan_id or ""),
+                "intent": str(agent_run.intent or ""),
+                "message": str(
+                    (agent_run.final_output or {}).get("message")
+                    or agent_run.error
+                    or agent_run.status
+                ),
+                "nodes_executed": len(
+                    [step for step in agent_run.steps if step.status == "completed"]
+                ),
+                "nodes_total": len(agent_run.steps),
+                "tool_call_ids": [call.call_id for call in agent_run.tool_calls],
+            }
         if not plan_obj:
             approval_service.remove_pending_workflow(approval_request_id)
             return {
@@ -585,6 +653,11 @@ def _approve_ai_workflow_request_without_node(
     opinion: str,
 ) -> dict[str, Any] | JSONResponse:
     """审批由 AI workflow 持久化、没有传统审批节点的请求。"""
+    if not _can_review_ai_workflow_request(db, req, actor):
+        return JSONResponse(
+            {"success": False, "message": "当前用户无权审批这条 AI 工作流"},
+            status_code=403,
+        )
     if not _has_pending_ai_workflow(req.request_no):
         return JSONResponse(
             {
@@ -594,6 +667,12 @@ def _approve_ai_workflow_request_without_node(
             status_code=409,
         )
 
+    audit_node = _ai_workflow_audit_node(db, req)
+    if audit_node is None:
+        return JSONResponse(
+            {"success": False, "message": "AI 审批流程缺少合法留痕节点"},
+            status_code=409,
+        )
     status_before = req.status
     req.status = ApprovalStatus.APPROVED.value
     req.approved_at = datetime.now()
@@ -601,6 +680,19 @@ def _approve_ai_workflow_request_without_node(
     req.approved_by_name = approver_name
     req.current_node_id = None
     req.current_node_order = (req.current_node_order or 0) + 1
+    db.add(
+        ApprovalRecord(
+            request_id=req.id,
+            node_id=audit_node.id,
+            node_name=audit_node.node_name,
+            node_order=audit_node.node_order,
+            approver_id=actor,
+            approver_name=approver_name,
+            action=ApprovalAction.APPROVE.value,
+            opinion=opinion,
+            is_passed=True,
+        )
+    )
 
     _audit(
         db,
@@ -620,7 +712,27 @@ def _approve_ai_workflow_request_without_node(
     workflow_execution = _resume_pending_ai_workflow_after_approval(
         request_no=str(req.request_no or ""),
         opinion=opinion,
+        approved_by=str(actor),
     )
+    if workflow_execution is not None:
+        try:
+            business_data = json.loads(req.business_data) if req.business_data else {}
+        except (TypeError, ValueError, json.JSONDecodeError):
+            business_data = {}
+        business_data["workflow_execution"] = workflow_execution
+        req.business_data = json.dumps(business_data, ensure_ascii=False, default=str)
+        _audit(
+            db,
+            actor=actor,
+            action="approval.execute_ai_workflow",
+            payload={
+                "request_id": req.id,
+                "request_no": req.request_no,
+                "workflow_execution": workflow_execution,
+            },
+        )
+        db.commit()
+        db.refresh(req)
     data = _request_to_dict(req, include_records=True)
     if workflow_execution is not None:
         data["workflow_execution"] = workflow_execution
@@ -633,7 +745,7 @@ def approve_request(
     body: dict = Body(default_factory=dict),
     x_user_id: str | None = Header(default=None, alias="X-User-ID"),
 ):
-    actor = _resolve_actor(http_request, x_user_id, fallback=body.get("approver_id"))
+    actor = _resolve_actor(http_request, x_user_id)
     if actor is None:
         raise HTTPException(status_code=401, detail="请先登录")
 
@@ -721,6 +833,7 @@ def approve_request(
             workflow_execution = _resume_pending_ai_workflow_after_approval(
                 request_no=str(req.request_no or ""),
                 opinion=opinion,
+                approved_by=str(actor),
             )
         if req.applicant_id:
             notify_mobile_user(
@@ -741,7 +854,7 @@ def reject_request(
     body: dict = Body(default_factory=dict),
     x_user_id: str | None = Header(default=None, alias="X-User-ID"),
 ):
-    actor = _resolve_actor(http_request, x_user_id, fallback=body.get("approver_id"))
+    actor = _resolve_actor(http_request, x_user_id)
     if actor is None:
         raise HTTPException(status_code=401, detail="请先登录")
 
@@ -767,6 +880,11 @@ def reject_request(
         current_node = req.current_node
         if current_node is None:
             if _is_ai_workflow_request(req):
+                if not _can_review_ai_workflow_request(db, req, actor):
+                    return JSONResponse(
+                        {"success": False, "message": "当前用户无权拒绝这条 AI 工作流"},
+                        status_code=403,
+                    )
                 if not _has_pending_ai_workflow(req.request_no):
                     return JSONResponse(
                         {
@@ -775,12 +893,32 @@ def reject_request(
                         },
                         status_code=409,
                     )
+                audit_node = _ai_workflow_audit_node(db, req)
+                if audit_node is None:
+                    return JSONResponse(
+                        {"success": False, "message": "AI 审批流程缺少合法留痕节点"},
+                        status_code=409,
+                    )
                 status_before = req.status
                 req.status = ApprovalStatus.REJECTED.value
                 req.rejected_at = datetime.now()
                 req.rejection_reason = reason
                 req.approved_by = actor
                 req.approved_by_name = approver_name
+                db.add(
+                    ApprovalRecord(
+                        request_id=req.id,
+                        node_id=audit_node.id,
+                        node_name=audit_node.node_name,
+                        node_order=audit_node.node_order,
+                        approver_id=actor,
+                        approver_name=approver_name,
+                        action=ApprovalAction.REJECT.value,
+                        opinion=reason,
+                        reject_reason=reason,
+                        is_passed=False,
+                    )
+                )
                 _audit(
                     db,
                     actor=actor,
