@@ -26,6 +26,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["agent"])
 
+_PUBLIC_AGENT_ERROR = "Agent 执行失败，详细信息已记录"
+_PUBLIC_AGENT_SERVICE_ERROR = "Agent 服务暂时不可用，请稍后重试"
+_PUBLIC_APPROVAL_ERROR = "approval_grant 无效、过期或与当前步骤不匹配"
+_INTERNAL_ERROR_KEYS = frozenset({"error", "exception", "stack_trace", "traceback"})
+
 
 def _success(data: Any, **extra: Any) -> dict[str, Any]:
     payload: dict[str, Any] = {"success": True, "data": json_safe(data)}
@@ -33,9 +38,44 @@ def _success(data: Any, **extra: Any) -> dict[str, Any]:
     return payload
 
 
+def _redact_internal_errors(value: Any) -> Any:
+    """Remove persisted exception details before crossing the public API boundary."""
+    if isinstance(value, dict):
+        return {
+            key: (
+                _PUBLIC_AGENT_ERROR
+                if str(key).lower() in _INTERNAL_ERROR_KEYS and child
+                else _redact_internal_errors(child)
+            )
+            for key, child in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_internal_errors(item) for item in value]
+    if isinstance(value, tuple):
+        return [_redact_internal_errors(item) for item in value]
+    return value
+
+
+def _public_run_dict(run: Any) -> dict[str, Any]:
+    return _redact_internal_errors(run.to_dict())
+
+
+def _public_event_dict(event: Any) -> dict[str, Any]:
+    return _redact_internal_errors(event.to_dict())
+
+
+def _internal_error_response(operation: str) -> JSONResponse:
+    logger.exception("%s failed", operation)
+    return JSONResponse(
+        {"success": False, "message": _PUBLIC_AGENT_SERVICE_ERROR},
+        status_code=500,
+    )
+
+
 def _run_response(run: Any, *, principal: AgentPrincipal) -> dict[str, Any]:
     approval = issue_approval_grant(run, principal_id=principal.user_id)
-    return _success(run.to_dict(), approval=approval) if approval else _success(run.to_dict())
+    public_run = _public_run_dict(run)
+    return _success(public_run, approval=approval) if approval else _success(public_run)
 
 
 def _owned_run(
@@ -84,9 +124,8 @@ def create_agent_run(
         )
         status_code = 202 if run.status in {"waiting_user", "blocked"} else 200
         return JSONResponse(_run_response(run, principal=principal), status_code=status_code)
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("create agent run failed: %s", exc)
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        return _internal_error_response("create agent run")
 
 
 @router.get("/api/agent/runs", response_model=None)
@@ -98,10 +137,9 @@ def list_agent_runs(
         # Public callers can only enumerate their own runs. Cross-user admin search should
         # use a separately permissioned admin route, not a caller-controlled query string.
         runs = AgentOrchestrator().list_runs(user_id=principal.user_id, limit=limit)
-        return _success([run.to_dict() for run in runs], count=len(runs))
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("list agent runs failed: %s", exc)
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return _success([_public_run_dict(run) for run in runs], count=len(runs))
+    except RECOVERABLE_ERRORS:
+        return _internal_error_response("list agent runs")
 
 
 @router.get("/api/agent/runs/{run_id}", response_model=None)
@@ -114,9 +152,8 @@ def get_agent_run(
         if error is not None:
             return error
         return _run_response(run, principal=principal)
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("get agent run failed: %s", exc)
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        return _internal_error_response("get agent run")
 
 
 @router.post("/api/agent/runs/{run_id}/continue", response_model=None)
@@ -156,11 +193,13 @@ def continue_agent_run(
             )
         status_code = 202 if run.status in {"waiting_user", "blocked"} else 200
         return JSONResponse(_run_response(run, principal=principal), status_code=status_code)
-    except ApprovalGrantError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("continue agent run failed: %s", exc)
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    except ApprovalGrantError:
+        return JSONResponse(
+            {"success": False, "message": _PUBLIC_APPROVAL_ERROR},
+            status_code=403,
+        )
+    except RECOVERABLE_ERRORS:
+        return _internal_error_response("continue agent run")
 
 
 def _control_agent_run(
@@ -235,10 +274,9 @@ def list_agent_run_events(
         if error is not None:
             return error
         events = orchestrator.list_events(run_id, after_event_id=after_event_id)
-        return _success([event.to_dict() for event in events], count=len(events))
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("list agent run events failed: %s", exc)
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return _success([_public_event_dict(event) for event in events], count=len(events))
+    except RECOVERABLE_ERRORS:
+        return _internal_error_response("list agent run events")
 
 
 @router.get("/api/agent/runs/{run_id}/events/stream", response_model=None)
@@ -261,7 +299,7 @@ async def stream_agent_run_events(
             events = current_orchestrator.list_events(run_id, after_event_id=cursor)
             for event in events:
                 cursor = event.event_id
-                yield f"id: {event.event_id}\nevent: {event.event_type}\ndata: {json.dumps(json_safe(event.to_dict()), ensure_ascii=False)}\n\n"
+                yield f"id: {event.event_id}\nevent: {event.event_type}\ndata: {json.dumps(json_safe(_public_event_dict(event)), ensure_ascii=False)}\n\n"
             current = current_orchestrator.get_run(run_id)
             if current is None or (current.status in terminal and not events):
                 break
