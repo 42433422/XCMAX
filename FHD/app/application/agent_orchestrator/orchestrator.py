@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 import time
 from typing import Any
 
@@ -35,6 +36,10 @@ from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_spec import get_tool_action_spec, validate_tool_call
 from app.application.workflow.types import PlanGraph, WorkflowNode
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
+
+_INTERNAL_RUN_ERROR = "agent_run_internal_error"
 
 
 class AgentOrchestrator(RunLifecycleMixin, ArtifactAttachmentMixin):
@@ -79,10 +84,15 @@ class AgentOrchestrator(RunLifecycleMixin, ArtifactAttachmentMixin):
             if auto_execute:
                 self._execute_ready_steps(run, runtime_context=dict(runtime_context or {}))
             return self._repo.save(run)
-        except RECOVERABLE_ERRORS as exc:
+        except RECOVERABLE_ERRORS:
+            logger.exception("agent run start failed")
             run.status = "failed"
-            run.error = str(exc)
-            run.add_event("run.failed", "Agent run 失败", {"error": str(exc)})
+            run.error = _INTERNAL_RUN_ERROR
+            run.add_event(
+                "run.failed",
+                "Agent run 失败",
+                {"error_code": _INTERNAL_RUN_ERROR},
+            )
             return self._repo.save(run)
 
     def start_run_from_plan(
@@ -115,10 +125,15 @@ class AgentOrchestrator(RunLifecycleMixin, ArtifactAttachmentMixin):
             if auto_execute:
                 self._execute_ready_steps(run, runtime_context=dict(runtime_context or {}))
             return self._repo.save(run)
-        except RECOVERABLE_ERRORS as exc:
+        except RECOVERABLE_ERRORS:
+            logger.exception("agent run from plan failed")
             run.status = "failed"
-            run.error = str(exc)
-            run.add_event("run.failed", "Agent run 失败", {"error": str(exc)})
+            run.error = _INTERNAL_RUN_ERROR
+            run.add_event(
+                "run.failed",
+                "Agent run 失败",
+                {"error_code": _INTERNAL_RUN_ERROR},
+            )
             return self._repo.save(run)
 
     def get_run(self, run_id: str) -> AgentRun | None:

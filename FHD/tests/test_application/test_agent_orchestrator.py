@@ -27,6 +27,31 @@ def _planner_fallback_patches():
     )
 
 
+def test_agent_orchestrator_persists_stable_error_codes_not_exception_details():
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+    from app.application.workflow.types import PlanGraph
+
+    secret = "Traceback: database password=do-not-expose"
+    direct = AgentOrchestrator(repository=InMemoryAgentRunRepository())
+    with patch.object(direct, "_plan", side_effect=RuntimeError(secret)):
+        direct_run = direct.start_run(user_id="u1", message="执行任务")
+
+    provided = AgentOrchestrator(repository=InMemoryAgentRunRepository())
+    with patch.object(provided, "_apply_plan", side_effect=RuntimeError(secret)):
+        provided_run = provided.start_run_from_plan(
+            user_id="u1",
+            message="执行任务",
+            plan=PlanGraph(plan_id="p1", intent="test"),
+        )
+
+    for run in (direct_run, provided_run):
+        assert run.status == "failed"
+        assert run.error == "agent_run_internal_error"
+        assert secret not in str(run.to_dict())
+        assert run.events[-1].data == {"error_code": "agent_run_internal_error"}
+
+
 def test_agent_orchestrator_executes_low_risk_tool_and_records_events():
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository

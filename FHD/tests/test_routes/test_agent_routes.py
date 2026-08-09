@@ -10,6 +10,7 @@ from app.application.agent_orchestrator.approval_grant import (
     clear_consumed_approval_grants_for_tests,
 )
 from app.application.agent_orchestrator.run_control import clear_run_controls_for_tests
+from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
 from app.fastapi_routes.domains.agent.routes import router
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
 
@@ -195,7 +196,9 @@ def test_continue_rejects_missing_mismatched_and_replayed_grants() -> None:
         grant = response.json()["approval"]["grant"]
         second_grant = owner.get(f"/api/agent/runs/{run_id}").json()["approval"]["grant"]
 
-        assert owner.post(f"/api/agent/runs/{run_id}/continue", json={}).status_code == 403
+        missing_grant = owner.post(f"/api/agent/runs/{run_id}/continue", json={})
+        assert missing_grant.status_code == 403
+        assert missing_grant.json()["message"] == ("approval_grant 无效、过期或与当前步骤不匹配")
         assert (
             _client("stranger")
             .post(f"/api/agent/runs/{run_id}/continue", json={"approval_grant": grant})
@@ -230,6 +233,69 @@ def test_create_agent_run_validates_request_body() -> None:
     )
     assert bad_context.status_code == 400
     assert bad_context.json()["success"] is False
+
+
+def test_agent_routes_do_not_expose_internal_exception_details() -> None:
+    secret = "Traceback: database password=do-not-expose"
+    repository = get_agent_run_repository()
+    repository.clear()
+    run = AgentRun(user_id="u1", message="执行任务", status="failed", error=secret)
+    run.steps.append(
+        AgentStep(
+            node_id="n1",
+            tool_id="products",
+            action="query",
+            status="failed",
+            error=secret,
+            output={"success": False, "error": secret},
+        )
+    )
+    run.tool_calls.append(
+        ToolCall(
+            step_id=run.steps[0].step_id,
+            node_id="n1",
+            tool_id="products",
+            action="query",
+            status="failed",
+            error=secret,
+        )
+    )
+    run.add_event("run.failed", "Agent run 失败", {"error": secret})
+
+    client = _client()
+    with patch(
+        "app.fastapi_routes.domains.agent.routes.AgentOrchestrator.start_run",
+        return_value=run,
+    ):
+        response = client.post("/api/agent/runs", json={"message": "执行任务"})
+
+    assert response.status_code == 200
+    assert secret not in response.text
+    payload = response.json()["data"]
+    assert payload["error"] == "Agent 执行失败，详细信息已记录"
+    assert payload["steps"][0]["output"]["error"] == "Agent 执行失败，详细信息已记录"
+    assert payload["events"][0]["data"]["error"] == "Agent 执行失败，详细信息已记录"
+
+    repository.save(run)
+    list_response = client.get("/api/agent/runs")
+    events_response = client.get(f"/api/agent/runs/{run.run_id}/events")
+    assert secret not in list_response.text
+    assert secret not in events_response.text
+
+
+def test_agent_route_internal_failure_returns_stable_public_message() -> None:
+    client = _client()
+    with patch(
+        "app.fastapi_routes.domains.agent.routes.AgentOrchestrator.start_run",
+        side_effect=RuntimeError("Traceback: database password=do-not-expose"),
+    ):
+        response = client.post("/api/agent/runs", json={"message": "执行任务"})
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "success": False,
+        "message": "Agent 服务暂时不可用，请稍后重试",
+    }
 
 
 def test_pause_resume_and_cancel_agent_run() -> None:
