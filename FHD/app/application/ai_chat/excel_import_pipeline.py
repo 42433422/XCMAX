@@ -17,6 +17,7 @@ from app.application.ai_chat.excel_import_policy import (
     _EXCEL_IMPORT_QTY_MEASURE_RE,
     _enrich_confirmation_inner,
 )
+from app.application.chat_tool_intent import looks_like_explicit_workflow_tool_intent
 
 logger = logging.getLogger(__name__)
 
@@ -1123,41 +1124,7 @@ class AIChatExcelImportMixin:
 
     @staticmethod
     def _looks_like_explicit_workflow_tool_intent(text: str) -> bool:
-        t = str(text or "").strip()
-        if not t:
-            return False
-        lower = t.lower()
-        employee_mentioned = any(k in t for k in ("员工", "调用", "交给")) or "employee" in lower
-        employee_action = any(k in t for k in ("调用", "执行", "运行", "交给", "让")) or any(
-            k in lower for k in ("call", "run", "execute", "employee")
-        )
-        if employee_mentioned and employee_action:
-            return True
-
-        db_mentioned = (
-            any(k in t for k in ("数据库", "查库", "读库", "写库"))
-            or "database" in lower
-            or bool(re.search(r"\bdb\b", lower))
-        )
-        if not db_mentioned:
-            return False
-        db_object = any(k in t for k in ("客户", "单位", "产品", "物料", "原材料", "发货", "出货"))
-        db_action = any(
-            k in t
-            for k in (
-                "查",
-                "读",
-                "读取",
-                "写",
-                "写入",
-                "新增",
-                "添加",
-                "创建",
-                "更新",
-                "删除",
-            )
-        ) or any(k in lower for k in ("read", "query", "write", "create", "update", "delete"))
-        return db_object and db_action
+        return looks_like_explicit_workflow_tool_intent(text)
 
     @staticmethod
     def _looks_like_smart_workflow_intent(text: str, context: dict[str, Any] | None = None) -> bool:

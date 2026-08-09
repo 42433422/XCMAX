@@ -9,6 +9,9 @@ from typing import Any, cast
 
 import httpx
 
+from app.application.chat_tool_intent import (
+    looks_like_business_db_write as _looks_like_business_db_write,
+)
 from app.services import get_ai_conversation_service
 from app.services.tools_workflow_registered import execute_registered_workflow_tool
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -22,25 +25,6 @@ logger = logging.getLogger(__name__)
 
 # 同步规划 LLM 复用 Client，减轻短时多次 DeepSeek 连接失败
 _planner_http_client: httpx.Client | None = None
-
-_DB_WRITE_KEYWORDS = frozenset(
-    {
-        "新增",
-        "添加",
-        "创建",
-        "写入",
-        "加入数据库",
-        "添加到数据库",
-        "保存到数据库",
-        "入库",
-        "修改",
-        "更新",
-        "改为",
-        "改成",
-        "删除",
-        "移除",
-    }
-)
 
 
 def _clean_db_slot_value(value: str) -> str:
@@ -77,18 +61,6 @@ def _extract_named_slot(message: str, patterns: tuple[str, ...]) -> str:
     if quoted:
         return _clean_db_slot_value(quoted.group(1))
     return ""
-
-
-def _looks_like_business_db_write(message: str, lower: str) -> bool:
-    if not any(k in message for k in _DB_WRITE_KEYWORDS) and not any(
-        k in lower for k in ("add", "create", "insert", "upsert", "update", "delete", "remove")
-    ):
-        return False
-    return (
-        any(k in message for k in ("数据库", "入库", "写库"))
-        or "db" in lower
-        or "database" in lower
-    )
 
 
 def _infer_business_db_entity(message: str) -> str:
@@ -249,6 +221,8 @@ def _extract_business_db_write_node(message: str) -> WorkflowNode | None:
         )
         if not unit_name:
             return None
+        payload = {"unit_name": unit_name, "customer_name": unit_name}
+        payload.update(_changes_for_business_db_message(entity, message))
         return WorkflowNode(
             node_id="write_business_customer",
             tool_id="business_db",
@@ -256,7 +230,7 @@ def _extract_business_db_write_node(message: str) -> WorkflowNode | None:
             params={
                 "entity": "customers",
                 "operation": "upsert",
-                "payload": {"unit_name": unit_name, "customer_name": unit_name},
+                "payload": payload,
             },
             risk="medium",
             description=f"写入客户 {unit_name}",
@@ -1496,9 +1470,17 @@ class LLMWorkflowPlanner:
 
         from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 
-        planned = self._plan_with_react_multiagent(
-            plan_id, user_id, message, registry_for_plan, context
-        )
+        planned = None
+        if _looks_like_business_db_write(message, message.lower()) and (
+            "business_db" in registry_for_plan
+        ):
+            deterministic = self._fallback_plan(plan_id, message, registry_for_plan)
+            if deterministic.intent == "business_db_write" and deterministic.nodes:
+                planned = deterministic
+        if planned is None:
+            planned = self._plan_with_react_multiagent(
+                plan_id, user_id, message, registry_for_plan, context
+            )
         return finalize_planned_graph(
             self._decorate_plan(planned, message, registry_for_plan),
             plan_id=plan_id,

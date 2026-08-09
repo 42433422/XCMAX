@@ -470,6 +470,21 @@ describe('main — backendEditionEnv', () => {
   })
 })
 
+describe('desktopBackendEnv — development MOD source', () => {
+  it('pins development backend to the checkout MOD directory', async () => {
+    const { desktopBackendEnv } = await import('./backend-env.js')
+    const env = desktopBackendEnv({}, path.join('/repo', 'FHD'))
+    expect(env.XCAGI_MODS_ROOT).toBe(path.join('/repo', 'FHD', 'mods'))
+    expect(env.XCAGI_MODS_DIR).toBe(path.join('/repo', 'FHD', 'mods'))
+  })
+
+  it('preserves packaged MOD selection when no development root is supplied', async () => {
+    const { desktopBackendEnv } = await import('./backend-env.js')
+    expect(desktopBackendEnv({ XCAGI_MODS_ROOT: '/packaged/mods' }).XCAGI_MODS_ROOT)
+      .toBe('/packaged/mods')
+  })
+})
+
 describe('main — readJsonTextFile', () => {
   it('reads UTF-8 file content', async () => {
     const { readJsonTextFile } = await import('./backend-env-utils.js')

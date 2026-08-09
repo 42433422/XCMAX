@@ -14,12 +14,16 @@ from app.fastapi_routes import xcagi_compat_chat_helpers as ch
 def test_runtime_context_uses_authenticated_session_actor():
     request = MagicMock()
     user = MagicMock(id=17)
-    with patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=user):
+    with (
+        patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=user),
+        patch("app.infrastructure.auth.tenant_context.resolve_tenant_id", return_value=23),
+    ):
         context = ch._runtime_context_with_authenticated_actor(
             request, {"user_id": "web_pro_session"}
         )
     assert context["local_user_id"] == 17
     assert context["actor_id"] == 17
+    assert context["tenant_id"] == 23
     assert context["user_id"] == "web_pro_session"
 
 
@@ -52,6 +56,49 @@ def test_stream_business_db_write_uses_stateful_approval_mainline():
 
     assert len(chunks) == 2
     service.process_chat.assert_called_once()
+    assert service.process_chat.call_args.kwargs["context"]["local_user_id"] == 17
+
+
+def test_stream_explicit_business_db_read_uses_workflow_mainline():
+    request = MagicMock(headers={}, cookies={})
+    service = MagicMock()
+    service._pending_workflows = {}
+    expected_payload = {
+        "success": True,
+        "response": "客户 19、产品 0、原材料 0、出货记录 6",
+        "data": {"tool_calls": [{"tool_id": "business_db", "action": "read"}]},
+    }
+
+    def process_chat_in_tenant_scope(**_kwargs):
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        assert current_tenant_id() == 23
+        return expected_payload
+
+    service.process_chat.side_effect = process_chat_in_tenant_scope
+    body = ch.XcagiCompatChatBody(
+        message="请通过业务数据库查询客户、产品、原材料和出货记录数量",
+        user_id="web_normal_session",
+        source="normal",
+    )
+    with (
+        patch("app.application.get_ai_chat_app_service", return_value=service),
+        patch.object(
+            ch,
+            "_runtime_context_with_authenticated_actor",
+            side_effect=lambda _request, context: {
+                **dict(context or {}),
+                "local_user_id": 17,
+                "tenant_id": 23,
+            },
+        ),
+        patch.object(ch, "runtime_context_with_tier", side_effect=lambda context, _tier: context),
+    ):
+        chunks = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+
+    assert len(chunks) == 2
+    service.process_chat.assert_called_once()
+    assert service.process_chat.call_args.kwargs["source"] == "normal"
     assert service.process_chat.call_args.kwargs["context"]["local_user_id"] == 17
 
 
