@@ -77,6 +77,27 @@ DEFAULT_PERMISSIONS = [
 
 DEFAULT_ROLES = [
     {
+        "name": "user",
+        "description": "普通业务用户（企业版/普通版默认角色，含业务只读与基础操作）",
+        "permissions": [
+            "customer.view",
+            "customer.edit",
+            "product.view",
+            "product.edit",
+            "shipment.view",
+            "shipment.create",
+            "shipment.edit",
+            "material.view",
+            "material.edit",
+            "print.label",
+            "dataset.read",
+            "dataset.write",
+            "etl.read",
+            "etl.template.manage",
+            "etl.execute",
+        ],
+    },
+    {
         "name": "viewer",
         "description": "只读用户",
         "permissions": [

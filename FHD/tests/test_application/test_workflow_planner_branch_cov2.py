@@ -132,8 +132,9 @@ class TestLooksLikeBusinessDbWrite:
     def test_no_write_keyword_returns_false(self) -> None:
         assert _looks_like_business_db_write("查询产品", "查询产品") is False
 
-    def test_write_keyword_but_no_db_marker_returns_false(self) -> None:
-        assert _looks_like_business_db_write("新增产品", "新增产品") is False
+    def test_write_keyword_with_entity_without_db_marker_returns_true(self) -> None:
+        # P0-Bug1：明确写关键词 + 业务实体即视为写意图，无需"数据库/db"字样
+        assert _looks_like_business_db_write("新增产品", "新增产品") is True
 
     def test_english_insert_with_db(self) -> None:
         assert _looks_like_business_db_write("insert into db", "insert into db") is True

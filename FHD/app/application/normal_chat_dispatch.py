@@ -46,6 +46,63 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
     query_keywords = ("查询", "查一下", "查下", "查", "看看", "看下", "搜索", "找下", "找", "检索")
     model_signal = bool(re.search(r"(?:型号|编号)\s*[:：]?\s*([0-9A-Za-z-]{2,})", text))
     unit_model_signal = bool(re.search(r"([^\s，,。]{2,})\s*的\s*([0-9A-Za-z-]{2,})", text))
+
+    # 业务写/删除意图优先于只读槽位匹配：
+    # 「新建客户」「新增产品」「删除客户」等必须路由到业务写/删除工具，
+    # 否则会被下方 customers_query/product_query 只读槽位截胡成"只查询"，
+    # 导致 LLM 无法真正执行新建/导入/删除（P0-Bug1 根因）。
+    business_write_keywords = (
+        "新建",
+        "新增",
+        "添加",
+        "创建",
+        "写入",
+        "入库",
+        "导入",
+        "录入",
+        "注册",
+        "保存到",
+        "增加一个",
+        "加一个",
+    )
+    delete_keywords = ("删除", "移除", "删掉", "删了")
+    business_entity_markers = (
+        "客户",
+        "购买单位",
+        "买家",
+        "产品",
+        "商品",
+        "原材料",
+        "物料",
+        "发货单",
+        "出货",
+    )
+    write_hit = any(k in text for k in business_write_keywords)
+    delete_hit = any(k in text for k in delete_keywords)
+    entity_hit = any(k in text for k in business_entity_markers)
+    # 明确写指令 + 业务实体 → 交给主链路/planner 的 business_db_write 工具（而非只读 query）
+    if (
+        write_hit
+        and entity_hit
+        and not any(k in text for k in ("查一下", "查下", "查询", "看看", "看下", "搜索"))
+    ):
+        return {
+            "intent": "business_db_write",
+            "slots": {"keyword": ""},
+        }
+    # 删除/移除类操作（须在客户/产品读匹配之前，避免「删除客户」被 customers_query 截胡）
+    # 不要求实体标记词：删除指令本身已足够明确（「删除A001」「移除七彩乐园」按名/编号删），
+    # 若要求业务实体词会把按 ID/名称删除的指令误判成 unknown。
+    if delete_hit:
+        del_target = ""
+        target_match = re.search(r"(?:删除|移除|删掉|删了)\s*([^\s，,。]{2,})", text)
+        if target_match:
+            del_target = target_match.group(1).strip()
+        return {
+            "intent": "delete_entity",
+            "slots": {"keyword": del_target},
+        }
+
     # 客户/购买单位：实体路由到 Agent 工具 customers.query。
     # 禁止用正则把问句前缀抽成客户名 keyword（空泛计数/列表问法必须 keyword=""）。
     # 指名检索由 Agent 在工具参数里填 keyword；此处只负责选工具。
@@ -54,18 +111,6 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
         return {
             "intent": "customers_query",
             "slots": {"keyword": ""},
-        }
-
-    # 删除/移除类操作
-    delete_keywords = ("删除", "移除", "删掉", "删了")
-    if any(k in text for k in delete_keywords):
-        del_target = ""
-        target_match = re.search(r"(?:删除|移除|删掉|删了)\s*([^\s，,。]{2,})", text)
-        if target_match:
-            del_target = target_match.group(1).strip()
-        return {
-            "intent": "delete_entity",
-            "slots": {"keyword": del_target},
         }
 
     # 报表 / 汇总 / 看板（吸收 Odoo 18 报表中心）——须在销售/库存/采购之前，避免「销售报表」等被宽泛词截胡

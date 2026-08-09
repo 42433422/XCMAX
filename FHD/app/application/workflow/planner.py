@@ -25,10 +25,13 @@ _planner_http_client: httpx.Client | None = None
 
 _DB_WRITE_KEYWORDS = frozenset(
     {
+        "新建",
         "新增",
         "添加",
         "创建",
         "写入",
+        "导入",
+        "录入",
         "加入数据库",
         "添加到数据库",
         "保存到数据库",
@@ -44,7 +47,8 @@ _DB_WRITE_KEYWORDS = frozenset(
 
 
 def _clean_db_slot_value(value: str) -> str:
-    text = str(value or "").strip(" \t\r\n，,。；;：:")
+    # 先按常见分隔符剥离，再单独 rstrip("=")（用于「名称=XXX」写法），避免 B005 strip 多字符告警
+    text = str(value or "").strip(" \t\r\n，,。；;：:").rstrip("=")
     for token in (
         "到数据库",
         "写入数据库",
@@ -84,6 +88,22 @@ def _looks_like_business_db_write(message: str, lower: str) -> bool:
         k in lower for k in ("add", "create", "insert", "upsert", "update", "delete", "remove")
     ):
         return False
+    # 明确写关键词 + 业务实体即视为写意图，不强制要求"数据库/db"字样
+    # （否则「新建客户」「新增产品」等日常指令因无"数据库"字样而不触发写工具，P0-Bug1 第二层根因）。
+    entity_markers = (
+        "客户",
+        "购买单位",
+        "买家",
+        "产品",
+        "商品",
+        "原材料",
+        "物料",
+        "发货单",
+        "出货",
+        "单位",
+    )
+    if any(k in message for k in entity_markers):
+        return True
     return (
         any(k in message for k in ("数据库", "入库", "写库"))
         or "db" in lower
@@ -243,8 +263,9 @@ def _extract_business_db_write_node(message: str) -> WorkflowNode | None:
         unit_name = _extract_named_slot(
             message,
             (
-                r"(?:客户|单位|购买单位)\s*[:：是为]?\s*([^\s，,。；;]+)",
-                r"(?:新增|添加|创建|写入|保存)\s*([^\s，,。；;]+)\s*(?:客户|单位)",
+                r"(?:客户名称|单位名称|名称)\s*[:：是为=]?\s*([^\s，,。；;=]+)",
+                r"(?:客户|单位|购买单位)\s*[:：是为=]?\s*([^\s，,。；;=]+)",
+                r"(?:新增|添加|创建|写入|保存)\s*([^\s，,。；;=]+)\s*(?:客户|单位)",
             ),
         )
         if not unit_name:
@@ -1496,6 +1517,29 @@ class LLMWorkflowPlanner:
 
         from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 
+        # 明确业务写意图优先走确定性写规划，避免 LLM 反问"要建到哪个系统"等
+        # 而迟迟不真正调用 business_db_write 工具（P0-Bug1 主链路根因）。
+        lower_msg = str(message or "").lower()
+        if (
+            _looks_like_business_db_write(str(message or ""), lower_msg)
+            and "business_db" in registry_for_plan
+        ):
+            deterministic_write = self._fallback_plan(
+                plan_id, str(message or ""), registry_for_plan
+            )
+            if deterministic_write is not None and any(
+                n.tool_id == "business_db" and n.action == "write"
+                for n in deterministic_write.nodes or []
+            ):
+                return finalize_planned_graph(
+                    self._decorate_plan(deterministic_write, str(message or ""), registry_for_plan),
+                    plan_id=plan_id,
+                    context=context,
+                    validate=validate_plan_graph,
+                    fallback_factory=lambda: deterministic_write,
+                    warn=logger.warning,
+                )
+
         planned = self._plan_with_react_multiagent(
             plan_id, user_id, message, registry_for_plan, context
         )
@@ -2271,39 +2315,17 @@ class LLMWorkflowPlanner:
                     )
                 )
 
+        # 明确「新增/添加 产品」且未指明"数据库/db"时，优先走专用的 add_product_to_unit
+        # （确保单位存在→创建产品）；若消息明确写库（如「添加到数据库」）则仍走 generic
+        # business_db_write。须在 generic business_db_write 之前判断，避免 P0-Bug1 的写意图
+        # 拓宽把「添加产品到公司A」误并进通用 business_db_write。
         if (
             not nodes
-            and _looks_like_business_db_write(message, lower)
-            and "business_db" in tool_registry
-        ):
-            node = _extract_business_db_write_node(message)
-            if node is not None:
-                intent = "business_db_write"
-                todo = ["识别业务实体与写入字段", "通过受控业务服务写入数据库", "返回写入结果"]
-                nodes.append(node)
-
-        if not nodes and (
-            any(k in lower for k in ("db", "database"))
-            or any(k in message for k in ("数据库", "查数据库", "读数据库"))
-        ):
-            if "business_db" in tool_registry:
-                intent = "business_db_read"
-                entity = _infer_business_db_entity(message)
-                keyword = _extract_business_db_read_keyword(message, entity)
-                nodes.append(
-                    WorkflowNode(
-                        node_id="read_business_db",
-                        tool_id="business_db",
-                        action="read",
-                        params={"entity": entity, "keyword": keyword},
-                        risk="low",
-                        description="读取受控业务数据库",
-                        idempotent=True,
-                    )
-                )
-
-        if not nodes and (
-            ("添加" in message or "新增" in message or "create" in lower) and ("产品" in message)
+            and ("添加" in message or "新增" in message or "create" in lower)
+            and ("产品" in message)
+            and not any(k in message for k in ("数据库", "写库", "入库"))
+            and "db" not in lower
+            and "database" not in lower
         ):
             intent = "add_product_to_unit"
             todo = [
@@ -2334,6 +2356,37 @@ class LLMWorkflowPlanner:
                         risk="medium",
                         description="创建产品",
                         depends_on=["check_or_create_unit"] if nodes else [],
+                    )
+                )
+
+        if (
+            not nodes
+            and _looks_like_business_db_write(message, lower)
+            and "business_db" in tool_registry
+        ):
+            node = _extract_business_db_write_node(message)
+            if node is not None:
+                intent = "business_db_write"
+                todo = ["识别业务实体与写入字段", "通过受控业务服务写入数据库", "返回写入结果"]
+                nodes.append(node)
+
+        if not nodes and (
+            any(k in lower for k in ("db", "database"))
+            or any(k in message for k in ("数据库", "查数据库", "读数据库"))
+        ):
+            if "business_db" in tool_registry:
+                intent = "business_db_read"
+                entity = _infer_business_db_entity(message)
+                keyword = _extract_business_db_read_keyword(message, entity)
+                nodes.append(
+                    WorkflowNode(
+                        node_id="read_business_db",
+                        tool_id="business_db",
+                        action="read",
+                        params={"entity": entity, "keyword": keyword},
+                        risk="low",
+                        description="读取受控业务数据库",
+                        idempotent=True,
                     )
                 )
 

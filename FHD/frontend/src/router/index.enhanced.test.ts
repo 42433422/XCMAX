@@ -545,12 +545,13 @@ describe('router/index enhanced', () => {
     expect(router.currentRoute.value.name).toBe('settings')
   })
 
-  it('redirects to login when enterprise SKU check fails', async () => {
+  it('fail-open on session check network error instead of redirecting to login', async () => {
     mockFetchProductSku.mockRejectedValue(new Error('network'))
     mockIsEnterpriseEdition.mockReturnValue(true)
     await router.push('/')
     await router.push('/settings')
-    expect(router.currentRoute.value.name).toBe('login')
+    // P1-Bug2 修复：瞬时网络异常不应把已登录用户踢回登录页
+    expect(router.currentRoute.value.name).toBe('settings')
   })
 
   it('allows public access routes without authentication', async () => {

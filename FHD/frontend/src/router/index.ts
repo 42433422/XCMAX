@@ -731,15 +731,10 @@ router.beforeEach(async (to, _from, next) => {
         }
       }
     } catch {
-      const sku = await fetchProductSku().catch(() => 'generic');
-      if (!isEnterpriseEdition(sku)) {
-        next();
-        return;
-      }
-      next({
-        name: 'login',
-        query: { redirect: to.fullPath !== '/login' ? to.fullPath : '/' },
-      });
+      // P1-Bug2：瞬时网络异常/后端冷启动未就绪时 fail-open，不把已登录用户踢回登录页。
+      // fetchProductSku 内部已兜底返回默认值；此处仅 validateEnterpriseSessionCached 在
+      // 网络异常时才会抛出。真正的鉴权失败由后续业务 API 的 401 兜底处理。
+      next();
       return;
     }
   }

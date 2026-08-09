@@ -1298,18 +1298,17 @@ async function createWindow(): Promise<void> {
   mainWindow.focus()
   updateSplashProgress(8, '正在启动本地服务…')
 
-  if (shouldClearFrontendCache()) {
-    void mainWindow.webContents.session
-      .clearCache()
-      .then(() => markFrontendCacheCleared())
-      .catch(() => undefined)
-  }
-
   const loadMainApplication = async (): Promise<void> => {
     if (!mainWindow) {
       throw new Error('主窗口在应用加载前已关闭')
     }
     try {
+      // 前端 bundle 变更时须在 loadURL 前 await 清理 Electron HTTP 缓存，
+      // 否则旧 index-*.js 引用已不存在的 chunk（竞态：clearCache 未完成即加载旧 index.html）
+      if (shouldClearFrontendCache()) {
+        await mainWindow.webContents.session.clearCache()
+        markFrontendCacheCleared()
+      }
       updateSplashProgress(92, '正在打开主界面…')
       await mainWindow.loadURL(desktopInitialUrl(), {
         extraHeaders: 'Cache-Control: no-cache\r\n'
@@ -1361,10 +1360,10 @@ async function createWindow(): Promise<void> {
   // 登录后的工作台不必等待全部 Mod 和业务路由完成。先在本地服务
   // 可响应时打开界面，模块继续在后台完成；更新观察期仍会等待两者。
   const mainUiReady = pingReady.then(() => {
-      splashPhase = 'done'
-      updateSplashProgress(88, '正在加载应用…')
-      return loadMainApplication()
-    })
+    splashPhase = 'done'
+    updateSplashProgress(88, '正在加载应用…')
+    return loadMainApplication()
+  })
   const backendApplicationReady = pingReady.then(() =>
     waitForBackendApplicationReady(DEFAULT_PORT, undefined, { skipPing: true }),
   )

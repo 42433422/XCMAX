@@ -832,11 +832,12 @@ it('/business-docking 进入 ETL 数据对接中心', async () => {
       expect(router.currentRoute.value.name).toBe('settings')
     })
 
-    it('fetchProductSku 异常 + enterprise 时重定向到 login', async () => {
-      mockFetchProductSku.mockRejectedValue(new Error('network'))
+    it('enterprise + 会话校验网络异常时 fail-open 放行（不误踢已登录用户）', async () => {
       mockIsEnterpriseEdition.mockReturnValue(true)
+      mockValidateEnterpriseSession.mockRejectedValue(new Error('network'))
       await router.push('/settings')
-      expect(router.currentRoute.value.name).toBe('login')
+      // 瞬时网络异常不应把已登录用户重定向到登录页（P1-Bug2 修复）
+      expect(router.currentRoute.value.name).toBe('settings')
     })
 
     it('publicAccess 路由跳过 enterprise session 检查', async () => {

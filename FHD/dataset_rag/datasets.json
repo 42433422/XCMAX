@@ -1246,6 +1246,29 @@
             "version_label": "v22"
           }
         },
+        "artifact_art_5e91dfe8575f474daeee92d1c0919959": {
+          "document_id": "artifact_art_5e91dfe8575f474daeee92d1c0919959",
+          "source": "ocr_result",
+          "parser": "inline_text",
+          "text_length": 17,
+          "chunk_count": 1,
+          "tenant_id": "tenant-a",
+          "version": 40,
+          "version_label": "v40",
+          "metadata": {
+            "artifact_id": "art_5e91dfe8575f474daeee92d1c0919959",
+            "artifact_type": "ocr_text",
+            "artifact_name": "ocr_result",
+            "artifact_source": "ocr.recognize",
+            "agent_run_id": "run_081b9d21da98460c8fbd4357cad62626",
+            "user_id": "tenant-a",
+            "mime_type": "image/*",
+            "parser_used": "ocr",
+            "tenant_id": "tenant-a",
+            "document_version": 40,
+            "version_label": "v40"
+          }
+        },
         "artifact_art_5ef87c14b0204375a3e54dc43f720213": {
           "document_id": "artifact_art_5ef87c14b0204375a3e54dc43f720213",
           "source": "shipment-template.xlsx",
@@ -1382,6 +1405,29 @@
             "tenant_id": "u1",
             "document_version": 44,
             "version_label": "v44"
+          }
+        },
+        "artifact_art_641b353579844b58858d2b6971fdda2c": {
+          "document_id": "artifact_art_641b353579844b58858d2b6971fdda2c",
+          "source": "shipment-template.xlsx",
+          "parser": "inline_text",
+          "text_length": 105,
+          "chunk_count": 1,
+          "tenant_id": "tenant-a",
+          "version": 40,
+          "version_label": "v40",
+          "metadata": {
+            "artifact_id": "art_641b353579844b58858d2b6971fdda2c",
+            "artifact_type": "excel_file",
+            "artifact_name": "shipment-template.xlsx",
+            "artifact_source": "templates_analyze_route",
+            "agent_run_id": "run_13ba02d6cc41464d8233989a69655370",
+            "user_id": "tenant-a",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "tenant-a",
+            "document_version": 40,
+            "version_label": "v40"
           }
         },
         "artifact_art_6645c80ff77447949e723533e9ab192d": {
@@ -2762,6 +2808,29 @@
             "tenant_id": "u1",
             "document_version": 1,
             "version_label": "v1"
+          }
+        },
+        "artifact_art_d1fd594bff9248e284fc03a231465331": {
+          "document_id": "artifact_art_d1fd594bff9248e284fc03a231465331",
+          "source": "excel_import_records",
+          "parser": "inline_text",
+          "text_length": 60,
+          "chunk_count": 1,
+          "tenant_id": "u",
+          "version": 12,
+          "version_label": "v12",
+          "metadata": {
+            "artifact_id": "art_d1fd594bff9248e284fc03a231465331",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_e5447fc4d3874a55bf4b01577ac4b63f",
+            "user_id": "u",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "u",
+            "document_version": 12,
+            "version_label": "v12"
           }
         },
         "artifact_art_d2664a81461d469a8db0505aaf0bc495": {
@@ -14921,14 +14990,98 @@
           },
           "source_url": "excel_import_records",
           "page": null
+        },
+        {
+          "text": "购货单位：ACME Trading",
+          "score": 0.0,
+          "source": "ocr_result",
+          "chunk_index": 154,
+          "char_start": 0,
+          "char_end": 17,
+          "metadata": {
+            "dataset_id": "persy-knowledge",
+            "document_id": "artifact_art_5e91dfe8575f474daeee92d1c0919959",
+            "source": "ocr_result",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "tenant-a",
+            "document_version": 40,
+            "version_label": "v40",
+            "artifact_id": "art_5e91dfe8575f474daeee92d1c0919959",
+            "artifact_type": "ocr_text",
+            "artifact_name": "ocr_result",
+            "artifact_source": "ocr.recognize",
+            "agent_run_id": "run_081b9d21da98460c8fbd4357cad62626",
+            "user_id": "tenant-a",
+            "mime_type": "image/*",
+            "parser_used": "ocr"
+          },
+          "source_url": "ocr_result",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"template_name\", \"value\": \"发货模板\"}, {\"name\": \"template_scope\", \"value\": \"shipment\"}]}",
+          "score": 0.0,
+          "source": "shipment-template.xlsx",
+          "chunk_index": 155,
+          "char_start": 0,
+          "char_end": 105,
+          "metadata": {
+            "dataset_id": "persy-knowledge",
+            "document_id": "artifact_art_641b353579844b58858d2b6971fdda2c",
+            "source": "shipment-template.xlsx",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "tenant-a",
+            "document_version": 40,
+            "version_label": "v40",
+            "artifact_id": "art_641b353579844b58858d2b6971fdda2c",
+            "artifact_type": "excel_file",
+            "artifact_name": "shipment-template.xlsx",
+            "artifact_source": "templates_analyze_route",
+            "agent_run_id": "run_13ba02d6cc41464d8233989a69655370",
+            "user_id": "tenant-a",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "shipment-template.xlsx",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"客户\"}, {\"name\": \"产品\"}, {\"name\": \"单价\"}]}",
+          "score": 0.0,
+          "source": "excel_import_records",
+          "chunk_index": 156,
+          "char_start": 0,
+          "char_end": 60,
+          "metadata": {
+            "dataset_id": "persy-knowledge",
+            "document_id": "artifact_art_d1fd594bff9248e284fc03a231465331",
+            "source": "excel_import_records",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "u",
+            "document_version": 12,
+            "version_label": "v12",
+            "artifact_id": "art_d1fd594bff9248e284fc03a231465331",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_e5447fc4d3874a55bf4b01577ac4b63f",
+            "user_id": "u",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "excel_import_records",
+          "page": null
         }
       ],
       "index": {
         "schema_version": 2,
         "retriever": "hybrid_bm25_vector",
         "reranker": "lexical_overlap_v1",
-        "document_count": 154,
-        "chunk_count": 154,
+        "document_count": 157,
+        "chunk_count": 157,
         "embedding_count": 107,
         "embedding_persisted": true,
         "vector_backend": {
@@ -14936,20 +15089,20 @@
           "dataset_id": "persy-knowledge",
           "backend": "sqlite_vector",
           "created_at": 1784878379.4086661,
-          "updated_at": 1786050494.437608,
-          "chunk_count": 154,
+          "updated_at": 1786291302.330741,
+          "chunk_count": 157,
           "path": "/Users/a4243342/Desktop/XCMAX/FHD/dataset_rag/datasets.json.vectors.sqlite",
           "persistent": true,
           "index_exists": true
         },
         "vector_backend_name": "sqlite_vector",
-        "vector_backend_chunk_count": 154,
+        "vector_backend_chunk_count": 157,
         "vector_backend_persistent": true,
         "vector_backend_sync_status": "synced",
-        "vector_backend_synced_chunks": 154,
-        "vector_backend_synced_at": "2026-08-06T21:08:14.452512Z",
+        "vector_backend_synced_chunks": 157,
+        "vector_backend_synced_at": "2026-08-09T16:01:42.340764Z",
         "vector_backend_error": "",
-        "updated_at": "2026-08-06T21:08:14.452840Z"
+        "updated_at": "2026-08-09T16:01:42.340966Z"
       },
       "rebuild_jobs": {}
     },
@@ -27425,7 +27578,7 @@
           "dataset_id": "user_eval-user",
           "backend": "sqlite_vector",
           "created_at": 1784878379.412129,
-          "updated_at": 1786050437.176411,
+          "updated_at": 1786291253.882446,
           "chunk_count": 245,
           "path": "/Users/a4243342/Desktop/XCMAX/FHD/dataset_rag/datasets.json.vectors.sqlite",
           "persistent": true,
@@ -27436,9 +27589,9 @@
         "vector_backend_persistent": true,
         "vector_backend_sync_status": "synced",
         "vector_backend_synced_chunks": 245,
-        "vector_backend_synced_at": "2026-08-06T21:07:17.180846Z",
+        "vector_backend_synced_at": "2026-08-09T16:00:53.888020Z",
         "vector_backend_error": "",
-        "updated_at": "2026-08-06T21:07:17.181027Z"
+        "updated_at": "2026-08-09T16:00:53.888207Z"
       },
       "rebuild_jobs": {}
     },
@@ -52757,7 +52910,7 @@
           "dataset_id": "user_tenant-a",
           "backend": "sqlite_vector",
           "created_at": 1784878379.423192,
-          "updated_at": 1786050437.184336,
+          "updated_at": 1786291253.8896441,
           "chunk_count": 496,
           "path": "/Users/a4243342/Desktop/XCMAX/FHD/dataset_rag/datasets.json.vectors.sqlite",
           "persistent": true,
@@ -52768,9 +52921,9 @@
         "vector_backend_persistent": true,
         "vector_backend_sync_status": "synced",
         "vector_backend_synced_chunks": 496,
-        "vector_backend_synced_at": "2026-08-06T21:07:17.192676Z",
+        "vector_backend_synced_at": "2026-08-09T16:00:53.898817Z",
         "vector_backend_error": "",
-        "updated_at": "2026-08-06T21:07:17.192929Z"
+        "updated_at": "2026-08-09T16:00:53.899019Z"
       },
       "rebuild_jobs": {}
     },
@@ -57077,7 +57230,7 @@
           "dataset_id": "user_u",
           "backend": "sqlite_vector",
           "created_at": 1784878379.433908,
-          "updated_at": 1786050437.193345,
+          "updated_at": 1786291253.899189,
           "chunk_count": 84,
           "path": "/Users/a4243342/Desktop/XCMAX/FHD/dataset_rag/datasets.json.vectors.sqlite",
           "persistent": true,
@@ -57088,9 +57241,9 @@
         "vector_backend_persistent": true,
         "vector_backend_sync_status": "synced",
         "vector_backend_synced_chunks": 84,
-        "vector_backend_synced_at": "2026-08-06T21:07:17.195191Z",
+        "vector_backend_synced_at": "2026-08-09T16:00:53.900738Z",
         "vector_backend_error": "",
-        "updated_at": "2026-08-06T21:07:17.195311Z"
+        "updated_at": "2026-08-09T16:00:53.900830Z"
       },
       "rebuild_jobs": {}
     },
@@ -66701,7 +66854,7 @@
           "dataset_id": "user_u1",
           "backend": "sqlite_vector",
           "created_at": 1784878379.4390662,
-          "updated_at": 1786050437.196353,
+          "updated_at": 1786291253.901149,
           "chunk_count": 188,
           "path": "/Users/a4243342/Desktop/XCMAX/FHD/dataset_rag/datasets.json.vectors.sqlite",
           "persistent": true,
@@ -66712,9 +66865,9 @@
         "vector_backend_persistent": true,
         "vector_backend_sync_status": "synced",
         "vector_backend_synced_chunks": 188,
-        "vector_backend_synced_at": "2026-08-06T21:07:17.199671Z",
+        "vector_backend_synced_at": "2026-08-09T16:00:53.904608Z",
         "vector_backend_error": "",
-        "updated_at": "2026-08-06T21:07:17.199833Z"
+        "updated_at": "2026-08-09T16:00:53.904762Z"
       },
       "rebuild_jobs": {}
     },
@@ -66735,7 +66888,7 @@
           "dataset_id": "xiaoc-internal",
           "backend": "sqlite_vector",
           "created_at": 1784878379.443906,
-          "updated_at": 1786050437.1998441,
+          "updated_at": 1786291253.904771,
           "chunk_count": 0,
           "path": "/Users/a4243342/Desktop/XCMAX/FHD/dataset_rag/datasets.json.vectors.sqlite",
           "persistent": true,
@@ -66746,9 +66899,9 @@
         "vector_backend_persistent": true,
         "vector_backend_sync_status": "synced",
         "vector_backend_synced_chunks": 0,
-        "vector_backend_synced_at": "2026-08-06T21:07:17.200128Z",
+        "vector_backend_synced_at": "2026-08-09T16:00:53.905224Z",
         "vector_backend_error": "",
-        "updated_at": "2026-08-06T21:07:17.200212Z"
+        "updated_at": "2026-08-09T16:00:53.905330Z"
       },
       "rebuild_jobs": {}
     }
