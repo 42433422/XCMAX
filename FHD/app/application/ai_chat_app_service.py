@@ -1328,7 +1328,9 @@ class AIChatApplicationService(
                                 approved_plan = PlanGraph(
                                     plan_id=f"{plan.plan_id}:{node.node_id}",
                                     intent=plan.intent,
-                                    todo_steps=[node.description or f"{node.tool_id}.{node.action}"],
+                                    todo_steps=[
+                                        node.description or f"{node.tool_id}.{node.action}"
+                                    ],
                                     nodes=[approved_node],
                                     risk_level=node.risk,
                                     metadata=dict(plan.metadata or {}),

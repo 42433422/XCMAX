@@ -144,9 +144,9 @@ def persist_workflow_approval(
                         applicant.display_name or applicant.username or applicant.id
                     ),
                     title=f"智能对话写操作：{request.tool_id}.{request.action}",
-                    description=json.dumps(
-                        request.params or {}, ensure_ascii=False, default=str
-                    )[:500],
+                    description=json.dumps(request.params or {}, ensure_ascii=False, default=str)[
+                        :500
+                    ],
                     current_node_id=None,
                     current_node_order=0,
                     status="pending",

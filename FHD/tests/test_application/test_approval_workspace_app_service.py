@@ -1207,9 +1207,7 @@ class TestApproveRequest:
 
         assert result["success"] is True
         assert result["data"]["workflow_execution"]["workflow_executed"] is True
-        mock_resume.assert_called_once_with(
-            request_no="req-ai-1", opinion="同意", approved_by="1"
-        )
+        mock_resume.assert_called_once_with(request_no="req-ai-1", opinion="同意", approved_by="1")
 
     def test_approve_ai_workflow_without_current_node_resumes_execution(self):
         request = Mock()
@@ -1254,9 +1252,7 @@ class TestApproveRequest:
         assert result["success"] is True
         assert req.status == ApprovalStatus.APPROVED.value
         assert result["data"]["workflow_execution"]["success"] is True
-        mock_resume.assert_called_once_with(
-            request_no="req-ai-1", opinion="同意", approved_by="1"
-        )
+        mock_resume.assert_called_once_with(request_no="req-ai-1", opinion="同意", approved_by="1")
         mock_db.add.assert_called_once()
 
 
