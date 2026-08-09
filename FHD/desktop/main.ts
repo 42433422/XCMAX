@@ -824,7 +824,7 @@ async function startBackend(): Promise<void> {
       XCAGI_DESKTOP_FAST_START: '1',
       ...backendEditionEnv(),
       PYTHONUTF8: '1'
-    }),
+    }, app.isPackaged ? undefined : repoRoot()),
     windowsHide: true
   })
   backendProcess.stdout.on('data', data => {
@@ -906,7 +906,7 @@ function runBackendMigration(): Promise<string> {
         XCAGI_GLOBAL_RATE_LIMIT: '0',
         ...backendEditionEnv(),
         PYTHONUTF8: '1'
-      }),
+      }, app.isPackaged ? undefined : repoRoot()),
       windowsHide: true
     })
     let stderr = ''

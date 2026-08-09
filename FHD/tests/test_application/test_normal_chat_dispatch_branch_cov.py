@@ -190,6 +190,29 @@ class TestRouteNormalModeMessageCustomersQuery:
 
         assert try_normal_slot_read_payload("今天天气怎么样") is None
 
+    def test_explicit_business_database_request_bypasses_normal_slot(self):
+        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+
+        assert (
+            try_normal_slot_read_payload(
+                "请通过业务数据库查询当前租户的客户、产品、原材料和出货记录数量"
+            )
+            is None
+        )
+        assert try_normal_slot_read_payload("删除数据库中的客户") is None
+        assert (
+            try_normal_slot_read_payload(
+                "请在业务数据库新建客户，名称：CHATCRUD-TEST，先预览并等待审批"
+            )
+            is None
+        )
+        assert (
+            try_normal_slot_read_payload(
+                "新建客户 CHATCRUD-TEST-涂料门店，联系人张三。只显示写入预览，不要直接写入。"
+            )
+            is None
+        )
+
 
 # ---------------------------------------------------------------------------
 # route_normal_mode_message — inventory_alert 分支
