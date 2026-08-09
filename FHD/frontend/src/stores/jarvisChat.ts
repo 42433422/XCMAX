@@ -2,8 +2,6 @@ import { defineStore } from 'pinia'
 import { ref, type Ref } from 'vue'
 import { useProModeStore } from './proMode'
 import { speakText, stopSpeaking, cleanTextForSpeech } from '../utils/tts'
-import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
-
 type LegacyChatWindow = Window & {
   setMonitorModeFromChat?: (enabled: boolean) => void
   setWorkModeFromChat?: (enabled: boolean) => void

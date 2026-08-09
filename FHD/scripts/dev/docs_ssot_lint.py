@@ -22,7 +22,11 @@ SCAN_DIRS = [FHD_ROOT / "docs", REPO_ROOT / "docs"]
 # 设计/规划文档（brainstorming spec、implementation plan）含 YAML 示例中的 "ssot:" 字段，
 # 非权威 SSOT 声明，跳过扫描避免假阳性。
 IGNORE_DIRS = {REPO_ROOT / "docs" / "superpowers"}
-IGNORE_FILES = {FHD_ROOT / "docs" / "PROJECT_STATE.md"}
+IGNORE_FILES = {
+    FHD_ROOT / "docs" / "PROJECT_STATE.md",
+    # 开发工具盘点清单：含大量 ssot 文件名/角色标签，非权威 SSOT 声明文档。
+    FHD_ROOT / "docs" / "DEV_TOOLS_INVENTORY.md",
+}
 
 CLAIM_PATTERN = re.compile(r"(唯一真相源|SSOT|单一事实来源)", re.IGNORECASE)
 # Markdown link in table cell: [text](path)

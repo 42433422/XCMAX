@@ -1,4 +1,4 @@
-"""COVERAGE_RAMP Phase 4 round 27: wechat message helpers, im_routes HTTP,
+"""COVERAGE_RAMP Phase 4 round 27: im_routes HTTP,
 ai_chat pro excel branches, legacy_chat_adapter post-tool hints."""
 
 from __future__ import annotations
@@ -38,64 +38,6 @@ def _chat_svc() -> AIChatApplicationService:
         svc = AIChatApplicationService()
         svc.ai_service = mock_ai
         return svc
-
-
-# ---------------------------------------------------------------------------
-# wechat routes — pure helpers
-# ---------------------------------------------------------------------------
-
-
-def test_wechat_message_timestamp_seconds_variants() -> None:
-    from app.fastapi_routes.domains.wechat import routes as wechat_routes
-
-    assert wechat_routes._wechat_message_timestamp_seconds({}) == 0.0
-    assert (
-        wechat_routes._wechat_message_timestamp_seconds({"timestamp": 1_700_000_000})
-        == 1_700_000_000
-    )
-    assert (
-        wechat_routes._wechat_message_timestamp_seconds({"timestamp": 1_700_000_000_000})
-        == 1_700_000_000.0
-    )
-    iso = wechat_routes._wechat_message_timestamp_seconds({"created_at": "2024-06-01T12:00:00Z"})
-    assert iso > 0
-
-
-def test_wechat_message_text_prefers_content() -> None:
-    from app.fastapi_routes.domains.wechat import routes as wechat_routes
-
-    assert wechat_routes._wechat_message_text({"content": "  hello  "}) == "hello"
-    assert wechat_routes._wechat_message_text({"message": "m"}) == "m"
-    assert wechat_routes._wechat_message_text({"text": ""}) == ""
-
-
-def test_wechat_tasks_success_and_error() -> None:
-    from app.fastapi_routes.domains.wechat import routes as wechat_routes
-
-    mock_svc = MagicMock()
-    mock_svc.get_tasks.return_value = [{"id": 1}]
-    with patch("app.application.get_wechat_task_app_service", return_value=mock_svc):
-        ok = wechat_routes.wechat_tasks()
-    assert ok["success"] is True
-    assert ok["total"] == 1
-
-    with patch(
-        "app.application.get_wechat_task_app_service",
-        side_effect=RuntimeError("db down"),
-    ):
-        err = wechat_routes.wechat_tasks()
-    assert err.status_code == 500
-
-
-@patch(
-    "app.services.wechat_passive_group_monitor.assert_safe_outbound_group_reply", return_value=None
-)
-def test_send_wechat_blocked_by_safety(_mock_safe: MagicMock) -> None:
-    from app.fastapi_routes.domains.wechat import routes as wechat_routes
-
-    out = wechat_routes._send_wechat_via_automation("Bob", "思考过程…")
-    assert out["success"] is False
-    assert "拦截" in out["message"]
 
 
 # ---------------------------------------------------------------------------

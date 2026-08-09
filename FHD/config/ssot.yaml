@@ -275,3 +275,39 @@ domains:
     mode: verify
     check: python scripts/ops/runtime_inventory.py check
     sync: null
+
+  - name: repository-ssot
+    owner: backend
+    enabled: true
+    # 仓储实现唯一真相源：禁止同一 <Entity>Repository port 重复实现（保新建删/DDD 演进）。
+    # 唯一规范目录 = app/infrastructure/repositories/；persistence/ 仅保留非 domain 仓储实现。
+    ssot: FHD/app/infrastructure/repositories/
+    derived:
+      - FHD/app/infrastructure/persistence/
+      - FHD/app/application/ports/
+    mode: lint
+    check: python scripts/dev/ssot_plugins/repository_ssot.py check
+    sync: null
+
+  - name: dev-inventory
+    owner: devops
+    enabled: true
+    # 开发工具盘点：把分散在 scripts/dev|ci|scripts 的规范性守卫/棘轮/校验脚本统一登记，
+    # 防止新"轮子"游离于 SSOT 工程外。棘轮模式：只拦新增未登记脚本。
+    ssot: FHD/scripts/dev/
+    derived:
+      - FHD/docs/DEV_TOOLS_INVENTORY.md
+    mode: lint
+    check: python scripts/dev/ssot_inventory.py --check
+    sync: null
+
+  - name: dev-guards
+    owner: devops
+    enabled: true
+    # 开发守卫统一入口：串行聚合游离的规范性守卫/棘轮脚本，纳入 ssot_cli gate 硬门禁。
+    # 命令参数与 fhd-ci-cd.yml backend-test 一致；依赖覆盖率数据的守卫不进本聚合。
+    ssot: FHD/scripts/dev/
+    derived: []
+    mode: lint
+    check: python scripts/dev/dev_guards.py check
+    sync: null

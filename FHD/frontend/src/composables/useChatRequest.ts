@@ -2,8 +2,6 @@ import { ref, type Ref } from 'vue'
 import type { ChatMessage } from './useChatMessages'
 import chatApi from '../api/chat'
 import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
-import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
-
 export interface UseChatRequestDeps {
   messages: Ref<ChatMessage[]>
   proIntentExperienceEnabled?: Ref<boolean>

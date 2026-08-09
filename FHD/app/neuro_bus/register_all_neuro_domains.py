@@ -29,7 +29,6 @@ def register_all_neuro_domains() -> list[str]:
     from app.neuro_bus.domains.product_domain import get_product_domain
     from app.neuro_bus.domains.safety_domain import get_safety_domain
     from app.neuro_bus.domains.shipment_domain import get_shipment_domain
-    from app.neuro_bus.domains.wechat_domain import get_wechat_domain
 
     getters = (
         get_intent_domain,
@@ -38,7 +37,6 @@ def register_all_neuro_domains() -> list[str]:
         get_product_domain,
         get_customer_domain,
         get_ai_service_domain,
-        get_wechat_domain,
         get_print_domain,
         get_ocr_domain,
         get_payment_domain,

@@ -4,7 +4,7 @@ export type CoreMenuCatalogItem = {
   key: string
   name: string
   iconClass: string
-  /** 侧栏 hover 提示的一句话说明，帮用户分清「智能对话/信息/AI群聊」等相似入口。可选，缺省仅显示 name。 */
+  /** 侧栏 hover 提示的一句话说明，帮用户分清「智能对话/信息」等相似入口。可选，缺省仅显示 name。 */
   description?: string
   children?: CoreMenuCatalogItem[]
 }
@@ -23,7 +23,6 @@ export function pinMenuKeyFirst<T extends { key: string }>(
 
 export const EMPLOYEE_WORKFLOW_MENU_CHILDREN: CoreMenuCatalogItem[] = [
   { key: 'workflow-employee-space', name: '员工空间', iconClass: 'fa-th-large', description: '看工位实况与员工上岗状态' },
-  { key: 'workflow-visualization', name: '流程可视化', iconClass: 'fa-share-alt', description: '看任务流程图与执行进度' },
 ]
 
 /** 管理端「员工工作台」额外子项（企业端不可见） */
@@ -36,15 +35,14 @@ export const EMPLOYEE_WORKFLOW_MENU_ITEM: CoreMenuCatalogItem = {
   key: 'employee-workflow',
   name: '员工工作台',
   iconClass: 'fa-users',
-  description: '看员工空间与流程可视化',
+  description: '看员工空间',
   children: EMPLOYEE_WORKFLOW_MENU_CHILDREN,
 }
 
 /**
- * 三个「看起来都像聊天」的入口说明文案（SSOT）：
+ * 两个「看起来都像聊天」的入口说明文案（SSOT）：
  * - 智能对话 = 找小 C 办事、下指令、看任务进度（对话入口轴）
  * - 信息 = 找已安装的 AI 同事、专属客服一对一聊（联系人列表轴）
- * - AI群聊 = 把多个 AI 员工拉进一个群，一起讨论或派工
  * 用于侧栏 hover 提示，帮用户分清楚点哪个；不改变路由与已有分工。
  */
 export const CORE_MENU_ITEMS_BASE: CoreMenuCatalogItem[] = [
@@ -61,12 +59,6 @@ export const CORE_MENU_ITEMS_BASE: CoreMenuCatalogItem[] = [
     description: '联系已安装的AI同事、专属客服，一对一聊',
   },
   {
-    key: 'ai-groups',
-    name: 'AI群聊',
-    iconClass: 'fa-users',
-    description: '把多个AI员工拉进一个群，一起讨论或派工',
-  },
-  {
     key: 'ai-ecosystem',
     name: '智能生态',
     iconClass: 'fa-sitemap',
@@ -77,6 +69,12 @@ export const CORE_MENU_ITEMS_BASE: CoreMenuCatalogItem[] = [
     name: '知识库',
     iconClass: 'fa-book',
     description: '查看企业知识、资料来源与长期记忆',
+  },
+  {
+    key: 'business-docking',
+    name: '数据对接中心',
+    iconClass: 'fa-exchange',
+    description: '上传业务文件，识别、预览并确认写入业务数据',
   },
   EMPLOYEE_WORKFLOW_MENU_ITEM,
 ]
@@ -93,6 +91,7 @@ export const INDUSTRY_DELIVERY_CORE_ITEMS: CoreMenuCatalogItem[] = [
   { key: 'orders', name: '业务单据', iconClass: 'fa-file-text-o' },
   { key: 'shipment-records', name: '业务记录', iconClass: 'fa-industry' },
   { key: 'materials', name: '资源库', iconClass: 'fa-archive' },
+  { key: 'business-docking', name: '数据对接中心', iconClass: 'fa-exchange', description: 'Excel ETL：预演、确认并写入业务数据' },
   { key: 'data-sources', name: '数据来源', iconClass: 'fa-database' },
   { key: 'print', name: '模板与打印', iconClass: 'fa-print' },
   { key: 'printer-list', name: '打印机列表', iconClass: 'fa-print' },

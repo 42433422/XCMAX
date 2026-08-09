@@ -43,12 +43,13 @@ describe('modViews', () => {
       expect((mod as { default: unknown }).default).toEqual({ template: '<div>mod</div>' })
     })
 
-    it('returns loader when key matches mods-admin-runtime/<id>/frontend/views/<file>', async () => {
+    it('ignores mods-admin-runtime glob keys (single SSOT = mods/)', async () => {
       const loader = async () => ({ default: { template: '<div>admin</div>' } })
       mockModPhysicalViewGlob['./mods-admin-runtime/m2/frontend/views/SettingsView.vue'] = loader
 
       const result = modView('m2', 'SettingsView.vue')
-      expect(result).toBe(loader)
+      const mod = (await result()) as { default: { template: string } }
+      expect(mod.default.template).toBe('<div />')
     })
 
     it('normalizes backslashes in glob keys when matching', async () => {
@@ -249,10 +250,10 @@ describe('modViews', () => {
       expect(physicalViewExists('m1', 'Products.vue')).toBe(true)
     })
 
-    it('returns true when mod view exists in mods-admin-runtime/<id>/frontend/views/<file>', () => {
+    it('returns false when only mods-admin-runtime view exists (single SSOT = mods/)', () => {
       mockModPhysicalViewGlob['./mods-admin-runtime/m2/frontend/views/Settings.vue'] = async () => ({ default: {} })
 
-      expect(physicalViewExists('m2', 'Settings.vue')).toBe(true)
+      expect(physicalViewExists('m2', 'Settings.vue')).toBe(false)
     })
 
     it('returns false when mod view does not exist', () => {

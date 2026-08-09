@@ -18,11 +18,9 @@ if TYPE_CHECKING:
         ShipmentApplicationServiceEventPrimary,
     )
     from app.application.file_analysis_app_service import FileAnalysisService
-    from app.application.ports.wechat_contact_store import WechatContactStorePort
     from app.application.shipment_app_service import ShipmentApplicationService
     from app.application.template_app_service import TemplateApplicationService
     from app.application.unit_products_import_app_service import UnitProductsImportService
-    from app.application.wechat_contact_app_service import WechatContactApplicationService
     from app.services.auth_service import AuthService
     from app.services.extract_log_service import ExtractLogService
     from app.services.materials_service import MaterialsService
@@ -53,8 +51,6 @@ class ServiceContainer:
         "_products_service",
         "_extract_log_service",
         "_product_import_service",
-        "_wechat_contact_store",
-        "_wechat_contact_application_service",
         "_shipment_application_service_core",
         "_shipment_event_primary_facade",
     )
@@ -73,8 +69,6 @@ class ServiceContainer:
         self._products_service = None
         self._extract_log_service = None
         self._product_import_service = None
-        self._wechat_contact_store: WechatContactStorePort | None = None
-        self._wechat_contact_application_service = None
         self._shipment_application_service_core = None
         self._shipment_event_primary_facade = None
 
@@ -181,7 +175,7 @@ class ServiceContainer:
     @property
     def materials_service(self) -> MaterialsService:
         def _factory() -> MaterialsService:
-            from app.infrastructure.persistence.material_repository_impl import (
+            from app.infrastructure.repositories.material_repository_impl import (
                 SQLAlchemyMaterialRepository,
             )
             from app.services.materials_service import MaterialsService
@@ -215,33 +209,6 @@ class ServiceContainer:
             "ProductImportService",
             self._lazy("_product_import_service", ProductImportService),
         )
-
-    @property
-    def wechat_contact_application_service(self) -> WechatContactApplicationService:
-        def _factory() -> WechatContactApplicationService:
-            from app.application.wechat_contact_app_service import (
-                WechatContactApplicationService,
-            )
-            from app.infrastructure.persistence.wechat_contact_store_impl import (
-                SQLAlchemyWechatContactStore,
-            )
-
-            store = self._wechat_contact_store
-            if store is None:
-                store = SQLAlchemyWechatContactStore()
-                self._wechat_contact_store = store
-            return WechatContactApplicationService(store)
-
-        return cast(
-            "WechatContactApplicationService",
-            self._lazy("_wechat_contact_application_service", _factory),
-        )
-
-    def invalidate_wechat_contact_application_service(self) -> None:
-        self._wechat_contact_application_service = None
-        self._wechat_contact_store = None
-
-    # --- shipment (full infra wiring; parity with former bootstrap lru_cache) ---
 
     @property
     def shipment_application_service_core(self) -> ShipmentApplicationService:

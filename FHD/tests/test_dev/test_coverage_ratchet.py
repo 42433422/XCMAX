@@ -628,6 +628,8 @@ class TestCmdCheck:
             "require_frontend": False,
             "record": False,
             "peak_floor": False,
+            "behavior": False,
+            "behavior_json": cr.BEHAVIOR_JSON_DEFAULT,
         }
         defaults.update(overrides)
         return Namespace(**defaults)

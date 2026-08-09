@@ -114,32 +114,6 @@ def test_im_list_conversations_server_error(im_client_error: TestClient) -> None
 
 
 # ---------------------------------------------------------------------------
-# wechat — groups sync
-# ---------------------------------------------------------------------------
-
-
-@patch("app.services.wechat_group_customer_bridge.sync_group_messages")
-def test_wechat_groups_sync_success(mock_sync: MagicMock) -> None:
-    from app.fastapi_routes.domains.wechat import routes as wechat_routes
-
-    mock_sync.return_value = {"success": True, "synced": 2, "failed": 0}
-    out = wechat_routes.wechat_groups_sync_messages(body={"group_limit": 10}, market_user_id=None)
-    assert out.status_code == 200
-    body = out.body.decode()
-    assert "success" in body
-
-
-@patch("app.services.wechat_group_customer_bridge.sync_group_messages")
-def test_wechat_groups_sync_all_failed(mock_sync: MagicMock) -> None:
-    from app.fastapi_routes.domains.wechat import routes as wechat_routes
-
-    mock_sync.return_value = {"success": True, "synced": 0, "failed": 3}
-    out = wechat_routes.wechat_groups_sync_messages(body=None, market_user_id=None)
-    payload = out.body.decode()
-    assert "false" in payload.lower() or "失败" in payload
-
-
-# ---------------------------------------------------------------------------
 # normal_chat — empty result messages
 # ---------------------------------------------------------------------------
 
@@ -154,16 +128,15 @@ def test_build_inventory_alert_no_low_stock(mock_get: MagicMock) -> None:
 
 
 def test_build_customers_query_empty_list(monkeypatch: pytest.MonkeyPatch) -> None:
-    import sys
-    import types
+    from app.mod_sdk import erp_domain_dispatch as erp_domain_dispatch_mod
 
-    mock_cls = MagicMock()
-    mock_cls.return_value.search.return_value = []
-    fake_mod = types.ModuleType("app.services.customers_service")
-    fake_mod.CustomerService = mock_cls  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "app.services.customers_service", fake_mod)
+    monkeypatch.setattr(
+        erp_domain_dispatch_mod,
+        "try_invoke_erp_domain_handler",
+        lambda *a, **kw: {"success": True, "data": []},
+    )
 
     rr = {"intent": "customers_query", "slots": {"keyword": "不存在公司"}}
     body = build_customers_query_response_dict(rr)
     assert body is not None
-    assert "未找到" in body["response"]
+    assert "不存在公司" in body["response"]

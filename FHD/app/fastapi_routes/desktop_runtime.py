@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import os
+import uuid
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.desktop_runtime import (
@@ -32,6 +33,10 @@ from app.runtime_integrity import runtime_integrity_snapshot
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop-runtime"])
+
+_MAX_CRASH_DUMP_BYTES = 20 * 1024 * 1024
+_MAX_CRASH_JSON_BYTES = 1024 * 1024
+_ALLOWED_CRASH_SUFFIXES = {".dmp", ".zip", ".json", ".txt", ".log"}
 
 
 class DownloadModelRequest(BaseModel):
@@ -300,6 +305,63 @@ def install_manifest(path: str, _user=Depends(get_logged_in_user)):
         )
     ]
     return {"success": True, "files": targets}
+
+
+@router.post("/crash-report")
+async def receive_crash_report(request: Request):
+    """接收桌面端 Electron 进程崩溃报告（JSON 或 multipart minidump）。
+
+    不要求登录——崩溃可能发生在用户登录之前。存储到数据目录 crash-reports/ 下，
+    供后续诊断分析。
+    """
+    if not is_desktop_mode():
+        raise HTTPException(status_code=409, detail="崩溃报告仅在桌面模式下可用")
+
+    dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))
+    crash_dir = dirs["root"] / "crash-reports"
+    crash_dir.mkdir(parents=True, exist_ok=True)
+
+    content_type = (request.headers.get("content-type") or "").lower()
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > _MAX_CRASH_DUMP_BYTES + 1024 * 1024:
+                raise HTTPException(status_code=413, detail="崩溃报告过大")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Content-Length 无效") from None
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    report_id = uuid.uuid4().hex[:12]
+
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        saved: list[str] = []
+        for field_name in form:
+            field = form[field_name]
+            filename = str(getattr(field, "filename", "") or "").strip()
+            reader = getattr(field, "read", None)
+            if not filename or not callable(reader):
+                continue
+            content = await reader()
+            if len(content) > _MAX_CRASH_DUMP_BYTES:
+                raise HTTPException(status_code=413, detail="崩溃转储超过 20 MB")
+            ext = Path(filename).suffix.lower()
+            if ext not in _ALLOWED_CRASH_SUFFIXES:
+                ext = ".bin"
+            target = crash_dir / f"crash-{ts}-{report_id}-{len(saved)}{ext}"
+            target.write_bytes(content)
+            saved.append(target.name)
+        if not saved:
+            raise HTTPException(status_code=400, detail="未收到崩溃转储文件")
+        return JSONResponse({"saved": True, "files": saved})
+
+    if "application/json" not in content_type:
+        raise HTTPException(status_code=415, detail="仅支持 JSON 或 multipart 崩溃报告")
+    body = await request.body()
+    if len(body) > _MAX_CRASH_JSON_BYTES:
+        raise HTTPException(status_code=413, detail="JSON 崩溃报告超过 1 MB")
+    target = crash_dir / f"crash-{ts}-{report_id}.json"
+    target.write_bytes(body)
+    return JSONResponse({"saved": True, "file": target.name})
 
 
 @router.get("/support-bundle")

@@ -1,4 +1,4 @@
-"""ERP 领域门面 Mod — 产品 / 客户 / 出货 / 微信；G：产品/出货经 domain_handlers。"""
+"""ERP 领域门面 Mod — 产品 / 客户 / 出货；G：产品/出货经 domain_handlers。"""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ HOST_DOMAIN_PREFIXES = [
     "/api/customers",
     "/api/orders",
     "/api/shipment",
-    "/api/wechat",
 ]
 
 
@@ -188,45 +187,6 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         from app.fastapi_routes.ai_assistant import compat_purchase_units_by_name
 
         return compat_purchase_units_by_name(unit_name)
-
-    # ── 微信（G2：WechatContactAppService / TaskAppService）──────────
-    @router.get("/wechat/contacts")
-    def mod_wechat_contacts(
-        keyword: str | None = Query(default=None),
-        type: str = Query(default="all"),
-        starred: str = Query(default="false"),
-        limit: int = Query(default=100),
-    ):
-        return _invoke(
-            "wechat",
-            "contacts_list",
-            keyword=keyword,
-            type=type,
-            starred=starred,
-            limit=limit,
-        )
-
-    @router.get("/wechat/contacts/{contact_id:int}")
-    def mod_wechat_contact_get(contact_id: int):
-        return _invoke("wechat", "contact_get", contact_id=contact_id)
-
-    @router.get("/wechat/tasks")
-    def mod_wechat_tasks(
-        status: str = Query(default="pending"),
-        contact_id: int | None = Query(default=None),
-        limit: int = Query(default=20),
-    ):
-        return _invoke(
-            "wechat",
-            "tasks",
-            status=status,
-            contact_id=contact_id,
-            limit=limit,
-        )
-
-    import wechat_contacts_routes
-
-    wechat_contacts_routes.mount_wechat_contacts_routes(router)
 
     app.include_router(router)
     logger.info("xcagi-erp-domain-bridge registered: %s", mod_id)

@@ -98,21 +98,6 @@ def test_load_mod_bundle_metadata_only(isolated_mods) -> None:
 
 
 # ---------------------------------------------------------------------------
-# wechat — delete contact
-# ---------------------------------------------------------------------------
-
-
-def test_wechat_contact_delete_api() -> None:
-    from app.fastapi_routes.domains.wechat import routes as wechat_routes
-
-    mock_svc = MagicMock()
-    mock_svc.delete_contact.return_value = {"success": True}
-    with patch("app.application.get_wechat_contact_app_service", return_value=mock_svc):
-        out = wechat_routes.wechat_contact_delete_api(7)
-    assert out.status_code == 200
-
-
-# ---------------------------------------------------------------------------
 # normal_chat — label print service failure
 # ---------------------------------------------------------------------------
 

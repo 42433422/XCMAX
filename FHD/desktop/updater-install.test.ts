@@ -20,6 +20,7 @@ vi.mock('electron-updater', () => ({ autoUpdater: mocks.autoUpdater }))
 vi.mock('electron', () => ({
   app: {
     isPackaged: true,
+    getVersion: vi.fn(() => '1.0.0'),
     getPath: vi.fn(() => '/tmp/xcagi-updater-test'),
   },
   net: {},

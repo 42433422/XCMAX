@@ -32,6 +32,35 @@ jobs:
       - name: Verify stable version anchors
         run: python scripts/dev/verify_version_anchors.py
 
+  # 前端唯一构建：产出共享 templates/vue-dist，作为 Web 与桌面端「单次构建、双端共用」的 SSOT 产物。
+  # 桌面/网页流水线各自下载该 artifact 并复用，不再各自重建（避免网页≠桌面、每次打包漂移/回退）。
+  build-frontend:
+    needs: verify-version-anchors
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FHD
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: FHD/frontend/package-lock.json
+      - name: Build shared vue-dist (enterprise/full)
+        run: |
+          set -euo pipefail
+          bash scripts/package/build-frontend.sh enterprise
+          test -f templates/vue-dist/index.html
+          echo "index=$(grep -oE 'index-[A-Za-z0-9_-]+\.js' templates/vue-dist/index.html | head -1)"
+      - name: Upload shared vue-dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-vue-dist
+          path: FHD/templates/vue-dist
+          retention-days: 7
+          if-no-files-found: error
+
   github-release:
     needs: verify-version-anchors
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/FHD/v')
@@ -50,7 +79,7 @@ jobs:
   # 时同样触发（含 sha256 manifest → 服务器端健康门/自动回滚），无需在此二次分发。
 
   dispatch-client-releases:
-    needs: verify-version-anchors
+    needs: [verify-version-anchors, build-frontend]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -75,9 +104,11 @@ jobs:
           raw="${raw#v}"
           raw="${raw#V}"
           version="${raw:-1.0.0.0}"
+          # 把本次 run 的 build-frontend artifact run_id 传给桌面/网页流水线，供其下载共享 vue-dist。
           case "${{ matrix.workflow }}" in
             fhd-release-desktop.yml|fhd-release-web.yml)
-              gh workflow run "${{ matrix.workflow }}" --ref "${{ github.ref_name }}" -f "version=${version}"
+              gh workflow run "${{ matrix.workflow }}" --ref "${{ github.ref_name }}" \
+                -f "version=${version}" -f "frontend_run_id=${{ github.run_id }}"
               ;;
             *)
               gh workflow run "${{ matrix.workflow }}" --ref "${{ github.ref_name }}"

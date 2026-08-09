@@ -25,7 +25,7 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
     assert "personal   = 'minimal'" in ps_sync
     assert "enterprise = 'full'" in ps_sync
 
-    for script in (sh_backend, sh_windows, sh_thin):
+    for script in (sh_windows, sh_thin):
         assert (
             "VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full"
         ) in script
@@ -34,11 +34,33 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
         assert "admin-console && npm run build" not in script
         assert "(cd admin-console && npm run build)" not in script
 
+    # build-backend.sh 自 4c724dae8 起把前端构建委托给 build-frontend.sh（SSOT 单点构建），
+    # enterprise=full 的构建由 build-frontend.sh 保证，这里校验委托关系与 admin-console 禁令。
+    sh_frontend = (scripts / "build-frontend.sh").read_text(encoding="utf-8")
+    assert "build-frontend.sh" in sh_backend
+    assert (
+        'VITE_XCAGI_PRODUCT_SKU="${VITE_SKU}" VITE_XCAGI_EDITION=full npm run build:full'
+        in sh_frontend
+    )
+    assert "VITE_XCAGI_PRODUCT_SKU=enterprise npm run build" not in sh_backend
+    assert "admin-console && npm run build" not in sh_backend
+    assert "(cd admin-console && npm run build)" not in sh_backend
+
     assert "admin-console" not in ps_backend or "不构建 admin-console" in ps_backend
     assert 'Push-Location (Join-Path $Root "admin-console")' not in ps_backend
     assert "templates/admin-vue-dist" not in spec
+    assert "app/application/agent_orchestrator/tool_spec_data/input_schemas.json" in spec
+    assert "app/application/agent_orchestrator/tool_spec_data/output_schemas.json" in spec
     assert "admin-console" not in ps_sync
     assert "does not include admin-vue-dist" in ps_sync
+    assert "vue-dist gate" in sh_backend
+    assert "bundled vue-dist" in sh_backend
+    assert "vue-dist gate" in ps_backend
+    assert "bundled vue-dist" in ps_backend
+    after_pack = (REPO_ROOT / "desktop" / "build" / "after-pack.cjs").read_text(encoding="utf-8")
+    assert "assertBundledVueDist" in after_pack
+    sync_sh = (scripts / "sync-desktop-frontend.sh").read_text(encoding="utf-8")
+    assert "templates/vue-dist" in sync_sh
 
 
 def test_desktop_windows_runtime_matches_mac_shell_policy() -> None:

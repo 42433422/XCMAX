@@ -678,6 +678,13 @@ class TestTryHandleDynamicWorkflowEdge:
                 "app.application.ai_chat_app_service.AIChatApplicationService._format_workflow_run_response",
                 return_value={"success": True, "response": "workflow done"},
             ) as mock_format,
+            patch(
+                "app.application.ai_chat_app_service.AIChatApplicationService._persist_plan_state"
+            ),
+            patch(
+                "app.application.workflow.checkpointer.DatabaseWorkflowCheckpointer.latest_checkpoint",
+                return_value=None,
+            ),
         ):
             result = svc._try_handle_dynamic_workflow(
                 user_id="u1",

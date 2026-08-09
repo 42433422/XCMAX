@@ -50,7 +50,8 @@ def test_enterprise_org_partitions_listed_unlisted():
     listed, unlisted = listed_employee_ids(), unlisted_employee_ids()
     assert listed.isdisjoint(unlisted)
     assert listed | unlisted == set(load_enterprise_employees())
-    assert {"wechat_contacts", "lan_gate"} <= listed
+    assert {"lan_gate"} <= listed
+    assert "wechat_contacts" not in listed  # wechat 已迁移至客来来，不再属于本仓企业组织
 
 
 def test_enterprise_layer_for_ssot_then_keyword():

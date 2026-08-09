@@ -156,14 +156,6 @@ def test_get_distillation_db_path(tmp_path, monkeypatch: pytest.MonkeyPatch) -> 
         assert init_db_mod.get_distillation_db_path().endswith("distillation.db")
 
 
-def test_init_wechat_tasks_table(tmp_path) -> None:
-    db_path = str(tmp_path / "wechat.db")
-    init_db_mod.init_wechat_tasks_table(db_path)
-    with sqlite3.connect(db_path) as conn:
-        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    assert "wechat_tasks" in tables
-
-
 def test_init_template_tables(tmp_path) -> None:
     db_path = str(tmp_path / "tpl.db")
     init_db_mod.init_template_tables(db_path)

@@ -282,6 +282,8 @@ async def stream_billed_llm_chat(
     max_tokens: Optional[int] = None,
     conversation_id: Optional[int] = None,
     allow_failover: bool = True,
+    tools: Optional[list[dict[str, Any]]] = None,
+    tool_choice: Any = None,
 ) -> StreamingResponse:
     primary_provider = (provider or "").strip().lower()
     primary_model = (model or "").strip()
@@ -435,6 +437,8 @@ async def stream_billed_llm_chat(
                     model=mdl,
                     messages=msgs,
                     max_tokens=max_tokens,
+                    tools=tools,
+                    tool_choice=tool_choice,
                 ):
                     if ev.get("type") == "error":
                         err = ev.get("error") or "upstream error"
@@ -488,6 +492,11 @@ async def stream_billed_llm_chat(
                         return
                     if ev.get("type") == "usage":
                         upstream_usage = ev.get("usage") or {}
+                        continue
+                    if ev.get("type") == "toolcall":
+                        choices = ev.get("choices") or []
+                        if choices:
+                            yield _sse("toolcall", {"choices": choices})
                         continue
                     if ev.get("type") == "delta":
                         delta = str(ev.get("delta") or "")

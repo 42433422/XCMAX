@@ -24,15 +24,11 @@ describe('sidebarApiRegression', () => {
       ['/api/products/list', '/api/mod/xcagi-erp-domain-bridge/products/list'],
       ['/api/purchase_units', '/api/mod/xcagi-erp-domain-bridge/purchase_units'],
       ['/api/orders?limit=100', '/api/mod/xcagi-erp-domain-bridge/orders?limit=100'],
-      [
-        '/api/wechat_contacts/ensure_contact_cache',
-        '/api/mod/xcagi-erp-domain-bridge/wechat_contacts/ensure_contact_cache',
-      ],
       ['/api/materials', '/api/materials'],
       ['/api/print/templates', '/api/print/templates'],
     ]
     for (const [host, expected] of cases) {
-      expect(resolveErpApiPath(host)).toBe(expected)
+      expect(resolveErpApiPath(host, ['xcagi-erp-domain-bridge'])).toBe(expected)
     }
   })
 
@@ -47,9 +43,6 @@ describe('sidebarApiRegression', () => {
     localStorage.setItem(ERP_LS, '1')
     expect(resolveErpPageRedirectForRouteName('products')).toBe(
       '/mod/xcagi-erp-domain-bridge/products',
-    )
-    expect(resolveErpPageRedirectForRouteName('wechat-contacts')).toBe(
-      '/mod/xcagi-erp-domain-bridge/data-sources?source=wechat_local_db',
     )
   })
 

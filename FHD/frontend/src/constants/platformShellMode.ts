@@ -1,6 +1,4 @@
-import {
-  readBuildEdition,
-  shouldAutoEnableEditionPlatformShell,
+import {readBuildEdition,
   shouldAutoEnableMinimalPlatformShell,
   shouldAutoEnablePlatformShell,
   hasInstalledAccountCustomMod,
@@ -31,6 +29,7 @@ export const SHELL_CORE_MENU_KEYS = new Set([
   'im',
   'ai-ecosystem',
   'persy-knowledge',
+  'business-docking',
   'employee-workflow',
   'workflow-employee-space',
   'settings',

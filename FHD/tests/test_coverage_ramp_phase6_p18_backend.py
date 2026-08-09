@@ -6,7 +6,6 @@ Targets:
 - ``app/application/workflow/engine.py`` (206 行, 未覆盖 64 行, cov 65.8%)
 - ``app/fastapi_routes/mobile_api_extensions.py`` (461 行, 未覆盖 64 行, cov 85.8%)
 - ``app/mod_sdk/industry_seed.py`` (165 行, 未覆盖 64 行, cov 55.8%)
-- ``app/services/wechat_contact_service.py`` (337 行, 未覆盖 64 行, cov 79.4%)
 
 Tests follow the phase-6 style: ``from __future__ import annotations``,
 ``unittest.mock`` + ``pytest``, mock only external boundaries (DB / external
@@ -48,14 +47,12 @@ from app.application.workflow.types import (
     PlanGraph,
     WorkflowNode,
 )
-from app.infrastructure.persistence.product_repository_impl import (
+from app.infrastructure.repositories.product_repository_impl import (
     TRIVIAL_MEASURE_UNITS,
     SQLAlchemyProductRepository,
 )
 from app.mod_sdk import industry_seed as industry_seed_mod
-from app.services import wechat_contact_service as wechat_mod
 from app.services.ocr_service import OCRResult, OCRService
-from app.services.wechat_contact_service import WechatContactService
 
 # ===========================================================================
 # Shared helpers / fixtures
@@ -186,307 +183,158 @@ def ext_mod():
 # ===========================================================================
 
 
-class TestProductRepositoryApiScalar:
-    """Cover ``_api_scalar`` edge cases."""
-
-    def test_api_scalar_none_returns_none(self):
-        assert SQLAlchemyProductRepository._api_scalar(None) is None
-
-    def test_api_scalar_float_nan_returns_none(self):
-        assert SQLAlchemyProductRepository._api_scalar(float("nan")) is None
-
-    def test_api_scalar_string_nan_returns_none(self):
-        assert SQLAlchemyProductRepository._api_scalar("nan") is None
-
-    def test_api_scalar_string_none_returns_none(self):
-        assert SQLAlchemyProductRepository._api_scalar("none") is None
-
-    def test_api_scalar_string_nat_returns_none(self):
-        assert SQLAlchemyProductRepository._api_scalar("NaT") is None
-
-    def test_api_scalar_string_na_angle_returns_none(self):
-        assert SQLAlchemyProductRepository._api_scalar("<NA>") is None
-
-    def test_api_scalar_string_null_returns_none(self):
-        assert SQLAlchemyProductRepository._api_scalar("null") is None
-
-    def test_api_scalar_string_with_whitespace_nan_returns_none(self):
-        assert SQLAlchemyProductRepository._api_scalar("  nan  ") is None
-
-    def test_api_scalar_normal_string_returns_stripped(self):
-        assert SQLAlchemyProductRepository._api_scalar("  hello  ") == "hello"
-
-    def test_api_scalar_integer_returns_integer(self):
-        assert SQLAlchemyProductRepository._api_scalar(42) == 42
-
-    def test_api_scalar_normal_float_returns_float(self):
-        assert SQLAlchemyProductRepository._api_scalar(3.14) == 3.14
-
-    def test_api_scalar_zero_returns_zero(self):
-        assert SQLAlchemyProductRepository._api_scalar(0) == 0
-
-    def test_api_scalar_empty_string_returns_empty(self):
-        assert SQLAlchemyProductRepository._api_scalar("") == ""
-
-    def test_api_scalar_object_with_float_nan_conversion_returns_none(self):
-        class NanLike:
-            def __float__(self):
-                return float("nan")
-
-        assert SQLAlchemyProductRepository._api_scalar(NanLike()) is None
-
-    def test_api_scalar_object_without_float_conversion_returns_self(self):
-        class Weird:
-            pass
-
-        w = Weird()
-        assert SQLAlchemyProductRepository._api_scalar(w) is w
-
-    def test_api_scalar_bool_true_returns_true(self):
-        assert SQLAlchemyProductRepository._api_scalar(True) is True
-
-    def test_api_scalar_bool_false_returns_false(self):
-        assert SQLAlchemyProductRepository._api_scalar(False) is False
-
-
 class TestProductRepositoryProductToDict:
-    """Cover ``_product_to_dict`` branches."""
+    """Cover ``find_all_dict`` dict output branches.
+
+    旧版私有辅助 _product_to_dict 已删除，改为直接断言 find_all_dict 的字典输出字段。
+    """
 
     @pytest.fixture
     def repo(self):
         return SQLAlchemyProductRepository()
 
-    def test_basic_conversion_includes_product_name(self, repo):
+    def _query(self, models, total):
+        mock_db = MagicMock()
+        mock_query = MagicMock()
+        mock_query.filter.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.offset.return_value = mock_query
+        mock_query.count.return_value = total
+        mock_query.all.return_value = models
+        mock_db.query.return_value = mock_query
+        return mock_db
+
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
+    def test_basic_conversion_includes_product_name(self, mock_get_db, repo):
         mock_product = _make_mock_product()
-        mock_col1 = MagicMock()
-        mock_col1.name = "id"
-        mock_col2 = MagicMock()
-        mock_col2.name = "name"
-        mock_col3 = MagicMock()
-        mock_col3.name = "price"
+        mock_get_db.return_value = _mock_db_ctx(self._query([mock_product], 1))
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
-            mock_mapper = MagicMock()
-            mock_mapper.columns = [mock_col1, mock_col2, mock_col3]
-            mock_insp.return_value = mock_mapper
-            result = repo._product_to_dict(mock_product)
+        dicts, total = repo.find_all_dict()
+        assert total == 1
+        assert dicts[0]["name"] == "测试产品"
+        assert dicts[0]["model_number"] == "MOD-001"
+        assert dicts[0]["price"] == 99.5
 
-        assert result["name"] == "测试产品"
-        assert result["product_name"] == "测试产品"
-
-    def test_empty_name_no_product_name(self, repo):
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
+    def test_empty_name_defaults_to_empty_string(self, mock_get_db, repo):
         mock_product = _make_mock_product(name="")
-        mock_col = MagicMock()
-        mock_col.name = "name"
+        mock_get_db.return_value = _mock_db_ctx(self._query([mock_product], 1))
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
-            mock_mapper = MagicMock()
-            mock_mapper.columns = [mock_col]
-            mock_insp.return_value = mock_mapper
-            result = repo._product_to_dict(mock_product)
+        dicts, total = repo.find_all_dict()
+        assert dicts[0]["name"] == ""
 
-        assert "product_name" not in result
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
+    def test_none_price_converted_to_zero(self, mock_get_db, repo):
+        mock_product = _make_mock_product(price=None)
+        mock_get_db.return_value = _mock_db_ctx(self._query([mock_product], 1))
 
-    def test_nan_price_converted_to_none(self, repo):
-        mock_product = _make_mock_product(price=float("nan"))
-        mock_col = MagicMock()
-        mock_col.name = "price"
+        dicts, total = repo.find_all_dict()
+        assert dicts[0]["price"] == 0
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
-            mock_mapper = MagicMock()
-            mock_mapper.columns = [mock_col]
-            mock_insp.return_value = mock_mapper
-            result = repo._product_to_dict(mock_product)
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
+    def test_no_rows_returns_empty_dict_list(self, mock_get_db, repo):
+        mock_get_db.return_value = _mock_db_ctx(self._query([], 0))
 
-        assert result["price"] is None
-
-    def test_column_not_in_dict_skipped(self, repo):
-        mock_product = MagicMock()
-        mock_product.__dict__ = {"id": 1, "name": "X"}
-        mock_col1 = MagicMock()
-        mock_col1.name = "id"
-        mock_col2 = MagicMock()
-        mock_col2.name = "name"
-        mock_col3 = MagicMock()
-        mock_col3.name = "missing_col"
-
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
-            mock_mapper = MagicMock()
-            mock_mapper.columns = [mock_col1, mock_col2, mock_col3]
-            mock_insp.return_value = mock_mapper
-            result = repo._product_to_dict(mock_product)
-
-        assert "missing_col" not in result
-        assert result["id"] == 1
+        dicts, total = repo.find_all_dict()
+        assert dicts == []
+        assert total == 0
 
 
 class TestProductRepositoryFindAll:
-    """Cover ``find_all`` branches."""
+    """Cover ``find_all`` branches.
+
+    新版 find_all 返回 (list[Product], total) 元组（不再返回 dict），
+    且不再做表存在性检查，DB 异常直接向上抛出。
+    """
 
     @pytest.fixture
     def repo(self):
         return SQLAlchemyProductRepository()
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
-    def test_products_table_not_exists_returns_empty(self, mock_get_db, repo):
+    def _query(self, models, total):
         mock_db = MagicMock()
-        mock_db.__dict__["bind"] = MagicMock()
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
+        mock_query = MagicMock()
+        mock_query.filter.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.offset.return_value = mock_query
+        mock_query.count.return_value = total
+        mock_query.all.return_value = models
+        mock_db.query.return_value = mock_query
+        return mock_db
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
-            mock_bind_insp = MagicMock()
-            mock_bind_insp.get_table_names.return_value = []
-            mock_insp.return_value = mock_bind_insp
-            result = repo.find_all()
+    @patch("app.infrastructure.repositories.product_repository_impl.product_to_domain")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
+    def test_empty_result_returns_tuple(self, mock_get_db, mock_to_domain, repo):
+        mock_get_db.return_value = _mock_db_ctx(self._query([], 0))
 
-        assert result["success"] is True
-        assert result["data"] == []
-        assert result["total"] == 0
+        result = repo.find_all()
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
-    def test_recoverable_error_returns_failure(self, mock_get_db, repo):
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        assert result[0] == []
+        assert result[1] == 0
+
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
+    def test_recoverable_error_is_raised(self, mock_get_db, repo):
         mock_get_db.side_effect = OSError("DB connection lost")
-        result = repo.find_all()
-        assert result["success"] is False
-        assert "查询失败" in result["message"]
+        with pytest.raises(OSError):
+            repo.find_all()
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
-    def test_with_unit_name_filter(self, mock_get_db, repo):
-        mock_db = MagicMock()
-        mock_db.__dict__["bind"] = MagicMock()
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
+    @patch("app.infrastructure.repositories.product_repository_impl.product_to_domain")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
+    def test_with_unit_name_filter(self, mock_get_db, mock_to_domain, repo):
+        mock_get_db.return_value = _mock_db_ctx(self._query([], 0))
 
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.count.return_value = 0
-        mock_query.all.return_value = []
-        mock_db.query.return_value = mock_query
+        result = repo.find_all(unit_name="箱")
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
-            mock_bind_insp = MagicMock()
-            mock_bind_insp.get_table_names.return_value = ["products"]
-            mock_insp.return_value = mock_bind_insp
-            result = repo.find_all(unit_name="箱")
+        assert result[1] == 0
+        assert result[0] == []
 
-        assert result["success"] is True
+    @patch("app.infrastructure.repositories.product_repository_impl.product_to_domain")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
+    def test_with_model_number_filter_normalized(self, mock_get_db, mock_to_domain, repo):
+        mock_get_db.return_value = _mock_db_ctx(self._query([], 0))
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
-    def test_with_model_number_filter_normalized(self, mock_get_db, repo):
-        mock_db = MagicMock()
-        mock_db.__dict__["bind"] = MagicMock()
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
+        result = repo.find_all(model_number="ABC-123")
 
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.count.return_value = 0
-        mock_query.all.return_value = []
-        mock_db.query.return_value = mock_query
+        assert result[1] == 0
+        assert result[0] == []
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
-            mock_bind_insp = MagicMock()
-            mock_bind_insp.get_table_names.return_value = ["products"]
-            mock_insp.return_value = mock_bind_insp
-            result = repo.find_all(model_number="ABC-123")
+    @patch("app.infrastructure.repositories.product_repository_impl.product_to_domain")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
+    def test_with_keyword_multiple_segments(self, mock_get_db, mock_to_domain, repo):
+        mock_get_db.return_value = _mock_db_ctx(self._query([], 0))
 
-        assert result["success"] is True
+        result = repo.find_all(keyword="测试 9803")
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
-    def test_with_keyword_multiple_segments(self, mock_get_db, repo):
-        mock_db = MagicMock()
-        mock_db.__dict__["bind"] = MagicMock()
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
+        assert result[1] == 0
+        assert result[0] == []
 
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.count.return_value = 0
-        mock_query.all.return_value = []
-        mock_db.query.return_value = mock_query
+    @patch("app.infrastructure.repositories.product_repository_impl.product_to_domain")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
+    def test_pagination_returns_total(self, mock_get_db, mock_to_domain, repo):
+        mock_get_db.return_value = _mock_db_ctx(self._query([], 100))
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
-            mock_bind_insp = MagicMock()
-            mock_bind_insp.get_table_names.return_value = ["products"]
-            mock_insp.return_value = mock_bind_insp
-            result = repo.find_all(keyword="测试 9803")
+        result = repo.find_all(page=3, per_page=10)
 
-        assert result["success"] is True
+        assert result[1] == 100
+        assert result[0] == []
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
-    def test_pagination(self, mock_get_db, repo):
-        mock_db = MagicMock()
-        mock_db.__dict__["bind"] = MagicMock()
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
-
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.count.return_value = 100
-        mock_query.all.return_value = []
-        mock_db.query.return_value = mock_query
-
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
-            mock_bind_insp = MagicMock()
-            mock_bind_insp.get_table_names.return_value = ["products"]
-            mock_insp.return_value = mock_bind_insp
-            result = repo.find_all(page=3, per_page=10)
-
-        assert result["page"] == 3
-        assert result["per_page"] == 10
-
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
-    def test_recoverable_error_on_table_names_check(self, mock_get_db, repo):
-        mock_db = MagicMock()
-        mock_db.__dict__["bind"] = MagicMock()
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
-
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
-            mock_insp.side_effect = RuntimeError("inspect failed")
-            result = repo.find_all()
-
-        assert result["success"] is True
-        assert result["data"] == []
-
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
-    def test_bind_with_get_table_names_method(self, mock_get_db, repo):
-        mock_db = MagicMock()
-        mock_bind = MagicMock()
-        mock_bind.get_table_names.return_value = ["products"]
-        mock_db.__dict__["bind"] = mock_bind
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
-
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.count.return_value = 0
-        mock_query.all.return_value = []
-        mock_db.query.return_value = mock_query
+    @patch("app.infrastructure.repositories.product_repository_impl.product_to_domain")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
+    def test_returns_domain_objects(self, mock_get_db, mock_to_domain, repo):
+        mock_model = _make_mock_product()
+        mock_domain = MagicMock()
+        mock_to_domain.return_value = mock_domain
+        mock_get_db.return_value = _mock_db_ctx(self._query([mock_model], 1))
 
         result = repo.find_all()
-        assert result["success"] is True
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
-    def test_table_names_not_list_returns_empty(self, mock_get_db, repo):
-        mock_db = MagicMock()
-        mock_bind = MagicMock()
-        mock_bind.get_table_names.return_value = "not a list"
-        mock_db.__dict__["bind"] = mock_bind
-        mock_get_db.return_value = _mock_db_ctx(mock_db)
-
-        result = repo.find_all()
-        assert result["success"] is True
-        assert result["data"] == []
+        assert result[1] == 1
+        assert result[0] == [mock_domain]
+        mock_to_domain.assert_called_once_with(mock_model)
 
 
 class TestProductRepositoryCreateUpdate:
@@ -496,15 +344,17 @@ class TestProductRepositoryCreateUpdate:
     def repo(self):
         return SQLAlchemyProductRepository()
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_create_success(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_product = MagicMock()
         mock_product.id = 42
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.Product") as MockProduct:
-            MockProduct.return_value = mock_product
+        with patch(
+            "app.infrastructure.repositories.product_repository_impl.ProductModel"
+        ) as MockProductModel:
+            MockProductModel.return_value = mock_product
             result = repo.create({"product_name": "新产品", "price": 10.0})
 
         assert result["success"] is True
@@ -519,27 +369,29 @@ class TestProductRepositoryCreateUpdate:
         result = repo.create({"name": "", "price": 0})
         assert result["success"] is False
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_create_with_name_key(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_product = MagicMock()
         mock_product.id = 1
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.Product") as MockProduct:
-            MockProduct.return_value = mock_product
+        with patch(
+            "app.infrastructure.repositories.product_repository_impl.ProductModel"
+        ) as MockProductModel:
+            MockProductModel.return_value = mock_product
             result = repo.create({"name": "用name键创建"})
 
         assert result["success"] is True
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_create_db_error(self, mock_get_db, repo):
         mock_get_db.side_effect = OSError("DB error")
         result = repo.create({"product_name": "测试"})
         assert result["success"] is False
         assert "创建失败" in result["message"]
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_update_success(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_product = MagicMock()
@@ -549,7 +401,7 @@ class TestProductRepositoryCreateUpdate:
         result = repo.update(1, {"product_name": "新名称"})
         assert result["success"] is True
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_update_not_found(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -559,7 +411,7 @@ class TestProductRepositoryCreateUpdate:
         assert result["success"] is False
         assert "产品不存在" in result["message"]
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_update_no_fields(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_product = MagicMock()
@@ -570,7 +422,7 @@ class TestProductRepositoryCreateUpdate:
         assert result["success"] is False
         assert "没有要更新的字段" in result["message"]
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_update_multiple_fields(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_product = MagicMock()
@@ -593,7 +445,7 @@ class TestProductRepositoryCreateUpdate:
         )
         assert result["success"] is True
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_update_db_error(self, mock_get_db, repo):
         mock_get_db.side_effect = OSError("DB error")
         result = repo.update(1, {"price": 10})
@@ -613,7 +465,7 @@ class TestProductRepositoryBatchOps:
         assert result["success"] is False
         assert "产品列表不能为空" in result["message"]
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_batch_create_success(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.bulk_insert_mappings.return_value = None
@@ -629,7 +481,7 @@ class TestProductRepositoryBatchOps:
         assert result["success"] is True
         assert result["success_count"] == 2
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_batch_create_with_empty_name(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.bulk_insert_mappings.return_value = None
@@ -645,14 +497,14 @@ class TestProductRepositoryBatchOps:
         assert result["success"] is False
         assert result["failed_count"] == 1
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_batch_create_db_error(self, mock_get_db, repo):
         mock_get_db.side_effect = OSError("DB error")
         result = repo.batch_create([{"product_name": "产品1"}])
         assert result["success"] is False
         assert "批量添加失败" in result["message"]
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_batch_create_bulk_insert_fallback(self, mock_get_db, repo):
         """bulk_insert_mappings raises SQLAlchemyError → fallback to single insert."""
         from sqlalchemy.exc import SQLAlchemyError
@@ -665,7 +517,9 @@ class TestProductRepositoryBatchOps:
         mock_db.flush.return_value = None
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.Product") as MockProduct:
+        with patch(
+            "app.infrastructure.repositories.product_repository_impl.Product"
+        ) as MockProduct:
             MockProduct.return_value = mock_product
             result = repo.batch_create([{"product_name": "产品1"}])
 
@@ -676,7 +530,7 @@ class TestProductRepositoryBatchOps:
         assert result["success"] is False
         assert "产品 ID 列表不能为空" in result["message"]
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_batch_delete_success(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_products = [MagicMock(), MagicMock()]
@@ -687,7 +541,7 @@ class TestProductRepositoryBatchOps:
         assert result["success"] is True
         assert result["deleted_count"] == 2
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_batch_delete_not_found(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.all.return_value = []
@@ -705,7 +559,7 @@ class TestProductRepositoryExistsAndNames:
     def repo(self):
         return SQLAlchemyProductRepository()
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_exists_true(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = MagicMock()
@@ -713,7 +567,7 @@ class TestProductRepositoryExistsAndNames:
 
         assert repo.exists(1) is True
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_exists_false(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -721,12 +575,12 @@ class TestProductRepositoryExistsAndNames:
 
         assert repo.exists(999) is False
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_exists_db_error(self, mock_get_db, repo):
         mock_get_db.side_effect = OSError("DB error")
         assert repo.exists(1) is False
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_find_names_success(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.query.return_value.distinct.return_value.all.return_value = [
@@ -736,24 +590,24 @@ class TestProductRepositoryExistsAndNames:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_insp.return_value.get_table_names.return_value = ["products"]
             result = repo.find_names()
 
         assert result == ["产品A", "产品B"]
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_find_names_no_table(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_insp.return_value.get_table_names.return_value = []
             result = repo.find_names()
 
         assert result == []
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_find_names_db_error(self, mock_get_db, repo):
         mock_get_db.side_effect = OSError("DB error")
         result = repo.find_names()
@@ -767,7 +621,7 @@ class TestProductRepositoryFindProductUnits:
     def repo(self):
         return SQLAlchemyProductRepository()
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_fallback_to_products_unit(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.bind = MagicMock()
@@ -778,7 +632,7 @@ class TestProductRepositoryFindProductUnits:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_insp_obj
@@ -793,14 +647,14 @@ class TestProductRepositoryFindProductUnits:
         assert "件" not in result
         assert "箱" not in result
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_empty_units(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.bind = MagicMock()
         mock_db.query.return_value.distinct.return_value.all.return_value = []
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_insp_obj
@@ -813,7 +667,7 @@ class TestProductRepositoryFindProductUnits:
 
         assert result == []
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_deduplication(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.bind = MagicMock()
@@ -824,7 +678,7 @@ class TestProductRepositoryFindProductUnits:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_insp_obj
@@ -837,14 +691,14 @@ class TestProductRepositoryFindProductUnits:
 
         assert result.count("客户A") == 1
 
-    @patch("app.infrastructure.persistence.product_repository_impl.get_db")
+    @patch("app.infrastructure.repositories.product_repository_impl.get_db")
     def test_recoverable_error_in_fallback(self, mock_get_db, repo):
         mock_db = MagicMock()
         mock_db.bind = MagicMock()
         mock_db.query.return_value.distinct.return_value.all.return_value = []
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        with patch("app.infrastructure.persistence.product_repository_impl.inspect") as mock_insp:
+        with patch("app.infrastructure.repositories.product_repository_impl.inspect") as mock_insp:
             mock_insp_obj = MagicMock()
             mock_insp_obj.get_table_names.return_value = ["products"]
             mock_insp.return_value = mock_insp_obj
@@ -1749,7 +1603,8 @@ class TestWorkflowEngineMergeRuntimeFallbackParams:
         node = WorkflowNode(node_id="n1", tool_id="customers", action="query", params={})
         params = {}
         engine._merge_runtime_fallback_params(node, params, {"message": "find customer"})
-        assert params["keyword"] == "find customer"
+        # customers.query 无检索词 = 全量列表，禁止把用户原话当客户名。
+        assert "keyword" not in params
 
     def test_no_message(self):
         engine = _make_engine()
@@ -2718,7 +2573,18 @@ class TestMobileExtCsRoutes:
         mock_user = MagicMock()
         mock_user.id = 1
         mock_request = MagicMock()
-        result = await ext_mod.get_cs_messages(request=mock_request, user=mock_user)
+        mock_db = MagicMock()
+        mock_db.__enter__ = MagicMock(return_value=mock_db)
+        mock_db.__exit__ = MagicMock(return_value=False)
+        mock_svc = MagicMock()
+        mock_svc._ensure_enterprise_dedicated_cs_user.return_value = SimpleNamespace(id=99)
+        mock_svc.get_or_create_direct.return_value = {"id": 7}
+        mock_svc.list_messages.return_value = []
+        with (
+            patch("app.db.session.get_db", return_value=mock_db),
+            patch("app.application.im_app_service.ImApplicationService", return_value=mock_svc),
+        ):
+            result = await ext_mod.get_cs_messages(request=mock_request, user=mock_user)
         if hasattr(result, "body"):
             data = json.loads(result.body)
         else:
@@ -3353,527 +3219,6 @@ class TestIndustrySeedInstallFallback:
             result = await industry_seed_mod.install_industry_seed_with_fallback("涂料")
         assert result["success"] is False
         assert result["status"] == "catalog_failed"
-
-
-# ===========================================================================
-# 6. app/services/wechat_contact_service.py
-# ===========================================================================
-
-
-@pytest.fixture
-def wechat_svc() -> WechatContactService:
-    return WechatContactService()
-
-
-class TestWechatGetContacts:
-    """Cover ``get_contacts`` branches."""
-
-    def test_keyword_with_results(self, wechat_svc):
-        s = MagicMock()
-        s.query.return_value = _fluent(all_=[_contact()])
-        with _patch_db(wechat_mod, s):
-            out = wechat_svc.get_contacts(keyword="张")
-        assert out[0]["contact_name"] == "张三"
-
-    def test_type_all_default_starred(self, wechat_svc):
-        s = MagicMock()
-        s.query.return_value = _fluent(all_=[_contact()])
-        with _patch_db(wechat_mod, s):
-            out = wechat_svc.get_contacts(contact_type="all", starred_only=True)
-        assert len(out) == 1
-
-    def test_type_specific(self, wechat_svc):
-        s = MagicMock()
-        s.query.return_value = _fluent(all_=[_contact(contact_type="group")])
-        with _patch_db(wechat_mod, s):
-            out = wechat_svc.get_contacts(contact_type="group")
-        assert out[0]["contact_type"] == "group"
-
-    def test_keyword_fallback_to_wechat_db(self, wechat_svc):
-        s = MagicMock()
-        s.query.return_value = _fluent(all_=[])
-        extra = [{"id": 99, "contact_name": "挖到的"}]
-        with (
-            _patch_db(wechat_mod, s),
-            patch.object(wechat_svc, "_search_contacts_from_wechat_db", return_value=extra),
-        ):
-            out = wechat_svc.get_contacts(keyword="找不到")
-        assert out == extra
-
-    def test_keyword_fallback_raises_returns_empty(self, wechat_svc):
-        s = MagicMock()
-        s.query.return_value = _fluent(all_=[])
-        with (
-            _patch_db(wechat_mod, s),
-            patch.object(
-                wechat_svc,
-                "_search_contacts_from_wechat_db",
-                side_effect=RuntimeError("db fail"),
-            ),
-        ):
-            out = wechat_svc.get_contacts(keyword="找不到")
-        assert out == []
-
-    def test_db_error_returns_empty(self, wechat_svc):
-        with patch.object(wechat_mod, "get_db", side_effect=RuntimeError("db down")):
-            assert wechat_svc.get_contacts() == []
-
-    def test_no_filters_returns_all(self, wechat_svc):
-        s = MagicMock()
-        s.query.return_value = _fluent(all_=[_contact(), _contact(id=2, contact_name="李四")])
-        with _patch_db(wechat_mod, s):
-            out = wechat_svc.get_contacts()
-        assert len(out) == 2
-
-
-class TestWechatSearchContactsFromWechatDb:
-    """Cover ``_search_contacts_from_wechat_db`` branches."""
-
-    def test_empty_keyword(self, wechat_svc):
-        assert wechat_svc._search_contacts_from_wechat_db("") == []
-        assert wechat_svc._search_contacts_from_wechat_db("   ") == []
-
-    def test_via_contact_sqlite(self, wechat_svc, tmp_path):
-        decrypted = tmp_path / "decrypted" / "message"
-        decrypted.mkdir(parents=True)
-        msg_db = decrypted / "message_0.db"
-        msg_db.write_bytes(b"x")
-
-        contact_dir = tmp_path / "decrypted" / "contact"
-        contact_dir.mkdir(parents=True)
-        contact_db = contact_dir / "contact.db"
-        with sqlite3.connect(contact_db) as conn:
-            conn.execute(
-                "CREATE TABLE contact (username TEXT, nick_name TEXT, remark TEXT, "
-                "is_in_chat_room INTEGER, delete_flag INTEGER)"
-            )
-            conn.execute(
-                "INSERT INTO contact VALUES (?, ?, ?, ?, ?)",
-                ("wxid_demo", "七彩乐园", "备注", 0, 0),
-            )
-            conn.commit()
-
-        with patch.dict(os.environ, {"WECHAT_MSG_DB_PATH": str(msg_db)}, clear=False):
-            out = wechat_svc._search_contacts_from_wechat_db("七彩", limit=5)
-        assert len(out) == 1
-        assert out[0]["contact_name"] == "七彩乐园"
-
-    def test_via_message_db_old_format(self, wechat_svc, tmp_path):
-        db_path = tmp_path / "message_0.db"
-        with sqlite3.connect(db_path) as conn:
-            conn.execute("CREATE TABLE MSG (talker TEXT, displayName TEXT)")
-            conn.execute("INSERT INTO MSG VALUES (?, ?)", ("wxid_abc", "李四"))
-            conn.commit()
-
-        plugin = MagicMock()
-        plugin.is_available.return_value = True
-        plugin.add_to_sys_path.return_value = None
-        plugin.get_decrypted_db_path.return_value = None
-        fake_wdr = MagicMock(get_recent_messages=MagicMock(return_value={"rows": []}))
-        with (
-            patch.dict(os.environ, {"WECHAT_MSG_DB_PATH": str(db_path)}, clear=False),
-            patch(
-                "app.infrastructure.plugins.wechat_plugin.get_wechat_plugin",
-                return_value=plugin,
-            ),
-            patch("app.utils.path_utils.get_base_dir", return_value=str(tmp_path)),
-            patch.dict("sys.modules", {"wechat_db_read": fake_wdr}),
-        ):
-            out = wechat_svc._search_contacts_from_wechat_db("李四", limit=3)
-        assert len(out) == 1
-        assert out[0]["contact_name"] == "李四"
-
-    def test_no_db_path_returns_empty(self, wechat_svc, tmp_path, monkeypatch):
-        monkeypatch.delenv("WECHAT_MSG_DB_PATH", raising=False)
-        plugin = MagicMock()
-        plugin.is_available.return_value = False
-        plugin.get_decrypted_db_path.return_value = None
-        with (
-            patch(
-                "app.infrastructure.plugins.wechat_plugin.get_wechat_plugin",
-                return_value=plugin,
-            ),
-            patch("app.utils.path_utils.get_base_dir", return_value=str(tmp_path)),
-        ):
-            out = wechat_svc._search_contacts_from_wechat_db("x")
-        assert out == []
-
-    def test_recoverable_error_returns_empty(self, wechat_svc, tmp_path, monkeypatch):
-        monkeypatch.delenv("WECHAT_MSG_DB_PATH", raising=False)
-        with patch(
-            "app.infrastructure.plugins.wechat_plugin.get_wechat_plugin",
-            side_effect=RuntimeError("plugin fail"),
-        ):
-            out = wechat_svc._search_contacts_from_wechat_db("x")
-        assert out == []
-
-
-class TestWechatGetContactById:
-    """Cover ``get_contact_by_id`` branches."""
-
-    def test_found(self, wechat_svc):
-        s = MagicMock()
-        s.query.return_value = _fluent(first=_contact())
-        with _patch_db(wechat_mod, s):
-            out = wechat_svc.get_contact_by_id(1)
-        assert out["id"] == 1
-
-    def test_missing(self, wechat_svc):
-        s = MagicMock()
-        s.query.return_value = _fluent(first=None)
-        with _patch_db(wechat_mod, s):
-            assert wechat_svc.get_contact_by_id(9) is None
-
-    def test_db_error_returns_none(self, wechat_svc):
-        with patch.object(wechat_mod, "get_db", side_effect=RuntimeError("db fail")):
-            assert wechat_svc.get_contact_by_id(1) is None
-
-
-class TestWechatAddContact:
-    """Cover ``add_contact`` branches."""
-
-    def test_empty_name(self, wechat_svc):
-        out = wechat_svc.add_contact("   ")
-        assert out["success"] is False
-
-    def test_placeholder_name_uses_wechat_id(self, wechat_svc):
-        s = MagicMock()
-        with _patch_db(wechat_mod, s):
-            out = wechat_svc.add_contact("%", wechat_id="wxid_123")
-        assert out["success"] is True
-        s.add.assert_called_once()
-
-    def test_placeholder_short_name_uses_wechat_id(self, wechat_svc):
-        s = MagicMock()
-        with _patch_db(wechat_mod, s):
-            out = wechat_svc.add_contact("%s", wechat_id="wxid_456")
-        assert out["success"] is True
-
-    def test_success(self, wechat_svc):
-        s = MagicMock()
-        with _patch_db(wechat_mod, s):
-            out = wechat_svc.add_contact("李四", remark="同事")
-        assert out["success"] is True
-
-    def test_db_error(self, wechat_svc):
-        with patch.object(wechat_mod, "get_db", side_effect=RuntimeError("db fail")):
-            out = wechat_svc.add_contact("x")
-        assert out["success"] is False
-
-
-class TestWechatUpdateContact:
-    """Cover ``update_contact`` branches."""
-
-    def test_not_found(self, wechat_svc):
-        s = MagicMock()
-        s.query.return_value = _fluent(first=None)
-        with _patch_db(wechat_mod, s):
-            assert wechat_svc.update_contact(1, contact_name="x")["success"] is False
-
-    def test_success_all_fields(self, wechat_svc):
-        s = MagicMock()
-        s.query.return_value = _fluent(first=_contact())
-        with _patch_db(wechat_mod, s):
-            out = wechat_svc.update_contact(
-                1,
-                contact_name="新名",
-                remark="新备注",
-                wechat_id="newid",
-                contact_type="invalid_type",
-                is_starred=False,
-            )
-        assert out["success"] is True
-
-    def test_empty_name(self, wechat_svc):
-        s = MagicMock()
-        s.query.return_value = _fluent(first=_contact())
-        with _patch_db(wechat_mod, s):
-            out = wechat_svc.update_contact(1, contact_name="   ")
-        assert out["success"] is False
-
-    def test_db_error(self, wechat_svc):
-        with patch.object(wechat_mod, "get_db", side_effect=RuntimeError("db fail")):
-            out = wechat_svc.update_contact(1, contact_name="x")
-        assert out["success"] is False
-
-
-class TestWechatDeleteAndStar:
-    """Cover ``delete_contact`` and ``star_contact``."""
-
-    def test_delete_success(self, wechat_svc):
-        s = MagicMock()
-        s.query.return_value = _fluent(first=_contact())
-        with _patch_db(wechat_mod, s):
-            assert wechat_svc.delete_contact(1)["success"] is True
-
-    def test_delete_not_found(self, wechat_svc):
-        s = MagicMock()
-        s.query.return_value = _fluent(first=None)
-        with _patch_db(wechat_mod, s):
-            assert wechat_svc.delete_contact(9)["success"] is False
-
-    def test_star_contact_delegates(self, wechat_svc):
-        s = MagicMock()
-        s.query.return_value = _fluent(first=_contact())
-        with _patch_db(wechat_mod, s):
-            assert wechat_svc.star_contact(1, starred=True)["success"] is True
-
-    def test_unstar_all(self, wechat_svc):
-        s = MagicMock()
-        s.query.return_value = _fluent(update_=3)
-        with _patch_db(wechat_mod, s):
-            out = wechat_svc.unstar_all()
-        assert out["success"] is True
-        assert out["count"] == 3
-
-    def test_unstar_all_db_error(self, wechat_svc):
-        with patch.object(wechat_mod, "get_db", side_effect=RuntimeError("db fail")):
-            out = wechat_svc.unstar_all()
-        assert out["success"] is False
-
-
-class TestWechatContactContext:
-    """Cover ``get_contact_context`` and ``save_contact_context``."""
-
-    def test_get_context_empty(self, wechat_svc):
-        s = MagicMock()
-        s.query.return_value = _fluent(first=None)
-        with _patch_db(wechat_mod, s):
-            assert wechat_svc.get_contact_context(1) == []
-
-    def test_get_context_parsed(self, wechat_svc):
-        ctx = SimpleNamespace(context_json=json.dumps([{"m": "hi"}]))
-        s = MagicMock()
-        s.query.return_value = _fluent(first=ctx)
-        with _patch_db(wechat_mod, s):
-            out = wechat_svc.get_contact_context(1)
-        assert out == [{"m": "hi"}]
-
-    def test_get_context_invalid_json(self, wechat_svc):
-        ctx = SimpleNamespace(context_json="{not json")
-        s = MagicMock()
-        s.query.return_value = _fluent(first=ctx)
-        with _patch_db(wechat_mod, s):
-            assert wechat_svc.get_contact_context(1) == []
-
-    def test_get_context_db_error(self, wechat_svc):
-        with patch.object(wechat_mod, "get_db", side_effect=RuntimeError("db fail")):
-            assert wechat_svc.get_contact_context(1) == []
-
-    def test_save_context_update_existing(self, wechat_svc):
-        ctx = SimpleNamespace(wechat_id="", context_json="", message_count=0, updated_at=None)
-        s = MagicMock()
-        s.query.return_value = _fluent(first=ctx)
-        with _patch_db(wechat_mod, s):
-            assert wechat_svc.save_contact_context(1, "wx", [{"m": "a"}]) is True
-        assert ctx.message_count == 1
-
-    def test_save_context_insert_new(self, wechat_svc):
-        s = MagicMock()
-        s.query.return_value = _fluent(first=None)
-        with _patch_db(wechat_mod, s):
-            assert wechat_svc.save_contact_context(1, "wx", [{"m": "a"}]) is True
-        s.add.assert_called_once()
-
-    def test_save_context_db_error(self, wechat_svc):
-        with patch.object(wechat_mod, "get_db", side_effect=RuntimeError("db fail")):
-            assert wechat_svc.save_contact_context(1, "wx", []) is False
-
-
-class TestWechatResolveSendMessage:
-    """Cover ``resolve_send_message`` and ``_find_best_matching_contact``."""
-
-    def test_too_short(self, wechat_svc):
-        assert wechat_svc.resolve_send_message("hi") == (None, None)
-
-    def test_match(self, wechat_svc):
-        with patch.object(wechat_svc, "_find_best_matching_contact", return_value="张三"):
-            contact, content = wechat_svc.resolve_send_message("给张三发送你好呀")
-        assert contact == "张三"
-        assert content == "你好呀"
-
-    def test_no_match(self, wechat_svc):
-        with patch.object(wechat_svc, "_find_best_matching_contact", return_value=None):
-            assert wechat_svc.resolve_send_message("给某人发送内容啊") == (None, None)
-
-    def test_pattern_without_colon(self, wechat_svc):
-        with patch.object(wechat_svc, "_find_best_matching_contact", return_value=None):
-            assert wechat_svc.resolve_send_message("发给张三") == (None, None)
-
-    def test_find_best_matching_contact_fuzzy(self, wechat_svc):
-        with patch.object(
-            wechat_svc,
-            "get_contacts",
-            return_value=[{"contact_name": "七彩乐园有限公司"}],
-        ):
-            hit = wechat_svc._find_best_matching_contact("七彩乐园")
-        assert hit == "七彩乐园有限公司"
-
-    def test_find_best_matching_contact_no_contacts(self, wechat_svc):
-        with patch.object(wechat_svc, "get_contacts", return_value=[]):
-            assert wechat_svc._find_best_matching_contact("无人") is None
-
-    def test_find_best_matching_contact_low_score(self, wechat_svc):
-        with patch.object(
-            wechat_svc,
-            "get_contacts",
-            return_value=[{"contact_name": "完全不同的名字"}],
-        ):
-            assert wechat_svc._find_best_matching_contact("张三") is None
-
-
-class TestWechatRefreshMessages:
-    """Cover ``refresh_messages`` branches."""
-
-    def test_contact_missing(self, wechat_svc):
-        s = MagicMock()
-        s.query.return_value = _fluent(first=None)
-        with _patch_db(wechat_mod, s):
-            out = wechat_svc.refresh_messages(99)
-        assert out["success"] is False
-        assert "不存在" in out["message"]
-
-    def test_empty_wechat_id(self, wechat_svc):
-        s = MagicMock()
-        s.query.return_value = _fluent(first=_contact(wechat_id="", contact_name=""))
-        with _patch_db(wechat_mod, s):
-            out = wechat_svc.refresh_messages(1)
-        assert out["success"] is False
-
-    def test_no_db_file(self, wechat_svc, tmp_path):
-        s = MagicMock()
-        s.query.return_value = _fluent(first=_contact())
-        missing = str(tmp_path / "no_message.db")
-        with (
-            _patch_db(wechat_mod, s),
-            patch(
-                "app.utils.path_utils.get_resource_path",
-                return_value=str(tmp_path / "missing"),
-            ),
-            patch.dict(os.environ, {"WECHAT_MSG_DB_PATH": missing}, clear=False),
-        ):
-            out = wechat_svc.refresh_messages(1)
-        assert out["success"] is False
-        assert "数据库不存在" in out["message"]
-
-    def test_import_wechat_db_read_fails(self, wechat_svc, tmp_path):
-        s = MagicMock()
-        s.query.return_value = _fluent(first=_contact())
-        db_file = tmp_path / "message_0.db"
-        db_file.write_bytes(b"")
-
-        class _FailModule:
-            def __getattr__(self, name):
-                raise ImportError(f"cannot import {name}")
-
-        with (
-            _patch_db(wechat_mod, s),
-            patch.dict(os.environ, {"WECHAT_MSG_DB_PATH": str(db_file)}, clear=False),
-            patch(
-                "app.utils.path_utils.get_resource_path",
-                return_value=str(tmp_path),
-            ),
-            patch.dict(
-                "sys.modules",
-                {"wechat_db_read": _FailModule()},
-            ),
-        ):
-            out = wechat_svc.refresh_messages(1)
-        assert out["success"] is False
-
-    def test_success(self, wechat_svc, tmp_path):
-        s = MagicMock()
-        s.query.return_value = _fluent(first=_contact())
-        db_file = tmp_path / "message_0.db"
-        db_file.write_bytes(b"")
-        fake_read = MagicMock(
-            return_value={"success": True, "rows": [{"role": "other", "text": "你好"}]}
-        )
-        with (
-            _patch_db(wechat_mod, s),
-            patch.dict(os.environ, {"WECHAT_MSG_DB_PATH": str(db_file)}, clear=False),
-            patch(
-                "app.utils.path_utils.get_resource_path",
-                return_value=str(tmp_path),
-            ),
-            patch.dict(
-                "sys.modules",
-                {
-                    "wechat_db_read": MagicMock(
-                        get_messages_for_contact=fake_read,
-                        get_wechat_contact_db_path=MagicMock(),
-                    )
-                },
-            ),
-            patch.object(wechat_svc, "save_contact_context", return_value=True),
-        ):
-            out = wechat_svc.refresh_messages(1, limit=10)
-        assert out["success"] is True
-
-    def test_no_rows(self, wechat_svc, tmp_path):
-        s = MagicMock()
-        s.query.return_value = _fluent(first=_contact())
-        db_file = tmp_path / "message_0.db"
-        db_file.write_bytes(b"")
-        fake_read = MagicMock(return_value={"success": True, "rows": []})
-        with (
-            _patch_db(wechat_mod, s),
-            patch.dict(os.environ, {"WECHAT_MSG_DB_PATH": str(db_file)}, clear=False),
-            patch(
-                "app.utils.path_utils.get_resource_path",
-                return_value=str(tmp_path),
-            ),
-            patch.dict(
-                "sys.modules",
-                {
-                    "wechat_db_read": MagicMock(
-                        get_messages_for_contact=fake_read,
-                        get_wechat_contact_db_path=MagicMock(),
-                    )
-                },
-            ),
-        ):
-            out = wechat_svc.refresh_messages(1, limit=10)
-        assert out["success"] is True
-        assert out["count"] == 0
-
-    def test_read_failure(self, wechat_svc, tmp_path):
-        s = MagicMock()
-        s.query.return_value = _fluent(first=_contact())
-        db_file = tmp_path / "message_0.db"
-        db_file.write_bytes(b"")
-        fake_read = MagicMock(return_value={"success": False, "message": "read err"})
-        with (
-            _patch_db(wechat_mod, s),
-            patch.dict(os.environ, {"WECHAT_MSG_DB_PATH": str(db_file)}, clear=False),
-            patch(
-                "app.utils.path_utils.get_resource_path",
-                return_value=str(tmp_path),
-            ),
-            patch.dict(
-                "sys.modules",
-                {
-                    "wechat_db_read": MagicMock(
-                        get_messages_for_contact=fake_read,
-                        get_wechat_contact_db_path=MagicMock(),
-                    )
-                },
-            ),
-        ):
-            out = wechat_svc.refresh_messages(1, limit=10)
-        assert out["success"] is False
-
-    def test_db_error(self, wechat_svc):
-        with patch.object(wechat_mod, "get_db", side_effect=RuntimeError("db fail")):
-            out = wechat_svc.refresh_messages(1)
-        assert out["success"] is False
-
-
-class TestWechatGetService:
-    """Cover singleton ``get_wechat_contact_service``."""
-
-    def test_singleton(self):
-        assert wechat_mod.get_wechat_contact_service() is wechat_mod.get_wechat_contact_service()
 
 
 if __name__ == "__main__":  # pragma: no cover

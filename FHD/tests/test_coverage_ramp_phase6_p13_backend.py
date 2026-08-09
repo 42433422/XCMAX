@@ -66,7 +66,6 @@ from app.application.workflow.planner import (
     _execute_shipment_generate_tool,
     _execute_shipment_records_tool,
     _execute_template_extract_tool,
-    _execute_wechat_preview_tool,
     _filter_tool_registry_for_profile,
     execute_tool,
     get_tool_registry,
@@ -1378,47 +1377,6 @@ class TestExecuteTemplateExtractTool:
         result = _execute_template_extract_tool({})
         assert result["success"] is False
         assert result["error_code"] == "missing_file_path"
-
-
-class TestExecuteWechatPreviewTool:
-    """Cover _execute_wechat_preview_tool."""
-
-    def test_with_keyword(self) -> None:
-        with patch("app.bootstrap.get_wechat_contact_app_service") as mock_get:
-            mock_svc = MagicMock()
-            mock_svc.get_contacts.return_value = [{"name": "C1"}]
-            mock_get.return_value = mock_svc
-            result = _execute_wechat_preview_tool({"keyword": "K"})
-            assert result["success"] is True
-
-    def test_no_contacts_found(self) -> None:
-        with patch("app.bootstrap.get_wechat_contact_app_service") as mock_get:
-            mock_svc = MagicMock()
-            mock_svc.get_contacts.return_value = []
-            mock_get.return_value = mock_svc
-            result = _execute_wechat_preview_tool({"keyword": "K"})
-            assert result["success"] is True
-            assert "未找到" in result["message"]
-
-    def test_import_error(self) -> None:
-        with patch("app.bootstrap.get_wechat_contact_app_service", side_effect=ImportError("no")):
-            result = _execute_wechat_preview_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "service_unavailable"
-
-    def test_value_error(self) -> None:
-        with patch("app.bootstrap.get_wechat_contact_app_service", side_effect=ValueError("bad")):
-            result = _execute_wechat_preview_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "invalid_parameters"
-
-    def test_runtime_error(self) -> None:
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service", side_effect=RuntimeError("fail")
-        ):
-            result = _execute_wechat_preview_tool({})
-            assert result["success"] is False
-            assert result["error_code"] == "query_failed"
 
 
 class TestExecuteExcelSchemaTool:

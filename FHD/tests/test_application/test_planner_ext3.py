@@ -1,7 +1,7 @@
 """Tests for app.application.workflow.planner — uncovered branches (ext3).
 
 Focus: _execute_excel_schema_tool openpyxl fallback, _execute_excel_analysis_tool
-openpyxl fallback, _execute_import_excel_tool branches, _execute_wechat_preview_tool,
+openpyxl fallback, _execute_import_excel_tool branches,
 LLMWorkflowPlanner._validate_required_params, _fallback_plan, _get_planner_http_client,
 and _WORKFLOW_TOOL_HANDLERS mapping.
 """
@@ -293,70 +293,6 @@ class TestExecuteImportExcelToolBranches:
         assert result["success"] is True
 
 
-# ========================= _execute_wechat_preview_tool - extended ==========
-
-
-class TestExecuteWechatPreviewToolExtended:
-    def test_with_keyword(self):
-        from app.application.workflow.planner import _execute_wechat_preview_tool
-
-        mock_svc = Mock()
-        mock_svc.get_contacts.return_value = [{"name": "张三"}]
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service",
-            return_value=mock_svc,
-        ):
-            result = _execute_wechat_preview_tool({"keyword": "张"})
-        assert result["success"] is True
-        assert len(result["data"]) == 1
-
-    def test_no_contacts_found(self):
-        from app.application.workflow.planner import _execute_wechat_preview_tool
-
-        mock_svc = Mock()
-        mock_svc.get_contacts.return_value = []
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service",
-            return_value=mock_svc,
-        ):
-            result = _execute_wechat_preview_tool({"keyword": "不存在"})
-        assert result["success"] is True
-        assert "未找到" in result["message"]
-
-    def test_import_error(self):
-        from app.application.workflow.planner import _execute_wechat_preview_tool
-
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service",
-            side_effect=ImportError("no svc"),
-        ):
-            result = _execute_wechat_preview_tool({"keyword": "test"})
-        assert result["success"] is False
-        assert result["error_code"] == "service_unavailable"
-
-    def test_value_error(self):
-        from app.application.workflow.planner import _execute_wechat_preview_tool
-
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service",
-            side_effect=ValueError("bad params"),
-        ):
-            result = _execute_wechat_preview_tool({"keyword": "test"})
-        assert result["success"] is False
-        assert result["error_code"] == "invalid_parameters"
-
-    def test_runtime_error(self):
-        from app.application.workflow.planner import _execute_wechat_preview_tool
-
-        with patch(
-            "app.bootstrap.get_wechat_contact_app_service",
-            side_effect=RuntimeError("fail"),
-        ):
-            result = _execute_wechat_preview_tool({"keyword": "test"})
-        assert result["success"] is False
-        assert result["error_code"] == "query_failed"
-
-
 # ========================= LLMWorkflowPlanner._validate_required_params ====
 
 
@@ -457,7 +393,6 @@ class TestWorkflowToolHandlersMapping:
             ("print_label", "generate"),
             ("excel_decompose", "decompose"),
             ("template_extract", "extract"),
-            ("wechat_send", "preview"),
             ("excel_schema", "analyze"),
             ("excel_analysis", "analyze"),
             ("import_excel", "import"),

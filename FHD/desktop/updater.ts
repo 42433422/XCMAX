@@ -18,6 +18,8 @@ let remoteBuildSha = ''
 let remoteReleaseDate = ''
 let remoteReleaseNotes = ''
 let remoteReleaseMedia: ReleaseMediaSlide[] = []
+let remoteMinVersion = ''
+let remoteForceUpgrade = false
 let rebuildHookInstalled = false
 let updaterNetSession: Session | null = null
 let updaterNetSessionReady: Promise<Session> | null = null
@@ -100,6 +102,71 @@ function buildInfoCandidates(): string[] {
     path.join(process.resourcesPath, 'build-info.json'),
     path.join(process.resourcesPath, 'backend', 'build-info.json'),
   ]
+}
+
+/** 远程更新元数据中的最低兼容版本（低于此版本必须强制更新）。 */
+export function getRemoteMinVersion(): string {
+  return remoteMinVersion
+}
+
+/** 远程更新元数据标记了强制升级。 */
+export function isForceUpgradeEnabled(): boolean {
+  return remoteForceUpgrade
+}
+
+/** Product version is four-part and comes from signed build metadata, not npm SemVer. */
+export function readLocalProductVersion(): string {
+  const fromEnv = String(process.env.XCAGI_PRODUCT_VERSION || '').trim()
+  if (fromEnv) return fromEnv
+  for (const filePath of buildInfoCandidates()) {
+    try {
+      if (!fs.existsSync(filePath)) continue
+      const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { version?: string }
+      const version = String(raw.version || '').trim()
+      if (version) return version
+    } catch {
+      /* try next */
+    }
+  }
+  return app.getVersion()
+}
+
+/** 当前版本是否低于最低兼容版本，需要强制升级。 */
+export function isCurrentBelowMinVersion(): boolean {
+  if (!remoteMinVersion) return false
+  try {
+    return compareVersions(readLocalProductVersion(), remoteMinVersion) < 0
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 4 段式版本号比较（如 1.0.0.1 vs 1.0.0.0）。
+ * 支持 2-4 段，缺失段视为 0。
+ */
+export function compareVersions(a: string, b: string): number {
+  const parse = (value: string): number[] => {
+    const normalized = String(value || '').trim()
+    if (!/^\d+(?:\.\d+){1,3}$/.test(normalized)) {
+      throw new Error(`invalid version: ${normalized || '<empty>'}`)
+    }
+    return normalized.split('.').map(part => Number.parseInt(part, 10))
+  }
+  const partsA = parse(a)
+  const partsB = parse(b)
+  const len = Math.max(partsA.length, partsB.length)
+  for (let i = 0; i < len; i++) {
+    const va = partsA[i] ?? 0
+    const vb = partsB[i] ?? 0
+    if (va !== vb) return va - vb
+  }
+  return 0
+}
+
+/** 当前 Electron 版本是否低于最低兼容版本（需要强制升级）。 */
+export function isForceUpgradeRequired(): boolean {
+  return remoteForceUpgrade && isCurrentBelowMinVersion()
 }
 
 export function readLocalBuildSha(): string {
@@ -243,7 +310,10 @@ function enrichUpdateInfo(
  * Cursor-style updates: check in background, never auto-download / auto-prompt.
  * Renderer shows a corner badge; user opens notes modal, then downloads & restarts.
  */
-export function configureUpdater(mainWindow: BrowserWindow): void {
+export function configureUpdater(
+  mainWindow: BrowserWindow,
+  options: { onForceUpgradeRequired?: () => void | Promise<void> } = {},
+): void {
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = false
   ;(autoUpdater as unknown as { allowDowngrade?: boolean }).allowDowngrade = false
@@ -320,15 +390,24 @@ export function configureUpdater(mainWindow: BrowserWindow): void {
     appendUpdaterEvent('error', { message: error.message, stack: error.stack })
   })
 
-  setTimeout(() => {
-    void runUpdateCheckWithDirectNet().catch(error => send('error', { message: error.message }))
-  }, 60_000)
+  const checkAndNotify = async () => {
+    try {
+      await runUpdateCheckWithDirectNet()
+      if (isForceUpgradeRequired()) {
+        await options.onForceUpgradeRequired?.()
+      }
+    } catch (error) {
+      send('error', { message: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  setTimeout(() => void checkAndNotify(), 60_000)
 
   setInterval(() => {
     if (!app.isPackaged && !process.env.XCAGI_UPDATE_URL) {
       return
     }
-    void runUpdateCheckWithDirectNet().catch(error => send('error', { message: error.message }))
+    void checkAndNotify()
   }, 6 * 60 * 60 * 1000)
 }
 
@@ -408,6 +487,8 @@ export async function checkForUpdates(): Promise<unknown> {
     remoteReleaseDate = parseYamlField(metadataText, 'releaseDate').replace(/^['"]|['"]$/g, '')
     remoteReleaseNotes = parseYamlBlock(metadataText, 'releaseNotes')
     remoteReleaseMedia = parseReleaseMediaFromYaml(metadataText)
+    remoteMinVersion = parseYamlField(metadataText, 'minVersion').replace(/^['"]|['"]$/g, '')
+    remoteForceUpgrade = String(parseYamlField(metadataText, 'forceUpgrade') || '').trim().toLowerCase() === 'true'
     installSameVersionRebuildHook()
   }
   return autoUpdater.checkForUpdates()
@@ -507,6 +588,8 @@ export function __resetUpdateDownloadedForTest(): void {
   remoteReleaseNotes = ''
   remoteBuildSha = ''
   remoteReleaseDate = ''
+  remoteMinVersion = ''
+  remoteForceUpgrade = false
 }
 
 export { normalizeReleaseMedia, parseReleaseMediaFromYaml } from './release-media.js'

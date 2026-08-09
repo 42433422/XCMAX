@@ -8,7 +8,7 @@
   "type": "commonjs",
   "scripts": {
     "dev": "npm run build && electron .",
-    "build": "tsc -p tsconfig.json && cp resources/splash.html dist/splash.html",
+    "build": "node scripts/inject-version.cjs && tsc -p tsconfig.json && cp resources/splash.html dist/splash.html",
     "pack": "npm run build && electron-builder --dir --config electron-builder.yml",
     "dist": "npm run build && electron-builder --config electron-builder.yml",
     "dist:win": "npm run build && electron-builder --win --config electron-builder.yml",
@@ -27,22 +27,23 @@
     "@noble/hashes": "^1.8.0",
     "@types/node": "25.6.0",
     "@vitest/coverage-v8": "^3.2.6",
-    "electron": "41.3.0",
+    "electron": "41.10.3",
     "electron-builder": "26.15.3",
     "typescript": "6.0.3",
     "vitest": "^3.2.6"
   },
   "overrides": {
     "@noble/hashes": "$@noble/hashes",
-    "brace-expansion@^1.0.0": "1.1.16",
-    "brace-expansion@^2.0.0": "2.1.2",
-    "brace-expansion@>=5.0.0": "5.0.8",
+    "brace-expansion@^1.0.0": "1.1.18",
+    "brace-expansion@^2.0.0": "2.1.4",
+    "brace-expansion@>=5.0.0": "5.0.9",
     "builder-util-runtime": "9.7.0",
+    "fast-uri": "3.1.5",
     "form-data": "4.0.6",
-    "js-yaml": "4.3.0",
+    "js-yaml": "4.3.1",
     "tar": "7.5.21",
-    "postcss": "8.5.18",
+    "postcss": "8.5.25",
     "tmp": "0.2.7",
-    "undici": "6.27.0"
+    "undici": "6.28.0"
   }
 }

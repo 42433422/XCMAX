@@ -310,6 +310,23 @@ describe('main — OTA proxy PAC', () => {
     expect(parseProxyEndpoint('127.0.0.1:7890')).toEqual({ host: '127.0.0.1', port: 7890 })
     expect(parseProxyEndpoint('bad')).toBeNull()
   })
+
+  it('injects market hosts into backend NO_PROXY', async () => {
+    const { sanitizeBackendProxyEnv } = await import('./backend-env-utils.js')
+    const env = sanitizeBackendProxyEnv({
+      HTTP_PROXY: 'http://127.0.0.1:7890',
+      HTTPS_PROXY: 'http://127.0.0.1:7890',
+      XCMAX_CLI_PROXY: 'http://127.0.0.1:7890',
+      NO_PROXY: 'example.com',
+    })
+    expect(env.HTTP_PROXY).toBeUndefined()
+    expect(env.HTTPS_PROXY).toBeUndefined()
+    expect(env.XCMAX_CLI_PROXY).toBeUndefined()
+    expect(String(env.NO_PROXY)).toContain('xiu-ci.com')
+    expect(String(env.NO_PROXY)).toContain('127.0.0.1')
+    expect(String(env.NO_PROXY)).toContain('example.com')
+    expect(env.no_proxy).toBe(env.NO_PROXY)
+  })
 })
 
 describe('main — ED25519_PUBLIC_KEY_PEM', () => {
@@ -659,5 +676,49 @@ describe('main — backend spawn failure', () => {
     expect(electronMocks.dialog.showErrorBox).not.toHaveBeenCalled()
     expect(electronMocks.app.quit).not.toHaveBeenCalled()
     electronMocks.app.isQuitting = false
+  })
+})
+
+describe('main — desktop CSP defense-in-depth injection', () => {
+  it('injects fallback CSP for a trusted local mainFrame without an existing CSP', async () => {
+    const { resolveDesktopCspInjection } = await import('./main.js')
+    const csp = resolveDesktopCspInjection({
+      responseHeaders: {},
+      resourceType: 'mainFrame',
+      url: 'http://127.0.0.1:17500/',
+    })
+    expect(csp).toContain("default-src 'self'")
+    expect(csp).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval'")
+    expect(csp).toContain("connect-src 'self' ws: wss: http: https:")
+  })
+
+  it('does not override an existing CSP header (avoid intersection becoming stricter)', async () => {
+    const { resolveDesktopCspInjection } = await import('./main.js')
+    const csp = resolveDesktopCspInjection({
+      responseHeaders: { 'Content-Security-Policy': ["default-src 'self'"] },
+      resourceType: 'mainFrame',
+      url: 'http://127.0.0.1:17500/',
+    })
+    expect(csp).toBeNull()
+  })
+
+  it('does not inject for sub-resources (non-mainFrame)', async () => {
+    const { resolveDesktopCspInjection } = await import('./main.js')
+    const csp = resolveDesktopCspInjection({
+      responseHeaders: {},
+      resourceType: 'script',
+      url: 'http://127.0.0.1:17500/assets/app.js',
+    })
+    expect(csp).toBeNull()
+  })
+
+  it('does not inject for untrusted origins', async () => {
+    const { resolveDesktopCspInjection } = await import('./main.js')
+    const csp = resolveDesktopCspInjection({
+      responseHeaders: {},
+      resourceType: 'mainFrame',
+      url: 'https://evil.example.com/',
+    })
+    expect(csp).toBeNull()
   })
 })

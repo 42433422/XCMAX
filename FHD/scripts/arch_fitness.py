@@ -145,20 +145,26 @@ def check_no_giant_files_in_modstore_server() -> None:
 
 
 def check_legacy_boundary() -> None:
-    """legacy_* 文件必须收容在 app/legacy/ 下，禁止散落到 app/ 其他子目录。"""
+    """legacy_* / *_compat / compat_* 文件必须收容在 app/legacy/ 下，禁止散落。
+
+    P1-4 双轨治理：``*_compat`` / ``compat_*`` 命名的过渡实现与 ``legacy_*`` 一样，
+    必须统一收容到 ``app/legacy/``，防止同一功能双套实现散落各子目录。
+    """
     legacy_root = APP_DIR / "legacy"
-    for py in APP_DIR.rglob("legacy_*.py"):
-        if _is_excluded_path(py):
-            continue
-        try:
-            py.relative_to(legacy_root)
-            continue
-        except ValueError:
-            pass
-        rel = py.relative_to(REPO_ROOT)
-        VIOLATIONS.append(
-            f"[legacy-boundary] {rel} — legacy_* file must live under app/legacy/"
-        )
+    patterns = ("legacy_*.py", "*_compat.py", "compat_*.py")
+    for glob in patterns:
+        for py in APP_DIR.rglob(glob):
+            if _is_excluded_path(py):
+                continue
+            try:
+                py.relative_to(legacy_root)
+                continue
+            except ValueError:
+                pass
+            rel = py.relative_to(REPO_ROOT)
+            VIOLATIONS.append(
+                f"[legacy-boundary] {rel} — legacy_*/compat_* file must live under app/legacy/"
+            )
 
 
 def main() -> int:

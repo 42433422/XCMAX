@@ -64,7 +64,7 @@ describe('erpPagePaths – resolveErpPagePath 边界', () => {
     expect(resolveErpPagePath('/materials')).toBe('/mod/xcagi-erp-domain-bridge/materials')
     expect(resolveErpPagePath('/materials-list')).toBe('/mod/xcagi-erp-domain-bridge/materials')
     expect(resolveErpPagePath('/traditional-mode')).toBe('/mod/xcagi-erp-domain-bridge/traditional-mode')
-    expect(resolveErpPagePath('/business-docking')).toBe('/mod/xcagi-erp-domain-bridge/template-preview')
+expect(resolveErpPagePath('/business-docking')).toBe('/business-docking')
     expect(resolveErpPagePath('/data-sources')).toBe('/mod/xcagi-erp-domain-bridge/data-sources')
     expect(resolveErpPagePath('/print')).toBe('/mod/xcagi-erp-domain-bridge/print')
     expect(resolveErpPagePath('/printer-list')).toBe('/mod/xcagi-erp-domain-bridge/printer-list')
@@ -79,20 +79,6 @@ describe('erpPagePaths – resolveErpPagePath 边界', () => {
     vi.stubGlobal('localStorage', { getItem: () => '1' })
     expect(resolveErpPagePath('/unknown')).toBe('/unknown')
     expect(resolveErpPagePath('/custom-path')).toBe('/custom-path')
-  })
-
-  it('facade 开启时 wechat-contacts 添加 source 参数', () => {
-    vi.stubGlobal('localStorage', { getItem: () => '1' })
-    const result = resolveErpPagePath('/wechat-contacts')
-    expect(result).toContain('/mod/xcagi-erp-domain-bridge/data-sources')
-    expect(result).toContain('source=wechat_local_db')
-  })
-
-  it('facade 开启时 wechat-contacts 保留已有 query', () => {
-    vi.stubGlobal('localStorage', { getItem: () => '1' })
-    const result = resolveErpPagePath('/wechat-contacts?foo=bar')
-    expect(result).toContain('/mod/xcagi-erp-domain-bridge/data-sources')
-    expect(result).toContain('foo=bar')
   })
 
   it('facade 开启时路径带 query 参数时保留', () => {
@@ -143,7 +129,7 @@ describe('erpPagePaths – resolveErpPageRedirectForRouteName 边界', () => {
     expect(resolveErpPageRedirectForRouteName('materials')).toBe('/mod/xcagi-erp-domain-bridge/materials')
     expect(resolveErpPageRedirectForRouteName('materials-list')).toBe('/mod/xcagi-erp-domain-bridge/materials')
     expect(resolveErpPageRedirectForRouteName('traditional-mode')).toBe('/mod/xcagi-erp-domain-bridge/traditional-mode')
-    expect(resolveErpPageRedirectForRouteName('business-docking')).toBe('/mod/xcagi-erp-domain-bridge/template-preview')
+expect(resolveErpPageRedirectForRouteName('business-docking')).toBeNull()
     expect(resolveErpPageRedirectForRouteName('data-sources')).toBe('/mod/xcagi-erp-domain-bridge/data-sources')
     expect(resolveErpPageRedirectForRouteName('print')).toBe('/mod/xcagi-erp-domain-bridge/print')
     expect(resolveErpPageRedirectForRouteName('printer-list')).toBe('/mod/xcagi-erp-domain-bridge/printer-list')
@@ -152,13 +138,6 @@ describe('erpPagePaths – resolveErpPageRedirectForRouteName 边界', () => {
     expect(resolveErpPageRedirectForRouteName('purchase')).toBe('/mod/xcagi-erp-domain-bridge/purchase')
     expect(resolveErpPageRedirectForRouteName('inventory')).toBe('/mod/xcagi-erp-domain-bridge/inventory')
     expect(resolveErpPageRedirectForRouteName('batch-analyze')).toBe('/mod/xcagi-erp-domain-bridge/batch-analyze')
-  })
-
-  it('facade 开启时 wechat-contacts 添加 source 参数', () => {
-    vi.stubGlobal('localStorage', { getItem: () => '1' })
-    expect(resolveErpPageRedirectForRouteName('wechat-contacts')).toBe(
-      '/mod/xcagi-erp-domain-bridge/data-sources?source=wechat_local_db',
-    )
   })
 })
 
@@ -223,14 +202,6 @@ describe('erpPagePaths – pushErpPage', () => {
     vi.stubGlobal('localStorage', { getItem: () => '1' })
     pushErpPage(mockRouter as unknown as Router, { name: 'unknown' })
     expect(mockRouter.push).toHaveBeenCalledWith({ name: 'unknown' })
-  })
-
-  it('wechat-contacts 路由名 facade 开启时 push 带 source 参数', async () => {
-    vi.stubGlobal('localStorage', { getItem: () => '1' })
-    pushErpPage(mockRouter as unknown as Router, { name: 'wechat-contacts' })
-    expect(mockRouter.push).toHaveBeenCalledWith({
-      path: '/mod/xcagi-erp-domain-bridge/data-sources?source=wechat_local_db',
-    })
   })
 
   it('对象无 path 和 name 时直接 push', async () => {

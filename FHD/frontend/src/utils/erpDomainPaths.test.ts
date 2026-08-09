@@ -44,13 +44,10 @@ describe('erpDomainPaths', () => {
     )
   })
 
-  it('maps purchase_units and wechat_contacts legacy paths', () => {
+  it('maps purchase_units legacy path', () => {
     localStorage.setItem(LS, '1')
     expect(resolveErpApiPath('/api/purchase_units')).toBe(
       '/api/mod/xcagi-erp-domain-bridge/purchase_units',
-    )
-    expect(resolveErpApiPath('/api/wechat_contacts/ensure_contact_cache')).toBe(
-      '/api/mod/xcagi-erp-domain-bridge/wechat_contacts/ensure_contact_cache',
     )
   })
 
@@ -102,17 +99,6 @@ describe('erpDomainPaths', () => {
     )
   })
 
-  it('routes wechat_contacts compat via erp bridge when bridge is installed', () => {
-    writeActiveExtensionModIdToStorage('taiyangniao-pro', TEST_SCOPE)
-    const ids = ['taiyangniao-pro', 'xcagi-erp-domain-bridge']
-    expect(resolveErpApiPath('/api/wechat_contacts/work_mode_feed?per_contact=1', ids)).toBe(
-      '/api/mod/xcagi-erp-domain-bridge/wechat_contacts/work_mode_feed?per_contact=1',
-    )
-    expect(resolveErpApiPath('/api/wechat_contacts/decrypt_status', ids)).toBe(
-      '/api/mod/xcagi-erp-domain-bridge/wechat_contacts/decrypt_status',
-    )
-  })
-
   it('routes ERP API via bridge when active mod is industry shell (attendance-industry)', () => {
     writeActiveExtensionModIdToStorage('attendance-industry', TEST_SCOPE)
     const ids = ['attendance-industry', 'xcagi-erp-domain-bridge']
@@ -134,14 +120,6 @@ describe('erpDomainPaths', () => {
     expect(resolveErpApiBase(ids)).toBe('/api/mod/xcagi-erp-domain-bridge')
     expect(resolveErpApiPath('/api/shipment/shipment-records/units', ids)).toBe(
       '/api/mod/xcagi-erp-domain-bridge/shipment/shipment-records/units',
-    )
-  })
-
-  it('does not map wechat_contacts to attendance-industry client mod', () => {
-    localStorage.setItem(LS, '1')
-    const ids = ['attendance-industry', 'xcagi-erp-domain-bridge']
-    expect(resolveErpApiPath('/api/wechat_contacts/decrypt_status', ids)).toBe(
-      '/api/mod/xcagi-erp-domain-bridge/wechat_contacts/decrypt_status',
     )
   })
 })

@@ -85,12 +85,6 @@ describe('erpDomainPaths deep branches', () => {
     expect(resolveErpApiPath('/api/orders?page=1')).toBe('/api/mod/xcagi-erp-domain-bridge/orders?page=1')
   })
 
-  it('resolveErpApiPath wechat_contacts compat routes to facade', () => {
-    expect(resolveErpApiPath('/api/wechat_contacts/list', ['xcagi-erp-domain-bridge'])).toContain(
-      '/api/mod/xcagi-erp-domain-bridge',
-    )
-  })
-
   it('resolveErpApiPath orders go to bridge when client active', () => {
     activeMod.value = 'taiyangniao-pro'
     protectedIds.add('taiyangniao-pro')

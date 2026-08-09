@@ -15,6 +15,14 @@ contextBridge.exposeInMainWorld('xcagiDesktop', {
   setBadge: (count: number) => ipcRenderer.invoke('xcagi:set-badge', count),
   showNotification: (title: string, body: string) =>
     ipcRenderer.invoke('xcagi:show-notification', { title, body }),
+  offlineQuery: (params: unknown) => ipcRenderer.invoke('xcagi:offline-query', params),
+  secureGet: (key: string) => ipcRenderer.invoke('xcagi:secure-get', key),
+  secureSet: (key: string, value: string) => ipcRenderer.invoke('xcagi:secure-set', key, value),
+  secureDelete: (key: string) => ipcRenderer.invoke('xcagi:secure-delete', key),
+  secureList: () => ipcRenderer.invoke('xcagi:secure-list'),
+  clipboardReadText: () => ipcRenderer.invoke('xcagi:clipboard-read-text'),
+  clipboardWriteText: (text: string) => ipcRenderer.invoke('xcagi:clipboard-write-text', text),
+  openPath: (target: string) => ipcRenderer.invoke('xcagi:open-path', target),
   onUpdateEvent: (callback: (event: unknown) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => callback(payload)
     ipcRenderer.on('xcagi:update-event', listener)

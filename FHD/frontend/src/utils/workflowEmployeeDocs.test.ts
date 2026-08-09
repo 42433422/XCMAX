@@ -34,13 +34,13 @@ const activeCtx: WorkflowDocsRuntimeContext = {
   isModsListLoaded: true,
   modsForUi: [
     {
-      id: 'wechat-contacts-ai-employee',
-      name: '微信触点 AI 员工',
+      id: 'test-employee-mod',
+      name: '测试员工扩展',
       workflow_employees: [
         {
-          id: 'wechat_contacts_hub',
-          label: '微信触点管家',
-          panel_summary: '侧栏微信联系人与副窗配合。',
+          id: 'test_hub',
+          label: '测试触点管家',
+          panel_summary: '测试摘要。',
           workflow_placeholder: true,
         },
       ],
@@ -64,9 +64,9 @@ describe('workflowEmployeeDocs', () => {
 
   it('merges manifest employees into branches and flows when mod active', () => {
     const merged = mergeManifestWorkflowEmployeesIntoDocs(baseDocs(), activeCtx)
-    expect(merged.branches.some((b) => b.id === 'wechat_contacts_hub')).toBe(true)
-    expect(merged.flows.some((f) => f.id === 'wechat_contacts_hub')).toBe(true)
-    const branch = merged.branches.find((b) => b.id === 'wechat_contacts_hub')
+    expect(merged.branches.some((b) => b.id === 'test_hub')).toBe(true)
+    expect(merged.flows.some((f) => f.id === 'test_hub')).toBe(true)
+    const branch = merged.branches.find((b) => b.id === 'test_hub')
     expect(branch?.kind).toBe('mod_extension')
   })
 
@@ -86,6 +86,6 @@ describe('workflowEmployeeDocs', () => {
   it('applyWorkflowEmployeeDocsRuntime includes extension copy', () => {
     const out = applyWorkflowEmployeeDocsRuntime(baseDocs(), activeCtx)
     expect(out.pipelineBranchLabel).toContain('1')
-    expect(out.branches.some((b) => b.id === 'wechat_contacts_hub')).toBe(true)
+    expect(out.branches.some((b) => b.id === 'test_hub')).toBe(true)
   })
 })

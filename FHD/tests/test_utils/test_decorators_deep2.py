@@ -267,7 +267,7 @@ class TestRateLimitedDeep:
     def test_window_seconds_passed_to_check(self):
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.return_value = {"allowed": True}
-        with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+        with patch.dict("sys.modules", {"app.utils.resilience.rate_limiter": fake_rl_module}):
 
             @dec.rate_limited(max_requests=10, window_seconds=120)
             def fn(user_id):
@@ -281,7 +281,7 @@ class TestRateLimitedDeep:
         is not checked."""
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.return_value = {"allowed": True}
-        with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+        with patch.dict("sys.modules", {"app.utils.resilience.rate_limiter": fake_rl_module}):
 
             @dec.rate_limited(max_requests=10)
             def fn():
@@ -295,7 +295,7 @@ class TestRateLimitedDeep:
         result.get('allowed', True) returns True (default)."""
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.return_value = {}
-        with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+        with patch.dict("sys.modules", {"app.utils.resilience.rate_limiter": fake_rl_module}):
 
             @dec.rate_limited(max_requests=10)
             def fn(user_id):
@@ -312,7 +312,7 @@ class TestRateLimitedDeep:
         with patch.dict(
             "sys.modules",
             {
-                "app.utils.rate_limiter": fake_rl_module,
+                "app.utils.resilience.rate_limiter": fake_rl_module,
                 "app.http.json_response": fake_json_module,
             },
         ):
@@ -330,7 +330,7 @@ class TestRateLimitedDeep:
 
     def test_rate_limit_import_error_falls_back(self):
         """ImportError on rate_limiter import is caught and function runs."""
-        with patch.dict("sys.modules", {"app.utils.rate_limiter": None}):
+        with patch.dict("sys.modules", {"app.utils.resilience.rate_limiter": None}):
 
             @dec.rate_limited(max_requests=10)
             def fn(user_id):
@@ -341,7 +341,7 @@ class TestRateLimitedDeep:
     def test_key_func_takes_precedence_over_args(self):
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.return_value = {"allowed": True}
-        with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+        with patch.dict("sys.modules", {"app.utils.resilience.rate_limiter": fake_rl_module}):
 
             @dec.rate_limited(max_requests=10, key_func=lambda *a, **k: "custom")
             def fn(user_id, x):
@@ -354,7 +354,7 @@ class TestRateLimitedDeep:
         """When first arg has __dict__, identifier is str(id(args[0]))."""
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.return_value = {"allowed": True}
-        with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+        with patch.dict("sys.modules", {"app.utils.resilience.rate_limiter": fake_rl_module}):
 
             @dec.rate_limited(max_requests=10)
             def method(self_, x):
@@ -719,7 +719,7 @@ class TestCombinedOptimizationDeep:
         """rate_limit > 0 applies rate_limited decorator."""
         fake_rl_module = MagicMock()
         fake_rl_module.check_rate_limit.return_value = {"allowed": True}
-        with patch.dict("sys.modules", {"app.utils.rate_limiter": fake_rl_module}):
+        with patch.dict("sys.modules", {"app.utils.resilience.rate_limiter": fake_rl_module}):
 
             @dec.combined_optimization(rate_limit=10)
             def fn(user_id):
@@ -809,7 +809,7 @@ class TestCombinedOptimizationDeep:
             "sys.modules",
             {
                 "app.utils.performance_initializer": fake_module,
-                "app.utils.rate_limiter": fake_rl_module,
+                "app.utils.resilience.rate_limiter": fake_rl_module,
             },
         ):
 

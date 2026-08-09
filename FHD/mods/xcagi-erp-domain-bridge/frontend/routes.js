@@ -22,11 +22,12 @@ const modRoutes = [
   route('/orders', 'mod-erp-orders', 'OrdersView.vue', '考勤单管理'),
   route('/orders/create', 'mod-erp-orders-create', 'CreateOrderView.vue', '新建考勤单'),
   route('/shipment-records', 'mod-erp-shipment-records', 'ShipmentRecordsView.vue', '考勤记录'),
-  { path: `${PREFIX}/wechat-contacts`, name: 'mod-erp-wechat-contacts', redirect: `${PREFIX}/data-sources` },
+  // wechat-contacts 已移至 xcagi-wechat-bridge Mod
   route('/materials', 'mod-erp-materials', 'MaterialsView.vue', '排班资源'),
   { path: `${PREFIX}/materials-list`, name: 'mod-erp-materials-list', redirect: `${PREFIX}/materials` },
   route('/traditional-mode', 'mod-erp-traditional-mode', 'TraditionalModeView.vue', '表格模式'),
-  route('/business-docking', 'mod-erp-business-docking', 'BusinessDockingView.vue', '业务对接'),
+// 旧「业务对接」页已退役；数据对接中心由宿主 EtlCenterView（/business-docking）承担
+  { path: `${PREFIX}/business-docking`, name: 'mod-erp-business-docking', redirect: '/business-docking' },
   route('/data-sources', 'mod-erp-data-sources', 'DataSourcesView.vue', '数据来源'),
   route('/print', 'mod-erp-print', 'PrintView.vue', '考勤表打印'),
   route('/printer-list', 'mod-erp-printer-list', 'PrinterListView.vue', '打印机列表'),
@@ -44,6 +45,7 @@ const modMenu = [
   { id: 'mod-erp-shipment-records', label: '考勤记录', icon: 'fa-industry', path: `${PREFIX}/shipment-records` },
   { id: 'mod-erp-materials', label: '排班资源', icon: 'fa-archive', path: `${PREFIX}/materials` },
   { id: 'mod-erp-traditional-mode', label: '表格模式', icon: 'fa-table', path: `${PREFIX}/traditional-mode` },
+  { id: 'mod-erp-business-docking', label: '数据对接中心', icon: 'fa-exchange', path: `${PREFIX}/business-docking` },
   { id: 'mod-erp-data-sources', label: '数据来源', icon: 'fa-database', path: `${PREFIX}/data-sources` },
   { id: 'mod-erp-print', label: '考勤表打印', icon: 'fa-print', path: `${PREFIX}/print` },
   { id: 'mod-erp-printer-list', label: '打印机列表', icon: 'fa-print', path: `${PREFIX}/printer-list` },

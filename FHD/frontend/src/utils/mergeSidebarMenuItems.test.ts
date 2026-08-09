@@ -24,32 +24,6 @@ describe('mergeSidebarMenuItems', () => {
     expect(keys).not.toContain('internal-customer-service')
   })
 
-  it('drops stale WeChat contact entries now represented by data sources', () => {
-    const merged = mergeSidebarMenuItems(
-      [{ key: 'data-sources', name: '数据来源', iconClass: 'fa-database' }],
-      [
-        {
-          key: 'mod-erp-wechat-contacts',
-          name: '企业微信联系人',
-          iconClass: 'fa-weixin',
-          modId: 'xcagi-erp-domain-bridge',
-          path: '/mod/xcagi-erp-domain-bridge/wechat-contacts',
-        },
-        {
-          key: 'wechat-contacts-ai-employee-entry',
-          name: '微信联系人',
-          iconClass: 'fa-weixin',
-          modId: 'wechat-contacts-ai-employee',
-          path: '/wechat-contacts',
-        },
-      ],
-      [],
-      [],
-      [],
-    )
-    expect(merged.map((item) => item.key)).toEqual(['data-sources'])
-  })
-
   it('drops stale materials-list entries now represented by materials', () => {
     const merged = mergeSidebarMenuItems(
       [{ key: 'materials', name: '资源库', iconClass: 'fa-archive' }],
@@ -69,10 +43,11 @@ describe('mergeSidebarMenuItems', () => {
     expect(merged.map((item) => item.key)).toEqual(['materials'])
   })
 
-  it('keeps model service in settings and business docking in chat, not primary navigation', () => {
+it('keeps model service in settings; suppresses Mod business-docking; host ETL stays', () => {
     const merged = mergeSidebarMenuItems(
       [
         { key: 'chat', name: '智能对话', iconClass: 'fa-comments-o' },
+        { key: 'business-docking', name: '数据对接中心', iconClass: 'fa-exchange' },
         { key: 'settings', name: '系统设置', iconClass: 'fa-cog' },
       ],
       [
@@ -95,7 +70,7 @@ describe('mergeSidebarMenuItems', () => {
       [],
       [],
     )
-    expect(merged.map((item) => item.key)).toEqual(['chat', 'settings'])
+    expect(merged.map((item) => item.key)).toEqual(['chat', 'business-docking', 'settings'])
   })
 
   it('drops mod item when key uses erroneous mod-mod- prefix', () => {

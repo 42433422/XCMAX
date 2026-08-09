@@ -212,3 +212,82 @@ class TestEnsurePostgresPerModDatabases:
             os.environ.pop("FHD_SKIP_MOD_DB_CREATE", None)
             result = ensure_postgres_per_mod_databases()
             assert "xcagi__mod1" in result
+
+    @patch("app.db.ensure_mod_postgres._clone_db_has_schema")
+    @patch("app.db.ensure_mod_postgres._load_bootstrap_module")
+    def test_recreates_empty_clone_target_db(self, mock_load, mock_clone_schema):
+        """克隆目标库存在但缺基库业务表（空库/失败克隆）时，自基库重建。"""
+        mock_boot = MagicMock()
+        mock_boot._discover_mod_ids.return_value = ["mod1"]
+        mock_boot._normalize_mod_file_suffix.return_value = "mod1"
+        mock_boot.DEFAULT_CLONE_FROM_BASE_MOD_IDS = ("mod1",)
+        mock_boot._url_for_database.return_value = "postgresql://user:pass@localhost/xcagi__mod1"
+        mock_boot._enable_pgvector = MagicMock()
+
+        # base exists, mod DB exists but is empty (no business schema)
+        mock_boot._db_exists.side_effect = lambda conn, dbn: True
+        mock_clone_schema.return_value = False
+        mock_boot._drop_database = MagicMock()
+        mock_boot._create_db_from_template = MagicMock()
+
+        mock_engine = MagicMock()
+        mock_conn = MagicMock()
+        mock_engine.connect.return_value.__enter__ = MagicMock(return_value=mock_conn)
+        mock_engine.connect.return_value.__exit__ = MagicMock(return_value=False)
+        mock_engine.dispose = MagicMock()
+        mock_boot._maintenance_engine.return_value = mock_engine
+        mock_load.return_value = mock_boot
+
+        with patch.dict(
+            os.environ,
+            {
+                "XCAGI_MOD_ISOLATED_DATABASES": "1",
+                "DATABASE_URL": "postgresql://user:pass@localhost/xcagi",
+            },
+            clear=False,
+        ):
+            os.environ.pop("FHD_SKIP_MOD_DB_CREATE", None)
+            result = ensure_postgres_per_mod_databases()
+
+        mock_boot._drop_database.assert_called_once_with(mock_conn, "xcagi__mod1")
+        mock_boot._create_db_from_template.assert_called_once()
+        assert "xcagi__mod1" in result
+
+    @patch("app.db.ensure_mod_postgres._clone_db_has_schema")
+    @patch("app.db.ensure_mod_postgres._load_bootstrap_module")
+    def test_keeps_populated_clone_target_db(self, mock_load, mock_clone_schema):
+        """克隆目标库已含业务 schema 时不做任何操作（幂等）。"""
+        mock_boot = MagicMock()
+        mock_boot._discover_mod_ids.return_value = ["mod1"]
+        mock_boot._normalize_mod_file_suffix.return_value = "mod1"
+        mock_boot.DEFAULT_CLONE_FROM_BASE_MOD_IDS = ("mod1",)
+        mock_boot._url_for_database.return_value = "postgresql://user:pass@localhost/xcagi__mod1"
+        mock_boot._enable_pgvector = MagicMock()
+
+        mock_boot._db_exists.side_effect = lambda conn, dbn: True
+        mock_clone_schema.return_value = True
+        mock_boot._drop_database = MagicMock()
+        mock_boot._create_db_from_template = MagicMock()
+
+        mock_engine = MagicMock()
+        mock_conn = MagicMock()
+        mock_engine.connect.return_value.__enter__ = MagicMock(return_value=mock_conn)
+        mock_engine.connect.return_value.__exit__ = MagicMock(return_value=False)
+        mock_engine.dispose = MagicMock()
+        mock_boot._maintenance_engine.return_value = mock_engine
+        mock_load.return_value = mock_boot
+
+        with patch.dict(
+            os.environ,
+            {
+                "XCAGI_MOD_ISOLATED_DATABASES": "1",
+                "DATABASE_URL": "postgresql://user:pass@localhost/xcagi",
+            },
+            clear=False,
+        ):
+            os.environ.pop("FHD_SKIP_MOD_DB_CREATE", None)
+            result = ensure_postgres_per_mod_databases()
+
+        mock_boot._drop_database.assert_not_called()
+        mock_boot._create_db_from_template.assert_not_called()
+        assert result == []

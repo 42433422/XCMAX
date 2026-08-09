@@ -19,6 +19,7 @@ function mockFetchOnce(body: unknown, ok = true) {
   ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
     ok,
     json: async () => body,
+    headers: { get: () => 'application/json' },
   } as Response)
 }
 

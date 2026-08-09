@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import uuid
@@ -29,6 +30,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import desc, select
+from sqlalchemy.exc import IntegrityError
 
 from modstore_server.db.base import get_session_factory
 from modstore_server.db.strategic import (
@@ -96,6 +98,15 @@ class DecisionLifecycleError(Exception):
 
 class DecisionAlreadyDecidedError(DecisionLifecycleError):
     """决策已经处于终态（rejected/withdrawn/completed），不能再变更。"""
+
+
+def _has_idempotency_key(row: StrategicDecisionModel, key: str) -> bool:
+    """Return whether a persisted record was created for this exact stable key."""
+    try:
+        payload = json.loads(str(row.decision_payload_json or "{}"))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return False
+    return isinstance(payload, dict) and payload.get("_idempotency_key") == key
 
 
 @dataclass
@@ -174,6 +185,7 @@ class StrategicDecisionLedger:
         scope: str = "global",
         scope_ref: str = "",
         execution_plan: Optional[Dict[str, Any]] = None,
+        idempotency_key: str = "",
     ) -> StrategicDecisionRecord:
         """提议新决策；立即评估自治边界，根据 ``allowed_autonomy`` 决定初始状态。
 
@@ -185,6 +197,7 @@ class StrategicDecisionLedger:
             scope: 作用域 ``global`` / ``release_train`` / ``module`` / ``employee`` / ``incident``
             scope_ref: 关联 ID（如模块名/版本号/员工 ID）
             execution_plan: 执行计划 JSON（执行层员工 ID、任务描述、依赖）
+            idempotency_key: 可选的稳定键；相同键只创建一条决策，适用于调度任务。
 
         Returns:
             StrategicDecisionRecord: 创建后的决策记录（含自治评估结果）
@@ -194,10 +207,37 @@ class StrategicDecisionLedger:
         if not action or not action.strip():
             raise ValueError("action must not be empty")
 
+        normalized_key = str(idempotency_key or "").strip()
+        if len(normalized_key) > 256:
+            raise ValueError("idempotency_key too long")
+        decision_id = (
+            f"dec-{hashlib.sha256(normalized_key.encode('utf-8')).hexdigest()[:16]}"
+            if normalized_key
+            else f"dec-{uuid.uuid4().hex[:16]}"
+        )
+
+        # Check before running any downstream decision work.  The deterministic
+        # decision id plus the unique database constraint also protects the race
+        # between two scheduler processes; the IntegrityError path below reloads
+        # the winner instead of creating a duplicate strategic request.
+        session = self._session_factory()()
+        try:
+            if normalized_key:
+                existing = session.execute(
+                    select(StrategicDecisionModel).where(
+                        StrategicDecisionModel.decision_id == decision_id
+                    )
+                ).scalar_one_or_none()
+                if existing is not None:
+                    if not _has_idempotency_key(existing, normalized_key):
+                        raise DecisionLifecycleError("idempotency_key collision")
+                    return _model_to_record(existing)
+        finally:
+            session.close()
+
         evaluator = self._evaluator or AutonomyEvaluator.from_db()
         evaluation = evaluator.evaluate(action)
 
-        decision_id = f"dec-{uuid.uuid4().hex[:16]}"
         now = datetime.now(timezone.utc)
 
         # 根据自治评估决定初始状态
@@ -227,7 +267,11 @@ class StrategicDecisionLedger:
             status=status,
             decided_by=decided_by,
             decided_at=decided_at,
-            decision_payload={**proposer.payload, "action": action},
+            decision_payload={
+                **proposer.payload,
+                "action": action,
+                **({"_idempotency_key": normalized_key} if normalized_key else {}),
+            },
             execution_plan=execution_plan or {},
             execution_result={},
             autonomy_rule_id=evaluation.rule.rule_id if evaluation.rule else "",
@@ -252,6 +296,19 @@ class StrategicDecisionLedger:
                 record.autonomy_action,
             )
             return record
+        except IntegrityError:
+            session.rollback()
+            if normalized_key:
+                existing = session.execute(
+                    select(StrategicDecisionModel).where(
+                        StrategicDecisionModel.decision_id == decision_id
+                    )
+                ).scalar_one_or_none()
+                if existing is not None:
+                    if not _has_idempotency_key(existing, normalized_key):
+                        raise DecisionLifecycleError("idempotency_key collision")
+                    return _model_to_record(existing)
+            raise
         except Exception:
             session.rollback()
             raise

@@ -27,7 +27,7 @@ describe('enterpriseModStack', () => {
       },
     ],
     required_mod_ids: ['xcagi-core-workflow-employees', 'xcagi-erp-domain-bridge'],
-    optional_mod_ids: ['wechat-contacts-ai-employee'],
+    optional_mod_ids: [],
     industry_mod_ids: ['coating-industry'],
     account_custom_mod_ids: ['sz-qsm-pro'],
     custom_mod_ids: ['coating-industry', 'sz-qsm-pro'],

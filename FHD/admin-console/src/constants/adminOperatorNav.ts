@@ -79,7 +79,6 @@ export const ADMIN_OPERATOR_ROUTE_NAMES = new Set([
   'workflow-employee-stitch-full',
   'workflow-employee-load-remove',
   'brain',
-  'wechat-contacts',
   'mod-landing',
   'attendance-industry-home',
   'attendance-industry-settings',

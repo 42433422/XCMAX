@@ -18,6 +18,11 @@ on:
         required: true
         default: false
         type: boolean
+      frontend_run_id:
+        description: "Run ID of the orchestrator's build-frontend job producing the shared xcagi-vue-dist artifact"
+        required: false
+        default: ""
+        type: string
   # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml, which gates on
   # verify-version-anchors and then dispatches this workflow. Removing the direct tag
   # trigger here eliminates the double-run on tag push.
@@ -90,6 +95,22 @@ jobs:
       XCAGI_WINDOWS_PUBLISHER_NAME: ${{ vars.XCAGI_WINDOWS_PUBLISHER_NAME }}
     steps:
       - uses: actions/checkout@v4
+      - name: Download shared vue-dist (single frontend build)
+        if: ${{ inputs.frontend_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: xcagi-vue-dist
+          path: FHD/templates/vue-dist
+          run-id: ${{ inputs.frontend_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Assert shared vue-dist present (fail closed)
+        if: ${{ inputs.frontend_run_id != '' }}
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "FHD/templates/vue-dist/index.html")) {
+            Write-Error "::error::Shared vue-dist missing from artifact (frontend_run_id=${{ inputs.frontend_run_id }}). Refusing to build a frontend-less desktop."
+            exit 1
+          }
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -121,7 +142,8 @@ jobs:
           $raw = "${{ github.event.inputs.version || github.ref_name }}"
           $raw = $raw -replace '^FHD/', ''
           $v = $raw.TrimStart('v','V')
-          scripts/package/build-installer.ps1 -Version $v -ProductSku enterprise -SkipUiInstaller
+          $skipF = if ("${{ inputs.frontend_run_id }}" -ne "") { "-SkipFrontend" } else { "" }
+          scripts/package/build-installer.ps1 -Version $v -ProductSku enterprise -SkipUiInstaller $skipF
       - name: Verify Windows enterprise installer
         shell: pwsh
         run: |
@@ -193,6 +215,22 @@ jobs:
       CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+      - name: Download shared vue-dist (single frontend build)
+        if: ${{ inputs.frontend_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: xcagi-vue-dist
+          path: FHD/templates/vue-dist
+          run-id: ${{ inputs.frontend_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Assert shared vue-dist present (fail closed)
+        if: ${{ inputs.frontend_run_id != '' }}
+        shell: bash
+        run: |
+          test -f FHD/templates/vue-dist/index.html || {
+            echo "::error::Shared vue-dist missing from artifact (frontend_run_id=${{ inputs.frontend_run_id }}). Refusing to build a frontend-less desktop."
+            exit 1
+          }
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -214,6 +252,7 @@ jobs:
         shell: bash
         env:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          SKIP_FRONTEND: ${{ inputs.frontend_run_id != '' && '1' || '0' }}
         run: |
           set -euo pipefail
           if [ -z "${CSC_NAME:-}" ]; then
