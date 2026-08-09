@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import importlib.util
 import json
+import sys
 from pathlib import Path
+
+from fastapi import FastAPI, Request
+from fastapi.testclient import TestClient
 
 REPO = Path(__file__).resolve().parents[1]
 MOD_DIR = REPO / "mods" / "xcagi-approval-bridge"
@@ -22,7 +27,59 @@ def test_approval_blueprints_delegate_routes():
     text = (MOD_DIR / "backend" / "blueprints.py").read_text(encoding="utf-8")
     assert "/requests" in text
     assert "/flows" in text
-    assert "app.fastapi_routes.approval" in text
+    assert "approval_workspace_app_service" in text
+    assert "app.fastapi_routes.approval" not in text
+
+
+def _load_approval_bridge_blueprints():
+    module_name = "_test_xcagi_approval_bridge_blueprints"
+    spec = importlib.util.spec_from_file_location(
+        module_name,
+        MOD_DIR / "backend" / "blueprints.py",
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_approval_bridge_runtime_delegates_list_and_approve(monkeypatch):
+    module = _load_approval_bridge_blueprints()
+    calls: dict[str, object] = {}
+
+    def fake_list_requests(*args):
+        calls["list"] = args
+        return {"success": True, "data": [{"id": 17}]}
+
+    def fake_approve(request_id, request, body, x_user_id):
+        assert isinstance(request, Request)
+        calls["approve"] = (request_id, body, x_user_id)
+        return {"success": True, "data": {"id": request_id, "status": "approved"}}
+
+    monkeypatch.setattr(module.svc, "list_requests", fake_list_requests)
+    monkeypatch.setattr(module.svc, "approve_request", fake_approve)
+
+    app = FastAPI()
+    module.register_fastapi_routes(app, "xcagi-approval-bridge")
+    client = TestClient(app)
+
+    listed = client.get(
+        "/api/mod/xcagi-approval-bridge/requests",
+        params={"approver_id": 2, "page": 1, "page_size": 200},
+    )
+    assert listed.status_code == 200
+    assert listed.json()["data"] == [{"id": 17}]
+    assert calls["list"] == (2, None, None, None, 1, 200)
+
+    approved = client.post(
+        "/api/mod/xcagi-approval-bridge/requests/17/approve",
+        headers={"X-User-ID": "2"},
+        json={"opinion": "同意"},
+    )
+    assert approved.status_code == 200
+    assert approved.json()["data"]["status"] == "approved"
+    assert calls["approve"] == (17, {"opinion": "同意"}, "2")
 
 
 def test_list_approval_facade_registry_mod(monkeypatch):
