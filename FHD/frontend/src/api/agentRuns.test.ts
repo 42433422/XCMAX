@@ -20,40 +20,51 @@ describe('agentRunsApi', () => {
   it('creates an agent run', async () => {
     await agentRunsApi.createRun({
       message: '查产品',
-      user_id: 'u1',
       runtime_context: { source: 'test' },
     })
 
     expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs', {
       message: '查产品',
-      user_id: 'u1',
       runtime_context: { source: 'test' },
     })
   })
 
   it('continues an agent run', async () => {
     await agentRunsApi.continueRun('run/1', {
-      approved_by: 'u1',
-      step_id: 'step_1',
+      approval_grant: 'signed-grant',
       runtime_context: { source: 'test' },
     })
 
     expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/continue', {
-      approved_by: 'u1',
-      step_id: 'step_1',
+      approval_grant: 'signed-grant',
       runtime_context: { source: 'test' },
     })
   })
 
   it('reads run detail, list, and events', async () => {
     await agentRunsApi.getRun('run/1')
-    await agentRunsApi.listRuns({ user_id: 'u1', limit: 10 })
+    await agentRunsApi.listRuns({ limit: 10 })
     await agentRunsApi.listEvents('run/1', { after_event_id: 'evt_1' })
 
     expect(apiMock.get).toHaveBeenCalledWith('/api/agent/runs/run%2F1')
-    expect(apiMock.get).toHaveBeenCalledWith('/api/agent/runs', { user_id: 'u1', limit: 10 })
+    expect(apiMock.get).toHaveBeenCalledWith('/api/agent/runs', { limit: 10 })
     expect(apiMock.get).toHaveBeenCalledWith('/api/agent/runs/run%2F1/events', {
       after_event_id: 'evt_1',
     })
+    expect(agentRunsApi.eventStreamPath('run/1', 'evt/1')).toBe(
+      '/api/agent/runs/run%2F1/events/stream?after_event_id=evt%2F1',
+    )
+  })
+
+  it('controls agent run lifecycle', async () => {
+    await agentRunsApi.pauseRun('run/1')
+    await agentRunsApi.resumeRun('run/1', { source: 'resume-test' })
+    await agentRunsApi.cancelRun('run/1')
+
+    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/pause', {})
+    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/resume', {
+      runtime_context: { source: 'resume-test' },
+    })
+    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/cancel', {})
   })
 })

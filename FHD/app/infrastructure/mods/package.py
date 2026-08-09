@@ -471,7 +471,7 @@ class ModPackage:
                         "XCAGI_REQUIRE_SIGNED_MODS 已启用 -> 拒绝安装"
                     ) from None
                 logger.warning("cryptography 库未安装，跳过密码学验签（仅校验内容哈希）")
-                return True
+                return False
 
             if not trusted_keys:
                 if require_signed:
@@ -480,7 +480,7 @@ class ModPackage:
                         "XCAGI_REQUIRE_SIGNED_MODS 已启用 -> 拒绝安装"
                     )
                 logger.warning("无可用受信公钥，跳过密码学验签（仅校验内容哈希）")
-                return True
+                return False
 
             sig_bytes = base64.b64decode(signature)
             for public_key in trusted_keys:

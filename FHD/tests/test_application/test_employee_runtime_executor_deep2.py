@@ -665,14 +665,18 @@ class TestActionsFhdDeep:
         employees = tmp_path / "backend" / "employees"
         employees.mkdir(parents=True)
         (employees / "worker.py").write_text("def run(payload, ctx):\n    return {'ok': True}\n")
-        out = exec_mod._actions_fhd(
-            {"actions": {"handlers": ["direct_python"]}},
-            {"input": {}},
-            "task",
-            "emp-1",
-            tmp_path,
-            None,
-        )
+        with patch(
+            "app.application.employee_runtime.executor.verify_direct_python_pack_trust",
+            return_value=(True, "test"),
+        ):
+            out = exec_mod._actions_fhd(
+                {"actions": {"handlers": ["direct_python"]}},
+                {"input": {}},
+                "task",
+                "emp-1",
+                tmp_path,
+                None,
+            )
         assert out["outputs"][0]["ok"] is True
 
     def test_summary_includes_count(self) -> None:

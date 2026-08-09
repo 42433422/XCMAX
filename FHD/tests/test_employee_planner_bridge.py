@@ -57,6 +57,14 @@ def convert_file(src_path, output_path, *, template_path=None, payload=None, ctx
 """,
         encoding="utf-8",
     )
+    from app.infrastructure.mods.package import compute_directory_hash
+
+    receipt = {
+        "schema_version": 1,
+        "signature_verified": True,
+        "content_sha256": compute_directory_hash(str(pack_dir)),
+    }
+    (pack_dir / ".xcagi-install-receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
     return pack_dir
 
 

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from typing import Any
 
 from app.application.agent_orchestrator.run_models import AgentArtifact, AgentRun
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+_DATASET_INGEST_ERRORS = RECOVERABLE_ERRORS + (sqlite3.Error,)
 
 _DOCUMENT_ARTIFACT_TYPES = {
     "pdf_document",
@@ -48,7 +51,7 @@ def ingest_artifact_to_dataset(run: AgentRun, artifact: AgentArtifact) -> dict[s
                 "fallback_reason": str(result.get("message") or "file ingest failed"),
             }
             result = service.ingest_document(**fallback_request)
-    except RECOVERABLE_ERRORS as exc:
+    except _DATASET_INGEST_ERRORS as exc:
         result = {
             "success": False,
             "dataset_id": request["dataset_id"],
