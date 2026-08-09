@@ -13,6 +13,7 @@ import pytest
 from app.application.approval_workspace_app_service import (
     _allow_x_user_id_header,
     _audit,
+    _can_review_ai_workflow_request,
     _close_request_if_needed,
     _generate_request_no,
     _next_node,
@@ -114,6 +115,28 @@ class TestGenerateRequestNo:
         no = _generate_request_no()
         today_str = datetime.now().strftime("%Y%m%d")
         assert today_str in no
+
+
+class TestAiWorkflowAuthorization:
+    def test_applicant_can_review_own_request(self):
+        db = MagicMock()
+        req = SimpleNamespace(applicant_id=7)
+        assert _can_review_ai_workflow_request(db, req, 7) is True
+        db.query.assert_not_called()
+
+    def test_non_admin_cannot_review_another_users_request(self):
+        db = MagicMock()
+        query = db.query.return_value
+        query.filter.return_value.first.return_value = SimpleNamespace(role="user")
+        req = SimpleNamespace(applicant_id=7)
+        assert _can_review_ai_workflow_request(db, req, 8) is False
+
+    def test_admin_can_review_ai_workflow_request(self):
+        db = MagicMock()
+        query = db.query.return_value
+        query.filter.return_value.first.return_value = SimpleNamespace(role="admin")
+        req = SimpleNamespace(applicant_id=7)
+        assert _can_review_ai_workflow_request(db, req, 8) is True
 
 
 # ========================= _node_query_for_user ==========================
@@ -362,6 +385,15 @@ class TestRequestToDict:
         result = _request_to_dict(req, include_records=True)
         assert result["records"] == []
 
+    def test_persisted_workflow_execution_is_exposed_for_reopened_details(self):
+        req = Mock()
+        req.to_dict.return_value = {
+            "id": 1,
+            "business_data": {"workflow_execution": {"workflow_executed": True, "success": True}},
+        }
+        result = _request_to_dict(req, include_records=False)
+        assert result["workflow_execution"]["success"] is True
+
     def test_ai_workflow_without_node_is_decorated(self):
         req = Mock()
         req.business_type = "workflow_tool"
@@ -581,6 +613,7 @@ class TestListRequests:
         }
         req.business_type = "workflow_tool"
         req.request_no = "req-ai-1"
+        req.applicant_id = 1
         req.current_node = None
         req.status = "pending"
         mock_query.all.return_value = [req]
@@ -948,6 +981,48 @@ class TestApproveRequest:
         svc.remove_pending_workflow.assert_called_once_with("req-ai-1")
         engine.run.assert_called_once()
 
+    def test_resume_pending_ai_workflow_continues_exact_agent_run_step(self):
+        svc = MagicMock()
+        svc.approve.return_value = True
+        svc.get_pending_workflow.return_value = {
+            "agent_run_id": "run-ai-1",
+            "approved_step_id": "write_product",
+            "runtime_context": {"message": "写入产品"},
+        }
+        agent_run = SimpleNamespace(
+            run_id="run-ai-1",
+            status="completed",
+            plan_id="plan-ai:write_product",
+            intent="business_db_write",
+            final_output={"message": "执行完成"},
+            error="",
+            steps=[SimpleNamespace(status="completed")],
+            tool_calls=[SimpleNamespace(call_id="call-1")],
+        )
+
+        with (
+            patch("app.application.workflow.get_approval_service", return_value=svc),
+            patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator_cls,
+        ):
+            orchestrator_cls.return_value.continue_run.return_value = agent_run
+            out = _resume_pending_ai_workflow_after_approval(
+                request_no="req-ai-1",
+                opinion="同意",
+                approved_by="7",
+            )
+
+        assert out is not None
+        assert out["success"] is True
+        assert out["agent_run_id"] == "run-ai-1"
+        assert out["tool_call_ids"] == ["call-1"]
+        orchestrator_cls.return_value.continue_run.assert_called_once_with(
+            "run-ai-1",
+            approved_by="7",
+            approved_step_id="write_product",
+            runtime_context={"message": "写入产品"},
+        )
+        svc.remove_pending_workflow.assert_called_once_with("req-ai-1")
+
     def test_no_actor_raises_401(self):
         request = Mock()
         with patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve:
@@ -1132,7 +1207,9 @@ class TestApproveRequest:
 
         assert result["success"] is True
         assert result["data"]["workflow_execution"]["workflow_executed"] is True
-        mock_resume.assert_called_once_with(request_no="req-ai-1", opinion="同意")
+        mock_resume.assert_called_once_with(
+            request_no="req-ai-1", opinion="同意", approved_by="1"
+        )
 
     def test_approve_ai_workflow_without_current_node_resumes_execution(self):
         request = Mock()
@@ -1147,6 +1224,7 @@ class TestApproveRequest:
         req.business_type = "workflow_tool"
         req.current_node = None
         req.current_node_order = 0
+        req.applicant_id = 1
         req.title = "AI 写库审批"
         mock_query.first.return_value = req
 
@@ -1158,6 +1236,10 @@ class TestApproveRequest:
                 return_value=True,
             ),
             patch("app.application.approval_workspace_app_service._audit"),
+            patch(
+                "app.application.approval_workspace_app_service._ai_workflow_audit_node",
+                return_value=SimpleNamespace(id=9, node_name="AI 工作流审批留痕", node_order=1),
+            ),
             patch("app.application.approval_workspace_app_service._request_to_dict") as mock_rtd,
             patch(
                 "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval"
@@ -1172,8 +1254,10 @@ class TestApproveRequest:
         assert result["success"] is True
         assert req.status == ApprovalStatus.APPROVED.value
         assert result["data"]["workflow_execution"]["success"] is True
-        mock_resume.assert_called_once_with(request_no="req-ai-1", opinion="同意")
-        mock_db.add.assert_not_called()
+        mock_resume.assert_called_once_with(
+            request_no="req-ai-1", opinion="同意", approved_by="1"
+        )
+        mock_db.add.assert_called_once()
 
 
 # ========================= reject_request ================================
@@ -1310,7 +1394,7 @@ class TestRejectRequest:
         ):
             mock_resolve.return_value = 1
             mock_nqf.return_value = True
-            req.applicant_id = 2
+            req.applicant_id = 1
             req.title = "请假"
             mock_rtd.return_value = {"id": 1, "status": "rejected"}
             mock_get_db.return_value = _make_db_ctx(mock_db)
@@ -1380,6 +1464,10 @@ class TestRejectRequest:
                 return_value=True,
             ),
             patch("app.application.approval_workspace_app_service._audit"),
+            patch(
+                "app.application.approval_workspace_app_service._ai_workflow_audit_node",
+                return_value=SimpleNamespace(id=9, node_name="AI 工作流审批留痕", node_order=1),
+            ),
             patch("app.application.approval_workspace_app_service.notify_mobile_user"),
             patch("app.application.approval_workspace_app_service._request_to_dict") as mock_rtd,
             patch(
@@ -1387,7 +1475,7 @@ class TestRejectRequest:
             ) as mock_drop,
         ):
             mock_resolve.return_value = 1
-            req.applicant_id = 2
+            req.applicant_id = 1
             req.title = "AI 工作流"
             mock_rtd.return_value = {"id": 1, "status": "rejected"}
             mock_drop.return_value = {
@@ -1401,7 +1489,7 @@ class TestRejectRequest:
         assert req.status == ApprovalStatus.REJECTED.value
         assert result["data"]["workflow_execution"]["discarded_pending_workflow"] is True
         mock_drop.assert_called_once_with(request_no="req-ai-1", reason="不执行")
-        mock_db.add.assert_not_called()
+        mock_db.add.assert_called_once()
 
 
 # ========================= withdraw_request ==============================

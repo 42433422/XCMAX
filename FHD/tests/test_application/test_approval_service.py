@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
@@ -60,6 +61,12 @@ class TestCheckNodeRequiresApproval:
             {"tool_id": "shipment_generate", "action": "execute", "trigger": "always"}
         ]
         node = _make_node()
+        assert svc.check_node_requires_approval(node) is True
+
+    def test_business_db_interactive_write_requires_approval(self):
+        svc = ApprovalService()
+        svc._config = MagicMock(enabled=True, rules=[])
+        node = _make_node(tool_id="business_db", action="write")
         assert svc.check_node_requires_approval(node) is True
 
     def test_never_trigger(self):
@@ -388,6 +395,123 @@ class TestApprovalWorkflowManagement:
     def test_remove_nonexistent_workflow(self):
         svc = ApprovalService()
         assert svc.remove_pending_workflow("nonexistent") is None
+
+
+def test_ai_workflow_approval_persists_valid_actor_flow_and_audit(monkeypatch, tmp_path):
+    db_file = tmp_path / "approval-persistence.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
+
+    from sqlalchemy import text
+
+    import app.db as db_mod
+    from app.db.base import Base
+    from app.db.models.approval import (
+        ApprovalFlow,
+        ApprovalFlowNode,
+        ApprovalRecord,
+    )
+    from app.db.models.approval import (
+        ApprovalRequest as ApprovalRequestModel,
+    )
+    from app.db.models.user import User
+    from app.db.session import get_db
+
+    tables = [
+        User.__table__,
+        ApprovalFlow.__table__,
+        ApprovalFlowNode.__table__,
+        ApprovalRequestModel.__table__,
+        ApprovalRecord.__table__,
+    ]
+    db_mod.dispose_and_recreate_engine()
+    Base.metadata.create_all(db_mod.engine, tables=tables)
+    with db_mod.engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE TABLE ai_action_audit ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+                "actor TEXT, action TEXT NOT NULL, payload TEXT)"
+            )
+        )
+    try:
+        with get_db() as db:
+            user = User(
+                username="crud-approver",
+                password="test-only",
+                display_name="CRUD 审批人",
+                role="user",
+                is_active=True,
+            )
+            db.add(user)
+            db.flush()
+            user_id = user.id
+
+        svc = ApprovalService()
+        node = _make_node(
+            tool_id="business_db",
+            action="write",
+            params={
+                "entity": "products",
+                "operation": "create",
+                "payload": {"product_name": "CHATCRUD-TEST"},
+            },
+        )
+        plan = _make_plan([node])
+        request = svc.create_approval_request(
+            "plan-crud",
+            node,
+            runtime_context={"user_id": str(user_id)},
+            plan=plan,
+            require_persistence=True,
+        )
+        metadata = svc.get_request_metadata(request.request_id)
+        assert metadata is not None
+        assert metadata["applicant_id"] == user_id
+        assert f"request_no={request.request_id}" in metadata["approval_path"]
+        assert svc.attach_pending_agent_run(
+            request.request_id,
+            agent_run_id="run-crud-1",
+            approved_step_id=node.node_id,
+        )
+
+        with get_db() as db:
+            persisted = (
+                db.query(ApprovalRequestModel)
+                .filter(ApprovalRequestModel.request_no == request.request_id)
+                .one()
+            )
+            assert persisted.flow_id > 0
+            assert persisted.applicant_id == user_id
+            assert persisted.current_node_id is None
+            assert persisted.status == "pending"
+            business_data = json.loads(persisted.business_data)
+            assert business_data["agent_run_id"] == "run-crud-1"
+            assert business_data["approved_step_id"] == node.node_id
+            assert persisted.flow.flow_key == "ai-workflow-interactive"
+            assert len(persisted.flow.nodes) == 1
+            audit = db.execute(
+                text(
+                    "SELECT actor, action FROM ai_action_audit "
+                    "WHERE action = 'approval.submit_ai_workflow'"
+                )
+            ).one()
+            assert audit.actor == str(user_id)
+
+        missing_actor_svc = ApprovalService()
+        with pytest.raises(RuntimeError, match="未能持久化"):
+            missing_actor_svc.create_approval_request(
+                "plan-missing-actor",
+                node,
+                runtime_context={"user_id": "unknown-user"},
+                plan=plan,
+                require_persistence=True,
+            )
+        assert missing_actor_svc._pending_requests == {}
+        assert missing_actor_svc._pending_workflows == {}
+    finally:
+        Base.metadata.drop_all(db_mod.engine, tables=list(reversed(tables)))
+        db_mod.dispose_and_recreate_engine()
 
 
 # ---------------------------------------------------------------------------

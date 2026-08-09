@@ -1540,7 +1540,8 @@
             "operation",
             "payload"
           ],
-          "availability": "shared"
+          "availability": "shared",
+          "action_class": "business_db.write"
         }
       }
     },

@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { ChatApprovalCard } from '@/types/chat-ui'
 
-defineProps<{
+const props = defineProps<{
   card: ChatApprovalCard
   busy?: boolean
 }>()
@@ -9,7 +10,12 @@ defineProps<{
 defineEmits<{
   confirm: []
   cancel: []
+  'open-approval': [path: string]
 }>()
+
+const hasPersistedApproval = computed(
+  () => Boolean(props.card.approval_path || props.card.approval_request_ids?.length),
+)
 </script>
 
 <template>
@@ -26,11 +32,23 @@ defineEmits<{
     <ul v-if="card.todo?.length" class="approval-todo">
       <li v-for="(step, idx) in card.todo" :key="idx">{{ step }}</li>
     </ul>
+    <div v-if="card.approval_request_ids?.length" class="approval-request-nos">
+      审批请求号：{{ card.approval_request_ids.join('、') }}
+    </div>
     <div class="approval-actions">
-      <button type="button" class="approval-btn approval-btn--primary" :disabled="busy" @click="$emit('confirm')">
+      <button
+        v-if="hasPersistedApproval"
+        type="button"
+        class="approval-btn approval-btn--primary"
+        :disabled="busy"
+        @click="$emit('open-approval', card.approval_path || '/mod/xcagi-approval-bridge/approval-hub/workspace')"
+      >
+        前往审批
+      </button>
+      <button v-else type="button" class="approval-btn approval-btn--primary" :disabled="busy" @click="$emit('confirm')">
         {{ card.approval_required ? '提交审批' : '确认执行' }}
       </button>
-      <button type="button" class="approval-btn approval-btn--ghost" :disabled="busy" @click="$emit('cancel')">
+      <button v-if="!hasPersistedApproval" type="button" class="approval-btn approval-btn--ghost" :disabled="busy" @click="$emit('cancel')">
         取消
       </button>
     </div>
@@ -113,6 +131,15 @@ defineEmits<{
   font-size: 11px;
   color: var(--ap-muted);
   font-family: var(--ap-mono);
+}
+
+.approval-request-nos {
+  margin-top: 4px;
+  padding-left: 12px;
+  color: var(--ap-muted);
+  font-family: var(--ap-mono);
+  font-size: 10px;
+  overflow-wrap: anywhere;
 }
 
 .approval-actions {

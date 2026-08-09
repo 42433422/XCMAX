@@ -3250,7 +3250,12 @@ class TestTryHandleDynamicWorkflow:
             "approval_required": True,
             "approval_nodes": [{"node_id": "n1", "tool_id": "products", "action": "create"}],
         }
-        with patch.object(svc.approval_service, "create_approval_request") as mock_create:
+        waiting_run = SimpleNamespace(status="waiting_user", run_id="run-approval-1")
+        with (
+            patch.object(svc.approval_service, "create_approval_request") as mock_create,
+            patch("app.application.agent_orchestrator.AgentOrchestrator") as mock_orchestrator,
+        ):
+            mock_orchestrator.return_value.start_run_from_plan.return_value = waiting_run
             result = svc._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
         mock_create.assert_called_once()
         assert result["data"]["action"] == "approval_pending"

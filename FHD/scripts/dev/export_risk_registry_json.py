@@ -20,7 +20,6 @@ _spec.loader.exec_module(_mod)
 # After SSOT migration, re-apply action_class bindings onto existing JSON.
 from resources.config.risk_actions_loader import (  # noqa: E402
     get_workflow_tools_from_registry,
-    invalidate_risk_registry_cache,
 )
 
 get_workflow_tool_registry = get_workflow_tools_from_registry
@@ -44,6 +43,7 @@ ACTION_CLASSES = {
 
 # tool_id -> action -> action_class
 ACTION_CLASS_BINDINGS: dict[str, dict[str, str]] = {
+    "business_db": {"write": "business_db.write"},
     "products": {
         "create": "business_db.write",
         "update": "business_db.write",
@@ -85,13 +85,13 @@ def _apply_action_classes(tools: dict) -> dict:
 
 
 def main() -> int:
-    tools = get_workflow_tool_registry()
-    payload = {
-        "schema_version": 1,
-        "action_classes": ACTION_CLASSES,
-        "tools": _apply_action_classes(tools),
-    }
     out_path = FHD_ROOT / "config" / "risk_actions.registry.json"
+    tools = get_workflow_tool_registry()
+    # Keep the autonomy policy envelope (schema v2, autonomous_actions and policy knobs)
+    # intact.  This exporter owns only the action classes and workflow-tool projection.
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    payload["action_classes"] = ACTION_CLASSES
+    payload["tools"] = _apply_action_classes(tools)
     out_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",

@@ -163,7 +163,10 @@ def _registered_router_products(
         execute_action = module._execute_products_compat_action
         return dict(execute_action(action, params) or {})
 
-    if str(runtime_context.get("service_source") or "") == "fastapi_product_route":
+    is_fastapi_product_route = (
+        str(runtime_context.get("service_source") or "") == "fastapi_product_route"
+    )
+    if is_fastapi_product_route:
         from app.fastapi_routes.domains.product import routes as product_routes
 
         svc = product_routes._svc()
@@ -172,7 +175,19 @@ def _registered_router_products(
 
         svc = get_products_service()
 
-    unit_name = str(params.get("unit_name") or "").strip()
+    # products.unit 是计量单位，不再承载客户/购买单位名称。旧 unit_name 仅兼容
+    # 明确的常见计量单位；历史上把客户名传入 unit_name 的调用会安全回退为“个”。
+    explicit_measure_unit = str(params.get("unit") or params.get("measure_unit") or "").strip()
+    legacy_unit_name = str(params.get("unit_name") or "").strip()
+    try:
+        from app.infrastructure.repositories.product_query_helpers import TRIVIAL_MEASURE_UNITS
+
+        legacy_measure_unit = legacy_unit_name if legacy_unit_name in TRIVIAL_MEASURE_UNITS else ""
+    except RECOVERABLE_ERRORS:
+        legacy_measure_unit = (
+            legacy_unit_name if legacy_unit_name in {"个", "件", "桶", "箱", "kg", "公斤"} else ""
+        )
+    measure_unit = explicit_measure_unit or legacy_measure_unit or "个"
     model_number = str(params.get("model_number") or "").strip().upper()
     product_name = str(params.get("product_name") or params.get("name") or "").strip()
     keyword = str(params.get("keyword") or product_name or model_number or "").strip()
@@ -185,7 +200,7 @@ def _registered_router_products(
                 per_page=20,
             )
         result = svc.get_products(
-            unit_name=unit_name or None,
+            unit_name=measure_unit if explicit_measure_unit or legacy_measure_unit else None,
             model_number=model_number or None,
             keyword=keyword or None,
             page=1,
@@ -199,7 +214,7 @@ def _registered_router_products(
 
     if action == "exists":
         result = svc.get_products(
-            unit_name=unit_name or None,
+            unit_name=measure_unit if explicit_measure_unit or legacy_measure_unit else None,
             model_number=model_number or None,
             keyword=keyword or None,
             page=1,
@@ -223,8 +238,8 @@ def _registered_router_products(
             payload = dict(params or {})
             return svc.create_product(payload)
         name_or_model = str(params.get("name_or_model") or product_name or model_number).strip()
-        if not name_or_model or not unit_name:
-            return {"success": False, "message": "缺少 name_or_model 或 unit_name"}
+        if not name_or_model:
+            return {"success": False, "message": "缺少 name_or_model"}
         price = params.get("unit_price", params.get("price", 0.0))
         try:
             price = float(price)
@@ -239,7 +254,7 @@ def _registered_router_products(
                 "specification": params.get("specification"),
                 "unit_price": price,
                 "price": price,
-                "unit": unit_name,
+                "unit": measure_unit,
             }
         )
         if create_result.get("success"):
@@ -248,6 +263,23 @@ def _registered_router_products(
     if action == "update":
         product_id = int(params.get("id"))
         payload = {k: v for k, v in params.items() if k != "id"}
+        if is_fastapi_product_route:
+            return svc.update_product(product_id, payload)
+        if "product_name" in payload and "name" not in payload:
+            payload["name"] = payload.pop("product_name")
+        if "unit_price" in payload and "price" not in payload:
+            payload["price"] = payload.pop("unit_price")
+        if "product_code" in payload and "model_number" not in payload:
+            payload["model_number"] = payload.pop("product_code")
+        if "measure_unit" in payload and "unit" not in payload:
+            payload["unit"] = payload.pop("measure_unit")
+        legacy_update_unit = str(payload.pop("unit_name", "") or "").strip()
+        if legacy_update_unit and "unit" not in payload:
+            payload["unit"] = (
+                legacy_update_unit
+                if legacy_update_unit in {"个", "件", "桶", "箱", "kg", "公斤", "吨", "米", "升"}
+                else "个"
+            )
         return svc.update_product(product_id, payload)
     if action == "delete":
         return svc.delete_product(int(params.get("id")))
@@ -306,6 +338,7 @@ def _registered_router_materials(
         payload.setdefault(
             "name", str(payload.get("name") or payload.get("material_name") or "").strip()
         )
+        payload.setdefault("material_code", f"MAT-{uuid.uuid4().hex[:12].upper()}")
         return svc.create_material(payload)
     if action == "update":
         material_id = int(params.get("id"))
@@ -1720,6 +1753,321 @@ def _normalize_business_db_entity(raw: Any, user_message: str = "") -> str:
     return ""
 
 
+_BUSINESS_DB_CONTROL_FIELDS = frozenset(
+    {
+        "selector",
+        "changes",
+        "fields",
+        "force",
+        "confirm",
+        "_selector_field",
+        "_resolved_target",
+    }
+)
+_RECENT_BUSINESS_DB_TARGETS: dict[str, dict[str, Any]] = {}
+
+
+def get_recent_business_db_target(user_id: object) -> dict[str, Any] | None:
+    target = _RECENT_BUSINESS_DB_TARGETS.get(str(user_id or "").strip())
+    return dict(target) if target is not None else None
+
+
+def _business_db_payload_contains_key(value: Any, forbidden: set[str]) -> bool:
+    """Reject forbidden controls even when a model nests them in changes/fields/selector."""
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            if str(key).strip().lower() in forbidden:
+                return True
+            if _business_db_payload_contains_key(nested, forbidden):
+                return True
+        return False
+    if isinstance(value, (list, tuple)):
+        return any(_business_db_payload_contains_key(item, forbidden) for item in value)
+    return False
+
+
+def _result_record_id(value: Any) -> int | None:
+    if not isinstance(value, dict):
+        return None
+    raw_id = value.get("id") or value.get("product_id") or value.get("record_id")
+    if raw_id not in (None, ""):
+        try:
+            parsed = int(raw_id)
+        except (TypeError, ValueError):
+            parsed = 0
+        if parsed > 0:
+            return parsed
+    for key in ("data", "raw", "shipment", "result"):
+        parsed = _result_record_id(value.get(key))
+        if parsed:
+            return parsed
+    return None
+
+
+def _business_db_selector(payload: dict[str, Any]) -> dict[str, Any]:
+    nested = payload.get("selector")
+    selector = dict(nested) if isinstance(nested, dict) else {}
+    for key in (
+        "id",
+        "customer_id",
+        "record_id",
+        "order_number",
+        "customer_name",
+        "unit_name",
+        "name",
+        "product_name",
+        "name_or_model",
+        "model_number",
+        "material_name",
+        "material_code",
+    ):
+        if key not in selector and payload.get(key) not in (None, ""):
+            selector[key] = payload.get(key)
+    return selector
+
+
+def _business_db_target_candidates(
+    entity: str, selector: dict[str, Any]
+) -> tuple[list[dict[str, Any]], str]:
+    """Resolve an exact target inside the active tenant scope.
+
+    All involved models inherit TenantScopedMixin, and apply_tenant_filter is repeated here as
+    defense in depth.  No fuzzy write target is ever accepted.
+    """
+    from app.db.session import get_db
+    from app.infrastructure.tenant_scope import apply_tenant_filter
+
+    raw_id = (
+        selector.get("id")
+        or selector.get("customer_id")
+        or selector.get("record_id")
+        or selector.get("order_number")
+    )
+    numeric_id = 0
+    if raw_id not in (None, ""):
+        try:
+            numeric_id = int(raw_id)
+        except (TypeError, ValueError):
+            return [], "id"
+        if numeric_id <= 0:
+            return [], "id"
+
+    with get_db() as db:
+        if entity == "customers":
+            from app.db.models.purchase_unit import PurchaseUnit
+
+            query = apply_tenant_filter(db.query(PurchaseUnit), PurchaseUnit)
+            selector_field = "id"
+            if numeric_id:
+                query = query.filter(PurchaseUnit.id == numeric_id)
+            else:
+                value = str(
+                    selector.get("customer_name")
+                    or selector.get("unit_name")
+                    or selector.get("name")
+                    or ""
+                ).strip()
+                if not value:
+                    return [], ""
+                selector_field = next(
+                    (
+                        key
+                        for key in ("customer_name", "unit_name", "name")
+                        if selector.get(key) not in (None, "")
+                    ),
+                    "customer_name",
+                )
+                query = query.filter(PurchaseUnit.unit_name == value)
+            rows = query.order_by(PurchaseUnit.id.asc()).limit(21).all()
+            return [
+                {"id": row.id, "customer_name": row.unit_name, "name": row.unit_name}
+                for row in rows
+            ], selector_field
+
+        if entity == "products":
+            from app.db.models.product import Product
+
+            query = apply_tenant_filter(db.query(Product), Product)
+            selector_field = "id"
+            if numeric_id:
+                query = query.filter(Product.id == numeric_id)
+            else:
+                model_number = str(selector.get("model_number") or "").strip().upper()
+                name = str(
+                    selector.get("product_name")
+                    or selector.get("name")
+                    or selector.get("name_or_model")
+                    or ""
+                ).strip()
+                if model_number:
+                    selector_field = "model_number"
+                    query = query.filter(Product.model_number == model_number)
+                elif name:
+                    selector_field = next(
+                        (
+                            key
+                            for key in ("product_name", "name", "name_or_model")
+                            if selector.get(key) not in (None, "")
+                        ),
+                        "name",
+                    )
+                    query = query.filter(Product.name == name)
+                else:
+                    return [], ""
+            rows = query.order_by(Product.id.asc()).limit(21).all()
+            return [
+                {
+                    "id": row.id,
+                    "name": row.name,
+                    "product_name": row.name,
+                    "model_number": row.model_number or "",
+                }
+                for row in rows
+            ], selector_field
+
+        if entity == "materials":
+            from app.db.models.material import Material
+
+            query = apply_tenant_filter(db.query(Material), Material)
+            selector_field = "id"
+            if numeric_id:
+                query = query.filter(Material.id == numeric_id)
+            else:
+                code = str(selector.get("material_code") or "").strip()
+                name = str(selector.get("material_name") or selector.get("name") or "").strip()
+                if code:
+                    selector_field = "material_code"
+                    query = query.filter(Material.material_code == code)
+                elif name:
+                    selector_field = "material_name" if selector.get("material_name") else "name"
+                    query = query.filter(Material.name == name)
+                else:
+                    return [], ""
+            rows = query.order_by(Material.id.asc()).limit(21).all()
+            return [
+                {
+                    "id": row.id,
+                    "name": row.name,
+                    "material_name": row.name,
+                    "material_code": row.material_code,
+                }
+                for row in rows
+            ], selector_field
+
+        if entity == "shipment_records":
+            from app.db.models.shipment import ShipmentRecord
+
+            if not numeric_id:
+                return [], ""
+            rows = (
+                apply_tenant_filter(db.query(ShipmentRecord), ShipmentRecord)
+                .filter(ShipmentRecord.id == numeric_id)
+                .order_by(ShipmentRecord.id.asc())
+                .limit(2)
+                .all()
+            )
+            return [
+                {
+                    "id": row.id,
+                    "name": f"{row.purchase_unit} / {row.product_name}",
+                    "purchase_unit": row.purchase_unit,
+                    "product_name": row.product_name,
+                }
+                for row in rows
+            ], "id"
+
+    return [], ""
+
+
+def prepare_business_db_write_target(
+    entity: str, operation: str, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """Resolve update/delete targets without mutating business data.
+
+    The result is shared by the clarification gate and the final dispatcher, so approval previews
+    and execution use the same exact, tenant-scoped target.
+    """
+    normalized = dict(payload or {})
+    if operation not in {"update", "delete"}:
+        return {"success": True, "payload": normalized}
+    if bool(normalized.get("force")):
+        return {
+            "success": False,
+            "reason": "force_not_allowed",
+            "message": "智能对话不允许 force 删除；请先处理关联数据。",
+        }
+
+    selector = _business_db_selector(normalized)
+    candidates, selector_field = _business_db_target_candidates(entity, selector)
+    if not selector_field:
+        return {
+            "success": False,
+            "reason": "missing_target",
+            "message": "更新或删除必须提供当前租户内的唯一 ID 或受支持的精确自然键。",
+            "candidates": [],
+        }
+    if not candidates:
+        return {
+            "success": False,
+            "reason": "target_not_found",
+            "message": "当前租户内未找到目标记录，未执行写入。",
+            "candidates": [],
+        }
+    if len(candidates) > 1:
+        return {
+            "success": False,
+            "reason": "ambiguous_target",
+            "message": "精确条件匹配到多条记录，请选择唯一 ID。",
+            "candidates": candidates,
+        }
+
+    target = candidates[0]
+    normalized["id"] = int(target["id"])
+    normalized["_selector_field"] = selector_field
+    normalized["_resolved_target"] = target
+    return {"success": True, "payload": normalized, "target": target}
+
+
+def _remember_business_db_target(
+    runtime_context: dict[str, Any],
+    entity: str,
+    operation: str,
+    payload: dict[str, Any],
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    if not result.get("success") or operation == "delete":
+        return result
+    target_id = _result_record_id(result) or _result_record_id(payload)
+    if not target_id and operation in {"create", "ensure_exists", "upsert"}:
+        candidates, _ = _business_db_target_candidates(entity, _business_db_selector(payload))
+        if len(candidates) == 1:
+            target_id = int(candidates[0]["id"])
+    user_id = str(runtime_context.get("user_id") or "").strip()
+    if user_id and target_id:
+        _RECENT_BUSINESS_DB_TARGETS[user_id] = {
+            "entity": entity,
+            "id": int(target_id),
+        }
+    return result
+
+
+def _business_db_update_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    nested = payload.get("changes")
+    if not isinstance(nested, dict):
+        nested = payload.get("fields")
+    if isinstance(nested, dict):
+        return {k: v for k, v in nested.items() if k not in _BUSINESS_DB_CONTROL_FIELDS}
+
+    selector_field = str(payload.get("_selector_field") or "")
+    return {
+        key: value
+        for key, value in payload.items()
+        if key not in _BUSINESS_DB_CONTROL_FIELDS
+        and key not in {"id", "customer_id", "record_id", "order_number"}
+        and key != selector_field
+    }
+
+
 def _registered_router_business_db(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
@@ -1746,7 +2094,7 @@ def _registered_router_business_db(
             )
         if entity == "products":
             return _registered_router_products(
-                "query", read_params, runtime_context, profile, user_message
+                "query", read_params, runtime_context, "admin", user_message
             )
         if entity == "materials":
             return _registered_router_materials(
@@ -1764,6 +2112,28 @@ def _registered_router_business_db(
     payload = params.get("payload")
     if not isinstance(payload, dict):
         return {"success": False, "message": "business_db.write 需要 dict payload。"}
+    if _business_db_payload_contains_key(payload, {"sql", "raw_sql", "query_sql"}):
+        return {
+            "success": False,
+            "message": "business_db 不接受任意 SQL，请使用 entity/operation/payload。",
+        }
+    if _business_db_payload_contains_key(payload, {"tenant_id"}):
+        return {
+            "success": False,
+            "message": "tenant_id 只能来自当前登录会话，拒绝跨租户目标。",
+        }
+
+    try:
+        from app.infrastructure.tenant_scope import tenant_id_for_write
+
+        tenant_id_for_write()
+    except Exception as exc:  # noqa: BLE001 - tool boundary must fail closed
+        return {"success": False, "message": f"缺少有效租户上下文，拒绝写入：{exc}"}
+
+    prepared = prepare_business_db_write_target(entity, operation, payload)
+    if not prepared.get("success"):
+        return dict(prepared)
+    payload = dict(prepared.get("payload") or {})
 
     if entity == "customers":
         if operation in ("create", "ensure_exists", "upsert"):
@@ -1773,31 +2143,102 @@ def _registered_router_business_db(
             return _registered_router_customers(
                 router_action, payload, runtime_context, profile, user_message
             )
-        return {"success": False, "message": "customers 仅支持 create/ensure_exists/upsert。"}
+        if operation == "update":
+            fields = _business_db_update_fields(payload)
+            if not fields:
+                return {"success": False, "message": "customers.update 缺少 changes/fields。"}
+            return _registered_router_customers(
+                "update", {"id": payload["id"], **fields}, runtime_context, profile, user_message
+            )
+        if operation == "delete":
+            return _registered_router_customers(
+                "delete",
+                {"id": payload["id"], "force": False},
+                runtime_context,
+                profile,
+                user_message,
+            )
+        return {
+            "success": False,
+            "message": "customers 支持 create/ensure_exists/upsert/update/delete。",
+        }
 
     if entity == "products":
         if operation == "create":
             return _registered_router_products(
                 "create", payload, runtime_context, profile, user_message
             )
-        return {"success": False, "message": "products 当前仅支持 create；查询请用 read。"}
+        if operation == "update":
+            fields = _business_db_update_fields(payload)
+            if not fields:
+                return {"success": False, "message": "products.update 缺少 changes/fields。"}
+            return _registered_router_products(
+                "update", {"id": payload["id"], **fields}, runtime_context, profile, user_message
+            )
+        if operation == "delete":
+            return _registered_router_products(
+                "delete", {"id": payload["id"]}, runtime_context, profile, user_message
+            )
+        return {"success": False, "message": "products 支持 create/update/delete；查询请用 read。"}
 
     if entity == "materials":
-        if operation in ("create", "update", "delete", "batch_delete"):
+        if operation == "create":
             return _registered_router_materials(
-                operation, payload, runtime_context, profile, user_message
+                "create", payload, runtime_context, profile, user_message
             )
-        return {"success": False, "message": "materials 支持 create/update/delete/batch_delete。"}
+        if operation == "update":
+            fields = _business_db_update_fields(payload)
+            if not fields:
+                return {"success": False, "message": "materials.update 缺少 changes/fields。"}
+            return _registered_router_materials(
+                "update", {"id": payload["id"], **fields}, runtime_context, profile, user_message
+            )
+        if operation == "delete":
+            result = _registered_router_materials(
+                "delete", {"id": payload["id"]}, runtime_context, profile, user_message
+            )
+            if result.get("success"):
+                from app.db.models.material import Material
+                from app.db.session import get_db
+                from app.infrastructure.tenant_scope import tenant_id_for_write
+
+                with get_db() as db:
+                    deleted = (
+                        db.query(Material)
+                        .filter(
+                            Material.id == int(payload["id"]),
+                            Material.tenant_id == tenant_id_for_write(),
+                        )
+                        .delete(synchronize_session=False)
+                    )
+                if deleted != 1:
+                    return {
+                        "success": False,
+                        "message": "原材料软删除后物理清理未命中唯一租户记录。",
+                    }
+            return result
+        return {"success": False, "message": "materials 支持 create/update/delete。"}
 
     if entity == "shipment_records":
-        if operation in ("update", "delete"):
+        if operation == "create":
             return _registered_router_shipment_records(
-                operation, payload, runtime_context, profile, user_message
+                "create", payload, runtime_context, profile, user_message
             )
-        return {
-            "success": False,
-            "message": "shipment_records 支持 update/delete；生成发货单请用 shipment_generate。",
-        }
+        if operation == "update":
+            fields = _business_db_update_fields(payload)
+            if not fields:
+                return {
+                    "success": False,
+                    "message": "shipment_records.update 缺少 changes/fields。",
+                }
+            return _registered_router_shipment_records(
+                "update", {"id": payload["id"], **fields}, runtime_context, profile, user_message
+            )
+        if operation == "delete":
+            return _registered_router_shipment_records(
+                "delete", {"id": payload["id"]}, runtime_context, profile, user_message
+            )
+        return {"success": False, "message": "shipment_records 支持 create/update/delete。"}
 
     return {"success": False, "message": f"不支持的 entity: {entity}"}
 
@@ -2703,7 +3144,18 @@ def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | N
 
     router = _REGISTERED_WORKFLOW_ROUTERS.get(tool_id)
     if router is not None:
-        return router(action, params, runtime_context, profile, user_message)
+        result = router(action, params, runtime_context, profile, user_message)
+        if tool_id == "business_db" and action == "write" and isinstance(result, dict):
+            payload = params.get("payload")
+            if isinstance(payload, dict):
+                result = _remember_business_db_target(
+                    runtime_context,
+                    _normalize_business_db_entity(params.get("entity"), user_message),
+                    str(params.get("operation") or params.get("op") or "create").strip().lower(),
+                    payload,
+                    result,
+                )
+        return result
     try:
         from app.mod_sdk.employee_tool_registry import execute_employee_tool, is_employee_tool
 

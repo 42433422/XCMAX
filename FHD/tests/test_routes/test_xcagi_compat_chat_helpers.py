@@ -10,6 +10,51 @@ import pytest
 
 from app.fastapi_routes import xcagi_compat_chat_helpers as ch
 
+
+def test_runtime_context_uses_authenticated_session_actor():
+    request = MagicMock()
+    user = MagicMock(id=17)
+    with patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=user):
+        context = ch._runtime_context_with_authenticated_actor(
+            request, {"user_id": "web_pro_session"}
+        )
+    assert context["local_user_id"] == 17
+    assert context["actor_id"] == 17
+    assert context["user_id"] == "web_pro_session"
+
+
+def test_stream_business_db_write_uses_stateful_approval_mainline():
+    request = MagicMock()
+    request.headers = {}
+    request.cookies = {}
+    service = MagicMock()
+    service._pending_workflows = {}
+    service.process_chat.return_value = {
+        "success": True,
+        "response": "请确认写入预览",
+        "data": {"action": "workflow_confirmation_required"},
+    }
+    body = ch.XcagiCompatChatBody(
+        message="新增产品到数据库 产品:CHATCRUD-STREAM",
+        user_id="web_pro_session",
+        source="pro",
+    )
+    with (
+        patch("app.application.get_ai_chat_app_service", return_value=service),
+        patch.object(
+            ch,
+            "_runtime_context_with_authenticated_actor",
+            side_effect=lambda _request, context: {**dict(context or {}), "local_user_id": 17},
+        ),
+        patch.object(ch, "runtime_context_with_tier", side_effect=lambda context, _tier: context),
+    ):
+        chunks = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+
+    assert len(chunks) == 2
+    service.process_chat.assert_called_once()
+    assert service.process_chat.call_args.kwargs["context"]["local_user_id"] == 17
+
+
 # ---------------------------------------------------------------------------
 # XcagiCompatChatBody
 # ---------------------------------------------------------------------------
