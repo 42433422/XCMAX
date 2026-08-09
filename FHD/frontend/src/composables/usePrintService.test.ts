@@ -6,6 +6,16 @@ vi.mock('@/utils/erpDomainPaths', () => ({
 
 import { usePrintService } from './usePrintService'
 
+/** 与真实 fetch Response 对齐：携带 content-type，供中心 client（core.request）按 JSON 解析。 */
+function jsonResponse(body: unknown, ok = true, status = 200) {
+  return {
+    ok,
+    status,
+    json: async () => body,
+    headers: { get: () => 'application/json' },
+  } as Response
+}
+
 describe('usePrintService', () => {
   let service: ReturnType<typeof usePrintService>
 
@@ -16,33 +26,23 @@ describe('usePrintService', () => {
 
   describe('printLabel', () => {
     it('returns success when API responds ok', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ success: true }),
-      } as Response)
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(jsonResponse({ success: true }))
       const result = await service.printLabel('/path/to/label.pdf')
       expect(result.success).toBe(true)
       expect(result.message).toContain('标签打印成功')
     })
 
     it('returns failure when API responds non-ok', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        json: async () => ({ success: false, message: 'Printer error' }),
-      } as Response)
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        jsonResponse({ success: false, message: 'Printer error' }, false, 500),
+      )
       const result = await service.printLabel('/path/to/label.pdf')
       expect(result.success).toBe(false)
       expect(result.message).toContain('Printer error')
     })
 
     it('returns failure with HTTP status when no message', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-        ok: false,
-        status: 503,
-        json: async () => ({}),
-      } as Response)
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(jsonResponse({}, false, 503))
       const result = await service.printLabel('/path/to/label.pdf')
       expect(result.success).toBe(false)
       expect(result.message).toContain('503')
@@ -56,22 +56,18 @@ describe('usePrintService', () => {
     })
 
     it('sends copies parameter', async () => {
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ success: true }),
-      } as Response)
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(jsonResponse({ success: true }))
       await service.printLabel('/path/to/label.pdf', 3)
       const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string)
       expect(body.copies).toBe(3)
     })
 
     it('defaults copies to 1', async () => {
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ success: true }),
-      } as Response)
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(jsonResponse({ success: true }))
       await service.printLabel('/path/to/label.pdf')
       const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string)
       expect(body.copies).toBe(1)
@@ -82,31 +78,25 @@ describe('usePrintService', () => {
         ok: true,
         status: 200,
         json: async () => { throw new Error('invalid json') },
+        headers: { get: () => 'application/json' },
       } as Response)
       const result = await service.printLabel('/path/to/label.pdf')
-      // With empty object, success is falsy, so it falls to HTTP status path
       expect(result.success).toBe(false)
     })
   })
 
   describe('printDocument', () => {
     it('returns success when API responds ok', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ success: true }),
-      } as Response)
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(jsonResponse({ success: true }))
       const result = await service.printDocument('/path/to/doc.pdf')
       expect(result.success).toBe(true)
       expect(result.message).toContain('发货单打印成功')
     })
 
     it('returns failure on API error', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        json: async () => ({ success: false, message: 'Print failed' }),
-      } as Response)
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        jsonResponse({ success: false, message: 'Print failed' }, false, 500),
+      )
       const result = await service.printDocument('/path/to/doc.pdf')
       expect(result.success).toBe(false)
     })
@@ -121,44 +111,36 @@ describe('usePrintService', () => {
 
   describe('markAsPrinted', () => {
     it('returns success when API responds ok', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ success: true, updated: true }),
-      } as Response)
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        jsonResponse({ success: true, updated: true }),
+      )
       const result = await service.markAsPrinted('/path/to/doc.pdf', 123)
       expect(result.success).toBe(true)
       expect(result.message).toContain('打印状态已更新')
     })
 
     it('includes orderId in payload when provided', async () => {
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ success: true, updated: true }),
-      } as Response)
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(jsonResponse({ success: true, updated: true }))
       await service.markAsPrinted('/path/to/doc.pdf', 42)
       const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string)
       expect(body.order_id).toBe(42)
     })
 
     it('omits orderId when not provided', async () => {
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ success: true, updated: true }),
-      } as Response)
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(jsonResponse({ success: true, updated: true }))
       await service.markAsPrinted('/path/to/doc.pdf')
       const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string)
       expect(body.order_id).toBeUndefined()
     })
 
     it('returns failure when updated is false', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ success: true, updated: false }),
-      } as Response)
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        jsonResponse({ success: true, updated: false }),
+      )
       const result = await service.markAsPrinted('/path/to/doc.pdf')
       expect(result.success).toBe(false)
     })
@@ -166,11 +148,7 @@ describe('usePrintService', () => {
 
   describe('executePrintTask', () => {
     it('sets isPrinting during execution', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({ success: true }),
-      } as Response)
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ success: true }))
       const promise = service.executePrintTask(['/label.pdf'], '/doc.pdf', 1)
       expect(service.isPrinting.value).toBe(true)
       await promise
@@ -178,11 +156,9 @@ describe('usePrintService', () => {
     })
 
     it('returns success summary when all operations succeed', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({ success: true, updated: true }),
-      } as Response)
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        jsonResponse({ success: true, updated: true }),
+      )
       const summary = await service.executePrintTask(['/label1.pdf', '/label2.pdf'], '/doc.pdf', 1)
       expect(summary.labelSuccess).toBe(2)
       expect(summary.labelFailed).toBe(0)
@@ -193,16 +169,8 @@ describe('usePrintService', () => {
 
     it('tracks label failures', async () => {
       vi.spyOn(globalThis, 'fetch')
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 500,
-          json: async () => ({ success: false, message: 'Printer jam' }),
-        } as Response)
-        .mockResolvedValue({
-          ok: true,
-          status: 200,
-          json: async () => ({ success: true, updated: true }),
-        } as Response)
+        .mockResolvedValueOnce(jsonResponse({ success: false, message: 'Printer jam' }, false, 500))
+        .mockResolvedValue(jsonResponse({ success: true, updated: true }))
       const summary = await service.executePrintTask(['/bad.pdf'], '/doc.pdf', 1)
       expect(summary.labelFailed).toBe(1)
       expect(summary.logs).toHaveLength(1)
@@ -211,42 +179,26 @@ describe('usePrintService', () => {
 
     it('tracks document print failure', async () => {
       vi.spyOn(globalThis, 'fetch')
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: async () => ({ success: true }),
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 500,
-          json: async () => ({ success: false, message: 'Doc error' }),
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: async () => ({ success: true, updated: true }),
-        } as Response)
+        .mockResolvedValueOnce(jsonResponse({ success: true }))
+        .mockResolvedValueOnce(jsonResponse({ success: false, message: 'Doc error' }, false, 500))
+        .mockResolvedValueOnce(jsonResponse({ success: true, updated: true }))
       const summary = await service.executePrintTask(['/label.pdf'], '/doc.pdf', 1)
       expect(summary.shipmentPrinted).toBe(false)
       expect(summary.logs).toContainEqual(expect.stringContaining('发货单打印失败'))
     })
 
     it('logs warning when orderId is missing', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({ success: true, updated: true }),
-      } as Response)
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        jsonResponse({ success: true, updated: true }),
+      )
       const summary = await service.executePrintTask(['/label.pdf'], '/doc.pdf')
       expect(summary.logs).toContainEqual(expect.stringContaining('缺少记录ID'))
     })
 
     it('succeeds with no label paths', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({ success: true, updated: true }),
-      } as Response)
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        jsonResponse({ success: true, updated: true }),
+      )
       const summary = await service.executePrintTask([], '/doc.pdf', 1)
       expect(summary.labelSuccess).toBe(0)
       expect(summary.labelFailed).toBe(0)
