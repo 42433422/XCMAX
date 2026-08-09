@@ -775,11 +775,25 @@ class TestBusinessDbRouter:
         assert result["success"] is False
 
     def test_write_shipment_records_update(self):
-        with patch("app.bootstrap.get_shipment_app_service") as mock_get:
+        with (
+            patch("app.bootstrap.get_shipment_app_service") as mock_get,
+            patch("app.infrastructure.tenant_scope.tenant_id_for_write", return_value=1),
+            patch(
+                "app.services.tools_workflow_registered.prepare_business_db_write_target",
+                return_value={
+                    "success": True,
+                    "payload": {"id": 1, "changes": {"status": "pending"}},
+                },
+            ),
+        ):
             mock_get.return_value.update_shipment_record.return_value = {"success": True}
             result = _registered_router_business_db(
                 "write",
-                {"entity": "shipment_records", "operation": "update", "payload": {"id": 1}},
+                {
+                    "entity": "shipment_records",
+                    "operation": "update",
+                    "payload": {"id": 1, "changes": {"status": "pending"}},
+                },
                 {},
                 "admin",
                 "",

@@ -1399,10 +1399,23 @@ class TestBusinessDbRouter:
     def test_write_shipment_records_update(self) -> None:
         mock_svc = MagicMock()
         mock_svc.update_shipment_record.return_value = {"success": True}
-        with patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc):
+        with (
+            patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc),
+            patch(
+                "app.services.tools_workflow_registered.prepare_business_db_write_target",
+                return_value={
+                    "success": True,
+                    "payload": {"id": 1, "changes": {"status": "pending"}},
+                },
+            ),
+        ):
             result = _registered_router_business_db(
                 "write",
-                {"entity": "shipment_records", "operation": "update", "payload": {"id": 1}},
+                {
+                    "entity": "shipment_records",
+                    "operation": "update",
+                    "payload": {"id": 1, "changes": {"status": "pending"}},
+                },
                 _ctx(),
                 "normal",
                 "",

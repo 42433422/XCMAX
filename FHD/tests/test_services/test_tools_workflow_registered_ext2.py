@@ -224,7 +224,7 @@ class TestProductsRouterMissingBranches:
                 "admin",
                 "",
             )
-        svc.update_product.assert_called_once_with(10, {"unit_price": 9.9})
+        svc.update_product.assert_called_once_with(10, {"price": 9.9})
         assert result["success"] is True
 
     # delete ---------------------------------------------------------------

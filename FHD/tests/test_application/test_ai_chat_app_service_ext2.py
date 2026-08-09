@@ -700,8 +700,17 @@ class TestTryHandleDynamicWorkflowExtended:
         service = _make_service()
         mock_plan = Mock()
         mock_plan.plan_id = "p1"
+        mock_plan.intent = "product_create"
+        mock_plan.metadata = {}
         mock_node = Mock()
         mock_node.node_id = "n1"
+        mock_node.tool_id = "products"
+        mock_node.action = "create"
+        mock_node.description = "create product"
+        mock_node.risk = "high"
+        mock_node.depends_on = []
+        mock_node.next = None
+        mock_node.branches = []
         mock_plan.nodes = [mock_node]
         service._pending_workflows["u1"] = {
             "plan": mock_plan,
@@ -709,7 +718,24 @@ class TestTryHandleDynamicWorkflowExtended:
             "approval_required": True,
             "approval_nodes": [{"node_id": "n1", "tool_id": "products", "action": "create"}],
         }
-        with patch.object(service.approval_service, "create_approval_request"):
+        approval_request = Mock(request_id="approval-1")
+        agent_run = Mock(run_id="run-1", status="waiting_user")
+        with (
+            patch(
+                "app.application.agent_orchestrator.AgentOrchestrator.start_run_from_plan",
+                return_value=agent_run,
+            ),
+            patch.object(
+                service.approval_service,
+                "create_approval_request",
+                return_value=approval_request,
+            ),
+            patch.object(
+                service.approval_service,
+                "get_request_metadata",
+                return_value={"request_no": "approval-1"},
+            ),
+        ):
             result = service._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
         assert result is not None
         assert "审批" in result["response"]
