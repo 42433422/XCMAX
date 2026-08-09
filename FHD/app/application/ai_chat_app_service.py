@@ -1380,13 +1380,11 @@ class AIChatApplicationService(
                                 "data": {"plan_id": plan.plan_id},
                             },
                         }
-
                     self._pending_workflows.pop(user_id, None)
                     approval_path = str(
                         (approval_requests[0] if approval_requests else {}).get("approval_path")
                         or "/mod/xcagi-approval-bridge/approval-hub/workspace"
                     )
-
                     approval_inner = {
                         "plan_id": plan.plan_id,
                         "approval_required": True,
