@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from app.application.agent_orchestrator.artifact_attachment import ArtifactAttachmentMixin
+from app.application.agent_orchestrator.artifact_ingestion import ingest_artifact_to_dataset
 from app.application.agent_orchestrator.budget import (
     apply_ai_budget_metadata,
     budget_exceeded_payload,
@@ -51,6 +52,10 @@ class AgentOrchestrator(RunLifecycleMixin, ArtifactAttachmentMixin):
             "durable": isinstance(self._repo, SQLAlchemyAgentRunRepository),
         }
         self._tool_executor = tool_executor or AgentToolExecutor()
+
+    @staticmethod
+    def _ingest_artifact_to_dataset(run: AgentRun, artifact: Any) -> None:
+        ingest_artifact_to_dataset(run, artifact)
 
     def start_run(
         self,

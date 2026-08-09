@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.application.agent_orchestrator.artifact_ingestion import ingest_artifact_to_dataset
 from app.application.agent_orchestrator.run_models import AgentRun, artifact_from_dict
 
 
@@ -47,7 +46,7 @@ class ArtifactAttachmentMixin:
                     "source": artifact.source,
                 },
             )
-            ingest_artifact_to_dataset(run, artifact)
+            self._ingest_artifact_to_dataset(run, artifact)
         if artifact_items:
             self._refresh_artifact_metadata(run)
 
