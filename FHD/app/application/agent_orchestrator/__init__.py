@@ -22,6 +22,7 @@ from app.application.agent_orchestrator.run_repository import (
     InMemoryAgentRunRepository,
     SQLAlchemyAgentRunRepository,
     get_agent_run_repository,
+    get_agent_run_repository_status,
 )
 from app.application.agent_orchestrator.tool_spec import (
     ToolActionSpecV2,
@@ -54,6 +55,7 @@ __all__ = [
     "ToolValidationResult",
     "build_tool_specs_v2",
     "get_agent_run_repository",
+    "get_agent_run_repository_status",
     "get_tool_action_spec",
     "validate_tool_call",
 ]

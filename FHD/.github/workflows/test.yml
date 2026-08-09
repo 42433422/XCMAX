@@ -8,6 +8,7 @@ on:
     paths:
       - "app/**"
       - "tests/**"
+      - "evals/**"
       - "frontend/**"
       - "deploy/requirements*.txt"
       - "pyproject.toml"
@@ -22,6 +23,7 @@ on:
     paths:
       - "app/**"
       - "tests/**"
+      - "evals/**"
       - "frontend/**"
       - "deploy/requirements*.txt"
       - "pyproject.toml"
@@ -110,6 +112,11 @@ jobs:
         run: |
           python -m pytest tests/test_routes/test_route_registry.py \
             tests/test_routes/test_registry_unit.py -x -q --tb=short
+
+      - name: Offline Agent runtime eval
+        env:
+          SECRET_KEY: "ci-agent-eval-secret-at-least-32-bytes"
+        run: python evals/run_agent_eval.py
 
   frontend-smoke:
     needs: repo-hygiene

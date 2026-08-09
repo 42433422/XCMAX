@@ -53,15 +53,12 @@ export interface AgentRunEventsResponse {
 
 export interface CreateAgentRunPayload {
   message: string
-  user_id?: string
   runtime_context?: Record<string, unknown>
   auto_execute?: boolean
 }
 
 export interface ContinueAgentRunPayload {
-  approved_by?: string
-  step_id?: string
-  node_id?: string
+  approval_grant: string
   runtime_context?: Record<string, unknown>
 }
 
@@ -72,7 +69,7 @@ export const agentRunsApi = {
 
   continueRun(
     runId: string,
-    payload: ContinueAgentRunPayload = {},
+    payload: ContinueAgentRunPayload,
   ): Promise<ApiResponse<AgentRun>> {
     return api.post<ApiResponse<AgentRun>>(
       `/api/agent/runs/${encodeURIComponent(runId)}/continue`,
@@ -80,11 +77,35 @@ export const agentRunsApi = {
     )
   },
 
+  pauseRun(runId: string): Promise<ApiResponse<AgentRun>> {
+    return api.post<ApiResponse<AgentRun>>(
+      `/api/agent/runs/${encodeURIComponent(runId)}/pause`,
+      {},
+    )
+  },
+
+  cancelRun(runId: string): Promise<ApiResponse<AgentRun>> {
+    return api.post<ApiResponse<AgentRun>>(
+      `/api/agent/runs/${encodeURIComponent(runId)}/cancel`,
+      {},
+    )
+  },
+
+  resumeRun(
+    runId: string,
+    runtimeContext: Record<string, unknown> = {},
+  ): Promise<ApiResponse<AgentRun>> {
+    return api.post<ApiResponse<AgentRun>>(
+      `/api/agent/runs/${encodeURIComponent(runId)}/resume`,
+      { runtime_context: runtimeContext },
+    )
+  },
+
   getRun(runId: string): Promise<ApiResponse<AgentRun>> {
     return api.get<ApiResponse<AgentRun>>(`/api/agent/runs/${encodeURIComponent(runId)}`)
   },
 
-  listRuns(params: { user_id?: string; limit?: number } = {}): Promise<ApiResponse<AgentRun[]>> {
+  listRuns(params: { limit?: number } = {}): Promise<ApiResponse<AgentRun[]>> {
     return api.get<ApiResponse<AgentRun[]>>('/api/agent/runs', params)
   },
 
@@ -96,6 +117,13 @@ export const agentRunsApi = {
       `/api/agent/runs/${encodeURIComponent(runId)}/events`,
       params,
     )
+  },
+
+  eventStreamPath(runId: string, afterEventId?: string): string {
+    const base = `/api/agent/runs/${encodeURIComponent(runId)}/events/stream`
+    return afterEventId
+      ? `${base}?after_event_id=${encodeURIComponent(afterEventId)}`
+      : base
   },
 }
 

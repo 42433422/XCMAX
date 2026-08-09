@@ -9,6 +9,32 @@ _MUTATING_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
+def _has_verified_bearer(request: Request) -> bool:
+    """Only a cryptographically/session verified bearer may replace CSRF protection."""
+    authorization = request.headers.get("authorization", "")
+    if not authorization.startswith("Bearer "):
+        return False
+    token = authorization[7:].strip()
+    if not token:
+        return False
+    try:
+        from app.security.mobile_jwt import verify_mobile_jwt
+
+        mobile = verify_mobile_jwt(token)
+        if mobile and mobile.get("typ") == "access":
+            return True
+        from app.security.web_jwt import verify_web_jwt
+
+        web = verify_web_jwt(token)
+        if web and web.get("typ") == "access":
+            return True
+        from app.application.facades.session_facade import get_session_service
+
+        return get_session_service().validate_session(token) is not None
+    except Exception:  # noqa: BLE001 - authentication failure must fail closed
+        return False
+
+
 def _csrf_exempt_sandbox_modstore_install(scope: Scope) -> bool:
     """MODstore 服务端用 httpx 推送 .xcmod；部分反向代理会剥离 Authorization，导致仅靠 Bearer 仍 403。"""
     if (os.environ.get("XCAGI_SANDBOX_INSTANCE") or "").strip() != "1":
@@ -163,8 +189,7 @@ class CSRFMiddleware:
                 await self.app(scope, receive, send)
                 return
 
-            auth_header = request.headers.get("authorization", "")
-            if auth_header.startswith("Bearer "):
+            if _has_verified_bearer(request):
                 await self.app(scope, receive, send)
                 return
 

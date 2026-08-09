@@ -7,13 +7,20 @@ import logging
 import os
 import shutil
 import tempfile
+import zipfile
+from datetime import UTC, datetime
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .artifact_constants import ARTIFACT_EMPLOYEE_PACK, normalize_artifact
 from .artifact_package import validate_employee_pack_manifest
-from .package import ModPackage, ModPackageError, ModSignatureError
+from .package import (
+    ModPackage,
+    ModPackageError,
+    ModSignatureError,
+    compute_directory_hash,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +130,13 @@ class EmployeeRegistry:
                 extract_path, manifest = ModPackage.extract_package(
                     package_path, temp_dir, verify_signature=verify_signature
                 )
+                signature_verified = False
+                if verify_signature:
+                    with zipfile.ZipFile(package_path, "r") as package_zip:
+                        if "META-INF/signature.json" in package_zip.namelist():
+                            signature_verified = ModPackage._verify_package_signature(
+                                temp_dir, package_zip
+                            )
                 if normalize_artifact(manifest) != ARTIFACT_EMPLOYEE_PACK:
                     return False, "非 employee_pack 包"
                 ve = validate_employee_pack_manifest(manifest)
@@ -139,6 +153,20 @@ class EmployeeRegistry:
                 if os.path.exists(dest):
                     shutil.rmtree(dest)
                 shutil.copytree(extract_path, dest)
+                receipt = {
+                    "schema_version": 1,
+                    "pack_id": pack_id,
+                    "version": str(manifest.get("version") or ""),
+                    "signature_verified": bool(signature_verified),
+                    "content_sha256": compute_directory_hash(dest),
+                    "installed_at": datetime.now(UTC).isoformat(),
+                }
+                with open(
+                    os.path.join(dest, ".xcagi-install-receipt.json"),
+                    "w",
+                    encoding="utf-8",
+                ) as receipt_file:
+                    json.dump(receipt, receipt_file, ensure_ascii=False, sort_keys=True)
                 logger.info("Installed employee_pack to %s", dest)
                 cfg = manifest.get("config") if isinstance(manifest.get("config"), dict) else {}
                 if cfg.get("host_foundation_pack"):
