@@ -4,7 +4,7 @@ import copy
 import time
 from typing import Any
 
-from app.application.agent_orchestrator.artifact_ingestion import ingest_artifact_to_dataset
+from app.application.agent_orchestrator.artifact_attachment import ArtifactAttachmentMixin
 from app.application.agent_orchestrator.budget import (
     apply_ai_budget_metadata,
     budget_exceeded_payload,
@@ -15,18 +15,14 @@ from app.application.agent_orchestrator.repair_advisor import (
     llm_repair_attempt_limit,
     request_llm_repair,
 )
-from app.application.agent_orchestrator.run_control import (
-    clear_run_control,
-    get_run_control,
-    request_run_control,
-)
+from app.application.agent_orchestrator.run_control import clear_run_control
+from app.application.agent_orchestrator.run_lifecycle import RunLifecycleMixin
 from app.application.agent_orchestrator.run_models import (
     AgentRun,
     AgentStep,
     LLMCall,
     RunEvent,
     ToolCall,
-    artifact_from_dict,
     utc_now_iso,
 )
 from app.application.agent_orchestrator.run_repository import (
@@ -40,7 +36,7 @@ from app.application.workflow.types import PlanGraph, WorkflowNode
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
-class AgentOrchestrator:
+class AgentOrchestrator(RunLifecycleMixin, ArtifactAttachmentMixin):
     def __init__(
         self,
         *,
@@ -50,9 +46,7 @@ class AgentOrchestrator:
         self._repo = repository or get_agent_run_repository()
         self._repository_status = {
             "mode": (
-                "sqlalchemy"
-                if isinstance(self._repo, SQLAlchemyAgentRunRepository)
-                else "memory"
+                "sqlalchemy" if isinstance(self._repo, SQLAlchemyAgentRunRepository) else "memory"
             ),
             "durable": isinstance(self._repo, SQLAlchemyAgentRunRepository),
         }
@@ -190,51 +184,6 @@ class AgentOrchestrator:
 
     def list_events(self, run_id: str, *, after_event_id: str | None = None) -> list[RunEvent]:
         return self._repo.list_events(run_id, after_event_id=after_event_id)
-
-    def pause_run(self, run_id: str, *, requested_by: str = "") -> AgentRun | None:
-        run = self._repo.get(run_id)
-        if run is None:
-            return None
-        if run.status in {"completed", "failed", "cancelled"}:
-            return run
-        request_run_control(run_id, "pause")
-        run.status = "paused"
-        run.metadata["control"] = {"state": "paused", "requested_by": requested_by}
-        run.add_event("run.paused", "Agent run 已暂停", {"requested_by": requested_by})
-        return self._repo.save(run)
-
-    def cancel_run(self, run_id: str, *, requested_by: str = "") -> AgentRun | None:
-        run = self._repo.get(run_id)
-        if run is None:
-            return None
-        if run.status in {"completed", "failed", "cancelled"}:
-            return run
-        request_run_control(run_id, "cancel")
-        self._mark_controlled(run, "cancel", requested_by=requested_by)
-        return self._repo.save(run)
-
-    def resume_run(
-        self,
-        run_id: str,
-        *,
-        requested_by: str = "",
-        runtime_context: dict[str, Any] | None = None,
-    ) -> AgentRun | None:
-        run = self._repo.get(run_id)
-        if run is None:
-            return None
-        if run.status != "paused":
-            return run
-        clear_run_control(run_id)
-        context = dict(run.metadata.get("runtime_context") or {})
-        context.update(dict(runtime_context or {}))
-        run.metadata["runtime_context"] = context
-        run.metadata["control"] = {"state": "running", "requested_by": requested_by}
-        run.status = "running"
-        run.add_event("run.resumed", "Agent run 已恢复", {"requested_by": requested_by})
-        self._repo.save(run)
-        self._execute_ready_steps(run, runtime_context=context)
-        return self._repo.save(run)
 
     def _plan(self, run: AgentRun, *, runtime_context: dict[str, Any]) -> PlanGraph:
         from app.application.agent_orchestrator.multimodal_planner import (
@@ -427,46 +376,6 @@ class AgentOrchestrator:
         self._append_llm_summary_to_final_output(run)
         run.add_event("run.completed", "Agent run 执行完成", run.final_output)
         clear_run_control(run.run_id)
-
-    def _apply_requested_control(self, run: AgentRun) -> bool:
-        control = get_run_control(run.run_id)
-        if control is None:
-            return False
-        self._mark_controlled(run, control)
-        self._repo.save(run)
-        return True
-
-    @staticmethod
-    def _mark_controlled(
-        run: AgentRun,
-        control: str,
-        *,
-        requested_by: str = "",
-    ) -> None:
-        if control == "cancel":
-            for step in run.steps:
-                if step.status in {"pending", "retrying", "waiting_user"}:
-                    step.status = "skipped"
-                    step.error = "run cancelled before execution"
-            run.status = "cancelled"
-            run.error = "run cancelled"
-            run.metadata["control"] = {"state": "cancelled", "requested_by": requested_by}
-            run.final_output = {
-                **dict(run.final_output or {}),
-                "cancelled": True,
-                "completed_step_ids": [
-                    step.step_id for step in run.steps if step.status == "completed"
-                ],
-            }
-            if not any(event.event_type == "run.cancelled" for event in run.events):
-                run.add_event(
-                    "run.cancelled", "Agent run 已取消", {"requested_by": requested_by}
-                )
-            return
-        run.status = "paused"
-        run.metadata["control"] = {"state": "paused", "requested_by": requested_by}
-        if not any(event.event_type == "run.paused" for event in run.events):
-            run.add_event("run.paused", "Agent run 已暂停", {"requested_by": requested_by})
 
     @staticmethod
     def _can_auto_execute(step: AgentStep) -> bool:
@@ -1330,49 +1239,3 @@ class AgentOrchestrator:
     def _refresh_repair_metadata(run: AgentRun) -> None:
         run.metadata["observation_count"] = sum(len(step.observations) for step in run.steps)
         run.metadata["repair_count"] = sum(len(step.repair_history) for step in run.steps)
-
-    def _attach_artifacts_from_payload(
-        self,
-        run: AgentRun,
-        payload: dict[str, Any],
-        *,
-        source: str,
-        extra_metadata: dict[str, Any] | None = None,
-    ) -> None:
-        artifacts = payload.get("artifacts")
-        if artifacts is None:
-            artifacts = payload.get("artifact")
-        if isinstance(artifacts, dict):
-            artifact_items = [artifacts]
-        elif isinstance(artifacts, list):
-            artifact_items = [item for item in artifacts if isinstance(item, dict)]
-        else:
-            artifact_items = []
-
-        for item in artifact_items:
-            artifact = artifact_from_dict(item)
-            if not artifact.artifact_type:
-                continue
-            artifact.source = artifact.source or source
-            if extra_metadata:
-                merged_metadata = dict(artifact.metadata or {})
-                merged_metadata.update(extra_metadata)
-                artifact.metadata = merged_metadata
-            run.artifacts.append(artifact)
-            run.add_event(
-                "artifact.attached",
-                f"Artifact 已附加: {artifact.artifact_type}",
-                {
-                    "artifact_id": artifact.artifact_id,
-                    "artifact_type": artifact.artifact_type,
-                    "name": artifact.name,
-                    "source": artifact.source,
-                },
-            )
-            ingest_artifact_to_dataset(run, artifact)
-        if artifact_items:
-            self._refresh_artifact_metadata(run)
-
-    @staticmethod
-    def _refresh_artifact_metadata(run: AgentRun) -> None:
-        run.metadata["artifact_count"] = len(run.artifacts)

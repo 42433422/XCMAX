@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -234,6 +235,24 @@ def verify_direct_python_pack_trust(pack_dir: Path | str) -> tuple[bool, str]:
         return False, "missing_or_invalid_install_receipt"
 
 
+def direct_python_pack_trust_error(
+    pack_dir: Path | str,
+    *,
+    verifier: Callable[[Path | str], tuple[bool, str]] = verify_direct_python_pack_trust,
+) -> dict[str, Any] | None:
+    """Return the structured executor error when a Python pack is untrusted."""
+    trusted, trust_reason = verifier(pack_dir)
+    if trusted:
+        return None
+    return {
+        "handler": "direct_python",
+        "ok": False,
+        "error": DIRECT_PYTHON_UNTRUSTED_MSG,
+        "error_code": "employee_python_pack_untrusted",
+        "trust_reason": trust_reason,
+    }
+
+
 def build_employee_context(employee_id: str, input_data: dict[str, Any]) -> dict[str, Any]:
     return {"employee_id": employee_id, "input_data": input_data or {}}
 
@@ -261,6 +280,7 @@ __all__ = [
     "DIRECT_PYTHON_UNTRUSTED_MSG",
     "build_employee_context",
     "candidate_pack_ids",
+    "direct_python_pack_trust_error",
     "list_installed_pack_records",
     "load_employee_pack_from_disk",
     "manifest_actions_handlers",
