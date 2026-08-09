@@ -858,6 +858,68 @@ def _base_registry() -> list[dict[str, Any]]:
             },
             "risk_level": "low",
         },
+        {
+            "type": "function",
+            "function": {
+                "name": "business_db_read",
+                "description": "查询业务数据（客户/购买单位、产品、原材料、出货记录）。entity 指定对象类型，可用 keyword 按名称/型号/单号过滤。只读操作。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "entity": {
+                            "type": "string",
+                            "enum": ["customers", "products", "materials", "shipment_records"],
+                            "description": "要查询的业务对象：customers客户、products产品、materials原材料、shipment_records出货记录",
+                        },
+                        "keyword": {
+                            "type": "string",
+                            "description": "可选：按名称/型号/单号等关键字过滤",
+                        },
+                        "query": {
+                            "type": "string",
+                            "description": "可选：查询条件描述（同 keyword）",
+                        },
+                    },
+                    "required": ["entity"],
+                },
+            },
+            "risk_level": "low",
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "business_db_write",
+                "description": "新建/更新/删除业务数据（客户、产品、原材料、出货记录）。entity 指定对象，operation 指定操作，payload 为具体字段。写操作。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "entity": {
+                            "type": "string",
+                            "enum": ["customers", "products", "materials", "shipment_records"],
+                            "description": "业务对象：customers客户、products产品、materials原材料、shipment_records出货记录",
+                        },
+                        "operation": {
+                            "type": "string",
+                            "enum": [
+                                "create",
+                                "ensure_exists",
+                                "upsert",
+                                "update",
+                                "delete",
+                                "batch_delete",
+                            ],
+                            "description": "create新建、update更新、delete删除、batch_delete批量删除、ensure_exists/upsert不存在则创建存在则返回",
+                        },
+                        "payload": {
+                            "type": "object",
+                            "description": "业务字段：如 customers 的 unit_name/customer_name/contact_person/contact_phone/contact_address；products 的 name/unit_name/model_number/unit_price 等",
+                        },
+                    },
+                    "required": ["entity", "operation", "payload"],
+                },
+            },
+            "risk_level": "medium",
+        },
     ]
 
 
@@ -1250,6 +1312,14 @@ def execute_workflow_tool(
             )
         except RECOVERABLE_ERRORS as e:
             return json.dumps({"success": False, "error": str(e)}, ensure_ascii=False)
+    if name in ("business_db_read", "business_db_write"):
+        from app.services.tools_workflow_registered import execute_registered_workflow_tool
+
+        action = "read" if name == "business_db_read" else "write"
+        return json.dumps(
+            execute_registered_workflow_tool("business_db", action, args),
+            ensure_ascii=False,
+        )
     # ─── 新增工具集分发：订单/客户/报表/RBAC ───────────────────────────
     # 直接调 service 层，不经过 HTTP。高危操作由各执行器内部 confirm 参数守护。
     new_tool_dispatch = _resolve_new_tool_dispatch(name)
