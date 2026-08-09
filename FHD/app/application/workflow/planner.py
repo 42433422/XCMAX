@@ -15,6 +15,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import ensure_fhd_repo_on_syspath
 
 from .clarification_node import build_clarify_node, needs_clarification
+from .planner_llm_gateway import request_planner_completion
 from .types import Branch, PlanGraph, WorkflowNode, validate_plan_graph
 
 logger = logging.getLogger(__name__)
@@ -1918,30 +1919,14 @@ class LLMWorkflowPlanner:
                 {"role": "system", "content": "你是工作流规划器，只输出可执行 JSON。"},
                 {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
             ]
-            api_key = getattr(self._ai_service, "api_key", "") or ""
-            from app.infrastructure.llm.providers.credentials import default_chat_completions_url
-
-            api_url = getattr(self._ai_service, "api_url", "") or default_chat_completions_url()
-            model = getattr(self._ai_service, "model", "") or "deepseek-chat"
-            if not api_key:
-                return None
-
-            response = _get_planner_http_client().post(
-                api_url,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "temperature": 0.1,
-                    "max_tokens": 1200,
-                },
+            response_data = request_planner_completion(
+                ai_service=self._ai_service,
+                context=context,
+                messages=messages,
+                http_client_factory=_get_planner_http_client,
             )
-            if response.status_code >= 400:
+            if response_data is None:
                 return None
-            response_data = response.json()
             raw = (
                 (response_data.get("choices") or [{}])[0]
                 .get("message", {})
