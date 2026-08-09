@@ -1,6 +1,6 @@
 import { api, buildFullApiUrl } from './core';
 import { LS_MARKET_ACCESS_TOKEN } from './marketAccount';
-import { readCsrfTokenFromCookie, shouldAttachCsrfHeader } from '@/utils/csrfCookie';
+import { readCsrfTokenFromCookie } from '@/utils/csrfCookie';
 import type { RequestOptions } from './core';
 import type { ApiResponse } from '@/types/api';
 import type { ChatRequest, ChatResponse, ChatSession } from '@/types/chat';
@@ -39,17 +39,33 @@ function readMarketBearerHeader(): Record<string, string> {
   return { Authorization: token.toLowerCase().startsWith('bearer ') ? token : `Bearer ${token}` };
 }
 
+/**
+ * Planner 请求可能同时携带市场授权 Bearer 和本地桌面会话。市场 Bearer 不是本地
+ * FastAPI 可验证的 access/session token，不能据此跳过双提交 CSRF；只要同源 Cookie
+ * 中已有令牌，就显式带上对应请求头。
+ */
+function withChatCsrfHeader(headers: Record<string, string>): Record<string, string> {
+  const hasCsrfHeader = Object.entries(headers).some(
+    ([key, value]) => key.toLowerCase() === 'x-csrf-token' && String(value || '').trim(),
+  );
+  if (hasCsrfHeader) return headers;
+  const token = readCsrfTokenFromCookie();
+  return token ? { ...headers, 'X-CSRF-Token': token } : headers;
+}
+
 function withMarketAuthorization(options: RequestOptions = {}): RequestOptions {
   const existing = options.headers as Record<string, string> | undefined;
-  if (existing?.Authorization || existing?.authorization) return options;
+  if (existing?.Authorization || existing?.authorization) {
+    return { ...options, headers: withChatCsrfHeader({ ...existing }) };
+  }
   const auth = readMarketBearerHeader();
   if (!auth.Authorization) return options;
   return {
     ...options,
-    headers: {
+    headers: withChatCsrfHeader({
       ...existing,
       ...auth,
-    },
+    }),
   };
 }
 
@@ -88,15 +104,11 @@ export const chatApi = {
     const { streamPath, headers: hdr, ...rest } = init;
     const url = buildFullApiUrl((streamPath || '').trim() || resolveChatStreamPath());
     const body = JSON.stringify(payload);
-    const headers: Record<string, string> = {
+    const headers = withChatCsrfHeader({
       'Content-Type': 'application/json',
       ...readMarketBearerHeader(),
       ...(hdr as Record<string, string>),
-    };
-    if (shouldAttachCsrfHeader('POST', headers)) {
-      const tok = readCsrfTokenFromCookie();
-      if (tok) headers['X-CSRF-Token'] = tok;
-    }
+    });
     return fetch(url, {
       method: 'POST',
       credentials: 'include',
