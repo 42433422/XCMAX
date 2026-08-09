@@ -1,7 +1,7 @@
 {
   "_note": "Cross-stack source debt ratchet. Existing oversized files and exact-copy debt may only shrink; generated/derived roots are excluded.",
   "schema_version": 1,
-  "updated_at": "2026-08-07",
+  "updated_at": "2026-08-09",
   "oversized_files": {
     "成都修茈科技有限公司/MODstore_deploy/market/src/views/WorkbenchHomeView.vue": {
       "stack": "modstore_vue",
@@ -165,7 +165,7 @@
     },
     "FHD/app/application/tools/workflow.py": {
       "stack": "fhd_backend",
-      "lines": 2083,
+      "lines": 2081,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/market/src/views/AiStoreView.vue": {

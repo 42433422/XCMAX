@@ -3,6 +3,20 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
+
+
+def _parse_excel_header_row_1based(args: dict[str, Any]) -> int | None:
+    raw = args.get("header_row")
+    if raw is None or raw == "":
+        raw = args.get("header_row_index")
+    if raw is None or raw == "":
+        return None
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return n if n >= 1 else None
 
 
 def resolve_safe_excel_path(workspace_root_or_file: str, file_path: str | None = None) -> Path:
