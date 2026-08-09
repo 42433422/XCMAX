@@ -31,6 +31,7 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
     _ensure_vector_index_if_needed,
     _merge_runtime_context_with_message_paths,
     _message_requires_db_read_token,
+    _runtime_context_with_authenticated_actor,
     _xcagi_chat_http_exc,
     _xcagi_chat_timeout_error_payload,
     _xcagi_chat_timeout_seconds,
@@ -333,9 +334,9 @@ async def _execute_ai_chat_mainline(
     message: str | None = None,
     kitten_extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    from app.application.ai_chat_app_service import AIChatApplicationService
+    from app.application import get_ai_chat_app_service
 
-    service = AIChatApplicationService()
+    service = get_ai_chat_app_service()
     file_context = runtime_context.get("file_context")
     if not isinstance(file_context, dict):
         file_context = runtime_context.get("file_analysis")
@@ -362,6 +363,7 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> di
         set_llm_mode(m)
 
     runtime_context, _ = _merge_runtime_context_with_message_paths(body.context, body.message)
+    runtime_context = _runtime_context_with_authenticated_actor(request, runtime_context)
     assert_p2_elevated_claim_or_raise(request)
     tier = resolve_ai_tier(request)
     runtime_context = runtime_context_with_tier(runtime_context, tier)
@@ -629,6 +631,7 @@ async def execute_compat_chat_batch(
     llm_client = create_modstore_openai_client_from_request(request)
     for txt in msgs:
         runtime_context, _ = _merge_runtime_context_with_message_paths(rolling_ctx, txt)
+        runtime_context = _runtime_context_with_authenticated_actor(request, runtime_context)
         runtime_context = runtime_context_with_tier(runtime_context, batch_tier)
         from app.application.chat_business_safety import try_handle_business_chat_action
 

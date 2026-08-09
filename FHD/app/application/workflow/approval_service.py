@@ -5,8 +5,6 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy.exc import SQLAlchemyError
-
 from app.application.workflow.types import (
     ApprovalRequest,
     ApprovalStatus,
@@ -24,10 +22,13 @@ logger = logging.getLogger(__name__)
 
 
 class ApprovalService:
+    _AI_WORKFLOW_FLOW_KEY = "ai-workflow-interactive"
+
     def __init__(self):
         self._config: ApprovalConfig = get_approval_config()
         self._pending_requests: dict[str, ApprovalRequest] = {}
         self._pending_workflows: dict[str, dict[str, Any]] = {}
+        self._request_metadata: dict[str, dict[str, Any]] = {}
 
     def reload_config(self) -> None:
         self._config = reload_approval_config()
@@ -47,9 +48,14 @@ class ApprovalService:
                 elif trigger == "conditional":
                     return self._evaluate_conditions(rule.get("conditions", {}), node)
         try:
-            from resources.config.risk_actions_loader import get_action_approval
+            from resources.config.risk_actions_loader import (
+                get_action_approval,
+                requires_write_approval,
+            )
 
-            if get_action_approval(node.tool_id, node.action) == "always":
+            if get_action_approval(node.tool_id, node.action) in {"always", "interactive"}:
+                return True
+            if requires_write_approval(node.tool_id, node.action):
                 return True
         except Exception:  # noqa: BLE001
             logger.debug("risk_actions registry lookup skipped", exc_info=True)
@@ -103,6 +109,7 @@ class ApprovalService:
         node: WorkflowNode,
         runtime_context: dict[str, Any] | None = None,
         plan: PlanGraph | None = None,
+        require_persistence: bool = False,
     ) -> ApprovalRequest:
         request_id = uuid.uuid4().hex
         request = ApprovalRequest(
@@ -125,57 +132,59 @@ class ApprovalService:
         logger.info("创建审批请求: %s for %s.%s", request_id, node.tool_id, node.action)
 
         # 同时持久化到 DB（防止重启丢失，且与 /api/approval/requests 工作台共享可见性）
-        self._persist_request_to_db(request)
+        metadata = self._persist_request_to_db(request, runtime_context=runtime_context)
+        if metadata is None and require_persistence:
+            self._pending_requests.pop(request_id, None)
+            self._pending_workflows.pop(request_id, None)
+            raise RuntimeError("审批请求未能持久化，已阻止数据库写入")
+        if metadata is not None:
+            self._request_metadata[request_id] = metadata
         return request
 
-    def _persist_request_to_db(self, request: ApprovalRequest) -> None:
-        """将内存审批请求写入 DB approval_requests 表（幂等）。"""
-        import json as _json
+    def _persist_request_to_db(
+        self,
+        request: ApprovalRequest,
+        runtime_context: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """将内存审批请求写入 DB approval_requests 表（幂等且外键完整）。"""
+        from app.application.workflow.approval_persistence import persist_workflow_approval
 
-        try:
-            from sqlalchemy import text
+        return persist_workflow_approval(
+            request,
+            runtime_context,
+            flow_key=self._AI_WORKFLOW_FLOW_KEY,
+        )
 
-            from app.db.session import get_db
-
-            with get_db() as db:
-                existing = db.execute(
-                    text("SELECT id FROM approval_requests WHERE request_no = :rno LIMIT 1"),
-                    {"rno": request.request_id},
-                ).fetchone()
-                if not existing:
-                    db.execute(
-                        text(
-                            "INSERT INTO approval_requests "
-                            "(request_no, flow_id, business_type, title, description, applicant_id, status, created_at) "
-                            "VALUES (:rno, NULL, 'workflow_tool', :title, :desc, NULL, 'pending', :created)"
-                        ),
-                        {
-                            "rno": request.request_id,
-                            "title": f"{request.tool_id}.{request.action}",
-                            "desc": _json.dumps(
-                                request.params or {}, ensure_ascii=False, default=str
-                            )[:500],
-                            "created": (request.created_at or datetime.now()).isoformat(),
-                        },
-                    )
-            # P2 NeuroBus: 广播审批创建事件
-            try:
-                from app.neuro_bus.application_neuro_bridge import (
-                    neuro_notify_approval_changed,
-                )
-
-                neuro_notify_approval_changed(
-                    "created",
-                    approval_id=request.request_id,
-                    flow_id="",
-                )
-            except RECOVERABLE_ERRORS:
-                logger.debug("neuro_notify_approval_changed skipped", exc_info=True)
-        except (*RECOVERABLE_ERRORS, SQLAlchemyError) as e:
-            logger.debug("AI 审批持久化到 DB 失败（非致命）: %s", e)
+    def get_request_metadata(self, request_id: str) -> dict[str, Any] | None:
+        metadata = self._request_metadata.get(request_id)
+        return dict(metadata) if metadata is not None else None
 
     def get_pending_workflow(self, request_id: str) -> dict[str, Any] | None:
         return self._pending_workflows.get(request_id)
+
+    def attach_pending_agent_run(
+        self,
+        request_id: str,
+        *,
+        agent_run_id: str,
+        approved_step_id: str,
+    ) -> bool:
+        pending = self._pending_workflows.get(request_id)
+        if pending is None:
+            return False
+        pending["agent_run_id"] = str(agent_run_id or "").strip()
+        pending["approved_step_id"] = str(approved_step_id or "").strip()
+        metadata = self._request_metadata.get(request_id)
+        if metadata is not None:
+            metadata["agent_run_id"] = str(agent_run_id or "").strip()
+        from app.application.workflow.approval_persistence import persist_agent_run_link
+
+        persist_agent_run_link(
+            request_id,
+            agent_run_id=agent_run_id,
+            approved_step_id=approved_step_id,
+        )
+        return True
 
     def remove_pending_workflow(self, request_id: str) -> dict[str, Any] | None:
         return self._pending_workflows.pop(request_id, None)

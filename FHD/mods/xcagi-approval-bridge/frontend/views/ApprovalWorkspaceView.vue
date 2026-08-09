@@ -284,11 +284,14 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { approvalApi, type ApprovalRequest, type ApprovalWorkflowExecution } from '@/api/approval'
+import { authApi } from '@/api/auth'
 import { appAlert, appConfirm, appPrompt } from '@/utils/appDialog'
 import Modal from '@/components/Modal.vue'
 
 const FINAL_STATUSES = ['approved', 'rejected', 'withdrawn', 'cancelled'] as const
+const route = useRoute()
 
 const isFinalStatus = (status: string) =>
   (FINAL_STATUSES as readonly string[]).includes(status)
@@ -321,10 +324,25 @@ const isPendingAiWorkflowApproval = (request?: ApprovalRequest | null) =>
   !isFinalStatus(request.status) &&
   !request.current_node_id
 
-// 获取当前用户 ID（从 localStorage 获取）
-const getCurrentUserId = () => {
-  const userId = localStorage.getItem('user_id') || '4'
-  return parseInt(userId)
+const currentUserId = ref(0)
+const deepLinkOpened = ref(false)
+
+const getCurrentUserId = () => currentUserId.value
+
+const resolveCurrentUserId = async () => {
+  const response = await authApi.validateSession()
+  const envelope = response as Record<string, unknown>
+  const data = (response.data && typeof response.data === 'object'
+    ? response.data
+    : {}) as Record<string, unknown>
+  const candidate = [
+    envelope.local_user_id,
+    data.local_user_id,
+    data.user_id,
+    envelope.user_id,
+  ].find((value) => Number.isInteger(Number(value)) && Number(value) > 0)
+  if (!candidate) throw new Error('当前登录会话缺少本地用户 ID')
+  currentUserId.value = Number(candidate)
 }
 
 // 加载数据
@@ -348,6 +366,15 @@ const loadData = async () => {
       stats.value.initiated = mine.length
       stats.value.approved = mine.filter((r: ApprovalRequest) => r.status === 'approved').length
       stats.value.rejected = mine.filter((r: ApprovalRequest) => r.status === 'rejected').length
+    }
+    const requestNo = String(route.query.request_no || '').trim()
+    if (requestNo && !deepLinkOpened.value) {
+      const target = [...pendingRequests.value, ...initiatedRequests.value]
+        .find((item) => item.request_no === requestNo)
+      if (target) {
+        deepLinkOpened.value = true
+        await viewDetails(target.id)
+      }
     }
   } catch (error) {
     console.error('加载审批数据失败:', error)
@@ -574,8 +601,14 @@ const formatTime = (isoString: string) => {
   return date.toLocaleString('zh-CN')
 }
 
-onMounted(() => {
-  loadData()
+onMounted(async () => {
+  try {
+    await resolveCurrentUserId()
+    await loadData()
+  } catch (error) {
+    console.error('无法从登录会话解析审批用户:', error)
+    await appAlert('登录会话无效，无法打开审批工作台')
+  }
 })
 </script>
 

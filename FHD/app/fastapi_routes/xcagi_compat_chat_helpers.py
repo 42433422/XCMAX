@@ -114,6 +114,25 @@ def _message_requires_db_read_token(message: str) -> bool:
     return bool(_CHAT_RAW_DB_SUBJECT_RE.search(text))
 
 
+def _runtime_context_with_authenticated_actor(
+    request: Request,
+    runtime_context: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Attach the local session actor; never trust chat body.user_id for approvals."""
+    context = dict(runtime_context or {})
+    try:
+        from app.infrastructure.auth.dependencies import resolve_session_user
+
+        user = resolve_session_user(request)
+        actor_id = int(getattr(user, "id", 0) or 0)
+        if actor_id > 0:
+            context["local_user_id"] = actor_id
+            context["actor_id"] = actor_id
+    except RECOVERABLE_ERRORS:
+        logger.debug("chat session actor resolution skipped", exc_info=True)
+    return context
+
+
 def _chat_read_token_required_payload(message: str) -> dict[str, Any]:
     _ = message
     return {
@@ -646,7 +665,33 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     if m in ("online", "offline"):
         set_llm_mode(m)
     runtime_context, _ = _merge_runtime_context_with_message_paths(body.context, body.message)
+    runtime_context = _runtime_context_with_authenticated_actor(request, runtime_context)
     runtime_context = runtime_context_with_tier(runtime_context, ai_tier)
+    from app.application import get_ai_chat_app_service
+    from app.application.workflow.planner import _looks_like_business_db_write
+
+    chat_service = get_ai_chat_app_service()
+    scoped_user_id = str(body.user_id or "default")
+    has_pending_workflow = scoped_user_id in chat_service._pending_workflows
+    controlled_entity_named = any(
+        token in str(body.message or "")
+        for token in ("客户", "购买单位", "产品", "商品", "原材料", "物料", "出货", "发货")
+    )
+    if has_pending_workflow or (
+        controlled_entity_named
+        and _looks_like_business_db_write(str(body.message or ""), str(body.message or "").lower())
+    ):
+        payload = chat_service.process_chat(
+            user_id=scoped_user_id,
+            message=body.message,
+            context=runtime_context,
+            source=body.source,
+            file_context={},
+        )
+        response_text = str(payload.get("response") or payload.get("message") or "")
+        yield _sse_event_line({"type": "token", "text": response_text})
+        yield _sse_event_line({"type": "done", "result": payload})
+        return
     # Keep stream and JSON chat on the same verified business-action policy.
     # This branch intentionally runs before creating a legacy AgentRun: a
     # blocked/no-data action must not surface as a 100%-completed planner task.

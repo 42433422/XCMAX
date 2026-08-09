@@ -728,7 +728,12 @@ class TestTryHandleDynamicWorkflowEdge:
             "approval_required": True,
             "approval_nodes": [{"node_id": "approval_node", "tool_id": "db", "action": "write"}],
         }
-        with patch.object(svc.approval_service, "create_approval_request") as mock_create:
+        waiting_run = SimpleNamespace(status="waiting_user", run_id="run-approval-1")
+        with (
+            patch.object(svc.approval_service, "create_approval_request") as mock_create,
+            patch("app.application.agent_orchestrator.AgentOrchestrator") as mock_orchestrator,
+        ):
+            mock_orchestrator.return_value.start_run_from_plan.return_value = waiting_run
             result = svc._try_handle_dynamic_workflow(
                 user_id="u1",
                 message="确认",
@@ -738,7 +743,7 @@ class TestTryHandleDynamicWorkflowEdge:
             )
         assert "已提交审批请求" in result["response"]
         mock_create.assert_called_once()
-        assert "u1" in svc._pending_workflows  # not popped until approval
+        assert "u1" not in svc._pending_workflows  # prevent duplicate approval creation
 
     def test_normal_profile_returns_none_for_non_workflow(self):
         svc = _make_svc()

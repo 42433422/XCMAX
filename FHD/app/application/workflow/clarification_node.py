@@ -148,6 +148,39 @@ def needs_clarification(
             continue
         params = node.params or {}
         required = _action_required(node, tool_registry)
+
+        if node.tool_id == "business_db" and node.action == "write":
+            operation = str(params.get("operation") or "").strip().lower()
+            payload = params.get("payload")
+            if operation in {"update", "delete"} and isinstance(payload, dict):
+                from app.services.tools_workflow_registered import (
+                    prepare_business_db_write_target,
+                )
+
+                resolved = prepare_business_db_write_target(
+                    str(params.get("entity") or ""), operation, payload
+                )
+                if resolved.get("success"):
+                    params["payload"] = resolved["payload"]
+                else:
+                    candidates = list(resolved.get("candidates") or [])
+                    reason = str(resolved.get("reason") or "missing_target")
+                    question = str(resolved.get("message") or "请提供唯一目标后再执行。")
+                    if len(candidates) > 1:
+                        reason = "ambiguous_target"
+                        question = _build_ambiguous_question(node, candidates)
+                    items.append(
+                        {
+                            "node_id": node.node_id,
+                            "tool_id": node.tool_id,
+                            "action": node.action,
+                            "reason": reason,
+                            "field": "id",
+                            "candidates": candidates[:20],
+                            "question": question,
+                        }
+                    )
+                    continue
         candidates = params.get("_candidates") or params.get("candidates")
 
         # 多候选歧义优先：目标 id 未解析 && 存在 >1 个候选 → 反问确认目标。

@@ -1399,15 +1399,32 @@ class TestBusinessDbRouter:
     def test_write_shipment_records_update(self) -> None:
         mock_svc = MagicMock()
         mock_svc.update_shipment_record.return_value = {"success": True}
-        with patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc):
+        prepared_target = MagicMock(
+            return_value={
+                "success": True,
+                "payload": {"id": 1, "changes": {"status": "pending"}},
+            }
+        )
+        with (
+            patch("app.bootstrap.get_shipment_app_service", return_value=mock_svc),
+            patch.dict(
+                _registered_router_business_db.__globals__,
+                {"prepare_business_db_write_target": prepared_target},
+            ),
+        ):
             result = _registered_router_business_db(
                 "write",
-                {"entity": "shipment_records", "operation": "update", "payload": {"id": 1}},
+                {
+                    "entity": "shipment_records",
+                    "operation": "update",
+                    "payload": {"id": 1, "changes": {"status": "pending"}},
+                },
                 _ctx(),
                 "normal",
                 "",
             )
             assert isinstance(result, dict)
+        prepared_target.assert_called_once()
 
     def test_write_shipment_records_unsupported_operation(self) -> None:
         result = _registered_router_business_db(

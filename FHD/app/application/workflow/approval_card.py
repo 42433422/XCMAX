@@ -43,6 +43,7 @@ def build_approval_card_payload(*, action: str, inner: dict[str, Any]) -> dict[s
         "approval_required": approval_required,
         "approval_nodes": approval_nodes,
         "approval_request_ids": inner.get("approval_request_ids") or [],
+        "approval_path": str(inner.get("approval_path") or "").strip(),
         "todo": [str(x) for x in todo if x],
         "reason": str(inner.get("reason") or "").strip(),
         "confirm_mode": confirm_mode,

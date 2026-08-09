@@ -203,14 +203,24 @@ class TestExtractBusinessDbWriteNode:
         node = _extract_business_db_write_node("产品数据库")
         assert node is None
 
-    def test_products_missing_unit_name_returns_none(self) -> None:
+    def test_products_do_not_require_customer_as_unit(self) -> None:
         node = _extract_business_db_write_node("新增产品：九零后")
-        assert node is None
+        assert node is not None
+        assert "unit_name" not in node.params["payload"]
 
-    def test_materials_returns_none(self) -> None:
-        # materials entity is not handled in _extract_business_db_write_node
+    def test_materials_returns_create_node(self) -> None:
         node = _extract_business_db_write_node("新增原材料：钢板")
-        assert node is None
+        assert node is not None
+        assert node.params["entity"] == "materials"
+        assert node.params["payload"]["name"] == "钢板"
+
+    def test_recent_reference_is_normalized_to_database_id(self) -> None:
+        node = _extract_business_db_write_node("修改刚才那条；数据库产品 ID: 37，单价: 138.5")
+        assert node is not None
+        assert node.params["entity"] == "products"
+        assert node.params["operation"] == "update"
+        assert node.params["payload"]["selector"] == {"id": 37}
+        assert node.params["payload"]["changes"]["price"] == 138.5
 
 
 class TestExtractBusinessDbReadKeyword:

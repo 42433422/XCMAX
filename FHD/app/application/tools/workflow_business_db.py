@@ -57,13 +57,17 @@ def business_db_tool_specs() -> list[dict[str, Any]]:
                                 "upsert",
                                 "update",
                                 "delete",
-                                "batch_delete",
                             ],
-                            "description": "create新建、update更新、delete删除、batch_delete批量删除、ensure_exists/upsert不存在则创建存在则返回",
+                            "description": "create新建、update更新、delete删除、ensure_exists/upsert不存在则创建存在则返回；不支持无目标批量删除",
                         },
                         "payload": {
                             "type": "object",
-                            "description": "业务字段：如 customers 的 unit_name/customer_name/contact_person/contact_phone/contact_address；products 的 name/unit_name/model_number/unit_price 等",
+                            "description": (
+                                "业务字段。create 直接传业务字段；update/delete 可传 id，或传 selector 精确定位，"
+                                "update 的修改内容放 changes/fields。customers 可按 customer_name，products 优先按 "
+                                "model_number，materials 优先按 material_code，shipment_records 仅按 id。"
+                                "products 的 unit/measure_unit 表示计量单位；旧 unit_name 仅兼容常见计量单位。"
+                            ),
                         },
                     },
                     "required": ["entity", "operation", "payload"],

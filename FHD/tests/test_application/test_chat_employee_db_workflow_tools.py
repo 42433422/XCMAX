@@ -107,7 +107,7 @@ def test_fallback_planner_routes_product_db_write_without_llm():
     assert node.params["entity"] == "products"
     assert node.params["operation"] == "create"
     assert node.params["payload"]["name_or_model"] == "5003A"
-    assert node.params["payload"]["unit_name"] == "星光贸易"
+    assert "unit_name" not in node.params["payload"]
 
 
 def test_fallback_planner_extracts_business_db_read_keyword_without_llm():
@@ -292,6 +292,246 @@ def test_business_db_write_and_read_use_real_sqlite_services(monkeypatch, tmp_pa
         )
     finally:
         Base.metadata.drop_all(db_mod.engine, tables=[Product.__table__, PurchaseUnit.__table__])
+        db_mod.dispose_and_recreate_engine()
+
+
+def test_business_db_full_crud_matrix_is_tenant_scoped_and_exact(monkeypatch, tmp_path):
+    db_file = tmp_path / "business-crud-matrix.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
+
+    import app.db as db_mod
+    from app.db.base import Base
+    from app.db.models.material import Material
+    from app.db.models.product import Product
+    from app.db.models.purchase_unit import PurchaseUnit
+    from app.db.models.shipment import ShipmentRecord
+    from app.db.session import get_db
+    from app.infrastructure.tenant_scope import tenant_scope
+    from app.services.tools_workflow_registered import execute_registered_workflow_tool
+
+    tables = [
+        PurchaseUnit.__table__,
+        Product.__table__,
+        Material.__table__,
+        ShipmentRecord.__table__,
+    ]
+    db_mod.dispose_and_recreate_engine()
+    Base.metadata.create_all(db_mod.engine, tables=tables)
+
+    def write(entity, operation, payload):
+        return execute_registered_workflow_tool(
+            "business_db",
+            "write",
+            {
+                "entity": entity,
+                "operation": operation,
+                "payload": payload,
+                "_runtime_context": {"user_id": "7", "message": "test"},
+            },
+        )
+
+    try:
+        prefix = "CHATCRUD-MATRIX"
+        customer_name = f"{prefix}-客户"
+        product_name = f"{prefix}-环氧底漆"
+        material_name = f"{prefix}-环氧树脂"
+
+        customer_create = write(
+            "customers",
+            "create",
+            {"customer_name": customer_name, "contact_person": "张一"},
+        )
+        assert customer_create["success"] is True
+        product_create = write(
+            "products",
+            "create",
+            {
+                "product_name": product_name,
+                "model_number": "CHATCRUD-EP01",
+                "unit": "桶",
+                "unit_name": customer_name,
+                "price": 128.0,
+            },
+        )
+        assert product_create["success"] is True
+        material_create = write(
+            "materials",
+            "create",
+            {
+                "name": material_name,
+                "material_code": "CHATCRUD-RESIN-01",
+                "unit": "千克",
+                "quantity": 100,
+                "unit_price": 20,
+            },
+        )
+        assert material_create["success"] is True
+        shipment_create = write(
+            "shipment_records",
+            "create",
+            {
+                "unit_name": customer_name,
+                "products": [
+                    {
+                        "product_name": product_name,
+                        "model_number": "CHATCRUD-EP01",
+                        "quantity_tins": 10,
+                        "tin_spec": 20,
+                        "unit_price": 128,
+                    }
+                ],
+            },
+        )
+        assert shipment_create["success"] is True
+
+        with get_db() as db:
+            customer = db.query(PurchaseUnit).filter(PurchaseUnit.unit_name == customer_name).one()
+            product = db.query(Product).filter(Product.model_number == "CHATCRUD-EP01").one()
+            material = (
+                db.query(Material).filter(Material.material_code == "CHATCRUD-RESIN-01").one()
+            )
+            shipment = (
+                db.query(ShipmentRecord).filter(ShipmentRecord.purchase_unit == customer_name).one()
+            )
+            ids = {
+                "customer": customer.id,
+                "product": product.id,
+                "material": material.id,
+                "shipment": shipment.id,
+            }
+            assert product.unit == "桶"
+            assert product.unit != customer_name
+            assert {
+                customer.tenant_id,
+                product.tenant_id,
+                material.tenant_id,
+                shipment.tenant_id,
+            } == {1}
+
+        assert write(
+            "customers",
+            "update",
+            {"selector": {"customer_name": customer_name}, "changes": {"contact_person": "李二"}},
+        )["success"]
+        assert write(
+            "products",
+            "update",
+            {
+                "selector": {"model_number": "CHATCRUD-EP01"},
+                "changes": {"specification": "20kg/桶", "price": 138.5},
+            },
+        )["success"]
+        assert write(
+            "materials",
+            "update",
+            {
+                "selector": {"material_code": "CHATCRUD-RESIN-01"},
+                "changes": {"quantity": 88, "unit_price": 21.5},
+            },
+        )["success"]
+        assert write(
+            "shipment_records",
+            "update",
+            {
+                "selector": {"id": ids["shipment"]},
+                "changes": {"quantity_tins": 12, "status": "processed"},
+            },
+        )["success"]
+
+        with get_db() as db:
+            assert db.get(PurchaseUnit, ids["customer"]).contact_person == "李二"
+            assert str(db.get(Product, ids["product"]).price) == "138.50"
+            assert db.get(Material, ids["material"]).quantity == 88
+            updated_shipment = db.get(ShipmentRecord, ids["shipment"])
+            assert updated_shipment.quantity_tins == 12
+            assert updated_shipment.status == "processed"
+
+        duplicate_name = f"{prefix}-重名产品"
+        assert write(
+            "products", "create", {"product_name": duplicate_name, "model_number": "DUP-01"}
+        )["success"]
+        assert write(
+            "products", "create", {"product_name": duplicate_name, "model_number": "DUP-02"}
+        )["success"]
+        ambiguous = write(
+            "products",
+            "update",
+            {"selector": {"product_name": duplicate_name}, "changes": {"price": 999}},
+        )
+        assert ambiguous["success"] is False
+        assert ambiguous["reason"] == "ambiguous_target"
+        assert len(ambiguous["candidates"]) == 2
+
+        missing = write(
+            "materials",
+            "delete",
+            {"selector": {"material_code": "CHATCRUD-NOT-FOUND"}},
+        )
+        assert missing["success"] is False
+        assert missing["reason"] == "target_not_found"
+        assert write("products", "delete", {"sql": "DELETE FROM products"})["success"] is False
+        assert (
+            write(
+                "products",
+                "update",
+                {
+                    "selector": {"id": ids["product"]},
+                    "changes": {"raw_sql": "UPDATE products SET price = 1"},
+                },
+            )["success"]
+            is False
+        )
+        assert (
+            write("products", "delete", {"tenant_id": 2, "selector": {"id": ids["product"]}})[
+                "success"
+            ]
+            is False
+        )
+        assert (
+            write(
+                "products",
+                "update",
+                {"selector": {"id": ids["product"]}, "changes": {"tenant_id": 2}},
+            )["success"]
+            is False
+        )
+
+        with tenant_scope(2):
+            with get_db() as db:
+                other = Product(
+                    name=f"{prefix}-其他租户",
+                    model_number="CHATCRUD-T2",
+                    unit="桶",
+                    tenant_id=2,
+                )
+                db.add(other)
+                db.flush()
+                other_id = other.id
+        cross_tenant = write("products", "delete", {"selector": {"id": other_id}})
+        assert cross_tenant["success"] is False
+        assert cross_tenant["reason"] == "target_not_found"
+
+        with get_db() as db:
+            duplicate_ids = [
+                row.id for row in db.query(Product).filter(Product.name == duplicate_name).all()
+            ]
+        for duplicate_id in duplicate_ids:
+            assert write("products", "delete", {"selector": {"id": duplicate_id}})["success"]
+        assert write("shipment_records", "delete", {"selector": {"id": ids["shipment"]}})["success"]
+        assert write("materials", "delete", {"selector": {"id": ids["material"]}})["success"]
+        assert write("products", "delete", {"selector": {"id": ids["product"]}})["success"]
+        assert write("customers", "delete", {"selector": {"id": ids["customer"]}})["success"]
+
+        with get_db() as db:
+            assert db.query(PurchaseUnit).count() == 0
+            assert db.query(Product).count() == 0
+            assert db.query(Material).count() == 0
+            assert db.query(ShipmentRecord).count() == 0
+        with tenant_scope(2):
+            with get_db() as db:
+                assert db.query(Product).filter(Product.id == other_id).count() == 1
+    finally:
+        Base.metadata.drop_all(db_mod.engine, tables=list(reversed(tables)))
         db_mod.dispose_and_recreate_engine()
 
 

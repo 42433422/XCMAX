@@ -26,4 +26,20 @@ describe('ChatApprovalInlineCard', () => {
     await wrapper.find('.approval-btn--primary').trigger('click')
     expect(wrapper.emitted('confirm')).toHaveLength(1)
   })
+
+  it('shows the persisted request number and opens the approval workspace once submitted', async () => {
+    const persistedCard = {
+      ...card,
+      approval_request_ids: ['req-crud-1'],
+      approval_path: '/mod/xcagi-approval-bridge/approval-hub/workspace?request_no=req-crud-1',
+    }
+    const wrapper = mount(ChatApprovalInlineCard, { props: { card: persistedCard } })
+
+    expect(wrapper.text()).toContain('req-crud-1')
+    expect(wrapper.text()).toContain('前往审批')
+    expect(wrapper.text()).not.toContain('取消')
+    await wrapper.find('.approval-btn--primary').trigger('click')
+    expect(wrapper.emitted('open-approval')).toEqual([[persistedCard.approval_path]])
+    expect(wrapper.emitted('confirm')).toBeUndefined()
+  })
 })
