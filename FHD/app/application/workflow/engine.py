@@ -340,7 +340,19 @@ class WorkflowEngine:
         if read_nodes and parallel:
             # 只读节点并发执行（只读 runtime_context，不在此处写回，线程安全）；
             # 结果在主线程统一归并。
-            with ThreadPoolExecutor(max_workers=len(read_nodes)) as executor:
+            try:
+                requested_workers = int(runtime_context.get("max_parallel_workers") or 4)
+            except (TypeError, ValueError):
+                requested_workers = 4
+            max_workers = max(1, min(requested_workers, 8, len(read_nodes)))
+            if len(read_nodes) > 1:
+                runtime_context.setdefault("parallel_batches", []).append(
+                    {
+                        "node_ids": [node.node_id for node in read_nodes],
+                        "max_workers": max_workers,
+                    }
+                )
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 read_map = {node.node_id: node for node in read_nodes}
                 future_map = {
                     node_id: executor.submit(
