@@ -18,9 +18,7 @@ def _client(user_id: str | None = "u1") -> TestClient:
     app = FastAPI()
     app.include_router(router)
     if user_id is not None:
-        app.dependency_overrides[require_agent_principal] = lambda: AgentPrincipal(
-            user_id=user_id
-        )
+        app.dependency_overrides[require_agent_principal] = lambda: AgentPrincipal(user_id=user_id)
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -192,9 +190,7 @@ def test_continue_rejects_missing_mismatched_and_replayed_grants() -> None:
             return_value={"success": True},
         ),
     ):
-        response = owner.post(
-            "/api/agent/runs", json={"message": "请把客户 星光贸易 写入数据库"}
-        )
+        response = owner.post("/api/agent/runs", json={"message": "请把客户 星光贸易 写入数据库"})
         run_id = response.json()["data"]["run_id"]
         grant = response.json()["approval"]["grant"]
         second_grant = owner.get(f"/api/agent/runs/{run_id}").json()["approval"]["grant"]
@@ -270,9 +266,7 @@ def test_pause_resume_and_cancel_agent_run() -> None:
             "/api/agent/runs",
             json={"message": "查产品", "auto_execute": False},
         ).json()["data"]
-        cancelled = client.post(
-            f"/api/agent/runs/{second['run_id']}/cancel"
-        ).json()["data"]
+        cancelled = client.post(f"/api/agent/runs/{second['run_id']}/cancel").json()["data"]
         assert cancelled["status"] == "cancelled"
         assert cancelled["steps"][0]["status"] == "skipped"
         assert cancelled["final_output"]["cancelled"] is True

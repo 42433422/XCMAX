@@ -95,9 +95,7 @@ def build_write_approval_gate(
             pass
         return {
             "ok": False,
-            "reason": (
-                f"写库工具 {name} 被审批门拦截：需在审批工作台通过"
-            ),
+            "reason": (f"写库工具 {name} 被审批门拦截：需在审批工作台通过"),
         }
 
     return gate

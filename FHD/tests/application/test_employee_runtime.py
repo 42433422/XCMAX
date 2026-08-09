@@ -120,9 +120,7 @@ def test_signed_install_receipt_detects_post_install_tampering(tmp_path):
         "signature_verified": True,
         "content_sha256": compute_directory_hash(str(pack_dir)),
     }
-    (pack_dir / ".xcagi-install-receipt.json").write_text(
-        json.dumps(receipt), encoding="utf-8"
-    )
+    (pack_dir / ".xcagi-install-receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
     assert verify_direct_python_pack_trust(pack_dir)[0] is True
 
     worker = next((pack_dir / "backend").rglob("*.py"))

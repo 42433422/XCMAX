@@ -37,7 +37,9 @@ def _secret() -> str:
 
 
 def _params_hash(step: AgentStep) -> str:
-    canonical = json.dumps(step.params or {}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    canonical = json.dumps(
+        step.params or {}, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
@@ -45,7 +47,9 @@ def waiting_step(run: AgentRun) -> AgentStep | None:
     return next((step for step in run.steps if step.status == "waiting_user"), None)
 
 
-def issue_approval_grant(run: AgentRun, *, principal_id: str, ttl_seconds: int = 300) -> dict[str, Any] | None:
+def issue_approval_grant(
+    run: AgentRun, *, principal_id: str, ttl_seconds: int = 300
+) -> dict[str, Any] | None:
     step = waiting_step(run)
     if step is None:
         return None
