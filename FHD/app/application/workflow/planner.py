@@ -1234,6 +1234,32 @@ class LLMWorkflowPlanner:
     def __init__(self) -> None:
         self._ai_service = get_ai_conversation_service()
 
+    def _resolve_planner_llm_adapter(self, context: dict[str, Any] | None) -> Any | None:
+        """解析规划 LLM 的修茈市场适配器。
+
+        优先级：
+        1) 从会话上下文（session_id/conversation_id）构建带 token 的适配器（桌面端/Web 端通用）；
+        2) 回退到全局单例已配置的 modstore_adapter（环境变量通道）。
+        均不可用返回 None，调用方据此回退规则规划。
+        """
+        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+
+        session_id = str(
+            (context or {}).get("session_id") or (context or {}).get("conversation_id") or ""
+        ).strip()
+        if session_id:
+            try:
+                adapter = ModstorePlatformAdapter.from_session(session_id=session_id)
+                if adapter.is_configured:
+                    return adapter
+            except RECOVERABLE_ERRORS as e:
+                logger.warning("从 Session 构建规划市场适配器失败: %s", e)
+
+        svc_adapter = getattr(self._ai_service, "modstore_adapter", None)
+        if svc_adapter is not None and getattr(svc_adapter, "is_configured", False):
+            return svc_adapter
+        return None
+
     def plan(
         self,
         user_id: str,
@@ -1919,29 +1945,40 @@ class LLMWorkflowPlanner:
                 {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
             ]
             api_key = getattr(self._ai_service, "api_key", "") or ""
-            from app.infrastructure.llm.providers.credentials import default_chat_completions_url
+            if api_key:
+                from app.infrastructure.llm.providers.credentials import (
+                    default_chat_completions_url,
+                )
 
-            api_url = getattr(self._ai_service, "api_url", "") or default_chat_completions_url()
-            model = getattr(self._ai_service, "model", "") or "deepseek-chat"
-            if not api_key:
-                return None
-
-            response = _get_planner_http_client().post(
-                api_url,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "temperature": 0.1,
-                    "max_tokens": 1200,
-                },
-            )
-            if response.status_code >= 400:
-                return None
-            response_data = response.json()
+                api_url = getattr(self._ai_service, "api_url", "") or default_chat_completions_url()
+                model = getattr(self._ai_service, "model", "") or "deepseek-chat"
+                response = _get_planner_http_client().post(
+                    api_url,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model,
+                        "messages": messages,
+                        "temperature": 0.1,
+                        "max_tokens": 1200,
+                    },
+                )
+                if response.status_code >= 400:
+                    return None
+                response_data = response.json()
+            else:
+                # 桌面端/Web 端无独立 LLM Key 时，复用修茈市场平台通道（与会话 token 打通）
+                adapter = self._resolve_planner_llm_adapter(context)
+                if adapter is None:
+                    return None
+                logger.info("LLM 规划走修茈市场平台通道 (modstore_adapter)")
+                response_data = adapter.chat_completion_sync(
+                    messages=messages,
+                    temperature=0.1,
+                    max_tokens=1200,
+                )
             raw = (
                 (response_data.get("choices") or [{}])[0]
                 .get("message", {})
