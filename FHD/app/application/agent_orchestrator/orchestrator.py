@@ -4,6 +4,7 @@ import copy
 import time
 from typing import Any
 
+from app.application.agent_orchestrator.artifact_attachment import ArtifactAttachmentMixin
 from app.application.agent_orchestrator.artifact_ingestion import ingest_artifact_to_dataset
 from app.application.agent_orchestrator.budget import (
     apply_ai_budget_metadata,
@@ -15,17 +16,19 @@ from app.application.agent_orchestrator.repair_advisor import (
     llm_repair_attempt_limit,
     request_llm_repair,
 )
+from app.application.agent_orchestrator.run_control import clear_run_control
+from app.application.agent_orchestrator.run_lifecycle import RunLifecycleMixin
 from app.application.agent_orchestrator.run_models import (
     AgentRun,
     AgentStep,
     LLMCall,
     RunEvent,
     ToolCall,
-    artifact_from_dict,
     utc_now_iso,
 )
 from app.application.agent_orchestrator.run_repository import (
     AgentRunRepository,
+    SQLAlchemyAgentRunRepository,
     get_agent_run_repository,
 )
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
@@ -34,7 +37,7 @@ from app.application.workflow.types import PlanGraph, WorkflowNode
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
-class AgentOrchestrator:
+class AgentOrchestrator(RunLifecycleMixin, ArtifactAttachmentMixin):
     def __init__(
         self,
         *,
@@ -42,7 +45,17 @@ class AgentOrchestrator:
         tool_executor: AgentToolExecutor | None = None,
     ) -> None:
         self._repo = repository or get_agent_run_repository()
+        self._repository_status = {
+            "mode": (
+                "sqlalchemy" if isinstance(self._repo, SQLAlchemyAgentRunRepository) else "memory"
+            ),
+            "durable": isinstance(self._repo, SQLAlchemyAgentRunRepository),
+        }
         self._tool_executor = tool_executor or AgentToolExecutor()
+
+    @staticmethod
+    def _ingest_artifact_to_dataset(run: AgentRun, artifact: Any) -> None:
+        ingest_artifact_to_dataset(run, artifact)
 
     def start_run(
         self,
@@ -53,6 +66,7 @@ class AgentOrchestrator:
         auto_execute: bool = True,
     ) -> AgentRun:
         run = AgentRun(user_id=str(user_id or ""), message=str(message or ""))
+        run.metadata["persistence"] = dict(self._repository_status)
         run.metadata["runtime_context"] = dict(runtime_context or {})
         run.add_event("run.created", "Agent run 已创建")
         self._repo.save(run)
@@ -81,6 +95,7 @@ class AgentOrchestrator:
         auto_execute: bool = True,
     ) -> AgentRun:
         run = AgentRun(user_id=str(user_id or ""), message=str(message or ""))
+        run.metadata["persistence"] = dict(self._repository_status)
         run.metadata["runtime_context"] = dict(runtime_context or {})
         run.add_event("run.created", "Agent run 已创建")
         run.add_event(
@@ -284,6 +299,8 @@ class AgentOrchestrator:
         }
 
         for step in run.steps:
+            if self._apply_requested_control(run):
+                return
             if step.status == "completed":
                 continue
             if any(dep not in completed_node_ids for dep in step.depends_on):
@@ -326,6 +343,8 @@ class AgentOrchestrator:
                 self._execute_step(
                     run, step, runtime_context=runtime_context, node_outputs=node_outputs
                 )
+                if self._apply_requested_control(run):
+                    return
                 if step.status == "completed":
                     break
                 if self._prepare_repair_or_retry(run, step, runtime_context=runtime_context):
@@ -361,6 +380,7 @@ class AgentOrchestrator:
         }
         self._append_llm_summary_to_final_output(run)
         run.add_event("run.completed", "Agent run 执行完成", run.final_output)
+        clear_run_control(run.run_id)
 
     @staticmethod
     def _can_auto_execute(step: AgentStep) -> bool:
@@ -1224,49 +1244,3 @@ class AgentOrchestrator:
     def _refresh_repair_metadata(run: AgentRun) -> None:
         run.metadata["observation_count"] = sum(len(step.observations) for step in run.steps)
         run.metadata["repair_count"] = sum(len(step.repair_history) for step in run.steps)
-
-    def _attach_artifacts_from_payload(
-        self,
-        run: AgentRun,
-        payload: dict[str, Any],
-        *,
-        source: str,
-        extra_metadata: dict[str, Any] | None = None,
-    ) -> None:
-        artifacts = payload.get("artifacts")
-        if artifacts is None:
-            artifacts = payload.get("artifact")
-        if isinstance(artifacts, dict):
-            artifact_items = [artifacts]
-        elif isinstance(artifacts, list):
-            artifact_items = [item for item in artifacts if isinstance(item, dict)]
-        else:
-            artifact_items = []
-
-        for item in artifact_items:
-            artifact = artifact_from_dict(item)
-            if not artifact.artifact_type:
-                continue
-            artifact.source = artifact.source or source
-            if extra_metadata:
-                merged_metadata = dict(artifact.metadata or {})
-                merged_metadata.update(extra_metadata)
-                artifact.metadata = merged_metadata
-            run.artifacts.append(artifact)
-            run.add_event(
-                "artifact.attached",
-                f"Artifact 已附加: {artifact.artifact_type}",
-                {
-                    "artifact_id": artifact.artifact_id,
-                    "artifact_type": artifact.artifact_type,
-                    "name": artifact.name,
-                    "source": artifact.source,
-                },
-            )
-            ingest_artifact_to_dataset(run, artifact)
-        if artifact_items:
-            self._refresh_artifact_metadata(run)
-
-    @staticmethod
-    def _refresh_artifact_metadata(run: AgentRun) -> None:
-        run.metadata["artifact_count"] = len(run.artifacts)

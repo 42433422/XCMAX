@@ -15,7 +15,9 @@ from typing import Any
 from app.application.employee_runtime.agent_runner import run_agent_handler
 from app.application.employee_runtime.loader import (
     DIRECT_PYTHON_RUNTIME_MISSING_MSG,
+    direct_python_pack_trust_error,
     pack_has_direct_python_runtime,
+    verify_direct_python_pack_trust,
 )
 from app.application.shipment_excel_etl_security import (
     ShipmentEtlPathError,
@@ -421,8 +423,12 @@ def _actions_fhd(
                     }
                 )
             else:
+                trust_error = direct_python_pack_trust_error(
+                    pack_root, verifier=verify_direct_python_pack_trust
+                )
                 outputs.append(
-                    _action_direct_python_module(
+                    trust_error
+                    or _action_direct_python_module(
                         pack_root, employee_id, actions_cfg, reasoning, task, workspace_root
                     )
                 )

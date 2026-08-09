@@ -340,7 +340,19 @@ class WorkflowEngine:
         if read_nodes and parallel:
             # 只读节点并发执行（只读 runtime_context，不在此处写回，线程安全）；
             # 结果在主线程统一归并。
-            with ThreadPoolExecutor(max_workers=len(read_nodes)) as executor:
+            try:
+                requested_workers = int(runtime_context.get("max_parallel_workers") or 4)
+            except (TypeError, ValueError):
+                requested_workers = 4
+            max_workers = max(1, min(requested_workers, 8, len(read_nodes)))
+            if len(read_nodes) > 1:
+                runtime_context.setdefault("parallel_batches", []).append(
+                    {
+                        "node_ids": [node.node_id for node in read_nodes],
+                        "max_workers": max_workers,
+                    }
+                )
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 read_map = {node.node_id: node for node in read_nodes}
                 future_map = {
                     node_id: executor.submit(
@@ -485,117 +497,17 @@ class WorkflowEngine:
         user_id: str | None,
         state_schema: StateSchema | None = None,
     ) -> WorkflowRunResult:
-        """
-        Agentic Loop：LLM 每步决定下一步做什么 → 执行 → 喂结果 → 再决定
-        循环直到 LLM 说 done 或达到 max_steps。
-        """
-        runtime_context = dict(runtime_context or {})
-        schema = state_schema or self._default_state_schema
-        all_node_results: list[NodeExecutionResult] = []
-        agent_history: list[dict[str, Any]] = []
-        max_steps = 10
-        step = 0
+        from .agent_loop import run_agentic_loop
 
-        user_message = str(runtime_context.get("message") or "").strip()
-
-        while step < max_steps:
-            step += 1
-
-            decision = self._llm_decide_next_step(
-                user_message=user_message,
-                tool_registry=tool_registry,
-                runtime_context=runtime_context,
-                agent_history=agent_history,
-                user_id=user_id,
-            )
-
-            if decision is None:
-                break
-
-            decision_action = str(decision.get("action") or "").strip()
-            tool_id = decision.get("tool_id", "")
-            tool_action = str(
-                decision.get("action_name") or decision.get("tool_action") or decision_action
-            ).strip()
-            params = decision.get("params") or {}
-            reasoning = str(decision.get("reasoning", "")).strip()
-
-            logger.info(
-                "AgenticLoop step=%d action=%s.%s reasoning=%s",
-                step,
-                tool_id,
-                tool_action,
-                reasoning[:100],
-            )
-
-            if decision_action == "done":
-                agent_history.append({"step": step, "role": "done"})
-                break
-
-            agent_history.append(
-                {
-                    "step": step,
-                    "role": "assistant",
-                    "tool_id": tool_id,
-                    "action": tool_action,
-                    "params": params,
-                    "reasoning": reasoning,
-                }
-            )
-
-            if not tool_id or not tool_action or tool_action == "execute":
-                agent_history.append(
-                    {
-                        "step": step,
-                        "role": "system",
-                        "content": "工具决策缺少 tool_id 或真实 action_name，已跳过。",
-                    }
-                )
-                continue
-
-            node_result = self._run_single_tool(
-                tool_id=tool_id,
-                action=tool_action,
-                params=params,
-                runtime_context=runtime_context,
-                max_retries=max_retries,
-                retryable=self._agentic_tool_allows_auto_retry(tool_registry, tool_id, tool_action),
-            )
-            all_node_results.append(node_result)
-            self._append_node_trace(runtime_context, node_result)
-            self._merge_state_schema(runtime_context, node_result, schema)
-
-            runtime_context.setdefault("node_outputs", {})
-            runtime_context["node_outputs"][f"agent_step_{step}"] = node_result.output
-            self._emit_state_update(node_result)
-
-            if not node_result.success:
-                agent_history.append(
-                    {
-                        "step": step,
-                        "role": "system",
-                        "content": f"工具执行失败: {node_result.error}",
-                    }
-                )
-            else:
-                output_preview = self._summarize_output(node_result.output)
-                agent_history.append(
-                    {
-                        "step": step,
-                        "role": "system",
-                        "content": f"结果: {output_preview}",
-                    }
-                )
-
-        if step >= max_steps:
-            logger.warning("AgenticLoop 达到最大步数限制 %d", max_steps)
-
-        return WorkflowRunResult(
-            plan_id=plan.plan_id,
-            success=True,
-            node_results=all_node_results,
-            final_context=runtime_context,
-            message=f"AgenticLoop 完成（{step} 步）",
+        return run_agentic_loop(
+            self,
+            logger,
+            plan,
+            runtime_context,
+            max_retries,
+            tool_registry,
+            user_id,
+            state_schema,
         )
 
     def _llm_decide_next_step(

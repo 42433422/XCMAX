@@ -17,18 +17,46 @@ class TestBuildWriteApprovalGate:
         gate = build_write_approval_gate("e")
         assert gate("excel_analysis", {})["ok"] is True
 
-    def test_approved_write_flag(self):
-        gate = build_write_approval_gate("e", {"approved_write": True})
-        assert gate("import_excel_to_database", {})["ok"] is True
-
-    def test_allow_write_flag(self):
-        gate = build_write_approval_gate("e", {"allow_write": True})
-        assert gate("products_bulk_import", {})["ok"] is True
-
-    def test_matching_env_token_allows(self, monkeypatch):
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"approved_write": True},
+            {"allow_write": True},
+            {"write_token": "secret"},
+            {"approval_token": "secret"},
+        ],
+    )
+    def test_untrusted_shortcuts_do_not_approve_write(self, payload, monkeypatch):
         monkeypatch.setenv("FHD_DB_WRITE_TOKEN", "secret")
-        gate = build_write_approval_gate("e", {"write_token": "secret"})
-        assert gate("import_excel_to_database", {})["ok"] is True
+        decision = MagicMock(
+            all_approved=False,
+            any_rejected=False,
+            pending_approval=True,
+            approval_request_ids=["req-1"],
+        )
+        with patch(
+            "app.application.workflow.approval_gated_engine.ApprovalGatedEngine"
+        ) as mock_cls:
+            mock_cls.return_value.evaluate_plan.return_value = decision
+            verdict = build_write_approval_gate("e", payload)(
+                "import_excel_to_database", {"write_token": "secret"}
+            )
+        assert verdict["ok"] is False
+        assert verdict["pending_approval"] is True
+
+    def test_approved_write_flag_is_not_trusted(self):
+        gate = build_write_approval_gate("e", {"approved_write": True})
+        decision = MagicMock(
+            all_approved=False,
+            any_rejected=True,
+            pending_approval=False,
+            approval_request_ids=[],
+        )
+        with patch(
+            "app.application.workflow.approval_gated_engine.ApprovalGatedEngine"
+        ) as mock_cls:
+            mock_cls.return_value.evaluate_plan.return_value = decision
+            assert gate("import_excel_to_database", {})["ok"] is False
 
     def test_env_token_alone_does_not_allow(self, monkeypatch):
         monkeypatch.setenv("FHD_DB_WRITE_TOKEN", "secret")

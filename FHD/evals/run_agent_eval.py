@@ -57,7 +57,20 @@ def load_tasks(path: Path = DEFAULT_TASKS_PATH) -> list[dict[str, Any]]:
 
 
 def run_eval(path: Path = DEFAULT_TASKS_PATH) -> dict[str, Any]:
-    results = [run_task(task) for task in load_tasks(path)]
+    # Evaluation must never share or mutate a developer/installed runtime data root.
+    # Several route-level tasks intentionally exercise persistence, so isolate every
+    # default store (JSON, SQLite and desktop data) for the whole suite.
+    with tempfile.TemporaryDirectory(prefix="xcagi-agent-eval-") as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        isolated_env = {
+            "XCAGI_DATA_DIR": str(tmp_path / "xcagi-data"),
+            "XCAGI_DESKTOP_DATA_DIR": str(tmp_path / "xcagi-data"),
+            "DATASET_RAG_STORE_PATH": str(tmp_path / "dataset-rag" / "datasets.json"),
+            "DATASET_RAG_VECTOR_INDEX_PATH": str(tmp_path / "dataset-rag" / "vectors.sqlite3"),
+            "MODEL_USAGE_LEDGER_PATH": str(tmp_path / "model-usage.json"),
+        }
+        with patch.dict(os.environ, isolated_env, clear=False):
+            results = [run_task(task) for task in load_tasks(path)]
     passed = sum(1 for result in results if result["passed"])
     total = len(results)
     return {
