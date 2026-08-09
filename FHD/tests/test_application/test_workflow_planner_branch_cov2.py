@@ -132,7 +132,10 @@ class TestLooksLikeBusinessDbWrite:
     def test_no_write_keyword_returns_false(self) -> None:
         assert _looks_like_business_db_write("查询产品", "查询产品") is False
 
-    def test_write_keyword_but_no_db_marker_returns_false(self) -> None:
+    def test_business_entity_write_does_not_require_db_jargon(self) -> None:
+        assert _looks_like_business_db_write("新建产品", "新建产品") is True
+
+    def test_legacy_add_product_without_db_jargon_stays_on_legacy_route(self) -> None:
         assert _looks_like_business_db_write("新增产品", "新增产品") is False
 
     def test_english_insert_with_db(self) -> None:
@@ -180,6 +183,15 @@ class TestExtractBusinessDbWriteNode:
         assert node.params["payload"]["unit_name"] == "七彩乐园"
         assert node.risk == "medium"
         assert node.idempotent is True
+
+    def test_customers_natural_create_keeps_contact_preview(self) -> None:
+        node = _extract_business_db_write_node(
+            "新建客户 CHATCRUD-TEST-涂料门店，联系人张三。只显示写入预览。"
+        )
+        assert node is not None
+        assert node.params["entity"] == "customers"
+        assert node.params["payload"]["unit_name"] == "CHATCRUD-TEST-涂料门店"
+        assert node.params["payload"]["contact_person"] == "张三"
 
     def test_customers_missing_unit_name_returns_none(self) -> None:
         node = _extract_business_db_write_node("新增客户")

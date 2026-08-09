@@ -154,6 +154,26 @@ class TestLLMWorkflowPlanner:
         assert plan.intent == "add_product_to_unit"
         assert len(plan.nodes) >= 1
 
+    def test_explicit_business_write_uses_deterministic_plan_before_llm(self):
+        planner = self._make_planner()
+        with (
+            patch.object(planner, "_plan_with_react_multiagent") as react,
+            patch(
+                "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
+                return_value="full",
+            ),
+            patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
+        ):
+            plan = planner.plan(
+                "u1",
+                "新建客户 CHATCRUD-TEST-涂料门店，联系人张三。只显示写入预览。",
+                get_tool_registry(),
+            )
+        assert plan.intent == "business_db_write"
+        assert plan.nodes[0].tool_id == "business_db"
+        assert plan.nodes[0].params["payload"]["contact_person"] == "张三"
+        react.assert_not_called()
+
     def test_fallback_plan_generic(self):
         planner = self._make_planner()
         with (
