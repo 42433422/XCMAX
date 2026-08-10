@@ -20,7 +20,6 @@
         @shipment-download-click="handleShipmentDownloadClick"
         @approval-confirm="confirmWorkflowFromCard"
         @approval-cancel="cancelWorkflowFromCard"
-        @approval-open="openApprovalFromCard"
       />
       <div v-if="isTaskPaneResizable && hasTaskPanelContent" class="chat-pane-handle-slot">
         <PaneResizeHandle
@@ -221,10 +220,6 @@ const proIntentExperienceEnabled = ref(
   clientModeTiersUiEnabled && localStorage.getItem(PRO_INTENT_EXPERIENCE_KEY) === '1',
 )
 const isTaskPaneResizable = ref(true)
-
-function openApprovalFromCard(path: string): void {
-  void router.push(path || '/mod/xcagi-approval-bridge/approval-hub/workspace')
-}
 
 function generateSessionId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2)

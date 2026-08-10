@@ -705,16 +705,78 @@ class TestBusinessDbRouter:
         assert result["success"] is True
 
     def test_write_customers_upsert(self):
-        with patch("app.application.get_customer_app_service") as mock_get:
-            mock_get.return_value.match_purchase_unit.return_value = MagicMock(unit_name="X")
+        with (
+            patch("app.application.get_customer_app_service") as mock_get,
+            patch(
+                "app.services.tools_workflow_registered._business_db_target_candidates",
+                return_value=([{"id": 9, "customer_name": "X"}], "customer_name"),
+            ),
+        ):
+            mock_get.return_value.update.return_value = {
+                "success": True,
+                "data": {"id": 9},
+            }
             result = _registered_router_business_db(
                 "write",
-                {"entity": "customers", "operation": "upsert", "payload": {"customer_name": "X"}},
+                {
+                    "entity": "customers",
+                    "operation": "upsert",
+                    "payload": {
+                        "customer_name": "X",
+                        "contact_person": "张经理",
+                        "contact_phone": "13800000000",
+                    },
+                },
                 {},
                 "admin",
                 "",
             )
         assert result["success"] is True
+        mock_get.return_value.update.assert_called_once_with(
+            9,
+            {
+                "customer_name": "X",
+                "contact_person": "张经理",
+                "contact_phone": "13800000000",
+            },
+        )
+
+    def test_write_customers_upsert_create_preserves_contact_fields(self):
+        with (
+            patch("app.application.get_customer_app_service") as mock_get,
+            patch(
+                "app.services.tools_workflow_registered._business_db_target_candidates",
+                return_value=([], "customer_name"),
+            ),
+        ):
+            mock_get.return_value.create.return_value = {
+                "success": True,
+                "data": {"id": 10},
+            }
+            result = _registered_router_business_db(
+                "write",
+                {
+                    "entity": "customers",
+                    "operation": "upsert",
+                    "payload": {
+                        "customer_name": "Y",
+                        "contact_person": "李经理",
+                        "contact_phone": "13900000000",
+                    },
+                },
+                {},
+                "admin",
+                "",
+            )
+        assert result["success"] is True
+        mock_get.return_value.create.assert_called_once_with(
+            {
+                "customer_name": "Y",
+                "contact_person": "李经理",
+                "contact_phone": "13900000000",
+                "contact_address": "",
+            }
+        )
 
     def test_write_customers_unsupported_op(self):
         result = _registered_router_business_db(

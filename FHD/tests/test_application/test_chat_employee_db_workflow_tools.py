@@ -250,7 +250,12 @@ def test_business_db_write_and_read_use_real_sqlite_services(monkeypatch, tmp_pa
             {
                 "entity": "customers",
                 "operation": "upsert",
-                "payload": {"unit_name": customer_name, "customer_name": customer_name},
+                "payload": {
+                    "unit_name": customer_name,
+                    "customer_name": customer_name,
+                    "contact_person": "陈经理",
+                    "contact_phone": "13800000001",
+                },
             },
         )
         assert customer_write["success"] is True
@@ -261,7 +266,42 @@ def test_business_db_write_and_read_use_real_sqlite_services(monkeypatch, tmp_pa
             {"entity": "customers", "keyword": customer_name},
         )
         assert customer_read["success"] is True
-        assert any(row.get("customer_name") == customer_name for row in customer_read["data"])
+        matching_customers = [
+            row for row in customer_read["data"] if row.get("customer_name") == customer_name
+        ]
+        assert len(matching_customers) == 1
+        assert matching_customers[0]["contact_person"] == "陈经理"
+        assert matching_customers[0]["contact_phone"] == "13800000001"
+
+        customer_update = execute_registered_workflow_tool(
+            "business_db",
+            "write",
+            {
+                "entity": "customers",
+                "operation": "upsert",
+                "payload": {
+                    "unit_name": customer_name,
+                    "customer_name": customer_name,
+                    "contact_person": "李经理",
+                    "contact_phone": "13900000001",
+                },
+            },
+        )
+        assert customer_update["success"] is True
+
+        updated_customer_read = execute_registered_workflow_tool(
+            "business_db",
+            "read",
+            {"entity": "customers", "keyword": customer_name},
+        )
+        matching_customers = [
+            row
+            for row in updated_customer_read["data"]
+            if row.get("customer_name") == customer_name
+        ]
+        assert len(matching_customers) == 1
+        assert matching_customers[0]["contact_person"] == "李经理"
+        assert matching_customers[0]["contact_phone"] == "13900000001"
 
         product_write = execute_registered_workflow_tool(
             "business_db",
