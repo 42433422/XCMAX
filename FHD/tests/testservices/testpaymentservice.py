@@ -25,7 +25,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.application import paymentservice as psvc
 from app.db.base import Base
-from app.db.models import Customer, ReceivableAllocation, SalesOrder
+from app.db.models import Customer, JournalEntry, ReceivableAllocation, SalesOrder
 from app.infrastructure.tenant_scope import tenant_scope
 from app.services import accounting_services as asvc
 
@@ -159,6 +159,31 @@ class TestPayment:
             result = psvc.payment(sales_order_id=999999, amount=Decimal("10"))
             assert result["success"] is False
 
+    def test_payment_creates_balanced_journal_entry(self, db_session):
+        """收款生成平衡凭证：借现金1001 / 贷应收1122，且应收行绑定 partner。"""
+        with tenant_scope(1):
+            order = _make_order(db_session, Decimal("1000.00"))
+            result = psvc.payment(
+                sales_order_id=order.id,
+                amount=Decimal("400.00"),
+                partner_id=7,
+                partner_name="租户客户",
+            )
+            assert result["success"] is True
+            entry_id = result["data"]["journal_entry_id"]
+            entry = db_session.query(JournalEntry).filter_by(id=entry_id).first()
+            assert entry is not None
+            assert entry.reference_type == "payment"
+            assert entry.reference_id == order.id
+            # 借贷平衡
+            assert entry.debit_total == entry.credit_total == Decimal("400.00")
+            codes = {(ln.account_code, float(ln.debit), float(ln.credit)) for ln in entry.lines}
+            assert ("1001", 400.0, 0.0) in codes
+            assert ("1122", 0.0, 400.0) in codes
+            # 应收行绑定 partner
+            recv_line = [ln for ln in entry.lines if ln.account_code == "1122"][0]
+            assert recv_line.partner_id == 7
+
 
 class TestRefund:
     def test_refund_posts_reverse_and_marks_refunded(self, db_session):
@@ -212,6 +237,24 @@ class TestRefund:
             assert order.paid_amount == Decimal("600.00")
             assert order.payment_state == "partial"
 
+    def test_full_refund_of_only_payment_returns_order_to_unpaid(self, db_session):
+        """唯一一笔收款全额退款 → 订单回到 unpaid，且产生冲销分配行。"""
+        with tenant_scope(1):
+            order = _make_order(db_session, Decimal("1000.00"))
+            paid = psvc.payment(sales_order_id=order.id, amount=Decimal("1000.00"))
+            assert paid["data"]["status"] == "paid"
+            psvc.refund(allocation_id=paid["data"]["id"])
+
+            db_session.refresh(order)
+            assert order.paid_amount == Decimal("0.00")
+            assert order.payment_state == "unpaid"
+            # 两条分配：原始 refunded + 冲销 reversal
+            allocs = db_session.query(ReceivableAllocation).filter_by(sales_order_id=order.id).all()
+            assert len(allocs) == 2
+            reversal = [a for a in allocs if a.reference_type == "reversal"][0]
+            assert reversal.status == "refunded"
+            assert reversal.reversed_of_id == paid["data"]["id"]
+
 
 class TestDecimalSafety:
     def test_decimal_precision_kept(self, db_session):
@@ -223,3 +266,25 @@ class TestDecimalSafety:
             result = psvc.payment(sales_order_id=order.id, amount=Decimal("0.20"))
             assert result["success"] is True
             assert result["data"]["status"] == "paid"
+
+
+class TestTenantIsolation:
+    def test_tenant2_cannot_see_tenant1_allocations(self, db_session):
+        """跨租户隔离：租户 2 查询不到租户 1 的收款分配。"""
+        with tenant_scope(1):
+            order = _make_order(db_session, Decimal("1000.00"))
+            psvc.payment(sales_order_id=order.id, amount=Decimal("400.00"))
+            assert len(db_session.query(ReceivableAllocation).all()) == 1
+        with tenant_scope(2):
+            assert db_session.query(ReceivableAllocation).all() == []
+
+    def test_tenant2_cannot_refund_tenant1_allocation(self, db_session):
+        """跨租户隔离：租户 2 无法退款租户 1 的收款分配。"""
+        with tenant_scope(1):
+            order = _make_order(db_session, Decimal("1000.00"))
+            paid = psvc.payment(sales_order_id=order.id, amount=Decimal("400.00"))
+            alloc_id = paid["data"]["id"]
+        with tenant_scope(2):
+            result = psvc.refund(allocation_id=alloc_id)
+            assert result["success"] is False
+            assert "分配不存在" in result["message"]
