@@ -32,6 +32,7 @@ from app.application.agent_orchestrator.run_repository import (
     SQLAlchemyAgentRunRepository,
     get_agent_run_repository,
 )
+from app.application.agent_orchestrator.task_context import apply_task_context
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_spec import get_tool_action_spec, validate_tool_call
 from app.application.workflow.types import PlanGraph, WorkflowNode
@@ -57,7 +58,6 @@ class AgentOrchestrator(RunLifecycleMixin, ArtifactAttachmentMixin):
             "durable": isinstance(self._repo, SQLAlchemyAgentRunRepository),
         }
         self._tool_executor = tool_executor or AgentToolExecutor()
-
     @staticmethod
     def _ingest_artifact_to_dataset(run: AgentRun, artifact: Any) -> None:
         ingest_artifact_to_dataset(run, artifact)
@@ -73,9 +73,9 @@ class AgentOrchestrator(RunLifecycleMixin, ArtifactAttachmentMixin):
         run = AgentRun(user_id=str(user_id or ""), message=str(message or ""))
         run.metadata["persistence"] = dict(self._repository_status)
         run.metadata["runtime_context"] = dict(runtime_context or {})
+        apply_task_context(run, runtime_context)
         run.add_event("run.created", "Agent run 已创建")
         self._repo.save(run)
-
         try:
             plan = self._plan(run, runtime_context=dict(runtime_context or {}))
             self._apply_plan(run, plan)
@@ -94,7 +94,6 @@ class AgentOrchestrator(RunLifecycleMixin, ArtifactAttachmentMixin):
                 {"error_code": _INTERNAL_RUN_ERROR},
             )
             return self._repo.save(run)
-
     def start_run_from_plan(
         self,
         *,
@@ -107,6 +106,7 @@ class AgentOrchestrator(RunLifecycleMixin, ArtifactAttachmentMixin):
         run = AgentRun(user_id=str(user_id or ""), message=str(message or ""))
         run.metadata["persistence"] = dict(self._repository_status)
         run.metadata["runtime_context"] = dict(runtime_context or {})
+        apply_task_context(run, runtime_context)
         run.add_event("run.created", "Agent run 已创建")
         run.add_event(
             "planner.completed",

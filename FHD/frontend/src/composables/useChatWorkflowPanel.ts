@@ -29,7 +29,7 @@ import {
   runLabelPrintSideEffect,
 } from '@/workflow/coreWorkflowDispatcher'
 import { formatWorkflowClock } from '@/workflow/coreWorkflowPrefs'
-import type { TaskItem } from './useChatPersistence'
+import type { TaskFilter, TaskItem } from './useChatPersistence'
 import type { ShipmentTask } from './useShipmentTask'
 
 export type PhoneAgentStatusPayload = {
@@ -112,7 +112,7 @@ export interface UseChatWorkflowPanelDeps {
   taskList: Ref<TaskItem[]>
   activeTaskId: Ref<string>
   expandedTaskIds: Ref<string[]>
-  taskFilter: Ref<'all' | 'running' | 'success' | 'failed'>
+  taskFilter: Ref<TaskFilter>
   currentTask: Ref<ShipmentTask | null>
   upsertTask: (item: Partial<TaskItem> & Pick<TaskItem, 'id' | 'type' | 'source' | 'title' | 'status'>) => void
   sortTaskList: () => void

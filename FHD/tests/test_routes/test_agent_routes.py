@@ -104,6 +104,49 @@ def test_create_get_and_list_agent_run() -> None:
     assert list_payload["data"][0]["run_id"] == run["run_id"]
 
 
+def test_record_observed_tool_run_is_owned_and_task_scoped() -> None:
+    get_agent_run_repository().clear()
+    response = _client("u1").post(
+        "/api/agent/runs/observed-tool",
+        json={
+            "message": "查 5003 产品",
+            "tool_id": "products",
+            "action": "query",
+            "params": {"keyword": "5003"},
+            "output": {"success": True, "data": []},
+            "response": "未找到",
+            "runtime_context": {
+                "task_id": "task-product-5003",
+                "conversation_id": "conversation-product-5003",
+            },
+        },
+    )
+    assert response.status_code == 200
+    run = response.json()["data"]
+    assert run["user_id"] == "u1"
+    assert run["status"] == "completed"
+    assert run["metadata"]["task_context"]["task_id"] == "task-product-5003"
+    assert run["metadata"]["task_context"]["conversation_id"] == "conversation-product-5003"
+    assert run["tool_calls"][0]["tool_id"] == "products"
+    assert run["metadata"]["runtime_context"]["observation_trust"] == (
+        "authenticated_client"
+    )
+
+
+def test_record_observed_tool_rejects_write_or_unknown_tools() -> None:
+    response = _client("u1").post(
+        "/api/agent/runs/observed-tool",
+        json={
+            "message": "伪造写入",
+            "tool_id": "business_db_write",
+            "action": "create",
+            "params": {},
+            "output": {"success": True},
+        },
+    )
+    assert response.status_code == 400
+
+
 def test_continue_waiting_agent_run() -> None:
     get_agent_run_repository().clear()
     clear_consumed_approval_grants_for_tests()
@@ -336,6 +379,76 @@ def test_pause_resume_and_cancel_agent_run() -> None:
         assert cancelled["status"] == "cancelled"
         assert cancelled["steps"][0]["status"] == "skipped"
         assert cancelled["final_output"]["cancelled"] is True
+
+
+def test_retry_agent_run_preserves_task_identity_and_creates_new_attempt() -> None:
+    repository = get_agent_run_repository()
+    repository.clear()
+    clear_run_controls_for_tests()
+    client = _client("owner")
+    patches = _planner_fallback_patches()
+    with (
+        patches[0],
+        patches[1],
+        patches[2],
+        patches[3],
+        patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool",
+            return_value={"success": True, "data": []},
+        ),
+    ):
+        created = client.post(
+            "/api/agent/runs",
+            json={
+                "message": "核对库存",
+                "auto_execute": False,
+                "runtime_context": {
+                    "conversation_id": "conversation-42",
+                    "task_id": "conversation-42",
+                    "task_title": "库存核对任务",
+                },
+            },
+        ).json()["data"]
+        cancelled = client.post(f"/api/agent/runs/{created['run_id']}/cancel").json()["data"]
+        assert cancelled["status"] == "cancelled"
+
+        response = client.post(
+            f"/api/agent/runs/{created['run_id']}/retry",
+            json={"runtime_context": {"task_id": "other-task", "conversation_id": "other-chat"}},
+        )
+        replay = client.post(f"/api/agent/runs/{created['run_id']}/retry", json={})
+
+    assert response.status_code == 200
+    retried = response.json()["data"]
+    assert replay.status_code == 200
+    assert replay.json()["data"]["run_id"] == retried["run_id"]
+    assert retried["run_id"] != created["run_id"]
+    assert retried["metadata"]["task_context"] == {
+        "task_id": "conversation-42",
+        "title": "库存核对任务",
+        "conversation_id": "conversation-42",
+        "root_run_id": created["run_id"],
+        "parent_run_id": created["run_id"],
+        "attempt": 2,
+        "workspace_id": "",
+        "workspace_path": "",
+        "isolation": "business_workspace",
+    }
+    previous = repository.get(created["run_id"])
+    assert previous is not None
+    assert previous.events[-1].event_type == "run.retry_created"
+
+
+def test_retry_agent_run_rejects_non_terminal_task() -> None:
+    repository = get_agent_run_repository()
+    repository.clear()
+    run = AgentRun(user_id="owner", message="仍在运行", status="running")
+    repository.save(run)
+
+    response = _client("owner").post(f"/api/agent/runs/{run.run_id}/retry", json={})
+
+    assert response.status_code == 409
+    assert "可以重试" in response.json()["message"]
 
 
 def test_get_agent_run_returns_404_for_missing_run() -> None:

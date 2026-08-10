@@ -237,7 +237,11 @@ describe('useChatOrchestration batch/json', () => {
     const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
     await api.sendMessage('批量问题')
     expect(enqueueChatBatchMessage).toHaveBeenCalled()
-    expect(requestChatByModeBatchWithTimeout).toHaveBeenCalledWith(['first', 'second'], expect.any(Number))
+    expect(requestChatByModeBatchWithTimeout).toHaveBeenCalledWith(
+      ['first', 'second'],
+      expect.any(Number),
+      expect.objectContaining({ sessionId: 's' }),
+    )
     expect(addAndSaveMessage).toHaveBeenCalledWith('part-1', 'ai', undefined, expect.any(Object))
   })
 

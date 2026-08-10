@@ -940,10 +940,10 @@ async def compat_chat_stream_async(
     # 客户等只读业务：请求线程内确定性 Agent 工具（customers.query），避免 ContextVar 丢租户读空。
     from app.application.normal_chat_dispatch import try_normal_slot_read_payload
     from app.fastapi_routes.xcagi_compat_chat_helpers import _sse_event_line
-
     slot_payload = try_normal_slot_read_payload(body.message, request=request)
     if isinstance(slot_payload, dict) and slot_payload.get("response"):
         runtime_context, _ = _merge_runtime_context_with_message_paths(body.context, body.message)
+        runtime_context = _runtime_context_with_authenticated_actor(request, runtime_context)
         channel = (
             "compat_chat_stream_agent_tool"
             if slot_payload.get("agent_tool_dispatch")

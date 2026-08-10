@@ -385,12 +385,12 @@ export function useChatMessages(sessionId: Ref<string>) {
     }
   }
 
-  async function saveMessage(role: 'user' | 'ai' | 'task', content: string): Promise<void> {
+  async function saveMessage(role: 'user' | 'ai' | 'task', content: string, targetSessionId?: string): Promise<void> {
     const visibleContent = role === 'ai' ? stripModelToolProtocol(content) : content
     if (!hasMeaningfulContent(visibleContent)) return
     try {
       await chatApi.saveMessage({
-        session_id: sessionId.value,
+        session_id: targetSessionId || sessionId.value,
         user_id: 'default',
         role,
         content: visibleContent
@@ -404,11 +404,11 @@ export function useChatMessages(sessionId: Ref<string>) {
     content: string,
     role: 'user' | 'ai' | 'task' = 'ai',
     extras?: ChatMessageExtras,
-    options?: { speak?: boolean }
+    options?: { speak?: boolean; sessionId?: string }
   ): Promise<void> {
     if (!hasMeaningfulContent(content)) return
-    addMessage(content, role, extras, options)
-    await saveMessage(role, content)
+    if (!options?.sessionId || options.sessionId === sessionId.value) addMessage(content, role, extras, options)
+    await saveMessage(role, content, options?.sessionId)
   }
 
   /** 流式回复：先占位一条 AI 消息，返回其在 messages 中的下标 */

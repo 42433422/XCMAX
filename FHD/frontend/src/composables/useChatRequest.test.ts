@@ -24,6 +24,7 @@ function makeDeps() {
     messages: ref([
       { role: 'user', content: 'previous message', time: '10:00' },
     ]),
+    sessionId: ref('session-1'),
     proIntentExperienceEnabled: ref(false),
     isProMode: ref(false),
     lastRequestContextSummary: ref(''),
@@ -72,6 +73,16 @@ describe('useChatRequest', () => {
     expect(request.loadingProgressText.value).toBe('处理中...')
   })
 
+  it('keeps progress isolated when another task finishes in the background', () => {
+    const deps = makeDeps()
+    const scoped = useChatRequest(deps)
+    scoped.setLoadingProgress('任务 A', 'task-a')
+    deps.sessionId.value = 'task-b'
+    scoped.setLoadingProgress('任务 B', 'task-b')
+    scoped.stopLoadingProgress('task-a')
+    expect(scoped.loadingProgressText.value).toBe('任务 B')
+  })
+
   it('buildPlannerChatRequestPayload builds basic mode payload', () => {
     const { body, proIntentEnabled } = request.buildPlannerChatRequestPayload('hello')
     expect(proIntentEnabled).toBe(false)
@@ -97,6 +108,17 @@ describe('useChatRequest', () => {
     const ctx = body.context as Record<string, unknown>
     expect(Array.isArray(ctx.recent_messages)).toBe(true)
     expect((ctx.recent_messages as unknown[]).length).toBeGreaterThan(0)
+  })
+
+  it('uses an immutable task scope after the visible conversation switches', () => {
+    const { body } = request.buildPlannerChatRequestPayload('continue', undefined, {
+      sessionId: 'task-original',
+      messages: [{ role: 'user', content: 'original context', time: '10:00' }],
+    })
+    const ctx = body.context as Record<string, unknown>
+    expect(ctx.task_id).toBe('task-original')
+    expect(ctx.conversation_id).toBe('task-original')
+    expect(ctx.recent_messages).toEqual([{ role: 'user', content: 'original context' }])
   })
 
   it('buildPlannerChatRequestPayload strips HTML from history', () => {

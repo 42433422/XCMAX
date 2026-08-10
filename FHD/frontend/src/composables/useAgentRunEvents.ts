@@ -1,9 +1,10 @@
-import type { AgentRunEvent } from '@/api/agentRuns'
+import type { AgentRun, AgentRunEvent } from '@/api/agentRuns'
 import agentRunsApi from '@/api/agentRuns'
 import type { TaskItem } from './useChatPersistence'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { normalizeTaskDisplayText } from '@/utils/chatTaskLabels'
 import { hasAgentRunExecutionEvidence, hasConfirmedAgentRunExecution } from '@/utils/agentRunExecution'
+import { groupAgentRunsIntoTasks } from '@/utils/agentTaskWorkspaceModel'
 
 type UpsertTask = (
   item: Partial<TaskItem> & { id: string; title: string; source: TaskItem['source']; type: string },
@@ -187,7 +188,20 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
       if (last?.event_id) {
         lastEventByRunId.set(normalizedRunId, last.event_id)
       }
-      syncTaskPanel(normalizedRunId, userText, events)
+      let run: AgentRun | undefined
+      try {
+        const runResponse = await agentRunsApi.getRun(normalizedRunId)
+        run = runResponse?.data
+      } catch {
+        // Older/offline runtimes may expose the event feed before the run detail route.
+      }
+      const durableTask = run ? groupAgentRunsIntoTasks([{ ...run, events }])[0] : null
+      if (durableTask) {
+        options.removeTask?.(`agent_${normalizedRunId}`)
+        options.upsertTask(durableTask)
+      } else {
+        syncTaskPanel(normalizedRunId, userText, events)
+      }
     } catch {
       options.removeTask?.(`agent_${normalizedRunId}`)
     }

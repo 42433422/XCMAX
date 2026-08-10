@@ -176,6 +176,7 @@ vi.mock('./useChatResponseAttach', () => ({
     attachThinkingStepsToLastAiMessage: vi.fn(),
     attachTodoStepsToLastAiMessage: vi.fn(),
     attachWorkflowTraceToLastAiMessage: vi.fn(),
+    attachApprovalCardToLastAiMessage: vi.fn(),
     attachContextSummaryToLastAiMessage: vi.fn(),
     syncTaskFromChatResponse: vi.fn(),
   }),
@@ -239,7 +240,7 @@ describe('useChatOrchestration stream', () => {
     expect(sendChatStream).toHaveBeenCalled()
     expect(readPlannerSseResponse).toHaveBeenCalled()
     expect(applyPlainTextToMessageIndex).toHaveBeenCalled()
-    expect(saveMessage).toHaveBeenCalledWith('ai', '你好')
+    expect(saveMessage).toHaveBeenCalledWith('ai', '你好', 's')
     expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
   })
 
