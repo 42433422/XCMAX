@@ -199,13 +199,47 @@ class ApprovalGatedEngine:
         request_id_to_approved: dict[str, bool],
         runtime_context: dict[str, Any] | None = None,
     ) -> WorkflowRunResult:
-        all_approved = all(request_id_to_approved.values())
-        if not all_approved:
+        """Fail-closed 恢复执行。
+
+        仅当调用方提供的每个审批请求都真实属于本计划、映射为已通过（true）
+        且 ApprovalService 复核状态为 APPROVED 时才执行引擎；空映射 /
+        未通过 / 未获批 / 不属于本计划的 request id 一律拒绝执行，
+        绝不因 `all([])==True` 而静默放行。
+        """
+        # 空映射无法证明任何审批通过 → fail-closed 拒绝。
+        if not request_id_to_approved:
             return WorkflowRunResult(
                 plan_id=plan.plan_id,
                 success=False,
-                message=f"未全部通过审批：{request_id_to_approved}",
+                message="缺少审批请求映射，拒绝执行",
             )
+
+        # 从 ApprovalService 取本计划全部审批请求，用于校验 request id 归属与状态复核。
+        plan_requests = self._approval_service.get_requests_by_plan(plan.plan_id)
+        by_id = {req.request_id: req for req in plan_requests}
+
+        for rid, approved in request_id_to_approved.items():
+            req = by_id.get(rid)
+            if req is None:
+                return WorkflowRunResult(
+                    plan_id=plan.plan_id,
+                    success=False,
+                    message=f"审批请求不属于本计划：{rid}",
+                )
+            if not approved:
+                return WorkflowRunResult(
+                    plan_id=plan.plan_id,
+                    success=False,
+                    message=f"未全部通过审批：{request_id_to_approved}",
+                )
+            # 双保险：ApprovalService 复核状态必须为 APPROVED（fail-closed）。
+            if req.status != ApprovalStatus.APPROVED:
+                return WorkflowRunResult(
+                    plan_id=plan.plan_id,
+                    success=False,
+                    message=f"审批请求状态未通过：{rid}={req.status}",
+                )
+
         return self._engine.run(
             plan=plan,
             runtime_context=runtime_context,
