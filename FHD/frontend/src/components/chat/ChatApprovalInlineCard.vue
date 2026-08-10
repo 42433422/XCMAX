@@ -10,7 +10,6 @@ const props = defineProps<{
 defineEmits<{
   confirm: []
   cancel: []
-  'open-approval': [path: string]
 }>()
 
 const hasPersistedApproval = computed(
@@ -36,15 +35,15 @@ const hasPersistedApproval = computed(
       审批请求号：{{ card.approval_request_ids.join('、') }}
     </div>
     <div class="approval-actions">
-      <button
+      <a
         v-if="hasPersistedApproval"
-        type="button"
         class="approval-btn approval-btn--primary"
-        :disabled="busy"
-        @click="$emit('open-approval', card.approval_path || '/mod/xcagi-approval-bridge/approval-hub/workspace')"
+        :href="card.approval_path || '/mod/xcagi-approval-bridge/approval-hub/workspace'"
+        :aria-disabled="busy ? 'true' : undefined"
+        @click="busy && $event.preventDefault()"
       >
         前往审批
-      </button>
+      </a>
       <button v-else type="button" class="approval-btn approval-btn--primary" :disabled="busy" @click="$emit('confirm')">
         {{ card.approval_required ? '提交审批' : '确认执行' }}
       </button>
@@ -150,6 +149,8 @@ const hasPersistedApproval = computed(
 }
 
 .approval-btn {
+  display: inline-flex;
+  align-items: center;
   background: transparent;
   border: 1px solid transparent;
   padding: 2px 10px;
@@ -157,6 +158,7 @@ const hasPersistedApproval = computed(
   font-size: 11px;
   cursor: pointer;
   line-height: 1.5;
+  text-decoration: none;
   transition: background 0.12s;
 }
 
@@ -165,12 +167,13 @@ const hasPersistedApproval = computed(
   border-color: rgba(16, 185, 129, 0.4);
 }
 
-.approval-btn--primary:hover:not(:disabled) {
+.approval-btn--primary:hover:not(:disabled):not([aria-disabled='true']) {
   background: rgba(16, 185, 129, 0.1);
 }
 
 .approval-btn--primary:disabled,
-.approval-btn--ghost:disabled {
+.approval-btn--ghost:disabled,
+.approval-btn[aria-disabled='true'] {
   opacity: 0.5;
   cursor: not-allowed;
 }

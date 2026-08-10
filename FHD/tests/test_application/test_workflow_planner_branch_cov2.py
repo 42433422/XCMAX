@@ -234,6 +234,17 @@ class TestExtractBusinessDbWriteNode:
         assert node.params["payload"]["selector"] == {"id": 37}
         assert node.params["payload"]["changes"]["price"] == 138.5
 
+    @pytest.mark.parametrize("tenant_marker", ["tenant_id 2", "租户 ID：2"])
+    def test_explicit_tenant_target_is_preserved_for_execution_guard(
+        self, tenant_marker: str
+    ) -> None:
+        node = _extract_business_db_write_node(
+            f"修改客户 ID 21，{tenant_marker}，联系人 跨租户测试"
+        )
+        assert node is not None
+        assert node.params["payload"]["selector"] == {"id": 21}
+        assert node.params["payload"]["tenant_id"] == 2
+
 
 class TestExtractBusinessDbReadKeyword:
     """_extract_business_db_read_keyword 分支覆盖。"""

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 _BUSINESS_DB_MUTATION_KEYWORDS = frozenset(
     {
@@ -37,6 +38,16 @@ _UNAMBIGUOUS_BUSINESS_DB_MUTATION_KEYWORDS = frozenset(
         "移除",
     }
 )
+
+
+def attach_explicit_tenant_id(payload: dict[str, Any], message: str) -> dict[str, Any]:
+    """Keep an explicit tenant target so the execution guard can reject it."""
+    match = re.search(
+        r"(?:tenant[\s_-]*id|租户\s*(?:id|编号))\s*[:：=]?\s*(\d+)", str(message or ""), re.I
+    )
+    if match:
+        payload["tenant_id"] = int(match.group(1))
+    return payload
 
 
 def looks_like_business_db_write(message: str, lower: str | None = None) -> bool:

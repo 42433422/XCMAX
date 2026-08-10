@@ -1068,6 +1068,25 @@ class TestEnsureSqliteRbacBootstrapCreatesTables:
         assert "permissions" in tables
         assert "roles" in tables
 
+    def test_seeds_default_user_with_etl_permissions(self):
+        from app.db.init_db import ensure_sqlite_rbac_bootstrap
+
+        engine = create_engine("sqlite:///:memory:")
+        with patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=engine):
+            ensure_sqlite_rbac_bootstrap(engine, swallow_errors=False)
+
+        with engine.connect() as conn:
+            codes = set(
+                conn.execute(
+                    text(
+                        "SELECT p.code FROM permissions p "
+                        "JOIN role_permissions rp ON rp.permission_id = p.id "
+                        "JOIN roles r ON r.id = rp.role_id WHERE r.name = 'user'"
+                    )
+                ).scalars()
+            )
+        assert {"etl.read", "etl.template.manage", "etl.execute"}.issubset(codes)
+
     def test_swallow_errors_true(self):
         from app.db.init_db import ensure_sqlite_rbac_bootstrap
 
