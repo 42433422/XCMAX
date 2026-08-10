@@ -67,10 +67,10 @@ Reddit = "https://www.reddit.com/r/LangChain/"
 default-groups = ['dev']
 
 [tool.uv.sources]
-langgraph-prebuilt = { path = "../xcagi_langgraph_prebuilt" }
-langgraph-checkpoint = { path = "../xcagi_langgraph_checkpoint" }
-langgraph-checkpoint-sqlite = { path = "../xcagi_langgraph_checkpoint_backends/checkpoint-sqlite" }
-langgraph-checkpoint-postgres = { path = "../xcagi_langgraph_checkpoint_backends/checkpoint-postgres" }
+langgraph-prebuilt = { path = "../xcagi_langgraph_prebuilt", editable = true }
+langgraph-checkpoint = { path = "../xcagi_langgraph_checkpoint", editable = true }
+langgraph-checkpoint-sqlite = { path = "../xcagi_langgraph_checkpoint_backends/checkpoint-sqlite", editable = true }
+langgraph-checkpoint-postgres = { path = "../xcagi_langgraph_checkpoint_backends/checkpoint-postgres", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["langgraph"]

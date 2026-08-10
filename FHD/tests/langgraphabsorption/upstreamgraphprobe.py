@@ -1,16 +1,19 @@
-"""LG-W0-07｜上游 graph 探针（upstream graph probe）— 多包综合版.
+"""LG-W0-07｜上游 graph 探针（upstream graph probe）— 多包综合版（review-fixed）.
 
-任务：在 FHD 侧验证 vendored 上游 `langgraph`（tag 1.2.10、锁定 commit
-`41341457342327166d72fc11952ab28fb61ec0bf`）的『图编排』能力，作为后续
-NeuroBus 引擎吸收图状态 / 条件路由 / 并行扇出 / 子图组合的行为基线。
-本探针同时串联 3 个 vendored 兄弟包，证明其可协同导入：
+任务：在 vendored 上游 `langgraph`（tag 1.2.10、锁定 commit
+`41341457342327166d72fc11952ab28fb61ec0bf`）的**锁定 uv 环境**中，验证其『图编排』
+能力，作为后续 NeuroBus 引擎吸收图状态 / 条件路由 / 并行扇出 / 子图组合的行为基线。
 
-  - `xcagi_langgraph_core`         → `langgraph.graph` / `langgraph.types` / `langgraph.constants`
-  - `xcagi_langgraph_checkpoint`   → `langgraph.checkpoint.memory`（`InMemorySaver`）
-  - `xcagi_langgraph_prebuilt`     → `langgraph.prebuilt`（`ToolNode` / `tools_condition` / `create_react_agent`）
+运行与加载约束（严格执行）：
+  - 通过 `uv run --project packages/xcagi_langgraph_core -- python tests/langgraphabsorption/upstreamgraphprobe.py`
+    在 vendored core 包自身锁定 uv 环境内运行，其中 core / checkpoint / prebuilt 三个
+    XCAGI vendored 兄弟包由 `[tool.uv.sources]` 指向安装（editable）。
+  - **不做** sys.path / PYTHONPATH 注入，**不**使用根 site-packages、**不**使用 /tmp 源码。
+  - 断言三个 vendored 模块的源码路径解析落在 `FHD/packages/xcagi_*` 内；任一兄弟缺失即
+    顶层 import 失败 → **fail closed**（不跳过）。
+  - 输出仅仓库相对路径（不落绝对路径）。
 
 覆盖能力（对应 `XCAGI/kb/absorption/langgraph/absorption_tasks.json`）：
-
   - 有类型状态 + reducer 合并语义（Typed State + Reducer，lg-absorb-01）
   - 条件路由（Conditional Edges，lg-absorb-02）
   - 确定性并行扇出 + 屏障合并（Parallel Fanout / superstep，lg-absorb-03）
@@ -18,41 +21,64 @@ NeuroBus 引擎吸收图状态 / 条件路由 / 并行扇出 / 子图组合的�
   - 流式状态事件（Streaming state events，lg-absorb-06）
   - 子图组合（Subgraph composition，lg-absorb-08）
 
-运行环境约束：在**干净独立 venv**（核心包 `uv sync` 生成的 vendored 环境）中运行；
-不依赖 site-packages 原版、不写入 /tmp、不读取 PYTHONPATH。仅做源码导入锁定，
-不产生任何临时目录。本文件同时作为可执行脚本与 pytest 用例使用。
+本文件既是可执行脚本也是 pytest 用例。
 """
 
 from __future__ import annotations
 
 import operator
-import sys
 from pathlib import Path
 from typing import Annotated, TypedDict
 
-# 显式注入 FHD/packages 下 vendored 兄弟包到 sys.path（置于最前，优先于站点包），
-# 保证探针针对锁定 commit 的 vendored 上游副本，而非 PyPI 原版。
-_PACKAGES = Path(__file__).resolve().parents[2] / "packages"
-_VENDORED_SRC = [
-    _PACKAGES / "xcagi_langgraph_core",
-    _PACKAGES / "xcagi_langgraph_checkpoint",
-    _PACKAGES / "xcagi_langgraph_prebuilt",
-]
-for _src in _VENDORED_SRC:
-    _p = str(_src.resolve())
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
+# 顶层导入即 fail-closed：任一 vendored 兄弟包缺失都会在此抛出 ImportError。
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
+from langgraph.prebuilt import ToolNode, create_react_agent, tools_condition
 
 __all__ = [
     "State",
-    "build_upstream_graph",
+    "assert_vendored_sources",
     "build_counter_subgraph",
+    "build_upstream_graph",
     "check_prebuilt",
 ]
+
+# 仓库相对根（tests/langgraphabsorption/upstreamgraphprobe.py -> FHD）
+_FHD = Path(__file__).resolve().parents[2]
+
+# 期望的 vendored 源码落点（仓库相对）
+_EXPECTED_SOURCES = {
+    "langgraph.graph": "packages/xcagi_langgraph_core/langgraph/graph/__init__.py",
+    "langgraph.checkpoint.memory": "packages/xcagi_langgraph_checkpoint/langgraph/checkpoint/memory/__init__.py",
+    "langgraph.prebuilt": "packages/xcagi_langgraph_prebuilt/langgraph/prebuilt/__init__.py",
+}
+
+
+def assert_vendored_sources() -> dict[str, str]:
+    """断言导入的 core/checkpoint/prebuilt 模块源码路径解析落在 FHD/packages/xcagi_* 内。
+
+    fail-closed：任一解析路径不在期望目录即抛 AssertionError。
+    返回仓库相对路径映射（供报告）。
+    """
+    import langgraph.checkpoint.memory as _cpm
+    import langgraph.graph as _g
+    import langgraph.prebuilt as _pb
+
+    actual = {
+        "langgraph.graph": _g.__file__,
+        "langgraph.checkpoint.memory": _cpm.__file__,
+        "langgraph.prebuilt": _pb.__file__,
+    }
+    reported: dict[str, str] = {}
+    for name, expected_rel in _EXPECTED_SOURCES.items():
+        expected = (_FHD / expected_rel).resolve()
+        resolved = Path(actual[name]).resolve()
+        assert resolved == expected, (
+            f"{name} 源码路径校验失败：解析到 {resolved}，期望 {expected}"
+        )
+        reported[name] = str(resolved.relative_to(_FHD))
+    return reported
 
 
 class State(TypedDict):
@@ -150,9 +176,8 @@ def build_upstream_graph(checkpointer=None):
 
 
 def check_prebuilt() -> None:
-    """验证 vendored prebuilt 包可导入且符号可用（lg-absorb 工具层）。"""
+    """验证 vendored prebuilt 包可用（lg-absorb 工具层）。"""
     from langchain_core.tools import tool
-    from langgraph.prebuilt import ToolNode, create_react_agent, tools_condition
 
     assert callable(ToolNode), "ToolNode 不可调用"
     assert callable(tools_condition), "tools_condition 不可调用"
@@ -169,6 +194,11 @@ def check_prebuilt() -> None:
 
 
 def main() -> None:
+    sources = assert_vendored_sources()
+    print("vendored source paths (repo-relative):")
+    for name, rel in sources.items():
+        print(f"  {name} -> {rel}")
+
     # 1) 有类型状态 + reducer + 并行扇出 + 子图组合（状态隔离）
     graph = build_upstream_graph()
     cfg1 = {"configurable": {"thread_id": "lg-w0-07-main"}}
@@ -208,12 +238,18 @@ def main() -> None:
     # 5) prebuilt 工具层可导入可用
     check_prebuilt()
 
-    print("LG-W0-07 UPSTREAM GRAPH PROBE PASSED (core + checkpoint + prebuilt, clean venv)")
+    print("LG-W0-07 UPSTREAM GRAPH PROBE PASSED (core+checkpoint+prebuilt, locked uv env)")
 
 
 # ---------------------------------------------------------------------------
 # pytest 用例
 # ---------------------------------------------------------------------------
+
+
+def test_vendored_sources_resolve_inside_packages() -> None:
+    reported = assert_vendored_sources()
+    for rel in reported.values():
+        assert rel.startswith("packages/xcagi_"), rel
 
 
 def test_typed_state_reducer_append_merge() -> None:

@@ -45,7 +45,7 @@
     }
   ],
   "probe": {
-    "file": "tests/langgraph_absorption/upstreamgraphprobe.py",
+    "file": "tests/langgraphabsorption/upstreamgraphprobe.py",
     "graph": "START -> start -> (route) -> {pa, pb, pc} -> join -> sub(子图) -> finish -> END",
     "state": "TypedDict(log: Annotated[list, operator.add], route: str, sub_total: int)",
     "checkpointer": "langgraph.checkpoint.memory.InMemorySaver",
