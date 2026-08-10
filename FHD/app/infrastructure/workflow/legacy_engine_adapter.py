@@ -50,8 +50,18 @@ class LegacyEngineAdapter:
     ) -> None:
         # fail-closed: require an injected engine OR a dispatcher to build one.
         if engine is None and tool_dispatcher is None:
+            raise ValueError("LegacyEngineAdapter requires either `engine` or `tool_dispatcher`")
+        # Conflict guards: an injected engine already owns its dispatcher and
+        # callback, so supplying them alongside the engine is ambiguous and must
+        # fail loudly instead of silently ignoring the extra wiring.
+        if engine is not None and tool_dispatcher is not None:
             raise ValueError(
-                "LegacyEngineAdapter requires either `engine` or `tool_dispatcher`"
+                "LegacyEngineAdapter accepts either `engine` or `tool_dispatcher`, not both"
+            )
+        if engine is not None and state_event_callback is not None:
+            raise ValueError(
+                "LegacyEngineAdapter `state_event_callback` only applies when "
+                "building from `tool_dispatcher` (engine already owns its callback)"
             )
         if engine is not None:
             self._engine = engine

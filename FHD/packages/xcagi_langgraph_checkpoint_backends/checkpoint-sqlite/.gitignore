@@ -1,5 +1,6 @@
 .langgraph_api/
 .devserver.pid
+caches/
 __pycache__/
 *.pyc
 .venv/

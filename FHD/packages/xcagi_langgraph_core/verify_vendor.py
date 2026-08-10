@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """XCAGI vendored langgraph 核心包 来源与许可证锁定验证脚本 (LG-W0-02).
 
-本脚本为「git tag -> SHA」来源校验（与 xcagi_langgraph_checkpoint 的 LG-W0-03、prebuilt 的 LG-W0-05 同型）：
-锁定的是上游 langgraph 仓库 tag v1.2.10 @ commit 41341457342327166d72fc11952ab28fb61ec0bf
-（见同目录 PROVENANCE.json）。
+锁定的是上游 langgraph 仓库远端 tag `1.2.10`（无 v 前缀）@ commit
+`41341457342327166d72fc11952ab28fb61ec0bf`（见同目录 PROVENANCE.json）。
 
 职责:
   1. 校验本目录下所有 vendored 文件 (langgraph 包 + LICENSE) 的 SHA-256 与 MANIFEST.sha256 一致。
   2. 校验 LICENSE 为 MIT (含关键字检查)。
-  3. 校验 vendored 副本与上游「锁定 commit」的 <source_path>/langgraph + LICENSE 字节级一致
-     （原样吸收），跳过 __pycache__/pyc/.venv/build/dist/egg-info 本地产物。
+  3. 在线模式：在临时目录 (tempfile.TemporaryDirectory) 中从远端 clone 精确 tag
+     `1.2.10`（无 v 前缀），把 tag 解析为 commit 并断言等于锁定 SHA `413414...`，
+     再对 `libs/langgraph/langgraph` + LICENSE 做字节级比对（原样吸收），不使用任何本地 /tmp 检出。
 
 用法:
-  python verify_vendor.py            # 本地清单 + LICENSE + 上游锁定 commit 比对
-  python verify_vendor.py --offline  # 仅本地清单 + LICENSE, 跳过上游比对
+  python verify_vendor.py            # 本地清单 + LICENSE + 在线上游比对
+  python verify_vendor.py --offline  # 仅本地清单 + LICENSE, 跳过在线比对
   python verify_vendor.py --gen      # 重新生成 MANIFEST.sha256
 
 退出码: 0=全部通过; 1=校验失败。
@@ -35,11 +35,13 @@ PROVENANCE = HERE / "PROVENANCE.json"
 # MANIFEST 需要覆盖的顶层条目 (langgraph/ 包目录下所有文件 + LICENSE)
 TOPNODE = ["langgraph", "LICENSE"]
 
-# 上游 langgraph 本地 git 检出（仅用于通过 git archive 取「锁定 commit」的源码）
-REPO = Path("/tmp/langgraph_retort")
+# 上游远端与锁定 tag（无 v 前缀）
+UPSTREAM_REPO = "https://github.com/langchain-ai/langgraph"
+EXPECTED_TAG = "1.2.10"
+EXPECTED_SHA = "41341457342327166d72fc11952ab28fb61ec0bf"
 
 # 本地产物目录/文件：不入 MANIFEST，也不参与上游比对
-EXCLUDE_DIRS = {"__pycache__", ".venv", "build", "dist"}
+EXCLUDE_DIRS = {"__pycache__", ".pytest_cache", ".venv", "build", "dist"}
 EXCLUDE_SUFFIXES = {".pyc"}
 EXCLUDE_EGGINFO = ".egg-info"
 
@@ -144,76 +146,62 @@ def verify_license() -> bool:
     return ok
 
 
-def _extract_pinned(sha: str, src: str, dst: Path) -> tuple[bool, str]:
-    """用 git archive 导出 PROVENANCE 锁定的 commit 的 <src>/langgraph + LICENSE 到 dst。
-
-    若锁定 commit 对象不在本地仓库，先尝试从 origin fetch（depth 1）。返回 (成功, 错误信息)。
-    """
-    if not (REPO / ".git").exists():
-        return False, f"上游 git 检出缺失: {REPO}"
-
-    upstream_paths = [f"{src}/langgraph", f"{src}/LICENSE"]
-
-    def _try_archive() -> bool:
-        try:
-            proc = subprocess.run(
-                ["git", "-C", str(REPO), "archive", "--format=tar", sha, *upstream_paths],
-                check=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            if proc.returncode == 0:
-                import tarfile
-                import io
-
-                with tarfile.open(fileobj=io.BytesIO(proc.stdout)) as tar:
-                    kwargs = {"filter": "data"} if sys.version_info >= (3, 12) else {}
-                    tar.extractall(dst, **kwargs)
-                return True
-            return False
-        except Exception:  # noqa: BLE001
-            return False
-
-    if _try_archive():
-        return True, ""
-    # 尝试 fetch 后再 archive
-    fetch = subprocess.run(
-        ["git", "-C", str(REPO), "fetch", "--depth", "1", "origin", sha],
-        check=False,
-        stdout=subprocess.DEVNULL,
+def _git(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=str(cwd) if cwd is not None else None,
+        stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        text=True,
     )
-    if fetch.returncode != 0:
-        return False, f"git fetch {sha} 失败（网络/远端不可达）"
-    if not _try_archive():
-        return False, f"git archive {sha} 失败"
-    return True, ""
+
+
+def _clone_tag(repo: Path) -> tuple[bool, str]:
+    """在临时目录浅克隆远端精确 tag (无 v 前缀)。返回 (成功, commit sha 或错误信息)。"""
+    proc = _git(
+        ["clone", "--depth", "1", "--branch", EXPECTED_TAG, "--single-branch", UPSTREAM_REPO, str(repo)]
+    )
+    if proc.returncode != 0:
+        return False, f"git clone tag {EXPECTED_TAG} 失败: {proc.stderr.strip()}"
+    rev = _git(["rev-parse", "HEAD"], cwd=repo)
+    if rev.returncode != 0:
+        return False, f"git rev-parse HEAD 失败: {rev.stderr.strip()}"
+    return True, rev.stdout.strip()
 
 
 def verify_upstream(prov: dict) -> bool:
-    """校验 vendored 副本与上游锁定 commit 的 <source_path>/langgraph + LICENSE 字节级一致。"""
-    sha = prov["upstream_commit_sha"]
-    src = prov["source_path"]
+    """在线校验：临时目录 clone 远端 tag 1.2.10 -> 断言 SHA -> 字节级比对源码。"""
+    tag = prov.get("upstream_tag", "")
+    sha = prov.get("upstream_commit_sha", "")
+    src = prov.get("source_path", "")
+
+    if tag != EXPECTED_TAG:
+        print(f"[FAIL] PROVENANCE upstream_tag 应为 {EXPECTED_TAG}（无 v 前缀），当前 {tag!r}")
+        return False
+    if sha != EXPECTED_SHA:
+        print(f"[FAIL] PROVENANCE upstream_commit_sha 应为 {EXPECTED_SHA}，当前 {sha!r}")
+        return False
+
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp)
-        ok, err = _extract_pinned(sha, src, base)
+        repo = base / "repo"
+        ok, resolved = _clone_tag(repo)
         if not ok:
-            print(f"[FAIL] 无法从上游获取锁定 commit: {err}")
+            print(f"[FAIL] {resolved}")
             return False
-        # tar 内已含 <src>/langgraph 完整树；collect_files() 的 rel 以 "langgraph/" 开头，
-        # 故上游根取 <src>（该目录下含 langgraph/ 与 LICENSE）。
-        upstream_lg = base / src
-        upstream_lic = base / src / "LICENSE"
-        if not (upstream_lg / "langgraph").is_dir():
-            print(f"[FAIL] 锁定 commit 缺少 {src}/langgraph")
+        if resolved != sha:
+            print(f"[FAIL] 远端 tag {EXPECTED_TAG} 解析为 {resolved[:12]}，与锁定 SHA {sha[:12]} 不一致")
+            return False
+        print(f"[OK] 远端 tag {EXPECTED_TAG} -> commit {resolved}")
+
+        upstream_root = repo / src  # 内含 langgraph/ 与 LICENSE
+        if not (upstream_root / "langgraph").is_dir():
+            print(f"[FAIL] 远端 {src}/langgraph 缺失")
             return False
 
         mismatches: list[str] = []
         for rel, digest in collect_files().items():
-            if rel == "LICENSE":
-                upstream = upstream_lic
-            else:
-                upstream = upstream_lg / rel
+            upstream = upstream_root / "LICENSE" if rel == "LICENSE" else upstream_root / rel
             if not upstream.is_file():
                 mismatches.append(f"{rel} (上游缺失)")
                 continue
@@ -222,7 +210,7 @@ def verify_upstream(prov: dict) -> bool:
 
     ok = not mismatches
     if ok:
-        print(f"[OK] 与上游锁定 commit {sha[:12]} 的 {src}/langgraph 字节级一致")
+        print(f"[OK] 与远端 tag {EXPECTED_TAG} ({sha[:12]}) 的 {src}/langgraph + LICENSE 字节级一致")
     else:
         for m in mismatches:
             print(f"[FAIL] 与上游不一致: {m}")

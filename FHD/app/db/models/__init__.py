@@ -56,7 +56,7 @@ from app.db.models.material import Material
 from app.db.models.mobile_device import MobileDeviceToken
 from app.db.models.mobile_notification import MobileNotificationOutbox
 from app.db.models.permission import Permission, Role, role_permissions
-from app.db.models.product import Product
+from app.db.models.product import Product, UomCategory, UomUnit
 from app.db.models.purchase import (
     PurchaseInbound,
     PurchaseInboundItem,
@@ -66,6 +66,7 @@ from app.db.models.purchase import (
 )
 from app.db.models.purchase_unit import PurchaseUnit
 from app.db.models.sales import SALES_ORDER_STATUS_FLOW, SalesOrder, SalesOrderItem
+from app.db.models.receivable_allocation import ReceivableAllocation
 from app.db.models.service_request import ServiceBridgeConfig, ServiceRequest
 from app.db.models.shipment import ShipmentRecord
 from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
@@ -87,6 +88,9 @@ __all__ = [
     "PurchaseUnit",
     "SalesOrder",
     "SalesOrderItem",
+    "ReceivableAllocation",
+    "UomCategory",
+    "UomUnit",
     "SALES_ORDER_STATUS_FLOW",
     "AgentRunRecord",
     "AiCirclePost",

@@ -2,46 +2,57 @@
 
 核对任务要求的可导入符号:
   - SqliteSaver (checkpoint/sqlite)
+  - AsyncSqliteSaver (checkpoint/sqlite/aio)
   - SqliteStore (store/sqlite)
 
-这些符号依赖兄弟包 langgraph-checkpoint 提供的命名空间 `langgraph.checkpoint` / `langgraph.store`，故本测试
-同时把 vendored 兄弟包源码目录加入 sys.path 后导入。
+本测试不使用 sys.path / PYTHONPATH 注入：运行环境必须是本包经 `uv run --locked` 的锁定安装
+（含 `[tool.uv.sources]` 重定向到的兄弟包 xcagi_langgraph_checkpoint）。每个被测符号都会断言
+其模块文件路径位于 FHD/packages 下的 vendored 包内，证明解析来自本地吸收副本而非任意 PYTHONPATH。
 """
 from __future__ import annotations
 
-import sys
+import importlib
+import inspect
 from pathlib import Path
 
 import pytest
 
-HERE = Path(__file__).resolve().parent
-PKG = HERE.parent  # packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite
-
-# 兄弟包 langgraph-checkpoint（提供 langgraph.checkpoint / langgraph.store 命名空间）
-CHECKPOINT_SIBLING = PKG.parent.parent / "xcagi_langgraph_checkpoint"
+# FHD/packages 根目录（vendor 包全部位于其下）
+# 本文件位于 FHD/packages/xcagi_langgraph_checkpoint_backends/<pkg>/tests/，parents[3] 即 FHD/packages
+PACKAGES_ROOT = Path(__file__).resolve().parents[3]
 
 
-@pytest.fixture(scope="module", autouse=True)
-def _backends_on_path() -> None:
-    for p in (PKG, CHECKPOINT_SIBLING):
-        s = str(p)
-        if s not in sys.path:
-            sys.path.insert(0, s)
+def _assert_under_packages(mod: object, expected_prefixes: tuple[str, ...]) -> Path:
+    """断言模块文件路径位于 FHD/packages 下，且属于预期 vendored 子包前缀之一。"""
+    path = Path(inspect.getfile(mod)).resolve()
+    root = str(PACKAGES_ROOT.resolve())
+    if not str(path).startswith(root):
+        pytest.fail(f"模块不在 FHD/packages 下: {path}")
+    rel = str(path.relative_to(Path(root)))
+    if not rel.startswith(expected_prefixes):
+        pytest.fail(f"模块来源不符合 vendored 包预期 {expected_prefixes}: {rel}")
+    return path
 
 
 def test_sqlite_saver_importable() -> None:
-    from langgraph.checkpoint.sqlite import SqliteSaver
-
-    assert issubclass(SqliteSaver, object)
+    mod = importlib.import_module("langgraph.checkpoint.sqlite")
+    assert hasattr(mod, "SqliteSaver")
+    _assert_under_packages(mod, ("xcagi_langgraph_checkpoint_backends",))
 
 
 def test_sqlite_async_saver_importable() -> None:
-    from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-
-    assert issubclass(AsyncSqliteSaver, object)
+    mod = importlib.import_module("langgraph.checkpoint.sqlite.aio")
+    assert hasattr(mod, "AsyncSqliteSaver")
+    _assert_under_packages(mod, ("xcagi_langgraph_checkpoint_backends",))
 
 
 def test_sqlite_store_importable() -> None:
-    from langgraph.store.sqlite import SqliteStore
+    mod = importlib.import_module("langgraph.store.sqlite")
+    assert hasattr(mod, "SqliteStore")
+    _assert_under_packages(mod, ("xcagi_langgraph_checkpoint_backends",))
 
-    assert issubclass(SqliteStore, object)
+
+def test_checkpoint_sibling_under_packages() -> None:
+    """兄弟包 langgraph-checkpoint 亦须来自 FHD/packages（重定向安装），且位于 xcagi_langgraph_checkpoint。"""
+    mod = importlib.import_module("langgraph.checkpoint.base")
+    _assert_under_packages(mod, ("xcagi_langgraph_checkpoint",))

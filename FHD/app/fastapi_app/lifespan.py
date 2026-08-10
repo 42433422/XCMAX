@@ -24,6 +24,7 @@ from app.db.init_db import (
     init_template_tables,
     initialize_databases,
 )
+from app.di.registry import get_service_registry
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .node_role import passive_node_enabled
@@ -58,6 +59,8 @@ async def lifespan(app: FastAPI):
     )
 
     mark_startup("lifespan_db_done")
+
+    _wire_workflow_runtime(app)
 
     try:
         from app.application.desktop_admin_gate import purge_admin_sessions_on_desktop
@@ -113,56 +116,61 @@ async def lifespan(app: FastAPI):
     mark_startup("lifespan_ready")
     logger.info("✅ FastAPI 应用启动完成%s", "（重服务后台加载）" if fast_start else "")
 
-    yield
-
-    logger.info("🛑 FastAPI 应用关闭中...")
-    if fast_start:
-        from app.fastapi_app.deferred_startup import cancel_deferred_heavy_startup
-
-        await cancel_deferred_heavy_startup(app)
     try:
-        from app.desktop_runtime.backup_scheduler import stop_backup_scheduler
+        yield
+    finally:
+        # 无论正常关闭还是被注入异常（如 CancelledError）终止，都在 finally 中
+        # 完成全部清理，避免神经总线、监控循环与各调度线程在异常关闭路径下泄漏。
+        _close_workflow_resources(app)
 
-        stop_backup_scheduler()
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("⚠️ 桌面端定时备份调度器关闭失败: %s", exc)
-    try:
-        from app.desktop_runtime.sync_outbox_scheduler import stop_sync_outbox_scheduler
+        logger.info("🛑 FastAPI 应用关闭中...")
+        if fast_start:
+            from app.fastapi_app.deferred_startup import cancel_deferred_heavy_startup
 
-        stop_sync_outbox_scheduler()
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("⚠️ 同步 outbox 补推调度器关闭失败: %s", exc)
-    try:
-        from app.application.employee_runtime.scheduler import stop_employee_scheduler
-
-        stop_employee_scheduler()
-        logger.info("✅ 员工本地调度器已关闭")
-    except RECOVERABLE_ERRORS as e:
-        logger.warning("⚠️ 员工本地调度器关闭失败: %s", e)
-    try:
-        from app.services.mobile_relay_desktop_client import stop_desktop_relay_poller
-
-        stop_desktop_relay_poller()
-        logger.info("✅ 移动端云中继轮询已关闭")
-    except RECOVERABLE_ERRORS as e:
-        logger.warning("⚠️ 移动端云中继轮询关闭失败: %s", e)
-    try:
-        from app.neuro_bus.bus_setup import teardown_neuro_bus
-
-        await teardown_neuro_bus()
-        logger.info("✅ 神经总线已关闭")
+            await cancel_deferred_heavy_startup(app)
         try:
-            from app.neuro_bus.health_monitor import get_health_monitor
+            from app.desktop_runtime.backup_scheduler import stop_backup_scheduler
 
-            get_health_monitor().stop_monitoring()
-            task = getattr(app.state, "neuro_health_monitor_task", None)
-            if task and not task.done():
-                task.cancel()
-            logger.info("✅ HealthMonitor 监控循环已停止")
-        except RECOVERABLE_ERRORS as hm_err:
-            logger.warning("⚠️ HealthMonitor 关闭失败: %s", hm_err)
-    except RECOVERABLE_ERRORS as e:
-        logger.warning("⚠️ 神经总线关闭失败: %s", e)
+            stop_backup_scheduler()
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("⚠️ 桌面端定时备份调度器关闭失败: %s", exc)
+        try:
+            from app.desktop_runtime.sync_outbox_scheduler import stop_sync_outbox_scheduler
+
+            stop_sync_outbox_scheduler()
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("⚠️ 同步 outbox 补推调度器关闭失败: %s", exc)
+        try:
+            from app.application.employee_runtime.scheduler import stop_employee_scheduler
+
+            stop_employee_scheduler()
+            logger.info("✅ 员工本地调度器已关闭")
+        except RECOVERABLE_ERRORS as e:
+            logger.warning("⚠️ 员工本地调度器关闭失败: %s", e)
+        try:
+            from app.services.mobile_relay_desktop_client import stop_desktop_relay_poller
+
+            stop_desktop_relay_poller()
+            logger.info("✅ 移动端云中继轮询已关闭")
+        except RECOVERABLE_ERRORS as e:
+            logger.warning("⚠️ 移动端云中继轮询关闭失败: %s", e)
+        try:
+            from app.neuro_bus.bus_setup import teardown_neuro_bus
+
+            await teardown_neuro_bus()
+            logger.info("✅ 神经总线已关闭")
+            try:
+                from app.neuro_bus.health_monitor import get_health_monitor
+
+                get_health_monitor().stop_monitoring()
+                task = getattr(app.state, "neuro_health_monitor_task", None)
+                if task and not task.done():
+                    task.cancel()
+                logger.info("✅ HealthMonitor 监控循环已停止")
+            except RECOVERABLE_ERRORS as hm_err:
+                logger.warning("⚠️ HealthMonitor 关闭失败: %s", hm_err)
+        except RECOVERABLE_ERRORS as e:
+            logger.warning("⚠️ 神经总线关闭失败: %s", e)
 
 
 async def _initialize_databases_async(app: FastAPI):
@@ -418,3 +426,31 @@ async def _init_mods_async(app: FastAPI):
         logger.info("✅ Mod 扩展分阶段加载已启动（lifespan 补偿路径）")
     except RECOVERABLE_ERRORS as e:
         logger.warning("⚠️ Mod 扩展初始化失败: %s", e)
+
+
+def _wire_workflow_runtime(app: FastAPI) -> None:
+    """Wire LangGraph workflow runtime/checkpointer onto app.state (LG-W1-T9-D).
+
+    在数据库初始化之后、lifespan ready/yield 之前执行。fail-closed：vendored
+    source 校验与运行时装配任一失败即中止启动，绝不静默回退。
+    """
+    from app.infrastructure.workflow.langgraph_assert import assert_vendored_sources
+
+    assert_vendored_sources()
+
+    registry = get_service_registry()
+    app.state.workflow_runtime = registry.reload_workflow_runtime()
+    app.state.workflow_checkpointer = registry.workflow_checkpointer
+
+
+def _close_workflow_resources(app: FastAPI) -> None:
+    """Close workflow resources exactly once and clear the app.state wiring.
+
+    由 lifespan 的 ``try/finally`` 守护：正常关闭与 yield 后抛入异常两种路径
+    都会且仅会执行一次。
+    """
+    get_service_registry().close_workflow_resources()
+    if hasattr(app.state, "workflow_runtime"):
+        del app.state.workflow_runtime
+    if hasattr(app.state, "workflow_checkpointer"):
+        del app.state.workflow_checkpointer

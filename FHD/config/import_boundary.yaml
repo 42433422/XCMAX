@@ -1,0 +1,62 @@
+{
+  "rules": [
+    {
+      "name": "workflow-application-ports-runtime",
+      "scan": [
+        "app/application/workflow/ports",
+        "app/application/workflow/runtime"
+      ],
+      "forbid": [
+        "app.infrastructure",
+        "app.neuro_bus",
+        "langgraph",
+        "langgraph_sdk",
+        "sqlalchemy",
+        "fastapi",
+        "openpyxl"
+      ],
+      "allow_files": [],
+      "required": true
+    },
+    {
+      "name": "no-langgraph-outside-infra-workflow",
+      "scan": [
+        "app"
+      ],
+      "forbid": [
+        "langgraph",
+        "langgraph_sdk"
+      ],
+      "allow_files": [
+        "app/infrastructure/workflow/langgraph_runtime.py",
+        "app/infrastructure/workflow/checkpoint_bridge.py",
+        "app/infrastructure/workflow/langgraph_assert.py"
+      ],
+      "required": true
+    },
+    {
+      "name": "neuro-bus-only-in-infra-workflow-bridge",
+      "scan": [
+        "app/infrastructure/workflow"
+      ],
+      "forbid": [
+        "app.neuro_bus"
+      ],
+      "allow_files": [
+        "app/infrastructure/workflow/neuro_bus_bridge.py"
+      ],
+      "required": true
+    },
+    {
+      "name": "application-must-not-import-infra-workflow",
+      "scan": [
+        "app/application"
+      ],
+      "forbid": [
+        "app.infrastructure.workflow"
+      ],
+      "allow_files": [],
+      "required": true
+    }
+  ]
+}

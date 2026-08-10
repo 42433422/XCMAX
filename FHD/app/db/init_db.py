@@ -1306,6 +1306,8 @@ def ensure_erp_bootstrap(
         ManufacturingOrder,
         ManufacturingOrderLine,
     )
+    from app.db.models.product import UomCategory, UomUnit
+    from app.db.models.receivable_allocation import ReceivableAllocation
     from app.db.models.sales import SalesOrder, SalesOrderItem
 
     real_engine = _resolve_auth_bootstrap_engine(engine, database_url=database_url)
@@ -1319,11 +1321,14 @@ def ensure_erp_bootstrap(
             ChartOfAccount.__table__,
             JournalEntry.__table__,
             JournalEntryLine.__table__,
+            ReceivableAllocation.__table__,
             Bom.__table__,
             BomLine.__table__,
             ManufacturingOrder.__table__,
             ManufacturingOrderLine.__table__,
             CustomerAddress.__table__,
+            UomCategory.__table__,
+            UomUnit.__table__,
         ]
         missing = [table for table in model_tables if table.name not in tables]
         if missing:

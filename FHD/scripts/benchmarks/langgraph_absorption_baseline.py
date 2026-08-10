@@ -26,9 +26,10 @@ LangGraph 加载约束（满足 LG-W0-09）：
 legacy 契约假设：读取 W0-06 fixture（``tests/langgraph_absorption/fixtures/legacy_contract.json``）
 作为 legacy 引擎行为冻结门禁（smoke gate）。
 
-用法：
-  .venv/bin/python scripts/benchmarks/langgraphabsorptionbaseline.py            # 打印稳定 JSON
-  .venv/bin/python scripts/benchmarks/langgraphabsorptionbaseline.py --write-doc  # 额外写 09-baseline.md
+用法（须在 FHD 目录内以模块方式运行，以便正常导入项目、无需 sys.path/PYTHONPATH）：
+  cd FHD
+  XCAGI_SKIP_LEGACY_COMPAT_ROUTES=1 .venv/bin/python -m scripts.benchmarks.langgraph_absorption_baseline             # 打印稳定 JSON
+  XCAGI_SKIP_LEGACY_COMPAT_ROUTES=1 .venv/bin/python -m scripts.benchmarks.langgraph_absorption_baseline --write-doc   # 额外写 09-baseline.md
 
 退出码：任一回归门禁（p95 上限）超限时非零。
 """
@@ -37,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import shutil
 import statistics
@@ -232,14 +234,31 @@ def legacy_contract_gate() -> dict:
 # vendored LangGraph 基准 —— 子进程运行于 vendored 包自身锁定 uv 环境
 # ---------------------------------------------------------------------------
 _LANGGRAPH_WORKER = r"""
-import json, statistics, time, random, operator
+import json, statistics, time, random, operator, os, sys
 __SEED__ = __SEED_REPLACE__
 WARMUP = __WARMUP_REPLACE__
 REPEATS = __REPEATS_REPLACE__
 random.seed(__SEED__)
 from typing import Annotated, TypedDict
+from pathlib import Path
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
+
+# ---- 来源合规自检：core/checkpoint 必须来自仓库 XCAGI vendored 来源（机器安全：仅布尔进 JSON）----
+_REPO = os.environ.get("LG_BASELINE_REPO_ROOT", "")
+_PKG = os.path.join(_REPO, "packages")
+import langgraph.graph as _core_mod
+import langgraph.checkpoint.memory as _ck_mod
+_core_file = str(Path(_core_mod.__file__).resolve())
+_ck_file = str(Path(_ck_mod.__file__).resolve())
+_core_ok = _core_file.startswith(_PKG)
+_ck_ok = _ck_file.startswith(_PKG)
+assert _core_ok and _ck_ok, (
+    "LangGraph 未从仓库 XCAGI vendored 来源加载（core=%s checkpoint=%s，期望位于 %s 之下）"
+    % (_core_file, _ck_file, _PKG)
+)
+print("[LG-W0-09] langgraph.core      = %s" % _core_file, file=sys.stderr)
+print("[LG-W0-09] langgraph.checkpoint= %s" % _ck_file, file=sys.stderr)
 
 class S(TypedDict):
     i: int
@@ -269,9 +288,9 @@ def _seq_app(n, checkpointer=None):
     return g.compile(checkpointer=checkpointer)
 
 def _fanout_app(degree):
-    g = StateGraph(S)
+    g = StateGraph(FS)
     for k in range(degree):
-        g.add_node("f%d" % k, _inc)
+        g.add_node("f%d" % k, _inc_f)
         g.add_edge(START, "f%d" % k); g.add_edge("f%d" % k, END)
     return g.compile()
 
@@ -309,6 +328,12 @@ def ec():
     return ck_app.invoke({"i": 0}, config={"configurable": {"thread_id": "thr-%d" % cnt["n"]}})
 results["checkpoint_200"] = _measure(ec, WARMUP, REPEATS)
 
+# 来源合规（机器安全：仅布尔，不含绝对路径/时间戳）
+results["_langgraph_source"] = {
+    "core_from_xcagi_vendor": bool(_core_ok),
+    "checkpoint_from_xcagi_vendor": bool(_ck_ok),
+}
+
 print(json.dumps(results, sort_keys=True, separators=(",", ":")))
 """
 
@@ -328,6 +353,7 @@ def benchmark_langgraph() -> dict:
         capture_output=True,
         text=True,
         cwd=str(_REPO_ROOT),
+        env={**os.environ, "LG_BASELINE_REPO_ROOT": str(_REPO_ROOT)},
     )
     if proc.returncode != 0:
         raise RuntimeError("vendored langgraph worker 失败: " + (proc.stderr or proc.stdout or "")[-2000:])
@@ -471,15 +497,23 @@ def _markdown(doc: dict) -> str:
     lines.append("")
     lines.append("```bash")
     lines.append("cd FHD")
-    lines.append("XCAGI_SKIP_LEGACY_COMPAT_ROUTES=1 .venv/bin/python scripts/benchmarks/langgraphabsorptionbaseline.py")
-    lines.append("XCAGI_SKIP_LEGACY_COMPAT_ROUTES=1 .venv/bin/python scripts/benchmarks/langgraphabsorptionbaseline.py --write-doc")
+    lines.append("XCAGI_SKIP_LEGACY_COMPAT_ROUTES=1 .venv/bin/python -m scripts.benchmarks.langgraph_absorption_baseline")
+    lines.append("XCAGI_SKIP_LEGACY_COMPAT_ROUTES=1 .venv/bin/python -m scripts.benchmarks.langgraph_absorption_baseline --write-doc")
     lines.append("```")
+    lines.append("")
+    lg_src = doc["results"]["vendor_langgraph"].get("_langgraph_source", {})
+    lines.append("## LangGraph 来源合规（本次运行）")
+    lines.append("")
+    lines.append("| 检查项 | 结果 |")
+    lines.append("|--------|------|")
+    lines.append(f"| langgraph.core 来自仓库 XCAGI vendored 来源 | {'✅' if lg_src.get('core_from_xcagi_vendor') else '❌'} |")
+    lines.append(f"| langgraph.checkpoint 来自仓库 XCAGI vendored 来源 | {'✅' if lg_src.get('checkpoint_from_xcagi_vendor') else '❌'} |")
     lines.append("")
     lines.append("## LangGraph 来源合规说明")
     lines.append("")
     lines.append("- LangGraph 由 vendored 包自身锁定 uv 环境（`uv run --project packages/xcagi_langgraph_core`，uv.lock + [tool.uv.sources] → 兄弟 vendored 包）子进程导入。")
     lines.append("- 不使用根 site-packages、不使用 /tmp 源码、不做 PYTHONPATH / sys.path 注入；core 包 .venv 被外部清理时按锁定来源按需重建，不改兄弟包。")
-    lines.append("- 输出 JSON 不含绝对路径、不含易变时间戳。")
+    lines.append("- 输出 JSON 不含绝对路径、不含易变时间戳；来源自检仅以布尔进 JSON，绝对路径仅打到 stderr。")
     lines.append("")
     return "\n".join(lines)
 
@@ -491,10 +525,6 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="LG-W0-09 LangGraph 吸收基线基准")
     parser.add_argument("--write-doc", action="store_true", help="额外写入 09-baseline.md（含本次实测结果）")
     args = parser.parse_args(argv)
-
-    # 保证 app 可导入（项目自身代码，仅 legacy 引擎用；不涉及 langgraph 加载）
-    if str(_REPO_ROOT) not in sys.path:
-        sys.path.insert(0, str(_REPO_ROOT))
 
     contract = legacy_contract_gate()
     legacy = benchmark_legacy()

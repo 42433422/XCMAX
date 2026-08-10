@@ -58,7 +58,14 @@ class ApprovalService:
             if requires_write_approval(node.tool_id, node.action):
                 return True
         except Exception:  # noqa: BLE001
-            logger.debug("risk_actions registry lookup skipped", exc_info=True)
+            # fail-closed：风险注册表缺失或查询异常时默认要求审批，绝不静默放行写动作。
+            logger.warning(
+                "risk_actions registry lookup failed; fail-closed requiring approval for %s.%s",
+                node.tool_id,
+                node.action,
+                exc_info=True,
+            )
+            return True
         return False
 
     def _evaluate_conditions(self, conditions: dict[str, Any], node: WorkflowNode) -> bool:
@@ -198,6 +205,10 @@ class ApprovalService:
                 return req
         return None
 
+    def get_requests_by_plan(self, plan_id: str) -> list[ApprovalRequest]:
+        """返回某计划下的全部审批请求（含 PENDING/APPROVED/REJECTED/CANCELLED）。"""
+        return [req for req in self._pending_requests.values() if req.plan_id == plan_id]
+
     def approve(self, request_id: str, comment: str = "") -> bool:
         request = self._pending_requests.get(request_id)
         if not request:
@@ -237,12 +248,27 @@ class ApprovalService:
         return True
 
     def is_approved(self, plan_id: str) -> bool:
-        request = self.get_pending_request_by_plan(plan_id)
-        return request is not None and request.status == ApprovalStatus.APPROVED
+        # 不应只查 PENDING 请求：审批通过后状态变 APPROVED，此时仍应能判定为已批准。
+        approved = next(
+            (
+                req
+                for req in self.get_requests_by_plan(plan_id)
+                if req.status == ApprovalStatus.APPROVED
+            ),
+            None,
+        )
+        return approved is not None
 
     def is_rejected(self, plan_id: str) -> bool:
-        request = self.get_pending_request_by_plan(plan_id)
-        return request is not None and request.status == ApprovalStatus.REJECTED
+        rejected = next(
+            (
+                req
+                for req in self.get_requests_by_plan(plan_id)
+                if req.status == ApprovalStatus.REJECTED
+            ),
+            None,
+        )
+        return rejected is not None
 
     def get_pending_approval_info(self, plan_id: str) -> dict[str, Any] | None:
         request = self.get_pending_request_by_plan(plan_id)

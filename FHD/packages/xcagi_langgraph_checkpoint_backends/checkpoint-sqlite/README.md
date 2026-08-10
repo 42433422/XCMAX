@@ -1,6 +1,6 @@
 # XCAGI vendored langgraph-checkpoint-sqlite (LG-W0-04)
 
-原样吸收 LangGraph `libs/checkpoint-sqlite` 包，锁定 tag `v1.2.10` @ commit `41341457342327166d72fc11952ab28fb61ec0bf`。
+原样吸收 LangGraph `libs/checkpoint-sqlite` 包，锁定 tag `1.2.10` @ commit `41341457342327166d72fc11952ab28fb61ec0bf`。
 
 - 版本 `3.1.0`（与上游 pyproject 一致）。
 - 源码结构保持上游原样（`langgraph/` 命名空间子包 `checkpoint/sqlite` `store/sqlite` `cache/sqlite` + MIT `LICENSE`），未改动任何业务源码。

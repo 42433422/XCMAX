@@ -15,10 +15,12 @@
 - 包名：`langgraph-prebuilt`
 - 内部命名空间：`langgraph.prebuilt`（与核心包共享 `langgraph` 命名空间）
 - 构建：`hatchling`，wheel 仅包含 `langgraph.prebuilt` 子包（`include = ["langgraph"]`）
-- 来源校验：`python verify_vendor.py`（本地清单 + LICENSE + 上游锁定 commit 字节比对；上游在
-  `TemporaryDirectory` 中临时浅克隆并校验锁定 SHA 获取，不依赖固定 `/tmp` 检出，可移植）
+- 来源校验：`python verify_vendor.py`（本地清单 + LICENSE + 上游字节比对；在线模式在
+  `TemporaryDirectory` 作用域内浅克隆上游并取回 tag `1.2.10`，`rev-parse` 其 commit 须等于锁定 SHA
+  `413414573…0bf`，再对该 commit 做 `git archive` 与本地比对；不依赖固定 `/tmp` 检出，可移植）
 - 依赖来源：`[tool.uv.sources]` 全部重定向到 XCAGI vendored 兄弟包
   （`langgraph`→`../xcagi_langgraph_core`、`langgraph-checkpoint`→`../xcagi_langgraph_checkpoint`、
+  `langgraph-sdk`→`../xcagi_langgraph_sdk`、
   `langgraph-checkpoint-sqlite`→`../xcagi_langgraph_checkpoint_backends/checkpoint-sqlite`、
   `langgraph-checkpoint-postgres`→`../xcagi_langgraph_checkpoint_backends/checkpoint-postgres`）
 - `uv.lock`：已生成并锁定兄弟包 editable；`uv lock --check` 通过

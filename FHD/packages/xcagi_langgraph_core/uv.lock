@@ -325,7 +325,7 @@ requires-dist = [
     { name = "langchain-core", specifier = ">=1.4.7,<2" },
     { name = "langgraph-checkpoint", editable = "../xcagi_langgraph_checkpoint" },
     { name = "langgraph-prebuilt", editable = "../xcagi_langgraph_prebuilt" },
-    { name = "langgraph-sdk", specifier = ">=0.4.2,<0.5.0" },
+    { name = "langgraph-sdk", editable = "../xcagi_langgraph_sdk" },
     { name = "pydantic", specifier = ">=2.7.4" },
     { name = "xxhash", specifier = ">=3.5.0" },
 ]
@@ -335,7 +335,7 @@ dev = [
     { name = "codespell" },
     { name = "langchain-core" },
     { name = "langgraph-checkpoint", editable = "../xcagi_langgraph_checkpoint" },
-    { name = "langgraph-sdk" },
+    { name = "langgraph-sdk", editable = "../xcagi_langgraph_sdk" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
@@ -352,7 +352,7 @@ lint = [
 test = [
     { name = "langchain-core" },
     { name = "langgraph-checkpoint", editable = "../xcagi_langgraph_checkpoint" },
-    { name = "langgraph-sdk" },
+    { name = "langgraph-sdk", editable = "../xcagi_langgraph_sdk" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
@@ -420,11 +420,11 @@ requires-dist = [
 dev = [
     { name = "codespell" },
     { name = "langchain-core" },
-    { name = "langgraph", directory = "." },
+    { name = "langgraph", editable = "." },
     { name = "langgraph-checkpoint", editable = "../xcagi_langgraph_checkpoint" },
-    { name = "langgraph-checkpoint-postgres", directory = "../xcagi_langgraph_checkpoint_backends/checkpoint-postgres" },
-    { name = "langgraph-checkpoint-sqlite", directory = "../xcagi_langgraph_checkpoint_backends/checkpoint-sqlite" },
-    { name = "langgraph-sdk" },
+    { name = "langgraph-checkpoint-postgres", editable = "../xcagi_langgraph_checkpoint_backends/checkpoint-postgres" },
+    { name = "langgraph-checkpoint-sqlite", editable = "../xcagi_langgraph_checkpoint_backends/checkpoint-sqlite" },
+    { name = "langgraph-sdk", editable = "../xcagi_langgraph_sdk" },
     { name = "psycopg-binary" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -441,11 +441,11 @@ lint = [
 ]
 test = [
     { name = "langchain-core" },
-    { name = "langgraph", directory = "." },
+    { name = "langgraph", editable = "." },
     { name = "langgraph-checkpoint", editable = "../xcagi_langgraph_checkpoint" },
-    { name = "langgraph-checkpoint-postgres", directory = "../xcagi_langgraph_checkpoint_backends/checkpoint-postgres" },
-    { name = "langgraph-checkpoint-sqlite", directory = "../xcagi_langgraph_checkpoint_backends/checkpoint-sqlite" },
-    { name = "langgraph-sdk" },
+    { name = "langgraph-checkpoint-postgres", editable = "../xcagi_langgraph_checkpoint_backends/checkpoint-postgres" },
+    { name = "langgraph-checkpoint-sqlite", editable = "../xcagi_langgraph_checkpoint_backends/checkpoint-sqlite" },
+    { name = "langgraph-sdk", editable = "../xcagi_langgraph_sdk" },
     { name = "psycopg-binary" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -457,7 +457,7 @@ test = [
 [[package]]
 name = "langgraph-sdk"
 version = "0.4.2"
-source = { registry = "https://pypi.org/simple" }
+source = { editable = "../xcagi_langgraph_sdk" }
 dependencies = [
     { name = "httpx" },
     { name = "langchain-core" },
@@ -465,9 +465,26 @@ dependencies = [
     { name = "orjson" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b4/2b/bd8ac26d4e97f6df88ef05ce5b6a38945a3903e1025d926f4752aa88aa97/langgraph_sdk-0.4.2.tar.gz", hash = "sha256:b88f0f5f6328ac0680d6790614a905b2bcfa257f2276dba4e38f0e86db0aa738", size = 348327, upload-time = "2026-06-01T17:51:19.856Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/05/aac507337cceae773c2cc9ab91eb6301963af7aeeb55b4217a00e15aff17/langgraph_sdk-0.4.2-py3-none-any.whl", hash = "sha256:75fa5096c1177ce39c847096a8fe3745ffd480ddb412995f836e9f5f884c43dd", size = 160521, upload-time = "2026-06-01T17:51:18.849Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.25.2" },
+    { name = "langchain-core", specifier = ">=1.4.0,<2" },
+    { name = "langchain-protocol", specifier = ">=0.0.15" },
+    { name = "orjson", specifier = ">=3.11.5" },
+    { name = "websockets", specifier = ">=14,<17" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-mock" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-mock" },
 ]
 
 [[package]]

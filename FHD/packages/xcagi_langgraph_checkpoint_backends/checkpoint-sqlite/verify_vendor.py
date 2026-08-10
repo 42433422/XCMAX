@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """XCAGI vendored langgraph-checkpoint-sqlite 来源与许可证锁定验证脚本 (LG-W0-04).
 
-本脚本为「git tag -> SHA」来源校验（区别于 sdist 来源）：锁定的是上游 langgraph 仓库 tag v1.2.10
+本脚本为「git tag -> SHA」来源校验（区别于 sdist 来源）：锁定的是上游 langgraph 仓库 tag 1.2.10
 @ commit 41341457342327166d72fc11952ab28fb61ec0bf（见同目录 PROVENANCE.json）。
 
 职责:
   1. 校验本目录下所有 vendored 文件 (langgraph/ 包 + LICENSE) 的 SHA-256 与 MANIFEST.sha256 一致。
   2. 校验 LICENSE 为 MIT (含关键字检查)。
-  3. 校验 vendored 副本与上游「锁定 commit」的 libs/checkpoint-sqlite/langgraph + LICENSE 字节级一致
-     （原样吸收），跳过 __pycache__/pyc 本地产物。
+  3. 在 TemporaryDirectory 内自远端 fetch 精确 tag 1.2.10，断言提交 SHA == 锁定值，并对
+     vendored 副本与上游 libs/checkpoint-sqlite/langgraph + LICENSE 做字节级比对（原样吸收）。
+     跳过 caches/__pycache__/.venv/build/dist/*.egg-info 等本地产物。
 
 用法:
-  python verify_vendor.py            # 本地清单 + LICENSE + 上游锁定 commit 比对
+  python verify_vendor.py            # 本地清单 + LICENSE + 上游锁定 tag 比对（在线, 自 fetch）
   python verify_vendor.py --offline  # 仅本地清单 + LICENSE, 跳过上游比对
   python verify_vendor.py --gen      # 重新生成 MANIFEST.sha256
 
@@ -34,13 +35,15 @@ PROVENANCE = HERE / "PROVENANCE.json"
 # MANIFEST 需要覆盖的顶层条目 (langgraph/ 包目录下所有文件 + LICENSE)
 TOPNODE = ["langgraph", "LICENSE"]
 
-# 上游 langgraph 本地 git 检出（仅用于通过 git archive 取「锁定 commit」的源码）
-REPO = Path("/tmp/langgraph_retort")
+# 上游远端与精确 tag / 锁定 SHA（与 PROVENANCE.json 一致）
+UPSTREAM_REPO = "https://github.com/langchain-ai/langgraph.git"
+UPSTREAM_TAG = "1.2.10"
+UPSTREAM_SHA = "41341457342327166d72fc11952ab28fb61ec0bf"
 # 锁定 commit 对应上游 libs/checkpoint-sqlite 下的相对路径
 UPSTREAM_PATHS = ["libs/checkpoint-sqlite/langgraph", "libs/checkpoint-sqlite/LICENSE"]
 
 # 本地产物目录/文件：不入 MANIFEST，也不参与上游比对
-EXCLUDE_DIRS = {"__pycache__", ".venv", "build", "dist"}
+EXCLUDE_DIRS = {"__pycache__", ".venv", "build", "dist", "caches"}
 EXCLUDE_SUFFIXES = {".pyc"}
 EXCLUDE_EGGINFO = ".egg-info"
 
@@ -144,64 +147,51 @@ def verify_license() -> bool:
     return ok
 
 
-def _extract_pinned(sha: str, dst: Path) -> tuple[bool, str]:
-    """用 git archive 导出 PROVENANCE 锁定的 commit 的 libs/checkpoint-sqlite/langgraph + LICENSE 到 dst。
+def fetch_pinned(dst: Path) -> tuple[bool, str]:
+    """在给定目录内自远端浅克隆精确 tag，断言提交 SHA 后返回上游源码根。
 
-    若锁定 commit 对象不在本地仓库，先尝试从 origin fetch（depth 1）。返回 (成功, 错误信息)。
+    返回 (成功, 错误信息)。成功时 dst 即 tag 1.2.10 的完整工作树。
     """
-    if not (REPO / ".git").exists():
-        return False, f"上游 git 检出缺失: {REPO}"
-
-    def _try_archive() -> bool:
-        try:
-            proc = subprocess.run(
-                ["git", "-C", str(REPO), "archive", "--format=tar", sha, *UPSTREAM_PATHS],
-                check=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            if proc.returncode == 0:
-                import tarfile
-                import io
-
-                with tarfile.open(fileobj=io.BytesIO(proc.stdout)) as tar:
-                    # filter="data" 需 Python >=3.12；旧版本降级为无过滤解包（来源为可信锁定 commit）
-                    kwargs = {"filter": "data"} if sys.version_info >= (3, 12) else {}
-                    tar.extractall(dst, **kwargs)
-                return True
-            return False
-        except Exception:  # noqa: BLE001
-            return False
-
-    if _try_archive():
-        return True, ""
-    # 尝试 fetch 后再 archive
-    fetch = subprocess.run(
-        ["git", "-C", str(REPO), "fetch", "--depth", "1", "origin", sha],
+    proc = subprocess.run(
+        [
+            "git", "clone", "--quiet", "--depth", "1", "--branch", UPSTREAM_TAG,
+            UPSTREAM_REPO, str(dst),
+        ],
         check=False,
-        stdout=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    if fetch.returncode != 0:
-        return False, f"git fetch {sha} 失败（网络/远端不可达）"
-    if not _try_archive():
-        return False, f"git archive {sha} 失败"
+    if proc.returncode != 0:
+        return False, f"git clone {UPSTREAM_TAG} 失败: {proc.stderr.decode(errors='replace').strip()}"
+
+    rev = subprocess.run(
+        ["git", "-C", str(dst), "rev-parse", "HEAD"],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if rev.returncode != 0:
+        return False, "无法解析 clone 后的 HEAD"
+    head = rev.stdout.decode().strip()
+    if head != UPSTREAM_SHA:
+        return False, f"tag {UPSTREAM_TAG} HEAD={head} != 锁定 {UPSTREAM_SHA}"
     return True, ""
 
 
 def verify_upstream(prov: dict) -> bool:
-    """校验 vendored 副本与上游锁定 commit 的 libs/checkpoint-sqlite/langgraph + LICENSE 字节级一致。"""
-    sha = prov["upstream_commit_sha"]
+    """自远端 fetch 精确 tag 1.2.10，断言 SHA，并字节级比对 libs/checkpoint-sqlite/langgraph + LICENSE。"""
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp)
-        ok, err = _extract_pinned(sha, base)
+        ok, err = fetch_pinned(base)
         if not ok:
-            print(f"[FAIL] 无法从上游获取锁定 commit: {err}")
+            print(f"[FAIL] 无法自远端获取上游 tag {UPSTREAM_TAG}: {err}")
             return False
+        print(f"[OK] 自远端 {UPSTREAM_REPO} tag {UPSTREAM_TAG} 获取成功, SHA {UPSTREAM_SHA[:12]} 一致")
+
         upstream_base = base / "libs" / "checkpoint-sqlite"
         upstream_lg = upstream_base / "langgraph"
         if not upstream_lg.is_dir():
-            print("[FAIL] 锁定 commit 缺少 libs/checkpoint-sqlite/langgraph")
+            print("[FAIL] tag 1.2.10 缺少 libs/checkpoint-sqlite/langgraph")
             return False
 
         mismatches: list[str] = []
@@ -219,7 +209,7 @@ def verify_upstream(prov: dict) -> bool:
 
     ok = not mismatches
     if ok:
-        print(f"[OK] 与上游锁定 commit {sha[:12]} 的 libs/checkpoint-sqlite 字节级一致")
+        print(f"[OK] 与上游 tag {UPSTREAM_TAG} ({UPSTREAM_SHA[:12]}) 的 libs/checkpoint-sqlite 字节级一致")
     else:
         for m in mismatches:
             print(f"[FAIL] 与上游不一致: {m}")
@@ -229,7 +219,7 @@ def verify_upstream(prov: dict) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--gen", action="store_true", help="重新生成 MANIFEST.sha256")
-    parser.add_argument("--offline", action="store_true", help="跳过上游锁定 commit 比对")
+    parser.add_argument("--offline", action="store_true", help="跳过上游锁定 tag 比对")
     args = parser.parse_args()
 
     if args.gen:
@@ -241,7 +231,7 @@ def main() -> int:
     if not args.offline:
         results.append(verify_upstream(prov))
     else:
-        print("[SKIP] offline 模式, 跳过上游锁定 commit 比对")
+        print("[SKIP] offline 模式, 跳过上游锁定 tag 比对")
 
     passed = all(results)
     print("\n" + ("ALL PASS" if passed else "VERIFY FAILED"))

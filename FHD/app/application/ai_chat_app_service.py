@@ -24,9 +24,14 @@ import logging
 import re
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx  # noqa: F401 - compatibility patch point for legacy tests/callers
+
+if TYPE_CHECKING:
+    # 仅用于类型标注；运行时经注入端口或 ``app.bootstrap`` 触发式解析，避免 import 期耦合。
+    from app.application.workflow.ports.checkpoint import CheckpointStore
+    from app.application.workflow.ports.runtime import WorkflowRuntime
 
 from app.di.registry import get_service_registry
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -110,7 +115,11 @@ class AIChatApplicationService(
     - 响应格式构建
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        workflow_runtime: "WorkflowRuntime | None" = None,
+        workflow_checkpointer: "CheckpointStore | None" = None,
+    ):
         # PEP 562 模块级 ``__getattr__`` 仅在 ``module.attr`` 访问时触发，不在
         # 普通名字查找时触发；通过 ``_self`` 显式走属性访问，既能让
         # ``mock.patch("app.application.ai_chat_app_service.LLMWorkflowPlanner")``
@@ -122,7 +131,18 @@ class AIChatApplicationService(
         self.ai_service = get_ai_conversation_service()
         self.workflow_planner = _self.LLMWorkflowPlanner()
         self.risk_gate = _self.HybridRiskGate()
-        self.workflow_engine = _self.WorkflowEngine(tool_dispatcher=self._dispatch_workflow_tool)
+        # 运行时/检查点经注入端口解析；未注入时触发式从 ``app.bootstrap`` 组合根获取，
+        # 避免应用层在 import 期选择/实例化基础设施。``workflow_engine`` 保留为兼容别名。
+        if workflow_runtime is None:
+            from app.bootstrap import get_workflow_runtime
+
+            workflow_runtime = get_workflow_runtime()
+        self.workflow_engine = workflow_runtime
+        if workflow_checkpointer is None:
+            from app.bootstrap import get_workflow_checkpointer
+
+            workflow_checkpointer = get_workflow_checkpointer()
+        self.workflow_checkpointer = workflow_checkpointer
         self.approval_service = _self.get_approval_service()
         self._pending_workflows: dict[str, dict[str, Any]] = {}
 
@@ -2195,11 +2215,12 @@ class AIChatApplicationService(
         用于跨会话/中断恢复的长任务；返回 ``(run_result, state_updates)``。
         """
         state_updates: list[dict[str, Any]] = []
-        from app.application.workflow.checkpointer import DatabaseWorkflowCheckpointer
+
+        # 复用注入/组合根解析的检查点端口，避免在此直接 new 基础设施实现。
+        checkpointer = self.workflow_checkpointer
 
         # 运行前落库计划（running），失败亦不阻断；运行后更新终态。
         self._persist_plan_state(plan, runtime_context, status="running")
-        checkpointer = DatabaseWorkflowCheckpointer()
         if resume:
             latest = checkpointer.latest_checkpoint(plan.plan_id)
             if latest is not None:
@@ -2281,13 +2302,11 @@ class AIChatApplicationService(
         runtime_context["_clarify_node_id"] = clarify_node.node_id
 
         # 执行反问节点：不真正调用业务工具，仅产出 requires_confirmation 并暂停工作流。
-        from app.application.workflow.checkpointer import DatabaseWorkflowCheckpointer
-
         self.workflow_engine.run(
             plan=plan,
             runtime_context=runtime_context,
             max_retries=1,
-            checkpointer=DatabaseWorkflowCheckpointer(),
+            checkpointer=self.workflow_checkpointer,
         )
 
         self._pending_workflows[user_id] = make_pending_entry(

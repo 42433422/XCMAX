@@ -8,14 +8,16 @@
 职责:
   1. 校验本目录下所有 vendored 文件 (langgraph/prebuilt 包 + LICENSE) 的 SHA-256 与 MANIFEST.sha256 一致。
   2. 校验 LICENSE 为 MIT (含关键字检查)。
-  3. 校验 vendored 副本与上游「锁定 commit」的 libs/prebuilt/langgraph/prebuilt + LICENSE 字节级一致
-     （原样吸收），跳过 __pycache__/pyc 本地产物。
+  3. 校验 vendored 副本与上游「tag 1.2.10 解析出的 commit」的 libs/prebuilt/langgraph/prebuilt + LICENSE
+     字节级一致（原样吸收）。在线模式取回远端 tag 1.2.10，rev-parse 其指向的 commit，要求恰好等于
+     锁定 SHA 41341457342327166d72fc11952ab28fb61ec0bf，再对该 commit 做 git archive 与本地比对。
+     跳过本地产物（__pycache__/pyc/.venv/build/dist/*.egg-info/.pytest_cache 等）。
 
-可移植性: 上游源码在 TemporaryDirectory 中临时浅克隆并校验锁定 SHA 后取用，不依赖任何固定
-  /tmp 检出路径；离线模式（--offline）则完全跳过上游比对。
+可移植性: 上游源码在 with tempfile.TemporaryDirectory() 作用域内临时浅克隆（取回 tag 而非固定 SHA 或
+  /tmp 检出），作用域退出自动清理，不残留临时目录；离线模式（--offline）则完全跳过上游比对。
 
 用法:
-  python verify_vendor.py            # 本地清单 + LICENSE + 上游锁定 commit 比对
+  python verify_vendor.py            # 本地清单 + LICENSE + 上游 tag->commit 比对
   python verify_vendor.py --offline  # 仅本地清单 + LICENSE, 跳过上游比对
   python verify_vendor.py --gen      # 重新生成 MANIFEST.sha256
 
@@ -27,7 +29,6 @@ import argparse
 import hashlib
 import io
 import json
-import shutil
 import subprocess
 import sys
 import tarfile
@@ -45,8 +46,8 @@ TOPNODE = ["langgraph", "LICENSE"]
 UPSTREAM_PATHS = ["libs/prebuilt/langgraph/prebuilt", "libs/prebuilt/LICENSE"]
 
 # 本地产物目录/文件：不入 MANIFEST，也不参与上游比对
-EXCLUDE_DIRS = {"__pycache__"}
-EXCLUDE_SUFFIXES = {".pyc"}
+EXCLUDE_DIRS = {"__pycache__", ".pytest_cache", ".venv", "build", "dist"}
+EXCLUDE_SUFFIXES = {".pyc", ".egg-info"}
 
 
 def sha256_of(path: Path) -> str:
@@ -146,40 +147,60 @@ def verify_license() -> bool:
     return ok
 
 
-def _fetch_and_archive(prov: dict) -> tuple[bool, Path | None, str]:
-    """在 TemporaryDirectory 中浅克隆上游，校验锁定 SHA 后用 git archive 导出 UPSTREAM_PATHS。
+def _clone_tag_at_sha(prov: dict, workdir: Path) -> tuple[bool, Path, str]:
+    """在 workdir 内浅克隆上游并取回远端 tag，校验其解析的 commit 等于锁定 SHA。
 
-    返回 (成功, 导出根目录, 错误信息)。成功时调用方负责清理返回的临时根目录。
+    返回 (成功, 仓库路径, 错误信息)。workdir 由调用方的 TemporaryDirectory 作用域负责清理。
     """
     sha = prov["upstream_commit_sha"]
+    tag = prov.get("upstream_tag", "1.2.10")
     repo_url = prov["upstream_repo"]
-    tmp = Path(tempfile.mkdtemp())
-    repo = tmp / "repo"
-    try:
-        steps = [
-            ["git", "init", "-q", str(repo)],
-            ["git", "-C", str(repo), "remote", "add", "origin", repo_url],
-            ["git", "-C", str(repo), "fetch", "--depth", "1", "origin", sha],
-        ]
-        for cmd in steps:
-            proc = subprocess.run(
-                cmd, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            )
-            if proc.returncode != 0:
-                return False, None, (
-                    f"git 步骤失败: {' '.join(cmd)} -> "
-                    f"{proc.stderr.decode(errors='replace').strip()}"
-                )
-
-        head = subprocess.run(
-            ["git", "-C", str(repo), "rev-parse", "FETCH_HEAD"],
-            check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+    repo = workdir / "repo"
+    steps = [
+        ["git", "init", "-q", str(repo)],
+        ["git", "-C", str(repo), "remote", "add", "origin", repo_url],
+        # 取回远端 tag 并写入本地 refs/tags/<tag>，以便后续 rev-parse 解引用该 tag
+        [
+            "git", "-C", str(repo), "fetch", "--depth", "1", "origin",
+            f"refs/tags/{tag}:refs/tags/{tag}",
+        ],
+    ]
+    for cmd in steps:
+        proc = subprocess.run(
+            cmd, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
-        fetched = head.stdout.decode(errors="replace").strip()
-        if head.returncode != 0 or fetched != sha:
-            return False, None, f"锁定 SHA 校验失败: FETCH_HEAD={fetched!r} != {sha!r}"
+        if proc.returncode != 0:
+            return False, repo, (
+                f"git 步骤失败: {' '.join(cmd)} -> "
+                f"{proc.stderr.decode(errors='replace').strip()}"
+            )
+
+    # rev-parse 该 tag 指向的 commit（^{} 解引用 annotated/lightweight tag）
+    ref = f"refs/tags/{tag}^{{}}"
+    rev = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", ref],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    tag_commit = rev.stdout.decode(errors="replace").strip()
+    if rev.returncode != 0 or tag_commit != sha:
+        return False, repo, (
+            f"远端 tag {tag} 未解析到锁定 SHA: tag_commit={tag_commit!r} != {sha!r}"
+        )
+    return True, repo, ""
+
+
+def verify_upstream(prov: dict) -> bool:
+    """取回远端 tag 1.2.10，校验其 commit 等于锁定 SHA，并字节级比对 libs/prebuilt + LICENSE。"""
+    sha = prov["upstream_commit_sha"]
+    tag = prov.get("upstream_tag", "1.2.10")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        base = Path(tmpdir)
+        ok, repo, err = _clone_tag_at_sha(prov, base)
+        if not ok:
+            print(f"[FAIL] 无法从上游 tag {tag} 获取锁定 commit: {err}")
+            return False
 
         archive = subprocess.run(
             ["git", "-C", str(repo), "archive", "--format=tar", sha, *UPSTREAM_PATHS],
@@ -188,28 +209,17 @@ def _fetch_and_archive(prov: dict) -> tuple[bool, Path | None, str]:
             stderr=subprocess.PIPE,
         )
         if archive.returncode != 0:
-            return False, None, (
-                f"git archive {sha} 失败: {archive.stderr.decode(errors='replace').strip()}"
+            print(
+                f"[FAIL] git archive {sha[:12]} 失败: "
+                f"{archive.stderr.decode(errors='replace').strip()}"
             )
+            return False
 
         with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as tar:
             # filter="data" 需 Python >=3.12；旧版本降级为无过滤解包（来源为可信锁定 commit）
             kwargs = {"filter": "data"} if sys.version_info >= (3, 12) else {}
-            tar.extractall(tmp, **kwargs)
-        return True, tmp, ""
-    except Exception:  # noqa: BLE001
-        shutil.rmtree(tmp, ignore_errors=True)
-        return False, None, "clone/fetch/archive 异常"
+            tar.extractall(base, **kwargs)
 
-
-def verify_upstream(prov: dict) -> bool:
-    """校验 vendored 副本与上游锁定 commit 的 libs/prebuilt/langgraph/prebuilt + LICENSE 字节级一致。"""
-    sha = prov["upstream_commit_sha"]
-    ok, base, err = _fetch_and_archive(prov)
-    if not ok:
-        print(f"[FAIL] 无法从上游获取锁定 commit: {err}")
-        return False
-    try:
         # tar 内已含 libs/prebuilt/ 完整树；vendored rel 直接拼接在该根之下
         upstream_lg = base / "libs" / "prebuilt"
         upstream_lic = base / "libs" / "prebuilt" / "LICENSE"
@@ -219,21 +229,19 @@ def verify_upstream(prov: dict) -> bool:
 
         mismatches: list[str] = []
         for rel, digest in collect_files().items():
-            if rel == "LICENSE":
-                upstream = upstream_lic
-            else:
-                upstream = upstream_lg / rel
+            upstream = upstream_lic if rel == "LICENSE" else upstream_lg / rel
             if not upstream.is_file():
                 mismatches.append(f"{rel} (上游缺失)")
                 continue
             if sha256_of(upstream) != digest:
                 mismatches.append(rel)
-    finally:
-        shutil.rmtree(base, ignore_errors=True)
 
     ok = not mismatches
     if ok:
-        print(f"[OK] 与上游锁定 commit {sha[:12]} 的 libs/prebuilt 字节级一致")
+        print(
+            f"[OK] 远端 tag {tag} 解析为锁定 commit {sha[:12]}，"
+            f"libs/prebuilt 字节级一致"
+        )
     else:
         for m in mismatches:
             print(f"[FAIL] 与上游不一致: {m}")

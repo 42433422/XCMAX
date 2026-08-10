@@ -18,3 +18,11 @@ test = [
 
 [tool.uv]
 package = false
+
+# 显式锁定 vendored 兄弟包为 editable 路径来源（指向 FHD/packages/xcagi* 现有兄弟包
+# 目录），保证 langgraph 模块解析到仓库 XCAGI 源码而非 site-packages 原版。
+[tool.uv.sources]
+langgraph = { path = "../../packages/xcagi_langgraph_core", editable = true }
+langgraph-checkpoint = { path = "../../packages/xcagi_langgraph_checkpoint", editable = true }
+langgraph-checkpoint-sqlite = { path = "../../packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite", editable = true }
+langgraph-prebuilt = { path = "../../packages/xcagi_langgraph_prebuilt", editable = true }

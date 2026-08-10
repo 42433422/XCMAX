@@ -1,0 +1,120 @@
+{
+  "schema_version": "1.0",
+  "kind": "odoo18_source_manifest",
+  "project": "Odoo 18 Community",
+  "own_project": "FHD",
+  "created_at": "2026-08-10T00:00:00Z",
+  "observed_at": "2026-08-10",
+  "upstream": {
+    "repo": "https://github.com/odoo/odoo.git",
+    "branch": "18.0",
+    "commit": "2b758fc5e8286257e8776438c6927818838123a0"
+  },
+  "boundary": {
+    "license": "LGPL-3.0-only",
+    "community_only": true,
+    "enterprise_prohibited": true
+  },
+  "ordering": "canonical_asc_by_path",
+  "study_domains": [
+    "sale_order_state_machine",
+    "stock_fulfillment",
+    "inventory_reordering",
+    "invoicing_double_entry",
+    "uom",
+    "partner_addresses"
+  ],
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "abc09dad5f84a76e1b0279237053cae16c03228ab27d8d467677054c2bd17eeb",
+      "bytes": 43529,
+      "domain": "license",
+      "purpose": "Upstream Odoo LGPL-3.0-only license text preserved verbatim; LGPLv3 + GPLv3 full text. License boundary authority for the absorption."
+    },
+    {
+      "path": "addons/account/models/account_account.py",
+      "sha256": "ae4b1f168c0d4ec12690fdde21fc5ac19795ee84b821535b4f039defb052987b",
+      "bytes": 78378,
+      "domain": "invoicing_double_entry",
+      "purpose": "account.account model: the chart of accounts (科目表) that every journal entry line references via account_id. Needed to model double-entry accounting."
+    },
+    {
+      "path": "addons/account/models/account_move.py",
+      "sha256": "dce154e0f0c283307dd2a0936728859f7957fb218d4b6ec6cedb7d34c1ad3daa",
+      "bytes": 328977,
+      "domain": "invoicing_double_entry",
+      "purpose": "account.move model: invoices and journal entries (凭证). Contains the balanced-journal-entry state machine and invoice_ids linkage used by sale.order."
+    },
+    {
+      "path": "addons/account/models/account_move_line.py",
+      "sha256": "9199e537a4972afd7c68abbe1bd6ad35c4b7cd7f0f4518e97794cde0fce837fa",
+      "bytes": 187233,
+      "domain": "invoicing_double_entry",
+      "purpose": "account.move.line model: the debit/credit lines (account_id/debit/credit/partner_id) composing a balanced journal entry. Core of double-entry modeling."
+    },
+    {
+      "path": "addons/product/models/uom_uom.py",
+      "sha256": "cbd3d8fa19820e6d7afe5bf04f205d0c819c3dd490fd01d2352cbc499863d25c",
+      "bytes": 840,
+      "domain": "uom",
+      "purpose": "uom.uom rounding precision onchange guard (decimal precision warning). Shows how UOM rounding precision is validated against decimal accuracy."
+    },
+    {
+      "path": "addons/sale/models/sale_order.py",
+      "sha256": "882bce641b3b2010a5872254673991c3d6be2edbd02c30b5094b750eb422b850",
+      "bytes": 98069,
+      "domain": "sale_order_state_machine",
+      "purpose": "SaleOrder model: state machine is draft/sent/sale/cancel (SALE_ORDER_STATE; there is no 'done' state). Delivered/invoiced/paid are NOT sale.order states: delivery quantity is tracked separately (see sale_stock line + stock moves) and payment state belongs to account.move / payment allocation."
+    },
+    {
+      "path": "addons/sale/models/sale_order_line.py",
+      "sha256": "904a34790c7a74549021f468869092a398a8c5d20bb10377de111c2a3c5db0c7",
+      "bytes": 76602,
+      "domain": "sale_order_state_machine",
+      "purpose": "SaleOrderLine model: per-line product_id/quantity/price, plus progress fields qty_delivered and qty_invoiced. These are orthogonal progress fields, NOT drivers of the commercial state machine: they are computed separately from stock moves / invoice lines and tracked via the independent invoice_status field. sale.order.state itself remains draft/sent/sale/cancel."
+    },
+    {
+      "path": "addons/sale_stock/models/sale_order_line.py",
+      "sha256": "cc05512f4746faf350ebc76e4ccfb3604353d0c85320daaf9bf17b3852ab957d",
+      "bytes": 24732,
+      "domain": "stock_fulfillment",
+      "purpose": "sale_stock bridge: turns sale order lines into stock moves/procurements for delivery, tracking qty_delivered for order fulfillment. Stock fulfillment of sale orders."
+    },
+    {
+      "path": "addons/stock/models/stock_orderpoint.py",
+      "sha256": "2111ebc18a660ec954b4bb827859f52a64d9616aa7b32f5acd02ab631e36b2ad",
+      "bytes": 41218,
+      "domain": "inventory_reordering",
+      "purpose": "stock.warehouse.orderpoint (Minimum Inventory Rule): the min/max source. product_min_qty / product_max_qty define the reordering bounds and qty_to_order / qty_to_order_computed compute the quantity to order against virtual stock. Inventory reordering min/max study."
+    },
+    {
+      "path": "addons/stock/models/stock_replenish_mixin.py",
+      "sha256": "4b702c94f314cb6456f73153eb3b65bf9b608813a9950c9cea4a26290c004b02",
+      "bytes": 1522,
+      "domain": "inventory_reordering",
+      "purpose": "stock.replenish.mixin: only exposes route_id and computes allowed_route_ids (allowed routes for replenishment) via _compute_allowed_route_ids / _get_allowed_route_domain. It does NOT calculate min/max or qty-to-order (that lives in stock_orderpoint.py). Replenishment route selection study."
+    },
+    {
+      "path": "addons/stock/models/stock_rule.py",
+      "sha256": "52e9e1664f023f3c2f3dcfe96c1cda731d656be6d3d909b9c09e2f9ae03cea5b",
+      "bytes": 40430,
+      "domain": "stock_fulfillment",
+      "purpose": "stock.rule model: procurement/delivery rules (buy/make/outsource) that route stock moves and drive replenishment. Fulfillment + reordering routing logic."
+    },
+    {
+      "path": "addons/uom/models/uom_uom.py",
+      "sha256": "0dcc409dd9d15b0cd8d0a48bff933bd1dcbf24db1fc02d7a3123b7d3fe93104f",
+      "bytes": 12233,
+      "domain": "uom",
+      "purpose": "Base uom.uom and uom.category models: unit-of-measure categories and conversion rates (factor/inverse rounding). Primary multi-unit conversion study file."
+    },
+    {
+      "path": "odoo/addons/base/models/res_partner.py",
+      "sha256": "8691daba7b5050026b15c10558f4af5d20430f489a6fac6b15a7549b1bb0ac9f",
+      "bytes": 55675,
+      "domain": "partner_addresses",
+      "purpose": "res.partner model: child partner addresses via child_ids (res.partner with parent_id) whose type selection includes ('invoice','Invoice Address') and ('delivery','Delivery Address'), resolved through address_get(adr_pref). There are NO invoice_address_id / delivery_address_id fields. Partner multi-address study file."
+    }
+  ]
+}

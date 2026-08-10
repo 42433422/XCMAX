@@ -62,13 +62,14 @@ Twitter = "https://x.com/langchain_oss"
 Slack = "https://www.langchain.com/join-community"
 Reddit = "https://www.reddit.com/r/LangChain/"
 
-# 依赖来源锁定到 XCAGI vendored 兄弟包（替代上游）。langgraph-sdk / langgraph-cli 无 vendored 版本，保持上游 registry。
+# 依赖来源全部锁定到 XCAGI vendored 兄弟包（替代上游）。
 [tool.uv]
 default-groups = ['dev']
 
 [tool.uv.sources]
 langgraph-prebuilt = { path = "../xcagi_langgraph_prebuilt", editable = true }
 langgraph-checkpoint = { path = "../xcagi_langgraph_checkpoint", editable = true }
+langgraph-sdk = { path = "../xcagi_langgraph_sdk", editable = true }
 langgraph-checkpoint-sqlite = { path = "../xcagi_langgraph_checkpoint_backends/checkpoint-sqlite", editable = true }
 langgraph-checkpoint-postgres = { path = "../xcagi_langgraph_checkpoint_backends/checkpoint-postgres", editable = true }
 

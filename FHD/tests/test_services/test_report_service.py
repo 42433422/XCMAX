@@ -96,7 +96,7 @@ class TestGetSalesReport:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        result = service.get_sales_report(group_by="product")
+        result = service.get_sales_report(group_by="product", source="shipment")
         assert result["success"] is True
         assert "data" in result
         assert "summary" in result
@@ -117,7 +117,7 @@ class TestGetSalesReport:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        result = service.get_sales_report(group_by="customer")
+        result = service.get_sales_report(group_by="customer", source="shipment")
         assert result["success"] is True
         assert "data" in result
 
@@ -137,7 +137,7 @@ class TestGetSalesReport:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        result = service.get_sales_report(group_by="date")
+        result = service.get_sales_report(group_by="date", source="shipment")
         assert result["success"] is True
         assert "data" in result
 
@@ -157,7 +157,7 @@ class TestGetSalesReport:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        result = service.get_sales_report(group_by="date")
+        result = service.get_sales_report(group_by="date", source="shipment")
         assert result["success"] is True
         assert any(d["date"] == "unknown" for d in result["data"])
 
@@ -168,7 +168,7 @@ class TestGetSalesReport:
         mock_db.query.return_value.group_by.return_value.all.return_value = []
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        result = service.get_sales_report(group_by="unknown")
+        result = service.get_sales_report(group_by="unknown", source="shipment")
         assert result["success"] is True
         assert result["data"] == []
 
@@ -194,6 +194,7 @@ class TestGetSalesReport:
         result = service.get_sales_report(
             start_date=datetime(2026, 1, 1),
             end_date=datetime(2026, 12, 31),
+            source="shipment",
         )
         assert result["success"] is True
 
@@ -215,7 +216,7 @@ class TestGetSalesReport:
         mock_db.query.return_value = mock_query
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        result = service.get_sales_report(customer_id=1)
+        result = service.get_sales_report(customer_id=1, source="shipment")
         assert result["success"] is True
 
     @patch("app.services.report_service.get_db")
@@ -232,6 +233,7 @@ class TestGetSalesReport:
             start_date=datetime(2026, 1, 1),
             end_date=datetime(2026, 1, 31),
             customer_id=1,
+            source="shipment",
         )
 
         assert result["success"] is True
@@ -255,7 +257,7 @@ class TestGetSalesReport:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        result = service.get_sales_report(group_by="product")
+        result = service.get_sales_report(group_by="product", source="shipment")
         assert result["success"] is True
         assert any("产品42" in d.get("product_name", "") for d in result["data"])
 
@@ -275,7 +277,7 @@ class TestGetSalesReport:
         ]
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
-        result = service.get_sales_report(group_by="customer")
+        result = service.get_sales_report(group_by="customer", source="shipment")
         assert result["success"] is True
         assert any("客户7" in d.get("customer_name", "") for d in result["data"])
 

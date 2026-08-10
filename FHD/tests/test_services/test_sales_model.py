@@ -64,6 +64,7 @@ def _make_order(db, status="quote"):
         product_id=product.id,
         product_name=product.name,
         quantity=10,
+        ordered_quantity=10,
         unit="个",
         unit_price=100.0,
         amount=1000.0,
@@ -142,6 +143,7 @@ class TestSalesOrderItem:
         test_session.commit()
         test_session.refresh(item)
         assert item.delivered_quantity == 8
+        assert item.ordered_quantity == 10
         assert item.invoiced_quantity == 6
         assert item.amount == 1000.0
 
