@@ -43,6 +43,7 @@ describe('useChatSessionActivity', () => {
       message: '查询 5003',
       tool_id: 'products',
       action: 'query',
+      output: { success: true, returned: 1, total: 1 },
       runtime_context: expect.objectContaining({
         task_id: 'task-a',
         conversation_id: 'task-a',

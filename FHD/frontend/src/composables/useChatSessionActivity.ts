@@ -52,7 +52,7 @@ export async function recordProductFastPathTask(
     tool_id: 'products',
     action: 'query',
     params: { keyword, page: 1, per_page: 20 },
-    output: { success: true, data: rows, total },
+    output: { success: true, returned: rows.length, total },
     response,
     source: 'desktop_product_fast_path',
     runtime_context: {

@@ -940,6 +940,7 @@ async def compat_chat_stream_async(
     # 客户等只读业务：请求线程内确定性 Agent 工具（customers.query），避免 ContextVar 丢租户读空。
     from app.application.normal_chat_dispatch import try_normal_slot_read_payload
     from app.fastapi_routes.xcagi_compat_chat_helpers import _sse_event_line
+
     slot_payload = try_normal_slot_read_payload(body.message, request=request)
     if isinstance(slot_payload, dict) and slot_payload.get("response"):
         runtime_context, _ = _merge_runtime_context_with_message_paths(body.context, body.message)
@@ -962,7 +963,6 @@ async def compat_chat_stream_async(
         yield _sse_event_line({"type": "token", "text": response_text})
         yield _sse_event_line({"type": "done", "result": traced})
         return
-
     # 注入 persona system_prompt（前端没传时用 persona 系统生成去客服腔 prompt）
     if not body.system_prompt and body.message:
         try:

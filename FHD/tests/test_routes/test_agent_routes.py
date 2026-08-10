@@ -122,15 +122,17 @@ def test_record_observed_tool_run_is_owned_and_task_scoped() -> None:
         },
     )
     assert response.status_code == 200
-    run = response.json()["data"]
+    reference = response.json()["data"]
+    assert reference["status"] == "completed"
+    assert reference["task_id"] == "task-product-5003"
+    stored = get_agent_run_repository().get(reference["run_id"])
+    assert stored is not None
+    run = stored.to_dict()
     assert run["user_id"] == "u1"
-    assert run["status"] == "completed"
-    assert run["metadata"]["task_context"]["task_id"] == "task-product-5003"
     assert run["metadata"]["task_context"]["conversation_id"] == "conversation-product-5003"
     assert run["tool_calls"][0]["tool_id"] == "products"
-    assert run["metadata"]["runtime_context"]["observation_trust"] == (
-        "authenticated_client"
-    )
+    assert run["metadata"]["runtime_context"]["observation_trust"] == ("authenticated_client")
+    assert run["metadata"]["non_retryable"] is True
 
 
 def test_record_observed_tool_rejects_write_or_unknown_tools() -> None:
@@ -145,6 +147,28 @@ def test_record_observed_tool_rejects_write_or_unknown_tools() -> None:
         },
     )
     assert response.status_code == 400
+
+
+def test_failed_observation_cannot_be_retried_as_an_execution_plan() -> None:
+    get_agent_run_repository().clear()
+    client = _client("u1")
+    observed = client.post(
+        "/api/agent/runs/observed-tool",
+        json={
+            "message": "查产品失败",
+            "tool_id": "products",
+            "action": "query",
+            "params": {"keyword": "5003"},
+            "output": {"success": False, "message": "network unavailable"},
+        },
+    )
+    assert observed.status_code == 200
+    reference = observed.json()["data"]
+    assert reference["status"] == "failed"
+
+    retry = client.post(f"/api/agent/runs/{reference['run_id']}/retry", json={})
+    assert retry.status_code == 409
+    assert "观察记录" in retry.json()["message"]
 
 
 def test_continue_waiting_agent_run() -> None:
@@ -419,10 +443,13 @@ def test_retry_agent_run_preserves_task_identity_and_creates_new_attempt() -> No
         replay = client.post(f"/api/agent/runs/{created['run_id']}/retry", json={})
 
     assert response.status_code == 200
-    retried = response.json()["data"]
+    retried_reference = response.json()["data"]
     assert replay.status_code == 200
-    assert replay.json()["data"]["run_id"] == retried["run_id"]
-    assert retried["run_id"] != created["run_id"]
+    assert replay.json()["data"]["run_id"] == retried_reference["run_id"]
+    assert retried_reference["run_id"] != created["run_id"]
+    retried_stored = repository.get(retried_reference["run_id"])
+    assert retried_stored is not None
+    retried = retried_stored.to_dict()
     assert retried["metadata"]["task_context"] == {
         "task_id": "conversation-42",
         "title": "库存核对任务",

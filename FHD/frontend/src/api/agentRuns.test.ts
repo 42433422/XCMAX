@@ -71,16 +71,14 @@ describe('agentRunsApi', () => {
   it('controls agent run lifecycle', async () => {
     await agentRunsApi.pauseRun('run/1')
     await agentRunsApi.resumeRun('run/1', { source: 'resume-test' })
-    await agentRunsApi.retryRun('run/1', { source: 'retry-test' })
+    await agentRunsApi.retryRun('run/1')
     await agentRunsApi.cancelRun('run/1')
 
     expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/pause', {})
     expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/resume', {
       runtime_context: { source: 'resume-test' },
     })
-    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/retry', {
-      runtime_context: { source: 'retry-test' },
-    })
+    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/retry', {})
     expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/cancel', {})
   })
 })

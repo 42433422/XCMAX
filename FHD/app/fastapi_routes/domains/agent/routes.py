@@ -78,6 +78,12 @@ def _run_response(run: Any, *, principal: AgentPrincipal) -> dict[str, Any]:
     return _success(public_run, approval=approval) if approval else _success(public_run)
 
 
+def _run_reference_response(run: Any) -> dict[str, Any]:
+    task_context = run.metadata.get("task_context")
+    task_id = str(task_context.get("task_id") or "") if isinstance(task_context, dict) else ""
+    return _success({"run_id": str(run.run_id), "status": str(run.status), "task_id": task_id})
+
+
 def _owned_run(
     orchestrator: AgentOrchestrator,
     run_id: str,
@@ -166,7 +172,9 @@ def record_observed_tool_run(
             status_code=400,
         )
 
-    from app.application.agent_orchestrator.chat_trace import create_chat_trace_run
+    from app.application.agent_orchestrator.observed_tool_trace import (
+        create_observed_tool_trace_run,
+    )
     from app.application.agent_orchestrator.tool_spec import validate_tool_call
 
     validation = validate_tool_call(tool_id, action, params)
@@ -177,38 +185,18 @@ def record_observed_tool_run(
             status_code=400,
         )
 
-    runtime = dict(runtime_context)
-    runtime.update(
-        {
-            "local_user_id": principal.user_id,
-            "actor_id": principal.user_id,
-            "trace_mode": "desktop_observed_tool",
-            "observation_trust": "authenticated_client",
-        }
-    )
-    payload = {
-        "success": output.get("success") is not False,
-        "response": str(data.get("response") or output.get("message") or ""),
-        "_tool_records": [
-            {
-                "tool_id": spec.tool_id,
-                "action": spec.action,
-                "params": params,
-                "output": output,
-            }
-        ],
-    }
     try:
-        run = create_chat_trace_run(
-            payload,
-            message=message,
-            runtime_context=runtime,
+        run = create_observed_tool_trace_run(
+            spec=spec,
             user_id=principal.user_id,
+            message=message,
+            params=params,
+            output=output,
+            response=str(data.get("response") or output.get("message") or ""),
+            runtime_context=runtime_context,
             source=str(data.get("source") or "desktop_fast_path"),
-            channel="desktop_observed_tool",
-            intent=f"{spec.tool_id}_{spec.action}",
         )
-        return _run_response(run, principal=principal)
+        return _run_reference_response(run)
     except RECOVERABLE_ERRORS:
         return _internal_error_response("record observed tool run")
 
@@ -336,7 +324,6 @@ def resume_agent_run(
 @router.post("/api/agent/runs/{run_id}/retry", response_model=None)
 def retry_agent_run(
     run_id: str,
-    body: dict[str, Any] = Body(default_factory=dict),
     principal: AgentPrincipal = Depends(require_agent_principal),
 ) -> dict[str, Any] | JSONResponse:
     with run_operation_lock(run_id):
@@ -350,19 +337,17 @@ def retry_agent_run(
                 {"success": False, "message": "只有失败、取消或阻塞的任务可以重试"},
                 status_code=409,
             )
-        runtime_context = (body or {}).get("runtime_context") or {}
-        if not isinstance(runtime_context, dict):
+        if run.metadata.get("non_retryable"):
             return JSONResponse(
-                {"success": False, "message": "runtime_context 必须是对象"},
-                status_code=400,
+                {"success": False, "message": "该观察记录不能作为执行任务重试"},
+                status_code=409,
             )
         try:
             retried = orchestrator.retry_run(
                 run_id,
                 requested_by=principal.user_id,
-                runtime_context=runtime_context,
             )
-            return _run_response(retried, principal=principal)
+            return _run_reference_response(retried)
         except RECOVERABLE_ERRORS:
             return _internal_error_response("retry agent run")
 

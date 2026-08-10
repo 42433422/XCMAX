@@ -102,13 +102,19 @@ export interface ObserveAgentToolPayload {
   runtime_context?: Record<string, unknown>
 }
 
+export interface AgentRunReference {
+  run_id: string
+  status: string
+  task_id: string
+}
+
 export const agentRunsApi = {
   createRun(payload: CreateAgentRunPayload): Promise<ApiResponse<AgentRun>> {
     return api.post<ApiResponse<AgentRun>>('/api/agent/runs', payload)
   },
 
-  observeTool(payload: ObserveAgentToolPayload): Promise<ApiResponse<AgentRun>> {
-    return api.post<ApiResponse<AgentRun>>('/api/agent/runs/observed-tool', payload)
+  observeTool(payload: ObserveAgentToolPayload): Promise<ApiResponse<AgentRunReference>> {
+    return api.post<ApiResponse<AgentRunReference>>('/api/agent/runs/observed-tool', payload)
   },
 
   continueRun(
@@ -145,13 +151,10 @@ export const agentRunsApi = {
     )
   },
 
-  retryRun(
-    runId: string,
-    runtimeContext: Record<string, unknown> = {},
-  ): Promise<ApiResponse<AgentRun>> {
-    return api.post<ApiResponse<AgentRun>>(
+  retryRun(runId: string): Promise<ApiResponse<AgentRunReference>> {
+    return api.post<ApiResponse<AgentRunReference>>(
       `/api/agent/runs/${encodeURIComponent(runId)}/retry`,
-      { runtime_context: runtimeContext },
+      {},
     )
   },
 

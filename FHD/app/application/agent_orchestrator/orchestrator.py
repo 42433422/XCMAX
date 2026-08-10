@@ -58,6 +58,7 @@ class AgentOrchestrator(RunLifecycleMixin, ArtifactAttachmentMixin):
             "durable": isinstance(self._repo, SQLAlchemyAgentRunRepository),
         }
         self._tool_executor = tool_executor or AgentToolExecutor()
+
     @staticmethod
     def _ingest_artifact_to_dataset(run: AgentRun, artifact: Any) -> None:
         ingest_artifact_to_dataset(run, artifact)
@@ -94,6 +95,7 @@ class AgentOrchestrator(RunLifecycleMixin, ArtifactAttachmentMixin):
                 {"error_code": _INTERNAL_RUN_ERROR},
             )
             return self._repo.save(run)
+
     def start_run_from_plan(
         self,
         *,
@@ -150,7 +152,6 @@ class AgentOrchestrator(RunLifecycleMixin, ArtifactAttachmentMixin):
         run = self._repo.get(run_id)
         if run is None:
             return None
-
         waiting_step = self._find_waiting_step(run, approved_step_id=approved_step_id)
         # A SQL-backed run can be observed at the durable ``pending`` snapshot
         # between plan persistence and the approval transition.  Route callers
@@ -173,7 +174,6 @@ class AgentOrchestrator(RunLifecycleMixin, ArtifactAttachmentMixin):
                 {"approved_by": approved_by, "approved_step_id": approved_step_id},
             )
             return self._repo.save(run)
-
         context = dict(run.metadata.get("runtime_context") or {})
         context.update(dict(runtime_context or {}))
         run.metadata["runtime_context"] = context
