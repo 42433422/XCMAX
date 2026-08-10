@@ -207,6 +207,18 @@ describe('useChatMessages', () => {
     expect(chatApi.saveMessage).toHaveBeenCalled()
   })
 
+  it('persists a detached task reply without rendering it in the active conversation', async () => {
+    const chatApi = (await import('@/api/chat')).default
+    await messages.addAndSaveMessage('background reply', 'ai', undefined, {
+      sessionId: 'task-background',
+    })
+    expect(messages.messages.value).toHaveLength(1)
+    expect(chatApi.saveMessage).toHaveBeenCalledWith(expect.objectContaining({
+      session_id: 'task-background',
+      content: 'background reply',
+    }))
+  })
+
   it('addAndSaveMessage ignores empty content', async () => {
     const chatApi = (await import('@/api/chat')).default
     await messages.addAndSaveMessage('', 'user')

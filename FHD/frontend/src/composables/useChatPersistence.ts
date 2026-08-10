@@ -15,7 +15,8 @@ import { hasAgentRunExecutionEvidence } from '@/utils/agentRunExecution'
 export const EXCEL_ANALYSIS_STORAGE_PREFIX = 'xcagi_excel_analysis_ctx_'
 export const CHAT_TASK_PANEL_STORAGE_PREFIX = 'xcagi_chat_task_panel_'
 
-export type TaskStatus = 'queued' | 'running' | 'success' | 'failed' | 'cancelled'
+export type TaskStatus = 'queued' | 'running' | 'blocked' | 'paused' | 'success' | 'failed' | 'cancelled'
+export type TaskFilter = 'all' | 'running' | 'blocked' | 'success' | 'failed'
 
 export interface TaskItem {
   id: string
@@ -37,7 +38,7 @@ export type PersistedTaskPanelState = {
   taskList: TaskItem[]
   activeTaskId: string
   expandedTaskIds: string[]
-  taskFilter: 'all' | 'running' | 'success' | 'failed'
+  taskFilter: TaskFilter
   currentTask: ShipmentTask | null
   savedAt: number
 }
@@ -195,7 +196,7 @@ export function readPersistedTaskPanelState(sessionKey: string): PersistedTaskPa
       ? (parsed as PersistedTaskPanelState).expandedTaskIds.map((x) => String(x || '').trim()).filter(Boolean)
       : []
     const filterRaw = String((parsed as PersistedTaskPanelState).taskFilter || '').trim()
-    const taskFilter = (['all', 'running', 'success', 'failed'].includes(filterRaw)
+    const taskFilter = (['all', 'running', 'blocked', 'success', 'failed'].includes(filterRaw)
       ? filterRaw
       : 'all') as PersistedTaskPanelState['taskFilter']
     const currentTask = ((parsed as PersistedTaskPanelState).currentTask
@@ -459,7 +460,7 @@ export interface ChatTaskPanelPersistenceDeps {
   taskList: Ref<TaskItem[]>
   activeTaskId: Ref<string>
   expandedTaskIds: Ref<string[]>
-  taskFilter: Ref<'all' | 'running' | 'success' | 'failed'>
+  taskFilter: Ref<TaskFilter>
   currentTask: Ref<ShipmentTask | null>
   sortTaskList: () => void
 }

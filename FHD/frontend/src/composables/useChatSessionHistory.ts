@@ -7,6 +7,7 @@ import {
   useChatHistoryPersistence,
   type LinkedExcelSheet,
   type TaskItem,
+  type TaskFilter,
 } from './useChatPersistence'
 import type { ShipmentTask } from './useShipmentTask'
 import type { ChatMessage } from './useChatMessages'
@@ -18,7 +19,7 @@ export interface UseChatSessionHistoryDeps {
   taskList: Ref<TaskItem[]>
   activeTaskId: Ref<string>
   expandedTaskIds: Ref<string[]>
-  taskFilter: Ref<'all' | 'running' | 'success' | 'failed'>
+  taskFilter: Ref<TaskFilter>
   currentTask: Ref<ShipmentTask | null>
   lastExcelAnalysisContext: Ref<Record<string, unknown> | null>
   linkedExcelSheet: Ref<LinkedExcelSheet | null>

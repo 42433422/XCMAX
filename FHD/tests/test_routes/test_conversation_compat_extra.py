@@ -8,12 +8,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 
 from app.fastapi_routes.domains.conversation.compat_extra import (
     _conversation_lock,
     _xcagi_evict_oldest_session_if_needed,
     _xcagi_iso_from_ts,
     _xcagi_normalize_chat_role,
+    _xcagi_request_user_id,
     _xcagi_resolve_session_scope,
     _xcagi_strip_html,
     _xcagi_summary_from_messages,
@@ -32,6 +34,27 @@ class TestXcagiResolveSessionScope:
         scope = _xcagi_resolve_session_scope(None, None)
         assert scope[0] == "default"
         assert scope[1] == ""
+
+
+class TestXcagiRequestUserId:
+    @staticmethod
+    def _request() -> Request:
+        return Request({"type": "http", "headers": []})
+
+    def test_authenticated_actor_overrides_explicit_user_id(self):
+        user = MagicMock(id=41)
+        with patch(
+            "app.infrastructure.auth.dependencies.resolve_session_user",
+            return_value=user,
+        ):
+            assert _xcagi_request_user_id(self._request(), "42") == "41"
+
+    def test_anonymous_numeric_id_cannot_select_durable_owner(self):
+        with patch(
+            "app.infrastructure.auth.dependencies.resolve_session_user",
+            return_value=None,
+        ):
+            assert _xcagi_request_user_id(self._request(), "41") == "legacy:41"
 
     def test_explicit_user_and_mod(self):
         scope = _xcagi_resolve_session_scope("user1", "mod1")

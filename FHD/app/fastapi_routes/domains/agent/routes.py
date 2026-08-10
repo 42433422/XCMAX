@@ -78,6 +78,12 @@ def _run_response(run: Any, *, principal: AgentPrincipal) -> dict[str, Any]:
     return _success(public_run, approval=approval) if approval else _success(public_run)
 
 
+def _run_reference_response(run: Any) -> dict[str, Any]:
+    task_context = run.metadata.get("task_context")
+    task_id = str(task_context.get("task_id") or "") if isinstance(task_context, dict) else ""
+    return _success({"run_id": str(run.run_id), "status": str(run.status), "task_id": task_id})
+
+
 def _owned_run(
     orchestrator: AgentOrchestrator,
     run_id: str,
@@ -140,6 +146,59 @@ def list_agent_runs(
         return _success([_public_run_dict(run) for run in runs], count=len(runs))
     except RECOVERABLE_ERRORS:
         return _internal_error_response("list agent runs")
+
+
+@router.post("/api/agent/runs/observed-tool", response_model=None)
+def record_observed_tool_run(
+    body: dict[str, Any] = Body(default_factory=dict),
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any] | JSONResponse:
+    """Record a completed low-risk desktop fast path in the durable task ledger."""
+    data = body or {}
+    message = str(data.get("message") or "").strip()
+    tool_id = str(data.get("tool_id") or "").strip()
+    action = str(data.get("action") or "").strip()
+    params = data.get("params") or {}
+    output = data.get("output") or {}
+    runtime_context = data.get("runtime_context") or {}
+    if not message or not isinstance(params, dict) or not isinstance(output, dict):
+        return JSONResponse(
+            {"success": False, "message": "message、params 与 output 格式无效"},
+            status_code=400,
+        )
+    if not isinstance(runtime_context, dict):
+        return JSONResponse(
+            {"success": False, "message": "runtime_context 必须是对象"},
+            status_code=400,
+        )
+
+    from app.application.agent_orchestrator.observed_tool_trace import (
+        create_observed_tool_trace_run,
+    )
+    from app.application.agent_orchestrator.tool_spec import validate_tool_call
+
+    validation = validate_tool_call(tool_id, action, params)
+    spec = validation.spec
+    if not validation.ok or spec is None or spec.risk != "low" or not spec.idempotent:
+        return JSONResponse(
+            {"success": False, "message": "只允许记录已注册的低风险幂等工具"},
+            status_code=400,
+        )
+
+    try:
+        run = create_observed_tool_trace_run(
+            spec=spec,
+            user_id=principal.user_id,
+            message=message,
+            params=params,
+            output=output,
+            response=str(data.get("response") or output.get("message") or ""),
+            runtime_context=runtime_context,
+            source=str(data.get("source") or "desktop_fast_path"),
+        )
+        return _run_reference_response(run)
+    except RECOVERABLE_ERRORS:
+        return _internal_error_response("record observed tool run")
 
 
 @router.get("/api/agent/runs/{run_id}", response_model=None)
@@ -260,6 +319,37 @@ def resume_agent_run(
         principal=principal,
         runtime_context=runtime_context,
     )
+
+
+@router.post("/api/agent/runs/{run_id}/retry", response_model=None)
+def retry_agent_run(
+    run_id: str,
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any] | JSONResponse:
+    with run_operation_lock(run_id):
+        orchestrator = AgentOrchestrator()
+        run, error = _owned_run(orchestrator, run_id, principal)
+        if error is not None:
+            return error
+        assert run is not None
+        if run.status not in {"failed", "cancelled", "blocked"}:
+            return JSONResponse(
+                {"success": False, "message": "只有失败、取消或阻塞的任务可以重试"},
+                status_code=409,
+            )
+        if run.metadata.get("non_retryable"):
+            return JSONResponse(
+                {"success": False, "message": "该观察记录不能作为执行任务重试"},
+                status_code=409,
+            )
+        try:
+            retried = orchestrator.retry_run(
+                run_id,
+                requested_by=principal.user_id,
+            )
+            return _run_reference_response(retried)
+        except RECOVERABLE_ERRORS:
+            return _internal_error_response("retry agent run")
 
 
 @router.get("/api/agent/runs/{run_id}/events", response_model=None)

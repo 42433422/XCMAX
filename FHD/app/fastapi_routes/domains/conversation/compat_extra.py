@@ -12,8 +12,12 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, HTTPException, Query, Request
 
+from app.application.task_conversation_store import (
+    durable_user_id,
+    task_conversation_store,
+)
 from app.request_active_mod_ctx import (
     get_request_active_mod_id,
     normalize_active_mod_id,
@@ -40,6 +44,23 @@ def _xcagi_resolve_session_scope(
         except RECOVERABLE_ERRORS:
             mod = ""
     return (uid, mod)
+
+
+def _xcagi_request_user_id(request: Request, explicit_user_id: Any) -> str:
+    """Prefer the authenticated local actor over a caller-controlled body value."""
+    try:
+        from app.infrastructure.auth.dependencies import resolve_session_user
+
+        user = resolve_session_user(request)
+        actor_id = getattr(user, "id", None) if user is not None else None
+        if actor_id is not None:
+            return str(actor_id)
+    except RECOVERABLE_ERRORS:
+        pass
+    fallback = str(explicit_user_id or "default").strip() or "default"
+    if durable_user_id(fallback) is not None:
+        return f"legacy:{fallback}"
+    return fallback
 
 
 def _xcagi_strip_html(text: str) -> str:
@@ -98,7 +119,10 @@ def _xcagi_evict_oldest_session_if_needed(
 
 
 @router.post("/conversations/message")
-def conversations_save_message(body: dict = Body(default_factory=dict)) -> dict:
+def conversations_save_message(
+    request: Request,
+    body: dict = Body(default_factory=dict),
+) -> dict:
     from app.neuro_bus.route_event_publisher import (
         publish_simple_event,
     )
@@ -109,8 +133,42 @@ def conversations_save_message(body: dict = Body(default_factory=dict)) -> dict:
     if not session_id or not content.strip():
         return {"success": True, "saved": False, "message": "empty session_id or content"}
 
-    scope = _xcagi_resolve_session_scope(body.get("user_id"), body.get("mod_id"))
+    resolved_user_id = _xcagi_request_user_id(request, body.get("user_id"))
+    scope = _xcagi_resolve_session_scope(resolved_user_id, body.get("mod_id"))
     user_id, mod_id = scope
+
+    numeric_user_id = durable_user_id(user_id)
+    if numeric_user_id is not None:
+        try:
+            message_id = task_conversation_store.save_message(
+                session_id=session_id,
+                user_id=numeric_user_id,
+                role=role,
+                content=content,
+                intent=str(body.get("intent") or ""),
+                metadata=str(body.get("metadata") or ""),
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        publish_simple_event(
+            "conversation.message.saved",
+            {
+                "session_id": session_id,
+                "user_id": user_id,
+                "mod_id": mod_id,
+                "role": role,
+                "message_length": len(content),
+                "durable": True,
+            },
+            domain="conversation",
+        )
+        return {
+            "success": True,
+            "saved": True,
+            "message_id": message_id,
+            "mod_id": mod_id,
+            "durable": True,
+        }
 
     now = time.time()
     msg = {"role": role, "content": content, "timestamp": _xcagi_iso_from_ts(now)}
@@ -145,11 +203,23 @@ def conversations_save_message(body: dict = Body(default_factory=dict)) -> dict:
 
 @router.get("/conversations/sessions")
 def conversations_sessions_list(
+    request: Request,
     limit: int = Query(default=50, ge=1, le=500),
     user_id: str = Query(default="default"),
     mod_id: str = Query(default=""),
 ) -> dict:
-    scope = _xcagi_resolve_session_scope(user_id, mod_id)
+    resolved_user_id = _xcagi_request_user_id(request, user_id)
+    scope = _xcagi_resolve_session_scope(resolved_user_id, mod_id)
+    numeric_user_id = durable_user_id(scope[0])
+    if numeric_user_id is not None:
+        return {
+            "success": True,
+            "mod_id": scope[1],
+            "sessions": task_conversation_store.list_sessions(
+                user_id=numeric_user_id,
+                limit=int(limit),
+            ),
+        }
     with _conversation_lock:
         user_bucket = dict(_xcagi_user_sessions.get(scope) or {})
     rows: list[tuple[float, dict[str, Any]]] = []
@@ -180,10 +250,24 @@ def conversations_sessions_list(
 
 
 @router.post("/conversations/sessions/clear")
-def conversations_sessions_clear(body: dict = Body(default_factory=dict)) -> dict:
+def conversations_sessions_clear(
+    request: Request,
+    body: dict = Body(default_factory=dict),
+) -> dict:
     payload = body or {}
-    scope = _xcagi_resolve_session_scope(payload.get("user_id"), payload.get("mod_id"))
+    resolved_user_id = _xcagi_request_user_id(request, payload.get("user_id"))
+    scope = _xcagi_resolve_session_scope(resolved_user_id, payload.get("mod_id"))
     clear_all_mods = bool(payload.get("all_mods") or payload.get("all"))
+    numeric_user_id = durable_user_id(scope[0])
+    if numeric_user_id is not None:
+        deleted = task_conversation_store.clear_sessions(user_id=numeric_user_id)
+        return {
+            "success": True,
+            "deleted": deleted,
+            "mod_id": scope[1],
+            "all_mods": clear_all_mods,
+            "message": "ok",
+        }
     with _conversation_lock:
         if clear_all_mods:
             target_scopes = [key for key in list(_xcagi_user_sessions.keys()) if key[0] == scope[0]]
@@ -212,12 +296,30 @@ def ai_conversation_new(body: dict = Body(default_factory=dict)) -> dict:
 
 @router.get("/conversations/{conversation_id}")
 def conversations_get(
+    request: Request,
     conversation_id: str,
     user_id: str = Query(default="default"),
     mod_id: str = Query(default=""),
 ) -> dict:
     cid = (conversation_id or "").strip()
-    scope = _xcagi_resolve_session_scope(user_id, mod_id)
+    resolved_user_id = _xcagi_request_user_id(request, user_id)
+    scope = _xcagi_resolve_session_scope(resolved_user_id, mod_id)
+    numeric_user_id = durable_user_id(scope[0])
+    if numeric_user_id is not None:
+        durable = task_conversation_store.get_conversation(
+            session_id=cid,
+            user_id=numeric_user_id,
+        )
+        session = durable.get("session")
+        return {
+            "success": True,
+            "id": cid,
+            "title": session.get("title") if isinstance(session, dict) else None,
+            "mod_id": scope[1],
+            "messages": durable.get("messages") or [],
+            "metadata": {},
+            "durable": True,
+        }
     with _conversation_lock:
         rec = (_xcagi_user_sessions.get(scope) or {}).get(cid)
         if rec is None and not scope[1]:
@@ -241,6 +343,7 @@ def conversations_get(
 
 @router.post("/conversations/{conversation_id}/messages")
 def conversations_post_message(
+    request: Request,
     conversation_id: str,
     body: dict = Body(default_factory=dict),
 ) -> dict:
@@ -258,4 +361,4 @@ def conversations_post_message(
                 break
     if not payload.get("role"):
         payload["role"] = "user"
-    return conversations_save_message(payload)
+    return conversations_save_message(request, payload)

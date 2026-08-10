@@ -23,6 +23,7 @@ from app.application.agent_orchestrator.run_repository import (
     AgentRunRepository,
     get_agent_run_repository,
 )
+from app.application.agent_orchestrator.task_context import apply_task_context
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,8 @@ def _resolved_user_id(
 ) -> str:
     context = runtime_context or {}
     candidates = (
+        context.get("local_user_id"),
+        context.get("actor_id"),
         user_id,
         context.get("user_id"),
         context.get("userId"),
@@ -1345,7 +1348,6 @@ def _create_legacy_tool_records_run(
     records = _extract_legacy_tool_records(payload)
     if not records:
         return None
-
     resolved_user_id = _resolved_user_id(runtime_context=runtime_context, user_id=user_id)
     status = _payload_status(payload)
     run = AgentRun(
@@ -1361,18 +1363,17 @@ def _create_legacy_tool_records_run(
         },
         final_output={"chat_payload": _trace_safe_value(payload)},
     )
+    apply_task_context(run, runtime_context)
     run.add_event(
         "run.created",
         "Legacy planner 工具调用已进入 AgentRun 追踪",
         {"channel": channel, "source": str(source or "").strip(), "observed": True},
     )
-
     node_outputs, total_cost = _append_legacy_tool_records_to_run(run, records)
     _append_llm_calls_to_run(run, _extract_llm_calls(payload))
     _append_retrieval_calls_to_run(run, _extract_retrieval_calls(payload, query=message))
     _append_memory_references_to_run(run, _extract_memory_references(payload, query=message))
     _append_artifacts_to_run(run, _extract_artifacts(payload))
-
     if run.steps and status == "completed" and any(step.status == "failed" for step in run.steps):
         run.status = "failed"
         run.error = "legacy planner tool failed"
@@ -1410,7 +1411,6 @@ def _create_tool_call_agent_run(
     extracted = _extract_low_risk_tool_call(payload)
     if extracted is None:
         return None
-
     tool_id, action, params, raw_tool_call = extracted
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.types import PlanGraph, WorkflowNode
@@ -1503,6 +1503,7 @@ def start_legacy_chat_run(
             "runtime_context": _trace_safe_value(runtime_context or {}),
         },
     )
+    apply_task_context(run, runtime_context)
     run.add_event(
         "run.created",
         "智能任务已创建",
@@ -1529,7 +1530,6 @@ def finalize_legacy_chat_run(
 ) -> dict[str, Any]:
     if not isinstance(payload, dict):
         return payload
-
     repository = get_agent_run_repository()
     run = repository.get(run_id)
     if run is None:
@@ -1542,7 +1542,6 @@ def finalize_legacy_chat_run(
             channel=channel,
             intent=intent,
         )
-
     status = _payload_status(payload)
     records = _extract_legacy_tool_records(payload)
     run.status = status
@@ -1651,6 +1650,7 @@ def create_chat_trace_run(
         },
         final_output={"chat_payload": _trace_safe_value(payload)},
     )
+    apply_task_context(run, runtime_context)
     run.add_event(
         "run.created",
         "Chat 请求已进入 AgentRun 追踪",

@@ -80,13 +80,24 @@ export function coreWorkflowTaskDotTitle(empId: string, payload: Record<string, 
 }
 
 export function workflowTaskDotStatusClassForTask(task: TaskItem): string {
-  if (!task.id?.startsWith('workflow_emp_')) return 'queued'
+  if (!task.id?.startsWith('workflow_emp_')) return task.status || 'queued'
   const empId = task.id.slice('workflow_emp_'.length)
   return coreWorkflowTaskDotStatusClass(empId, (task.payload || {}) as Record<string, unknown>) || 'queued'
 }
 
 export function workflowTaskDotTitleForTask(task: TaskItem): string {
-  if (!task.id?.startsWith('workflow_emp_')) return ''
+  if (!task.id?.startsWith('workflow_emp_')) {
+    const labels: Record<string, string> = {
+      queued: '状态：排队中',
+      running: '状态：执行中',
+      blocked: '状态：等待审批、输入或依赖',
+      paused: '状态：已暂停',
+      success: '状态：已完成',
+      failed: '状态：失败',
+      cancelled: '状态：已中断',
+    }
+    return labels[task.status] || ''
+  }
   const empId = task.id.slice('workflow_emp_'.length)
   return coreWorkflowTaskDotTitle(empId, (task.payload || {}) as Record<string, unknown>) || ''
 }
