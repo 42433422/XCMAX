@@ -30,40 +30,49 @@ from app.application.workflow.ports.tools import ToolDispatcher
 class LegacyEngineAdapter:
     """Adapter making the legacy ``WorkflowEngine`` satisfy ``WorkflowRuntime``.
 
-    Constructed **keyword-only** with the business ``tool_dispatcher`` (and an
-    optional state event callback) exactly like ``WorkflowEngine``; every
-    ``WorkflowRuntime`` method delegates to the wrapped engine unchanged. The
-    adapter is fail-closed: it refuses to build without a dispatcher, so a
-    misconfigured composition root fails loudly at construction instead of
-    at first node execution.
+    Constructed **keyword-only** with either an already-built ``engine`` or a
+    ``tool_dispatcher`` (plus optional ``state_event_callback``) used to build
+    one. Every ``WorkflowRuntime`` method delegates to the wrapped engine
+    unchanged. The adapter is fail-closed: it refuses to build without either an
+    engine or a dispatcher, so a misconfigured composition root fails loudly at
+    construction instead of at first node execution.
 
-    Read-only accessors expose the wrapped engine and the dispatcher so callers
-    / tests can assert engine identity and dispatcher pass-through.
+    Read-only accessors expose the wrapped engine (identity) and the dispatcher
+    it is wired to (always derived from the engine).
     """
 
     def __init__(
         self,
         *,
-        tool_dispatcher: ToolDispatcher,
+        engine: WorkflowEngine | None = None,
+        tool_dispatcher: ToolDispatcher | None = None,
         state_event_callback: Callback | None = None,
     ) -> None:
-        # fail-closed: a null dispatcher would only explode mid-run; reject early.
-        if tool_dispatcher is None:
-            raise ValueError("LegacyEngineAdapter requires a non-null tool_dispatcher")
-        self._dispatcher = tool_dispatcher
-        self._engine = WorkflowEngine(
-            tool_dispatcher=tool_dispatcher,
-            state_event_callback=state_event_callback,
-        )
+        # fail-closed: require an injected engine OR a dispatcher to build one.
+        if engine is None and tool_dispatcher is None:
+            raise ValueError(
+                "LegacyEngineAdapter requires either `engine` or `tool_dispatcher`"
+            )
+        if engine is not None:
+            self._engine = engine
+        else:
+            self._engine = WorkflowEngine(
+                tool_dispatcher=tool_dispatcher,
+                state_event_callback=state_event_callback,
+            )
+        # Dispatcher is always derived from the engine's own dispatcher, keeping
+        # engine identity and dispatcher pass-through consistent whether the
+        # engine was injected or built from a dispatcher.
+        self._dispatcher = getattr(self._engine, "_dispatch", None)
 
     @property
     def engine(self) -> WorkflowEngine:
-        """The wrapped legacy ``WorkflowEngine`` instance (identity check)."""
+        """The wrapped legacy ``WorkflowEngine`` (identity of the injected engine)."""
         return self._engine
 
     @property
-    def dispatcher(self) -> ToolDispatcher:
-        """The dispatcher passed through to the engine (pass-through check)."""
+    def dispatcher(self) -> ToolDispatcher | None:
+        """The dispatcher the engine is wired to (derived from the engine)."""
         return self._dispatcher
 
     def run(
