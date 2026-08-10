@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
 
+vi.mock('@/api/agentRuns', () => ({
+  default: { observeTool: vi.fn().mockResolvedValue({ success: true }) },
+}))
+
 vi.mock('./useChatMessages', async () => {
   const { ref } = await import('vue')
   return {

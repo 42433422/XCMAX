@@ -26,6 +26,33 @@ export interface AgentRunStep {
   started_at?: string
   finished_at?: string
   duration_ms?: number
+  attempt_count?: number
+}
+
+export interface AgentToolCall {
+  call_id: string
+  step_id?: string
+  node_id?: string
+  tool_id?: string
+  action?: string
+  status?: string
+  started_at?: string
+  finished_at?: string
+  duration_ms?: number
+  cost_units?: number
+  metadata?: Record<string, unknown>
+}
+
+export interface AgentArtifact {
+  artifact_id: string
+  artifact_type?: string
+  name?: string
+  source?: string
+  uri?: string
+  mime_type?: string
+  summary?: string
+  created_at?: string
+  metadata?: Record<string, unknown>
 }
 
 export interface AgentRun {
@@ -36,6 +63,8 @@ export interface AgentRun {
   plan_id?: string
   intent?: string
   steps?: AgentRunStep[]
+  tool_calls?: AgentToolCall[]
+  artifacts?: AgentArtifact[]
   events?: AgentRunEvent[]
   final_output?: Record<string, unknown>
   error?: string
@@ -62,9 +91,30 @@ export interface ContinueAgentRunPayload {
   runtime_context?: Record<string, unknown>
 }
 
+export interface ObserveAgentToolPayload {
+  message: string
+  tool_id: string
+  action: string
+  params: Record<string, unknown>
+  output: Record<string, unknown>
+  response?: string
+  source?: string
+  runtime_context?: Record<string, unknown>
+}
+
+export interface AgentRunReference {
+  run_id: string
+  status: string
+  task_id: string
+}
+
 export const agentRunsApi = {
   createRun(payload: CreateAgentRunPayload): Promise<ApiResponse<AgentRun>> {
     return api.post<ApiResponse<AgentRun>>('/api/agent/runs', payload)
+  },
+
+  observeTool(payload: ObserveAgentToolPayload): Promise<ApiResponse<AgentRunReference>> {
+    return api.post<ApiResponse<AgentRunReference>>('/api/agent/runs/observed-tool', payload)
   },
 
   continueRun(
@@ -98,6 +148,13 @@ export const agentRunsApi = {
     return api.post<ApiResponse<AgentRun>>(
       `/api/agent/runs/${encodeURIComponent(runId)}/resume`,
       { runtime_context: runtimeContext },
+    )
+  },
+
+  retryRun(runId: string): Promise<ApiResponse<AgentRunReference>> {
+    return api.post<ApiResponse<AgentRunReference>>(
+      `/api/agent/runs/${encodeURIComponent(runId)}/retry`,
+      {},
     )
   },
 

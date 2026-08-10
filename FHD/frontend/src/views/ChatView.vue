@@ -34,6 +34,7 @@
         :current-task="currentTask"
         :task-list="taskList"
         :filtered-task-list="filteredTaskList"
+        :active-task-id="activeTaskId"
         :expanded-task-ids="expandedTaskIds"
         :task-filter="taskFilter"
         :is-pro-mode="isProMode"
@@ -59,9 +60,12 @@
         @set-task-filter="setTaskFilter"
         @clear-task-history="clearTaskHistory"
         @toggle-task-expanded="toggleTaskExpanded"
+        @select-task="selectTask"
         @open-shipment-records="openShipmentRecordsFromAuditTask"
         @jump-to-task-message="jumpToTaskMessage"
         @retry-task="retryTask"
+        @pause-task="pauseTask"
+        @resume-task="resumeTask"
         @cancel-task-by-id="cancelTaskById"
         @copy-assistant-push="copyAssistantPushContent"
         @open-assistant-float="openAssistantFloatFromTaskPanel"
@@ -245,6 +249,7 @@ const {
   latestAssistantPush,
   proRuntimeTask,
   taskList,
+  activeTaskId,
   filteredTaskList,
   expandedTaskIds,
   taskFilter,
@@ -275,9 +280,12 @@ const {
   bindExcelSheetToChat,
   bindAllExcelSheetsToChat,
   toggleTaskExpanded,
+  selectTask,
   setTaskFilter,
   clearTaskHistory,
   retryTask,
+  pauseTask,
+  resumeTask,
   cancelTaskById,
   jumpToTaskMessage,
   showHistoryPanel,

@@ -2,6 +2,7 @@ import { ref, computed, type Ref } from 'vue'
 import {
   TASK_HISTORY_LIMIT,
   type TaskItem,
+  type TaskFilter,
   type TaskStatus,
 } from './useChatPersistence'
 
@@ -18,7 +19,7 @@ export function useChatTaskList(options: UseChatTaskListOptions = {}) {
   const taskList = ref<TaskItem[]>([])
   const activeTaskId = ref<string>('')
   const expandedTaskIds = ref<string[]>([])
-  const taskFilter = ref<'all' | 'running' | 'success' | 'failed'>('all')
+  const taskFilter = ref<TaskFilter>('all')
 
   function createTaskId(prefix: string): string {
     return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -26,7 +27,14 @@ export function useChatTaskList(options: UseChatTaskListOptions = {}) {
 
   function sortTaskList() {
     taskList.value.sort((a, b) => {
-      const rank = (s: TaskStatus) => (s === 'running' ? 0 : s === 'queued' ? 1 : s === 'failed' ? 2 : s === 'success' ? 3 : 4)
+      const rank = (s: TaskStatus) => (
+        s === 'running' ? 0
+          : s === 'queued' ? 1
+            : s === 'blocked' ? 2
+              : s === 'paused' ? 3
+                : s === 'failed' ? 4
+                  : s === 'success' ? 5 : 6
+      )
       const r = rank(a.status) - rank(b.status)
       if (r !== 0) return r
       const startedDiff = (a.startedAt || 0) - (b.startedAt || 0)
@@ -156,6 +164,9 @@ export function useChatTaskList(options: UseChatTaskListOptions = {}) {
     if (taskFilter.value === 'running') {
       return list.filter((t) => t.status === 'running' || t.status === 'queued')
     }
+    if (taskFilter.value === 'blocked') {
+      return list.filter((t) => t.status === 'blocked' || t.status === 'paused')
+    }
     if (taskFilter.value === 'success') {
       const rest = list.filter((t) => t.status === 'success')
       const ids = new Set(rest.map((t) => t.id))
@@ -168,7 +179,7 @@ export function useChatTaskList(options: UseChatTaskListOptions = {}) {
     return [...wfExtra, ...rest]
   })
 
-  function setTaskFilter(filter: 'all' | 'running' | 'success' | 'failed') {
+  function setTaskFilter(filter: TaskFilter) {
     taskFilter.value = filter
   }
 

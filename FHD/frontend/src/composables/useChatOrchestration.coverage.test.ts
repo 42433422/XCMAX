@@ -12,6 +12,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ref, type Ref } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
 
+vi.mock('@/api/agentRuns', () => ({
+  default: { observeTool: vi.fn().mockResolvedValue({ success: true }) },
+}))
+
 // ── vi.hoisted：所有在 vi.mock 工厂中引用的 vi.fn 必须在此定义 ───
 const {
   mockAddAndSaveMessage,
@@ -1561,7 +1565,7 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 单条 JSON',
     })
     const api = createApi()
     await api.sendMessage('执行')
-    expect(mockSetLoadingProgress).toHaveBeenCalledWith('执行完成，正在整理结果...')
+    expect(mockSetLoadingProgress).toHaveBeenCalledWith('执行完成，正在整理结果...', 'test-session')
   })
 
   it('workflow_failed action 设置 loadingProgress', async () => {
@@ -1572,7 +1576,7 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 单条 JSON',
     })
     const api = createApi()
     await api.sendMessage('执行')
-    expect(mockSetLoadingProgress).toHaveBeenCalledWith('执行失败，正在整理错误信息...')
+    expect(mockSetLoadingProgress).toHaveBeenCalledWith('执行失败，正在整理错误信息...', 'test-session')
   })
 })
 
@@ -2050,7 +2054,7 @@ describe('useChatOrchestration coverage – proIntentExperienceEnabled 流式 lo
       proIntentExperienceEnabled: ref(true),
     })
     await api.sendMessage('hello')
-    expect(mockSetLoadingProgress).toHaveBeenCalledWith('专业意图处理中（流式）…')
+    expect(mockSetLoadingProgress).toHaveBeenCalledWith('专业意图处理中（流式）…', 'hybrid')
   })
 })
 
@@ -2074,6 +2078,6 @@ describe('useChatOrchestration coverage – proIntentExperienceEnabled 非流式
       proIntentExperienceEnabled: ref(true),
     })
     await api.sendMessage('hello')
-    expect(mockSetLoadingProgress).toHaveBeenCalledWith('专业意图处理中（普通界面槽位）...')
+    expect(mockSetLoadingProgress).toHaveBeenCalledWith('专业意图处理中（普通界面槽位）...', 'hybrid2')
   })
 })

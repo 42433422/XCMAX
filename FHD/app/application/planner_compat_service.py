@@ -944,6 +944,7 @@ async def compat_chat_stream_async(
     slot_payload = try_normal_slot_read_payload(body.message, request=request)
     if isinstance(slot_payload, dict) and slot_payload.get("response"):
         runtime_context, _ = _merge_runtime_context_with_message_paths(body.context, body.message)
+        runtime_context = _runtime_context_with_authenticated_actor(request, runtime_context)
         channel = (
             "compat_chat_stream_agent_tool"
             if slot_payload.get("agent_tool_dispatch")
@@ -962,7 +963,6 @@ async def compat_chat_stream_async(
         yield _sse_event_line({"type": "token", "text": response_text})
         yield _sse_event_line({"type": "done", "result": traced})
         return
-
     # 注入 persona system_prompt（前端没传时用 persona 系统生成去客服腔 prompt）
     if not body.system_prompt and body.message:
         try:

@@ -104,6 +104,7 @@
             <div class="task-filters">
               <button class="task-filter-btn" :class="{ active: taskFilter === 'all' }" @click="$emit('set-task-filter', 'all')">{{ $t('chat.filterAll') }}</button>
               <button class="task-filter-btn" :class="{ active: taskFilter === 'running' }" @click="$emit('set-task-filter', 'running')">{{ $t('chat.filterRunning') }}</button>
+              <button class="task-filter-btn" :class="{ active: taskFilter === 'blocked' }" @click="$emit('set-task-filter', 'blocked')">{{ $t('chat.filterBlocked') }}</button>
               <button class="task-filter-btn" :class="{ active: taskFilter === 'success' }" @click="$emit('set-task-filter', 'success')">{{ $t('chat.filterSuccess') }}</button>
               <button class="task-filter-btn" :class="{ active: taskFilter === 'failed' }" @click="$emit('set-task-filter', 'failed')">{{ $t('chat.filterFailed') }}</button>
             </div>
@@ -115,6 +116,7 @@
               :key="task.id"
               class="task-list-item"
               :class="{
+                'task-list-item-active': activeTaskId === task.id,
                 'task-list-item-workflow-collapsed':
                   task.type === 'workflow_employee' && !expandedTaskIds.includes(task.id),
               }"
@@ -123,7 +125,7 @@
                 type="button"
                 class="task-list-main"
                 :aria-expanded="expandedTaskIds.includes(task.id)"
-                @click="$emit('toggle-task-expanded', task.id)"
+                @click="$emit('select-task', task)"
               >
                 <span
                   class="task-dot"
@@ -219,8 +221,9 @@
               <div v-if="expandedTaskIds.includes(task.id)" class="task-list-detail">
                 <div v-if="task.summary" class="task-summary">{{ normalizeTaskDisplayText(task.summary) }}</div>
                 <div v-if="task.error" class="task-error">{{ normalizeTaskDisplayText(task.error) }}</div>
+                <AgentTaskRuntimePanel v-if="task.type === 'agent_task'" :task="task" @open="$emit('select-task', task)" @retry="$emit('retry-task', task.id)" @pause="$emit('pause-task', task.id)" @resume="$emit('resume-task', task.id)" @cancel="$emit('cancel-task-by-id', task.id)" />
                 <div
-                  v-if="task.type !== 'workflow_employee'"
+                  v-if="task.type !== 'workflow_employee' && task.type !== 'agent_task'"
                   class="task-actions"
                 >
                   <button
@@ -278,12 +281,11 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ShipmentTask } from '@/composables/useShipmentTask'
-import type { TaskItem } from '@/composables/useChatPersistence'
+import type { TaskFilter, TaskItem } from '@/composables/useChatPersistence'
+import AgentTaskRuntimePanel from './AgentTaskRuntimePanel.vue'
 import { workflowProgressIsIdle } from '@/workflow/coreWorkflowTaskUi'
 import { normalizeTaskDisplayText } from '@/utils/chatTaskLabels'
-
 useI18n()
-
 type WorkflowTaskPayload = {
   workflowProgressPct?: number
   workflowMonitorLine?: string
@@ -292,11 +294,9 @@ type WorkflowTaskPayload = {
   workflowProgressLabel?: string
   workflowSteps?: Array<{ id: string; label: string; status: string }>
 }
-
 function workflowPayload(task: TaskItem): WorkflowTaskPayload {
   return (task.payload ?? {}) as WorkflowTaskPayload
 }
-
 function hasWorkflowBody(task: TaskItem): boolean {
   const p = workflowPayload(task)
   return (
@@ -306,13 +306,12 @@ function hasWorkflowBody(task: TaskItem): boolean {
     || (Array.isArray(p.workflowSteps) && p.workflowSteps.length > 0)
   )
 }
-
 const props = defineProps<{
   currentTask: ShipmentTask | null
   taskList: TaskItem[]
   filteredTaskList: TaskItem[]
-  expandedTaskIds: string[]
-  taskFilter: 'all' | 'running' | 'success' | 'failed'
+  activeTaskId: string; expandedTaskIds: string[]
+  taskFilter: TaskFilter
   isProMode: boolean
   proRuntimeTask: { title: string; statusText: string; statusClass: string; description: string } | null
   latestAssistantPush: { title: string; description: string } | null
@@ -327,7 +326,6 @@ const props = defineProps<{
   workflowTaskDotStatusClass: (task: TaskItem) => string
   workflowTaskDotTitle: (task: TaskItem) => string
 }>()
-
 const emit = defineEmits<{
   'confirm-task': []
   'cancel-task': []
@@ -336,23 +334,23 @@ const emit = defineEmits<{
   'shipment-download-click': []
   'start-print': []
   'switch-view': [view: string]
-  'set-task-filter': [filter: 'all' | 'running' | 'success' | 'failed']
+  'set-task-filter': [filter: TaskFilter]
   'clear-task-history': []
   'toggle-task-expanded': [id: string]
+  'select-task': [task: TaskItem]
   'open-shipment-records': []
   'jump-to-task-message': [task: TaskItem]
   'retry-task': [id: string]
+  'pause-task': [id: string]; 'resume-task': [id: string]
   'cancel-task-by-id': [id: string]
   'copy-assistant-push': []
   'open-assistant-float': []
 }>()
-
 const customOrderNumberModel = computed({
   get: () => props.currentTask?.customOrderNumber ?? '',
   set: (value: string) => emit('set-custom-order-number', value),
 })
 </script>
-
 <style scoped>
 .panel-content.panel-content-task {
   display: flex;
@@ -360,13 +358,11 @@ const customOrderNumberModel = computed({
   min-height: 0;
   overflow: hidden;
 }
-
 .task-panel-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
 }
-
 .task-list {
   display: flex;
   flex-direction: column;
@@ -426,6 +422,8 @@ const customOrderNumberModel = computed({
   background: var(--card-bg);
 }
 
+.task-list-item-active { border-color: var(--app-interactive); box-shadow: 0 0 0 1px rgba(59, 130, 246, .18); }
+
 .task-list-main {
   width: 100%;
   display: flex;
@@ -447,6 +445,7 @@ const customOrderNumberModel = computed({
 
 .status-queued { background: #9ca3af; }
 .status-running { background: #3b82f6; }
+.status-blocked { background: #f59e0b; } .status-paused { background: #8b5cf6; }
 .status-success { background: #10b981; }
 .status-failed { background: #ef4444; }
 .status-cancelled { background: #6b7280; }
@@ -694,4 +693,5 @@ const customOrderNumberModel = computed({
   font-size: 12px;
   color: #dc2626;
 }
+
 </style>
