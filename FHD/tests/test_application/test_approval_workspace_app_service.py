@@ -1455,10 +1455,6 @@ class TestRejectRequest:
         with (
             patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
             patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
-            patch(
-                "app.application.approval_workspace_app_service._has_pending_ai_workflow",
-                return_value=True,
-            ),
             patch("app.application.approval_workspace_app_service._audit"),
             patch(
                 "app.application.approval_workspace_app_service._ai_workflow_audit_node",
@@ -1485,6 +1481,50 @@ class TestRejectRequest:
         assert req.status == ApprovalStatus.REJECTED.value
         assert result["data"]["workflow_execution"]["discarded_pending_workflow"] is True
         mock_drop.assert_called_once_with(request_no="req-ai-1", reason="不执行")
+        mock_db.add.assert_called_once()
+
+    def test_reject_expired_ai_workflow_persists_without_execution(self):
+        request = Mock()
+        mock_db = MagicMock()
+        mock_query = MagicMock()
+        mock_db.query.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        req = Mock()
+        req.status = ApprovalStatus.PENDING.value
+        req.id = 1
+        req.request_no = "req-ai-expired"
+        req.business_type = "workflow_tool"
+        req.current_node = None
+        req.applicant_id = 1
+        req.title = "已过期 AI 工作流"
+        mock_query.first.return_value = req
+
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor", return_value=1),
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch("app.application.approval_workspace_app_service._audit"),
+            patch(
+                "app.application.approval_workspace_app_service._ai_workflow_audit_node",
+                return_value=SimpleNamespace(id=9, node_name="AI 工作流审批留痕", node_order=1),
+            ),
+            patch("app.application.approval_workspace_app_service.notify_mobile_user"),
+            patch(
+                "app.application.approval_workspace_app_service._request_to_dict",
+                return_value={"id": 1, "status": "rejected"},
+            ),
+            patch(
+                "app.application.approval_workspace_app_service._drop_pending_ai_workflow_after_rejection",
+                return_value=None,
+            ) as mock_drop,
+        ):
+            mock_get_db.return_value = _make_db_ctx(mock_db)
+            result = reject_request(1, request, body={"reason": "运行态已过期，拒绝留痕"})
+
+        assert result == {"success": True, "data": {"id": 1, "status": "rejected"}}
+        assert req.status == ApprovalStatus.REJECTED.value
+        mock_drop.assert_called_once_with(
+            request_no="req-ai-expired", reason="运行态已过期，拒绝留痕"
+        )
         mock_db.add.assert_called_once()
 
 

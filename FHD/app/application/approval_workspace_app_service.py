@@ -885,14 +885,6 @@ def reject_request(
                         {"success": False, "message": "当前用户无权拒绝这条 AI 工作流"},
                         status_code=403,
                     )
-                if not _has_pending_ai_workflow(req.request_no):
-                    return JSONResponse(
-                        {
-                            "success": False,
-                            "message": "AI 工作流运行态不存在或已过期，请重新发起任务",
-                        },
-                        status_code=409,
-                    )
                 audit_node = _ai_workflow_audit_node(db, req)
                 if audit_node is None:
                     return JSONResponse(
