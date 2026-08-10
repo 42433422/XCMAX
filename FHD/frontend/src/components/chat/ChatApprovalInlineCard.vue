@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import type { ChatApprovalCard } from '@/types/chat-ui'
 
 const props = defineProps<{
   card: ChatApprovalCard
   busy?: boolean
 }>()
+
+const router = useRouter()
 
 defineEmits<{
   confirm: []
@@ -15,6 +18,12 @@ defineEmits<{
 const hasPersistedApproval = computed(
   () => Boolean(props.card.approval_path || props.card.approval_request_ids?.length),
 )
+
+async function openApprovalWorkspace() {
+  if (props.busy) return
+  const path = props.card.approval_path || '/mod/xcagi-approval-bridge/approval-hub/workspace'
+  await router.push(path)
+}
 </script>
 
 <template>
@@ -40,7 +49,7 @@ const hasPersistedApproval = computed(
         class="approval-btn approval-btn--primary"
         :href="card.approval_path || '/mod/xcagi-approval-bridge/approval-hub/workspace'"
         :aria-disabled="busy ? 'true' : undefined"
-        @click="busy && $event.preventDefault()"
+        @click.prevent="openApprovalWorkspace"
       >
         前往审批
       </a>

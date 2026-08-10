@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ChatApprovalInlineCard from './ChatApprovalInlineCard.vue'
+
+const push = vi.fn()
+
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push }),
+}))
 
 const card = {
   approval_required: true,
@@ -11,6 +17,10 @@ const card = {
 }
 
 describe('ChatApprovalInlineCard', () => {
+  beforeEach(() => {
+    push.mockReset()
+  })
+
   it('renders approval as an inline flow instead of a dialog card', () => {
     const wrapper = mount(ChatApprovalInlineCard, { props: { card } })
 
@@ -27,7 +37,7 @@ describe('ChatApprovalInlineCard', () => {
     expect(wrapper.emitted('confirm')).toHaveLength(1)
   })
 
-  it('shows the persisted request number and links directly to the approval workspace', () => {
+  it('shows the persisted request number and uses SPA navigation to open the approval workspace', async () => {
     const persistedCard = {
       ...card,
       approval_request_ids: ['req-crud-1'],
@@ -41,6 +51,24 @@ describe('ChatApprovalInlineCard', () => {
     expect(wrapper.find('.approval-btn--primary').attributes('href')).toBe(
       persistedCard.approval_path,
     )
+    await wrapper.find('.approval-btn--primary').trigger('click')
+    expect(push).toHaveBeenCalledWith(persistedCard.approval_path)
     expect(wrapper.emitted('confirm')).toBeUndefined()
+  })
+
+  it('does not navigate while busy', async () => {
+    const wrapper = mount(ChatApprovalInlineCard, {
+      props: {
+        card: {
+          ...card,
+          approval_request_ids: ['req-crud-2'],
+          approval_path: '/mod/xcagi-approval-bridge/approval-hub/workspace?request_no=req-crud-2',
+        },
+        busy: true,
+      },
+    })
+
+    await wrapper.find('.approval-btn--primary').trigger('click')
+    expect(push).not.toHaveBeenCalled()
   })
 })
