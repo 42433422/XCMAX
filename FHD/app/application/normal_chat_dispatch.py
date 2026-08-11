@@ -1,9 +1,4 @@
-"""
-普通版聊天槽位路由与产品查询响应（与 unified_chat 行为一致）。
-
-供 /api/ai/unified_chat、工作流 execute_registered_workflow_tool（tool_execution_profile=normal）
-及 normal_slot_dispatch 工具复用。
-"""
+"""普通版聊天槽位路由，供统一聊天、工作流和 normal_slot_dispatch 复用。"""
 
 from __future__ import annotations
 
@@ -18,17 +13,11 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-# 销售到收款闭环写意图（Sales-to-Payment closed-loop write，吸收 Odoo 18）。
-# 命中后路由为 sales_write + execute_closed_loop，并产出可预览、需审批、零持久化的写载荷（W1-10 契约）。
-# 置于通用客户实体匹配之前，避免「客户/开票/收款」等词把销售写语义遮蔽成只读查询。
+# W1-10 销售到收款闭环写意图；必须先于通用客户实体匹配。
 _SALES_WRITE_SELL_MARKERS = ("卖给", "销售给", "出售给")
-_SALES_WRITE_HEAD_MARKERS = ("把", "将")
-_SALES_WRITE_DELIMITERS = "，,；;"
-_ASCII_DIGITS = "0123456789"
 
 
 def _as_closed_loop_number(value: float) -> int | float:
-    """整数收敛为 int，否则保留 float，保证载荷数值干净、可精确断言。"""
     return int(value) if float(value).is_integer() else float(value)
 
 
@@ -41,7 +30,6 @@ def _sales_write_idempotency_key(
     request_invoice: bool,
     request_payment: bool,
 ) -> str:
-    """内容派生的确定性幂等键：仅依赖请求内容，稳定、无随机、无副作用。"""
     seed = json.dumps(
         {
             "customer_name": customer_name,
@@ -59,120 +47,74 @@ def _sales_write_idempotency_key(
     return "sw-" + hashlib.sha256(seed.encode("utf-8")).hexdigest()
 
 
-def _scan_decimal(text: str, start: int = 0) -> tuple[float, int] | None:
-    """从 ``start`` 线性扫描带可选符号的小数，避免对用户文本执行回溯正则。"""
-    cursor = start
-    while cursor < len(text) and text[cursor].isspace():
-        cursor += 1
+def _first_marker(text: str, markers: tuple[str, ...], start: int = 0) -> tuple[int, str]:
+    matches = ((index, marker) for marker in markers if (index := text.find(marker, start)) >= 0)
+    return min(matches, default=(-1, ""), key=lambda item: item[0])
 
-    number_start = cursor
-    if cursor < len(text) and text[cursor] in "+-":
-        cursor += 1
 
-    integer_start = cursor
-    while cursor < len(text) and text[cursor] in _ASCII_DIGITS:
-        cursor += 1
-    if cursor == integer_start:
+def _decimal_prefix(text: str) -> tuple[float, str] | None:
+    candidate = text.lstrip()
+    allowed = "+-.0123456789"
+    end = next(
+        (index for index, char in enumerate(candidate) if char not in allowed), len(candidate)
+    )
+    try:
+        return float(candidate[:end]), candidate[end:]
+    except ValueError:
         return None
-
-    if cursor < len(text) and text[cursor] == ".":
-        cursor += 1
-        fraction_start = cursor
-        while cursor < len(text) and text[cursor] in _ASCII_DIGITS:
-            cursor += 1
-        if cursor == fraction_start:
-            return None
-
-    return float(text[number_start:cursor]), cursor
 
 
 def _parse_sales_write_request(text: str) -> dict[str, Any] | None:
-    """通用确定性解析「<产品>卖给<客户>，<数量><单位>，单价<价格>，[开票] [收款]」。
-
-    命中销售到收款闭环写意图；必填字段缺失或非正时返回 None，回退到非写路由。
-    仅做内容解析：不查询/写入数据库，不执行任何工具，不硬编码整句示例。
-    实体名按句子原样保留（含「客户」前缀等），供未来租户作用域精确名解析。
-    """
+    """线性解析销售闭环写意图；字段缺失或非正时 fail closed。"""
     if not any(marker in text for marker in _SALES_WRITE_SELL_MARKERS):
         return None
-
-    # 通用确定性形状：把|将 + 产品文本 + 卖给|销售给|出售给 + 客户文本 + 首个逗号 + 数量/单位 + 逗号 + 单价 + [开票][收款]。
-    # 产品名 = 初始标记与销售标记之间的整段（不剥离「产品/商品」）；客户名 = 销售标记与首个中英逗号之间的整段（不剥离「客户」）。
-    head_candidates = [
-        (index, marker) for marker in _SALES_WRITE_HEAD_MARKERS if (index := text.find(marker)) >= 0
-    ]
-    if not head_candidates:
+    head_index, head_marker = _first_marker(text, ("把", "将"))
+    if head_index < 0:
         return None
-    head_index, head_marker = min(head_candidates, key=lambda candidate: candidate[0])
     product_start = head_index + len(head_marker)
-
-    sell_candidates = [
-        (index, marker)
-        for marker in _SALES_WRITE_SELL_MARKERS
-        if (index := text.find(marker, product_start)) >= 0
-    ]
-    if not sell_candidates:
+    sell_index, sell_marker = _first_marker(text, _SALES_WRITE_SELL_MARKERS, product_start)
+    if sell_index < 0:
         return None
-    sell_index, sell_marker = min(sell_candidates, key=lambda candidate: candidate[0])
     customer_start = sell_index + len(sell_marker)
-
-    delimiter_candidates = [
-        index
-        for delimiter in _SALES_WRITE_DELIMITERS
-        if (index := text.find(delimiter, customer_start)) >= 0
-    ]
-    if not delimiter_candidates:
+    delimiter_index, _ = _first_marker(text, tuple("，,；;"), customer_start)
+    if delimiter_index < 0:
         return None
-    delimiter_index = min(delimiter_candidates)
-
     product_name = text[product_start:sell_index].strip()
     customer_name = text[customer_start:delimiter_index].strip()
     if not product_name or not customer_name:
         return None
-
     tail = text[delimiter_index + 1 :]
-    # 数量与单位锚定在首个逗号之后，带符号解析：负号不被未锚定的数字正则跳过。
-    quantity_scan = _scan_decimal(tail)
+    quantity_scan = _decimal_prefix(tail)
     if quantity_scan is None:
         return None
-    quantity_raw, cursor = quantity_scan
-
-    while cursor < len(tail) and tail[cursor].isspace():
-        cursor += 1
-    unit_start = cursor
-    while (
-        cursor < len(tail)
-        and tail[cursor] not in _ASCII_DIGITS + _SALES_WRITE_DELIMITERS + "。"
-        and not tail[cursor].isspace()
-        and cursor - unit_start < 5
-    ):
-        cursor += 1
-    unit = tail[unit_start:cursor].strip()
+    quantity_raw, quantity_tail = quantity_scan
+    unit_text = quantity_tail.lstrip()
+    unit_end = next(
+        (
+            index
+            for index, char in enumerate(unit_text)
+            if char.isdigit() or char.isspace() or char in "，,。；;"
+        ),
+        len(unit_text),
+    )
+    unit = unit_text[:unit_end]
     if not 1 <= len(unit) <= 4:
         return None
-
-    price_marker = tail.find("单价", cursor)
+    price_marker = tail.find("单价")
     if price_marker < 0:
         return None
-    price_start = price_marker + len("单价")
-    while price_start < len(tail) and tail[price_start].isspace():
-        price_start += 1
-    if price_start < len(tail) and tail[price_start] in ":：":
-        price_start += 1
-    price_scan = _scan_decimal(tail, price_start)
+    price_text = tail[price_marker + len("单价") :].lstrip(" \t\r\n:：")
+    price_scan = _decimal_prefix(price_text)
     if price_scan is None:
         return None
-    unit_price_raw, _ = price_scan
+    unit_price_raw, _price_tail = price_scan
     if quantity_raw <= 0 or unit_price_raw <= 0 or not unit:
         return None
-
     quantity = _as_closed_loop_number(quantity_raw)
     unit_price = _as_closed_loop_number(unit_price_raw)
     total_amount = _as_closed_loop_number(quantity_raw * unit_price_raw)
-
     request_invoice = "开票" in text
     request_payment = "收款" in text
-
     idem_key = _sales_write_idempotency_key(
         customer_name,
         product_name,
@@ -182,7 +124,6 @@ def _parse_sales_write_request(text: str) -> dict[str, Any] | None:
         request_invoice,
         request_payment,
     )
-
     return {
         "idempotency_key": idem_key,
         "order": {
@@ -224,24 +165,12 @@ def _parse_sales_write_request(text: str) -> dict[str, Any] | None:
 
 
 def _is_sales_closed_loop_write(text: str) -> bool:
-    """兼容检测：命中销售到收款闭环写解析即视为闭环写意图。
-
-    供规则规划器（planner.py）导入复用；与 ``_parse_sales_write_request`` 同源判定，
-    仅做内容解析，无数据库/工具副作用。
-    """
+    """供规则规划器复用同源、无副作用的销售闭环写判定。"""
     return _parse_sales_write_request(text) is not None
 
 
 def route_normal_mode_message(message: str) -> dict[str, Any]:
-    """
-    普通版轻量槽位提取与任务分流：
-    - shipment: 发货单 / 开单 / 打印 / 出货单等单据语境
-    - product_query: 产品库检索
-    - customers_query: 客户/购买单位查询
-    - inventory_alert: 库存预警
-    - label_print: 标签打印
-    - unknown: 未命中
-    """
+    """普通版轻量槽位提取与任务分流。"""
     text = (message or "").strip()
     lower = text.lower()
 
@@ -258,8 +187,6 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
             "slots": {"number_style_order": number_style_order},
         }
 
-    # 销售到收款闭环写意图：须在「客户/购买单位」匹配之前判断，
-    # 避免「卖给…客户…开票收款」被「客户」一词遮蔽成只读 customers_query（GAP-1 纠正）。
     sales_write_payload = _parse_sales_write_request(text)
     if sales_write_payload is not None:
         return {
@@ -271,9 +198,7 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
     query_keywords = ("查询", "查一下", "查下", "查", "看看", "看下", "搜索", "找下", "找", "检索")
     model_signal = bool(re.search(r"(?:型号|编号)\s*[:：]?\s*([0-9A-Za-z-]{2,})", text))
     unit_model_signal = bool(re.search(r"([^\s，,。]{2,})\s*的\s*([0-9A-Za-z-]{2,})", text))
-    # 客户/购买单位：实体路由到 Agent 工具 customers.query。
-    # 禁止用正则把问句前缀抽成客户名 keyword（空泛计数/列表问法必须 keyword=""）。
-    # 指名检索由 Agent 在工具参数里填 keyword；此处只负责选工具。
+    # 客户/购买单位只负责选工具；空泛计数/列表问法必须保持空 keyword。
     customer_entity_markers = ("客户", "购买单位", "买家")
     if any(k in text for k in customer_entity_markers):
         return {
