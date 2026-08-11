@@ -4,12 +4,12 @@
 # 重型 ML：requirements.txt / optional-dependencies.ml（torch、transformers）
 
 # XCAGI 吸收并维护的 LangGraph 运行时；CI/服务端必须从仓库内同一份源码安装。
-./packages/xcagi_langgraph_core
-./packages/xcagi_langgraph_checkpoint
-./packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite
-./packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres
-./packages/xcagi_langgraph_prebuilt
-./packages/xcagi_langgraph_sdk
+-e ./packages/xcagi_langgraph_core
+-e ./packages/xcagi_langgraph_checkpoint
+-e ./packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite
+-e ./packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres
+-e ./packages/xcagi_langgraph_prebuilt
+-e ./packages/xcagi_langgraph_sdk
 
 fastapi>=0.136.1
 uvicorn[standard]>=0.27.0
