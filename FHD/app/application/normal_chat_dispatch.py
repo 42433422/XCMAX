@@ -22,6 +22,9 @@ logger = logging.getLogger(__name__)
 # 命中后路由为 sales_write + execute_closed_loop，并产出可预览、需审批、零持久化的写载荷（W1-10 契约）。
 # 置于通用客户实体匹配之前，避免「客户/开票/收款」等词把销售写语义遮蔽成只读查询。
 _SALES_WRITE_SELL_MARKERS = ("卖给", "销售给", "出售给")
+_SALES_WRITE_HEAD_MARKERS = ("把", "将")
+_SALES_WRITE_DELIMITERS = "，,；;"
+_ASCII_DIGITS = "0123456789"
 
 
 def _as_closed_loop_number(value: float) -> int | float:
@@ -56,6 +59,33 @@ def _sales_write_idempotency_key(
     return "sw-" + hashlib.sha256(seed.encode("utf-8")).hexdigest()
 
 
+def _scan_decimal(text: str, start: int = 0) -> tuple[float, int] | None:
+    """从 ``start`` 线性扫描带可选符号的小数，避免对用户文本执行回溯正则。"""
+    cursor = start
+    while cursor < len(text) and text[cursor].isspace():
+        cursor += 1
+
+    number_start = cursor
+    if cursor < len(text) and text[cursor] in "+-":
+        cursor += 1
+
+    integer_start = cursor
+    while cursor < len(text) and text[cursor] in _ASCII_DIGITS:
+        cursor += 1
+    if cursor == integer_start:
+        return None
+
+    if cursor < len(text) and text[cursor] == ".":
+        cursor += 1
+        fraction_start = cursor
+        while cursor < len(text) and text[cursor] in _ASCII_DIGITS:
+            cursor += 1
+        if cursor == fraction_start:
+            return None
+
+    return float(text[number_start:cursor]), cursor
+
+
 def _parse_sales_write_request(text: str) -> dict[str, Any] | None:
     """通用确定性解析「<产品>卖给<客户>，<数量><单位>，单价<价格>，[开票] [收款]」。
 
@@ -68,27 +98,71 @@ def _parse_sales_write_request(text: str) -> dict[str, Any] | None:
 
     # 通用确定性形状：把|将 + 产品文本 + 卖给|销售给|出售给 + 客户文本 + 首个逗号 + 数量/单位 + 逗号 + 单价 + [开票][收款]。
     # 产品名 = 初始标记与销售标记之间的整段（不剥离「产品/商品」）；客户名 = 销售标记与首个中英逗号之间的整段（不剥离「客户」）。
-    head = re.search(
-        r"(?:把|将)\s*(.+?)\s*(?:卖给|销售给|出售给)\s*(.+?)[，,；;]",
-        text,
-    )
-    if not head:
+    head_candidates = [
+        (index, marker) for marker in _SALES_WRITE_HEAD_MARKERS if (index := text.find(marker)) >= 0
+    ]
+    if not head_candidates:
         return None
-    product_name = head.group(1).strip()
-    customer_name = head.group(2).strip()
+    head_index, head_marker = min(head_candidates, key=lambda candidate: candidate[0])
+    product_start = head_index + len(head_marker)
+
+    sell_candidates = [
+        (index, marker)
+        for marker in _SALES_WRITE_SELL_MARKERS
+        if (index := text.find(marker, product_start)) >= 0
+    ]
+    if not sell_candidates:
+        return None
+    sell_index, sell_marker = min(sell_candidates, key=lambda candidate: candidate[0])
+    customer_start = sell_index + len(sell_marker)
+
+    delimiter_candidates = [
+        index
+        for delimiter in _SALES_WRITE_DELIMITERS
+        if (index := text.find(delimiter, customer_start)) >= 0
+    ]
+    if not delimiter_candidates:
+        return None
+    delimiter_index = min(delimiter_candidates)
+
+    product_name = text[product_start:sell_index].strip()
+    customer_name = text[customer_start:delimiter_index].strip()
     if not product_name or not customer_name:
         return None
 
-    tail = text[head.end() :]
+    tail = text[delimiter_index + 1 :]
     # 数量与单位锚定在首个逗号之后，带符号解析：负号不被未锚定的数字正则跳过。
-    qty = re.match(r"\s*([-+]?)(\d+(?:\.\d+)?)\s*([^\d\s，,。；;]{1,4})", tail)
-    price = re.search(r"单价\s*[:：]?\s*([-+]?)(\d+(?:\.\d+)?)", tail)
-    if not qty or not price:
+    quantity_scan = _scan_decimal(tail)
+    if quantity_scan is None:
+        return None
+    quantity_raw, cursor = quantity_scan
+
+    while cursor < len(tail) and tail[cursor].isspace():
+        cursor += 1
+    unit_start = cursor
+    while (
+        cursor < len(tail)
+        and tail[cursor] not in _ASCII_DIGITS + _SALES_WRITE_DELIMITERS + "。"
+        and not tail[cursor].isspace()
+        and cursor - unit_start < 5
+    ):
+        cursor += 1
+    unit = tail[unit_start:cursor].strip()
+    if not 1 <= len(unit) <= 4:
         return None
 
-    quantity_raw = float((qty.group(1) or "") + qty.group(2))
-    unit = qty.group(3).strip()
-    unit_price_raw = float((price.group(1) or "") + price.group(2))
+    price_marker = tail.find("单价", cursor)
+    if price_marker < 0:
+        return None
+    price_start = price_marker + len("单价")
+    while price_start < len(tail) and tail[price_start].isspace():
+        price_start += 1
+    if price_start < len(tail) and tail[price_start] in ":：":
+        price_start += 1
+    price_scan = _scan_decimal(tail, price_start)
+    if price_scan is None:
+        return None
+    unit_price_raw, _ = price_scan
     if quantity_raw <= 0 or unit_price_raw <= 0 or not unit:
         return None
 

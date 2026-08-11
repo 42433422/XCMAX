@@ -402,6 +402,18 @@ class TestSalesWriteClosedLoopRouting:
         assert payload["invoice"]["requested"] is False
         assert payload["payment_allocation"]["requested"] is True
 
+    def test_parser_handles_large_whitespace_input_linearly(self):
+        whitespace = "\t" * 20_000
+        sentence = (
+            f"把{whitespace}A 产品卖给客户B，{whitespace}10 个，单价{whitespace}100，开票收款"
+        )
+        route = route_normal_mode_message(sentence)
+        assert route["intent"] == "sales_write"
+        item = route["payload"]["order"]["items"][0]
+        assert item["product_name"] == "A 产品"
+        assert item["quantity"] == 10
+        assert item["unit_price"] == 100
+
     def test_idempotency_key_content_derived_and_stable(self):
         key1 = route_normal_mode_message(EXACT_SALES_WRITE_SENTENCE)["payload"]["idempotency_key"]
         assert key1.startswith("sw-")
