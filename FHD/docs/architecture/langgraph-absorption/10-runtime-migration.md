@@ -1,7 +1,7 @@
 # LG-W0-10｜LangGraph 运行时迁移设计（Runtime Migration Design）
 
 > 目录：`FHD/docs/architecture/langgraph-absorption/10-runtime-migration.md`（本系列文档之一；01–09 为其他 Wave 0 主题，不在本任务范围）。
-> 目标结构 SSOT：`FHD/docs/architecture/target-structure.md`
+> 目标结构权威文档：`FHD/docs/architecture/target-structure.md`
 > 前置契约冻结：`FHD/tests/langgraph_absorption/test_legacy_runtime_contract.py`（LG-W0-06）+ `FHD/tests/langgraph_absorption/fixtures/legacy_contract.json`
 > 上游吸收证据：`FHD/XCAGI/kb/absorption/langgraph/absorption_tasks.json`（8 项待吸收能力）
 > vendored 依赖来源：`FHD/packages/xcagi_langgraph_core/`、`.../checkpoint/`、`.../checkpoint_backends/`、`.../prebuilt/`（均含 `PROVENANCE.json`+`MANIFEST.sha256`+`verify_vendor.py`+`LICENSE`）；原始基线 `FHD/third_party/langgraph/`
@@ -14,7 +14,7 @@
 
 ---
 
-## §0 执行状态（2026-08-10 · LG-W1-T10-C SSOT 事实更新）
+## §0 执行状态（2026-08-10 · LG-W1-T10-C 事实更新）
 
 > 本文件 §1–§10 为**原始设计**：凡标注 `TO CREATE` 即表示设计时尚未创建。**本节为当前实现覆盖层的事实快照**，经只读核实后更新；「设计意图」与「实现事实」以日期（2026-08-10）与语义区分。
 
@@ -85,7 +85,7 @@
 | NeuroBus（异步事件总线，核心不可改） | `app/neuro_bus/bus.py`（`NeuroBus`+`get_neuro_bus()`）、`bus_setup.py`、`events/base.py`（`NeuroEvent`）、`domains/`、`transports/`、`integrations/`、`sandbox.py` | **事件桥来源，非图执行器**；`bus.py` 字节不变 |
 | 组合根 | `app/di/registry.py`（`ServiceContainer`）、`app/bootstrap.py`、`app/fastapi_app/lifespan.py`（`_init_neuro_ddd_async`） | 扩展注入运行时 |
 | 特性开关先例 | `app/contexts/flags.py`（`XCAGI_EVENT_PRIMARY*`） | 沿用模式，新增 `lg_runtime_mode()` |
-| 契约冻结 | `tests/langgraph_absorption/test_legacy_runtime_contract.py` + `fixtures/legacy_contract.json` | 迁移期红线；`primary-ready` 阶段以新运行时为 SSOT（legacy 移除另列后续门） |
+| 契约冻结 | `tests/langgraph_absorption/test_legacy_runtime_contract.py` + `fixtures/legacy_contract.json` | 迁移期红线；`primary-ready` 阶段以新运行时契约为准（legacy 移除另列后续门） |
 
 > 结论：本次迁移**不是**重写引擎，而是把真正执行图的运行时换成 XCAGI 自有、基于 vendored `langgraph`（含 sdk）的执行器；NeuroBus 退位为事件桥；保持 DDD 分层 + 开关化 + 灰度门控。
 
@@ -340,7 +340,7 @@ from langgraph_sdk.client import LangGraphClient              # vendored sdk (W0
   .venv/bin/python -m pytest tests/langgraph_absorption/test_legacy_runtime_contract.py -q   # 只读回归：legacy 契约不改，仅复跑验证
   git diff --exit-code -- app/neuro_bus/bus.py tests/langgraph_absorption/test_legacy_runtime_contract.py tests/langgraph_absorption/fixtures/legacy_contract.json
   ```
-- **说明**：目标运行时以 `XCAGILangGraphRuntime` 为 SSOT 的**独立新契约文件**验收（`test_langgraph_runtime_contract.py` + `fixtures/langgraph_runtime_contract.json`，由该测试自行生成/冻结），不触碰 legacy 契约；`primary` 为 Wave-1 上限；`remove` 需后续生产观察期门（§8）另行定义证据与回滚，**不在本任务 claim**。
+- **说明**：目标运行时以 `XCAGILangGraphRuntime` 的**独立新契约文件**验收（`test_langgraph_runtime_contract.py` + `fixtures/langgraph_runtime_contract.json`，由该测试自行生成/冻结），不触碰 legacy 契约；`primary` 为 Wave-1 上限；`remove` 需后续生产观察期门（§8）另行定义证据与回滚，**不在本任务 claim**。
 - **T10 本地验收证据（2026-08-10，fail-closed 复跑确认）**：
   - `import_boundary.py --check`：**4 条规则**分别扫描 **6 / 1282 / 7 / 320** 个 Python 文件，**0 违规**（`workflow-application-ports-runtime`=6、`no-langgraph-outside-infra-workflow`=1282、`neuro-bus-only-in-infra-workflow-bridge`=7、`application-must-not-import-infra-workflow`=320）。
   - `import_boundary.py --selfcheck`：**22 个用例全部 PASS**。
