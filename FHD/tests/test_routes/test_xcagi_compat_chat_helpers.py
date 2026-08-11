@@ -82,13 +82,84 @@ def _sse_payloads(chunks):
 def test_runtime_context_uses_authenticated_session_actor():
     request = MagicMock()
     user = MagicMock(id=17)
-    with patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=user):
+    with (
+        patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=user),
+        patch(
+            "app.infrastructure.auth.tenant_context.resolve_tenant_id",
+            return_value=7,
+        ),
+    ):
         context = ch._runtime_context_with_authenticated_actor(
-            request, {"user_id": "web_pro_session"}
+            request, {"user_id": "web_pro_session", "tenant_id": 999}
         )
     assert context["local_user_id"] == 17
     assert context["actor_id"] == 17
     assert context["user_id"] == "web_pro_session"
+    # 认证解析出的租户覆盖调用方上下文里的冲突租户（resolved tenant wins）。
+    assert context["tenant_id"] == 7
+
+
+def test_runtime_context_discards_untrusted_tenant_when_session_has_none():
+    request = MagicMock()
+    with (
+        patch(
+            "app.infrastructure.auth.dependencies.resolve_session_user",
+            return_value=None,
+        ),
+        patch(
+            "app.infrastructure.auth.tenant_context.resolve_tenant_id",
+            return_value=None,
+        ),
+    ):
+        context = ch._runtime_context_with_authenticated_actor(
+            request, {"user_id": "web_pro_session", "tenant_id": 999}
+        )
+
+    assert "tenant_id" not in context
+
+
+def test_sales_sse_uses_authenticated_resolved_tenant_even_if_context_conflicts():
+    """W1-10 租户隔离：活跃 compat SSE 处理销售闭环句时，真实 process_chat 在
+    current_tenant_id() == 认证解析租户 的 tenant_scope 内执行；即使请求体上下文
+    携带冲突 tenant_id，也以认证解析租户为准（resolved tenant wins）。不执行审批、
+    不调用 LLM。"""
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    svc = _make_real_app_service()
+    captured: dict[str, int | None] = {}
+    real_process_chat = svc.process_chat
+
+    def _spy_process_chat(*args, **kwargs):  # noqa: ANN002, ANN003
+        captured["tenant_id"] = current_tenant_id()
+        return real_process_chat(*args, **kwargs)
+
+    svc.process_chat = _spy_process_chat
+
+    request = MagicMock()
+    request.headers = {}
+    request.cookies = {}
+    body = ch.XcagiCompatChatBody(
+        message=EXACT_SENTENCE,
+        user_id="web_pro_session",
+        source="pro",
+        context={"tenant_id": 999},  # 调用方提供的冲突租户：必须被认证租户覆盖
+    )
+
+    with (
+        patch("app.application.get_ai_chat_app_service", return_value=svc),
+        patch(
+            "app.infrastructure.auth.tenant_context.resolve_tenant_id",
+            return_value=7,
+        ),
+        patch.object(ch, "runtime_context_with_tier", side_effect=lambda c, _t: c),
+    ):
+        chunks = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+
+    events = _sse_payloads(chunks)
+    errors = [e for e in events if e.get("type") == "error"]
+    assert not errors, errors
+    # 真实 process_chat 已在认证租户作用域内执行（resolved tenant wins）。
+    assert captured["tenant_id"] == 7
 
 
 def test_stream_business_db_write_uses_stateful_approval_mainline():

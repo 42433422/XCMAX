@@ -118,8 +118,17 @@ def _runtime_context_with_authenticated_actor(
     request: Request,
     runtime_context: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Attach the local session actor; never trust chat body.user_id for approvals."""
+    """Attach the local session actor and authenticated tenant.
+
+    Never trust chat body.user_id for approvals, and never trust any tenant_id
+    supplied by the request body/context: the tenant is derived only from the
+    authenticated session (``resolve_tenant_id``) so the resolved tenant wins.
+    """
     context = dict(runtime_context or {})
+    # The caller-controlled context is never an authentication source. Remove
+    # any supplied tenant before attempting session resolution so a missing or
+    # failed resolver cannot accidentally preserve a spoofed tenant id.
+    context.pop("tenant_id", None)
     try:
         from app.infrastructure.auth.dependencies import resolve_session_user
 
@@ -130,6 +139,15 @@ def _runtime_context_with_authenticated_actor(
             context["actor_id"] = actor_id
     except RECOVERABLE_ERRORS:
         logger.debug("chat session actor resolution skipped", exc_info=True)
+    # 租户只从认证会话解析；解析不到时保持缺失并 fail closed。
+    try:
+        from app.infrastructure.auth.tenant_context import resolve_tenant_id
+
+        resolved_tenant = resolve_tenant_id(request)
+        if resolved_tenant is not None:
+            context["tenant_id"] = int(resolved_tenant)
+    except RECOVERABLE_ERRORS:
+        logger.debug("chat session tenant resolution skipped", exc_info=True)
     return context
 
 
@@ -689,6 +707,16 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         token in str(body.message or "")
         for token in ("客户", "购买单位", "产品", "商品", "原材料", "物料", "出货", "发货")
     )
+    # 租户只来自认证会话解析出的 runtime_context（_runtime_context_with_authenticated_actor），
+    # 绝不信任请求体/上下文携带的 tenant_id。process_chat 内的销售到收款闭环写执行依赖
+    # current_tenant_id()（sales_app_service.tenant_id_for_write），因此必须用该认证租户
+    # 包裹真实应用服务调用，避免流式 SSE 请求丢失认证租户作用域。
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    authenticated_tenant_id = runtime_context.get("tenant_id")
+    authenticated_tenant_id = (
+        int(authenticated_tenant_id) if authenticated_tenant_id is not None else None
+    )
     if (
         has_pending_workflow
         or sales_closed_loop_route
@@ -699,13 +727,14 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             )
         )
     ):
-        payload = chat_service.process_chat(
-            user_id=scoped_user_id,
-            message=body.message,
-            context=runtime_context,
-            source=body.source,
-            file_context={},
-        )
+        with tenant_scope(authenticated_tenant_id):
+            payload = chat_service.process_chat(
+                user_id=scoped_user_id,
+                message=body.message,
+                context=runtime_context,
+                source=body.source,
+                file_context={},
+            )
         response_text = str(payload.get("response") or payload.get("message") or "")
         yield _sse_event_line({"type": "token", "text": response_text})
         yield _sse_event_line({"type": "done", "result": payload})
