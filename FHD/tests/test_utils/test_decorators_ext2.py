@@ -553,8 +553,8 @@ class TestCircuitBreaker:
         assert fn() == {"down": True}
 
     def test_recovers_after_timeout(self, monkeypatch):
-        time_vals = iter([1000.0, 1000.0, 2000.0, 2000.0])
-        monkeypatch.setattr("app.utils.decorators.time.time", lambda: next(time_vals))
+        clock = {"now": 1000.0}
+        monkeypatch.setattr("app.utils.decorators.time.time", lambda: clock["now"])
 
         calls = {"n": 0}
 
@@ -568,6 +568,7 @@ class TestCircuitBreaker:
         with pytest.raises(OSError):
             fn()
         # After recovery_timeout, circuit closes
+        clock["now"] = 2000.0
         assert fn() == "ok"
 
     def test_resets_failures_on_success(self, monkeypatch):

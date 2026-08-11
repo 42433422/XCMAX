@@ -1207,6 +1207,7 @@ class TestApproveRequest:
             patch(
                 "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval"
             ) as mock_resume,
+            patch("app.application.approval_workspace_app_service.notify_mobile_user"),
         ):
             mock_resolve.return_value = 1
             mock_nqf.return_value = True
@@ -1260,6 +1261,7 @@ class TestApproveRequest:
             patch(
                 "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval"
             ) as mock_resume,
+            patch("app.application.approval_workspace_app_service.notify_mobile_user"),
         ):
             mock_resolve.return_value = 1
             mock_rtd.return_value = {"id": 1, "status": "approved"}
