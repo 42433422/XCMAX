@@ -197,6 +197,7 @@ md_to_pdf.py
 sample_messages.py
 search_all_*.py
 verify_*.py
+!kb/absorption/odoo18/verify_source.py
 final_test.*
 hash研究.py
 _convert_*.py

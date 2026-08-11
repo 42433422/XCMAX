@@ -164,8 +164,9 @@
 </template>
 
 <script>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onActivated, computed } from 'vue'
 import { get, post } from '@/api'
+import productsApi from '@/api/products'
 import { appAlert } from '@/utils/appDialog'
 
 export default {
@@ -215,9 +216,9 @@ export default {
 
     const loadProducts = async () => {
       try {
-        const res = await get('/api/products')
+        const res = await productsApi.getProducts({ page: 1, per_page: 1000 })
         if (res.success) {
-          products.value = res.data || []
+          products.value = Array.isArray(res.data) ? res.data : []
         }
       } catch (e) {
         console.error('加载产品失败', e)
@@ -340,12 +341,15 @@ export default {
       }
     }
 
-    onMounted(() => {
+    const refreshInventoryView = () => {
       loadWarehouses()
       loadProducts()
       loadInventory()
       loadLowStock()
-    })
+    }
+
+    onMounted(refreshInventoryView)
+    onActivated(refreshInventoryView)
 
     return {
       inventoryList,

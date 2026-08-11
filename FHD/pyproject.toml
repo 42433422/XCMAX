@@ -5,7 +5,15 @@ description = "XCAGI - 企业 AI 员工平台（桌面版 + Web 版并行交付�
 license = "Apache-2.0"
 requires-python = ">=3.11"
 # 运行时依赖见 optional-dependencies；CI/生产安装：deploy/requirements-server-api.txt（与 server-api extra 对齐）
-dependencies = []
+# LG-W1-T1：吸收的 LangGraph 运行时根依赖，全部经 [tool.uv.sources] 重定向到本地 XCAGI vendored 包。
+dependencies = [
+    "langgraph==1.2.10",
+    "langgraph-checkpoint==4.1.1",
+    "langgraph-checkpoint-sqlite==3.1.0",
+    "langgraph-checkpoint-postgres==3.1.0",
+    "langgraph-prebuilt==1.1.0",
+    "langgraph-sdk==0.4.2",
+]
 
 [project.optional-dependencies]
 server-api = [
@@ -93,6 +101,16 @@ dev = [
     "safety>=3.0",
     "bandit>=1.7",
 ]
+
+# LG-W1-T1：LangGraph 运行时根依赖来源 — 全部可编辑(editable)安装到本地 XCAGI vendored 包目录，
+# 替代 PyPI 上游分发，确保 FHD/packages 内解析而非 site-packages。
+[tool.uv.sources]
+langgraph = { path = "packages/xcagi_langgraph_core", editable = true }
+langgraph-checkpoint = { path = "packages/xcagi_langgraph_checkpoint", editable = true }
+langgraph-checkpoint-sqlite = { path = "packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite", editable = true }
+langgraph-checkpoint-postgres = { path = "packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres", editable = true }
+langgraph-prebuilt = { path = "packages/xcagi_langgraph_prebuilt", editable = true }
+langgraph-sdk = { path = "packages/xcagi_langgraph_sdk", editable = true }
 
 [tool.ruff]
 line-length = 100

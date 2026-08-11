@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "kind": "odoo18_source_provenance",
+  "project": "Odoo 18 Community",
+  "own_project": "FHD",
+  "created_at": "2026-08-10T00:00:00Z",
+  "observed_at": "2026-08-10",
+  "upstream": {
+    "repo": "https://github.com/odoo/odoo.git",
+    "branch": "18.0",
+    "commit": "2b758fc5e8286257e8776438c6927818838123a0",
+    "commit_pin": "exact_40_hex_git_sha1"
+  },
+  "boundary": {
+    "license": "LGPL-3.0-only",
+    "community_only": true,
+    "enterprise_prohibited": true,
+    "note": "Only the Community repository (https://github.com/odoo/odoo) may be studied. Any Enterprise or OEEL source (odoo/enterprise, odoo-enterprise, openerp-enterprise licenses) is prohibited and must never be vendored, copied, or referenced as an implementation source."
+  },
+  "purpose": "Reproducible, non-runtime Odoo 18 Community source study baseline established before deeper domain absorption into FHD. Records the exact pinned commit, license boundary, and a small explicit manifest of upstream source files needed to study sale order / stock fulfillment / reordering / invoicing / double-entry / UOM / partner addresses."
+}

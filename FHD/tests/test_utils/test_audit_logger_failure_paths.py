@@ -20,8 +20,14 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch: pytest.MonkeyPatch):
+    import logging
+
     monkeypatch.delenv("AUDIT_LOG_PATH", raising=False)
+    audit_logger = logging.getLogger("audit")
+    disabled = audit_logger.disabled
+    audit_logger.disabled = False
     yield
+    audit_logger.disabled = disabled
 
 
 def test_audit_log_emits_json(monkeypatch: pytest.MonkeyPatch, caplog):

@@ -971,7 +971,7 @@ class TestReportServiceUncoveredBranches:
         mock_db.query.return_value.group_by.return_value.all.return_value = [(record, 1)]
 
         with patch("app.services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
-            result = svc.get_sales_report(group_by="customer")
+            result = svc.get_sales_report(group_by="customer", source="shipment")
 
         assert result["success"] is True
         assert result["data"][0]["customer_name"] == "c1"
@@ -984,7 +984,7 @@ class TestReportServiceUncoveredBranches:
         mock_db.query.return_value.group_by.return_value.all.return_value = [(record, 1)]
 
         with patch("app.services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
-            result = svc.get_sales_report(group_by="date")
+            result = svc.get_sales_report(group_by="date", source="shipment")
 
         assert result["data"][0]["date"] == "2026-01-01"
 
@@ -993,7 +993,7 @@ class TestReportServiceUncoveredBranches:
         mock_db.query.return_value.group_by.return_value.all.return_value = []
 
         with patch("app.services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
-            result = svc.get_sales_report(group_by="unknown")
+            result = svc.get_sales_report(group_by="unknown", source="shipment")
 
         assert result == {"success": True, "data": [], "summary": {}}
 
@@ -1016,7 +1016,7 @@ class TestReportServiceUncoveredBranches:
         end = datetime(2026, 1, 31)
 
         with patch("app.services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
-            svc.get_sales_report(start_date=start, end_date=end, customer_id=5)
+            svc.get_sales_report(start_date=start, end_date=end, customer_id=5, source="shipment")
 
         assert mock_query.filter.call_count == 3
 

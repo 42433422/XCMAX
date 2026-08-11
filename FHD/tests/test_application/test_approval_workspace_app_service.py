@@ -12,10 +12,13 @@ import pytest
 
 from app.application.approval_workspace_app_service import (
     _allow_x_user_id_header,
+    _approve_ai_workflow_request_without_node,
     _audit,
     _can_review_ai_workflow_request,
     _close_request_if_needed,
+    _drop_pending_ai_workflow_after_rejection,
     _generate_request_no,
+    _has_pending_ai_workflow,
     _next_node,
     _node_query_for_user,
     _normalize_statuses,
@@ -1148,6 +1151,10 @@ class TestApproveRequest:
             patch("app.application.approval_workspace_app_service._audit"),
             patch("app.application.approval_workspace_app_service.notify_mobile_user"),
             patch("app.application.approval_workspace_app_service._request_to_dict") as mock_rtd,
+            patch(
+                "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval",
+                return_value=None,
+            ),
         ):
             mock_resolve.return_value = 1
             mock_nqf.return_value = True
@@ -1171,6 +1178,7 @@ class TestApproveRequest:
         req.request_no = "req-ai-1"
         req.flow_id = 1
         req.title = "AI 写库审批"
+        req.business_data = "{}"
         req.applicant_id = None
         node = Mock()
         node.id = 10
@@ -1193,15 +1201,25 @@ class TestApproveRequest:
             patch("app.application.approval_workspace_app_service._audit"),
             patch("app.application.approval_workspace_app_service._request_to_dict") as mock_rtd,
             patch(
+                "app.application.approval_workspace_app_service._is_ai_workflow_request",
+                return_value=True,
+            ),
+            patch(
                 "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval"
             ) as mock_resume,
+            patch("app.application.approval_workspace_app_service.notify_mobile_user"),
         ):
             mock_resolve.return_value = 1
             mock_nqf.return_value = True
             mock_on.return_value = [node]
             mock_close.return_value = (ApprovalStatus.APPROVED.value, None)
             mock_rtd.return_value = {"id": 1, "status": "approved"}
-            mock_resume.return_value = {"workflow_executed": True, "success": True}
+            mock_resume.return_value = {
+                "workflow_executed": True,
+                "success": True,
+                "nodes_executed": 1,
+                "nodes_total": 1,
+            }
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = approve_request(1, request, body={"opinion": "同意"})
 
@@ -1224,6 +1242,7 @@ class TestApproveRequest:
         req.current_node_order = 0
         req.applicant_id = 1
         req.title = "AI 写库审批"
+        req.business_data = "{}"
         mock_query.first.return_value = req
 
         with (
@@ -1242,18 +1261,267 @@ class TestApproveRequest:
             patch(
                 "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval"
             ) as mock_resume,
+            patch("app.application.approval_workspace_app_service.notify_mobile_user"),
         ):
             mock_resolve.return_value = 1
             mock_rtd.return_value = {"id": 1, "status": "approved"}
-            mock_resume.return_value = {"workflow_executed": True, "success": True}
+            mock_resume.return_value = {
+                "workflow_executed": True,
+                "success": True,
+                "nodes_executed": 1,
+                "nodes_total": 1,
+            }
             mock_get_db.return_value = _make_db_ctx(mock_db)
             result = approve_request(1, request, body={"opinion": "同意"})
 
         assert result["success"] is True
         assert req.status == ApprovalStatus.APPROVED.value
         assert result["data"]["workflow_execution"]["success"] is True
+        assert result["data"]["workflow_execution"]["nodes_executed"] == 1
+        assert result["data"]["workflow_execution"]["nodes_total"] == 1
+        persisted_outcome = json.loads(req.business_data)["workflow_execution"]
+        assert persisted_outcome["nodes_executed"] == 1
+        assert persisted_outcome["nodes_total"] == 1
         mock_resume.assert_called_once_with(request_no="req-ai-1", opinion="同意", approved_by="1")
         mock_db.add.assert_called_once()
+
+    def test_approve_ai_workflow_secret_recovery_hint_absent_from_response_and_persisted(
+        self,
+    ):
+        """恢复器即便返回携带秘密级 recovery_hint 的 node_results，响应与持久化 outcome
+        也绝不包含该后端生成文本（recovery_hint 只允许固定安全值或空串）。"""
+        request = Mock()
+        mock_db = MagicMock()
+        mock_query = MagicMock()
+        mock_db.query.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        req = Mock()
+        req.status = ApprovalStatus.PENDING.value
+        req.id = 1
+        req.request_no = "req-ai-1"
+        req.business_type = "workflow_tool"
+        req.current_node = None
+        req.current_node_order = 0
+        req.applicant_id = 1
+        req.title = "AI 写库审批"
+        req.business_data = "{}"
+        mock_query.first.return_value = req
+
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch(
+                "app.application.approval_workspace_app_service._has_pending_ai_workflow",
+                return_value=True,
+            ),
+            patch("app.application.approval_workspace_app_service._audit"),
+            patch(
+                "app.application.approval_workspace_app_service._ai_workflow_audit_node",
+                return_value=SimpleNamespace(id=9, node_name="AI 工作流审批留痕", node_order=1),
+            ),
+            patch("app.application.approval_workspace_app_service._request_to_dict") as mock_rtd,
+            patch(
+                "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval"
+            ) as mock_resume,
+            patch("app.application.approval_workspace_app_service.notify_mobile_user"),
+        ):
+            mock_resolve.return_value = 1
+            mock_rtd.return_value = {"id": 1, "status": "approved"}
+            # 模拟后端生成的秘密级恢复提示：恢复器把它放进 node_results，但绝不外泄。
+            mock_resume.return_value = {
+                "workflow_executed": True,
+                "success": True,
+                "node_results": [
+                    {
+                        "node_id": "n1",
+                        "tool_id": "sales",
+                        "action": "execute_closed_loop",
+                        "success": False,
+                        "recovery_hint": "raw-recovery-secret",
+                    }
+                ],
+            }
+            mock_get_db.return_value = _make_db_ctx(mock_db)
+            result = approve_request(1, request, body={"opinion": "同意"})
+
+        assert result["success"] is True
+        # 响应：workflow_execution 是被白名单化的 bounded_outcome，不含任何恢复提示。
+        resp_we = result["data"]["workflow_execution"]
+        assert "recovery_hint" not in resp_we
+        assert "raw-recovery-secret" not in str(result)
+        # 持久化：business_data 内 workflow_execution 同样不含 recovery_hint / 原始文本。
+        persisted = json.loads(req.business_data)["workflow_execution"]
+        assert "recovery_hint" not in persisted
+        assert "raw-recovery-secret" not in req.business_data
+        assert persisted["workflow_executed"] is True
+
+    def test_approve_ai_workflow_without_node_failure_cancels_and_commits(self):
+        """工作流未成功执行 → 请求置为 cancelled、写有界 outcome、commit 并返回 success False。"""
+        db = MagicMock()
+        req = Mock()
+        req.status = ApprovalStatus.PENDING.value
+        req.id = 1
+        req.request_no = "req-ai-1"
+        req.business_data = "{}"
+        req.applicant_id = None
+        with (
+            patch(
+                "app.application.approval_workspace_app_service._can_review_ai_workflow_request",
+                return_value=True,
+            ),
+            patch(
+                "app.application.approval_workspace_app_service._has_pending_ai_workflow",
+                return_value=True,
+            ),
+            patch(
+                "app.application.approval_workspace_app_service._ai_workflow_audit_node",
+                return_value=SimpleNamespace(id=9, node_name="AI 工作流审批留痕", node_order=1),
+            ),
+            patch(
+                "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval"
+            ) as mock_resume,
+            patch(
+                "app.application.approval_workspace_app_service._request_to_dict",
+                return_value={"id": 1, "status": "cancelled"},
+            ),
+            patch("app.application.approval_workspace_app_service._audit") as mock_audit,
+        ):
+            mock_resume.return_value = {
+                "workflow_executed": False,
+                "success": False,
+                "code": "raw-secret-code",
+                "message": "raw-db-secret-message",
+            }
+            result = _approve_ai_workflow_request_without_node(
+                db,
+                req=req,
+                actor=1,
+                approver_name="admin",
+                opinion="同意",
+            )
+
+        # 失败即安全响应：JSONResponse 409，body.success=False。
+        assert result.status_code == 409
+        body = json.loads(result.body)
+        assert body["success"] is False
+        assert body["message"] == "审批通过后 AI 工作流执行失败，审批已取消"
+        # 原子真值：请求置为 cancelled 终态，绝不留下“已获批成功”的假记录。
+        assert req.status == ApprovalStatus.CANCELLED.value
+        assert req.rejection_reason == "workflow_execution_failed"
+        persisted_outcome = json.loads(req.business_data)["workflow_execution"]
+        assert persisted_outcome["success"] is False
+        assert persisted_outcome["code"] == "workflow_execution_failed"
+        assert persisted_outcome["message"] == "AI 工作流执行失败"
+        assert "raw-secret" not in req.business_data
+        db.commit.assert_called_once()
+        db.refresh.assert_called_once()
+        # 失败审计留痕 + 不落批准记录。
+        assert any(
+            call.kwargs.get("action") == "approval.execute_ai_workflow_failed"
+            for call in mock_audit.call_args_list
+        )
+        db.add.assert_not_called()
+
+    def test_approve_success_rollback_when_workflow_fails(self):
+        """工作流恢复上报失败 → 返回 success False，且同事务落为 cancelled 终态（不落已通过、杜绝重放）。"""
+        request = Mock()
+        mock_db = MagicMock()
+        mock_query = MagicMock()
+        mock_db.query.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        req = Mock()
+        req.status = ApprovalStatus.PENDING.value
+        req.id = 1
+        req.request_no = "req-ai-1"
+        req.flow_id = 1
+        req.title = "AI 写库审批"
+        req.business_data = "{}"
+        req.applicant_id = None
+        node = Mock()
+        node.id = 10
+        node.node_name = "Node1"
+        node.node_order = 1
+        node.approver_ids = "[1]"
+        req.current_node = node
+        mock_query.first.return_value = req
+
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch(
+                "app.application.approval_workspace_app_service._node_query_for_user"
+            ) as mock_nqf,
+            patch("app.application.approval_workspace_app_service._ordered_nodes") as mock_on,
+            patch(
+                "app.application.approval_workspace_app_service._close_request_if_needed"
+            ) as mock_close,
+            patch("app.application.approval_workspace_app_service._audit"),
+            patch("app.application.approval_workspace_app_service._request_to_dict") as mock_rtd,
+            patch(
+                "app.application.approval_workspace_app_service._is_ai_workflow_request",
+                return_value=True,
+            ),
+            patch(
+                "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval"
+            ) as mock_resume,
+        ):
+            mock_resolve.return_value = 1
+            mock_nqf.return_value = True
+            mock_on.return_value = [node]
+            mock_close.return_value = (ApprovalStatus.APPROVED.value, None)
+            mock_rtd.return_value = {"id": 1, "status": "pending"}
+            mock_resume.return_value = {"workflow_executed": False, "success": False}
+            mock_get_db.return_value = _make_db_ctx(mock_db)
+            result = approve_request(1, request, body={"opinion": "同意"})
+
+        assert result["success"] is False
+        assert result["message"] == "审批未通过：AI 工作流未成功执行"
+        assert result["workflow_execution"]["workflow_executed"] is False
+        # 失败不再回滚成可重放的 pending：同事务落为 cancelled 终态（原子真值，杜绝重放）。
+        assert req.status == ApprovalStatus.CANCELLED.value
+        persisted_outcome = json.loads(req.business_data)["workflow_execution"]
+        assert persisted_outcome["status"] == ApprovalStatus.CANCELLED.value
+        assert persisted_outcome["success"] is False
+        mock_db.rollback.assert_not_called()
+
+    def test_approve_repeat_on_terminal_request_never_resumes_executor(self):
+        """重复审批终态请求 → 返回 400，绝不再次调用恢复器/执行器（杜绝重放）。"""
+        request = Mock()
+        mock_db = MagicMock()
+        mock_query = MagicMock()
+        mock_db.query.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        req = Mock()
+        req.status = ApprovalStatus.CANCELLED.value
+        req.id = 1
+        req.request_no = "req-ai-terminal"
+        req.flow_id = 1
+        req.title = "AI 写库审批"
+        req.applicant_id = None
+        node = Mock()
+        node.id = 10
+        node.node_name = "Node1"
+        node.node_order = 1
+        node.approver_ids = "[1]"
+        req.current_node = node
+        mock_query.first.return_value = req
+
+        with (
+            patch("app.application.approval_workspace_app_service._resolve_actor") as mock_resolve,
+            patch("app.application.approval_workspace_app_service.get_db") as mock_get_db,
+            patch(
+                "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval"
+            ) as mock_resume,
+        ):
+            mock_resolve.return_value = 1
+            mock_get_db.return_value = _make_db_ctx(mock_db)
+            result = approve_request(1, request, body={"opinion": "同意"})
+
+        # 终态请求直接拒绝，工作流恢复器/执行器绝不触达。
+        assert result.status_code == 400
+        mock_resume.assert_not_called()
+        mock_db.add.assert_not_called()
+        mock_db.commit.assert_not_called()
 
 
 # ========================= reject_request ================================
@@ -1526,6 +1794,17 @@ class TestRejectRequest:
             request_no="req-ai-expired", reason="运行态已过期，拒绝留痕"
         )
         mock_db.add.assert_called_once()
+
+    def test_drop_pending_ai_workflow_no_raw_exc_leak(self):
+        """拒绝清理工作流出错 → 响应消息不泄漏原始异常文本。"""
+        svc = MagicMock()
+        svc.reject.side_effect = RuntimeError("boom-secret-db")
+        with patch("app.application.workflow.get_approval_service", return_value=svc):
+            result = _drop_pending_ai_workflow_after_rejection(request_no="req-ai-1", reason="拒绝")
+        assert result["workflow_executed"] is False
+        assert result["success"] is False
+        assert result["message"] == "审批已拒绝，但清理 AI 工作流失败"
+        assert "boom-secret-db" not in str(result.get("message", ""))
 
 
 # ========================= withdraw_request ==============================
@@ -2306,3 +2585,239 @@ class TestDeleteFlow:
             assert result["success"] is True
             assert flow.is_deleted is True
             assert flow.is_active is False
+
+
+# ========================= 可靠快照恢复（进程重启） =========================
+class TestHasPendingAiWorkflow:
+    """工作台判定"存在待审批 AI 工作流"：内存快速路径 + 持久化快照兜底。"""
+
+    def test_empty_request_no_false(self):
+        assert _has_pending_ai_workflow(None) is False
+        assert _has_pending_ai_workflow("  ") is False
+
+    def test_memory_fast_path_hits(self):
+        svc = MagicMock()
+        svc.get_pending_workflow.return_value = {"plan": object()}
+        with patch("app.application.workflow.get_approval_service", return_value=svc):
+            assert _has_pending_ai_workflow("req-1") is True
+
+    def test_memory_miss_durable_snapshot_present(self):
+        svc = MagicMock()
+        svc.get_pending_workflow.return_value = None
+        with (
+            patch("app.application.workflow.get_approval_service", return_value=svc),
+            patch(
+                "app.application.workflow.approval_persistence.load_durable_workflow_snapshot",
+                return_value={"plan": object()},
+            ) as mock_load,
+        ):
+            assert _has_pending_ai_workflow("req-1") is True
+        mock_load.assert_called_once_with("req-1", allow_terminal=False)
+
+    def test_memory_miss_no_snapshot_false(self):
+        svc = MagicMock()
+        svc.get_pending_workflow.return_value = None
+        with (
+            patch("app.application.workflow.get_approval_service", return_value=svc),
+            patch(
+                "app.application.workflow.approval_persistence.load_durable_workflow_snapshot",
+                return_value=None,
+            ),
+        ):
+            assert _has_pending_ai_workflow("req-1") is False
+
+    def test_exception_fail_closed(self):
+        svc = MagicMock()
+        svc.get_pending_workflow.side_effect = RuntimeError("boom")
+        with patch("app.application.workflow.get_approval_service", return_value=svc):
+            assert _has_pending_ai_workflow("req-1") is False
+
+
+class TestResumePendingAiWorkflow:
+    """审批通过后恢复 AI 工作流：内存路径 + 持久化快照重建路径 + fail-closed。"""
+
+    def test_empty_request_no_returns_none(self):
+        assert _resume_pending_ai_workflow_after_approval(request_no="  ", opinion="") is None
+
+    def test_in_memory_fast_path_preserved(self):
+        """未重启时走内存 pending workflow，不触达持久化加载。"""
+        plan = MagicMock()
+        plan.plan_id = "plan-1"
+        plan.intent = "test"
+        plan.nodes = []
+        svc = MagicMock()
+        svc.approve.return_value = True
+        svc.get_pending_workflow.return_value = {
+            "plan": plan,
+            "runtime_context": {},
+            "agent_run_id": "",
+            "approved_step_id": "",
+        }
+        run_result = MagicMock()
+        run_result.success = True
+        run_result.message = "done"
+        run_result.node_results = []
+        engine_instance = MagicMock()
+        engine_instance.run.return_value = run_result
+        with (
+            patch("app.application.workflow.get_approval_service", return_value=svc),
+            patch("app.application.workflow.WorkflowEngine", return_value=engine_instance),
+            patch(
+                "app.application.workflow.approval_persistence.load_durable_workflow_snapshot"
+            ) as mock_load,
+        ):
+            result = _resume_pending_ai_workflow_after_approval(request_no="req-1", opinion="ok")
+        assert result["workflow_executed"] is True
+        assert result["approved_in_memory"] is True
+        assert result["success"] is True
+        engine_instance.run.assert_called_once()
+        mock_load.assert_not_called()
+
+    def test_durable_snapshot_plan_reaches_execution(self):
+        """进程重启后内存缺失：从可靠快照重建并执行计划，不依赖内存。"""
+        plan = MagicMock()
+        plan.plan_id = "plan-1"
+        plan.intent = "test"
+        plan.nodes = ["n1"]
+        snapshot = {
+            "plan": plan,
+            "runtime_context": {"a": 1},
+            "plan_id": "plan-1",
+            "agent_run_id": "",
+            "approved_step_id": "",
+        }
+        svc = MagicMock()
+        svc.approve.return_value = False
+        svc.get_pending_workflow.return_value = None
+        run_result = MagicMock()
+        run_result.success = True
+        run_result.message = "done"
+        run_result.node_results = []
+        engine_instance = MagicMock()
+        engine_instance.run.return_value = run_result
+        with (
+            patch("app.application.workflow.get_approval_service", return_value=svc),
+            patch(
+                "app.application.workflow.approval_persistence.load_workflow_snapshot_for_execution",
+                return_value=snapshot,
+            ),
+            patch("app.application.workflow.WorkflowEngine", return_value=engine_instance),
+        ):
+            result = _resume_pending_ai_workflow_after_approval(request_no="req-1", opinion="ok")
+        assert result["workflow_executed"] is True
+        assert result["success"] is True
+        assert result["approved_in_memory"] is False
+        engine_instance.run.assert_called_once()
+        svc.remove_pending_workflow.assert_called_once_with("req-1")
+
+    def test_missing_snapshot_fail_closed_no_execution(self):
+        """重启后无可靠快照 → fail-closed，不执行。"""
+        svc = MagicMock()
+        svc.approve.return_value = False
+        svc.get_pending_workflow.return_value = None
+        with (
+            patch("app.application.workflow.get_approval_service", return_value=svc),
+            patch(
+                "app.application.workflow.approval_persistence.load_workflow_snapshot_for_execution",
+                return_value=None,
+            ),
+            patch("app.application.workflow.WorkflowEngine") as mock_engine_cls,
+        ):
+            result = _resume_pending_ai_workflow_after_approval(request_no="req-1", opinion="ok")
+        assert result["workflow_executed"] is False
+        assert result["success"] is False
+        mock_engine_cls.assert_not_called()
+
+    def test_exception_safe_failure_no_leak(self):
+        """异常 → 安全失败响应，且不泄漏原始异常文本。"""
+        svc = MagicMock()
+        svc.approve.side_effect = RuntimeError("boom-db-secret")
+        with patch("app.application.workflow.get_approval_service", return_value=svc):
+            result = _resume_pending_ai_workflow_after_approval(request_no="req-1", opinion="ok")
+        assert result["workflow_executed"] is False
+        assert result["success"] is False
+        assert "boom-db-secret" not in str(result.get("message", ""))
+
+    def test_agent_run_raw_output_never_reaches_public_or_durable_outcome(self):
+        """AgentRun error/final_output 无论成败都不得转发或落库。"""
+        svc = MagicMock()
+        svc.approve.return_value = True
+        svc.get_pending_workflow.return_value = {
+            "agent_run_id": "run-1",
+            "approved_step_id": "step-1",
+            "runtime_context": {},
+        }
+        agent_run = SimpleNamespace(
+            run_id="run-1",
+            status="failed",
+            plan_id="plan-1",
+            intent="sales_write",
+            error="raw-agent-error-secret",
+            final_output={"message": "raw-agent-final-secret"},
+            steps=[SimpleNamespace(status="failed")],
+            tool_calls=[],
+        )
+        with (
+            patch("app.application.workflow.get_approval_service", return_value=svc),
+            patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator_cls,
+            patch(
+                "app.application.workflow.approval_persistence.mark_durable_outcome"
+            ) as mark_outcome,
+        ):
+            orchestrator_cls.return_value.continue_run.return_value = agent_run
+            result = _resume_pending_ai_workflow_after_approval(
+                request_no="req-1", opinion="ok", approved_by="7"
+            )
+
+        assert result["success"] is False
+        assert result["code"] == "workflow_execution_failed"
+        assert result["message"] == "AI 工作流执行失败"
+        assert "raw-agent" not in str(result)
+        # 纯执行契约：恢复器不落库；终态由调用方统一写入。
+        mark_outcome.assert_not_called()
+
+    def test_engine_raw_message_error_and_hint_are_replaced_with_fixed_values(self):
+        """Engine/node 的 message/error/recovery_hint 只能输出固定安全值。"""
+        plan = SimpleNamespace(plan_id="plan-1", intent="sales_write", nodes=[object()])
+        svc = MagicMock()
+        svc.approve.return_value = True
+        svc.get_pending_workflow.return_value = {
+            "plan": plan,
+            "runtime_context": {},
+            "agent_run_id": "",
+            "approved_step_id": "",
+        }
+        node_result = SimpleNamespace(
+            node_id="n1",
+            tool_id="sales",
+            action="execute_closed_loop",
+            success=False,
+            error="raw-node-error-secret",
+            retries=1,
+            retryable=True,
+            recovery_hint="raw-recovery-secret",
+        )
+        run_result = SimpleNamespace(
+            success=False,
+            message="raw-engine-message-secret",
+            node_results=[node_result],
+        )
+        engine = MagicMock()
+        engine.run.return_value = run_result
+        with (
+            patch("app.application.workflow.get_approval_service", return_value=svc),
+            patch("app.application.workflow.WorkflowEngine", return_value=engine),
+            patch(
+                "app.application.workflow.approval_persistence.mark_durable_outcome"
+            ) as mark_outcome,
+        ):
+            result = _resume_pending_ai_workflow_after_approval(request_no="req-1", opinion="ok")
+
+        assert result["success"] is False
+        assert result["code"] == "workflow_execution_failed"
+        assert result["message"] == "AI 工作流执行失败"
+        assert result["node_results"][0]["error"] == "node_execution_failed"
+        assert result["node_results"][0]["recovery_hint"] == "retry_recommended"
+        assert "raw-" not in str(result)
+        # 纯执行契约：恢复器不落库；终态由调用方统一写入。
+        mark_outcome.assert_not_called()

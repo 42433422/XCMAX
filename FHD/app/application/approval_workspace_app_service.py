@@ -20,6 +20,14 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.application.mobile_push_app_service import notify_mobile_user
+from app.application.workflow.approval_persistence import (
+    AGENT_RUN_UNAVAILABLE_CODE,
+    WORKFLOW_EXECUTION_FAILED_CODE,
+    WORKFLOW_EXECUTION_SUCCESS_CODE,
+    WORKFLOW_PLAN_UNAVAILABLE_CODE,
+    WORKFLOW_SNAPSHOT_UNAVAILABLE_CODE,
+    canonical_workflow_outcome,
+)
 from app.db.models.approval import (
     ApprovalAction,
     ApprovalFlow,
@@ -88,7 +96,8 @@ def _audit(db, *, actor: int | None, action: str, payload: dict) -> None:
             },
         )
     except RECOVERABLE_ERRORS as exc:  # pragma: no cover - 审计失败不应阻塞主流程
-        logger.warning("ai_action_audit 写入失败 action=%s: %s", action, exc)
+        # 有界日志：只记录异常类型，不向日志暴露原始异常正文。
+        logger.warning("ai_action_audit 写入失败 action=%s type=%s", action, type(exc).__name__)
 
 
 def _generate_request_no() -> str:
@@ -157,14 +166,17 @@ def _has_pending_ai_workflow(request_no: str | None) -> bool:
         return False
     try:
         from app.application.workflow import get_approval_service
+        from app.application.workflow.approval_persistence import load_durable_workflow_snapshot
 
-        return bool(get_approval_service().get_pending_workflow(approval_request_id))
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning(
-            "check pending AI workflow failed request_no=%s: %s",
-            approval_request_id,
-            exc,
-        )
+        # 内存快速路径：未重启时直接命中在线 pending workflow。
+        if bool(get_approval_service().get_pending_workflow(approval_request_id)):
+            return True
+        # 持久化 fallback：进程重启后内存缺失，从 DB 严格加载仍待审批的可靠工作流快照。
+        # 仅当快照存在、匹配、可执行且状态仍为 pending 才算"存在待审批工作流"。
+        return load_durable_workflow_snapshot(approval_request_id, allow_terminal=False) is not None
+    except RECOVERABLE_ERRORS:
+        # 有界日志：不向日志暴露原始异常正文。
+        logger.warning("check pending AI workflow failed request_no=%s", approval_request_id)
         return False
 
 
@@ -476,6 +488,46 @@ def submit_request(
         return {"success": True, "data": _request_to_dict(req, include_records=True)}
 
 
+def _persist_ai_workflow_outcome(
+    req: ApprovalRequest,
+    *,
+    status: str,
+    success: bool,
+    code: str,
+    message: str,
+    workflow_executed: bool,
+    nodes_executed: int = 0,
+    nodes_total: int = 0,
+) -> None:
+    """在调用方事务内把 AI 工作流执行结果写入请求 ``business_data``（原子真值）。
+
+    只落白名单内的固定 ``code``/``message``；绝不落原始异常正文。由调用方随后统一
+    ``db.commit()``，从而与请求终态（approved/cancelled）构成单一、真实、可重放拒绝的状态。
+    """
+    business_data = json.loads(req.business_data) if req.business_data else {}
+    if not isinstance(business_data, dict):
+        business_data = {}
+    business_data["workflow_execution"] = {
+        "status": status,
+        "success": bool(success),
+        "code": str(code or ""),
+        "message": str(message or ""),
+        "workflow_executed": bool(workflow_executed),
+        "nodes_executed": _safe_workflow_node_count(nodes_executed),
+        "nodes_total": _safe_workflow_node_count(nodes_total),
+    }
+    req.business_data = json.dumps(business_data, ensure_ascii=False, default=str)
+
+
+def _safe_workflow_node_count(value: Any) -> int:
+    """Return a bounded non-negative count safe for persistence and UI output."""
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return min(max(count, 0), 10_000)
+
+
 def _close_request_if_needed(
     db,
     *,
@@ -503,19 +555,49 @@ def _close_request_if_needed(
 def _resume_pending_ai_workflow_after_approval(
     *, request_no: str, opinion: str, approved_by: str = ""
 ) -> dict[str, Any] | None:
-    """工作台审批通过后，继续执行由 AI 工作流创建的 pending workflow。"""
+    """工作台审批通过后，继续执行由 AI 工作流创建的 pending workflow。
+
+    纯执行函数：只做内存态审批推进与实际工作流执行，**不做任何请求落库/状态持久化**。
+    请求的终态（approved/cancelled + ``workflow_execution`` outcome + 审计）统一由
+    调用方（``_approve_ai_workflow_request_without_node`` / ``approve_request``）在自身
+    事务中写入并提交，避免与恢复器嵌套会话冲突导致原子真值被覆盖。
+
+    优先内存快速路径；进程重启后内存缺失时，从 DB 严格加载持久化工作流快照并
+    重建可执行计划后继续执行（fail-closed：快照缺失/畸形/终态/不匹配/已执行 → 不执行）。
+    """
     approval_request_id = str(request_no or "").strip()
     if not approval_request_id:
         return None
     try:
         from app.application.workflow import WorkflowEngine, get_approval_service
+        from app.application.workflow.approval_persistence import (
+            load_workflow_snapshot_for_execution,
+        )
         from app.fastapi_routes.domains.misc.helpers import _dispatch_tool_for_approval
 
         approval_service = get_approval_service()
         approved_in_memory = approval_service.approve(approval_request_id, opinion)
         workflow_data = approval_service.get_pending_workflow(approval_request_id)
         if not workflow_data:
-            return None
+            # 内存缺失：进程重启后的持久化恢复路径。
+            # 仅接受预终态 pending/in_progress（审批尚未写库终态时调用）；终态
+            # （cancelled/rejected/approved 等）与已执行（workflow_execution）一律拒绝，
+            # 杜绝重复审批重新进入业务与重放。
+            snapshot = load_workflow_snapshot_for_execution(approval_request_id)
+            if snapshot is None:
+                safe_code, safe_message = canonical_workflow_outcome(
+                    success=False,
+                    code=WORKFLOW_SNAPSHOT_UNAVAILABLE_CODE,
+                )
+                return {
+                    "workflow_executed": False,
+                    "approval_request_id": approval_request_id,
+                    "approved_in_memory": approved_in_memory,
+                    "success": False,
+                    "code": safe_code,
+                    "message": safe_message,
+                }
+            workflow_data = snapshot
 
         plan_obj = workflow_data.get("plan")
         runtime_ctx = workflow_data.get("runtime_context", {})
@@ -532,26 +614,37 @@ def _resume_pending_ai_workflow_after_approval(
             )
             approval_service.remove_pending_workflow(approval_request_id)
             if agent_run is None:
+                safe_code, safe_message = canonical_workflow_outcome(
+                    success=False,
+                    code=AGENT_RUN_UNAVAILABLE_CODE,
+                )
                 return {
                     "workflow_executed": False,
                     "approval_request_id": approval_request_id,
                     "agent_run_id": agent_run_id,
                     "success": False,
-                    "message": "审批已通过，但 Agent Run 不存在",
+                    "code": safe_code,
+                    "message": safe_message,
                 }
+            _agent_success = agent_run.status == "completed"
+            _agent_code, _agent_message = canonical_workflow_outcome(
+                success=_agent_success,
+                code=(
+                    WORKFLOW_EXECUTION_SUCCESS_CODE
+                    if _agent_success
+                    else WORKFLOW_EXECUTION_FAILED_CODE
+                ),
+            )
             return {
                 "workflow_executed": True,
                 "approval_request_id": approval_request_id,
                 "agent_run_id": agent_run.run_id,
                 "approved_in_memory": approved_in_memory,
-                "success": agent_run.status == "completed",
+                "success": _agent_success,
+                "code": _agent_code,
                 "plan_id": str(agent_run.plan_id or ""),
                 "intent": str(agent_run.intent or ""),
-                "message": str(
-                    (agent_run.final_output or {}).get("message")
-                    or agent_run.error
-                    or agent_run.status
-                ),
+                "message": _agent_message,
                 "nodes_executed": len(
                     [step for step in agent_run.steps if step.status == "completed"]
                 ),
@@ -560,24 +653,40 @@ def _resume_pending_ai_workflow_after_approval(
             }
         if not plan_obj:
             approval_service.remove_pending_workflow(approval_request_id)
+            safe_code, safe_message = canonical_workflow_outcome(
+                success=False,
+                code=WORKFLOW_PLAN_UNAVAILABLE_CODE,
+            )
             return {
                 "workflow_executed": False,
                 "approval_request_id": approval_request_id,
                 "approved_in_memory": approved_in_memory,
-                "message": "审批已通过，但缺少可恢复的工作流计划",
+                "success": False,
+                "code": safe_code,
+                "message": safe_message,
             }
 
         engine = WorkflowEngine(tool_dispatcher=_dispatch_tool_for_approval)
         run_result = engine.run(plan=plan_obj, runtime_context=runtime_ctx, max_retries=1)
         approval_service.remove_pending_workflow(approval_request_id)
+        _engine_success = bool(run_result.success)
+        _engine_code, _engine_message = canonical_workflow_outcome(
+            success=_engine_success,
+            code=(
+                WORKFLOW_EXECUTION_SUCCESS_CODE
+                if _engine_success
+                else WORKFLOW_EXECUTION_FAILED_CODE
+            ),
+        )
         return {
             "workflow_executed": True,
             "approval_request_id": approval_request_id,
             "approved_in_memory": approved_in_memory,
-            "success": bool(run_result.success),
+            "success": _engine_success,
+            "code": _engine_code,
             "plan_id": getattr(plan_obj, "plan_id", ""),
             "intent": getattr(plan_obj, "intent", ""),
-            "message": str(run_result.message or ""),
+            "message": _engine_message,
             "nodes_executed": len(run_result.node_results or []),
             "nodes_total": len(getattr(plan_obj, "nodes", []) or []),
             "node_results": [
@@ -586,26 +695,39 @@ def _resume_pending_ai_workflow_after_approval(
                     "tool_id": item.tool_id,
                     "action": item.action,
                     "success": bool(item.success),
-                    "error": str(item.error or "")[:240],
+                    # 节点错误只暴露有界安全码，绝不外泄原始异常正文。
+                    "error": "node_execution_failed"
+                    if bool(item.error) and not bool(item.success)
+                    else "",
                     "retries": int(getattr(item, "retries", 0) or 0),
                     "retryable": bool(getattr(item, "retryable", True)),
-                    "recovery_hint": str(getattr(item, "recovery_hint", "") or "")[:240],
+                    "recovery_hint": (
+                        "retry_recommended"
+                        if not bool(item.success) and bool(getattr(item, "retryable", True))
+                        else ""
+                    ),
                 }
                 for item in (run_result.node_results or [])[:10]
             ],
         }
     except RECOVERABLE_ERRORS as exc:
+        # UI 安全：绝不向公共响应泄漏原始 DB/异常文本；落库失败终态由调用方统一完成。
+        safe_code, safe_message = canonical_workflow_outcome(
+            success=False,
+            code=WORKFLOW_EXECUTION_FAILED_CODE,
+        )
+        # 有界日志：仅记录异常类型，不向日志暴露原始异常正文。
         logger.warning(
-            "resume pending AI workflow after approval failed request_no=%s: %s",
+            "resume pending AI workflow after approval failed request_no=%s type=%s",
             approval_request_id,
-            exc,
-            exc_info=True,
+            type(exc).__name__,
         )
         return {
             "workflow_executed": False,
             "approval_request_id": approval_request_id,
             "success": False,
-            "message": f"审批已通过，但恢复 AI 工作流失败：{exc}",
+            "code": safe_code,
+            "message": safe_message,
         }
 
 
@@ -630,17 +752,17 @@ def _drop_pending_ai_workflow_after_rejection(
             "message": "审批已拒绝，AI 工作流已取消",
         }
     except RECOVERABLE_ERRORS as exc:
+        # UI 安全：绝不向公共响应泄漏原始 DB/异常文本，也不向日志暴露原始异常正文。
         logger.warning(
-            "drop pending AI workflow after rejection failed request_no=%s: %s",
+            "drop pending AI workflow after rejection failed request_no=%s type=%s",
             approval_request_id,
-            exc,
-            exc_info=True,
+            type(exc).__name__,
         )
         return {
             "workflow_executed": False,
             "approval_request_id": approval_request_id,
             "success": False,
-            "message": f"审批已拒绝，但清理 AI 工作流失败：{exc}",
+            "message": "审批已拒绝，但清理 AI 工作流失败",
         }
 
 
@@ -673,69 +795,130 @@ def _approve_ai_workflow_request_without_node(
             {"success": False, "message": "AI 审批流程缺少合法留痕节点"},
             status_code=409,
         )
-    status_before = req.status
-    req.status = ApprovalStatus.APPROVED.value
-    req.approved_at = datetime.now()
-    req.approved_by = actor
-    req.approved_by_name = approver_name
-    req.current_node_id = None
-    req.current_node_order = (req.current_node_order or 0) + 1
-    db.add(
-        ApprovalRecord(
-            request_id=req.id,
-            node_id=audit_node.id,
-            node_name=audit_node.node_name,
-            node_order=audit_node.node_order,
-            approver_id=actor,
-            approver_name=approver_name,
-            action=ApprovalAction.APPROVE.value,
-            opinion=opinion,
-            is_passed=True,
-        )
-    )
 
-    _audit(
-        db,
-        actor=actor,
-        action="approval.approve_ai_workflow",
-        payload={
-            "request_id": req.id,
-            "request_no": req.request_no,
-            "status_before": status_before,
-            "status_after": req.status,
-            "opinion": opinion,
-        },
-    )
-
-    db.commit()
-    db.refresh(req)
+    # 先真实执行 AI 工作流，再按执行结果落终态（原子真值，杜绝重放）：
+    # - 成功 → 请求置为 approved（正常获批终态，工作台过滤器可见）。
+    # - 失败 → 请求置为 cancelled（既有取消态），绝不留下“已获批成功”的假记录。
     workflow_execution = _resume_pending_ai_workflow_after_approval(
         request_no=str(req.request_no or ""),
         opinion=opinion,
         approved_by=str(actor),
     )
-    if workflow_execution is not None:
-        try:
-            business_data = json.loads(req.business_data) if req.business_data else {}
-        except (TypeError, ValueError, json.JSONDecodeError):
-            business_data = {}
-        business_data["workflow_execution"] = workflow_execution
-        req.business_data = json.dumps(business_data, ensure_ascii=False, default=str)
+    _execution_success = bool(workflow_execution and workflow_execution.get("success"))
+    status_before = req.status
+    terminal_status = (
+        ApprovalStatus.APPROVED.value if _execution_success else ApprovalStatus.CANCELLED.value
+    )
+    # 只保存白名单中的固定 code/message；即使恢复器返回被污染文本，
+    # 端点也不会落库或向 UI 转发。
+    safe_code, safe_message = canonical_workflow_outcome(
+        success=_execution_success,
+        code=str((workflow_execution or {}).get("code") or ""),
+    )
+    bounded_outcome = {
+        "status": terminal_status,
+        "success": _execution_success,
+        "code": safe_code,
+        "message": safe_message,
+        "workflow_executed": bool(
+            workflow_execution and workflow_execution.get("workflow_executed")
+        ),
+        "nodes_executed": _safe_workflow_node_count(
+            (workflow_execution or {}).get("nodes_executed")
+        ),
+        "nodes_total": _safe_workflow_node_count((workflow_execution or {}).get("nodes_total")),
+    }
+    # 在调用方事务内写入原子真值 outcome；随后统一 commit，绝不二次执行工作流。
+    _persist_ai_workflow_outcome(
+        req,
+        status=terminal_status,
+        success=_execution_success,
+        code=safe_code,
+        message=safe_message,
+        workflow_executed=bool(workflow_execution and workflow_execution.get("workflow_executed")),
+        nodes_executed=bounded_outcome["nodes_executed"],
+        nodes_total=bounded_outcome["nodes_total"],
+    )
+    req.status = terminal_status
+
+    if _execution_success:
+        req.approved_at = datetime.now()
+        req.approved_by = actor
+        req.approved_by_name = approver_name
+        req.current_node_id = None
+        req.current_node_order = (req.current_node_order or 0) + 1
+        db.add(
+            ApprovalRecord(
+                request_id=req.id,
+                node_id=audit_node.id,
+                node_name=audit_node.node_name,
+                node_order=audit_node.node_order,
+                approver_id=actor,
+                approver_name=approver_name,
+                action=ApprovalAction.APPROVE.value,
+                opinion=opinion,
+                is_passed=True,
+            )
+        )
         _audit(
             db,
             actor=actor,
-            action="approval.execute_ai_workflow",
+            action="approval.approve_ai_workflow",
             payload={
                 "request_id": req.id,
                 "request_no": req.request_no,
-                "workflow_execution": workflow_execution,
+                "status_before": status_before,
+                "status_after": req.status,
+                "opinion": opinion,
             },
         )
-        db.commit()
-        db.refresh(req)
+
+    _audit(
+        db,
+        actor=actor,
+        action="approval.execute_ai_workflow",
+        payload={
+            "request_id": req.id,
+            "request_no": req.request_no,
+            "workflow_execution_status": bounded_outcome["status"],
+            "workflow_execution_success": _execution_success,
+            "workflow_execution_code": safe_code,
+            "workflow_execution_message": bounded_outcome["message"],
+        },
+    )
+    if not _execution_success:
+        # 有界 rejection_reason（绝不落原始异常正文）+ 失败审计留痕。
+        req.rejection_reason = WORKFLOW_EXECUTION_FAILED_CODE
+        _audit(
+            db,
+            actor=actor,
+            action="approval.execute_ai_workflow_failed",
+            payload={
+                "request_no": req.request_no,
+                "code": safe_code,
+                "message": bounded_outcome["message"],
+            },
+        )
+    elif req.applicant_id:
+        notify_mobile_user(
+            int(req.applicant_id),
+            "审批进度更新",
+            f"《{req.title or req.request_no}》AI 工作流已执行完成",
+            {"route": f"/app/approval/{req.id}", "request_id": str(req.id)},
+        )
+    db.commit()
+    db.refresh(req)
     data = _request_to_dict(req, include_records=True)
-    if workflow_execution is not None:
-        data["workflow_execution"] = workflow_execution
+    data["workflow_execution"] = bounded_outcome
+    if not _execution_success:
+        return JSONResponse(
+            {
+                "success": False,
+                "data": data,
+                "message": "审批通过后 AI 工作流执行失败，审批已取消",
+            },
+            status_code=409,
+        )
     return {"success": True, "data": data}
 
 
@@ -826,15 +1009,83 @@ def approve_request(
             },
         )
 
-        db.commit()
-        db.refresh(req)
         workflow_execution = None
-        if new_status == ApprovalStatus.APPROVED.value:
+        # 若终审通过且是 AI 工作流，先执行工作流再落终态：
+        # 绝不提前 commit “approved”，否则工作流失败时已提交的获批态无法被回滚（旧缺陷）。
+        # 成功 → 保持 approved 终态并写入安全 outcome；失败 → 同一事务内置为 cancelled。
+        if new_status == ApprovalStatus.APPROVED.value and _is_ai_workflow_request(req):
             workflow_execution = _resume_pending_ai_workflow_after_approval(
                 request_no=str(req.request_no or ""),
                 opinion=opinion,
                 approved_by=str(actor),
             )
+            _execution_success = bool(
+                workflow_execution
+                and workflow_execution.get("workflow_executed")
+                and workflow_execution.get("success")
+            )
+            safe_code, safe_message = canonical_workflow_outcome(
+                success=_execution_success,
+                code=str((workflow_execution or {}).get("code") or ""),
+            )
+            if _execution_success:
+                _persist_ai_workflow_outcome(
+                    req,
+                    status=ApprovalStatus.APPROVED.value,
+                    success=True,
+                    code=safe_code,
+                    message=safe_message,
+                    workflow_executed=True,
+                    nodes_executed=_safe_workflow_node_count(
+                        (workflow_execution or {}).get("nodes_executed")
+                    ),
+                    nodes_total=_safe_workflow_node_count(
+                        (workflow_execution or {}).get("nodes_total")
+                    ),
+                )
+            else:
+                # 失败 → cancelled + 有界 outcome + 失败审计，单次 commit 落单一真实终态。
+                _persist_ai_workflow_outcome(
+                    req,
+                    status=ApprovalStatus.CANCELLED.value,
+                    success=False,
+                    code=safe_code,
+                    message=safe_message,
+                    workflow_executed=bool(
+                        workflow_execution and workflow_execution.get("workflow_executed")
+                    ),
+                    nodes_executed=_safe_workflow_node_count(
+                        (workflow_execution or {}).get("nodes_executed")
+                    ),
+                    nodes_total=_safe_workflow_node_count(
+                        (workflow_execution or {}).get("nodes_total")
+                    ),
+                )
+                req.status = ApprovalStatus.CANCELLED.value
+                req.rejection_reason = safe_code
+                _audit(
+                    db,
+                    actor=actor,
+                    action="approval.execute_ai_workflow_failed",
+                    payload={
+                        "request_no": req.request_no,
+                        "code": safe_code,
+                        "message": safe_message,
+                    },
+                )
+
+        db.commit()
+        db.refresh(req)
+        if workflow_execution is not None and not (
+            workflow_execution.get("workflow_executed") and workflow_execution.get("success")
+        ):
+            # 工作流未成功执行：已按失败终态（cancelled）落库，返回 success False。
+            return {
+                "success": False,
+                "data": _request_to_dict(req, include_records=False),
+                "workflow_execution": workflow_execution,
+                "message": "审批未通过：AI 工作流未成功执行",
+            }
         if req.applicant_id:
             notify_mobile_user(
                 int(req.applicant_id),

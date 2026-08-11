@@ -1,0 +1,19 @@
+{
+  "vendor": "langgraph",
+  "upstream_repo": "https://github.com/langchain-ai/langgraph",
+  "upstream_pkg": "langgraph",
+  "license": "MIT",
+  "license_file": "LICENSE",
+  "version": "1.2.10",
+  "upstream_tag": "1.2.10",
+  "upstream_commit_sha": "41341457342327166d72fc11952ab28fb61ec0bf",
+  "source_path": "libs/langgraph",
+  "vendored_path": "langgraph/",
+  "sha256_manifest": "MANIFEST.sha256",
+  "verify_script": "verify_vendor.py",
+  "fetch_time_utc": "2026-08-10T00:00:00Z",
+  "verification": {
+    "method": "本地吸收副本与远端 tag 1.2.10（无 v 前缀）的锁定 commit 字节级比对 + MANIFEST.sha256 完整性 + LICENSE 校验",
+    "note": "吸收源取自 langgraph 仓库远端 tag 1.2.10 @ commit 41341457342327166d72fc11952ab28fb61ec0bf 的 libs/langgraph/langgraph + LICENSE，字节级一致。version 1.2.10 与 pyproject 一致。"
+  }
+}

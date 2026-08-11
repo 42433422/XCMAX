@@ -18,6 +18,8 @@ from app.db.models import (
     InventoryTransaction,
     Product,
     PurchaseOrder,
+    SalesOrder,
+    SalesOrderItem,
     ShipmentRecord,
     Supplier,
 )
@@ -43,7 +45,156 @@ class ReportService(NeuroEventPublisherMixin):
         end_date: datetime | None = None,
         group_by: str = "product",
         customer_id: int | None = None,
+        source: str = "sales_order",
     ) -> dict[str, Any]:
+        """销售报表。
+
+        ``source`` 决定数据源：
+        - ``"sales_order"``（默认）：**主源**，按 ``SalesOrderItem`` 正交读模型聚合
+          （产品 / 客户 / 日期），``summary.total_amount`` 与 ``SalesOrder.total_amount`` 一致。
+        - ``"shipment"``：遗留 ``ShipmentRecord`` **兼容路径**，仅作兼容保留，
+          不再作为销售主源。
+        """
+        if source == "shipment":
+            return self._get_sales_report_from_shipments(
+                start_date, end_date, group_by, customer_id
+            )
+        return self._get_sales_report_from_orders(start_date, end_date, group_by, customer_id)
+
+    def _get_sales_report_from_orders(
+        self,
+        start_date: datetime | None,
+        end_date: datetime | None,
+        group_by: str,
+        customer_id: int | None,
+    ) -> dict[str, Any]:
+        """SalesOrder 正交读模型聚合（主源）。
+
+        按 ``SalesOrderItem`` 在产品 / 客户 / 日期维度聚合，金额用 ``Decimal`` 累加
+        保证确定性；``summary.total_amount`` 等于被纳入订单的 ``SalesOrder.total_amount`` 之和。
+        多租户隔离由 ``TenantScopedMixin`` + 全局 tenant filter 自动生效。
+        """
+        with get_db() as db:
+            query = db.query(SalesOrderItem, SalesOrder).join(
+                SalesOrder, SalesOrderItem.order_id == SalesOrder.id
+            )
+
+            if start_date:
+                query = query.filter(SalesOrder.created_at >= start_date)
+            if end_date:
+                query = query.filter(SalesOrder.created_at <= end_date)
+            if customer_id:
+                query = query.filter(SalesOrder.customer_id == customer_id)
+
+            pairs = [(item, order) for item, order in query.all()]
+
+            # 权威汇总：summary.total_amount 以纳入订单的 SalesOrder.total_amount 之和为准
+            # （与订单总额一致），各维度明细 amount 仍按 SalesOrderItem.amount 聚合。
+            _zero = Decimal("0")
+            order_totals: dict[int, Decimal] = {}
+            for _item, order in pairs:
+                order_totals[order.id] = order.total_amount or _zero
+            summary_total = sum(order_totals.values())
+
+            if group_by == "product":
+                product_stats: dict[str, dict] = {}
+                zero = Decimal("0")
+                for item, order in pairs:
+                    key = item.product_name or f"产品{item.id}"
+                    entry = product_stats.setdefault(
+                        key,
+                        {"product_name": key, "quantity": zero, "amount": zero},
+                    )
+                    entry["quantity"] += item.quantity or zero
+                    entry["amount"] += item.amount or zero
+
+                return {
+                    "success": True,
+                    "data": [
+                        {
+                            "product_name": key,
+                            "quantity": float(entry["quantity"]),
+                            "amount": float(entry["amount"]),
+                        }
+                        for key, entry in sorted(product_stats.items())
+                    ],
+                    "summary": {
+                        "total_quantity": float(sum(e["quantity"] for e in product_stats.values())),
+                        "total_amount": float(summary_total),
+                    },
+                }
+
+            elif group_by == "customer":
+                customer_stats: dict[str, dict] = {}
+                zero = Decimal("0")
+                for item, order in pairs:
+                    key = order.customer_name or f"客户{order.customer_id or order.id}"
+                    entry = customer_stats.setdefault(
+                        key,
+                        {"customer_name": key, "order_ids": set(), "amount": zero},
+                    )
+                    entry["order_ids"].add(order.id)
+                    entry["amount"] += item.amount or zero
+
+                return {
+                    "success": True,
+                    "data": [
+                        {
+                            "customer_name": key,
+                            "order_count": len(entry["order_ids"]),
+                            "amount": float(entry["amount"]),
+                        }
+                        for key, entry in sorted(customer_stats.items())
+                    ],
+                    "summary": {
+                        "total_customers": len(customer_stats),
+                        "total_amount": float(summary_total),
+                    },
+                }
+
+            elif group_by == "date":
+                date_stats: dict[str, dict] = {}
+                zero = Decimal("0")
+                for item, order in pairs:
+                    created_at = order.created_at
+                    date_key = created_at.strftime("%Y-%m-%d") if created_at else "unknown"
+                    entry = date_stats.setdefault(
+                        date_key,
+                        {"date": date_key, "order_ids": set(), "amount": zero},
+                    )
+                    entry["order_ids"].add(order.id)
+                    entry["amount"] += item.amount or zero
+
+                return {
+                    "success": True,
+                    "data": [
+                        {
+                            "date": key,
+                            "order_count": len(entry["order_ids"]),
+                            "amount": float(entry["amount"]),
+                        }
+                        for key, entry in sorted(date_stats.items())
+                    ],
+                    "summary": {
+                        "total_days": len(date_stats),
+                        "total_amount": float(summary_total),
+                    },
+                }
+
+            # fail-closed：主源（sales_order）不支持未知 group_by，避免返回误导性空报表
+            return {"success": False, "message": f"不支持的 group_by: {group_by}"}
+
+    def _get_sales_report_from_shipments(
+        self,
+        start_date: datetime | None,
+        end_date: datetime | None,
+        group_by: str,
+        customer_id: int | None,
+    ) -> dict[str, Any]:
+        """遗留 ``ShipmentRecord`` 销售报表（兼容路径，非主源）。
+
+        保留仅供历史兼容读取；新销售数据一律走 ``_get_sales_report_from_orders``。
+        """
         with get_db() as db:
             query = db.query(ShipmentRecord, func.count(ShipmentRecord.id).label("record_count"))
 
@@ -286,9 +437,9 @@ class ReportService(NeuroEventPublisherMixin):
                 db.query(func.count(Supplier.id)).filter(Supplier.status == "active").scalar() or 0
             )
 
-            month_shipments = (
-                db.query(func.count(ShipmentRecord.id), func.sum(ShipmentRecord.amount))
-                .filter(ShipmentRecord.created_at >= month_start)
+            month_sales = (
+                db.query(func.count(SalesOrder.id), func.sum(SalesOrder.total_amount))
+                .filter(SalesOrder.created_at >= month_start)
                 .first()
             )
 
@@ -318,8 +469,8 @@ class ReportService(NeuroEventPublisherMixin):
                     "product_count": product_count,
                     "supplier_count": supplier_count,
                     "monthly_sales": {
-                        "order_count": month_shipments[0] or 0,
-                        "total_amount": self._decimal_to_float(month_shipments[1]),
+                        "order_count": month_sales[0] or 0,
+                        "total_amount": self._decimal_to_float(month_sales[1]),
                     },
                     "monthly_purchases": {
                         "order_count": month_purchases[0] or 0,

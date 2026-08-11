@@ -240,6 +240,7 @@ class NeuroBus:
         self._global_handlers: list[HandlerSubscription] = []
 
         # 执行器
+        self._worker_threads = worker_threads
         self._executor = ThreadPoolExecutor(
             max_workers=worker_threads, thread_name_prefix="neurobus_"
         )
@@ -349,6 +350,14 @@ class NeuroBus:
         """启动总线"""
         if self._running:
             return
+
+        # 重启安全：一次 stop() 会 shutdown 线程池；若在修复后重新 start()，
+        # 需重建执行器，否则事件处理（run_in_executor）会在已关闭的池上抛错。
+        # 供健康监控的固定动作 neuro_bus.ensure_running.v1 在重启后真正可运行。
+        if getattr(self._executor, "_shutdown", False):
+            self._executor = ThreadPoolExecutor(
+                max_workers=self._worker_threads, thread_name_prefix="neurobus_"
+            )
 
         self._running = True
         self._shutdown = False

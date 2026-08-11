@@ -44,6 +44,7 @@ const ENTERPRISE_BUSINESS_CORE_KEYS = new Set([
   'orders-create',
   'shipment-records',
   'customers',
+  'inventory',
   'print',
   'approval-hub',
 ])

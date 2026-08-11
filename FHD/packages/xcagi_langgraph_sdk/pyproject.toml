@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "langgraph-sdk"
+version = "0.4.2"
+description = "SDK for interacting with LangGraph API. XCAGI vendored fork (LG-W0-11)."
+authors = []
+requires-python = ">=3.10"
+readme = "README.md"
+license = "MIT"
+license-files = ['LICENSE']
+dependencies = [
+    "httpx>=0.25.2",
+    "orjson>=3.11.5",
+    "langchain-protocol>=0.0.15",
+    "langchain-core>=1.4.0,<2",
+    "websockets>=14,<17",
+]
+
+[project.urls]
+Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/sdk-py"
+Twitter = "https://x.com/langchain_oss"
+Slack = "https://www.langchain.com/join-community"
+Reddit = "https://www.reddit.com/r/LangChain/"
+
+[dependency-groups]
+test = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-mock",
+]
+dev = [
+  { include-group = "test" },
+]
+
+# 依赖来源：langgraph-sdk 自身不依赖 langgraph 核心（langgraph.core 仅在源码 type-checking
+# 下的可选 langgraph.store / langgraph_api 引用，运行时不触发），因此本包不映射任何
+# [tool.uv.sources] 兄弟包，也不从 registry 拉取 LangGraph 核心；所有运行时依赖
+# （httpx/orjson/langchain-protocol/langchain-core/websockets）来自 registry，避免循环依赖。
+[tool.uv]
+default-groups = ['dev']
+
+[tool.hatch.build.targets.wheel]
+include = ["langgraph_sdk"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --strict-config --durations=5 -vv"
+asyncio_mode = "auto"
+
+[tool.ruff]
+lint.select = [ "E", "F", "I", "UP" ]
+lint.ignore = [ "E501" ]
+target-version = "py310"

@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from FHD.scripts.dev import count_big_files
+
 from scripts.dev import source_governance
 
 
@@ -142,6 +143,27 @@ class SourceGovernanceEvaluateTests(unittest.TestCase):
                     source_governance._ignored_tracked_paths(repo_root),
                     ["generated/live.py"],
                 )
+
+    def test_duplicate_candidates_exclude_materialized_langgraph_trees(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            content = "VALUE = 'vendored'\n" * 40
+            tracked = [
+                "FHD/app/runtime.py",
+                "FHD/packages/xcagi_langgraph_core/langgraph/runtime.py",
+                "FHD/third_party/langgraph/libs/langgraph/langgraph/runtime.py",
+            ]
+            for rel in tracked:
+                path = repo_root / rel
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
+
+            candidates = source_governance._duplicate_candidates(repo_root, tracked)
+
+            self.assertEqual(
+                [item["file"] for item in candidates],
+                ["FHD/app/runtime.py"],
+            )
 
 
 class FhdBigFileRatchetV2Tests(unittest.TestCase):

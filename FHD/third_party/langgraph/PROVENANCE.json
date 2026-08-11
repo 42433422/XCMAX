@@ -1,0 +1,19 @@
+{
+  "vendor": "langgraph",
+  "upstream_repo": "https://github.com/langchain-ai/langgraph.git",
+  "license": "MIT",
+  "license_file": "LICENSE",
+  "locked_tag": "1.2.10",
+  "locked_sha": "41341457342327166d72fc11952ab28fb61ec0bf",
+  "tag_ref": "refs/tags/1.2.10",
+  "vendored_path": "libs/langgraph/langgraph",
+  "fetch_time_utc": "2026-08-10T03:22:00Z",
+  "sha256_manifest": "MANIFEST.sha256",
+  "verify_script": "verify_vendor.py",
+  "vendor_script": "refresh_vendor.py",
+  "smoke_check": "StateGraph build -> compile -> invoke",
+  "verification": {
+    "tag_points_to_sha": true,
+    "tag_to_sha_method": "git ls-remote --tags https://github.com/langchain-ai/langgraph.git refs/tags/1.2.10; shallow clone --branch 1.2.10 HEAD == locked_sha"
+  }
+}

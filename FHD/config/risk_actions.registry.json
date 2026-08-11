@@ -181,6 +181,10 @@
       "risk": "high",
       "approval": "always"
     },
+    "payment.refund": {
+      "risk": "high",
+      "approval": "always"
+    },
     "bulk_import": {
       "risk": "high",
       "approval": "interactive",
@@ -655,7 +659,7 @@
         },
         "quote": {
           "risk": "medium",
-          "idempotent": false,
+          "idempotent": true,
           "required_params": [
             "customer_id",
             "items"
@@ -665,7 +669,7 @@
         },
         "confirm": {
           "risk": "medium",
-          "idempotent": false,
+          "idempotent": true,
           "required_params": [
             "order_id"
           ],
@@ -674,14 +678,26 @@
         },
         "deliver": {
           "risk": "high",
-          "idempotent": false,
+          "idempotent": true,
+          "required_params": [
+            "order_id",
+            "item_id",
+            "quantity",
+            "warehouse_id"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "invoice": {
+          "risk": "high",
+          "idempotent": true,
           "required_params": [
             "order_id"
           ],
           "availability": "shared",
           "action_class": "business_db.write"
         },
-        "invoice": {
+        "credit_note": {
           "risk": "high",
           "idempotent": false,
           "required_params": [
@@ -692,7 +708,7 @@
         },
         "payment": {
           "risk": "high",
-          "idempotent": false,
+          "idempotent": true,
           "required_params": [
             "order_id",
             "amount"
@@ -700,14 +716,33 @@
           "availability": "shared",
           "action_class": "payment.charge"
         },
+        "refund": {
+          "risk": "high",
+          "idempotent": true,
+          "required_params": [
+            "allocation_id"
+          ],
+          "availability": "shared",
+          "action_class": "payment.refund"
+        },
         "cancel": {
           "risk": "high",
-          "idempotent": false,
+          "idempotent": true,
           "required_params": [
             "order_id"
           ],
           "availability": "shared",
           "action_class": "business_db.write"
+        },
+        "execute_closed_loop": {
+          "risk": "high",
+          "idempotent": true,
+          "required_params": [
+            "payload"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write",
+          "approval": "always"
         }
       }
     },

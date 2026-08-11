@@ -1,0 +1,188 @@
+{
+  "canonical_run": {
+    "executed_nodes": [
+      "n1",
+      "n2",
+      "n3"
+    ],
+    "final_context": {
+      "message": "契约",
+      "node_outputs": {
+        "n1": {
+          "action": "a1",
+          "success": true,
+          "tool_id": "t1"
+        },
+        "n2": {
+          "action": "a2",
+          "success": true,
+          "tool_id": "t2"
+        },
+        "n3": {
+          "action": "a3",
+          "success": true,
+          "tool_id": "t3"
+        }
+      },
+      "workflow_status": {
+        "executed_nodes": [
+          "n1",
+          "n2",
+          "n3"
+        ],
+        "message": "工作流执行完成",
+        "state": "completed"
+      },
+      "workflow_trace": [
+        {
+          "action": "a1",
+          "error": "",
+          "node_id": "n1",
+          "recovery_hint": "",
+          "retries": 0,
+          "retryable": true,
+          "success": true,
+          "tool_id": "t1"
+        },
+        {
+          "action": "a2",
+          "error": "",
+          "node_id": "n2",
+          "recovery_hint": "",
+          "retries": 0,
+          "retryable": true,
+          "success": true,
+          "tool_id": "t2"
+        },
+        {
+          "action": "a3",
+          "error": "",
+          "node_id": "n3",
+          "recovery_hint": "",
+          "retries": 0,
+          "retryable": true,
+          "success": true,
+          "tool_id": "t3"
+        }
+      ]
+    },
+    "message": "工作流执行完成",
+    "node_results": [
+      {
+        "action": "a1",
+        "error": "",
+        "node_id": "n1",
+        "output": {
+          "action": "a1",
+          "success": true,
+          "tool_id": "t1"
+        },
+        "params": {
+          "k": 1
+        },
+        "recovery_hint": "",
+        "retries": 0,
+        "retryable": true,
+        "success": true,
+        "tool_id": "t1"
+      },
+      {
+        "action": "a2",
+        "error": "",
+        "node_id": "n2",
+        "output": {
+          "action": "a2",
+          "success": true,
+          "tool_id": "t2"
+        },
+        "params": {
+          "k": 2
+        },
+        "recovery_hint": "",
+        "retries": 0,
+        "retryable": true,
+        "success": true,
+        "tool_id": "t2"
+      },
+      {
+        "action": "a3",
+        "error": "",
+        "node_id": "n3",
+        "output": {
+          "action": "a3",
+          "success": true,
+          "tool_id": "t3"
+        },
+        "params": {
+          "k": 3
+        },
+        "recovery_hint": "",
+        "retries": 0,
+        "retryable": true,
+        "success": true,
+        "tool_id": "t3"
+      }
+    ],
+    "plan_id": "p_ct",
+    "success": true
+  },
+  "checkpoint_shape": {
+    "blocked": [],
+    "executed_nodes": [
+      "n1"
+    ],
+    "keys": [
+      "blocked",
+      "checkpoint_id",
+      "created_at",
+      "executed_nodes",
+      "plan_id",
+      "runtime_context",
+      "step_index"
+    ],
+    "plan_id": "shape",
+    "runtime_context": {
+      "node_outputs": {
+        "n1": {
+          "ok": true
+        }
+      }
+    },
+    "step_index": 1
+  },
+  "deterministic": true,
+  "reducer_golden": {
+    "count": 5,
+    "meta": {
+      "a": 1,
+      "b": 2
+    },
+    "tags": [
+      "a",
+      "b"
+    ]
+  },
+  "scope": [
+    "FHD/tests/langgraph_absorption/test_legacy_runtime_contract.py",
+    "FHD/tests/langgraph_absorption/fixtures/legacy_contract.json"
+  ],
+  "serialization": {
+    "node_ids_after_roundtrip": [
+      "n1",
+      "n2",
+      "n3"
+    ],
+    "plan_to_dict_keys": [
+      "intent",
+      "metadata",
+      "nodes",
+      "plan_id",
+      "risk_level",
+      "todo_steps"
+    ],
+    "roundtrip_identical": true
+  },
+  "spec": "LG-W0-06",
+  "spec_title": "legacy workflow runtime contract freeze",
+  "target": "app/application/workflow/engine.py + types.py (schemas) + checkpointer.py"
+}

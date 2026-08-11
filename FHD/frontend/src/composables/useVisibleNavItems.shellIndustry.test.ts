@@ -109,6 +109,8 @@ describe('useVisibleNavItems · 平台壳第三步完成后长出行业菜单', 
     expect(keys).toContain('products')
     expect(keys).toContain('customers')
     expect(keys).toContain('orders')
+    expect(keys).toContain('inventory')
+    expect(keys).toContain('approval-hub')
     expect(keys).toContain('business-docking')
     expect(keys).toContain('data-sources')
     expect(keys).toContain('template-preview')

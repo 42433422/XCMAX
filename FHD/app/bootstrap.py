@@ -22,6 +22,8 @@ if TYPE_CHECKING:
     from app.application.shipment_app_service import ShipmentApplicationService
     from app.application.template_app_service import TemplateApplicationService
     from app.application.unit_products_import_app_service import UnitProductsImportService
+    from app.application.workflow.ports.checkpoint import CheckpointStore
+    from app.application.workflow.ports.runtime import WorkflowRuntime
     from app.services.extract_log_service import ExtractLogService
     from app.services.materials_service import MaterialsService
     from app.services.product_import_service import ProductImportService
@@ -86,3 +88,24 @@ def get_file_analysis_service() -> FileAnalysisService:
 
 def get_unit_products_import_service() -> UnitProductsImportService:
     return get_service_registry().unit_products_import_application_service
+
+
+def get_workflow_runtime() -> "WorkflowRuntime":  # noqa: UP037
+    """Return the process-wide workflow runtime singleton (composition root)."""
+    return get_service_registry().workflow_runtime
+
+
+def get_workflow_checkpointer() -> "CheckpointStore":  # noqa: UP037
+    """Return the process-wide workflow checkpointer singleton (composition root)."""
+    return get_service_registry().workflow_checkpointer
+
+
+def reload_workflow_runtime() -> "WorkflowRuntime":  # noqa: UP037
+    """Rebuild and return a fresh workflow runtime (hot-reload hook)."""
+    return get_service_registry().reload_workflow_runtime()
+
+
+def close_workflow_resources() -> None:
+    """Release workflow resources. Always returns ``None``."""
+    get_service_registry().close_workflow_resources()
+    return None

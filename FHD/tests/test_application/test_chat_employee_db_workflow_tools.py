@@ -236,12 +236,18 @@ def test_business_db_write_and_read_use_real_sqlite_services(monkeypatch, tmp_pa
 
     import app.db as db_mod
     from app.db.base import Base
-    from app.db.models.product import Product
+    from app.db.models.product import Product, UomCategory, UomUnit
     from app.db.models.purchase_unit import PurchaseUnit
     from app.services.tools_workflow_registered import execute_registered_workflow_tool
 
     db_mod.dispose_and_recreate_engine()
-    Base.metadata.create_all(db_mod.engine, tables=[PurchaseUnit.__table__, Product.__table__])
+    tables = [
+        PurchaseUnit.__table__,
+        UomCategory.__table__,
+        UomUnit.__table__,
+        Product.__table__,
+    ]
+    Base.metadata.create_all(db_mod.engine, tables=tables)
     try:
         customer_name = "星光贸易集成测试"
         customer_write = execute_registered_workflow_tool(
@@ -331,7 +337,7 @@ def test_business_db_write_and_read_use_real_sqlite_services(monkeypatch, tmp_pa
             for row in product_read["data"]
         )
     finally:
-        Base.metadata.drop_all(db_mod.engine, tables=[Product.__table__, PurchaseUnit.__table__])
+        Base.metadata.drop_all(db_mod.engine, tables=list(reversed(tables)))
         db_mod.dispose_and_recreate_engine()
 
 
@@ -342,7 +348,7 @@ def test_business_db_full_crud_matrix_is_tenant_scoped_and_exact(monkeypatch, tm
     import app.db as db_mod
     from app.db.base import Base
     from app.db.models.material import Material
-    from app.db.models.product import Product
+    from app.db.models.product import Product, UomCategory, UomUnit
     from app.db.models.purchase_unit import PurchaseUnit
     from app.db.models.shipment import ShipmentRecord
     from app.db.session import get_db
@@ -351,6 +357,8 @@ def test_business_db_full_crud_matrix_is_tenant_scoped_and_exact(monkeypatch, tm
 
     tables = [
         PurchaseUnit.__table__,
+        UomCategory.__table__,
+        UomUnit.__table__,
         Product.__table__,
         Material.__table__,
         ShipmentRecord.__table__,
@@ -692,7 +700,8 @@ def test_ai_chat_dynamic_workflow_executes_employee_tool():
                 reason="test low enough",
             )
         )
-        service.approval_service.get_approval_required_nodes = Mock(return_value=[])
+        service.approval_service = Mock()
+        service.approval_service.get_approval_required_nodes.return_value = []
 
         result = service._try_handle_dynamic_workflow(
             user_id="u1",
@@ -784,7 +793,8 @@ def test_ai_chat_explicit_business_db_read_uses_agent_orchestrator():
                 reason="low risk",
             )
         )
-        service.approval_service.get_approval_required_nodes = Mock(return_value=[])
+        service.approval_service = Mock()
+        service.approval_service.get_approval_required_nodes.return_value = []
 
         result = service._try_handle_dynamic_workflow(
             user_id="u1",
@@ -860,7 +870,8 @@ def test_ai_chat_pro_low_risk_dynamic_workflow_uses_agent_orchestrator():
                 reason="low risk",
             )
         )
-        service.approval_service.get_approval_required_nodes = Mock(return_value=[])
+        service.approval_service = Mock()
+        service.approval_service.get_approval_required_nodes.return_value = []
         service.workflow_engine.run = Mock()
 
         result = service._try_handle_dynamic_workflow(
@@ -1077,7 +1088,8 @@ def test_ai_chat_agentic_excel_loop_returns_agent_run_trace():
                 reason="excel agentic",
             )
         )
-        service.approval_service.get_approval_required_nodes = Mock(return_value=[])
+        service.approval_service = Mock()
+        service.approval_service.get_approval_required_nodes.return_value = []
         service.workflow_engine.run = Mock(return_value=run_result)
 
         result = service._try_handle_dynamic_workflow(
@@ -1215,7 +1227,8 @@ def test_ai_chat_explicit_employee_intent_runs_without_pro_source():
                 reason="explicit employee intent",
             )
         )
-        service.approval_service.get_approval_required_nodes = Mock(return_value=[])
+        service.approval_service = Mock()
+        service.approval_service.get_approval_required_nodes.return_value = []
 
         result = service._try_handle_dynamic_workflow(
             user_id="u1",
@@ -1308,7 +1321,8 @@ def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_so
                 reason="explicit db intent",
             )
         )
-        service.approval_service.get_approval_required_nodes = Mock(return_value=[])
+        service.approval_service = Mock()
+        service.approval_service.get_approval_required_nodes.return_value = []
 
         result = service._try_handle_dynamic_workflow(
             user_id="u1",
@@ -1402,7 +1416,8 @@ def test_ai_chat_medium_risk_confirmation_continues_same_agent_run():
                 reason="explicit db write needs confirmation",
             )
         )
-        service.approval_service.get_approval_required_nodes = Mock(return_value=[])
+        service.approval_service = Mock()
+        service.approval_service.get_approval_required_nodes.return_value = []
 
         waiting = service._try_handle_dynamic_workflow(
             user_id="u1",

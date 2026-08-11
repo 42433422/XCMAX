@@ -26,6 +26,15 @@ def _to_float(value: Any) -> float:
     return float(value)
 
 
+def _to_decimal(value: Any) -> Decimal:
+    """转成 ``Decimal`` 用于记账金额，避免二进制浮点误差与 float 转换。"""
+    if value is None:
+        return Decimal("0")
+    if isinstance(value, Decimal):
+        return value
+    return Decimal(str(value))
+
+
 def query_financial_ledger(
     account_id: int | None = None,
     account_code: str | None = None,
@@ -105,24 +114,37 @@ def query_financial_ledger(
         }
 
 
-def create_journal_entry(data: dict[str, Any]) -> dict[str, Any]:
-    """创建复式记账凭证；借贷必须平衡，否则拒写。"""
+def create_journal_entry(data: dict[str, Any], *, db: Any = None) -> dict[str, Any]:
+    """创建复式记账凭证；借贷必须平衡，否则拒写。
+
+    - ``db``：可选，调用方持有的 SQLAlchemy 会话。传入时在调用方事务内执笔，
+      不提交（由调用方统一 commit/rollback）；缺省时自建会话并在退出时提交，
+      保持旧调用方行为不变。
+    - 金额内部一律用 ``Decimal``，不做 float 转换。
+    """
+    if db is None:
+        with get_db() as session:
+            return _create_journal_entry(data, session)
+    return _create_journal_entry(data, db)
+
+
+def _create_journal_entry(data: dict[str, Any], db: Any) -> dict[str, Any]:
     lines_data = data.get("lines") or []
     if not isinstance(lines_data, list) or not lines_data:
         return {"success": False, "message": "缺少 lines 分录行"}
 
     parsed_lines = []
-    debit_total = 0.0
-    credit_total = 0.0
+    debit_total = Decimal("0")
+    credit_total = Decimal("0")
     for item in lines_data:
         account_id = item.get("account_id")
         account = None
         if account_id:
-            account = _find_account(account_id)
+            account = _find_account(db, account_id)
         elif item.get("account_code"):
-            account = _find_account_by_code(item.get("account_code"))
-        debit = _to_float(item.get("debit", 0))
-        credit = _to_float(item.get("credit", 0))
+            account = _find_account_by_code(db, item.get("account_code"))
+        debit = _to_decimal(item.get("debit", 0))
+        credit = _to_decimal(item.get("credit", 0))
         if debit == 0 and credit == 0:
             return {"success": False, "message": "分录行借贷不能同时为 0"}
         debit_total += debit
@@ -140,60 +162,57 @@ def create_journal_entry(data: dict[str, Any]) -> dict[str, Any]:
             }
         )
 
-    if abs(debit_total - credit_total) > 0.01:
+    if abs(debit_total - credit_total) > Decimal("0.01"):
         return {
             "success": False,
             "message": f"借贷不平衡: 借 {debit_total} vs 贷 {credit_total}",
         }
 
-    with get_db() as db:
-        entry_no = data.get("entry_no") or _generate_entry_no()
-        entry = JournalEntry(
-            entry_no=entry_no,
-            journal_date=data.get("journal_date") or date.today(),
-            status=data.get("status") or "posted",
-            description=data.get("description"),
-            reference_type=data.get("reference_type"),
-            reference_id=data.get("reference_id"),
-            debit_total=Decimal(str(debit_total)),
-            credit_total=Decimal(str(credit_total)),
-            created_at=datetime.now(),
-        )
-        db.add(entry)
-        db.flush()
-        for line in parsed_lines:
-            db.add(
-                JournalEntryLine(
-                    entry_id=entry.id,
-                    account_id=line["account_id"],
-                    account_code=line["account_code"],
-                    account_name=line["account_name"],
-                    debit=Decimal(str(line["debit"])),
-                    credit=Decimal(str(line["credit"])),
-                    partner_id=line["partner_id"],
-                    partner_name=line["partner_name"],
-                    reference=line["reference"],
-                    created_at=datetime.now(),
-                )
+    entry_no = data.get("entry_no") or _generate_entry_no()
+    entry = JournalEntry(
+        entry_no=entry_no,
+        journal_date=data.get("journal_date") or date.today(),
+        status=data.get("status") or "posted",
+        description=data.get("description"),
+        reference_type=data.get("reference_type"),
+        reference_id=data.get("reference_id"),
+        debit_total=Decimal("0"),
+        credit_total=Decimal("0"),
+        reversed_of_id=data.get("reversed_of_id"),
+        credit_note_of_id=data.get("credit_note_of_id"),
+        is_credit_note=data.get("is_credit_note", 0),
+        created_at=datetime.now(),
+    )
+    db.add(entry)
+    for line in parsed_lines:
+        entry.lines.append(
+            JournalEntryLine(
+                account_id=line["account_id"],
+                account_code=line["account_code"],
+                account_name=line["account_name"],
+                debit=line["debit"],
+                credit=line["credit"],
+                partner_id=line["partner_id"],
+                partner_name=line["partner_name"],
+                reference=line["reference"],
+                created_at=datetime.now(),
             )
-        entry.refresh_totals()
-        db.commit()
-        db.refresh(entry)
-        return {
-            "success": True,
-            "message": f"记账凭证已创建: {entry.entry_no}",
-            "data": entry.to_dict(),
-        }
+        )
+    db.flush()
+    entry.refresh_totals()
+    return {
+        "success": True,
+        "message": f"记账凭证已创建: {entry.entry_no}",
+        "data": entry.to_dict(),
+    }
 
 
-def _find_account(account_id: int) -> ChartOfAccount | None:
-    with get_db() as db:
-        return db.query(ChartOfAccount).filter(ChartOfAccount.id == int(account_id)).first()
+def _find_account(db: Any, account_id: int) -> ChartOfAccount | None:
+    return db.query(ChartOfAccount).filter(ChartOfAccount.id == int(account_id)).first()
 
 
-def _find_account_by_code(code: str) -> ChartOfAccount | None:
-    with get_db() as db:
-        return db.query(ChartOfAccount).filter(ChartOfAccount.code == str(code)).first()
+def _find_account_by_code(db: Any, code: str) -> ChartOfAccount | None:
+    return db.query(ChartOfAccount).filter(ChartOfAccount.code == str(code)).first()
 
 
 def get_chart_of_accounts() -> dict[str, Any]:
@@ -358,6 +377,130 @@ def aging_report(party_type: str, party_id: int, as_of_date: date | None = None)
     }
 
 
+def create_sale_invoice_entry(
+    order_id: int,
+    *,
+    partner_id: int | None = None,
+    partner_name: str | None = None,
+    amount: float | Decimal = 0.0,
+    journal_date: date | None = None,
+    description: str | None = None,
+    db: Any = None,
+) -> dict[str, Any]:
+    """生成销售开票平衡凭证：借应收账款(1122, partner) / 贷主营业务收入(6001)。
+
+    - ``reference_type='sale'``、``reference_id=order_id``。
+    - 复用通用平衡记账 API ``create_journal_entry``，借贷平衡由该 API 强制。
+    - ``db``：可选，调用方事务内执笔（同 ``create_journal_entry``）。
+    """
+    return create_journal_entry(
+        {
+            "journal_date": journal_date or date.today(),
+            "status": "posted",
+            "description": description or f"销售开票-订单{order_id}",
+            "reference_type": "sale",
+            "reference_id": order_id,
+            "lines": [
+                {
+                    "account_code": "1122",
+                    "partner_id": partner_id,
+                    "partner_name": partner_name,
+                    "debit": amount,
+                    "credit": 0,
+                },
+                {
+                    "account_code": "6001",
+                    "debit": 0,
+                    "credit": amount,
+                },
+            ],
+        },
+        db=db,
+    )
+
+
+def create_credit_note_entry(
+    original_entry_id: int,
+    *,
+    order_id: int | None = None,
+    journal_date: date | None = None,
+    description: str | None = None,
+    db: Any = None,
+) -> dict[str, Any]:
+    """按原销售凭证生成贷项通知单反向凭证，经 ``reversed_of_id`` 关联原凭证。
+
+    - 借贷方向全部反转（借↔贷），金额不变，天然借贷平衡。
+    - 复用通用平衡记账 API ``create_journal_entry``；原凭证不存在或已冲销则拒写。
+    - 在**同一事务**内创建反向凭证并标记原凭证 ``reversed_at``：传入 ``db`` 时
+      随调用方统一提交/回滚（原子）；缺省时自建会话并在退出时提交，保持旧行为。
+    """
+    if db is None:
+        with get_db() as session:
+            return _create_credit_note_entry(
+                original_entry_id,
+                session,
+                order_id=order_id,
+                journal_date=journal_date,
+                description=description,
+            )
+    return _create_credit_note_entry(
+        original_entry_id,
+        db,
+        order_id=order_id,
+        journal_date=journal_date,
+        description=description,
+    )
+
+
+def _create_credit_note_entry(
+    original_entry_id: int,
+    db: Any,
+    *,
+    order_id: int | None = None,
+    journal_date: date | None = None,
+    description: str | None = None,
+) -> dict[str, Any]:
+    original = db.query(JournalEntry).filter(JournalEntry.id == int(original_entry_id)).first()
+    if original is None:
+        return {"success": False, "message": f"原销售凭证不存在: id={original_entry_id}"}
+    if original.reversed_of_id is not None or original.reversed_at is not None:
+        return {
+            "success": False,
+            "message": f"凭证 {original.entry_no} 已冲销，不能重复生成贷项通知单",
+        }
+    reversed_lines = []
+    for line in original.lines:
+        reversed_lines.append(
+            {
+                "account_id": line.account_id,
+                "account_code": line.account_code,
+                "account_name": line.account_name,
+                "partner_id": line.partner_id,
+                "partner_name": line.partner_name,
+                "reference": line.reference,
+                "debit": line.credit or Decimal("0"),
+                "credit": line.debit or Decimal("0"),
+            }
+        )
+
+    result = create_journal_entry(
+        {
+            "journal_date": journal_date or date.today(),
+            "status": "posted",
+            "description": description or f"贷项通知单-冲销{original.entry_no}",
+            "reference_type": "credit-note",
+            "reference_id": order_id if order_id is not None else original.reference_id,
+            "reversed_of_id": original.id,
+            "is_credit_note": 1,
+            "lines": reversed_lines,
+        },
+        db=db,
+    )
+    if result["success"]:
+        original.reversed_at = datetime.now()
+    return result
+
+
 __all__ = [
     "create_journal_entry",
     "get_chart_of_accounts",
@@ -365,4 +508,6 @@ __all__ = [
     "seed_default_chart_of_accounts",
     "journal_entry_reverse",
     "aging_report",
+    "create_sale_invoice_entry",
+    "create_credit_note_entry",
 ]

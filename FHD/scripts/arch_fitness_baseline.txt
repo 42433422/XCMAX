@@ -253,3 +253,13 @@
 [giant-file] app/application/etl/parser_shipment_history.py
 # 2026-08-07 ERP Odoo18 升级：workflow clarification_node 571 行略超 500，后续拆分
 [giant-file] app/application/workflow/clarification_node.py
+# 2026-08-11 LangGraph + Odoo W1 集成：新增运行时与事务服务先纳入债务基线，后续波次拆分
+[giant-file] app/application/sales_app_service.py
+[giant-file] app/application/workflow/approval_persistence.py
+[giant-file] app/application/workflow/runtime/shadow_canary.py
+[giant-file] app/infrastructure/workflow/langgraph_runtime.py
+[giant-file] app/neuro_bus/health_monitor.py
+[giant-file] app/services/accounting_services.py
+[giant-file] app/services/fulfillment_service.py
+[giant-file] app/services/report_service.py
+[legacy-boundary] app/infrastructure/workflow/legacy_engine_adapter.py

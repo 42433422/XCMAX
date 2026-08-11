@@ -28,6 +28,7 @@ from app.application.workflow.approval_gated_engine import (
     _summarize_output,
     build_gated_evidence,
 )
+from app.application.workflow.approval_service import ApprovalService
 from app.application.workflow.risk_gate import RiskDecision
 from app.application.workflow.types import (
     NodeExecutionResult,
@@ -91,11 +92,13 @@ def _make_engine() -> ApprovalGatedEngine:
         ],
         message="工作流执行完成",
     )
-    # ApprovalService 用真实实例,但持久化到 DB 的部分会失败/被吞掉,不影响行为
+    # ApprovalService 用独立实例（避免进程级单例串扰），持久化到 DB 的部分被吞掉。
+    svc = ApprovalService()
+    svc._persist_request_to_db = lambda *a, **k: None
     engine = ApprovalGatedEngine(
         engine=mock_engine,
         risk_gate=None,  # 使用真实 HybridRiskGate
-        approval_service=None,  # 使用真实 ApprovalService
+        approval_service=svc,
     )
     return engine
 
@@ -350,6 +353,8 @@ def test_resume_after_approval_all_approved_runs_engine() -> None:
     )
     req_ids = decision.approval_request_ids
     assert len(req_ids) == 1
+    # 人工审批通过，再 resume（fail-closed：ApprovalService 复核 APPROVED）。
+    assert engine._approval_service.approve(req_ids[0]) is True
 
     result = engine.resume_after_approval(plan, {req_ids[0]: True}, runtime_context={})
     assert result.success is True
@@ -359,19 +364,23 @@ def test_resume_after_approval_all_approved_runs_engine() -> None:
 def test_resume_after_approval_partial_rejected_skips_engine() -> None:
     engine = _make_engine()
     plan = _make_plan()
-    result = engine.resume_after_approval(plan, {"req-x": False, "req-y": True}, runtime_context={})
+    decision = engine.evaluate_plan(
+        plan, strategy=ApprovalGatedEngine.APPROVAL_STRATEGY_INTERACTIVE
+    )
+    req_id = decision.approval_request_ids[0]
+    result = engine.resume_after_approval(plan, {req_id: False}, runtime_context={})
     assert result.success is False
     assert "未全部通过审批" in result.message
     engine._engine.run.assert_not_called()
 
 
-def test_resume_after_approval_empty_map_treated_as_all_approved() -> None:
-    """all([]) == True → 空字典视为全部通过,会调用 engine.run。"""
+def test_resume_after_approval_empty_map_fails_closed() -> None:
+    """Fail-closed：空映射不得被当作 all([])==True 放行。"""
     engine = _make_engine()
     plan = _make_plan()
     result = engine.resume_after_approval(plan, {}, runtime_context=None)
-    assert result.success is True
-    engine._engine.run.assert_called_once()
+    assert result.success is False
+    engine._engine.run.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,219 @@
+{
+  "canonical_run": {
+    "executed_nodes": [
+      "n1",
+      "n2",
+      "n3"
+    ],
+    "final_context": {
+      "message": "契约",
+      "node_outputs": {
+        "n1": {
+          "action": "a1",
+          "param_k": 1,
+          "success": true,
+          "tool_id": "t1"
+        },
+        "n2": {
+          "action": "a2",
+          "param_k": 2,
+          "success": true,
+          "tool_id": "t2"
+        },
+        "n3": {
+          "action": "a3",
+          "param_k": 3,
+          "success": true,
+          "tool_id": "t3"
+        }
+      },
+      "workflow_status": {
+        "executed_nodes": [
+          "n1",
+          "n2",
+          "n3"
+        ],
+        "message": "工作流执行完成",
+        "state": "completed"
+      },
+      "workflow_trace": [
+        {
+          "action": "a1",
+          "error": "",
+          "node_id": "n1",
+          "recovery_hint": "",
+          "success": true,
+          "tool_id": "t1"
+        },
+        {
+          "action": "a2",
+          "error": "",
+          "node_id": "n2",
+          "recovery_hint": "",
+          "success": true,
+          "tool_id": "t2"
+        },
+        {
+          "action": "a3",
+          "error": "",
+          "node_id": "n3",
+          "recovery_hint": "",
+          "success": true,
+          "tool_id": "t3"
+        }
+      ]
+    },
+    "message": "工作流执行完成",
+    "node_results": [
+      {
+        "action": "a1",
+        "error": "",
+        "node_id": "n1",
+        "output": {
+          "action": "a1",
+          "param_k": 1,
+          "success": true,
+          "tool_id": "t1"
+        },
+        "params": {
+          "k": 1
+        },
+        "recovery_hint": "",
+        "retries": 0,
+        "retryable": true,
+        "success": true,
+        "tool_id": "t1"
+      },
+      {
+        "action": "a2",
+        "error": "",
+        "node_id": "n2",
+        "output": {
+          "action": "a2",
+          "param_k": 2,
+          "success": true,
+          "tool_id": "t2"
+        },
+        "params": {
+          "k": 2
+        },
+        "recovery_hint": "",
+        "retries": 0,
+        "retryable": true,
+        "success": true,
+        "tool_id": "t2"
+      },
+      {
+        "action": "a3",
+        "error": "",
+        "node_id": "n3",
+        "output": {
+          "action": "a3",
+          "param_k": 3,
+          "success": true,
+          "tool_id": "t3"
+        },
+        "params": {
+          "k": 3
+        },
+        "recovery_hint": "",
+        "retries": 0,
+        "retryable": true,
+        "success": true,
+        "tool_id": "t3"
+      }
+    ],
+    "plan_id": "p_rt",
+    "success": true
+  },
+  "checkpoint_golden": {
+    "blocked": [],
+    "executed_nodes": [
+      "n1",
+      "n2",
+      "n3"
+    ],
+    "keys": [
+      "blocked",
+      "checkpoint_id",
+      "executed_nodes",
+      "plan_id",
+      "runtime_context",
+      "step_index"
+    ],
+    "plan_id": "p_rt",
+    "runtime_context_keys": [
+      "blocked",
+      "executed",
+      "failure",
+      "node_outputs",
+      "results",
+      "workflow_status",
+      "workflow_trace"
+    ],
+    "step_index": 3
+  },
+  "deterministic": true,
+  "reducer_golden": {
+    "count": 5,
+    "meta": {
+      "a": 1,
+      "b": 2
+    },
+    "tags": [
+      "a",
+      "b"
+    ]
+  },
+  "replay_golden": {
+    "dispatched": false,
+    "message": "重放自 checkpoint（未重新执行）",
+    "node_ids": [
+      "n1",
+      "n2"
+    ],
+    "success": true
+  },
+  "resume_golden": {
+    "first_success": false,
+    "resume_checkpoint_id": "cp2",
+    "resume_dispatched": [
+      "t3",
+      "t4",
+      "t5"
+    ],
+    "resume_executed": [
+      "n1",
+      "n2",
+      "n3",
+      "n4",
+      "n5"
+    ],
+    "resume_success": true,
+    "stored_steps": [
+      1,
+      2
+    ]
+  },
+  "scope": [
+    "FHD/tests/langgraph_absorption/test_langgraph_runtime_contract.py",
+    "FHD/tests/langgraph_absorption/fixtures/langgraph_runtime_contract.json"
+  ],
+  "spec": "LG-W1-T10-B",
+  "spec_title": "XCAGI LangGraph runtime contract freeze",
+  "target": "app/infrastructure/workflow/langgraph_runtime.py (WorkflowRuntime port) + ports + types + langgraph_assert",
+  "target_identity": {
+    "class_name": "XCAGILangGraphRuntime",
+    "fail_closed_source_assertion": true,
+    "graph_source": "langgraph.graph.state",
+    "implements_protocol": "WorkflowRuntime",
+    "upstream_tag": "1.2.10"
+  },
+  "vendored_modules": {
+    "langgraph.checkpoint.postgres": "xcagi_langgraph_checkpoint_backends/checkpoint-postgres",
+    "langgraph.checkpoint.sqlite": "xcagi_langgraph_checkpoint_backends/checkpoint-sqlite",
+    "langgraph.graph.state": "xcagi_langgraph_core",
+    "langgraph.prebuilt.tool_node": "xcagi_langgraph_prebuilt",
+    "langgraph_sdk.client": "xcagi_langgraph_sdk"
+  }
+}

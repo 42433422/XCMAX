@@ -1454,6 +1454,34 @@ class LLMWorkflowPlanner:
         profile = resolve_tool_execution_profile(context)
         registry_for_plan = _filter_tool_registry_for_profile(tool_registry, profile)
 
+        # 确定性销售到收款闭环写意图：以生产 NL 路由为唯一事实源，在用户记忆 RAG、
+        # ReAct/CoT 或任何 LLM 调用之前直接返回生产 fallback 计划（不二次解析、不造节点）。
+        # 仅在 sales 工具经画像过滤后仍可用时进入；否则保持原有安全行为。
+        from app.application.normal_chat_dispatch import route_normal_mode_message
+
+        _route = route_normal_mode_message(str(message or ""))
+        if (
+            "sales" in registry_for_plan
+            and str(_route.get("intent") or "") == "sales_write"
+            and str(_route.get("action") or "") == "execute_closed_loop"
+            and isinstance(_route.get("payload"), dict)
+            and bool(_route.get("payload"))
+        ):
+            from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
+
+            return finalize_planned_graph(
+                self._decorate_plan(
+                    self._fallback_plan(plan_id, message, registry_for_plan),
+                    message,
+                    registry_for_plan,
+                ),
+                plan_id=plan_id,
+                context=context,
+                validate=validate_plan_graph,
+                fallback_factory=lambda: self._fallback_plan(plan_id, message, registry_for_plan),
+                warn=logger.warning,
+            )
+
         # 专业模式 ReAct/CoT 前：拉取用户记忆 RAG 命中摘要，注入到 context（只放摘要文本）。
         # 目的：让规划器在“选择工具/补全关键 params”时更贴近用户习惯，但避免把全量历史注入 prompt。
         try:
@@ -2220,6 +2248,8 @@ class LLMWorkflowPlanner:
         message: str,
         tool_registry: dict[str, Any],
     ) -> PlanGraph:
+        from app.application.normal_chat_dispatch import route_normal_mode_message
+
         lower = (message or "").lower()
         nodes: list[WorkflowNode] = []
         todo = ["理解用户目标", "执行可用工具", "输出执行结果"]
@@ -2280,6 +2310,33 @@ class LLMWorkflowPlanner:
                 intent = "business_db_write"
                 todo = ["识别业务实体与写入字段", "通过受控业务服务写入数据库", "返回写入结果"]
                 nodes.append(node)
+
+        # 销售到收款闭环写意图：以生产 NL 路由为唯一事实源（不在此处二次解析），
+        # 产出单个确定性的高风险复合节点 sales.execute_closed_loop，并原样携带路由写载荷。
+        # 该分支仅在路由判定 intent==sales_write && action==execute_closed_loop 且载荷非空、
+        # 且 sales 工具存在于注册表时进入。不注册/不执行复合动作，规划到此为止。
+        route = route_normal_mode_message(message)
+        if (
+            not nodes
+            and "sales" in tool_registry
+            and str(route.get("intent") or "") == "sales_write"
+            and str(route.get("action") or "") == "execute_closed_loop"
+            and isinstance(route.get("payload"), dict)
+            and bool(route.get("payload"))
+        ):
+            intent = "sales_write"
+            todo = ["解析销售到收款闭环写载荷", "高风险审批后执行销售闭环", "返回执行结果"]
+            nodes.append(
+                WorkflowNode(
+                    node_id="sales_execute_closed_loop",
+                    tool_id="sales",
+                    action="execute_closed_loop",
+                    params={"payload": route["payload"]},
+                    risk="high",
+                    idempotent=True,
+                    description="执行销售到收款闭环",
+                )
+            )
 
         if not nodes and (
             any(k in lower for k in ("db", "database"))

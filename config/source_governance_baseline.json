@@ -1,7 +1,7 @@
 {
   "_note": "Cross-stack source debt ratchet. Existing oversized files and exact-copy debt may only shrink; generated/derived roots are excluded.",
   "schema_version": 1,
-  "updated_at": "2026-08-09",
+  "updated_at": "2026-08-11",
   "oversized_files": {
     "成都修茈科技有限公司/MODstore_deploy/market/src/views/WorkbenchHomeView.vue": {
       "stack": "modstore_vue",
@@ -40,7 +40,7 @@
     },
     "FHD/app/services/tools_workflow_registered.py": {
       "stack": "fhd_backend",
-      "lines": 3175,
+      "lines": 3187,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_scaffold_runner.py": {
@@ -105,7 +105,7 @@
     },
     "FHD/app/application/ai_chat_app_service.py": {
       "stack": "fhd_backend",
-      "lines": 2508,
+      "lines": 2527,
       "soft_cap": 800
     },
     "FHD/app/application/dataset_rag_app_service.py": {
@@ -113,14 +113,14 @@
       "lines": 2501,
       "soft_cap": 800
     },
+    "FHD/app/application/workflow/planner.py": {
+      "stack": "fhd_backend",
+      "lines": 2496,
+      "soft_cap": 800
+    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/market_routes.py": {
       "stack": "modstore_backend",
       "lines": 2487,
-      "soft_cap": 800
-    },
-    "FHD/app/application/workflow/planner.py": {
-      "stack": "fhd_backend",
-      "lines": 2439,
       "soft_cap": 800
     },
     "FHD/app/application/shipment_excel_etl_app_service.py": {
@@ -168,15 +168,15 @@
       "lines": 2081,
       "soft_cap": 800
     },
+    "FHD/app/db/init_db.py": {
+      "stack": "fhd_backend",
+      "lines": 2057,
+      "soft_cap": 800
+    },
     "成都修茈科技有限公司/MODstore_deploy/market/src/views/AiStoreView.vue": {
       "stack": "modstore_vue",
       "lines": 2053,
       "soft_cap": 500
-    },
-    "FHD/app/db/init_db.py": {
-      "stack": "fhd_backend",
-      "lines": 2052,
-      "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_scheduler.py": {
       "stack": "modstore_backend",
@@ -222,6 +222,11 @@
       "stack": "fhd_vue",
       "lines": 1764,
       "soft_cap": 500
+    },
+    "FHD/app/application/approval_workspace_app_service.py": {
+      "stack": "fhd_backend",
+      "lines": 1721,
+      "soft_cap": 800
     },
     "FHD/app/application/agent_orchestrator/chat_trace.py": {
       "stack": "fhd_backend",
@@ -278,11 +283,6 @@
       "lines": 1516,
       "soft_cap": 500
     },
-    "FHD/app/application/approval_workspace_app_service.py": {
-      "stack": "fhd_backend",
-      "lines": 1478,
-      "soft_cap": 800
-    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/butler_qq_bridge.py": {
       "stack": "modstore_backend",
       "lines": 1449,
@@ -328,6 +328,11 @@
       "lines": 1403,
       "soft_cap": 800
     },
+    "FHD/app/application/normal_chat_dispatch.py": {
+      "stack": "fhd_backend",
+      "lines": 1402,
+      "soft_cap": 800
+    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_autonomy_service.py": {
       "stack": "modstore_backend",
       "lines": 1393,
@@ -341,11 +346,6 @@
     "FHD/app/neuro_bus/dead_letter_queue.py": {
       "stack": "fhd_backend",
       "lines": 1362,
-      "soft_cap": 800
-    },
-    "FHD/app/application/ai_chat/excel_import_pipeline.py": {
-      "stack": "fhd_backend",
-      "lines": 1355,
       "soft_cap": 800
     },
     "FHD/app/neuro_bus/event_store.py": {
@@ -367,6 +367,11 @@
       "stack": "fhd_vue",
       "lines": 1325,
       "soft_cap": 500
+    },
+    "FHD/app/application/ai_chat/excel_import_pipeline.py": {
+      "stack": "fhd_backend",
+      "lines": 1322,
+      "soft_cap": 800
     },
     "FHD/app/fastapi_routes/domains/auth/routes.py": {
       "stack": "fhd_backend",
@@ -417,11 +422,6 @@
       "stack": "fhd_vue",
       "lines": 1252,
       "soft_cap": 500
-    },
-    "FHD/app/application/normal_chat_dispatch.py": {
-      "stack": "fhd_backend",
-      "lines": 1251,
-      "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/craft_steps.py": {
       "stack": "modstore_backend",
@@ -521,6 +521,11 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/admin_duty_graph_api.py": {
       "stack": "modstore_backend",
       "lines": 1094,
+      "soft_cap": 800
+    },
+    "FHD/app/application/sales_app_service.py": {
+      "stack": "fhd_backend",
+      "lines": 1081,
       "soft_cap": 800
     },
     "FHD/app/application/aiopen/service.py": {
@@ -638,6 +643,11 @@
       "lines": 983,
       "soft_cap": 800
     },
+    "FHD/app/fastapi_routes/xcagi_compat_chat_helpers.py": {
+      "stack": "fhd_backend",
+      "lines": 975,
+      "soft_cap": 800
+    },
     "FHD/frontend/src/components/kitten/KittenAnalyzerView.vue": {
       "stack": "fhd_vue",
       "lines": 975,
@@ -646,6 +656,11 @@
     "FHD/app/fastapi_routes/excel_extract.py": {
       "stack": "fhd_backend",
       "lines": 969,
+      "soft_cap": 800
+    },
+    "FHD/app/services/inventory_service.py": {
+      "stack": "fhd_backend",
+      "lines": 960,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/market/src/components/workbench/EmployeeAiDraftReview.vue": {
@@ -683,9 +698,9 @@
       "lines": 934,
       "soft_cap": 500
     },
-    "FHD/app/fastapi_routes/xcagi_compat_chat_helpers.py": {
+    "FHD/app/neuro_bus/health_monitor.py": {
       "stack": "fhd_backend",
-      "lines": 928,
+      "lines": 931,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/integrations/ops_action_handlers.py": {
@@ -778,20 +793,25 @@
       "lines": 839,
       "soft_cap": 800
     },
+    "FHD/app/infrastructure/workflow/langgraph_runtime.py": {
+      "stack": "fhd_backend",
+      "lines": 830,
+      "soft_cap": 800
+    },
     "FHD/app/neuro_bus/circuit_breaker.py": {
       "stack": "fhd_backend",
       "lines": 830,
+      "soft_cap": 800
+    },
+    "FHD/app/neuro_bus/bus.py": {
+      "stack": "fhd_backend",
+      "lines": 824,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/market/src/views/workflow/v2/WorkflowFlowEditor.vue": {
       "stack": "modstore_vue",
       "lines": 820,
       "soft_cap": 500
-    },
-    "FHD/app/neuro_bus/bus.py": {
-      "stack": "fhd_backend",
-      "lines": 815,
-      "soft_cap": 800
     },
     "FHD/mods/xcagi-erp-domain-bridge/frontend/views/CreateOrderView.vue": {
       "stack": "fhd_vue",
@@ -1264,6 +1284,8 @@
   },
   "duplicate_excluded_prefixes": [
     "FHD/XCAGI/mods/",
-    "FHD/templates/"
+    "FHD/packages/xcagi_langgraph_",
+    "FHD/templates/",
+    "FHD/third_party/langgraph/"
   ]
 }

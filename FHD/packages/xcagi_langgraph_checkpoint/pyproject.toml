@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "langgraph-checkpoint"
+version = "4.1.1"
+description = "Library with base interfaces for LangGraph checkpoint savers. XCAGI vendored fork (LG-W0-03)."
+authors = []
+requires-python = ">=3.10"
+readme = "README.md"
+license = "MIT"
+license-files = ['LICENSE']
+dependencies = [
+    "langchain-core>=0.2.38",
+    "ormsgpack>=1.12.0",
+]
+
+[dependency-groups]
+test = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-mock",
+    "pytest-watcher",
+    "syrupy",
+    "langchain-core",
+]
+lint = [
+    "ruff",
+    "codespell",
+    "ty",
+]
+dev = [
+    {include-group = "test"},
+    {include-group = "lint"},
+]
+
+[project.urls]
+Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint"
+Twitter = "https://x.com/langchain_oss"
+Slack = "https://www.langchain.com/join-community"
+Reddit = "https://www.reddit.com/r/LangChain/"
+
+[tool.uv]
+default-groups = ['dev']
+
+[tool.hatch.build.targets.wheel]
+include = ["langgraph"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --strict-config --durations=5 -vv"
+asyncio_mode = "auto"
+
+[tool.ruff]
+lint.select = [ "E", "F", "I", "UP", "B" ]
+lint.ignore = [ "E501", "B008" ]
+target-version = "py310"
