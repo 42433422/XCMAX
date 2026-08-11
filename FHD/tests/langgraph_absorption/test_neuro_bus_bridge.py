@@ -43,7 +43,9 @@ class RecordingBus:
         return True
 
 
-def _make_bridge(*, running: bool = True, reject: bool = False) -> tuple[NeuroBusEventBridge, RecordingBus]:
+def _make_bridge(
+    *, running: bool = True, reject: bool = False
+) -> tuple[NeuroBusEventBridge, RecordingBus]:
     bus = RecordingBus(running=running, reject=reject)
     return NeuroBusEventBridge(bus=bus), bus
 

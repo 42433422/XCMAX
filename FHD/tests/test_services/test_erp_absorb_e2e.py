@@ -32,9 +32,10 @@ W1-10 端到端契约 + 真实 SQLite 原子闭环 + 桌面验收（W1-09 R2 确
 from __future__ import annotations
 
 import copy
+import json
 from datetime import datetime
 from decimal import Decimal
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from sqlalchemy import create_engine, func, select
@@ -56,6 +57,7 @@ from app.db.models import (
     InventoryTransaction,
     JournalEntry,
     Product,
+    PurchaseUnit,
     ReceivableAllocation,
     SalesOrder,
     SalesOrderItem,
@@ -474,6 +476,19 @@ def _e2e_db(tmp_path):
         connect_args={"check_same_thread": False, "timeout": 30},
     )
     Base.metadata.create_all(engine)
+    # approval_persistence 会向 ai_action_audit 写审计（非 Base 表），需一并创建，
+    # 否则事务被“无此表”污染导致请求快照无法落库。
+    from sqlalchemy import text as _text
+
+    with engine.begin() as conn:
+        conn.execute(
+            _text(
+                "CREATE TABLE IF NOT EXISTS ai_action_audit ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+                "actor TEXT, action TEXT NOT NULL, payload TEXT)"
+            )
+        )
     factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     yield factory
     engine.dispose()
@@ -516,6 +531,100 @@ def _seed_tenant(factory, tenant_id: int, warehouse_code: str, ledger_qty: int =
             return {
                 "tenant_id": tenant_id,
                 "customer_id": customer.id,
+                "product_id": product.id,
+                "warehouse_id": warehouse.id,
+                "ledger_id": ledger.id,
+            }
+        finally:
+            db.close()
+
+
+def _seed_purchase_unit_only(
+    factory,
+    tenant_id: int,
+    warehouse_code: str,
+    ledger_qty: int = 100,
+    batch_no: str | None = None,
+) -> dict:
+    """在显式 tenant_scope 下种子【仅采购单位】(桌面客户B) + 产品 + 活动仓库 + 库存台账。
+
+    刻意不创建任何核心 ``Customer``：验证「采购单位吸收为核心客户」路径
+    （core=0 且同租户精确 PurchaseUnit=1 → 恰好新建一个核心 Customer）。
+    """
+    with tenant_scope(tenant_id):
+        db = factory()
+        try:
+            pu = PurchaseUnit(
+                unit_name="客户B",
+                contact_person="采购人B",
+                contact_phone="13800000000",
+                address="地址B",
+            )
+            product = Product(name="A 产品", unit="个")
+            warehouse = Warehouse(
+                code=warehouse_code,
+                name=f"仓{tenant_id}",
+                status="active",
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+            db.add_all([pu, product, warehouse])
+            db.flush()
+            ledger = InventoryLedger(
+                product_id=product.id,
+                warehouse_id=warehouse.id,
+                batch_no=batch_no,
+                quantity=ledger_qty,
+                available_quantity=ledger_qty,
+                reserved_quantity=0,
+                unit="个",
+                in_date=datetime.now().date(),
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+            db.add(ledger)
+            db.commit()
+            return {
+                "tenant_id": tenant_id,
+                "purchase_unit_id": pu.id,
+                "product_id": product.id,
+                "warehouse_id": warehouse.id,
+                "ledger_id": ledger.id,
+            }
+        finally:
+            db.close()
+
+
+def _seed_product_warehouse_only(factory, tenant_id: int, warehouse_code: str) -> dict:
+    """种子产品 + 活动仓库 + 库存台账，但不创建任何客户/采购单位（用于缺客户场景）。"""
+    with tenant_scope(tenant_id):
+        db = factory()
+        try:
+            product = Product(name="A 产品", unit="个")
+            warehouse = Warehouse(
+                code=warehouse_code,
+                name=f"仓{tenant_id}",
+                status="active",
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+            db.add_all([product, warehouse])
+            db.flush()
+            ledger = InventoryLedger(
+                product_id=product.id,
+                warehouse_id=warehouse.id,
+                quantity=100,
+                available_quantity=100,
+                reserved_quantity=0,
+                unit="个",
+                in_date=datetime.now().date(),
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+            db.add(ledger)
+            db.commit()
+            return {
+                "tenant_id": tenant_id,
                 "product_id": product.id,
                 "warehouse_id": warehouse.id,
                 "ledger_id": ledger.id,
@@ -584,6 +693,110 @@ def _run_approved_closed_loop(plan, payload, runtime_context) -> tuple[object, A
     assert approval.approve(req.request_id, comment="w1-10 e2e approve") is True
     resume = gated.resume_after_approval(plan, {req.request_id: True}, runtime_context)
     return resume, approval
+
+
+def _seed_approver_user(factory, username: str = "w1-10-approver") -> dict:
+    """种子一个真实用户，供持久化审批取申请人（approval_persistence 需要落到 users）。"""
+    from app.db.models.user import User
+
+    with tenant_scope(1):
+        db = factory()
+        try:
+            existing = db.query(User).filter(User.username == username).first()
+            if existing is not None:
+                return {"user_id": int(existing.id)}
+            user = User(username=username, password="x", display_name=username, is_active=True)
+            db.add(user)
+            db.commit()
+            return {"user_id": int(user.id)}
+        finally:
+            db.close()
+
+
+def _new_real_approval() -> ApprovalService:
+    """真实 ApprovalService：启用 DB 持久化，写入绑定 request_no 的可靠工作流快照。"""
+    return ApprovalService()
+
+
+def _create_durable_snapshot_request(
+    approval: ApprovalService, runtime_context: dict
+) -> tuple[object, str]:
+    """用真实生产门控引擎创建并持久化一个待审批请求（含可靠工作流快照）。
+
+    返回 ``(decision, request_no)``。审批内存态保留在 ``approval`` 内（未重启阶段）。
+    """
+    plan = _fallback_plan_for(EXACT_SENTENCE)
+    gated = _gated_engine(approval)
+    decision, run_result = gated.run(plan, runtime_context, strategy="interactive")
+    assert decision.pending_approval is True, decision
+    assert run_result is None
+    requests = approval.get_requests_by_plan(plan.plan_id)
+    assert len(requests) == 1
+    return decision, requests[0].request_id
+
+
+def _mutate_business_data(factory, request_no: str, mutator) -> None:
+    """直接改写 DB 中某审批请求的 business_data（用于注入缺失/错配快照场景）。"""
+    from app.db.models.approval import ApprovalRequest as ApprovalRequestModel
+
+    with tenant_scope(1):
+        db = factory()
+        try:
+            persisted = (
+                db.query(ApprovalRequestModel)
+                .filter(ApprovalRequestModel.request_no == request_no)
+                .first()
+            )
+            assert persisted is not None, f"request not found: {request_no}"
+            business_data = json.loads(persisted.business_data) if persisted.business_data else {}
+            mutated = mutator(business_data)
+            persisted.business_data = json.dumps(mutated, ensure_ascii=False, default=str)
+            db.commit()
+        finally:
+            db.close()
+
+
+def _assert_one_exact_closed_loop_row_set(factory, seed) -> None:
+    """断言真实 W1 闭环的精确业务行与后置条件（订单1+明细1、库存90、双平衡凭证、应收已收）。"""
+    assert _ledger_available(factory, 1, seed["product_id"]) == 90.0
+    with tenant_scope(1):
+        db = factory()
+        try:
+            order = db.query(SalesOrder).first()
+            assert order is not None
+            assert order.customer_name == "客户B"
+            assert order.state == "confirmed"
+            assert order.invoice_status == "invoiced"
+            assert order.payment_state == "paid"
+            assert order.fulfillment_state() == "delivered"
+            assert float(order.total_amount) == 1000.0
+            assert float(order.paid_amount) == 1000.0
+
+            items = db.query(SalesOrderItem).all()
+            assert len(items) == 1
+            item = items[0]
+            assert item.product_name == "A 产品"
+            assert float(item.quantity) == 10
+            assert item.unit == "个"
+            assert float(item.unit_price) == 100
+            assert float(item.amount) == 1000
+
+            inv_tx = db.query(InventoryTransaction).all()
+            assert len(inv_tx) == 1
+            assert inv_tx[0].transaction_type == "out"
+            assert float(inv_tx[0].quantity) == -10
+
+            entries = db.query(JournalEntry).all()
+            assert len(entries) == 2
+            for e in entries:
+                assert e.is_balanced() is True
+
+            allocs = db.query(ReceivableAllocation).all()
+            assert len(allocs) == 1
+            assert allocs[0].status == "paid"
+            assert float(allocs[0].allocated_amount) == 1000.0
+        finally:
+            db.close()
 
 
 class TestRealSqliteAtomicClosedLoop:
@@ -678,6 +891,81 @@ class TestRealSqliteAtomicClosedLoop:
             inv = {r["product_name"]: r for r in inv_report["data"]}
             assert float(inv["A 产品"]["total_quantity"]) == 90
             assert float(inv["A 产品"]["available_quantity"]) == 90
+
+    def test_fractional_quantity_price_decimal_exact_accounting(self, _e2e_db, monkeypatch):
+        """修正 B：0.10 × 0.20 = 0.020 全程 Decimal，无二进制浮点伪影。
+
+        断言持久化订单总额、明细合计、凭证与收款分配均为精确定点 Decimal 0.02
+        （Numeric(18,2) 的定点等价），证明复合账务不经任何 float 运算。
+        """
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        seed = _seed_tenant(factory, 1, "WH-T1")
+
+        payload = {
+            "idempotency_key": "w1-10-fractional-decimal-e2e",
+            "order": {
+                "customer_id": seed["customer_id"],
+                "customer_name": "客户B",
+                "currency": "CNY",
+                "total_amount": Decimal("0.020"),
+                "items": [
+                    {
+                        "product_id": seed["product_id"],
+                        "product_name": "A 产品",
+                        "quantity": Decimal("0.10"),
+                        "unit_price": Decimal("0.20"),
+                        "line_total": Decimal("0.020"),
+                        "unit": "个",
+                    }
+                ],
+            },
+            "fulfillment": {
+                "requested": True,
+                "quantity": Decimal("0.10"),
+                "unit": "个",
+                "warehouse_id": seed["warehouse_id"],
+                "warehouse_resolution": "current_tenant_default",
+            },
+            "invoice": {"requested": True, "amount": Decimal("0.020"), "currency": "CNY"},
+            "payment_allocation": {
+                "requested": True,
+                "amount": Decimal("0.020"),
+                "currency": "CNY",
+            },
+        }
+
+        with tenant_scope(1):
+            result = SalesAppService().execute_closed_loop(payload)
+
+        assert result["success"] is True, result
+
+        def _fx(value) -> Decimal:
+            return Decimal(str(value)).normalize()
+
+        with tenant_scope(1):
+            db = factory()
+            try:
+                order = db.query(SalesOrder).first()
+                item = db.query(SalesOrderItem).first()
+                entries = db.query(JournalEntry).all()
+                alloc = db.query(ReceivableAllocation).first()
+            finally:
+                db.close()
+
+        assert order is not None and item is not None and alloc is not None
+        assert _fx(order.total_amount) == Decimal("0.020")
+        assert _fx(order.paid_amount) == Decimal("0.020")
+        assert _fx(item.quantity) == Decimal("0.1")
+        assert _fx(item.unit_price) == Decimal("0.2")
+        assert _fx(item.amount) == Decimal("0.020")
+        assert len(entries) == 2
+        for e in entries:
+            assert _fx(e.debit_total) == Decimal("0.020")
+            assert _fx(e.credit_total) == Decimal("0.020")
+            for line in e.lines:
+                assert _fx(line.debit) == Decimal("0.020") or _fx(line.credit) == Decimal("0.020")
+        assert _fx(alloc.allocated_amount) == Decimal("0.020")
 
     def test_replay_same_plan_idempotent_no_new_rows(self, _e2e_db, monkeypatch):
         """后置条件 5：重放同计划幂等，业务行数与库存不变。"""
@@ -1528,3 +1816,786 @@ class TestIdempotencyPrefixBoundary:
 
         assert _count_business_rows(factory, 1) == before
         assert _ledger_available(factory, 1, seed["product_id"]) == before_avail == 90.0
+
+
+class TestDurableRecoveryAfterRestart:
+    """真实 W1 SQLite：进程重启后凭可靠工作流快照恢复审批并精确执行一次。
+
+    覆盖：可靠快照 → 全新 ApprovalService（模拟重启）→ 工作台可见/审批到达执行 →
+    精确后置条件 → 缺失/错配快照 fail-closed 零执行 → 重复审批终态零重放。
+    """
+
+    def test_durable_snapshot_recovery_after_restart_writes_exact_rows(self, _e2e_db, monkeypatch):
+        """可靠快照 → 全新审批服务 → 工作台可见 + _resume 到达执行 → 精确业务后置条件。"""
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        seed = _seed_tenant(factory, 1, "WH-T1")
+        user = _seed_approver_user(factory)
+
+        with tenant_scope(1):
+            runtime_context = {"message": EXACT_SENTENCE, "user_id": user["user_id"]}
+            # 进程 1：真实审批服务（启用持久化，写入可靠快照）进入人工待审批。
+            approval1 = _new_real_approval()
+            monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approval1)
+            _decision, request_no = _create_durable_snapshot_request(approval1, runtime_context)
+
+            # 工作台可见性：未重启时内存快速路径即命中。
+            from app.application.approval_workspace_app_service import _has_pending_ai_workflow
+
+            assert _has_pending_ai_workflow(request_no) is True
+
+        # 模拟进程重启：全新 ApprovalService，内存 _pending_workflows 为空。
+        approval2 = _new_real_approval()
+        monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approval2)
+        assert approval2.get_pending_workflow(request_no) is None
+
+        # 重启后工作台可见性：内存缺失，但可靠快照仍判定存在待审批工作流。
+        with tenant_scope(1):
+            from app.application.approval_workspace_app_service import (
+                _has_pending_ai_workflow,
+                _resume_pending_ai_workflow_after_approval,
+            )
+
+            assert _has_pending_ai_workflow(request_no) is True
+            # 工作台审批：内存缺失 → 从可靠快照重建并精确执行一次。
+            exec_result = _resume_pending_ai_workflow_after_approval(
+                request_no=request_no, opinion="w1-10 durable approve"
+            )
+
+        assert exec_result is not None, "resume must return a result dict"
+        assert exec_result.get("workflow_executed") is True, exec_result
+        assert exec_result.get("success") is True, exec_result
+
+        _assert_one_exact_closed_loop_row_set(factory, seed)
+
+    def test_missing_snapshot_fail_closed_zero_execution(self, _e2e_db, monkeypatch):
+        """DB 中仅有通用请求/状态/文本而无可靠快照 → fail-closed，绝不视为可执行工作流。"""
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        seed = _seed_tenant(factory, 1, "WH-T1")
+        user = _seed_approver_user(factory)
+
+        with tenant_scope(1):
+            runtime_context = {"message": EXACT_SENTENCE, "user_id": user["user_id"]}
+            approval1 = _new_real_approval()
+            monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approval1)
+            _decision, request_no = _create_durable_snapshot_request(approval1, runtime_context)
+
+        # 移除快照：仅保留通用 request/status/text，不再构成可执行工作流证明。
+        from app.application.workflow.approval_persistence import SNAPSHOT_KEY
+
+        def _strip(business_data: dict) -> dict:
+            business_data.pop(SNAPSHOT_KEY, None)
+            return business_data
+
+        _mutate_business_data(factory, request_no, _strip)
+
+        approval2 = _new_real_approval()
+        monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approval2)
+
+        with tenant_scope(1):
+            from app.application.approval_workspace_app_service import (
+                _has_pending_ai_workflow,
+                _resume_pending_ai_workflow_after_approval,
+            )
+
+            assert _has_pending_ai_workflow(request_no) is False
+            exec_result = _resume_pending_ai_workflow_after_approval(
+                request_no=request_no, opinion="approve"
+            )
+
+        assert exec_result is not None
+        assert exec_result.get("workflow_executed") is False, exec_result
+        assert exec_result.get("success") is False, exec_result
+        # 零执行：无业务行，库存仍 100。
+        assert _count_business_rows(factory, 1) == {
+            "orders": 0,
+            "items": 0,
+            "inv_tx": 0,
+            "journal": 0,
+            "alloc": 0,
+        }
+        assert _ledger_available(factory, 1, seed["product_id"]) == 100.0
+
+    def test_mismatched_snapshot_fail_closed_zero_execution(self, _e2e_db, monkeypatch):
+        """快照 plan_id 与请求编码不一致（跨请求数据污染）→ fail-closed，零执行。"""
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        seed = _seed_tenant(factory, 1, "WH-T1")
+        user = _seed_approver_user(factory)
+
+        with tenant_scope(1):
+            runtime_context = {"message": EXACT_SENTENCE, "user_id": user["user_id"]}
+            approval1 = _new_real_approval()
+            monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approval1)
+            _decision, request_no = _create_durable_snapshot_request(approval1, runtime_context)
+
+        # 篡改快照 plan_id，与请求编码的 plan_id 不一致。
+        from app.application.workflow.approval_persistence import SNAPSHOT_KEY
+
+        def _mismatch(business_data: dict) -> dict:
+            snapshot = business_data.get(SNAPSHOT_KEY)
+            assert isinstance(snapshot, dict)
+            snapshot["plan_id"] = "other-plan-id"
+            business_data[SNAPSHOT_KEY] = snapshot
+            return business_data
+
+        _mutate_business_data(factory, request_no, _mismatch)
+
+        approval2 = _new_real_approval()
+        monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approval2)
+
+        with tenant_scope(1):
+            from app.application.approval_workspace_app_service import (
+                _has_pending_ai_workflow,
+                _resume_pending_ai_workflow_after_approval,
+            )
+
+            assert _has_pending_ai_workflow(request_no) is False
+            exec_result = _resume_pending_ai_workflow_after_approval(
+                request_no=request_no, opinion="approve"
+            )
+
+        assert exec_result is not None
+        assert exec_result.get("workflow_executed") is False, exec_result
+        assert exec_result.get("success") is False, exec_result
+        assert _count_business_rows(factory, 1) == {
+            "orders": 0,
+            "items": 0,
+            "inv_tx": 0,
+            "journal": 0,
+            "alloc": 0,
+        }
+        assert _ledger_available(factory, 1, seed["product_id"]) == 100.0
+
+    def test_repeat_approval_after_durable_resume_terminal_no_replay(self, _e2e_db, monkeypatch):
+        """工作台首次审批执行后，重复审批为终态 no-op：不二次执行、零新增业务行。"""
+        from app.application.approval_workspace_app_service import approve_request
+        from app.db.models.approval import ApprovalRequest as ApprovalRequestModel
+
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        # 外部移动端通知不属于 durable 恢复契约；隔离它以避免真实网络副作用掩盖
+        # 一次执行、终态落库和零重放的断言。
+        monkeypatch.setattr(
+            "app.application.approval_workspace_app_service.notify_mobile_user",
+            lambda *_args, **_kwargs: None,
+        )
+        seed = _seed_tenant(factory, 1, "WH-T1")
+        user = _seed_approver_user(factory)
+
+        with tenant_scope(1):
+            runtime_context = {"message": EXACT_SENTENCE, "user_id": user["user_id"]}
+            approval1 = _new_real_approval()
+            monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approval1)
+            _decision, request_no = _create_durable_snapshot_request(approval1, runtime_context)
+
+        # 进程重启：全新审批服务。
+        approval2 = _new_real_approval()
+        monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approval2)
+
+        with tenant_scope(1):
+            db = factory()
+            try:
+                req_db = (
+                    db.query(ApprovalRequestModel)
+                    .filter(ApprovalRequestModel.request_no == request_no)
+                    .first()
+                )
+                assert req_db is not None
+                req_id = int(req_db.id)
+            finally:
+                db.close()
+
+        # 首次工作台审批（走真实 approve_request → _approve_ai_workflow_request_without_node）。
+        with patch(
+            "app.application.approval_workspace_app_service._resolve_actor",
+            return_value=user["user_id"],
+        ):
+            with tenant_scope(1):
+                resp = approve_request(req_id, Mock(), body={"opinion": "同意"})
+        assert resp["success"] is True, resp
+        assert resp["data"]["workflow_execution"]["success"] is True, resp
+        _assert_one_exact_closed_loop_row_set(factory, seed)
+
+        # 同一请求重复审批 → 终态（approved）→ 400，不调用执行。
+        with patch(
+            "app.application.approval_workspace_app_service._resolve_actor",
+            return_value=user["user_id"],
+        ):
+            with tenant_scope(1):
+                resp2 = approve_request(req_id, Mock(), body={"opinion": "再次通过"})
+        assert resp2.status_code == 400, resp2
+
+        # 零重放：业务行数与库存均不变。
+        assert _ledger_available(factory, 1, seed["product_id"]) == 90.0
+        assert _count_business_rows(factory, 1) == {
+            "orders": 1,
+            "items": 1,
+            "inv_tx": 1,
+            "journal": 2,
+            "alloc": 1,
+        }
+
+    def test_execution_failure_is_truthful_terminal_no_replay(self, _e2e_db, monkeypatch):
+        """原子真值：获批后恢复执行失败 → 请求落库为失败终态（不呈现“已获批成功”），
+        且重复恢复 fail-closed 绝不重放业务。
+        """
+        from app.application.approval_workspace_app_service import (
+            _resume_pending_ai_workflow_after_approval,
+            approve_request,
+        )
+        from app.db.models.approval import ApprovalRequest as ApprovalRequestModel
+
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        seed = _seed_tenant(factory, 1, "WH-T1")
+        user = _seed_approver_user(factory)
+
+        with tenant_scope(1):
+            runtime_context = {"message": EXACT_SENTENCE, "user_id": user["user_id"]}
+            approval1 = _new_real_approval()
+            monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approval1)
+            _decision, request_no = _create_durable_snapshot_request(approval1, runtime_context)
+
+        # 进程重启：全新审批服务，内存为空。
+        approval2 = _new_real_approval()
+        monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approval2)
+
+        # 使真实引擎执行失败：分发器抛可恢复错误 → 节点失败 → run_result.success=False。
+        def _boom(*_args, **_kwargs):  # noqa: ANN002, ANN003
+            raise RuntimeError("tool dispatch failed")
+
+        with tenant_scope(1):
+            db = factory()
+            try:
+                req_db = (
+                    db.query(ApprovalRequestModel)
+                    .filter(ApprovalRequestModel.request_no == request_no)
+                    .first()
+                )
+                assert req_db is not None
+                req_id = int(req_db.id)
+            finally:
+                db.close()
+
+        # 走真实调用方（无节点 AI 审批）：恢复器纯执行失败 → 调用方在同一事务落 cancelled。
+        with patch(
+            "app.fastapi_routes.domains.misc.helpers._dispatch_tool_for_approval",
+            side_effect=_boom,
+        ):
+            with patch(
+                "app.application.approval_workspace_app_service._resolve_actor",
+                return_value=user["user_id"],
+            ):
+                with tenant_scope(1):
+                    resp = approve_request(req_id, Mock(), body={"opinion": "同意"})
+        assert resp.status_code == 409, resp
+        exec_result = json.loads(resp.body)["data"]["workflow_execution"]
+        assert exec_result.get("workflow_executed") is True, exec_result
+        assert exec_result.get("success") is False, exec_result
+
+        # 原子真值：请求状态如实为“执行失败”终态（cancelled），而非“已获批”。
+        with tenant_scope(1):
+            db = factory()
+            try:
+                req_db = (
+                    db.query(ApprovalRequestModel)
+                    .filter(ApprovalRequestModel.request_no == request_no)
+                    .first()
+                )
+                assert req_db is not None
+                assert req_db.status == ApprovalStatus.CANCELLED.value, req_db.status
+                business_data = json.loads(req_db.business_data)
+                outcome = business_data.get("workflow_execution") or {}
+                assert outcome.get("success") is False
+                assert outcome.get("status") == ApprovalStatus.CANCELLED.value
+                assert outcome.get("code") == "workflow_execution_failed"
+            finally:
+                db.close()
+
+        # 终态拒绝重放：再次恢复 fail-closed，零执行、零业务行。
+        with tenant_scope(1):
+            exec_result2 = _resume_pending_ai_workflow_after_approval(
+                request_no=request_no, opinion="approve again"
+            )
+        assert exec_result2 is not None
+        assert exec_result2.get("workflow_executed") is False, exec_result2
+        assert exec_result2.get("success") is False, exec_result2
+        assert _count_business_rows(factory, 1) == {
+            "orders": 0,
+            "items": 0,
+            "inv_tx": 0,
+            "journal": 0,
+            "alloc": 0,
+        }
+        assert _ledger_available(factory, 1, seed["product_id"]) == 100.0
+
+    def test_terminal_success_status_prevents_replay(self, _e2e_db, monkeypatch):
+        """执行成功后请求落为终态 approved（workflow_execution 已写入）；再次恢复
+        fail-closed，绝不二次执行。"""
+        from app.application.approval_workspace_app_service import (
+            _resume_pending_ai_workflow_after_approval,
+            approve_request,
+        )
+        from app.db.models.approval import ApprovalRequest as ApprovalRequestModel
+
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        # 本测试只验证 durable 恢复与终态零重放，不允许外部通知阻塞审批返回。
+        monkeypatch.setattr(
+            "app.application.approval_workspace_app_service.notify_mobile_user",
+            lambda *_args, **_kwargs: None,
+        )
+        seed = _seed_tenant(factory, 1, "WH-T1")
+        user = _seed_approver_user(factory)
+
+        with tenant_scope(1):
+            runtime_context = {"message": EXACT_SENTENCE, "user_id": user["user_id"]}
+            approval1 = _new_real_approval()
+            monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approval1)
+            _decision, request_no = _create_durable_snapshot_request(approval1, runtime_context)
+
+        approval2 = _new_real_approval()
+        monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approval2)
+
+        with tenant_scope(1):
+            db = factory()
+            try:
+                req_db = (
+                    db.query(ApprovalRequestModel)
+                    .filter(ApprovalRequestModel.request_no == request_no)
+                    .first()
+                )
+                assert req_db is not None
+                req_id = int(req_db.id)
+            finally:
+                db.close()
+
+        # 走真实调用方（无节点 AI 审批）：恢复器纯执行成功后，调用方在同一事务落 approved。
+        with patch(
+            "app.application.approval_workspace_app_service._resolve_actor",
+            return_value=user["user_id"],
+        ):
+            with tenant_scope(1):
+                resp = approve_request(req_id, Mock(), body={"opinion": "同意"})
+        assert resp["success"] is True, resp
+        assert resp["data"]["workflow_execution"]["success"] is True, resp
+        _assert_one_exact_closed_loop_row_set(factory, seed)
+
+        # 状态如实为获批终态（approved 状态 + workflow_execution 已写入）。
+        with tenant_scope(1):
+            db = factory()
+            try:
+                req_db = (
+                    db.query(ApprovalRequestModel)
+                    .filter(ApprovalRequestModel.request_no == request_no)
+                    .first()
+                )
+                assert req_db is not None
+                assert req_db.status == ApprovalStatus.APPROVED.value, req_db.status
+                bd = json.loads(req_db.business_data)
+                assert bd["workflow_execution"]["success"] is True
+                assert bd["workflow_execution"]["code"] == "workflow_execution_success"
+            finally:
+                db.close()
+
+        # 终态拒绝重放：再次恢复 fail-closed，业务行与库存均不变。
+        with tenant_scope(1):
+            exec_result2 = _resume_pending_ai_workflow_after_approval(
+                request_no=request_no, opinion="approve again"
+            )
+        assert exec_result2 is not None
+        assert exec_result2.get("workflow_executed") is False, exec_result2
+        assert exec_result2.get("success") is False, exec_result2
+        assert _ledger_available(factory, 1, seed["product_id"]) == 90.0
+        assert _count_business_rows(factory, 1) == {
+            "orders": 1,
+            "items": 1,
+            "inv_tx": 1,
+            "journal": 2,
+            "alloc": 1,
+        }
+
+    def test_cross_tenant_snapshot_fail_closed(self, _e2e_db, monkeypatch):
+        """快照租户与当前租户错配 → fail-closed，零执行（租户绑定，而非通用状态）。"""
+        from app.application.approval_workspace_app_service import (
+            _resume_pending_ai_workflow_after_approval,
+        )
+        from app.application.workflow.approval_persistence import SNAPSHOT_KEY
+
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        seed = _seed_tenant(factory, 1, "WH-T1")
+        user = _seed_approver_user(factory)
+
+        with tenant_scope(1):
+            runtime_context = {"message": EXACT_SENTENCE, "user_id": user["user_id"]}
+            approval1 = _new_real_approval()
+            monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approval1)
+            _decision, request_no = _create_durable_snapshot_request(approval1, runtime_context)
+
+        # 篡改快照 tenant_id 到另一租户，与当前租户(1)错配。
+        def _swap_tenant(business_data: dict) -> dict:
+            snapshot = business_data.get(SNAPSHOT_KEY)
+            assert isinstance(snapshot, dict)
+            snapshot["tenant_id"] = 999
+            business_data[SNAPSHOT_KEY] = snapshot
+            return business_data
+
+        _mutate_business_data(factory, request_no, _swap_tenant)
+
+        approval2 = _new_real_approval()
+        monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approval2)
+
+        with tenant_scope(1):
+            exec_result = _resume_pending_ai_workflow_after_approval(
+                request_no=request_no, opinion="approve"
+            )
+
+        assert exec_result is not None
+        assert exec_result.get("workflow_executed") is False, exec_result
+        assert exec_result.get("success") is False, exec_result
+        assert _count_business_rows(factory, 1) == {
+            "orders": 0,
+            "items": 0,
+            "inv_tx": 0,
+            "journal": 0,
+            "alloc": 0,
+        }
+        assert _ledger_available(factory, 1, seed["product_id"]) == 100.0
+
+    def test_malformed_snapshot_version_fail_closed(self, _e2e_db, monkeypatch):
+        """快照版本不符 → fail-closed，零执行。"""
+        from app.application.approval_workspace_app_service import (
+            _resume_pending_ai_workflow_after_approval,
+        )
+        from app.application.workflow.approval_persistence import SNAPSHOT_KEY
+
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        seed = _seed_tenant(factory, 1, "WH-T1")
+        user = _seed_approver_user(factory)
+
+        with tenant_scope(1):
+            runtime_context = {"message": EXACT_SENTENCE, "user_id": user["user_id"]}
+            approval1 = _new_real_approval()
+            monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approval1)
+            _decision, request_no = _create_durable_snapshot_request(approval1, runtime_context)
+
+        def _bad_version(business_data: dict) -> dict:
+            snapshot = business_data.get(SNAPSHOT_KEY)
+            assert isinstance(snapshot, dict)
+            snapshot["version"] = 999
+            business_data[SNAPSHOT_KEY] = snapshot
+            return business_data
+
+        _mutate_business_data(factory, request_no, _bad_version)
+
+        approval2 = _new_real_approval()
+        monkeypatch.setattr("app.application.workflow.get_approval_service", lambda: approval2)
+
+        with tenant_scope(1):
+            exec_result = _resume_pending_ai_workflow_after_approval(
+                request_no=request_no, opinion="approve"
+            )
+
+        assert exec_result is not None
+        assert exec_result.get("workflow_executed") is False, exec_result
+        assert exec_result.get("success") is False, exec_result
+        assert _count_business_rows(factory, 1) == {
+            "orders": 0,
+            "items": 0,
+            "inv_tx": 0,
+            "journal": 0,
+            "alloc": 0,
+        }
+        assert _ledger_available(factory, 1, seed["product_id"]) == 100.0
+
+
+# ===========================================================================
+# 需求 B：仅采购单位（桌面客户B）→ 恰好一个同租户精确采购单位 → 恰好一个核心 Customer
+# ===========================================================================
+
+
+class TestPurchaseUnitToCoreCustomerAbsorption:
+    """需求 B：``execute_closed_loop`` 事务内，仅采购单位的桌面客户「客户B」从
+    **恰好一个同租户精确 PurchaseUnit** 吸收为**恰好一个核心 Customer**。
+
+    覆盖：成功吸收（A 产品 qty 10 全闭环后置条件）、缺租户/跨租户/歧义 fail-closed、
+    后续步骤失败整体回滚（连同新客户）、以及重复执行不产生重复核心客户。
+    """
+
+    def test_purchase_unit_only_absorbs_to_one_core_customer(self, _e2e_db, monkeypatch):
+        """仅采购单位「客户B」→ 恰好一个同租户 PurchaseUnit → 恰好新建一个核心 Customer。"""
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        seed = _seed_purchase_unit_only(factory, 1, "WH-T1")
+
+        with tenant_scope(1):
+            payload = route_normal_mode_message(EXACT_SENTENCE)["payload"]
+            result = SalesAppService().execute_closed_loop(payload)
+
+        assert result["success"] is True, result
+
+        # 恰好一个核心 Customer「客户B」，且吸收自采购单位（联系人信息来自 PurchaseUnit）。
+        with tenant_scope(1):
+            db = factory()
+            try:
+                customers = db.query(Customer).filter(Customer.customer_name == "客户B").all()
+                assert len(customers) == 1, customers
+                c = customers[0]
+                assert c.tenant_id == 1
+                assert c.contact_person == "采购人B"
+                assert c.contact_phone == "13800000000"
+                assert c.contact_address == "地址B"
+                order = db.query(SalesOrder).first()
+                assert order is not None
+                assert order.customer_id == c.id
+                assert order.customer_name == "客户B"
+            finally:
+                db.close()
+
+        # 全闭环后置条件 + A 产品 qty 10（复用既有精确行断言）。
+        _assert_one_exact_closed_loop_row_set(factory, seed)
+
+    def test_purchase_unit_bridge_delivers_from_unique_batched_inventory(
+        self, _e2e_db, monkeypatch
+    ):
+        """桌面带批次入库 100 时，闭环解析唯一台账并真实扣减 100→90。"""
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        seed = _seed_purchase_unit_only(
+            factory,
+            1,
+            "WH-T1",
+            batch_no="W110-DESKTOP-BATCH",
+        )
+
+        with tenant_scope(1):
+            payload = route_normal_mode_message(EXACT_SENTENCE)["payload"]
+            result = SalesAppService().execute_closed_loop(payload)
+
+        assert result["success"] is True, result
+        assert _ledger_available(factory, 1, seed["product_id"]) == 90.0
+        with tenant_scope(1):
+            db = factory()
+            try:
+                out_txn = (
+                    db.query(InventoryTransaction)
+                    .filter(InventoryTransaction.transaction_type == "out")
+                    .one()
+                )
+                assert out_txn.batch_no == "W110-DESKTOP-BATCH"
+                assert float(out_txn.before_quantity) == 100.0
+                assert float(out_txn.after_quantity) == 90.0
+            finally:
+                db.close()
+
+    def test_purchase_unit_no_tenant_fail_closed(self, _e2e_db, monkeypatch):
+        """缺租户上下文 → NO_TENANT_CONTEXT，零核心客户、零业务行。"""
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        _seed_purchase_unit_only(factory, 1, "WH-T1")
+        payload = route_normal_mode_message(EXACT_SENTENCE)["payload"]
+        with tenant_scope(None):
+            result = SalesAppService().execute_closed_loop(payload)
+        assert result["success"] is False
+        assert result["error_code"] == "NO_TENANT_CONTEXT"
+        assert _count_table(factory, Customer, 1) == 0
+        assert _count_business_rows(factory, 1) == {
+            "orders": 0,
+            "items": 0,
+            "inv_tx": 0,
+            "journal": 0,
+            "alloc": 0,
+        }
+
+    def test_purchase_unit_cross_tenant_fail_closed(self, _e2e_db, monkeypatch):
+        """跨租户：采购单位「客户B」仅在他租户(2)，当前租户(1)无匹配 → fail-closed 零吸收。"""
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        # 采购单位「客户B」只落在租户 2。
+        _seed_purchase_unit_only(factory, 2, "WH-T2")
+        # 租户 1 只有产品/仓库/库存，无客户与采购单位。
+        _seed_product_warehouse_only(factory, 1, "WH-T1")
+
+        with tenant_scope(1):
+            payload = route_normal_mode_message(EXACT_SENTENCE)["payload"]
+            result = SalesAppService().execute_closed_loop(payload)
+
+        assert result["success"] is False, result
+        assert result["failed_step"] == "resolve_customer"
+        # 租户 1 不得因他租户采购单位而吸收出任何核心客户。
+        assert _count_table(factory, Customer, 1) == 0
+        assert _count_business_rows(factory, 1) == {
+            "orders": 0,
+            "items": 0,
+            "inv_tx": 0,
+            "journal": 0,
+            "alloc": 0,
+        }
+
+    def test_purchase_unit_ambiguous_fail_closed(self, _e2e_db, monkeypatch):
+        """歧义：同租户两个同名采购单位「客户B」→ fail-closed，零吸收、零订单。"""
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        _seed_product_warehouse_only(factory, 1, "WH-T1")
+        with tenant_scope(1):
+            db = factory()
+            try:
+                db.add_all([PurchaseUnit(unit_name="客户B"), PurchaseUnit(unit_name="客户B")])
+                db.commit()
+            finally:
+                db.close()
+
+        with tenant_scope(1):
+            payload = route_normal_mode_message(EXACT_SENTENCE)["payload"]
+            result = SalesAppService().execute_closed_loop(payload)
+
+        assert result["success"] is False, result
+        assert result["failed_step"] == "resolve_customer"
+        assert _count_table(factory, Customer, 1) == 0
+        assert _count_business_rows(factory, 1) == {
+            "orders": 0,
+            "items": 0,
+            "inv_tx": 0,
+            "journal": 0,
+            "alloc": 0,
+        }
+
+    def test_purchase_unit_missing_purchase_unit_fail_closed(self, _e2e_db, monkeypatch):
+        """缺失：当前租户既无核心客户也无采购单位「客户B」→ fail-closed，零写入。"""
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        _seed_product_warehouse_only(factory, 1, "WH-T1")
+
+        with tenant_scope(1):
+            payload = route_normal_mode_message(EXACT_SENTENCE)["payload"]
+            result = SalesAppService().execute_closed_loop(payload)
+
+        assert result["success"] is False, result
+        assert result["failed_step"] == "resolve_customer"
+        assert _count_table(factory, Customer, 1) == 0
+        assert _count_business_rows(factory, 1) == {
+            "orders": 0,
+            "items": 0,
+            "inv_tx": 0,
+            "journal": 0,
+            "alloc": 0,
+        }
+
+    def test_purchase_unit_later_step_failure_rolls_back_absorbed_customer(
+        self, _e2e_db, monkeypatch
+    ):
+        """回滚：后续收款步失败 → 连同新建的核心客户整单回滚（零客户、零业务行、库存仍 100）。"""
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        seed = _seed_purchase_unit_only(factory, 1, "WH-T1")
+
+        with patch.object(
+            SalesAppService,
+            "payment",
+            return_value={"success": False, "message": "injected payment failure"},
+        ):
+            with tenant_scope(1):
+                payload = route_normal_mode_message(EXACT_SENTENCE)["payload"]
+                result = SalesAppService().execute_closed_loop(payload)
+
+        assert result["success"] is False
+        assert result["failed_step"] == "payment"
+        # 新建核心客户随事务整体回滚。
+        assert _count_table(factory, Customer, 1) == 0
+        assert _count_business_rows(factory, 1) == {
+            "orders": 0,
+            "items": 0,
+            "inv_tx": 0,
+            "journal": 0,
+            "alloc": 0,
+        }
+        assert _ledger_available(factory, 1, seed["product_id"]) == 100.0
+
+    def test_purchase_unit_no_duplicate_customer_on_rerun(self, _e2e_db, monkeypatch):
+        """不重复：同采购单位先后以不同幂等键执行两次 → 仍恰好一个核心 Customer（无重复吸收）。"""
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        seed = _seed_purchase_unit_only(factory, 1, "WH-T1")
+
+        with tenant_scope(1):
+            payload = route_normal_mode_message(EXACT_SENTENCE)["payload"]
+            r1 = SalesAppService().execute_closed_loop(payload)
+            assert r1["success"] is True, r1
+
+            # 第二次：不同幂等键、同客户「客户B」→ 复用已吸收核心客户，不新建。
+            payload2 = copy.deepcopy(payload)
+            payload2["idempotency_key"] = "sw-purchase-unit-no-dup"
+            r2 = SalesAppService().execute_closed_loop(payload2)
+            assert r2["success"] is True, r2
+            assert r2["data"]["order_id"] != r1["data"]["order_id"]
+
+        with tenant_scope(1):
+            db = factory()
+            try:
+                customers = db.query(Customer).filter(Customer.customer_name == "客户B").all()
+                assert len(customers) == 1, customers
+            finally:
+                db.close()
+        # 两次闭环分别扣减库存：100 → 90 → 80。
+        assert _ledger_available(factory, 1, seed["product_id"]) == 80.0
+
+    def test_purchase_unit_core_duplicate_fail_closed(self, _e2e_db, monkeypatch):
+        """核心重复：同租户两个同名核心 Customer「客户B」→ fail-closed，零业务行、不桥接。"""
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        _seed_product_warehouse_only(factory, 1, "WH-T1")
+        with tenant_scope(1):
+            db = factory()
+            try:
+                db.add_all([Customer(customer_name="客户B"), Customer(customer_name="客户B")])
+                db.commit()
+            finally:
+                db.close()
+
+        with tenant_scope(1):
+            payload = route_normal_mode_message(EXACT_SENTENCE)["payload"]
+            result = SalesAppService().execute_closed_loop(payload)
+
+        assert result["success"] is False, result
+        assert result["failed_step"] == "resolve_customer"
+        # 恰好两个已存在的核心客户，未新增、未吸收采购单位。
+        assert _count_table(factory, Customer, 1) == 2
+        assert _count_business_rows(factory, 1) == {
+            "orders": 0,
+            "items": 0,
+            "inv_tx": 0,
+            "journal": 0,
+            "alloc": 0,
+        }
+
+    def test_purchase_unit_same_payload_idempotent_no_duplicate_inventory_90(
+        self, _e2e_db, monkeypatch
+    ):
+        """幂等：同载荷（同幂等键）执行两次 → 仍恰好一个核心 Customer/一张订单，库存保持 90。"""
+        factory = _e2e_db
+        _patch_sessionlocal(monkeypatch, factory)
+        seed = _seed_purchase_unit_only(factory, 1, "WH-T1")
+
+        with tenant_scope(1):
+            payload = route_normal_mode_message(EXACT_SENTENCE)["payload"]
+            r1 = SalesAppService().execute_closed_loop(payload)
+            assert r1["success"] is True, r1
+            # 完全相同的载荷（内容派生幂等键不变）再次执行 → 幂等重放，不重复建单/扣库。
+            r2 = SalesAppService().execute_closed_loop(payload)
+            assert r2["success"] is True, r2
+            assert r2["data"]["order_id"] == r1["data"]["order_id"]
+
+        with tenant_scope(1):
+            db = factory()
+            try:
+                customers = db.query(Customer).filter(Customer.customer_name == "客户B").all()
+                assert len(customers) == 1, customers
+                assert db.query(SalesOrder).count() == 1
+            finally:
+                db.close()
+        # 只扣减一次：100 → 90，重放不重复扣库。
+        assert _ledger_available(factory, 1, seed["product_id"]) == 90.0

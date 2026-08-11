@@ -31,8 +31,7 @@ __all__ = [
 class Callback(Protocol):
     """A state event callback (e.g. ``{"type": "state.update", ...}``)."""
 
-    def __call__(self, event: dict[str, Any]) -> None:
-        ...
+    def __call__(self, event: dict[str, Any]) -> None: ...
 
 
 @runtime_checkable

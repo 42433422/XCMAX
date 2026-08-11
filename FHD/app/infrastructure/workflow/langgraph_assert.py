@@ -44,13 +44,9 @@ def _assert_module_source(module_name: str, expected_pkg: str) -> None:
         raise AssertionError(f"{module_name} 缺少 __file__（疑似命名空间包）")
     resolved = Path(source).resolve()
     if not resolved.is_relative_to(_packages_root()):
-        raise AssertionError(
-            f"{module_name} 未解析到 vendored packages: {resolved}"
-        )
+        raise AssertionError(f"{module_name} 未解析到 vendored packages: {resolved}")
     if expected_pkg not in resolved.as_posix():
-        raise AssertionError(
-            f"{module_name} 来自 {resolved}，不属于期望包 {expected_pkg}"
-        )
+        raise AssertionError(f"{module_name} 来自 {resolved}，不属于期望包 {expected_pkg}")
 
 
 def _assert_provenance(package_dir: str) -> None:

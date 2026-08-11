@@ -24,8 +24,8 @@ from pathlib import Path
 
 import pytest
 
-from app.application.workflow.engine import DEFAULT_STATE_SCHEMA, WorkflowEngine
 from app.application.workflow.checkpointer import WorkflowCheckpointer
+from app.application.workflow.engine import DEFAULT_STATE_SCHEMA, WorkflowEngine
 from app.application.workflow.types import (
     ApprovalStatus,
     Branch,
@@ -69,7 +69,12 @@ def _sequential_plan(n: int = 3, plan_id: str = "p_ct") -> PlanGraph:
         )
         for i in range(1, n + 1)
     ]
-    return PlanGraph(plan_id=plan_id, intent="contract", todo_steps=[f"s{i}" for i in range(1, n + 1)], nodes=nodes)
+    return PlanGraph(
+        plan_id=plan_id,
+        intent="contract",
+        todo_steps=[f"s{i}" for i in range(1, n + 1)],
+        nodes=nodes,
+    )
 
 
 def _executed_nodes(result) -> list[str]:
@@ -80,7 +85,16 @@ def _executed_nodes(result) -> list[str]:
 # 归一化：去掉时间戳 / 耗时 / checkpoint 唯一 ID 等易变字段，保证字节可复现
 # ---------------------------------------------------------------------------
 
-_TRACE_KEYS = ("node_id", "tool_id", "action", "success", "retries", "retryable", "error", "recovery_hint")
+_TRACE_KEYS = (
+    "node_id",
+    "tool_id",
+    "action",
+    "success",
+    "retries",
+    "retryable",
+    "error",
+    "recovery_hint",
+)
 
 
 def _normalize_node_result(r) -> dict:
@@ -219,7 +233,13 @@ class TestCompile:
         assert engine._default_state_schema is DEFAULT_STATE_SCHEMA
 
     def test_default_state_schema_covers_common_keys(self):
-        for key in ("node_outputs", "workflow_trace", "workflow_status", "message", "agent_history"):
+        for key in (
+            "node_outputs",
+            "workflow_trace",
+            "workflow_status",
+            "message",
+            "agent_history",
+        ):
             assert key in DEFAULT_STATE_SCHEMA.fields
 
     def test_workflownode_dataclass_defaults(self):
@@ -247,12 +267,15 @@ class TestValidation:
         assert validate_plan_graph(_sequential_plan()) is None
 
     def test_missing_plan_id(self):
-        plan = PlanGraph(plan_id="", intent="x", nodes=[WorkflowNode(node_id="n1", tool_id="t", action="a")])
+        plan = PlanGraph(
+            plan_id="", intent="x", nodes=[WorkflowNode(node_id="n1", tool_id="t", action="a")]
+        )
         assert validate_plan_graph(plan) == "plan_id 不能为空"
 
     def test_duplicate_node_id(self):
         plan = PlanGraph(
-            plan_id="p", intent="x",
+            plan_id="p",
+            intent="x",
             nodes=[
                 WorkflowNode(node_id="n1", tool_id="t1", action="a1"),
                 WorkflowNode(node_id="n1", tool_id="t2", action="a2"),
@@ -262,17 +285,24 @@ class TestValidation:
 
     def test_dangling_dependency(self):
         plan = PlanGraph(
-            plan_id="p", intent="x",
+            plan_id="p",
+            intent="x",
             nodes=[WorkflowNode(node_id="n1", tool_id="t", action="a", depends_on=["ghost"])],
         )
         assert validate_plan_graph(plan) == "节点 n1 依赖不存在: ghost"
 
     def test_conditional_cycle_detected(self):
         plan = PlanGraph(
-            plan_id="p", intent="x",
+            plan_id="p",
+            intent="x",
             nodes=[
                 WorkflowNode(node_id="n1", tool_id="t1", action="a1", next="n2"),
-                WorkflowNode(node_id="n2", tool_id="t2", action="a2", branches=[Branch(target="n1", condition={"key": "x", "equals": 1})]),
+                WorkflowNode(
+                    node_id="n2",
+                    tool_id="t2",
+                    action="a2",
+                    branches=[Branch(target="n1", condition={"key": "x", "equals": 1})],
+                ),
             ],
         )
         assert "环" in validate_plan_graph(plan)
@@ -291,7 +321,9 @@ class TestSequential:
 
     def test_dependency_gates_downstream(self):
         calls: list[str] = []
-        engine = _make_engine(lambda tool_id, action, params: calls.append(tool_id) or {"success": True})
+        engine = _make_engine(
+            lambda tool_id, action, params: calls.append(tool_id) or {"success": True}
+        )
         engine.run(_sequential_plan())
         assert calls == ["t1", "t2", "t3"]
 
@@ -306,7 +338,8 @@ class TestSequential:
 
     def test_unresolvable_dependency_blocks_run(self):
         plan = PlanGraph(
-            plan_id="p", intent="x",
+            plan_id="p",
+            intent="x",
             nodes=[
                 WorkflowNode(node_id="n1", tool_id="t1", action="a1", depends_on=["n2"]),
                 WorkflowNode(node_id="n2", tool_id="t2", action="a2", depends_on=["n1"]),
@@ -324,15 +357,34 @@ class TestSequential:
 
 def _conditional_plan() -> PlanGraph:
     return PlanGraph(
-        plan_id="p_cond", intent="conditional",
+        plan_id="p_cond",
+        intent="conditional",
         nodes=[
             WorkflowNode(
-                node_id="check", tool_id="inventory", action="check_stock", risk="low", idempotent=True,
+                node_id="check",
+                tool_id="inventory",
+                action="check_stock",
+                risk="low",
+                idempotent=True,
                 branches=[Branch(target="buy", condition={"key": "low_stock", "equals": True})],
                 next="normal",
             ),
-            WorkflowNode(node_id="buy", tool_id="purchase", action="advice", risk="low", idempotent=True, depends_on=["check"]),
-            WorkflowNode(node_id="normal", tool_id="inventory", action="normal_advice", risk="low", idempotent=True, depends_on=["check"]),
+            WorkflowNode(
+                node_id="buy",
+                tool_id="purchase",
+                action="advice",
+                risk="low",
+                idempotent=True,
+                depends_on=["check"],
+            ),
+            WorkflowNode(
+                node_id="normal",
+                tool_id="inventory",
+                action="normal_advice",
+                risk="low",
+                idempotent=True,
+                depends_on=["check"],
+            ),
         ],
     )
 
@@ -350,11 +402,25 @@ class TestConditional:
 
     def test_no_match_and_no_next_ends_normally(self):
         plan = PlanGraph(
-            plan_id="p", intent="x",
+            plan_id="p",
+            intent="x",
             nodes=[
-                WorkflowNode(node_id="gate", tool_id="x", action="y", risk="low", idempotent=True,
-                             branches=[Branch(target="target", condition={"key": "flag", "equals": True})]),
-                WorkflowNode(node_id="target", tool_id="z", action="w", risk="low", idempotent=True, depends_on=["gate"]),
+                WorkflowNode(
+                    node_id="gate",
+                    tool_id="x",
+                    action="y",
+                    risk="low",
+                    idempotent=True,
+                    branches=[Branch(target="target", condition={"key": "flag", "equals": True})],
+                ),
+                WorkflowNode(
+                    node_id="target",
+                    tool_id="z",
+                    action="w",
+                    risk="low",
+                    idempotent=True,
+                    depends_on=["gate"],
+                ),
             ],
         )
         engine = _make_engine(lambda tool_id, action, params: {"success": True, "flag": False})
@@ -375,11 +441,33 @@ class TestConditional:
 
 def _parallel_plan() -> PlanGraph:
     return PlanGraph(
-        plan_id="p_par", intent="parallel",
+        plan_id="p_par",
+        intent="parallel",
         nodes=[
-            WorkflowNode(node_id="p1", tool_id="products", action="query", params={}, risk="low", idempotent=True),
-            WorkflowNode(node_id="p2", tool_id="customers", action="query", params={}, risk="low", idempotent=True),
-            WorkflowNode(node_id="p3", tool_id="orders", action="query", params={}, risk="low", idempotent=True),
+            WorkflowNode(
+                node_id="p1",
+                tool_id="products",
+                action="query",
+                params={},
+                risk="low",
+                idempotent=True,
+            ),
+            WorkflowNode(
+                node_id="p2",
+                tool_id="customers",
+                action="query",
+                params={},
+                risk="low",
+                idempotent=True,
+            ),
+            WorkflowNode(
+                node_id="p3",
+                tool_id="orders",
+                action="query",
+                params={},
+                risk="low",
+                idempotent=True,
+            ),
         ],
     )
 
@@ -394,7 +482,9 @@ class TestParallel:
             barrier.wait()
             return {"success": True, "tool_id": tool_id}
 
-        result = _make_engine(dispatch).run(_parallel_plan(), runtime_context={"max_parallel_workers": 3})
+        result = _make_engine(dispatch).run(
+            _parallel_plan(), runtime_context={"max_parallel_workers": 3}
+        )
         assert result.success is True
         assert len(set(seen)) == 3  # 三个独立只读节点确实并发执行
 
@@ -406,8 +496,22 @@ class TestParallel:
 
     def test_high_risk_write_node_serialized(self):
         nodes = [
-            WorkflowNode(node_id="w1", tool_id="sales", action="write", params={}, risk="high", idempotent=False),
-            WorkflowNode(node_id="w2", tool_id="sales", action="write", params={}, risk="high", idempotent=False),
+            WorkflowNode(
+                node_id="w1",
+                tool_id="sales",
+                action="write",
+                params={},
+                risk="high",
+                idempotent=False,
+            ),
+            WorkflowNode(
+                node_id="w2",
+                tool_id="sales",
+                action="write",
+                params={},
+                risk="high",
+                idempotent=False,
+            ),
         ]
         plan = PlanGraph(plan_id="p", intent="x", nodes=nodes)
         seen: list[int] = []
@@ -521,14 +625,26 @@ class TestRetry:
 
 def _clarify_plan() -> PlanGraph:
     return PlanGraph(
-        plan_id="p_clarify", intent="confirm",
+        plan_id="p_clarify",
+        intent="confirm",
         nodes=[
             WorkflowNode(
-                node_id="c1", tool_id="clarify", action="ask",
+                node_id="c1",
+                tool_id="clarify",
+                action="ask",
                 params={"question": "确认执行?", "target_node_id": "op", "answer_key": "confirmed"},
-                branches=[Branch(target="op", condition={"key": "answer_confirmed", "equals": True})],
+                branches=[
+                    Branch(target="op", condition={"key": "answer_confirmed", "equals": True})
+                ],
             ),
-            WorkflowNode(node_id="op", tool_id="ops", action="run", risk="low", idempotent=True, depends_on=["c1"]),
+            WorkflowNode(
+                node_id="op",
+                tool_id="ops",
+                action="run",
+                risk="low",
+                idempotent=True,
+                depends_on=["c1"],
+            ),
         ],
     )
 
@@ -545,14 +661,19 @@ class TestInterruptApproval:
 
     def test_confirmed_answer_resumes_to_target(self):
         engine = _make_engine()
-        result = engine.run(_clarify_plan(), runtime_context={"_clarify_answers": {"c1": {"confirmed": True}}})
+        result = engine.run(
+            _clarify_plan(), runtime_context={"_clarify_answers": {"c1": {"confirmed": True}}}
+        )
         assert result.success is True
         assert "op" in set(result.final_context["node_outputs"])
         clarify_out = next(r.output for r in result.node_results if r.tool_id == "clarify")
         assert clarify_out["answer_confirmed"] is True
 
     def test_approval_gated_pending_blocks_execution(self):
-        from app.application.workflow.approval_gated_engine import ApprovalGatedEngine, GatedPlanDecision
+        from app.application.workflow.approval_gated_engine import (
+            ApprovalGatedEngine,
+            GatedPlanDecision,
+        )
         from app.application.workflow.types import ApprovalRequest
 
         class FakeApproval:
@@ -561,9 +682,14 @@ class TestInterruptApproval:
 
             def create_approval_request(self, plan_id, node, runtime_context=None, plan=None):
                 req = ApprovalRequest(
-                    request_id="req-1", plan_id=plan_id, node_id=node.node_id,
-                    tool_id=node.tool_id, action=node.action, params=node.params,
-                    status=ApprovalStatus.PENDING, created_at=datetime(2026, 1, 1),
+                    request_id="req-1",
+                    plan_id=plan_id,
+                    node_id=node.node_id,
+                    tool_id=node.tool_id,
+                    action=node.action,
+                    params=node.params,
+                    status=ApprovalStatus.PENDING,
+                    created_at=datetime(2026, 1, 1),
                 )
                 self.requests[req.request_id] = req
                 return req
@@ -583,10 +709,16 @@ class TestInterruptApproval:
         class FakeRisk:
             def evaluate(self, plan, context):
                 fake = GatedPlanDecision(plan_id=plan.plan_id, risk_decision=None)
-                return type("RD", (), {
-                    "requires_confirmation": True, "reason": "test",
-                    "blocking_nodes": ["op"], "denied_nodes": [],
-                })()
+                return type(
+                    "RD",
+                    (),
+                    {
+                        "requires_confirmation": True,
+                        "reason": "test",
+                        "blocking_nodes": ["op"],
+                        "denied_nodes": [],
+                    },
+                )()
 
         gated = ApprovalGatedEngine(engine, risk_gate=FakeRisk(), approval_service=approval)
         decision, run_result = gated.run(_clarify_plan(), strategy="interactive")
@@ -607,7 +739,13 @@ def _checkpoint_plan() -> PlanGraph:
 class TestCheckpointResume:
     def test_checkpoint_saved_per_step(self):
         cp = WorkflowCheckpointer()
-        engine = _make_engine(lambda tool_id, action, params: {"success": False, "message": "fail at " + tool_id} if tool_id == "t4" else {"success": True})
+        engine = _make_engine(
+            lambda tool_id, action, params: (
+                {"success": False, "message": "fail at " + tool_id}
+                if tool_id == "t4"
+                else {"success": True}
+            )
+        )
         engine.run(_checkpoint_plan(), checkpointer=cp)
         cps = cp.list_checkpoints("p_cp")
         assert [c["step_index"] for c in cps] == [1, 2, 3]
@@ -615,13 +753,21 @@ class TestCheckpointResume:
     def test_resume_skips_already_done_nodes(self):
         cp = WorkflowCheckpointer()
         first_calls: list[str] = []
-        engine = _make_engine(lambda tool_id, action, params: {"success": False, "message": "fail"} if tool_id == "t4" else (first_calls.append(tool_id) or {"success": True}))
+        engine = _make_engine(
+            lambda tool_id, action, params: (
+                {"success": False, "message": "fail"}
+                if tool_id == "t4"
+                else (first_calls.append(tool_id) or {"success": True})
+            )
+        )
         plan = _checkpoint_plan()
         assert engine.run(plan, checkpointer=cp).success is False
         resume_ckpt = cp.list_checkpoints("p_cp")[-1]
 
         resume_calls: list[str] = []
-        resumer = _make_engine(lambda tool_id, action, params: resume_calls.append(tool_id) or {"success": True})
+        resumer = _make_engine(
+            lambda tool_id, action, params: resume_calls.append(tool_id) or {"success": True}
+        )
         result = resumer.resume_run(plan, resume_ckpt["checkpoint_id"], checkpointer=cp)
         assert result.success is True
         assert _executed_nodes(result) == ["n1", "n2", "n3", "n4", "n5"]
@@ -636,7 +782,9 @@ class TestCheckpointResume:
         assert original.success is True
         replay = engine.replay_run(plan.plan_id, checkpointer=cp)
         assert replay.success is True
-        assert [r.node_id for r in replay.node_results] == [r.node_id for r in original.node_results]
+        assert [r.node_id for r in replay.node_results] == [
+            r.node_id for r in original.node_results
+        ]
         assert replay.final_context["node_outputs"] == original.final_context["node_outputs"]
 
     def test_resume_missing_checkpoint_fails(self):
@@ -706,13 +854,13 @@ class TestFixtureFreeze:
         assert _FIXTURE_PATH.exists()
         text = _FIXTURE_PATH.read_text(encoding="utf-8")
         # 无绝对路径（/Users、/private、/opt 等）
-        assert not re.search(r'/(Users|private|opt|tmp|var)/', text)
+        assert not re.search(r"/(Users|private|opt|tmp|var)/", text)
         # 无 ISO 时间戳
-        assert re.search(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}', text) is None
+        assert re.search(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", text) is None
         # 无 checkpoint 时间戳式 ID（cp-YYYYMMDD...）
-        assert re.search(r'cp-\d{14}', text) is None
+        assert re.search(r"cp-\d{14}", text) is None
         # 无 32 位十六进制随机 ID
-        assert re.search(r'\b[0-9a-f]{32}\b', text) is None
+        assert re.search(r"\b[0-9a-f]{32}\b", text) is None
 
     def test_fixture_is_valid_deterministic_json(self):
         assert _FIXTURE_PATH.exists()

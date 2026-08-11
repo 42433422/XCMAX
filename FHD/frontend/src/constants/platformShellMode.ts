@@ -62,6 +62,7 @@ export const INDUSTRY_DELIVERY_ERP_MENU_KEYS = [
   'orders',
   'shipment-records',
   'materials',
+  'inventory',
   'data-sources',
   'traditional-mode',
   'print',

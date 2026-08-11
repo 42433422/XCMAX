@@ -63,7 +63,6 @@ class ApprovalService:
                 "risk_actions registry lookup failed; fail-closed requiring approval for %s.%s",
                 node.tool_id,
                 node.action,
-                exc_info=True,
             )
             return True
         return False
@@ -138,8 +137,9 @@ class ApprovalService:
             }
         logger.info("创建审批请求: %s for %s.%s", request_id, node.tool_id, node.action)
 
-        # 同时持久化到 DB（防止重启丢失，且与 /api/approval/requests 工作台共享可见性）
-        metadata = self._persist_request_to_db(request, runtime_context=runtime_context)
+        # 同时持久化到 DB（防止重启丢失，且与 /api/approval/requests 工作台共享可见性）。
+        # 携带 plan 使持久化层能写入绑定 request_no 的可靠工作流快照，供重启后重建/续跑。
+        metadata = self._persist_request_to_db(request, runtime_context=runtime_context, plan=plan)
         if metadata is None and require_persistence:
             self._pending_requests.pop(request_id, None)
             self._pending_workflows.pop(request_id, None)
@@ -152,14 +152,21 @@ class ApprovalService:
         self,
         request: ApprovalRequest,
         runtime_context: dict[str, Any] | None = None,
+        *,
+        plan: PlanGraph | None = None,
     ) -> dict[str, Any] | None:
-        """将内存审批请求写入 DB approval_requests 表（幂等且外键完整）。"""
+        """将内存审批请求写入 DB approval_requests 表（幂等且外键完整）。
+
+        ``plan`` 非空时一并持久化绑定 request_no 的可靠工作流快照（完整计划 + 安全
+        运行上下文），使进程重启后仍可据此重建并继续执行获批计划。
+        """
         from app.application.workflow.approval_persistence import persist_workflow_approval
 
         return persist_workflow_approval(
             request,
             runtime_context,
             flow_key=self._AI_WORKFLOW_FLOW_KEY,
+            plan=plan,
         )
 
     def get_request_metadata(self, request_id: str) -> dict[str, Any] | None:
@@ -168,6 +175,17 @@ class ApprovalService:
 
     def get_pending_workflow(self, request_id: str) -> dict[str, Any] | None:
         return self._pending_workflows.get(request_id)
+
+    def load_durable_workflow_snapshot(self, request_id: str) -> dict[str, Any] | None:
+        """从 DB 加载绑定 ``request_no`` 的可靠工作流快照（获批后可据此重建/续跑）。
+
+        仅返回经过严格校验（存在、匹配、可执行、非拒绝终态）的快照；缺失/畸形/
+        不匹配一律 ``None``（fail-closed），绝不把 DB 的通用 status/text 当作可执行
+        工作流的证明。
+        """
+        from app.application.workflow.approval_persistence import load_durable_workflow_snapshot
+
+        return load_durable_workflow_snapshot(request_id, allow_terminal=True)
 
     def attach_pending_agent_run(
         self,
@@ -364,10 +382,10 @@ def process_approval_timeouts() -> dict[str, Any]:
                             decision=r.get("note", ""),
                         )
                 except RECOVERABLE_ERRORS:
-                    logger.debug("neuro_notify_approval_changed skipped", exc_info=True)
+                    logger.debug("neuro_notify_approval_changed skipped")
     except RECOVERABLE_ERRORS as e:
-        logger.error("审批超时处理失败: %s", e, exc_info=True)
-        return {"success": False, "error": str(e), "processed": 0}
+        logger.error("审批超时处理失败 type=%s", type(e).__name__)
+        return {"success": False, "error": "approval_timeout_processing_failed", "processed": 0}
 
     return {"success": True, "processed": len(results), "results": results}
 

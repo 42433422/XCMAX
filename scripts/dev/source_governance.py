@@ -55,7 +55,9 @@ GENERATED_NAME_MARKERS = (".generated.", ".freezed.", ".g.dart")
 # These are materialized build/export trees, not independent editing sources.
 DUPLICATE_EXCLUDED_PREFIXES = (
     "FHD/XCAGI/mods/",
+    "FHD/packages/xcagi_langgraph_",
     "FHD/templates/",
+    "FHD/third_party/langgraph/",
 )
 
 # These retired recovery/runtime trees are not editing sources. Keep the

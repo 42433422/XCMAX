@@ -96,9 +96,7 @@ def assert_vendored_sources() -> dict[str, str]:
     reported: dict[str, str] = {}
     for name, path in actual.items():
         resolved = Path(path).resolve()
-        assert root_str in str(resolved), (
-            f"{name} 未解析到 FHD/packages（fail-closed）: {resolved}"
-        )
+        assert root_str in str(resolved), f"{name} 未解析到 FHD/packages（fail-closed）: {resolved}"
         assert "xcagi_langgraph" in str(resolved) or "checkpoint-" in str(resolved), resolved
         reported[name] = str(resolved.relative_to(_FHD))
     return reported

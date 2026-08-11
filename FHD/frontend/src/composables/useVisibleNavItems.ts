@@ -245,7 +245,8 @@ export function useVisibleNavItems() {
         // 企业完整包下客户 ERP 场景会抑制通用 bridge 的重复菜单，也需要用宿主槽位承载。
         // 仅取行业/定制 label 覆盖；其同名 mod 入口会在 merge 阶段因占用宿主槽位被去重。
         const industryDelivery: ResolvedSidebarMenuItem[] = []
-        const shouldInjectIndustryDelivery = exposeIndustrySidebar.value
+        const shouldInjectIndustryDelivery =
+          !isPlatformShellMode() || exposeIndustrySidebar.value
         if (!adminShell && shouldInjectIndustryDelivery) {
           for (const item of INDUSTRY_DELIVERY_CORE_ITEMS) {
             const override = coreMenuOverrides.value.get(item.key)

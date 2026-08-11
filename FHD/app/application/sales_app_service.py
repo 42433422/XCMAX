@@ -31,7 +31,14 @@ from app.application.sales_lifecycle_service import (
     SalesLifecycleError,
     SalesLifecycleService,
 )
-from app.db.models import Customer, Product, SalesOrder, SalesOrderItem, Warehouse
+from app.db.models import (
+    Customer,
+    InventoryLedger,
+    Product,
+    SalesOrder,
+    SalesOrderItem,
+    Warehouse,
+)
 from app.db.models.sales import SALES_ORDER_STATUS_FLOW
 from app.db.session import get_db
 from app.infrastructure.tenant_scope import (
@@ -47,12 +54,14 @@ logger = logging.getLogger(__name__)
 _CLOSED_LOOP_FP_PREFIX = "w1-10-closed-loop-composite"
 
 
-def _to_float(value: Any) -> float:
+def _to_decimal(value: Any) -> Decimal:
+    """把报价数值安全转为 Decimal，保证账务全程定点运算、无浮点伪影。"""
     if value is None:
-        return 0.0
-    if isinstance(value, Decimal):
-        return float(value)
-    return float(value)
+        return Decimal("0")
+    try:
+        return Decimal(str(value))
+    except (TypeError, ValueError, InvalidOperation):
+        return Decimal("0")
 
 
 class ClosedLoopExecutionError(RuntimeError):
@@ -162,7 +171,7 @@ class SalesAppService:
             if customer is None:
                 return {"success": False, "message": f"客户不存在: customer_id={customer_id}"}
 
-            total_amount = 0.0
+            total_amount = Decimal("0")
             order_no = data.get("order_no") or self._generate_order_no()
             order = SalesOrder(
                 order_no=order_no,
@@ -187,8 +196,8 @@ class SalesAppService:
                     if product_id
                     else None
                 )
-                quantity = _to_float(item_data.get("quantity", 0))
-                unit_price = _to_float(item_data.get("unit_price", 0))
+                quantity = _to_decimal(item_data.get("quantity", "0"))
+                unit_price = _to_decimal(item_data.get("unit_price", "0"))
                 amount = quantity * unit_price
                 total_amount += amount
                 ctx.add(
@@ -197,11 +206,11 @@ class SalesAppService:
                         product_id=product_id,
                         product_name=(product.name if product else item_data.get("product_name")),
                         specification=item_data.get("specification"),
-                        quantity=Decimal(str(quantity)),
+                        quantity=quantity,
                         unit=item_data.get("unit", "个"),
-                        unit_price=Decimal(str(unit_price)),
-                        amount=Decimal(str(amount)),
-                        ordered_quantity=Decimal(str(quantity)),
+                        unit_price=unit_price,
+                        amount=amount,
+                        ordered_quantity=quantity,
                         delivered_quantity=Decimal("0"),
                         returned_quantity=Decimal("0"),
                         invoiced_quantity=Decimal("0"),
@@ -211,7 +220,7 @@ class SalesAppService:
                     )
                 )
 
-            order.total_amount = Decimal(str(total_amount))
+            order.total_amount = total_amount
             # 调用方会话 autoflush=False：必须先 flush 全部明细与合计，refresh 才不回读为 0
             ctx.flush()
             if owned:
@@ -270,7 +279,7 @@ class SalesAppService:
         self,
         order_id: int,
         item_id: int,
-        quantity: float,
+        quantity: Decimal | float,
         *,
         warehouse_id: int,
         product_id: int | None = None,
@@ -640,8 +649,8 @@ class SalesAppService:
             "items": [
                 {
                     "product_id": p["product_id"],
-                    "quantity": float(p["quantity"]),
-                    "unit_price": float(p["unit_price"]),
+                    "quantity": p["quantity"],
+                    "unit_price": p["unit_price"],
                     "unit": p["unit"],
                     "product_name": p["product_name"],
                 }
@@ -661,9 +670,22 @@ class SalesAppService:
         if replayed:
             # 任一后续 confirm/deliver/invoice/payment 之前：校验完整复合载荷指纹一致。
             self._closed_loop_verify_idempotent_fingerprint(db, order_id, fingerprint)
+            # 已完成交付由履行服务的行级幂等标记直接命中，不应要求当前仍有库存，
+            # 也不再重新选择批次。
+            inventory_sources = [{"batch_no": None, "location_id": None} for _product in products]
         else:
             # 首建：在同一外层事务内持久化复合指纹（命名空间化，不破坏顶层 idempotency 标记）。
             self._closed_loop_persist_fingerprint(db, order_id, fingerprint)
+            inventory_sources = [
+                self._closed_loop_resolve_inventory_source(
+                    db,
+                    product_id=product["product_id"],
+                    warehouse_id=warehouse["id"],
+                    quantity=product["quantity"],
+                    tenant_id=tenant_id,
+                )
+                for product in products
+            ]
 
         confirm_res = self.confirm(order_id, db=db)
         if not confirm_res.get("success"):
@@ -684,9 +706,11 @@ class SalesAppService:
             deliver_res = self.deliver(
                 order_id,
                 oi.id,
-                float(oi.quantity),
+                oi.quantity,
                 warehouse_id=warehouse["id"],
                 product_id=oi.product_id,
+                batch_no=inventory_sources[idx]["batch_no"],
+                location_id=inventory_sources[idx]["location_id"],
                 idempotency_key=deliver_key,
                 db=db,
             )
@@ -696,7 +720,9 @@ class SalesAppService:
 
         invoice_entry_id = None
         if invoice.get("requested"):
-            invoice_res = self.invoice(order_id, amount=float(order["total_amount"]), db=db)
+            invoice_res = self.invoice(
+                order_id, amount=self._closed_loop_dec(order.get("total_amount")), db=db
+            )
             if not invoice_res.get("success"):
                 raise ClosedLoopExecutionError("invoice", invoice_res.get("message", "开票失败"))
             invoice_entry_id = invoice_res.get("entry_id") or (
@@ -705,7 +731,9 @@ class SalesAppService:
 
         payment_allocation_id = None
         if pa.get("requested"):
-            payment_res = self.payment(order_id, amount=float(order["total_amount"]), db=db)
+            payment_res = self.payment(
+                order_id, amount=self._closed_loop_dec(order.get("total_amount")), db=db
+            )
             if not payment_res.get("success"):
                 raise ClosedLoopExecutionError("payment", payment_res.get("message", "收款失败"))
             payment_allocation_id = (payment_res.get("data") or {}).get("id")
@@ -872,20 +900,53 @@ class SalesAppService:
             raise ClosedLoopExecutionError(
                 "resolve_customer", f"不支持的客户解析方式: {resolution}"
             )
+        # 主路径：核心 Customer 精确唯一匹配（同事务、同租户）。
         matches = (
             db.query(Customer)
             .filter(Customer.customer_name == cname, Customer.tenant_id == tenant_id)
             .count()
         )
-        if matches != 1:
-            raise ClosedLoopExecutionError(
-                "resolve_customer", f"客户名匹配数为 {matches}（应为恰好 1）: {cname}"
+        if matches == 1:
+            customer = (
+                db.query(Customer)
+                .filter(Customer.customer_name == cname, Customer.tenant_id == tenant_id)
+                .first()
             )
-        customer = (
-            db.query(Customer)
-            .filter(Customer.customer_name == cname, Customer.tenant_id == tenant_id)
-            .first()
+            return {"id": customer.id, "name": customer.customer_name}
+
+        if matches != 0:
+            raise ClosedLoopExecutionError(
+                "resolve_customer",
+                f"客户名匹配数为 {matches}（应为恰好 1）: {cname}",
+            )
+
+        # 采购单位 → 核心客户桥接（同一外层闭环事务、同租户）。
+        # 仅允许 core=0 且 PurchaseUnit=1；桥接 Customer 的 flush 与后续
+        # quote/confirm/deliver/invoice/payment 共用一个会话，任一后续失败
+        # 都会连同新客户整体回滚。
+        from app.db.models.purchase_unit import PurchaseUnit  # 延迟导入避免循环导入
+
+        purchase_units = (
+            db.query(PurchaseUnit)
+            .filter(PurchaseUnit.unit_name == cname, PurchaseUnit.tenant_id == tenant_id)
+            .limit(2)
+            .all()
         )
+        if len(purchase_units) != 1:
+            raise ClosedLoopExecutionError(
+                "resolve_customer",
+                f"采购单位匹配数为 {len(purchase_units)}（应为恰好 1）: {cname}",
+            )
+        purchase_unit = purchase_units[0]
+        customer = Customer(
+            customer_name=purchase_unit.unit_name,
+            contact_person=purchase_unit.contact_person,
+            contact_phone=purchase_unit.contact_phone,
+            contact_address=purchase_unit.address,
+            tenant_id=tenant_id,
+        )
+        db.add(customer)
+        db.flush()
         return {"id": customer.id, "name": customer.customer_name}
 
     def _closed_loop_resolve_products(
@@ -974,6 +1035,41 @@ class SalesAppService:
         if wh is None:
             raise ClosedLoopExecutionError("resolve_warehouse", "当前租户下无可用仓库")
         return {"id": wh.id, "code": wh.code}
+
+    def _closed_loop_resolve_inventory_source(
+        self,
+        db,
+        *,
+        product_id: int,
+        warehouse_id: int,
+        quantity: Decimal,
+        tenant_id: int,
+    ) -> dict[str, Any]:
+        """解析闭环交付使用的唯一库存批次，避免把有批次库存误判为不存在。
+
+        桌面正常入库允许填写批次号，而库存扣减服务按 ``batch_no`` 精确匹配。
+        闭环载荷未显式指定批次时，只接受当前租户、产品、仓库下恰好一个库存充足
+        的台账；缺失或多个候选均 fail-closed，绝不静默挑选错误批次。
+        """
+        ledgers = (
+            db.query(InventoryLedger)
+            .filter(
+                InventoryLedger.product_id == product_id,
+                InventoryLedger.warehouse_id == warehouse_id,
+                InventoryLedger.tenant_id == tenant_id,
+                InventoryLedger.available_quantity >= quantity,
+            )
+            .order_by(InventoryLedger.id.asc())
+            .limit(2)
+            .all()
+        )
+        if len(ledgers) != 1:
+            raise ClosedLoopExecutionError(
+                "resolve_inventory",
+                f"可交付库存台账匹配数为 {len(ledgers)}（应为恰好 1）",
+            )
+        ledger = ledgers[0]
+        return {"batch_no": ledger.batch_no, "location_id": ledger.location_id}
 
     # ── 工具内部 ───────────────────────────────────────────────
 
