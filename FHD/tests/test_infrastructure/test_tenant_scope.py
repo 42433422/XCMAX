@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.db.models.product import Product
+from app.db.models.product import Product, UomCategory, UomUnit
 from app.infrastructure.tenant_scope import (
     TenantScopeError,
     append_tenant_scope_where,
@@ -22,6 +22,8 @@ from app.infrastructure.tenant_scope import (
 def session_with_products(monkeypatch):
     """内存 sqlite：3 条产品分属 tenant=1 / tenant=2 / NULL。"""
     eng = create_engine("sqlite://")
+    UomCategory.__table__.create(bind=eng)
+    UomUnit.__table__.create(bind=eng)
     Product.__table__.create(bind=eng)
     with Session(eng) as db:
         monkeypatch.setenv("XCAGI_TENANT_ALLOW_UNSCOPED_WRITE", "1")

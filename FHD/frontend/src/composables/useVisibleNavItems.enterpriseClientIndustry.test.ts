@@ -144,4 +144,18 @@ describe('useVisibleNavItems · 企业完整包客户行业侧栏', () => {
     expect(keys).toContain('data-sources')
     expect(visibleNavItems.value.find((i) => i.key === 'products')?.name).toBe('人员管理')
   })
+
+  it('完整企业版即使尚未确认 host pack 也显示 ERP 业务入口', () => {
+    mockFlags.clientErpSidebarContext = false
+    mockFlags.exposeIndustrySidebar = false
+
+    const { visibleNavItems } = useVisibleNavItems()
+    const keys = visibleNavItems.value.map((i) => i.key)
+
+    expect(keys).toContain('products')
+    expect(keys).toContain('customers')
+    expect(keys).toContain('orders')
+    expect(keys).toContain('inventory')
+    expect(keys).toContain('approval-hub')
+  })
 })

@@ -345,10 +345,18 @@ class TestApprovalQueryMethods:
             req = svc.create_approval_request("plan-1", node)
         assert svc.is_approved("plan-1") is False
         svc.approve(req.request_id)
-        # After approval, status is APPROVED, but get_pending_request_by_plan
-        # only returns PENDING requests, so is_approved returns False
-        # This is the actual behavior of the code
-        assert svc.is_approved("plan-1") is False  # not PENDING anymore
+        # fail-closed：审批通过（status=APPROVED）后，is_approved 应返回 True。
+        assert svc.is_approved("plan-1") is True
+
+    def test_is_approved_wrong_plan(self):
+        svc = ApprovalService()
+        svc._config = MagicMock(enabled=True)
+        node = _make_node()
+        with patch.object(svc, "_persist_request_to_db"):
+            req = svc.create_approval_request("plan-1", node)
+        svc.approve(req.request_id)
+        # 属于 plan-1 的请求不应导致 plan-2 被判定为已批准。
+        assert svc.is_approved("plan-2") is False
 
     def test_is_rejected(self):
         svc = ApprovalService()
@@ -357,9 +365,8 @@ class TestApprovalQueryMethods:
         with patch.object(svc, "_persist_request_to_db"):
             req = svc.create_approval_request("plan-1", node)
         svc.reject(req.request_id)
-        # After rejection, status is REJECTED, but get_pending_request_by_plan
-        # only returns PENDING requests, so is_rejected returns False
-        assert svc.is_rejected("plan-1") is False  # not PENDING anymore
+        # fail-closed：审批拒绝（status=REJECTED）后，is_rejected 应返回 True。
+        assert svc.is_rejected("plan-1") is True
 
     def test_get_pending_approval_info(self):
         svc = ApprovalService()

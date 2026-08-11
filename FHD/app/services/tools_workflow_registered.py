@@ -547,16 +547,28 @@ def _registered_router_sales(
     if action == "confirm":
         return svc.confirm(int(params.get("order_id")))
     if action == "deliver":
-        return svc.deliver(int(params.get("order_id")))
+        return svc.deliver(
+            int(params.get("order_id")),
+            int(params.get("item_id")),
+            float(params.get("quantity")),
+            warehouse_id=int(params.get("warehouse_id")),
+            idempotency_key=params.get("idempotency_key"),
+        )
     if action == "invoice":
         return svc.invoice(int(params.get("order_id")))
+    if action == "credit_note":
+        return svc.credit_note(int(params.get("order_id")))
     if action == "payment":
         amount = params.get("amount")
         return svc.payment(
             int(params.get("order_id")), float(amount) if amount is not None else None
         )
+    if action == "refund":
+        return svc.refund(int(params.get("allocation_id")))
     if action == "cancel":
         return svc.cancel(int(params.get("order_id")))
+    if action == "execute_closed_loop":
+        return svc.execute_closed_loop(dict(params["payload"]))
     return {"success": False, "message": f"未注册的 sales 动作: {action}"}
 
 

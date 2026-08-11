@@ -2,13 +2,84 @@
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+from app.application.ai_chat_app_service import AIChatApplicationService
+from app.application.normal_chat_dispatch import route_normal_mode_message
+from app.application.workflow.checkpointer import WorkflowCheckpointer
+from app.application.workflow.engine import WorkflowEngine
+from app.application.workflow.planner import LLMWorkflowPlanner
 from app.fastapi_routes import xcagi_compat_chat_helpers as ch
+
+# 精确验收句（与 W1-10 生产销售写路由一致）
+EXACT_SENTENCE = "把 A 产品卖给客户B，10 个，单价 100，开票收款"
+
+
+class _LLMBomb:
+    """Planner model/completion 网关炸弹：任何属性访问或调用即抛错。"""
+
+    def __getattr__(self, _name):  # noqa: ANN001
+        raise AssertionError("planner model/completion 网关不得被触达")
+
+    def __call__(self, *args, **kwargs):  # noqa: ANN002, ANN003
+        raise AssertionError("planner model/completion 网关不得被触达")
+
+
+def _make_real_app_service():
+    """真实 AIChatApplicationService：真实 planner / risk gate / approval service /
+    AgentOrchestrator，真实 WorkflowEngine(分发器炸弹) + 真实 WorkflowCheckpointer。
+
+    仅隔离已确立的审计/运行/审批持久化边界，绝不替换 route、planner、risk gate、
+    approval-required-node 决策或应用服务逻辑：
+    - langgraph 运行时/检查点 → 真实 WorkflowEngine(dispatch bomb) / WorkflowCheckpointer；
+    - 遗留对话 LLM 服务 → 空壳；
+    - AgentRun 仓库 → 内存实现；
+    - 审批 DB 持久化（persist_request_to_db / persist_agent_run_link）→ no-op/in-memory。
+    """
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+    from app.application.workflow.approval_service import ApprovalService
+
+    def _dispatch_bomb(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise AssertionError("workflow 分发器不得在获批前被调用")
+
+    real_engine = WorkflowEngine(tool_dispatcher=_dispatch_bomb)
+    real_checkpointer = WorkflowCheckpointer()
+
+    with (
+        patch("app.services.get_ai_conversation_service", return_value=MagicMock()),
+        patch(
+            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+            return_value=InMemoryAgentRunRepository(),
+        ),
+        patch(
+            "app.application.workflow.approval_persistence.persist_agent_run_link",
+            return_value=None,
+        ),
+    ):
+        svc = AIChatApplicationService(
+            workflow_runtime=real_engine,
+            workflow_checkpointer=real_checkpointer,
+        )
+    # 使用独立的真实审批服务，避免其它测试对进程级单例安装的 mock 污染审批判定。
+    svc.approval_service = ApprovalService()
+    svc.approval_service._persist_request_to_db = lambda req, **k: {  # noqa: ARG005
+        "request_no": req.request_id
+    }
+    # 计划落库为尽力而为的持久化边界 → no-op，保持测试隔离。
+    svc._persist_plan_state = lambda *a, **k: None
+    # planner 实例 model/completion 网关 → 炸弹（确定性 bypass 不触达）。
+    svc.workflow_planner._ai_service = _LLMBomb()
+    return svc
+
+
+def _sse_payloads(chunks):
+    return [json.loads(c.decode("utf-8")[len("data: ") :].strip()) for c in chunks]
 
 
 def test_runtime_context_uses_authenticated_session_actor():
@@ -16,15 +87,82 @@ def test_runtime_context_uses_authenticated_session_actor():
     user = MagicMock(id=17)
     with (
         patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=user),
-        patch("app.infrastructure.auth.tenant_context.resolve_tenant_id", return_value=23),
+        patch(
+            "app.infrastructure.auth.tenant_context.resolve_tenant_id",
+            return_value=7,
+        ),
     ):
         context = ch._runtime_context_with_authenticated_actor(
-            request, {"user_id": "web_pro_session"}
+            request, {"user_id": "web_pro_session", "tenant_id": 999}
         )
     assert context["local_user_id"] == 17
     assert context["actor_id"] == 17
-    assert context["tenant_id"] == 23
     assert context["user_id"] == "web_pro_session"
+    # 认证解析出的租户覆盖调用方上下文里的冲突租户（resolved tenant wins）。
+    assert context["tenant_id"] == 7
+
+
+def test_runtime_context_discards_untrusted_tenant_when_session_has_none():
+    request = MagicMock()
+    with (
+        patch(
+            "app.infrastructure.auth.dependencies.resolve_session_user",
+            return_value=None,
+        ),
+        patch(
+            "app.infrastructure.auth.tenant_context.resolve_tenant_id",
+            return_value=None,
+        ),
+    ):
+        context = ch._runtime_context_with_authenticated_actor(
+            request, {"user_id": "web_pro_session", "tenant_id": 999}
+        )
+
+    assert "tenant_id" not in context
+
+
+def test_sales_sse_uses_authenticated_resolved_tenant_even_if_context_conflicts():
+    """W1-10 租户隔离：活跃 compat SSE 处理销售闭环句时，真实 process_chat 在
+    current_tenant_id() == 认证解析租户 的 tenant_scope 内执行；即使请求体上下文
+    携带冲突 tenant_id，也以认证解析租户为准（resolved tenant wins）。不执行审批、
+    不调用 LLM。"""
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    svc = _make_real_app_service()
+    captured: dict[str, int | None] = {}
+    real_process_chat = svc.process_chat
+
+    def _spy_process_chat(*args, **kwargs):  # noqa: ANN002, ANN003
+        captured["tenant_id"] = current_tenant_id()
+        return real_process_chat(*args, **kwargs)
+
+    svc.process_chat = _spy_process_chat
+
+    request = MagicMock()
+    request.headers = {}
+    request.cookies = {}
+    body = ch.XcagiCompatChatBody(
+        message=EXACT_SENTENCE,
+        user_id="web_pro_session",
+        source="pro",
+        context={"tenant_id": 999},  # 调用方提供的冲突租户：必须被认证租户覆盖
+    )
+
+    with (
+        patch("app.application.get_ai_chat_app_service", return_value=svc),
+        patch(
+            "app.infrastructure.auth.tenant_context.resolve_tenant_id",
+            return_value=7,
+        ),
+        patch.object(ch, "runtime_context_with_tier", side_effect=lambda c, _t: c),
+    ):
+        chunks = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+
+    events = _sse_payloads(chunks)
+    errors = [e for e in events if e.get("type") == "error"]
+    assert not errors, errors
+    # 真实 process_chat 已在认证租户作用域内执行（resolved tenant wins）。
+    assert captured["tenant_id"] == 7
 
 
 def test_stream_business_db_write_uses_stateful_approval_mainline():
@@ -59,47 +197,132 @@ def test_stream_business_db_write_uses_stateful_approval_mainline():
     assert service.process_chat.call_args.kwargs["context"]["local_user_id"] == 17
 
 
-def test_stream_explicit_business_db_read_uses_workflow_mainline():
-    request = MagicMock(headers={}, cookies={})
+def test_sales_sentence_routes_to_app_service_no_llm_then_approval_pending():
+    """W1-10 精确验收句经活跃 compat SSE 直接进入真实应用服务，绝不创建 LLM 客户端、
+    不触碰 legacy planner stream，产出一个正常 done 事件（action=workflow_confirmation_required，
+    而非 error 事件），随后「确认」返回 approval_pending。
+
+    ``create_modstore_openai_client_from_request``（LLM 客户端创建）、
+    ``_xcagi_guarded_planner_stream_events``（legacy planner stream）、
+    ``AgentToolExecutor.execute``（业务工具执行）以及 planner 的
+    ``_plan_with_react_multiagent`` / ``request_planner_completion`` /
+    ``_get_planner_http_client`` 均安装炸弹：一旦被调用即抛错，测试失败。
+    """
+    svc = _make_real_app_service()
+    request = MagicMock()
+    request.headers = {}
+    request.cookies = {}
+    body = ch.XcagiCompatChatBody(message=EXACT_SENTENCE, user_id="web_pro_session", source="pro")
+
+    def _bomb(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise AssertionError("LLM 客户端 / legacy planner / 工具执行路径不得被触达")
+
+    with (
+        patch("app.application.get_ai_chat_app_service", return_value=svc),
+        patch.object(
+            ch,
+            "create_modstore_openai_client_from_request",
+            side_effect=_bomb,
+        ),
+        patch.object(
+            ch,
+            "_xcagi_guarded_planner_stream_events",
+            side_effect=_bomb,
+        ),
+        patch.object(ch, "runtime_context_with_tier", side_effect=lambda c, _t: c),
+        patch.object(AgentToolExecutor, "execute", side_effect=_bomb),
+        patch.object(
+            LLMWorkflowPlanner,
+            "_plan_with_react_multiagent",
+            side_effect=_bomb,
+        ),
+        patch(
+            "app.application.workflow.planner.request_planner_completion",
+            side_effect=_bomb,
+        ),
+        patch(
+            "app.application.workflow.planner._get_planner_http_client",
+            side_effect=_bomb,
+        ),
+    ):
+        chunks = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+        # 首响应后审批已挂起（获批前不分发业务）。
+        assert svc._pending_workflows["web_pro_session"]["approval_required"] is True
+        # 同一服务实例在全部炸弹仍生效时驱动确认 → approval_pending（确认期间也不得执行工具）。
+        resp2 = svc.process_chat(
+            user_id="web_pro_session", message="确认", context={}, source="pro"
+        )
+
+    events = _sse_payloads(chunks)
+    errors = [e for e in events if e.get("type") == "error"]
+    assert not errors, errors
+    done = [e for e in events if e.get("type") == "done"]
+    assert len(done) == 1
+
+    done_payload = done[0]["result"]
+    assert done_payload["data"]["action"] == "workflow_confirmation_required"
+    # 首响应即进入待确认：恰好一个审批节点 sales.execute_closed_loop，获批前绝不分发业务。
+    inner = done_payload["data"]["data"]
+    assert inner["approval_required"] is True
+    assert inner["approval_nodes"] == [
+        {
+            "node_id": "sales_execute_closed_loop",
+            "tool_id": "sales",
+            "action": "execute_closed_loop",
+        }
+    ]
+
+    # 同一服务实例驱动确认 → approval_pending
+    assert resp2["data"]["action"] == "approval_pending"
+    inner = resp2["data"]["data"]
+    assert inner["approval_required"] is True
+    assert inner["approval_path"] == "/mod/xcagi-approval-bridge/approval-hub/workspace"
+    request_ids = inner["approval_request_ids"]
+    assert isinstance(request_ids, list) and len(request_ids) == 1
+    assert str(request_ids[0]).strip()
+    # approval_pending 响应带完整 params：高风险/幂等生产图载荷原样保留。
+    nodes = inner["approval_nodes"]
+    assert len(nodes) == 1
+    node = nodes[0]
+    assert node["node_id"] == "sales_execute_closed_loop"
+    assert node["tool_id"] == "sales"
+    assert node["action"] == "execute_closed_loop"
+    payload = route_normal_mode_message(EXACT_SENTENCE)["payload"]
+    assert node["params"]["payload"] == payload
+
+
+def test_casual_chat_not_diverted_to_app_service():
+    """非销售/闲聊回归：活跃 compat SSE 仅在精确闭环写意图时直达应用服务；
+    闲聊仍走 legacy 路径，绝不把普通消息广泛分流到 ``process_chat``。"""
     service = MagicMock()
     service._pending_workflows = {}
-    expected_payload = {
-        "success": True,
-        "response": "客户 19、产品 0、原材料 0、出货记录 6",
-        "data": {"tool_calls": [{"tool_id": "business_db", "action": "read"}]},
-    }
+    service.process_chat.side_effect = AssertionError("闲聊不得分流到应用服务")
+    request = MagicMock()
+    request.headers = {}
+    request.cookies = {}
+    body = ch.XcagiCompatChatBody(message="你好，帮我写首诗", user_id="web_casual", source="pro")
 
-    def process_chat_in_tenant_scope(**_kwargs):
-        from app.infrastructure.tenant_scope import current_tenant_id
-
-        assert current_tenant_id() == 23
-        return expected_payload
-
-    service.process_chat.side_effect = process_chat_in_tenant_scope
-    body = ch.XcagiCompatChatBody(
-        message="请通过业务数据库查询客户、产品、原材料和出货记录数量",
-        user_id="web_normal_session",
-        source="normal",
-    )
+    casual_done = {"type": "done", "result": {"success": True, "data": {"action": "casual"}}}
     with (
         patch("app.application.get_ai_chat_app_service", return_value=service),
         patch.object(
             ch,
-            "_runtime_context_with_authenticated_actor",
-            side_effect=lambda _request, context: {
-                **dict(context or {}),
-                "local_user_id": 17,
-                "tenant_id": 23,
-            },
+            "create_modstore_openai_client_from_request",
+            return_value=MagicMock(),
         ),
-        patch.object(ch, "runtime_context_with_tier", side_effect=lambda context, _tier: context),
+        patch.object(
+            ch,
+            "_xcagi_guarded_planner_stream_events",
+            return_value=iter([{"type": "token", "text": "你好"}, casual_done]),
+        ),
+        patch.object(ch, "runtime_context_with_tier", side_effect=lambda c, _t: c),
     ):
         chunks = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
 
-    assert len(chunks) == 2
-    service.process_chat.assert_called_once()
-    assert service.process_chat.call_args.kwargs["source"] == "normal"
-    assert service.process_chat.call_args.kwargs["context"]["local_user_id"] == 17
+    events = _sse_payloads(chunks)
+    service.process_chat.assert_not_called()
+    # 闲聊走 legacy 路径：产出 token + done，未被打包到应用服务。
+    assert any(e.get("type") == "done" for e in events)
 
 
 # ---------------------------------------------------------------------------

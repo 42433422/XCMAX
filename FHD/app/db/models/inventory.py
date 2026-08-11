@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -82,6 +82,21 @@ class InventoryLedger(TenantScopedMixin, Base):
 class InventoryTransaction(TenantScopedMixin, Base):
     __tablename__ = "inventory_transactions"
 
+    __table_args__ = (
+        CheckConstraint(
+            "COALESCE(ordered_quantity, 0) >= 0",
+            name="ck_inventory_transactions_ordered_quantity_nonnegative",
+        ),
+        CheckConstraint(
+            "COALESCE(delivered_quantity, 0) >= 0",
+            name="ck_inventory_transactions_delivered_quantity_nonnegative",
+        ),
+        CheckConstraint(
+            "COALESCE(delivered_quantity, 0) <= COALESCE(ordered_quantity, 0)",
+            name="ck_inventory_transactions_delivered_not_exceed_ordered",
+        ),
+    )
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ledger_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("inventory_ledger.id"))
     transaction_type: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -96,6 +111,15 @@ class InventoryTransaction(TenantScopedMixin, Base):
     total_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2))
     reference_type: Mapped[Optional[str]] = mapped_column(String(50))
     reference_id: Mapped[Optional[int]] = mapped_column(Integer)
+    # 履行维度（stock moves 复用本表，不新建 move 表）：按单/按明细分派数量
+    ordered_quantity: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), default=0)
+    delivered_quantity: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), default=0)
+    sales_order_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("sales_orders.id"), nullable=True, index=True
+    )
+    sales_order_item_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("sales_order_items.id"), nullable=True, index=True
+    )
     transaction_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     operator: Mapped[Optional[str]] = mapped_column(String(50))
     remark: Mapped[Optional[str]] = mapped_column(Text)

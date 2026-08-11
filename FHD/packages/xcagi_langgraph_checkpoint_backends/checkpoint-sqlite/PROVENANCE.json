@@ -1,0 +1,19 @@
+{
+  "vendor": "langgraph-checkpoint-sqlite",
+  "upstream_repo": "https://github.com/langchain-ai/langgraph",
+  "upstream_pkg": "langgraph-checkpoint-sqlite",
+  "license": "MIT",
+  "license_file": "LICENSE",
+  "version": "3.1.0",
+  "upstream_tag": "1.2.10",
+  "upstream_commit_sha": "41341457342327166d72fc11952ab28fb61ec0bf",
+  "source_path": "libs/checkpoint-sqlite",
+  "vendored_path": "langgraph/",
+  "sha256_manifest": "MANIFEST.sha256",
+  "verify_script": "verify_vendor.py",
+  "fetch_time_utc": "2026-08-10T00:00:00Z",
+  "verification": {
+    "method": "本地吸收副本与上游锁定 commit（tag 1.2.10）字节级比对 + MANIFEST.sha256 完整性 + LICENSE 校验",
+    "note": "吸收源取自 langgraph 仓库锁定 commit 41341457342327166d72fc11952ab28fb61ec0bf 的 libs/checkpoint-sqlite/langgraph + LICENSE，字节级一致。version 3.1.0 与 pyproject 一致。"
+  }
+}

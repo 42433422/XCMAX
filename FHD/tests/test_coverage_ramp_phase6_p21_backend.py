@@ -48,6 +48,7 @@ from app.application.workflow.approval_gated_engine import (
     GatedPlanDecision,
     build_gated_evidence,
 )
+from app.application.workflow.approval_service import ApprovalService
 from app.application.workflow.risk_gate import RiskDecision
 from app.application.workflow.types import (
     NodeExecutionResult,
@@ -981,11 +982,25 @@ def _make_engine_for_gate() -> ApprovalGatedEngine:
         ],
         message="ok",
     )
+    # 独立 ApprovalService，避免进程级单例在不同测试间串扰。
+    svc = ApprovalService()
+    svc._persist_request_to_db = lambda *a, **k: None
     return ApprovalGatedEngine(
         engine=mock_engine,
         risk_gate=None,
-        approval_service=None,
+        approval_service=svc,
     )
+
+
+def _seed_approved(engine: ApprovalGatedEngine, plan: PlanGraph) -> dict[str, bool]:
+    """为计划内每个节点创建审批请求并全部获批，返回 {request_id: True}。"""
+    svc = engine._approval_service
+    approved: dict[str, bool] = {}
+    for node in plan.nodes:
+        req = svc.create_approval_request(plan_id=plan.plan_id, node=node)
+        svc.approve(req.request_id)
+        approved[req.request_id] = True
+    return approved
 
 
 class TestGatedNodeDecisionDefaults:
@@ -1087,26 +1102,51 @@ class TestApprovalGatedEngineResumeEdges:
     def test_resume_with_all_true_runs_engine(self) -> None:
         engine = _make_engine_for_gate()
         plan = _make_plan_for_gate()
-        result = engine.resume_after_approval(
-            plan, {"req-1": True, "req-2": True}, runtime_context={}
-        )
+        approved = _seed_approved(engine, plan)
+        result = engine.resume_after_approval(plan, approved, runtime_context={})
         assert result.success is True
         engine._engine.run.assert_called_once()
 
-    def test_resume_with_empty_map_runs_engine(self) -> None:
-        """all([]) == True → empty map treated as all approved."""
+    def test_resume_with_empty_map_fails_closed(self) -> None:
+        """Fail-closed：空映射不得被当作 all([])==True 放行。"""
         engine = _make_engine_for_gate()
         plan = _make_plan_for_gate()
         result = engine.resume_after_approval(plan, {}, runtime_context=None)
-        assert result.success is True
-        engine._engine.run.assert_called_once()
+        assert result.success is False
+        engine._engine.run.assert_not_called()
+
+    def test_resume_with_pending_status_fails_closed(self) -> None:
+        """映射为 true 但 ApprovalService 状态仍 PENDING → 拒绝执行。"""
+        engine = _make_engine_for_gate()
+        plan = _make_plan_for_gate()
+        svc = engine._approval_service
+        req = svc.create_approval_request(plan_id=plan.plan_id, node=plan.nodes[0])
+        result = engine.resume_after_approval(plan, {req.request_id: True}, runtime_context={})
+        assert result.success is False
+        assert "状态未通过" in result.message
+        engine._engine.run.assert_not_called()
 
     def test_resume_with_any_false_skips_engine(self) -> None:
         engine = _make_engine_for_gate()
         plan = _make_plan_for_gate()
-        result = engine.resume_after_approval(plan, {"req-1": False}, runtime_context={})
+        approved = _seed_approved(engine, plan)
+        result = engine.resume_after_approval(
+            plan, dict.fromkeys(approved, False), runtime_context={}
+        )
         assert result.success is False
         assert "未全部通过审批" in result.message
+        engine._engine.run.assert_not_called()
+
+    def test_resume_with_foreign_request_id_rejected(self) -> None:
+        """不属于本计划的 request id → 拒绝执行（防跨计划串扰）。"""
+        engine = _make_engine_for_gate()
+        plan = _make_plan_for_gate()
+        approved = _seed_approved(engine, plan)
+        result = engine.resume_after_approval(
+            plan, {**approved, "not-in-plan": True}, runtime_context={}
+        )
+        assert result.success is False
+        assert "不属于本计划" in result.message
         engine._engine.run.assert_not_called()
 
 

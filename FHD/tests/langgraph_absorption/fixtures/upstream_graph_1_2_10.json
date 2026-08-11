@@ -1,0 +1,51 @@
+{
+  "commit": "41341457342327166d72fc11952ab28fb61ec0bf",
+  "prebuilt": {
+    "ToolNode": true,
+    "create_react_agent": true,
+    "tools_condition": true
+  },
+  "probe": {
+    "checkpointer": "langgraph.checkpoint.memory.InMemorySaver",
+    "file": "tests/langgraph_absorption/upstream_graph_probe.py",
+    "graph": "START ->(route)-> {fast|slow} ->(fanout)-> {pa,pb,pc} -> join -> sub(subgraph) -> END",
+    "state": "State(log: Annotated[list, operator.add], route: str, total: Annotated[int, operator.add], sub_total: int)"
+  },
+  "semantics": {
+    "checkpoint_count": 6,
+    "checkpoint_latest_log": [
+      "fast",
+      "join",
+      "pa",
+      "pb",
+      "pc"
+    ],
+    "conditional_route_fast": [
+      "fast",
+      "join",
+      "pa",
+      "pb",
+      "pc"
+    ],
+    "fanout_total": 6,
+    "streaming_node_count": 6,
+    "streaming_nodes": [
+      "join",
+      "n_slow",
+      "pa",
+      "pb",
+      "pc",
+      "sub"
+    ],
+    "subgraph_sub_total": 12
+  },
+  "spec": "LG-W0-07",
+  "spec_title": "upstream langgraph graph semantic probe",
+  "tag": "1.2.10",
+  "target": "packages/xcagi_langgraph_core (vendored) / xcagi_langgraph_checkpoint / xcagi_langgraph_prebuilt",
+  "vendored_sources": {
+    "checkpoint.memory": "packages/xcagi_langgraph_checkpoint/langgraph/checkpoint/memory/__init__.py",
+    "core.graph": "packages/xcagi_langgraph_core/langgraph/graph/state.py",
+    "prebuilt": "packages/xcagi_langgraph_prebuilt/langgraph/prebuilt/__init__.py"
+  }
+}
