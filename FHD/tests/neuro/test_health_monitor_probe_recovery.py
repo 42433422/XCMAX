@@ -21,9 +21,16 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.neuro_bus import health_monitor as hm
+from app.neuro_bus.event_store import EventStore, EventStoreMode
 from app.neuro_bus.health_monitor import (
+    INCIDENT_REPORTED,
+    REASON_EVENT_STORE_UNAVAILABLE,
+    RECOVERY_FAILED,
+    RECOVERY_REPORTED,
+    REMEDIATION_REPORTED,
     AlertLevel,
     DashboardDataProvider,
+    HealthCheckResult,
     HealthMonitor,
     HealthStatus,
     check_component,
@@ -472,3 +479,223 @@ def test_get_system_status(monkeypatch):
     fake.get_health_summary.return_value = {"overall_status": "healthy"}
     monkeypatch.setattr(hm, "get_health_monitor", lambda: fake)
     assert get_system_status() == "healthy"
+
+
+# ---------------------------------------------------------------------------
+# 闭环自愈（safe remediation closed loop）
+# ---------------------------------------------------------------------------
+
+
+class _FailingStore:
+    """append 始终抛错的存储：模拟事件存储不可用。"""
+
+    def __init__(self):
+        self.appends = []
+
+    def append(self, event, stream_id=None):
+        self.appends.append(event)
+        raise RuntimeError("secret-db-error-TOKEN123")
+
+
+def _health_receipts(store):
+    return [
+        stored.event for stored in store.get_all() if stored.event.event_type.startswith("health.")
+    ]
+
+
+@pytest.mark.asyncio
+async def test_closed_loop_run_check_invokes_handler_and_recovers_on_fresh_healthy_postcondition():
+    store = EventStore(mode=EventStoreMode.MEMORY)
+    mon = HealthMonitor(check_interval_seconds=60, event_store=store)
+    state = {"calls": 0, "handler_calls": 0}
+
+    def svc_check():
+        state["calls"] += 1
+        # 第一次 = 原始非健康；强制后置条件复查（第二次）= 健康，模拟修复成功
+        if state["calls"] == 1:
+            return HealthCheckResult("svc", HealthStatus.UNHEALTHY, "down", 0.1)
+        return HealthCheckResult("svc", HealthStatus.HEALTHY, "ok", 0.1)
+
+    def handler(_result):
+        state["handler_calls"] += 1
+
+    mon.register_check("svc", svc_check)
+    mon.register_remediation("svc", "act-fix-svc", handler)
+
+    result = await mon.run_check("svc")
+
+    assert result is not None
+    # run_check 自动驱动闭环，调用已注册 handler
+    assert state["handler_calls"] == 1
+    # 复查为健康 -> 报告恢复，且不出现恢复失败
+    types = [ev.event_type for ev in _health_receipts(store)]
+    assert INCIDENT_REPORTED in types
+    assert REMEDIATION_REPORTED in types
+    assert RECOVERY_REPORTED in types
+    assert RECOVERY_FAILED not in types
+
+
+@pytest.mark.asyncio
+async def test_closed_loop_receipt_action_id_present_and_payload_safe():
+    store = EventStore(mode=EventStoreMode.MEMORY)
+    mon = HealthMonitor(check_interval_seconds=60, event_store=store)
+
+    def svc_check():
+        return HealthCheckResult("svc", HealthStatus.UNHEALTHY, "down-raw-token", 0.1)
+
+    def handler(_result):
+        pass
+
+    mon.register_check("svc", svc_check)
+    mon.register_remediation("svc", "act-fix-svc", handler)
+
+    result = HealthCheckResult("svc", HealthStatus.UNHEALTHY, "down-raw-token", 0.1)
+    await mon.run_remediation_closed_loop(result)
+
+    receipts = _health_receipts(store)
+    assert receipts
+    allowed_keys = {
+        "incident_id",
+        "component",
+        "stage",
+        "status",
+        "reason_code",
+        "durable",
+        "action_id",
+        "stream_id",
+    }
+    for ev in receipts:
+        # 每条接收单都带注册的 action_id
+        assert ev.payload.get("action_id") == "act-fix-svc"
+        # 只含固定安全字段，绝不携带 message/details/异常/命令/url/token
+        assert set(ev.payload.keys()) == allowed_keys
+        assert "down-raw-token" not in str(ev.payload)
+
+
+@pytest.mark.asyncio
+async def test_closed_loop_store_unavailable_no_handler_no_recovery_safe_reason():
+    store = _FailingStore()
+    mon = HealthMonitor(check_interval_seconds=60, event_store=store)
+    state = {"handler_calls": 0}
+
+    def svc_check():
+        return HealthCheckResult("svc", HealthStatus.UNHEALTHY, "down", 0.1)
+
+    def handler(_result):
+        state["handler_calls"] += 1
+
+    mon.register_check("svc", svc_check)
+    mon.register_remediation("svc", "act-fix-svc", handler)
+
+    # 自动路径（run_check）：append 失败 -> 不调用 handler、不报告恢复
+    await mon.run_check("svc")
+    assert state["handler_calls"] == 0
+    assert not mon._open_incidents
+
+    # 闭环 outcome：fail safe，原因码安全且不泄漏原始异常文本
+    result = HealthCheckResult("svc", HealthStatus.UNHEALTHY, "down", 0.1)
+    outcome = await mon.run_remediation_closed_loop(result)
+    assert outcome.recovered is False
+    assert outcome.reason_code == REASON_EVENT_STORE_UNAVAILABLE
+    assert outcome.handler_invoked is False
+    assert state["handler_calls"] == 0
+    assert "secret-db-error-TOKEN123" not in str(outcome)
+    assert not mon._open_incidents
+
+
+@pytest.mark.asyncio
+async def test_closed_loop_no_event_store_fails_safe():
+    mon = HealthMonitor(check_interval_seconds=60, event_store=None)
+
+    def svc_check():
+        return HealthCheckResult("svc", HealthStatus.UNHEALTHY, "down", 0.1)
+
+    def handler(_result):
+        pass
+
+    mon.register_check("svc", svc_check)
+    mon.register_remediation("svc", "act-fix-svc", handler)
+
+    result = HealthCheckResult("svc", HealthStatus.UNHEALTHY, "down", 0.1)
+    outcome = await mon.run_remediation_closed_loop(result)
+
+    assert outcome.recovered is False
+    assert outcome.reason_code == REASON_EVENT_STORE_UNAVAILABLE
+    assert outcome.handler_invoked is False
+
+
+@pytest.mark.asyncio
+async def test_closed_loop_memory_store_reports_nondurable():
+    store = EventStore(mode=EventStoreMode.MEMORY)
+    mon = HealthMonitor(check_interval_seconds=60, event_store=store)
+
+    def svc_check():
+        return HealthCheckResult("svc", HealthStatus.UNHEALTHY, "down", 0.1)
+
+    def handler(_result):
+        pass
+
+    mon.register_check("svc", svc_check)
+    mon.register_remediation("svc", "act-fix-svc", handler)
+
+    result = HealthCheckResult("svc", HealthStatus.UNHEALTHY, "down", 0.1)
+    outcome = await mon.run_remediation_closed_loop(result)
+
+    assert outcome.durable_receipts is False
+    receipts = _health_receipts(store)
+    assert receipts
+    assert all(ev.payload.get("durable") is False for ev in receipts)
+
+
+@pytest.mark.asyncio
+async def test_closed_loop_sqlite_store_reports_durable(tmp_path):
+    db = tmp_path / "health_events.db"
+    store = EventStore(mode=EventStoreMode.SQLITE, storage_path=str(db))
+    mon = HealthMonitor(check_interval_seconds=60, event_store=store)
+
+    def svc_check():
+        return HealthCheckResult("svc", HealthStatus.UNHEALTHY, "down", 0.1)
+
+    def handler(_result):
+        pass
+
+    mon.register_check("svc", svc_check)
+    mon.register_remediation("svc", "act-fix-svc", handler)
+
+    result = HealthCheckResult("svc", HealthStatus.UNHEALTHY, "down", 0.1)
+    outcome = await mon.run_remediation_closed_loop(result)
+
+    assert outcome.durable_receipts is True
+    receipts = _health_receipts(store)
+    assert receipts
+    assert all(ev.payload.get("durable") is True for ev in receipts)
+
+
+@pytest.mark.asyncio
+async def test_closed_loop_at_most_once_per_pending_incident():
+    store = EventStore(mode=EventStoreMode.MEMORY)
+    mon = HealthMonitor(check_interval_seconds=60, event_store=store)
+    state = {"handler_calls": 0}
+
+    def svc_check():
+        return HealthCheckResult("svc", HealthStatus.UNHEALTHY, "down", 0.1)
+
+    def handler(_result):
+        state["handler_calls"] += 1
+
+    mon.register_check("svc", svc_check)
+    mon.register_remediation("svc", "act-fix-svc", handler)
+
+    result = HealthCheckResult("svc", HealthStatus.UNHEALTHY, "down", 0.1)
+
+    # 第一次：执行 handler，postcondition 仍非健康 -> recovery_failed，incident 保持未决
+    first = await mon.run_remediation_closed_loop(result)
+    assert first.handler_invoked is True
+    assert first.recovered is False
+    assert state["handler_calls"] == 1
+
+    # 第二次：同一未决 incident -> 不重复执行 handler（至少一次保障）
+    second = await mon.run_remediation_closed_loop(result)
+    assert second.status == "already_attempted"
+    assert second.handler_invoked is False
+    assert state["handler_calls"] == 1

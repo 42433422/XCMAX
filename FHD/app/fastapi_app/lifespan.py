@@ -322,11 +322,11 @@ async def _init_neuro_ddd_async(app: FastAPI):
         app.state.neuro_bus_manager = get_neuro_bus_manager()
         logger.info("✅ 神经总线已启动，域: %s", bus.registered_domains)
         try:
-            from app.neuro_bus.health_monitor import get_health_monitor
+            from app.neuro_bus.health_monitor import configure_runtime_health_monitor
 
-            monitor = get_health_monitor()
+            monitor, durable = configure_runtime_health_monitor()
             app.state.neuro_health_monitor_task = asyncio.create_task(monitor.start_monitoring())
-            logger.info("✅ HealthMonitor 监控循环已启动")
+            logger.info("✅ HealthMonitor 监控循环已启动 (durable_remediation=%s)", durable)
         except RECOVERABLE_ERRORS as hm_err:
             logger.warning("⚠️ HealthMonitor 启动失败: %s", hm_err)
 
