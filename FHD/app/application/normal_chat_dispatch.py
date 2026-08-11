@@ -7,15 +7,155 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import re
 from typing import Any
 
-from app.application.chat_tool_intent import looks_like_explicit_workflow_tool_intent
 from app.utils.ai_helpers import format_money, safe_float
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+# 销售到收款闭环写意图（Sales-to-Payment closed-loop write，吸收 Odoo 18）。
+# 命中后路由为 sales_write + execute_closed_loop，并产出可预览、需审批、零持久化的写载荷（W1-10 契约）。
+# 置于通用客户实体匹配之前，避免「客户/开票/收款」等词把销售写语义遮蔽成只读查询。
+_SALES_WRITE_SELL_MARKERS = ("卖给", "销售给", "出售给")
+
+
+def _as_closed_loop_number(value: float) -> int | float:
+    """整数收敛为 int，否则保留 float，保证载荷数值干净、可精确断言。"""
+    return int(value) if float(value).is_integer() else float(value)
+
+
+def _sales_write_idempotency_key(
+    customer_name: str,
+    product_name: str,
+    quantity: int | float,
+    unit: str,
+    unit_price: int | float,
+    request_invoice: bool,
+    request_payment: bool,
+) -> str:
+    """内容派生的确定性幂等键：仅依赖请求内容，稳定、无随机、无副作用。"""
+    seed = json.dumps(
+        {
+            "customer_name": customer_name,
+            "product_name": product_name,
+            "quantity": quantity,
+            "unit": unit,
+            "unit_price": unit_price,
+            "invoice": request_invoice,
+            "payment": request_payment,
+        },
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return "sw-" + hashlib.sha256(seed.encode("utf-8")).hexdigest()
+
+
+def _parse_sales_write_request(text: str) -> dict[str, Any] | None:
+    """通用确定性解析「<产品>卖给<客户>，<数量><单位>，单价<价格>，[开票] [收款]」。
+
+    命中销售到收款闭环写意图；必填字段缺失或非正时返回 None，回退到非写路由。
+    仅做内容解析：不查询/写入数据库，不执行任何工具，不硬编码整句示例。
+    实体名按句子原样保留（含「客户」前缀等），供未来租户作用域精确名解析。
+    """
+    if not any(marker in text for marker in _SALES_WRITE_SELL_MARKERS):
+        return None
+
+    # 通用确定性形状：把|将 + 产品文本 + 卖给|销售给|出售给 + 客户文本 + 首个逗号 + 数量/单位 + 逗号 + 单价 + [开票][收款]。
+    # 产品名 = 初始标记与销售标记之间的整段（不剥离「产品/商品」）；客户名 = 销售标记与首个中英逗号之间的整段（不剥离「客户」）。
+    head = re.search(
+        r"(?:把|将)\s*(.+?)\s*(?:卖给|销售给|出售给)\s*(.+?)[，,；;]",
+        text,
+    )
+    if not head:
+        return None
+    product_name = head.group(1).strip()
+    customer_name = head.group(2).strip()
+    if not product_name or not customer_name:
+        return None
+
+    tail = text[head.end() :]
+    # 数量与单位锚定在首个逗号之后，带符号解析：负号不被未锚定的数字正则跳过。
+    qty = re.match(r"\s*([-+]?)(\d+(?:\.\d+)?)\s*([^\d\s，,。；;]{1,4})", tail)
+    price = re.search(r"单价\s*[:：]?\s*([-+]?)(\d+(?:\.\d+)?)", tail)
+    if not qty or not price:
+        return None
+
+    quantity_raw = float((qty.group(1) or "") + qty.group(2))
+    unit = qty.group(3).strip()
+    unit_price_raw = float((price.group(1) or "") + price.group(2))
+    if quantity_raw <= 0 or unit_price_raw <= 0 or not unit:
+        return None
+
+    quantity = _as_closed_loop_number(quantity_raw)
+    unit_price = _as_closed_loop_number(unit_price_raw)
+    total_amount = _as_closed_loop_number(quantity_raw * unit_price_raw)
+
+    request_invoice = "开票" in text
+    request_payment = "收款" in text
+
+    idem_key = _sales_write_idempotency_key(
+        customer_name,
+        product_name,
+        quantity,
+        unit,
+        unit_price,
+        request_invoice,
+        request_payment,
+    )
+
+    return {
+        "idempotency_key": idem_key,
+        "order": {
+            "customer_name": customer_name,
+            "customer_id": None,
+            "customer_resolution": "current_tenant_exact_name",
+            "currency": "CNY",
+            "items": [
+                {
+                    "product_name": product_name,
+                    "product_id": None,
+                    "product_resolution": "current_tenant_exact_name",
+                    "quantity": quantity,
+                    "unit": unit,
+                    "unit_price": unit_price,
+                    "line_total": total_amount,
+                }
+            ],
+            "total_amount": total_amount,
+        },
+        "fulfillment": {
+            "requested": True,
+            "quantity": quantity,
+            "unit": unit,
+            "warehouse_id": None,
+            "warehouse_resolution": "current_tenant_default",
+        },
+        "invoice": {
+            "requested": request_invoice,
+            "amount": total_amount,
+            "currency": "CNY",
+        },
+        "payment_allocation": {
+            "requested": request_payment,
+            "amount": total_amount,
+            "currency": "CNY",
+        },
+    }
+
+
+def _is_sales_closed_loop_write(text: str) -> bool:
+    """兼容检测：命中销售到收款闭环写解析即视为闭环写意图。
+
+    供规则规划器（planner.py）导入复用；与 ``_parse_sales_write_request`` 同源判定，
+    仅做内容解析，无数据库/工具副作用。
+    """
+    return _parse_sales_write_request(text) is not None
 
 
 def route_normal_mode_message(message: str) -> dict[str, Any]:
@@ -42,6 +182,16 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
         return {
             "intent": "shipment",
             "slots": {"number_style_order": number_style_order},
+        }
+
+    # 销售到收款闭环写意图：须在「客户/购买单位」匹配之前判断，
+    # 避免「卖给…客户…开票收款」被「客户」一词遮蔽成只读 customers_query（GAP-1 纠正）。
+    sales_write_payload = _parse_sales_write_request(text)
+    if sales_write_payload is not None:
+        return {
+            "intent": "sales_write",
+            "action": "execute_closed_loop",
+            "payload": sales_write_payload,
         }
 
     query_keywords = ("查询", "查一下", "查下", "查", "看看", "看下", "搜索", "找下", "找", "检索")
@@ -193,11 +343,11 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
         }
 
     # 销售 / 报价 / 销售订单（Sales-to-Payment 闭环，吸收 Odoo 18）
+    # 注意：只匹配明确销售语境短语，不用单字「销售」以免宽泛词截胡无关句子。
     sales_keywords = (
         "销售订单",
         "报价单",
         "销售单",
-        "销售",
         "下单",
         "收款",
         "开票",
@@ -486,13 +636,14 @@ def try_normal_slot_read_payload(
     request: Any | None = None,
 ) -> dict[str, Any] | None:
     """普通版只读业务：命中则走确定性 Agent 工具（无 LLM 也可 tool-call）。
-    客户类问题调用 customers.query 并写入 legacy_tool_records，避免 LLM 编造或误提关键词。
-    StreamingResponse 迭代时显式恢复 request + tenant，避免 ContextVar 重置后租户读空。
+
+    客户类问题调用 customers.query（ERP list），写入 legacy_tool_records，
+    避免 LLM 编造「没有数据」，也避免正则把问句当客户名。
+    StreamingResponse 迭代时 IndustryContextMiddleware 可能已 reset 请求 ContextVar，
+    因此这里显式恢复 request + tenant，避免租户 fail-closed 读空。
     """
     text = str(message or "").strip()
     if not text:
-        return None
-    if looks_like_explicit_workflow_tool_intent(text):
         return None
 
     req_token = None

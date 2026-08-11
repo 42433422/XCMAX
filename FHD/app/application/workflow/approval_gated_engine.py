@@ -199,46 +199,96 @@ class ApprovalGatedEngine:
         request_id_to_approved: dict[str, bool],
         runtime_context: dict[str, Any] | None = None,
     ) -> WorkflowRunResult:
-        """Fail-closed 恢复执行。
+        """R5：fail-closed 恢复执行，按 required nodes 分类校验。
 
-        仅当调用方提供的每个审批请求都真实属于本计划、映射为已通过（true）
-        且 ApprovalService 复核状态为 APPROVED 时才执行引擎；空映射 /
-        未通过 / 未获批 / 不属于本计划的 request id 一律拒绝执行，
+        required nodes = ``get_requests_by_plan`` 中真实存在于 ``plan.nodes``
+        的节点（请求节点集合 ∩ 计划节点集合，去重）。
+
+        对调用方传入的 ``{request_id: approved}`` 逐项分类：
+          unknown     → request id 在本服务内不存在
+          cross-plan  → request id 属于其它计划
+          extra       → 不属于本计划任何 required 节点
+          duplicate   → 同一 required 节点被多个请求重复覆盖
+          missing     → 某 required 节点缺少获批请求
+          pending / rejected / cancelled → 审批状态未通过
+
+        任一异常分类 → fail-closed：返回 ``success=False`` 且**不执行引擎**；
+        仅当全部 required 节点各有一个获批请求时才执行引擎并返回 ``success=True``。
         绝不因 `all([])==True` 而静默放行。
         """
+        plan_id = plan.plan_id
+
         # 空映射无法证明任何审批通过 → fail-closed 拒绝。
         if not request_id_to_approved:
             return WorkflowRunResult(
-                plan_id=plan.plan_id,
+                plan_id=plan_id,
                 success=False,
                 message="缺少审批请求映射，拒绝执行",
             )
 
-        # 从 ApprovalService 取本计划全部审批请求，用于校验 request id 归属与状态复核。
-        plan_requests = self._approval_service.get_requests_by_plan(plan.plan_id)
+        # 本计划全部审批请求；required nodes = 请求节点 ∩ 本计划节点（去重）。
+        # 仅统计真实存在于 plan.nodes 的节点，避免“额外/bogus 请求”被当作 required 放行。
+        plan_requests = self._approval_service.get_requests_by_plan(plan_id)
         by_id = {req.request_id: req for req in plan_requests}
+        plan_node_ids = {node.node_id for node in plan.nodes}
+        required_node_ids: set[str] = {
+            req.node_id for req in plan_requests if req.node_id in plan_node_ids
+        }
+
+        errors: list[str] = []
+        classifications: dict[str, str] = {}
+        node_to_provided: dict[str, list[str]] = {}
 
         for rid, approved in request_id_to_approved.items():
             req = by_id.get(rid)
             if req is None:
-                return WorkflowRunResult(
-                    plan_id=plan.plan_id,
-                    success=False,
-                    message=f"审批请求不属于本计划：{rid}",
-                )
+                other = self._approval_service.get_pending_request(rid)
+                if other is None:
+                    classifications[rid] = "unknown"
+                    errors.append(f"审批请求不属于本计划（未知）: {rid}")
+                else:
+                    classifications[rid] = "cross-plan"
+                    errors.append(f"审批请求不属于本计划（跨计划）: {rid} plan={other.plan_id}")
+                continue
+
+            node_id = req.node_id
+            if node_id not in required_node_ids:
+                classifications[rid] = "extra"
+                errors.append(f"额外审批请求（非 required 节点）: {rid} -> {node_id}")
+                continue
+
             if not approved:
-                return WorkflowRunResult(
-                    plan_id=plan.plan_id,
-                    success=False,
-                    message=f"未全部通过审批：{request_id_to_approved}",
-                )
+                classifications[rid] = "rejected"
+                errors.append(f"未全部通过审批: {rid}")
+                continue
             # 双保险：ApprovalService 复核状态必须为 APPROVED（fail-closed）。
             if req.status != ApprovalStatus.APPROVED:
-                return WorkflowRunResult(
-                    plan_id=plan.plan_id,
-                    success=False,
-                    message=f"审批请求状态未通过：{rid}={req.status}",
-                )
+                classifications[rid] = req.status.value  # pending/rejected/cancelled
+                errors.append(f"状态未通过: {rid}={req.status.value}")
+                continue
+
+            classifications[rid] = "approved"
+            node_to_provided.setdefault(node_id, []).append(rid)
+
+        # 同一 required 节点被多个请求覆盖 → duplicate。
+        for node_id, rids in node_to_provided.items():
+            if len(rids) > 1:
+                classifications[f"node:{node_id}"] = "duplicate"
+                errors.append(f"重复审批请求: {node_id} -> {rids}")
+
+        # required 节点缺少获批请求 → missing。
+        for node_id in sorted(required_node_ids):
+            if node_id not in node_to_provided:
+                classifications[f"node:{node_id}"] = "missing"
+                errors.append(f"required 节点缺少审批: {node_id}")
+
+        if errors:
+            logger.warning("plan %s resume rejected (fail-closed): %s", plan_id, "; ".join(errors))
+            return WorkflowRunResult(
+                plan_id=plan_id,
+                success=False,
+                message="; ".join(errors),
+            )
 
         return self._engine.run(
             plan=plan,

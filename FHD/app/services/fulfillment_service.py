@@ -15,6 +15,8 @@
 from __future__ import annotations
 
 import logging
+import re
+from contextlib import nullcontext
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
@@ -31,6 +33,25 @@ def _to_decimal(value: Any) -> Decimal:
     if value is None:
         return Decimal("0")
     return Decimal(str(value))
+
+
+_SOURCE_ITEM_RE = re.compile(r"backorder source_item_id=(\d+)\Z")
+
+
+def _parse_source_item_id(remark: str | None) -> int | None:
+    """从子单明细 remark 精确解析来源父单明细 id。
+
+    仅当 remark 与 backorder 来源标记格式完全一致（如 ``backorder source_item_id=10``）
+    时才返回 id；带前后缀或其它文本的 remark（如 ``source_item_id=1x``、
+    ``backorder source_item_id=1 trailing``、``fake-prefix backorder source_item_id=1``）
+    一律返回 None，避免子串误配导致 id 前缀冲突（如 1 与 10/100）。
+    """
+    if not remark:
+        return None
+    match = _SOURCE_ITEM_RE.fullmatch(remark)
+    if match is None:
+        return None
+    return int(match.group(1))
 
 
 def _effective_ordered(item: SalesOrderItem) -> Decimal:
@@ -115,13 +136,16 @@ class FulfillmentService:
         """backorder 子单明细的来源标记（唯一标识父单明细）。"""
         return f"backorder source_item_id={int(item_id)}"
 
-    def _find_child_item(
-        self, child: SalesOrder, item_id: Any
-    ) -> SalesOrderItem | None:
-        """按来源标记在子单中定位对应父单明细的补货明细（替代 child.items[0] 假设）。"""
+    def _find_child_item(self, child: SalesOrder, item_id: Any) -> SalesOrderItem | None:
+        """按来源标记在子单中定位对应父单明细的补货明细。
+
+        直接与 ``_source_marker`` 生成的完整标记做**等值比较**（而非子串包含或
+        前缀解析），避免父单多明细 id 存在数字前缀冲突（如 1 与 10、12、100）时
+        误配到其它明细。
+        """
         marker = self._source_marker(item_id)
         for child_item in child.items:
-            if child_item.remark and marker in child_item.remark:
+            if child_item.remark == marker:
                 return child_item
         return None
 
@@ -213,11 +237,7 @@ class FulfillmentService:
                     "product_id": ci.product_id,
                     "product_name": ci.product_name,
                     "ordered_quantity": float(_to_decimal(ci.ordered_quantity)),
-                    "source_item_id": (
-                        int(ci.remark.split("source_item_id=")[1].strip())
-                        if ci.remark and "source_item_id=" in ci.remark
-                        else None
-                    ),
+                    "source_item_id": _parse_source_item_id(ci.remark),
                 }
                 for ci in child.items
             ]
@@ -316,13 +336,23 @@ class FulfillmentService:
         operator: str | None = None,
         remark: str | None = None,
         idempotency_key: str | None = None,
+        db: Any = None,
     ) -> dict[str, Any]:
-        with get_db() as db:
+        """交付（partial/backorder）。
+
+        可选 ``db``：调用方持有的会话。提供时使用该精确对象做全部查询/库存扣减/
+        backorder 同步，且**不**调用 ``get_db()``，也**不** commit/rollback/close
+        （由调用方负责提交/回滚）；缺省时沿用本模块 ``get_db()`` 自有会话并自行提交。
+        ``InventoryService.deduct_for_order(..., db=db)`` 收到同一会话。
+        """
+        owned = db is None
+        cm = nullcontext(db) if not owned else get_db()
+        with cm as ctx:
             try:
-                order, item, err = self._get_order_and_item(db, order_id, item_id)
+                order, item, err = self._get_order_and_item(ctx, order_id, item_id)
                 if err:
                     return {"success": False, "message": err}
-                if self._idempotency_done(db, item_id, "deliver", idempotency_key):
+                if self._idempotency_done(ctx, item_id, "deliver", idempotency_key):
                     return {
                         "success": True,
                         "message": "交付已处理（幂等）",
@@ -353,7 +383,7 @@ class FulfillmentService:
                     location_id=location_id,
                     operator=operator,
                     remark=self._mark(remark, "deliver", idempotency_key),
-                    db=db,
+                    db=ctx,
                 )
                 if not inv["success"]:
                     return inv
@@ -363,9 +393,13 @@ class FulfillmentService:
                 new_delivered = delivered + q
                 partial = new_delivered < ordered
                 backorder_qty = max(Decimal("0"), ordered - new_delivered)
-                child = self._sync_backorder(db, order, item, backorder_qty)
-                db.commit()
-                db.refresh(item)
+                child = self._sync_backorder(ctx, order, item, backorder_qty)
+                # 调用方会话 autoflush=False：先 flush 明细/backorder/库存事务，
+                # 再 refresh 才不会回读为旧值。
+                ctx.flush()
+                if owned:
+                    ctx.commit()
+                ctx.refresh(item)
                 return {
                     "success": True,
                     "message": "部分交付并触发 backorder" if partial else "交付完成",
@@ -380,7 +414,8 @@ class FulfillmentService:
                     },
                 }
             except RECOVERABLE_ERRORS as e:
-                db.rollback()
+                if owned:
+                    ctx.rollback()
                 logger.error("履行交付失败: %s", e)
                 return {"success": False, "message": str(e)}
 

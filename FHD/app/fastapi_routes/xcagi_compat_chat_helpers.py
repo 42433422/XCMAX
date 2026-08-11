@@ -122,16 +122,12 @@ def _runtime_context_with_authenticated_actor(
     context = dict(runtime_context or {})
     try:
         from app.infrastructure.auth.dependencies import resolve_session_user
-        from app.infrastructure.auth.tenant_context import resolve_tenant_id
 
         user = resolve_session_user(request)
         actor_id = int(getattr(user, "id", 0) or 0)
         if actor_id > 0:
             context["local_user_id"] = actor_id
             context["actor_id"] = actor_id
-        tenant_id = resolve_tenant_id(request)
-        if tenant_id is not None:
-            context["tenant_id"] = int(tenant_id)
     except RECOVERABLE_ERRORS:
         logger.debug("chat session actor resolution skipped", exc_info=True)
     return context
@@ -672,21 +668,44 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     runtime_context = _runtime_context_with_authenticated_actor(request, runtime_context)
     runtime_context = runtime_context_with_tier(runtime_context, ai_tier)
     from app.application import get_ai_chat_app_service
-    from app.application.chat_tool_intent import looks_like_explicit_workflow_tool_intent
-    from app.infrastructure.tenant_scope import tenant_scope
+    from app.application.normal_chat_dispatch import route_normal_mode_message
+    from app.application.workflow.planner import _looks_like_business_db_write
 
     chat_service = get_ai_chat_app_service()
     scoped_user_id = str(body.user_id or "default")
     has_pending_workflow = scoped_user_id in chat_service._pending_workflows
-    if has_pending_workflow or looks_like_explicit_workflow_tool_intent(body.message):
-        with tenant_scope(runtime_context.get("tenant_id")):
-            payload = chat_service.process_chat(
-                user_id=scoped_user_id,
-                message=body.message,
-                context=runtime_context,
-                source=body.source,
-                file_context={},
+    # 生产 NL 路由作为唯一事实源：识别确定的销售到收款闭环写意图时，直接进入真实
+    # AIChatApplicationService.process_chat（在创建 legacy/modstore LLM 客户端或 legacy
+    # AgentRun 之前），使该句无需 LLM 即进入确定性审批。不复制销售解析器，也不放宽
+    # 其它非 unknown 意图到应用服务。
+    _sales_route = route_normal_mode_message(str(body.message or ""))
+    sales_closed_loop_route = (
+        str(_sales_route.get("intent") or "") == "sales_write"
+        and str(_sales_route.get("action") or "") == "execute_closed_loop"
+        and isinstance(_sales_route.get("payload"), dict)
+        and bool(_sales_route.get("payload"))
+    )
+    controlled_entity_named = any(
+        token in str(body.message or "")
+        for token in ("客户", "购买单位", "产品", "商品", "原材料", "物料", "出货", "发货")
+    )
+    if (
+        has_pending_workflow
+        or sales_closed_loop_route
+        or (
+            controlled_entity_named
+            and _looks_like_business_db_write(
+                str(body.message or ""), str(body.message or "").lower()
             )
+        )
+    ):
+        payload = chat_service.process_chat(
+            user_id=scoped_user_id,
+            message=body.message,
+            context=runtime_context,
+            source=body.source,
+            file_context={},
+        )
         response_text = str(payload.get("response") or payload.get("message") or "")
         yield _sse_event_line({"type": "token", "text": response_text})
         yield _sse_event_line({"type": "done", "result": payload})

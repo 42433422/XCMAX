@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from datetime import date
 from decimal import Decimal
 from typing import Any
@@ -57,6 +58,7 @@ def invoice(
     amount: float | Decimal | None = None,
     journal_date: date | None = None,
     description: str | None = None,
+    db: Any = None,
 ) -> dict[str, Any]:
     """为销售订单生成开票平衡凭证；重复开票幂等，不重复生成。
 
@@ -66,9 +68,13 @@ def invoice(
     - 开票状态独立：不校验发货（可先开票后发货）。
     - **原子**：凭证创建与 ``invoice_status`` 更新在**同一调用方事务**内提交，
       任一失败整体回滚，不留半成品业务状态。
+    - 可选 ``db``：调用方持有的会话，提供时使用该精确对象且**不**调用 ``get_db()``，
+      也**不** commit/rollback/close（由调用方负责）；缺省时沿用 ``get_db()`` 自带事务。
     """
-    with get_db() as db:
-        existing = _find_sale_entry(db, order_id)
+    owned = db is None
+    cm = nullcontext(db) if not owned else get_db()
+    with cm as ctx:
+        existing = _find_sale_entry(ctx, order_id)
         if existing is not None:
             return {
                 "success": True,
@@ -78,7 +84,7 @@ def invoice(
                 "data": existing.to_dict(),
             }
 
-        order = _get_order(db, order_id)
+        order = _get_order(ctx, order_id)
         if order is None:
             return {"success": False, "message": f"销售订单不存在: id={order_id}"}
 
@@ -89,7 +95,7 @@ def invoice(
             amount=amount if amount is not None else (order.total_amount or Decimal("0")),
             journal_date=journal_date,
             description=description,
-            db=db,
+            db=ctx,
         )
         if result["success"]:
             order.invoice_status = "invoiced"

@@ -45,12 +45,6 @@ def _registered_router_customers(
     unit_name = str(
         params.get("unit_name") or params.get("customer_name") or params.get("name") or ""
     ).strip()
-    if action in {"create", "ensure_exists", "upsert"}:
-        from app.services.business_db_customer_mutations import execute_customer_create_like
-
-        return execute_customer_create_like(
-            action, params, svc=svc, resolve_targets=_business_db_target_candidates
-        )
     if action == "query":
         keyword = str(params.get("keyword") or unit_name or "").strip()
         result = svc.get_all(keyword=keyword, page=1, per_page=20)
@@ -59,6 +53,35 @@ def _registered_router_customers(
             "data": result.get("data", []),
             "raw": result,
         }
+
+    if action == "ensure_exists":
+        if not unit_name:
+            return {"success": False, "message": "缺少 unit_name"}
+        matched = svc.match_purchase_unit(unit_name)
+        if matched:
+            return {"success": True, "exists": True, "unit_name": matched.unit_name}
+        create_result = svc.create({"customer_name": unit_name})
+        if create_result.get("success"):
+            return {"success": True, "exists": False, "created": True, "unit_name": unit_name}
+        msg = str(create_result.get("message") or "")
+        if "已存在" in msg:
+            return {"success": True, "exists": True, "unit_name": unit_name}
+        return {"success": False, "message": msg or "创建单位失败"}
+
+    if action == "create":
+        if not unit_name:
+            return {"success": False, "message": "缺少 unit_name"}
+        create_result = svc.create(
+            {
+                "customer_name": unit_name,
+                "contact_person": params.get("contact_person", ""),
+                "contact_phone": params.get("contact_phone", ""),
+                "contact_address": params.get("contact_address", params.get("address", "")),
+            }
+        )
+        if create_result.get("success"):
+            return {"success": True, "created": True, "data": create_result.get("data", {})}
+        return {"success": False, "message": create_result.get("message") or "创建失败"}
 
     if action == "update":
         customer_id = int(params.get("id") or params.get("customer_id") or 0)
@@ -547,16 +570,28 @@ def _registered_router_sales(
     if action == "confirm":
         return svc.confirm(int(params.get("order_id")))
     if action == "deliver":
-        return svc.deliver(int(params.get("order_id")))
+        return svc.deliver(
+            int(params.get("order_id")),
+            int(params.get("item_id")),
+            float(params.get("quantity")),
+            warehouse_id=int(params.get("warehouse_id")),
+            idempotency_key=params.get("idempotency_key"),
+        )
     if action == "invoice":
         return svc.invoice(int(params.get("order_id")))
+    if action == "credit_note":
+        return svc.credit_note(int(params.get("order_id")))
     if action == "payment":
         amount = params.get("amount")
         return svc.payment(
             int(params.get("order_id")), float(amount) if amount is not None else None
         )
+    if action == "refund":
+        return svc.refund(int(params.get("allocation_id")))
     if action == "cancel":
         return svc.cancel(int(params.get("order_id")))
+    if action == "execute_closed_loop":
+        return svc.execute_closed_loop(dict(params["payload"]))
     return {"success": False, "message": f"未注册的 sales 动作: {action}"}
 
 
@@ -2114,8 +2149,11 @@ def _registered_router_business_db(
 
     if entity == "customers":
         if operation in ("create", "ensure_exists", "upsert"):
+            router_action = (
+                "ensure_exists" if operation in ("ensure_exists", "upsert") else "create"
+            )
             return _registered_router_customers(
-                operation, payload, runtime_context, profile, user_message
+                router_action, payload, runtime_context, profile, user_message
             )
         if operation == "update":
             fields = _business_db_update_fields(payload)

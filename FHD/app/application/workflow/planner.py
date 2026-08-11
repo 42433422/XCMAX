@@ -9,12 +9,6 @@ from typing import Any, cast
 
 import httpx
 
-from app.application.chat_tool_intent import (
-    attach_explicit_tenant_id as _attach_explicit_tenant_id,
-)
-from app.application.chat_tool_intent import (
-    looks_like_business_db_write as _looks_like_business_db_write,
-)
 from app.services import get_ai_conversation_service
 from app.services.tools_workflow_registered import execute_registered_workflow_tool
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -28,6 +22,25 @@ logger = logging.getLogger(__name__)
 
 # 同步规划 LLM 复用 Client，减轻短时多次 DeepSeek 连接失败
 _planner_http_client: httpx.Client | None = None
+
+_DB_WRITE_KEYWORDS = frozenset(
+    {
+        "新增",
+        "添加",
+        "创建",
+        "写入",
+        "加入数据库",
+        "添加到数据库",
+        "保存到数据库",
+        "入库",
+        "修改",
+        "更新",
+        "改为",
+        "改成",
+        "删除",
+        "移除",
+    }
+)
 
 
 def _clean_db_slot_value(value: str) -> str:
@@ -64,6 +77,18 @@ def _extract_named_slot(message: str, patterns: tuple[str, ...]) -> str:
     if quoted:
         return _clean_db_slot_value(quoted.group(1))
     return ""
+
+
+def _looks_like_business_db_write(message: str, lower: str) -> bool:
+    if not any(k in message for k in _DB_WRITE_KEYWORDS) and not any(
+        k in lower for k in ("add", "create", "insert", "upsert", "update", "delete", "remove")
+    ):
+        return False
+    return (
+        any(k in message for k in ("数据库", "入库", "写库"))
+        or "db" in lower
+        or "database" in lower
+    )
 
 
 def _infer_business_db_entity(message: str) -> str:
@@ -208,11 +233,7 @@ def _extract_business_db_write_node(message: str) -> WorkflowNode | None:
             node_id=f"{operation}_business_{entity.rstrip('s')}",
             tool_id="business_db",
             action="write",
-            params={
-                "entity": entity,
-                "operation": operation,
-                "payload": _attach_explicit_tenant_id(payload, message),
-            },
+            params={"entity": entity, "operation": operation, "payload": payload},
             risk="high" if operation == "delete" else "medium",
             description=f"{operation} {entity}",
             idempotent=False,
@@ -228,8 +249,6 @@ def _extract_business_db_write_node(message: str) -> WorkflowNode | None:
         )
         if not unit_name:
             return None
-        payload = {"unit_name": unit_name, "customer_name": unit_name}
-        payload.update(_changes_for_business_db_message(entity, message))
         return WorkflowNode(
             node_id="write_business_customer",
             tool_id="business_db",
@@ -237,7 +256,7 @@ def _extract_business_db_write_node(message: str) -> WorkflowNode | None:
             params={
                 "entity": "customers",
                 "operation": "upsert",
-                "payload": _attach_explicit_tenant_id(payload, message),
+                "payload": {"unit_name": unit_name, "customer_name": unit_name},
             },
             risk="medium",
             description=f"写入客户 {unit_name}",
@@ -274,11 +293,7 @@ def _extract_business_db_write_node(message: str) -> WorkflowNode | None:
             node_id="write_business_product",
             tool_id="business_db",
             action="write",
-            params={
-                "entity": "products",
-                "operation": "create",
-                "payload": _attach_explicit_tenant_id(payload, message),
-            },
+            params={"entity": "products", "operation": "create", "payload": payload},
             risk="medium",
             description=f"写入产品 {product_name}",
             idempotent=False,
@@ -305,11 +320,7 @@ def _extract_business_db_write_node(message: str) -> WorkflowNode | None:
             node_id="write_business_material",
             tool_id="business_db",
             action="write",
-            params={
-                "entity": "materials",
-                "operation": "create",
-                "payload": _attach_explicit_tenant_id(payload, message),
-            },
+            params={"entity": "materials", "operation": "create", "payload": payload},
             risk="medium",
             description=f"写入原材料 {name}",
             idempotent=False,
@@ -342,9 +353,7 @@ def _extract_business_db_write_node(message: str) -> WorkflowNode | None:
             params={
                 "entity": "shipment_records",
                 "operation": "create",
-                "payload": _attach_explicit_tenant_id(
-                    {"unit_name": unit_name, "products": [item]}, message
-                ),
+                "payload": {"unit_name": unit_name, "products": [item]},
             },
             risk="medium",
             description=f"为 {unit_name} 创建 {product_name} 出货记录",
@@ -1454,6 +1463,34 @@ class LLMWorkflowPlanner:
         profile = resolve_tool_execution_profile(context)
         registry_for_plan = _filter_tool_registry_for_profile(tool_registry, profile)
 
+        # 确定性销售到收款闭环写意图：以生产 NL 路由为唯一事实源，在用户记忆 RAG、
+        # ReAct/CoT 或任何 LLM 调用之前直接返回生产 fallback 计划（不二次解析、不造节点）。
+        # 仅在 sales 工具经画像过滤后仍可用时进入；否则保持原有安全行为。
+        from app.application.normal_chat_dispatch import route_normal_mode_message
+
+        _route = route_normal_mode_message(str(message or ""))
+        if (
+            "sales" in registry_for_plan
+            and str(_route.get("intent") or "") == "sales_write"
+            and str(_route.get("action") or "") == "execute_closed_loop"
+            and isinstance(_route.get("payload"), dict)
+            and bool(_route.get("payload"))
+        ):
+            from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
+
+            return finalize_planned_graph(
+                self._decorate_plan(
+                    self._fallback_plan(plan_id, message, registry_for_plan),
+                    message,
+                    registry_for_plan,
+                ),
+                plan_id=plan_id,
+                context=context,
+                validate=validate_plan_graph,
+                fallback_factory=lambda: self._fallback_plan(plan_id, message, registry_for_plan),
+                warn=logger.warning,
+            )
+
         # 专业模式 ReAct/CoT 前：拉取用户记忆 RAG 命中摘要，注入到 context（只放摘要文本）。
         # 目的：让规划器在“选择工具/补全关键 params”时更贴近用户习惯，但避免把全量历史注入 prompt。
         try:
@@ -1487,17 +1524,9 @@ class LLMWorkflowPlanner:
 
         from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 
-        planned = None
-        if _looks_like_business_db_write(message, message.lower()) and (
-            "business_db" in registry_for_plan
-        ):
-            deterministic = self._fallback_plan(plan_id, message, registry_for_plan)
-            if deterministic.intent == "business_db_write" and deterministic.nodes:
-                planned = deterministic
-        if planned is None:
-            planned = self._plan_with_react_multiagent(
-                plan_id, user_id, message, registry_for_plan, context
-            )
+        planned = self._plan_with_react_multiagent(
+            plan_id, user_id, message, registry_for_plan, context
+        )
         return finalize_planned_graph(
             self._decorate_plan(planned, message, registry_for_plan),
             plan_id=plan_id,
@@ -2220,6 +2249,8 @@ class LLMWorkflowPlanner:
         message: str,
         tool_registry: dict[str, Any],
     ) -> PlanGraph:
+        from app.application.normal_chat_dispatch import route_normal_mode_message
+
         lower = (message or "").lower()
         nodes: list[WorkflowNode] = []
         todo = ["理解用户目标", "执行可用工具", "输出执行结果"]
@@ -2280,6 +2311,33 @@ class LLMWorkflowPlanner:
                 intent = "business_db_write"
                 todo = ["识别业务实体与写入字段", "通过受控业务服务写入数据库", "返回写入结果"]
                 nodes.append(node)
+
+        # 销售到收款闭环写意图：以生产 NL 路由为唯一事实源（不在此处二次解析），
+        # 产出单个确定性的高风险复合节点 sales.execute_closed_loop，并原样携带路由写载荷。
+        # 该分支仅在路由判定 intent==sales_write && action==execute_closed_loop 且载荷非空、
+        # 且 sales 工具存在于注册表时进入。不注册/不执行复合动作，规划到此为止。
+        route = route_normal_mode_message(message)
+        if (
+            not nodes
+            and "sales" in tool_registry
+            and str(route.get("intent") or "") == "sales_write"
+            and str(route.get("action") or "") == "execute_closed_loop"
+            and isinstance(route.get("payload"), dict)
+            and bool(route.get("payload"))
+        ):
+            intent = "sales_write"
+            todo = ["解析销售到收款闭环写载荷", "高风险审批后执行销售闭环", "返回执行结果"]
+            nodes.append(
+                WorkflowNode(
+                    node_id="sales_execute_closed_loop",
+                    tool_id="sales",
+                    action="execute_closed_loop",
+                    params={"payload": route["payload"]},
+                    risk="high",
+                    idempotent=True,
+                    description="执行销售到收款闭环",
+                )
+            )
 
         if not nodes and (
             any(k in lower for k in ("db", "database"))
