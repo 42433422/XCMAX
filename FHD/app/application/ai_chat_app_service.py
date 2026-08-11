@@ -2217,7 +2217,7 @@ class AIChatApplicationService(
         state_updates: list[dict[str, Any]] = []
 
         # 复用注入/组合根解析的检查点端口，避免在此直接 new 基础设施实现。
-        checkpointer = self.workflow_checkpointer
+        checkpointer = getattr(self, "workflow_checkpointer", None)
 
         # 运行前落库计划（running），失败亦不阻断；运行后更新终态。
         self._persist_plan_state(plan, runtime_context, status="running")

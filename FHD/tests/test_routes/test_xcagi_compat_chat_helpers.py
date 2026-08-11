@@ -43,6 +43,7 @@ def _make_real_app_service():
     - 审批 DB 持久化（persist_request_to_db / persist_agent_run_link）→ no-op/in-memory。
     """
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+    from app.application.workflow.approval_service import ApprovalService
 
     def _dispatch_bomb(*args, **kwargs):  # noqa: ANN002, ANN003
         raise AssertionError("workflow 分发器不得在获批前被调用")
@@ -65,6 +66,8 @@ def _make_real_app_service():
             workflow_runtime=real_engine,
             workflow_checkpointer=real_checkpointer,
         )
+    # 使用独立的真实审批服务，避免其它测试对进程级单例安装的 mock 污染审批判定。
+    svc.approval_service = ApprovalService()
     svc.approval_service._persist_request_to_db = lambda req, **k: {  # noqa: ARG005
         "request_no": req.request_id
     }

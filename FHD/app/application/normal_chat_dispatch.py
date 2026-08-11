@@ -8,6 +8,7 @@ import logging
 import re
 from typing import Any
 
+from app.application.chat_tool_intent import looks_like_explicit_workflow_tool_intent
 from app.utils.ai_helpers import format_money, safe_float
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -636,13 +637,13 @@ def try_normal_slot_read_payload(
 ) -> dict[str, Any] | None:
     """普通版只读业务：命中则走确定性 Agent 工具（无 LLM 也可 tool-call）。
 
-    客户类问题调用 customers.query（ERP list），写入 legacy_tool_records，
-    避免 LLM 编造「没有数据」，也避免正则把问句当客户名。
-    StreamingResponse 迭代时 IndustryContextMiddleware 可能已 reset 请求 ContextVar，
-    因此这里显式恢复 request + tenant，避免租户 fail-closed 读空。
+    客户类问题调用 customers.query 并写入 legacy_tool_records，避免 LLM 编造或误提关键词。
+    StreamingResponse 迭代时显式恢复 request + tenant，避免 ContextVar 重置后租户读空。
     """
     text = str(message or "").strip()
     if not text:
+        return None
+    if looks_like_explicit_workflow_tool_intent(text):
         return None
 
     req_token = None
