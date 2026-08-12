@@ -29,4 +29,38 @@ describe('TaskWorkspaceContextBar', () => {
     expect(wrapper.emitted('control')).toEqual([['approve']])
     expect(wrapper.get('[aria-label="客户B销售开票工作区统一进度"]').attributes('aria-valuenow')).toBe('45')
   })
+
+  it('derives resume, retry and cancel controls from canonical status fallbacks', async () => {
+    const paused = mount(TaskWorkspaceContextBar, {
+      props: { title: '暂停任务', status: 'paused' },
+    })
+    expect(paused.text()).toContain('已暂停')
+    expect(paused.text()).toContain('恢复')
+    expect(paused.text()).toContain('取消')
+    expect(paused.findAll('.chat-workspace-context__actions button').map((button) => button.text())).toEqual(['恢复', '取消'])
+    await paused.findAll('.chat-workspace-context__actions button')[0].trigger('click')
+    expect(paused.emitted('control')).toEqual([['resume']])
+
+    const failed = mount(TaskWorkspaceContextBar, {
+      props: { title: '失败任务', status: 'failed' },
+    })
+    expect(failed.text()).toContain('重试')
+    expect(failed.findAll('.chat-workspace-context__actions button').map((button) => button.text())).toEqual(['重试'])
+    await failed.findAll('.chat-workspace-context__actions button')[0].trigger('click')
+    expect(failed.emitted('control')).toEqual([['retry']])
+  })
+
+  it('honors explicit disabled capabilities instead of status fallbacks', () => {
+    const wrapper = mount(TaskWorkspaceContextBar, {
+      props: {
+        title: '已锁定工作区',
+        status: 'waiting_user',
+        capabilities: { approve: false, pause: false, cancel: false, resume: false, retry: false },
+      },
+    })
+
+    expect(wrapper.find('.chat-workspace-context__actions').exists()).toBe(false)
+    expect(wrapper.find('.chat-workspace-context__signals .is-approval').exists()).toBe(false)
+    expect(wrapper.find('.chat-workspace-context__signals .is-unread').exists()).toBe(false)
+  })
 })

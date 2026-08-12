@@ -129,4 +129,38 @@ describe('useRoutedTaskWorkspace', () => {
     expect(workspace.visibleActiveTaskId.value).toBe('local-2')
     scope.stop()
   })
+
+  it('builds a safe workspace header when only the routed task id is available', async () => {
+    const scope = effectScope()
+    const loadSession = vi.fn(async () => undefined)
+    const props = reactive<{ workspaceTaskId?: string }>({})
+    const workspace = scope.run(() => useRoutedTaskWorkspace({
+      props,
+      currentSessionId: ref('normal-chat'),
+      taskList: ref([]),
+      filteredTaskList: ref([]),
+      activeTaskId: ref(''),
+      taskSummaries: ref([]),
+      loadSession,
+    }))!
+    props.workspaceTaskId = 'server-only-task'
+    await nextTick()
+
+    expect(loadSession).toHaveBeenCalledWith('server-only-task')
+    expect(apiMock.markTaskRead).toHaveBeenCalledWith('server-only-task')
+    expect(workspace.activeWorkspaceTask.value).toBeNull()
+    expect(workspace.activeWorkspaceSummary.value).toBeNull()
+    expect(workspace.workspaceHeader.value).toEqual({
+      title: 'server-only-task',
+      status: '',
+      stage: '未知',
+      progress: undefined,
+      unreadCount: 0,
+      approvalRequired: false,
+      attempt: 1,
+      runCount: 1,
+      capabilities: {},
+    })
+    scope.stop()
+  })
 })
