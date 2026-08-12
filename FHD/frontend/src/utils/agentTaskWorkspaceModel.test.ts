@@ -4,6 +4,7 @@ import {
   activeRunIdOfTask,
   conversationIdOfTask,
   groupAgentRunsIntoTasks,
+  taskSummariesToTaskItems,
 } from './agentTaskWorkspaceModel'
 
 function run(overrides: Partial<AgentRun> = {}): AgentRun {
@@ -198,5 +199,36 @@ describe('groupAgentRunsIntoTasks', () => {
     expect(task.progress).toBe(75)
     expect(task.payload?.attempt).toBe(1)
     expect(task.payload?.deliveryEvidence).toEqual([{ kind: 'commit' }, { kind: 'test' }])
+  })
+
+  it('shows a durable cooperative control request until the worker applies it', () => {
+    const active = run({ status: 'running' })
+    const [task] = taskSummariesToTaskItems([{
+      task_id: 'conversation-sales',
+      user_id: '7',
+      title: '销售核对',
+      source: 'agent',
+      task_type: 'agent',
+      status: 'running',
+      attempt: 1,
+      run_count: 1,
+      active_run_id: active.run_id,
+      runs: [active],
+      active_run: active,
+      control_command: {
+        command_id: 'taskcmd-1',
+        task_id: 'conversation-sales',
+        run_id: active.run_id,
+        action: 'pause',
+        status: 'requested',
+      },
+    }])
+
+    expect(task.status).toBe('running')
+    expect(task.stage).toBe('正在请求暂停')
+    expect(task.payload?.controlCommand).toMatchObject({
+      command_id: 'taskcmd-1',
+      status: 'requested',
+    })
   })
 })

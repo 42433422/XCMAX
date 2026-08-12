@@ -18,6 +18,7 @@ from app.application.agent_orchestrator.approval_grant import (
     issue_approval_grant,
 )
 from app.application.agent_orchestrator.run_control import run_operation_lock
+from app.application.agent_orchestrator.task_models import task_from_run, tenant_id_of_run
 from app.application.agent_orchestrator.unified_task import (
     UnifiedTaskConflictError,
     UnifiedTaskError,
@@ -93,6 +94,38 @@ def _run_reference_response(run: Any) -> dict[str, Any]:
     return _success({"run_id": str(run.run_id), "status": str(run.status), "task_id": task_id})
 
 
+def _task_envelope(
+    orchestrator: AgentOrchestrator,
+    task: Any,
+    *,
+    include_runs: bool = True,
+) -> dict[str, Any]:
+    if include_runs:
+        runs = [
+            run
+            for run in orchestrator.list_task_runs(user_id=task.user_id, task_id=task.task_id)
+            if tenant_id_of_run(run) == task.tenant_id
+        ]
+        active = next((run for run in runs if run.run_id == task.active_run_id), None)
+        active = active or (runs[-1] if runs else None)
+    else:
+        active = orchestrator.get_run(task.active_run_id) if task.active_run_id else None
+        if (
+            active is None
+            or active.user_id != task.user_id
+            or tenant_id_of_run(active) != task.tenant_id
+        ):
+            active = None
+        runs = []
+    payload = task.to_dict()
+    payload["runs"] = [_public_run_dict(run) for run in runs]
+    payload["active_run"] = _public_run_dict(active) if active is not None else None
+    payload["capabilities"] = task_capabilities(active) if active is not None else {}
+    command = orchestrator.latest_task_control(active.run_id) if active is not None else None
+    payload["control_command"] = command.to_dict() if command is not None else None
+    return payload
+
+
 def _owned_run(
     orchestrator: AgentOrchestrator,
     run_id: str,
@@ -123,12 +156,15 @@ def create_agent_run(
             status_code=400,
         )
 
-    runtime_context = data.get("runtime_context") or {}
-    if not isinstance(runtime_context, dict):
+    runtime_context_raw = data.get("runtime_context") or {}
+    if not isinstance(runtime_context_raw, dict):
         return JSONResponse(
             {"success": False, "message": "runtime_context 必须是对象"},
             status_code=400,
         )
+    runtime_context = dict(runtime_context_raw)
+    if principal.tenant_id:
+        runtime_context["tenant_id"] = principal.tenant_id
 
     try:
         run = AgentOrchestrator().start_run(
@@ -157,6 +193,44 @@ def list_agent_runs(
         return _internal_error_response("list agent runs")
 
 
+@router.get("/api/agent/tasks", response_model=None)
+def list_agent_tasks(
+    limit: int = Query(default=50, ge=1, le=200),
+    include_archived: bool = Query(default=False),
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any] | JSONResponse:
+    try:
+        orchestrator = AgentOrchestrator()
+        # Lazy, non-destructive backfill keeps pre-migration AgentRun history
+        # visible without mutating the historical run payloads.
+        for run in orchestrator.list_runs(user_id=principal.user_id, limit=limit):
+            if principal.tenant_id and tenant_id_of_run(run) != principal.tenant_id:
+                continue
+            context = run.metadata.get("task_context")
+            task_id = str(context.get("task_id") or "") if isinstance(context, dict) else ""
+            if not task_id:
+                continue
+            existing = orchestrator.get_task(
+                user_id=principal.user_id,
+                task_id=task_id,
+                tenant_id=principal.tenant_id or None,
+            )
+            if existing is None:
+                orchestrator.save_task(task_from_run(run))
+        tasks = orchestrator.list_tasks(
+            user_id=principal.user_id,
+            tenant_id=principal.tenant_id or None,
+            limit=limit,
+            include_archived=include_archived,
+        )
+        return _success(
+            [_task_envelope(orchestrator, task, include_runs=False) for task in tasks],
+            count=len(tasks),
+        )
+    except RECOVERABLE_ERRORS:
+        return _internal_error_response("list agent tasks")
+
+
 @router.post("/api/agent/tasks", response_model=None)
 def create_agent_task(
     body: dict[str, Any] = Body(default_factory=dict),
@@ -164,17 +238,23 @@ def create_agent_task(
 ) -> dict[str, Any] | JSONResponse:
     data = body or {}
     params = data.get("params") or {}
-    runtime_context = data.get("runtime_context") or {}
-    if not isinstance(params, dict) or not isinstance(runtime_context, dict):
+    runtime_context_raw = data.get("runtime_context") or {}
+    if not isinstance(params, dict) or not isinstance(runtime_context_raw, dict):
         return JSONResponse(
             {"success": False, "message": "params 与 runtime_context 必须是对象"},
             status_code=400,
         )
+    runtime_context = dict(runtime_context_raw)
     try:
+        if principal.tenant_id:
+            runtime_context["tenant_id"] = principal.tenant_id
         task_id = str(data.get("task_id") or "").strip()
-        if not task_id or len(task_id) > 160:
+        if not task_id or len(task_id) > 160 or "/" in task_id:
             return JSONResponse(
-                {"success": False, "message": "task_id 不能为空且长度不能超过 160"},
+                {
+                    "success": False,
+                    "message": "task_id 不能为空、不能含 /，且长度不能超过 160",
+                },
                 status_code=400,
             )
         with run_operation_lock(f"task:{principal.user_id}:{task_id}"):
@@ -208,6 +288,60 @@ def create_agent_task(
         return _internal_error_response("create agent task")
 
 
+@router.get("/api/agent/tasks/{task_id}", response_model=None)
+def get_agent_task(
+    task_id: str,
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any] | JSONResponse:
+    try:
+        orchestrator = AgentOrchestrator()
+        task = orchestrator.get_task(
+            user_id=principal.user_id,
+            task_id=task_id,
+            tenant_id=principal.tenant_id or None,
+        )
+        if task is None:
+            return JSONResponse(
+                {"success": False, "message": "任务不存在"},
+                status_code=404,
+            )
+        return _success(_task_envelope(orchestrator, task))
+    except RECOVERABLE_ERRORS:
+        return _internal_error_response("get agent task")
+
+
+@router.post("/api/agent/tasks/{task_id}/archive", response_model=None)
+def archive_agent_task(
+    task_id: str,
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any] | JSONResponse:
+    try:
+        orchestrator = AgentOrchestrator()
+        owned = orchestrator.get_task(
+            user_id=principal.user_id,
+            task_id=task_id,
+            tenant_id=principal.tenant_id or None,
+        )
+        if owned is None:
+            return JSONResponse(
+                {"success": False, "message": "任务不存在"},
+                status_code=404,
+            )
+        if owned.status not in {"completed", "failed", "cancelled"}:
+            return JSONResponse(
+                {"success": False, "message": "只有终态任务可以归档"},
+                status_code=409,
+            )
+        archived = orchestrator.archive_task(
+            user_id=principal.user_id,
+            task_id=task_id,
+            tenant_id=principal.tenant_id or None,
+        )
+        return _success(archived.to_dict() if archived is not None else owned.to_dict())
+    except RECOVERABLE_ERRORS:
+        return _internal_error_response("archive agent task")
+
+
 @router.post("/api/agent/runs/observed-tool", response_model=None)
 def record_observed_tool_run(
     body: dict[str, Any] = Body(default_factory=dict),
@@ -220,17 +354,20 @@ def record_observed_tool_run(
     action = str(data.get("action") or "").strip()
     params = data.get("params") or {}
     output = data.get("output") or {}
-    runtime_context = data.get("runtime_context") or {}
+    runtime_context_raw = data.get("runtime_context") or {}
     if not message or not isinstance(params, dict) or not isinstance(output, dict):
         return JSONResponse(
             {"success": False, "message": "message、params 与 output 格式无效"},
             status_code=400,
         )
-    if not isinstance(runtime_context, dict):
+    if not isinstance(runtime_context_raw, dict):
         return JSONResponse(
             {"success": False, "message": "runtime_context 必须是对象"},
             status_code=400,
         )
+    runtime_context = dict(runtime_context_raw)
+    if principal.tenant_id:
+        runtime_context["tenant_id"] = principal.tenant_id
 
     from app.application.agent_orchestrator.observed_tool_trace import (
         create_observed_tool_trace_run,
@@ -267,10 +404,15 @@ def get_agent_run(
     principal: AgentPrincipal = Depends(require_agent_principal),
 ) -> dict[str, Any] | JSONResponse:
     try:
-        run, error = _owned_run(AgentOrchestrator(), run_id, principal)
+        orchestrator = AgentOrchestrator()
+        run, error = _owned_run(orchestrator, run_id, principal)
         if error is not None:
             return error
-        return _run_response(run, principal=principal)
+        response = _run_response(run, principal=principal)
+        command = orchestrator.latest_task_control(run_id)
+        if command is not None:
+            response["control_command"] = command.to_dict()
+        return response
     except RECOVERABLE_ERRORS:
         return _internal_error_response("get agent run")
 
@@ -328,7 +470,7 @@ def _control_agent_run(
     principal: AgentPrincipal,
     runtime_context: dict[str, Any] | None = None,
 ) -> dict[str, Any] | JSONResponse:
-    with run_operation_lock(run_id):
+    def apply_control() -> dict[str, Any] | JSONResponse:
         orchestrator = AgentOrchestrator()
         _, error = _owned_run(orchestrator, run_id, principal)
         if error is not None:
@@ -343,7 +485,18 @@ def _control_agent_run(
                 requested_by=principal.user_id,
                 runtime_context=runtime_context,
             )
-        return _run_response(run, principal=principal)
+        response = _run_response(run, principal=principal)
+        command = orchestrator.latest_task_control(run_id)
+        if command is not None:
+            response["control_command"] = command.to_dict()
+        return response
+
+    # Pause/cancel must be able to persist their command while another worker is
+    # executing the run. Resume remains serialized with approval/retry mutations.
+    if action in {"pause", "cancel"}:
+        return apply_control()
+    with run_operation_lock(run_id):
+        return apply_control()
 
 
 @router.post("/api/agent/runs/{run_id}/pause", response_model=None)

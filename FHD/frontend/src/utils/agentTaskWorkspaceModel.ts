@@ -3,6 +3,7 @@ import type {
   AgentRun,
   AgentRunEvent,
   AgentRunStep,
+  AgentTaskSummary,
   AgentToolCall,
 } from '@/api/agentRuns'
 import type { TaskItem, TaskStatus } from '@/composables/useChatPersistence'
@@ -187,6 +188,67 @@ export function groupAgentRunsIntoTasks(runs: AgentRun[]): TaskItem[] {
         finalOutput: current.final_output || {},
         capabilities: capabilitiesOf(current),
         rawRunStatus: current.status,
+      },
+    }
+  }).sort((left, right) => right.updatedAt - left.updatedAt)
+}
+
+export function taskSummariesToTaskItems(tasks: AgentTaskSummary[]): TaskItem[] {
+  return asArray<AgentTaskSummary>(tasks).map((summary) => {
+    const runs = asArray<AgentRun>(summary.runs)
+    const activeRun = summary.active_run
+    const base = groupAgentRunsIntoTasks(runs.length ? runs : (activeRun ? [activeRun] : []))[0]
+    const rawStatus = asString(summary.status || activeRun?.status || 'queued')
+    const controlCommand = summary.control_command
+    const pendingControl = controlCommand?.status === 'requested'
+      ? controlCommand.action
+      : ''
+    const taskStage = pendingControl === 'pause'
+      ? '正在请求暂停'
+      : pendingControl === 'cancel'
+        ? '正在请求取消'
+        : stageOf(rawStatus)
+    const updatedAt = timestamp(summary.updated_at || activeRun?.updated_at) || Date.now()
+    if (!base) {
+      return {
+        id: `agent_task_${summary.task_id}`,
+        type: 'agent_task',
+        source: 'agent' as const,
+        title: asString(summary.title || summary.task_id),
+        status: displayStatus(rawStatus),
+        stage: taskStage,
+        summary: `${Number(summary.run_count || 0)} 次运行`,
+        startedAt: timestamp(summary.created_at) || updatedAt,
+        updatedAt,
+        payload: {
+          serverBacked: true,
+          taskId: summary.task_id,
+          activeRunId: summary.active_run_id,
+          runCount: Number(summary.run_count || 0),
+          attentionState: summary.attention_state || '',
+          controlCommand,
+          capabilities: summary.capabilities || {},
+          rawRunStatus: rawStatus,
+        },
+      }
+    }
+    return {
+      ...base,
+      id: `agent_task_${summary.task_id}`,
+      title: asString(summary.title || base.title),
+      status: displayStatus(rawStatus),
+      stage: taskStage,
+      updatedAt,
+      payload: {
+        ...(base.payload || {}),
+        serverBacked: true,
+        taskId: summary.task_id,
+        activeRunId: summary.active_run_id || activeRun?.run_id,
+        runCount: Number(summary.run_count || runs.length),
+        attentionState: summary.attention_state || '',
+        controlCommand,
+        capabilities: summary.capabilities || asRecord(base.payload).capabilities || {},
+        rawRunStatus: rawStatus,
       },
     }
   }).sort((left, right) => right.updatedAt - left.updatedAt)

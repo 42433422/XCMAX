@@ -5,7 +5,7 @@ from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.application.agent_orchestrator import get_agent_run_repository
+from app.application.agent_orchestrator import AgentOrchestrator, get_agent_run_repository
 from app.application.agent_orchestrator.approval_grant import (
     clear_consumed_approval_grants_for_tests,
 )
@@ -15,11 +15,14 @@ from app.fastapi_routes.domains.agent.routes import router
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
 
 
-def _client(user_id: str | None = "u1") -> TestClient:
+def _client(user_id: str | None = "u1", *, tenant_id: str = "") -> TestClient:
     app = FastAPI()
     app.include_router(router)
     if user_id is not None:
-        app.dependency_overrides[require_agent_principal] = lambda: AgentPrincipal(user_id=user_id)
+        app.dependency_overrides[require_agent_principal] = lambda: AgentPrincipal(
+            user_id=user_id,
+            tenant_id=tenant_id,
+        )
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -597,3 +600,101 @@ def test_unified_low_risk_task_cancel_and_retry_preserve_exact_approval() -> Non
     assert retried_run.metadata["task_context"]["task_id"] == body["task_id"]
     assert retried_run.metadata["task_context"]["attempt"] == 2
     execute.assert_not_called()
+
+
+def test_task_ssot_lists_details_and_archives_per_tenant() -> None:
+    repository = get_agent_run_repository()
+    repository.clear()
+    clear_consumed_approval_grants_for_tests()
+    client = _client("task-owner", tenant_id="tenant-a")
+    body = {
+        "task_id": "task-monthly-report",
+        "title": "生成月度经营报告",
+        "tool_id": "customers",
+        "action": "query",
+        "params": {"keyword": "客户甲"},
+    }
+
+    created = client.post("/api/agent/tasks", json=body)
+    assert created.status_code == 202
+    run = created.json()["data"]
+
+    listing = client.get("/api/agent/tasks")
+    assert listing.status_code == 200
+    assert listing.json()["count"] == 1
+    task = listing.json()["data"][0]
+    assert task["task_id"] == body["task_id"]
+    assert task["tenant_id"] == "tenant-a"
+    assert task["attention_state"] == "approval_required"
+    assert task["active_run_id"] == run["run_id"]
+    assert task["active_run"]["run_id"] == run["run_id"]
+    assert task["capabilities"]["approve"] is True
+
+    detail = client.get(f"/api/agent/tasks/{body['task_id']}")
+    assert detail.status_code == 200
+    assert detail.json()["data"]["run_count"] == 1
+    assert len(detail.json()["data"]["runs"]) == 1
+
+    assert client.post(f"/api/agent/tasks/{body['task_id']}/archive").status_code == 409
+
+    cancelled = client.post(f"/api/agent/runs/{run['run_id']}/cancel")
+    assert cancelled.status_code == 200
+    archived = client.post(f"/api/agent/tasks/{body['task_id']}/archive")
+    assert archived.status_code == 200
+    assert archived.json()["data"]["archived_at"]
+    assert client.get("/api/agent/tasks").json()["count"] == 0
+    archived_listing = client.get(
+        "/api/agent/tasks",
+        params={"include_archived": True},
+    ).json()
+    assert archived_listing["count"] == 1
+
+    tenant_b_client = _client("task-owner", tenant_id="tenant-b")
+    assert tenant_b_client.get(f"/api/agent/tasks/{body['task_id']}").status_code == 404
+    tenant_b_created = tenant_b_client.post("/api/agent/tasks", json=body)
+    assert tenant_b_created.status_code == 202
+    assert tenant_b_client.get("/api/agent/tasks").json()["count"] == 1
+    assert client.get("/api/agent/tasks").json()["count"] == 0
+
+
+def test_task_control_command_survives_process_local_control_reset() -> None:
+    repository = get_agent_run_repository()
+    repository.clear()
+    clear_run_controls_for_tests()
+    run = AgentRun(user_id="task-owner", message="长任务", status="running")
+    run.metadata["runtime_context"] = {"task_id": "durable-control-task"}
+    run.metadata["execution"] = {"state": "active"}
+    run.metadata["task_context"] = {
+        "task_id": "durable-control-task",
+        "title": "长任务",
+        "root_run_id": run.run_id,
+        "attempt": 1,
+    }
+    repository.save(run)
+
+    orchestrator = AgentOrchestrator(repository=repository)
+    paused = orchestrator.pause_run(run.run_id, requested_by="task-owner")
+    assert paused is not None
+    assert paused.status == "running"
+    assert paused.metadata["control_request"]["status"] == "requested"
+    command = repository.latest_task_control(run.run_id)
+    assert command is not None
+    assert command.action == "pause"
+    assert command.status == "requested"
+
+    clear_run_controls_for_tests()
+    worker_snapshot = repository.get(run.run_id)
+    assert worker_snapshot is not None
+    assert worker_snapshot.status == "running"
+    assert "control_request" not in worker_snapshot.metadata
+    assert (
+        AgentOrchestrator(repository=repository)._apply_requested_control(worker_snapshot) is True
+    )
+    applied = repository.latest_task_control(run.run_id)
+    assert applied is not None
+    assert applied.command_id == command.command_id
+    assert applied.status == "applied"
+    assert applied.applied_at
+    persisted = repository.get(run.run_id)
+    assert persisted is not None
+    assert persisted.status == "paused"

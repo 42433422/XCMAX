@@ -17,7 +17,6 @@ from app.application.agent_orchestrator.repair_advisor import (
     llm_repair_attempt_limit,
     request_llm_repair,
 )
-from app.application.agent_orchestrator.run_control import clear_run_control
 from app.application.agent_orchestrator.run_lifecycle import RunLifecycleMixin
 from app.application.agent_orchestrator.run_models import (
     AgentRun,
@@ -84,7 +83,7 @@ class AgentOrchestrator(UnifiedTaskPlanMixin, RunLifecycleMixin, ArtifactAttachm
             apply_ai_budget_metadata(run, dict(plan.metadata or {}), dict(runtime_context or {}))
             self._repo.save(run)
             if auto_execute:
-                self._execute_ready_steps(run, runtime_context=dict(runtime_context or {}))
+                self._execute_with_durable_lease(run, runtime_context=dict(runtime_context or {}))
             return self._repo.save(run)
         except RECOVERABLE_ERRORS:
             logger.exception("agent run start failed")
@@ -126,7 +125,7 @@ class AgentOrchestrator(UnifiedTaskPlanMixin, RunLifecycleMixin, ArtifactAttachm
             apply_ai_budget_metadata(run, dict(plan.metadata or {}), dict(runtime_context or {}))
             self._repo.save(run)
             if auto_execute:
-                self._execute_ready_steps(run, runtime_context=dict(runtime_context or {}))
+                self._execute_with_durable_lease(run, runtime_context=dict(runtime_context or {}))
             return self._repo.save(run)
         except RECOVERABLE_ERRORS:
             logger.exception("agent run from plan failed")
@@ -190,7 +189,7 @@ class AgentOrchestrator(UnifiedTaskPlanMixin, RunLifecycleMixin, ArtifactAttachm
                 "approved_by": approved_by,
             },
         )
-        self._execute_ready_steps(
+        self._execute_with_durable_lease(
             run,
             runtime_context=context,
             approved_step_id=waiting_step.step_id,
@@ -393,7 +392,6 @@ class AgentOrchestrator(UnifiedTaskPlanMixin, RunLifecycleMixin, ArtifactAttachm
         }
         self._append_llm_summary_to_final_output(run)
         run.add_event("run.completed", "Agent run 执行完成", run.final_output)
-        clear_run_control(run.run_id)
 
     @staticmethod
     def _can_auto_execute(step: AgentStep) -> bool:
