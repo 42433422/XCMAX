@@ -87,10 +87,11 @@ function latestRun(runs: AgentRun[]): AgentRun {
   return active || sorted[0]
 }
 
-function exactProgress(steps: AgentRunStep[]): number | undefined {
+function exactProgress(steps: AgentRunStep[], status: string): number | undefined {
   if (!steps.length) return undefined
   const settled = steps.filter((step) => ['completed', 'failed', 'skipped'].includes(asString(step.status))).length
-  return Math.round((settled / steps.length) * 100)
+  const percent = Math.round((settled / steps.length) * 100)
+  return status === 'completed' ? percent : Math.min(99, percent)
 }
 
 function evidenceOf(runs: AgentRun[]) {
@@ -156,7 +157,7 @@ export function groupAgentRunsIntoTasks(runs: AgentRun[]): TaskItem[] {
       source: 'agent' as const,
       title,
       status,
-      progress: exactProgress(steps),
+      progress: exactProgress(steps, asString(current.status)),
       stage: stageOf(asString(current.status)),
       summary: status === 'success'
         ? `任务已完成 · ${ordered.length} 次运行 · ${toolCalls.length} 次工具调用`
@@ -207,8 +208,10 @@ export function taskSummariesToTaskItems(tasks: AgentTaskSummary[]): TaskItem[] 
       ? '正在请求暂停'
       : pendingControl === 'cancel'
         ? '正在请求取消'
-        : stageOf(rawStatus)
+        : summary.progress?.stage || stageOf(rawStatus)
     const updatedAt = timestamp(summary.updated_at || activeRun?.updated_at) || Date.now()
+    const canonicalProgress = Number(summary.progress?.percent)
+    const hasCanonicalProgress = Number.isFinite(canonicalProgress)
     if (!base) {
       return {
         id: `agent_task_${summary.task_id}`,
@@ -216,6 +219,7 @@ export function taskSummariesToTaskItems(tasks: AgentTaskSummary[]): TaskItem[] 
         source: 'agent' as const,
         title: asString(summary.title || summary.task_id),
         status: displayStatus(rawStatus),
+        progress: hasCanonicalProgress ? canonicalProgress : undefined,
         stage: taskStage,
         summary: `${Number(summary.run_count || 0)} 次运行`,
         startedAt: timestamp(summary.created_at) || updatedAt,
@@ -238,6 +242,7 @@ export function taskSummariesToTaskItems(tasks: AgentTaskSummary[]): TaskItem[] 
       id: `agent_task_${summary.task_id}`,
       title: asString(summary.title || base.title),
       status: displayStatus(rawStatus),
+      progress: hasCanonicalProgress ? canonicalProgress : base.progress,
       stage: taskStage,
       updatedAt,
       payload: {

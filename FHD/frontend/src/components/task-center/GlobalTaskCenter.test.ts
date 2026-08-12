@@ -17,6 +17,7 @@ const task = {
   task_id: 'task-1', user_id: 'owner', title: '独立工作任务', source: 'agent', task_type: 'agent',
   status: 'waiting_user', attention_state: 'approval_required', attempt: 1, run_count: 1,
   active_run_id: 'run-1', conversation_id: 'chat-1',
+  progress: { percent: 0, completed_units: 0, settled_units: 0, total_units: 1, current_unit: 1, stage: '等待审批或用户确认', detail: '查询产品', status: 'waiting_user', attempt: 1, indeterminate: false, basis: 'steps' },
   capabilities: { approve: true, pause: true, cancel: true, retry: false, resume: false, evidence: true },
   execution: { run_id: 'run-1', task_id: 'task-1', user_id: 'owner', state: 'blocked', priority: 100, execution_count: 1, recovery_count: 0 },
   active_run: {
@@ -30,7 +31,7 @@ describe('GlobalTaskCenter', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     apiMock.listTasks.mockResolvedValue({ success: true, data: [task] })
-    apiMock.getTaskRuntime.mockResolvedValue({ success: true, data: { running: true, max_workers: 4, active_count: 0 } })
+    apiMock.getTaskRuntime.mockResolvedValue({ success: true, data: { running: true, max_workers: 4, active_count: 0, progress: { task_count: 1, active_count: 0, attention_count: 1, completed_count: 0, overall_percent: 0 } } })
     apiMock.getTask.mockResolvedValue({ success: true, data: { ...task, runs: [task.active_run] } })
     apiMock.getRun.mockResolvedValue({ success: true, data: task.active_run, approval: { grant: 'grant-1' } })
     apiMock.continueRun.mockResolvedValue({ success: true, data: { ...task.active_run, status: 'queued' } })
@@ -50,11 +51,15 @@ describe('GlobalTaskCenter', () => {
 
     await wrapper.get('.task-center-trigger').trigger('click')
     expect(wrapper.text()).toContain('并发 0/4')
+    expect(wrapper.text()).toContain('总进度 0%')
     expect(wrapper.text()).toContain('独立工作任务')
+    expect(wrapper.get('[aria-label="独立工作任务进度"]').attributes('aria-valuenow')).toBe('0')
 
     await wrapper.get('.task-center-item').trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('结果证据')
+    expect(wrapper.text()).toContain('统一进度')
+    expect(wrapper.text()).toContain('已完成 0 / 1 个步骤')
     expect(wrapper.text()).toContain('可安全恢复')
 
     const approval = wrapper.findAll('.task-center-actions button').find((button) => button.text() === '批准并执行')
