@@ -5,44 +5,58 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import GlobalTaskCenter from './GlobalTaskCenter.vue'
 
 const apiMock = vi.hoisted(() => ({
-  listTasks: vi.fn(), getTaskRuntime: vi.fn(), getTask: vi.fn(), getRun: vi.fn(),
-  continueRun: vi.fn(), pauseRun: vi.fn(), cancelRun: vi.fn(), resumeRun: vi.fn(),
-  retryRun: vi.fn(), archiveTask: vi.fn(),
+  listTasks: vi.fn(),
+  getTaskRuntime: vi.fn(),
+  getTask: vi.fn(),
+  getRun: vi.fn(),
+  continueRun: vi.fn(),
+  pauseRun: vi.fn(),
+  cancelRun: vi.fn(),
+  resumeRun: vi.fn(),
+  retryRun: vi.fn(),
+  archiveTask: vi.fn(),
+  markTaskRead: vi.fn(),
   taskEventStreamPath: vi.fn(() => '/api/agent/tasks/events/stream'),
 }))
 vi.mock('@/api/agentRuns', () => ({ default: apiMock }))
 vi.mock('@/api/core', () => ({ buildFullApiUrl: (path: string) => path }))
 
-const task = {
-  task_id: 'task-1', user_id: 'owner', title: '独立工作任务', source: 'agent', task_type: 'agent',
-  status: 'waiting_user', attention_state: 'approval_required', attempt: 1, run_count: 1,
-  active_run_id: 'run-1', conversation_id: 'chat-1',
-  progress: { percent: 0, completed_units: 0, settled_units: 0, total_units: 1, current_unit: 1, stage: '等待审批或用户确认', detail: '查询产品', status: 'waiting_user', attempt: 1, indeterminate: false, basis: 'steps' },
-  capabilities: { approve: true, pause: true, cancel: true, retry: false, resume: false, evidence: true },
-  execution: { run_id: 'run-1', task_id: 'task-1', user_id: 'owner', state: 'blocked', priority: 100, execution_count: 1, recovery_count: 0 },
-  active_run: {
-    run_id: 'run-1', user_id: 'owner', message: '执行任务', status: 'waiting_user',
-    steps: [{ step_id: 'step-1', node_id: 'query', tool_id: 'products', action: 'query', status: 'waiting_user', idempotent: true }],
-    tool_calls: [], artifacts: [], events: [{ event_id: 'event-1', run_id: 'run-1', event_type: 'step.waiting_user', message: '等待确认' }],
-  },
+const approvalWorkspace = {
+  task_id: 'task-approval', user_id: 'owner', title: '客户B销售开票', source: 'agent', task_type: 'agent',
+  status: 'waiting_user', attention_state: 'approval_required', approval_required: true, unread_count: 0,
+  attempt: 1, run_count: 1, active_run_id: 'run-approval', conversation_id: 'chat-approval',
+  progress: { percent: 45, completed_units: 1, settled_units: 1, total_units: 2, current_unit: 2, stage: '等待审批', detail: '确认开票', status: 'waiting_user', attempt: 1, indeterminate: false, basis: 'steps' },
+}
+const unreadWorkspace = {
+  task_id: 'task-result', user_id: 'owner', title: '月度经营报告', source: 'agent', task_type: 'agent',
+  status: 'completed', attention_state: 'result_unread', approval_required: false, unread_count: 1,
+  attempt: 1, run_count: 1, active_run_id: 'run-result', conversation_id: 'chat-result',
+  progress: { percent: 100, completed_units: 2, settled_units: 2, total_units: 2, current_unit: 2, stage: '任务完成', detail: '', status: 'completed', attempt: 1, indeterminate: false, basis: 'steps' },
 }
 
 describe('GlobalTaskCenter', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    apiMock.listTasks.mockResolvedValue({ success: true, data: [task] })
-    apiMock.getTaskRuntime.mockResolvedValue({ success: true, data: { running: true, max_workers: 4, active_count: 0, progress: { task_count: 1, active_count: 0, attention_count: 1, completed_count: 0, overall_percent: 0 } } })
-    apiMock.getTask.mockResolvedValue({ success: true, data: { ...task, runs: [task.active_run] } })
-    apiMock.getRun.mockResolvedValue({ success: true, data: task.active_run, approval: { grant: 'grant-1' } })
-    apiMock.continueRun.mockResolvedValue({ success: true, data: { ...task.active_run, status: 'queued' } })
+    apiMock.listTasks.mockResolvedValue({ success: true, data: [approvalWorkspace, unreadWorkspace] })
+    apiMock.getTaskRuntime.mockResolvedValue({
+      success: true,
+      data: { running: true, max_workers: 4, active_count: 0 },
+    })
+    apiMock.markTaskRead.mockResolvedValue({
+      success: true,
+      data: { ...unreadWorkspace, attention_state: '', unread_count: 0 },
+    })
   })
 
-  it('opens globally, shows evidence and performs a real approval action', async () => {
+  it('renders the task center as a workspace list with status, progress, unread and approval', async () => {
     const router = createRouter({
       history: createMemoryHistory(),
-      routes: [{ path: '/chat', name: 'chat', component: { template: '<div />' } }],
+      routes: [
+        { path: '/', name: 'chat', component: { template: '<div />' } },
+        { path: '/workspaces/:taskId', name: 'task-workspace', component: { template: '<div />' } },
+      ],
     })
-    await router.push('/chat')
+    await router.push('/')
     await router.isReady()
     const wrapper = mount(GlobalTaskCenter, {
       global: { plugins: [createPinia(), router], stubs: { Teleport: true } },
@@ -50,23 +64,25 @@ describe('GlobalTaskCenter', () => {
     await flushPromises()
 
     await wrapper.get('.task-center-trigger').trigger('click')
-    expect(wrapper.text()).toContain('并发 0/4')
-    expect(wrapper.text()).toContain('总进度 0%')
-    expect(wrapper.text()).toContain('独立工作任务')
-    expect(wrapper.get('[aria-label="独立工作任务进度"]').attributes('aria-valuenow')).toBe('0')
+    expect(wrapper.text()).toContain('工作区')
+    expect(wrapper.text()).toContain('2 个工作区')
+    expect(wrapper.text()).toContain('客户B销售开票')
+    expect(wrapper.text()).toContain('月度经营报告')
+    expect(wrapper.text()).toContain('待审批')
+    expect(wrapper.text()).toContain('1 未读')
+    expect(wrapper.get('[aria-label="客户B销售开票工作区进度"]').attributes('aria-valuenow')).toBe('45')
+
+    const unreadFilter = wrapper.findAll('.task-center-filters button').find((button) => button.text().includes('未读'))
+    await unreadFilter!.trigger('click')
+    expect(wrapper.findAll('.task-center-item')).toHaveLength(1)
 
     await wrapper.get('.task-center-item').trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toContain('结果证据')
-    expect(wrapper.text()).toContain('统一进度')
-    expect(wrapper.text()).toContain('已完成 0 / 1 个步骤')
-    expect(wrapper.text()).toContain('可安全恢复')
-
-    const approval = wrapper.findAll('.task-center-actions button').find((button) => button.text() === '批准并执行')
-    expect(approval).toBeDefined()
-    await approval!.trigger('click')
-    await flushPromises()
-    expect(apiMock.continueRun).toHaveBeenCalledWith('run-1', { approval_grant: 'grant-1' })
+    expect(apiMock.markTaskRead).toHaveBeenCalledWith('task-result')
+    expect(router.currentRoute.value.name).toBe('task-workspace')
+    expect(router.currentRoute.value.params.taskId).toBe('task-result')
+    expect(router.currentRoute.value.query.conversation).toBe('chat-result')
+    expect(wrapper.find('.task-center-drawer').exists()).toBe(false)
 
     wrapper.unmount()
   })
