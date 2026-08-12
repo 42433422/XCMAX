@@ -40,7 +40,18 @@ describe('GlobalTaskCenter', () => {
     apiMock.listTasks.mockResolvedValue({ success: true, data: [approvalWorkspace, unreadWorkspace] })
     apiMock.getTaskRuntime.mockResolvedValue({
       success: true,
-      data: { running: true, max_workers: 4, active_count: 0 },
+      data: {
+        running: true,
+        max_workers: 4,
+        active_count: 0,
+        progress: {
+          task_count: 2,
+          active_count: 1,
+          attention_count: 1,
+          completed_count: 1,
+          overall_percent: 73,
+        },
+      },
     })
     apiMock.markTaskRead.mockResolvedValue({
       success: true,
@@ -70,6 +81,9 @@ describe('GlobalTaskCenter', () => {
     expect(wrapper.text()).toContain('月度经营报告')
     expect(wrapper.text()).toContain('待审批')
     expect(wrapper.text()).toContain('1 未读')
+    expect(wrapper.text()).toContain('统一进度 73%')
+    expect(wrapper.text()).toContain('完成 1/2')
+    expect(wrapper.get('[aria-label="全部工作区统一进度"]').attributes('aria-valuenow')).toBe('73')
     expect(wrapper.get('[aria-label="客户B销售开票工作区进度"]').attributes('aria-valuenow')).toBe('45')
 
     const unreadFilter = wrapper.findAll('.task-center-filters button').find((button) => button.text().includes('未读'))

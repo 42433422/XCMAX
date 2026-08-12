@@ -9,6 +9,7 @@ import type {
 import { buildFullApiUrl } from '@/api/core'
 
 const TERMINAL_STATES = new Set(['completed', 'failed', 'cancelled'])
+type TaskControlAction = 'approve' | 'pause' | 'cancel' | 'resume' | 'retry'
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message
@@ -43,7 +44,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     tasks.value.filter((task) => task.approval_required || task.attention_state === 'approval_required' || task.status === 'waiting_user').length,
   )
   const activeCount = computed(() =>
-    tasks.value.filter((task) => ['queued', 'planning', 'running', 'retrying'].includes(task.status)).length,
+    tasks.value.filter((task) => ['queued', 'planning', 'running', 'retrying', 'paused'].includes(task.status)).length,
   )
 
   function replaceTasks(snapshot: AgentTaskSummary[]): void {
@@ -122,20 +123,43 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     return runs.find((run) => run.run_id === task.active_run_id) || runs[runs.length - 1] || null
   }
 
-  async function control(action: 'approve' | 'pause' | 'cancel' | 'resume' | 'retry'): Promise<void> {
-    const runId = activeRunOf(selectedTask.value)?.run_id || selectedTask.value?.active_run_id
-    if (!runId || actionPending.value) return
+  async function applyControl(task: AgentTaskSummary, action: TaskControlAction): Promise<void> {
+    const runId = activeRunOf(task)?.run_id || task.active_run_id
+    if (!runId) throw new Error('工作区当前没有可控制的运行')
+    if (action === 'approve') {
+      const snapshot = await agentRunsApi.getRun(runId)
+      const grant = snapshot.approval?.grant
+      if (!grant) throw new Error('任务当前没有可用的审批凭证')
+      await agentRunsApi.continueRun(runId, { approval_grant: grant })
+    } else if (action === 'pause') await agentRunsApi.pauseRun(runId)
+    else if (action === 'cancel') await agentRunsApi.cancelRun(runId)
+    else if (action === 'resume') await agentRunsApi.resumeRun(runId)
+    else await agentRunsApi.retryRun(runId)
+  }
+
+  async function controlTask(taskId: string, action: TaskControlAction): Promise<void> {
+    const id = String(taskId || '').trim()
+    if (!id || actionPending.value) return
     actionPending.value = action
     try {
-      if (action === 'approve') {
-        const snapshot = await agentRunsApi.getRun(runId)
-        const grant = snapshot.approval?.grant
-        if (!grant) throw new Error('任务当前没有可用的审批凭证')
-        await agentRunsApi.continueRun(runId, { approval_grant: grant })
-      } else if (action === 'pause') await agentRunsApi.pauseRun(runId)
-      else if (action === 'cancel') await agentRunsApi.cancelRun(runId)
-      else if (action === 'resume') await agentRunsApi.resumeRun(runId)
-      else await agentRunsApi.retryRun(runId)
+      const response = await agentRunsApi.getTask(id)
+      const task = response.data
+      if (!task) throw new Error('工作区任务不存在')
+      await applyControl(task, action)
+      await Promise.all([refresh(), selectedTaskId.value ? refreshDetail() : Promise.resolve()])
+    } catch (reason) {
+      error.value = errorMessage(reason)
+    } finally {
+      actionPending.value = ''
+    }
+  }
+
+  async function control(action: TaskControlAction): Promise<void> {
+    const task = selectedTask.value
+    if (!task || actionPending.value) return
+    actionPending.value = action
+    try {
+      await applyControl(task, action)
       await Promise.all([refresh(), refreshDetail()])
     } catch (reason) {
       error.value = errorMessage(reason)
@@ -236,6 +260,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     archiveSelected,
     closeDrawer,
     control,
+    controlTask,
     markTaskRead,
     openTask,
     refresh,
