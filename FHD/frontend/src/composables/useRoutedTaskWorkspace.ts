@@ -1,6 +1,13 @@
 import { computed, watch, type Ref } from 'vue'
 import agentRunsApi from '@/api/agentRuns'
+import type { AgentTaskSummary } from '@/api/agentRuns'
 import type { TaskItem } from './useChatPersistence'
+import {
+  taskNeedsApproval,
+  taskProgressPercent,
+  taskStatusLabel,
+  taskUnreadCount,
+} from '@/utils/taskWorkspacePresentation'
 
 export interface RoutedTaskWorkspaceProps {
   workspaceTaskId?: string
@@ -13,7 +20,9 @@ interface RoutedTaskWorkspaceOptions {
   taskList: Ref<TaskItem[]>
   filteredTaskList: Ref<TaskItem[]>
   activeTaskId: Ref<string>
+  taskSummaries?: Ref<AgentTaskSummary[]>
   loadSession: (conversationId: string) => Promise<void>
+  markTaskRead?: (taskId: string) => Promise<void>
 }
 
 export function resolveWorkspaceSessionId(props: RoutedTaskWorkspaceProps): string {
@@ -45,6 +54,27 @@ export function useRoutedTaskWorkspace(options: RoutedTaskWorkspaceOptions) {
     || visibleTaskList.value[0]
     || null
   ))
+  const activeWorkspaceSummary = computed(() => (
+    options.taskSummaries?.value.find((task) => task.task_id === workspaceTaskId.value) || null
+  ))
+  const workspaceHeader = computed(() => {
+    const summary = activeWorkspaceSummary.value
+    const localTask = activeWorkspaceTask.value
+    const payload = localTask?.payload || {}
+    const rawStatus = String(summary?.status || payload.rawRunStatus || localTask?.status || '')
+    const summaryProgress = summary ? taskProgressPercent(summary) : undefined
+    return {
+      title: String(summary?.title || localTask?.title || workspaceTaskId.value),
+      status: rawStatus,
+      stage: String(summary?.progress?.stage || localTask?.stage || taskStatusLabel(rawStatus)),
+      progress: summaryProgress ?? localTask?.progress,
+      unreadCount: taskUnreadCount(summary),
+      approvalRequired: taskNeedsApproval(summary),
+      attempt: Number(summary?.attempt || payload.attempt || 1),
+      runCount: Number(summary?.run_count || payload.runCount || 1),
+      capabilities: (summary?.capabilities || payload.capabilities || {}) as Record<string, boolean>,
+    }
+  })
 
   watch(
     () => resolveWorkspaceSessionId(options.props),
@@ -57,17 +87,23 @@ export function useRoutedTaskWorkspace(options: RoutedTaskWorkspaceOptions) {
   watch(
     workspaceTaskId,
     (taskId) => {
-      if (taskId) void agentRunsApi.markTaskRead(taskId).catch(() => undefined)
+      if (!taskId) return
+      const markRead = options.markTaskRead
+        ? options.markTaskRead(taskId)
+        : agentRunsApi.markTaskRead(taskId).then(() => undefined)
+      void markRead.catch(() => undefined)
     },
     { immediate: true },
   )
 
   return {
     activeWorkspaceTask,
+    activeWorkspaceSummary,
     visibleActiveTaskId,
     visibleFilteredTaskList,
     visibleTaskList,
     workspaceMode,
+    workspaceHeader,
     workspaceTaskId,
   }
 }

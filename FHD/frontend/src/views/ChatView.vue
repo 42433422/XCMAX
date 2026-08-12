@@ -2,9 +2,9 @@
   <div class="chat-view page-view active" id="view-chat">
     <TaskWorkspaceContextBar
       v-if="workspaceMode"
-      :title="activeWorkspaceTask?.title || workspaceTaskId"
-      :stage="activeWorkspaceTask?.stage"
-      :progress="activeWorkspaceTask?.progress"
+      v-bind="workspaceHeader"
+      :action-pending="taskCenterStore.actionPending"
+      @control="controlWorkspaceTask"
     />
     <ChatQuickActions :buttons="visibleQuickButtons" @quick="sendQuick" />
     <div class="chat-container" data-tour="chat-thread" :style="chatPaneStyle">
@@ -197,6 +197,7 @@
 import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useIndustryStore } from '@/stores/industry'
+import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
 import { getIndustryPreset, getIndustryQuickButtons } from '@/constants/industryPresets'
 import { isClientModeTiersUiEnabled, PRO_INTENT_EXPERIENCE_KEY } from '@/constants/clientModeTiers'
 import { useRouter } from 'vue-router'
@@ -231,6 +232,7 @@ const props = withDefaults(defineProps<{
 const router = useRouter()
 const modsStore = useModsStore()
 const { mods: modsFromStore } = storeToRefs(modsStore)
+const taskCenterStore = useAgentTaskCenterStore()
 const industryStore = useIndustryStore()
 const { currentIndustryId } = storeToRefs(industryStore)
 
@@ -241,7 +243,6 @@ const proIntentExperienceEnabled = ref(
   clientModeTiersUiEnabled && localStorage.getItem(PRO_INTENT_EXPERIENCE_KEY) === '1',
 )
 const isTaskPaneResizable = ref(true)
-
 function generateSessionId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2)
 }
@@ -326,10 +327,16 @@ const {
 
 const {
   workspaceTaskId, workspaceMode, visibleTaskList, visibleFilteredTaskList,
-  visibleActiveTaskId, activeWorkspaceTask,
+  visibleActiveTaskId, workspaceHeader,
 } = useRoutedTaskWorkspace({
   props, currentSessionId, taskList, filteredTaskList, activeTaskId, loadSession,
+  taskSummaries: storeToRefs(taskCenterStore).tasks,
+  markTaskRead: taskCenterStore.markTaskRead,
 })
+
+function controlWorkspaceTask(action: 'approve' | 'pause' | 'cancel' | 'resume' | 'retry'): void {
+  void taskCenterStore.controlTask(workspaceTaskId.value, action)
+}
 
 const messageInput = ref('')
 

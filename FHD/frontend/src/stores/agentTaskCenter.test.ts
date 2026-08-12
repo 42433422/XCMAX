@@ -181,6 +181,7 @@ describe('agent task center store', () => {
     store.selectedTask = { ...task, active_run_id: undefined, active_run: undefined, runs: undefined }
     await store.control('pause')
     expect(apiMock.pauseRun).not.toHaveBeenCalled()
+    expect(store.error).toBe('工作区当前没有可控制的运行')
   })
 
   it('dispatches every durable lifecycle command and clears pending state', async () => {
@@ -204,11 +205,28 @@ describe('agent task center store', () => {
     expect(store.actionPending).toBe('')
   })
 
+  it('controls a routed workspace from a freshly loaded canonical task detail', async () => {
+    const store = useAgentTaskCenterStore()
+
+    await store.controlTask('task-1', 'pause')
+
+    expect(apiMock.getTask).toHaveBeenCalledWith('task-1')
+    expect(apiMock.pauseRun).toHaveBeenCalledWith('run-1')
+    expect(apiMock.listTasks).toHaveBeenCalledOnce()
+    expect(store.actionPending).toBe('')
+
+    apiMock.getTask.mockResolvedValueOnce({ success: true })
+    await store.controlTask('missing-task', 'cancel')
+    expect(store.error).toBe('工作区任务不存在')
+    expect(apiMock.cancelRun).not.toHaveBeenCalled()
+  })
+
   it('fails closed when approval has no grant and ignores missing runs', async () => {
     const store = useAgentTaskCenterStore()
     store.selectedTask = { ...task, active_run_id: undefined, active_run: undefined, runs: [] }
     await store.control('pause')
     expect(apiMock.pauseRun).not.toHaveBeenCalled()
+    expect(store.error).toBe('工作区当前没有可控制的运行')
 
     store.selectedTask = { ...task, active_run: undefined, runs: [task.active_run] }
     apiMock.getRun.mockResolvedValueOnce({ success: true, data: task.active_run })

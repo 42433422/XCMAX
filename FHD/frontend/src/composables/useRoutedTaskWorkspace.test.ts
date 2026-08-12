@@ -45,9 +45,37 @@ describe('useRoutedTaskWorkspace', () => {
     const loadSession = vi.fn(async (conversationId: string) => {
       currentSessionId.value = conversationId
     })
+    const markTaskRead = vi.fn(async () => undefined)
+    const taskSummaries = ref([{
+      task_id: 'task-approval',
+      user_id: 'owner',
+      title: '客户B销售开票（服务端）',
+      source: 'agent',
+      task_type: 'agent',
+      status: 'waiting_user',
+      attention_state: 'approval_required',
+      approval_required: true,
+      unread_count: 0,
+      attempt: 2,
+      run_count: 3,
+      progress: {
+        percent: 45,
+        completed_units: 1,
+        settled_units: 1,
+        total_units: 2,
+        current_unit: 2,
+        stage: '等待审批',
+        detail: '确认开票',
+        status: 'waiting_user',
+        attempt: 2,
+        indeterminate: false,
+        basis: 'steps' as const,
+      },
+    }])
     const scope = effectScope()
     const workspace = scope.run(() => useRoutedTaskWorkspace({
-      props, currentSessionId, taskList, filteredTaskList, activeTaskId, loadSession,
+      props, currentSessionId, taskList, filteredTaskList, activeTaskId, taskSummaries,
+      loadSession, markTaskRead,
     }))!
     await nextTick()
 
@@ -57,7 +85,17 @@ describe('useRoutedTaskWorkspace', () => {
     expect(workspace.visibleFilteredTaskList.value).toEqual([firstTask])
     expect(workspace.visibleActiveTaskId.value).toBe('local-1')
     expect(workspace.activeWorkspaceTask.value?.title).toBe('客户B销售开票')
-    expect(apiMock.markTaskRead).toHaveBeenCalledWith('task-approval')
+    expect(markTaskRead).toHaveBeenCalledWith('task-approval')
+    expect(workspace.activeWorkspaceSummary.value?.task_id).toBe('task-approval')
+    expect(workspace.workspaceHeader.value).toMatchObject({
+      title: '客户B销售开票（服务端）',
+      status: 'waiting_user',
+      stage: '等待审批',
+      progress: 45,
+      approvalRequired: true,
+      attempt: 2,
+      runCount: 3,
+    })
     expect(loadSession).not.toHaveBeenCalled()
 
     props.workspaceTaskId = 'task-result'
@@ -65,7 +103,7 @@ describe('useRoutedTaskWorkspace', () => {
     await nextTick()
 
     expect(loadSession).toHaveBeenCalledWith('chat-result')
-    expect(apiMock.markTaskRead).toHaveBeenCalledWith('task-result')
+    expect(markTaskRead).toHaveBeenCalledWith('task-result')
     expect(workspace.visibleTaskList.value).toEqual([secondTask])
     expect(workspace.visibleActiveTaskId.value).toBe('local-2')
     scope.stop()

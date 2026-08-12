@@ -4,6 +4,12 @@ import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import type { AgentTaskSummary } from '@/api/agentRuns'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
+import {
+  taskNeedsApproval,
+  taskProgressPercent,
+  taskStatusLabel,
+  taskUnreadCount,
+} from '@/utils/taskWorkspacePresentation'
 
 const store = useAgentTaskCenterStore()
 const router = useRouter()
@@ -26,43 +32,24 @@ const filters = [
   { value: 'approval', label: '待审批' },
 ] as const
 
-function unreadOf(task: AgentTaskSummary): number {
-  return Math.max(
-    0,
-    Number(task.unread_count ?? (task.attention_state === 'result_unread' ? 1 : 0)) || 0,
-  )
-}
-
-function needsApproval(task: AgentTaskSummary): boolean {
-  return Boolean(
-    task.approval_required
-    || task.attention_state === 'approval_required'
-    || task.status === 'waiting_user',
-  )
-}
-
-function progressOf(task: AgentTaskSummary): number {
-  const value = Number(task.progress?.percent)
-  if (Number.isFinite(value)) return Math.max(0, Math.min(100, Math.round(value)))
-  return task.status === 'completed' ? 100 : 0
-}
-
 const filteredTasks = computed(() => tasks.value.filter((task) => {
   if (filter.value === 'active') {
     return ['queued', 'planning', 'running', 'retrying', 'paused'].includes(task.status)
   }
-  if (filter.value === 'unread') return unreadOf(task) > 0
-  if (filter.value === 'approval') return needsApproval(task)
+  if (filter.value === 'unread') return taskUnreadCount(task) > 0
+  if (filter.value === 'approval') return taskNeedsApproval(task)
   return true
 }))
 
-function statusLabel(status: string | undefined): string {
-  return {
-    queued: '排队中', claimed: '执行中', planning: '规划中', running: '执行中', retrying: '重试中',
-    waiting_user: '等待审批', paused: '已暂停', blocked: '已阻断', completed: '已完成',
-    failed: '失败', cancelled: '已取消', pending: '待执行', skipped: '已跳过',
-  }[String(status || '')] || String(status || '未知')
-}
+const overview = computed(() => runtime.value.progress || {
+  task_count: tasks.value.length,
+  active_count: activeCount.value,
+  attention_count: approvalCount.value,
+  completed_count: tasks.value.filter((task) => task.status === 'completed').length,
+  overall_percent: tasks.value.length
+    ? Math.round(tasks.value.reduce((total, task) => total + taskProgressPercent(task), 0) / tasks.value.length)
+    : 0,
+})
 
 function formatTime(value: string | undefined): string {
   if (!value) return ''
@@ -73,7 +60,7 @@ function formatTime(value: string | undefined): string {
 }
 
 async function openWorkspace(task: AgentTaskSummary): Promise<void> {
-  if (unreadOf(task) > 0) await store.markTaskRead(task.task_id)
+  if (taskUnreadCount(task) > 0) await store.markTaskRead(task.task_id)
   const conversationId = String(
     task.conversation_id || task.workspace_id || task.task_id,
   ).trim()
@@ -125,6 +112,26 @@ onBeforeUnmount(() => store.stop())
             <span>{{ error }}</span><button type="button" @click="store.refresh()">重试</button>
           </div>
 
+          <section class="task-center-overview" aria-label="全部工作区进度概览">
+            <div class="task-center-overview__head">
+              <strong>统一进度 {{ overview.overall_percent }}%</strong>
+              <span>完成 {{ overview.completed_count }}/{{ overview.task_count }}</span>
+            </div>
+            <div
+              class="task-center-overview__track"
+              role="progressbar"
+              aria-label="全部工作区统一进度"
+              :aria-valuenow="overview.overall_percent"
+              aria-valuemin="0"
+              aria-valuemax="100"
+            ><span :style="{ width: `${overview.overall_percent}%` }" /></div>
+            <div class="task-center-overview__facts">
+              <span>{{ overview.active_count }} 个未结束</span>
+              <span>{{ overview.attention_count }} 个需处理</span>
+              <span>{{ unreadCount }} 个未读结果</span>
+            </div>
+          </section>
+
           <nav class="task-center-filters" aria-label="工作区筛选">
             <button
               v-for="item in filters"
@@ -150,30 +157,30 @@ onBeforeUnmount(() => store.stop())
             >
               <span class="task-center-item__top">
                 <strong>{{ task.title }}</strong>
-                <em :data-status="task.status">{{ statusLabel(task.status) }}</em>
+                <em :data-status="task.status">{{ taskStatusLabel(task.status) }}</em>
               </span>
 
               <span class="task-center-item__signals">
-                <span :class="['workspace-read-state', { 'is-unread': unreadOf(task) > 0 }]">
-                  {{ unreadOf(task) > 0 ? `${unreadOf(task)} 未读` : '已读' }}
+                <span :class="['workspace-read-state', { 'is-unread': taskUnreadCount(task) > 0 }]">
+                  {{ taskUnreadCount(task) > 0 ? `${taskUnreadCount(task)} 未读` : '已读' }}
                 </span>
-                <span v-if="needsApproval(task)" class="workspace-approval-state">待审批</span>
+                <span v-if="taskNeedsApproval(task)" class="workspace-approval-state">待审批</span>
                 <span v-else-if="['blocked', 'failed'].includes(task.status)" class="workspace-blocked-state">需处理</span>
               </span>
 
               <span class="task-center-progress">
                 <span class="task-center-progress__head">
-                  <span>{{ task.progress?.stage || statusLabel(task.status) }}<template v-if="task.progress?.detail"> · {{ task.progress.detail }}</template></span>
-                  <strong>{{ progressOf(task) }}%</strong>
+                  <span>{{ task.progress?.stage || taskStatusLabel(task.status) }}<template v-if="task.progress?.detail"> · {{ task.progress.detail }}</template></span>
+                  <strong>{{ taskProgressPercent(task) }}%</strong>
                 </span>
                 <span
                   class="task-center-progress__track"
                   role="progressbar"
                   :aria-label="`${task.title}工作区进度`"
-                  :aria-valuenow="progressOf(task)"
+                  :aria-valuenow="taskProgressPercent(task)"
                   aria-valuemin="0"
                   aria-valuemax="100"
-                ><span :style="{ width: `${progressOf(task)}%` }" /></span>
+                ><span :style="{ width: `${taskProgressPercent(task)}%` }" /></span>
               </span>
 
               <span class="task-center-item__meta">
