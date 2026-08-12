@@ -29,6 +29,7 @@
   "/api/agent/runs/{run_id}/pause",
   "/api/agent/runs/{run_id}/resume",
   "/api/agent/runs/{run_id}/retry",
+  "/api/agent/tasks",
   "/api/auth/avatar",
   "/api/auth/company-brand",
   "/api/auth/forgot-account",
