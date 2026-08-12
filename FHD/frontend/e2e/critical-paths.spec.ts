@@ -1,7 +1,5 @@
 import { test, expect, type Route } from '@playwright/test';
 import {
-  E2E_PASSWORD,
-  E2E_USER,
   installE2eShellMocks,
   captureEvidence,
   csrfHeaders,
@@ -140,10 +138,7 @@ test.describe('P0 critical paths', () => {
           body: JSON.stringify({ success: true, data: [mockOrder], count: 1 }),
         });
       };
-      await page.route(
-        /\/api\/(?:mod\/[^/]+\/)?orders(?:\?.*)?$/,
-        handleOrderCollection,
-      );
+      await page.route(/\/api\/(?:mod\/[^/]+\/)?orders(?:\?.*)?$/, handleOrderCollection);
       await page.route('**/api/orders/1001', async (route) => {
         if (route.request().method() === 'PATCH') {
           Object.assign(mockOrder, JSON.parse(route.request().postData() || '{}'));
@@ -164,25 +159,13 @@ test.describe('P0 critical paths', () => {
       // Browser-side fetches need an HTTP origin; about:blank cannot resolve /api/* URLs.
       await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
     } else {
-      // Establish the browser-side enterprise session cache through the real
-      // login UI. API cookies alone can leave a deep link waiting on redundant
-      // remote validation in slower CI environments.
-      await page.goto('/login?redirect=%2Forders', {
+      // beforeEach already established and verified a real browser session.
+      // The dedicated login-flow spec owns the form-login assertion; this case
+      // keeps its proof focused on the authenticated order data loop.
+      await page.goto('/orders', {
         waitUntil: 'domcontentloaded',
         timeout: 30_000,
       });
-      await page.locator('#lv-username').fill(E2E_USER);
-      await page.locator('#lv-password').fill(E2E_PASSWORD);
-      const loginResponsePromise = page.waitForResponse(
-        (response) =>
-          response.request().method() === 'POST' && /\/api\/auth\/login(?:\?|$)/.test(response.url()),
-        { timeout: 30_000 }
-      );
-      await page.locator('.login-submit').click();
-      const loginResponse = await loginResponsePromise;
-      const loginText = await loginResponse.text();
-      expect(loginResponse.status(), loginText).toBe(200);
-      expect(JSON.parse(loginText || '{}')?.success, loginText).toBe(true);
       await expect(page).toHaveURL(/\/orders(?:[?#]|$)/, { timeout: 25_000 });
       await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
     }
@@ -279,27 +262,13 @@ test.describe('P0 critical paths', () => {
       };
     };
 
-    // Establish this page's session through the real login UI. Reusing only a
-    // cookie leaves the browser-side enterprise session cache cold, so a deep
-    // link can block on redundant remote validation while the Agent-backed
-    // order work is settling. Login marks that cache valid without weakening
-    // any auth, route, or CRUD assertion.
-    await page.goto('/login?redirect=%2Forders', {
+    // beforeEach already established and verified a real browser session.
+    // Navigate through the authenticated route directly so this proof remains
+    // about material CRUD/export rather than a second concurrent login.
+    await page.goto('/orders', {
       waitUntil: 'domcontentloaded',
       timeout: 30_000,
     });
-    await page.locator('#lv-username').fill(E2E_USER);
-    await page.locator('#lv-password').fill(E2E_PASSWORD);
-    const loginResponsePromise = page.waitForResponse(
-      (response) =>
-        response.request().method() === 'POST' && /\/api\/auth\/login(?:\?|$)/.test(response.url()),
-      { timeout: 30_000 }
-    );
-    await page.locator('.login-submit').click();
-    const loginResponse = await loginResponsePromise;
-    const loginText = await loginResponse.text();
-    expect(loginResponse.status(), loginText).toBe(200);
-    expect(JSON.parse(loginText || '{}')?.success, loginText).toBe(true);
     await expect(page).toHaveURL(/\/orders(?:[?#]|$)/, { timeout: 25_000 });
     await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
     await page.goto('/materials', { waitUntil: 'domcontentloaded', timeout: 30_000 });
@@ -347,7 +316,9 @@ test.describe('P0 critical paths', () => {
     const listed = await requestJson(`/api/materials?search=${encodeURIComponent(updatedName)}`);
     expect(listed.status, listed.text).toBe(200);
     const rows = Array.isArray(listed.body?.data) ? listed.body.data : [];
-    expect(rows.some((row: any) => String(row.id) === materialId && row.name === updatedName)).toBe(true);
+    expect(rows.some((row: any) => String(row.id) === materialId && row.name === updatedName)).toBe(
+      true
+    );
 
     const exported = await page.request.get(`${apiBase}/api/materials/export`, { timeout: 30_000 });
     expect(exported.status(), await exported.text()).toBe(200);
