@@ -28,6 +28,7 @@ export interface ShipmentTask {
   description?: string
   payload?: {
     tool_id?: string
+    action?: string
     params?: {
       tool_id?: string
       products?: ShipmentProduct[]

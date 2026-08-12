@@ -224,6 +224,8 @@ class TestBuildShipmentPreviewResponseDict:
             result = build_shipment_preview_response_dict("TestUnit", products, "order text")
             assert result["success"] is True
             assert result["task"]["type"] == "shipment_generate"
+            assert result["task"]["payload"]["tool_id"] == "shipment_orders"
+            assert result["task"]["payload"]["action"] == "generate"
             assert "TestUnit" in result["task"]["description"]
             assert result["data"]["intent"] == "shipment_preview"
 

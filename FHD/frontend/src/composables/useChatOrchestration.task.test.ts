@@ -8,6 +8,16 @@ const executePrintTask = vi.fn()
 const buildPrintSummaryMessage = vi.fn(() => '打印完成')
 const upsertTask = vi.fn()
 const handleChatRequiresToken = vi.fn()
+const agentRunsApiMock = vi.hoisted(() => ({
+  createTask: vi.fn(),
+  continueRun: vi.fn(),
+  listRuns: vi.fn(),
+  pauseRun: vi.fn(),
+  resumeRun: vi.fn(),
+  cancelRun: vi.fn(),
+  retryRun: vi.fn(),
+  getRun: vi.fn(),
+}))
 
 vi.mock('./useChatMessages', async () => {
   const { ref } = await import('vue')
@@ -190,6 +200,7 @@ vi.mock('@/stores/mods', () => ({
   useModsStore: () => ({ activeModId: '', mods: [], modsForUi: [], setActiveModId: vi.fn() }),
 }))
 vi.mock('@/api/chat', () => ({ default: {}, parseChatStreamErrorResponse: vi.fn() }))
+vi.mock('@/api/agentRuns', () => ({ default: agentRunsApiMock }))
 vi.mock('@/api/products', () => ({ default: { searchProducts: vi.fn() } }))
 vi.mock('@/utils/chatSseStream', () => ({
   readPlannerSseResponse: vi.fn(),
@@ -210,6 +221,7 @@ describe('useChatOrchestration task/print', () => {
     vi.clearAllMocks()
     lastShipmentExecution.value = null
     executePrintTask.mockResolvedValue({ success: true, message: 'ok' })
+    agentRunsApiMock.listRuns.mockResolvedValue({ success: true, data: [] })
   })
 
   afterEach(() => {
@@ -295,5 +307,56 @@ describe('useChatOrchestration task/print', () => {
     await api.confirmTask()
     expect(handleChatRequiresToken).toHaveBeenCalled()
     expect(api.currentTask.value?.description).toContain('令牌')
+  })
+
+  it('routes a registered task through durable creation and bound approval', async () => {
+    const legacyFetch = vi.fn()
+    vi.stubGlobal('fetch', legacyFetch)
+    agentRunsApiMock.createTask.mockResolvedValue({
+      success: true,
+      data: { run_id: 'run-1', user_id: 'u1', message: '发货', status: 'waiting_user' },
+      approval: { grant: 'grant-1' },
+    })
+    agentRunsApiMock.continueRun.mockResolvedValue({
+      success: true,
+      data: {
+        run_id: 'run-1',
+        user_id: 'u1',
+        message: '发货',
+        status: 'completed',
+        final_output: {
+          node_outputs: {
+            shipment: { success: true, message: '发货单已生成', order_id: 41 },
+          },
+        },
+      },
+    })
+    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    api.showTaskConfirm({
+      type: 'shipment_generate',
+      title: '发货单预览',
+      order_number: 'ORD-001',
+      api_url: '/api/tools/execute',
+      payload: {
+        tool_id: 'shipment_orders',
+        action: 'generate',
+        params: { unit_name: '客户甲', products: [{ quantity: 1 }] },
+      },
+    })
+
+    await api.confirmTask()
+
+    expect(agentRunsApiMock.createTask).toHaveBeenCalledWith(expect.objectContaining({
+      task_id: 'chat_task-1',
+      tool_id: 'shipment_orders',
+      action: 'generate',
+      params: expect.objectContaining({ order_number: 'ORD-001' }),
+    }))
+    expect(agentRunsApiMock.continueRun).toHaveBeenCalledWith('run-1', {
+      approval_grant: 'grant-1',
+      runtime_context: { source: 'chat_task_card_approval' },
+    })
+    expect(legacyFetch).not.toHaveBeenCalled()
+    expect(api.currentTask.value?.completed).toBe(true)
   })
 })

@@ -180,8 +180,8 @@ def build_shipment_preview_response_dict(
             "api_url": "/api/tools/execute",
             "method": "POST",
             "payload": {
-                "tool_id": "shipment_generate",
-                "action": "执行",
+                "tool_id": "shipment_orders",
+                "action": "generate",
                 "params": {
                     "order_text": order_text,
                     "unit_name": unit_name,

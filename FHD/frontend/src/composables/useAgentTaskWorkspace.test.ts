@@ -9,6 +9,8 @@ const apiMock = vi.hoisted(() => ({
   resumeRun: vi.fn(),
   cancelRun: vi.fn(),
   retryRun: vi.fn(),
+  getRun: vi.fn(),
+  continueRun: vi.fn(),
 }))
 
 vi.mock('@/api/agentRuns', () => ({ default: apiMock }))
@@ -40,6 +42,11 @@ describe('useAgentTaskWorkspace', () => {
     localStorage.clear()
     Object.values(apiMock).forEach((mock) => mock.mockReset().mockResolvedValue({ success: true }))
     apiMock.listRuns.mockResolvedValue({ success: true, data: [serverRun()] })
+    apiMock.getRun.mockResolvedValue({
+      success: true,
+      data: serverRun('waiting_user'),
+      approval: { grant: 'bound-grant' },
+    })
   })
 
   function setup() {
@@ -95,5 +102,19 @@ describe('useAgentTaskWorkspace', () => {
 
     expect(state.taskList.value).toHaveLength(0)
     expect(apiMock.cancelRun).not.toHaveBeenCalled()
+  })
+
+  it('approves through a fresh action-bound grant and refreshes evidence', async () => {
+    apiMock.listRuns.mockResolvedValue({ success: true, data: [serverRun('waiting_user')] })
+    const state = setup()
+    await state.workspace.refreshTasks()
+
+    await state.workspace.controlTask('agent_task_conversation-monthly', 'approve')
+
+    expect(apiMock.getRun).toHaveBeenCalledWith('run-1')
+    expect(apiMock.continueRun).toHaveBeenCalledWith('run-1', {
+      approval_grant: 'bound-grant',
+    })
+    expect(apiMock.listRuns).toHaveBeenCalledTimes(2)
   })
 })

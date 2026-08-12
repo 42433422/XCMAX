@@ -33,6 +33,7 @@ from app.application.agent_orchestrator.run_repository import (
     get_agent_run_repository,
 )
 from app.application.agent_orchestrator.task_context import apply_task_context
+from app.application.agent_orchestrator.task_plan import UnifiedTaskPlanMixin
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_spec import get_tool_action_spec, validate_tool_call
 from app.application.workflow.types import PlanGraph, WorkflowNode
@@ -43,7 +44,7 @@ logger = logging.getLogger(__name__)
 _INTERNAL_RUN_ERROR = "agent_run_internal_error"
 
 
-class AgentOrchestrator(RunLifecycleMixin, ArtifactAttachmentMixin):
+class AgentOrchestrator(UnifiedTaskPlanMixin, RunLifecycleMixin, ArtifactAttachmentMixin):
     def __init__(
         self,
         *,
@@ -137,9 +138,6 @@ class AgentOrchestrator(RunLifecycleMixin, ArtifactAttachmentMixin):
                 {"error_code": _INTERNAL_RUN_ERROR},
             )
             return self._repo.save(run)
-
-    def get_run(self, run_id: str) -> AgentRun | None:
-        return self._repo.get(run_id)
 
     def continue_run(
         self,

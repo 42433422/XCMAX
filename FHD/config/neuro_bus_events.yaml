@@ -31,6 +31,8 @@ streams:
         - { type: "run.completed",         const: RUN_COMPLETED,         sla_tier: conscious, terminal: true }
         - { type: "run.failed",            const: RUN_FAILED,            sla_tier: conscious, terminal: true }
         - { type: "run.continue_ignored",  const: RUN_CONTINUE_IGNORED }
+      task:
+        - { type: "task.approval_required", const: TASK_APPROVAL_REQUIRED }
       planner:
         - { type: "planner.started",        const: PLANNER_STARTED }
         - { type: "planner.completed",      const: PLANNER_COMPLETED }
