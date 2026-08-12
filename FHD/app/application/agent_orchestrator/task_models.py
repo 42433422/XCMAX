@@ -8,6 +8,11 @@ from typing import Any, Literal
 
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
 from app.application.agent_orchestrator.task_context import task_context_of
+from app.application.agent_orchestrator.task_progress import (
+    fallback_task_progress_snapshot,
+    progress_snapshot_of_task_metadata,
+    task_progress_snapshot,
+)
 
 TaskAttention = Literal["", "approval_required", "blocked", "failed", "result_unread"]
 TaskControlAction = Literal["pause", "cancel", "resume"]
@@ -56,6 +61,13 @@ class AgentTask:
         self.updated_at = utc_now_iso()
 
     def to_dict(self) -> dict[str, Any]:
+        progress = progress_snapshot_of_task_metadata(self.metadata)
+        if not progress:
+            progress = fallback_task_progress_snapshot(
+                status=self.status,
+                attempt=self.attempt,
+                updated_at=self.updated_at,
+            )
         return {
             "task_id": self.task_id,
             "user_id": self.user_id,
@@ -73,6 +85,7 @@ class AgentTask:
             "workspace_isolation": self.workspace_isolation,
             "attempt": self.attempt,
             "run_count": self.run_count,
+            "progress": progress,
             "archived_at": self.archived_at,
             "metadata": self.metadata,
             "created_at": self.created_at,
@@ -143,6 +156,7 @@ def task_from_run(run: AgentRun, *, existing: AgentTask | None = None) -> AgentT
         "task_model_version": int(runtime.get("task_model_version") or 1),
         "task_request": dict(run.metadata.get("task_request") or {}),
         "task_request_fingerprint": str(run.metadata.get("task_request_fingerprint") or ""),
+        "progress": task_progress_snapshot(run),
     }
     current.updated_at = run.updated_at
     return current

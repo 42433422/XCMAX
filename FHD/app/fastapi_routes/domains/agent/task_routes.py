@@ -17,6 +17,7 @@ from app.application.agent_orchestrator.task_execution_repository import (
     get_task_execution_repository,
 )
 from app.application.agent_orchestrator.task_models import task_from_run, tenant_id_of_run
+from app.application.agent_orchestrator.task_progress import task_progress_snapshot
 from app.application.agent_orchestrator.unified_task import (
     UnifiedTaskConflictError,
     UnifiedTaskError,
@@ -61,6 +62,8 @@ def _task_envelope(
             active = None
         runs = []
     payload = task.to_dict()
+    if active is not None:
+        payload["progress"] = task_progress_snapshot(active)
     payload["runs"] = [public_run_dict(run) for run in runs]
     payload["active_run"] = public_run_dict(active) if active is not None else None
     payload["capabilities"] = task_capabilities(active) if active is not None else {}
@@ -95,6 +98,30 @@ def _task_stream_envelope(task: Any, executions: dict[str, Any]) -> dict[str, An
         }
     )
     return payload
+
+
+def _task_progress_overview(tasks: list[Any]) -> dict[str, int]:
+    snapshots = [task.to_dict() for task in tasks]
+    percents: list[int] = []
+    for item in snapshots:
+        try:
+            value = int((item.get("progress") or {}).get("percent") or 0)
+        except (TypeError, ValueError):
+            value = 0
+        percents.append(max(0, min(100, value)))
+    return {
+        "task_count": len(snapshots),
+        "active_count": sum(
+            str(item.get("status") or "") in {"queued", "planning", "running", "retrying", "paused"}
+            for item in snapshots
+        ),
+        "attention_count": sum(
+            str(item.get("status") or "") in {"waiting_user", "blocked", "failed"}
+            for item in snapshots
+        ),
+        "completed_count": sum(str(item.get("status") or "") == "completed" for item in snapshots),
+        "overall_percent": round(sum(percents) / len(percents)) if percents else 0,
+    }
 
 
 @router.get("/api/agent/tasks", response_model=None)
@@ -144,16 +171,26 @@ def list_agent_tasks(
 
 @router.get("/api/agent/task-runtime", response_model=None)
 def get_agent_task_runtime(
-    _principal: AgentPrincipal = Depends(require_agent_principal),
-) -> dict[str, Any]:
-    snapshot = get_agent_task_dispatcher().snapshot()
-    return success(
-        {
-            "running": bool(snapshot["running"]),
-            "max_workers": int(snapshot["max_workers"]),
-            "active_count": int(snapshot["active_count"]),
-        }
-    )
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any] | JSONResponse:
+    try:
+        snapshot = get_agent_task_dispatcher().snapshot()
+        tasks = AgentOrchestrator().list_tasks(
+            user_id=principal.user_id,
+            tenant_id=principal.tenant_id or None,
+            limit=200,
+            include_archived=False,
+        )
+        return success(
+            {
+                "running": bool(snapshot["running"]),
+                "max_workers": int(snapshot["max_workers"]),
+                "active_count": int(snapshot["active_count"]),
+                "progress": _task_progress_overview(tasks),
+            }
+        )
+    except RECOVERABLE_ERRORS:
+        return internal_error_response("get agent task runtime")
 
 
 @router.post("/api/agent/tasks", response_model=None)

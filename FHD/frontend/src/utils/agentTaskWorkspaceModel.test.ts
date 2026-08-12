@@ -231,4 +231,33 @@ describe('groupAgentRunsIntoTasks', () => {
       status: 'requested',
     })
   })
+
+  it('uses canonical server progress when a lightweight snapshot has no run payload', () => {
+    const [task] = taskSummariesToTaskItems([{
+      task_id: 'server-progress',
+      user_id: '7',
+      title: '服务端进度',
+      source: 'agent',
+      task_type: 'agent',
+      status: 'running',
+      attempt: 1,
+      run_count: 1,
+      progress: {
+        percent: 42,
+        completed_units: 2,
+        settled_units: 2,
+        total_units: 5,
+        current_unit: 3,
+        stage: '执行中',
+        detail: '生成报表',
+        status: 'running',
+        attempt: 1,
+        indeterminate: false,
+        basis: 'steps',
+      },
+    }])
+
+    expect(task.progress).toBe(42)
+    expect(task.payload?.serverBacked).toBe(true)
+  })
 })

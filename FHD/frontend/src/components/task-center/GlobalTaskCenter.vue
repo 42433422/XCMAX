@@ -108,6 +108,7 @@ onBeforeUnmount(() => store.stop())
               <p v-if="!selectedTask">
                 <span :class="['connection-dot', { 'is-online': connected }]" />
                 {{ connected ? '实时连接' : '自动重连' }} · {{ runtime.running ? `并发 ${runtime.active_count}/${runtime.max_workers}` : '执行器未启动' }}
+                <template v-if="runtime.progress?.task_count"> · 总进度 {{ runtime.progress.overall_percent }}%</template>
               </p>
             </div>
             <button class="task-center-close" type="button" aria-label="关闭" @click="store.closeDrawer()">×</button>
@@ -139,6 +140,20 @@ onBeforeUnmount(() => store.stop())
                   第 {{ task.attempt || 1 }} 次 · {{ task.execution ? statusLabel(task.execution.state) : '等待调度' }}
                   <small>{{ formatTime(task.updated_at) }}</small>
                 </span>
+                <span v-if="task.progress" class="task-center-progress">
+                  <span class="task-center-progress__head">
+                    <span>{{ task.progress.stage }}<template v-if="task.progress.detail"> · {{ task.progress.detail }}</template></span>
+                    <strong>{{ task.progress.percent }}%</strong>
+                  </span>
+                  <span
+                    class="task-center-progress__track"
+                    role="progressbar"
+                    :aria-label="`${task.title}进度`"
+                    :aria-valuenow="task.progress.percent"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                  ><span :style="{ width: `${task.progress.percent}%` }" /></span>
+                </span>
                 <span v-if="task.attention_state" class="task-center-attention">需要你处理</span>
               </button>
               <div v-if="!filteredTasks.length" class="task-center-empty">
@@ -152,6 +167,26 @@ onBeforeUnmount(() => store.stop())
               <span class="task-status" :data-status="selectedTask.status">{{ statusLabel(selectedTask.status) }}</span>
               <span>第 {{ selectedTask.attempt }} 次 / 共 {{ selectedTask.run_count }} 次</span>
               <span v-if="selectedTask.execution">执行 {{ selectedTask.execution.execution_count }} 次 · 恢复 {{ selectedTask.execution.recovery_count }} 次</span>
+            </section>
+
+            <section v-if="selectedTask.progress" class="task-center-section task-center-detail-progress">
+              <h3>统一进度</h3>
+              <div class="task-center-progress__head">
+                <span>{{ selectedTask.progress.stage }}<template v-if="selectedTask.progress.detail"> · {{ selectedTask.progress.detail }}</template></span>
+                <strong>{{ selectedTask.progress.percent }}%</strong>
+              </div>
+              <div
+                class="task-center-progress__track"
+                role="progressbar"
+                aria-label="任务统一进度"
+                :aria-valuenow="selectedTask.progress.percent"
+                aria-valuemin="0"
+                aria-valuemax="100"
+              ><span :style="{ width: `${selectedTask.progress.percent}%` }" /></div>
+              <small v-if="selectedTask.progress.total_units">
+                已完成 {{ selectedTask.progress.completed_units }} / {{ selectedTask.progress.total_units }} 个步骤
+              </small>
+              <small v-else>当前阶段暂无可量化步骤，状态仍由服务端持续同步。</small>
             </section>
 
             <section v-if="activeRun?.steps?.length" class="task-center-section">
