@@ -8,7 +8,7 @@ import logging
 import time
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import Body, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.application.agent_orchestrator import AgentOrchestrator
@@ -54,8 +54,12 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["agent"])
-router.include_router(task_router)
+# Keep task and run endpoints on one concrete router. FastAPI 0.138+ represents
+# nested ``include_router`` calls as ``_IncludedRouter`` objects; nesting here
+# made the task endpoints invisible to the repository's one-level route
+# registration/golden-snapshot boundary even though direct TestClient calls
+# could still traverse them.
+router = task_router
 
 
 @router.post("/api/agent/runs", response_model=None)
