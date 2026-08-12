@@ -166,6 +166,7 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute("PRAGMA synchronous=FULL")
             cursor.execute("PRAGMA wal_autocheckpoint=1000")
+            cursor.execute("PRAGMA busy_timeout=45000")
             cursor.execute("PRAGMA cache_size=-64000")
             cursor.execute("PRAGMA foreign_keys=ON")
         else:
@@ -218,13 +219,29 @@ def _sqlite_desktop_mode() -> bool:
 
 def _create_engine_for_url(url: str):
     if url.startswith("sqlite"):
-        # 桌面单用户：StaticPool 复用单连接，降低 NullPool 每次请求的开销。
-        # 服务端/多写场景仍用 NullPool，减轻 database is locked。
+        # 内存库必须共享同一连接，否则每个 session 会看到不同的数据库。
+        # 文件型桌面库会同时承载 HTTP 请求和 Agent worker；StaticPool 会让
+        # 多个线程并发操作同一个 sqlite3.Connection，造成结果串线、事务
+        # 互相回滚以及 ``bad parameter or other API misuse``。为桌面文件库使用
+        # 有界 QueuePool，让每个并发事务拥有独立连接，再由 WAL/busy_timeout
+        # 负责 SQLite 的写入串行化。
         if _sqlite_desktop_mode():
+            parsed = make_url(url)
+            if not parsed.database or parsed.database == ":memory:":
+                return create_engine(
+                    url,
+                    connect_args={"check_same_thread": False, "timeout": 45},
+                    poolclass=pool.StaticPool,
+                    echo=False,
+                )
             return create_engine(
                 url,
                 connect_args={"check_same_thread": False, "timeout": 45},
-                poolclass=pool.StaticPool,
+                poolclass=pool.QueuePool,
+                pool_size=8,
+                max_overflow=16,
+                pool_timeout=45,
+                pool_pre_ping=True,
                 echo=False,
             )
         return create_engine(

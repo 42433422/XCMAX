@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 import app.db as db_mod
@@ -119,13 +122,57 @@ def test_get_database_url_uses_database_url_env():
                 assert db_mod._get_database_url() == "sqlite:///env.db"
 
 
-def test_create_engine_sqlite_desktop_uses_static_pool():
+def test_create_engine_sqlite_desktop_uses_queue_pool():
     with patch.dict("os.environ", {"XCAGI_DESKTOP_MODE": "true"}, clear=False):
         engine = db_mod._create_engine_for_url("sqlite:///desk.db")
+        try:
+            assert "QueuePool" in type(engine.pool).__name__
+        finally:
+            engine.dispose()
+
+
+def test_create_engine_sqlite_desktop_memory_keeps_static_pool():
+    with patch.dict("os.environ", {"XCAGI_DESKTOP_MODE": "true"}, clear=False):
+        engine = db_mod._create_engine_for_url("sqlite:///:memory:")
         try:
             assert "StaticPool" in type(engine.pool).__name__
         finally:
             engine.dispose()
+
+
+def test_desktop_sqlite_concurrent_writes_use_independent_connections(tmp_path):
+    db_path = tmp_path / "desktop-concurrency.db"
+    with patch.dict("os.environ", {"XCAGI_DESKTOP_MODE": "true"}, clear=False):
+        engine = db_mod._create_engine_for_url(f"sqlite:///{db_path}")
+
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text("CREATE TABLE task_probe (task_id INTEGER PRIMARY KEY, title TEXT NOT NULL)")
+            )
+
+        barrier = threading.Barrier(4)
+
+        def insert_task(task_id: int) -> None:
+            barrier.wait(timeout=5)
+            with engine.begin() as connection:
+                connection.execute(
+                    text("INSERT INTO task_probe (task_id, title) VALUES (:task_id, :title)"),
+                    {"task_id": task_id, "title": f"task-{task_id}"},
+                )
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(insert_task, task_id) for task_id in range(4)]
+            for future in futures:
+                future.result(timeout=10)
+
+        with engine.connect() as connection:
+            rows = connection.execute(
+                text("SELECT task_id, title FROM task_probe ORDER BY task_id")
+            ).all()
+        assert rows == [(index, f"task-{index}") for index in range(4)]
+    finally:
+        engine.dispose()
 
 
 def test_create_engine_sqlite_server_uses_null_pool():

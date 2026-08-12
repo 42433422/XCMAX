@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -250,3 +253,41 @@ def test_sqlalchemy_agent_run_repository_persists_runs_across_instances(tmp_path
         is not None
     )
     assert process_two_repo.get_task(user_id="u1", task_id="task-xg-5003") is None
+
+
+def test_desktop_repository_persists_four_tasks_concurrently(tmp_path, monkeypatch) -> None:
+    from app.db import _create_engine_for_url
+
+    monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+    engine = _create_engine_for_url(f"sqlite:///{tmp_path / 'agent-runs-concurrent.db'}")
+    session_factory = sessionmaker(bind=engine)
+    repository = SQLAlchemyAgentRunRepository(session_factory=session_factory)
+
+    try:
+        repository._ensure_schema()
+        barrier = threading.Barrier(4)
+
+        def persist_task(index: int) -> str:
+            run = AgentRun(user_id="desktop-user", message=f"并发任务 {index}")
+            run.metadata["runtime_context"] = {"tenant_id": "tenant-1"}
+            run.metadata["task_context"] = {
+                "task_id": f"desktop-task-{index}",
+                "title": f"并发任务 {index}",
+            }
+            barrier.wait(timeout=5)
+            return repository.save(run).run_id
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(persist_task, index) for index in range(4)]
+            saved_run_ids = [future.result(timeout=10) for future in futures]
+
+        assert len(set(saved_run_ids)) == 4
+        tasks = repository.list_tasks(user_id="desktop-user", tenant_id="tenant-1")
+        assert {task.task_id for task in tasks} == {
+            "desktop-task-0",
+            "desktop-task-1",
+            "desktop-task-2",
+            "desktop-task-3",
+        }
+    finally:
+        engine.dispose()
