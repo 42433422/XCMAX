@@ -283,6 +283,9 @@ async def finalize_enterprise_login(
 
         mtok = str((market_result or {}).get("token") or "").strip()
         mrefresh = str((market_result or {}).get("refresh_token") or "").strip()
+        from app.application.surface_audit_demo_account import is_local_demo_market_token
+
+        local_demo_market = bool(mtok and is_local_demo_market_token(mtok))
         if market_result and market_result.get("success") and mtok:
             save_session_market_token(str(session_id), mtok, mrefresh or None)
             result["market_access_token"] = mtok
@@ -334,7 +337,7 @@ async def finalize_enterprise_login(
             result["market_is_admin"] = market_is_admin
             result["market_is_enterprise"] = market_is_enterprise
             # 维度3 会员体系：登录后从市场同步会员等级到 Session.market_membership_tier
-            if mtok:
+            if mtok and not local_demo_market:
                 from app.application.session_account_meta import (
                     persist_session_membership_tier,
                 )
@@ -365,7 +368,13 @@ async def finalize_enterprise_login(
                 )
             result["account_kind"] = account_kind
 
-        if sku == "enterprise" and market_result and market_result.get("success") and mtok:
+        if (
+            sku == "enterprise"
+            and market_result
+            and market_result.get("success")
+            and mtok
+            and not local_demo_market
+        ):
             from app.enterprise.mod_entitlements import (
                 get_cached_entitled_client_mod_ids,
                 persist_entitlements_to_session_row,
