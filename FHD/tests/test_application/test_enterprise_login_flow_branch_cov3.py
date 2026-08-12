@@ -658,6 +658,70 @@ class TestFinalizeEnterpriseLogin:
         assert "entitled_mod_ids" not in out
 
     @pytest.mark.asyncio
+    async def test_local_demo_token_skips_remote_membership_and_entitlements(self):
+        """本地演示 token 只走本地权益回退，不访问不存在的市场服务。"""
+        result = {"user": {"id": 1}}
+        market = {
+            "success": True,
+            "token": "xcagi-local-surface-audit-demo",
+            "raw": {"user": {"id": 5}},
+        }
+        with (
+            patch("app.fastapi_routes.market_account.save_session_market_token"),
+            patch(
+                "app.application.enterprise_login_flow.extract_market_user_blob",
+                return_value={"id": 5},
+            ),
+            patch(
+                "app.application.enterprise_login_flow.company_brand_from_user_blob",
+                return_value="",
+            ),
+            patch(
+                "app.application.enterprise_login_flow.bind_tenant_for_login",
+                return_value={"tenant_id": None, "tenant_name": ""},
+            ),
+            patch(
+                "app.application.enterprise_login_flow._derive_and_heal_account_kind",
+                return_value="enterprise",
+            ),
+            patch("app.application.enterprise_login_flow.persist_session_account_meta"),
+            patch(
+                "app.fastapi_routes.market_account.fetch_market_membership_tier",
+                new_callable=AsyncMock,
+            ) as mock_membership,
+            patch(
+                "app.enterprise.mod_entitlements.refresh_session_entitlements_from_market",
+                new_callable=AsyncMock,
+            ) as mock_refresh,
+            patch(
+                "app.enterprise.account_mod_binding.augment_entitled_client_mod_ids_for_username",
+                return_value={10, 20},
+            ),
+            patch("app.enterprise.mod_entitlements.set_session_entitlements"),
+            patch("app.enterprise.mod_entitlements.persist_entitlements_to_session_row"),
+            patch(
+                "app.enterprise.mod_entitlements.enterprise_mod_filter_active",
+                return_value=False,
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids",
+                return_value={10, 20},
+            ),
+        ):
+            out = await finalize_enterprise_login(
+                result=result,
+                session_id="sid",
+                market_result=market,
+                account_kind="enterprise",
+                username="xcagi-enterprise-demo",
+                sku="enterprise",
+            )
+
+        mock_membership.assert_not_awaited()
+        mock_refresh.assert_not_awaited()
+        assert out["entitled_mod_ids"] == [10, 20]
+
+    @pytest.mark.asyncio
     async def test_recoverable_error_during_market_sync(self):
         """RECOVERABLE_ERRORS 异常 → market_account success=False。"""
         result = {"user": {"id": 1}}
