@@ -41,6 +41,7 @@ export interface AgentToolCall {
   duration_ms?: number
   cost_units?: number
   metadata?: Record<string, unknown>
+  output?: Record<string, unknown>
 }
 
 export interface AgentArtifact {
@@ -108,9 +109,47 @@ export interface AgentRunReference {
   task_id: string
 }
 
+export interface AgentTaskCapabilities {
+  pause: boolean
+  cancel: boolean
+  retry: boolean
+  approve: boolean
+  resume: boolean
+  evidence: boolean
+}
+
+export interface AgentApprovalGrant {
+  grant: string
+  run_id: string
+  step_id: string
+  tool_id: string
+  action: string
+  expires_at: number
+}
+
+export interface AgentRunResponse extends ApiResponse<AgentRun> {
+  approval?: AgentApprovalGrant
+  capabilities?: AgentTaskCapabilities
+  deduplicated?: boolean
+}
+
+export interface CreateAgentTaskPayload {
+  task_id: string
+  title: string
+  message?: string
+  tool_id: string
+  action: string
+  params: Record<string, unknown>
+  runtime_context?: Record<string, unknown>
+}
+
 export const agentRunsApi = {
   createRun(payload: CreateAgentRunPayload): Promise<ApiResponse<AgentRun>> {
     return api.post<ApiResponse<AgentRun>>('/api/agent/runs', payload)
+  },
+
+  createTask(payload: CreateAgentTaskPayload): Promise<AgentRunResponse> {
+    return api.post<AgentRunResponse>('/api/agent/tasks', payload)
   },
 
   observeTool(payload: ObserveAgentToolPayload): Promise<ApiResponse<AgentRunReference>> {
@@ -120,8 +159,8 @@ export const agentRunsApi = {
   continueRun(
     runId: string,
     payload: ContinueAgentRunPayload,
-  ): Promise<ApiResponse<AgentRun>> {
-    return api.post<ApiResponse<AgentRun>>(
+  ): Promise<AgentRunResponse> {
+    return api.post<AgentRunResponse>(
       `/api/agent/runs/${encodeURIComponent(runId)}/continue`,
       payload,
     )
@@ -158,8 +197,8 @@ export const agentRunsApi = {
     )
   },
 
-  getRun(runId: string): Promise<ApiResponse<AgentRun>> {
-    return api.get<ApiResponse<AgentRun>>(`/api/agent/runs/${encodeURIComponent(runId)}`)
+  getRun(runId: string): Promise<AgentRunResponse> {
+    return api.get<AgentRunResponse>(`/api/agent/runs/${encodeURIComponent(runId)}`)
   },
 
   listRuns(params: { limit?: number } = {}): Promise<ApiResponse<AgentRun[]>> {

@@ -34,6 +34,7 @@ import { useChatResponseAttach } from './useChatResponseAttach'
 import { useChatSessionHistory } from './useChatSessionHistory'
 import { useAgentRunEventSync } from './useAgentRunEvents'
 import { useChatTaskRuntimeBridge } from './useChatTaskRuntimeBridge'
+import { useCanonicalChatTaskBridge } from './useCanonicalChatTaskBridge'
 import type { UseChatViewOptions } from './useChatView'
 import type { ChatAutoAction, ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { collapseExactDuplicateReply } from '@/utils/chatReplyNormalization'
@@ -140,8 +141,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     removeTask,
     finishTask,
     failTask,
-    cancelTaskById: cancelLocalTaskById,
-    retryTask: retryLocalTask,
     toggleTaskExpanded,
     setTaskFilter,
     clearTaskHistory: clearLocalTaskHistory,
@@ -300,8 +299,10 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     taskList, activeTaskId, expandedTaskIds, sortTaskList,
     persist: () => persistTaskPanelStateForSession(), loadConversation: loadSessionFromHistory,
     newConversation: newConversationFromHistory, jumpToMessage: jumpToTaskMessage,
-    toggleExpanded: toggleTaskExpanded, cancelLocal: cancelLocalTaskById,
-    retryLocal: retryLocalTask, clearLocalHistory: clearLocalTaskHistory,
+    toggleExpanded: toggleTaskExpanded, clearLocalHistory: clearLocalTaskHistory,
+  })
+  const canonicalTaskBridge = useCanonicalChatTaskBridge({
+    sessionId, createTaskId, refreshTasks: agentTaskRuntime.refreshTasks,
   })
   const {
     lastShipmentExecution,
@@ -633,45 +634,19 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   function setCustomOrderNumber(value: string) {
     const t = currentTask.value
     if (!t) return
+    canonicalTaskBridge.invalidateStagedTask(t, value)
     t.customOrderNumber = value
-  }
-
-  function shouldAutoRunTask(task: ShipmentTask | null): boolean {
-    if (!task || task.completed) return false
-    const taskType = String(task.type || '').trim().toLowerCase()
-    if (taskType === 'excel_import') return true
-    if (taskType.includes('excel') && taskType.includes('import')) return true
-
-    const toolId = String(
-      task.payload?.tool_id
-      || task.payload?.params?.tool_id
-      || task.tool_id
-      || ''
-    ).trim().toLowerCase()
-    if (toolId === 'import_excel_to_database' || toolId === 'excel_import') return true
-    if (toolId.includes('excel') && toolId.includes('import')) return true
-    return false
-  }
-
-  function scheduleAutoConfirmTask(task: DynamicShipmentTask): void {
-    if (!task || task.completed || !task.api_url) return
-    if (task.__xcagiAutoConfirmScheduled) return
-    task.__xcagiAutoConfirmScheduled = true
-    window.setTimeout(() => {
-      if (currentTask.value !== task) return
-      if (isExecuting.value || task.completed) return
-      void confirmTask()
-    }, 0)
   }
 
   function showTaskConfirm(task: unknown) {
     const nextTask = asShipmentTask(task)
     currentTask.value = nextTask
-    if (shouldAutoRunTask(nextTask)) {
-      scheduleAutoConfirmTask(nextTask)
-    }
 
-    if (nextTask.type !== 'shipment_generate' || nextTask.completed) return
+    if (nextTask.completed) return
+    if (nextTask.type !== 'shipment_generate') {
+      void canonicalTaskBridge.stageCanonicalTask(nextTask).catch(() => { /* execution stays blocked */ })
+      return
+    }
 
     const existingOrderNo = String(
       nextTask.customOrderNumber
@@ -683,12 +658,19 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
     if (existingOrderNo) {
       nextTask.customOrderNumber = existingOrderNo
+      void canonicalTaskBridge.stageCanonicalTask(nextTask).catch(() => { /* execution stays blocked */ })
       return
     }
 
     nextTask.customOrderNumber = ''
-    hydrateTaskOrderNumber(nextTask).catch(() => { })
-    enrichShipmentPreviewProducts(nextTask).catch(() => { })
+    Promise.allSettled([
+      hydrateTaskOrderNumber(nextTask),
+      enrichShipmentPreviewProducts(nextTask),
+    ]).then(() => {
+      if (currentTask.value === nextTask) {
+        void canonicalTaskBridge.stageCanonicalTask(nextTask).catch(() => { /* execution stays blocked */ })
+      }
+    })
   }
 
   function emitAssistantPush(payload: unknown = {}) {
@@ -874,7 +856,11 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
     try {
       let result
-      if (method === 'GET') {
+      const canonicalResult = await canonicalTaskBridge.executeCanonicalTask(task, asRecord(payload.params))
+
+      if (canonicalResult) {
+        result = canonicalResult
+      } else if (method === 'GET') {
         result = await fetch(apiUrl)
       } else {
         result = await fetch(apiUrl, {
@@ -966,6 +952,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   }
 
   function cancelTask() {
+    canonicalTaskBridge.cancelCanonicalTask(currentTask.value)
     currentTask.value = null
     persistTaskPanelStateForSession()
   }

@@ -38,6 +38,7 @@ export type AgentRunEventType =
   | 'step.repair_rejected'
   | 'step.retry_scheduled'
   | 'step.waiting_user'
+  | 'task.approval_required'
   | 'tool.completed'
   | 'tool.failed'
   | 'tool.started';

@@ -12,8 +12,6 @@ interface UseChatTaskRuntimeBridgeOptions {
   newConversation: () => void
   jumpToMessage: (task: TaskItem) => void
   toggleExpanded: (taskId: string) => void
-  cancelLocal: (taskId: string) => void
-  retryLocal: (taskId: string) => void
   clearLocalHistory: () => void
 }
 
@@ -46,8 +44,6 @@ export function useChatTaskRuntimeBridge(options: UseChatTaskRuntimeBridgeOption
   async function controlTask(taskId: string, action: 'cancel' | 'retry'): Promise<void> {
     const task = options.taskList.value.find((item) => item.id === taskId)
     if (task?.type === 'agent_task') await workspace.controlTask(taskId, action)
-    else if (action === 'retry') options.retryLocal(taskId)
-    else options.cancelLocal(taskId)
   }
 
   function clearTaskHistory(): void {
@@ -63,6 +59,7 @@ export function useChatTaskRuntimeBridge(options: UseChatTaskRuntimeBridgeOption
     retryTask: (id: string) => controlTask(id, 'retry'),
     pauseTask: (id: string) => workspace.controlTask(id, 'pause'),
     resumeTask: (id: string) => workspace.controlTask(id, 'resume'),
+    approveTask: (id: string) => workspace.controlTask(id, 'approve'),
     clearTaskHistory,
     refreshTasks: workspace.refreshTasks,
     start: workspace.start,

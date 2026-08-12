@@ -490,3 +490,110 @@ def test_get_agent_run_returns_404_for_missing_run() -> None:
     events_response = client.get("/api/agent/runs/run_missing/events")
     assert events_response.status_code == 404
     assert events_response.json()["success"] is False
+
+
+def test_unified_task_requires_approval_and_deduplicates_execution() -> None:
+    repository = get_agent_run_repository()
+    repository.clear()
+    clear_consumed_approval_grants_for_tests()
+    client = _client("task-owner")
+    body = {
+        "task_id": "chat-shipment-001",
+        "title": "生成客户甲发货单",
+        "message": "给客户甲生成一张发货单",
+        "tool_id": "shipment_orders",
+        "action": "generate",
+        "params": {
+            "unit_name": "客户甲",
+            "products": [{"model_number": "A-01", "quantity": 2}],
+        },
+        "runtime_context": {"conversation_id": "chat-001"},
+    }
+
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        return_value={
+            "success": True,
+            "message": "发货单已生成",
+            "order_id": 41,
+            "file_path": "/tmp/shipment-41.docx",
+        },
+    ) as execute:
+        created = client.post("/api/agent/tasks", json=body)
+        assert created.status_code == 202
+        created_payload = created.json()
+        run = created_payload["data"]
+        assert run["status"] == "waiting_user"
+        assert run["steps"][0]["status"] == "waiting_user"
+        assert created_payload["capabilities"]["approve"] is True
+        assert created_payload["capabilities"]["pause"] is True
+        assert created_payload["deduplicated"] is False
+        execute.assert_not_called()
+
+        paused = client.post(f"/api/agent/runs/{run['run_id']}/pause").json()
+        assert paused["data"]["status"] == "paused"
+        assert paused["capabilities"]["resume"] is True
+
+        resumed = client.post(f"/api/agent/runs/{run['run_id']}/resume", json={}).json()
+        assert resumed["data"]["status"] == "waiting_user"
+        assert resumed["capabilities"]["approve"] is True
+        execute.assert_not_called()
+
+        approval_grant = resumed["approval"]["grant"]
+        approved = client.post(
+            f"/api/agent/runs/{run['run_id']}/continue",
+            json={"approval_grant": approval_grant},
+        )
+        assert approved.status_code == 200
+        completed = approved.json()["data"]
+        assert completed["status"] == "completed"
+        assert completed["tool_calls"][0]["status"] == "completed"
+        assert completed["final_output"]["node_outputs"]
+        assert "step.approved" in [event["event_type"] for event in completed["events"]]
+        execute.assert_called_once()
+        assert execute.call_args.args[:2] == ("shipment_orders", "generate")
+        assert execute.call_args.args[2]["unit_name"] == "客户甲"
+        assert execute.call_args.args[2]["products"] == [{"model_number": "A-01", "quantity": 2}]
+        assert isinstance(execute.call_args.args[2]["_runtime_context"], dict)
+
+        duplicate = client.post("/api/agent/tasks", json=body)
+        assert duplicate.status_code == 200
+        assert duplicate.json()["deduplicated"] is True
+        assert duplicate.json()["data"]["run_id"] == run["run_id"]
+        execute.assert_called_once()
+
+    mismatched = client.post(
+        "/api/agent/tasks",
+        json={**body, "params": {"unit_name": "客户乙", "products": [{"quantity": 1}]}},
+    )
+    assert mismatched.status_code == 409
+
+
+def test_unified_low_risk_task_cancel_and_retry_preserve_exact_approval() -> None:
+    repository = get_agent_run_repository()
+    repository.clear()
+    client = _client("task-owner")
+    body = {
+        "task_id": "chat-shipment-retry",
+        "title": "可恢复客户查询任务",
+        "tool_id": "customers",
+        "action": "query",
+        "params": {"keyword": "客户乙"},
+    }
+    created = client.post("/api/agent/tasks", json=body).json()["data"]
+    cancelled = client.post(f"/api/agent/runs/{created['run_id']}/cancel").json()["data"]
+    assert cancelled["status"] == "cancelled"
+
+    with patch("app.application.facades.tools_facade.execute_registered_workflow_tool") as execute:
+        retried = client.post(f"/api/agent/runs/{created['run_id']}/retry", json={})
+
+    assert retried.status_code == 200
+    retried_run = repository.get(retried.json()["data"]["run_id"])
+    assert retried_run is not None
+    assert retried_run.status == "waiting_user"
+    assert retried_run.steps[0].tool_id == "customers"
+    assert retried_run.steps[0].action == "query"
+    assert retried_run.steps[0].params == body["params"]
+    assert retried_run.metadata["task_context"]["task_id"] == body["task_id"]
+    assert retried_run.metadata["task_context"]["attempt"] == 2
+    execute.assert_not_called()

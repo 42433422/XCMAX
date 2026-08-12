@@ -221,7 +221,7 @@
               <div v-if="expandedTaskIds.includes(task.id)" class="task-list-detail">
                 <div v-if="task.summary" class="task-summary">{{ normalizeTaskDisplayText(task.summary) }}</div>
                 <div v-if="task.error" class="task-error">{{ normalizeTaskDisplayText(task.error) }}</div>
-                <AgentTaskRuntimePanel v-if="task.type === 'agent_task'" :task="task" @open="$emit('select-task', task)" @retry="$emit('retry-task', task.id)" @pause="$emit('pause-task', task.id)" @resume="$emit('resume-task', task.id)" @cancel="$emit('cancel-task-by-id', task.id)" />
+                <AgentTaskRuntimePanel v-if="task.type === 'agent_task'" :task="task" @open="$emit('select-task', task)" @approve="$emit('approve-task', task.id)" @retry="$emit('retry-task', task.id)" @pause="$emit('pause-task', task.id)" @resume="$emit('resume-task', task.id)" @cancel="$emit('cancel-task-by-id', task.id)" />
                 <div
                   v-if="task.type !== 'workflow_employee' && task.type !== 'agent_task'"
                   class="task-actions"
@@ -233,8 +233,7 @@
                     @click="$emit('open-shipment-records')"
                   >{{ $t('chat.openShipmentRecords') }}</button>
                   <button class="btn btn-secondary btn-sm" @click="$emit('jump-to-task-message', task)">{{ $t('chat.jumpToMessage') }}</button>
-                  <button v-if="task.status === 'failed' || task.status === 'cancelled'" class="btn btn-primary btn-sm" @click="$emit('retry-task', task.id)">{{ $t('chat.retryTask') }}</button>
-                  <button v-if="task.status === 'running' || task.status === 'queued'" class="btn btn-secondary btn-sm" @click="$emit('cancel-task-by-id', task.id)">{{ $t('chat.cancel') }}</button>
+                  <span class="task-summary">本地状态快照，不提供伪控制</span>
                 </div>
               </div>
             </div>
@@ -342,6 +341,7 @@ const emit = defineEmits<{
   'jump-to-task-message': [task: TaskItem]
   'retry-task': [id: string]
   'pause-task': [id: string]; 'resume-task': [id: string]
+  'approve-task': [id: string]
   'cancel-task-by-id': [id: string]
   'copy-assistant-push': []
   'open-assistant-float': []

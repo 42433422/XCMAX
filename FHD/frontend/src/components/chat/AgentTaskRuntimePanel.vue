@@ -26,8 +26,22 @@
     <div v-if="Number(payload.artifactCount || 0)" class="agent-task-evidence">
       {{ $t('chat.evidenceCount', { count: payload.artifactCount }) }}
     </div>
+    <div class="agent-task-evidence">
+      结果证据：{{ payload.eventCount || 0 }} 条事件 · {{ payload.completedToolCount || 0 }} 次已完成工具调用 · {{ payload.artifactCount || 0 }} 个产物
+    </div>
+    <details v-if="hasResultEvidence" class="agent-result-evidence">
+      <summary>查看结果证据</summary>
+      <pre v-if="finalOutputText">{{ finalOutputText }}</pre>
+      <ul v-if="artifacts.length">
+        <li v-for="artifact in artifacts" :key="artifact.artifact_id">
+          {{ artifact.name || artifact.artifact_type || artifact.artifact_id }}
+          <small v-if="artifact.uri">{{ artifact.uri }}</small>
+        </li>
+      </ul>
+    </details>
     <div class="task-actions">
       <button class="btn btn-primary btn-sm" @click="$emit('open')">{{ $t('chat.openTask') }}</button>
+      <button v-if="can('approve')" class="btn btn-success btn-sm" @click="$emit('approve')">审批并执行</button>
       <button v-if="isRetryable" class="btn btn-primary btn-sm" @click="$emit('retry')">{{ $t('chat.retryTask') }}</button>
       <button v-if="isPausable" class="btn btn-secondary btn-sm" @click="$emit('pause')">{{ $t('chat.pauseTask') }}</button>
       <button v-if="task.status === 'paused'" class="btn btn-primary btn-sm" @click="$emit('resume')">{{ $t('chat.resumeTask') }}</button>
@@ -38,7 +52,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { AgentRunStep, AgentToolCall } from '@/api/agentRuns'
+import type { AgentArtifact, AgentRunStep, AgentToolCall } from '@/api/agentRuns'
 import type { TaskItem } from '@/composables/useChatPersistence'
 
 type AgentTaskPayload = {
@@ -50,17 +64,43 @@ type AgentTaskPayload = {
   steps?: AgentRunStep[]
   toolCalls?: AgentToolCall[]
   artifactCount?: number
+  eventCount?: number
+  completedToolCount?: number
+  capabilities?: Record<string, boolean>
+  rawRunStatus?: string
+  finalOutput?: Record<string, unknown>
+  artifacts?: AgentArtifact[]
 }
 
 const props = defineProps<{ task: TaskItem }>()
-defineEmits<{ open: []; retry: []; pause: []; resume: []; cancel: [] }>()
+defineEmits<{ open: []; approve: []; retry: []; pause: []; resume: []; cancel: [] }>()
 
 const payload = computed(() => (props.task.payload ?? {}) as AgentTaskPayload)
 const steps = computed(() => Array.isArray(payload.value.steps) ? payload.value.steps : [])
 const toolCalls = computed(() => Array.isArray(payload.value.toolCalls) ? payload.value.toolCalls : [])
-const isRetryable = computed(() => ['failed', 'cancelled', 'blocked'].includes(props.task.status))
-const isPausable = computed(() => ['running', 'queued'].includes(props.task.status))
-const isCancellable = computed(() => ['running', 'queued', 'blocked', 'paused'].includes(props.task.status))
+const artifacts = computed(() => Array.isArray(payload.value.artifacts) ? payload.value.artifacts : [])
+const finalOutputText = computed(() => {
+  const output = payload.value.finalOutput
+  if (!output || !Object.keys(output).length) return ''
+  const rendered = JSON.stringify(output, null, 2)
+  return rendered.length > 4000 ? `${rendered.slice(0, 4000)}\n…` : rendered
+})
+const hasResultEvidence = computed(() => Boolean(finalOutputText.value || artifacts.value.length))
+function can(action: string): boolean {
+  if (payload.value.capabilities && action in payload.value.capabilities) {
+    return Boolean(payload.value.capabilities[action])
+  }
+  const rawStatus = String(payload.value.rawRunStatus || props.task.status)
+  if (action === 'approve') return rawStatus === 'waiting_user'
+  if (action === 'pause') return ['queued', 'running', 'waiting_user'].includes(rawStatus)
+  if (action === 'resume') return rawStatus === 'paused'
+  if (action === 'cancel') return ['queued', 'running', 'blocked', 'paused', 'waiting_user'].includes(rawStatus)
+  if (action === 'retry') return ['failed', 'cancelled', 'blocked'].includes(rawStatus)
+  return action === 'evidence'
+}
+const isRetryable = computed(() => can('retry'))
+const isPausable = computed(() => can('pause'))
+const isCancellable = computed(() => can('cancel'))
 
 function stepStatus(status: string | undefined): string {
   const labels: Record<string, string> = {
@@ -87,5 +127,9 @@ function stepStatus(status: string | undefined): string {
 .agent-tool-sessions summary { cursor: pointer; font-size: 11px; font-weight: 600; color: #334155; }
 .agent-tool-session { padding-top: 5px; }
 .agent-tool-session small, .agent-task-evidence { color: #64748b; font-size: 11px; }
+.agent-result-evidence summary { cursor: pointer; font-size: 11px; font-weight: 600; color: #334155; }
+.agent-result-evidence pre { max-height: 220px; margin: 6px 0 0; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 10px; color: #334155; }
+.agent-result-evidence ul { margin: 6px 0 0; padding-left: 18px; font-size: 10px; color: #334155; }
+.agent-result-evidence small { display: block; word-break: break-all; color: #64748b; }
 .task-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 </style>

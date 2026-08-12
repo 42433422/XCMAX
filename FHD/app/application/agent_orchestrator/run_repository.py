@@ -24,6 +24,8 @@ class AgentRunRepository(Protocol):
 
     def list_recent(self, *, user_id: str | None = None, limit: int = 50) -> list[AgentRun]: ...
 
+    def list_task_runs(self, *, user_id: str, task_id: str) -> list[AgentRun]: ...
+
     def list_events(self, run_id: str, *, after_event_id: str | None = None) -> list[RunEvent]: ...
 
     def clear(self) -> None: ...
@@ -52,6 +54,20 @@ class InMemoryAgentRunRepository:
             runs = [run for run in runs if run.user_id == user_id]
         runs.sort(key=lambda run: run.updated_at, reverse=True)
         return [copy.deepcopy(run) for run in runs[: max(0, int(limit))]]
+
+    def list_task_runs(self, *, user_id: str, task_id: str) -> list[AgentRun]:
+        wanted_user = str(user_id or "")
+        wanted_task = str(task_id or "")
+        with self._lock:
+            runs = [
+                copy.deepcopy(run)
+                for run in self._runs.values()
+                if run.user_id == wanted_user
+                and isinstance(run.metadata.get("task_context"), dict)
+                and str(run.metadata["task_context"].get("task_id") or "") == wanted_task
+            ]
+        runs.sort(key=lambda run: (run.created_at, run.run_id))
+        return runs
 
     def list_events(self, run_id: str, *, after_event_id: str | None = None) -> list[RunEvent]:
         run = self.get(run_id)
@@ -134,6 +150,34 @@ class SQLAlchemyAgentRunRepository:
                 query.order_by(AgentRunRecord.updated_at.desc()).limit(max(0, int(limit))).all()
             )
             return [run for record in records if (run := self._record_to_run(record)) is not None]
+
+    def list_task_runs(self, *, user_id: str, task_id: str) -> list[AgentRun]:
+        """Resolve a durable task without relying on a recent-run window.
+
+        ``task_id`` currently lives in the versioned AgentRun payload.  Scanning one
+        principal's rows is intentionally slower than adding an un-migrated shadow
+        index, but it keeps idempotency correct for old tasks as well as recent ones.
+        """
+        self._ensure_schema()
+        wanted_task = str(task_id or "")
+        with self._session_scope(read_only=True) as db:
+            from app.db.models.agent import AgentRunRecord
+
+            records = (
+                db.query(AgentRunRecord)
+                .filter(AgentRunRecord.user_id == str(user_id or ""))
+                .order_by(AgentRunRecord.created_at.asc(), AgentRunRecord.run_id.asc())
+                .all()
+            )
+            runs: list[AgentRun] = []
+            for record in records:
+                run = self._record_to_run(record)
+                if run is None:
+                    continue
+                context = run.metadata.get("task_context")
+                if isinstance(context, dict) and str(context.get("task_id") or "") == wanted_task:
+                    runs.append(run)
+            return runs
 
     def list_events(self, run_id: str, *, after_event_id: str | None = None) -> list[RunEvent]:
         run = self.get(run_id)
