@@ -34,6 +34,7 @@
   "/api/agent/tasks/events/stream",
   "/api/agent/tasks/{task_id}",
   "/api/agent/tasks/{task_id}/archive",
+  "/api/agent/tasks/{task_id}/read",
   "/api/auth/avatar",
   "/api/auth/company-brand",
   "/api/auth/forgot-account",
