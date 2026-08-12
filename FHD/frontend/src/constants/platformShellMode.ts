@@ -41,6 +41,7 @@ export const SHELL_CORE_MENU_KEYS = new Set([
 /** 壳模式允许注册的路由 name */
 export const SHELL_CORE_ROUTE_NAMES = new Set([
   ...SHELL_CORE_MENU_KEYS,
+  'task-workspace',
   'product-onboarding',
   'mod-landing',
   'workflow-employee-stitch-full',

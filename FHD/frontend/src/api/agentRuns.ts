@@ -205,6 +205,8 @@ export interface AgentTaskSummary {
   task_type: string
   status: string
   attention_state?: string
+  unread_count?: number
+  approval_required?: boolean
   active_run_id?: string
   root_run_id?: string
   conversation_id?: string
@@ -256,6 +258,13 @@ export const agentRunsApi = {
 
   getTask(taskId: string): Promise<AgentTaskResponse> {
     return api.get<AgentTaskResponse>(`/api/agent/tasks/${encodeURIComponent(taskId)}`)
+  },
+
+  markTaskRead(taskId: string): Promise<AgentTaskResponse> {
+    return api.post<AgentTaskResponse>(
+      `/api/agent/tasks/${encodeURIComponent(taskId)}/read`,
+      {},
+    )
   },
 
   getTaskRuntime(): Promise<ApiResponse<AgentTaskRuntime>> {

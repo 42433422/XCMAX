@@ -31,6 +31,7 @@ describe('platformShellMode', () => {
     expect(SHELL_CORE_ROUTE_NAMES.has('login-forgot-password')).toBe(true)
     expect(SHELL_CORE_ROUTE_NAMES.has('private-mod-delivery')).toBe(true)
     expect(SHELL_CORE_ROUTE_NAMES.has('brain')).toBe(true)
+    expect(SHELL_CORE_ROUTE_NAMES.has('task-workspace')).toBe(true)
   })
 
   it('host business keys are not shell core', () => {

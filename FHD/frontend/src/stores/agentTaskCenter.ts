@@ -12,7 +12,7 @@ const TERMINAL_STATES = new Set(['completed', 'failed', 'cancelled'])
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message
-  return '任务中心暂时不可用'
+  return '工作区列表暂时不可用'
 }
 
 export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
@@ -32,6 +32,15 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
 
   const attentionCount = computed(() =>
     tasks.value.filter((task) => ['waiting_user', 'blocked', 'failed'].includes(task.status)).length,
+  )
+  const unreadCount = computed(() =>
+    tasks.value.reduce((total, task) => total + Math.max(
+      0,
+      Number(task.unread_count ?? (task.attention_state === 'result_unread' ? 1 : 0)) || 0,
+    ), 0),
+  )
+  const approvalCount = computed(() =>
+    tasks.value.filter((task) => task.approval_required || task.attention_state === 'approval_required' || task.status === 'waiting_user').length,
   )
   const activeCount = computed(() =>
     tasks.value.filter((task) => ['queued', 'planning', 'running', 'retrying'].includes(task.status)).length,
@@ -79,6 +88,22 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     drawerOpen.value = true
     selectedTask.value = tasks.value.find((task) => task.task_id === taskId) || null
     await refreshDetail()
+  }
+
+  async function markTaskRead(taskId: string): Promise<void> {
+    const id = String(taskId || '').trim()
+    if (!id) return
+    try {
+      const response = await agentRunsApi.markTaskRead(id)
+      const updated = response.data
+      if (updated) {
+        tasks.value = tasks.value.map((task) => task.task_id === id ? { ...task, ...updated } : task)
+        if (selectedTaskId.value === id) selectedTask.value = updated
+      }
+      error.value = ''
+    } catch (reason) {
+      error.value = errorMessage(reason)
+    }
   }
 
   function closeDrawer(): void {
@@ -205,10 +230,13 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     error,
     runtime,
     attentionCount,
+    unreadCount,
+    approvalCount,
     activeCount,
     archiveSelected,
     closeDrawer,
     control,
+    markTaskRead,
     openTask,
     refresh,
     refreshDetail,

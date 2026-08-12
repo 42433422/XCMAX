@@ -77,6 +77,8 @@ class AgentTask:
             "task_type": self.task_type,
             "status": self.status,
             "attention_state": self.attention_state,
+            "unread_count": int(self.attention_state == "result_unread"),
+            "approval_required": self.attention_state == "approval_required",
             "active_run_id": self.active_run_id,
             "root_run_id": self.root_run_id,
             "conversation_id": self.conversation_id,

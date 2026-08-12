@@ -123,6 +123,13 @@ def create_unified_task(
     normalized_title = str(title or message or f"任务 {normalized_task_id[-8:]}").strip()[:80]
     normalized_message = str(message or normalized_title).strip()[:2000]
     context = dict(runtime_context or {})
+    # Every durable task is also an addressable conversation workspace.  Chat-created
+    # tasks keep their caller-provided session; non-chat entry points receive a stable
+    # task-scoped conversation instead of falling back to the last global chat.
+    if not str(context.get("conversation_id") or context.get("session_id") or "").strip():
+        context["conversation_id"] = normalized_task_id
+    if not str(context.get("workspace_id") or context.get("workspace") or "").strip():
+        context["workspace_id"] = normalized_task_id
     context.update(
         {
             "task_id": normalized_task_id,

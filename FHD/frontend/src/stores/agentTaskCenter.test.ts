@@ -12,6 +12,7 @@ const apiMock = vi.hoisted(() => ({
   resumeRun: vi.fn(),
   retryRun: vi.fn(),
   archiveTask: vi.fn(),
+  markTaskRead: vi.fn(),
   taskEventStreamPath: vi.fn(() => '/api/agent/tasks/events/stream'),
 }))
 
@@ -44,6 +45,7 @@ describe('agent task center store', () => {
     apiMock.resumeRun.mockResolvedValue({ success: true, data: task.active_run })
     apiMock.retryRun.mockResolvedValue({ success: true, data: task.active_run })
     apiMock.archiveTask.mockResolvedValue({ success: true, data: task })
+    apiMock.markTaskRead.mockResolvedValue({ success: true, data: { ...task, attention_state: '', unread_count: 0 } })
   })
 
   afterEach(() => {
@@ -56,6 +58,8 @@ describe('agent task center store', () => {
 
     expect(store.tasks).toHaveLength(1)
     expect(store.attentionCount).toBe(1)
+    expect(store.approvalCount).toBe(1)
+    expect(store.unreadCount).toBe(0)
     expect(store.runtime).toEqual({ running: true, max_workers: 4, active_count: 2 })
 
     await store.openTask('task-1')
@@ -108,8 +112,26 @@ describe('agent task center store', () => {
     expect(store.connected).toBe(true)
     expect(store.tasks[0].status).toBe('completed')
     expect(store.attentionCount).toBe(0)
+    expect(store.approvalCount).toBe(0)
+    expect(store.unreadCount).toBe(1)
     store.stop()
     expect(FakeEventSource.instances[0].closed).toBe(true)
+  })
+
+  it('persists result read state and updates the workspace list snapshot', async () => {
+    const store = useAgentTaskCenterStore()
+    apiMock.listTasks.mockResolvedValueOnce({
+      success: true,
+      data: [{ ...task, status: 'completed', attention_state: 'result_unread', unread_count: 1 }],
+    })
+    await store.refresh()
+    expect(store.unreadCount).toBe(1)
+
+    await store.markTaskRead('task-1')
+
+    expect(apiMock.markTaskRead).toHaveBeenCalledWith('task-1')
+    expect(store.tasks[0].attention_state).toBe('')
+    expect(store.unreadCount).toBe(0)
   })
 
   it('handles refresh and detail failures without losing durable state', async () => {
@@ -129,7 +151,7 @@ describe('agent task center store', () => {
     store.selectedTaskId = 'missing-task'
     apiMock.getTask.mockRejectedValueOnce('offline')
     await store.refreshDetail()
-    expect(store.error).toBe('任务中心暂时不可用')
+    expect(store.error).toBe('工作区列表暂时不可用')
   })
 
   it('normalizes sparse API payloads and task selections', async () => {
