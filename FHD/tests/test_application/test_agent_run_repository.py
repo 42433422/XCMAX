@@ -109,6 +109,7 @@ def test_sqlalchemy_agent_run_repository_persists_runs_across_instances(tmp_path
     run.metadata["memory_reference_count"] = 1
     run.metadata["memory_hit_count"] = 1
     run.metadata["artifact_count"] = 1
+    run.metadata["task_context"] = {"task_id": "task-xg-5003"}
     first_event = run.add_event("run.created", "created")
     run.add_event("run.completed", "completed", {"ok": True})
     saved = repo.save(run)
@@ -149,6 +150,10 @@ def test_sqlalchemy_agent_run_repository_persists_runs_across_instances(tmp_path
 
     recent = restored_repo.list_recent(user_id="u1", limit=10)
     assert [item.run_id for item in recent] == [run.run_id]
+
+    task_runs = restored_repo.list_task_runs(user_id="u1", task_id="task-xg-5003")
+    assert [item.run_id for item in task_runs] == [run.run_id]
+    assert restored_repo.list_task_runs(user_id="u2", task_id="task-xg-5003") == []
 
     events_after_first = restored_repo.list_events(run.run_id, after_event_id=first_event.event_id)
     assert [event.event_type for event in events_after_first] == ["run.completed"]

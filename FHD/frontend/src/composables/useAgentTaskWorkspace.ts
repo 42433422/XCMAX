@@ -95,13 +95,18 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
 
   async function controlTask(
     taskId: string,
-    action: 'pause' | 'resume' | 'cancel' | 'retry',
+    action: 'pause' | 'resume' | 'cancel' | 'retry' | 'approve',
   ): Promise<void> {
     const task = options.taskList.value.find((item) => item.id === taskId)
     if (!task || task.type !== 'agent_task') return
     const runId = activeRunIdOfTask(task)
     if (!runId) return
-    if (action === 'pause') await agentRunsApi.pauseRun(runId)
+    if (action === 'approve') {
+      const snapshot = await agentRunsApi.getRun(runId)
+      const grant = snapshot.approval?.grant
+      if (!grant) throw new Error('任务当前没有可用的审批凭证')
+      await agentRunsApi.continueRun(runId, { approval_grant: grant })
+    } else if (action === 'pause') await agentRunsApi.pauseRun(runId)
     else if (action === 'resume') await agentRunsApi.resumeRun(runId)
     else if (action === 'retry') await agentRunsApi.retryRun(runId)
     else await agentRunsApi.cancelRun(runId)

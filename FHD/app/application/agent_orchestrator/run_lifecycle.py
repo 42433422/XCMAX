@@ -21,9 +21,14 @@ class RunLifecycleMixin:
             return None
         if run.status in {"completed", "failed", "cancelled"}:
             return run
+        resume_status = "waiting_user" if run.status == "waiting_user" else "running"
         request_run_control(run_id, "pause")
         run.status = "paused"
-        run.metadata["control"] = {"state": "paused", "requested_by": requested_by}
+        run.metadata["control"] = {
+            "state": "paused",
+            "requested_by": requested_by,
+            "resume_status": resume_status,
+        }
         run.add_event("run.paused", "Agent run 已暂停", {"requested_by": requested_by})
         return self._repo.save(run)
 
@@ -49,14 +54,18 @@ class RunLifecycleMixin:
             return None
         if run.status != "paused":
             return run
+        control = run.metadata.get("control")
+        resume_status = str(control.get("resume_status") or "") if isinstance(control, dict) else ""
         clear_run_control(run_id)
         context = dict(run.metadata.get("runtime_context") or {})
         context.update(dict(runtime_context or {}))
         run.metadata["runtime_context"] = context
         run.metadata["control"] = {"state": "running", "requested_by": requested_by}
-        run.status = "running"
+        run.status = "waiting_user" if resume_status == "waiting_user" else "running"
         run.add_event("run.resumed", "Agent run 已恢复", {"requested_by": requested_by})
         self._repo.save(run)
+        if run.status == "waiting_user":
+            return self._repo.save(run)
         self._execute_ready_steps(run, runtime_context=context)
         return self._repo.save(run)
 
@@ -97,12 +106,24 @@ class RunLifecycleMixin:
                 "workspace_isolation": task.get("isolation") or context.get("workspace_isolation"),
             }
         )
-        retried = self.start_run(
-            user_id=previous.user_id,
-            message=previous.message,
-            runtime_context=context,
-            auto_execute=True,
-        )
+        provided_plan = previous.metadata.get("provided_plan")
+        if isinstance(provided_plan, dict) and provided_plan.get("nodes"):
+            retried = self.start_task_from_plan(
+                user_id=previous.user_id,
+                message=previous.message,
+                plan=self.plan_from_snapshot(provided_plan),
+                runtime_context=context,
+            )
+        else:
+            retried = self.start_run(
+                user_id=previous.user_id,
+                message=previous.message,
+                runtime_context=context,
+                auto_execute=True,
+            )
+        for key in ("task_model", "task_request", "task_request_fingerprint"):
+            if key in previous.metadata:
+                retried.metadata[key] = previous.metadata[key]
         retried.add_event(
             "run.retried",
             "任务已重新执行",

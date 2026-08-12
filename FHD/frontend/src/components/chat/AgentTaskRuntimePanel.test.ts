@@ -49,7 +49,7 @@ describe('AgentTaskRuntimePanel', () => {
     expect(wrapper.find('.agent-task-workspace').exists()).toBe(false)
     expect(wrapper.find('.agent-task-steps').exists()).toBe(false)
     expect(wrapper.find('.agent-tool-sessions').exists()).toBe(false)
-    expect(wrapper.find('.agent-task-evidence').exists()).toBe(false)
+    expect(wrapper.find('.agent-task-evidence').text()).toContain('结果证据：0 条事件')
     expect(wrapper.findAll('button').map((button) => button.text())).toEqual(['chat.openTask'])
   })
 
@@ -109,4 +109,36 @@ describe('AgentTaskRuntimePanel', () => {
       )
     },
   )
+
+  it('offers a real approval action only at the waiting checkpoint', async () => {
+    const wrapper = mountTask({
+      status: 'blocked',
+      payload: {
+        rawRunStatus: 'waiting_user',
+        capabilities: { approve: true, pause: true, cancel: true },
+      },
+    })
+    const approval = wrapper.findAll('button').find((button) => button.text() === '审批并执行')
+
+    expect(approval).toBeDefined()
+    await approval!.trigger('click')
+    expect(wrapper.emitted('approve')).toHaveLength(1)
+  })
+
+  it('exposes persisted result output and artifact identity as evidence', () => {
+    const wrapper = mountTask({
+      status: 'success',
+      payload: {
+        eventCount: 8,
+        completedToolCount: 1,
+        artifactCount: 1,
+        finalOutput: { node_outputs: { shipment: { success: true, order_id: 41 } } },
+        artifacts: [{ artifact_id: 'art-1', name: 'shipment-41.docx', uri: '/tmp/shipment-41.docx' }],
+      },
+    })
+
+    expect(wrapper.text()).toContain('8 条事件')
+    expect(wrapper.text()).toContain('shipment-41.docx')
+    expect(wrapper.find('.agent-result-evidence pre').text()).toContain('"order_id": 41')
+  })
 })

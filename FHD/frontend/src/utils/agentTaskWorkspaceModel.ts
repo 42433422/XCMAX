@@ -103,6 +103,26 @@ function evidenceOf(runs: AgentRun[]) {
     artifacts,
     delivery: metadataEvidence,
     artifact_count: artifacts.length,
+    event_count: runs.reduce((count, run) => count + asArray(run.events).length, 0),
+    completed_tool_count: runs.reduce(
+      (count, run) => count + asArray<AgentToolCall>(run.tool_calls)
+        .filter((call) => asString(call.status) === 'completed').length,
+      0,
+    ),
+  }
+}
+
+function capabilitiesOf(run: AgentRun) {
+  const status = asString(run.status)
+  return {
+    approve: status === 'waiting_user',
+    pause: ['queued', 'planning', 'running', 'retrying', 'waiting_user'].includes(status),
+    resume: status === 'paused',
+    cancel: ['queued', 'planning', 'running', 'retrying', 'waiting_user', 'paused', 'blocked']
+      .includes(status),
+    retry: ['failed', 'cancelled', 'blocked'].includes(status)
+      && !asRecord(run.metadata).non_retryable,
+    evidence: true,
   }
 }
 
@@ -162,6 +182,10 @@ export function groupAgentRunsIntoTasks(runs: AgentRun[]): TaskItem[] {
         artifacts: evidence.artifacts,
         deliveryEvidence: evidence.delivery,
         artifactCount: evidence.artifact_count,
+        eventCount: evidence.event_count,
+        completedToolCount: evidence.completed_tool_count,
+        finalOutput: current.final_output || {},
+        capabilities: capabilitiesOf(current),
         rawRunStatus: current.status,
       },
     }

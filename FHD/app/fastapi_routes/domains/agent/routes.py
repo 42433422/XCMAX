@@ -18,6 +18,12 @@ from app.application.agent_orchestrator.approval_grant import (
     issue_approval_grant,
 )
 from app.application.agent_orchestrator.run_control import run_operation_lock
+from app.application.agent_orchestrator.unified_task import (
+    UnifiedTaskConflictError,
+    UnifiedTaskError,
+    create_unified_task,
+    task_capabilities,
+)
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
 from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -75,7 +81,10 @@ def _internal_error_response(operation: str) -> JSONResponse:
 def _run_response(run: Any, *, principal: AgentPrincipal) -> dict[str, Any]:
     approval = issue_approval_grant(run, principal_id=principal.user_id)
     public_run = _public_run_dict(run)
-    return _success(public_run, approval=approval) if approval else _success(public_run)
+    extra: dict[str, Any] = {"capabilities": task_capabilities(run)}
+    if approval:
+        extra["approval"] = approval
+    return _success(public_run, **extra)
 
 
 def _run_reference_response(run: Any) -> dict[str, Any]:
@@ -146,6 +155,57 @@ def list_agent_runs(
         return _success([_public_run_dict(run) for run in runs], count=len(runs))
     except RECOVERABLE_ERRORS:
         return _internal_error_response("list agent runs")
+
+
+@router.post("/api/agent/tasks", response_model=None)
+def create_agent_task(
+    body: dict[str, Any] = Body(default_factory=dict),
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any] | JSONResponse:
+    data = body or {}
+    params = data.get("params") or {}
+    runtime_context = data.get("runtime_context") or {}
+    if not isinstance(params, dict) or not isinstance(runtime_context, dict):
+        return JSONResponse(
+            {"success": False, "message": "params 与 runtime_context 必须是对象"},
+            status_code=400,
+        )
+    try:
+        task_id = str(data.get("task_id") or "").strip()
+        if not task_id or len(task_id) > 160:
+            return JSONResponse(
+                {"success": False, "message": "task_id 不能为空且长度不能超过 160"},
+                status_code=400,
+            )
+        with run_operation_lock(f"task:{principal.user_id}:{task_id}"):
+            result = create_unified_task(
+                orchestrator=AgentOrchestrator(),
+                user_id=principal.user_id,
+                task_id=task_id,
+                title=str(data.get("title") or ""),
+                message=str(data.get("message") or data.get("title") or ""),
+                tool_id=str(data.get("tool_id") or ""),
+                action=str(data.get("action") or ""),
+                params=params,
+                runtime_context=runtime_context,
+            )
+        response = _run_response(result.run, principal=principal)
+        response["deduplicated"] = result.deduplicated
+        return JSONResponse(
+            response, status_code=202 if result.run.status == "waiting_user" else 200
+        )
+    except UnifiedTaskConflictError as exc:
+        return JSONResponse(
+            {"success": False, "message": str(exc)},
+            status_code=409,
+        )
+    except UnifiedTaskError as exc:
+        return JSONResponse(
+            {"success": False, "message": str(exc)},
+            status_code=400,
+        )
+    except RECOVERABLE_ERRORS:
+        return _internal_error_response("create agent task")
 
 
 @router.post("/api/agent/runs/observed-tool", response_model=None)

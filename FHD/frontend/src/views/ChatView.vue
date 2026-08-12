@@ -66,6 +66,7 @@
         @retry-task="retryTask"
         @pause-task="pauseTask"
         @resume-task="resumeTask"
+        @approve-task="approveTask"
         @cancel-task-by-id="cancelTaskById"
         @copy-assistant-push="copyAssistantPushContent"
         @open-assistant-float="openAssistantFloatFromTaskPanel"
@@ -286,6 +287,7 @@ const {
   retryTask,
   pauseTask,
   resumeTask,
+  approveTask,
   cancelTaskById,
   jumpToTaskMessage,
   showHistoryPanel,
