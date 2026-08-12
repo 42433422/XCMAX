@@ -11,7 +11,9 @@ const handleChatRequiresToken = vi.fn()
 const agentRunsApiMock = vi.hoisted(() => ({
   createTask: vi.fn(),
   continueRun: vi.fn(),
+  listTasks: vi.fn(),
   listRuns: vi.fn(),
+  archiveTask: vi.fn(),
   pauseRun: vi.fn(),
   resumeRun: vi.fn(),
   cancelRun: vi.fn(),
@@ -89,7 +91,6 @@ vi.mock('./useExcelAnalysis', async () => {
   }
 })
 vi.mock('./useShipmentTask', async () => {
-  const { ref } = await import('vue')
   return {
     useShipmentTask: () => ({
       lastShipmentExecution,
@@ -222,6 +223,7 @@ describe('useChatOrchestration task/print', () => {
     lastShipmentExecution.value = null
     executePrintTask.mockResolvedValue({ success: true, message: 'ok' })
     agentRunsApiMock.listRuns.mockResolvedValue({ success: true, data: [] })
+    agentRunsApiMock.listTasks.mockResolvedValue({ success: true, data: [] })
   })
 
   afterEach(() => {

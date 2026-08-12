@@ -4,7 +4,9 @@ import type { AgentRun } from '@/api/agentRuns'
 import type { TaskItem } from './useChatPersistence'
 
 const apiMock = vi.hoisted(() => ({
+  listTasks: vi.fn(),
   listRuns: vi.fn(),
+  archiveTask: vi.fn(),
   pauseRun: vi.fn(),
   resumeRun: vi.fn(),
   cancelRun: vi.fn(),
@@ -37,10 +39,30 @@ function serverRun(status = 'running'): AgentRun {
   }
 }
 
+function serverTask(status = 'running') {
+  const run = serverRun(status)
+  return {
+    task_id: 'conversation-monthly',
+    user_id: '7',
+    title: '生成月报',
+    source: 'agent',
+    task_type: 'agent',
+    status,
+    attempt: 1,
+    run_count: 1,
+    active_run_id: run.run_id,
+    created_at: run.created_at,
+    updated_at: run.updated_at,
+    runs: [run],
+    active_run: run,
+  }
+}
+
 describe('useAgentTaskWorkspace', () => {
   beforeEach(() => {
     localStorage.clear()
     Object.values(apiMock).forEach((mock) => mock.mockReset().mockResolvedValue({ success: true }))
+    apiMock.listTasks.mockResolvedValue({ success: true, data: [serverTask()] })
     apiMock.listRuns.mockResolvedValue({ success: true, data: [serverRun()] })
     apiMock.getRun.mockResolvedValue({
       success: true,
@@ -89,23 +111,25 @@ describe('useAgentTaskWorkspace', () => {
 
     expect(apiMock.pauseRun).toHaveBeenCalledWith('run-1')
     expect(apiMock.cancelRun).toHaveBeenCalledWith('run-1')
-    expect(apiMock.listRuns).toHaveBeenCalledTimes(3)
+    expect(apiMock.listTasks).toHaveBeenCalledTimes(3)
   })
 
-  it('archives completed tasks locally without deleting the server run', async () => {
-    apiMock.listRuns.mockResolvedValue({ success: true, data: [serverRun('completed')] })
+  it('archives completed tasks in the server SSOT without deleting a run', async () => {
+    apiMock.listTasks.mockResolvedValueOnce({ success: true, data: [serverTask('completed')] })
+      .mockResolvedValue({ success: true, data: [] })
     const state = setup()
     await state.workspace.refreshTasks()
 
-    state.workspace.archiveCompletedTasks()
+    await state.workspace.archiveCompletedTasks()
     await state.workspace.refreshTasks()
 
     expect(state.taskList.value).toHaveLength(0)
+    expect(apiMock.archiveTask).toHaveBeenCalledWith('conversation-monthly')
     expect(apiMock.cancelRun).not.toHaveBeenCalled()
   })
 
   it('approves through a fresh action-bound grant and refreshes evidence', async () => {
-    apiMock.listRuns.mockResolvedValue({ success: true, data: [serverRun('waiting_user')] })
+    apiMock.listTasks.mockResolvedValue({ success: true, data: [serverTask('waiting_user')] })
     const state = setup()
     await state.workspace.refreshTasks()
 
@@ -115,6 +139,6 @@ describe('useAgentTaskWorkspace', () => {
     expect(apiMock.continueRun).toHaveBeenCalledWith('run-1', {
       approval_grant: 'bound-grant',
     })
-    expect(apiMock.listRuns).toHaveBeenCalledTimes(2)
+    expect(apiMock.listTasks).toHaveBeenCalledTimes(2)
   })
 })
