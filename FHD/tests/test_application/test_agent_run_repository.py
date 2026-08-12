@@ -109,6 +109,7 @@ def test_sqlalchemy_agent_run_repository_persists_runs_across_instances(tmp_path
     run.metadata["memory_reference_count"] = 1
     run.metadata["memory_hit_count"] = 1
     run.metadata["artifact_count"] = 1
+    run.metadata["runtime_context"] = {"tenant_id": "tenant-a"}
     run.metadata["task_context"] = {"task_id": "task-xg-5003"}
     first_event = run.add_event("run.created", "created")
     run.add_event("run.completed", "completed", {"ok": True})
@@ -157,3 +158,95 @@ def test_sqlalchemy_agent_run_repository_persists_runs_across_instances(tmp_path
 
     events_after_first = restored_repo.list_events(run.run_id, after_event_id=first_event.event_id)
     assert [event.event_type for event in events_after_first] == ["run.completed"]
+
+    task = restored_repo.get_task(
+        user_id="u1",
+        task_id="task-xg-5003",
+        tenant_id="tenant-a",
+    )
+    assert task is not None
+    assert task.active_run_id == run.run_id
+    assert task.title == run.message
+    assert (
+        restored_repo.get_task(
+            user_id="u1",
+            task_id="task-xg-5003",
+            tenant_id="tenant-b",
+        )
+        is None
+    )
+    assert [
+        item.task_id
+        for item in restored_repo.list_tasks(
+            user_id="u1",
+            tenant_id="tenant-a",
+        )
+    ] == ["task-xg-5003"]
+
+    command = restored_repo.request_task_control(
+        run.run_id,
+        "pause",
+        requested_by="u1",
+    )
+    process_two_repo = SQLAlchemyAgentRunRepository(session_factory=session_factory)
+    durable_command = process_two_repo.latest_task_control(run.run_id)
+    assert durable_command is not None
+    assert durable_command.command_id == command.command_id
+    assert durable_command.status == "requested"
+    replacement = process_two_repo.request_task_control(
+        run.run_id,
+        "cancel",
+        requested_by="u1",
+    )
+    latest = restored_repo.latest_task_control(run.run_id)
+    assert latest is not None
+    assert latest.command_id == replacement.command_id
+    assert latest.action == "cancel"
+    applied = process_two_repo.mark_task_control(
+        replacement.command_id,
+        "applied",
+        applied_at="2026-08-12T12:00:00+00:00",
+    )
+    assert applied is not None
+    assert applied.status == "applied"
+
+    archived = process_two_repo.archive_task(
+        user_id="u1",
+        task_id="task-xg-5003",
+        archived_at="2026-08-12T12:01:00+00:00",
+    )
+    assert archived is not None
+    assert archived.archived_at == "2026-08-12T12:01:00+00:00"
+    assert process_two_repo.list_tasks(user_id="u1", tenant_id="tenant-a") == []
+    assert (
+        len(
+            process_two_repo.list_tasks(
+                user_id="u1",
+                tenant_id="tenant-a",
+                include_archived=True,
+            )
+        )
+        == 1
+    )
+
+    tenant_b_run = AgentRun(user_id="u1", message="同标识的另一租户任务")
+    tenant_b_run.metadata["runtime_context"] = {"tenant_id": "tenant-b"}
+    tenant_b_run.metadata["task_context"] = {"task_id": "task-xg-5003"}
+    process_two_repo.save(tenant_b_run)
+    assert (
+        process_two_repo.get_task(
+            user_id="u1",
+            task_id="task-xg-5003",
+            tenant_id="tenant-a",
+        )
+        is not None
+    )
+    assert (
+        process_two_repo.get_task(
+            user_id="u1",
+            task_id="task-xg-5003",
+            tenant_id="tenant-b",
+        )
+        is not None
+    )
+    assert process_two_repo.get_task(user_id="u1", task_id="task-xg-5003") is None

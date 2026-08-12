@@ -130,8 +130,53 @@ export interface AgentApprovalGrant {
 export interface AgentRunResponse extends ApiResponse<AgentRun> {
   approval?: AgentApprovalGrant
   capabilities?: AgentTaskCapabilities
+  control_command?: AgentTaskControlCommand
   deduplicated?: boolean
 }
+
+export interface AgentTaskControlCommand {
+  command_id: string
+  task_id: string
+  run_id: string
+  action: 'pause' | 'cancel' | 'resume'
+  status: 'requested' | 'applied' | 'superseded' | 'rejected'
+  requested_by?: string
+  created_at?: string
+  applied_at?: string
+}
+
+export interface AgentTaskSummary {
+  task_id: string
+  user_id: string
+  tenant_id?: string
+  title: string
+  source: string
+  task_type: string
+  status: string
+  attention_state?: string
+  active_run_id?: string
+  root_run_id?: string
+  conversation_id?: string
+  workspace_id?: string
+  workspace_path?: string
+  workspace_isolation?: string
+  attempt: number
+  run_count: number
+  archived_at?: string
+  metadata?: Record<string, unknown>
+  created_at?: string
+  updated_at?: string
+  runs?: AgentRun[]
+  active_run?: AgentRun
+  capabilities?: AgentTaskCapabilities
+  control_command?: AgentTaskControlCommand
+}
+
+export interface AgentTaskListResponse extends ApiResponse<AgentTaskSummary[]> {
+  count?: number
+}
+
+export interface AgentTaskResponse extends ApiResponse<AgentTaskSummary> {}
 
 export interface CreateAgentTaskPayload {
   task_id: string
@@ -150,6 +195,21 @@ export const agentRunsApi = {
 
   createTask(payload: CreateAgentTaskPayload): Promise<AgentRunResponse> {
     return api.post<AgentRunResponse>('/api/agent/tasks', payload)
+  },
+
+  listTasks(params: { limit?: number; include_archived?: boolean } = {}): Promise<AgentTaskListResponse> {
+    return api.get<AgentTaskListResponse>('/api/agent/tasks', params)
+  },
+
+  getTask(taskId: string): Promise<AgentTaskResponse> {
+    return api.get<AgentTaskResponse>(`/api/agent/tasks/${encodeURIComponent(taskId)}`)
+  },
+
+  archiveTask(taskId: string): Promise<AgentTaskResponse> {
+    return api.post<AgentTaskResponse>(
+      `/api/agent/tasks/${encodeURIComponent(taskId)}/archive`,
+      {},
+    )
   },
 
   observeTool(payload: ObserveAgentToolPayload): Promise<ApiResponse<AgentRunReference>> {

@@ -46,8 +46,8 @@ export function useChatTaskRuntimeBridge(options: UseChatTaskRuntimeBridgeOption
     if (task?.type === 'agent_task') await workspace.controlTask(taskId, action)
   }
 
-  function clearTaskHistory(): void {
-    workspace.archiveCompletedTasks()
+  async function clearTaskHistory(): Promise<void> {
+    await workspace.archiveCompletedTasks()
     options.clearLocalHistory()
   }
 

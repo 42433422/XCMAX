@@ -2,15 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.application.agent_orchestrator.run_control import (
-    clear_run_control,
-    get_run_control,
-    request_run_control,
-)
-from app.application.agent_orchestrator.run_models import AgentRun
+from app.application.agent_orchestrator.execution_lease import DurableExecutionLeaseMixin
+from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
 
 
-class RunLifecycleMixin:
+class RunLifecycleMixin(DurableExecutionLeaseMixin):
     """Cooperative pause, resume, and cancellation for an agent orchestrator."""
 
     _repo: Any
@@ -22,15 +18,36 @@ class RunLifecycleMixin:
         if run.status in {"completed", "failed", "cancelled"}:
             return run
         resume_status = "waiting_user" if run.status == "waiting_user" else "running"
-        request_run_control(run_id, "pause")
+        command = self._repo.request_task_control(run_id, "pause", requested_by=requested_by)
+        execution = run.metadata.get("execution")
+        execution_active = isinstance(execution, dict) and execution.get("state") == "active"
+        if execution_active:
+            run.metadata["control_request"] = {
+                "action": "pause",
+                "status": "requested",
+                "requested_by": requested_by,
+                "command_id": command.command_id,
+            }
+            return run
         run.status = "paused"
         run.metadata["control"] = {
             "state": "paused",
             "requested_by": requested_by,
             "resume_status": resume_status,
+            "command_id": command.command_id,
         }
-        run.add_event("run.paused", "Agent run 已暂停", {"requested_by": requested_by})
-        return self._repo.save(run)
+        run.add_event(
+            "run.paused",
+            "Agent run 已暂停",
+            {"requested_by": requested_by, "command_id": command.command_id},
+        )
+        stored = self._repo.save(run)
+        self._repo.mark_task_control(
+            command.command_id,
+            "applied",
+            applied_at=utc_now_iso(),
+        )
+        return stored
 
     def cancel_run(self, run_id: str, *, requested_by: str = "") -> AgentRun | None:
         run = self._repo.get(run_id)
@@ -38,9 +55,30 @@ class RunLifecycleMixin:
             return None
         if run.status in {"completed", "failed", "cancelled"}:
             return run
-        request_run_control(run_id, "cancel")
-        self._mark_controlled(run, "cancel", requested_by=requested_by)
-        return self._repo.save(run)
+        command = self._repo.request_task_control(run_id, "cancel", requested_by=requested_by)
+        execution = run.metadata.get("execution")
+        execution_active = isinstance(execution, dict) and execution.get("state") == "active"
+        if execution_active:
+            run.metadata["control_request"] = {
+                "action": "cancel",
+                "status": "requested",
+                "requested_by": requested_by,
+                "command_id": command.command_id,
+            }
+            return run
+        self._mark_controlled(
+            run,
+            "cancel",
+            requested_by=requested_by,
+            command_id=command.command_id,
+        )
+        stored = self._repo.save(run)
+        self._repo.mark_task_control(
+            command.command_id,
+            "applied",
+            applied_at=utc_now_iso(),
+        )
+        return stored
 
     def resume_run(
         self,
@@ -56,17 +94,26 @@ class RunLifecycleMixin:
             return run
         control = run.metadata.get("control")
         resume_status = str(control.get("resume_status") or "") if isinstance(control, dict) else ""
-        clear_run_control(run_id)
+        command = self._repo.request_task_control(run_id, "resume", requested_by=requested_by)
         context = dict(run.metadata.get("runtime_context") or {})
         context.update(dict(runtime_context or {}))
         run.metadata["runtime_context"] = context
-        run.metadata["control"] = {"state": "running", "requested_by": requested_by}
+        run.metadata["control"] = {
+            "state": "running",
+            "requested_by": requested_by,
+            "command_id": command.command_id,
+        }
         run.status = "waiting_user" if resume_status == "waiting_user" else "running"
-        run.add_event("run.resumed", "Agent run 已恢复", {"requested_by": requested_by})
+        run.add_event(
+            "run.resumed",
+            "Agent run 已恢复",
+            {"requested_by": requested_by, "command_id": command.command_id},
+        )
         self._repo.save(run)
+        self._repo.mark_task_control(command.command_id, "applied", applied_at=utc_now_iso())
         if run.status == "waiting_user":
             return self._repo.save(run)
-        self._execute_ready_steps(run, runtime_context=context)
+        self._execute_with_durable_lease(run, runtime_context=context)
         return self._repo.save(run)
 
     def retry_run(
@@ -138,11 +185,42 @@ class RunLifecycleMixin:
         return self._repo.save(retried)
 
     def _apply_requested_control(self, run: AgentRun) -> bool:
-        control = get_run_control(run.run_id)
-        if control is None:
+        command = self._repo.latest_task_control(run.run_id)
+        if (
+            command is None
+            or command.status != "requested"
+            or command.action not in {"pause", "cancel"}
+        ):
             return False
-        self._mark_controlled(run, control)
+        if run.status in {"completed", "failed", "cancelled"}:
+            self._repo.mark_task_control(
+                command.command_id,
+                "rejected",
+                applied_at=utc_now_iso(),
+            )
+            return False
+        control = run.metadata.get("control")
+        last_command_id = str(control.get("command_id") or "") if isinstance(control, dict) else ""
+        if last_command_id == command.command_id and run.status in {"paused", "cancelled"}:
+            if command.status == "requested":
+                self._repo.mark_task_control(
+                    command.command_id,
+                    "applied",
+                    applied_at=utc_now_iso(),
+                )
+            return True
+        self._mark_controlled(
+            run,
+            command.action,
+            requested_by=command.requested_by,
+            command_id=command.command_id,
+        )
         self._repo.save(run)
+        self._repo.mark_task_control(
+            command.command_id,
+            "applied",
+            applied_at=utc_now_iso(),
+        )
         return True
 
     @staticmethod
@@ -151,6 +229,7 @@ class RunLifecycleMixin:
         control: str,
         *,
         requested_by: str = "",
+        command_id: str = "",
     ) -> None:
         if control == "cancel":
             for step in run.steps:
@@ -159,7 +238,11 @@ class RunLifecycleMixin:
                     step.error = "run cancelled before execution"
             run.status = "cancelled"
             run.error = "run cancelled"
-            run.metadata["control"] = {"state": "cancelled", "requested_by": requested_by}
+            run.metadata["control"] = {
+                "state": "cancelled",
+                "requested_by": requested_by,
+                "command_id": command_id,
+            }
             run.final_output = {
                 **dict(run.final_output or {}),
                 "cancelled": True,
@@ -171,6 +254,10 @@ class RunLifecycleMixin:
                 run.add_event("run.cancelled", "Agent run 已取消", {"requested_by": requested_by})
             return
         run.status = "paused"
-        run.metadata["control"] = {"state": "paused", "requested_by": requested_by}
+        run.metadata["control"] = {
+            "state": "paused",
+            "requested_by": requested_by,
+            "command_id": command_id,
+        }
         if not any(event.event_type == "run.paused" for event in run.events):
             run.add_event("run.paused", "Agent run 已暂停", {"requested_by": requested_by})

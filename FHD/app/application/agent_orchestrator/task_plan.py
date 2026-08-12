@@ -6,6 +6,7 @@ import copy
 from typing import Any
 
 from app.application.agent_orchestrator.run_models import AgentRun
+from app.application.agent_orchestrator.task_models import AgentTask, TaskControlCommand
 from app.application.workflow.types import Branch, PlanGraph, WorkflowNode
 
 
@@ -15,6 +16,52 @@ class UnifiedTaskPlanMixin:
 
     def list_task_runs(self, *, user_id: str, task_id: str) -> list[AgentRun]:
         return self._repo.list_task_runs(user_id=user_id, task_id=task_id)
+
+    def get_task(
+        self,
+        *,
+        user_id: str,
+        task_id: str,
+        tenant_id: str | None = None,
+    ) -> AgentTask | None:
+        return self._repo.get_task(user_id=user_id, task_id=task_id, tenant_id=tenant_id)
+
+    def save_task(self, task: AgentTask) -> AgentTask:
+        return self._repo.save_task(task)
+
+    def latest_task_control(self, run_id: str) -> TaskControlCommand | None:
+        return self._repo.latest_task_control(run_id)
+
+    def list_tasks(
+        self,
+        *,
+        user_id: str,
+        tenant_id: str | None = None,
+        limit: int = 50,
+        include_archived: bool = False,
+    ) -> list[AgentTask]:
+        return self._repo.list_tasks(
+            user_id=user_id,
+            tenant_id=tenant_id,
+            limit=limit,
+            include_archived=include_archived,
+        )
+
+    def archive_task(
+        self,
+        *,
+        user_id: str,
+        task_id: str,
+        tenant_id: str | None = None,
+    ) -> AgentTask | None:
+        from app.application.agent_orchestrator.run_models import utc_now_iso
+
+        return self._repo.archive_task(
+            user_id=user_id,
+            task_id=task_id,
+            archived_at=utc_now_iso(),
+            tenant_id=tenant_id,
+        )
 
     def save_run(self, run: AgentRun) -> AgentRun:
         return self._repo.save(run)

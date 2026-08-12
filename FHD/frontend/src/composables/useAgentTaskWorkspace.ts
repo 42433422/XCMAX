@@ -5,24 +5,8 @@ import {
   activeRunIdOfTask,
   conversationIdOfTask,
   groupAgentRunsIntoTasks,
+  taskSummariesToTaskItems,
 } from '@/utils/agentTaskWorkspaceModel'
-
-const ARCHIVED_TASKS_KEY = 'xcagi_agent_tasks_archived_v1'
-
-function archivedTaskIds(): Set<string> {
-  if (typeof localStorage === 'undefined') return new Set()
-  try {
-    const parsed = JSON.parse(localStorage.getItem(ARCHIVED_TASKS_KEY) || '[]')
-    return new Set(Array.isArray(parsed) ? parsed.map(String) : [])
-  } catch {
-    return new Set()
-  }
-}
-
-function persistArchivedTaskIds(ids: Set<string>): void {
-  if (typeof localStorage === 'undefined') return
-  localStorage.setItem(ARCHIVED_TASKS_KEY, JSON.stringify([...ids].slice(-500)))
-}
 
 export interface UseAgentTaskWorkspaceOptions {
   taskList: Ref<TaskItem[]>
@@ -42,10 +26,17 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
     if (refreshInFlight) return
     refreshInFlight = true
     try {
-      const response = await agentRunsApi.listRuns({ limit: 200 })
-      const runs = Array.isArray(response?.data) ? response.data : []
-      const archived = archivedTaskIds()
-      const serverTasks = groupAgentRunsIntoTasks(runs).filter((task) => !archived.has(task.id))
+      let serverTasks: TaskItem[]
+      try {
+        const response = await agentRunsApi.listTasks({ limit: 200 })
+        const tasks = Array.isArray(response?.data) ? response.data : []
+        serverTasks = taskSummariesToTaskItems(tasks)
+      } catch {
+        // Compatibility with an older backend during rolling desktop upgrades.
+        const response = await agentRunsApi.listRuns({ limit: 200 })
+        const runs = Array.isArray(response?.data) ? response.data : []
+        serverTasks = groupAgentRunsIntoTasks(runs)
+      }
       const localTasks = options.taskList.value.filter((task) => !['agent_task', 'agent_run'].includes(task.type))
       options.taskList.value = [...serverTasks, ...localTasks]
       const known = new Set(options.taskList.value.map((task) => task.id))
@@ -113,18 +104,16 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
     await refreshTasks()
   }
 
-  function archiveCompletedTasks(): void {
-    const archived = archivedTaskIds()
-    options.taskList.value.forEach((task) => {
-      if (
-        task.type === 'agent_task'
-        && ['success', 'failed', 'cancelled'].includes(task.status)
-      ) {
-        archived.add(task.id)
-      }
-    })
-    persistArchivedTaskIds(archived)
-    options.taskList.value = options.taskList.value.filter((task) => !archived.has(task.id))
+  async function archiveCompletedTasks(): Promise<void> {
+    const completed = options.taskList.value.filter((task) =>
+      task.type === 'agent_task' && ['success', 'failed', 'cancelled'].includes(task.status),
+    )
+    await Promise.all(completed.map(async (task) => {
+      const taskId = String(task.payload?.taskId || '').trim()
+      if (taskId) await agentRunsApi.archiveTask(taskId)
+    }))
+    const archivedIds = new Set(completed.map((task) => task.id))
+    options.taskList.value = options.taskList.value.filter((task) => !archivedIds.has(task.id))
     options.onPersist?.()
   }
 
