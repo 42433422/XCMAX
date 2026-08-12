@@ -22,6 +22,13 @@
 .task-center-close:hover { color: var(--xc-color-text); background: var(--xc-color-surface-3); }
 .task-center-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 18px; color: var(--xc-color-danger); background: var(--xc-color-danger-bg); font-size: var(--xc-font-xs); }
 .task-center-error button { border: 0; color: inherit; background: transparent; font-weight: 700; cursor: pointer; }
+.task-center-overview { display: grid; gap: 8px; margin: 14px 18px 0; padding: 12px; border: 1px solid var(--xc-color-border); border-radius: var(--xc-radius-lg); background: var(--xc-color-surface-2); }
+.task-center-overview__head, .task-center-overview__facts { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.task-center-overview__head { font-size: var(--xc-font-sm); }
+.task-center-overview__head span, .task-center-overview__facts { color: var(--xc-color-muted); font-size: 10px; }
+.task-center-overview__track { display: block; height: 8px; overflow: hidden; border-radius: var(--xc-radius-full); background: color-mix(in srgb, var(--xc-color-muted) 16%, transparent); }
+.task-center-overview__track > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--xc-color-primary), var(--xc-color-info)); transition: width var(--xc-transition-fast); }
+.task-center-overview__facts { justify-content: flex-start; flex-wrap: wrap; }
 .task-center-filters { display: flex; gap: 6px; padding: 14px 18px; overflow-x: auto; border-bottom: 1px solid var(--xc-color-border); }
 .task-center-filters button { padding: 6px 10px; border: 1px solid transparent; border-radius: var(--xc-radius-full); color: var(--xc-color-muted); background: var(--xc-color-surface-2); font-size: var(--xc-font-xs); cursor: pointer; }
 .task-center-filters button.active { border-color: var(--xc-color-primary); color: var(--xc-color-primary); background: var(--xc-color-primary-surface); }
