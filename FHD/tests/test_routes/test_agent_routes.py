@@ -701,6 +701,10 @@ def test_task_ssot_lists_details_and_archives_per_tenant() -> None:
     assert task["task_id"] == body["task_id"]
     assert task["tenant_id"] == "tenant-a"
     assert task["attention_state"] == "approval_required"
+    assert task["approval_required"] is True
+    assert task["unread_count"] == 0
+    assert task["conversation_id"] == body["task_id"]
+    assert task["workspace_id"] == body["task_id"]
     assert task["active_run_id"] == run["run_id"]
     assert task["active_run"]["run_id"] == run["run_id"]
     assert task["capabilities"]["approve"] is True
@@ -733,6 +737,45 @@ def test_task_ssot_lists_details_and_archives_per_tenant() -> None:
     assert tenant_b_created.status_code == 202
     assert tenant_b_client.get("/api/agent/tasks").json()["count"] == 1
     assert client.get("/api/agent/tasks").json()["count"] == 0
+
+
+def test_completed_workspace_result_is_durably_marked_read_per_tenant() -> None:
+    repository = get_agent_run_repository()
+    repository.clear()
+    client = _client("workspace-owner", tenant_id="tenant-a")
+    body = {
+        "task_id": "workspace-result-001",
+        "title": "客户B销售结果",
+        "tool_id": "customers",
+        "action": "query",
+        "params": {"keyword": "客户B"},
+    }
+    created = client.post("/api/agent/tasks", json=body).json()["data"]
+    run = repository.get(created["run_id"])
+    assert run is not None
+    run.status = "completed"
+    run.steps[0].status = "completed"
+    repository.save(run)
+
+    unread = client.get("/api/agent/tasks").json()["data"][0]
+    assert unread["attention_state"] == "result_unread"
+    assert unread["unread_count"] == 1
+
+    marked = client.post(f"/api/agent/tasks/{body['task_id']}/read")
+    assert marked.status_code == 200
+    assert marked.json()["data"]["attention_state"] == ""
+    assert marked.json()["data"]["unread_count"] == 0
+    assert marked.json()["data"]["metadata"]["read_at"]
+    assert client.post(f"/api/agent/tasks/{body['task_id']}/read").status_code == 200
+    persisted = client.get("/api/agent/tasks").json()["data"][0]
+    assert persisted["attention_state"] == ""
+    assert persisted["unread_count"] == 0
+    assert (
+        _client("workspace-owner", tenant_id="tenant-b")
+        .post(f"/api/agent/tasks/{body['task_id']}/read")
+        .status_code
+        == 404
+    )
 
 
 def test_task_center_stream_emits_tenant_scoped_snapshot() -> None:

@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.application.agent_orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.run_control import run_operation_lock
+from app.application.agent_orchestrator.run_models import utc_now_iso
 from app.application.agent_orchestrator.task_dispatcher import get_agent_task_dispatcher
 from app.application.agent_orchestrator.task_execution_repository import (
     get_task_execution_repository,
@@ -295,6 +296,30 @@ def get_agent_task(
         return success(_task_envelope(orchestrator, task))
     except RECOVERABLE_ERRORS:
         return internal_error_response("get agent task")
+
+
+@router.post("/api/agent/tasks/{task_id}/read", response_model=None)
+def mark_agent_task_read(
+    task_id: str,
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any] | JSONResponse:
+    """Acknowledge a completed workspace result without clearing approval attention."""
+    try:
+        orchestrator = AgentOrchestrator()
+        task = orchestrator.get_task(
+            user_id=principal.user_id,
+            task_id=task_id,
+            tenant_id=principal.tenant_id or None,
+        )
+        if task is None:
+            return JSONResponse({"success": False, "message": "工作区不存在"}, status_code=404)
+        if task.attention_state == "result_unread":
+            task.attention_state = ""
+            task.metadata = {**dict(task.metadata or {}), "read_at": utc_now_iso()}
+            task = orchestrator.save_task(task)
+        return success(_task_envelope(orchestrator, task, include_runs=False))
+    except RECOVERABLE_ERRORS:
+        return internal_error_response("mark agent task read")
 
 
 @router.post("/api/agent/tasks/{task_id}/archive", response_model=None)

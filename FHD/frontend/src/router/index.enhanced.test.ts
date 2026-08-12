@@ -264,6 +264,7 @@ describe('router/index enhanced', () => {
     const names = router.getRoutes().map((r) => r.name)
     expect(names).toContain('login')
     expect(names).toContain('chat')
+    expect(names).toContain('task-workspace')
     expect(names).toContain('settings')
     expect(names).toContain('mod-store')
   })
@@ -276,6 +277,13 @@ describe('router/index enhanced', () => {
   it('allows navigation to chat home', async () => {
     await router.push('/')
     expect(router.currentRoute.value.name).toBe('chat')
+  })
+
+  it('opens an independent task workspace route', async () => {
+    await router.push('/workspaces/task-42?conversation=conversation-42')
+    expect(router.currentRoute.value.name).toBe('task-workspace')
+    expect(router.currentRoute.value.params.taskId).toBe('task-42')
+    expect(router.currentRoute.value.query.conversation).toBe('conversation-42')
   })
 
   it('redirects /index.html to /', async () => {

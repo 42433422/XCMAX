@@ -1,5 +1,11 @@
 <template>
   <div class="chat-view page-view active" id="view-chat">
+    <TaskWorkspaceContextBar
+      v-if="workspaceMode"
+      :title="activeWorkspaceTask?.title || workspaceTaskId"
+      :stage="activeWorkspaceTask?.stage"
+      :progress="activeWorkspaceTask?.progress"
+    />
     <ChatQuickActions :buttons="visibleQuickButtons" @quick="sendQuick" />
     <div class="chat-container" data-tour="chat-thread" :style="chatPaneStyle">
       <ChatMessageList
@@ -32,9 +38,9 @@
       <ChatTaskPanel
         v-if="hasTaskPanelContent"
         :current-task="currentTask"
-        :task-list="taskList"
-        :filtered-task-list="filteredTaskList"
-        :active-task-id="activeTaskId"
+        :task-list="visibleTaskList"
+        :filtered-task-list="visibleFilteredTaskList"
+        :active-task-id="visibleActiveTaskId"
         :expanded-task-ids="expandedTaskIds"
         :task-filter="taskFilter"
         :is-pro-mode="isProMode"
@@ -201,6 +207,7 @@ import ChatTaskPanel from '@/components/chat/ChatTaskPanel.vue'
 import ChatInputToolbar from '@/components/chat/ChatInputToolbar.vue'
 import ChatHistoryModal from '@/components/chat/ChatHistoryModal.vue'
 import ChatOfficeDockingReview from '@/components/chat/ChatOfficeDockingReview.vue'
+import TaskWorkspaceContextBar from '@/components/chat/TaskWorkspaceContextBar.vue'
 import { useChatOfficeDocking } from '@/composables/useChatOfficeDocking'
 import { useResizablePane } from '@/composables/useResizablePane'
 import { useModsStore } from '@/stores/mods'
@@ -211,6 +218,15 @@ import { useChatViewHost } from '@/composables/useChatViewHost'
 import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '@/workflow/coreWorkflowTaskUi'
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
 import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
+import { resolveWorkspaceSessionId, useRoutedTaskWorkspace } from '@/composables/useRoutedTaskWorkspace'
+
+const props = withDefaults(defineProps<{
+  workspaceTaskId?: string
+  workspaceConversationId?: string
+}>(), {
+  workspaceTaskId: '',
+  workspaceConversationId: '',
+})
 
 const router = useRouter()
 const modsStore = useModsStore()
@@ -231,7 +247,8 @@ function generateSessionId(): string {
 }
 
 const _storedSessionId = readAiSessionIdFromStorage()
-const currentSessionId = ref(_storedSessionId || generateSessionId())
+const initialWorkspaceSessionId = resolveWorkspaceSessionId(props)
+const currentSessionId = ref(initialWorkspaceSessionId || _storedSessionId || generateSessionId())
 if (!_storedSessionId) writeAiSessionIdToStorage(currentSessionId.value)
 
 const chatViewApi = useChatView({ sessionId: currentSessionId, proIntentExperienceEnabled })
@@ -307,6 +324,13 @@ const {
   stageExcelAnalysisContext,
 } = chatViewApi
 
+const {
+  workspaceTaskId, workspaceMode, visibleTaskList, visibleFilteredTaskList,
+  visibleActiveTaskId, activeWorkspaceTask,
+} = useRoutedTaskWorkspace({
+  props, currentSessionId, taskList, filteredTaskList, activeTaskId, loadSession,
+})
+
 const messageInput = ref('')
 
 const {
@@ -364,7 +388,7 @@ const inputPlaceholder = computed(() => {
 
 const hasTaskPanelContent = computed(() => (
   !!currentTask.value
-  || taskList.value.length > 0
+  || visibleTaskList.value.length > 0
   || !!latestAssistantPush.value
   || (isProMode.value && !!proRuntimeTask.value)
 ))

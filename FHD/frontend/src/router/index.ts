@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, START_LOCATION, type NavigationGuardNext, type RouteLocationNormalized, type RouteRecordRaw } from 'vue-router';
 import { useLanGate } from '@/composables/useLanGate';
-import {isPlatformShellModeEnabled,
+import {
+  isPlatformShellModeEnabled,
   isIndustryDeliveryRouteName,
   SHELL_CORE_ROUTE_NAMES,
 } from '@/constants/platformShellMode';
@@ -12,9 +13,6 @@ import {
 } from '@/utils/hostPackOnboardingGate';
 import { resolveHostBusinessPageRedirect } from '@/utils/hostBusinessPageRedirect';
 import { customerServiceHostPathFromModPath } from '@/utils/customerServicePagePaths';
-
-
-
 import { resolvePlannerChatHomePath, resolvePlannerPagePath } from '@/utils/plannerPagePaths';
 import { readActiveExtensionModId } from '@/utils/erpDomainPaths';
 import { isProtectedClientModId } from '@/constants/protectedMods';
@@ -94,6 +92,7 @@ const allRoutes: RouteRecordRaw[] = [
     component: () => import('../views/ChatView.vue'),
     meta: { title: '智能对话' }
   },
+  { path: '/workspaces/:taskId', name: 'task-workspace', component: () => import('../views/ChatView.vue'), props: (route) => ({ workspaceTaskId: String(route.params.taskId || ''), workspaceConversationId: String(route.query.conversation || route.params.taskId || '') }), meta: { title: '独立工作区' } },
   {
     path: '/persy/knowledge',
     name: 'persy-knowledge',

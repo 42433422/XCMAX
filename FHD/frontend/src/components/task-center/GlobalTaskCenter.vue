@@ -2,47 +2,59 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
-import type { AgentRun, AgentTaskCapabilities, AgentTaskSummary } from '@/api/agentRuns'
+import type { AgentTaskSummary } from '@/api/agentRuns'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
 
 const store = useAgentTaskCenterStore()
 const router = useRouter()
 const {
   tasks,
-  selectedTask,
   drawerOpen,
   loading,
-  actionPending,
   connected,
   error,
   runtime,
-  attentionCount,
+  unreadCount,
+  approvalCount,
   activeCount,
 } = storeToRefs(store)
-const filter = ref<'all' | 'active' | 'attention' | 'completed'>('all')
+const filter = ref<'all' | 'active' | 'unread' | 'approval'>('all')
 const filters = [
   { value: 'all', label: '全部' },
   { value: 'active', label: '执行中' },
-  { value: 'attention', label: '待处理' },
-  { value: 'completed', label: '已完成' },
+  { value: 'unread', label: '未读' },
+  { value: 'approval', label: '待审批' },
 ] as const
 
+function unreadOf(task: AgentTaskSummary): number {
+  return Math.max(
+    0,
+    Number(task.unread_count ?? (task.attention_state === 'result_unread' ? 1 : 0)) || 0,
+  )
+}
+
+function needsApproval(task: AgentTaskSummary): boolean {
+  return Boolean(
+    task.approval_required
+    || task.attention_state === 'approval_required'
+    || task.status === 'waiting_user',
+  )
+}
+
+function progressOf(task: AgentTaskSummary): number {
+  const value = Number(task.progress?.percent)
+  if (Number.isFinite(value)) return Math.max(0, Math.min(100, Math.round(value)))
+  return task.status === 'completed' ? 100 : 0
+}
+
 const filteredTasks = computed(() => tasks.value.filter((task) => {
-  if (filter.value === 'active') return ['queued', 'planning', 'running', 'retrying', 'paused'].includes(task.status)
-  if (filter.value === 'attention') return ['waiting_user', 'blocked', 'failed'].includes(task.status)
-  if (filter.value === 'completed') return ['completed', 'cancelled'].includes(task.status)
+  if (filter.value === 'active') {
+    return ['queued', 'planning', 'running', 'retrying', 'paused'].includes(task.status)
+  }
+  if (filter.value === 'unread') return unreadOf(task) > 0
+  if (filter.value === 'approval') return needsApproval(task)
   return true
 }))
-const activeRun = computed<AgentRun | null>(() => {
-  const task = selectedTask.value
-  if (!task) return null
-  return task.active_run
-    || task.runs?.find((run) => run.run_id === task.active_run_id)
-    || task.runs?.[Math.max(0, (task.runs?.length || 1) - 1)]
-    || null
-})
-const capabilities = computed<Partial<AgentTaskCapabilities>>(() => selectedTask.value?.capabilities || {})
-const terminal = computed(() => ['completed', 'failed', 'cancelled'].includes(selectedTask.value?.status || ''))
 
 function statusLabel(status: string | undefined): string {
   return {
@@ -52,29 +64,23 @@ function statusLabel(status: string | undefined): string {
   }[String(status || '')] || String(status || '未知')
 }
 
-function pretty(value: unknown): string {
-  if (!value || typeof value !== 'object') return ''
-  const text = JSON.stringify(value, null, 2)
-  return text.length > 5000 ? `${text.slice(0, 5000)}\n…` : text
-}
-
 function formatTime(value: string | undefined): string {
   if (!value) return ''
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN', { hour12: false })
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleString('zh-CN', { hour12: false })
 }
 
-function can(action: 'approve' | 'pause' | 'cancel' | 'resume' | 'retry'): boolean {
-  return Boolean(capabilities.value[action])
-}
-
-async function openConversation(task: AgentTaskSummary): Promise<void> {
+async function openWorkspace(task: AgentTaskSummary): Promise<void> {
+  if (unreadOf(task) > 0) await store.markTaskRead(task.task_id)
+  const conversationId = String(
+    task.conversation_id || task.workspace_id || task.task_id,
+  ).trim()
   await router.push({
-    name: 'chat',
-    query: {
-      task: task.task_id,
-      ...(task.conversation_id ? { conversation: task.conversation_id } : {}),
-    },
+    name: 'task-workspace',
+    params: { taskId: task.task_id },
+    query: { conversation: conversationId },
   })
   store.closeDrawer()
 }
@@ -87,28 +93,29 @@ onBeforeUnmount(() => store.stop())
   <button
     class="task-center-trigger"
     type="button"
-    aria-label="打开全局任务中心"
+    aria-label="打开独立工作区列表"
     :aria-expanded="drawerOpen"
     @click="drawerOpen ? store.closeDrawer() : (drawerOpen = true)"
   >
-    <span class="task-center-trigger__icon">✓</span>
-    <span>任务</span>
-    <strong v-if="attentionCount">{{ attentionCount }}</strong>
+    <span class="task-center-trigger__icon">◈</span>
+    <span>工作区</span>
+    <strong v-if="approvalCount">{{ approvalCount }}</strong>
+    <em v-else-if="unreadCount">{{ unreadCount }}</em>
     <em v-else-if="activeCount">{{ activeCount }}</em>
   </button>
 
   <Teleport to="body">
     <Transition name="task-center-fade">
       <div v-if="drawerOpen" class="task-center-overlay" @click.self="store.closeDrawer()">
-        <aside class="task-center-drawer" role="dialog" aria-modal="true" aria-label="全局任务中心">
+        <aside class="task-center-drawer" role="dialog" aria-modal="true" aria-label="独立工作区列表">
           <header class="task-center-header">
             <div>
-              <button v-if="selectedTask" class="task-center-back" type="button" @click="store.showTaskList()">← 全部任务</button>
-              <h2>{{ selectedTask?.title || '任务中心' }}</h2>
-              <p v-if="!selectedTask">
+              <span class="task-center-eyebrow">独立对话与执行上下文</span>
+              <h2>工作区</h2>
+              <p>
                 <span :class="['connection-dot', { 'is-online': connected }]" />
-                {{ connected ? '实时连接' : '自动重连' }} · {{ runtime.running ? `并发 ${runtime.active_count}/${runtime.max_workers}` : '执行器未启动' }}
-                <template v-if="runtime.progress?.task_count"> · 总进度 {{ runtime.progress.overall_percent }}%</template>
+                {{ connected ? '实时同步' : '自动重连' }} · {{ tasks.length }} 个工作区
+                <template v-if="runtime.running"> · 并发 {{ runtime.active_count }}/{{ runtime.max_workers }}</template>
               </p>
             </div>
             <button class="task-center-close" type="button" aria-label="关闭" @click="store.closeDrawer()">×</button>
@@ -118,125 +125,65 @@ onBeforeUnmount(() => store.stop())
             <span>{{ error }}</span><button type="button" @click="store.refresh()">重试</button>
           </div>
 
-          <template v-if="!selectedTask">
-            <nav class="task-center-filters" aria-label="任务筛选">
-              <button v-for="item in filters" :key="item.value" type="button" :class="{ active: filter === item.value }" @click="filter = item.value">
-                {{ item.label }}
-              </button>
-            </nav>
-            <div class="task-center-list">
-              <button
-                v-for="task in filteredTasks"
-                :key="task.task_id"
-                class="task-center-item"
-                type="button"
-                @click="store.openTask(task.task_id)"
-              >
-                <span class="task-center-item__top">
-                  <strong>{{ task.title }}</strong>
-                  <em :data-status="task.status">{{ statusLabel(task.status) }}</em>
+          <nav class="task-center-filters" aria-label="工作区筛选">
+            <button
+              v-for="item in filters"
+              :key="item.value"
+              type="button"
+              :class="{ active: filter === item.value }"
+              @click="filter = item.value"
+            >
+              {{ item.label }}
+              <span v-if="item.value === 'unread' && unreadCount">{{ unreadCount }}</span>
+              <span v-if="item.value === 'approval' && approvalCount">{{ approvalCount }}</span>
+            </button>
+          </nav>
+
+          <div class="task-center-list">
+            <button
+              v-for="task in filteredTasks"
+              :key="task.task_id"
+              class="task-center-item"
+              type="button"
+              :aria-label="`打开${task.title}独立工作区`"
+              @click="openWorkspace(task)"
+            >
+              <span class="task-center-item__top">
+                <strong>{{ task.title }}</strong>
+                <em :data-status="task.status">{{ statusLabel(task.status) }}</em>
+              </span>
+
+              <span class="task-center-item__signals">
+                <span :class="['workspace-read-state', { 'is-unread': unreadOf(task) > 0 }]">
+                  {{ unreadOf(task) > 0 ? `${unreadOf(task)} 未读` : '已读' }}
                 </span>
-                <span class="task-center-item__meta">
-                  第 {{ task.attempt || 1 }} 次 · {{ task.execution ? statusLabel(task.execution.state) : '等待调度' }}
-                  <small>{{ formatTime(task.updated_at) }}</small>
+                <span v-if="needsApproval(task)" class="workspace-approval-state">待审批</span>
+                <span v-else-if="['blocked', 'failed'].includes(task.status)" class="workspace-blocked-state">需处理</span>
+              </span>
+
+              <span class="task-center-progress">
+                <span class="task-center-progress__head">
+                  <span>{{ task.progress?.stage || statusLabel(task.status) }}<template v-if="task.progress?.detail"> · {{ task.progress.detail }}</template></span>
+                  <strong>{{ progressOf(task) }}%</strong>
                 </span>
-                <span v-if="task.progress" class="task-center-progress">
-                  <span class="task-center-progress__head">
-                    <span>{{ task.progress.stage }}<template v-if="task.progress.detail"> · {{ task.progress.detail }}</template></span>
-                    <strong>{{ task.progress.percent }}%</strong>
-                  </span>
-                  <span
-                    class="task-center-progress__track"
-                    role="progressbar"
-                    :aria-label="`${task.title}进度`"
-                    :aria-valuenow="task.progress.percent"
-                    aria-valuemin="0"
-                    aria-valuemax="100"
-                  ><span :style="{ width: `${task.progress.percent}%` }" /></span>
-                </span>
-                <span v-if="task.attention_state" class="task-center-attention">需要你处理</span>
-              </button>
-              <div v-if="!filteredTasks.length" class="task-center-empty">
-                {{ loading ? '正在同步任务…' : '这里暂时没有任务' }}
-              </div>
+                <span
+                  class="task-center-progress__track"
+                  role="progressbar"
+                  :aria-label="`${task.title}工作区进度`"
+                  :aria-valuenow="progressOf(task)"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                ><span :style="{ width: `${progressOf(task)}%` }" /></span>
+              </span>
+
+              <span class="task-center-item__meta">
+                <small>{{ formatTime(task.updated_at) }}</small>
+                <span>进入独立对话 →</span>
+              </span>
+            </button>
+            <div v-if="!filteredTasks.length" class="task-center-empty">
+              {{ loading ? '正在同步工作区…' : '这里暂时没有工作区' }}
             </div>
-          </template>
-
-          <div v-else class="task-center-detail">
-            <section class="task-center-summary">
-              <span class="task-status" :data-status="selectedTask.status">{{ statusLabel(selectedTask.status) }}</span>
-              <span>第 {{ selectedTask.attempt }} 次 / 共 {{ selectedTask.run_count }} 次</span>
-              <span v-if="selectedTask.execution">执行 {{ selectedTask.execution.execution_count }} 次 · 恢复 {{ selectedTask.execution.recovery_count }} 次</span>
-            </section>
-
-            <section v-if="selectedTask.progress" class="task-center-section task-center-detail-progress">
-              <h3>统一进度</h3>
-              <div class="task-center-progress__head">
-                <span>{{ selectedTask.progress.stage }}<template v-if="selectedTask.progress.detail"> · {{ selectedTask.progress.detail }}</template></span>
-                <strong>{{ selectedTask.progress.percent }}%</strong>
-              </div>
-              <div
-                class="task-center-progress__track"
-                role="progressbar"
-                aria-label="任务统一进度"
-                :aria-valuenow="selectedTask.progress.percent"
-                aria-valuemin="0"
-                aria-valuemax="100"
-              ><span :style="{ width: `${selectedTask.progress.percent}%` }" /></div>
-              <small v-if="selectedTask.progress.total_units">
-                已完成 {{ selectedTask.progress.completed_units }} / {{ selectedTask.progress.total_units }} 个步骤
-              </small>
-              <small v-else>当前阶段暂无可量化步骤，状态仍由服务端持续同步。</small>
-            </section>
-
-            <section v-if="activeRun?.steps?.length" class="task-center-section">
-              <h3>执行步骤</h3>
-              <ol class="task-center-steps">
-                <li v-for="step in activeRun.steps" :key="step.step_id">
-                  <span class="step-marker" :data-status="step.status" />
-                  <div><strong>{{ step.description || `${step.tool_id}.${step.action}` }}</strong><small>{{ statusLabel(step.status) }} · {{ step.idempotent ? '可安全恢复' : '禁止未知重放' }}</small></div>
-                </li>
-              </ol>
-            </section>
-
-            <section v-if="can('approve')" class="task-center-approval">
-              <strong>此任务正在等待审批</strong>
-              <p>批准后由后台工作线程独立执行；关闭页面不会中断任务。</p>
-            </section>
-
-            <section class="task-center-actions">
-              <button v-if="can('approve')" class="is-primary" type="button" :disabled="!!actionPending" @click="store.control('approve')">批准并执行</button>
-              <button v-if="can('pause')" type="button" :disabled="!!actionPending" @click="store.control('pause')">暂停</button>
-              <button v-if="can('resume')" class="is-primary" type="button" :disabled="!!actionPending" @click="store.control('resume')">恢复</button>
-              <button v-if="can('retry')" class="is-primary" type="button" :disabled="!!actionPending" @click="store.control('retry')">重试</button>
-              <button v-if="can('cancel')" type="button" :disabled="!!actionPending" @click="store.control('cancel')">取消</button>
-              <button type="button" @click="openConversation(selectedTask)">打开对话</button>
-              <button v-if="terminal" type="button" :disabled="!!actionPending" @click="store.archiveSelected()">归档</button>
-            </section>
-
-            <section class="task-center-section task-center-evidence">
-              <h3>结果证据</h3>
-              <div class="evidence-facts">
-                <span>{{ activeRun?.events?.length || 0 }} 条事件</span>
-                <span>{{ activeRun?.tool_calls?.filter((call) => call.status === 'completed').length || 0 }} 次工具执行</span>
-                <span>{{ activeRun?.artifacts?.length || 0 }} 个产物</span>
-              </div>
-              <details v-if="activeRun?.final_output && Object.keys(activeRun.final_output).length">
-                <summary>最终结果</summary><pre>{{ pretty(activeRun.final_output) }}</pre>
-              </details>
-              <details v-if="activeRun?.tool_calls?.length">
-                <summary>工具调用记录</summary>
-                <ul><li v-for="call in activeRun.tool_calls" :key="call.call_id">{{ call.tool_id }}.{{ call.action }} · {{ statusLabel(call.status) }} · {{ call.duration_ms || 0 }}ms</li></ul>
-              </details>
-              <details v-if="activeRun?.artifacts?.length">
-                <summary>任务产物</summary>
-                <ul><li v-for="artifact in activeRun.artifacts" :key="artifact.artifact_id">{{ artifact.name || artifact.artifact_type }}<small v-if="artifact.uri">{{ artifact.uri }}</small></li></ul>
-              </details>
-              <details v-if="activeRun?.events?.length">
-                <summary>事件时间线</summary>
-                <ul><li v-for="event in activeRun.events" :key="event.event_id">{{ formatTime(event.created_at) }} · {{ event.message || event.event_type }}</li></ul>
-              </details>
-            </section>
           </div>
         </aside>
       </div>
