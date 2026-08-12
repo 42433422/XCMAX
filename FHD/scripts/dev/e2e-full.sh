@@ -81,6 +81,14 @@ export VITE_XCAGI_PLATFORM_SHELL="0"
 export VITE_XCAGI_DEFAULT_PLATFORM_SHELL="0"
 export VITE_API_BASE="${API_URL}"
 export XCAGI_DESKTOP_MODE="1"
+# This gate verifies the local desktop login and ERP paths.  Keep it
+# deterministic and offline by exercising the repository's loopback-only demo
+# market shim instead of making CI availability depend on xiu-ci.com.
+export XCAGI_MARKET_BASE_URL="${XCAGI_MARKET_BASE_URL:-http://127.0.0.1:8765}"
+# The P0 suite creates several independent browser contexts, each of which
+# establishes its own session.  Authentication rate limiting has dedicated
+# middleware tests and would otherwise make this local concurrency gate flaky.
+export XCAGI_AUTH_RATE_LIMIT="${XCAGI_AUTH_RATE_LIMIT:-0}"
 export XCAGI_MARKET_HTTP_TIMEOUT="${XCAGI_MARKET_HTTP_TIMEOUT:-10}"
 export XCAGI_MARKET_HTTP_RETRIES="${XCAGI_MARKET_HTTP_RETRIES:-2}"
 export XCAGI_DESKTOP_FAST_START="${XCAGI_DESKTOP_FAST_START:-0}"
