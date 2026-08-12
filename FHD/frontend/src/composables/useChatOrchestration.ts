@@ -18,7 +18,6 @@ import { usePrintService } from './usePrintService'
 import { useExcelAnalysis } from './useExcelAnalysis'
 import { isStartPrintMessage, detectRuntimeModeCommand } from '../utils/textParser'
 import chatApi, { parseChatStreamErrorResponse } from '../api/chat'
-import agentRunsApi, { type AgentRun, type AgentRunResponse } from '../api/agentRuns'
 import productsApi from '../api/products'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { readPlannerSseResponse, isChatStreamEnabled, type PlannerSseEvent } from '@/utils/chatSseStream'
@@ -35,6 +34,7 @@ import { useChatResponseAttach } from './useChatResponseAttach'
 import { useChatSessionHistory } from './useChatSessionHistory'
 import { useAgentRunEventSync } from './useAgentRunEvents'
 import { useChatTaskRuntimeBridge } from './useChatTaskRuntimeBridge'
+import { useCanonicalChatTaskBridge } from './useCanonicalChatTaskBridge'
 import type { UseChatViewOptions } from './useChatView'
 import type { ChatAutoAction, ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { collapseExactDuplicateReply } from '@/utils/chatReplyNormalization'
@@ -300,6 +300,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     persist: () => persistTaskPanelStateForSession(), loadConversation: loadSessionFromHistory,
     newConversation: newConversationFromHistory, jumpToMessage: jumpToTaskMessage,
     toggleExpanded: toggleTaskExpanded, clearLocalHistory: clearLocalTaskHistory,
+  })
+  const canonicalTaskBridge = useCanonicalChatTaskBridge({
+    sessionId, createTaskId, refreshTasks: agentTaskRuntime.refreshTasks,
   })
   const {
     lastShipmentExecution,
@@ -631,67 +634,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   function setCustomOrderNumber(value: string) {
     const t = currentTask.value
     if (!t) return
-    const stagedRunId = String((t as DynamicShipmentTask).agentRunId || '')
-    if (stagedRunId && value !== t.customOrderNumber) {
-      void agentRunsApi.cancelRun(stagedRunId).finally(() => agentTaskRuntime.refreshTasks())
-      delete (t as DynamicShipmentTask).agentRunId
-      delete (t as DynamicShipmentTask).agentTaskId
-    }
+    canonicalTaskBridge.invalidateStagedTask(t, value)
     t.customOrderNumber = value
-  }
-
-  function canonicalTaskRequest(
-    task: ShipmentTask,
-    paramsOverride?: Record<string, unknown>,
-  ): { toolId: string; action: string; params: Record<string, unknown> } | null {
-    const payload = asRecord(task.payload)
-    const requestedToolId = String(
-      payload.tool_id || asRecord(payload.params).tool_id || task.tool_id || '',
-    ).trim()
-    const rawAction = String(payload.action || asRecord(payload.params).action || '').trim()
-    const toolId = requestedToolId === 'shipment_generate'
-      ? 'shipment_orders'
-      : requestedToolId === 'import_excel_to_database'
-        ? 'excel_import'
-        : requestedToolId
-    const action = requestedToolId === 'shipment_generate' ? 'generate' : rawAction
-    if (!toolId || !action) return null
-    const params = { ...(paramsOverride || asRecord(payload.params)) }
-    const orderNumber = String(task.customOrderNumber || task.order_number || '').trim()
-    if (toolId === 'shipment_orders' && action === 'generate' && orderNumber) {
-      params.order_number = orderNumber
-    }
-    return { toolId, action, params }
-  }
-
-  async function stageCanonicalTask(
-    task: ShipmentTask,
-    paramsOverride?: Record<string, unknown>,
-  ): Promise<AgentRunResponse | null> {
-    const request = canonicalTaskRequest(task, paramsOverride)
-    if (!request) return null
-    const mutableTask = task as DynamicShipmentTask
-    const taskId = String(mutableTask.agentTaskId || createTaskId('chat_task'))
-    mutableTask.agentTaskId = taskId
-    const created = await agentRunsApi.createTask({
-      task_id: taskId,
-      title: String(task.title || '智能任务'),
-      message: String(task.description || task.title || '智能任务'),
-      tool_id: request.toolId,
-      action: request.action,
-      params: request.params,
-      runtime_context: {
-        conversation_id: String(sessionId.value || ''),
-        source: 'chat_task_card',
-      },
-    })
-    if (!created.data) throw new Error('任务持久化失败')
-    mutableTask.agentRunId = created.data.run_id
-    if (mutableTask.agentCancelRequested) {
-      await agentRunsApi.cancelRun(created.data.run_id)
-    }
-    await agentTaskRuntime.refreshTasks()
-    return created
   }
 
   function showTaskConfirm(task: unknown) {
@@ -700,7 +644,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
     if (nextTask.completed) return
     if (nextTask.type !== 'shipment_generate') {
-      void stageCanonicalTask(nextTask).catch(() => { /* execution stays blocked */ })
+      void canonicalTaskBridge.stageCanonicalTask(nextTask).catch(() => { /* execution stays blocked */ })
       return
     }
 
@@ -714,7 +658,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
     if (existingOrderNo) {
       nextTask.customOrderNumber = existingOrderNo
-      void stageCanonicalTask(nextTask).catch(() => { /* execution stays blocked */ })
+      void canonicalTaskBridge.stageCanonicalTask(nextTask).catch(() => { /* execution stays blocked */ })
       return
     }
 
@@ -724,7 +668,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       enrichShipmentPreviewProducts(nextTask),
     ]).then(() => {
       if (currentTask.value === nextTask) {
-        void stageCanonicalTask(nextTask).catch(() => { /* execution stays blocked */ })
+        void canonicalTaskBridge.stageCanonicalTask(nextTask).catch(() => { /* execution stays blocked */ })
       }
     })
   }
@@ -912,38 +856,10 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
     try {
       let result
-      const canonicalRequest = canonicalTaskRequest(task, asRecord(payload.params))
+      const canonicalResult = await canonicalTaskBridge.executeCanonicalTask(task, asRecord(payload.params))
 
-      if (canonicalRequest) {
-        delete (task as DynamicShipmentTask).agentCancelRequested
-        const created = await stageCanonicalTask(task, canonicalRequest.params)
-        if (!created?.data) throw new Error('任务持久化失败')
-        let run: AgentRun = created.data
-        if (run.status === 'waiting_user') {
-          const grant = created.approval?.grant
-          if (!grant) throw new Error('任务审批凭证不可用')
-          const approved = await agentRunsApi.continueRun(run.run_id, {
-            approval_grant: grant,
-            runtime_context: { source: 'chat_task_card_approval' },
-          })
-          if (!approved.data) throw new Error('审批结果不可用')
-          run = approved.data
-        }
-        const nodeOutputs = asRecord(run.final_output).node_outputs
-        const outputRows = Object.values(asRecord(nodeOutputs))
-        const taskOutput = asRecord(outputRows[outputRows.length - 1])
-        const responseBody = Object.keys(taskOutput).length
-          ? taskOutput
-          : {
-              success: run.status === 'completed',
-              message: run.status === 'completed' ? '任务执行成功' : (run.error || '任务执行失败'),
-            }
-        result = {
-          ok: run.status === 'completed' && responseBody.success !== false,
-          status: run.status === 'completed' ? 200 : 409,
-          json: async () => responseBody,
-        } as Response
-        await agentTaskRuntime.refreshTasks()
+      if (canonicalResult) {
+        result = canonicalResult
       } else if (method === 'GET') {
         result = await fetch(apiUrl)
       } else {
@@ -1036,12 +952,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   }
 
   function cancelTask() {
-    const mutableTask = currentTask.value as DynamicShipmentTask | null
-    if (mutableTask) mutableTask.agentCancelRequested = true
-    const runId = String(mutableTask?.agentRunId || '')
-    if (runId) {
-      void agentRunsApi.cancelRun(runId).finally(() => agentTaskRuntime.refreshTasks())
-    }
+    canonicalTaskBridge.cancelCanonicalTask(currentTask.value)
     currentTask.value = null
     persistTaskPanelStateForSession()
   }

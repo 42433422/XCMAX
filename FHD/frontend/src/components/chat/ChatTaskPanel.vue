@@ -233,7 +233,7 @@
                     @click="$emit('open-shipment-records')"
                   >{{ $t('chat.openShipmentRecords') }}</button>
                   <button class="btn btn-secondary btn-sm" @click="$emit('jump-to-task-message', task)">{{ $t('chat.jumpToMessage') }}</button>
-                  <span class="task-local-snapshot">本地状态快照，不提供伪控制</span>
+                  <span class="task-summary">本地状态快照，不提供伪控制</span>
                 </div>
               </div>
             </div>
@@ -482,11 +482,6 @@ const customOrderNumberModel = computed({
   font-size: 12px;
   color: #6b7280;
   flex-wrap: wrap;
-}
-
-.task-local-snapshot {
-  color: var(--app-text-caption);
-  font-size: var(--app-font-size-caption);
 }
 
 .task-workflow-body {
