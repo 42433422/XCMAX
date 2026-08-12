@@ -122,6 +122,7 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
         *,
         requested_by: str = "",
         runtime_context: dict[str, Any] | None = None,
+        auto_execute: bool = True,
     ) -> AgentRun | None:
         previous = self._repo.get(run_id)
         if previous is None:
@@ -166,7 +167,7 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
                 user_id=previous.user_id,
                 message=previous.message,
                 runtime_context=context,
-                auto_execute=True,
+                auto_execute=auto_execute,
             )
         for key in ("task_model", "task_request", "task_request_fingerprint"):
             if key in previous.metadata:

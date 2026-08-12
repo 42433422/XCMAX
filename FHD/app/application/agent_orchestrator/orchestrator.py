@@ -5,7 +5,6 @@ import logging
 import time
 from typing import Any
 
-from app.application.agent_orchestrator.artifact_attachment import ArtifactAttachmentMixin
 from app.application.agent_orchestrator.artifact_ingestion import ingest_artifact_to_dataset
 from app.application.agent_orchestrator.budget import (
     apply_ai_budget_metadata,
@@ -17,7 +16,6 @@ from app.application.agent_orchestrator.repair_advisor import (
     llm_repair_attempt_limit,
     request_llm_repair,
 )
-from app.application.agent_orchestrator.run_lifecycle import RunLifecycleMixin
 from app.application.agent_orchestrator.run_models import (
     AgentRun,
     AgentStep,
@@ -31,8 +29,11 @@ from app.application.agent_orchestrator.run_repository import (
     SQLAlchemyAgentRunRepository,
     get_agent_run_repository,
 )
+from app.application.agent_orchestrator.task_background import (
+    AgentOrchestratorTaskMixin,
+    task_execution_context,
+)
 from app.application.agent_orchestrator.task_context import apply_task_context
-from app.application.agent_orchestrator.task_plan import UnifiedTaskPlanMixin
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_spec import get_tool_action_spec, validate_tool_call
 from app.application.workflow.types import PlanGraph, WorkflowNode
@@ -43,7 +44,7 @@ logger = logging.getLogger(__name__)
 _INTERNAL_RUN_ERROR = "agent_run_internal_error"
 
 
-class AgentOrchestrator(UnifiedTaskPlanMixin, RunLifecycleMixin, ArtifactAttachmentMixin):
+class AgentOrchestrator(AgentOrchestratorTaskMixin):
     def __init__(
         self,
         *,
@@ -452,8 +453,10 @@ class AgentOrchestrator(UnifiedTaskPlanMixin, RunLifecycleMixin, ArtifactAttachm
                 "message": run.message,
                 "user_id": run.user_id,
                 "node_outputs": dict(node_outputs),
+                **task_execution_context(run, step),
             }
         )
+        tool_call.metadata["idempotency_key"] = ctx["idempotency_key"]
         validation = validate_tool_call(step.tool_id, step.action, step.params)
         if not validation.ok:
             output = {

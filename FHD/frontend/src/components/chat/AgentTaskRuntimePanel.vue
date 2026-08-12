@@ -4,6 +4,7 @@
       <span>{{ $t('chat.runCount', { count: payload.runCount || 1 }) }}</span>
       <span>{{ $t('chat.toolCount', { count: toolCalls.length }) }}</span>
       <span>{{ $t('chat.attemptCount', { count: payload.attempt || 1 }) }}</span>
+      <span v-if="payload.execution">调度 {{ payload.execution.state }} · 执行 {{ payload.execution.execution_count }} 次 · 恢复 {{ payload.execution.recovery_count }} 次</span>
     </div>
     <div v-if="payload.workspaceId || payload.workspacePath" class="agent-task-workspace">
       <strong>{{ $t('chat.taskWorkspace') }}</strong>
@@ -70,6 +71,11 @@ type AgentTaskPayload = {
   rawRunStatus?: string
   finalOutput?: Record<string, unknown>
   artifacts?: AgentArtifact[]
+  execution?: {
+    state: string
+    execution_count: number
+    recovery_count: number
+  }
 }
 
 const props = defineProps<{ task: TaskItem }>()

@@ -18,6 +18,13 @@ from app.application.agent_orchestrator.approval_grant import (
     issue_approval_grant,
 )
 from app.application.agent_orchestrator.run_control import run_operation_lock
+from app.application.agent_orchestrator.task_dispatcher import (
+    get_agent_task_dispatcher,
+    notify_agent_task_dispatcher,
+)
+from app.application.agent_orchestrator.task_execution_repository import (
+    get_task_execution_repository,
+)
 from app.application.agent_orchestrator.task_models import task_from_run, tenant_id_of_run
 from app.application.agent_orchestrator.unified_task import (
     UnifiedTaskConflictError,
@@ -85,6 +92,9 @@ def _run_response(run: Any, *, principal: AgentPrincipal) -> dict[str, Any]:
     extra: dict[str, Any] = {"capabilities": task_capabilities(run)}
     if approval:
         extra["approval"] = approval
+    execution = get_task_execution_repository().get(run.run_id)
+    if execution is not None:
+        extra["execution"] = execution.to_dict()
     return _success(public_run, **extra)
 
 
@@ -99,6 +109,7 @@ def _task_envelope(
     task: Any,
     *,
     include_runs: bool = True,
+    executions: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if include_runs:
         runs = [
@@ -123,7 +134,52 @@ def _task_envelope(
     payload["capabilities"] = task_capabilities(active) if active is not None else {}
     command = orchestrator.latest_task_control(active.run_id) if active is not None else None
     payload["control_command"] = command.to_dict() if command is not None else None
+    execution = None
+    if active is not None:
+        execution = (
+            executions.get(active.run_id)
+            if executions is not None
+            else get_task_execution_repository().get(active.run_id)
+        )
+    payload["execution"] = execution.to_dict() if execution is not None else None
     return payload
+
+
+def _execution_map(tasks: list[Any]) -> dict[str, Any]:
+    run_ids = [str(task.active_run_id or "") for task in tasks if task.active_run_id]
+    return get_task_execution_repository().list_for_run_ids(run_ids)
+
+
+def _task_stream_envelope(task: Any, executions: dict[str, Any]) -> dict[str, Any]:
+    payload = task.to_dict()
+    execution = executions.get(str(task.active_run_id or ""))
+    payload.update(
+        {
+            "runs": [],
+            "active_run": None,
+            "capabilities": {},
+            "control_command": None,
+            "execution": execution.to_dict() if execution is not None else None,
+        }
+    )
+    return payload
+
+
+def _enqueue_run(run: Any, *, requested_by: str) -> None:
+    get_task_execution_repository().enqueue(run, requested_by=requested_by)
+    notify_agent_task_dispatcher()
+
+
+def _sync_execution_terminal_state(run: Any) -> None:
+    state = {
+        "paused": "paused",
+        "blocked": "blocked",
+        "completed": "completed",
+        "failed": "failed",
+        "cancelled": "cancelled",
+    }.get(str(run.status or ""))
+    if state:
+        get_task_execution_repository().transition(run.run_id, state)
 
 
 def _owned_run(
@@ -167,13 +223,22 @@ def create_agent_run(
         runtime_context["tenant_id"] = principal.tenant_id
 
     try:
-        run = AgentOrchestrator().start_run(
+        orchestrator = AgentOrchestrator()
+        auto_execute = bool(data.get("auto_execute", True))
+        run = orchestrator.start_run(
             user_id=principal.user_id,
             message=message,
             runtime_context=runtime_context,
-            auto_execute=bool(data.get("auto_execute", True)),
+            auto_execute=False,
         )
-        status_code = 202 if run.status in {"waiting_user", "blocked"} else 200
+        if auto_execute and run.status == "running":
+            run = orchestrator.stage_run_for_dispatch(
+                run.run_id,
+                requested_by=principal.user_id,
+            )
+            if run is not None:
+                _enqueue_run(run, requested_by=principal.user_id)
+        status_code = 202 if run.status in {"queued", "waiting_user", "blocked"} else 200
         return JSONResponse(_run_response(run, principal=principal), status_code=status_code)
     except RECOVERABLE_ERRORS:
         return _internal_error_response("create agent run")
@@ -223,12 +288,35 @@ def list_agent_tasks(
             limit=limit,
             include_archived=include_archived,
         )
+        executions = _execution_map(tasks)
         return _success(
-            [_task_envelope(orchestrator, task, include_runs=False) for task in tasks],
+            [
+                _task_envelope(
+                    orchestrator,
+                    task,
+                    include_runs=False,
+                    executions=executions,
+                )
+                for task in tasks
+            ],
             count=len(tasks),
         )
     except RECOVERABLE_ERRORS:
         return _internal_error_response("list agent tasks")
+
+
+@router.get("/api/agent/task-runtime", response_model=None)
+def get_agent_task_runtime(
+    _principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any]:
+    snapshot = get_agent_task_dispatcher().snapshot()
+    return _success(
+        {
+            "running": bool(snapshot["running"]),
+            "max_workers": int(snapshot["max_workers"]),
+            "active_count": int(snapshot["active_count"]),
+        }
+    )
 
 
 @router.post("/api/agent/tasks", response_model=None)
@@ -286,6 +374,40 @@ def create_agent_task(
         )
     except RECOVERABLE_ERRORS:
         return _internal_error_response("create agent task")
+
+
+@router.get("/api/agent/tasks/events/stream", response_model=None)
+async def stream_agent_tasks(
+    once: bool = Query(default=False),
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> StreamingResponse:
+    async def event_stream():
+        previous = ""
+        deadline = time.monotonic() + 60.0
+        while time.monotonic() < deadline:
+            orchestrator = AgentOrchestrator()
+            tasks = orchestrator.list_tasks(
+                user_id=principal.user_id,
+                tenant_id=principal.tenant_id or None,
+                limit=200,
+                include_archived=False,
+            )
+            executions = _execution_map(tasks)
+            snapshot = [_task_stream_envelope(task, executions) for task in tasks]
+            encoded = json.dumps(json_safe(snapshot), ensure_ascii=False, sort_keys=True)
+            if encoded != previous:
+                previous = encoded
+                yield f"event: task.snapshot\ndata: {encoded}\n\n"
+            if once:
+                break
+            await asyncio.sleep(0.25)
+        yield "event: stream.closed\ndata: {}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/api/agent/tasks/{task_id}", response_model=None)
@@ -441,7 +563,7 @@ def continue_agent_run(
                 run=current,
                 principal_id=principal.user_id,
             )
-            run = orchestrator.continue_run(
+            run = orchestrator.stage_approved_run(
                 run_id,
                 approved_by=principal.user_id,
                 approved_step_id=str(claims["step_id"]),
@@ -452,8 +574,9 @@ def continue_agent_run(
                 {"success": False, "message": "agent run 不存在"},
                 status_code=404,
             )
-        status_code = 202 if run.status in {"waiting_user", "blocked"} else 200
-        return JSONResponse(_run_response(run, principal=principal), status_code=status_code)
+        if run.status == "queued":
+            _enqueue_run(run, requested_by=principal.user_id)
+        return JSONResponse(_run_response(run, principal=principal), status_code=202)
     except ApprovalGrantError:
         return JSONResponse(
             {"success": False, "message": _PUBLIC_APPROVAL_ERROR},
@@ -480,16 +603,25 @@ def _control_agent_run(
         elif action == "cancel":
             run = orchestrator.cancel_run(run_id, requested_by=principal.user_id)
         else:
-            run = orchestrator.resume_run(
+            run = orchestrator.stage_resume_run(
                 run_id,
                 requested_by=principal.user_id,
                 runtime_context=runtime_context,
             )
+        if run is None:
+            return JSONResponse(
+                {"success": False, "message": "agent run 不存在"},
+                status_code=404,
+            )
+        if run.status == "queued":
+            _enqueue_run(run, requested_by=principal.user_id)
+        else:
+            _sync_execution_terminal_state(run)
         response = _run_response(run, principal=principal)
         command = orchestrator.latest_task_control(run_id)
         if command is not None:
             response["control_command"] = command.to_dict()
-        return response
+        return JSONResponse(response, status_code=202 if run.status == "queued" else 200)
 
     # Pause/cancel must be able to persist their command while another worker is
     # executing the run. Resume remains serialized with approval/retry mutations.
@@ -559,7 +691,15 @@ def retry_agent_run(
             retried = orchestrator.retry_run(
                 run_id,
                 requested_by=principal.user_id,
+                auto_execute=False,
             )
+            if retried is not None and retried.status == "running":
+                retried = orchestrator.stage_run_for_dispatch(
+                    retried.run_id,
+                    requested_by=principal.user_id,
+                )
+                if retried is not None:
+                    _enqueue_run(retried, requested_by=principal.user_id)
             return _run_reference_response(retried)
         except RECOVERABLE_ERRORS:
             return _internal_error_response("retry agent run")

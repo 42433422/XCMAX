@@ -85,3 +85,42 @@ class AgentTaskCommandRecord(Base):
     metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     created_at: Mapped[str] = mapped_column(String(48), nullable=False, index=True)
     applied_at: Mapped[str | None] = mapped_column(String(48), nullable=True)
+
+
+class AgentTaskExecutionRecord(Base):
+    """Durable queue row and renewable execution lease for one AgentRun."""
+
+    __tablename__ = "agent_task_executions"
+    __table_args__ = (
+        Index(
+            "ix_agent_task_executions_queue",
+            "state",
+            "available_at",
+            "priority",
+            "created_at",
+        ),
+        Index(
+            "ix_agent_task_executions_owner_lease",
+            "lease_owner",
+            "lease_expires_at",
+        ),
+        Index("ix_agent_task_executions_task_updated", "task_id", "updated_at"),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    task_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    user_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    state: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    available_at: Mapped[str] = mapped_column(String(48), nullable=False, index=True)
+    lease_owner: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    lease_expires_at: Mapped[str | None] = mapped_column(String(48), nullable=True, index=True)
+    heartbeat_at: Mapped[str | None] = mapped_column(String(48), nullable=True)
+    execution_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    recovery_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    requested_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    last_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[str] = mapped_column(String(48), nullable=False)
+    updated_at: Mapped[str] = mapped_column(String(48), nullable=False, index=True)
+    finished_at: Mapped[str | None] = mapped_column(String(48), nullable=True)

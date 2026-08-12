@@ -131,6 +131,7 @@ export interface AgentRunResponse extends ApiResponse<AgentRun> {
   approval?: AgentApprovalGrant
   capabilities?: AgentTaskCapabilities
   control_command?: AgentTaskControlCommand
+  execution?: AgentTaskExecution
   deduplicated?: boolean
 }
 
@@ -143,6 +144,32 @@ export interface AgentTaskControlCommand {
   requested_by?: string
   created_at?: string
   applied_at?: string
+}
+
+export interface AgentTaskExecution {
+  run_id: string
+  task_id: string
+  user_id: string
+  tenant_id?: string
+  state: 'queued' | 'claimed' | 'paused' | 'blocked' | 'completed' | 'failed' | 'cancelled'
+  priority: number
+  available_at?: string
+  lease_owner?: string
+  lease_expires_at?: string
+  heartbeat_at?: string
+  execution_count: number
+  recovery_count: number
+  requested_by?: string
+  last_error_code?: string
+  created_at?: string
+  updated_at?: string
+  finished_at?: string
+}
+
+export interface AgentTaskRuntime {
+  running: boolean
+  max_workers: number
+  active_count: number
 }
 
 export interface AgentTaskSummary {
@@ -170,6 +197,7 @@ export interface AgentTaskSummary {
   active_run?: AgentRun
   capabilities?: AgentTaskCapabilities
   control_command?: AgentTaskControlCommand
+  execution?: AgentTaskExecution
 }
 
 export interface AgentTaskListResponse extends ApiResponse<AgentTaskSummary[]> {
@@ -203,6 +231,14 @@ export const agentRunsApi = {
 
   getTask(taskId: string): Promise<AgentTaskResponse> {
     return api.get<AgentTaskResponse>(`/api/agent/tasks/${encodeURIComponent(taskId)}`)
+  },
+
+  getTaskRuntime(): Promise<ApiResponse<AgentTaskRuntime>> {
+    return api.get<ApiResponse<AgentTaskRuntime>>('/api/agent/task-runtime')
+  },
+
+  taskEventStreamPath(): string {
+    return '/api/agent/tasks/events/stream'
   },
 
   archiveTask(taskId: string): Promise<AgentTaskResponse> {

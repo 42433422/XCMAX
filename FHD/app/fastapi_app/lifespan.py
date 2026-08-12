@@ -40,6 +40,25 @@ def _desktop_fast_start_enabled() -> bool:
     return raw not in {"0", "false", "off", "no"}
 
 
+def _start_agent_tasks(app: FastAPI) -> None:
+    if passive_node_enabled():
+        return
+    from app.application.agent_orchestrator.task_dispatcher import (
+        start_agent_task_dispatcher,
+    )
+
+    app.state.agent_task_dispatcher = start_agent_task_dispatcher()
+
+
+def _stop_agent_tasks(app: FastAPI) -> None:
+    if not hasattr(app.state, "agent_task_dispatcher"):
+        return
+    from app.application.agent_orchestrator.task_dispatcher import stop_agent_task_dispatcher
+
+    stop_agent_task_dispatcher()
+    del app.state.agent_task_dispatcher
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI 应用生命周期管理"""
@@ -61,6 +80,7 @@ async def lifespan(app: FastAPI):
     mark_startup("lifespan_db_done")
 
     _wire_workflow_runtime(app)
+    _start_agent_tasks(app)
 
     try:
         from app.application.desktop_admin_gate import purge_admin_sessions_on_desktop
@@ -121,6 +141,7 @@ async def lifespan(app: FastAPI):
     finally:
         # 无论正常关闭还是被注入异常（如 CancelledError）终止，都在 finally 中
         # 完成全部清理，避免神经总线、监控循环与各调度线程在异常关闭路径下泄漏。
+        _stop_agent_tasks(app)
         _close_workflow_resources(app)
 
         logger.info("🛑 FastAPI 应用关闭中...")
