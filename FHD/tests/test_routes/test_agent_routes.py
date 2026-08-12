@@ -2,17 +2,63 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.application.agent_orchestrator import AgentOrchestrator, get_agent_run_repository
+from app.application.agent_orchestrator import (
+    AgentOrchestrator,
+    InMemoryAgentRunRepository,
+    get_agent_run_repository,
+    set_agent_run_repository_for_tests,
+)
 from app.application.agent_orchestrator.approval_grant import (
     clear_consumed_approval_grants_for_tests,
 )
 from app.application.agent_orchestrator.run_control import clear_run_controls_for_tests
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
+from app.application.agent_orchestrator.task_dispatcher import (
+    set_agent_task_dispatcher_for_tests,
+    stop_agent_task_dispatcher,
+)
+from app.application.agent_orchestrator.task_execution_repository import (
+    InMemoryTaskExecutionRepository,
+    get_task_execution_repository,
+    set_task_execution_repository_for_tests,
+)
 from app.fastapi_routes.domains.agent.routes import router
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
+
+
+@pytest.fixture(autouse=True)
+def _isolated_agent_task_repositories():
+    set_agent_run_repository_for_tests(InMemoryAgentRunRepository())
+    set_task_execution_repository_for_tests(InMemoryTaskExecutionRepository())
+    set_agent_task_dispatcher_for_tests(None)
+    yield
+    stop_agent_task_dispatcher(timeout=0)
+    set_agent_task_dispatcher_for_tests(None)
+    set_task_execution_repository_for_tests(None)
+    set_agent_run_repository_for_tests(None)
+
+
+def _drain_background_run(run_id: str) -> AgentRun:
+    queue = get_task_execution_repository()
+    claimed = queue.claim("route-test-worker", lease_seconds=30)
+    assert claimed is not None and claimed.run_id == run_id
+    run = AgentOrchestrator().execute_dispatched_run(
+        run_id,
+        recovered=claimed.recovery_count > 0,
+    )
+    assert run is not None
+    state = {
+        "completed": "completed",
+        "failed": "failed",
+        "cancelled": "cancelled",
+        "paused": "paused",
+    }.get(run.status, "blocked")
+    queue.finish(run_id, "route-test-worker", state)
+    return run
 
 
 def _client(user_id: str | None = "u1", *, tenant_id: str = "") -> TestClient:
@@ -65,11 +111,14 @@ def test_create_get_and_list_agent_run() -> None:
                 "runtime_context": {"source": "route-test"},
             },
         )
+        completed_run = _drain_background_run(response.json()["data"]["run_id"])
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     payload = response.json()
     assert payload["success"] is True
-    run = payload["data"]
+    assert payload["data"]["status"] == "queued"
+    assert payload["execution"]["state"] == "queued"
+    run = completed_run.to_dict()
     assert run["status"] == "completed"
     assert run["user_id"] == "u1"
     assert run["intent"] == "business_db_read"
@@ -198,21 +247,26 @@ def test_continue_waiting_agent_run() -> None:
             },
         )
         assert create_response.status_code == 202
-        waiting = create_response.json()["data"]
-        approval_grant = create_response.json()["approval"]["grant"]
-        assert waiting["status"] == "waiting_user"
+        queued = create_response.json()["data"]
+        assert queued["status"] == "queued"
+        waiting = _drain_background_run(queued["run_id"])
+        approval_response = client.get(f"/api/agent/runs/{waiting.run_id}").json()
+        approval_grant = approval_response["approval"]["grant"]
+        assert waiting.status == "waiting_user"
         mock_execute.assert_not_called()
 
         mock_execute.return_value = {"success": True, "message": "客户已写入"}
         continue_response = client.post(
-            f"/api/agent/runs/{waiting['run_id']}/continue",
+            f"/api/agent/runs/{waiting.run_id}/continue",
             json={"approval_grant": approval_grant, "approved_by": "forged-approver"},
         )
+        assert continue_response.json()["data"]["status"] == "queued"
+        completed_run = _drain_background_run(waiting.run_id)
 
-    assert continue_response.status_code == 200
+    assert continue_response.status_code == 202
     payload = continue_response.json()
     assert payload["success"] is True
-    completed = payload["data"]
+    completed = completed_run.to_dict()
     assert completed["status"] == "completed"
     assert completed["steps"][0]["status"] == "completed"
     event_types = [event["event_type"] for event in completed["events"]]
@@ -259,11 +313,12 @@ def test_continue_rejects_missing_mismatched_and_replayed_grants() -> None:
         patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool",
             return_value={"success": True},
-        ),
+        ) as execute,
     ):
         response = owner.post("/api/agent/runs", json={"message": "请把客户 星光贸易 写入数据库"})
         run_id = response.json()["data"]["run_id"]
-        grant = response.json()["approval"]["grant"]
+        _drain_background_run(run_id)
+        grant = owner.get(f"/api/agent/runs/{run_id}").json()["approval"]["grant"]
         second_grant = owner.get(f"/api/agent/runs/{run_id}").json()["approval"]["grant"]
 
         missing_grant = owner.post(f"/api/agent/runs/{run_id}/continue", json={})
@@ -275,18 +330,34 @@ def test_continue_rejects_missing_mismatched_and_replayed_grants() -> None:
             .status_code
             == 403
         )
-        assert (
-            owner.post(
-                f"/api/agent/runs/{run_id}/continue", json={"approval_grant": grant}
-            ).status_code
-            == 200
+        approved = owner.post(
+            f"/api/agent/runs/{run_id}/continue",
+            json={"approval_grant": grant},
         )
+        assert approved.status_code == 202
+        assert approved.json()["execution"]["state"] == "queued"
         assert (
             owner.post(
-                f"/api/agent/runs/{run_id}/continue", json={"approval_grant": second_grant}
+                f"/api/agent/runs/{run_id}/continue",
+                json={"approval_grant": second_grant},
             ).status_code
             == 403
         )
+        completed = _drain_background_run(run_id)
+        assert completed.status == "completed"
+        assert len(completed.tool_calls) == 1
+        assert (
+            owner.post(
+                f"/api/agent/runs/{run_id}/continue",
+                json={"approval_grant": grant},
+            ).status_code
+            == 403
+        )
+        execution = get_task_execution_repository().get(run_id)
+        assert execution is not None
+        assert execution.state == "completed"
+        assert execution.execution_count == 2
+        execute.assert_called_once()
 
 
 def test_create_agent_run_validates_request_body() -> None:
@@ -391,10 +462,13 @@ def test_pause_resume_and_cancel_agent_run() -> None:
         assert paused["status"] == "paused"
         execute.assert_not_called()
 
-        resumed = client.post(
+        resumed_response = client.post(
             f"/api/agent/runs/{created['run_id']}/resume",
             json={"runtime_context": {"source": "resume-test"}},
-        ).json()["data"]
+        )
+        assert resumed_response.status_code == 202
+        assert resumed_response.json()["data"]["status"] == "queued"
+        resumed = _drain_background_run(created["run_id"]).to_dict()
         assert resumed["status"] == "completed"
         execute.assert_called_once()
 
@@ -547,8 +621,9 @@ def test_unified_task_requires_approval_and_deduplicates_execution() -> None:
             f"/api/agent/runs/{run['run_id']}/continue",
             json={"approval_grant": approval_grant},
         )
-        assert approved.status_code == 200
-        completed = approved.json()["data"]
+        assert approved.status_code == 202
+        assert approved.json()["data"]["status"] == "queued"
+        completed = _drain_background_run(run["run_id"]).to_dict()
         assert completed["status"] == "completed"
         assert completed["tool_calls"][0]["status"] == "completed"
         assert completed["final_output"]["node_outputs"]
@@ -655,6 +730,49 @@ def test_task_ssot_lists_details_and_archives_per_tenant() -> None:
     assert tenant_b_created.status_code == 202
     assert tenant_b_client.get("/api/agent/tasks").json()["count"] == 1
     assert client.get("/api/agent/tasks").json()["count"] == 0
+
+
+def test_task_center_stream_emits_tenant_scoped_snapshot() -> None:
+    client = _client("task-owner", tenant_id="tenant-a")
+    created = client.post(
+        "/api/agent/tasks",
+        json={
+            "task_id": "stream-task",
+            "title": "流式任务",
+            "tool_id": "customers",
+            "action": "query",
+            "params": {"keyword": "客户甲"},
+        },
+    )
+    assert created.status_code == 202
+    assert (
+        _client("task-owner", tenant_id="tenant-b")
+        .post(
+            "/api/agent/tasks",
+            json={
+                "task_id": "other-tenant-task",
+                "title": "其它租户任务",
+                "tool_id": "customers",
+                "action": "query",
+                "params": {"keyword": "客户乙"},
+            },
+        )
+        .status_code
+        == 202
+    )
+
+    streamed = client.get("/api/agent/tasks/events/stream", params={"once": True})
+
+    assert streamed.status_code == 200
+    assert streamed.headers["content-type"].startswith("text/event-stream")
+    assert "event: task.snapshot" in streamed.text
+    assert '"task_id": "stream-task"' in streamed.text
+    assert "other-tenant-task" not in streamed.text
+    assert "event: stream.closed" in streamed.text
+    runtime = client.get("/api/agent/task-runtime")
+    assert runtime.status_code == 200
+    assert runtime.json()["data"]["max_workers"] == 4
+    assert runtime.json()["data"]["active_count"] == 0
 
 
 def test_task_control_command_survives_process_local_control_reset() -> None:

@@ -1,4 +1,9 @@
-from app.db.models.agent import AgentRunRecord, AgentTaskCommandRecord, AgentTaskRecord
+from app.db.models.agent import (
+    AgentRunRecord,
+    AgentTaskCommandRecord,
+    AgentTaskExecutionRecord,
+    AgentTaskRecord,
+)
 from app.db.models.ai_circle import AiCircleComment, AiCirclePost, AiCircleReaction
 from app.db.models.ai_employee import AiEmployeeProfile
 from app.db.models.employee_run_log import EmployeeRunLog
@@ -95,6 +100,7 @@ __all__ = [
     "AgentRunRecord",
     "AgentTaskRecord",
     "AgentTaskCommandRecord",
+    "AgentTaskExecutionRecord",
     "AiCirclePost",
     "AiCircleReaction",
     "AiCircleComment",

@@ -732,3 +732,13 @@ def get_agent_run_repository() -> AgentRunRepository:
 def get_agent_run_repository_status() -> dict[str, str | bool]:
     get_agent_run_repository()
     return dict(_agent_run_repository_status)
+
+
+def set_agent_run_repository_for_tests(repository: AgentRunRepository | None) -> None:
+    global _agent_run_repository, _agent_run_repository_status
+    _agent_run_repository = repository
+    _agent_run_repository_status = {
+        "mode": "memory" if isinstance(repository, InMemoryAgentRunRepository) else "uninitialized",
+        "durable": False,
+        "degraded_reason": "",
+    }
