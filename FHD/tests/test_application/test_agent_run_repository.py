@@ -170,6 +170,9 @@ def test_sqlalchemy_agent_run_repository_persists_runs_across_instances(tmp_path
     assert task is not None
     assert task.active_run_id == run.run_id
     assert task.title == run.message
+    assert task.to_dict()["progress"] == task.metadata["progress"]
+    assert task.to_dict()["progress"]["percent"] == 99
+    assert task.to_dict()["progress"]["total_units"] == 1
     assert (
         restored_repo.get_task(
             user_id="u1",
