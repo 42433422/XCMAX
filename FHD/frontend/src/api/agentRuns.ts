@@ -170,6 +170,30 @@ export interface AgentTaskRuntime {
   running: boolean
   max_workers: number
   active_count: number
+  progress?: AgentTaskProgressOverview
+}
+
+export interface AgentTaskProgress {
+  percent: number
+  completed_units: number
+  settled_units: number
+  total_units: number
+  current_unit: number
+  stage: string
+  detail: string
+  status: string
+  attempt: number
+  indeterminate: boolean
+  basis: 'steps' | 'status'
+  updated_at?: string
+}
+
+export interface AgentTaskProgressOverview {
+  task_count: number
+  active_count: number
+  attention_count: number
+  completed_count: number
+  overall_percent: number
 }
 
 export interface AgentTaskSummary {
@@ -189,6 +213,7 @@ export interface AgentTaskSummary {
   workspace_isolation?: string
   attempt: number
   run_count: number
+  progress?: AgentTaskProgress
   archived_at?: string
   metadata?: Record<string, unknown>
   created_at?: string

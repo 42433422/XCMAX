@@ -704,6 +704,9 @@ def test_task_ssot_lists_details_and_archives_per_tenant() -> None:
     assert task["active_run_id"] == run["run_id"]
     assert task["active_run"]["run_id"] == run["run_id"]
     assert task["capabilities"]["approve"] is True
+    assert task["progress"]["percent"] == 0
+    assert task["progress"]["stage"] == "等待审批或用户确认"
+    assert task["progress"]["total_units"] == 1
 
     detail = client.get(f"/api/agent/tasks/{body['task_id']}")
     assert detail.status_code == 200
@@ -767,12 +770,21 @@ def test_task_center_stream_emits_tenant_scoped_snapshot() -> None:
     assert streamed.headers["content-type"].startswith("text/event-stream")
     assert "event: task.snapshot" in streamed.text
     assert '"task_id": "stream-task"' in streamed.text
+    assert '"progress": {' in streamed.text
+    assert '"stage": "等待审批或用户确认"' in streamed.text
     assert "other-tenant-task" not in streamed.text
     assert "event: stream.closed" in streamed.text
     runtime = client.get("/api/agent/task-runtime")
     assert runtime.status_code == 200
     assert runtime.json()["data"]["max_workers"] == 4
     assert runtime.json()["data"]["active_count"] == 0
+    assert runtime.json()["data"]["progress"] == {
+        "task_count": 1,
+        "active_count": 0,
+        "attention_count": 1,
+        "completed_count": 0,
+        "overall_percent": 0,
+    }
 
 
 def test_task_control_command_survives_process_local_control_reset() -> None:
