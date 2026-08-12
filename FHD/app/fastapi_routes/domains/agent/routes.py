@@ -8,106 +8,58 @@ import logging
 import time
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import Body, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.application.agent_orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.approval_grant import (
     ApprovalGrantError,
     consume_approval_grant,
-    issue_approval_grant,
 )
 from app.application.agent_orchestrator.run_control import run_operation_lock
-from app.application.agent_orchestrator.unified_task import (
-    UnifiedTaskConflictError,
-    UnifiedTaskError,
-    create_unified_task,
-    task_capabilities,
+from app.fastapi_routes.domains.agent.route_support import (
+    PUBLIC_APPROVAL_ERROR as _PUBLIC_APPROVAL_ERROR,
 )
+from app.fastapi_routes.domains.agent.route_support import (
+    enqueue_run as _enqueue_run,
+)
+from app.fastapi_routes.domains.agent.route_support import (
+    internal_error_response as _internal_error_response,
+)
+from app.fastapi_routes.domains.agent.route_support import (
+    owned_run as _owned_run,
+)
+from app.fastapi_routes.domains.agent.route_support import (
+    public_event_dict as _public_event_dict,
+)
+from app.fastapi_routes.domains.agent.route_support import (
+    public_run_dict as _public_run_dict,
+)
+from app.fastapi_routes.domains.agent.route_support import (
+    run_reference_response as _run_reference_response,
+)
+from app.fastapi_routes.domains.agent.route_support import (
+    run_response as _run_response,
+)
+from app.fastapi_routes.domains.agent.route_support import (
+    success as _success,
+)
+from app.fastapi_routes.domains.agent.route_support import (
+    sync_execution_terminal_state as _sync_execution_terminal_state,
+)
+from app.fastapi_routes.domains.agent.task_routes import router as task_router
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
 from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["agent"])
-
-_PUBLIC_AGENT_ERROR = "Agent 执行失败，详细信息已记录"
-_PUBLIC_AGENT_SERVICE_ERROR = "Agent 服务暂时不可用，请稍后重试"
-_PUBLIC_APPROVAL_ERROR = "approval_grant 无效、过期或与当前步骤不匹配"
-_INTERNAL_ERROR_KEYS = frozenset({"error", "exception", "stack_trace", "traceback"})
-
-
-def _success(data: Any, **extra: Any) -> dict[str, Any]:
-    payload: dict[str, Any] = {"success": True, "data": json_safe(data)}
-    payload.update(extra)
-    return payload
-
-
-def _redact_internal_errors(value: Any) -> Any:
-    """Remove persisted exception details before crossing the public API boundary."""
-    if isinstance(value, dict):
-        return {
-            key: (
-                _PUBLIC_AGENT_ERROR
-                if str(key).lower() in _INTERNAL_ERROR_KEYS and child
-                else _redact_internal_errors(child)
-            )
-            for key, child in value.items()
-        }
-    if isinstance(value, list):
-        return [_redact_internal_errors(item) for item in value]
-    if isinstance(value, tuple):
-        return [_redact_internal_errors(item) for item in value]
-    return value
-
-
-def _public_run_dict(run: Any) -> dict[str, Any]:
-    return _redact_internal_errors(run.to_dict())
-
-
-def _public_event_dict(event: Any) -> dict[str, Any]:
-    return _redact_internal_errors(event.to_dict())
-
-
-def _internal_error_response(operation: str) -> JSONResponse:
-    logger.exception("%s failed", operation)
-    return JSONResponse(
-        {"success": False, "message": _PUBLIC_AGENT_SERVICE_ERROR},
-        status_code=500,
-    )
-
-
-def _run_response(run: Any, *, principal: AgentPrincipal) -> dict[str, Any]:
-    approval = issue_approval_grant(run, principal_id=principal.user_id)
-    public_run = _public_run_dict(run)
-    extra: dict[str, Any] = {"capabilities": task_capabilities(run)}
-    if approval:
-        extra["approval"] = approval
-    return _success(public_run, **extra)
-
-
-def _run_reference_response(run: Any) -> dict[str, Any]:
-    task_context = run.metadata.get("task_context")
-    task_id = str(task_context.get("task_id") or "") if isinstance(task_context, dict) else ""
-    return _success({"run_id": str(run.run_id), "status": str(run.status), "task_id": task_id})
-
-
-def _owned_run(
-    orchestrator: AgentOrchestrator,
-    run_id: str,
-    principal: AgentPrincipal,
-) -> tuple[Any | None, JSONResponse | None]:
-    run = orchestrator.get_run(run_id)
-    if run is None:
-        return None, JSONResponse(
-            {"success": False, "message": "agent run 不存在"}, status_code=404
-        )
-    if not principal.is_admin and run.user_id != principal.user_id:
-        return None, JSONResponse(
-            {"success": False, "message": "无权访问该 agent run"}, status_code=403
-        )
-    return run, None
+# Keep task and run endpoints on one concrete router. FastAPI 0.138+ represents
+# nested ``include_router`` calls as ``_IncludedRouter`` objects; nesting here
+# made the task endpoints invisible to the repository's one-level route
+# registration/golden-snapshot boundary even though direct TestClient calls
+# could still traverse them.
+router = task_router
 
 
 @router.post("/api/agent/runs", response_model=None)
@@ -123,21 +75,33 @@ def create_agent_run(
             status_code=400,
         )
 
-    runtime_context = data.get("runtime_context") or {}
-    if not isinstance(runtime_context, dict):
+    runtime_context_raw = data.get("runtime_context") or {}
+    if not isinstance(runtime_context_raw, dict):
         return JSONResponse(
             {"success": False, "message": "runtime_context 必须是对象"},
             status_code=400,
         )
+    runtime_context = dict(runtime_context_raw)
+    if principal.tenant_id:
+        runtime_context["tenant_id"] = principal.tenant_id
 
     try:
-        run = AgentOrchestrator().start_run(
+        orchestrator = AgentOrchestrator()
+        auto_execute = bool(data.get("auto_execute", True))
+        run = orchestrator.start_run(
             user_id=principal.user_id,
             message=message,
             runtime_context=runtime_context,
-            auto_execute=bool(data.get("auto_execute", True)),
+            auto_execute=False,
         )
-        status_code = 202 if run.status in {"waiting_user", "blocked"} else 200
+        if auto_execute and run.status == "running":
+            run = orchestrator.stage_run_for_dispatch(
+                run.run_id,
+                requested_by=principal.user_id,
+            )
+            if run is not None:
+                _enqueue_run(run, requested_by=principal.user_id)
+        status_code = 202 if run.status in {"queued", "waiting_user", "blocked"} else 200
         return JSONResponse(_run_response(run, principal=principal), status_code=status_code)
     except RECOVERABLE_ERRORS:
         return _internal_error_response("create agent run")
@@ -157,57 +121,6 @@ def list_agent_runs(
         return _internal_error_response("list agent runs")
 
 
-@router.post("/api/agent/tasks", response_model=None)
-def create_agent_task(
-    body: dict[str, Any] = Body(default_factory=dict),
-    principal: AgentPrincipal = Depends(require_agent_principal),
-) -> dict[str, Any] | JSONResponse:
-    data = body or {}
-    params = data.get("params") or {}
-    runtime_context = data.get("runtime_context") or {}
-    if not isinstance(params, dict) or not isinstance(runtime_context, dict):
-        return JSONResponse(
-            {"success": False, "message": "params 与 runtime_context 必须是对象"},
-            status_code=400,
-        )
-    try:
-        task_id = str(data.get("task_id") or "").strip()
-        if not task_id or len(task_id) > 160:
-            return JSONResponse(
-                {"success": False, "message": "task_id 不能为空且长度不能超过 160"},
-                status_code=400,
-            )
-        with run_operation_lock(f"task:{principal.user_id}:{task_id}"):
-            result = create_unified_task(
-                orchestrator=AgentOrchestrator(),
-                user_id=principal.user_id,
-                task_id=task_id,
-                title=str(data.get("title") or ""),
-                message=str(data.get("message") or data.get("title") or ""),
-                tool_id=str(data.get("tool_id") or ""),
-                action=str(data.get("action") or ""),
-                params=params,
-                runtime_context=runtime_context,
-            )
-        response = _run_response(result.run, principal=principal)
-        response["deduplicated"] = result.deduplicated
-        return JSONResponse(
-            response, status_code=202 if result.run.status == "waiting_user" else 200
-        )
-    except UnifiedTaskConflictError as exc:
-        return JSONResponse(
-            {"success": False, "message": str(exc)},
-            status_code=409,
-        )
-    except UnifiedTaskError as exc:
-        return JSONResponse(
-            {"success": False, "message": str(exc)},
-            status_code=400,
-        )
-    except RECOVERABLE_ERRORS:
-        return _internal_error_response("create agent task")
-
-
 @router.post("/api/agent/runs/observed-tool", response_model=None)
 def record_observed_tool_run(
     body: dict[str, Any] = Body(default_factory=dict),
@@ -220,17 +133,20 @@ def record_observed_tool_run(
     action = str(data.get("action") or "").strip()
     params = data.get("params") or {}
     output = data.get("output") or {}
-    runtime_context = data.get("runtime_context") or {}
+    runtime_context_raw = data.get("runtime_context") or {}
     if not message or not isinstance(params, dict) or not isinstance(output, dict):
         return JSONResponse(
             {"success": False, "message": "message、params 与 output 格式无效"},
             status_code=400,
         )
-    if not isinstance(runtime_context, dict):
+    if not isinstance(runtime_context_raw, dict):
         return JSONResponse(
             {"success": False, "message": "runtime_context 必须是对象"},
             status_code=400,
         )
+    runtime_context = dict(runtime_context_raw)
+    if principal.tenant_id:
+        runtime_context["tenant_id"] = principal.tenant_id
 
     from app.application.agent_orchestrator.observed_tool_trace import (
         create_observed_tool_trace_run,
@@ -267,10 +183,15 @@ def get_agent_run(
     principal: AgentPrincipal = Depends(require_agent_principal),
 ) -> dict[str, Any] | JSONResponse:
     try:
-        run, error = _owned_run(AgentOrchestrator(), run_id, principal)
+        orchestrator = AgentOrchestrator()
+        run, error = _owned_run(orchestrator, run_id, principal)
         if error is not None:
             return error
-        return _run_response(run, principal=principal)
+        response = _run_response(run, principal=principal)
+        command = orchestrator.latest_task_control(run_id)
+        if command is not None:
+            response["control_command"] = command.to_dict()
+        return response
     except RECOVERABLE_ERRORS:
         return _internal_error_response("get agent run")
 
@@ -299,7 +220,7 @@ def continue_agent_run(
                 run=current,
                 principal_id=principal.user_id,
             )
-            run = orchestrator.continue_run(
+            run = orchestrator.stage_approved_run(
                 run_id,
                 approved_by=principal.user_id,
                 approved_step_id=str(claims["step_id"]),
@@ -310,8 +231,9 @@ def continue_agent_run(
                 {"success": False, "message": "agent run 不存在"},
                 status_code=404,
             )
-        status_code = 202 if run.status in {"waiting_user", "blocked"} else 200
-        return JSONResponse(_run_response(run, principal=principal), status_code=status_code)
+        if run.status == "queued":
+            _enqueue_run(run, requested_by=principal.user_id)
+        return JSONResponse(_run_response(run, principal=principal), status_code=202)
     except ApprovalGrantError:
         return JSONResponse(
             {"success": False, "message": _PUBLIC_APPROVAL_ERROR},
@@ -328,7 +250,7 @@ def _control_agent_run(
     principal: AgentPrincipal,
     runtime_context: dict[str, Any] | None = None,
 ) -> dict[str, Any] | JSONResponse:
-    with run_operation_lock(run_id):
+    def apply_control() -> dict[str, Any] | JSONResponse:
         orchestrator = AgentOrchestrator()
         _, error = _owned_run(orchestrator, run_id, principal)
         if error is not None:
@@ -338,12 +260,32 @@ def _control_agent_run(
         elif action == "cancel":
             run = orchestrator.cancel_run(run_id, requested_by=principal.user_id)
         else:
-            run = orchestrator.resume_run(
+            run = orchestrator.stage_resume_run(
                 run_id,
                 requested_by=principal.user_id,
                 runtime_context=runtime_context,
             )
-        return _run_response(run, principal=principal)
+        if run is None:
+            return JSONResponse(
+                {"success": False, "message": "agent run 不存在"},
+                status_code=404,
+            )
+        if run.status == "queued":
+            _enqueue_run(run, requested_by=principal.user_id)
+        else:
+            _sync_execution_terminal_state(run)
+        response = _run_response(run, principal=principal)
+        command = orchestrator.latest_task_control(run_id)
+        if command is not None:
+            response["control_command"] = command.to_dict()
+        return JSONResponse(response, status_code=202 if run.status == "queued" else 200)
+
+    # Pause/cancel must be able to persist their command while another worker is
+    # executing the run. Resume remains serialized with approval/retry mutations.
+    if action in {"pause", "cancel"}:
+        return apply_control()
+    with run_operation_lock(run_id):
+        return apply_control()
 
 
 @router.post("/api/agent/runs/{run_id}/pause", response_model=None)
@@ -406,7 +348,15 @@ def retry_agent_run(
             retried = orchestrator.retry_run(
                 run_id,
                 requested_by=principal.user_id,
+                auto_execute=False,
             )
+            if retried is not None and retried.status == "running":
+                retried = orchestrator.stage_run_for_dispatch(
+                    retried.run_id,
+                    requested_by=principal.user_id,
+                )
+                if retried is not None:
+                    _enqueue_run(retried, requested_by=principal.user_id)
             return _run_reference_response(retried)
         except RECOVERABLE_ERRORS:
             return _internal_error_response("retry agent run")

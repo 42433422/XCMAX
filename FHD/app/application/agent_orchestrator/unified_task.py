@@ -10,6 +10,7 @@ from typing import Any
 
 from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.run_models import AgentRun
+from app.application.agent_orchestrator.task_models import tenant_id_of_run
 from app.application.agent_orchestrator.tool_spec import validate_tool_call
 from app.application.workflow.types import PlanGraph, WorkflowNode
 
@@ -68,8 +69,8 @@ def create_unified_task(
     runtime_context: dict[str, Any] | None = None,
 ) -> UnifiedTaskResult:
     normalized_task_id = str(task_id or "").strip()
-    if not normalized_task_id or len(normalized_task_id) > 160:
-        raise UnifiedTaskError("task_id 不能为空且长度不能超过 160")
+    if not normalized_task_id or len(normalized_task_id) > 160 or "/" in normalized_task_id:
+        raise UnifiedTaskError("task_id 不能为空、不能含 /，且长度不能超过 160")
     if not isinstance(params, dict):
         raise UnifiedTaskError("params 必须是对象")
 
@@ -79,7 +80,31 @@ def create_unified_task(
         raise UnifiedTaskError(validation.message or "任务工具未注册")
 
     fingerprint = _request_fingerprint(spec.tool_id, spec.action, params)
-    existing = orchestrator.list_task_runs(user_id=user_id, task_id=normalized_task_id)
+    tenant_id = str((runtime_context or {}).get("tenant_id") or "")
+    task = orchestrator.get_task(
+        user_id=user_id,
+        task_id=normalized_task_id,
+        tenant_id=tenant_id or None,
+    )
+    if task is not None:
+        previous_fingerprint = str(task.metadata.get("task_request_fingerprint") or "")
+        if previous_fingerprint != fingerprint:
+            raise UnifiedTaskConflictError("task_id 已绑定到不同的任务内容")
+        previous = orchestrator.get_run(task.active_run_id)
+        if previous is None:
+            task_runs = orchestrator.list_task_runs(user_id=user_id, task_id=normalized_task_id)
+            previous = task_runs[-1] if task_runs else None
+        if previous is None:
+            raise UnifiedTaskError("任务账本缺少执行记录")
+        return UnifiedTaskResult(run=previous, deduplicated=True)
+
+    # Backfill a pre-Task-SSOT AgentRun on first access so old durable tasks keep
+    # their idempotency contract after the schema upgrade.
+    existing = [
+        run
+        for run in orchestrator.list_task_runs(user_id=user_id, task_id=normalized_task_id)
+        if tenant_id_of_run(run) == tenant_id
+    ]
     if existing:
         previous = existing[-1]
         previous_fingerprint = str(previous.metadata.get("task_request_fingerprint") or "")
@@ -92,6 +117,7 @@ def create_unified_task(
             )
         if previous_fingerprint != fingerprint:
             raise UnifiedTaskConflictError("task_id 已绑定到不同的任务内容")
+        orchestrator.save_run(previous)
         return UnifiedTaskResult(run=previous, deduplicated=True)
 
     normalized_title = str(title or message or f"任务 {normalized_task_id[-8:]}").strip()[:80]

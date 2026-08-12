@@ -23,7 +23,9 @@ from app.application.agent_orchestrator.run_repository import (
     SQLAlchemyAgentRunRepository,
     get_agent_run_repository,
     get_agent_run_repository_status,
+    set_agent_run_repository_for_tests,
 )
+from app.application.agent_orchestrator.task_models import AgentTask, TaskControlCommand
 from app.application.agent_orchestrator.tool_spec import (
     ToolActionSpecV2,
     ToolValidationResult,
@@ -37,6 +39,7 @@ __all__ = [
     "AgentArtifact",
     "AgentRun",
     "AgentRunRepository",
+    "AgentTask",
     "AgentStep",
     "AgentStepStatus",
     "InMemoryAgentRunRepository",
@@ -52,10 +55,12 @@ __all__ = [
     "ToolActionSpecV2",
     "ToolCall",
     "ToolCallStatus",
+    "TaskControlCommand",
     "ToolValidationResult",
     "build_tool_specs_v2",
     "get_agent_run_repository",
     "get_agent_run_repository_status",
+    "set_agent_run_repository_for_tests",
     "get_tool_action_spec",
     "validate_tool_call",
 ]

@@ -3,6 +3,7 @@ import MainLayout from './components/MainLayout.vue'
 import LegacyFloatPanels from '@/components/shell/LegacyFloatPanels.vue'
 import AppGlobalProviders from '@/components/shell/AppGlobalProviders.vue'
 import VirtualCursorOverlay from '@/components/aiopen/VirtualCursorOverlay.vue'
+import GlobalTaskCenter from '@/components/task-center/GlobalTaskCenter.vue'
 import { useAppBoot } from '@/composables/useAppBoot'
 
 const {
@@ -19,6 +20,7 @@ const {
     <LegacyFloatPanels v-if="!hideChrome" />
     <AppGlobalProviders :show-lan-gate="!isAdminConsoleSpa()" />
     <VirtualCursorOverlay />
+    <GlobalTaskCenter v-if="!hideChrome" />
 
     <router-view v-if="hideChrome" />
     <MainLayout

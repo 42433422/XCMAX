@@ -68,6 +68,22 @@ describe('agentRunsApi', () => {
     )
   })
 
+  it('reads and archives durable tasks', async () => {
+    await agentRunsApi.listTasks({ limit: 25, include_archived: false })
+    await agentRunsApi.getTask('task-1')
+    await agentRunsApi.getTaskRuntime()
+    await agentRunsApi.archiveTask('task-1')
+
+    expect(apiMock.get).toHaveBeenCalledWith('/api/agent/tasks', {
+      limit: 25,
+      include_archived: false,
+    })
+    expect(apiMock.get).toHaveBeenCalledWith('/api/agent/tasks/task-1')
+    expect(apiMock.get).toHaveBeenCalledWith('/api/agent/task-runtime')
+    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/tasks/task-1/archive', {})
+    expect(agentRunsApi.taskEventStreamPath()).toBe('/api/agent/tasks/events/stream')
+  })
+
   it('controls agent run lifecycle', async () => {
     await agentRunsApi.pauseRun('run/1')
     await agentRunsApi.resumeRun('run/1', { source: 'resume-test' })
