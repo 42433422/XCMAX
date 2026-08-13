@@ -116,8 +116,6 @@ vi.mock('./useChatWorkflowPanel', () => ({
 vi.mock('./useChatDbTokenGate', () => ({
   useChatDbTokenGate: () => ({
     handleChatRequiresToken: vi.fn(),
-    resolveEffectiveProModeState: vi.fn(() => false),
-    syncProModeState: vi.fn(),
     onDbWriteUnlockedForChatRetry: vi.fn(),
   }),
 }))
@@ -214,35 +212,35 @@ describe('useChatOrchestration deep', () => {
   })
 
   it('cancelTask clears current task state', () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     api.cancelTask()
     expect(api.currentTask).toBeDefined()
   })
 
   it('scrollToBottom is callable', () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     document.body.innerHTML = '<div id="chat-messages"></div>'
     expect(() => api.scrollToBottom()).not.toThrow()
   })
 
   it('generateSessionId returns string', () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     expect(typeof api.generateSessionId()).toBe('string')
     expect(api.generateSessionId().length).toBeGreaterThan(0)
   })
 
   it('copyAssistantPushContent resolves', async () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     await expect(api.copyAssistantPushContent()).resolves.toBeUndefined()
   })
 
   it('handleShipmentDownloadClick is callable', () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     expect(() => api.handleShipmentDownloadClick()).not.toThrow()
   })
 
   it('setTtsEnabled persists preference and clears queue when off', () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     api.setTtsEnabled(true)
     expect(localStorage.getItem('xcagi_chat_tts_enabled')).toBe('1')
     expect(api.ttsEnabled.value).toBe(true)
@@ -254,7 +252,7 @@ describe('useChatOrchestration deep', () => {
   it('sendMessage triggers remote chat round when debounce disabled', async () => {
     requestChatByModeWithTimeout.mockClear()
     vi.mocked(extractLikelyProductQueryKeyword).mockReturnValue(null)
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     await api.sendMessage('查5003产品')
     expect(requestChatByModeWithTimeout).toHaveBeenCalled()
   })
@@ -267,20 +265,20 @@ describe('useChatOrchestration deep', () => {
       data: [{ model_number: '5003A', name: '清漆', price: 120 }],
       total: 1,
     } as never)
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     await api.sendMessage('查5003A')
     expect(productsApi.searchProducts).toHaveBeenCalledWith('5003A')
     expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
   })
 
   it('isStartPrintMessage is exposed', () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     expect(typeof api.isStartPrintMessage).toBe('function')
     expect(api.isStartPrintMessage('开始打印')).toBe(true)
   })
 
   it('newConversation is callable', () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     expect(() => api.newConversation()).not.toThrow()
   })
 })

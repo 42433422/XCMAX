@@ -1,62 +1,12 @@
 import type { Router } from 'vue-router'
-import { isClientModeTiersUiEnabled } from '@/constants/clientModeTiers'
 import { navigateFromSidebarKey } from '@/utils/sidebarNavigation'
-
-type ProModeController = {
-  readProModeStateFromDom: () => boolean
-  isProMode: { value: boolean }
-  hasLegacyProModeRuntime: () => boolean
-  resolveModProEntryPath: () => string
-  enterModProMode: () => Promise<void>
-  exitModProMode: () => Promise<void>
-  syncProModeStateSoon: () => void
-  handleToggleProMode: () => void
-}
 
 /**
  * 集中管理 App 壳层对 window 的 legacy 桥接，避免 App.vue 散落赋值。
  */
-export function useAppShellBridge(router: Router, proMode: ProModeController) {
-  let onToggleProModeEvent: (() => void) | null = null
+export function useAppShellBridge(router: Router) {
   let switchViewEvent: ((event: Event) => void) | null = null
   let sandboxMessageHandler: ((e: MessageEvent) => void) | null = null
-
-  function installProModeBridge() {
-    ;(window as Window & { setProModeEnabled?: (enabled: boolean) => void }).setProModeEnabled = (
-      enabled
-    ) => {
-      if (!isClientModeTiersUiEnabled()) {
-        if (enabled) return
-        proMode.isProMode.value = false
-        void proMode.exitModProMode()
-        return
-      }
-      const shouldEnable = !!enabled
-      const active = proMode.isProMode.value || proMode.readProModeStateFromDom()
-      if (shouldEnable === active) {
-        proMode.isProMode.value = active
-        return
-      }
-      if (!proMode.resolveModProEntryPath() && proMode.hasLegacyProModeRuntime()) {
-        const legacyToggle =
-          (window as Window & { __legacyToggleProMode?: () => void; toggleProMode?: () => void })
-            .__legacyToggleProMode ||
-          (window as Window & { toggleProMode?: () => void }).toggleProMode
-        legacyToggle?.()
-        proMode.syncProModeStateSoon()
-      } else if (shouldEnable) {
-        void proMode.enterModProMode()
-      } else {
-        void proMode.exitModProMode()
-      }
-    }
-
-    onToggleProModeEvent = () => {
-      if (!isClientModeTiersUiEnabled()) return
-      proMode.handleToggleProMode()
-    }
-    window.addEventListener('xcagi:toggle-pro-mode', onToggleProModeEvent)
-  }
 
   function installSwitchViewBridge() {
     switchViewEvent = (event: Event) => {
@@ -112,10 +62,6 @@ export function useAppShellBridge(router: Router, proMode: ProModeController) {
   }
 
   function uninstall() {
-    if (onToggleProModeEvent) {
-      window.removeEventListener('xcagi:toggle-pro-mode', onToggleProModeEvent)
-      onToggleProModeEvent = null
-    }
     if (switchViewEvent) {
       window.removeEventListener('xcagi:switch-view', switchViewEvent)
       switchViewEvent = null
@@ -124,16 +70,9 @@ export function useAppShellBridge(router: Router, proMode: ProModeController) {
       window.removeEventListener('message', sandboxMessageHandler)
       sandboxMessageHandler = null
     }
-    const w = window as Window & {
-      setProModeEnabled?: (enabled: boolean) => void
-      __XCAGI_IS_PRO_MODE?: boolean
-    }
-    Reflect.deleteProperty(w, 'setProModeEnabled')
-    Reflect.deleteProperty(w, '__XCAGI_IS_PRO_MODE')
   }
 
   return {
-    installProModeBridge,
     installSwitchViewBridge,
     installSandboxBridge,
     bindLegacyUploadHooks,

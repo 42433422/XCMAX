@@ -21,7 +21,6 @@ describe('buildAdvancedNavSteps', () => {
       industryId: '考勤',
       mods: [],
       visibleNav,
-      isProMode: false,
     })
     const steps = buildAdvancedNavSteps(visibleNav, ctx)
     expect(steps[0]?.id).toBe('advanced-sidebar-scan')
@@ -40,7 +39,6 @@ describe('buildAdvancedNavSteps', () => {
       industryId: '考勤',
       mods: [],
       visibleNav,
-      isProMode: false,
     })
     const steps = buildAdvancedNavSteps(visibleNav, ctx)
     expect(steps.some((s) => s.routeName === 'print')).toBe(false)

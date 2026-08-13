@@ -16,7 +16,6 @@ export function buildQuickStartOfficeImportSteps(): TutorialStep[] {
       highlightSelector: '#view-chat button[data-tutorial-id="toolbar-excel-analyze"]',
       actionType: 'observe',
       track: 'advanced',
-      excludeInPro: false,
       allowCardNext: true,
     }),
     createStep({
@@ -28,7 +27,6 @@ export function buildQuickStartOfficeImportSteps(): TutorialStep[] {
       highlightSelector: '[data-tour="chat-thread"]',
       actionType: 'click',
       track: 'advanced',
-      excludeInPro: false,
       noAutoSkipWhenMissing: true,
     }),
     createStep({
@@ -40,7 +38,6 @@ export function buildQuickStartOfficeImportSteps(): TutorialStep[] {
       highlightSelector: '[data-tour="chat-thread"]',
       actionType: 'observe',
       track: 'advanced',
-      excludeInPro: false,
       allowCardNext: true,
       noAutoSkipWhenMissing: true,
     }),
@@ -53,7 +50,6 @@ export function buildQuickStartOfficeImportSteps(): TutorialStep[] {
       highlightSelector: '[data-tour="chat-thread"]',
       actionType: 'click',
       track: 'advanced',
-      excludeInPro: false,
       noAutoSkipWhenMissing: true,
     }),
     createStep({
@@ -65,7 +61,6 @@ export function buildQuickStartOfficeImportSteps(): TutorialStep[] {
       highlightSelector: '[data-tour="chat-thread"]',
       actionType: 'observe',
       track: 'advanced',
-      excludeInPro: false,
       allowCardNext: true,
       noAutoSkipWhenMissing: true,
     }),
@@ -78,7 +73,6 @@ export function buildQuickStartOfficeImportSteps(): TutorialStep[] {
       highlightSelector: '[data-tour="chat-thread"]',
       actionType: 'observe',
       track: 'advanced',
-      excludeInPro: false,
       noAutoSkipWhenMissing: true,
     }),
     createStep({
@@ -90,7 +84,6 @@ export function buildQuickStartOfficeImportSteps(): TutorialStep[] {
       highlightSelector: '[data-tour="chat-thread"]',
       actionType: 'observe',
       track: 'advanced',
-      excludeInPro: false,
       allowCardNext: true,
       noAutoSkipWhenMissing: true,
     }),

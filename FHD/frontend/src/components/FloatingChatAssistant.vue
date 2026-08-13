@@ -104,9 +104,6 @@ if (!storedSessionId) {
   writeAiSessionIdToStorage(currentSessionId.value)
 }
 
-const PRO_INTENT_EXPERIENCE_KEY = 'xcagi_pro_intent_experience'
-const proIntentExperienceEnabled = ref(localStorage.getItem(PRO_INTENT_EXPERIENCE_KEY) === '1')
-
 const isOpen = ref(false)
 const externallyHidden = ref(false)
 const draft = ref('')
@@ -134,7 +131,6 @@ const {
   sendMessage,
 } = useChatView({
   sessionId: currentSessionId,
-  proIntentExperienceEnabled,
 })
 
 const visibleMessages = computed(() => messages.value.slice(-20))

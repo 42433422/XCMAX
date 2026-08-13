@@ -3,64 +3,24 @@ import { readAiSessionIdFromStorage } from '@/utils/xcagiStorageKeys'
 
 export interface UseChatDbTokenGateDeps {
   sessionId: Ref<string>
-  isProMode: Ref<boolean>
   pendingDbWriteChatRetryMessages: Ref<string[] | null>
   plannerWriteUnlockResumeDraft: Ref<string>
   executeRemoteChatRound: (msgs: string[], opts?: { fromWriteUnlock?: boolean }) => Promise<void>
 }
 
-/** 与对话请求 body.user_id 同源：``web_normal_<session>`` / ``web_pro_<session>``。 */
-export function resolveModeScopedChatUserId(proEnabled?: boolean): string {
+/** 与对话请求 body.user_id 同源：``web_normal_<session>``。 */
+export function resolveModeScopedChatUserId(): string {
   const sid = String(readAiSessionIdFromStorage() || '').trim() || 'default'
-  const pro =
-    typeof proEnabled === 'boolean'
-      ? proEnabled
-      : typeof window !== 'undefined' && window.__XCAGI_IS_PRO_MODE === true
-  return pro ? `web_pro_${sid}` : `web_normal_${sid}`
+  return `web_normal_${sid}`
 }
 
 export function useChatDbTokenGate(deps: UseChatDbTokenGateDeps) {
   const {
     sessionId,
-    isProMode,
     pendingDbWriteChatRetryMessages,
     plannerWriteUnlockResumeDraft,
     executeRemoteChatRound,
   } = deps
-
-  function isProModeActiveFromDom(): boolean {
-    const overlay = document.getElementById('proModeOverlay')
-    const bodyActive = document.body.classList.contains('pro-mode-active')
-    const overlayActive = !!overlay?.classList.contains('active')
-    const overlayVisible = !!overlay && overlay.style.display !== 'none'
-    return bodyActive || (overlayActive && overlayVisible)
-  }
-
-  function resolveEffectiveProModeState(): boolean {
-    const overlay = document.getElementById('proModeOverlay')
-    if (!overlay && typeof window.__XCAGI_IS_PRO_MODE === 'boolean') {
-      return !!window.__XCAGI_IS_PRO_MODE
-    }
-    const domState = isProModeActiveFromDom()
-    if (typeof window.__XCAGI_IS_PRO_MODE === 'boolean') {
-      if (window.__XCAGI_IS_PRO_MODE !== domState) {
-        window.__XCAGI_IS_PRO_MODE = domState
-        window.dispatchEvent(new CustomEvent('xcagi:pro-mode-changed', {
-          detail: { isProMode: domState }
-        }))
-      }
-    }
-    return domState
-  }
-
-  function syncProModeState() {
-    isProMode.value = resolveEffectiveProModeState()
-  }
-
-  function getModeScopedUserId(proEnabled: boolean): string {
-    const sid = String(sessionId.value || '').trim() || 'default'
-    return proEnabled ? `web_pro_${sid}` : `web_normal_${sid}`
-  }
 
   function resolveChatDbTokensForPayload(): { db_read_token?: string; db_write_token?: string } {
     return {}
@@ -85,9 +45,6 @@ export function useChatDbTokenGate(deps: UseChatDbTokenGateDeps) {
   }
 
   return {
-    resolveEffectiveProModeState,
-    syncProModeState,
-    getModeScopedUserId,
     resolveChatDbTokensForPayload,
     handleChatRequiresToken,
     onDbWriteUnlockedForChatRetry,

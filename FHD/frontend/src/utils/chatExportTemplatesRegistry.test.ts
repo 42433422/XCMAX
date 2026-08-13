@@ -54,4 +54,70 @@ describe('chatExportTemplatesRegistry', () => {
     localStorage.setItem(CHAT_EXPORT_TEMPLATES_REGISTRY_KEY, '{bad')
     expect(readChatExportTemplatesRegistry()).toEqual([])
   })
+
+  it('treats non-array JSON as empty', () => {
+    localStorage.setItem(CHAT_EXPORT_TEMPLATES_REGISTRY_KEY, '{"a":1}')
+    expect(readChatExportTemplatesRegistry()).toEqual([])
+  })
+
+  it('no-ops when localStorage is unavailable', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+    const hadOwn = !!descriptor
+    try {
+      Object.defineProperty(globalThis, 'localStorage', {
+        value: undefined,
+        configurable: true,
+        writable: true,
+      })
+      expect(readChatExportTemplatesRegistry()).toEqual([])
+      expect(() => writeChatExportTemplatesRegistry([sample])).not.toThrow()
+      expect(() => upsertChatExportTemplateEntry(sample)).not.toThrow()
+      expect(() => removeChatExportTemplateEntry('x')).not.toThrow()
+      expect(isTemplateSyncedToChat('x')).toBe(false)
+    } finally {
+      if (hadOwn && descriptor) {
+        Object.defineProperty(globalThis, 'localStorage', descriptor)
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        delete (globalThis as any).localStorage
+      }
+    }
+  })
+
+  it('no-ops when localStorage.setItem throws', () => {
+    const originalSetItem = Storage.prototype.setItem
+    Storage.prototype.setItem = () => {
+      throw new Error('quota')
+    }
+    try {
+      expect(() => writeChatExportTemplatesRegistry([sample])).not.toThrow()
+      expect(readChatExportTemplatesRegistry()).toEqual([])
+    } finally {
+      Storage.prototype.setItem = originalSetItem
+    }
+  })
+
+  it('ignores upsert entries with an empty id', () => {
+    upsertChatExportTemplateEntry({ ...sample, id: '' })
+    expect(readChatExportTemplatesRegistry()).toEqual([])
+  })
+
+  it('assigns a default syncedAt when missing on upsert', () => {
+    upsertChatExportTemplateEntry({ ...sample, syncedAt: '' })
+    const rows = readChatExportTemplatesRegistry()
+    expect(rows).toHaveLength(1)
+    expect(typeof rows[0].syncedAt).toBe('string')
+    expect(rows[0].syncedAt.length).toBeGreaterThan(0)
+  })
+
+  it('ignores remove calls with an empty id', () => {
+    upsertChatExportTemplateEntry(sample)
+    removeChatExportTemplateEntry('')
+    expect(readChatExportTemplatesRegistry()).toHaveLength(1)
+  })
+
+  it('isTemplateSyncedToChat is false for an empty id', () => {
+    upsertChatExportTemplateEntry(sample)
+    expect(isTemplateSyncedToChat('')).toBe(false)
+  })
 })

@@ -239,20 +239,7 @@
             </div>
           </div>
         </template>
-        <template v-if="!currentTask && !taskList.length && isProMode && proRuntimeTask">
-          <div class="task-card">
-            <div class="task-header">{{ normalizeTaskDisplayText(proRuntimeTask.title) }}</div>
-            <div style="margin-top:6px;">
-              <span :class="['task-item-status', proRuntimeTask.statusClass]">
-                {{ normalizeTaskDisplayText(proRuntimeTask.statusText) }}
-              </span>
-            </div>
-            <div style="margin-top:10px; color:var(--app-text-muted); font-size:13px;">
-              {{ normalizeTaskDisplayText(proRuntimeTask.description) }}
-            </div>
-          </div>
-        </template>
-        <template v-else-if="!currentTask && !taskList.length && latestAssistantPush">
+        <template v-if="!currentTask && !taskList.length && latestAssistantPush">
           <div class="task-card">
             <div class="task-header">{{ $t('chat.assistantPush') }}</div>
             <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
@@ -311,8 +298,6 @@ const props = defineProps<{
   filteredTaskList: TaskItem[]
   activeTaskId: string; expandedTaskIds: string[]
   taskFilter: TaskFilter
-  isProMode: boolean
-  proRuntimeTask: { title: string; statusText: string; statusClass: string; description: string } | null
   latestAssistantPush: { title: string; description: string } | null
   pushCopied: boolean
   orderNumberFetching: boolean

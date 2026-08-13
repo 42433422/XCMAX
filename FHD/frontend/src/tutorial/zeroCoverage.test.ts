@@ -23,7 +23,7 @@ import {
   waitForSelector,
   demoGroupCleanup,
 } from './buildDriverSchedule'
-import { filterStepsForPro, resolveTrackSteps, resolveAllWarmupSteps } from './resolveSteps'
+import { resolveTrackSteps, resolveAllWarmupSteps } from './resolveSteps'
 import {
   fetchTutorialSampleFile,
   assignFileToInput,
@@ -207,7 +207,6 @@ describe('buildAssistantFloatTour', () => {
     for (const s of steps) {
       expect(s.routeName).toBe('chat')
       expect(s.allowCardNext).toBe(true)
-      expect(s.excludeInPro).toBe(false)
     }
   })
 })
@@ -632,34 +631,8 @@ describe('resolveSteps', () => {
     industryId: 'default',
     mods: [],
     visibleNav: [],
-    isProMode: false,
     modMenuKeys: new Set<string>(),
   }
-
-  describe('filterStepsForPro', () => {
-    it('keeps all steps when not pro', () => {
-      const steps = [
-        { id: 'a', excludeInPro: true } as TutorialStep,
-        { id: 'b', excludeInPro: false } as TutorialStep,
-      ]
-      expect(filterStepsForPro(steps, false)).toHaveLength(2)
-    })
-
-    it('filters out excludeInPro steps when pro', () => {
-      const steps = [
-        { id: 'a', excludeInPro: true } as TutorialStep,
-        { id: 'b', excludeInPro: false } as TutorialStep,
-      ]
-      const result = filterStepsForPro(steps, true)
-      expect(result).toHaveLength(1)
-      expect(result[0].id).toBe('b')
-    })
-
-    it('keeps steps without excludeInPro flag in pro mode', () => {
-      const steps = [{ id: 'a' } as TutorialStep]
-      expect(filterStepsForPro(steps, true)).toHaveLength(1)
-    })
-  })
 
   describe('resolveTrackSteps', () => {
     it('returns basic steps for basic track', () => {
@@ -686,14 +659,6 @@ describe('resolveSteps', () => {
     it('treats whitespace-only track id as basic', () => {
       const steps = resolveTrackSteps('   ', baseCtx)
       expect(steps.length).toBeGreaterThan(0)
-    })
-
-    it('filters pro steps when isProMode is true', () => {
-      const proCtx = { ...baseCtx, isProMode: true }
-      const steps = resolveTrackSteps('basic', proCtx)
-      for (const s of steps) {
-        expect(s.excludeInPro).toBeFalsy()
-      }
     })
   })
 
@@ -1170,7 +1135,7 @@ describe('promptAdvancedTutorial', () => {
       localStorage.setItem('xcagi_onboarding_driver_tutorial_completed', '1')
       vi.mocked(appConfirmMock).mockResolvedValue(false)
       const router = {} as never
-      const ctx = { industryId: '', mods: [], visibleNav: [], isProMode: false, modMenuKeys: new Set() }
+      const ctx = { industryId: '', mods: [], visibleNav: [], modMenuKeys: new Set() }
       const result = await promptAdvancedTutorialAfterInstall({
         router,
         buildContext: ctx,
@@ -1183,7 +1148,7 @@ describe('promptAdvancedTutorial', () => {
       localStorage.removeItem('xcagi_onboarding_driver_tutorial_completed')
       vi.mocked(appConfirmMock).mockResolvedValue(false)
       const router = {} as never
-      const ctx = { industryId: '', mods: [], visibleNav: [], isProMode: false, modMenuKeys: new Set() }
+      const ctx = { industryId: '', mods: [], visibleNav: [], modMenuKeys: new Set() }
       const result = await promptAdvancedTutorialAfterInstall({
         router,
         buildContext: ctx,
@@ -1198,7 +1163,7 @@ describe('promptAdvancedTutorial', () => {
       const router = {
         push: vi.fn().mockResolvedValue(undefined),
       } as unknown as never
-      const ctx = { industryId: '', mods: [], visibleNav: [], isProMode: false, modMenuKeys: new Set() }
+      const ctx = { industryId: '', mods: [], visibleNav: [], modMenuKeys: new Set() }
       const result = await launchAdvancedDriverTour({
         router,
         buildContext: ctx,

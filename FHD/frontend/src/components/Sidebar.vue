@@ -120,28 +120,6 @@
           </span>
         </div>
       </div>
-      <button
-        v-if="clientModeTiersUiEnabled && !isSandboxMode && !isAdminConsoleSpa()"
-        class="mode-switch"
-        id="modeSwitch"
-        type="button"
-        aria-label="切换专业模式"
-        @click="toggleProMode"
-      >
-        <span class="mode-label">
-          {{ isProMode ? '切换到普通版' : '切换到专业版' }}
-        </span>
-        <div
-          class="toggle-switch"
-          id="proModeToggle"
-          :class="{ active: isProMode }"
-        >
-          <div class="toggle-slider"></div>
-        </div>
-      </button>
-      <div v-if="clientModeTiersUiEnabled && !isAdminConsoleSpa()" class="current-mode-text">
-        当前：{{ currentModeText }}
-      </div>
     </div>
   </div>
 </template>
@@ -158,10 +136,6 @@ import {
   ADMIN_OPERATOR_BRAND_TITLE,
 } from '@/constants/adminOperatorNav'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
-import {
-  isClientModeTiersUiEnabled,
-  PRO_INTENT_EXPERIENCE_KEY,
-} from '@/constants/clientModeTiers'
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
 import { getIndustryPreset } from '@/constants/industryPresets'
 import { useIndustryUiText } from '@/composables/useIndustryUiText'
@@ -184,13 +158,9 @@ const props = defineProps({
     type: String,
     required: true,
   },
-  isProMode: {
-    type: Boolean,
-    default: false,
-  },
 })
 
-const emit = defineEmits(['change-view', 'toggle-pro-mode'])
+const emit = defineEmits(['change-view'])
 
 const industryStore = useIndustryStore()
 const sidebarLayoutStore = useSidebarLayoutStore()
@@ -220,8 +190,6 @@ const primaryModChip = computed(() => {
   return chips.length > 0 ? chips[0] : null
 })
 
-const clientModeTiersUiEnabled = isClientModeTiersUiEnabled()
-const proIntentExperienceEnabled = ref(localStorage.getItem(PRO_INTENT_EXPERIENCE_KEY) === '1')
 const LONG_PRESS_MS = 1000
 const sidebarMenuRef = ref(null)
 const pressingKey = ref('')
@@ -331,16 +299,6 @@ const displayMenuItems = computed(() => {
   nextKeys.splice(to, 0, lifted)
   const byKey = new Map(items.map((m) => [m.key, m]))
   return nextKeys.map((k) => byKey.get(k)).filter(Boolean)
-})
-
-const currentModeText = computed(() => {
-  if (props.isProMode) {
-    return '专业版（增强执行）'
-  }
-  if (proIntentExperienceEnabled.value) {
-    return '普通版（专业意图体验）'
-  }
-  return '普通版（标准对话）'
 })
 
 const shouldShowAdminDeployStatus = computed(() => isAdminConsoleSpa() && isAdminAccount.value)
@@ -531,10 +489,6 @@ function markEntitlementSyncNotice(updatedAtMs) {
   }, 45_000)
 }
 
-const syncProIntentExperience = () => {
-  proIntentExperienceEnabled.value = localStorage.getItem(PRO_INTENT_EXPERIENCE_KEY) === '1'
-}
-
 async function refreshAdminDeployStatus() {
   if (!shouldShowAdminDeployStatus.value || adminDeployStatusLoading.value) return
   adminDeployStatusLoading.value = true
@@ -707,10 +661,6 @@ watch(shouldShowAdminDeployStatus, () => {
 watch(shouldShowEntitlementSyncStatus, () => {
   syncEntitlementSyncPolling()
 })
-
-const toggleProMode = () => {
-  emit('toggle-pro-mode')
-}
 
 function clearPressTimer() {
   if (pressTimer) {
@@ -896,8 +846,6 @@ watch(draggingKey, (key) => {
 })
 
 onMounted(async () => {
-  window.addEventListener('storage', syncProIntentExperience)
-  window.addEventListener('xcagi:pro-intent-experience-changed', syncProIntentExperience)
   window.addEventListener('xcagi:admin-deploy-updated', refreshAdminDeployStatus)
   sidebarLayoutStore.initialize(sidebarLayoutSeedKeys())
   if (!industryStore.isLoaded) {
@@ -923,8 +871,6 @@ onBeforeUnmount(() => {
     window.clearTimeout(entitlementSyncNoticeTimer)
     entitlementSyncNoticeTimer = null
   }
-  window.removeEventListener('storage', syncProIntentExperience)
-  window.removeEventListener('xcagi:pro-intent-experience-changed', syncProIntentExperience)
   window.removeEventListener('xcagi:admin-deploy-updated', refreshAdminDeployStatus)
 })
 </script>

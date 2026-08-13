@@ -238,13 +238,6 @@ export function isStartPrintMessage(message: string): boolean {
   return /^开始打印(?:吧|一下)?$/.test(t)
 }
 
-export function isProTaskMessage(message: string): boolean {
-  if (typeof window.isProTaskAcquisitionMessage === 'function') {
-    return window.isProTaskAcquisitionMessage(message)
-  }
-  return false
-}
-
 export function detectRuntimeModeCommand(message: string): 'set_work_mode' | 'show_monitor' | null {
   const text = String(message || '').trim().toLowerCase()
   if (!text) return null

@@ -81,7 +81,7 @@ describe('industryPresets constants and functions', () => {
     })
 
     it('returns API-provided preset when available', () => {
-      industryPresetsRef.value = { 'custom': { id: 'custom', name: 'Custom', scenario: '', welcomeIntro: 'hi', welcomeBullets: [], quickButtons: [], placeholderNormal: '', placeholderPro: '', menuLabels: {}, uiLabels: {} } }
+      industryPresetsRef.value = { 'custom': { id: 'custom', name: 'Custom', scenario: '', welcomeIntro: 'hi', welcomeBullets: [], quickButtons: [], placeholderNormal: '', menuLabels: {}, uiLabels: {} } }
       expect(getIndustryPreset('custom').id).toBe('custom')
     })
   })

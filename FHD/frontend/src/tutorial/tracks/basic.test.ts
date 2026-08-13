@@ -3,7 +3,7 @@ import { buildBasicSteps } from './basic'
 
 describe('buildBasicSteps', () => {
   it('returns an ordered list of tutorial steps', () => {
-    const steps = buildBasicSteps({ industryId: '考勤', mods: [], visibleNav: [], isProMode: false } as never)
+    const steps = buildBasicSteps({ industryId: '考勤', mods: [], visibleNav: [] } as never)
     expect(Array.isArray(steps)).toBe(true)
     expect(steps.length).toBeGreaterThan(3)
     expect(steps[0].id).toBe('chat-entry')
@@ -15,7 +15,7 @@ describe('buildBasicSteps', () => {
   })
 
   it('produces unique step ids', () => {
-    const steps = buildBasicSteps({ industryId: '', mods: [], visibleNav: [], isProMode: false } as never)
+    const steps = buildBasicSteps({ industryId: '', mods: [], visibleNav: [] } as never)
     const ids = steps.map((s) => s.id)
     expect(new Set(ids).size).toBe(ids.length)
   })

@@ -43,7 +43,6 @@
         }
       ],
       "placeholderNormal": "输入需求",
-      "placeholderPro": "复合任务",
       "menuLabels": {},
       "uiLabels": {
         "entity": "条目",
@@ -80,7 +79,6 @@
         }
       ],
       "placeholderNormal": "输入运维指令",
-      "placeholderPro": "复合运维任务",
       "menuLabels": {
         "chat": "运维对话",
         "im": "信息",
@@ -135,7 +133,6 @@
         }
       ],
       "placeholderNormal": "查产品",
-      "placeholderPro": "开单打印",
       "menuLabels": {
         "materials": "原材料仓库",
         "products": "产品管理",
@@ -188,7 +185,6 @@
         }
       ],
       "placeholderNormal": "查员工",
-      "placeholderPro": "汇总考勤",
       "menuLabels": {
         "materials": "排班资源",
         "products": "人员管理",
@@ -237,7 +233,6 @@
         }
       ],
       "placeholderNormal": "查库存",
-      "placeholderPro": "批量开单",
       "menuLabels": {
         "products": "商品管理",
         "orders": "批发单",
@@ -274,7 +269,6 @@
         }
       ],
       "placeholderNormal": "查商品",
-      "placeholderPro": "汇总订单",
       "menuLabels": {
         "products": "商品管理",
         "orders": "订单管理",
@@ -311,7 +305,6 @@
         }
       ],
       "placeholderNormal": "查食材",
-      "placeholderPro": "汇总订货",
       "menuLabels": {
         "materials": "食材仓库",
         "products": "菜品/食材",
@@ -348,7 +341,6 @@
         }
       ],
       "placeholderNormal": "查运单",
-      "placeholderPro": "批量运单",
       "menuLabels": {
         "products": "货物管理",
         "orders": "运单管理",

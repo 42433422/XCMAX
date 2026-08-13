@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest'
 import {
   applySidebarTheme,
+  applySidebarThemeFromStorage,
   readStoredSidebarTheme,
   persistSidebarTheme,
   SIDEBAR_THEME_OPTIONS,
@@ -36,5 +37,11 @@ describe('sidebarTheme', () => {
   it('migrates legacy light-* page theme', () => {
     localStorage.setItem('settingsPageTheme', 'light-blue')
     expect(readStoredSidebarTheme()).toBe('office-default')
+  })
+
+  it('applySidebarThemeFromStorage applies the stored theme', () => {
+    localStorage.setItem(SIDEBAR_THEME_STORAGE_KEY, 'dark-slate')
+    applySidebarThemeFromStorage()
+    expect(document.body.getAttribute('data-sidebar-theme')).toBe('dark-slate')
   })
 })

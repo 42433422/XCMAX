@@ -15,7 +15,6 @@ export type IndustryPreset = {
   welcomeBullets: string[]
   quickButtons: IndustryQuickButton[]
   placeholderNormal: string
-  placeholderPro: string
   menuLabels: Record<string, string>
   uiLabels: Record<string, string>
 }
@@ -46,7 +45,6 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
       { text: '测试预览', label: '测试预览' },
     ],
     placeholderNormal: '输入需求',
-    placeholderPro: '复合任务',
     menuLabels: {},
     uiLabels: { entity: '条目', model_label: '编号', shipment_order: '业务单', records: '业务记录' },
   },
@@ -65,7 +63,6 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
       { text: '测试预览', label: '测试预览' },
     ],
     placeholderNormal: '查产品',
-    placeholderPro: '开单打印',
     menuLabels: {
       materials: '原材料仓库',
       products: '产品管理',
@@ -92,7 +89,6 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
       { text: '测试预览', label: '测试预览' },
     ],
     placeholderNormal: '查员工',
-    placeholderPro: '汇总考勤',
     menuLabels: {
       materials: '排班资源',
       products: '人员管理',
@@ -121,7 +117,6 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
       { text: '测试预览', label: '测试预览' },
     ],
     placeholderNormal: '查库存',
-    placeholderPro: '批量开单',
     menuLabels: {
       products: '商品管理',
       orders: '批发单',
@@ -143,7 +138,6 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
       { text: '测试预览', label: '测试预览' },
     ],
     placeholderNormal: '查商品',
-    placeholderPro: '汇总订单',
     menuLabels: {
       products: '商品管理',
       orders: '订单管理',
@@ -165,7 +159,6 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
       { text: '测试预览', label: '测试预览' },
     ],
     placeholderNormal: '查食材',
-    placeholderPro: '汇总订货',
     menuLabels: {
       materials: '食材仓库',
       products: '菜品/食材',
@@ -187,7 +180,6 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
       { text: '测试预览', label: '测试预览' },
     ],
     placeholderNormal: '查运单',
-    placeholderPro: '批量运单',
     menuLabels: {
       products: '货物管理',
       orders: '运单管理',
@@ -210,7 +202,6 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
       { text: '测试预览', label: '测试预览' },
     ],
     placeholderNormal: '输入运维指令',
-    placeholderPro: '复合运维任务',
     menuLabels: {
       chat: '运维对话',
       im: '信息',
@@ -280,7 +271,6 @@ export function industryPresetFromManifest(
       ? (ind.quick_buttons as IndustryQuickButton[])
       : [{ text: '帮我查一下常用数据', label: '查数据' }],
     placeholderNormal: String(ind.placeholder_normal || '输入需求'),
-    placeholderPro: String(ind.placeholder_pro || '复合任务'),
     menuLabels,
     uiLabels,
   }

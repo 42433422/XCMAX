@@ -36,7 +36,6 @@ function createStoreState() {
     ] as StepShape[],
     highlightRect: null as { top: number; left: number; width: number; height: number } | null,
     blockedTip: '',
-    proBasicFallbackNotice: '',
     returnContext: null as {
       routeName?: string
       assistantOpen?: boolean
@@ -182,8 +181,6 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
       pause: vi.fn(),
       src: '',
     })))
-
-    window.__XCAGI_IS_PRO_MODE = false as any
   })
 
   afterEach(() => {
@@ -197,7 +194,6 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
     vi.unstubAllEnvs()
     vi.restoreAllMocks()
     setViewport(originalInnerWidth, originalInnerHeight)
-    delete (window as any).__XCAGI_IS_PRO_MODE
   })
 
   // ===== 1. 基础渲染 =====
@@ -277,20 +273,6 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
     expect(test.text()).not.toContain('跳过')
   })
 
-  it('proBasicFallbackNotice 有值时显示提示', async () => {
-    const { wrapper } = await mountComponent()
-    await activateTutorial(wrapper, { proBasicFallbackNotice: '专业版回退提示' })
-    const notice = wrapper.find('.tutorial-fallback-notice')
-    expect(notice.exists()).toBe(true)
-    expect(notice.text()).toBe('专业版回退提示')
-  })
-
-  it('proBasicFallbackNotice 为空时不显示提示', async () => {
-    const { wrapper } = await mountComponent()
-    await activateTutorial(wrapper, { proBasicFallbackNotice: '' })
-    expect(wrapper.find('.tutorial-fallback-notice').exists()).toBe(false)
-  })
-
   it('blockedTip 有值时显示提示', async () => {
     const { wrapper } = await mountComponent()
     await activateTutorial(wrapper, { blockedTip: '请先点击高亮' })
@@ -302,7 +284,7 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
 
   it('blockedTip 为空时不显示普通提示', async () => {
     const { wrapper } = await mountComponent()
-    await activateTutorial(wrapper, { blockedTip: '', proBasicFallbackNotice: '' })
+    await activateTutorial(wrapper, { blockedTip: '' })
     const tips = wrapper.findAll('.tutorial-tip').filter((t) => !t.classes().includes('tutorial-fallback-notice'))
     expect(tips.length).toBe(0)
   })
@@ -604,22 +586,12 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
 
   // ===== 7. xcagi:warmup-tutorial-tts 事件 =====
 
-  it('warmup-tutorial-tts 事件触发预热（pro 模式）', async () => {
-    window.__XCAGI_IS_PRO_MODE = true as any
+  it('warmup-tutorial-tts 事件触发预热且重复事件不重复触发', async () => {
     const { wrapper } = await mountComponent()
     await flushPromises()
     window.dispatchEvent(new CustomEvent('xcagi:warmup-tutorial-tts'))
     await flushPromises()
     // 重复事件不应再次触发
-    window.dispatchEvent(new CustomEvent('xcagi:warmup-tutorial-tts'))
-    await flushPromises()
-    expect(wrapper.exists()).toBe(true)
-  })
-
-  it('warmup-tutorial-tts 事件触发预热（普通模式）', async () => {
-    window.__XCAGI_IS_PRO_MODE = false as any
-    const { wrapper } = await mountComponent()
-    await flushPromises()
     window.dispatchEvent(new CustomEvent('xcagi:warmup-tutorial-tts'))
     await flushPromises()
     expect(wrapper.exists()).toBe(true)
@@ -1013,8 +985,6 @@ describe('TutorialOverlay.vue TTS 路径测试', () => {
       pause: vi.fn(),
       src: '',
     })))
-
-    window.__XCAGI_IS_PRO_MODE = false as any
   })
 
   afterEach(() => {
@@ -1024,7 +994,6 @@ describe('TutorialOverlay.vue TTS 路径测试', () => {
     vi.restoreAllMocks()
     Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: originalInnerWidth })
     Object.defineProperty(window, 'innerHeight', { configurable: true, writable: true, value: originalInnerHeight })
-    delete (window as any).__XCAGI_IS_PRO_MODE
   })
 
   it('启用 TTS 时 isActive 触发 prefetchTutorialSpeech', async () => {

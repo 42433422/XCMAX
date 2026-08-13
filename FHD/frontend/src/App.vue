@@ -9,8 +9,6 @@ import { useAppBoot } from '@/composables/useAppBoot'
 const {
   hideChrome,
   appReady,
-  isProMode,
-  handleToggleProMode,
   isAdminConsoleSpa,
 } = useAppBoot()
 </script>
@@ -23,11 +21,7 @@ const {
     <GlobalTaskCenter v-if="!hideChrome" />
 
     <router-view v-if="hideChrome" />
-    <MainLayout
-      v-else
-      :is-pro-mode="isProMode"
-      @toggle-pro-mode="handleToggleProMode"
-    >
+    <MainLayout v-else>
       <router-view v-slot="{ Component, route }">
         <transition name="route-fade" mode="out-in">
           <keep-alive v-if="!isAdminConsoleSpa()" :max="12">

@@ -17,6 +17,21 @@ DEFAULT_PROFILE: dict[str, Any] = {
     "remote": {"enabled": False, "database_url": ""},
 }
 
+_REMOTE_SCHEMES = {"postgresql", "postgresql+psycopg", "postgres"}
+
+
+def _as_bool(value: Any) -> bool:
+    """Coerce a stored value to bool.
+
+    JSON profile may be hand-edited, so ``"false"`` / ``"0"`` / ``"no"`` must
+    not be treated as truthy (``bool("false")`` is ``True``).
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
 
 def profile_path(data_root: str | os.PathLike[str]) -> Path:
     return Path(data_root).expanduser().resolve() / "config" / "database.json"
@@ -31,7 +46,7 @@ def _normalize_profile(raw: dict[str, Any] | None) -> dict[str, Any]:
     remote = raw.get("remote")
     if isinstance(remote, dict):
         profile["remote"] = {
-            "enabled": bool(remote.get("enabled")),
+            "enabled": _as_bool(remote.get("enabled")),
             "database_url": str(remote.get("database_url") or "").strip(),
         }
     return profile
@@ -63,21 +78,16 @@ def save_profile(
     return path, normalized
 
 
-def _is_valid_remote_database_url(url: str) -> bool:
+def is_valid_remote_database_url(url: str) -> bool:
+    """Return True when ``url`` is a usable PostgreSQL DSN (has scheme + host)."""
     text = (url or "").strip()
-    if not text:
-        return False
-    if is_sqlite_url(text):
+    if not text or is_sqlite_url(text):
         return False
     try:
         parsed = urlparse(text)
     except ValueError:
         return False
-    return parsed.scheme in {"postgresql", "postgresql+psycopg", "postgres"}
-
-
-def is_valid_remote_database_url(url: str) -> bool:
-    return _is_valid_remote_database_url(url)
+    return parsed.scheme in _REMOTE_SCHEMES and bool(parsed.hostname)
 
 
 def apply_database_profile_to_env(
@@ -91,7 +101,7 @@ def apply_database_profile_to_env(
 
     remote = profile.get("remote") if isinstance(profile.get("remote"), dict) else {}
     remote_url = str(remote.get("database_url") or "").strip()
-    use_remote = bool(remote.get("enabled")) and _is_valid_remote_database_url(remote_url)
+    use_remote = _as_bool(remote.get("enabled")) and is_valid_remote_database_url(remote_url)
 
     if use_remote:
         os.environ["XCAGI_DESKTOP_KEEP_DATABASE_URL"] = "1"
@@ -114,7 +124,7 @@ def resolve_storage_mode(database_url: str | None, profile: dict[str, Any] | Non
     if is_sqlite_url(database_url):
         return "local_sqlite"
     url = str(database_url or "").strip()
-    if url and _is_valid_remote_database_url(url):
+    if url and is_valid_remote_database_url(url):
         return "remote_postgresql"
     mode = str((profile or {}).get("mode") or "").strip().lower()
     if mode == "remote":

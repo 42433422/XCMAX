@@ -43,8 +43,6 @@
         :active-task-id="visibleActiveTaskId"
         :expanded-task-ids="expandedTaskIds"
         :task-filter="taskFilter"
-        :is-pro-mode="isProMode"
-        :pro-runtime-task="proRuntimeTask"
         :latest-assistant-push="latestAssistantPush"
         :push-copied="pushCopied"
         :order-number-fetching="orderNumberFetching"
@@ -82,8 +80,6 @@
       <ChatInputToolbar
         :excel-analyze-uploading="excelAnalyzeUploading"
         :multimodal-pending-count="multimodalPendingCount"
-        :client-mode-tiers-ui-enabled="clientModeTiersUiEnabled"
-        :pro-intent-experience-enabled="proIntentExperienceEnabled"
         :auto-refresh-starred-wechat="autoRefreshStarredWechat"
         :tts-enabled="ttsEnabled"
         :excel-analyze-input-ref="chatRefBag.excelAnalyzeInputRef"
@@ -92,7 +88,6 @@
         @show-history="showHistoryPanel"
         @trigger-office-docking="triggerOfficeDocking"
         @excel-file-change="onExcelAnalyzeFileChange"
-        @pro-intent-change="onProIntentToolbarChange"
         @auto-refresh-change="onAutoRefreshToolbarChange"
         @toggle-tts="setTtsEnabled"
       />
@@ -199,7 +194,6 @@ import { storeToRefs } from 'pinia'
 import { useIndustryStore } from '@/stores/industry'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
 import { getIndustryPreset, getIndustryQuickButtons } from '@/constants/industryPresets'
-import { isClientModeTiersUiEnabled, PRO_INTENT_EXPERIENCE_KEY } from '@/constants/clientModeTiers'
 import { useRouter } from 'vue-router'
 import PaneResizeHandle from '@/components/PaneResizeHandle.vue'
 import ChatQuickActions from '@/components/chat/ChatQuickActions.vue'
@@ -236,12 +230,8 @@ const taskCenterStore = useAgentTaskCenterStore()
 const industryStore = useIndustryStore()
 const { currentIndustryId } = storeToRefs(industryStore)
 
-const clientModeTiersUiEnabled = isClientModeTiersUiEnabled()
 // 主动意识：默认关闭，须用户主动勾选后才轮询星标会话
 const autoRefreshStarredWechat = ref(localStorage.getItem('xcagi_auto_refresh_starred_wechat') === '1')
-const proIntentExperienceEnabled = ref(
-  clientModeTiersUiEnabled && localStorage.getItem(PRO_INTENT_EXPERIENCE_KEY) === '1',
-)
 const isTaskPaneResizable = ref(true)
 function generateSessionId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2)
@@ -252,7 +242,7 @@ const initialWorkspaceSessionId = resolveWorkspaceSessionId(props)
 const currentSessionId = ref(initialWorkspaceSessionId || _storedSessionId || generateSessionId())
 if (!_storedSessionId) writeAiSessionIdToStorage(currentSessionId.value)
 
-const chatViewApi = useChatView({ sessionId: currentSessionId, proIntentExperienceEnabled })
+const chatViewApi = useChatView({ sessionId: currentSessionId })
 const chatRefBag = {
   chatMessagesRef: chatViewApi.chatMessagesRef,
   excelAnalyzeInputRef: chatViewApi.excelAnalyzeInputRef,
@@ -266,7 +256,6 @@ const {
   isStreamingReply,
   isExecuting,
   latestAssistantPush,
-  proRuntimeTask,
   taskList,
   activeTaskId,
   filteredTaskList,
@@ -283,7 +272,6 @@ const {
   excelSheetOptions,
   linkedExcelSheet,
   linkedExcelAllSheets,
-  isProMode,
   taskTableColumns,
   taskTableItems,
   taskOrderNumber,
@@ -316,7 +304,6 @@ const {
   startPrintFromTaskCard,
   copyAssistantPushContent,
   openAssistantFloatFromTaskPanel,
-  syncProModeState,
   syncSessionMessages,
   handleAutoAction: chatHandleAutoAction,
   ttsEnabled,
@@ -385,19 +372,17 @@ const {
 const quickButtons = computed(() => getIndustryQuickButtons(currentIndustryId.value))
 const visibleQuickButtons = computed(() => {
   const list = quickButtons.value || []
-  if (isProMode.value) return list
   return list.filter((btn) => btn.text !== '测试预览')
 })
 const inputPlaceholder = computed(() => {
   const preset = getIndustryPreset(currentIndustryId.value)
-  return isProMode.value ? preset.placeholderPro : preset.placeholderNormal
+  return preset.placeholderNormal
 })
 
 const hasTaskPanelContent = computed(() => (
   !!currentTask.value
   || visibleTaskList.value.length > 0
   || !!latestAssistantPush.value
-  || (isProMode.value && !!proRuntimeTask.value)
 ))
 
 const canSendMessage = computed(() => !!messageInput.value.trim() && !isLoading.value)
@@ -453,20 +438,13 @@ const handleKeyDown = (e: KeyboardEvent) => {
   }
 }
 
-const { onProIntentToolbarChange, onAutoRefreshToolbarChange } = useChatViewHost({
-  router,
+const { onAutoRefreshToolbarChange } = useChatViewHost({
   modsStore,
   modsFromStore,
-  clientModeTiersUiEnabled,
-  proIntentExperienceEnabled,
   autoRefreshStarredWechat,
   isTaskPaneResizable,
   messageInput,
-  isProMode,
-  currentTask,
-  proRuntimeTask,
   latestAssistantPush,
-  syncProModeState,
   syncSessionMessages,
   chatHandleAutoAction,
   sendMessage,

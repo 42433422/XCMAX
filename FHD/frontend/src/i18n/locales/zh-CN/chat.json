@@ -76,8 +76,6 @@
     "copyPush": "复制推送",
     "openAssistantFloat": "打开副窗",
     "noActiveTasks": "暂无进行中任务（可先触发分析、打印或工作流）",
-    "proIntentToggle": "专业模式AI意图体验",
-    "proIntentTitle": "仅在当前未处于专业版界面时切换对话意图链路；若已打开专业版（红色主题等），对话会始终走专业接口，与本勾选无关。",
     "starAutoRefresh": "主动意识启用",
     "starAutoRefreshTitle": "需主动勾选后启用：小C才会感知星标会话新消息（约每分钟拉取）",
     "ttsToggle": "语音播报",

@@ -8,8 +8,6 @@ function mountToolbar(propsOverrides = {}) {
     props: {
       excelAnalyzeUploading: false,
       multimodalPendingCount: 0,
-      clientModeTiersUiEnabled: false,
-      proIntentExperienceEnabled: false,
       autoRefreshStarredWechat: false,
       ttsEnabled: false,
       ...propsOverrides,
@@ -141,55 +139,6 @@ describe('ChatInputToolbar', () => {
     expect(wrapper.emitted('excel-file-change')).toHaveLength(1)
   })
 
-  it('does not render pro-intent toggle when clientModeTiersUiEnabled is false', () => {
-    const wrapper = mountToolbar({ clientModeTiersUiEnabled: false })
-    expect(wrapper.find('.intent-pro-toggle').exists()).toBe(false)
-  })
-
-  it('renders pro-intent toggle when clientModeTiersUiEnabled is true', () => {
-    const wrapper = mountToolbar({ clientModeTiersUiEnabled: true })
-    expect(wrapper.find('.intent-pro-toggle').exists()).toBe(true)
-  })
-
-  it('pro-intent checkbox reflects proIntentExperienceEnabled prop', () => {
-    const wrapper = mountToolbar({
-      clientModeTiersUiEnabled: true,
-      proIntentExperienceEnabled: true,
-    })
-    const checkbox = wrapper.find('.intent-pro-toggle input[type="checkbox"]')
-    expect((checkbox.element as HTMLInputElement).checked).toBe(true)
-  })
-
-  it('pro-intent checkbox is unchecked when proIntentExperienceEnabled is false', () => {
-    const wrapper = mountToolbar({
-      clientModeTiersUiEnabled: true,
-      proIntentExperienceEnabled: false,
-    })
-    const checkbox = wrapper.find('.intent-pro-toggle input[type="checkbox"]')
-    expect((checkbox.element as HTMLInputElement).checked).toBe(false)
-  })
-
-  it('emits pro-intent-change with true when checkbox checked', async () => {
-    const wrapper = mountToolbar({
-      clientModeTiersUiEnabled: true,
-      proIntentExperienceEnabled: false,
-    })
-    const checkbox = wrapper.find('.intent-pro-toggle input[type="checkbox"]')
-    await checkbox.setValue(true)
-    expect(wrapper.emitted('pro-intent-change')).toBeTruthy()
-    expect(wrapper.emitted('pro-intent-change')![0]).toEqual([true])
-  })
-
-  it('emits pro-intent-change with false when checkbox unchecked', async () => {
-    const wrapper = mountToolbar({
-      clientModeTiersUiEnabled: true,
-      proIntentExperienceEnabled: true,
-    })
-    const checkbox = wrapper.find('.intent-pro-toggle input[type="checkbox"]')
-    await checkbox.setValue(false)
-    expect(wrapper.emitted('pro-intent-change')![0]).toEqual([false])
-  })
-
   it('renders auto-refresh toggle', () => {
     const wrapper = mountToolbar()
     const toggle = wrapper.find('[data-tutorial-id="star-auto-refresh-toggle"]')
@@ -267,10 +216,5 @@ describe('ChatInputToolbar', () => {
   it('history button has correct title', () => {
     const wrapper = mountToolbar()
     expect(wrapper.find('#historyPanelBtn').attributes('title')).toBe('chat.historyTitleBtn')
-  })
-
-  it('pro-intent toggle has correct title', () => {
-    const wrapper = mountToolbar({ clientModeTiersUiEnabled: true })
-    expect(wrapper.find('.intent-pro-toggle').attributes('title')).toBe('chat.proIntentTitle')
   })
 })

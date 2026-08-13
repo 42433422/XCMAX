@@ -8,10 +8,9 @@
  *   - isSandboxMode：URL 参数检测
  *   - hideChrome / startupModNames / primaryModName 计算属性
  *   - watch(route.name) 路由切换：公共路由 stop、非公共路由 start
- *   - onMounted：visibilitychange / pageshow 监听、shellBridge 安装、proMode 初始化
+ *   - onMounted：visibilitychange / pageshow 监听、shellBridge 安装
  *   - onBeforeUnmount：事件移除、bridge 卸载、sync stop
  *   - skipStartupSplash 返回函数
- *   - isClientModeTiersUiEnabled 分支（true / false）
  *
  * 遵循铁律3：happy path + 空值/None + 边界值 + 异常路径。
  * Mock 最小化：仅 mock 外部边界（stores、composables、constants）。
@@ -68,17 +67,7 @@ const testState = vi.hoisted(() => {
       teardownOnUnmount: vi.fn(),
       clearFailsafeTimer: vi.fn(),
     },
-    proMode: {
-      isProMode: vue.ref(false),
-      handleToggleProMode: vi.fn(),
-      readProModeStateFromDom: vi.fn(() => false),
-      syncGlobalProMode: vi.fn(),
-      installLegacyDomObserver: vi.fn(),
-      uninstallLegacyDomObserver: vi.fn(),
-      enforceClientNormalModeBaseline: vi.fn(),
-    },
     shellBridge: {
-      installProModeBridge: vi.fn(),
       installSwitchViewBridge: vi.fn(),
       installSandboxBridge: vi.fn(),
       bindLegacyUploadHooks: vi.fn(),
@@ -92,7 +81,6 @@ const testState = vi.hoisted(() => {
       ensureStartupAuthenticated: vi.fn().mockResolvedValue({ ok: true, entitledModIds: [] }),
       runEnterpriseStartupAuth: vi.fn().mockResolvedValue(undefined),
     },
-    clientModeTiersEnabled: false,
     adminConsoleSpa: false,
   }
 })
@@ -120,11 +108,6 @@ vi.mock('@/constants/platformShellMode', () => ({
   isPlatformShellModeEnabled: vi.fn(() => false),
 }))
 
-vi.mock('@/constants/clientModeTiers', () => ({
-  isClientModeTiersUiEnabled: () => testState.clientModeTiersEnabled,
-  resetClientModeTierLocalState: vi.fn(),
-}))
-
 vi.mock('@/composables/useStartupAuth', () => ({
   useStartupAuth: () => testState.startupAuth,
 }))
@@ -141,10 +124,6 @@ vi.mock('@/composables/useStartupSplash', () => ({
       .filter(Boolean)
   },
   useStartupSplash: () => testState.splash,
-}))
-
-vi.mock('@/composables/useAppProMode', () => ({
-  useAppProMode: () => testState.proMode,
 }))
 
 vi.mock('@/composables/useAppShellBridge', () => ({
@@ -205,14 +184,6 @@ function resetTestState() {
   testState.splash.createMinSplashElapsed = vi.fn(() => Promise.resolve())
   testState.splash.teardownOnUnmount = vi.fn()
   testState.splash.clearFailsafeTimer = vi.fn()
-  testState.proMode.isProMode.value = false
-  testState.proMode.handleToggleProMode = vi.fn()
-  testState.proMode.readProModeStateFromDom = vi.fn(() => false)
-  testState.proMode.syncGlobalProMode = vi.fn()
-  testState.proMode.installLegacyDomObserver = vi.fn()
-  testState.proMode.uninstallLegacyDomObserver = vi.fn()
-  testState.proMode.enforceClientNormalModeBaseline = vi.fn()
-  testState.shellBridge.installProModeBridge = vi.fn()
   testState.shellBridge.installSwitchViewBridge = vi.fn()
   testState.shellBridge.installSandboxBridge = vi.fn()
   testState.shellBridge.bindLegacyUploadHooks = vi.fn()
@@ -224,7 +195,6 @@ function resetTestState() {
     entitledModIds: [],
   })
   testState.startupAuth.runEnterpriseStartupAuth = vi.fn().mockResolvedValue(undefined)
-  testState.clientModeTiersEnabled = false
   testState.adminConsoleSpa = false
 }
 
@@ -260,8 +230,6 @@ describe('useAppBoot - coverage ramp', () => {
       expect(api.primaryModName).toBeDefined()
       expect(api.modsLoading).toBeDefined()
       expect(api.modsLoadError).toBeDefined()
-      expect(api.isProMode).toBeDefined()
-      expect(api.handleToggleProMode).toBeDefined()
       expect(api.startupPublicUrl).toBeDefined()
       expect(typeof api.skipStartupSplash).toBe('function')
       expect(api.isAdminConsoleSpa).toBeDefined()
@@ -508,33 +476,6 @@ describe('useAppBoot - coverage ramp', () => {
       wrapper.unmount()
     })
 
-    it('调用 shellBridge.installProModeBridge', () => {
-      const { wrapper } = mountWithBoot()
-      expect(testState.shellBridge.installProModeBridge).toHaveBeenCalled()
-      wrapper.unmount()
-    })
-
-    it('调用 proMode.installLegacyDomObserver', () => {
-      const { wrapper } = mountWithBoot()
-      expect(testState.proMode.installLegacyDomObserver).toHaveBeenCalled()
-      wrapper.unmount()
-    })
-
-    it('isClientModeTiersUiEnabled=false 时调用 enforceClientNormalModeBaseline', () => {
-      testState.clientModeTiersEnabled = false
-      const { wrapper } = mountWithBoot()
-      expect(testState.proMode.enforceClientNormalModeBaseline).toHaveBeenCalled()
-      wrapper.unmount()
-    })
-
-    it('isClientModeTiersUiEnabled=true 时调用 readProModeStateFromDom + syncGlobalProMode', () => {
-      testState.clientModeTiersEnabled = true
-      const { wrapper } = mountWithBoot()
-      expect(testState.proMode.readProModeStateFromDom).toHaveBeenCalled()
-      expect(testState.proMode.syncGlobalProMode).toHaveBeenCalled()
-      wrapper.unmount()
-    })
-
     it('调用 shellBridge.installSwitchViewBridge', () => {
       const { wrapper } = mountWithBoot()
       expect(testState.shellBridge.installSwitchViewBridge).toHaveBeenCalled()
@@ -714,12 +655,6 @@ describe('useAppBoot - coverage ramp', () => {
   // ════════════════════════════════════════════════════════════════════
 
   describe('onBeforeUnmount 生命周期', () => {
-    it('卸载时调用 proMode.uninstallLegacyDomObserver', () => {
-      const { wrapper } = mountWithBoot()
-      wrapper.unmount()
-      expect(testState.proMode.uninstallLegacyDomObserver).toHaveBeenCalled()
-    })
-
     it('卸载时调用 shellBridge.uninstall', () => {
       const { wrapper } = mountWithBoot()
       wrapper.unmount()

@@ -35,8 +35,6 @@ import './styles/css/components/modals.css';
 import './styles/css/components/ui-components.css';
 import './styles/css/animations/transitions.css';
 import './styles/css/animations/ui-effects.css';
-import './styles/css/animations/pro-mode.css';
-import './styles/css/animations/gpu-optimizations.css';
 import './styles/css/office-theme.css';
 import 'font-awesome/css/font-awesome.min.css';
 

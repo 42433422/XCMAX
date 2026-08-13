@@ -23,7 +23,6 @@ export function buildChatExcelWorkflowSteps(): TutorialStep[] {
       highlightSelector: '[data-tour="chat-input-area"]',
       actionType: 'observe',
       track: 'advanced',
-      excludeInPro: false,
       allowCardNext: true,
     }),
     createStep({
@@ -35,7 +34,6 @@ export function buildChatExcelWorkflowSteps(): TutorialStep[] {
       highlightSelector: '#view-chat button[data-tutorial-id="toolbar-excel-analyze"]',
       actionType: 'observe',
       track: 'advanced',
-      excludeInPro: false,
       allowCardNext: true,
     }),
     createStep({
@@ -47,7 +45,6 @@ export function buildChatExcelWorkflowSteps(): TutorialStep[] {
       highlightSelector: '#view-chat button[data-tutorial-id="toolbar-excel-analyze"]',
       actionType: 'click',
       track: 'advanced',
-      excludeInPro: false,
       allowCardNext: true,
     }),
     createStep({
@@ -59,7 +56,6 @@ export function buildChatExcelWorkflowSteps(): TutorialStep[] {
       highlightSelector: '#view-chat .input-wrapper',
       actionType: 'observe',
       track: 'advanced',
-      excludeInPro: false,
       allowCardNext: true,
     }),
     createStep({
@@ -71,7 +67,6 @@ export function buildChatExcelWorkflowSteps(): TutorialStep[] {
       highlightSelector: '#view-chat .sheet-link-bar, #view-chat .input-wrapper',
       actionType: 'observe',
       track: 'advanced',
-      excludeInPro: false,
       allowCardNext: true,
     }),
     createStep({
@@ -82,7 +77,6 @@ export function buildChatExcelWorkflowSteps(): TutorialStep[] {
       actionType: 'click',
       routeName: 'customers',
       track: 'advanced',
-      excludeInPro: false,
       allowCardNext: true,
     }),
     createStep({
@@ -94,7 +88,6 @@ export function buildChatExcelWorkflowSteps(): TutorialStep[] {
       highlightSelector: '#view-customers .customers-header-actions',
       actionType: 'observe',
       track: 'advanced',
-      excludeInPro: false,
       allowCardNext: true,
     }),
     createStep({
@@ -105,7 +98,6 @@ export function buildChatExcelWorkflowSteps(): TutorialStep[] {
       actionType: 'click',
       routeName: 'products',
       track: 'advanced',
-      excludeInPro: false,
       allowCardNext: true,
     }),
     createStep({
@@ -117,7 +109,6 @@ export function buildChatExcelWorkflowSteps(): TutorialStep[] {
       highlightSelector: '#view-products .page-header',
       actionType: 'observe',
       track: 'advanced',
-      excludeInPro: false,
       allowCardNext: true,
     }),
     createStep({
@@ -130,7 +121,6 @@ export function buildChatExcelWorkflowSteps(): TutorialStep[] {
       highlightSelector: '[data-tour="chat-input-area"]',
       actionType: 'observe',
       track: 'advanced',
-      excludeInPro: false,
     }),
   ]
 }

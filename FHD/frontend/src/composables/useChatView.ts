@@ -3,7 +3,6 @@ import { useChatOrchestration } from './useChatOrchestration'
 
 export interface UseChatViewOptions {
   sessionId: Ref<string>
-  proIntentExperienceEnabled?: Ref<boolean>
 }
 
 /** Facade: wires extracted composables; implementation in useChatOrchestration. */

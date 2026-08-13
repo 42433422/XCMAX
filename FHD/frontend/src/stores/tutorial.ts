@@ -17,9 +17,6 @@ import type { TutorialStep, TutorialTrackId } from '@/tutorial/types'
 export { bindTutorialRouter }
 export type { TutorialStep, TutorialTrackId, TutorialActionType } from '@/tutorial/types'
 
-const PRO_INTENT_EXPERIENCE_STORAGE_KEY = 'xcagi_pro_intent_experience'
-type ProIntentLocalSnapshot = false | string | null
-
 type TutorialTestStatus = 'pending' | 'passed' | 'skipped'
 type TutorialReturnContext = {
   routeName?: string
@@ -37,7 +34,7 @@ export function setTutorialBuildContextFactory(
   tutorialBuildContextFactory = factory
 }
 
-function getBuildContext(isProMode: boolean) {
+function getBuildContext() {
   if (tutorialBuildContextFactory) {
     return tutorialBuildContextFactory()
   }
@@ -45,12 +42,11 @@ function getBuildContext(isProMode: boolean) {
     industryId: '考勤',
     mods: [],
     visibleNav: [],
-    isProMode,
   })
 }
 
-export function getTutorialTtsWarmupTexts(isProMode: boolean): string[] {
-  const ctx = getBuildContext(isProMode)
+export function getTutorialTtsWarmupTexts(): string[] {
+  const ctx = getBuildContext()
   const merged = resolveAllWarmupSteps(ctx)
   const seen = new Set<string>()
   const out: string[] = []
@@ -75,27 +71,6 @@ export const useTutorialStore = defineStore('tutorial', () => {
   const testResults = ref<Record<string, TutorialTestStatus>>({})
   const lastTestReport = ref<{ total: number; passed: number; skipped: number } | null>(null)
   const returnContext = ref<TutorialReturnContext | null>(null)
-  const proBasicFallbackNotice = ref('')
-  const tutorialProIntentSnapshot = ref<ProIntentLocalSnapshot>(false)
-
-  const captureTutorialProIntentSnapshot = () => {
-    tutorialProIntentSnapshot.value = localStorage.getItem(PRO_INTENT_EXPERIENCE_STORAGE_KEY)
-  }
-
-  const restoreTutorialProIntentSnapshot = () => {
-    if (tutorialProIntentSnapshot.value === false) return
-    const snap = tutorialProIntentSnapshot.value
-    tutorialProIntentSnapshot.value = false
-    if (snap === null || snap === '') {
-      localStorage.removeItem(PRO_INTENT_EXPERIENCE_STORAGE_KEY)
-    } else {
-      localStorage.setItem(PRO_INTENT_EXPERIENCE_STORAGE_KEY, snap)
-    }
-    const enabled = snap === '1'
-    window.dispatchEvent(
-      new CustomEvent('xcagi:pro-intent-experience-changed', { detail: { enabled } }),
-    )
-  }
 
   const currentStep = computed(() => steps.value[currentStepIndex.value] || null)
   const hasPrev = computed(() => currentStepIndex.value > 0)
@@ -175,16 +150,6 @@ export const useTutorialStore = defineStore('tutorial', () => {
         finishTutorial()
         return
       }
-      if (window.__XCAGI_IS_PRO_MODE && currentStep.value.excludeInPro) {
-        if (import.meta.env.DEV) {
-          console.info('[tutorial] skip pro-only guarded step:', currentStep.value.id)
-        }
-        markStepStatus(currentStep.value.id, 'skipped')
-        currentStepIndex.value += 1
-        canNext.value = false
-        skipMissingTargets()
-        return
-      }
       const step = currentStep.value
       const applyRect = () => {
         if (!currentStep.value) {
@@ -239,31 +204,21 @@ export const useTutorialStore = defineStore('tutorial', () => {
 
   const startTutorial = (
     options: {
-      isProMode?: boolean
       returnContext?: TutorialReturnContext
       track?: TutorialTrackId
       buildContext?: import('@/tutorial/types').TutorialBuildContext
     } = {},
   ) => {
-    const isProMode = !!options.isProMode
-    proBasicFallbackNotice.value = ''
     let effectiveTrack: TutorialTrackId = options.track ?? 'basic'
     returnContext.value = options.returnContext || null
-    const ctx = options.buildContext || getBuildContext(isProMode)
+    const ctx = options.buildContext || getBuildContext()
 
-    let resolved = resolveTrackSteps(effectiveTrack, ctx)
-    if (!resolved.length && effectiveTrack === 'basic' && isProMode) {
-      proBasicFallbackNotice.value =
-        '当前为专业版界面：基础教程面向普通版布局，已自动切换为「进阶教程」路线（仍可分步熟悉菜单与页面）。'
-      effectiveTrack = 'advanced'
-      resolved = resolveTrackSteps(effectiveTrack, ctx)
-    }
+    const resolved = resolveTrackSteps(effectiveTrack, ctx)
     steps.value = resolved
     if (!steps.value.length) {
       finishTutorial()
       return
     }
-    captureTutorialProIntentSnapshot()
     isActive.value = true
     isExited.value = false
     lastTestReport.value = null
@@ -365,8 +320,6 @@ export const useTutorialStore = defineStore('tutorial', () => {
   }
 
   const finishTutorial = () => {
-    restoreTutorialProIntentSnapshot()
-    proBasicFallbackNotice.value = ''
     lastTestReport.value = {
       total: testSummary.value.total,
       passed: testSummary.value.passed,
@@ -378,8 +331,6 @@ export const useTutorialStore = defineStore('tutorial', () => {
   }
 
   const exitTutorial = () => {
-    restoreTutorialProIntentSnapshot()
-    proBasicFallbackNotice.value = ''
     lastTestReport.value = {
       total: testSummary.value.total,
       passed: testSummary.value.passed,
@@ -391,7 +342,7 @@ export const useTutorialStore = defineStore('tutorial', () => {
   }
 
   const currentTrackLabel = computed(() => {
-    const ctx = getBuildContext(!!window.__XCAGI_IS_PRO_MODE)
+    const ctx = getBuildContext()
     return getTrackLabel(currentTrack.value, ctx)
   })
 
@@ -406,7 +357,6 @@ export const useTutorialStore = defineStore('tutorial', () => {
     highlightRect,
     canNext,
     blockedTip,
-    proBasicFallbackNotice,
     testResults,
     testSummary,
     lastTestReport,
