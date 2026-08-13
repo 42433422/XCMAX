@@ -10,6 +10,12 @@ export interface TutorialEvidenceDTO {
   verified_at: string | null
 }
 
+export interface TutorialGuideActionDTO {
+  instruction: string
+  target_selector: string
+  expected_input: string
+}
+
 export interface TutorialStepDTO {
   id: string
   title: string
@@ -20,8 +26,11 @@ export interface TutorialStepDTO {
   hint: string
   route_name: string
   target_selector: string
-  action_checklist?: string[]
-  principle?: string
+  location_label: string
+  completion_cue: string
+  guide_actions: TutorialGuideActionDTO[]
+  action_checklist: string[]
+  principle: string
   required: boolean
   status: 'pending' | 'failed' | 'passed'
   evidence: TutorialEvidenceDTO | null

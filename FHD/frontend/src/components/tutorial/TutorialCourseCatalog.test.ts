@@ -44,14 +44,15 @@ describe('TutorialCourseCatalog', () => {
   it('renders statuses, progress, duration and prerequisite locking in the existing tutorial surface', async () => {
     const wrapper = mount(TutorialCourseCatalog)
     await flushPromises()
-    expect(wrapper.text()).toContain('进阶教程 · 真实业务实训')
+    expect(wrapper.text()).toContain('进阶教程 · 跟着做就能学会')
+    expect(wrapper.text()).toContain('打开页面、照着提示操作、让系统检查')
     expect(wrapper.text()).toContain('课程 1')
-    expect(wrapper.text()).toContain('教程已升级')
+    expect(wrapper.text()).toContain('这是新版动手教程')
     expect(wrapper.text()).toContain('客户与产品建档')
     expect(wrapper.text()).toContain('约 10 分钟')
-    expect(wrapper.text()).toContain('进度 0%')
+    expect(wrapper.text()).toContain('共 0 步')
     expect(wrapper.text()).toContain('先完成：客户与产品建档')
-    const buttons = wrapper.findAll('button').filter((button) => button.text() === '开始')
+    const buttons = wrapper.findAll('button').filter((button) => button.text() === '开始学习')
     expect(buttons).toHaveLength(2)
     expect(buttons[0].attributes('disabled')).toBeUndefined()
     expect(buttons[1].attributes('disabled')).toBeDefined()
@@ -62,14 +63,14 @@ describe('TutorialCourseCatalog', () => {
     await flushPromises()
     await wrapper.find('details').find('button').trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toContain('只有企业 owner/admin')
+    expect(wrapper.text()).toContain('只有企业负责人或管理员')
   })
 
   it('starts an unlocked course and returns to the active tutorial coach', async () => {
     const wrapper = mount(TutorialCourseCatalog)
     await flushPromises()
 
-    await wrapper.findAll('button').find((button) => button.text() === '开始')!.trigger('click')
+    await wrapper.findAll('button').find((button) => button.text() === '开始学习')!.trigger('click')
     await flushPromises()
 
     expect(apiMock.start).toHaveBeenCalledWith('master-data')
