@@ -279,18 +279,13 @@ describe('coreWorkflowMonitor', () => {
     expect(result.label).not.toContain('进行中')
   })
 
-  it('buildCoreWorkflowStepsForEmployee wechat_msg with pro intent label', () => {
-    localStorage.setItem('xcagi_pro_intent_experience', '1')
-    try {
-      const steps = buildCoreWorkflowStepsForEmployee('wechat_msg', {
-        lastWechat: { at: Date.now(), line: 'hi' },
-      })
-      const step4 = steps.find((s) => s.id === 'wx4')
-      expect(step4?.label).toContain('intent/test')
-      expect(step4?.status).toBe('done')
-    } finally {
-      localStorage.removeItem('xcagi_pro_intent_experience')
-    }
+  it('buildCoreWorkflowStepsForEmployee wechat_msg builds wx4 intent step', () => {
+    const steps = buildCoreWorkflowStepsForEmployee('wechat_msg', {
+      lastWechat: { at: Date.now(), line: 'hi' },
+    })
+    const step4 = steps.find((s) => s.id === 'wx4')
+    expect(step4?.label).toContain('意图预处理')
+    expect(step4?.status).toBe('done')
   })
 
   it('buildCoreWorkflowStepsForEmployee shipment_mgmt with audit active', () => {

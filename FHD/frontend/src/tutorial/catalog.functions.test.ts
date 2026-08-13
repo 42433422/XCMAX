@@ -13,7 +13,6 @@ function makeCtx(overrides: Partial<TutorialBuildContext> = {}): TutorialBuildCo
     industryId: 'retail',
     mods: [],
     visibleNav: [],
-    isProMode: false,
     modMenuKeys: new Set(),
     ...overrides,
   }

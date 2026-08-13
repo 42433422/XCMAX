@@ -1,8 +1,8 @@
 /**
  * useChatOrchestration.ts 覆盖率补齐测试
  * 针对未覆盖行：errorMessage、normalizeServerContentToHtml、scrollToBottom、
- * useExcelAnalysis 回调、runShipmentMgmtAfterPrintSuccess、applyProRuntimeMode、
- * tryHandleRuntimeModeCommand、refetchTaskOrderNumber、setCustomOrderNumber、
+ * useExcelAnalysis 回调、runShipmentMgmtAfterPrintSuccess、
+ * refetchTaskOrderNumber、setCustomOrderNumber、
  * shouldAutoRunTask/scheduleAutoConfirmTask、showTaskConfirm、emitAssistantPush、
  * maybeCloseAssistantFloatForShipmentTask、confirmTask 各分支、handleAutoAction 各分支、
  * maybePrefetchProductAssistantFloat、executeRemoteChatRound 快路径/批量/单条、
@@ -22,7 +22,6 @@ const {
   mockExecutePrintTask,
   mockBuildPrintSummaryMessage,
   mockHandleChatRequiresToken,
-  mockResolveEffectiveProModeState,
   mockRequestChatByModeWithTimeout,
   mockRequestChatByModeBatchWithTimeout,
   mockEnqueueChatBatchMessage,
@@ -71,7 +70,6 @@ const {
   mockExecutePrintTask: vi.fn(),
   mockBuildPrintSummaryMessage: vi.fn(() => '打印完成'),
   mockHandleChatRequiresToken: vi.fn(),
-  mockResolveEffectiveProModeState: vi.fn(() => false),
   mockRequestChatByModeWithTimeout: vi.fn(),
   mockRequestChatByModeBatchWithTimeout: vi.fn(),
   mockEnqueueChatBatchMessage: vi.fn(),
@@ -253,10 +251,7 @@ vi.mock('./useChatWorkflowPanel', () => ({
 vi.mock('./useChatDbTokenGate', () => ({
   useChatDbTokenGate: () => ({
     handleChatRequiresToken: mockHandleChatRequiresToken,
-    resolveEffectiveProModeState: mockResolveEffectiveProModeState,
-    syncProModeState: vi.fn(),
     onDbWriteUnlockedForChatRetry: vi.fn(),
-    getModeScopedUserId: vi.fn(() => 'u1'),
     resolveChatDbTokensForPayload: vi.fn(() => ({})),
   }),
 }))
@@ -383,7 +378,6 @@ import { createApp, defineComponent, h } from 'vue'
 function createApi(sessionId = 'test-session') {
   return useChatOrchestration({
     sessionId: ref(sessionId),
-    proIntentExperienceEnabled: ref(false),
   })
 }
 
@@ -396,7 +390,6 @@ function resetMockState() {
   state.linkedExcelSheet!.value = null
   state.lastExcelAnalysisContext!.value = null
   state.linkedExcelAllSheets!.value = false
-  mockResolveEffectiveProModeState.mockReturnValue(false)
   mockIsChatStreamEnabled.mockReturnValue(false)
   mockGetChatBatchDebounceMs.mockReturnValue(0)
   mockExtractLikelyProductQueryKeyword.mockReturnValue(null)
@@ -726,81 +719,6 @@ describe('useChatOrchestration coverage – handleStartPrintCommand', () => {
     const api = createApi()
     await api.sendMessage('开始打印')
     expect(mockExecutePrintTask).toHaveBeenCalled()
-  })
-})
-
-describe('useChatOrchestration coverage – applyProRuntimeMode / tryHandleRuntimeModeCommand', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetMockState()
-  })
-
-  afterEach(() => {
-    delete (window as unknown as { setWorkModeFromChat?: unknown }).setWorkModeFromChat
-    delete (window as unknown as { setMonitorModeFromChat?: unknown }).setMonitorModeFromChat
-    delete (window as unknown as { refreshWorkModeMonitorList?: unknown }).refreshWorkModeMonitorList
-  })
-
-  it('pro 模式下发送"工作模式"切换工作模式', async () => {
-    const api = createApi()
-    api.isProMode.value = true
-    const workModeFn = vi.fn()
-    ;(window as unknown as { setWorkModeFromChat: typeof workModeFn }).setWorkModeFromChat = workModeFn
-    await api.sendMessage('工作模式')
-    expect(workModeFn).toHaveBeenCalledWith(true)
-  })
-
-  it('pro 模式下发送"监控模式"切换监控模式', async () => {
-    const api = createApi()
-    api.isProMode.value = true
-    const monitorFn = vi.fn()
-    ;(window as unknown as { setMonitorModeFromChat: typeof monitorFn }).setMonitorModeFromChat = monitorFn
-    await api.sendMessage('监控模式')
-    expect(monitorFn).toHaveBeenCalledWith(true)
-  })
-
-  it('监控模式入口缺失时提示不可用', async () => {
-    const api = createApi()
-    api.isProMode.value = true
-    await api.sendMessage('监控模式')
-    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('监控模式入口不可用'),
-      'ai',
-      undefined,
-      expect.any(Object),
-    )
-  })
-
-  it('工作模式入口缺失时提示不可用', async () => {
-    const api = createApi()
-    api.isProMode.value = true
-    await api.sendMessage('工作模式')
-    expect(mockAddAndSaveMessage).toHaveBeenCalledWith(
-      expect.stringContaining('工作模式入口不可用'),
-      'ai',
-      undefined,
-      expect.any(Object),
-    )
-  })
-
-  it('非 pro 模式下不处理运行时模式命令', async () => {
-    const api = createApi()
-    api.isProMode.value = false
-    mockExtractLikelyProductQueryKeyword.mockReturnValue(null)
-    await api.sendMessage('工作模式')
-    expect(mockRequestChatByModeWithTimeout).toHaveBeenCalled()
-  })
-
-  it('pro 模式下 refreshWorkModeMonitorList 被调用', async () => {
-    const api = createApi()
-    api.isProMode.value = true
-    const workModeFn = vi.fn()
-    const refreshFn = vi.fn()
-    ;(window as unknown as { setWorkModeFromChat: typeof workModeFn }).setWorkModeFromChat = workModeFn
-    ;(window as unknown as { refreshWorkModeMonitorList: typeof refreshFn }).refreshWorkModeMonitorList = refreshFn
-    await api.sendMessage('工作模式')
-    expect(refreshFn).toHaveBeenCalled()
   })
 })
 
@@ -1227,27 +1145,6 @@ describe('useChatOrchestration coverage – handleAutoAction 各分支', () => {
     window.removeEventListener('xcagi:switch-view', handler)
   })
 
-  it('show_products 在 pro 模式下额外派发 switch-view 到 products', () => {
-    const api = createApi()
-    api.isProMode.value = true
-    const handler = vi.fn()
-    window.addEventListener('xcagi:switch-view', handler)
-    api.handleAutoAction({ type: 'show_products', query: '5003A' })
-    expect(handler).toHaveBeenCalled()
-    const views = handler.mock.calls.map((c) => c[0].detail.view)
-    expect(views).toContain('products')
-    window.removeEventListener('xcagi:switch-view', handler)
-  })
-
-  it('set_work_mode 在非 pro 模式下早返回不调用 legacyAutoActionHandler', () => {
-    const api = createApi()
-    api.isProMode.value = false
-    const legacyFn = vi.fn()
-    ;(window as unknown as { legacyAutoActionHandler: typeof legacyFn }).legacyAutoActionHandler = legacyFn
-    api.handleAutoAction({ type: 'set_work_mode' }, 'msg')
-    expect(legacyFn).not.toHaveBeenCalled()
-  })
-
   it('有 legacyAutoActionHandler 时调用它', () => {
     const api = createApi()
     const legacyFn = vi.fn()
@@ -1273,27 +1170,10 @@ describe('useChatOrchestration coverage – sendMessage 各分支', () => {
     resetMockState()
   })
 
-  afterEach(() => {
-    delete (window as unknown as { isProTaskAcquisitionMessage?: unknown }).isProTaskAcquisitionMessage
-    delete (window as unknown as { jarvisSendMessage?: unknown }).jarvisSendMessage
-  })
-
   it('handleShipmentModify 返回 true 时跳过后续', async () => {
     mockHandleShipmentModify.mockResolvedValue(true)
     const api = createApi()
     await api.sendMessage('修改发货单')
-    expect(mockRequestChatByModeWithTimeout).not.toHaveBeenCalled()
-  })
-
-  it('pro 模式下 isProTaskAcquisitionMessage 返回 true 时走 jarvisSendMessage', async () => {
-    const api = createApi()
-    api.isProMode.value = true
-    const isProFn = vi.fn(() => true)
-    const jarvisFn = vi.fn()
-    ;(window as unknown as { isProTaskAcquisitionMessage: typeof isProFn }).isProTaskAcquisitionMessage = isProFn
-    ;(window as unknown as { jarvisSendMessage: typeof jarvisFn }).jarvisSendMessage = jarvisFn
-    await api.sendMessage('采集任务')
-    expect(jarvisFn).toHaveBeenCalledWith('采集任务')
     expect(mockRequestChatByModeWithTimeout).not.toHaveBeenCalled()
   })
 
@@ -1699,9 +1579,10 @@ describe('useChatOrchestration coverage – maybePrefetchProductAssistantFloat',
 
   it('非快路径且有 keyword 时 prefetch 副窗', async () => {
     mockExtractLikelyProductQueryKeyword.mockReturnValue('5003A')
+    // 有产品关键词但处于多模态挂起（非快路径）时，应并行预开产品副窗
+    state.multimodalPendingCount!.value = 1
     const api = useChatOrchestration({
       sessionId: ref('test'),
-      proIntentExperienceEnabled: ref(true),
     })
     const handler = vi.fn()
     window.addEventListener('xcagi:open-assistant-float', handler)
@@ -1759,7 +1640,6 @@ describe('useChatOrchestration coverage – 生命周期钩子', () => {
       setup() {
         useChatOrchestration({
           sessionId: ref('lifecycle'),
-          proIntentExperienceEnabled: ref(false),
         })
         return () => h('div')
       },
@@ -1781,7 +1661,6 @@ describe('useChatOrchestration coverage – 生命周期钩子', () => {
       setup() {
         useChatOrchestration({
           sessionId: ref('lifecycle2'),
-          proIntentExperienceEnabled: ref(false),
         })
         return () => h('div')
       },
@@ -1801,7 +1680,6 @@ describe('useChatOrchestration coverage – 生命周期钩子', () => {
       setup() {
         useChatOrchestration({
           sessionId: ref('lifecycle3'),
-          proIntentExperienceEnabled: ref(false),
         })
         return () => h('div')
       },
@@ -1818,7 +1696,6 @@ describe('useChatOrchestration coverage – 生命周期钩子', () => {
       setup() {
         useChatOrchestration({
           sessionId: ref('unmount'),
-          proIntentExperienceEnabled: ref(false),
         })
         return () => h('div')
       },
@@ -2032,52 +1909,5 @@ describe('useChatOrchestration coverage – buildTaskCompletedDescription / extr
       expect.any(Object),
     )
     vi.unstubAllGlobals()
-  })
-})
-
-describe('useChatOrchestration coverage – proIntentExperienceEnabled 流式 loading', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetMockState()
-    mockIsChatStreamEnabled.mockReturnValue(true)
-    mockSendChatStream.mockResolvedValue({ ok: true, body: {} })
-    mockReadPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
-      onEvent({ type: 'done', result: { success: true, response: '回复' } })
-    })
-  })
-
-  it('proIntentExperienceEnabled 且非 pro 模式时 loading 显示专业意图处理中', async () => {
-    mockResolveEffectiveProModeState.mockReturnValue(false)
-    const api = useChatOrchestration({
-      sessionId: ref('hybrid'),
-      proIntentExperienceEnabled: ref(true),
-    })
-    await api.sendMessage('hello')
-    expect(mockSetLoadingProgress).toHaveBeenCalledWith('专业意图处理中（流式）…', 'hybrid')
-  })
-})
-
-describe('useChatOrchestration coverage – proIntentExperienceEnabled 非流式 loading', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetMockState()
-    mockIsChatStreamEnabled.mockReturnValue(false)
-    mockResolveEffectiveProModeState.mockReturnValue(false)
-    mockRequestChatByModeWithTimeout.mockResolvedValue({
-      success: true,
-      response: '回复',
-      data: { action: 'workflow_confirmation_required', data: {} },
-    })
-  })
-
-  it('proIntentExperienceEnabled 且非 pro 模式时 loading 显示专业意图处理中', async () => {
-    const api = useChatOrchestration({
-      sessionId: ref('hybrid2'),
-      proIntentExperienceEnabled: ref(true),
-    })
-    await api.sendMessage('hello')
-    expect(mockSetLoadingProgress).toHaveBeenCalledWith('专业意图处理中（普通界面槽位）...', 'hybrid2')
   })
 })

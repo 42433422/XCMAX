@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   aiMarkdownSourceFromContent,
+  countThinkingStepLines,
   extractToolInvocationChips,
   formatToolInvocationChip,
   hasVisibleChatBubbleBody,
@@ -10,6 +11,11 @@ import {
 } from './chatBubbleDisplay'
 
 describe('chatBubbleDisplay', () => {
+  it('countThinkingStepLines counts non-empty trimmed lines', () => {
+    expect(countThinkingStepLines('  a \n\n b \n')).toBe(2)
+    expect(countThinkingStepLines('')).toBe(0)
+    expect(countThinkingStepLines(null)).toBe(0)
+  })
   it('parses excel read tool json', () => {
     const raw = '{"file_path": "uploads/xcagi-quickstart-sample-b.xlsx", "action": "read"}'
     const obj = tryParseToolInvocationJson(raw)

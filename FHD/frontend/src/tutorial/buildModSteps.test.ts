@@ -19,7 +19,6 @@ describe('buildModSteps', () => {
       industryId: '考勤',
       mods,
       visibleNav: [],
-      isProMode: false,
     })
     const merged = collectModPageHighlights(ctx)
     expect(merged.chat?.[0]?.idSuffix).toBe('x')

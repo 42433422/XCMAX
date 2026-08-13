@@ -175,7 +175,7 @@ function createModsState(overrides: Record<string, unknown> = {}) {
 
 function createTutorialState(overrides: Record<string, unknown> = {}) {
   return {
-    buildContext: { value: { industryId: '通用', mods: [], visibleNav: [], isProMode: false } },
+    buildContext: { value: { industryId: '通用', mods: [], visibleNav: [] } },
     tutorialTracks: { value: [] },
     advancedTrackHint: { value: '' },
     visibleNavItems: { value: [] },

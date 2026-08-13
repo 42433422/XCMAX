@@ -592,7 +592,6 @@ const startTutorialGuide = async (track = DEFAULT_TUTORIAL_TRACK_ID) => {
   popupNotice.value = null;
   activeTab.value = 'tutorial';
   tutorialStore.startTutorial({
-    isProMode: !!window.__XCAGI_IS_PRO_MODE,
     track: t,
     buildContext: tutorialBuildContext.value,
     returnContext: {
@@ -1372,7 +1371,6 @@ watch(() => linkedGridData.value, () => {
   flex: 1;
   min-width: 0;
 }
-/* 与侧栏 #proModeToggle 同款尺寸与动效，适配浅色副窗背景 */
 .workflow-employee-toggle.toggle-switch {
   flex-shrink: 0;
   width: 40px;

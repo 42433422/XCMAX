@@ -73,7 +73,7 @@ vi.mock('@/composables/useTutorialCatalog', () => ({
       { id: 'advanced', title: '进阶', summary: '进阶教程', description: '进阶说明' },
     ],
     advancedTrackHint: '进阶路线提示',
-    buildContext: () => ({ industryId: '考勤', mods: [], visibleNav: [], isProMode: false }),
+    buildContext: () => ({ industryId: '考勤', mods: [], visibleNav: [] }),
   }),
 }))
 

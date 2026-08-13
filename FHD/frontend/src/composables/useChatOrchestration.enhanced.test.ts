@@ -4,7 +4,7 @@
  * showTaskConfirm、cancelTask、handleAutoAction、
  * emitAssistantPush（间接）、copyAssistantPushContent、
  * generateSessionId、scrollToBottom、ttsEnabled、
- * handleStartPrintCommand（间接）、applyProRuntimeMode（间接）
+ * handleStartPrintCommand（间接）
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
@@ -125,10 +125,7 @@ vi.mock('./useChatWorkflowPanel', () => ({
 vi.mock('./useChatDbTokenGate', () => ({
   useChatDbTokenGate: () => ({
     handleChatRequiresToken: vi.fn(),
-    resolveEffectiveProModeState: vi.fn(() => false),
-    syncProModeState: vi.fn(),
     onDbWriteUnlockedForChatRetry: vi.fn(),
-    getModeScopedUserId: vi.fn(() => 'user-1'),
     resolveChatDbTokensForPayload: vi.fn(() => ({})),
   }),
 }))
@@ -225,7 +222,6 @@ import productsApi from '@/api/products'
 function createApi() {
   return useChatOrchestration({
     sessionId: ref('test-session'),
-    proIntentExperienceEnabled: ref(false),
   })
 }
 
@@ -266,7 +262,6 @@ describe('useChatOrchestration – API surface', () => {
     expect(api.isStreamingReply).toBeDefined()
     expect(api.isExecuting).toBeDefined()
     expect(api.currentTask).toBeDefined()
-    expect(api.isProMode).toBeDefined()
     expect(api.ttsEnabled).toBeDefined()
     expect(api.pushCopied).toBeDefined()
     expect(api.messages).toBeDefined()

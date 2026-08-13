@@ -25,12 +25,8 @@ function makeDeps() {
       { role: 'user', content: 'previous message', time: '10:00' },
     ]),
     sessionId: ref('session-1'),
-    proIntentExperienceEnabled: ref(false),
-    isProMode: ref(false),
     lastRequestContextSummary: ref(''),
     plannerWriteUnlockResumeDraft: ref(''),
-    resolveEffectiveProModeState: () => false,
-    getModeScopedUserId: (proEnabled: boolean) => proEnabled ? 'pro-user-1' : 'basic-user-1',
     resolveChatDbTokensForPayload: () => ({}),
     injectExcelContextPayload: vi.fn(() => false),
     consumeMultimodalIntoPlannerContext: vi.fn(),
@@ -84,23 +80,11 @@ describe('useChatRequest', () => {
   })
 
   it('buildPlannerChatRequestPayload builds basic mode payload', () => {
-    const { body, proIntentEnabled } = request.buildPlannerChatRequestPayload('hello')
-    expect(proIntentEnabled).toBe(false)
+    const { body } = request.buildPlannerChatRequestPayload('hello')
     expect(body.message).toBe('hello')
     expect(body.source).toBe('normal')
     expect(body.mode).toBe('basic')
-    expect(body.user_id).toBe('basic-user-1')
-  })
-
-  it('buildPlannerChatRequestPayload builds pro mode payload', () => {
-    const deps = makeDeps()
-    deps.resolveEffectiveProModeState = () => true
-    const req = useChatRequest(deps)
-    const { body, proIntentEnabled } = req.buildPlannerChatRequestPayload('hello')
-    expect(proIntentEnabled).toBe(true)
-    expect(body.source).toBe('pro')
-    expect(body.mode).toBe('professional')
-    expect(body.user_id).toBe('pro-user-1')
+    expect(body.user_id).toBe('web_normal_session-1')
   })
 
   it('buildPlannerChatRequestPayload includes context with recent messages', () => {
@@ -147,18 +131,6 @@ describe('useChatRequest', () => {
     expect(history.length).toBeLessThanOrEqual(6)
   })
 
-  it('buildPlannerChatRequestPayload with proIntentExperienceEnabled but not pro mode', () => {
-    const deps = makeDeps()
-    deps.proIntentExperienceEnabled.value = true
-    deps.resolveEffectiveProModeState = () => false
-    const req = useChatRequest(deps)
-    const { body, proIntentEnabled } = req.buildPlannerChatRequestPayload('hello')
-    expect(proIntentEnabled).toBe(true)
-    const ctx = body.context as Record<string, unknown>
-    expect(ctx.ui_surface).toBe('normal')
-    expect(ctx.intent_channel).toBe('pro')
-  })
-
   it('buildPlannerChatRequestPayload with fromWriteUnlock option', () => {
     const deps = makeDeps()
     deps.plannerWriteUnlockResumeDraft.value = 'draft content here'
@@ -196,34 +168,16 @@ describe('useChatRequest', () => {
     expect(deps.lastRequestContextSummary.value).toContain('已关联上下文')
   })
 
-  it('requestChatByMode calls sendUnifiedChat in basic mode', async () => {
+  it('requestChatByMode calls sendUnifiedChat', async () => {
     const chatApi = (await import('@/api/chat')).default
     await request.requestChatByMode('hello')
     expect(chatApi.sendUnifiedChat).toHaveBeenCalled()
   })
 
-  it('requestChatByMode calls sendChat in pro mode', async () => {
-    const deps = makeDeps()
-    deps.resolveEffectiveProModeState = () => true
-    const req = useChatRequest(deps)
-    const chatApi = (await import('@/api/chat')).default
-    await req.requestChatByMode('hello')
-    expect(chatApi.sendChat).toHaveBeenCalled()
-  })
-
-  it('requestChatByModeBatch calls sendUnifiedChatBatch in basic mode', async () => {
+  it('requestChatByModeBatch calls sendUnifiedChatBatch', async () => {
     const chatApi = (await import('@/api/chat')).default
     await request.requestChatByModeBatch(['msg1', 'msg2'])
     expect(chatApi.sendUnifiedChatBatch).toHaveBeenCalled()
-  })
-
-  it('requestChatByModeBatch calls sendChatBatch in pro mode', async () => {
-    const deps = makeDeps()
-    deps.resolveEffectiveProModeState = () => true
-    const req = useChatRequest(deps)
-    const chatApi = (await import('@/api/chat')).default
-    await req.requestChatByModeBatch(['msg1', 'msg2'])
-    expect(chatApi.sendChatBatch).toHaveBeenCalled()
   })
 
   it('getChatBatchDebounceMs returns 0 by default', () => {

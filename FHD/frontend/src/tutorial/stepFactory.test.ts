@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import {
-  createStep,
   advancedSidebarNavStep,
   advancedPageFeaturesStep,
   pageHighlightToStep,
@@ -8,18 +7,10 @@ import {
 } from './stepFactory'
 
 describe('tutorial stepFactory', () => {
-  it('createStep defaults excludeInPro to true', () => {
-    expect(createStep({ id: 'a', title: 't', description: 'd', actionType: 'observe' }).excludeInPro).toBe(true)
-    expect(
-      createStep({ id: 'a', title: 't', description: 'd', actionType: 'observe', excludeInPro: false }).excludeInPro,
-    ).toBe(false)
-  })
-
   it('advancedSidebarNavStep sanitizes id and sets click', () => {
     const s = advancedSidebarNavStep('chat/view', '标题', '描述')
     expect(s.id).toBe('nav-chat-view')
     expect(s.actionType).toBe('click')
-    expect(s.excludeInPro).toBe(false)
   })
 
   it('advancedPageFeaturesStep falls back highlight to target', () => {

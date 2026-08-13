@@ -16,7 +16,7 @@ import { useChatMessages } from './useChatMessages'
 import { useShipmentTask, type ShipmentTask } from './useShipmentTask'
 import { usePrintService } from './usePrintService'
 import { useExcelAnalysis } from './useExcelAnalysis'
-import { isStartPrintMessage, detectRuntimeModeCommand } from '../utils/textParser'
+import { isStartPrintMessage } from '../utils/textParser'
 import chatApi, { parseChatStreamErrorResponse } from '../api/chat'
 import productsApi from '../api/products'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
@@ -41,12 +41,7 @@ import { collapseExactDuplicateReply } from '@/utils/chatReplyNormalization'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 type XcagiChatWindow = Window & {
   __VUE_CHAT_FILL__?: (value: string) => boolean
-  setWorkModeFromChat?: (enabled: boolean) => void
-  setMonitorModeFromChat?: (enabled: boolean) => void
-  refreshWorkModeMonitorList?: () => void
   legacyAutoActionHandler?: (action: ChatAutoAction, userMessage: string) => void
-  isProTaskAcquisitionMessage?: (message: string) => boolean
-  jarvisSendMessage?: (message: string) => void
 }
 type DynamicShipmentTask = ShipmentTask & Record<string, unknown>
 function getXcagiWindow(): XcagiChatWindow {
@@ -78,7 +73,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const tutorialStore = useTutorialStore()
   const modsStore = useModsStore()
   const { sessionId } = options
-  const proIntentExperienceEnabled = options.proIntentExperienceEnabled
   const historyPersistence = useChatHistoryPersistence({
     sessionId,
     getActiveModId: () => String(modsStore.activeModId || ''),
@@ -125,7 +119,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     output_summary: string
   }>>([])
   const latestAssistantPush = ref<{ title: string; description: string } | null>(null)
-  const proRuntimeTask = ref<{ title: string; statusText: string; statusClass: string; description: string } | null>(null)
   const chatMessagesRef = ref<HTMLElement | null>(null)
   let persistTaskPanelStateForSession: (targetSessionId?: string) => void = () => { }
   const {
@@ -163,19 +156,17 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const pendingDbWriteChatRetryMessages = ref<string[] | null>(null)
   const plannerWriteUnlockResumeDraft = ref('')
   const lastRequestContextSummary = ref('')
-  const isProMode = ref(false)
   const pushCopied = ref(false)
   const executeRemoteChatRoundRef: {
     fn: (msgs: string[], opts?: { fromWriteUnlock?: boolean }) => Promise<void>
   } = { fn: async () => { } }
   const dbGate = useChatDbTokenGate({
     sessionId,
-    isProMode,
     pendingDbWriteChatRetryMessages,
     plannerWriteUnlockResumeDraft,
     executeRemoteChatRound: (msgs, opts) => executeRemoteChatRoundRef.fn(msgs, opts),
   })
-  const { handleChatRequiresToken, resolveEffectiveProModeState } = dbGate
+  const { handleChatRequiresToken } = dbGate
   const excelCtx = useChatExcelContext({ sessionId, addAndSaveMessage })
   const {
     lastExcelAnalysisContext,
@@ -222,12 +213,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const chatRequest = useChatRequest({
     messages,
     sessionId,
-    proIntentExperienceEnabled,
-    isProMode,
     lastRequestContextSummary,
     plannerWriteUnlockResumeDraft,
-    resolveEffectiveProModeState: dbGate.resolveEffectiveProModeState,
-    getModeScopedUserId: dbGate.getModeScopedUserId,
     resolveChatDbTokensForPayload: dbGate.resolveChatDbTokensForPayload,
     injectExcelContextPayload,
     consumeMultimodalIntoPlannerContext,
@@ -570,53 +557,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         labelCount: labelPaths.length,
       })
     }
-    return true
-  }
-
-  function applyProRuntimeMode(actionType: string, enabled: boolean): boolean {
-    if (!isProMode.value) return false
-    const shouldEnable = enabled !== false
-    const toggleWorkMode = getXcagiWindow().setWorkModeFromChat
-    const toggleMonitorMode = getXcagiWindow().setMonitorModeFromChat
-
-    if (actionType === 'show_monitor') {
-      if (typeof toggleMonitorMode === 'function') {
-        toggleMonitorMode(shouldEnable)
-      } else {
-        console.warn('[pro-runtime] monitor mode entry missing; skip fallback to work mode')
-        return false
-      }
-    } else {
-      if (typeof toggleWorkMode !== 'function') {
-        console.warn('[pro-runtime] work mode entry missing')
-        return false
-      }
-      toggleWorkMode(shouldEnable)
-    }
-
-    const refreshMonitorList = getXcagiWindow().refreshWorkModeMonitorList
-    if (shouldEnable && typeof refreshMonitorList === 'function') {
-      refreshMonitorList()
-    }
-
-    window.dispatchEvent(new CustomEvent('xcagi:pro-runtime-mode-changed', {
-      detail: { type: actionType, enabled: shouldEnable }
-    }))
-    return true
-  }
-
-  async function tryHandleRuntimeModeCommand(message: string): Promise<boolean> {
-    if (!isProMode.value) return false
-    const modeAction = detectRuntimeModeCommand(message)
-    if (!modeAction) return false
-
-    const switched = applyProRuntimeMode(modeAction, true)
-    const reply = switched
-      ? (modeAction === 'show_monitor' ? '正在切换到监控模式...' : '正在切换到工作模式...')
-      : (modeAction === 'show_monitor'
-        ? '监控模式入口不可用，已保持当前模式不变。'
-        : '工作模式入口不可用，已保持当前模式不变。')
-    await addAndSaveMessage(reply, 'ai')
     return true
   }
 
@@ -967,13 +907,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         : autoAction.keyword || userMessage || ''
     ).trim()
 
-    if (type === 'set_work_mode') {
-      applyProRuntimeMode(type, autoAction.enabled !== false)
-    } else if (type === 'show_monitor') {
-      applyProRuntimeMode(type, true)
-    }
-
-    // 与普通模式一致：无论是否专业 UI，产品副窗都应打开（工作流也会下发 show_products_float）
+    // 产品副窗打开（工作流会下发 show_products_float）
     if (type === 'show_products' || type === 'show_products_float') {
       emitAssistantPush({
         title: '产品查询',
@@ -991,10 +925,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         floatDetail.hydrateProductSearch = { rows: hyd.rows, total: hyd.total }
       }
       window.dispatchEvent(new CustomEvent('xcagi:open-assistant-float', { detail: floatDetail }))
-      // 原逻辑：仅专业 UI 下 show_products 会额外跳到产品页（show_products_float 不跳页）
-      if (type === 'show_products' && isProMode.value) {
-        window.dispatchEvent(new CustomEvent('xcagi:switch-view', { detail: { view: 'products' } }))
-      }
       return
     }
 
@@ -1026,10 +956,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     }
     const event = new CustomEvent('auto-action', { detail: { action: autoAction, userMessage } })
     window.dispatchEvent(event)
-
-    if (!isProMode.value && ['set_work_mode', 'show_monitor'].includes(type)) {
-      return
-    }
 
     const legacyAutoActionHandler = getXcagiWindow().legacyAutoActionHandler
     if (typeof legacyAutoActionHandler === 'function') {
@@ -1088,13 +1014,11 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     }
     const primaryText = remoteMessages[0] || ''
 
-    /** 未开专业版界面且未勾选「专业意图体验」时：查产品类话术不必等 /ai/chat 或连通性探测，直接走产品列表接口 */
+    /** 查产品类话术可不必等 /ai/chat 或连通性探测，直接走产品列表接口 */
     /** 管理端（admin-console）无产品库业务，不走产品快路径，避免「查询…」话术被误判为产品检索 */
     const kwFast =
       remoteMessages.length === 1 &&
         !isAdminConsoleSpa() &&
-        !resolveEffectiveProModeState() &&
-        !proIntentExperienceEnabled?.value &&
         !resolveExcelAnalysisContextForRequest() &&
         multimodalPendingCount.value === 0
         ? extractLikelyProductQueryKeyword(primaryText)
@@ -1179,9 +1103,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       const primaryForStream = remoteMessages[0] || ''
       round.setStreaming(true)
       round.setLoading(true)
-      const runtimeProForLoadingS = resolveEffectiveProModeState()
-      const hybridS = !!proIntentExperienceEnabled?.value && !runtimeProForLoadingS
-      setLoadingProgress(hybridS ? '专业意图处理中（流式）…' : '正在流式生成回复…', requestScope.sessionId)
+      setLoadingProgress('正在流式生成回复…', requestScope.sessionId)
       startWaitProgressTimer(requestScope.sessionId)
       const baseS = resolveChatTimeoutMs(primaryForStream)
       const timeoutMsS = Math.min(120000, baseS)
@@ -1321,15 +1243,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
     round.setLoading(true)
     round.setStreaming(false)
-    const runtimeProForLoading = resolveEffectiveProModeState()
-    const hybridNormalUiProChannel =
-      !!proIntentExperienceEnabled?.value && !runtimeProForLoading
-    setLoadingProgress(
-      hybridNormalUiProChannel
-        ? '专业意图处理中（普通界面槽位）...'
-        : '正在理解你的问题...',
-      requestScope.sessionId,
-    )
+    setLoadingProgress('正在理解你的问题...', requestScope.sessionId)
     let data: ChatPlannerPayload = {}
     try {
       // 不再在发聊天前阻塞等待 /api/ai/test（最多 3s），否则「慢」往往来自这里而非 AI
@@ -1491,22 +1405,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const requestScope = { sessionId: taskSessionId, messages: [...messages.value] }
     await saveUserMessage
 
-    const modeHandled = await tryHandleRuntimeModeCommand(message)
-    if (modeHandled) return
-
     const previewModified = await handleShipmentModify(message)
     if (previewModified) return
-
-    const xcagiWindow = getXcagiWindow()
-    if (
-      isProMode.value &&
-      typeof xcagiWindow.isProTaskAcquisitionMessage === 'function' &&
-      xcagiWindow.isProTaskAcquisitionMessage(message) &&
-      typeof xcagiWindow.jarvisSendMessage === 'function'
-    ) {
-      xcagiWindow.jarvisSendMessage(message)
-      return
-    }
 
     const printHandled = await handleStartPrintCommand(message)
     if (printHandled) return
@@ -1593,7 +1493,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     isExecuting,
     stateSteps,
     latestAssistantPush,
-    proRuntimeTask,
     taskList,
     filteredTaskList,
     activeTask,
@@ -1613,14 +1512,12 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     excelSheetOptions,
     linkedExcelSheet,
     linkedExcelAllSheets,
-    isProMode,
     isPrinting,
     taskTableColumns,
     taskTableItems,
     taskOrderNumber,
     generateSessionId,
     scrollToBottom,
-    syncProModeState: dbGate.syncProModeState,
     sendMessage,
     confirmWorkflowFromCard,
     cancelWorkflowFromCard,

@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { LS_PLANNER_MOD_FACADE_ENABLED } from '@/constants/plannerMod'
 import * as xcagiStorageKeys from '@/utils/xcagiStorageKeys'
 import { invalidateTenantStorageScopeCache } from '@/utils/tenantStorageScope'
-import { resolvePlannerPagePath } from './plannerPagePaths'
+import { resolvePlannerPagePath, resolvePlannerChatHomePath } from './plannerPagePaths'
 
 describe('plannerPagePaths', () => {
   beforeEach(() => {
@@ -35,5 +35,16 @@ describe('plannerPagePaths', () => {
     })
     vi.spyOn(xcagiStorageKeys, 'readActiveExtensionModIdFromStorage').mockReturnValue('taiyangniao-pro')
     expect(resolvePlannerPagePath('/')).toBe('/')
+  })
+
+  it('resolvePlannerChatHomePath maps host root to mod chat when facade on', () => {
+    const store: Record<string, string> = {
+      [LS_PLANNER_MOD_FACADE_ENABLED]: '1',
+    }
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store[k] ?? null,
+    })
+    vi.spyOn(xcagiStorageKeys, 'readActiveExtensionModIdFromStorage').mockReturnValue('')
+    expect(resolvePlannerChatHomePath()).toBe('/mod/xcagi-planner-bridge/chat')
   })
 })

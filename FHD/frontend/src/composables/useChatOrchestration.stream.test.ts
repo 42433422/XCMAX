@@ -130,10 +130,7 @@ vi.mock('./useChatWorkflowPanel', () => ({
 vi.mock('./useChatDbTokenGate', () => ({
   useChatDbTokenGate: () => ({
     handleChatRequiresToken,
-    resolveEffectiveProModeState: vi.fn(() => false),
-    syncProModeState: vi.fn(),
     onDbWriteUnlockedForChatRetry: vi.fn(),
-    getModeScopedUserId: vi.fn(() => 'u1'),
     resolveChatDbTokensForPayload: vi.fn(() => ({})),
   }),
 }))
@@ -235,7 +232,7 @@ describe('useChatOrchestration stream', () => {
   })
 
   it('sendMessage uses SSE stream when enabled', async () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     await api.sendMessage('hello')
     expect(sendChatStream).toHaveBeenCalled()
     expect(readPlannerSseResponse).toHaveBeenCalled()
@@ -249,7 +246,7 @@ describe('useChatOrchestration stream', () => {
       onEvent({ type: 'requires_token', token_name: 'PAYMENT_TOKEN', token_description: '支付授权' })
       onEvent({ type: 'done', result: { success: true, response: '' } })
     })
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     await api.sendMessage('发起支付')
     expect(handleChatRequiresToken).toHaveBeenCalled()
     expect(applyPlainTextToMessageIndex).toHaveBeenCalled()
@@ -257,7 +254,7 @@ describe('useChatOrchestration stream', () => {
 
   it('sendMessage stream surfaces HTTP error', async () => {
     sendChatStream.mockResolvedValue({ ok: false, status: 502 })
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     await api.sendMessage('hello')
     expect(applyPlainTextToMessageIndex).toHaveBeenCalledWith(0, expect.stringContaining('处理失败'))
   })
@@ -266,7 +263,7 @@ describe('useChatOrchestration stream', () => {
     readPlannerSseResponse.mockImplementation(async (_res, onEvent) => {
       onEvent({ type: 'error', message: '模型不可用' })
     })
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     await api.sendMessage('hello')
     expect(applyPlainTextToMessageIndex).toHaveBeenCalledWith(0, expect.stringContaining('模型不可用'))
   })

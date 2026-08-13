@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import os
 import platform
 import sys
@@ -15,6 +16,8 @@ from app.desktop_runtime.migrate import export_config
 from app.security.log_redaction import redact_log_text
 
 from .paths import ensure_desktop_dirs, is_desktop_mode
+
+logger = logging.getLogger(__name__)
 
 
 def _redact_log_bytes(chunk: bytes) -> bytes:
@@ -32,7 +35,8 @@ def _tail_bytes(path: Path, max_bytes: int = 2_097_152) -> bytes | None:
                 return f.read()
             f.seek(max(0, size - max_bytes))
             return f.read()
-    except OSError:
+    except OSError as exc:
+        logger.debug("failed to tail %s: %s", path, exc)
         return None
 
 
@@ -75,7 +79,8 @@ def build_support_bundle_zip(
         manifest["modsLoaded"] = [
             str(m.get("id") or "") for m in get_mod_manager().list_all_mods() if m.get("id")
         ][:200]
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("mod list for support bundle unavailable: %s", exc)
         manifest["modsLoaded"] = []
 
     buf = io.BytesIO()

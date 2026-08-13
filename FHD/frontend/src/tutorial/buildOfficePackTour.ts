@@ -13,7 +13,6 @@ export function buildOfficeEmployeePackSteps(): TutorialStep[] {
       actionType: 'click',
       routeName: 'ai-ecosystem',
       track: 'advanced',
-      excludeInPro: false,
     }),
     createStep({
       id: 'office-pack-open-modstore',
@@ -25,7 +24,6 @@ export function buildOfficeEmployeePackSteps(): TutorialStep[] {
       highlightSelector: '[data-tour="ecosystem-launcher-modstore"]',
       actionType: 'click',
       track: 'advanced',
-      excludeInPro: false,
     }),
     createStep({
       id: 'office-pack-nav-tab',
@@ -38,7 +36,6 @@ export function buildOfficeEmployeePackSteps(): TutorialStep[] {
       highlightSelector: '[data-tour="store-nav-office"]',
       actionType: 'click',
       track: 'advanced',
-      excludeInPro: false,
     }),
     createStep({
       id: 'office-pack-one-click',
@@ -51,7 +48,6 @@ export function buildOfficeEmployeePackSteps(): TutorialStep[] {
       highlightSelector: '[data-tour="store-one-click-install"]',
       actionType: 'click',
       track: 'advanced',
-      excludeInPro: false,
     }),
     createStep({
       id: 'office-pack-wait-ready',
@@ -64,7 +60,6 @@ export function buildOfficeEmployeePackSteps(): TutorialStep[] {
       actionType: 'observe',
       track: 'advanced',
       noAutoSkipWhenMissing: true,
-      excludeInPro: false,
     }),
     createStep({
       id: 'office-pack-chat-verify',
@@ -76,7 +71,6 @@ export function buildOfficeEmployeePackSteps(): TutorialStep[] {
       highlightSelector: '[data-tour="chat-input-area"]',
       actionType: 'observe',
       track: 'advanced',
-      excludeInPro: false,
     }),
   ]
 }

@@ -14,7 +14,6 @@ export interface TutorialStep {
   actionType: TutorialActionType
   routeName?: string
   assistantTab?: string
-  excludeInPro?: boolean
   allowCardNext?: boolean
   noAutoSkipWhenMissing?: boolean
   /** Mod 贡献：插入到某 nav key 之后 */
@@ -60,6 +59,5 @@ export interface TutorialBuildContext {
   industryId: string
   mods: ModForNavLabel[]
   visibleNav: VisibleNavItem[]
-  isProMode: boolean
   modMenuKeys: Set<string>
 }

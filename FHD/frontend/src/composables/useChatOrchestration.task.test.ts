@@ -132,10 +132,7 @@ vi.mock('./useChatWorkflowPanel', () => ({
 vi.mock('./useChatDbTokenGate', () => ({
   useChatDbTokenGate: () => ({
     handleChatRequiresToken,
-    resolveEffectiveProModeState: vi.fn(() => false),
-    syncProModeState: vi.fn(),
     onDbWriteUnlockedForChatRetry: vi.fn(),
-    getModeScopedUserId: vi.fn(() => 'u1'),
     resolveChatDbTokensForPayload: vi.fn(() => ({})),
   }),
 }))
@@ -231,7 +228,7 @@ describe('useChatOrchestration task/print', () => {
   })
 
   it('sendMessage start print without context replies hint', async () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     await api.sendMessage('开始打印')
     expect(addAndSaveMessage).toHaveBeenCalledWith(
       expect.stringContaining('暂无可打印'),
@@ -248,14 +245,14 @@ describe('useChatOrchestration task/print', () => {
       labelPaths: ['/tmp/label.pdf'],
       purchaseUnit: '甲公司',
     }
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     await api.sendMessage('开始打印')
     expect(executePrintTask).toHaveBeenCalled()
     expect(buildPrintSummaryMessage).toHaveBeenCalled()
   })
 
   it('confirmTask without api_url reports failure', async () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     api.showTaskConfirm({ type: 'custom', title: 't', api_url: '', payload: {} })
     await api.confirmTask()
     expect(addAndSaveMessage).toHaveBeenCalledWith(
@@ -274,7 +271,7 @@ describe('useChatOrchestration task/print', () => {
         json: async () => ({ success: true, message: '执行成功' }),
       }),
     )
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     api.showTaskConfirm({
       type: 'custom',
       title: '测试任务',
@@ -299,7 +296,7 @@ describe('useChatOrchestration task/print', () => {
         }),
       }),
     )
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     api.showTaskConfirm({
       type: 'custom',
       title: '支付',

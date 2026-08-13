@@ -3,14 +3,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { useModsStore } from '@/stores/mods'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
-import { isClientModeTiersUiEnabled } from '@/constants/clientModeTiers'
 import { useStartupAuth, type StartupAuthResult } from '@/composables/useStartupAuth'
 import {
   STARTUP_MOD_FETCH_CAP_MS,
   useStartupSplash,
   extractModNames,
 } from '@/composables/useStartupSplash'
-import { useAppProMode } from '@/composables/useAppProMode'
 import { useAppShellBridge } from '@/composables/useAppShellBridge'
 import { useXcmaxSync } from '@/composables/useXcmaxSync'
 
@@ -70,16 +68,13 @@ export function useAppBoot() {
   })
   const primaryModName = computed(() => startupModNames.value[0] || '')
 
-  const proMode = useAppProMode(modsStore, router, route)
-  const { isProMode, handleToggleProMode, readProModeStateFromDom, syncGlobalProMode } = proMode
-
   const { ensureStartupAuthenticated, runEnterpriseStartupAuth } = useStartupAuth({
     router,
     modsStore,
     dismissStartupSplashImmediate,
   })
 
-  const shellBridge = useAppShellBridge(router, proMode)
+  const shellBridge = useAppShellBridge(router)
   const xcmaxSync = useXcmaxSync()
 
   let onModsVisibilityRetry: (() => void) | null = null
@@ -198,15 +193,6 @@ export function useAppBoot() {
       /* v8 ignore end */
     })()
 
-    shellBridge.installProModeBridge()
-    proMode.installLegacyDomObserver()
-    if (!isClientModeTiersUiEnabled()) {
-      proMode.enforceClientNormalModeBaseline()
-    } else {
-      isProMode.value = readProModeStateFromDom()
-      syncGlobalProMode()
-    }
-
     shellBridge.installSwitchViewBridge()
     shellBridge.installSandboxBridge(isSandboxMode)
     shellBridge.bindLegacyUploadHooks(String(route.name || ''))
@@ -221,7 +207,6 @@ export function useAppBoot() {
       window.removeEventListener('pageshow', onPageShowBfCache)
       onPageShowBfCache = null
     }
-    proMode.uninstallLegacyDomObserver()
     shellBridge.uninstall()
     xcmaxSync.stop()
     teardownOnUnmount()
@@ -236,8 +221,6 @@ export function useAppBoot() {
     primaryModName,
     modsLoading,
     modsLoadError,
-    isProMode,
-    handleToggleProMode,
     startupPublicUrl,
     skipStartupSplash: () => skipStartupSplash(() => completeStartupSplash(ensureStartupAuthenticated)),
     isAdminConsoleSpa,

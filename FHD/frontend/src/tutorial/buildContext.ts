@@ -6,7 +6,6 @@ export function createTutorialBuildContext(options: {
   industryId: string
   mods: ModForNavLabel[]
   visibleNav: VisibleNavItem[]
-  isProMode: boolean
 }): TutorialBuildContext {
   const modMenuKeys = new Set<string>()
   for (const item of options.visibleNav) {
@@ -18,7 +17,6 @@ export function createTutorialBuildContext(options: {
     industryId: options.industryId,
     mods: options.mods,
     visibleNav: options.visibleNav,
-    isProMode: options.isProMode,
     modMenuKeys,
   }
 }

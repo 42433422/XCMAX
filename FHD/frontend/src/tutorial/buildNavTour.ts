@@ -32,7 +32,6 @@ export function buildAdvancedIntroStep(): TutorialStep {
     targetSelector: '.sidebar .sidebar-menu',
     actionType: 'observe',
     routeName: 'chat',
-    excludeInPro: false,
   })
 }
 

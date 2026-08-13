@@ -18,7 +18,6 @@ export function useTutorialCatalog() {
       industryId: String(industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID),
       mods: modsForUi.value || [],
       visibleNav: visibleNavItems.value,
-      isProMode: !!window.__XCAGI_IS_PRO_MODE,
     }),
   )
 

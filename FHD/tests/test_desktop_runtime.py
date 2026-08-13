@@ -5,8 +5,10 @@ import os
 
 from app.desktop_runtime.database_profile import (
     apply_database_profile_to_env,
+    is_valid_remote_database_url,
     load_or_create_profile,
     resolve_storage_mode,
+    save_profile,
 )
 from app.desktop_runtime.model_downloader import load_manifest
 from app.desktop_runtime.paths import (
@@ -48,6 +50,42 @@ def test_database_profile_creates_default_json(tmp_path):
 
 def test_resolve_storage_mode_local_sqlite():
     assert resolve_storage_mode("sqlite:///C:/data/xcagi.db") == "local_sqlite"
+
+
+def test_is_valid_remote_database_url_requires_host():
+    assert is_valid_remote_database_url("") is False
+    assert is_valid_remote_database_url("sqlite:///x.db") is False
+    assert is_valid_remote_database_url("postgresql://") is False
+    assert is_valid_remote_database_url("postgresql://u:p@127.0.0.1:5432/xcagi") is True
+    assert is_valid_remote_database_url("postgresql+psycopg://u:p@h:5432/db") is True
+
+
+def test_save_profile_normalizes_string_false_enabled(tmp_path):
+    _, profile = save_profile(
+        tmp_path,
+        {
+            "mode": "remote",
+            "remote": {
+                "enabled": "false",
+                "database_url": "postgresql://u:p@h:5432/xcagi",
+            },
+        },
+    )
+    assert profile["remote"]["enabled"] is False
+
+
+def test_apply_database_profile_string_false_stays_local(tmp_path, monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    prof_path, _ = load_or_create_profile(tmp_path)
+    prof_path.write_text(
+        '{"version":1,"mode":"remote","remote":{"enabled":"false",'
+        '"database_url":"postgresql+psycopg://u:p@127.0.0.1:5432/xcagi"}}',
+        encoding="utf-8",
+    )
+    local_url = sqlite_database_url(tmp_path)
+    apply_database_profile_to_env(tmp_path, local_sqlite_url=local_url)
+    assert os.environ["DATABASE_URL"].startswith("sqlite:///")
+    assert os.environ.get("XCAGI_DESKTOP_KEEP_DATABASE_URL") is None
 
 
 def test_apply_database_profile_remote_when_enabled(tmp_path, monkeypatch):
