@@ -835,14 +835,14 @@ class TestWorkflowProductsFloatQuery:
         q = service._workflow_products_float_query(mock_plan, mock_result, "hello")
         assert q == "5003A"
 
-    def test_fallback_to_message(self):
+    def test_generic_full_list_fallback_uses_empty_filter(self):
         service = _make_service()
         mock_plan = Mock()
         mock_plan.nodes = []
         mock_result = Mock()
         mock_result.node_results = []
         q = service._workflow_products_float_query(mock_plan, mock_result, "查产品")
-        assert q == "查产品"
+        assert q == ""
 
 
 # ========================= _format_workflow_run_response ==================
