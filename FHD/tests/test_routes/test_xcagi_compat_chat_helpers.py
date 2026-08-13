@@ -121,6 +121,27 @@ def test_runtime_context_discards_untrusted_tenant_when_session_has_none():
     assert "tenant_id" not in context
 
 
+def test_runtime_context_uses_server_verified_tutorial_tenant():
+    request = MagicMock()
+    request.state.tutorial_active = True
+    request.state.tenant_id = 29
+    user = MagicMock(id=17)
+    with (
+        patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=user),
+        patch(
+            "app.infrastructure.auth.tenant_context.resolve_tenant_id",
+            return_value=7,
+        ) as session_tenant,
+    ):
+        context = ch._runtime_context_with_authenticated_actor(
+            request, {"user_id": "web_pro_session", "tenant_id": 999}
+        )
+
+    assert context["local_user_id"] == 17
+    assert context["tenant_id"] == 29
+    session_tenant.assert_not_called()
+
+
 def test_sales_sse_uses_authenticated_resolved_tenant_even_if_context_conflicts():
     """W1-10 租户隔离：活跃 compat SSE 处理销售闭环句时，真实 process_chat 在
     current_tenant_id() == 认证解析租户 的 tenant_scope 内执行；即使请求体上下文

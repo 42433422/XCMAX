@@ -18,6 +18,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func as sql_func
 
 from app.db.base import Base
+from app.db.mixins import TenantScopedMixin
 from app.domain.approval.safe_dsl import should_trigger_condition
 
 
@@ -154,7 +155,7 @@ class ApprovalFlowNode(Base):
         return should_trigger_condition(self, context)
 
 
-class ApprovalRequest(Base):
+class ApprovalRequest(TenantScopedMixin, Base):
     __tablename__ = "approval_requests"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -216,6 +217,7 @@ class ApprovalRequest(Base):
     def to_dict(self) -> dict:
         return {
             "id": self.id,
+            "tenant_id": self.tenant_id,
             "request_no": self.request_no,
             "flow_id": self.flow_id,
             "flow_name": self.flow.flow_name if self.flow else None,
@@ -247,7 +249,7 @@ class ApprovalRequest(Base):
         }
 
 
-class ApprovalRecord(Base):
+class ApprovalRecord(TenantScopedMixin, Base):
     __tablename__ = "approval_records"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -292,6 +294,7 @@ class ApprovalRecord(Base):
     def to_dict(self) -> dict:
         return {
             "id": self.id,
+            "tenant_id": self.tenant_id,
             "request_id": self.request_id,
             "node_id": self.node_id,
             "node_name": self.node_name,

@@ -12,7 +12,11 @@ vi.mock('@/tutorial/promptAdvancedTutorial', () => ({
 }))
 vi.mock('@/composables/useTutorialCatalog', () => ({
   useTutorialCatalog: () => ({
-    tutorialTracks: [{ id: 't1', title: '引导' }],
+    tutorialTracks: [
+      { id: 'basic', title: '宿主入门', summary: '首次设置', recommended: true },
+      { id: 'advanced', title: '进阶教程', summary: '真实业务实训' },
+      { id: 't1', title: '扩展说明', summary: 'MOD 说明' },
+    ],
     advancedTrackHint: '高级引导',
     buildContext: () => ({}),
   }),
@@ -46,6 +50,7 @@ async function mountFloat() {
         ExcelPreview: true,
         Teleport: true,
         KittenAnalyzerView: true,
+        TutorialCourseCatalog: { template: '<div data-testid="v2-course-catalog">V2 课程目录</div>' },
       },
     },
   })
@@ -91,5 +96,16 @@ describe('TopAssistantFloat deep paths', () => {
   it('shows 副窗 label on toggle', async () => {
     const wrapper = await mountFloat()
     expect(wrapper.text()).toContain('副窗')
+  })
+
+  it('keeps the existing assistant tutorial entry and opens the V2 course catalog', async () => {
+    const wrapper = await mountFloat()
+    await wrapper.find('.assistant-float-toggle').trigger('click')
+    const tutorialTab = wrapper.find('[data-tutorial-id="tab-tutorial"]')
+    await tutorialTab.trigger('click')
+    const advancedCard = wrapper.findAll('.tutorial-track-card').find((card) => card.text().includes('进阶教程'))
+    expect(advancedCard).toBeTruthy()
+    await advancedCard!.find('button').trigger('click')
+    expect(wrapper.find('[data-testid="v2-course-catalog"]').exists()).toBe(true)
   })
 })

@@ -22,6 +22,7 @@ from app.db.init_db import (
     init_extract_logs_tables,
     init_service_bridge_tables,
     init_template_tables,
+    init_tutorial_v2_tables,
     initialize_databases,
 )
 from app.di.registry import get_service_registry
@@ -267,6 +268,10 @@ def _initialize_databases_sync(app: FastAPI):
             init_approval_tables(engine)
         except RECOVERABLE_ERRORS as approval_err:
             logger.warning("approval 表初始化失败（不影响主流程）: %s", approval_err)
+        try:
+            init_tutorial_v2_tables(engine)
+        except RECOVERABLE_ERRORS as tutorial_err:
+            logger.warning("tutorial v2 表初始化失败（不影响主流程）: %s", tutorial_err)
         try:
             init_service_bridge_tables(engine)
         except RECOVERABLE_ERRORS as bridge_err:

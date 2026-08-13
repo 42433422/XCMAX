@@ -17,7 +17,7 @@ from typing import Any, Awaitable, Callable
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from app.infrastructure.request_context import (
     reset_current_request,
@@ -88,7 +88,65 @@ class IndustryContextMiddleware(BaseHTTPMiddleware):
                 industry_id = DEFAULT_INDUSTRY
                 tenant_id = None
             request.state.industry_id = industry_id
+            request.state.source_tenant_id = tenant_id
             request.state.tenant_id = tenant_id
+            tutorial_cookie = str(request.cookies.get("xcagi_tutorial_run") or "").strip()
+            if tutorial_cookie:
+                if user is None or tenant_id is None or getattr(user, "id", None) is None:
+                    return JSONResponse(
+                        {
+                            "success": False,
+                            "error": {
+                                "code": "tutorial_cookie_invalid",
+                                "hint": "教学会话无效，请重新登录并从进阶教程进入。",
+                            },
+                        },
+                        status_code=401,
+                    )
+                try:
+                    from app.application.tutorial_v2.scope import resolve_tutorial_scope
+                    from app.db import SessionLocal
+
+                    db = SessionLocal()
+                    try:
+                        decision = resolve_tutorial_scope(
+                            db,
+                            request,
+                            user_id=int(user.id),
+                            source_tenant_id=int(tenant_id),
+                        )
+                    finally:
+                        db.close()
+                except RECOVERABLE_ERRORS:
+                    logger.warning("tutorial scope resolution failed")
+                    return JSONResponse(
+                        {
+                            "success": False,
+                            "error": {
+                                "code": "tutorial_scope_unavailable",
+                                "hint": "教学空间暂时不可用，请保存退出后重试。",
+                            },
+                        },
+                        status_code=503,
+                    )
+                if decision.error_code:
+                    return JSONResponse(
+                        {
+                            "success": False,
+                            "error": {
+                                "code": decision.error_code,
+                                "hint": decision.error_hint,
+                            },
+                        },
+                        status_code=decision.error_status,
+                    )
+                request.state.tutorial_active = decision.active
+                request.state.tutorial_run_id = decision.run_id
+                request.state.tutorial_workspace_id = decision.workspace_id
+                request.state.tutorial_course_id = decision.course_id
+                request.state.tutorial_tenant_id = decision.tutorial_tenant_id
+                if decision.switched:
+                    request.state.tenant_id = decision.tutorial_tenant_id
             return await call_next(request)
         finally:
             reset_current_request(token)

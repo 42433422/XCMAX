@@ -668,14 +668,14 @@ describe('resolveSteps', () => {
       expect(steps[0].id).toBeTruthy()
     })
 
-    it('returns advanced steps for advanced track', () => {
+    it('disables the legacy timed tour for the V2 advanced track', () => {
       const steps = resolveTrackSteps('advanced', baseCtx)
-      expect(steps.length).toBeGreaterThan(0)
+      expect(steps).toEqual([])
     })
 
-    it('falls back to advanced when unknown track has no mod steps', () => {
+    it('does not turn an unvalidated extension into the old advanced tour', () => {
       const steps = resolveTrackSteps('unknown-track', baseCtx)
-      expect(steps.length).toBeGreaterThan(0)
+      expect(steps).toEqual([])
     })
 
     it('treats empty track id as basic', () => {
@@ -698,7 +698,7 @@ describe('resolveSteps', () => {
   })
 
   describe('resolveAllWarmupSteps', () => {
-    it('combines basic and advanced steps with dedup', () => {
+    it('warms only active legacy tracks and keeps ids deduplicated', () => {
       const all = resolveAllWarmupSteps(baseCtx)
       expect(all.length).toBeGreaterThan(0)
       const ids = all.map((s) => s.id)
@@ -718,7 +718,6 @@ describe('tutorialOfficeImportDemo', () => {
 
   describe('fetchTutorialSampleFile', () => {
     it('throws when fetch fails', async () => {
-      const okSpy = vi.fn().mockReturnValue(false)
       const blobSpy = vi.fn()
       const fetchSpy = vi.fn().mockResolvedValue({ ok: false, status: 404, blob: blobSpy } as unknown as Response)
       vi.stubGlobal('fetch', fetchSpy)
@@ -1167,15 +1166,16 @@ describe('promptAdvancedTutorial', () => {
   })
 
   describe('promptAdvancedTutorialAfterInstall', () => {
-    it('returns already_completed when skipIfCompleted and tutorial completed', async () => {
+    it('ignores the old local completion flag after the V2 upgrade', async () => {
       localStorage.setItem('xcagi_onboarding_driver_tutorial_completed', '1')
+      vi.mocked(appConfirmMock).mockResolvedValue(false)
       const router = {} as never
       const ctx = { industryId: '', mods: [], visibleNav: [], isProMode: false, modMenuKeys: new Set() }
       const result = await promptAdvancedTutorialAfterInstall({
         router,
         buildContext: ctx,
       })
-      expect(result).toBe('already_completed')
+      expect(result).toBe('dismissed')
       localStorage.removeItem('xcagi_onboarding_driver_tutorial_completed')
     })
 

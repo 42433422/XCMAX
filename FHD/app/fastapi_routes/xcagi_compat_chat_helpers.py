@@ -139,7 +139,14 @@ def _runtime_context_with_authenticated_actor(
             context["actor_id"] = actor_id
     except RECOVERABLE_ERRORS:
         logger.debug("chat session actor resolution skipped", exc_info=True)
-    # 租户只从认证会话解析；解析不到时保持缺失并 fail closed。
+    # 教学租户只能来自上游中间件已经校验过的 HttpOnly 课程 Cookie；普通请求仍只从
+    # 认证会话解析。不能再次从 session 覆盖教学作用域，否则聊天任务会落回正式租户。
+    tutorial_active = getattr(request.state, "tutorial_active", False) is True
+    tutorial_tenant = getattr(request.state, "tenant_id", None) if tutorial_active else None
+    if tutorial_tenant is not None:
+        context["tenant_id"] = int(tutorial_tenant)
+        return context
+    # 普通请求的租户只从认证会话解析；解析不到时保持缺失并 fail closed。
     try:
         from app.infrastructure.auth.tenant_context import resolve_tenant_id
 

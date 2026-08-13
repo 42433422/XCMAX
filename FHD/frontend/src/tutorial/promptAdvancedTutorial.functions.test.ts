@@ -1,25 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 
-const { mockAppConfirm, mockStoreStart, mockStoreIsCompleted, mockStoreActive } = vi.hoisted(() => ({
+const { mockAppConfirm } = vi.hoisted(() => ({
   mockAppConfirm: vi.fn(),
-  mockStoreStart: vi.fn(),
-  mockStoreIsCompleted: vi.fn(),
-  mockStoreActive: false,
 }))
 
 vi.mock('@/utils/appDialog', () => ({
   appConfirm: mockAppConfirm,
-}))
-
-vi.mock('@/stores/onboardingTutorial', () => ({
-  useOnboardingTutorialStore: () => ({
-    start: mockStoreStart,
-    isCompleted: mockStoreIsCompleted,
-    get active() {
-      return mockStoreActive
-    },
-  }),
 }))
 
 import { resolveRouteNameFromPath, launchAdvancedDriverTour, promptAdvancedTutorialAfterInstall } from './promptAdvancedTutorial'
@@ -35,9 +22,6 @@ describe('promptAdvancedTutorial', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     mockAppConfirm.mockReset()
-    mockStoreStart.mockReset()
-    mockStoreIsCompleted.mockReset()
-    mockStoreIsCompleted.mockReturnValue(false)
   })
 
   describe('resolveRouteNameFromPath', () => {
@@ -86,18 +70,21 @@ describe('promptAdvancedTutorial', () => {
   })
 
   describe('launchAdvancedDriverTour', () => {
-    it('navigates to chat and starts advanced tour', async () => {
+    it('opens the V2 course catalog without starting the timed driver tour', async () => {
       const router = makeRouter()
       const buildContext = { industryId: 'retail', mods: [], visibleNav: [], isProMode: false, modMenuKeys: new Set() }
+      const listener = vi.fn()
+      window.addEventListener('xcagi:open-assistant-float', listener)
 
       await launchAdvancedDriverTour({ router, buildContext, skipNavigation: true })
 
-      expect(mockStoreStart).toHaveBeenCalledWith(
-        expect.objectContaining({
-          track: 'advanced',
-          buildContext,
-        }),
-      )
+      expect(router.push).not.toHaveBeenCalled()
+      expect(listener).toHaveBeenCalledOnce()
+      expect((listener.mock.calls[0][0] as CustomEvent).detail).toEqual({
+        feature: 'tutorial',
+        advanced: true,
+      })
+      window.removeEventListener('xcagi:open-assistant-float', listener)
     })
 
     it('returns store.active value', async () => {
@@ -110,30 +97,28 @@ describe('promptAdvancedTutorial', () => {
       expect(typeof result).toBe('boolean')
     })
 
-    it('uses default returnContext when not provided', async () => {
+    it('does not synthesize clicks or timed navigation when return context is absent', async () => {
       const buildContext = { industryId: 'retail', mods: [], visibleNav: [], isProMode: false, modMenuKeys: new Set() }
+      const router = makeRouter()
       await launchAdvancedDriverTour({
-        router: makeRouter(),
+        router,
         buildContext,
         skipNavigation: true,
       })
-      expect(mockStoreStart).toHaveBeenCalledWith(
-        expect.objectContaining({
-          returnContext: { routeName: 'chat' },
-        }),
-      )
+      expect(router.push).not.toHaveBeenCalled()
     })
   })
 
   describe('promptAdvancedTutorialAfterInstall', () => {
-    it('returns "already_completed" when skipIfCompleted and store is completed', async () => {
-      mockStoreIsCompleted.mockReturnValue(true)
+    it('ignores the old local completion boolean because it is not V2 evidence', async () => {
+      mockAppConfirm.mockResolvedValueOnce(false)
       const buildContext = { industryId: 'retail', mods: [], visibleNav: [], isProMode: false, modMenuKeys: new Set() }
       const result = await promptAdvancedTutorialAfterInstall({
         router: makeRouter(),
         buildContext,
       })
-      expect(result).toBe('already_completed')
+      expect(result).toBe('dismissed')
+      expect(mockAppConfirm).toHaveBeenCalled()
     })
 
     it('returns "dismissed" when user declines confirm', async () => {
@@ -175,7 +160,6 @@ describe('promptAdvancedTutorial', () => {
     })
 
     it('does not skip when skipIfCompleted is false', async () => {
-      mockStoreIsCompleted.mockReturnValue(true)
       mockAppConfirm.mockResolvedValueOnce(false)
       const buildContext = { industryId: 'retail', mods: [], visibleNav: [], isProMode: false, modMenuKeys: new Set() }
       const result = await promptAdvancedTutorialAfterInstall({

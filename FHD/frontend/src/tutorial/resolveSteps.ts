@@ -1,5 +1,4 @@
 import type { TutorialBuildContext, TutorialStep, TutorialTrackId } from './types'
-import { buildAdvancedNavSteps } from './buildNavTour'
 import { collectModStepsForTrack, injectModSteps } from './buildModSteps'
 import { buildBasicSteps } from './tracks/basic'
 
@@ -11,19 +10,17 @@ export function resolveTrackSteps(trackId: TutorialTrackId, ctx: TutorialBuildCo
   const id = String(trackId || 'basic').trim() || 'basic'
   let steps: TutorialStep[]
   if (id === 'advanced') {
-    steps = buildAdvancedNavSteps(ctx.visibleNav, ctx)
+    // 进阶教程由 V2 服务端运行与验证器独占；旧 driver 菜单巡游不可再被
+    // store、热身或历史调用入口恢复。
+    steps = []
   } else if (id === 'basic') {
     steps = buildBasicSteps(ctx)
   } else {
     steps = injectModSteps([], collectModStepsForTrack(id, ctx.mods as never[]))
-    if (!steps.length) {
-      steps = buildAdvancedNavSteps(ctx.visibleNav, ctx)
-    }
   }
-  const modInjected =
-    id === 'basic' || id === 'advanced'
-      ? injectModSteps(steps, collectModStepsForTrack(id, ctx.mods as never[]))
-      : steps
+  const modInjected = id === 'basic'
+    ? injectModSteps(steps, collectModStepsForTrack(id, ctx.mods as never[]))
+    : steps
   return filterStepsForPro(modInjected, ctx.isProMode)
 }
 
