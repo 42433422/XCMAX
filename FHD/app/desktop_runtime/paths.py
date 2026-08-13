@@ -139,8 +139,6 @@ def configure_desktop_environment(data_dir: str | os.PathLike[str] | None = None
     try:
         seed_edition_mods_from_bundle()
     except RECOVERABLE_ERRORS as exc:
-        import logging
-
         logging.getLogger(__name__).warning("Desktop mod seed skipped: %s", exc)
 
     try:
@@ -148,8 +146,6 @@ def configure_desktop_environment(data_dir: str | os.PathLike[str] | None = None
 
         apply_sunbird_roster_seed_if_needed(root)
     except RECOVERABLE_ERRORS as exc:
-        import logging
-
         logging.getLogger(__name__).warning("Sunbird roster seed skipped: %s", exc)
 
     return root

@@ -53,8 +53,8 @@ def backup_database(
         if target.exists():
             try:
                 target.unlink()
-            except OSError:
-                pass
+            except OSError as cleanup_exc:
+                logger.debug("failed to remove partial backup %s: %s", target, cleanup_exc)
         return None
     finally:
         if dst_conn is not None:
@@ -67,8 +67,8 @@ def backup_database(
         logger.error("backup_database integrity_check failed for %s, removing", target)
         try:
             target.unlink()
-        except OSError:
-            pass
+        except OSError as cleanup_exc:
+            logger.debug("failed to remove invalid backup %s: %s", target, cleanup_exc)
         return None
 
     # Age-only retention is unsafe for multi-gigabyte desktop databases. Prune
