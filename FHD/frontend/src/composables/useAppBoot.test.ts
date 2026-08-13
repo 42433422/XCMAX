@@ -54,18 +54,13 @@ vi.mock('@/composables/useStartupSplash', () => ({
   }),
 }))
 
-vi.mock('@/composables/useAppProMode', () => ({
-  useAppProMode: () => ({
-    isProMode: ref(false),
-    handleToggleProMode: vi.fn(),
-    readProModeStateFromDom: vi.fn(),
-    syncGlobalProMode: vi.fn(),
-    uninstallLegacyDomObserver: vi.fn(),
-  }),
-}))
-
 vi.mock('@/composables/useAppShellBridge', () => ({
-  useAppShellBridge: () => ({ registerShellBridge: vi.fn(), uninstall: vi.fn() }),
+  useAppShellBridge: () => ({
+    installSwitchViewBridge: vi.fn(),
+    installSandboxBridge: vi.fn(),
+    bindLegacyUploadHooks: vi.fn(),
+    uninstall: vi.fn(),
+  }),
 }))
 
 vi.mock('@/composables/useXcmaxSync', () => ({

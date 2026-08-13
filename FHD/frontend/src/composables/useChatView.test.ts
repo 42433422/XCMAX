@@ -54,11 +54,10 @@ describe('useChatView (composable)', () => {
     vi.resetAllMocks()
   })
 
-  it('returns core API including sendMessage and isProMode', () => {
+  it('returns core API including sendMessage', () => {
     const sessionId = ref('test-session')
-    const api = useChatView({ sessionId, proIntentExperienceEnabled: ref(false) })
+    const api = useChatView({ sessionId })
     expect(api).toBeTruthy()
     expect(typeof api.sendMessage).toBe('function')
-    expect(api.isProMode).toBeDefined()
   })
 })

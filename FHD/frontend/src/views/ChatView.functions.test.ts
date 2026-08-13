@@ -18,14 +18,12 @@ vi.mock('pinia', async () => {
 const mockChatSendMessage = vi.fn(async () => undefined)
 // 使用真实 ref 以保证 computed 响应式
 const isLoadingRef = ref(false)
-const isProModeRef = ref(false)
 const messagesRef = ref<any[]>([])
 const currentTaskRef = ref<any>(null)
 const showHistoryRef = ref(false)
 
 function resetMockRefs() {
   isLoadingRef.value = false
-  isProModeRef.value = false
   messagesRef.value = []
   currentTaskRef.value = null
   showHistoryRef.value = false
@@ -39,7 +37,6 @@ const mockChatViewApi = {
   isStreamingReply: { value: false },
   isExecuting: { value: false },
   latestAssistantPush: { value: null },
-  proRuntimeTask: { value: null },
   taskList: { value: [] },
   filteredTaskList: { value: [] },
   expandedTaskIds: { value: [] },
@@ -55,7 +52,6 @@ const mockChatViewApi = {
   excelSheetOptions: { value: [] },
   linkedExcelSheet: { value: null },
   linkedExcelAllSheets: { value: false },
-  isProMode: isProModeRef,
   taskTableColumns: { value: [] },
   taskTableItems: { value: [] },
   taskOrderNumber: { value: '' },
@@ -83,7 +79,6 @@ const mockChatViewApi = {
   startPrintFromTaskCard: vi.fn(),
   copyAssistantPushContent: vi.fn(),
   openAssistantFloatFromTaskPanel: vi.fn(),
-  syncProModeState: vi.fn(),
   syncSessionMessages: vi.fn(),
   handleAutoAction: vi.fn(),
   ttsEnabled: { value: false },
@@ -128,7 +123,6 @@ vi.mock('@/composables/useChatMessageUi', () => ({
 
 vi.mock('@/composables/useChatViewHost', () => ({
   useChatViewHost: () => ({
-    onProIntentToolbarChange: vi.fn(),
     onAutoRefreshToolbarChange: vi.fn(),
   }),
 }))
@@ -158,18 +152,12 @@ vi.mock('@/stores/mods', () => ({
 
 vi.mock('@/constants/industryPresets', () => ({
   getIndustryPreset: () => ({
-    placeholderPro: '请输入专业模式消息',
     placeholderNormal: '请输入消息',
   }),
   getIndustryQuickButtons: () => [
     { text: '测试预览', label: '测试' },
     { text: '快捷1', label: '快捷1' },
   ],
-}))
-
-vi.mock('@/constants/clientModeTiers', () => ({
-  isClientModeTiersUiEnabled: () => false,
-  PRO_INTENT_EXPERIENCE_KEY: 'xcagi_pro_intent_experience',
 }))
 
 vi.mock('@/workflow/coreWorkflowTaskUi', () => ({
@@ -505,24 +493,13 @@ describe('ChatView functions – visibleQuickButtons computed', () => {
     localStorage.clear()
   })
 
-  it('非 pro 模式过滤掉测试预览按钮', async () => {
+  it('过滤掉测试预览按钮', async () => {
     const { wrapper } = await mountChatView()
     const vm = wrapper.vm as any
-    mockChatViewApi.isProMode.value = false
     await nextTick()
     const buttons = vm.visibleQuickButtons
     expect(buttons.length).toBe(1)
     expect(buttons[0].text).not.toBe('测试预览')
-    wrapper.unmount()
-  })
-
-  it('pro 模式显示所有按钮', async () => {
-    const { wrapper } = await mountChatView()
-    const vm = wrapper.vm as any
-    mockChatViewApi.isProMode.value = true
-    await nextTick()
-    const buttons = vm.visibleQuickButtons
-    expect(buttons.length).toBe(2)
     wrapper.unmount()
   })
 })
@@ -538,21 +515,11 @@ describe('ChatView functions – inputPlaceholder computed', () => {
     localStorage.clear()
   })
 
-  it('非 pro 模式返回普通占位符', async () => {
+  it('返回普通占位符', async () => {
     const { wrapper } = await mountChatView()
     const vm = wrapper.vm as any
-    mockChatViewApi.isProMode.value = false
     await nextTick()
     expect(vm.inputPlaceholder).toBe('请输入消息')
-    wrapper.unmount()
-  })
-
-  it('pro 模式返回专业占位符', async () => {
-    const { wrapper } = await mountChatView()
-    const vm = wrapper.vm as any
-    mockChatViewApi.isProMode.value = true
-    await nextTick()
-    expect(vm.inputPlaceholder).toBe('请输入专业模式消息')
     wrapper.unmount()
   })
 })

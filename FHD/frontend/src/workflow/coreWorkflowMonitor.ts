@@ -5,7 +5,6 @@ import {
 import {
   formatWorkflowClock,
   formatWorkflowHintTime,
-  isProIntentExperienceOn,
   isStarredChatAutoRefreshOn,
 } from '@/workflow/coreWorkflowPrefs'
 import {
@@ -102,9 +101,8 @@ export function buildCoreWorkflowStepsForEmployee(
 ): WorkflowStepRow[] {
   if (empId === 'wechat_msg') {
     const refreshOn = isStarredChatAutoRefreshOn()
-    const proIntent = isProIntentExperienceOn()
     const last = ctx?.lastWechat
-    const preface = proIntent ? '调用 POST /api/ai/intent/test' : '本地关键词规则（inferWechatCustomerIntent）'
+    const preface = '本地关键词规则（inferWechatCustomerIntent）'
     return [
       { id: 'wx1', label: '① 副窗「一键托管」启用「微信消息处理 AI 员工」', status: 'done' },
       { id: 'wx2', label: '② 智能对话勾选「主动意识启用」', status: refreshOn ? 'done' : 'active' },

@@ -1,7 +1,7 @@
 /**
  * tutorial.ts store 覆盖率补齐测试
- * 重点覆盖：buildContext factory 注入、pro 模式跳过、轮询高亮、
- * refreshHighlight 各分支、prevStep/nextStep 边界、pro intent 快照恢复、
+ * 重点覆盖：buildContext factory 注入、轮询高亮、
+ * refreshHighlight 各分支、prevStep/nextStep 边界、
  * markCurrentStepClicked/blockOutsideClick 守卫等
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -22,7 +22,6 @@ const mockCreateTutorialBuildContext = vi.fn(() => ({
   industryId: '考勤',
   mods: [],
   visibleNav: [],
-  isProMode: false,
 }))
 const mockDispatchAssistantTab = vi.fn()
 const mockEnsureRouteForStepThen = vi.fn((_s: unknown, cb: () => void) => cb())
@@ -86,9 +85,7 @@ describe('tutorial store – 覆盖率补齐', () => {
       industryId: '考勤',
       mods: [],
       visibleNav: [],
-      isProMode: false,
     })
-    window.__XCAGI_IS_PRO_MODE = false
     localStorage.clear()
   })
 
@@ -110,7 +107,6 @@ describe('tutorial store – 覆盖率补齐', () => {
         industryId: '涂装',
         mods: [],
         visibleNav: [],
-        isProMode: true,
       }
       setTutorialBuildContextFactory(() => factoryCtx)
       mockResolveAllWarmupSteps.mockReturnValue([
@@ -125,7 +121,6 @@ describe('tutorial store – 覆盖率补齐', () => {
         industryId: '考勤',
         mods: [],
         visibleNav: [],
-        isProMode: false,
       }))
     })
 
@@ -161,24 +156,12 @@ describe('tutorial store – 覆盖率补齐', () => {
   // 2. startTutorial 各分支
   // ═══════════════════════════════════════════════════════════
   describe('startTutorial 分支', () => {
-    it('basic 路线在 pro 模式下无步骤时回退到 advanced', () => {
-      mockResolveTrackSteps.mockImplementation((track: string) =>
-        track === 'advanced' ? baseSteps : [],
-      )
-      const s = useTutorialStore()
-      s.startTutorial({ track: 'basic', isProMode: true })
-      expect(s.proBasicFallbackNotice).toContain('进阶教程')
-      expect(s.currentTrack).toBe('advanced')
-      expect(s.isActive).toBe(true)
-    })
-
-    it('basic 路线在非 pro 模式下无步骤时不回退', () => {
+    it('basic 路线无步骤时直接结束', () => {
       mockResolveTrackSteps.mockReturnValue([])
       const s = useTutorialStore()
-      s.startTutorial({ track: 'basic', isProMode: false })
+      s.startTutorial({ track: 'basic' })
       // 无步骤直接 finishTutorial
       expect(s.isActive).toBe(false)
-      expect(s.proBasicFallbackNotice).toBe('')
     })
 
     it('传入 buildContext 时使用传入的上下文', () => {
@@ -186,7 +169,6 @@ describe('tutorial store – 覆盖率补齐', () => {
         industryId: '涂装',
         mods: [],
         visibleNav: [],
-        isProMode: true,
       }
       mockResolveTrackSteps.mockReturnValue(baseSteps)
       const s = useTutorialStore()
@@ -223,20 +205,6 @@ describe('tutorial store – 覆盖率补齐', () => {
   // 3. skipMissingTargets 各分支
   // ═══════════════════════════════════════════════════════════
   describe('skipMissingTargets 分支', () => {
-    it('pro 模式下跳过 excludeInPro 步骤', () => {
-      const stepsWithProExclude = [
-        { id: 's1', actionType: 'observe', excludeInPro: true },
-        { id: 's2', actionType: 'observe' },
-      ]
-      mockResolveTrackSteps.mockReturnValue(stepsWithProExclude)
-      window.__XCAGI_IS_PRO_MODE = true
-      const s = useTutorialStore()
-      s.startTutorial({ track: 'basic' })
-      // s1 被跳过，当前应为 s2
-      expect(s.currentStep?.id).toBe('s2')
-      expect(s.testResults.s1).toBe('skipped')
-    })
-
     it('shouldNeverAutoSkipStep 返回 true 时设置 fallback 高亮和提示', () => {
       mockShouldNeverAutoSkipStep.mockReturnValue(true)
       mockResolveStepHighlightRect.mockReturnValue(null)
@@ -711,69 +679,6 @@ describe('tutorial store – 覆盖率补齐', () => {
   })
 
   // ═══════════════════════════════════════════════════════════
-  // 9. pro intent 快照恢复
-  // ═══════════════════════════════════════════════════════════
-  describe('pro intent 快照恢复', () => {
-    it('startTutorial 捕获 localStorage 中的 pro intent 快照', () => {
-      localStorage.setItem('xcagi_pro_intent_experience', '1')
-      mockResolveTrackSteps.mockReturnValue(baseSteps)
-      const s = useTutorialStore()
-      s.startTutorial({ track: 'basic' })
-      // 快照已捕获，finishTutorial 时会恢复
-      s.finishTutorial()
-      // 恢复后应重新设置 localStorage
-      expect(localStorage.getItem('xcagi_pro_intent_experience')).toBe('1')
-    })
-
-    it('finishTutorial 恢复快照为空字符串时移除 localStorage', () => {
-      localStorage.setItem('xcagi_pro_intent_experience', '')
-      mockResolveTrackSteps.mockReturnValue(baseSteps)
-      const s = useTutorialStore()
-      s.startTutorial({ track: 'basic' })
-      s.finishTutorial()
-      // 空字符串快照 -> removeItem
-      expect(localStorage.getItem('xcagi_pro_intent_experience')).toBeNull()
-    })
-
-    it('finishTutorial 恢复快照为 null 时移除 localStorage', () => {
-      // localStorage 没有 pro intent 时，getItem 返回 null
-      mockResolveTrackSteps.mockReturnValue(baseSteps)
-      const s = useTutorialStore()
-      s.startTutorial({ track: 'basic' })
-      // 快照值为 null
-      s.finishTutorial()
-      // null 快照 -> removeItem
-      expect(localStorage.getItem('xcagi_pro_intent_experience')).toBeNull()
-    })
-
-    it('finishTutorial 恢复快照后派发事件', () => {
-      localStorage.setItem('xcagi_pro_intent_experience', '1')
-      const dispatchSpy = vi.spyOn(window, 'dispatchEvent').mockImplementation(() => true)
-      mockResolveTrackSteps.mockReturnValue(baseSteps)
-      const s = useTutorialStore()
-      s.startTutorial({ track: 'basic' })
-      dispatchSpy.mockClear()
-      s.finishTutorial()
-      // 应派发 xcagi:pro-intent-experience-changed 事件
-      const event = dispatchSpy.mock.calls.find(
-        (c) => (c[0] as CustomEvent).type === 'xcagi:pro-intent-experience-changed',
-      )
-      expect(event).toBeDefined()
-      expect((event![0] as CustomEvent).detail).toEqual({ enabled: true })
-      dispatchSpy.mockRestore()
-    })
-
-    it('未捕获快照时 finishTutorial 不恢复', () => {
-      // 不调用 startTutorial，直接 finishTutorial
-      // 此时 tutorialProIntentSnapshot 为 false，restoreTutorialProIntentSnapshot 直接返回
-      const s = useTutorialStore()
-      s.finishTutorial()
-      // 不应崩溃，也不应派发事件
-      expect(s.isActive).toBe(false)
-    })
-  })
-
-  // ═══════════════════════════════════════════════════════════
   // 10. computed 属性
   // ═══════════════════════════════════════════════════════════
   describe('computed 属性', () => {
@@ -847,13 +752,11 @@ describe('tutorial store – 覆盖率补齐', () => {
       expect(mockGetTrackLabel).toHaveBeenCalled()
     })
 
-    it('currentTrackLabel 在 pro 模式下使用 window.__XCAGI_IS_PRO_MODE', () => {
+    it('currentTrackLabel 读取当前 track 标签', () => {
       mockResolveTrackSteps.mockReturnValue(baseSteps)
-      window.__XCAGI_IS_PRO_MODE = true
       mockGetTrackLabel.mockReturnValue('进阶教程')
       const s = useTutorialStore()
       s.startTutorial({ track: 'basic' })
-      // currentTrackLabel 通过 getBuildContext(!!window.__XCAGI_IS_PRO_MODE) 获取上下文
       expect(s.currentTrackLabel).toBe('进阶教程')
     })
   })

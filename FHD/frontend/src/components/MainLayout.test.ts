@@ -13,8 +13,8 @@ vi.mock('./Sidebar.vue', () => ({
         <button class="sidebar-workflow" type="button" @click="$emit('change-view', 'employee-workflow')">员工工作台</button>
       </nav>
     `,
-    props: ['activeView', 'isProMode'],
-    emits: ['change-view', 'toggle-pro-mode'],
+    props: ['activeView'],
+    emits: ['change-view'],
   },
 }))
 
@@ -51,7 +51,6 @@ describe('MainLayout.vue', () => {
           RouterLink: { template: '<a><slot /></a>' },
         },
       },
-      props: { isProMode: false },
     })
 
     expect(wrapper.find('.sidebar-stub').exists()).toBe(true)
@@ -73,7 +72,6 @@ describe('MainLayout.vue', () => {
           RouterLink: { template: '<a><slot /></a>' },
         },
       },
-      props: { isProMode: false },
     })
 
     await wrapper.find('.sidebar-chat').trigger('click')

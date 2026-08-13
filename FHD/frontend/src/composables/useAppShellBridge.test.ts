@@ -2,31 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useAppShellBridge } from './useAppShellBridge'
 import { navigateFromSidebarKey } from '@/utils/sidebarNavigation'
 
-vi.mock('@/constants/clientModeTiers', () => ({
-  isClientModeTiersUiEnabled: () => true,
-  PRO_INTENT_EXPERIENCE_KEY: 'xcagi_pro_intent_experience',
-  resetClientModeTierLocalState: vi.fn(),
-}))
-
 vi.mock('@/utils/sidebarNavigation', () => ({
   navigateFromSidebarKey: vi.fn(async () => true),
 }))
 
 function makeRouter() {
   return { push: vi.fn() } as unknown as import('vue-router').Router
-}
-
-function makeProMode() {
-  return {
-    readProModeStateFromDom: vi.fn(() => false),
-    isProMode: { value: false },
-    hasLegacyProModeRuntime: vi.fn(() => false),
-    resolveModProEntryPath: vi.fn(() => ''),
-    enterModProMode: vi.fn(async () => {}),
-    exitModProMode: vi.fn(async () => {}),
-    syncProModeStateSoon: vi.fn(),
-    handleToggleProMode: vi.fn(),
-  }
 }
 
 describe('useAppShellBridge', () => {
@@ -40,7 +21,7 @@ describe('useAppShellBridge', () => {
 
   it('installSwitchViewBridge navigates on xcagi:switch-view', () => {
     const router = makeRouter()
-    const bridge = useAppShellBridge(router, makeProMode())
+    const bridge = useAppShellBridge(router)
     bridge.installSwitchViewBridge()
     window.dispatchEvent(new CustomEvent('xcagi:switch-view', { detail: { view: 'products' } }))
     expect(navigateFromSidebarKey).toHaveBeenCalledWith(router, 'products')
@@ -54,20 +35,10 @@ describe('useAppShellBridge', () => {
     entry.id = 'fileUploadEntry'
     document.body.appendChild(entry)
 
-    const bridge = useAppShellBridge(makeRouter(), makeProMode())
+    const bridge = useAppShellBridge(makeRouter())
     bridge.bindLegacyUploadHooks('chat')
     entry.click()
     expect(openImport).toHaveBeenCalled()
-    bridge.uninstall()
-  })
-
-  it('setProModeEnabled delegates to enterModProMode when enabling', () => {
-    const proMode = makeProMode()
-    const bridge = useAppShellBridge(makeRouter(), proMode)
-    bridge.installProModeBridge()
-    const w = window as Window & { setProModeEnabled?: (enabled: boolean) => void }
-    w.setProModeEnabled?.(true)
-    expect(proMode.enterModProMode).toHaveBeenCalled()
     bridge.uninstall()
   })
 })

@@ -326,21 +326,6 @@ body:not(.pro-mode-active) .btn-icon:hover {
   color: #0f172a;
 }
 
-body:not(.pro-mode-active) #proModeToggle {
-  background: #cbd5e1;
-  border: 1px solid #94a3b8;
-}
-
-body:not(.pro-mode-active) #proModeToggle.active {
-  background: #0f6cbd;
-  border-color: #0f6cbd;
-}
-
-body:not(.pro-mode-active) #proModeToggle .toggle-slider {
-  background: #f8fafc;
-  border: 1px solid #64748b;
-}
-
 body:not(.pro-mode-active) .tool-action-btn {
   border: 1px solid #c8d1df;
   background: #eef3f9;
@@ -651,21 +636,6 @@ body[data-sidebar-theme^="dark-"] .mode-label {
 body[data-sidebar-theme^="dark-"] .sidebar .current-mode-text {
   color: var(--sb-muted);
   opacity: 1;
-}
-
-body[data-sidebar-theme^="dark-"]:not(.pro-mode-active) #proModeToggle {
-  background: rgba(255, 255, 255, 0.14);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-}
-
-body[data-sidebar-theme^="dark-"]:not(.pro-mode-active) #proModeToggle.active {
-  background: var(--sb-accent);
-  border-color: var(--sb-accent);
-}
-
-body[data-sidebar-theme^="dark-"]:not(.pro-mode-active) #proModeToggle .toggle-slider {
-  background: #f8fafc;
-  border: 1px solid rgba(15, 23, 42, 0.35);
 }
 
 /* 深色侧栏 + 普通版：模式切换按钮与底栏一致，避免 Office 浅色块 */

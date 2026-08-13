@@ -1,17 +1,8 @@
 export const STAR_REFRESH_STORAGE_KEY = 'xcagi_auto_refresh_starred_wechat'
-export const PRO_INTENT_STORAGE_KEY = 'xcagi_pro_intent_experience'
 
 export function isStarredChatAutoRefreshOn(): boolean {
   try {
     return localStorage.getItem(STAR_REFRESH_STORAGE_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-export function isProIntentExperienceOn(): boolean {
-  try {
-    return localStorage.getItem(PRO_INTENT_STORAGE_KEY) === '1'
   } catch {
     return false
   }

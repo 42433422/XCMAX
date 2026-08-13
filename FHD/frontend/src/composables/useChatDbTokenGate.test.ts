@@ -14,7 +14,6 @@ import { resolveModeScopedChatUserId, useChatDbTokenGate } from './useChatDbToke
 function makeDeps() {
   return {
     sessionId: ref('sess-1'),
-    isProMode: ref(false),
     pendingDbWriteChatRetryMessages: ref<string[] | null>(null),
     plannerWriteUnlockResumeDraft: ref(''),
     executeRemoteChatRound: executeRemote,
@@ -24,23 +23,14 @@ function makeDeps() {
 beforeEach(() => {
   setActivePinia(createPinia());
   document.body.className = '';
-  delete (window as Window & { __XCAGI_IS_PRO_MODE?: boolean }).__XCAGI_IS_PRO_MODE;
   executeRemote.mockReset();
   readAiSessionIdFromStorageMock.mockReset();
   readAiSessionIdFromStorageMock.mockReturnValue('stored-sid');
 });
 
 describe('useChatDbTokenGate', () => {
-  it('resolveModeScopedChatUserId matches chat web_normal/web_pro keys', () => {
-    expect(resolveModeScopedChatUserId(false)).toBe('web_normal_stored-sid');
-    expect(resolveModeScopedChatUserId(true)).toBe('web_pro_stored-sid');
-  });
-
-  it('getModeScopedUserId scopes by pro mode', () => {
-    const deps = makeDeps();
-    const gate = useChatDbTokenGate(deps);
-    expect(gate.getModeScopedUserId(false)).toBe('web_normal_sess-1');
-    expect(gate.getModeScopedUserId(true)).toBe('web_pro_sess-1');
+  it('resolveModeScopedChatUserId matches chat web_normal key', () => {
+    expect(resolveModeScopedChatUserId()).toBe('web_normal_stored-sid');
   });
 
   it('resolveChatDbTokensForPayload never attaches database password tokens', () => {
@@ -71,13 +61,5 @@ describe('useChatDbTokenGate', () => {
     gate.onDbWriteUnlockedForChatRetry();
     expect(executeRemote).toHaveBeenCalledWith(['hello'], { fromWriteUnlock: true });
     expect(deps.pendingDbWriteChatRetryMessages.value).toBeNull();
-  });
-
-  it('syncProModeState reads DOM overlay', () => {
-    document.body.classList.add('pro-mode-active');
-    const deps = makeDeps();
-    const gate = useChatDbTokenGate(deps);
-    gate.syncProModeState();
-    expect(deps.isProMode.value).toBe(true);
   });
 });

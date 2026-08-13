@@ -6,12 +6,8 @@ export type ChatRequestScope = { sessionId: string; messages: ChatMessage[] }
 export interface UseChatRequestDeps {
   messages: Ref<ChatMessage[]>
   sessionId?: Ref<string>
-  proIntentExperienceEnabled?: Ref<boolean>
-  isProMode: Ref<boolean>
   lastRequestContextSummary: Ref<string>
   plannerWriteUnlockResumeDraft: Ref<string>
-  resolveEffectiveProModeState: () => boolean
-  getModeScopedUserId: (proEnabled: boolean) => string
   resolveChatDbTokensForPayload: () => { db_read_token?: string; db_write_token?: string }
   injectExcelContextPayload: (ctx: Record<string, unknown>, parts: string[]) => boolean
   consumeMultimodalIntoPlannerContext: (ctx: Record<string, unknown>, parts: string[]) => void
@@ -21,12 +17,8 @@ export function useChatRequest(deps: UseChatRequestDeps) {
   const {
     messages,
     sessionId,
-    proIntentExperienceEnabled,
-    isProMode,
     lastRequestContextSummary,
     plannerWriteUnlockResumeDraft,
-    resolveEffectiveProModeState,
-    getModeScopedUserId,
     resolveChatDbTokensForPayload,
     injectExcelContextPayload,
     consumeMultimodalIntoPlannerContext,
@@ -45,14 +37,8 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     scope?: ChatRequestScope,
   ): {
     body: Record<string, unknown>
-    proIntentEnabled: boolean
   } {
-    const runtimeProEnabled = resolveEffectiveProModeState()
-    isProMode.value = runtimeProEnabled
-
-    const proIntentEnabled = runtimeProEnabled || !!proIntentExperienceEnabled?.value
-    const hybridNormalUiProChannel = proIntentEnabled && !runtimeProEnabled
-    const user_id = getModeScopedUserId(proIntentEnabled)
+    const user_id = resolveChatUserId(scope)
     const compactHistory = (scope?.messages || messages.value || [])
       .slice(-6)
       .map((m) => ({
@@ -77,11 +63,6 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     consumeMultimodalIntoPlannerContext(contextPayload, contextParts)
     const linkedCount = compactHistory.length + (hasExcelContext ? 1 : 0)
     lastRequestContextSummary.value = `已关联上下文：${contextParts.join(' + ')}（共 ${linkedCount}）`
-    if (hybridNormalUiProChannel) {
-      contextPayload.ui_surface = 'normal'
-      contextPayload.intent_channel = 'pro'
-      contextPayload.tool_execution_profile = 'normal'
-    }
     if (plannerOpts?.fromWriteUnlock) {
       contextPayload.chat_db_write_authorized = true
       const draftRaw = plannerWriteUnlockResumeDraft.value.trim()
@@ -92,21 +73,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
         ? `【上一轮流式可见输出节选】\n${bodyDraft}\n\n【续跑要求】用户已在弹窗完成二级写入授权；本请求 JSON 已附带 db_write_token。请直接调用 import_excel_to_database 完成写入（file_path、sheet_name、header_row 与 excel_analysis / 运行时一致）。除非明显缺字段，不要再次整本重跑 excel_analysis 或重复开场白。`
         : '【续跑要求】用户已确认二级写入令牌；本请求已附带 db_write_token。请直接调用 import_excel_to_database，避免重复开场白与无谓的 excel_analysis。'
     }
-    if (proIntentEnabled) {
-      return {
-        proIntentEnabled,
-        body: {
-          message,
-          source: 'pro',
-          mode: 'professional',
-          user_id,
-          context: contextPayload,
-          ...resolveChatDbTokensForPayload()
-        }
-      }
-    }
     return {
-      proIntentEnabled,
       body: {
         message,
         source: 'normal',
@@ -118,27 +85,25 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     }
   }
 
+  function resolveChatUserId(scope?: ChatRequestScope): string {
+    const sid = String(scope?.sessionId || sessionId?.value || '').trim() || 'default'
+    return `web_normal_${sid}`
+  }
+
   async function requestChatByMode(
     message: string,
     fetchOptions: RequestInit = {},
     plannerOpts?: { fromWriteUnlock?: boolean },
     scope?: ChatRequestScope,
   ): Promise<ChatPlannerPayload> {
-    const { body, proIntentEnabled } = buildPlannerChatRequestPayload(message, plannerOpts, scope)
+    const { body } = buildPlannerChatRequestPayload(message, plannerOpts, scope)
     const reqOpts = { signal: fetchOptions.signal }
-    if (proIntentEnabled) {
-      return (await chatApi.sendChat(body as unknown as ChatRequest, reqOpts)) as unknown as ChatPlannerPayload
-    }
     return (await chatApi.sendUnifiedChat(body as unknown as ChatRequest, reqOpts)) as unknown as ChatPlannerPayload
   }
 
-  /** 与单条请求相同的 context / user_id，用于 /api/ai/chat/batch 与 unified_chat/batch */
+  /** 与单条请求相同的 context / user_id，用于 unified_chat/batch */
   async function requestChatByModeBatch(batchTexts: string[], fetchOptions: RequestInit = {}, scope?: ChatRequestScope): Promise<ChatPlannerPayload> {
-    const runtimeProEnabled = resolveEffectiveProModeState()
-    isProMode.value = runtimeProEnabled
-    const proIntentEnabled = runtimeProEnabled || !!proIntentExperienceEnabled?.value
-    const hybridNormalUiProChannel = proIntentEnabled && !runtimeProEnabled
-    const user_id = getModeScopedUserId(proIntentEnabled)
+    const user_id = resolveChatUserId(scope)
     const compactHistory = (scope?.messages || messages.value || [])
       .slice(-6)
       .map((m) => ({
@@ -162,22 +127,14 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     consumeMultimodalIntoPlannerContext(contextPayload, contextParts)
     const linkedCount = compactHistory.length + (hasExcelContext ? 1 : 0)
     lastRequestContextSummary.value = `已关联上下文：${contextParts.join(' + ')}（共 ${linkedCount}）`
-    if (hybridNormalUiProChannel) {
-      contextPayload.ui_surface = 'normal'
-      contextPayload.intent_channel = 'pro'
-      contextPayload.tool_execution_profile = 'normal'
-    }
     const reqOpts = { signal: fetchOptions.signal }
     const batchBody = {
       messages: batchTexts,
       user_id,
       context: contextPayload,
-      source: proIntentEnabled ? ('pro' as const) : ('normal' as const),
-      mode: proIntentEnabled ? ('professional' as const) : ('basic' as const),
+      source: 'normal' as const,
+      mode: 'basic' as const,
       ...resolveChatDbTokensForPayload()
-    }
-    if (proIntentEnabled) {
-      return (await chatApi.sendChatBatch(batchBody as ChatRequest & { messages: string[] }, reqOpts)) as unknown as ChatPlannerPayload
     }
     return (await chatApi.sendUnifiedChatBatch(batchBody as ChatRequest & { messages: string[] }, reqOpts)) as unknown as ChatPlannerPayload
   }

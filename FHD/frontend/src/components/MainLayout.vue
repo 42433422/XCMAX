@@ -8,9 +8,7 @@
     >
       <Sidebar
         :active-view="currentRouteName"
-        :is-pro-mode="isProMode"
         @change-view="handleViewChange"
-        @toggle-pro-mode="$emit('toggle-pro-mode')"
       />
       <PaneResizeHandle
         v-if="isSidebarFeatureEnabled && !sidebarCollapsed"
@@ -62,13 +60,6 @@
             {{ accountUsername }}
           </div>
         </div>
-        <div
-          v-if="clientModeTiersUiEnabled && !adminConsoleSpa"
-          class="mode-badge"
-          :class="[props.isProMode ? 'pro' : 'normal', { 'with-mod': hasModsForUi }]"
-        >
-          {{ modeBadgeText }}
-        </div>
         <button
           type="button"
           class="top-bar-settings-btn"
@@ -110,7 +101,6 @@ import { useResizablePane } from '@/composables/useResizablePane'
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
 import { getIndustryPreset } from '@/constants/industryPresets'
 import { resolveCoreNavLabel, INDUSTRY_MENU_LABELS } from '@/utils/coreNavLabel'
-import { isClientModeTiersUiEnabled } from '@/constants/clientModeTiers'
 import { isChatSidebarActive, normalizeSidebarActiveKey } from '@/utils/sidebarActiveKey'
 import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
 import { navigateFromSidebarKey } from '@/utils/sidebarNavigation'
@@ -130,13 +120,6 @@ import { useTutorialStore } from '@/stores/tutorial'
 import { setTutorialBuildContextFactory } from '@/stores/tutorial'
 import { useTutorialCatalog } from '@/composables/useTutorialCatalog'
 import { documentPreviewPip } from '@/state/documentPreviewPip'
-const props = defineProps({
-  isProMode: {
-    type: Boolean,
-    default: false
-  }
-})
-const emit = defineEmits(['toggle-pro-mode'])
 const route = useRoute()
 const router = useRouter()
 const onboardingTutorialStore = useOnboardingTutorialStore()
@@ -172,11 +155,7 @@ let sidebarViewportMedia = null
 const showMobileBottomNav = ref(false)
 let mobileBottomNavMedia = null
 let layoutActive = true
-const clientModeTiersUiEnabled = isClientModeTiersUiEnabled()
-const isSandboxMode = new URLSearchParams(window.location.search).has('sandbox')
 const adminConsoleSpa = detectAdminConsoleSpa()
-/** 原版模式或未加载扩展时为空，与侧栏 Mod 菜单一致 */
-const hasModsForUi = computed(() => modsForUi.value.length > 0)
 
 const { buildContext: tutorialBuildContext } = useTutorialCatalog()
 setTutorialBuildContextFactory(() => tutorialBuildContext.value)
@@ -229,23 +208,6 @@ async function endImpersonation() {
     endingImpersonation.value = false
   }
 }
-
-/** 顶栏角标：普通/专业 + 已加载 Mod 时追加简写（如 ·Pro） */
-function resolveModBadgeSuffix() {
-  const list = modsForUi.value
-  if (!list.length) return ''
-  const lead = list.find((m) => m.primary) || list[0]
-  const name = String(lead?.name || lead?.id || 'Mod').trim()
-  if (!name) return 'Mod'
-  return name.length <= 8 ? name : `${name.slice(0, 7)}…`
-}
-
-const modeBadgeText = computed(() => {
-  if (isSandboxMode) return '沙箱模式'
-  const base = props.isProMode ? '专业版' : '普通版'
-  if (!hasModsForUi.value) return base
-  return `${base}·${resolveModBadgeSuffix()}`
-})
 
 const modPathToSidebarKey = computed(() => {
   const m = {}
@@ -698,40 +660,6 @@ onBeforeUnmount(() => {
   color: #0b72d9;
   border-color: rgba(11, 114, 217, 0.35);
   background: rgba(239, 246, 255, 0.96);
-}
-
-.mode-badge {
-  margin-left: auto;
-  padding: 7px 12px;
-  border-radius: 999px;
-  font-size: var(--app-font-size-caption, 12px);
-  line-height: 1;
-  font-weight: 800;
-  letter-spacing: 0.01em;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
-}
-
-.mode-badge.normal {
-  color: #1e3a8a;
-  background: linear-gradient(135deg, rgba(239, 246, 255, 0.96), rgba(219, 234, 254, 0.92));
-  border: 1px solid rgba(147, 197, 253, 0.62);
-}
-
-.mode-badge.pro {
-  color: #7dd3fc;
-  background: linear-gradient(135deg, rgba(14, 116, 144, 0.3), rgba(15, 23, 42, 0.78));
-  border: 1px solid rgba(125, 211, 252, 0.35);
-}
-
-/* 已加载 Mod：在普通/专业底子上略强调「扩展环境」 */
-.mode-badge.with-mod.normal {
-  background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
-  border-color: #a5b4fc;
-  color: #3730a3;
-}
-
-.mode-badge.with-mod.pro {
-  box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.2);
 }
 
 </style>

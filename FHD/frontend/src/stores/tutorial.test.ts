@@ -11,7 +11,7 @@ const resolveAllWarmupSteps = vi.fn(() => [
 const resolveStepHighlightRect = vi.fn(() => ({ top: 1, left: 2, width: 3, height: 4 }))
 
 vi.mock('@/tutorial/buildContext', () => ({
-  createTutorialBuildContext: () => ({ industryId: '考勤', mods: [], visibleNav: [], isProMode: false }),
+  createTutorialBuildContext: () => ({ industryId: '考勤', mods: [], visibleNav: [] }),
 }))
 vi.mock('@/tutorial/catalog', () => ({
   getTrackLabel: () => '基础教程',
@@ -46,7 +46,6 @@ describe('tutorial store', () => {
     setActivePinia(createPinia())
     resolveTrackSteps.mockReset()
     resolveStepHighlightRect.mockReturnValue({ top: 1, left: 2, width: 3, height: 4 })
-    window.__XCAGI_IS_PRO_MODE = false
   })
 
   it('getTutorialTtsWarmupTexts dedupes and drops empty', () => {
@@ -99,14 +98,6 @@ describe('tutorial store', () => {
     const s = useTutorialStore()
     s.startTutorial({ track: 'basic' })
     expect(s.isActive).toBe(false)
-  })
-
-  it('pro basic falls back to advanced track', () => {
-    resolveTrackSteps.mockImplementation((track: string) => (track === 'advanced' ? baseSteps : []))
-    const s = useTutorialStore()
-    s.startTutorial({ track: 'basic', isProMode: true })
-    expect(s.proBasicFallbackNotice).toContain('进阶教程')
-    expect(s.currentTrack).toBe('advanced')
   })
 
   it('exitTutorial sets exited flag', () => {

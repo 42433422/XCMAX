@@ -2,7 +2,6 @@ import type { TutorialPageHighlight, TutorialStep } from './types'
 
 export const createStep = (step: TutorialStep): TutorialStep => ({
   ...step,
-  excludeInPro: step.excludeInPro ?? true,
 })
 
 export const advancedSidebarNavStep = (
@@ -17,7 +16,6 @@ export const advancedSidebarNavStep = (
     targetSelector: `.sidebar .menu-item[data-view="${viewKey}"]`,
     actionType: 'click',
     allowCardNext: true,
-    excludeInPro: false,
   })
 
 export const advancedPageFeaturesStep = (
@@ -36,7 +34,6 @@ export const advancedPageFeaturesStep = (
     highlightSelector: highlightSelector || targetSelector,
     actionType: 'observe',
     routeName,
-    excludeInPro: false,
     allowCardNext: true,
     noAutoSkipWhenMissing: true,
   })
@@ -67,7 +64,6 @@ export const fallbackPageObserveStep = (
     highlightSelector: `#view-${routeName} .page-content`,
     actionType: 'observe',
     routeName,
-    excludeInPro: false,
     allowCardNext: true,
     noAutoSkipWhenMissing: true,
   })

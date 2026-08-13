@@ -128,10 +128,7 @@ vi.mock('./useChatWorkflowPanel', () => ({
 vi.mock('./useChatDbTokenGate', () => ({
   useChatDbTokenGate: () => ({
     handleChatRequiresToken: vi.fn(),
-    resolveEffectiveProModeState: vi.fn(() => false),
-    syncProModeState: vi.fn(),
     onDbWriteUnlockedForChatRetry: vi.fn(),
-    getModeScopedUserId: vi.fn(() => 'u1'),
     resolveChatDbTokensForPayload: vi.fn(() => ({})),
   }),
 }))
@@ -234,7 +231,7 @@ describe('useChatOrchestration batch/json', () => {
   })
 
   it('sendMessage debounce triggers batch chat round', async () => {
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     await api.sendMessage('批量问题')
     expect(enqueueChatBatchMessage).toHaveBeenCalled()
     expect(requestChatByModeBatchWithTimeout).toHaveBeenCalledWith(
@@ -255,7 +252,7 @@ describe('useChatOrchestration batch/json', () => {
       run_id: 'run_1',
       data: { action: 'workflow_confirmation_required', data: { pending_workflow_id: 'wf-2' } },
     })
-    const api = useChatOrchestration({ sessionId: ref('s'), proIntentExperienceEnabled: ref(false) })
+    const api = useChatOrchestration({ sessionId: ref('s') })
     await api.sendMessage('执行计划')
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(requestChatByModeWithTimeout).toHaveBeenCalled()

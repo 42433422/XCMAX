@@ -38,19 +38,6 @@
       @change="onFileChange"
     >
     <label
-      v-if="clientModeTiersUiEnabled"
-      class="intent-pro-toggle"
-      data-tutorial-id="intent-pro-experience-toggle"
-      :title="$t('chat.proIntentTitle')"
-    >
-      <input
-        type="checkbox"
-        :checked="proIntentExperienceEnabled"
-        @change="onProIntentChange"
-      >
-      <span class="intent-pro-toggle-text">{{ $t('chat.proIntentToggle') }}</span>
-    </label>
-    <label
       data-tutorial-id="star-auto-refresh-toggle"
       :title="$t('chat.starAutoRefreshTitle')"
       style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:var(--app-font-size-caption);color:var(--app-text-muted);cursor:pointer;user-select:none;"
@@ -85,8 +72,6 @@ useI18n()
 const props = defineProps<{
   excelAnalyzeUploading: boolean
   multimodalPendingCount: number
-  clientModeTiersUiEnabled: boolean
-  proIntentExperienceEnabled: boolean
   autoRefreshStarredWechat: boolean
   ttsEnabled: boolean
   officeDockingProcessing?: boolean
@@ -99,7 +84,6 @@ const emit = defineEmits<{
   'trigger-office-docking': []
   'register-excel-input': [input: HTMLInputElement | null]
   'excel-file-change': [event: Event]
-  'pro-intent-change': [enabled: boolean]
   'auto-refresh-change': [enabled: boolean]
   'toggle-tts': [enabled: boolean]
 }>()
@@ -121,10 +105,6 @@ function triggerUpload() {
 
 function onFileChange(event: Event) {
   emit('excel-file-change', event)
-}
-
-function onProIntentChange(event: Event) {
-  emit('pro-intent-change', (event.target as HTMLInputElement).checked)
 }
 
 function onAutoRefreshChange(event: Event) {

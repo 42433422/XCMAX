@@ -10,7 +10,6 @@ export type IndustryPreset = {
   welcomeBullets: string[]
   quickButtons: IndustryQuickButton[]
   placeholderNormal: string
-  placeholderPro: string
   menuLabels: Record<string, string>
   uiLabels: Record<string, string>
 }

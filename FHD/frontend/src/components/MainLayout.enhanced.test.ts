@@ -14,9 +14,9 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 vi.mock('./Sidebar.vue', () => ({
   default: {
     name: 'Sidebar',
-    template: '<nav class="sidebar-stub" @change-view="$emit(\'change-view\', $event)" @toggle-pro-mode="$emit(\'toggle-pro-mode\')"><slot /></nav>',
-    props: ['activeView', 'isProMode'],
-    emits: ['change-view', 'toggle-pro-mode'],
+    template: '<nav class="sidebar-stub" @change-view="$emit(\'change-view\', $event)"><slot /></nav>',
+    props: ['activeView'],
+    emits: ['change-view'],
   },
 }))
 
@@ -166,10 +166,6 @@ vi.mock('@/utils/coreNavLabel', () => ({
   INDUSTRY_MENU_LABELS: {},
 }))
 
-vi.mock('@/constants/clientModeTiers', () => ({
-  isClientModeTiersUiEnabled: () => false,
-}))
-
 vi.mock('@/utils/hostBusinessPageRedirect', () => ({
   resolveHostBusinessPageRedirect: () => null,
 }))
@@ -228,7 +224,7 @@ async function mountMainLayout(props = {}) {
         RouterLink: { template: '<a><slot /></a>' },
       },
     },
-    props: { isProMode: false, ...props },
+    props: { ...props },
   })
   return { wrapper, router }
 }
@@ -311,30 +307,6 @@ describe('MainLayout.vue – sidebar behavior', () => {
       await peekBtn.trigger('click')
       expect(wrapper.vm.sidebarCollapsed).toBe(false)
     }
-    wrapper.unmount()
-  })
-})
-
-describe('MainLayout.vue – pro mode badge', () => {
-  it('shows normal mode badge when isProMode is false', async () => {
-    const { wrapper } = await mountMainLayout({ isProMode: false })
-    // modeBadgeText computed depends on isProMode prop
-    expect(wrapper.vm.modeBadgeText).toContain('普通版')
-    wrapper.unmount()
-  })
-
-  it('shows pro mode badge when isProMode is true', async () => {
-    const { wrapper } = await mountMainLayout({ isProMode: true })
-    expect(wrapper.vm.modeBadgeText).toContain('专业版')
-    wrapper.unmount()
-  })
-
-  it('shows sandbox mode in sandbox mode', async () => {
-    // sandbox mode is detected from URL params at module level
-    // This test verifies the computed logic
-    const { wrapper } = await mountMainLayout()
-    // Default is not sandbox
-    expect(wrapper.vm.modeBadgeText).not.toContain('沙箱模式')
     wrapper.unmount()
   })
 })
@@ -423,14 +395,6 @@ describe('MainLayout.vue – handleViewChange', () => {
     await wrapper.vm.handleViewChange('settings')
     expect(pushSpy).toHaveBeenCalled()
     pushSpy.mockRestore()
-    wrapper.unmount()
-  })
-})
-
-describe('MainLayout.vue – resolveModBadgeSuffix', () => {
-  it('returns empty string when no mods loaded', async () => {
-    const { wrapper } = await mountMainLayout()
-    expect(wrapper.vm.resolveModBadgeSuffix()).toBe('')
     wrapper.unmount()
   })
 })

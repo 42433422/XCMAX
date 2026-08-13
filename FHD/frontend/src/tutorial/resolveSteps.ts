@@ -2,10 +2,6 @@ import type { TutorialBuildContext, TutorialStep, TutorialTrackId } from './type
 import { collectModStepsForTrack, injectModSteps } from './buildModSteps'
 import { buildBasicSteps } from './tracks/basic'
 
-export function filterStepsForPro(list: TutorialStep[], pro: boolean): TutorialStep[] {
-  return list.filter((step) => (step.excludeInPro ? !pro : true))
-}
-
 export function resolveTrackSteps(trackId: TutorialTrackId, ctx: TutorialBuildContext): TutorialStep[] {
   const id = String(trackId || 'basic').trim() || 'basic'
   let steps: TutorialStep[]
@@ -21,7 +17,7 @@ export function resolveTrackSteps(trackId: TutorialTrackId, ctx: TutorialBuildCo
   const modInjected = id === 'basic'
     ? injectModSteps(steps, collectModStepsForTrack(id, ctx.mods as never[]))
     : steps
-  return filterStepsForPro(modInjected, ctx.isProMode)
+  return modInjected
 }
 
 export function resolveAllWarmupSteps(ctx: TutorialBuildContext): TutorialStep[] {

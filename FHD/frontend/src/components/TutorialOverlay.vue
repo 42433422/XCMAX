@@ -17,9 +17,6 @@
         功能测试：通过 {{ tutorialStore.testSummary.passed }} / {{ tutorialStore.testSummary.total }}
         <span v-if="tutorialStore.testSummary.skipped > 0">，跳过 {{ tutorialStore.testSummary.skipped }}</span>
       </p>
-      <p v-if="tutorialStore.proBasicFallbackNotice" class="tutorial-tip tutorial-fallback-notice">
-        {{ tutorialStore.proBasicFallbackNotice }}
-      </p>
       <p v-if="tutorialStore.blockedTip" class="tutorial-tip">{{ tutorialStore.blockedTip }}</p>
 
       <div class="tutorial-actions" data-tutorial-overlay="true">
@@ -291,7 +288,7 @@ const prefetchTtsForTexts = (texts) => {
 const onWarmupTutorialTtsFromPick = () => {
   if (tutorialTtsPickWarmupDone) return
   tutorialTtsPickWarmupDone = true
-  const texts = getTutorialTtsWarmupTexts(!!window.__XCAGI_IS_PRO_MODE).slice(0, 6)
+  const texts = getTutorialTtsWarmupTexts(false).slice(0, 6)
   prefetchTtsForTexts(texts)
 }
 

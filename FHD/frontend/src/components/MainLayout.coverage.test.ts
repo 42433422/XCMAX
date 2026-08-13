@@ -5,7 +5,6 @@
  * 重点覆盖：
  *   - endImpersonation：代管结束流程（含成功/失败路径）
  *   - accountUsername：localStorage 读取与 JSON 解析（含异常）
- *   - resolveModBadgeSuffix / modeBadgeText：Mod 徽标后缀
  *   - modPathToSidebarKey：Mod 菜单 path → key 映射
  *   - currentRouteName：matched 路由回退
  *   - useResizablePane 回调：enabled / onResizeStart / onResizeEnd
@@ -196,10 +195,6 @@ vi.mock('@/utils/coreNavLabel', () => ({
   INDUSTRY_MENU_LABELS: {},
 }))
 
-vi.mock('@/constants/clientModeTiers', () => ({
-  isClientModeTiersUiEnabled: () => false,
-}))
-
 vi.mock('@/utils/hostBusinessPageRedirect', () => ({
   resolveHostBusinessPageRedirect: () => testState.hostBusinessRedirect,
 }))
@@ -223,9 +218,9 @@ vi.mock('./Sidebar.vue', () => ({
   default: {
     name: 'Sidebar',
     template:
-      '<nav class="sidebar-stub" @change-view="$emit(\'change-view\', $event)" @toggle-pro-mode="$emit(\'toggle-pro-mode\')"><slot /></nav>',
-    props: ['activeView', 'isProMode'],
-    emits: ['change-view', 'toggle-pro-mode'],
+      '<nav class="sidebar-stub" @change-view="$emit(\'change-view\', $event)"><slot /></nav>',
+    props: ['activeView'],
+    emits: ['change-view'],
   },
 }))
 
@@ -332,7 +327,7 @@ async function mountMainLayout(props: Record<string, unknown> = {}) {
         RouterLink: { template: '<a><slot /></a>' },
       },
     },
-    props: { isProMode: false, ...props },
+    props: { ...props },
   })
   return { wrapper, router }
 }
@@ -498,61 +493,6 @@ describe('MainLayout.vue - coverage ramp', () => {
       await nextTick()
 
       expect(wrapper.find('.page-account-sub').exists()).toBe(false)
-      wrapper.unmount()
-    })
-  })
-
-  // ════════════════════════════════════════════════════════════════════
-  // resolveModBadgeSuffix / modeBadgeText
-  // ════════════════════════════════════════════════════════════════════
-
-  describe('resolveModBadgeSuffix / modeBadgeText', () => {
-    it('有 mods 时 modeBadgeText 包含 Mod 名称', async () => {
-      testState.modsStore.modsForUi = [{ name: '财务分析', primary: true }]
-      const { wrapper } = await mountMainLayout()
-      expect(wrapper.vm.modeBadgeText).toContain('财务分析')
-      wrapper.unmount()
-    })
-
-    it('mod name 超过 8 字符时截断', async () => {
-      testState.modsStore.modsForUi = [{ name: '这是一个很长的Mod名称测试', primary: true }]
-      const { wrapper } = await mountMainLayout()
-      const suffix = wrapper.vm.resolveModBadgeSuffix()
-      expect(suffix).toContain('…')
-      expect(suffix.length).toBeLessThanOrEqual(8)
-      wrapper.unmount()
-    })
-
-    it('mod 无 name 时使用 id', async () => {
-      testState.modsStore.modsForUi = [{ id: 'mod-id' }]
-      const { wrapper } = await mountMainLayout()
-      expect(wrapper.vm.resolveModBadgeSuffix()).toBe('mod-id')
-      wrapper.unmount()
-    })
-
-    it('mod 无 name 和 id 时返回 Mod', async () => {
-      testState.modsStore.modsForUi = [{}]
-      const { wrapper } = await mountMainLayout()
-      expect(wrapper.vm.resolveModBadgeSuffix()).toBe('Mod')
-      wrapper.unmount()
-    })
-
-    it('首个 primary mod 优先于非 primary', async () => {
-      testState.modsStore.modsForUi = [
-        { name: 'NonPrim' },
-        { name: 'Primary', primary: true },
-      ]
-      const { wrapper } = await mountMainLayout()
-      expect(wrapper.vm.resolveModBadgeSuffix()).toBe('Primary')
-      wrapper.unmount()
-    })
-
-    it('sandbox 模式时 modeBadgeText 为沙箱模式', async () => {
-      // sandbox 通过 URL 参数检测，在模块级别读取
-      // 这里直接验证 modeBadgeText 逻辑
-      const { wrapper } = await mountMainLayout()
-      // 默认非 sandbox
-      expect(wrapper.vm.modeBadgeText).not.toContain('沙箱模式')
       wrapper.unmount()
     })
   })

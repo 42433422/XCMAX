@@ -118,8 +118,6 @@ vi.mock('./useChatWorkflowPanel', () => ({
 vi.mock('./useChatDbTokenGate', () => ({
   useChatDbTokenGate: () => ({
     handleChatRequiresToken: vi.fn(),
-    resolveEffectiveProModeState: vi.fn(),
-    syncProModeState: vi.fn(),
     onDbWriteUnlockedForChatRetry: vi.fn(),
   }),
 }))
@@ -191,11 +189,9 @@ describe('useChatOrchestration', () => {
     const sessionId = ref('orch-session')
     const api = useChatOrchestration({
       sessionId,
-      proIntentExperienceEnabled: ref(false),
     })
     expect(typeof api.sendMessage).toBe('function')
     expect(typeof api.confirmTask).toBe('function')
-    expect(api.isProMode).toBeDefined()
     expect(api.ttsEnabled).toBeDefined()
   })
 
@@ -203,7 +199,6 @@ describe('useChatOrchestration', () => {
     const sessionId = ref('tts-session')
     const api = useChatOrchestration({
       sessionId,
-      proIntentExperienceEnabled: ref(false),
     })
     api.setTtsEnabled(false)
     expect(localStorage.getItem('xcagi_chat_tts_enabled')).toBe('0')
@@ -216,7 +211,6 @@ describe('useChatOrchestration', () => {
     const sessionId = ref('float-session')
     const api = useChatOrchestration({
       sessionId,
-      proIntentExperienceEnabled: ref(false),
     })
     const handler = vi.fn()
     window.addEventListener('xcagi:open-assistant-float', handler)
@@ -229,7 +223,6 @@ describe('useChatOrchestration', () => {
     const sessionId = ref('filter-session')
     const api = useChatOrchestration({
       sessionId,
-      proIntentExperienceEnabled: ref(false),
     })
     api.setTaskFilter('running')
     expect(api.taskFilter).toBeDefined()

@@ -14,7 +14,6 @@ export function buildAssistantFloatSteps(): TutorialStep[] {
       actionType: 'click',
       routeName: 'chat',
       allowCardNext: true,
-      excludeInPro: false,
     }),
     createStep({
       id: 'page-chat-assistant-panel',
@@ -25,7 +24,6 @@ export function buildAssistantFloatSteps(): TutorialStep[] {
       actionType: 'observe',
       routeName: 'chat',
       allowCardNext: true,
-      excludeInPro: false,
       noAutoSkipWhenMissing: true,
     }),
     createStep({
@@ -37,7 +35,6 @@ export function buildAssistantFloatSteps(): TutorialStep[] {
       actionType: 'click',
       routeName: 'chat',
       allowCardNext: true,
-      excludeInPro: false,
     }),
   ]
 }

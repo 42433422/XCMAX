@@ -24,7 +24,6 @@ export function buildQuickStartDeleteTutorialSteps(visibleNav: VisibleNavItem[])
       targetSelector: '[data-tour="chat-thread"]',
       actionType: 'observe',
       track: 'advanced',
-      excludeInPro: false,
       allowCardNext: true,
     }),
   ]
@@ -42,7 +41,6 @@ export function buildQuickStartDeleteTutorialSteps(visibleNav: VisibleNavItem[])
         actionType: 'click',
         routeName: 'customers',
         track: 'advanced',
-        excludeInPro: false,
         allowCardNext: true,
       }),
       createStep({
@@ -54,7 +52,6 @@ export function buildQuickStartDeleteTutorialSteps(visibleNav: VisibleNavItem[])
         highlightSelector: '[data-tour="customers-batch-actions"]',
         actionType: 'observe',
         track: 'advanced',
-        excludeInPro: false,
         noAutoSkipWhenMissing: true,
         allowCardNext: true,
       }),
@@ -74,7 +71,6 @@ export function buildQuickStartDeleteTutorialSteps(visibleNav: VisibleNavItem[])
         actionType: 'click',
         routeName: 'products',
         track: 'advanced',
-        excludeInPro: false,
         allowCardNext: true,
       }),
       createStep({
@@ -86,7 +82,6 @@ export function buildQuickStartDeleteTutorialSteps(visibleNav: VisibleNavItem[])
         highlightSelector: '[data-tour="products-batch-actions"]',
         actionType: 'observe',
         track: 'advanced',
-        excludeInPro: false,
         noAutoSkipWhenMissing: true,
         allowCardNext: true,
       }),
@@ -103,7 +98,6 @@ export function buildQuickStartDeleteTutorialSteps(visibleNav: VisibleNavItem[])
       highlightSelector: '#newConversationBtn',
       actionType: 'click',
       track: 'advanced',
-      excludeInPro: false,
       allowCardNext: true,
     }),
   )
