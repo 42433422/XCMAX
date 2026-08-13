@@ -94,7 +94,7 @@
           </div>
           <label>
             目标
-            <select v-model="targetType" :disabled="busy">
+            <select v-model="targetType" data-tutorial-id="etl-target" :disabled="busy">
               <option value="auto">智能识别（推荐）· 只建议目标</option>
               <option v-for="target in capabilities?.targets || []" :key="target.type" :value="target.type">
                 {{ target.label }}{{ target.reversible ? ' · 可撤销' : ' · 不可撤销' }}
@@ -187,6 +187,7 @@
             <button
               type="button"
               class="etl-primary"
+              data-tutorial-id="etl-start-preview"
               :disabled="!selectedFiles.length || busy || incompatibleFiles.length > 0 || (targetType === 'webhook' && !targetConfigId)"
               @click="startPreview"
             >
@@ -266,7 +267,7 @@
       </div>
     </section>
 
-    <section v-else-if="activeTab === 'mapping'" class="etl-panel">
+    <section v-else-if="activeTab === 'mapping'" class="etl-panel" data-tutorial-id="etl-mapping">
       <div class="etl-panel__title">
         <div>
           <h2>字段映射</h2>
@@ -346,7 +347,12 @@
       </div>
     </section>
 
-    <section v-else-if="activeTab === 'preview'" class="etl-panel" data-tutorial-anchor="business-dock-results">
+    <section
+      v-else-if="activeTab === 'preview'"
+      class="etl-panel"
+      data-tutorial-id="etl-preview"
+      data-tutorial-anchor="business-dock-results"
+    >
       <div class="etl-panel__title">
         <div>
           <h2>核对与写入</h2>

@@ -14,7 +14,7 @@ from sqlalchemy.pool import StaticPool
 from starlette.requests import Request
 
 import app.db.models  # noqa: F401
-from app.application.tutorial_v2.catalog import COURSE_VERSION, COURSES
+from app.application.tutorial_v2.catalog import COURSE_VERSION, COURSES, public_course
 from app.application.tutorial_v2.scope import resolve_tutorial_scope
 from app.application.tutorial_v2.service import (
     SALES_SENTENCE,
@@ -36,6 +36,7 @@ from app.db.models.tenant import Tenant
 from app.db.models.tutorial import TutorialStepEvidence
 from app.db.models.user import User
 from app.infrastructure.tenant_scope import tenant_scope
+from app.schemas.tutorial_v2 import TutorialCourseDTO
 
 
 def test_fresh_runtime_bootstrap_creates_tutorial_v2_tables():
@@ -64,11 +65,15 @@ def test_course_catalog_uses_exact_targets_and_one_business_object_per_trace_ste
         "transfer-readonly-query",
     ]
     first_task_step = COURSES[0]["steps"][0]
-    assert "新对话" in first_task_step["instruction"]
-    assert first_task_step["action_checklist"][0] == "点击新对话，保留已有销售任务工作区"
+    assert first_task_step["location_label"] == "小C助理页面底部的输入区"
+    assert first_task_step["guide_actions"][0] == {
+        "instruction": "点击“新对话”。",
+        "target_selector": "#newConversationBtn",
+        "expected_input": "",
+    }
+    assert first_task_step["guide_actions"][1]["expected_input"] == "查询当前客户列表"
     transfer_step = COURSES[0]["steps"][-1]
-    assert "新对话" in transfer_step["instruction"]
-    assert transfer_step["action_checklist"][0] == "点击新对话，创建第二个独立工作区"
+    assert transfer_step["guide_actions"][1]["expected_input"] == "查询当前产品列表"
     trace_steps = [step["id"] for step in COURSES[-1]["steps"]]
     assert trace_steps == [
         "trace-task",
@@ -80,6 +85,36 @@ def test_course_catalog_uses_exact_targets_and_one_business_object_per_trace_ste
         "trace-vouchers",
         "trace-import",
     ]
+
+
+def test_beginner_guide_contract_survives_public_dto_without_internal_jargon():
+    blocked_words = ("代次", "租户", "持久", "实体引用")
+    for course in COURSES:
+        payload = {
+            **public_course(course),
+            "locked": False,
+            "missing_prerequisite_ids": [],
+            "run": None,
+            "status": "not_started",
+            "progress": 0,
+        }
+        dto = TutorialCourseDTO.model_validate(payload).model_dump(mode="json")
+        assert dto["version"] == COURSE_VERSION
+        for step in dto["steps"]:
+            assert step["location_label"]
+            assert step["completion_cue"]
+            assert step["guide_actions"]
+            assert all(action["instruction"] for action in step["guide_actions"])
+            beginner_copy = " ".join(
+                [
+                    step["title"],
+                    step["goal"],
+                    step["instruction"],
+                    step["location_label"],
+                    step["completion_cue"],
+                ]
+            )
+            assert not any(word in beginner_copy for word in blocked_words)
 
 
 @pytest.fixture()

@@ -104,7 +104,7 @@
         <div class="modal-body">
           <div class="form-group">
             <label>{{ fieldLabel('model_number', '产品型号') }} *</label>
-            <input v-model="formData.model_number" type="text" placeholder="如：A001">
+            <input v-model="formData.model_number" data-tutorial-id="product-model" type="text" placeholder="如：A001">
           </div>
           <div class="form-group">
             <label>{{ fieldLabel('name', '产品名称') }} *</label>

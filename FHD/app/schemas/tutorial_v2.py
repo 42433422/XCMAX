@@ -17,6 +17,12 @@ class TutorialEvidenceDTO(BaseModel):
     verified_at: str | None = None
 
 
+class TutorialGuideActionDTO(BaseModel):
+    instruction: str
+    target_selector: str = ""
+    expected_input: str = ""
+
+
 class TutorialStepDTO(BaseModel):
     id: str
     title: str
@@ -27,6 +33,11 @@ class TutorialStepDTO(BaseModel):
     hint: str
     route_name: str
     target_selector: str
+    location_label: str = ""
+    completion_cue: str = ""
+    guide_actions: list[TutorialGuideActionDTO] = Field(default_factory=list)
+    action_checklist: list[str] = Field(default_factory=list)
+    principle: str = ""
     required: bool = True
     status: Literal["pending", "failed", "passed"] = "pending"
     evidence: TutorialEvidenceDTO | None = None
@@ -68,6 +79,7 @@ class TutorialCourseDTO(BaseModel):
 __all__ = [
     "TutorialCourseDTO",
     "TutorialEvidenceDTO",
+    "TutorialGuideActionDTO",
     "TutorialRunDTO",
     "TutorialStepDTO",
 ]
