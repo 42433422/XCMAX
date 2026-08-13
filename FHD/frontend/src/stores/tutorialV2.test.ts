@@ -14,7 +14,11 @@ const apiMock = vi.hoisted(() => ({
 
 vi.mock('@/api/tutorialV2', () => ({ tutorialV2Api: apiMock }))
 
-import { tutorialRunAllowsRoute, useTutorialV2Store } from './tutorialV2'
+import {
+  activeTutorialRunAllowsRoute,
+  tutorialRunAllowsRoute,
+  useTutorialV2Store,
+} from './tutorialV2'
 
 const step = {
   id: 'create-customer', title: '创建客户B', goal: '建客户', instruction: '亲自创建',
@@ -40,6 +44,11 @@ describe('tutorial V2 store', () => {
     expect(tutorialRunAllowsRoute({ ...activeRun, status: 'paused' }, 'customers')).toBe(false)
     expect(tutorialRunAllowsRoute({ ...activeRun, status: 'completed' }, 'customers')).toBe(true)
     expect(tutorialRunAllowsRoute(null, 'customers')).toBe(false)
+
+    const store = useTutorialV2Store()
+    store.currentRun = activeRun
+    expect(activeTutorialRunAllowsRoute('customers')).toBe(true)
+    expect(activeTutorialRunAllowsRoute('products')).toBe(false)
   })
 
   beforeEach(() => {
@@ -106,5 +115,17 @@ describe('tutorial V2 store', () => {
     expect(apiMock.current).toHaveBeenCalled()
     expect(apiMock.enter).toHaveBeenCalledWith('run-1')
     expect(store.currentRun?.id).toBe('run-1')
+  })
+
+  it('creates a new generation when the user resets a course', async () => {
+    const store = useTutorialV2Store()
+    store.courses = [course]
+
+    await store.resetCourse('run-1')
+
+    expect(apiMock.reset).toHaveBeenCalledWith('run-1')
+    expect(store.currentRun).toMatchObject({ id: 'run-2', generation: 2 })
+    expect(store.verificationHint).toContain('新的教学代次')
+    expect(apiMock.courses).toHaveBeenCalled()
   })
 })
