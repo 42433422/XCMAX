@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from typing import Any
 
 from app.application import agent_task_context
@@ -18,11 +17,16 @@ OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 def normalize_product_float_query(raw: str) -> str:
     """Keep specific product terms while preserving an empty full-list query."""
     text = str(raw or "").strip()
-    if re.fullmatch(
-        r"(?:查询|查一下|查下|查看|看看|看下|查)?\s*"
-        r"(?:当前|现有|全部|所有)?\s*产品(?:列表|库)?\s*[。！？…]*",
-        text,
-    ):
+    candidate = text.rstrip("。！？…").strip()
+    for prefix in ("查询", "查一下", "查下", "查看", "看看", "看下", "查"):
+        if candidate.startswith(prefix):
+            candidate = candidate[len(prefix) :].strip()
+            break
+    for scope in ("当前", "现有", "全部", "所有"):
+        if candidate.startswith(scope):
+            candidate = candidate[len(scope) :].strip()
+            break
+    if candidate in {"产品", "产品列表", "产品库"}:
         return ""
     return text
 
