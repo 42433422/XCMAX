@@ -55,6 +55,6 @@
     "errLoginFailedRetry": "登录失败，请稍后再试",
     "errWithId": "登录失败（错误编号 {id}），请联系管理员排查后端日志。",
     "errIdSuffix": "（错误编号 {id}）",
-    "devHint": "。本地开发可试：企业演示 xcagi-enterprise-demo / Demo@2026；平台管理员请点「管理员登录」或访问 /admin/（admin / admin123）。"
+    "devHint": "。本地开发可试：企业演示 xcagi-enterprise-demo / Demo{'@'}2026；平台管理员请点「管理员登录」或访问 /admin/（admin / admin123）。"
   }
 }

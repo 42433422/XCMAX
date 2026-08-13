@@ -50,6 +50,18 @@ def require_agent_principal(
     session_user = resolve_session_user(request)
     principal = _from_user(session_user) if session_user is not None else None
     if principal is not None:
+        # The tutorial middleware is the only authority allowed to replace the
+        # business tenant. Keep the authenticated user/role while making task
+        # list, detail and commands observe the same shadow tenant as chat.
+        if getattr(request.state, "tutorial_active", False) is True:
+            tutorial_tenant = getattr(request.state, "tenant_id", None)
+            if tutorial_tenant is not None:
+                return AgentPrincipal(
+                    user_id=principal.user_id,
+                    username=principal.username,
+                    tenant_id=str(int(tutorial_tenant)),
+                    is_admin=principal.is_admin,
+                )
         return principal
 
     authorization = request.headers.get("authorization", "")

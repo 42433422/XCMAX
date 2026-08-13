@@ -191,6 +191,13 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     )
     _mount(
         registry,
+        "tutorial_v2",
+        lambda: __import__("app.fastapi_routes.tutorial_v2", fromlist=["router"]).router,
+        priority=12,
+        required_in_ci=True,
+    )
+    _mount(
+        registry,
         "knowledge_v1",
         lambda: __import__("app.fastapi_routes.knowledge_v1", fromlist=["router"]).router,
         priority=13,

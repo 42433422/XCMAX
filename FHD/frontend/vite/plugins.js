@@ -1,6 +1,7 @@
 /** Vue / Element Plus plugin bundle for Vite. */
 
 import vue from '@vitejs/plugin-vue'
+import VueI18n from '@intlify/unplugin-vue-i18n/vite'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
@@ -9,10 +10,22 @@ import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
  * @param {object} opts
  * @param {import('vite').PluginOption} opts.staticCopyPlugin
  * @param {string} [opts.xcmaxPublicApiPrefix]
+ * @param {string} opts.i18nInclude
  */
-export function createVitePlugins({ staticCopyPlugin, xcmaxPublicApiPrefix = '' }) {
+export function createVitePlugins({
+  staticCopyPlugin,
+  xcmaxPublicApiPrefix = '',
+  i18nInclude,
+}) {
   return [
     vue(),
+    VueI18n({
+      runtimeOnly: true,
+      compositionOnly: true,
+      jitCompilation: false,
+      dropMessageCompiler: true,
+      include: i18nInclude,
+    }),
     AutoImport({
       resolvers: [ElementPlusResolver()],
       dts: false,

@@ -206,7 +206,13 @@
       </div>
 
       <div v-else-if="activeTab === 'tutorial'" class="assistant-body assistant-body-tutorial">
-        <div class="tutorial-track-pick">
+        <div v-if="showAdvancedCourses" class="tutorial-v2-panel">
+          <button type="button" class="btn btn-secondary btn-sm tutorial-v2-back" @click="showAdvancedCourses = false">
+            返回教程选择
+          </button>
+          <TutorialCourseCatalog @close="isOpen = false" />
+        </div>
+        <div v-else class="tutorial-track-pick">
           <div class="tutorial-track-heading">选择教程</div>
           <p class="tutorial-track-lead">默认路线「宿主入门」：认识XC → 行业定型 → 准备菜单。</p>
           <ul class="tutorial-track-list">
@@ -220,6 +226,9 @@
                 <p class="tutorial-track-card-summary">{{ track.summary }}</p>
                 <p v-if="track.id === 'advanced'" class="tutorial-track-card-extra muted">
                   {{ advancedTrackHint }}
+                </p>
+                <p v-else-if="track.id !== DEFAULT_TUTORIAL_TRACK_ID" class="tutorial-track-card-extra muted">
+                  扩展说明 · 未接入 V2 服务端验证器，不计入正式课程完成
                 </p>
               </div>
               <button
@@ -257,9 +266,7 @@ import { useRouter } from 'vue-router';
 import api, { ApiError } from '@/api';
 import productsApi from '@/api/products';
 import { useTutorialStore } from '@/stores/tutorial';
-import { useOnboardingTutorialStore } from '@/stores/onboardingTutorial';
 import { useTutorialCatalog } from '@/composables/useTutorialCatalog';
-import { launchAdvancedDriverTour } from '@/tutorial/promptAdvancedTutorial';
 import { DEFAULT_TUTORIAL_TRACK_ID } from '@/constants/productFlow';
 import { useModsStore } from '@/stores/mods';
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees';
@@ -273,10 +280,10 @@ import { useWorkflowPanoramaNavVisible } from '@/composables/useWorkflowPanorama
 import { useEnterpriseScopedWorkflowRegistry } from '@/composables/useEnterpriseScopedWorkflowRegistry';
 import { syncEnterpriseWorkflowRegistry } from '@/utils/syncEnterpriseWorkflowRegistry';
 import ExcelPreview from '@/components/template/ExcelPreview.vue';
+import TutorialCourseCatalog from '@/components/tutorial/TutorialCourseCatalog.vue';
 
 const router = useRouter();
 const tutorialStore = useTutorialStore();
-const onboardingTutorialStore = useOnboardingTutorialStore();
 const { tutorialTracks, advancedTrackHint, buildContext: tutorialBuildContext } = useTutorialCatalog();
 const modsStore = useModsStore();
 const uiText = useIndustryUiText();
@@ -290,6 +297,7 @@ const { scopedRegistryEntries } = useEnterpriseScopedWorkflowRegistry();
 
 const isOpen = ref(false);
 const activeTab = ref('push');
+const showAdvancedCourses = ref(false);
 const floatToggleRef = ref(null);
 const assistantPanelRef = ref(null);
 
@@ -507,7 +515,11 @@ const startTutorialGuide = async (track = DEFAULT_TUTORIAL_TRACK_ID) => {
     await startHostOnboardingGuide();
     return;
   }
-  const useDriverTour = t === 'advanced';
+  if (t === 'advanced') {
+    showAdvancedCourses.value = true;
+    activeTab.value = 'tutorial';
+    return;
+  }
   const extractChatMessagesSnapshot = () => {
     const nodes = Array.from(document.querySelectorAll('#chatMessages .message'));
     return nodes.slice(-30).map((node) => {
@@ -575,36 +587,21 @@ const startTutorialGuide = async (track = DEFAULT_TUTORIAL_TRACK_ID) => {
   lastProductSearchQuery.value = '';
   lastProductSearchTotal.value = null;
   operationHistory.value = [];
-  if (useDriverTour) {
-    isOpen.value = false;
-    await launchAdvancedDriverTour({
-      router,
-      buildContext: tutorialBuildContext.value,
-      skipNavigation: true,
-      returnContext: {
-        routeName: previousRouteName || 'chat',
-        assistantOpen: previousOpen,
-        assistantTab: previousTab || 'push',
-        assistantState: snapshotState,
-      },
-    });
-  } else {
-    isOpen.value = true;
-    hasUnreadPush.value = false;
-    popupNotice.value = null;
-    activeTab.value = 'tutorial';
-    tutorialStore.startTutorial({
-      isProMode: !!window.__XCAGI_IS_PRO_MODE,
-      track: t,
-      buildContext: tutorialBuildContext.value,
-      returnContext: {
-        routeName: previousRouteName || 'chat',
-        assistantOpen: previousOpen,
-        assistantTab: previousTab || 'push',
-        assistantState: snapshotState,
-      },
-    });
-  }
+  isOpen.value = true;
+  hasUnreadPush.value = false;
+  popupNotice.value = null;
+  activeTab.value = 'tutorial';
+  tutorialStore.startTutorial({
+    isProMode: !!window.__XCAGI_IS_PRO_MODE,
+    track: t,
+    buildContext: tutorialBuildContext.value,
+    returnContext: {
+      routeName: previousRouteName || 'chat',
+      assistantOpen: previousOpen,
+      assistantTab: previousTab || 'push',
+      assistantState: snapshotState,
+    },
+  });
   // 若用户已在教程标签，startTutorial 前再触发一次预热（仅首次会真正请求）
   queueMicrotask(() => {
     window.dispatchEvent(new CustomEvent('xcagi:warmup-tutorial-tts'));
@@ -620,28 +617,17 @@ const startTutorialGuide = async (track = DEFAULT_TUTORIAL_TRACK_ID) => {
       chatMessages: extractChatMessagesSnapshot(),
     },
     tutorial: {
-      track: useDriverTour ? t : (tutorialStore.currentTrack ?? t),
+      track: tutorialStore.currentTrack ?? t,
       requestedTrack: t,
-      stepCount: useDriverTour
-        ? onboardingTutorialStore.schedules.length
-        : tutorialStore.steps.length,
-      steps: useDriverTour
-        ? onboardingTutorialStore.schedules.map((step, idx) => ({
-            index: idx + 1,
-            id: step.id,
-            title: step.title,
-            description: step.description,
-            actionType: step.actionType,
-            targetSelector: step.waitFor,
-          }))
-        : tutorialStore.steps.map((step, idx) => ({
-            index: idx + 1,
-            id: step.id,
-            title: step.title,
-            description: step.description,
-            actionType: step.actionType,
-            targetSelector: step.targetSelector,
-          })),
+      stepCount: tutorialStore.steps.length,
+      steps: tutorialStore.steps.map((step, idx) => ({
+        index: idx + 1,
+        id: step.id,
+        title: step.title,
+        description: step.description,
+        actionType: step.actionType,
+        targetSelector: step.targetSelector,
+      })),
     },
   };
   void cacheTutorialGuidePack(tutorialPack);
@@ -836,6 +822,7 @@ const onOpenAssistantFloat = (evt) => {
   } else if (detail?.feature === 'tutorial') {
     isOpen.value = true;
     activeTab.value = 'tutorial';
+    showAdvancedCourses.value = detail?.advanced === true;
   } else {
     activeTab.value = 'push';
   }
@@ -1507,6 +1494,15 @@ watch(() => linkedGridData.value, () => {
   overflow-y: auto;
   overflow-x: hidden;
   color: #111827;
+}
+
+.tutorial-v2-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.tutorial-v2-back {
+  justify-self: start;
 }
 @keyframes assistant-pulse {
   0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.35); }

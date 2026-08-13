@@ -3,7 +3,7 @@ import path from 'path'
 import { buildDevProxy } from './vite/devProxy.js'
 import { createBuildOptions } from './vite/build.js'
 import { createVitePlugins } from './vite/plugins.js'
-import { createStaticCopyPlugin, modViewsDir } from './vite/staticCopy.js'
+import { createStaticCopyPlugin } from './vite/staticCopy.js'
 import { resolveApiBase } from './vite/resolveApiBase.js'
 
 const API_BASE = resolveApiBase(process.env.VITE_API_BASE)
@@ -51,6 +51,7 @@ export default defineConfig(({ mode }) => {
     plugins: createVitePlugins({
       staticCopyPlugin: createStaticCopyPlugin(__dirname),
       xcmaxPublicApiPrefix,
+      i18nInclude: path.resolve(__dirname, './src/i18n/locales/**/*.json'),
     }),
     base: publicBase,
     resolve: {

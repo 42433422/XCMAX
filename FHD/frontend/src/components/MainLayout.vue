@@ -89,6 +89,7 @@
     <VirtualCursor />
     <OnboardingTutorial />
     <TutorialOverlay v-if="!onboardingTutorialStore.active" />
+    <TutorialTrainingCoach />
     <MobileBottomNav v-if="mobileBottomNavVisible" />
   </div>
 </template>
@@ -122,6 +123,7 @@ import TopAssistantFloat from './TopAssistantFloat.vue'
 import TutorialOverlay from './TutorialOverlay.vue'
 import VirtualCursor from './VirtualCursor.vue'
 import OnboardingTutorial from './OnboardingTutorial.vue'
+import TutorialTrainingCoach from './tutorial/TutorialTrainingCoach.vue'
 import MobileBottomNav from './MobileBottomNav.vue'
 import { useOnboardingTutorialStore } from '@/stores/onboardingTutorial'
 import { useTutorialStore } from '@/stores/tutorial'
