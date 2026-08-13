@@ -152,8 +152,8 @@ export const useTutorialV2Store = defineStore('tutorialV2', () => {
       currentRun.value = await tutorialV2Api.reset(runId)
       targetVisited.value = false
       verificationHint.value = previousCourseId && previousCourseId !== currentRun.value.course_id
-        ? '已创建新的教学代次。新空间没有旧业务数据，请先重新完成前置课程；旧数据将在 7 天后清理。'
-        : '已创建新的教学代次，旧数据将在 7 天后清理。'
+        ? '新的练习已经开始。这里没有上一次的业务数据，请先重新完成前面的课程；旧练习数据会在 7 天后清理。'
+        : '新的练习已经开始，旧练习数据会在 7 天后清理。'
       await loadCourses()
       return currentRun.value
     } catch (error) {

@@ -112,7 +112,7 @@
           <button class="btn-link" @click="viewAll('initiated')">查看全部</button>
         </div>
       </div>
-      <div class="request-list">
+      <div class="request-list" data-tutorial-id="approval-initiated-list">
         <div 
           v-for="item in initiatedRequests" 
           :key="item.id" 

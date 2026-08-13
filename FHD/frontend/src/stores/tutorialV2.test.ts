@@ -23,7 +23,9 @@ import {
 const step = {
   id: 'create-customer', title: '创建客户B', goal: '建客户', instruction: '亲自创建',
   success_criteria: '恰好一条', why: '主数据唯一', hint: '精确名称', route_name: 'customers',
-  target_selector: 'button', required: true, status: 'pending' as const, evidence: null,
+  target_selector: 'button', location_label: '组织管理', completion_cue: '看到客户B',
+  guide_actions: [{ instruction: '点击新建', target_selector: 'button', expected_input: '' }],
+  action_checklist: ['点击新建'], principle: '', required: true, status: 'pending' as const, evidence: null,
 }
 const activeRun = {
   id: 'run-1', workspace_id: 'workspace-1', course_id: 'master-data', version: 2,
@@ -117,7 +119,7 @@ describe('tutorial V2 store', () => {
     expect(store.currentRun?.id).toBe('run-1')
   })
 
-  it('creates a new generation when the user resets a course', async () => {
+  it('starts a fresh practice when the user resets a course', async () => {
     const store = useTutorialV2Store()
     store.courses = [course]
 
@@ -125,7 +127,8 @@ describe('tutorial V2 store', () => {
 
     expect(apiMock.reset).toHaveBeenCalledWith('run-1')
     expect(store.currentRun).toMatchObject({ id: 'run-2', generation: 2 })
-    expect(store.verificationHint).toContain('新的教学代次')
+    expect(store.verificationHint).toContain('新的练习已经开始')
+    expect(store.verificationHint).not.toContain('代次')
     expect(apiMock.courses).toHaveBeenCalled()
   })
 })

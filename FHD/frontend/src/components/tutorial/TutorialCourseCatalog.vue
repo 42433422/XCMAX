@@ -2,14 +2,19 @@
   <section class="tutorial-v2-catalog" aria-label="进阶教程课程目录">
     <div class="tutorial-v2-catalog__head">
       <div>
-        <strong>进阶教程 · 真实业务实训</strong>
-        <p>你亲自操作，服务端验证真实结果；所有写入只发生在个人教学空间。</p>
+        <strong>进阶教程 · 跟着做就能学会</strong>
+        <p>第一次使用也没关系。每一步只做三件事：打开页面、照着提示操作、让系统检查。</p>
       </div>
       <span class="tutorial-v2-space-badge">教学空间</span>
     </div>
 
+    <ol class="tutorial-v2-howto" aria-label="学习方法">
+      <li><strong>1</strong><span>按顺序选一门课</span></li>
+      <li><strong>2</strong><span>每次只完成一个动作</span></li>
+      <li><strong>3</strong><span>做完点“检查一下”</span></li>
+    </ol>
     <div class="tutorial-v2-upgrade" role="status">
-      教程已升级：旧版“完成”记录不代表新课程完成，建议重新学习。
+      这是新版动手教程。旧教程记录还在，但建议从第 1 门重新学一次。
     </div>
     <div v-if="store.errorHint" class="tutorial-v2-error" role="alert">{{ store.errorHint }}</div>
     <div v-if="store.loading && !store.courses.length" class="tutorial-v2-loading">正在加载课程…</div>
@@ -28,11 +33,11 @@
         </div>
         <div class="tutorial-v2-meta">
           <span>约 {{ course.estimated_minutes }} 分钟</span>
-          <span>进度 {{ course.progress }}%</span>
+          <span>{{ progressLabel(course) }}</span>
           <span v-if="course.prerequisite_ids.length">
-            前置：{{ prerequisiteLabel(course.prerequisite_ids) }}
+            开始前先完成：{{ prerequisiteLabel(course.prerequisite_ids) }}
           </span>
-          <span v-else>无前置课程</span>
+          <span v-else>现在就可以开始</span>
         </div>
         <div class="tutorial-v2-progress" role="progressbar" :aria-valuenow="course.progress" aria-valuemin="0" aria-valuemax="100">
           <span :style="{ width: `${course.progress}%` }"></span>
@@ -63,8 +68,8 @@
     </ul>
 
     <details class="tutorial-v2-team">
-      <summary>团队学习（企业管理员）</summary>
-      <button type="button" class="btn btn-secondary btn-sm" @click="loadReports">查看团队学习</button>
+      <summary>我是管理员：查看团队学习情况</summary>
+      <button type="button" class="btn btn-secondary btn-sm" @click="loadReports">查看团队进度</button>
       <p v-if="reportHint" class="tutorial-v2-report-hint">{{ reportHint }}</p>
       <ul v-if="store.reports.length" class="tutorial-v2-report-list">
         <li v-for="(report, index) in store.reports" :key="`${report.user_id}-${report.course_id}-${index}`">
@@ -115,10 +120,15 @@ function statusLabel(status: TutorialCourseDTO['status']) {
   }[status] || status
 }
 
+function progressLabel(course: TutorialCourseDTO) {
+  if (!course.run) return `共 ${course.steps.length} 步`
+  return `已完成 ${course.run.completed_steps} / ${course.run.total_steps} 步`
+}
+
 function actionLabel(course: TutorialCourseDTO) {
-  if (course.status === 'completed') return '复习'
-  if (course.run) return '继续'
-  return '开始'
+  if (course.status === 'completed') return '查看学习成果'
+  if (course.run) return '继续学习'
+  return '开始学习'
 }
 
 async function openCourse(course: TutorialCourseDTO) {
@@ -132,7 +142,7 @@ async function openCourse(course: TutorialCourseDTO) {
 
 async function resetCourse(course: TutorialCourseDTO) {
   if (!course.run) return
-  const confirmed = window.confirm('重置会创建新的教学代次；旧教学数据 7 天后清理，学习证据继续保留。确定重置吗？')
+  const confirmed = window.confirm('重新学习会清空本轮练习并从第一步开始。你公司的正式数据不会受影响；旧练习数据会在 7 天后自动清理。确定重新开始吗？')
   if (!confirmed) return
   await store.resetCourse(course.run.id)
   emit('close')
@@ -144,7 +154,7 @@ async function loadReports() {
     const reports = await store.loadReports()
     reportHint.value = reports.length ? `共 ${reports.length} 条课程运行记录。` : '团队暂无学习记录。'
   } catch {
-    reportHint.value = '只有企业 owner/admin 可以查看团队学习。'
+    reportHint.value = '只有企业负责人或管理员可以查看团队学习情况。'
   }
 }
 
@@ -159,6 +169,9 @@ onMounted(() => {
 .tutorial-v2-catalog__head p, .tutorial-v2-course-card p { margin: 4px 0 0; color: #56697a; line-height: 1.45; }
 .tutorial-v2-space-badge { flex: 0 0 auto; border-radius: 999px; padding: 4px 9px; color: #7a3d00; background: #fff1cf; border: 1px solid #f0c56a; font-weight: 700; }
 .tutorial-v2-upgrade { padding: 9px 10px; border-radius: 9px; color: #67551b; background: #fff9dc; border: 1px solid #eadb8a; }
+.tutorial-v2-howto { list-style: none; padding: 10px 12px; margin: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; border-radius: 10px; background: #f2f8fc; }
+.tutorial-v2-howto li { display: flex; gap: 8px; align-items: center; color: #3f5c70; font-size: 13px; }
+.tutorial-v2-howto strong { display: grid; place-items: center; flex: 0 0 24px; height: 24px; border-radius: 50%; background: #2678ad; color: #fff; }
 .tutorial-v2-error { color: #9f2525; }
 .tutorial-v2-course-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
 .tutorial-v2-course-card { border: 1px solid #d9e3ec; border-radius: 12px; padding: 12px; background: #fff; display: grid; gap: 9px; }
@@ -175,4 +188,7 @@ onMounted(() => {
 .tutorial-v2-team summary { cursor: pointer; font-weight: 600; margin-bottom: 9px; }
 .tutorial-v2-report-list { padding-left: 18px; max-height: 140px; overflow: auto; }
 .tutorial-v2-report-hint { color: #66798a; }
+@media (max-width: 720px) {
+  .tutorial-v2-howto { grid-template-columns: 1fr; }
+}
 </style>
