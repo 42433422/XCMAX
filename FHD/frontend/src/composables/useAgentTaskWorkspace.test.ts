@@ -13,6 +13,7 @@ const apiMock = vi.hoisted(() => ({
   retryRun: vi.fn(),
   getRun: vi.fn(),
   continueRun: vi.fn(),
+  markTaskRead: vi.fn(),
 }))
 
 vi.mock('@/api/agentRuns', () => ({ default: apiMock }))
@@ -100,6 +101,7 @@ describe('useAgentTaskWorkspace', () => {
     expect(state.activeTaskId.value).toBe(task.id)
     expect(state.expandedTaskIds.value).toContain(task.id)
     expect(state.onOpenConversation).toHaveBeenCalledWith('conversation-monthly')
+    expect(apiMock.markTaskRead).toHaveBeenCalledWith('conversation-monthly')
   })
 
   it('controls the exact active run and refreshes the durable snapshot', async () => {

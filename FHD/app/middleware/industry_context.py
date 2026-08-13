@@ -17,7 +17,7 @@ from typing import Any, Awaitable, Callable
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from app.infrastructure.request_context import (
     reset_current_request,
@@ -29,6 +29,22 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_INDUSTRY = "通用"
 ADMIN_INDUSTRY = "管理端"
+
+
+def _expire_tutorial_cookie(response: Response) -> Response:
+    """Remove an unusable teaching cookie without exposing or replaying it."""
+    from app.application.tutorial_v2.scope import TUTORIAL_COOKIE
+
+    response.delete_cookie(TUTORIAL_COOKIE, path="/", httponly=True, samesite="strict")
+    return response
+
+
+def _tutorial_error(code: str, hint: str, status_code: int, *, clear_cookie: bool) -> Response:
+    response = JSONResponse(
+        {"success": False, "error": {"code": code, "hint": hint}},
+        status_code=status_code,
+    )
+    return _expire_tutorial_cookie(response) if clear_cookie else response
 
 
 def get_current_user(request: Request) -> Any | None:
@@ -88,7 +104,67 @@ class IndustryContextMiddleware(BaseHTTPMiddleware):
                 industry_id = DEFAULT_INDUSTRY
                 tenant_id = None
             request.state.industry_id = industry_id
+            request.state.source_tenant_id = tenant_id
             request.state.tenant_id = tenant_id
+            request.state.tutorial_active = False
+            tutorial_cookie = str(request.cookies.get("xcagi_tutorial_run") or "").strip()
+            if tutorial_cookie:
+                from app.application.tutorial_v2.scope import is_tutorial_recovery_path
+
+                accepts_html = "text/html" in str(request.headers.get("accept") or "").lower()
+                browser_navigation = request.method.upper() == "GET" and accepts_html
+                recovery_path = is_tutorial_recovery_path(request.url.path) or browser_navigation
+                if user is None or tenant_id is None or getattr(user, "id", None) is None:
+                    if recovery_path:
+                        return _expire_tutorial_cookie(await call_next(request))
+                    return _tutorial_error(
+                        "tutorial_cookie_invalid",
+                        "教学会话已失效，已为你退出教学空间；请重新登录后进入教程。",
+                        401,
+                        clear_cookie=True,
+                    )
+                try:
+                    from app.application.tutorial_v2.scope import resolve_tutorial_scope
+                    from app.db import SessionLocal
+
+                    db = SessionLocal()
+                    try:
+                        decision = resolve_tutorial_scope(
+                            db,
+                            request,
+                            user_id=int(user.id),
+                            source_tenant_id=int(tenant_id),
+                        )
+                    finally:
+                        db.close()
+                except RECOVERABLE_ERRORS:
+                    logger.warning("tutorial scope resolution failed")
+                    return _tutorial_error(
+                        "tutorial_scope_unavailable",
+                        "教学空间暂时不可用，请保存退出后重试。",
+                        503,
+                        clear_cookie=False,
+                    )
+                if decision.error_code:
+                    stale = decision.error_code in {
+                        "tutorial_cookie_invalid",
+                        "tutorial_cookie_expired",
+                    }
+                    if stale and recovery_path:
+                        return _expire_tutorial_cookie(await call_next(request))
+                    return _tutorial_error(
+                        decision.error_code,
+                        str(decision.error_hint or "教学会话不可用，请重新进入教程。"),
+                        decision.error_status,
+                        clear_cookie=stale,
+                    )
+                request.state.tutorial_active = decision.active
+                request.state.tutorial_run_id = decision.run_id
+                request.state.tutorial_workspace_id = decision.workspace_id
+                request.state.tutorial_course_id = decision.course_id
+                request.state.tutorial_tenant_id = decision.tutorial_tenant_id
+                if decision.switched:
+                    request.state.tenant_id = decision.tutorial_tenant_id
             return await call_next(request)
         finally:
             reset_current_request(token)

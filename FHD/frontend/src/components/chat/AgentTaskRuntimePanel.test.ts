@@ -141,4 +141,23 @@ describe('AgentTaskRuntimePanel', () => {
     expect(wrapper.text()).toContain('shipment-41.docx')
     expect(wrapper.find('.agent-result-evidence pre').text()).toContain('"order_id": 41')
   })
+
+  it('shows a beginner-readable business result before optional technical JSON', () => {
+    const wrapper = mountTask({
+      status: 'success',
+      payload: {
+        eventCount: 4,
+        completedToolCount: 1,
+        finalOutput: {
+          chat_payload: { success: true, response: '当前客户库暂无数据。' },
+          node_outputs: { customers: { success: true, data: [] } },
+        },
+      },
+    })
+
+    expect(wrapper.find('.agent-result-summary').text()).toContain('业务结果')
+    expect(wrapper.find('.agent-result-summary').text()).toContain('当前客户库暂无数据。')
+    expect(wrapper.find('.agent-result-evidence summary').text()).toBe('技术明细（高级）')
+    expect(wrapper.find('.agent-result-evidence').attributes('open')).toBeUndefined()
+  })
 })

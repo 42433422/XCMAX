@@ -19,6 +19,7 @@ from fastapi import Body, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from app.application.approval_notifications import completed_workflow_notification
 from app.application.mobile_push_app_service import notify_mobile_user
 from app.application.workflow.approval_persistence import (
     AGENT_RUN_UNAVAILABLE_CODE,
@@ -899,15 +900,11 @@ def _approve_ai_workflow_request_without_node(
                 "message": bounded_outcome["message"],
             },
         )
-    elif req.applicant_id:
-        notify_mobile_user(
-            int(req.applicant_id),
-            "审批进度更新",
-            f"《{req.title or req.request_no}》AI 工作流已执行完成",
-            {"route": f"/app/approval/{req.id}", "request_id": str(req.id)},
-        )
+    notification = completed_workflow_notification(req) if req.applicant_id else None
     db.commit()
     db.refresh(req)
+    if _execution_success and notification is not None:
+        notify_mobile_user(*notification)
     data = _request_to_dict(req, include_records=True)
     data["workflow_execution"] = bounded_outcome
     if not _execution_success:

@@ -20,6 +20,9 @@ const apiMock = vi.hoisted(() => ({
 }))
 vi.mock('@/api/agentRuns', () => ({ default: apiMock }))
 vi.mock('@/api/core', () => ({ buildFullApiUrl: (path: string) => path }))
+vi.mock('@/stores/tutorialV2', () => ({
+  useTutorialV2Store: () => ({ currentRun: null }),
+}))
 
 const approvalWorkspace = {
   task_id: 'task-approval', user_id: 'owner', title: '客户B销售开票', source: 'agent', task_type: 'agent',
@@ -75,6 +78,8 @@ describe('GlobalTaskCenter', () => {
     await flushPromises()
 
     await wrapper.get('.task-center-trigger').trigger('click')
+    await flushPromises()
+    expect(apiMock.listTasks).toHaveBeenCalled()
     expect(wrapper.text()).toContain('工作区')
     expect(wrapper.text()).toContain('2 个工作区')
     expect(wrapper.text()).toContain('客户B销售开票')

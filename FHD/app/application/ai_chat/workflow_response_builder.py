@@ -6,14 +6,44 @@ import json
 import logging
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
+from app.application import agent_task_context
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
 
 OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 
 
+def normalize_product_float_query(raw: str) -> str:
+    """Keep specific product terms while preserving an empty full-list query."""
+    text = str(raw or "").strip()
+    candidate = text.rstrip("。！？…").strip()
+    for prefix in ("查询", "查一下", "查下", "查看", "看看", "看下", "查"):
+        if candidate.startswith(prefix):
+            candidate = candidate[len(prefix) :].strip()
+            break
+    for scope in ("当前", "现有", "全部", "所有"):
+        if candidate.startswith(scope):
+            candidate = candidate[len(scope) :].strip()
+            break
+    if candidate in {"产品", "产品列表", "产品库"}:
+        return ""
+    return text
+
+
 class AIChatWorkflowResponseMixin:
+    @staticmethod
+    def _attach_task_tenant(runtime_context: dict[str, Any]) -> None:
+        agent_task_context.attach_scoped_tenant(runtime_context)
+
+    @staticmethod
+    def _task_owner_id(user_id: str, runtime_context: dict[str, Any]) -> str:
+        return agent_task_context.authenticated_task_owner(user_id, runtime_context)
+
+    @staticmethod
+    def _normalize_product_query(raw: str) -> str:
+        return normalize_product_float_query(raw)
+
     def _format_agent_run_response(
         self,
         plan,
@@ -127,10 +157,30 @@ class AIChatWorkflowResponseMixin:
             step.status == "completed" and step.tool_id == "products" and step.action == "query"
             for step in getattr(agent_run, "steps", []) or []
         ):
+            query = ""
+            for step in getattr(agent_run, "steps", []) or []:
+                if (
+                    step.status != "completed"
+                    or step.tool_id != "products"
+                    or step.action != "query"
+                ):
+                    continue
+                params = node_params_by_id.get(str(step.node_id), {})
+                query = normalize_product_float_query(
+                    str(
+                        params.get("keyword")
+                        or params.get("model_number")
+                        or params.get("product_name")
+                        or params.get("name")
+                        or ""
+                    )
+                )
+                if query:
+                    break
             payload["autoAction"] = {
                 "type": "show_products_float",
                 "feature": "products",
-                "query": str(user_message or "").strip(),
+                "query": query or normalize_product_float_query(user_message),
             }
         return payload
 

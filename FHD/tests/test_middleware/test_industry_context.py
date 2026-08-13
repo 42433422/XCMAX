@@ -19,12 +19,12 @@ from app.middleware.industry_context import (
 )
 
 
-def _make_request(headers: dict[str, str] | None = None) -> Request:
+def _make_request(headers: dict[str, str] | None = None, *, path: str = "/") -> Request:
     raw_headers = [(k.lower().encode(), v.encode()) for k, v in (headers or {}).items()]
     scope = {
         "type": "http",
         "method": "GET",
-        "path": "/",
+        "path": path,
         "headers": raw_headers,
         "query_string": b"",
         "state": {},
@@ -106,3 +106,54 @@ async def test_user_with_empty_industry_id_falls_back_to_general():
 
     assert resp.status_code == 200
     assert req.state.industry_id == DEFAULT_INDUSTRY
+
+
+async def test_stale_tutorial_cookie_never_blocks_login_and_is_expired():
+    mw = _middleware()
+    req = _make_request(
+        {"cookie": "xcagi_tutorial_run=stale-run"},
+        path="/login",
+    )
+
+    with patch("app.middleware.industry_context.get_current_user", return_value=None):
+        resp = await mw.dispatch(req, _call_next)
+
+    assert resp.status_code == 200
+    cookie = resp.headers.get("set-cookie", "")
+    assert "xcagi_tutorial_run=" in cookie
+    assert "Max-Age=0" in cookie
+    assert "HttpOnly" in cookie
+
+
+async def test_stale_tutorial_cookie_never_blocks_browser_navigation_and_is_expired():
+    mw = _middleware()
+    req = _make_request(
+        {
+            "accept": "text/html,application/xhtml+xml",
+            "cookie": "xcagi_tutorial_run=stale-run",
+        },
+        path="/products",
+    )
+
+    with patch("app.middleware.industry_context.get_current_user", return_value=None):
+        resp = await mw.dispatch(req, _call_next)
+
+    assert resp.status_code == 200
+    cookie = resp.headers.get("set-cookie", "")
+    assert "xcagi_tutorial_run=" in cookie
+    assert "Max-Age=0" in cookie
+
+
+async def test_stale_tutorial_cookie_fails_closed_on_business_route_and_self_heals():
+    mw = _middleware()
+    req = _make_request(
+        {"cookie": "xcagi_tutorial_run=stale-run"},
+        path="/customers",
+    )
+
+    with patch("app.middleware.industry_context.get_current_user", return_value=None):
+        resp = await mw.dispatch(req, _call_next)
+
+    assert resp.status_code == 401
+    assert b"tutorial_cookie_invalid" in resp.body
+    assert "Max-Age=0" in resp.headers.get("set-cookie", "")

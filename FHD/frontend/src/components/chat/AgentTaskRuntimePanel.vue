@@ -30,8 +30,12 @@
     <div class="agent-task-evidence">
       结果证据：{{ payload.eventCount || 0 }} 条事件 · {{ payload.completedToolCount || 0 }} 次已完成工具调用 · {{ payload.artifactCount || 0 }} 个产物
     </div>
+    <div v-if="resultSummary" class="agent-result-summary">
+      <strong>业务结果</strong>
+      <p>{{ resultSummary }}</p>
+    </div>
     <details v-if="hasResultEvidence" class="agent-result-evidence">
-      <summary>查看结果证据</summary>
+      <summary>技术明细（高级）</summary>
       <pre v-if="finalOutputText">{{ finalOutputText }}</pre>
       <ul v-if="artifacts.length">
         <li v-for="artifact in artifacts" :key="artifact.artifact_id">
@@ -85,6 +89,17 @@ const payload = computed(() => (props.task.payload ?? {}) as AgentTaskPayload)
 const steps = computed(() => Array.isArray(payload.value.steps) ? payload.value.steps : [])
 const toolCalls = computed(() => Array.isArray(payload.value.toolCalls) ? payload.value.toolCalls : [])
 const artifacts = computed(() => Array.isArray(payload.value.artifacts) ? payload.value.artifacts : [])
+const resultSummary = computed(() => {
+  const output = payload.value.finalOutput
+  if (!output || typeof output !== 'object') return ''
+  const chatPayload = output.chat_payload
+  const chatRecord = chatPayload && typeof chatPayload === 'object'
+    ? chatPayload as Record<string, unknown>
+    : null
+  const candidates = [chatRecord?.response, chatRecord?.message, output.response, output.message]
+  const summary = candidates.find((value) => typeof value === 'string' && value.trim())
+  return typeof summary === 'string' ? summary.trim().slice(0, 800) : ''
+})
 const finalOutputText = computed(() => {
   const output = payload.value.finalOutput
   if (!output || !Object.keys(output).length) return ''
@@ -133,6 +148,8 @@ function stepStatus(status: string | undefined): string {
 .agent-tool-sessions summary { cursor: pointer; font-size: 11px; font-weight: 600; color: #334155; }
 .agent-tool-session { padding-top: 5px; }
 .agent-tool-session small, .agent-task-evidence { color: #64748b; font-size: 11px; }
+.agent-result-summary { padding: 7px 8px; border-radius: 6px; background: #ecfdf5; color: #14532d; font-size: 11px; }
+.agent-result-summary p { margin: 3px 0 0; line-height: 1.45; }
 .agent-result-evidence summary { cursor: pointer; font-size: 11px; font-weight: 600; color: #334155; }
 .agent-result-evidence pre { max-height: 220px; margin: 6px 0 0; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 10px; color: #334155; }
 .agent-result-evidence ul { margin: 6px 0 0; padding-left: 18px; font-size: 10px; color: #334155; }

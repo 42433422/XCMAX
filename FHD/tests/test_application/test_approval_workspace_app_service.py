@@ -1230,6 +1230,8 @@ class TestApproveRequest:
     def test_approve_ai_workflow_without_current_node_resumes_execution(self):
         request = Mock()
         mock_db = MagicMock()
+        persistence_events = []
+        mock_db.commit.side_effect = lambda: persistence_events.append("commit")
         mock_query = MagicMock()
         mock_db.query.return_value = mock_query
         mock_query.filter.return_value = mock_query
@@ -1261,7 +1263,10 @@ class TestApproveRequest:
             patch(
                 "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval"
             ) as mock_resume,
-            patch("app.application.approval_workspace_app_service.notify_mobile_user"),
+            patch(
+                "app.application.approval_workspace_app_service.notify_mobile_user",
+                side_effect=lambda *args, **kwargs: persistence_events.append("notify"),
+            ),
         ):
             mock_resolve.return_value = 1
             mock_rtd.return_value = {"id": 1, "status": "approved"}
@@ -1284,6 +1289,7 @@ class TestApproveRequest:
         assert persisted_outcome["nodes_total"] == 1
         mock_resume.assert_called_once_with(request_no="req-ai-1", opinion="同意", approved_by="1")
         mock_db.add.assert_called_once()
+        assert persistence_events == ["commit", "notify"]
 
     def test_approve_ai_workflow_secret_recovery_hint_absent_from_response_and_persisted(
         self,

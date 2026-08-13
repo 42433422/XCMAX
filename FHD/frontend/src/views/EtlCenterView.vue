@@ -20,8 +20,8 @@ import {
 import { useEtlTemplateSelection } from '@/composables/useEtlTemplateSelection'
 import { tabForRunStatus, type EtlRunTab } from '@/utils/etlRunView'
 import { ETL_FILE_ACCEPT, formatEtlBytes } from '@/utils/etlFileSelection'
+import { useTutorialImportAutoWrite } from '@/composables/useTutorialImportAutoWrite'
 type TabId = EtlRunTab
-
 const route = useRoute()
 const router = useRouter()
 const tabs: Array<{ id: TabId; step: string; label: string }> = [
@@ -45,8 +45,8 @@ const rowTotal = ref(0)
 const rowActionFilter = ref('')
 const busy = ref(false)
 const pageError = ref('')
-/** 上传解析就绪后直接写入业务库（真实导入，不是停在预演）。 */
-const autoWriteEnabled = ref(true)
+/** 正常工作流保持自动写入；教学课程强制停在预览，等待学习者亲自确认。 */
+const autoWriteEnabled = useTutorialImportAutoWrite()
 const pendingAutoWriteIds = ref(new Set<string>())
 const validRowsOnly = ref(false)
 const editableMappings = ref<EtlFieldMapping[]>([])

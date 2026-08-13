@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import type { AgentTaskSummary } from '@/api/agentRuns'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
+import { useTutorialV2Store } from '@/stores/tutorialV2'
 import {
   taskNeedsApproval,
   taskProgressPercent,
@@ -12,6 +13,7 @@ import {
 } from '@/utils/taskWorkspacePresentation'
 
 const store = useAgentTaskCenterStore()
+const tutorialStore = useTutorialV2Store()
 const router = useRouter()
 const {
   tasks,
@@ -40,6 +42,11 @@ const filteredTasks = computed(() => tasks.value.filter((task) => {
   if (filter.value === 'approval') return taskNeedsApproval(task)
   return true
 }))
+
+const tutorialScopeKey = computed(() => {
+  const run = tutorialStore.currentRun
+  return `${run?.id || ''}:${run?.status || ''}:${run?.generation || ''}`
+})
 
 const overview = computed(() => runtime.value.progress || {
   task_count: tasks.value.length,
@@ -72,8 +79,20 @@ async function openWorkspace(task: AgentTaskSummary): Promise<void> {
   store.closeDrawer()
 }
 
+function toggleDrawer(): void {
+  if (drawerOpen.value) {
+    store.closeDrawer()
+    return
+  }
+  drawerOpen.value = true
+  void store.refresh()
+}
+
 onMounted(() => store.start())
 onBeforeUnmount(() => store.stop())
+watch(tutorialScopeKey, (next, previous) => {
+  if (next !== previous) store.restartForScope()
+})
 </script>
 
 <template>
@@ -82,7 +101,7 @@ onBeforeUnmount(() => store.stop())
     type="button"
     aria-label="打开独立工作区列表"
     :aria-expanded="drawerOpen"
-    @click="drawerOpen ? store.closeDrawer() : (drawerOpen = true)"
+    @click="toggleDrawer"
   >
     <span class="task-center-trigger__icon">◈</span>
     <span>工作区</span>
@@ -146,7 +165,7 @@ onBeforeUnmount(() => store.stop())
             </button>
           </nav>
 
-          <div class="task-center-list">
+          <div class="task-center-list" data-tutorial-id="task-workspace-list">
             <button
               v-for="task in filteredTasks"
               :key="task.task_id"

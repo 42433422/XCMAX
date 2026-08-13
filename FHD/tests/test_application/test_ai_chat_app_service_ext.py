@@ -129,7 +129,7 @@ class TestMergeToolRuntimeContext:
 
     def test_none_context(self):
         result = AIChatApplicationService._merge_tool_runtime_context("u1", "hi", None)
-        assert result == {"user_id": "u1", "message": "hi"}
+        assert result == {"user_id": "u1", "message": "hi", "tenant_id": "1"}
 
 
 # ========================= _build_fallback_response ======================

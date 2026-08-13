@@ -29,7 +29,7 @@ describe('tutorial/catalog', () => {
       expect(result[0].kind).toBe('curated')
       expect(result[0].recommended).toBe(true)
       expect(result[1].id).toBe('advanced')
-      expect(result[1].kind).toBe('nav')
+      expect(result[1].kind).toBe('curated')
     })
 
     it('includes mod tracks after host tracks', () => {
@@ -103,20 +103,26 @@ describe('tutorial/catalog', () => {
   })
 
   describe('formatAdvancedTrackHint', () => {
-    it('returns default hint when visibleNames is empty', () => {
-      expect(formatAdvancedTrackHint([])).toBe('按侧栏生成步骤。')
+    it('describes the V2 business training when visibleNames is empty', () => {
+      expect(formatAdvancedTrackHint([])).toBe('5 门真实业务实训 · 亲自操作 · 服务端验证')
     })
 
-    it('returns count hint when visibleNames has items', () => {
-      expect(formatAdvancedTrackHint(['a', 'b', 'c'])).toBe('含 3 个菜单项。')
+    it('does not describe the retired menu-tour behavior', () => {
+      expect(formatAdvancedTrackHint(['a', 'b', 'c'])).toBe(
+        '5 门真实业务实训 · 亲自操作 · 服务端验证',
+      )
     })
 
-    it('returns count hint for single item', () => {
-      expect(formatAdvancedTrackHint(['only'])).toBe('含 1 个菜单项。')
+    it('keeps the V2 hint for a single visible item', () => {
+      expect(formatAdvancedTrackHint(['only'])).toBe(
+        '5 门真实业务实训 · 亲自操作 · 服务端验证',
+      )
     })
 
-    it('accepts custom max parameter without changing output format', () => {
-      expect(formatAdvancedTrackHint(['a', 'b'], 1)).toBe('含 2 个菜单项。')
+    it('accepts the legacy max parameter without changing the V2 hint', () => {
+      expect(formatAdvancedTrackHint(['a', 'b'], 1)).toBe(
+        '5 门真实业务实训 · 亲自操作 · 服务端验证',
+      )
     })
   })
 })

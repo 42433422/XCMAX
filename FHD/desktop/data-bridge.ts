@@ -91,11 +91,15 @@ export function resolveOfflineQuery(
       if (!kw) return null
       const like = `%${kw}%`
       return {
-        sql: `SELECT 'message' AS kind, m.id AS row_id, m.body AS text, m.created_at AS ts
-              FROM im_messages m WHERE m.body LIKE ? LIMIT ?
+        sql: `SELECT * FROM (
+                SELECT 'message' AS kind, m.id AS row_id, m.body AS text, m.created_at AS ts
+                FROM im_messages m WHERE m.body LIKE ? LIMIT ?
+              )
               UNION ALL
-              SELECT 'employee' AS kind, p.id AS row_id, p.display_name AS text, p.created_at AS ts
-              FROM ai_employee_profiles p WHERE p.display_name LIKE ? LIMIT ?`,
+              SELECT * FROM (
+                SELECT 'employee' AS kind, p.id AS row_id, p.display_name AS text, p.created_at AS ts
+                FROM ai_employee_profiles p WHERE p.display_name LIKE ? LIMIT ?
+              )`,
         bind: [like, limit, like, limit],
       }
     }

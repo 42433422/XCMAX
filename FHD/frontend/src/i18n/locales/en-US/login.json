@@ -55,6 +55,6 @@
     "errLoginFailedRetry": "Sign-in failed, try again later",
     "errWithId": "Sign-in failed (error ID {id}). Contact your administrator.",
     "errIdSuffix": "(error ID {id})",
-    "devHint": ". Local dev: enterprise demo xcagi-enterprise-demo / Demo@2026; platform admin: Admin sign-in or /admin/ (admin / admin123)."
+    "devHint": ". Local dev: enterprise demo xcagi-enterprise-demo / Demo{'@'}2026; platform admin: Admin sign-in or /admin/ (admin / admin123)."
   }
 }

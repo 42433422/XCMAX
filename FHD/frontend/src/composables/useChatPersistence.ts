@@ -161,6 +161,11 @@ export function extractLikelyProductQueryKeyword(raw: string): string | null {
   if (/(出货单|发货单|订单列表|客户列表|工作流|批量|导入|上传|数据库|打印标签|打印\s|有哪些客户|今天.*单)/.test(t)) {
     return null
   }
+  // “当前/全部产品列表”是全量查询，不是名为“当前产品列表”的产品关键词。
+  // 交给服务端产品查询路由以空 keyword 拉取全量，避免快路径误报“未找到”。
+  if (/^(?:查询|查一下|查下|查看|看看|看下|查)?\s*(?:当前|现有|全部|所有)?\s*产品(?:列表|库)?\s*[。！？…]*$/u.test(t)) {
+    return null
+  }
   const patterns: RegExp[] = [
     /^查询\s*(.+)$/u,
     /^查一下\s*(.+?)\s*的?(?:价格|价钱|多少钱)?\s*[。！？…]*$/iu,
