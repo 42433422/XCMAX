@@ -60,7 +60,7 @@
               <path stroke="#fff" stroke-width="2.2" stroke-linecap="round" fill="none" d="M7 7l10 10M17 7L7 17"/>
             </svg>
           </button>
-          <button class="btn btn-primary" @click="openAddModal">+ 新建客户</button>
+          <button class="btn btn-primary" data-tutorial-id="customer-create" @click="openAddModal">+ 新建客户</button>
           <button v-if="selectedIds.length > 0" class="btn btn-danger" @click="handleBatchDelete">批量删除 ({{ selectedIds.length }})</button>
         </div>
       </div>
@@ -142,7 +142,7 @@
         <div class="modal-body">
           <div class="form-group">
             <label>客户名称 *</label>
-            <input type="text" v-model="addForm.customer_name" placeholder="请输入客户名称" />
+            <input data-tutorial-id="customer-name" type="text" v-model="addForm.customer_name" placeholder="请输入客户名称" />
           </div>
           <div class="form-group">
             <label>联系人</label>
@@ -159,7 +159,7 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="closeAddModal">取消</button>
-          <button class="btn btn-primary" @click="saveAdd" :disabled="loading">创建</button>
+          <button class="btn btn-primary" data-tutorial-id="customer-save" @click="saveAdd" :disabled="loading">创建</button>
         </div>
       </div>
     </div>

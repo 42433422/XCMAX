@@ -14,6 +14,33 @@
       </button>
     </header>
 
+    <section v-if="tutorialSalesEvidence" class="tutorial-finance-proof" aria-label="本次销售财务证据">
+      <header>
+        <div>
+          <span>教学空间 · 服务端核验</span>
+          <h2>本次销售财务证据</h2>
+        </div>
+        <strong>客户B · A 产品 · ¥{{ tutorialCount('order_total') }}</strong>
+      </header>
+      <div class="tutorial-finance-proof__grid">
+        <article data-tutorial-id="tutorial-finance-invoice">
+          <small>发票</small>
+          <strong>{{ tutorialStatus('invoice_status') }}</strong>
+          <span>订单金额 ¥{{ tutorialCount('order_total') }}</span>
+        </article>
+        <article data-tutorial-id="tutorial-finance-receipt">
+          <small>收款核销</small>
+          <strong>{{ tutorialStatus('payment_state') }}</strong>
+          <span>{{ tutorialCount('allocation_count') }} 条 · ¥{{ tutorialCount('allocated_amount') }}</span>
+        </article>
+        <article data-tutorial-id="tutorial-finance-vouchers">
+          <small>记账凭证</small>
+          <strong>{{ tutorialCount('balanced_journal_entry_count') }} / {{ tutorialCount('journal_entry_count') }} 借贷平衡</strong>
+          <span>开票 {{ tutorialCount('invoice_voucher_count') }} · 收款 {{ tutorialCount('payment_voucher_count') }}</span>
+        </article>
+      </div>
+    </section>
+
     <!-- 加载动画 -->
     <div v-if="loading" class="k-loading">
       <div class="k-spinner"></div>
@@ -124,11 +151,26 @@
 import { ref, computed, onMounted, nextTick } from 'vue'
 import kittenApi from '@/api/kitten'
 import { appAlert } from '@/utils/appDialog'
+import { useTutorialV2Store } from '@/stores/tutorialV2'
 
 const loading = ref(false)
 const hasData = ref(false)
 const showChart = ref(true)
 const updateTime = ref('')
+const tutorialStore = useTutorialV2Store()
+const tutorialSalesEvidence = computed(() => tutorialStore.courses
+  .find((course) => course.id === 'sales-to-cash')
+  ?.run?.steps.find((step) => step.id === 'approve-sales-request')
+  ?.evidence || null)
+
+function tutorialCount(key: string): string | number {
+  return tutorialSalesEvidence.value?.counts?.[key] ?? 0
+}
+
+function tutorialStatus(key: string): string {
+  const value = String(tutorialSalesEvidence.value?.counts?.[key] || '')
+  return ({ invoiced: '已开票', paid: '已收款' } as Record<string, string>)[value] || '待核验'
+}
 
 const m = ref({
   total_revenue: 0,
@@ -235,7 +277,9 @@ async function doExport() {
   } catch (e) { await appAlert('导出失败：' + e) }
 }
 
-onMounted(() => {})
+onMounted(() => {
+  void tutorialStore.loadCourses().catch(() => undefined)
+})
 </script>
 
 <style scoped>
@@ -245,6 +289,14 @@ onMounted(() => {})
   font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
   color: #333;
 }
+.tutorial-finance-proof { max-width: 1100px; margin: 20px auto 0; padding: 20px; border: 1px solid #e4b64d; border-radius: 14px; background: #fff9e7; }
+.tutorial-finance-proof > header { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 14px; }
+.tutorial-finance-proof > header span { color: #96610b; font-size: 12px; font-weight: 700; }
+.tutorial-finance-proof h2 { margin: 3px 0 0; font-size: 19px; }
+.tutorial-finance-proof__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.tutorial-finance-proof article { display: grid; gap: 5px; padding: 14px; border: 1px solid #edd79f; border-radius: 10px; background: #fff; }
+.tutorial-finance-proof article small, .tutorial-finance-proof article span { color: #78684c; }
+@media (max-width: 760px) { .tutorial-finance-proof__grid { grid-template-columns: 1fr; } }
 
 /* ====== 顶部 ====== */
 .k-header {

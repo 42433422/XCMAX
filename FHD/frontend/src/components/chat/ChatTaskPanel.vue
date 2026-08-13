@@ -110,7 +110,7 @@
             </div>
             <button class="btn btn-secondary btn-sm" @click="$emit('clear-task-history')">{{ $t('chat.clearTaskHistory') }}</button>
           </div>
-          <div class="task-list">
+          <div class="task-list" data-tutorial-id="task-workspace-list">
             <div
               v-for="task in filteredTaskList"
               :key="task.id"

@@ -14,7 +14,7 @@ const apiMock = vi.hoisted(() => ({
 
 vi.mock('@/api/tutorialV2', () => ({ tutorialV2Api: apiMock }))
 
-import { useTutorialV2Store } from './tutorialV2'
+import { tutorialRunAllowsRoute, useTutorialV2Store } from './tutorialV2'
 
 const step = {
   id: 'create-customer', title: '创建客户B', goal: '建客户', instruction: '亲自创建',
@@ -34,6 +34,14 @@ const course = {
 }
 
 describe('tutorial V2 store', () => {
+  it('only allows routes declared by an active or completed tutorial run', () => {
+    expect(tutorialRunAllowsRoute(activeRun, 'customers')).toBe(true)
+    expect(tutorialRunAllowsRoute(activeRun, 'products')).toBe(false)
+    expect(tutorialRunAllowsRoute({ ...activeRun, status: 'paused' }, 'customers')).toBe(false)
+    expect(tutorialRunAllowsRoute({ ...activeRun, status: 'completed' }, 'customers')).toBe(true)
+    expect(tutorialRunAllowsRoute(null, 'customers')).toBe(false)
+  })
+
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
@@ -72,6 +80,7 @@ describe('tutorial V2 store', () => {
     await store.verifyCurrent('customers')
     expect(apiMock.verify).toHaveBeenCalledWith('run-1', 'create-customer', {
       visited_route: 'customers',
+      target_visible: false,
     })
     expect(store.currentRun?.progress).toBe(0)
     expect(store.verificationHint).toContain('客户B')

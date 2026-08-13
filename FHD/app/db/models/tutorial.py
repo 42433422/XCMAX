@@ -75,7 +75,7 @@ class TutorialRun(Base):
     source_tenant_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     course_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="active", index=True)
     active_key: Mapped[Optional[str]] = mapped_column(String(96), unique=True, index=True)
     current_step_id: Mapped[str] = mapped_column(String(96), nullable=False)

@@ -20,11 +20,14 @@ from app.db.models.agent import AgentRunRecord, AgentTaskExecutionRecord, AgentT
 from app.db.models.approval import ApprovalRequest
 from app.db.models.customer import Customer
 from app.db.models.etl import EtlRun, EtlRunRow, EtlUpload
+from app.db.models.inventory import InventoryLedger, Warehouse
 from app.db.models.product import Product
+from app.db.models.purchase_unit import PurchaseUnit
 from app.db.models.receivable_allocation import ReceivableAllocation
 from app.db.models.sales import SalesOrder, SalesOrderItem
 from app.db.models.tenant import Tenant
 from app.db.models.tutorial import TutorialRun, TutorialStepEvidence, TutorialWorkspace
+from app.db.models.user import User
 from app.infrastructure.tenant_scope import tenant_scope
 from app.utils.path_utils import get_app_data_dir
 
@@ -38,7 +41,9 @@ SAFE_HINTS = {
     "product_not_ready": "请确认“A 产品”的价格为 100、库存为 100，且只有一条。",
     "task_not_completed": "请先完成一项只读查询任务。",
     "task_evidence_not_ready": "请打开已完成任务的结果证据后重试。",
+    "second_task_not_ready": "请用自己的说法完成产品列表查询，并查看第二项任务的结果证据。",
     "approval_not_ready": "请按精确句子提交并确认任务，且暂不要批准。",
+    "approval_detail_not_viewed": "请打开真实待审批详情，核对客户、产品、数量和金额后再验证。",
     "sales_result_not_ready": "请批准申请后检查订单、库存、开票、收款和凭证。",
     "etl_preview_not_ready": "请先完成上传、字段映射和预览核对。",
     "etl_result_not_ready": "请确认写入并查看逐行导入结果。",
@@ -157,19 +162,82 @@ class TutorialV2Service:
         db.flush()
         return workspace
 
+    def _ensure_teaching_warehouse(self, db: Session, workspace: TutorialWorkspace) -> Warehouse:
+        """Create the shadow tenant's private default warehouse exactly once."""
+        tenant_id = int(workspace.tutorial_tenant_id)
+        with tenant_scope(tenant_id):
+            existing = (
+                db.query(Warehouse)
+                .filter(Warehouse.status == "active")
+                .order_by(Warehouse.id.asc())
+                .first()
+            )
+            if existing is not None:
+                return cast(Warehouse, existing)
+            warehouse = Warehouse(
+                code=f"TUT-{str(workspace.id)[:12]}-WH",
+                name="教学默认仓库",
+                status="active",
+                tenant_id=tenant_id,
+                created_at=_now(),
+            )
+            db.add(warehouse)
+            db.flush()
+            return warehouse
+
     def _workspace_or_create(self, db: Session, user: Any) -> TutorialWorkspace:
         return self._active_workspace(db, user) or self._new_workspace(db, user)
 
+    def _ensure_teaching_inventory(self, db: Session, workspace: TutorialWorkspace) -> None:
+        """Project the verified tutorial product stock into its private warehouse."""
+        tenant_id = int(workspace.tutorial_tenant_id)
+        with tenant_scope(tenant_id):
+            products = db.query(Product).filter(Product.name == "A 产品").limit(2).all()
+            warehouses = db.query(Warehouse).filter(Warehouse.status == "active").limit(2).all()
+            if len(products) != 1 or len(warehouses) != 1:
+                return
+            existing = (
+                db.query(InventoryLedger)
+                .filter(
+                    InventoryLedger.product_id == products[0].id,
+                    InventoryLedger.warehouse_id == warehouses[0].id,
+                )
+                .limit(2)
+                .all()
+            )
+            if existing:
+                return
+            quantity = Decimal(str(products[0].quantity or 0))
+            db.add(
+                InventoryLedger(
+                    product_id=int(products[0].id),
+                    warehouse_id=int(warehouses[0].id),
+                    quantity=quantity,
+                    available_quantity=quantity,
+                    reserved_quantity=Decimal("0"),
+                    unit=str(products[0].unit or "个"),
+                    tenant_id=tenant_id,
+                    created_at=_now(),
+                )
+            )
+            db.flush()
+
     def _completed_course_ids(self, db: Session, workspace: TutorialWorkspace) -> set[str]:
         return {
-            str(row[0])
-            for row in db.query(TutorialRun.course_id)
+            str(row.course_id)
+            for row in db.query(TutorialRun)
             .filter(
                 TutorialRun.workspace_id == workspace.id,
                 TutorialRun.status == "completed",
             )
             .all()
+            if row.course_id in COURSE_BY_ID
+            and int(row.version) == int(COURSE_BY_ID[row.course_id]["version"])
         }
+
+    def _is_current_version(self, run: TutorialRun) -> bool:
+        course = COURSE_BY_ID.get(str(run.course_id))
+        return course is not None and int(run.version) == int(course["version"])
 
     def _evidence_map(self, run: TutorialRun) -> dict[str, TutorialStepEvidence]:
         return {item.step_id: item for item in run.evidence}
@@ -227,7 +295,8 @@ class TutorialV2Service:
                 .all()
             )
             for run in rows:
-                latest.setdefault(run.course_id, run)
+                if self._is_current_version(run):
+                    latest.setdefault(run.course_id, run)
         result: list[dict[str, Any]] = []
         for course in COURSES:
             dto = public_course(course)
@@ -276,17 +345,21 @@ class TutorialV2Service:
         if course is None:
             raise TutorialServiceError("course_not_found", "未找到该课程。", 404)
         workspace = self._workspace_or_create(db, user)
+        self._ensure_teaching_warehouse(db, workspace)
         missing = set(course["prerequisite_ids"]) - self._completed_course_ids(db, workspace)
         if missing:
             raise TutorialServiceError(
                 "prerequisite_incomplete", SAFE_HINTS["prerequisite_incomplete"], 409
             )
+        if str(course_id) == "sales-to-cash":
+            self._ensure_teaching_inventory(db, workspace)
         user_id, source_tenant_id = self._owner(user)
         current = (
             db.query(TutorialRun)
             .filter(
                 TutorialRun.workspace_id == workspace.id,
                 TutorialRun.course_id == str(course_id),
+                TutorialRun.version == int(course["version"]),
                 TutorialRun.status.in_(["active", "paused"]),
             )
             .order_by(TutorialRun.created_at.desc())
@@ -353,9 +426,9 @@ class TutorialV2Service:
                 .first()
             )
             if preferred is not None:
-                return cast(TutorialRun, preferred)
-        return cast(
-            TutorialRun | None,
+                if self._is_current_version(preferred):
+                    return cast(TutorialRun, preferred)
+        candidates = (
             db.query(TutorialRun)
             .filter(
                 TutorialRun.user_id == user_id,
@@ -366,13 +439,23 @@ class TutorialV2Service:
                 (TutorialRun.status == "active").desc(),
                 TutorialRun.updated_at.desc(),
             )
-            .first(),
+            .all()
         )
+        return next((row for row in candidates if self._is_current_version(row)), None)
 
     def enter_run(self, db: Session, user: Any, run_id: str) -> TutorialRun:
         run = self._owned_run(db, user, run_id)
+        if not self._is_current_version(run):
+            raise TutorialServiceError(
+                "tutorial_run_outdated",
+                "教程内容已升级，请从课程目录开始新版课程；旧证据仍会保留。",
+                409,
+            )
         if run.status == "reset":
             raise TutorialServiceError("tutorial_run_retired", "该教学代次已重置。", 409)
+        self._ensure_teaching_warehouse(db, run.workspace)
+        if run.course_id == "sales-to-cash":
+            self._ensure_teaching_inventory(db, run.workspace)
         user_id, source_tenant_id = self._owner(user)
         paused_any = False
         for active in (
@@ -426,8 +509,10 @@ class TutorialV2Service:
                 old_run.active_key = None
                 old_run.last_left_at = now
         course_id = run.course_id
+        prerequisite_ids = list(COURSE_BY_ID[course_id]["prerequisite_ids"])
+        restart_course_id = prerequisite_ids[0] if prerequisite_ids else course_id
         db.commit()
-        return self.start_run(db, user, course_id)
+        return self.start_run(db, user, restart_course_id)
 
     def _step_definition(self, run: TutorialRun, step_id: str) -> tuple[int, dict[str, Any]]:
         steps = COURSE_BY_ID[run.course_id]["steps"]
@@ -447,6 +532,12 @@ class TutorialV2Service:
         context: dict[str, Any] | None = None,
     ) -> tuple[TutorialRun, TutorialStepEvidence]:
         run = self._owned_run(db, user, run_id)
+        if not self._is_current_version(run):
+            raise TutorialServiceError(
+                "tutorial_run_outdated",
+                "教程内容已升级，请从课程目录开始新版课程；旧证据仍会保留。",
+                409,
+            )
         if str(cookie_run_id or "") != run.id:
             raise TutorialServiceError(
                 "tutorial_context_required", SAFE_HINTS["tutorial_context_required"], 409
@@ -515,14 +606,19 @@ class TutorialV2Service:
             "exact_product": self._verify_product,
             "completed_readonly_task": self._verify_task,
             "task_evidence_viewed": self._verify_task_evidence_viewed,
+            "second_readonly_task": self._verify_second_readonly_task,
             "sales_waiting_approval": self._verify_sales_waiting,
+            "sales_approval_reviewed": self._verify_sales_approval_reviewed,
             "sales_closed_loop": self._verify_sales_closed_loop,
             "etl_preview": self._verify_etl_preview,
             "etl_completed": self._verify_etl_completed,
             "trace_task": self._verify_trace_task,
             "trace_approval": self._verify_trace_approval,
-            "trace_order_inventory": self._verify_trace_order,
-            "trace_finance": self._verify_trace_finance,
+            "trace_order": self._verify_trace_order,
+            "trace_inventory": self._verify_trace_inventory,
+            "trace_invoice": self._verify_trace_finance,
+            "trace_receipt": self._verify_trace_finance,
+            "trace_vouchers": self._verify_trace_finance,
             "trace_import": self._verify_trace_import,
         }
         validator = validators.get(verifier)
@@ -532,13 +628,33 @@ class TutorialV2Service:
 
     def _verify_customer(self, db: Session, run: TutorialRun, _context: dict[str, Any]):
         with tenant_scope(run.workspace.tutorial_tenant_id):
-            rows = db.query(Customer).filter(Customer.customer_name == "客户B").all()
-        ok = len(rows) == 1
+            core_rows = db.query(Customer).filter(Customer.customer_name == "客户B").all()
+            purchase_unit_rows = (
+                db.query(PurchaseUnit).filter(PurchaseUnit.unit_name == "客户B").all()
+            )
+        # The active customer-management page persists the shared customer/purchase-unit
+        # entity.  A core Customer is also accepted for compatibility, but ambiguous
+        # duplicates across the two stores fail closed.
+        core_only = len(core_rows) == 1 and not purchase_unit_rows
+        purchase_unit_only = len(purchase_unit_rows) == 1 and not core_rows
+        ok = core_only or purchase_unit_only
+        row = core_rows[0] if core_only else purchase_unit_rows[0] if purchase_unit_only else None
         return (
             ok,
             "verification_passed" if ok else "customer_not_ready",
-            [{"type": "customer", "id": rows[0].id}] if ok else [],
-            {"customer_count": len(rows)},
+            [
+                {
+                    "type": "customer" if core_only else "purchase_unit",
+                    "id": row.id,
+                }
+            ]
+            if row is not None
+            else [],
+            {
+                "customer_count": len(core_rows) + len(purchase_unit_rows),
+                "core_customer_count": len(core_rows),
+                "purchase_unit_count": len(purchase_unit_rows),
+            },
         )
 
     def _verify_product(self, db: Session, run: TutorialRun, _context: dict[str, Any]):
@@ -578,6 +694,40 @@ class TutorialV2Service:
             and str(row.task_type or "") not in {"sales_write", "write"}
         ]
 
+    def _observed_task_execution_count(
+        self,
+        db: Session,
+        run: TutorialRun,
+        task: AgentTaskRecord,
+    ) -> int:
+        if not task.active_run_id:
+            return 0
+        run_record = (
+            db.query(AgentRunRecord)
+            .filter(
+                AgentRunRecord.run_id == task.active_run_id,
+                AgentRunRecord.user_id == str(run.user_id),
+                AgentRunRecord.status == "completed",
+            )
+            .first()
+        )
+        payload = _load_json(run_record.payload_json, {}) if run_record else {}
+        steps = payload.get("steps") if isinstance(payload, dict) else None
+        calls = payload.get("tool_calls") if isinstance(payload, dict) else None
+        final_output = payload.get("final_output") if isinstance(payload, dict) else None
+        events = payload.get("events") if isinstance(payload, dict) else None
+        has_completed_step = isinstance(steps, list) and any(
+            isinstance(item, dict) and item.get("status") == "completed" for item in steps
+        )
+        has_completed_call = isinstance(calls, list) and any(
+            isinstance(item, dict) and item.get("status") == "completed" for item in calls
+        )
+        has_terminal_event = isinstance(events, list) and any(
+            isinstance(item, dict) and item.get("event_type") == "run.completed" for item in events
+        )
+        has_result = isinstance(final_output, dict) and bool(final_output)
+        return int((has_completed_step or has_completed_call or has_terminal_event) and has_result)
+
     def _verify_task(self, db: Session, run: TutorialRun, _context: dict[str, Any]):
         tasks = self._task_rows(db, run)
         queue_executions = 0
@@ -588,27 +738,7 @@ class TutorialV2Service:
                 .filter(AgentTaskExecutionRecord.task_id == tasks[0].task_id)
                 .count()
             )
-            run_record = (
-                db.query(AgentRunRecord)
-                .filter(
-                    AgentRunRecord.run_id == tasks[0].active_run_id,
-                    AgentRunRecord.user_id == str(run.user_id),
-                    AgentRunRecord.status == "completed",
-                )
-                .first()
-            )
-            payload = _load_json(run_record.payload_json, {}) if run_record else {}
-            steps = payload.get("steps") if isinstance(payload, dict) else None
-            calls = payload.get("tool_calls") if isinstance(payload, dict) else None
-            final_output = payload.get("final_output") if isinstance(payload, dict) else None
-            has_completed_step = isinstance(steps, list) and any(
-                isinstance(item, dict) and item.get("status") == "completed" for item in steps
-            )
-            has_completed_call = isinstance(calls, list) and any(
-                isinstance(item, dict) and item.get("status") == "completed" for item in calls
-            )
-            has_result = isinstance(final_output, dict) and bool(final_output)
-            observed_executions = int(has_completed_step and has_completed_call and has_result)
+            observed_executions = self._observed_task_execution_count(db, run, tasks[0])
         executions = queue_executions + observed_executions
         ok = bool(tasks) and executions > 0
         code = (
@@ -637,11 +767,53 @@ class TutorialV2Service:
             return False, "task_evidence_not_ready", [], {**counts, "result_viewed": int(viewed)}
         return True, code, refs, {**counts, "result_viewed": 1}
 
+    def _verify_second_readonly_task(self, db: Session, run: TutorialRun, _context: dict[str, Any]):
+        tasks = self._task_rows(db, run)
+        distinct_titles = {str(item.title or "").strip() for item in tasks if item.title}
+        customer_queries = [item for item in tasks if "客户" in str(item.title or "")]
+        product_queries = [item for item in tasks if "产品" in str(item.title or "")]
+        viewed = [item for item in tasks if item.attention_state != "result_unread"]
+        execution_count = 0
+        for item in tasks:
+            execution_count += (
+                db.query(AgentTaskExecutionRecord)
+                .filter(AgentTaskExecutionRecord.task_id == item.task_id)
+                .count()
+            )
+            execution_count += self._observed_task_execution_count(db, run, item)
+        ok = bool(
+            len(distinct_titles) >= 2
+            and customer_queries
+            and product_queries
+            and len(viewed) >= 2
+            and execution_count >= 2
+        )
+        refs = [{"type": "agent_task", "id": item.task_id} for item in tasks[:2]] if ok else []
+        return (
+            ok,
+            "verification_passed" if ok else "second_task_not_ready",
+            refs,
+            {
+                "distinct_readonly_task_count": len(distinct_titles),
+                "customer_query_count": len(customer_queries),
+                "product_query_count": len(product_queries),
+                "viewed_result_count": len(viewed),
+                "execution_count": execution_count,
+            },
+        )
+
     def _sales_entities(self, db: Session, run: TutorialRun) -> dict[str, Any]:
         tenant_id = run.workspace.tutorial_tenant_id
         with tenant_scope(tenant_id):
             customer_rows = db.query(Customer).filter(Customer.customer_name == "客户B").all()
             product_rows = db.query(Product).filter(Product.name == "A 产品").all()
+            inventory_rows = []
+            if len(product_rows) == 1:
+                inventory_rows = (
+                    db.query(InventoryLedger)
+                    .filter(InventoryLedger.product_id == product_rows[0].id)
+                    .all()
+                )
             orders = db.query(SalesOrder).filter(SalesOrder.customer_name == "客户B").all()
             items = []
             allocations = []
@@ -669,6 +841,7 @@ class TutorialV2Service:
         return {
             "customers": customer_rows,
             "products": product_rows,
+            "inventory": inventory_rows,
             "orders": orders,
             "items": items,
             "allocations": allocations,
@@ -695,7 +868,14 @@ class TutorialV2Service:
             allocation_count = db.query(ReceivableAllocation).count()
             voucher_count = db.query(JournalEntry).count()
             products = db.query(Product).filter(Product.name == "A 产品").all()
-        inventory = int(products[0].quantity or 0) if len(products) == 1 else -1
+            inventory_rows = []
+            if len(products) == 1:
+                inventory_rows = (
+                    db.query(InventoryLedger)
+                    .filter(InventoryLedger.product_id == products[0].id)
+                    .all()
+                )
+        inventory = int(inventory_rows[0].quantity or 0) if len(inventory_rows) == 1 else -1
         ok = (
             len(matching) == 1
             and order_count == 0
@@ -718,15 +898,31 @@ class TutorialV2Service:
             },
         )
 
+    def _verify_sales_approval_reviewed(
+        self, db: Session, run: TutorialRun, context: dict[str, Any]
+    ):
+        ok, _code, refs, counts = self._verify_sales_waiting(db, run, context)
+        detail_opened = bool(context.get("target_visible")) and self._visited(
+            context, {"approval-workspace"}
+        )
+        return (
+            bool(ok and detail_opened),
+            "verification_passed" if ok and detail_opened else "approval_detail_not_viewed",
+            refs if ok and detail_opened else [],
+            {**counts, "approval_detail_opened": int(detail_opened)},
+        )
+
     def _closed_loop_result(self, db: Session, run: TutorialRun):
         data = self._sales_entities(db, run)
         products = data["products"]
+        inventory_rows = data["inventory"]
         orders = data["orders"]
         items = data["items"]
         allocations = data["allocations"]
         entries = data["entries"]
         order = orders[0] if len(orders) == 1 else None
         product = products[0] if len(products) == 1 else None
+        inventory = inventory_rows[0] if len(inventory_rows) == 1 else None
         item_ok = (
             len(items) == 1
             and Decimal(str(items[0].quantity or 0)) == Decimal("10")
@@ -745,7 +941,9 @@ class TutorialV2Service:
         ok = bool(
             len(data["customers"]) == 1
             and product is not None
-            and int(product.quantity or 0) == 90
+            and inventory is not None
+            and int(inventory.quantity or 0) == 90
+            and int(inventory.available_quantity or 0) == 90
             and order is not None
             and order.invoice_status == "invoiced"
             and order.payment_state == "paid"
@@ -755,11 +953,12 @@ class TutorialV2Service:
             and entries_ok
         )
         refs: list[dict[str, Any]] = []
-        if ok and order is not None and product is not None:
+        if ok and order is not None and product is not None and inventory is not None:
             refs = [
                 {"type": "sales_order", "id": order.id},
                 {"type": "sales_order_item", "id": items[0].id},
                 {"type": "product", "id": product.id},
+                {"type": "inventory_ledger", "id": inventory.id},
                 {"type": "receivable_allocation", "id": allocations[0].id},
                 *[
                     {
@@ -775,7 +974,7 @@ class TutorialV2Service:
         counts = {
             "sales_order_count": len(orders),
             "sales_order_item_count": len(items),
-            "inventory": int(product.quantity or 0) if product else -1,
+            "inventory": int(inventory.quantity or 0) if inventory else -1,
             "allocation_count": len(allocations),
             "journal_entry_count": len(entries),
             "invoice_voucher_count": invoice_vouchers,
@@ -784,6 +983,12 @@ class TutorialV2Service:
                 Decimal(str(entry.debit_total or 0)) == Decimal(str(entry.credit_total or 0))
                 for entry in entries
             ),
+            "order_total": float(order.total_amount or 0) if order else 0,
+            "invoice_status": str(order.invoice_status or "") if order else "",
+            "payment_state": str(order.payment_state or "") if order else "",
+            "allocated_amount": float(allocations[0].allocated_amount or 0)
+            if len(allocations) == 1
+            else 0,
         }
         return ok, refs, counts
 
@@ -843,11 +1048,14 @@ class TutorialV2Service:
             },
         )
 
-    def _visited(self, context: dict[str, Any], expected: set[str]) -> bool:
-        return str(context.get("visited_route") or "") in expected
+    def _visited(
+        self, context: dict[str, Any], expected: set[str], *, require_target: bool = False
+    ) -> bool:
+        route_ok = str(context.get("visited_route") or "") in expected
+        return route_ok and (not require_target or bool(context.get("target_visible")))
 
     def _verify_trace_task(self, db: Session, run: TutorialRun, context: dict[str, Any]):
-        if not self._visited(context, {"chat"}):
+        if not self._visited(context, {"chat", "task-workspace"}, require_target=True):
             return False, "trace_view_required", [], {}
         tasks = (
             db.query(AgentTaskRecord)
@@ -872,6 +1080,7 @@ class TutorialV2Service:
                 .filter(AgentTaskExecutionRecord.task_id == matching[0].task_id)
                 .count()
             )
+            execution_count += self._observed_task_execution_count(db, run, matching[0])
         ok = len(matching) == 1 and execution_count > 0
         return (
             ok,
@@ -881,7 +1090,7 @@ class TutorialV2Service:
         )
 
     def _verify_trace_approval(self, db: Session, run: TutorialRun, context: dict[str, Any]):
-        if not self._visited(context, {"approval-workspace"}):
+        if not self._visited(context, {"approval-workspace"}, require_target=True):
             return False, "trace_view_required", [], {}
         with tenant_scope(run.workspace.tutorial_tenant_id):
             rows = db.query(ApprovalRequest).filter(ApprovalRequest.status == "approved").all()
@@ -895,19 +1104,25 @@ class TutorialV2Service:
         )
 
     def _verify_trace_order(self, db: Session, run: TutorialRun, context: dict[str, Any]):
-        if not self._visited(context, {"inventory", "orders"}):
+        if not self._visited(context, {"orders"}, require_target=True):
+            return False, "trace_view_required", [], {}
+        ok, refs, counts = self._closed_loop_result(db, run)
+        return ok, "verification_passed" if ok else "trace_result_not_ready", refs, counts
+
+    def _verify_trace_inventory(self, db: Session, run: TutorialRun, context: dict[str, Any]):
+        if not self._visited(context, {"inventory"}, require_target=True):
             return False, "trace_view_required", [], {}
         ok, refs, counts = self._closed_loop_result(db, run)
         return ok, "verification_passed" if ok else "trace_result_not_ready", refs, counts
 
     def _verify_trace_finance(self, db: Session, run: TutorialRun, context: dict[str, Any]):
-        if not self._visited(context, {"kitten-finance", "orders"}):
+        if not self._visited(context, {"kitten-finance"}, require_target=True):
             return False, "trace_view_required", [], {}
         ok, refs, counts = self._closed_loop_result(db, run)
         return ok, "verification_passed" if ok else "trace_result_not_ready", refs, counts
 
     def _verify_trace_import(self, db: Session, run: TutorialRun, context: dict[str, Any]):
-        if not self._visited(context, {"business-docking"}):
+        if not self._visited(context, {"business-docking"}, require_target=True):
             return False, "trace_view_required", [], {}
         return self._verify_etl_completed(db, run, context)
 
@@ -923,9 +1138,14 @@ class TutorialV2Service:
             .order_by(TutorialRun.updated_at.desc())
             .all()
         )
+        member_names = {
+            int(item.id): str(item.display_name or item.username or f"成员 {item.id}")
+            for item in db.query(User).filter(User.id.in_({row.user_id for row in rows})).all()
+        }
         return [
             {
                 "user_id": row.user_id,
+                "user_name": member_names.get(int(row.user_id), f"成员 {row.user_id}"),
                 "course_id": row.course_id,
                 "status": row.status,
                 "progress": self._run_dto(row)["progress"],

@@ -120,11 +120,11 @@ class TestIsProSourceExtended:
 class TestMergeToolRuntimeContextExtended:
     def test_none_context(self):
         result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", None)
-        assert result == {"user_id": "u1", "message": "hello"}
+        assert result == {"user_id": "u1", "message": "hello", "tenant_id": "1"}
 
     def test_non_dict_context(self):
         result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", "not a dict")
-        assert result == {"user_id": "u1", "message": "hello"}
+        assert result == {"user_id": "u1", "message": "hello", "tenant_id": "1"}
 
     def test_context_with_ui_surface(self):
         result = AIChatApplicationService._merge_tool_runtime_context(
@@ -157,6 +157,18 @@ class TestMergeToolRuntimeContextExtended:
             "u1", "hello", {"last_excel_analysis_context": {"sheet": "Sheet1"}}
         )
         assert result["last_excel_analysis_context"] == {"sheet": "Sheet1"}
+
+    def test_authenticated_tenant_scope_is_persisted_but_context_tenant_is_ignored(self):
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        with tenant_scope(42):
+            result = AIChatApplicationService._merge_tool_runtime_context(
+                "u1", "hello", {"tenant_id": "999", "local_user_id": 7}
+            )
+
+        assert result["tenant_id"] == "42"
+        assert result["local_user_id"] == "7"
+        assert AIChatApplicationService._task_owner_id("u1", result) == "7"
 
 
 # ========================= _excel_cell_looks_like_product_measure_unit ====

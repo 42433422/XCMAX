@@ -199,6 +199,29 @@ class TestLoaderPlanIdAndParams:
         _insert_request(db, request_no="req-restored-mismatch", business_data=data)
         assert load_durable_workflow_snapshot("req-restored-mismatch", allow_terminal=False) is None
 
+    def test_legacy_single_node_derived_plan_id_remains_loadable(self, db):
+        data = _valid_business_data(plan_id="plan-parent")
+        data[SNAPSHOT_KEY]["plan"]["plan_id"] = "plan-parent:write_customer"
+        _insert_request(db, request_no="req-legacy-derived", business_data=data)
+
+        snapshot = load_durable_workflow_snapshot("req-legacy-derived", allow_terminal=False)
+
+        assert snapshot is not None
+        assert snapshot["plan"].plan_id == "plan-parent:write_customer"
+
+    def test_legacy_derived_plan_id_rejects_multi_node_plan(self, db):
+        data = _valid_business_data(plan_id="plan-parent")
+        data[SNAPSHOT_KEY]["plan"]["plan_id"] = "plan-parent:write_customer"
+        data[SNAPSHOT_KEY]["plan"]["nodes"].append(
+            {
+                **data[SNAPSHOT_KEY]["plan"]["nodes"][0],
+                "node_id": "unexpected_second_node",
+            }
+        )
+        _insert_request(db, request_no="req-legacy-multi", business_data=data)
+
+        assert load_durable_workflow_snapshot("req-legacy-multi", allow_terminal=False) is None
+
     def test_non_dict_params_fail_closed(self, db):
         data = _valid_business_data()
         data["params"] = "not-a-dict"

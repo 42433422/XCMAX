@@ -18,7 +18,13 @@
         <input v-model="searchQuery" type="text" placeholder="搜索产品名称或型号..." @input="loadInventory">
       </div>
 
-      <div class="card">
+      <section v-if="tutorialSalesEvidence" class="tutorial-inventory-proof" data-tutorial-id="tutorial-inventory-proof">
+        <strong>教学库存结果 · 服务端核验</strong>
+        <span>A 产品</span>
+        <span>期初 100 − 销售 10 = 当前 {{ tutorialInventory }}</span>
+      </section>
+
+      <div class="card" data-tutorial-id="inventory-table">
         <div class="table-responsive">
           <table class="data-table">
             <thead>
@@ -168,10 +174,17 @@ import { ref, onMounted, onActivated, computed } from 'vue'
 import { get, post } from '@/api'
 import productsApi from '@/api/products'
 import { appAlert } from '@/utils/appDialog'
+import { useTutorialV2Store } from '@/stores/tutorialV2'
 
 export default {
   name: 'InventoryView',
   setup() {
+    const tutorialStore = useTutorialV2Store()
+    const tutorialSalesEvidence = computed(() => tutorialStore.courses
+      .find((course) => course.id === 'sales-to-cash')
+      ?.run?.steps.find((step) => step.id === 'approve-sales-request')
+      ?.evidence || null)
+    const tutorialInventory = computed(() => tutorialSalesEvidence.value?.counts?.inventory ?? 0)
     const inventoryList = ref([])
     const warehouses = ref([])
     const products = ref([])
@@ -348,7 +361,10 @@ export default {
       loadLowStock()
     }
 
-    onMounted(refreshInventoryView)
+    onMounted(() => {
+      refreshInventoryView()
+      void tutorialStore.loadCourses().catch(() => undefined)
+    })
     onActivated(refreshInventoryView)
 
     return {
@@ -374,7 +390,9 @@ export default {
       doInventoryOut,
       exportInventory,
       prevPage,
-      nextPage
+      nextPage,
+      tutorialSalesEvidence,
+      tutorialInventory
     }
   }
 }
@@ -397,4 +415,5 @@ export default {
   gap: 10px;
   margin-top: 15px;
 }
+.tutorial-inventory-proof { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 14px; padding: 12px 14px; border: 1px solid #e7c46a; border-radius: 10px; background: #fff8df; color: #6f5314; }
 </style>

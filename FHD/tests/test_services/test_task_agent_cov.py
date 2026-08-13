@@ -513,6 +513,9 @@ class TestExtractQueryKeyword:
         kw = agent._extract_query_keyword("产品列表")
         assert isinstance(kw, str)
 
+    def test_current_product_list_returns_empty_keyword(self, agent):
+        assert agent._extract_query_keyword("查询当前产品列表") == ""
+
     def test_short_text_no_generic_keywords(self, agent):
         kw = agent._extract_query_keyword("9803")
         assert kw == "9803"

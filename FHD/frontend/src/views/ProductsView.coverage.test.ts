@@ -375,6 +375,7 @@ describe('ProductsView.coverage', () => {
         name: '',
         specification: '',
         price: 0,
+        quantity: 0,
       })
     })
 

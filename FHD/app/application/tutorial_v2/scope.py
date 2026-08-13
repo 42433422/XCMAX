@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from starlette.requests import Request
 
+from app.application.tutorial_v2.catalog import COURSE_BY_ID
 from app.db.models.tutorial import TutorialRun, TutorialWorkspace
 
 TUTORIAL_COOKIE = "xcagi_tutorial_run"
@@ -22,10 +23,23 @@ _CONTROL_PREFIXES = (
     "/api/preferences",
     "/api/update",
     "/api/system",
+    "/api/desktop",
+    "/api/xcmax",
     "/api/license",
     "/api/admin",
     "/health",
     "/api/health",
+)
+_RECOVERY_PREFIXES = (
+    "/login",
+    "/register",
+    "/forgot-account",
+    "/forgot-password",
+    "/api/auth",
+    "/api/login",
+    "/api/logout",
+    "/api/session",
+    "/api/tutorial/v2",
 )
 _EXTERNAL_OR_PRODUCTION_PREFIXES = (
     "/api/im",
@@ -42,11 +56,14 @@ _EXTERNAL_OR_PRODUCTION_PREFIXES = (
 )
 _READ_BUSINESS_PREFIXES = (
     "/api/agent",
+    "/api/conversations",
     "/api/chat",
     "/api/ai/chat",
     "/api/ai/unified_chat",
     "/api/mod/xcagi-planner-bridge/chat",
     "/api/mod/xcagi-planner-bridge/unified_chat",
+    "/api/mod/xcagi-erp-domain-bridge",
+    "/api/mod/xcagi-approval-bridge",
     "/api/approval",
     "/api/etl",
     "/api/products",
@@ -57,6 +74,7 @@ _READ_BUSINESS_PREFIXES = (
     "/api/sales",
     "/api/inventory",
     "/api/finance",
+    "/api/ai/kitten",
 )
 _COURSE_WRITE_PREFIXES = {
     "task-workspace": (
@@ -66,8 +84,16 @@ _COURSE_WRITE_PREFIXES = {
         "/api/ai/unified_chat",
         "/api/mod/xcagi-planner-bridge/chat",
         "/api/mod/xcagi-planner-bridge/unified_chat",
+        "/api/conversations",
     ),
-    "master-data": ("/api/products", "/products", "/customers", "/api/customers"),
+    "master-data": (
+        "/api/products",
+        "/products",
+        "/customers",
+        "/api/customers",
+        "/api/mod/xcagi-erp-domain-bridge/products",
+        "/api/mod/xcagi-erp-domain-bridge/customers",
+    ),
     "sales-to-cash": (
         "/api/agent",
         "/api/chat",
@@ -75,9 +101,11 @@ _COURSE_WRITE_PREFIXES = {
         "/api/ai/unified_chat",
         "/api/mod/xcagi-planner-bridge/chat",
         "/api/mod/xcagi-planner-bridge/unified_chat",
+        "/api/conversations",
         "/api/approval",
+        "/api/mod/xcagi-approval-bridge",
     ),
-    "data-import": ("/api/etl",),
+    "data-import": ("/api/etl", "/api/platform-shell/office-sample-upload"),
     "evidence-trace": (),
 }
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
@@ -98,6 +126,12 @@ class TutorialScopeDecision:
 
 def _starts(path: str, prefixes: tuple[str, ...]) -> bool:
     return any(path == prefix or path.startswith(f"{prefix}/") for prefix in prefixes)
+
+
+def is_tutorial_recovery_path(path: str) -> bool:
+    """Return whether a stale tutorial cookie must never block this route."""
+    normalized = str(path or "/").rstrip("/") or "/"
+    return _starts(normalized, _RECOVERY_PREFIXES)
 
 
 def resolve_tutorial_scope(
@@ -124,6 +158,13 @@ def resolve_tutorial_scope(
             error_code="tutorial_cookie_invalid",
             error_hint="教学会话无效，请从进阶教程重新进入。",
             error_status=401,
+        )
+    course = COURSE_BY_ID.get(str(run.course_id))
+    if course is None or int(run.version) != int(course["version"]):
+        return TutorialScopeDecision(
+            error_code="tutorial_cookie_expired",
+            error_hint="教程内容已升级，请从课程目录开始新版课程。",
+            error_status=409,
         )
     workspace = (
         db.query(TutorialWorkspace)
@@ -203,5 +244,6 @@ __all__ = [
     "COOKIE_MAX_AGE_SECONDS",
     "TUTORIAL_COOKIE",
     "TutorialScopeDecision",
+    "is_tutorial_recovery_path",
     "resolve_tutorial_scope",
 ]

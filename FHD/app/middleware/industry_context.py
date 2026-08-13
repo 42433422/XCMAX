@@ -31,6 +31,22 @@ DEFAULT_INDUSTRY = "通用"
 ADMIN_INDUSTRY = "管理端"
 
 
+def _expire_tutorial_cookie(response: Response) -> Response:
+    """Remove an unusable teaching cookie without exposing or replaying it."""
+    from app.application.tutorial_v2.scope import TUTORIAL_COOKIE
+
+    response.delete_cookie(TUTORIAL_COOKIE, path="/", httponly=True, samesite="strict")
+    return response
+
+
+def _tutorial_error(code: str, hint: str, status_code: int, *, clear_cookie: bool) -> Response:
+    response = JSONResponse(
+        {"success": False, "error": {"code": code, "hint": hint}},
+        status_code=status_code,
+    )
+    return _expire_tutorial_cookie(response) if clear_cookie else response
+
+
 def get_current_user(request: Request) -> Any | None:
     """复用现有认证逻辑解析当前用户。
 
@@ -90,18 +106,22 @@ class IndustryContextMiddleware(BaseHTTPMiddleware):
             request.state.industry_id = industry_id
             request.state.source_tenant_id = tenant_id
             request.state.tenant_id = tenant_id
+            request.state.tutorial_active = False
             tutorial_cookie = str(request.cookies.get("xcagi_tutorial_run") or "").strip()
             if tutorial_cookie:
+                from app.application.tutorial_v2.scope import is_tutorial_recovery_path
+
+                accepts_html = "text/html" in str(request.headers.get("accept") or "").lower()
+                browser_navigation = request.method.upper() == "GET" and accepts_html
+                recovery_path = is_tutorial_recovery_path(request.url.path) or browser_navigation
                 if user is None or tenant_id is None or getattr(user, "id", None) is None:
-                    return JSONResponse(
-                        {
-                            "success": False,
-                            "error": {
-                                "code": "tutorial_cookie_invalid",
-                                "hint": "教学会话无效，请重新登录并从进阶教程进入。",
-                            },
-                        },
-                        status_code=401,
+                    if recovery_path:
+                        return _expire_tutorial_cookie(await call_next(request))
+                    return _tutorial_error(
+                        "tutorial_cookie_invalid",
+                        "教学会话已失效，已为你退出教学空间；请重新登录后进入教程。",
+                        401,
+                        clear_cookie=True,
                     )
                 try:
                     from app.application.tutorial_v2.scope import resolve_tutorial_scope
@@ -119,26 +139,24 @@ class IndustryContextMiddleware(BaseHTTPMiddleware):
                         db.close()
                 except RECOVERABLE_ERRORS:
                     logger.warning("tutorial scope resolution failed")
-                    return JSONResponse(
-                        {
-                            "success": False,
-                            "error": {
-                                "code": "tutorial_scope_unavailable",
-                                "hint": "教学空间暂时不可用，请保存退出后重试。",
-                            },
-                        },
-                        status_code=503,
+                    return _tutorial_error(
+                        "tutorial_scope_unavailable",
+                        "教学空间暂时不可用，请保存退出后重试。",
+                        503,
+                        clear_cookie=False,
                     )
                 if decision.error_code:
-                    return JSONResponse(
-                        {
-                            "success": False,
-                            "error": {
-                                "code": decision.error_code,
-                                "hint": decision.error_hint,
-                            },
-                        },
-                        status_code=decision.error_status,
+                    stale = decision.error_code in {
+                        "tutorial_cookie_invalid",
+                        "tutorial_cookie_expired",
+                    }
+                    if stale and recovery_path:
+                        return _expire_tutorial_cookie(await call_next(request))
+                    return _tutorial_error(
+                        decision.error_code,
+                        str(decision.error_hint or "教学会话不可用，请重新进入教程。"),
+                        decision.error_status,
+                        clear_cookie=stale,
                     )
                 request.state.tutorial_active = decision.active
                 request.state.tutorial_run_id = decision.run_id

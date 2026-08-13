@@ -30,6 +30,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
   let reconnectTimer: number | null = null
   let fallbackTimer: number | null = null
   let started = false
+  let scopeVersion = 0
 
   const attentionCount = computed(() =>
     tasks.value.filter((task) => ['waiting_user', 'blocked', 'failed'].includes(task.status)).length,
@@ -57,19 +58,22 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
 
   async function refresh(): Promise<void> {
     if (loading.value) return
+    const requestedScopeVersion = scopeVersion
     loading.value = true
     try {
       const [taskResponse, runtimeResponse] = await Promise.all([
         agentRunsApi.listTasks({ limit: 200 }),
         agentRunsApi.getTaskRuntime(),
       ])
+      if (requestedScopeVersion !== scopeVersion) return
       replaceTasks(Array.isArray(taskResponse.data) ? taskResponse.data : [])
       if (runtimeResponse.data) runtime.value = runtimeResponse.data
       error.value = ''
     } catch (reason) {
+      if (requestedScopeVersion !== scopeVersion) return
       error.value = errorMessage(reason)
     } finally {
-      loading.value = false
+      if (requestedScopeVersion === scopeVersion) loading.value = false
     }
   }
 
@@ -243,6 +247,19 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     fallbackTimer = null
   }
 
+  function restartForScope(): void {
+    const shouldRestart = started
+    stop()
+    scopeVersion += 1
+    tasks.value = []
+    selectedTask.value = null
+    selectedTaskId.value = ''
+    runtime.value = { running: false, max_workers: 4, active_count: 0 }
+    loading.value = false
+    error.value = ''
+    if (shouldRestart) start()
+  }
+
   return {
     tasks,
     selectedTask,
@@ -265,6 +282,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     openTask,
     refresh,
     refreshDetail,
+    restartForScope,
     showTaskList,
     start,
     stop,

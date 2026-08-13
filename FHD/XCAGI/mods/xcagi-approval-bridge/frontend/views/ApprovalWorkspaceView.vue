@@ -51,7 +51,7 @@
         <h3>待我审批</h3>
         <button class="btn-link" @click="viewAll('pending')">查看全部</button>
       </div>
-      <div class="request-list">
+      <div class="request-list" data-tutorial-id="approval-pending-list">
         <div 
           v-for="item in pendingRequests" 
           :key="item.id" 
@@ -162,7 +162,7 @@
       max-width="800px"
       @close="closeDetails"
     >
-      <div v-if="selectedRequest" class="request-detail">
+      <div v-if="selectedRequest" class="request-detail" data-tutorial-id="approval-detail">
         <div class="detail-section">
           <h4>基本信息</h4>
           <div class="detail-grid">
@@ -268,6 +268,7 @@
         </div>
       </div>
       <template #footer>
+        <div data-tutorial-id="approval-detail-actions" class="approval-detail-actions">
         <button class="btn btn-link" @click="closeDetails">
           <i class="fa fa-times"></i> 关闭
         </button>
@@ -277,6 +278,7 @@
         <button v-if="canApprove && selectedRequest" class="btn btn-approve" @click="approve(selectedRequest.id)">
           <i class="fa fa-check"></i> 通过
         </button>
+        </div>
       </template>
     </Modal>
   </div>
@@ -368,9 +370,10 @@ const loadData = async () => {
       stats.value.rejected = mine.filter((r: ApprovalRequest) => r.status === 'rejected').length
     }
     const requestNo = String(route.query.request_no || '').trim()
-    if (requestNo && !deepLinkOpened.value) {
+    const requestId = Number(route.query.request_id || 0)
+    if ((requestNo || requestId > 0) && !deepLinkOpened.value) {
       const target = [...pendingRequests.value, ...initiatedRequests.value]
-        .find((item) => item.request_no === requestNo)
+        .find((item) => (requestId > 0 ? item.id === requestId : item.request_no === requestNo))
       if (target) {
         deepLinkOpened.value = true
         await viewDetails(target.id)

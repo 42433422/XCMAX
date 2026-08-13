@@ -32,7 +32,6 @@ export function getTrackLabel(trackId: string | null | undefined, ctx: TutorialB
   return hit?.title || trackId
 }
 
-export function formatAdvancedTrackHint(visibleNames: string[], _max = 5): string {
-  if (!visibleNames.length) return '按侧栏生成步骤。'
-  return `含 ${visibleNames.length} 个菜单项。`
+export function formatAdvancedTrackHint(_visibleNames: string[], _max = 5): string {
+  return '5 门真实业务实训 · 亲自操作 · 服务端验证'
 }

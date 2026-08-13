@@ -418,6 +418,19 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
                     lower,
                 )
                 keyword = re.sub(r"\s+", " ", keyword).strip()
+                if keyword in {
+                    "产品",
+                    "产品列表",
+                    "当前产品",
+                    "当前产品列表",
+                    "现有产品",
+                    "现有产品列表",
+                    "全部产品",
+                    "全部产品列表",
+                    "所有产品",
+                    "所有产品列表",
+                }:
+                    keyword = ""
                 if keyword:
                     slots["keyword"] = keyword
 
@@ -506,12 +519,13 @@ def run_workflow_products_query_normal_profile(
     text = (user_message or "").strip()
     rr = route_normal_mode_message(text)
     kw_preview = ""
-    if rr.get("intent") == "product_query":
+    routed_product_query = rr.get("intent") == "product_query"
+    if routed_product_query:
         route_slots = rr.get("slots") or {}
         keyword = str(route_slots.get("keyword") or "").strip()
         model_number = str(route_slots.get("model_number") or "").strip().upper()
         kw_preview = (keyword or "").strip() or (model_number or "").strip()
-    if not kw_preview:
+    if not kw_preview and not routed_product_query:
         kw_preview = (
             str(node_params.get("keyword") or "").strip()
             or str(node_params.get("model_number") or "").strip().upper()
