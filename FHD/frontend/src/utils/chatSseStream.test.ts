@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { readPlannerSseResponse, isChatStreamEnabled } from './chatSseStream'
+import { readPlannerSseResponse, isChatStreamEnabled, resolveChatStreamPath } from './chatSseStream'
+import { resolvePlannerChatStreamPath } from './plannerChatPaths'
 
 function mockSseResponse(chunks: string[]): Response {
   const encoder = new TextEncoder()
@@ -61,6 +62,10 @@ describe('chatSseStream', () => {
     } finally {
       import.meta.env.VITE_CHAT_STREAM = prev
     }
+  })
+
+  it('resolveChatStreamPath delegates to the planner stream path resolver', () => {
+    expect(resolveChatStreamPath()).toBe(resolvePlannerChatStreamPath())
   })
 
   it('ignores non-data lines and empty payloads in the stream', async () => {
