@@ -25,3 +25,10 @@ export { systemApi } from './system';
 export { intentPackagesApi } from './intentPackages';
 export { privateDbAssistantApi } from './privateDbAssistant';
 export { memoryV2Api } from './memoryV2';
+export { tutorialV2Api } from './tutorialV2';
+export type {
+  TutorialCourseDTO,
+  TutorialEvidenceDTO,
+  TutorialRunDTO,
+  TutorialStepDTO,
+} from './tutorialV2';

@@ -75,8 +75,10 @@ from app.db.models.receivable_allocation import ReceivableAllocation
 from app.db.models.service_request import ServiceBridgeConfig, ServiceRequest
 from app.db.models.shipment import ShipmentRecord
 from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
+from app.db.models.tenant import Tenant
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
+from app.db.models.tutorial import TutorialRun, TutorialStepEvidence, TutorialWorkspace
 from app.db.models.workflow import (
     WorkflowCheckpoint,
     WorkflowDefinition,
@@ -130,6 +132,10 @@ __all__ = [
     "JournalEntryLine",
     "ACCOUNT_TYPES",
     "User",
+    "Tenant",
+    "TutorialWorkspace",
+    "TutorialRun",
+    "TutorialStepEvidence",
     "UserSession",
     "Permission",
     "Role",

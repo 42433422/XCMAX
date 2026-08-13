@@ -41,6 +41,7 @@
       <div class="etl-upload-grid">
         <div
           class="etl-dropzone"
+          data-tutorial-id="etl-upload"
           :class="{ busy: busy }"
           @dragover.prevent
           @drop="onDrop"
@@ -376,6 +377,7 @@
           <button
             type="button"
             class="etl-primary"
+            data-tutorial-id="etl-confirm"
             :disabled="!canExecute || busy"
             @click="executeCurrentRun"
           >
@@ -626,7 +628,7 @@
         <button type="button" class="etl-secondary" @click="refreshRuns">刷新</button>
       </div>
       <div v-if="!runs.length" class="etl-empty">暂无运行记录。</div>
-      <div v-else class="etl-history">
+      <div v-else class="etl-history" data-tutorial-id="etl-history">
         <button
           v-for="run in runs"
           :key="run.id"

@@ -245,6 +245,13 @@ class TestMergeRuntimeFallbackParams:
         engine._merge_runtime_fallback_params(node, params, {"message": "hello"})
         assert params["keyword"] == "x"
 
+    def test_products_full_list_does_not_inject_sentence_as_keyword(self):
+        engine = _make_engine()
+        node = WorkflowNode(node_id="n1", tool_id="products", action="query", params={})
+        params = {}
+        engine._merge_runtime_fallback_params(node, params, {"message": "查询当前产品列表"})
+        assert "keyword" not in params
+
     def test_customers_query_empty_params(self):
         engine = _make_engine()
         node = WorkflowNode(node_id="n1", tool_id="customers", action="query", params={})

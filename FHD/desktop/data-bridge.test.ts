@@ -94,7 +94,7 @@ describe('data-bridge — queryOffline', () => {
     db.exec(
       `CREATE TABLE ai_employee_profiles(
         id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id TEXT, user_id INTEGER,
-        mod_id TEXT, display_name TEXT, avatar_url TEXT
+        mod_id TEXT, display_name TEXT, avatar_url TEXT, created_at TEXT
       )`,
     )
     db.exec(

@@ -17,6 +17,7 @@ from app.application.agent_orchestrator.tool_spec import ToolActionSpecV2
 _MAX_TEXT = 4000
 _MAX_ITEMS = 40
 _TASK_CONTEXT_KEYS = (
+    "tenant_id",
     "task_id",
     "conversation_id",
     "session_id",

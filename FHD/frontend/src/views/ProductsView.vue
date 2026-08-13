@@ -19,7 +19,7 @@
           </button>
           <button class="btn btn-secondary" @click="exportPriceListExcel" title="导出为 Excel（与旧版一致）">导出Excel</button>
           <button v-if="selectedIds.length > 0" class="btn btn-danger" @click="batchDelete" style="margin-right:10px;">批量删除 ({{ selectedIds.length }})</button>
-          <button class="btn btn-primary" @click="showAddModal">+ 添加产品</button>
+          <button class="btn btn-primary" data-tutorial-id="product-create" @click="showAddModal">+ 添加产品</button>
         </div>
       </div>
       <div class="search-box" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
@@ -108,7 +108,7 @@
           </div>
           <div class="form-group">
             <label>{{ fieldLabel('name', '产品名称') }} *</label>
-            <input v-model="formData.name" type="text" placeholder="产品名称">
+            <input v-model="formData.name" data-tutorial-id="product-name" type="text" placeholder="产品名称">
           </div>
           <div class="form-group">
             <label>{{ fieldLabel('specification', '规格') }}</label>
@@ -120,8 +120,9 @@
           </div>
           <div class="form-group">
             <label>{{ fieldLabel('price', '价格') }}</label>
-            <input v-model.number="formData.price" type="number" step="0.01" placeholder="0.00">
+            <input v-model.number="formData.price" data-tutorial-id="product-price" type="number" step="0.01" placeholder="0.00">
           </div>
+          <div v-if="!isEdit" class="form-group"><label>初始库存</label><input v-model.number="formData.quantity" data-tutorial-id="product-inventory" type="number" min="0" step="1" placeholder="0"></div>
           <div class="form-group" v-for="f in extraFields" :key="f.key">
             <label>{{ f.label }}</label>
             <input
@@ -133,7 +134,7 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="showModal = false">取消</button>
-          <button class="btn btn-primary" @click="saveProduct">保存</button>
+          <button class="btn btn-primary" data-tutorial-id="product-save" @click="saveProduct">保存</button>
         </div>
       </div>
     </div>
@@ -153,19 +154,16 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import { appAlert } from '@/utils/appDialog';
 import { useCoreNavLabel } from '@/composables/useCoreNavLabel';
 import { useIndustryFieldSchema } from '@/composables/useIndustryFieldSchema';
-
 const pageNavTitle = useCoreNavLabel('products');
-
 // 行业感知：products 子系统的实体名与字段表头随行业变（产品/人员、型号/工号、规格/班次、单价/时薪）
 const productsSchema = useIndustryFieldSchema('products');
 const entityName = computed(() => productsSchema.entity.value || '产品');
 function fieldLabel(key, fallback) {
   return productsSchema.labelOf(key, fallback);
 }
-
 // 行业新增字段（批号/保质期等）动态渲染：schema 里超出核心 4 字段(型号/名称/规格/单价)的字段，
 // 在表单尾部按类型自动生成输入；核心字段仍为固定输入，保证稳定。
-const CORE_PRODUCT_KEYS = ['model_number', 'name', 'specification', 'price', 'unit'];
+const CORE_PRODUCT_KEYS = ['model_number', 'name', 'specification', 'price', 'quantity', 'unit'];
 const extraFields = computed(() =>
   productsSchema.fields.value.filter((f) => !CORE_PRODUCT_KEYS.includes(f.key)),
 );
@@ -178,7 +176,6 @@ const specOptions = computed(() => {
 
 const store = useProductsStore();
 const { products, loading } = storeToRefs(store);
-
 const units = ref([]);
 const showModal = ref(false);
 const isEdit = ref(false);
@@ -197,7 +194,8 @@ const formData = ref({
   model_number: '',
   name: '',
   specification: '',
-  price: 0
+  price: 0,
+  quantity: 0
 });
 const showDeleteConfirm = ref(false);
 const showBatchDeleteConfirm = ref(false);
@@ -212,7 +210,8 @@ const columns = computed(() => [
   { key: 'model_number', label: fieldLabel('model_number', '型号') },
   { key: 'name', label: fieldLabel('name', '名称') },
   { key: 'specification', label: fieldLabel('specification', '规格') },
-  { key: 'price', label: fieldLabel('price', '价格') }
+  { key: 'price', label: fieldLabel('price', '价格') },
+  { key: 'quantity', label: '库存' }
 ]);
 
 const currentRequestId = ref(0);
@@ -270,7 +269,8 @@ const showAddModal = () => {
     model_number: '',
     name: '',
     specification: '',
-    price: 0
+    price: 0,
+    quantity: 0
   };
   showModal.value = true;
 };

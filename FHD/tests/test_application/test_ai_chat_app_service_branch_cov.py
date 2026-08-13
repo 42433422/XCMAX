@@ -938,6 +938,37 @@ class TestFormatAgentRunResponse:
         result = svc._format_agent_run_response(plan, agent_run, user_message="find products")
         assert "autoAction" in result
         assert result["autoAction"]["type"] == "show_products_float"
+        assert result["autoAction"]["query"] == "find products"
+
+    def test_products_query_full_list_keeps_empty_float_query(self):
+        svc = _make_svc()
+        plan = _make_plan(
+            nodes=[
+                _make_node(
+                    node_id="products-query",
+                    tool_id="products",
+                    action="query",
+                    params={"keyword": ""},
+                )
+            ]
+        )
+        agent_run = _make_agent_run(
+            status="completed",
+            steps=[
+                _make_step(
+                    node_id="products-query",
+                    tool_id="products",
+                    action="query",
+                    status="completed",
+                )
+            ],
+        )
+        result = svc._format_agent_run_response(
+            plan,
+            agent_run,
+            user_message="查询当前产品列表",
+        )
+        assert result["autoAction"]["query"] == ""
 
     def test_no_thinking_steps_no_todo(self):
         svc = _make_svc()
@@ -1424,6 +1455,28 @@ class TestWorkflowProductsFloatQuery:
         run_result = _make_run_result(node_results=[])
         result = svc._workflow_products_float_query(plan, run_result, "user query")
         assert result == "user query"
+
+    def test_generic_full_list_fallback_is_empty(self):
+        svc = _make_svc()
+        plan = _make_plan(nodes=[])
+        run_result = _make_run_result(node_results=[])
+        result = svc._workflow_products_float_query(plan, run_result, "查询当前产品列表")
+        assert result == ""
+
+    def test_generic_full_list_node_param_is_empty(self):
+        svc = _make_svc()
+        plan = _make_plan(
+            nodes=[
+                _make_node(
+                    tool_id="products",
+                    action="query",
+                    params={"keyword": "查询当前产品列表"},
+                )
+            ]
+        )
+        run_result = _make_run_result(node_results=[])
+        result = svc._workflow_products_float_query(plan, run_result, "查询当前产品列表")
+        assert result == ""
 
     def test_failed_node_result_skipped(self):
         svc = _make_svc()
@@ -3209,7 +3262,7 @@ class TestTryHandleDynamicWorkflow:
         plan = _make_plan()
         svc._pending_workflows["u1"] = {
             "plan": plan,
-            "runtime_context": {},
+            "runtime_context": {"tenant_id": "42", "local_user_id": "7"},
             "approval_required": False,
             "approval_nodes": [],
         }
@@ -3246,7 +3299,7 @@ class TestTryHandleDynamicWorkflow:
         plan = _make_plan(nodes=[_make_node()])
         svc._pending_workflows["u1"] = {
             "plan": plan,
-            "runtime_context": {},
+            "runtime_context": {"tenant_id": "42", "local_user_id": "7"},
             "approval_required": True,
             "approval_nodes": [{"node_id": "n1", "tool_id": "products", "action": "create"}],
         }
@@ -3258,6 +3311,13 @@ class TestTryHandleDynamicWorkflow:
             mock_orchestrator.return_value.start_run_from_plan.return_value = waiting_run
             result = svc._try_handle_dynamic_workflow("u1", "确认", "pro", {}, {})
         mock_create.assert_called_once()
+        assert mock_orchestrator.return_value.start_run_from_plan.call_args.kwargs["user_id"] == "7"
+        assert (
+            mock_orchestrator.return_value.start_run_from_plan.call_args.kwargs["runtime_context"][
+                "tenant_id"
+            ]
+            == "42"
+        )
         assert result["data"]["action"] == "approval_pending"
 
     def test_unit_products_db_import_no_saved_name(self):

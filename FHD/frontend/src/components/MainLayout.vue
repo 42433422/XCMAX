@@ -89,6 +89,7 @@
     <VirtualCursor />
     <OnboardingTutorial />
     <TutorialOverlay v-if="!onboardingTutorialStore.active" />
+    <TutorialTrainingCoach />
     <MobileBottomNav v-if="mobileBottomNavVisible" />
   </div>
 </template>
@@ -122,6 +123,7 @@ import TopAssistantFloat from './TopAssistantFloat.vue'
 import TutorialOverlay from './TutorialOverlay.vue'
 import VirtualCursor from './VirtualCursor.vue'
 import OnboardingTutorial from './OnboardingTutorial.vue'
+import TutorialTrainingCoach from './tutorial/TutorialTrainingCoach.vue'
 import MobileBottomNav from './MobileBottomNav.vue'
 import { useOnboardingTutorialStore } from '@/stores/onboardingTutorial'
 import { useTutorialStore } from '@/stores/tutorial'
@@ -170,11 +172,9 @@ let sidebarViewportMedia = null
 const showMobileBottomNav = ref(false)
 let mobileBottomNavMedia = null
 let layoutActive = true
-
 const clientModeTiersUiEnabled = isClientModeTiersUiEnabled()
 const isSandboxMode = new URLSearchParams(window.location.search).has('sandbox')
 const adminConsoleSpa = detectAdminConsoleSpa()
-
 /** 原版模式或未加载扩展时为空，与侧栏 Mod 菜单一致 */
 const hasModsForUi = computed(() => modsForUi.value.length > 0)
 

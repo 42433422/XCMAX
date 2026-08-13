@@ -469,6 +469,11 @@ describe('useChatPersistence — coverage ramp', () => {
       expect(extractLikelyProductQueryKeyword('有哪些客户')).toBeNull()
     })
 
+    it('returns null for generic current product list queries', () => {
+      expect(extractLikelyProductQueryKeyword('查询当前产品列表')).toBeNull()
+      expect(extractLikelyProductQueryKeyword('查看全部产品')).toBeNull()
+    })
+
     it('extracts keyword from 查询 pattern', () => {
       expect(extractLikelyProductQueryKeyword('查询XCD-100')).toBe('XCD-100')
     })

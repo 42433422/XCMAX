@@ -421,6 +421,16 @@ describe('useChatOrchestration – handleAutoAction', () => {
     window.removeEventListener('xcagi:open-assistant-float', handler)
   })
 
+  it('preserves an explicit empty product query for a full-list request', () => {
+    const api = createApi()
+    const handler = vi.fn()
+    window.addEventListener('xcagi:open-assistant-float', handler)
+    api.handleAutoAction({ type: 'show_products_float', query: '' }, '查询当前产品列表')
+    expect(handler).toHaveBeenCalled()
+    expect(handler.mock.calls[0][0].detail.query).toBe('')
+    window.removeEventListener('xcagi:open-assistant-float', handler)
+  })
+
   it('dispatches xcagi:switch-view for show_orders', () => {
     const api = createApi()
     const handler = vi.fn()

@@ -76,9 +76,10 @@ def _build_workflow_snapshot(
     """
     from app.infrastructure.tenant_scope import current_tenant_id
 
+    persisted_plan_id = str(getattr(plan, "plan_id", "") or request.plan_id)
     return {
         "version": SNAPSHOT_VERSION,
-        "plan_id": request.plan_id,
+        "plan_id": persisted_plan_id,
         "tenant_id": current_tenant_id(),
         "node": {
             "node_id": request.node_id,
@@ -226,8 +227,13 @@ def persist_workflow_approval(
                     db.add(audit_node)
                     db.flush()
 
+                persisted_plan_id = (
+                    str(getattr(plan, "plan_id", "") or request.plan_id)
+                    if _is_valid_plan_for_snapshot(plan)
+                    else request.plan_id
+                )
                 business_data = {
-                    "plan_id": request.plan_id,
+                    "plan_id": persisted_plan_id,
                     "node_id": request.node_id,
                     "tool_id": request.tool_id,
                     "action": request.action,
@@ -419,8 +425,12 @@ def _validated_snapshot(persisted) -> dict[str, Any] | None:
     plan = _safe_plan_from_snapshot(snapshot.get("plan"))
     if plan is None:
         return None
-    # 还原的计划必须与快照 plan_id 完全一致（防跨计划替换）。
-    if str(getattr(plan, "plan_id", "") or "") != plan_id:
+    restored_plan_id = str(getattr(plan, "plan_id", "") or "")
+    # 新快照必须精确一致。兼容早期 AgentRun 已持久化的单节点恢复计划：它会把
+    # 父计划 ``plan_id`` 确定性地派生为 ``{plan_id}:{node_id}``。仅允许这个精确
+    # 后缀且计划必须只有一个匹配节点；其它任何 plan_id 差异仍 fail-closed。
+    legacy_single_node_plan_id = len(plan.nodes) == 1 and restored_plan_id == f"{plan_id}:{node_id}"
+    if restored_plan_id != plan_id and not legacy_single_node_plan_id:
         return None
     # 计划必须包含与快照节点精确匹配的节点（node_id + tool_id + action + params）。
     plan_node = next((n for n in plan.nodes if n.node_id == node_id), None)

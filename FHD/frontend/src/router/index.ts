@@ -39,9 +39,8 @@ import { isClientErpSidebarContext } from '@/constants/genericModPack';
 import { AI_DELIVERY_ROUTES } from './privateModDeliveryRoutes';
 import { resolveInitialRoutes } from './initialRouteSelection';
 import { refreshDesktopSessionInBackground } from '@/utils/desktopSessionRestore';
-
+import { activeTutorialRunAllowsRoute } from '@/stores/tutorialV2';
 const DEFAULT_DUTY_ROSTER_GRAPH_VIEW = 'department';
-
 function normalizeDutyRosterGraphView(raw: unknown): string {
   const token = String(Array.isArray(raw) ? raw[0] : raw || '').trim().toLowerCase();
   if (token === 'department' || token === 'dept' || token === '六部门') return 'department';
@@ -564,8 +563,10 @@ router.beforeEach(async (to, _from, next) => {
     }
   }
 
+  const activeTutorialRoute = activeTutorialRunAllowsRoute(String(to.name || ''));
   if (
     isPlatformShellModeEnabled() &&
+    !activeTutorialRoute &&
     to.name &&
     !SHELL_CORE_ROUTE_NAMES.has(String(to.name)) &&
     !isIndustryDeliveryRouteName(

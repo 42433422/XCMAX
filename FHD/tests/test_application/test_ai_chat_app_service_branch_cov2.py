@@ -189,11 +189,11 @@ class TestMergeToolRuntimeContext:
 
     def test_none_context(self):
         result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", None)
-        assert result == {"user_id": "u1", "message": "hello"}
+        assert result == {"user_id": "u1", "message": "hello", "tenant_id": "1"}
 
     def test_non_dict_context(self):
         result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", "not dict")  # type: ignore[arg-type]
-        assert result == {"user_id": "u1", "message": "hello"}
+        assert result == {"user_id": "u1", "message": "hello", "tenant_id": "1"}
 
     def test_dict_with_none_values_skipped(self):
         ctx = {"ui_surface": None, "intent_channel": None, "tool_execution_profile": None}

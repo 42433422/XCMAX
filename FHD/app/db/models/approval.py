@@ -18,6 +18,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func as sql_func
 
 from app.db.base import Base
+from app.db.mixins import TenantScopedMixin
 from app.domain.approval.safe_dsl import should_trigger_condition
 
 
@@ -154,8 +155,9 @@ class ApprovalFlowNode(Base):
         return should_trigger_condition(self, context)
 
 
-class ApprovalRequest(Base):
+class ApprovalRequest(TenantScopedMixin, Base):
     __tablename__ = "approval_requests"
+    __table_args__ = (Index("ix_approval_requests_tenant_status", "tenant_id", "status"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     request_no: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
@@ -216,6 +218,7 @@ class ApprovalRequest(Base):
     def to_dict(self) -> dict:
         return {
             "id": self.id,
+            "tenant_id": self.tenant_id,
             "request_no": self.request_no,
             "flow_id": self.flow_id,
             "flow_name": self.flow.flow_name if self.flow else None,
@@ -247,7 +250,7 @@ class ApprovalRequest(Base):
         }
 
 
-class ApprovalRecord(Base):
+class ApprovalRecord(TenantScopedMixin, Base):
     __tablename__ = "approval_records"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -287,11 +290,15 @@ class ApprovalRecord(Base):
     request: Mapped[ApprovalRequest] = relationship("ApprovalRequest", back_populates="records")
     approver: Mapped[Optional[User]] = relationship("User", foreign_keys=[approver_id])
 
-    __table_args__ = (Index("idx_request_node", "request_id", "node_order"),)
+    __table_args__ = (
+        Index("idx_request_node", "request_id", "node_order"),
+        Index("ix_approval_records_tenant_request", "tenant_id", "request_id"),
+    )
 
     def to_dict(self) -> dict:
         return {
             "id": self.id,
+            "tenant_id": self.tenant_id,
             "request_id": self.request_id,
             "node_id": self.node_id,
             "node_name": self.node_name,

@@ -97,7 +97,7 @@ vi.mock('@/utils/workflowEmployeeRegistry', () => ({
   loadWorkflowEmployeeRegistry: vi.fn(async () => ({ version: 1, employees: [] })),
   loadWorkflowEmployeeRegistryCached: vi.fn(async () => ({ version: 1, employees: [] })),
   mergeModManifestEntries: vi.fn((registry: { employees: unknown[] }) => registry.employees),
-  resolveLabel: (entry: { id: string }, resolver: (k: string) => string) => {
+  resolveLabel: (entry: { id: string }, _resolver: (k: string) => string) => {
     const map: Record<string, string> = {
       wechat_msg: '微信消息员工',
       label_print: '标签打印员工',
@@ -167,11 +167,8 @@ function dispatchWindowEvent(name: string, detail: Record<string, unknown> = {})
 }
 
 describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
-  let originalFetch: typeof globalThis.fetch
-
   beforeEach(() => {
     setActivePinia(createPinia())
-    originalFetch = globalThis.fetch
     vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
     // 重置 localStorage 状态
     localStorage.clear()
@@ -553,12 +550,8 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
     expect(router.currentRoute.value.name).toBe('product-onboarding')
   })
 
-  it('点击进阶教程按钮触发 driver tour', async () => {
+  it('点击进阶教程按钮打开 V2 课程目录且不触发 driver tour', async () => {
     const { launchAdvancedDriverTour } = await import('@/tutorial/promptAdvancedTutorial')
-    // 在 DOM 中放置 newConversationBtn，让 startTutorialGuide 内部循环立即 break
-    const newConvBtn = document.createElement('button')
-    newConvBtn.id = 'newConversationBtn'
-    document.body.appendChild(newConvBtn)
     const { wrapper } = await mountComponent()
     await wrapper.find('.assistant-float-toggle').trigger('click')
     await flushPromises()
@@ -571,12 +564,10 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
     expect(advancedCard).toBeTruthy()
     const advancedBtn = advancedCard!.find('.btn')
     await advancedBtn.trigger('click')
-    // startTutorialGuide 是异步的，需要等待所有 promise 链完成
     await flushPromises()
-    await flushPromises()
-    await flushPromises()
-    expect(launchAdvancedDriverTour).toHaveBeenCalled()
-    document.body.removeChild(newConvBtn)
+    expect(wrapper.find('.tutorial-v2-panel').exists()).toBe(true)
+    expect(wrapper.text()).toContain('真实业务实训')
+    expect(launchAdvancedDriverTour).not.toHaveBeenCalled()
   })
 
   // ===== 8. 浮窗打开事件 =====

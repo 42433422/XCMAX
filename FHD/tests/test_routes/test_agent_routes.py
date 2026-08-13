@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 
 from app.application.agent_orchestrator import (
     AgentOrchestrator,
@@ -28,6 +29,29 @@ from app.application.agent_orchestrator.task_execution_repository import (
 )
 from app.fastapi_routes.domains.agent.routes import router
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
+
+
+def test_agent_principal_keeps_actor_but_uses_verified_tutorial_tenant() -> None:
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/agent/tasks",
+            "headers": [],
+            "query_string": b"",
+            "server": ("test", 80),
+            "client": ("test", 1),
+            "scheme": "http",
+        }
+    )
+    request.state.tutorial_active = True
+    request.state.tenant_id = 29
+    user = MagicMock(id=17, username="learner", tenant_id=7, tier="", role="user")
+    with patch("app.infrastructure.auth.agent_principal.resolve_session_user", return_value=user):
+        principal = require_agent_principal(request)
+
+    assert principal.user_id == "17"
+    assert principal.tenant_id == "29"
 
 
 @pytest.fixture(autouse=True)
@@ -158,7 +182,7 @@ def test_create_get_and_list_agent_run() -> None:
 
 def test_record_observed_tool_run_is_owned_and_task_scoped() -> None:
     get_agent_run_repository().clear()
-    response = _client("u1").post(
+    response = _client("u1", tenant_id="shadow-tenant").post(
         "/api/agent/runs/observed-tool",
         json={
             "message": "查 5003 产品",
@@ -182,6 +206,7 @@ def test_record_observed_tool_run_is_owned_and_task_scoped() -> None:
     run = stored.to_dict()
     assert run["user_id"] == "u1"
     assert run["metadata"]["task_context"]["conversation_id"] == "conversation-product-5003"
+    assert run["metadata"]["runtime_context"]["tenant_id"] == "shadow-tenant"
     assert run["tool_calls"][0]["tool_id"] == "products"
     assert run["metadata"]["runtime_context"]["observation_trust"] == ("authenticated_client")
     assert run["metadata"]["non_retryable"] is True

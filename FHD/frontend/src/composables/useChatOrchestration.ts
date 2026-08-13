@@ -961,7 +961,11 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const autoAction = asAutoAction(action)
     console.log('[AutoAction] 触发:', autoAction, '| 用户消息:', userMessage)
     const type = String(autoAction.type || '')
-    const actionQuery = String(autoAction.query || autoAction.keyword || userMessage || '').trim()
+    const actionQuery = String(
+      Object.prototype.hasOwnProperty.call(autoAction, 'query')
+        ? autoAction.query ?? ''
+        : autoAction.keyword || userMessage || ''
+    ).trim()
 
     if (type === 'set_work_mode') {
       applyProRuntimeMode(type, autoAction.enabled !== false)

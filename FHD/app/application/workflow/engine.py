@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from app.application.product_query_context import inject_product_query_fallback
 from app.services import get_ai_conversation_service
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -783,13 +784,12 @@ class WorkflowEngine:
                 merged_params,
                 ("keyword", "model_number", "product_name", "name", "unit_name"),
             ):
-                merged_params["keyword"] = user_msg
+                keyword = inject_product_query_fallback(merged_params, user_msg)
                 logger.info(
-                    "工作流 products.query 参数为空，已注入用户原话作为 keyword（前 80 字）: %s",
-                    user_msg[:80],
+                    "工作流 products.query %s",
+                    f"注入有效检索词: {keyword[:80]}" if keyword else "按全量列表请求执行",
                 )
         elif node.tool_id == "customers" and node.action == "query":
-            # keyword 为空 = 列表/计数（Agent 列出全部客户），禁止把用户原话当客户名。
             if not self._has_non_empty_param(
                 merged_params,
                 ("keyword", "unit_name", "customer_name", "name"),
