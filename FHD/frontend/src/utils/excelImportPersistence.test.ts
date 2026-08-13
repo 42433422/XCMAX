@@ -74,4 +74,69 @@ describe('excelImportPersistence', () => {
     expect(all.length).toBeGreaterThanOrEqual(2)
     expect(all[0].created_at).toBeGreaterThanOrEqual(all[1].created_at)
   })
+
+  it('savePendingImport swallows storage write errors', () => {
+    const originalSetItem = Storage.prototype.setItem
+    Storage.prototype.setItem = () => {
+      throw new Error('denied')
+    }
+    try {
+      expect(() => savePendingImport(sampleImport('p-write-fail'))).not.toThrow()
+    } finally {
+      Storage.prototype.setItem = originalSetItem
+    }
+  })
+
+  it('getPendingImport returns null when sessionStorage read fails', () => {
+    const originalGetItem = Storage.prototype.getItem
+    Storage.prototype.getItem = () => {
+      throw new Error('denied')
+    }
+    try {
+      expect(getPendingImport('p-read-fail')).toBeNull()
+    } finally {
+      Storage.prototype.getItem = originalGetItem
+    }
+  })
+
+  it('removePendingImport swallows storage removal errors', () => {
+    const originalRemoveItem = Storage.prototype.removeItem
+    Storage.prototype.removeItem = () => {
+      throw new Error('denied')
+    }
+    try {
+      expect(() => removePendingImport('p-remove-fail')).not.toThrow()
+    } finally {
+      Storage.prototype.removeItem = originalRemoveItem
+    }
+  })
+
+  it('cleanupExpiredImports ignores corrupt entries', () => {
+    localStorage.setItem('xcagi_excel_pending_import_corrupt', '{oops')
+    localStorage.setItem('xcagi_excel_pending_import_ok', JSON.stringify(sampleImport('ok')))
+    expect(() => cleanupExpiredImports()).not.toThrow()
+    expect(getPendingImport('ok')).not.toBeNull()
+  })
+
+  it('getAllPendingImports ignores corrupt entries', () => {
+    localStorage.setItem('xcagi_excel_pending_import_corrupt', '{oops')
+    const all = getAllPendingImports()
+    expect(all.every((i) => i.pending_id !== 'corrupt')).toBe(true)
+  })
+
+  it('cleanupExpiredImports swallows outer storage failures', () => {
+    const originalLength = Object.getOwnPropertyDescriptor(Storage.prototype, 'length')
+    Object.defineProperty(Storage.prototype, 'length', {
+      configurable: true,
+      get: () => {
+        throw new Error('no storage')
+      },
+    })
+    try {
+      expect(() => cleanupExpiredImports()).not.toThrow()
+      expect(getAllPendingImports()).toEqual([])
+    } finally {
+      if (originalLength) Object.defineProperty(Storage.prototype, 'length', originalLength)
+    }
+  })
 })

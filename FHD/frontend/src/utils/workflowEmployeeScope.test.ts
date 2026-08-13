@@ -91,4 +91,95 @@ describe('workflowEmployeeScope', () => {
     expect(merged.map((e) => e.id)).toEqual(['attendance_ai'])
     expect(workflowRegistryEntryBelongsToStack(merged[0], stack)).toBe(true)
   })
+
+  it('returns false when entry has no carrier and no mod id', () => {
+    const stack = buildEnterpriseModStack(basePlan)
+    expect(
+      workflowRegistryEntryBelongsToStack({ carrierModId: '', hostModId: '' }, stack),
+    ).toBe(false)
+  })
+
+  it('returns false for custom phase employee carrier mod id', () => {
+    const stack = buildEnterpriseModStack(basePlan)
+    expect(
+      workflowRegistryEntryBelongsToStack(
+        { carrierModId: 'xcagi-workflow-employee-custom', hostModId: 'xcagi-workflow-employee-custom' },
+        stack,
+      ),
+    ).toBe(false)
+  })
+
+  it('returns true for workflow carrier mod when stack is null', () => {
+    expect(
+      workflowRegistryEntryBelongsToStack(
+        { carrierModId: 'xcagi-workflow-employee-attendance', hostModId: 'xcagi-workflow-employee-attendance' },
+        null,
+      ),
+    ).toBe(true)
+  })
+
+  it('returns true for host bridge mod when stack is null', () => {
+    expect(
+      workflowRegistryEntryBelongsToStack(
+        { carrierModId: 'xcagi-erp-domain-bridge', hostModId: 'xcagi-erp-domain-bridge' },
+        null,
+      ),
+    ).toBe(true)
+  })
+
+  it('returns false for unknown carrier mod when stack is null', () => {
+    expect(
+      workflowRegistryEntryBelongsToStack(
+        { carrierModId: 'some-random-mod', hostModId: 'some-random-mod' },
+        null,
+      ),
+    ).toBe(false)
+  })
+
+  it('filterModsForEnterpriseWorkflowRegistry filters source mods when stack is null', () => {
+    const mods = [
+      { id: 'xcagi-workflow-employee-attendance', workflow_employees: [{ id: 'att_ai', label: '考勤' }] },
+      { id: 'xcagi-host-foundation-employee', type: 'employee_pack', workflow_employees: [{ id: 'gen_ai', label: '生成' }] },
+    ]
+    const scoped = filterModsForEnterpriseWorkflowRegistry(mods, null)
+    expect(scoped.map((m) => m.id)).toEqual(['xcagi-workflow-employee-attendance'])
+  })
+
+  it('filterModsForEnterpriseWorkflowRegistry handles undefined mods', () => {
+    const stack = buildEnterpriseModStack(basePlan)
+    expect(filterModsForEnterpriseWorkflowRegistry(undefined, stack)).toEqual([])
+  })
+
+  it('filterModsForEnterpriseWorkflowRegistry skips mods with empty id', () => {
+    const stack = buildEnterpriseModStack(basePlan)
+    const mods = [
+      { id: '', workflow_employees: [{ id: 'e1', label: 'E1' }] },
+      { id: 'coating-industry', workflow_employees: [{ id: 'e2', label: 'E2' }] },
+    ]
+    const scoped = filterModsForEnterpriseWorkflowRegistry(mods, stack)
+    expect(scoped.map((m) => m.id)).toEqual(['coating-industry'])
+  })
+
+  it('filterModsForEnterpriseWorkflowRegistry skips mods with empty workflow_employees', () => {
+    const stack = buildEnterpriseModStack(basePlan)
+    const mods = [
+      { id: 'coating-industry', workflow_employees: [] },
+      { id: 'xcagi-erp-domain-bridge', workflow_employees: [{ id: 'e1', label: 'E1' }] },
+    ]
+    const scoped = filterModsForEnterpriseWorkflowRegistry(mods, stack)
+    expect(scoped.map((m) => m.id)).toEqual(['xcagi-erp-domain-bridge'])
+  })
+
+  it('filterModsForEnterpriseWorkflowRegistry skips employee pack entries', () => {
+    const stack = buildEnterpriseModStack(basePlan)
+    const mods = [
+      { id: 'xcagi-host-foundation-employee', type: 'employee_pack', workflow_employees: [{ id: 'e1', label: 'E1' }] },
+      { id: 'coating-industry', workflow_employees: [{ id: 'e2', label: 'E2' }] },
+    ]
+    // coating-industry is in stack.packageModIds but the employee pack is not in stack
+    // Actually, since stack contains coating-industry in packageModIds, coating-industry should be included
+    const scoped = filterModsForEnterpriseWorkflowRegistry(mods, stack)
+    // xcagi-host-foundation-employee is an employee pack, so it's filtered out
+    expect(scoped.map((m) => m.id)).toEqual(['coating-industry'])
+  })
 })
