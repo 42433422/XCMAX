@@ -566,7 +566,7 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
     await advancedBtn.trigger('click')
     await flushPromises()
     expect(wrapper.find('.tutorial-v2-panel').exists()).toBe(true)
-    expect(wrapper.text()).toContain('真实业务实训')
+    expect(wrapper.text()).toContain('进阶教程 · 跟着做就能学会')
     expect(launchAdvancedDriverTour).not.toHaveBeenCalled()
   })
 

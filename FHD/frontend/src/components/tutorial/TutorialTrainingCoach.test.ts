@@ -33,6 +33,15 @@ const step = {
   hint: '名称必须完全一致。',
   route_name: 'customers',
   target_selector: '#tutorial-customer-target',
+  location_label: '左侧菜单“组织管理”',
+  completion_cue: '客户列表中出现“客户B”。',
+  guide_actions: [
+    { instruction: '点击“+ 新建客户”。', target_selector: '#tutorial-customer-target', expected_input: '' },
+    { instruction: '输入客户名称。', target_selector: '#tutorial-customer-name', expected_input: '客户B' },
+    { instruction: '点击“创建”。', target_selector: '#tutorial-customer-save', expected_input: '' },
+  ],
+  action_checklist: ['点击“+ 新建客户”。', '输入客户名称。', '点击“创建”。'],
+  principle: '客户名称要准确且唯一。',
   required: true,
   status: 'pending' as const,
   evidence: null,
@@ -85,7 +94,7 @@ describe('TutorialTrainingCoach', () => {
     vi.useRealTimers()
   })
 
-  it('shows the teaching-space banner and all required coaching fields', async () => {
+  it('shows one beginner action first and keeps explanations folded away', async () => {
     const store = useTutorialV2Store()
     store.currentRun = activeRun
     const wrapper = mount(TutorialTrainingCoach, {
@@ -95,15 +104,18 @@ describe('TutorialTrainingCoach', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('教学空间')
-    expect(wrapper.text()).toContain('所有业务写入与正式企业数据隔离')
-    for (const label of ['目标', '你要做什么', '成功标准', '为什么', '提示']) {
-      expect(wrapper.text()).toContain(label)
-    }
+    expect(wrapper.text()).toContain('这里的练习不会改动你公司的正式数据')
+    expect(wrapper.text()).toContain('现在只做这一件事')
     expect(wrapper.text()).toContain('建立精确客户主数据')
+    expect(wrapper.text()).toContain('位置左侧菜单“组织管理”')
+    expect(wrapper.text()).toContain('完成后你会看到')
+    expect(wrapper.text()).toContain('打开操作页面')
+    expect(wrapper.findAll('details')).toHaveLength(2)
+    expect(wrapper.findAll('details').every((item) => item.attributes('open') === undefined)).toBe(true)
     wrapper.unmount()
   })
 
-  it('only navigates and highlights on 去操作; verification remains explicit', async () => {
+  it('only navigates and highlights on 打开操作页面; checking remains explicit', async () => {
     const target = document.createElement('button')
     target.id = 'tutorial-customer-target'
     document.body.appendChild(target)
@@ -115,7 +127,7 @@ describe('TutorialTrainingCoach', () => {
     })
     await flushPromises()
 
-    await wrapper.get('button.btn-primary').trigger('click')
+    await wrapper.findAll('button').find((item) => item.text() === '打开操作页面')!.trigger('click')
     await vi.advanceTimersByTimeAsync(100)
 
     expect(routerPush).toHaveBeenCalledWith({ name: 'customers' })
@@ -124,10 +136,12 @@ describe('TutorialTrainingCoach', () => {
     expect(target.classList.contains('xcagi-tutorial-target-highlight')).toBe(true)
     expect(apiMock.verify).not.toHaveBeenCalled()
     expect(target.getAttribute('value')).toBeNull()
+    expect(wrapper.text()).toContain('照着做 · 1 / 3')
+    expect(wrapper.text()).toContain('点击“+ 新建客户”。')
     wrapper.unmount()
   })
 
-  it('collapses before a wide operation target can cover the action controls', async () => {
+  it('keeps the current instruction visible for a wide operation target', async () => {
     const target = document.createElement('div')
     target.id = 'tutorial-customer-target'
     target.getBoundingClientRect = () => ({
@@ -150,13 +164,45 @@ describe('TutorialTrainingCoach', () => {
     })
     await flushPromises()
 
-    await wrapper.get('button.btn-primary').trigger('click')
+    await wrapper.findAll('button').find((item) => item.text() === '打开操作页面')!.trigger('click')
     await vi.advanceTimersByTimeAsync(100)
 
     expect(target.classList.contains('xcagi-tutorial-target-highlight')).toBe(true)
-    expect(wrapper.text()).toContain('展开')
-    expect(wrapper.text()).not.toContain('你要做什么')
-    expect(wrapper.get('.tutorial-coach').classes()).toContain('is-collapsed')
+    expect(wrapper.text()).toContain('点击“+ 新建客户”。')
+    expect(wrapper.get('.tutorial-coach').classes()).toContain('is-guide-mode')
+    expect(wrapper.get('.tutorial-coach').classes()).not.toContain('is-collapsed')
+    wrapper.unmount()
+  })
+
+  it('moves through micro-instructions without clicking or filling the page for the learner', async () => {
+    const create = document.createElement('button')
+    create.id = 'tutorial-customer-target'
+    const name = document.createElement('input')
+    name.id = 'tutorial-customer-name'
+    let createClicks = 0
+    create.addEventListener('click', () => { createClicks += 1 })
+    document.body.append(create, name)
+    const store = useTutorialV2Store()
+    store.currentRun = activeRun
+    const wrapper = mount(TutorialTrainingCoach, {
+      attachTo: document.body,
+      global: { stubs: { Teleport: true } },
+    })
+    await flushPromises()
+
+    await wrapper.findAll('button').find((item) => item.text() === '打开操作页面')!.trigger('click')
+    await vi.advanceTimersByTimeAsync(100)
+    await wrapper.findAll('button').find((item) => item.text() === '我做完了，下一条')!.trigger('click')
+    await vi.advanceTimersByTimeAsync(60)
+
+    expect(createClicks).toBe(0)
+    expect(name.value).toBe('')
+    expect(name.classList.contains('xcagi-tutorial-target-highlight')).toBe(true)
+    expect(wrapper.text()).toContain('请准确输入')
+    expect(wrapper.text()).toContain('客户B')
+    expect(apiMock.verify).not.toHaveBeenCalled()
+    create.remove()
+    name.remove()
     wrapper.unmount()
   })
 
@@ -185,10 +231,10 @@ describe('TutorialTrainingCoach', () => {
     })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('系统检测')
+    expect(wrapper.text()).toContain('还差一点')
     expect(wrapper.text()).toContain('客户数量：0')
-    expect(wrapper.text()).toContain('期望标准')
-    expect(wrapper.text()).toContain('下一步')
+    expect(wrapper.text()).toContain('名称必须完全一致')
+    expect(wrapper.text()).toContain('系统会检查什么')
     expect(wrapper.text()).not.toContain('customer_count')
     expect(wrapper.text()).not.toContain('customer_not_ready')
     wrapper.unmount()
