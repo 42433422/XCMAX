@@ -172,11 +172,9 @@ let sidebarViewportMedia = null
 const showMobileBottomNav = ref(false)
 let mobileBottomNavMedia = null
 let layoutActive = true
-
 const clientModeTiersUiEnabled = isClientModeTiersUiEnabled()
 const isSandboxMode = new URLSearchParams(window.location.search).has('sandbox')
 const adminConsoleSpa = detectAdminConsoleSpa()
-
 /** 原版模式或未加载扩展时为空，与侧栏 Mod 菜单一致 */
 const hasModsForUi = computed(() => modsForUi.value.length > 0)
 

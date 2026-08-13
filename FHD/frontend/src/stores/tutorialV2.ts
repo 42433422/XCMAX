@@ -16,6 +16,14 @@ export function tutorialRunAllowsRoute(
   return Boolean(target && run.steps.some((step) => step.route_name === target))
 }
 
+export function activeTutorialRunAllowsRoute(routeName: string): boolean {
+  try {
+    return tutorialRunAllowsRoute(useTutorialV2Store().currentRun, routeName)
+  } catch {
+    return false
+  }
+}
+
 function safeErrorHint(error: unknown): string {
   if (error instanceof ApiError) {
     const payload = error.data && typeof error.data === 'object'

@@ -9,12 +9,12 @@ import re
 from typing import Any
 
 from app.application.chat_tool_intent import looks_like_explicit_workflow_tool_intent
+from app.application.product_query_context import is_full_product_list_phrase
 from app.utils.ai_helpers import format_money, safe_float
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-# W1-10 销售到收款闭环写意图；必须先于通用客户实体匹配。
 _SALES_WRITE_SELL_MARKERS = ("卖给", "销售给", "出售给")
 
 
@@ -418,19 +418,7 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
                     lower,
                 )
                 keyword = re.sub(r"\s+", " ", keyword).strip()
-                if keyword in {
-                    "产品",
-                    "产品列表",
-                    "当前产品",
-                    "当前产品列表",
-                    "现有产品",
-                    "现有产品列表",
-                    "全部产品",
-                    "全部产品列表",
-                    "所有产品",
-                    "所有产品列表",
-                }:
-                    keyword = ""
+                keyword = "" if is_full_product_list_phrase(keyword) else keyword
                 if keyword:
                     slots["keyword"] = keyword
 
@@ -514,18 +502,16 @@ def run_workflow_products_query_normal_profile(
     node_params: dict[str, Any] | None = None,
     per_page: int = 20,
 ) -> dict[str, Any]:
-    """工作流 products.query 在普通工具画像下：与普通版 product_query 相同 keyword 策略。"""
     node_params = dict(node_params or {})
     text = (user_message or "").strip()
     rr = route_normal_mode_message(text)
     kw_preview = ""
-    routed_product_query = rr.get("intent") == "product_query"
-    if routed_product_query:
+    if rr.get("intent") == "product_query":
         route_slots = rr.get("slots") or {}
-        keyword = str(route_slots.get("keyword") or "").strip()
-        model_number = str(route_slots.get("model_number") or "").strip().upper()
-        kw_preview = (keyword or "").strip() or (model_number or "").strip()
-    if not kw_preview and not routed_product_query:
+        kw_preview = str(
+            route_slots.get("keyword") or route_slots.get("model_number") or ""
+        ).strip()
+    if not kw_preview and rr.get("intent") != "product_query":
         kw_preview = (
             str(node_params.get("keyword") or "").strip()
             or str(node_params.get("model_number") or "").strip().upper()

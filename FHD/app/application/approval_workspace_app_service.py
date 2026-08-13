@@ -19,6 +19,7 @@ from fastapi import Body, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from app.application.approval_notifications import completed_workflow_notification
 from app.application.mobile_push_app_service import notify_mobile_user
 from app.application.workflow.approval_persistence import (
     AGENT_RUN_UNAVAILABLE_CODE,
@@ -899,19 +900,10 @@ def _approve_ai_workflow_request_without_node(
                 "message": bounded_outcome["message"],
             },
         )
-    notification = None
-    if _execution_success and req.applicant_id:
-        notification = (
-            int(req.applicant_id),
-            "审批进度更新",
-            f"《{req.title or req.request_no}》AI 工作流已执行完成",
-            {"route": f"/app/approval/{req.id}", "request_id": str(req.id)},
-        )
+    notification = completed_workflow_notification(req) if req.applicant_id else None
     db.commit()
     db.refresh(req)
-    # SQLite 桌面运行时只允许在审批事务释放写锁后使用通知服务自己的会话。
-    # 否则通知写入会等待当前审批会话，造成界面假死并最终报 database is locked。
-    if notification is not None:
+    if _execution_success and notification is not None:
         notify_mobile_user(*notification)
     data = _request_to_dict(req, include_records=True)
     data["workflow_execution"] = bounded_outcome

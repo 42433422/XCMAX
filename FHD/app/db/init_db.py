@@ -1969,28 +1969,6 @@ def init_approval_tables(engine: Engine) -> None:
         logger.warning("approval_flows.business_type 兼容补列失败: %s", exc)
 
 
-def init_tutorial_v2_tables(engine: Engine) -> None:
-    """Create Tutorial V2 control-plane tables for fresh desktop/Web SQLite installs.
-
-    Alembic remains authoritative for upgrades and approval tenant backfills.  The
-    runtime bootstrap also needs these tables because a brand-new desktop data
-    directory is initialized directly from ORM metadata before any tutorial API is
-    opened.
-    """
-    from app.db.base import Base
-    from app.db.models.tutorial import TutorialRun, TutorialStepEvidence, TutorialWorkspace
-
-    Base.metadata.create_all(
-        engine,
-        tables=[
-            TutorialWorkspace.__table__,
-            TutorialRun.__table__,
-            TutorialStepEvidence.__table__,
-        ],
-        checkfirst=True,
-    )
-
-
 def ensure_product_query_indexes(engine: Engine) -> None:
     """
     为 products 表补齐常用查询索引（按客户 unit、型号 model_number），
