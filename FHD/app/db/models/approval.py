@@ -157,6 +157,7 @@ class ApprovalFlowNode(Base):
 
 class ApprovalRequest(TenantScopedMixin, Base):
     __tablename__ = "approval_requests"
+    __table_args__ = (Index("ix_approval_requests_tenant_status", "tenant_id", "status"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     request_no: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
@@ -289,7 +290,10 @@ class ApprovalRecord(TenantScopedMixin, Base):
     request: Mapped[ApprovalRequest] = relationship("ApprovalRequest", back_populates="records")
     approver: Mapped[Optional[User]] = relationship("User", foreign_keys=[approver_id])
 
-    __table_args__ = (Index("idx_request_node", "request_id", "node_order"),)
+    __table_args__ = (
+        Index("idx_request_node", "request_id", "node_order"),
+        Index("ix_approval_records_tenant_request", "tenant_id", "request_id"),
+    )
 
     def to_dict(self) -> dict:
         return {

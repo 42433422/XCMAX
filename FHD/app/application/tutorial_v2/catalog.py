@@ -195,7 +195,7 @@ COURSES: tuple[dict[str, Any], ...] = (
                 why="只有持久业务副作用全部一致，销售任务才算完成。",
                 hint="如果列表中有多条申请，请按任务句子和申请单号核对。",
                 route_name="approval-workspace",
-                target_selector="[data-tutorial-id='approval-detail-actions']",
+                target_selector="[data-tutorial-id='approval-approve-action']",
                 verifier="sales_closed_loop",
                 action_checklist=("点击通过", "等待工作流恢复完成", "返回实训教练验证结果"),
                 principle="批准只应恢复同一请求一次；业务结果必须完整且不可重复。",

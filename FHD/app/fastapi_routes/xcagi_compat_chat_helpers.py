@@ -31,6 +31,7 @@ from app.application.agent_orchestrator.chat_trace import (
 from app.application.chat_reply_safety import sanitize_model_chat_reply
 from app.application.modstore_conversation_app import create_modstore_openai_client_from_request
 from app.application.stream_status_events import MODEL_STREAM_ACCEPTED_EVENT
+from app.application.tutorial_v2.scope import validated_tutorial_tenant_id
 from app.application.workflow.multimodal_user_content import (
     EmptyMultimodalResponseError,
     UnsupportedMultimodalModelError,
@@ -119,14 +120,12 @@ def _runtime_context_with_authenticated_actor(
     runtime_context: dict[str, Any] | None,
 ) -> dict[str, Any]:
     """Attach the local session actor and authenticated tenant.
-
     Never trust chat body.user_id for approvals, and never trust any tenant_id
     supplied by the request body/context: the tenant is derived only from the
     authenticated session (``resolve_tenant_id``) so the resolved tenant wins.
     """
     context = dict(runtime_context or {})
-    # The caller-controlled context is never an authentication source. Remove
-    # any supplied tenant before attempting session resolution so a missing or
+    # Remove caller-supplied tenant before session resolution so a missing or
     # failed resolver cannot accidentally preserve a spoofed tenant id.
     context.pop("tenant_id", None)
     try:
@@ -139,14 +138,8 @@ def _runtime_context_with_authenticated_actor(
             context["actor_id"] = actor_id
     except RECOVERABLE_ERRORS:
         logger.debug("chat session actor resolution skipped", exc_info=True)
-    # 教学租户只能来自上游中间件已经校验过的 HttpOnly 课程 Cookie；普通请求仍只从
-    # 认证会话解析。不能再次从 session 覆盖教学作用域，否则聊天任务会落回正式租户。
-    tutorial_active = getattr(request.state, "tutorial_active", False) is True
-    tutorial_tenant = getattr(request.state, "tenant_id", None) if tutorial_active else None
-    if tutorial_tenant is not None:
-        context["tenant_id"] = int(tutorial_tenant)
-        return context
-    # 普通请求的租户只从认证会话解析；解析不到时保持缺失并 fail closed。
+    if (tutorial_tenant := validated_tutorial_tenant_id(request)) is not None:
+        return {**context, "tenant_id": int(tutorial_tenant)}
     try:
         from app.infrastructure.auth.tenant_context import resolve_tenant_id
 

@@ -14,6 +14,14 @@ from app.db.models.tutorial import TutorialRun, TutorialWorkspace
 TUTORIAL_COOKIE = "xcagi_tutorial_run"
 COOKIE_MAX_AGE_SECONDS = 12 * 60 * 60
 
+
+def validated_tutorial_tenant_id(request: Request) -> int | None:
+    if getattr(request.state, "tutorial_active", False) is not True:
+        return None
+    tenant_id = getattr(request.state, "tenant_id", None)
+    return int(tenant_id) if tenant_id is not None else None
+
+
 _CONTROL_PREFIXES = (
     "/api/tutorial/v2",
     "/api/auth",

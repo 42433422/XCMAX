@@ -22,9 +22,9 @@ from app.db.init_db import (
     init_extract_logs_tables,
     init_service_bridge_tables,
     init_template_tables,
-    init_tutorial_v2_tables,
     initialize_databases,
 )
+from app.db.init_tutorial import init_tutorial_v2_tables
 from app.di.registry import get_service_registry
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 

@@ -48,10 +48,7 @@ from app.application.ai_chat.excel_import_policy import (
     _skip_pro_excel_deterministic_import,
 )
 from app.application.ai_chat.instant_tools import AIChatInstantToolsMixin
-from app.application.ai_chat.workflow_response_builder import (
-    AIChatWorkflowResponseMixin,
-    normalize_product_float_query,
-)
+from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
 
 
 def _import_workflow_components():
@@ -164,9 +161,7 @@ class AIChatApplicationService(
     @staticmethod
     def _is_pure_casual_chat(text: str) -> bool:
         """纯闲聊判定：无任何业务/工具/实体语义，交给 legacy 单次 LLM。
-
-        全局启用多步编排后，普通对话默认进入可执行规划；仅当槽位路由完全未命中
-        （如「你好」「帮我写首诗」）才回落 legacy 聊天，避免强行编排无意义内容。
+        全局多步编排仅在槽位路由未命中时回落 legacy 聊天。
         """
         from app.application.normal_chat_dispatch import route_normal_mode_message
 
@@ -179,14 +174,7 @@ class AIChatApplicationService(
         context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         runtime_ctx: dict[str, Any] = {"user_id": user_id, "message": message}
-        # Tenant identity is read from the trusted request scope, never copied from
-        # caller-controlled chat context.  Durable AgentRun/AgentTask rows must keep
-        # the same tenant as the business operation they represent.
-        from app.infrastructure.tenant_scope import current_tenant_id
-
-        scoped_tenant_id = current_tenant_id()
-        if scoped_tenant_id is not None:
-            runtime_ctx["tenant_id"] = str(scoped_tenant_id)
+        AIChatWorkflowResponseMixin._attach_task_tenant(runtime_ctx)
         if isinstance(context, dict):
             # 会话级标识透传，供计划持久化（跨会话续跑）与记忆落盘使用。
             for key in ("session_id", "conversation_id", "local_user_id", "actor_id"):
@@ -200,13 +188,6 @@ class AIChatApplicationService(
                 if key in context and isinstance(context[key], dict):
                     runtime_ctx[key] = context[key]
         return runtime_ctx
-
-    @staticmethod
-    def _task_owner_id(user_id: str, runtime_context: dict[str, Any]) -> str:
-        """Use the authenticated local actor for durable task ownership."""
-        return str(
-            runtime_context.get("local_user_id") or runtime_context.get("actor_id") or user_id
-        ).strip()
 
     def process_chat(
         self,
@@ -1862,8 +1843,7 @@ class AIChatApplicationService(
                     or str(p.get("model_number") or "").strip()
                     or str(p.get("product_name") or p.get("name") or "").strip()
                 )
-                q = normalize_product_float_query(q)
-                if q:
+                if q := self._normalize_product_query(q):
                     return q
         for r in run_result.node_results:
             if not r.success or r.tool_id != "products" or r.action != "query":
@@ -1879,7 +1859,7 @@ class AIChatApplicationService(
                         return m
                 if n:
                     return n
-        return normalize_product_float_query(user_message)
+        return self._normalize_product_query(user_message)
 
     def _start_agentic_workflow_agent_run(
         self,

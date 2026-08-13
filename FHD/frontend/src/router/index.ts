@@ -39,10 +39,8 @@ import { isClientErpSidebarContext } from '@/constants/genericModPack';
 import { AI_DELIVERY_ROUTES } from './privateModDeliveryRoutes';
 import { resolveInitialRoutes } from './initialRouteSelection';
 import { refreshDesktopSessionInBackground } from '@/utils/desktopSessionRestore';
-import { tutorialRunAllowsRoute, useTutorialV2Store } from '@/stores/tutorialV2';
-
+import { activeTutorialRunAllowsRoute } from '@/stores/tutorialV2';
 const DEFAULT_DUTY_ROSTER_GRAPH_VIEW = 'department';
-
 function normalizeDutyRosterGraphView(raw: unknown): string {
   const token = String(Array.isArray(raw) ? raw[0] : raw || '').trim().toLowerCase();
   if (token === 'department' || token === 'dept' || token === '六部门') return 'department';
@@ -565,16 +563,7 @@ router.beforeEach(async (to, _from, next) => {
     }
   }
 
-  let activeTutorialRoute = false;
-  try {
-    activeTutorialRoute = tutorialRunAllowsRoute(
-      useTutorialV2Store().currentRun,
-      String(to.name || ''),
-    );
-  } catch {
-    /* Pinia 未就绪时按普通平台壳规则处理 */
-  }
-
+  const activeTutorialRoute = activeTutorialRunAllowsRoute(String(to.name || ''));
   if (
     isPlatformShellModeEnabled() &&
     !activeTutorialRoute &&

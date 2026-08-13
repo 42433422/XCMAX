@@ -268,17 +268,15 @@
         </div>
       </div>
       <template #footer>
-        <div data-tutorial-id="approval-detail-actions" class="approval-detail-actions">
         <button class="btn btn-link" @click="closeDetails">
           <i class="fa fa-times"></i> 关闭
         </button>
         <button v-if="canApprove && selectedRequest" class="btn btn-reject" @click="reject(selectedRequest.id)">
           <i class="fa fa-times"></i> 拒绝
         </button>
-        <button v-if="canApprove && selectedRequest" class="btn btn-approve" @click="approve(selectedRequest.id)">
+        <button v-if="canApprove && selectedRequest" class="btn btn-approve" data-tutorial-id="approval-approve-action" @click="approve(selectedRequest.id)">
           <i class="fa fa-check"></i> 通过
         </button>
-        </div>
       </template>
     </Modal>
   </div>
@@ -369,8 +367,7 @@ const loadData = async () => {
       stats.value.approved = mine.filter((r: ApprovalRequest) => r.status === 'approved').length
       stats.value.rejected = mine.filter((r: ApprovalRequest) => r.status === 'rejected').length
     }
-    const requestNo = String(route.query.request_no || '').trim()
-    const requestId = Number(route.query.request_id || 0)
+    const requestNo = String(route.query.request_no || '').trim(), requestId = Number(route.query.request_id || 0)
     if ((requestNo || requestId > 0) && !deepLinkOpened.value) {
       const target = [...pendingRequests.value, ...initiatedRequests.value]
         .find((item) => (requestId > 0 ? item.id === requestId : item.request_no === requestNo))

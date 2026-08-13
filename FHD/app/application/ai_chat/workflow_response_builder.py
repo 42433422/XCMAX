@@ -7,9 +7,10 @@ import logging
 import re
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
+from app.application import agent_task_context
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
 
 OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 
@@ -27,6 +28,18 @@ def normalize_product_float_query(raw: str) -> str:
 
 
 class AIChatWorkflowResponseMixin:
+    @staticmethod
+    def _attach_task_tenant(runtime_context: dict[str, Any]) -> None:
+        agent_task_context.attach_scoped_tenant(runtime_context)
+
+    @staticmethod
+    def _task_owner_id(user_id: str, runtime_context: dict[str, Any]) -> str:
+        return agent_task_context.authenticated_task_owner(user_id, runtime_context)
+
+    @staticmethod
+    def _normalize_product_query(raw: str) -> str:
+        return normalize_product_float_query(raw)
+
     def _format_agent_run_response(
         self,
         plan,

@@ -39,7 +39,7 @@ from app.infrastructure.tenant_scope import tenant_scope
 
 
 def test_fresh_runtime_bootstrap_creates_tutorial_v2_tables():
-    from app.db.init_db import init_tutorial_v2_tables
+    from app.db.init_tutorial import init_tutorial_v2_tables
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
     init_tutorial_v2_tables(engine)

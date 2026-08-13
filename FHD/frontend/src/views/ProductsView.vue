@@ -122,10 +122,7 @@
             <label>{{ fieldLabel('price', '价格') }}</label>
             <input v-model.number="formData.price" data-tutorial-id="product-price" type="number" step="0.01" placeholder="0.00">
           </div>
-          <div v-if="!isEdit" class="form-group">
-            <label>初始库存</label>
-            <input v-model.number="formData.quantity" data-tutorial-id="product-inventory" type="number" min="0" step="1" placeholder="0">
-          </div>
+          <div v-if="!isEdit" class="form-group"><label>初始库存</label><input v-model.number="formData.quantity" data-tutorial-id="product-inventory" type="number" min="0" step="1" placeholder="0"></div>
           <div class="form-group" v-for="f in extraFields" :key="f.key">
             <label>{{ f.label }}</label>
             <input
@@ -157,16 +154,13 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import { appAlert } from '@/utils/appDialog';
 import { useCoreNavLabel } from '@/composables/useCoreNavLabel';
 import { useIndustryFieldSchema } from '@/composables/useIndustryFieldSchema';
-
 const pageNavTitle = useCoreNavLabel('products');
-
 // 行业感知：products 子系统的实体名与字段表头随行业变（产品/人员、型号/工号、规格/班次、单价/时薪）
 const productsSchema = useIndustryFieldSchema('products');
 const entityName = computed(() => productsSchema.entity.value || '产品');
 function fieldLabel(key, fallback) {
   return productsSchema.labelOf(key, fallback);
 }
-
 // 行业新增字段（批号/保质期等）动态渲染：schema 里超出核心 4 字段(型号/名称/规格/单价)的字段，
 // 在表单尾部按类型自动生成输入；核心字段仍为固定输入，保证稳定。
 const CORE_PRODUCT_KEYS = ['model_number', 'name', 'specification', 'price', 'quantity', 'unit'];
@@ -182,7 +176,6 @@ const specOptions = computed(() => {
 
 const store = useProductsStore();
 const { products, loading } = storeToRefs(store);
-
 const units = ref([]);
 const showModal = ref(false);
 const isEdit = ref(false);
