@@ -344,10 +344,14 @@ class TestRouteNormalModeMessageProductQuery:
         assert result["intent"] == "product_query"
 
     def test_product_query_keyword_stripped_to_nonempty(self):
-        """'查询产品' 清理后 keyword='产品'。"""
+        """泛化的产品列表问法必须查询全量，而不是把“产品”当筛选词。"""
         result = route_normal_mode_message("查询产品")
         assert result["intent"] == "product_query"
-        assert result["slots"].get("keyword") == "产品"
+        assert result["slots"].get("keyword") is None
+
+    def test_current_product_list_is_a_full_list_query(self):
+        result = route_normal_mode_message("查询当前产品列表")
+        assert result == {"intent": "product_query", "slots": {}}
 
     def test_product_query_with_model_signal(self):
         result = route_normal_mode_message("型号:A001")
@@ -561,6 +565,15 @@ class TestRunWorkflowProductsQueryNormalProfile:
             result = run_workflow_products_query_normal_profile("查询A001")
         assert result["success"] is True
         assert result["normal_tool_profile"] is True
+
+    def test_generic_current_product_list_does_not_become_a_keyword(self):
+        with patch("app.bootstrap.get_products_service") as mock_get:
+            mock_svc = MagicMock()
+            mock_svc.get_products.return_value = {"success": True, "data": [{"id": 1}]}
+            mock_get.return_value = mock_svc
+            result = run_workflow_products_query_normal_profile("查询当前产品列表")
+        assert result["success"] is True
+        assert mock_svc.get_products.call_args.kwargs["keyword"] is None
 
     def test_with_non_product_query_intent_uses_node_params(self):
         with patch("app.bootstrap.get_products_service") as mock_get:

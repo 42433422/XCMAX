@@ -120,8 +120,97 @@ describe('TutorialTrainingCoach', () => {
 
     expect(routerPush).toHaveBeenCalledWith({ name: 'customers' })
     expect(target.classList.contains('xcagi-tutorial-target-highlight')).toBe(true)
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(target.classList.contains('xcagi-tutorial-target-highlight')).toBe(true)
     expect(apiMock.verify).not.toHaveBeenCalled()
     expect(target.getAttribute('value')).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('collapses before a wide operation target can cover the action controls', async () => {
+    const target = document.createElement('div')
+    target.id = 'tutorial-customer-target'
+    target.getBoundingClientRect = () => ({
+      x: 20,
+      y: 700,
+      top: 700,
+      left: 20,
+      right: 1000,
+      bottom: 780,
+      width: 980,
+      height: 80,
+      toJSON: () => ({}),
+    })
+    document.body.appendChild(target)
+    const store = useTutorialV2Store()
+    store.currentRun = activeRun
+    const wrapper = mount(TutorialTrainingCoach, {
+      attachTo: document.body,
+      global: { stubs: { Teleport: true } },
+    })
+    await flushPromises()
+
+    await wrapper.get('button.btn-primary').trigger('click')
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(target.classList.contains('xcagi-tutorial-target-highlight')).toBe(true)
+    expect(wrapper.text()).toContain('展开')
+    expect(wrapper.text()).not.toContain('你要做什么')
+    expect(wrapper.get('.tutorial-coach').classes()).toContain('is-collapsed')
+    wrapper.unmount()
+  })
+
+  it('explains failed evidence in Chinese without exposing internal codes or keys', async () => {
+    const failedStep = {
+      ...step,
+      status: 'failed' as const,
+      evidence: {
+        step_id: step.id,
+        status: 'failed' as const,
+        result_code: 'customer_not_ready',
+        entity_refs: [],
+        counts: { customer_count: 0 },
+        attempt_count: 1,
+        verified_at: '2026-08-13T00:01:00',
+      },
+    }
+    const store = useTutorialV2Store()
+    const failedRun = { ...activeRun, steps: [failedStep] }
+    apiMock.current.mockResolvedValue(failedRun)
+    store.currentRun = failedRun
+    store.verificationHint = '请确认教学空间中只有一条名称精确为“客户B”的客户。'
+    const wrapper = mount(TutorialTrainingCoach, {
+      attachTo: document.body,
+      global: { stubs: { Teleport: true } },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('系统检测')
+    expect(wrapper.text()).toContain('客户数量：0')
+    expect(wrapper.text()).toContain('期望标准')
+    expect(wrapper.text()).toContain('下一步')
+    expect(wrapper.text()).not.toContain('customer_count')
+    expect(wrapper.text()).not.toContain('customer_not_ready')
+    wrapper.unmount()
+  })
+
+  it('returns to intelligent chat after exiting a completed course', async () => {
+    const completedRun = { ...activeRun, status: 'completed' as const, progress: 100 }
+    const store = useTutorialV2Store()
+    store.currentRun = completedRun
+    apiMock.current.mockResolvedValue(completedRun)
+    apiMock.leave.mockResolvedValue(completedRun)
+    const wrapper = mount(TutorialTrainingCoach, {
+      attachTo: document.body,
+      global: { stubs: { Teleport: true } },
+    })
+    await flushPromises()
+
+    await wrapper.get('button.btn-secondary').trigger('click')
+    await flushPromises()
+
+    expect(store.currentRun).toBeNull()
+    expect(routerPush).toHaveBeenCalledWith({ name: 'chat' })
     wrapper.unmount()
   })
 })

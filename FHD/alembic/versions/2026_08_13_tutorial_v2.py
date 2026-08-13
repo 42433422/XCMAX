@@ -138,7 +138,7 @@ def _create_tutorial_tables(bind) -> None:
             sa.Column("source_tenant_id", sa.Integer(), nullable=False),
             sa.Column("user_id", sa.Integer(), nullable=False),
             sa.Column("course_id", sa.String(length=64), nullable=False),
-            sa.Column("version", sa.Integer(), nullable=False, server_default="2"),
+            sa.Column("version", sa.Integer(), nullable=False, server_default="3"),
             sa.Column("status", sa.String(length=24), nullable=False, server_default="active"),
             sa.Column("active_key", sa.String(length=96), nullable=True),
             sa.Column("current_step_id", sa.String(length=96), nullable=False),
@@ -218,10 +218,24 @@ def downgrade() -> None:
     if "approval_records" in tables and "tenant_id" in _column_names(
         sa.inspect(bind), "approval_records"
     ):
+        record_indexes = _index_names(sa.inspect(bind), "approval_records")
         with op.batch_alter_table("approval_records") as batch:
+            for name in (
+                "ix_approval_records_tenant_request",
+                "ix_approval_records_tenant_id",
+            ):
+                if name in record_indexes:
+                    batch.drop_index(name)
             batch.drop_column("tenant_id")
     if "approval_requests" in tables and "tenant_id" in _column_names(
         sa.inspect(bind), "approval_requests"
     ):
+        request_indexes = _index_names(sa.inspect(bind), "approval_requests")
         with op.batch_alter_table("approval_requests") as batch:
+            for name in (
+                "ix_approval_requests_tenant_status",
+                "ix_approval_requests_tenant_id",
+            ):
+                if name in request_indexes:
+                    batch.drop_index(name)
             batch.drop_column("tenant_id")

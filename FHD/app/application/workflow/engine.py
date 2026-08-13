@@ -783,11 +783,20 @@ class WorkflowEngine:
                 merged_params,
                 ("keyword", "model_number", "product_name", "name", "unit_name"),
             ):
-                merged_params["keyword"] = user_msg
-                logger.info(
-                    "工作流 products.query 参数为空，已注入用户原话作为 keyword（前 80 字）: %s",
-                    user_msg[:80],
+                from app.application.ai_chat.workflow_response_builder import (
+                    normalize_product_float_query,
                 )
+
+                keyword = normalize_product_float_query(user_msg)
+                if keyword:
+                    merged_params["keyword"] = keyword
+                    logger.info(
+                        "工作流 products.query 参数为空，已注入有效检索词（前 80 字）: %s",
+                        keyword[:80],
+                    )
+                else:
+                    merged_params.pop("keyword", None)
+                    logger.info("工作流 products.query 为全量列表请求，不注入用户原话")
         elif node.tool_id == "customers" and node.action == "query":
             # keyword 为空 = 列表/计数（Agent 列出全部客户），禁止把用户原话当客户名。
             if not self._has_non_empty_param(

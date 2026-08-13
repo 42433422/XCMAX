@@ -11,7 +11,13 @@
       <div class="search-box">
         <input v-model.trim="searchQuery" type="text" placeholder="搜索客户名/单号..." @input="doSearch">
       </div>
-      <div class="card">
+      <section v-if="tutorialSalesEvidence" class="tutorial-business-proof" data-tutorial-id="tutorial-order-proof">
+        <strong>教学销售订单 · 服务端核验</strong>
+        <span>客户B · A 产品</span>
+        <span>订单 {{ tutorialCount('sales_order_count') }} 张 · 明细 {{ tutorialCount('sales_order_item_count') }} 条</span>
+        <span>数量 10 · 单价 ¥100 · 金额 ¥{{ tutorialCount('order_total') }}</span>
+      </section>
+      <div class="card" data-tutorial-id="orders-table">
         <DataTable
           :columns="columns"
           :data="store.orders"
@@ -60,7 +66,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useOrdersStore } from '@/stores/orders';
 import { pushErpPage } from '@/utils/erpPagePaths';
@@ -68,10 +74,20 @@ import { storeToRefs } from 'pinia';
 import DataTable from '@/components/DataTable.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import { appAlert, appConfirm, appPrompt } from '@/utils/appDialog';
+import { useTutorialV2Store } from '@/stores/tutorialV2';
 
 const router = useRouter();
 const store = useOrdersStore();
 const { orders } = storeToRefs(store);
+const tutorialStore = useTutorialV2Store();
+const tutorialSalesEvidence = computed(() => tutorialStore.courses
+  .find((course) => course.id === 'sales-to-cash')
+  ?.run?.steps.find((step) => step.id === 'approve-sales-request')
+  ?.evidence || null);
+
+function tutorialCount(key) {
+  return tutorialSalesEvidence.value?.counts?.[key] ?? 0;
+}
 
 function goCreateOrder() {
   pushErpPage(router, '/orders/create');
@@ -127,5 +143,11 @@ async function confirmClearAll() {
 
 onMounted(() => {
   loadOrders();
+  void tutorialStore.loadCourses().catch(() => undefined);
 });
 </script>
+
+<style scoped>
+.tutorial-business-proof { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 14px; padding: 12px 14px; border: 1px solid #e7c46a; border-radius: 10px; background: #fff8df; color: #6f5314; }
+.tutorial-business-proof strong { color: #744707; }
+</style>

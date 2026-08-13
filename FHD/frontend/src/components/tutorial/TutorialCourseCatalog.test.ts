@@ -35,6 +35,7 @@ describe('TutorialCourseCatalog', () => {
     const wrapper = mount(TutorialCourseCatalog)
     await flushPromises()
     expect(wrapper.text()).toContain('进阶教程 · 真实业务实训')
+    expect(wrapper.text()).toContain('课程 1')
     expect(wrapper.text()).toContain('教程已升级')
     expect(wrapper.text()).toContain('客户与产品建档')
     expect(wrapper.text()).toContain('约 10 分钟')

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -11,6 +12,18 @@ logger = logging.getLogger(__name__)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
+
+
+def normalize_product_float_query(raw: str) -> str:
+    """Keep specific product terms while preserving an empty full-list query."""
+    text = str(raw or "").strip()
+    if re.fullmatch(
+        r"(?:查询|查一下|查下|查看|看看|看下|查)?\s*"
+        r"(?:当前|现有|全部|所有)?\s*产品(?:列表|库)?\s*[。！？…]*",
+        text,
+    ):
+        return ""
+    return text
 
 
 class AIChatWorkflowResponseMixin:
@@ -127,10 +140,30 @@ class AIChatWorkflowResponseMixin:
             step.status == "completed" and step.tool_id == "products" and step.action == "query"
             for step in getattr(agent_run, "steps", []) or []
         ):
+            query = ""
+            for step in getattr(agent_run, "steps", []) or []:
+                if (
+                    step.status != "completed"
+                    or step.tool_id != "products"
+                    or step.action != "query"
+                ):
+                    continue
+                params = node_params_by_id.get(str(step.node_id), {})
+                query = normalize_product_float_query(
+                    str(
+                        params.get("keyword")
+                        or params.get("model_number")
+                        or params.get("product_name")
+                        or params.get("name")
+                        or ""
+                    )
+                )
+                if query:
+                    break
             payload["autoAction"] = {
                 "type": "show_products_float",
                 "feature": "products",
-                "query": str(user_message or "").strip(),
+                "query": query or normalize_product_float_query(user_message),
             }
         return payload
 

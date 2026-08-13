@@ -14,6 +14,7 @@ from sqlalchemy.pool import StaticPool
 from starlette.requests import Request
 
 import app.db.models  # noqa: F401
+from app.application.tutorial_v2.catalog import COURSE_VERSION, COURSES
 from app.application.tutorial_v2.scope import resolve_tutorial_scope
 from app.application.tutorial_v2.service import (
     SALES_SENTENCE,
@@ -26,7 +27,9 @@ from app.db.models.agent import AgentRunRecord, AgentTaskExecutionRecord, AgentT
 from app.db.models.approval import ApprovalFlow, ApprovalFlowNode, ApprovalRecord, ApprovalRequest
 from app.db.models.customer import Customer
 from app.db.models.etl import EtlRun, EtlRunRow, EtlUpload
+from app.db.models.inventory import InventoryLedger, Warehouse
 from app.db.models.product import Product
+from app.db.models.purchase_unit import PurchaseUnit
 from app.db.models.receivable_allocation import ReceivableAllocation
 from app.db.models.sales import SalesOrder, SalesOrderItem
 from app.db.models.tenant import Tenant
@@ -47,6 +50,36 @@ def test_fresh_runtime_bootstrap_creates_tutorial_v2_tables():
     }.issubset(set(sqlalchemy_inspect(engine).get_table_names()))
     init_tutorial_v2_tables(engine)
     engine.dispose()
+
+
+def test_course_catalog_uses_exact_targets_and_one_business_object_per_trace_step():
+    assert len(COURSES) == 5
+    selectors = [step["target_selector"] for course in COURSES for step in course["steps"]]
+    assert all(selector and selector not in {"button", "table"} for selector in selectors)
+    assert all(", button" not in selector and ", table" not in selector for selector in selectors)
+    task_steps = [step["id"] for step in COURSES[0]["steps"]]
+    assert task_steps == [
+        "submit-readonly-query",
+        "inspect-task-evidence",
+        "transfer-readonly-query",
+    ]
+    first_task_step = COURSES[0]["steps"][0]
+    assert "新对话" in first_task_step["instruction"]
+    assert first_task_step["action_checklist"][0] == "点击新对话，保留已有销售任务工作区"
+    transfer_step = COURSES[0]["steps"][-1]
+    assert "新对话" in transfer_step["instruction"]
+    assert transfer_step["action_checklist"][0] == "点击新对话，创建第二个独立工作区"
+    trace_steps = [step["id"] for step in COURSES[-1]["steps"]]
+    assert trace_steps == [
+        "trace-task",
+        "trace-approval",
+        "trace-order",
+        "trace-inventory",
+        "trace-invoice",
+        "trace-receipt",
+        "trace-vouchers",
+        "trace-import",
+    ]
 
 
 @pytest.fixture()
@@ -123,6 +156,12 @@ def test_each_user_gets_an_independent_shadow_tenant_and_source_data_never_chang
     run_two = service.start_run(db, users[1], "master-data")
     assert run_one.workspace.tutorial_tenant_id != run_two.workspace.tutorial_tenant_id
     assert run_one.workspace.tutorial_tenant_id != users[0].tenant_id
+    with tenant_scope(run_one.workspace.tutorial_tenant_id):
+        assert db.query(Warehouse).count() == 1
+    with tenant_scope(run_two.workspace.tutorial_tenant_id):
+        assert db.query(Warehouse).count() == 1
+    with tenant_scope(users[0].tenant_id):
+        assert db.query(Warehouse).count() == 0
 
     with tenant_scope(run_one.workspace.tutorial_tenant_id):
         db.add(Customer(customer_name="客户B"))
@@ -151,7 +190,7 @@ def test_required_steps_verify_server_state_and_repeat_verification_is_idempoten
     assert failed.result_code == "customer_not_ready"
 
     with tenant_scope(run.workspace.tutorial_tenant_id):
-        customer = Customer(customer_name="客户B")
+        customer = PurchaseUnit(unit_name="客户B")
         product = Product(name="A 产品", price=Decimal("100"), quantity=100, unit="个")
         db.add_all([customer, product])
         db.commit()
@@ -172,6 +211,8 @@ def test_required_steps_verify_server_state_and_repeat_verification_is_idempoten
     )
     assert repeated.status == "passed"
     assert repeated.attempt_count == attempts
+    assert repeated.counts_json is not None
+    assert json.loads(repeated.counts_json)["purchase_unit_count"] == 1
     run, product_evidence = service.verify_step(
         db,
         users[0],
@@ -196,6 +237,32 @@ def test_cookie_scope_validates_owner_course_allowlist_and_expiry_state(tutorial
     )
     assert customer_write.switched is True
     assert customer_write.tutorial_tenant_id == run.workspace.tutorial_tenant_id
+
+    mod_customer_write = resolve_tutorial_scope(
+        db,
+        _request("/api/mod/xcagi-erp-domain-bridge/customers", "POST", run.id),
+        user_id=users[0].id,
+        source_tenant_id=users[0].tenant_id,
+    )
+    assert mod_customer_write.switched is True
+
+    mod_product_read = resolve_tutorial_scope(
+        db,
+        _request("/api/mod/xcagi-erp-domain-bridge/products/list", "GET", run.id),
+        user_id=users[0].id,
+        source_tenant_id=users[0].tenant_id,
+    )
+    assert mod_product_read.switched is True
+
+    desktop_system_write = resolve_tutorial_scope(
+        db,
+        _request("/api/desktop/crash-report", "POST", run.id),
+        user_id=users[0].id,
+        source_tenant_id=users[0].tenant_id,
+    )
+    assert desktop_system_write.active is True
+    assert desktop_system_write.switched is False
+    assert desktop_system_write.error_code is None
 
     forbidden = resolve_tutorial_scope(
         db,
@@ -222,6 +289,43 @@ def test_cookie_scope_validates_owner_course_allowlist_and_expiry_state(tutorial
         source_tenant_id=users[0].tenant_id,
     )
     assert mod_chat_write.switched is True
+
+    conversation_write = resolve_tutorial_scope(
+        db,
+        _request("/api/conversations/message", "POST", task_run.id),
+        user_id=users[0].id,
+        source_tenant_id=users[0].tenant_id,
+    )
+    assert conversation_write.switched is True
+
+    finance_read = resolve_tutorial_scope(
+        db,
+        _request("/api/ai/kitten/business-snapshot", "GET", task_run.id),
+        user_id=users[0].id,
+        source_tenant_id=users[0].tenant_id,
+    )
+    assert finance_read.switched is True
+
+    run.status = "completed"
+    run.active_key = None
+    db.commit()
+    sales_run = service.start_run(db, users[0], "sales-to-cash")
+    approval_facade_write = resolve_tutorial_scope(
+        db,
+        _request("/api/mod/xcagi-approval-bridge/requests/1/approve", "POST", sales_run.id),
+        user_id=users[0].id,
+        source_tenant_id=users[0].tenant_id,
+    )
+    assert approval_facade_write.switched is True
+
+    import_run = service.start_run(db, users[0], "data-import")
+    sample_upload = resolve_tutorial_scope(
+        db,
+        _request("/api/platform-shell/office-sample-upload", "POST", import_run.id),
+        user_id=users[0].id,
+        source_tenant_id=users[0].tenant_id,
+    )
+    assert sample_upload.switched is True
 
     invalid_owner = resolve_tutorial_scope(
         db,
@@ -295,6 +399,51 @@ def test_prerequisites_are_fail_closed(tutorial_db):
     assert caught.value.code == "prerequisite_incomplete"
 
 
+def test_reset_of_dependent_course_starts_its_first_prerequisite_in_new_generation(
+    tutorial_db,
+):
+    db, users = tutorial_db
+    service = TutorialV2Service()
+    master = service.start_run(db, users[0], "master-data")
+    master.status = "completed"
+    master.active_key = None
+    db.commit()
+    sales = service.start_run(db, users[0], "sales-to-cash")
+
+    replacement = service.reset_run(db, users[0], sales.id)
+
+    assert replacement.course_id == "master-data"
+    assert replacement.workspace.generation == sales.workspace.generation + 1
+    assert replacement.workspace.tutorial_tenant_id != sales.workspace.tutorial_tenant_id
+    with tenant_scope(replacement.workspace.tutorial_tenant_id):
+        assert db.query(Warehouse).count() == 1
+
+
+def test_course_upgrade_retires_old_runtime_without_losing_old_evidence(tutorial_db):
+    db, users = tutorial_db
+    service = TutorialV2Service()
+    old = service.start_run(db, users[0], "master-data")
+    old.version = COURSE_VERSION - 1
+    db.commit()
+
+    stale = resolve_tutorial_scope(
+        db,
+        _request("/customers", "GET", old.id),
+        user_id=users[0].id,
+        source_tenant_id=users[0].tenant_id,
+    )
+    assert stale.error_code == "tutorial_cookie_expired"
+    catalog = service.list_courses(db, users[0])
+    master_card = next(item for item in catalog if item["id"] == "master-data")
+    assert master_card["run"] is None
+    replacement = service.start_run(db, users[0], "master-data")
+    db.refresh(old)
+    assert replacement.id != old.id
+    assert replacement.version == COURSE_VERSION
+    assert old.status == "paused"
+    assert db.query(TutorialStepEvidence).filter_by(run_id=old.id).count() == 2
+
+
 def test_task_verifier_requires_persisted_execution_evidence(tutorial_db):
     db, users = tutorial_db
     service = TutorialV2Service()
@@ -304,7 +453,7 @@ def test_task_verifier_requires_persisted_execution_evidence(tutorial_db):
         task_id="tutorial-task-1",
         user_id=str(users[0].id),
         tenant_id=str(run.workspace.tutorial_tenant_id),
-        title="查询 A 产品当前库存",
+        title="查询当前客户列表",
         source="chat",
         task_type="readonly_query",
         status="completed",
@@ -332,7 +481,7 @@ def test_task_verifier_requires_persisted_execution_evidence(tutorial_db):
             user_id=str(users[0].id),
             status="completed",
             intent="products_query",
-            message="查询 A 产品当前库存",
+            message="查询当前客户列表",
             payload_json=json.dumps(
                 {
                     "status": "completed",
@@ -355,6 +504,33 @@ def test_task_verifier_requires_persisted_execution_evidence(tutorial_db):
     )
     assert observed.status == "passed"
     assert json.loads(observed.counts_json)["observed_execution_count"] == 1
+
+    # Deterministic read-only fast paths persist terminal run events and output,
+    # but intentionally do not fabricate workflow steps/tool calls.
+    run_record = db.query(AgentRunRecord).filter_by(run_id="tutorial-run-1").one()
+    run_record.payload_json = json.dumps(
+        {
+            "status": "completed",
+            "steps": [],
+            "tool_calls": [],
+            "events": [{"event_type": "run.completed"}],
+            "final_output": {"chat_payload": {"success": True, "response": "查询完成"}},
+        }
+    )
+    db.commit()
+    assert service._observed_task_execution_count(db, run, task) == 1
+
+    run_record.payload_json = json.dumps(
+        {
+            "status": "completed",
+            "steps": [],
+            "tool_calls": [],
+            "events": [{"event_type": "run.completed"}],
+            "final_output": {},
+        }
+    )
+    db.commit()
+    assert service._observed_task_execution_count(db, run, task) == 0
 
     # Background-dispatched tasks remain valid evidence as a separate execution mode.
     run_two = service.reset_run(db, users[0], run.id)
@@ -405,7 +581,111 @@ def test_task_verifier_requires_persisted_execution_evidence(tutorial_db):
         cookie_run_id=run_two.id,
     )
     assert viewed.status == "passed"
+    assert finished.status == "active"
+    second_task = AgentTaskRecord(
+        task_id="tutorial-task-2",
+        user_id=str(users[0].id),
+        tenant_id=str(run_two.workspace.tutorial_tenant_id),
+        title="帮我查看现在有哪些产品",
+        source="chat",
+        task_type="readonly_query",
+        status="completed",
+        attention_state="",
+        active_run_id="tutorial-run-3",
+        attempt=1,
+        run_count=1,
+        metadata_json=json.dumps({"read_only": True}),
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(second_task)
+    db.flush()
+    db.add(
+        AgentTaskExecutionRecord(
+            run_id="tutorial-run-3",
+            task_id=second_task.task_id,
+            user_id=str(users[0].id),
+            tenant_id=str(run_two.workspace.tutorial_tenant_id),
+            state="finished",
+            priority=100,
+            available_at=now,
+            execution_count=1,
+            recovery_count=0,
+            created_at=now,
+            updated_at=now,
+            finished_at=now,
+        )
+    )
+    db.commit()
+    finished, transferred = service.verify_step(
+        db,
+        users[0],
+        run_two.id,
+        "transfer-readonly-query",
+        cookie_run_id=run_two.id,
+    )
+    assert transferred.status == "passed"
     assert finished.status == "completed"
+
+
+def test_trace_task_accepts_the_opened_independent_workspace(tutorial_db):
+    db, users = tutorial_db
+    service = TutorialV2Service()
+    run = service.start_run(db, users[0], "task-workspace")
+    now = datetime.utcnow().isoformat()
+    task = AgentTaskRecord(
+        task_id="tutorial-sales-task",
+        user_id=str(users[0].id),
+        tenant_id=str(run.workspace.tutorial_tenant_id),
+        title=SALES_SENTENCE,
+        source="chat",
+        task_type="sales_write",
+        status="completed",
+        attention_state="result_unread",
+        active_run_id="tutorial-sales-run",
+        attempt=1,
+        run_count=1,
+        metadata_json=json.dumps({"sentence": SALES_SENTENCE}, ensure_ascii=False),
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(task)
+    db.flush()
+    db.add(
+        AgentRunRecord(
+            run_id="tutorial-sales-run",
+            user_id=str(users[0].id),
+            status="completed",
+            intent="sales_write",
+            message=SALES_SENTENCE,
+            payload_json=json.dumps(
+                {
+                    "steps": [{"status": "completed", "tool_id": "sales"}],
+                    "tool_calls": [{"status": "completed", "tool_id": "sales"}],
+                    "final_output": {"order_id": 1},
+                }
+            ),
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    db.commit()
+
+    blocked = service._verify_trace_task(
+        db,
+        run,
+        {"visited_route": "task-workspace", "target_visible": False},
+    )
+    assert blocked[0] is False
+    passed = service._verify_trace_task(
+        db,
+        run,
+        {"visited_route": "task-workspace", "target_visible": True},
+    )
+    assert passed[0] is True
+    assert passed[1] == "verification_passed"
+    assert passed[2] == [{"type": "agent_task", "id": "tutorial-sales-task"}]
+    assert passed[3] == {"sales_task_count": 1, "execution_count": 1}
 
 
 def test_approval_requests_and_records_are_tenant_scoped(tutorial_db):
@@ -585,6 +865,12 @@ def test_sales_closed_loop_verifier_records_counts_and_balanced_vouchers(tutoria
         service.verify_step(db, users[0], master.id, step, cookie_run_id=master.id)
     sales = service.start_run(db, users[0], "sales-to-cash")
     with tenant_scope(tenant_id):
+        seeded_ledgers = db.query(InventoryLedger).all()
+        assert len(seeded_ledgers) == 1
+        assert seeded_ledgers[0].product_id == product.id
+        assert seeded_ledgers[0].quantity == Decimal("100")
+        assert seeded_ledgers[0].available_quantity == Decimal("100")
+    with tenant_scope(tenant_id):
         flow = ApprovalFlow(
             flow_key="tutorial-sales",
             flow_name="教学销售审批",
@@ -619,6 +905,24 @@ def test_sales_closed_loop_verifier_records_counts_and_balanced_vouchers(tutoria
         "sales_order_count": 0,
         "sales_order_item_count": 0,
     }
+    sales, not_reviewed = service.verify_step(
+        db,
+        users[0],
+        sales.id,
+        "review-sales-approval",
+        cookie_run_id=sales.id,
+        context={"visited_route": "approval-workspace", "target_visible": False},
+    )
+    assert not_reviewed.result_code == "approval_detail_not_viewed"
+    sales, reviewed = service.verify_step(
+        db,
+        users[0],
+        sales.id,
+        "review-sales-approval",
+        cookie_run_id=sales.id,
+        context={"visited_route": "approval-workspace", "target_visible": True},
+    )
+    assert reviewed.status == "passed"
 
     with tenant_scope(tenant_id):
         approval.status = "approved"
@@ -649,7 +953,8 @@ def test_sales_closed_loop_verifier_records_counts_and_balanced_vouchers(tutoria
                 status="paid",
             )
         )
-        product.quantity = 90
+        seeded_ledgers[0].quantity = 90
+        seeded_ledgers[0].available_quantity = 90
         invoice = JournalEntry(
             entry_no="TUTORIAL-INV-1",
             status="posted",
@@ -689,10 +994,15 @@ def test_sales_closed_loop_verifier_records_counts_and_balanced_vouchers(tutoria
         "invoice_voucher_count": 1,
         "payment_voucher_count": 1,
         "balanced_journal_entry_count": 2,
+        "order_total": 1000.0,
+        "invoice_status": "invoiced",
+        "payment_state": "paid",
+        "allocated_amount": 1000.0,
     }
     assert {item["type"] for item in refs} >= {
         "sales_order",
         "sales_order_item",
+        "inventory_ledger",
         "receivable_allocation",
         "journal_entry",
     }

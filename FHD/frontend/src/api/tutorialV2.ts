@@ -20,6 +20,8 @@ export interface TutorialStepDTO {
   hint: string
   route_name: string
   target_selector: string
+  action_checklist?: string[]
+  principle?: string
   required: boolean
   status: 'pending' | 'failed' | 'passed'
   evidence: TutorialEvidenceDTO | null

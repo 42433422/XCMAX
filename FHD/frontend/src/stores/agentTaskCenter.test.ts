@@ -118,6 +118,43 @@ describe('agent task center store', () => {
     expect(FakeEventSource.instances[0].closed).toBe(true)
   })
 
+  it('drops the previous tenant snapshot and reconnects after a scope change', async () => {
+    class FakeEventSource {
+      static instances: FakeEventSource[] = []
+      listeners = new Map<string, (event: MessageEvent) => void>()
+      onerror: (() => void) | null = null
+      closed = false
+
+      constructor(public url: string) {
+        FakeEventSource.instances.push(this)
+      }
+
+      addEventListener(type: string, listener: (event: MessageEvent) => void): void {
+        this.listeners.set(type, listener)
+      }
+
+      close(): void {
+        this.closed = true
+      }
+    }
+    vi.stubGlobal('EventSource', FakeEventSource)
+    const store = useAgentTaskCenterStore()
+    store.start()
+    await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(1))
+    await vi.waitFor(() => expect(store.tasks).toHaveLength(1))
+    expect(store.tasks).toHaveLength(1)
+    const priorRefreshCount = apiMock.listTasks.mock.calls.length
+
+    apiMock.listTasks.mockResolvedValueOnce({ success: true, data: [] })
+    store.restartForScope()
+
+    expect(FakeEventSource.instances[0].closed).toBe(true)
+    expect(store.tasks).toEqual([])
+    await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(2))
+    await vi.waitFor(() => expect(apiMock.listTasks).toHaveBeenCalledTimes(priorRefreshCount + 1))
+    store.stop()
+  })
+
   it('persists result read state and updates the workspace list snapshot', async () => {
     const store = useAgentTaskCenterStore()
     apiMock.listTasks.mockResolvedValueOnce({

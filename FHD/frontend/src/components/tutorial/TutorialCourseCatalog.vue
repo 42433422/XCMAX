@@ -15,9 +15,10 @@
     <div v-if="store.loading && !store.courses.length" class="tutorial-v2-loading">正在加载课程…</div>
 
     <ul v-else class="tutorial-v2-course-list">
-      <li v-for="course in store.courses" :key="course.id" class="tutorial-v2-course-card">
+      <li v-for="(course, index) in store.courses" :key="course.id" class="tutorial-v2-course-card">
         <div class="tutorial-v2-course-card__top">
           <div>
+            <span class="tutorial-v2-course-card__number">课程 {{ index + 1 }}</span>
             <strong>{{ course.title }}</strong>
             <p>{{ course.summary }}</p>
           </div>
@@ -67,7 +68,7 @@
       <p v-if="reportHint" class="tutorial-v2-report-hint">{{ reportHint }}</p>
       <ul v-if="store.reports.length" class="tutorial-v2-report-list">
         <li v-for="(report, index) in store.reports" :key="`${report.user_id}-${report.course_id}-${index}`">
-          用户 {{ report.user_id }} · {{ report.course_id }} · {{ report.status }} ·
+          {{ report.user_name || `成员 #${report.user_id}` }} · {{ courseLabel(String(report.course_id || '')) }} · {{ reportStatusLabel(String(report.status || '')) }} ·
           {{ report.progress }}% · 尝试 {{ report.attempt_count }} 次
         </li>
       </ul>
@@ -94,6 +95,14 @@ const titles: Record<string, string> = {
 
 function prerequisiteLabel(ids: string[]) {
   return ids.map((id) => titles[id] || id).join('、')
+}
+
+function courseLabel(id: string) {
+  return titles[id] || '进阶课程'
+}
+
+function reportStatusLabel(status: string) {
+  return ({ active: '进行中', paused: '已保存', completed: '已完成', reset: '已重置' } as Record<string, string>)[status] || '未开始'
 }
 
 function statusLabel(status: TutorialCourseDTO['status']) {
@@ -154,6 +163,7 @@ onMounted(() => {
 .tutorial-v2-course-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
 .tutorial-v2-course-card { border: 1px solid #d9e3ec; border-radius: 12px; padding: 12px; background: #fff; display: grid; gap: 9px; }
 .tutorial-v2-course-card__top { display: flex; justify-content: space-between; gap: 10px; }
+.tutorial-v2-course-card__number { display: block; margin-bottom: 3px; color: #2678ad; font-size: 11px; font-weight: 700; }
 .tutorial-v2-status { flex: 0 0 auto; font-size: 12px; color: #4b6378; }
 .tutorial-v2-status[data-status='completed'] { color: #137247; font-weight: 700; }
 .tutorial-v2-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; color: #687a8b; font-size: 12px; }

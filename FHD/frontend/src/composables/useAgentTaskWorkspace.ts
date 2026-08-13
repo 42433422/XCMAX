@@ -70,6 +70,10 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
       options.expandedTaskIds.value = [...options.expandedTaskIds.value, task.id]
     }
     options.onPersist?.()
+    const durableTaskId = String(task.payload?.taskId || '').trim()
+    if (durableTaskId) {
+      await agentRunsApi.markTaskRead(durableTaskId).catch(() => undefined)
+    }
     const conversationId = conversationIdOfTask(task)
     if (conversationId && options.onOpenConversation) {
       await options.onOpenConversation(conversationId)
