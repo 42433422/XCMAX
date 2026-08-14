@@ -125,8 +125,8 @@ def _get_optional_user(authorization: Optional[str] = Header(None)) -> Optional[
 class RegisterDTO(BaseModel):
     username: str = Field(..., min_length=2, max_length=64)
     password: str = Field(..., min_length=6)
-    email: str = Field(..., min_length=5, max_length=128, description="必填，用于接收验证码")
-    verification_code: str = Field(..., min_length=4, max_length=16, description="邮箱验证码")
+    email: str = Field(default="", max_length=128, description="选填；填写时必须验证")
+    verification_code: str = Field(default="", max_length=16, description="邮箱验证码")
 
 
 class LoginDTO(BaseModel):
@@ -275,13 +275,13 @@ def _verify_and_consume_verification_code(email: str, code: str) -> None:
 
 @router.post("/auth/register")
 def api_register(body: RegisterDTO):
-    email_norm = _normalize_email(body.email)
-    if not email_norm or "@" not in email_norm:
-        raise HTTPException(400, "请填写有效邮箱")
-    vcode = (body.verification_code or "").strip()
-    if not vcode:
-        raise HTTPException(400, "请填写邮箱验证码，并先通过「获取验证码」收取邮件")
-    _verify_and_consume_verification_code(email_norm, vcode)
+    email_norm, vcode = _normalize_email(body.email), (body.verification_code or "").strip()
+    if email_norm and ("@" not in email_norm or not vcode):
+        raise HTTPException(400, "填写邮箱后，请填写有效邮箱并获取邮箱验证码")
+    if email_norm:
+        _verify_and_consume_verification_code(email_norm, vcode)
+    elif vcode:
+        raise HTTPException(400, "填写验证码前请先填写邮箱")
     try:
         user = register_user(body.username, body.password, email_norm)
     except ValueError as e:
