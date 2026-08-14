@@ -10,6 +10,7 @@ import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+
 def test_health(client):
     r = client.get("/api/health")
     assert r.status_code == 200
