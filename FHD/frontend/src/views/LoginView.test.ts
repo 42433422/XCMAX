@@ -60,6 +60,6 @@ describe('LoginView.vue', () => {
     expect(actions[0].attributes('href')).toBe('https://xiu-ci.com/market/register')
     expect(actions[1].text()).toContain('购买与授权')
     expect(actions[1].attributes('href')).toBe('https://xiu-ci.com/#pricing')
-    expect(wrapper.find('.login-entitlement-hint').text()).toContain('同步账号权益')
+    expect(wrapper.find('.login-subheading').text()).toContain('同步账号权益')
   })
 })
