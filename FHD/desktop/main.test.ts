@@ -579,6 +579,23 @@ describe('main — trusted external account URLs', () => {
     expect(isTrustedDesktopExternalUrl('https://xiu-ci.com.evil.example/market/register')).toBe(false)
     expect(isTrustedDesktopExternalUrl('not-a-url')).toBe(false)
   })
+
+  it('hands official account links to the system browser and keeps the renderer closed', async () => {
+    const { handleDesktopWindowOpen } = await import('./desktop-navigation.js')
+    const openExternal = vi.fn(() => Promise.resolve())
+    const warn = vi.fn()
+
+    expect(
+      handleDesktopWindowOpen(
+        'https://xiu-ci.com/market/register',
+        17500,
+        openExternal,
+        warn,
+      ),
+    ).toBe('deny')
+    expect(openExternal).toHaveBeenCalledWith('https://xiu-ci.com/market/register')
+    expect(warn).not.toHaveBeenCalled()
+  })
 })
 
 describe('main — readPackagedAppVersion', () => {

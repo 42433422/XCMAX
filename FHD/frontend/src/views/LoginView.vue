@@ -10,8 +10,6 @@ import {
   loginAccountInputPlaceholder,
   loginPageTitle,
   loginPasswordInputPlaceholder,
-  marketRegisterUrl,
-  purchaseAuthorizationUrl,
 } from '@/constants/loginBranding';
 import { fetchProductSku } from '@/utils/productSku';
 import { useAccountProfileStore } from '@/stores/accountProfile';
@@ -27,6 +25,7 @@ import { loadLoginPreferences, saveLoginPreferences } from '@/utils/loginPrefere
 import { clearHostPackSkippedSession } from '@/utils/hostPackOnboardingGate';
 import { canResumeRecentDesktopSession } from '@/utils/authSessionCache';
 import OtpCells from '@/components/OtpCells.vue';
+import LoginAccountActions from '@/components/login/LoginAccountActions.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -116,12 +115,6 @@ const loginHeading = computed(() =>
 );
 const accountPlaceholder = computed(() => loginAccountInputPlaceholder(productSku.value));
 const passwordPlaceholder = computed(() => loginPasswordInputPlaceholder());
-const enterpriseRegisterUrl = computed(() => marketRegisterUrl());
-const enterprisePurchaseUrl = computed(() => purchaseAuthorizationUrl());
-const registerRoute = computed(() => ({
-  name: 'login-register' as const,
-  query: route.query,
-}));
 const forgotAccountRoute = computed(() => ({
   name: 'login-forgot-account' as const,
   query: route.query,
@@ -455,32 +448,13 @@ async function submitLogin() {
 
     <!-- 右侧登录区 -->
     <section class="login-panel" aria-labelledby="login-heading">
-      <nav v-if="!isAdminConsoleSpa()" class="login-account-actions" :aria-label="$t('login.accountActions')">
-        <template v-if="isEnterpriseEdition">
-          <a
-            class="login-account-action"
-            :href="enterpriseRegisterUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-          >{{ $t('login.registerEnterprise') }}</a>
-          <a
-            class="login-account-action login-account-action--primary"
-            :href="enterprisePurchaseUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-          >{{ $t('login.purchaseAuthorization') }}</a>
-        </template>
-        <router-link v-else class="login-account-action" :to="registerRoute">{{ $t('login.register') }}</router-link>
-      </nav>
+      <LoginAccountActions v-if="!isAdminConsoleSpa()" :enterprise="isEnterpriseEdition" />
 
       <div class="login-panel-inner">
         <h1 id="login-heading" class="login-heading">{{ loginHeading }}</h1>
         <p class="login-subheading" role="note">
           <template v-if="accountKind === 'admin'">{{ $t('login.subheadingAdmin') }}</template>
           <template v-else>{{ $t('login.subheadingEnterprise') }}</template>
-        </p>
-        <p v-if="isEnterpriseEdition && accountKind === 'enterprise'" class="login-entitlement-hint" role="note">
-          {{ $t('login.purchaseSyncHint') }}
         </p>
 
         <div v-if="accountKind === 'enterprise'" class="login-mode-tabs" role="tablist">
@@ -832,42 +806,6 @@ async function submitLogin() {
   position: relative;
 }
 
-.login-account-actions {
-  position: absolute;
-  top: 24px;
-  right: 28px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.login-account-action {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--xc-color-primary);
-  text-decoration: none;
-  padding: 6px 14px;
-  border: 1px solid var(--xc-color-primary-soft);
-  border-radius: var(--xc-radius-full);
-  background: var(--xc-color-primary-surface);
-  transition: var(--xc-transition-fast);
-}
-
-.login-account-action:hover {
-  background: var(--xc-color-primary-soft);
-}
-
-.login-account-action--primary {
-  color: #fff;
-  border-color: var(--xc-color-primary);
-  background: var(--xc-color-primary);
-}
-
-.login-account-action--primary:hover {
-  color: #fff;
-  background: var(--xc-color-primary-hover, #1d4ed8);
-}
-
 .login-panel-inner {
   width: 100%;
   max-width: 380px;
@@ -896,20 +834,10 @@ async function submitLogin() {
 
 /* 交付说明：标题下介绍文案保留，UI 迭代时勿整段删除 */
 .login-subheading {
-  margin: 0 0 12px;
+  margin: 0 0 28px;
   font-size: var(--xc-font-sm);
   color: var(--xc-color-muted);
   line-height: 1.65;
-}
-
-.login-entitlement-hint {
-  margin: 0 0 22px;
-  padding: 9px 12px;
-  color: var(--xc-color-text-secondary);
-  background: var(--xc-color-primary-surface);
-  border-radius: var(--xc-radius-md);
-  font-size: 12px;
-  line-height: 1.55;
 }
 
 /* ─── 表单字段 ─────────────────────────────────────────── */
@@ -1289,10 +1217,6 @@ async function submitLogin() {
 @media (max-width: 480px) {
   .login-panel {
     padding: 60px 16px 32px;
-  }
-  .login-account-actions {
-    right: 16px;
-    top: 16px;
   }
   .login-panel-logo {
     right: 16px;
