@@ -60,6 +60,10 @@ export function marketRegisterUrl(): string {
   return `${marketBaseUrl()}/register`;
 }
 
+export function purchaseAuthorizationUrl(): string {
+  return String(import.meta.env.VITE_XCAGI_PURCHASE_URL || 'https://xiu-ci.com/#pricing').trim();
+}
+
 export function marketForgotPasswordUrl(): string {
   return `${marketBaseUrl()}/forgot-password`;
 }
@@ -86,14 +90,14 @@ export const LOGIN_HELP_SECTIONS: LoginHelpSection[] = [
   },
   {
     title: '无法连接后端',
-    items: ['确认本机后端已启动（默认 5000 端口）', '检查数据库是否运行'],
+    items: ['确认本机后端已启动（桌面默认 17500 端口）', '检查数据库是否运行'],
   },
   {
     title: '市场同步',
     items: ['登录后可在设置同步市场 Token', '502 多为市场服务不可达'],
   },
   {
-    title: '注册',
-    items: ['使用登录页注册入口', '企业版需市场服务可达'],
+    title: '注册与购买',
+    items: ['企业版请使用登录页的“开户注册”入口', '购买完成后返回桌面重新登录以同步账号权益'],
   },
 ];
