@@ -81,6 +81,8 @@ vi.mock('vue-router', () => ({
 }))
 vi.mock('./authPaths', () => ({
   pickRedirectFromRoute: vi.fn(() => '/console'),
+  isXcagiDesktopRegistration: vi.fn(() => false),
+  DEFAULT_POST_AUTH: '/console',
 }))
 vi.mock('./composables/useStreamingTts', () => ({
   useStreamingTts: vi.fn(() => ({ speak: streamingSpeakMock })),
@@ -773,9 +775,12 @@ describe('low coverage public auth views, round 2', () => {
     vi.advanceTimersByTime(1000)
     expect(vm.cooldown).toBe(59)
 
+    vm.username = 'no-email-user'
+    vm.password = 'secret123'
     vm.email = ''
+    vm.verificationCode = ''
     await vm.doRegister()
-    expect(vm.err).toContain('邮箱')
+    expect(apiMock.register).toHaveBeenCalledWith('no-email-user', 'secret123', '', '')
 
     vm.email = 'new@example.test'
     vm.verificationCode = ''
@@ -787,7 +792,7 @@ describe('low coverage public auth views, round 2', () => {
     vm.verificationCode = '123456'
     await vm.doRegister()
     expect(apiMock.register).toHaveBeenCalledWith('tester', 'secret123', 'new@example.test', '123456')
-    expect(routerMock.replace).toHaveBeenCalledWith('/workbench')
+    expect(routerMock.replace).toHaveBeenCalledWith('/console')
 
     apiMock.sendRegisterVerificationCode.mockRejectedValueOnce(new Error('send failed'))
     vm.cooldown = 0

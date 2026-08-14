@@ -57,7 +57,7 @@ export function marketBaseUrl(): string {
 }
 
 export function marketRegisterUrl(): string {
-  return `${marketBaseUrl()}/register`;
+  return `${marketBaseUrl()}/register?source=xcagi-desktop`;
 }
 
 export function purchaseAuthorizationUrl(): string {
@@ -98,6 +98,6 @@ export const LOGIN_HELP_SECTIONS: LoginHelpSection[] = [
   },
   {
     title: '注册与购买',
-    items: ['企业版请使用登录页的“开户注册”入口', '购买完成后返回桌面重新登录以同步账号权益'],
+    items: ['企业版请使用登录页的“注册账号”入口', '购买完成后返回桌面重新登录以同步账号权益'],
   },
 ];

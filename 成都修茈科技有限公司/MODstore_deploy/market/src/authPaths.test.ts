@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { safeRedirectPath, pickRedirectFromRoute, DEFAULT_POST_AUTH } from './authPaths'
+import {
+  safeRedirectPath,
+  pickRedirectFromRoute,
+  DEFAULT_POST_AUTH,
+  isXcagiDesktopRegistration,
+} from './authPaths'
 
 describe('safeRedirectPath', () => {
   it('returns default for non-string input', () => {
@@ -83,5 +88,18 @@ describe('pickRedirectFromRoute', () => {
   it('sanitizes redirect path', () => {
     const route = { query: { redirect: '/login' } }
     expect(pickRedirectFromRoute(route)).toBe('/workbench/home')
+  })
+})
+
+describe('isXcagiDesktopRegistration', () => {
+  it('accepts only the fixed desktop source contract', () => {
+    expect(isXcagiDesktopRegistration({ query: { source: 'xcagi-desktop' } })).toBe(true)
+    expect(isXcagiDesktopRegistration({ query: { source: ['xcagi-desktop', 'web'] } })).toBe(true)
+  })
+
+  it('fails closed for missing or unknown sources', () => {
+    expect(isXcagiDesktopRegistration({ query: {} })).toBe(false)
+    expect(isXcagiDesktopRegistration({ query: { source: 'desktop' } })).toBe(false)
+    expect(isXcagiDesktopRegistration({ query: { source: '//external.example' } })).toBe(false)
   })
 })

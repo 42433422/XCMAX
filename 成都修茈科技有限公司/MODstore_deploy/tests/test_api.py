@@ -5,12 +5,10 @@ from __future__ import annotations
 import io
 import json
 import shutil
+import uuid
 import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
-
 
 def test_health(client):
     r = client.get("/api/health")
@@ -31,6 +29,46 @@ def test_openapi_schema(client):
     paths = spec.get("paths", {})
     assert "/api/mods" in paths
     assert "/api/debug/sandbox" in paths
+
+
+def test_register_email_is_optional_but_verified_when_present(client):
+    username = f"no_email_{uuid.uuid4().hex[:12]}"
+    password = "no-email-pass-12"
+
+    registered = client.post(
+        "/api/auth/register",
+        json={"username": username, "password": password},
+    )
+    assert registered.status_code == 200, registered.text
+    assert registered.json()["user"]["email"] is None
+
+    login = client.post(
+        "/api/auth/login",
+        json={"username": username, "password": password},
+    )
+    assert login.status_code == 200, login.text
+
+    missing_code = client.post(
+        "/api/auth/register",
+        json={
+            "username": f"needs_code_{uuid.uuid4().hex[:12]}",
+            "password": password,
+            "email": f"needs-code-{uuid.uuid4().hex[:8]}@pytest.local",
+        },
+    )
+    assert missing_code.status_code == 400, missing_code.text
+    assert "验证码" in missing_code.json()["detail"]
+
+    code_without_email = client.post(
+        "/api/auth/register",
+        json={
+            "username": f"code_only_{uuid.uuid4().hex[:12]}",
+            "password": password,
+            "verification_code": "999999",
+        },
+    )
+    assert code_without_email.status_code == 400, code_without_email.text
+    assert "邮箱" in code_without_email.json()["detail"]
 
 
 def test_create_list_get_mod(client, library: Path, auth_headers: dict):
