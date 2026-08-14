@@ -114,8 +114,8 @@ describe('loginBranding', () => {
   })
 
   describe('marketRegisterUrl', () => {
-    it('returns a URL ending with /register', () => {
-      expect(marketRegisterUrl()).toMatch(/\/register$/)
+    it('opens the shared market registration page with the desktop source contract', () => {
+      expect(marketRegisterUrl()).toBe('https://xiu-ci.com/market/register?source=xcagi-desktop')
     })
   })
 

@@ -1,7 +1,24 @@
 <template>
   <div class="auth-page">
-    <div class="auth-card">
-      <h2>注册</h2>
+    <div v-if="registrationComplete" class="auth-card auth-card--success" role="status">
+      <div class="success-mark" aria-hidden="true">✓</div>
+      <p class="source-badge">XCAGI 桌面端</p>
+      <h2>账号注册成功</h2>
+      <p class="success-lead">网页与 XCAGI 桌面端共用这一个修茈市场账号，不需要再注册。</p>
+      <div class="next-step">
+        <strong>下一步</strong>
+        <span>可以关闭本页，回到 XCAGI 桌面端登录。桌面端仅向已开通企业授权的账号开放；若尚未开通，请先完成授权。</span>
+      </div>
+      <router-link :to="DEFAULT_POST_AUTH" class="btn btn-primary-solid btn-block success-action">
+        继续使用网页版
+      </router-link>
+    </div>
+    <div v-else class="auth-card">
+      <p v-if="desktopRegistration" class="source-badge">来自 XCAGI 桌面端</p>
+      <h2>注册修茈市场账号</h2>
+      <p v-if="desktopRegistration" class="auth-intro">
+        桌面端与网页端共用同一账号。在这里完成一次注册即可。
+      </p>
       <div v-if="err" class="flash flash-err">{{ err }}</div>
       <form @submit.prevent="doRegister">
         <div class="form-group">
@@ -9,18 +26,18 @@
           <input class="input" v-model="username" required minlength="2" maxlength="64" autocomplete="username" />
         </div>
         <div class="form-group">
-          <label>邮箱（必填）</label>
+          <label>邮箱（选填）</label>
+          <p class="field-hint">不填写也可注册；填写后可用于邮箱登录、验证和密码找回。</p>
           <input
             class="input"
             type="email"
             v-model="email"
-            required
             autocomplete="email"
             placeholder="name@example.com"
           />
         </div>
-        <div class="form-group form-group-code">
-          <label>邮箱验证码</label>
+        <div v-if="emailTrimmed" class="form-group form-group-code">
+          <label>邮箱验证码（填写邮箱后必填）</label>
           <div class="code-row">
             <input
               class="input input-code"
@@ -49,7 +66,10 @@
           {{ loading ? '注册中...' : '注册' }}
         </button>
       </form>
-      <p class="auth-footer">
+      <p v-if="desktopRegistration" class="auth-footer">
+        已有账号？请关闭本页，回到 XCAGI 桌面端登录
+      </p>
+      <p v-else class="auth-footer">
         已有账号？<router-link to="/login" class="link">登录</router-link>
       </p>
     </div>
@@ -58,10 +78,16 @@
 
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api'
+import {
+  DEFAULT_POST_AUTH,
+  isXcagiDesktopRegistration,
+  pickRedirectFromRoute,
+} from '@/authPaths'
 
 const router = useRouter()
+const route = useRoute()
 const username = ref('')
 const email = ref('')
 const verificationCode = ref('')
@@ -70,9 +96,11 @@ const loading = ref(false)
 const sendCodeLoading = ref(false)
 const err = ref('')
 const cooldown = ref(0)
+const registrationComplete = ref(false)
 let tick: ReturnType<typeof setInterval> | null = null
 
 const emailTrimmed = computed(() => email.value.trim())
+const desktopRegistration = computed(() => isXcagiDesktopRegistration(route))
 
 const sendDisabled = computed(
   () => cooldown.value > 0 || loading.value || sendCodeLoading.value || !emailTrimmed.value,
@@ -123,16 +151,16 @@ async function doRegister() {
   try {
     const em = emailTrimmed.value
     const code = verificationCode.value.trim()
-    if (!em) {
-      err.value = '请填写邮箱'
-      return
-    }
-    if (!code) {
+    if (em && !code) {
       err.value = '请先点击「获取验证码」，填写邮件中的 6 位验证码'
       return
     }
-    await api.register(username.value, password.value, em, code)
-    await router.replace('/workbench')
+    await api.register(username.value, password.value, em, em ? code : '')
+    if (desktopRegistration.value) {
+      registrationComplete.value = true
+      return
+    }
+    await router.replace(pickRedirectFromRoute(route))
   } catch (e) {
     err.value = (e as Error)?.message || String(e)
   } finally {
@@ -167,6 +195,59 @@ async function doRegister() {
   margin-bottom: 24px;
   text-align: center;
   color: var(--wb-text-primary, #1d1d1f);
+}
+.source-badge {
+  width: fit-content;
+  margin: 0 auto 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wb-accent-primary, #0071e3) 10%, transparent);
+  color: var(--wb-accent-primary, #0071e3);
+  font-size: 12px;
+  font-weight: 600;
+}
+.auth-intro,
+.success-lead {
+  margin: -10px 0 22px;
+  color: var(--wb-text-muted, #6e6e73);
+  font-size: 14px;
+  line-height: 1.65;
+  text-align: center;
+}
+.auth-card--success {
+  text-align: center;
+}
+.success-mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  background: #e8f7ee;
+  color: #18864b;
+  font-size: 28px;
+  font-weight: 700;
+}
+.auth-card--success .success-lead {
+  margin-top: -8px;
+}
+.next-step {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--wb-surface-sunken, rgba(0, 0, 0, 0.04));
+  color: var(--wb-text-primary, #1d1d1f);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: left;
+}
+.success-action {
+  display: block;
+  box-sizing: border-box;
+  text-decoration: none;
 }
 .form-group { margin-bottom: 16px; }
 .form-group label {
