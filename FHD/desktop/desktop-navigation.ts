@@ -15,6 +15,17 @@ export function desktopWindowOpenAction(rawUrl: string, expectedPort: number): '
   return isTrustedDesktopOrigin(rawUrl, expectedPort) ? 'allow' : 'deny'
 }
 
+export function isTrustedDesktopExternalUrl(rawUrl: string | undefined): boolean {
+  if (!rawUrl) return false
+  try {
+    const url = new URL(rawUrl)
+    const host = url.hostname.toLowerCase()
+    return url.protocol === 'https:' && (host === 'xiu-ci.com' || host.endsWith('.xiu-ci.com'))
+  } catch {
+    return false
+  }
+}
+
 /**
  * Chromium may abort the first navigation while the local backend redirects
  * from splash to the SPA. If the same trusted desktop page is already loaded,

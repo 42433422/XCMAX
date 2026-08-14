@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import {
   normalizeLoginSku,
   loginEyebrow,
@@ -7,6 +7,7 @@ import {
   loginAccountInputPlaceholder,
   loginPasswordInputPlaceholder,
   marketRegisterUrl,
+  purchaseAuthorizationUrl,
   marketForgotPasswordUrl,
   loginHelpDocUrl,
   loginPageTitle,
@@ -115,6 +116,12 @@ describe('loginBranding', () => {
   describe('marketRegisterUrl', () => {
     it('returns a URL ending with /register', () => {
       expect(marketRegisterUrl()).toMatch(/\/register$/)
+    })
+  })
+
+  describe('purchaseAuthorizationUrl', () => {
+    it('returns the official HTTPS pricing entry', () => {
+      expect(purchaseAuthorizationUrl()).toBe('https://xiu-ci.com/#pricing')
     })
   })
 
