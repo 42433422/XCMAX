@@ -60,7 +60,7 @@ const electronMocks = vi.hoisted(() => {
     showOpenDialog: vi.fn(() => Promise.resolve({ canceled: true }))
   }
   const ipcMain = { handle: vi.fn() }
-  const shell = { openPath: vi.fn() }
+  const shell = { openPath: vi.fn(), openExternal: vi.fn(() => Promise.resolve()) }
   const session = {
     defaultSession: {
       cookies: { get: vi.fn(() => Promise.resolve([] as Array<{ name: string; value: string }>)) },
@@ -567,6 +567,17 @@ describe('main — desktopWindowOpenAction', () => {
     const { desktopWindowOpenAction } = await import('./desktop-navigation.js')
     expect(desktopWindowOpenAction('https://example.com/', 17500)).toBe('deny')
     expect(desktopWindowOpenAction('not-a-url', 17500)).toBe('deny')
+  })
+})
+
+describe('main — trusted external account URLs', () => {
+  it('allows only official HTTPS xiu-ci.com URLs for system-browser handoff', async () => {
+    const { isTrustedDesktopExternalUrl } = await import('./desktop-navigation.js')
+    expect(isTrustedDesktopExternalUrl('https://xiu-ci.com/market/register')).toBe(true)
+    expect(isTrustedDesktopExternalUrl('https://www.xiu-ci.com/#pricing')).toBe(true)
+    expect(isTrustedDesktopExternalUrl('http://xiu-ci.com/market/register')).toBe(false)
+    expect(isTrustedDesktopExternalUrl('https://xiu-ci.com.evil.example/market/register')).toBe(false)
+    expect(isTrustedDesktopExternalUrl('not-a-url')).toBe(false)
   })
 })
 
