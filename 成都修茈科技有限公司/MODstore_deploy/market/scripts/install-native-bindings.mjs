@@ -24,22 +24,22 @@ const REGISTRY = process.env.NPM_REGISTRY || 'https://registry.npmmirror.com'
 /** @type {Record<string, Array<{ name: string; version: string }>>} */
 const PLATFORM_PACKAGES = {
   'darwin-arm64': [
-    { name: '@rolldown/binding-darwin-arm64', version: '1.0.0-rc.17' },
+    { name: '@rolldown/binding-darwin-arm64', version: '1.2.3' },
     { name: '@rollup/rollup-darwin-arm64', version: '4.60.2' },
     { name: '@esbuild/darwin-arm64', version: '0.21.5' },
   ],
   'darwin-x64': [
-    { name: '@rolldown/binding-darwin-x64', version: '1.0.0-rc.17' },
+    { name: '@rolldown/binding-darwin-x64', version: '1.2.3' },
     { name: '@rollup/rollup-darwin-x64', version: '4.60.2' },
     { name: '@esbuild/darwin-x64', version: '0.21.5' },
   ],
   'linux-x64': [
-    { name: '@rolldown/binding-linux-x64-gnu', version: '1.0.0-rc.17' },
+    { name: '@rolldown/binding-linux-x64-gnu', version: '1.2.3' },
     { name: '@rollup/rollup-linux-x64-gnu', version: '4.60.2' },
     { name: '@esbuild/linux-x64', version: '0.21.5' },
   ],
   'win32-x64': [
-    { name: '@rolldown/binding-win32-x64-msvc', version: '1.0.0-rc.17' },
+    { name: '@rolldown/binding-win32-x64-msvc', version: '1.2.3' },
     { name: '@rollup/rollup-win32-x64-msvc', version: '4.60.2' },
     { name: '@esbuild/win32-x64', version: '0.21.5' },
   ],
@@ -64,7 +64,8 @@ function pkgDir(packageName) {
 function dirHasBinding(dir) {
   try {
     const names = readdirSync(dir)
-    if (names.some((n) => n.endsWith('.node') || n === 'esbuild' || n === 'esbuild.exe')) return true
+    if (names.some((n) => n.endsWith('.node') || n === 'esbuild' || n === 'esbuild.exe'))
+      return true
     const binDir = join(dir, 'bin')
     try {
       const binNames = readdirSync(binDir)
