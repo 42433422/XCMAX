@@ -15,6 +15,34 @@ export function desktopWindowOpenAction(rawUrl: string, expectedPort: number): '
   return isTrustedDesktopOrigin(rawUrl, expectedPort) ? 'allow' : 'deny'
 }
 
+export function isTrustedDesktopExternalUrl(rawUrl: string | undefined): boolean {
+  if (!rawUrl) return false
+  try {
+    const url = new URL(rawUrl)
+    const host = url.hostname.toLowerCase()
+    return url.protocol === 'https:' && (host === 'xiu-ci.com' || host.endsWith('.xiu-ci.com'))
+  } catch {
+    return false
+  }
+}
+
+export function handleDesktopWindowOpen(
+  rawUrl: string,
+  expectedPort: number,
+  openExternal: (url: string) => Promise<unknown>,
+  warn: (message: string) => void,
+): 'allow' | 'deny' {
+  if (isTrustedDesktopExternalUrl(rawUrl)) {
+    void openExternal(rawUrl).catch(error => {
+      warn(`[xcagi-desktop] failed to open trusted external URL: ${error instanceof Error ? error.message : String(error)}`)
+    })
+    return 'deny'
+  }
+  const action = desktopWindowOpenAction(rawUrl, expectedPort)
+  if (action === 'deny') warn(`[xcagi-desktop] blocked window open to ${rawUrl}`)
+  return action
+}
+
 /**
  * Chromium may abort the first navigation while the local backend redirects
  * from splash to the SPA. If the same trusted desktop page is already loaded,

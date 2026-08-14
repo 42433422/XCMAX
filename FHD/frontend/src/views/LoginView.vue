@@ -25,6 +25,7 @@ import { loadLoginPreferences, saveLoginPreferences } from '@/utils/loginPrefere
 import { clearHostPackSkippedSession } from '@/utils/hostPackOnboardingGate';
 import { canResumeRecentDesktopSession } from '@/utils/authSessionCache';
 import OtpCells from '@/components/OtpCells.vue';
+import LoginAccountActions from '@/components/login/LoginAccountActions.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -114,10 +115,6 @@ const loginHeading = computed(() =>
 );
 const accountPlaceholder = computed(() => loginAccountInputPlaceholder(productSku.value));
 const passwordPlaceholder = computed(() => loginPasswordInputPlaceholder());
-const registerRoute = computed(() => ({
-  name: 'login-register' as const,
-  query: route.query,
-}));
 const forgotAccountRoute = computed(() => ({
   name: 'login-forgot-account' as const,
   query: route.query,
@@ -451,7 +448,7 @@ async function submitLogin() {
 
     <!-- 右侧登录区 -->
     <section class="login-panel" aria-labelledby="login-heading">
-      <router-link class="login-register-link" :to="registerRoute">{{ $t('login.register') }}</router-link>
+      <LoginAccountActions v-if="!isAdminConsoleSpa()" :enterprise="isEnterpriseEdition" />
 
       <div class="login-panel-inner">
         <h1 id="login-heading" class="login-heading">{{ loginHeading }}</h1>
@@ -807,25 +804,6 @@ async function submitLogin() {
   padding: 48px 24px;
   background: var(--xc-color-surface);
   position: relative;
-}
-
-.login-register-link {
-  position: absolute;
-  top: 24px;
-  right: 28px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--xc-color-primary);
-  text-decoration: none;
-  padding: 6px 14px;
-  border: 1px solid var(--xc-color-primary-soft);
-  border-radius: var(--xc-radius-full);
-  background: var(--xc-color-primary-surface);
-  transition: var(--xc-transition-fast);
-}
-
-.login-register-link:hover {
-  background: var(--xc-color-primary-soft);
 }
 
 .login-panel-inner {
@@ -1239,10 +1217,6 @@ async function submitLogin() {
 @media (max-width: 480px) {
   .login-panel {
     padding: 60px 16px 32px;
-  }
-  .login-register-link {
-    right: 16px;
-    top: 16px;
   }
   .login-panel-logo {
     right: 16px;

@@ -54,6 +54,8 @@ vi.mock('@/constants/loginBranding', () => ({
   loginAccountInputPlaceholder: () => '请输入账号',
   loginPageTitle: () => 'XCAGI 登录',
   loginPasswordInputPlaceholder: () => '请输入密码',
+  marketRegisterUrl: () => 'https://xiu-ci.com/market/register',
+  purchaseAuthorizationUrl: () => 'https://xiu-ci.com/#pricing',
 }))
 
 const mockFetchProductSku = vi.fn(async () => 'generic')

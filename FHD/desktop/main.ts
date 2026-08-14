@@ -50,7 +50,7 @@ import { degradedRemediationPolicy } from './autonomy/policies/degraded-remediat
 import { updateRollbackPolicy } from './autonomy/policies/update-rollback.policy'
 import { createForceUpgradeHandler, initializeLocalCrashReporting } from './desktop-resilience'
 import { readJsonTextFile, sanitizeBackendProxyEnv } from './backend-env-utils'
-import { desktopWindowOpenAction, isBenignDesktopLoadAbort, isTrustedDesktopOrigin } from './desktop-navigation'
+import { handleDesktopWindowOpen, isBenignDesktopLoadAbort, isTrustedDesktopOrigin } from './desktop-navigation'
 import { assertSelfUpdateInstallSupported, getDesktopInstallIdentity } from './desktop-install-update'
 import { warmPersistedDesktopSessionCookieStore } from './session-cookie-warmup'
 
@@ -1262,11 +1262,7 @@ async function createWindow(): Promise<void> {
     }
   })
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    const action = desktopWindowOpenAction(url, DEFAULT_PORT)
-    if (action === 'deny') {
-      console.warn(`[xcagi-desktop] blocked window open to ${url}`)
-    }
-    return { action }
+    return { action: handleDesktopWindowOpen(url, DEFAULT_PORT, target => shell.openExternal(target), message => console.warn(message)) }
   })
   mainWindow.webContents.on('unresponsive', () => {
     writeBackendLog('[crash] renderer unresponsive\n')
