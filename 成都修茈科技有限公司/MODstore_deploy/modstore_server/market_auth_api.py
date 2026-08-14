@@ -706,13 +706,10 @@ def _verify_and_consume_verification_code(email: str, code: str) -> None:
 
 @router.post("/auth/register", summary="注册用户（邮箱选填，填写时需验证）")
 def api_register(body: RegisterDTO):
-    email_norm = _normalize_email(body.email)
-    vcode = (body.verification_code or "").strip()
+    email_norm, vcode = _normalize_email(body.email), (body.verification_code or "").strip()
+    if email_norm and ("@" not in email_norm or not vcode):
+        raise HTTPException(400, "填写邮箱后，请填写有效邮箱并获取邮箱验证码")
     if email_norm:
-        if "@" not in email_norm:
-            raise HTTPException(400, "请填写有效邮箱")
-        if not vcode:
-            raise HTTPException(400, "填写邮箱后，请获取并填写邮箱验证码")
         _verify_and_consume_verification_code(email_norm, vcode)
     elif vcode:
         raise HTTPException(400, "填写验证码前请先填写邮箱")
