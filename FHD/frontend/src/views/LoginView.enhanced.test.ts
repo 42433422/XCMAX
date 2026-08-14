@@ -54,6 +54,8 @@ vi.mock('@/constants/loginBranding', () => ({
   loginAccountInputPlaceholder: () => '请输入账号',
   loginPageTitle: () => 'XCAGI 登录',
   loginPasswordInputPlaceholder: () => '请输入密码',
+  marketRegisterUrl: () => 'https://xiu-ci.com/market/register',
+  purchaseAuthorizationUrl: () => 'https://xiu-ci.com/#pricing',
 }))
 
 vi.mock('@/constants/accountModBinding', () => ({
@@ -180,9 +182,9 @@ describe('LoginView.vue – component structure', () => {
     expect(wrapper.find('.login-mode-tabs').exists()).toBe(true)
   })
 
-  it('renders register link', async () => {
+  it('renders the generic registration account action', async () => {
     const { wrapper } = await mountLoginView()
-    expect(wrapper.find('.login-register-link').exists()).toBe(true)
+    expect(wrapper.find('.login-account-action').exists()).toBe(true)
   })
 })
 
