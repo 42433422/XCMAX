@@ -86,13 +86,13 @@ def validate_account_kind_for_market(
         if is_market_admin:
             return "管理员账号不能从企业账号入口登录，请切换到管理员入口登录。"
         if not is_enterprise:
-            return "该账号尚未开通 XCAGI 账号授权，请先在修茈市场选择账号授权并完成支付。"
+            return "该账号尚未开通企业版 XCAGI 账号授权，请先在修茈市场选择账号授权并完成支付。"
         return None
     # personal：阶段一与企业相同
     if is_market_admin:
         return "管理员账号请使用管理员入口登录。"
     if not is_enterprise:
-        return "该账号尚未开通 XCAGI 账号授权，请先在修茈市场完成支付。"
+        return "该账号尚未开通企业版 XCAGI 账号授权，请先在修茈市场完成支付。"
     return None
 
 
