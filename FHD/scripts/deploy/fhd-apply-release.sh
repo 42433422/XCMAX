@@ -99,6 +99,20 @@ for stamp in .deploy-last.tar.gz .deploy-git-sha .deploy-sha256 .deploy-admin-co
 done
 log "已备份至 $BACKUP"
 
+# 保留策略：cron 每 5 分钟执行一次应用，若不清理会以 ~110MB/次速度把磁盘写满
+#（历史事故：/opt/fhd-full-backups 累积 318 个 pre-* 目录，占满 124G 磁盘阻塞发布）。
+# 仅保留最近 FHD_BACKUP_RETAIN 个备份作为回滚窗口，超出的立即删除。
+FHD_BACKUP_RETAIN="${FHD_BACKUP_RETAIN:-10}"
+_retained=0
+for _dir in $(ls -dt "$BACKUP_ROOT"/pre-* 2>/dev/null); do
+  _retained=$((_retained + 1))
+  if [[ "$_retained" -gt "$FHD_BACKUP_RETAIN" ]]; then
+    log "清理旧备份: $_dir（保留最近 ${FHD_BACKUP_RETAIN} 个）"
+    rm -rf "$_dir"
+  fi
+done
+unset _dir _retained
+
 rollback_from_backup() {
   autonomy_evaluate_action "rollback_release" "rollback:${TARBALL_SHA256:0:16}"
   log "执行回滚: $BACKUP"
