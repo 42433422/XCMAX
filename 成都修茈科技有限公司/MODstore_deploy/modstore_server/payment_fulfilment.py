@@ -32,6 +32,7 @@ from modstore_server.models import (
     Purchase,
     Quota,
     Transaction,
+    User,
     UserMod,
     UserPlan,
     Wallet,
@@ -231,6 +232,10 @@ class PlanFulfilStrategy(FulfilStrategy):
         if not plan:
             return
 
+        user = session.query(User).filter(User.id == ctx.user_id).first()
+        if user is None:
+            return
+
         session.query(UserPlan).filter(
             UserPlan.user_id == ctx.user_id, UserPlan.is_active == True  # noqa: E712
         ).update({"is_active": False})
@@ -244,6 +249,9 @@ class PlanFulfilStrategy(FulfilStrategy):
                 is_active=True,
             )
         )
+        from modstore_server.account_lifecycle import mark_active_after_plan
+
+        mark_active_after_plan(user, session=session)
         session.add(
             Entitlement(
                 user_id=ctx.user_id,

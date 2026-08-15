@@ -25,6 +25,7 @@ describe('RegisterView', () => {
         { path: '/register', name: 'register', component: { template: '<div />' } },
         { path: '/login', name: 'login', component: { template: '<div />' } },
         { path: '/workbench/home', name: 'workbench-home', component: { template: '<div />' } },
+        { path: '/plans', name: 'plans', component: { template: '<div />' } },
       ],
     })
   })
@@ -86,10 +87,13 @@ describe('RegisterView', () => {
     await flushPromises()
 
     expect(registerMock).toHaveBeenCalledWith('no-email-user', 'secret123', '', '')
-    expect(replaceSpy).toHaveBeenCalledWith({ name: 'workbench-home' })
+    expect(replaceSpy).toHaveBeenCalledWith({
+      name: 'plans',
+      query: { plan: 'plan_enterprise' },
+    })
   })
 
-  it('keeps ordinary web registration on the normal post-auth route', async () => {
+  it('sends ordinary web registration to plan selection', async () => {
     router.push('/register')
     await router.isReady()
     const replaceSpy = vi.spyOn(router, 'replace')
@@ -104,7 +108,10 @@ describe('RegisterView', () => {
     await flushPromises()
 
     expect(registerMock).toHaveBeenCalledWith('web-user', 'secret123', 'web@example.test', '123456')
-    expect(replaceSpy).toHaveBeenCalledWith({ name: 'workbench-home' })
+    expect(replaceSpy).toHaveBeenCalledWith({
+      name: 'plans',
+      query: { plan: 'plan_enterprise' },
+    })
   })
 
   it('shows a desktop-specific handoff after the same registration call without entering web workbench', async () => {
@@ -127,7 +134,8 @@ describe('RegisterView', () => {
 
     expect(registerMock).toHaveBeenCalledWith('desktop-user', 'secret123', 'desktop@example.test', '654321')
     expect(wrapper.text()).toContain('账号注册成功')
-    expect(wrapper.text()).toContain('关闭本页，回到 XCAGI 桌面端登录')
+    expect(wrapper.text()).toContain('选择套餐并完成支付')
+    expect(wrapper.text()).toContain('权益生效后，再回到 XCAGI 桌面端登录')
     expect(replaceSpy).not.toHaveBeenCalled()
   })
 })

@@ -11,7 +11,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 
 from modstore_server.env_loader import load_modstore_env
 
@@ -157,6 +157,55 @@ def _include_optional(app: FastAPI, module_path: str) -> None:
         app.include_router(extra_router)
 
 
+def _iter_route_method_signatures(routes, *, prefix: str = ""):
+    """Yield flattened ``(path, method)`` pairs across lazy FastAPI routers."""
+
+    for route in routes:
+        original_router = getattr(route, "original_router", None)
+        if original_router is not None:
+            include_context = getattr(route, "include_context", None)
+            nested_prefix = f"{prefix}{getattr(include_context, 'prefix', '') or ''}"
+            yield from _iter_route_method_signatures(
+                getattr(original_router, "routes", ()),
+                prefix=nested_prefix,
+            )
+            continue
+        path = f"{prefix}{getattr(route, 'path', '')}"
+        for method in getattr(route, "methods", None) or set():
+            yield path, str(method).upper()
+
+
+def _include_router_without_method_conflicts(
+    app: FastAPI,
+    router: APIRouter,
+    *,
+    prefix: str = "",
+) -> None:
+    """Mount only routes not already owned by the application.
+
+    ``market_auth_api`` still contains legacy implementations while its unique
+    profile/avatar endpoints are migrated. Public auth contracts must have one
+    runtime owner, so earlier core routes win deterministically.
+    """
+
+    existing = set(_iter_route_method_signatures(app.routes))
+    filtered = APIRouter()
+    for route in router.routes:
+        full_path = f"{prefix}{getattr(route, 'path', '')}"
+        methods = {str(method).upper() for method in (getattr(route, "methods", None) or set())}
+        conflicts = sorted(method for method in methods if (full_path, method) in existing)
+        if conflicts:
+            logger.info(
+                "skip duplicate legacy route %s methods=%s endpoint=%s",
+                full_path,
+                conflicts,
+                getattr(route, "name", ""),
+            )
+            continue
+        filtered.routes.append(route)
+    app.include_router(filtered, prefix=prefix)
+
+
 def _init_database() -> None:
     try:
         from modstore_server.models import init_db
@@ -280,7 +329,11 @@ def _register_core_routes(app: FastAPI, cfg: AppConfig) -> None:
         try:
             from modstore_server.market_auth_api import router as market_auth_router
 
-            app.include_router(market_auth_router, prefix="/api")
+            _include_router_without_method_conflicts(
+                app,
+                market_auth_router,
+                prefix="/api",
+            )
         except Exception:
             logger.exception("market_auth_api 加载失败，跳过")
 

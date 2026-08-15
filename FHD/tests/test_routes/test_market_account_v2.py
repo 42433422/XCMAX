@@ -358,6 +358,24 @@ class TestMarketIdentityFromPayloads:
         assert blob == {}
 
 
+class TestMarketLifecycleFromPayloads:
+    def test_later_auth_me_response_can_revoke_stale_access(self):
+        lifecycle = ma._market_lifecycle_from_payloads(
+            {"desktop_access": True, "account_state": "active"},
+            {
+                "desktop_access": False,
+                "account_state": "pending_plan",
+                "next_action": "select_plan",
+            },
+        )
+        assert lifecycle == {
+            "account_state": "pending_plan",
+            "next_action": "select_plan",
+            "desktop_access": False,
+            "active_plan_id": "",
+        }
+
+
 class TestMarketUserIdFromAuthPayload:
     def test_nested_user_id(self):
         payload = {"data": {"user": {"id": "61", "username": "wuxinghua1"}}}
@@ -681,14 +699,13 @@ class TestRegisterMarketUser:
             assert result["success"] is False
 
     @pytest.mark.asyncio
-    async def test_verification_required_fallback(self, monkeypatch):
+    async def test_verification_required_does_not_bypass_verification(self, monkeypatch):
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "http://localhost:8765")
         error_payload = {
             "__proxy_error__": True,
             "status_code": 400,
             "payload": {"detail": "需要验证码"},
         }
-        open_reg_payload = {"data": {"access_token": "open_tok", "refresh_token": "open_rt"}}
         call_count = 0
 
         async def mock_proxy(method, path, **kwargs):
@@ -696,11 +713,12 @@ class TestRegisterMarketUser:
             call_count += 1
             if call_count == 1:
                 return error_payload
-            return open_reg_payload
+            raise AssertionError("public registration must not call open registration")
 
         with patch.object(ma, "_proxy_json", side_effect=mock_proxy):
             result = await ma.register_market_user("user1", "pass123", "a@b.com")
-            assert result["success"] is True
+            assert result["success"] is False
+            assert call_count == 1
 
 
 class TestEnsureMarketEnterpriseProfile:

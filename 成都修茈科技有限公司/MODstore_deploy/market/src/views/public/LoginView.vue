@@ -19,14 +19,14 @@
       <p class="auth-footer">
         <router-link to="/login-email" class="link">邮箱验证码登录</router-link>
         · <router-link to="/forgot-password" class="link">忘记密码</router-link>
-        · 没有账号？<router-link to="/register" class="link">注册</router-link>
+        · 没有账号？<router-link :to="registerRoute" class="link">注册</router-link>
       </p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { pickRedirectFromRoute } from '@/authPaths'
@@ -38,6 +38,7 @@ const password = ref('')
 const loading = ref(false)
 const err = ref('')
 const authStore = useAuthStore()
+const registerRoute = computed(() => ({ name: 'register', query: route.query }))
 
 async function doLogin() {
   loading.value = true

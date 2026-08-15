@@ -4,8 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { ApiError } from '@/api';
 import { authApi } from '@/api/auth';
 import { applyMarketTokensAfterFhdLogin } from '@/api/marketAccount';
-import { loginPageTitle } from '@/constants/loginBranding';
-import { INDUSTRY_PRESET_IDS } from '@/constants/industryPresets';
+import { loginPageTitle, purchaseAuthorizationUrl } from '@/constants/loginBranding';
 import { fetchProductSku } from '@/utils/productSku';
 
 const route = useRoute();
@@ -18,16 +17,16 @@ const confirmPassword = ref('');
 const showPassword = ref(false);
 const loading = ref(false);
 const errorMessage = ref('');
-
-// 账号体系：行业 + 预算区间（企业版展示；预算 → account_tier 自动派生）
-const industryId = ref('通用');
-const budgetRange = ref('');
-const industryOptions = INDUSTRY_PRESET_IDS.filter((id) => id !== '管理端');
-const BUDGET_OPTIONS = ['1–5 万', '5–10 万', '10–50 万', '50–100 万'];
+const verificationCode = ref('');
+const sendingCode = ref(false);
+const registrationComplete = ref(false);
+const pendingPurchaseUrl = ref('');
 
 const productSku = ref<string>('generic');
 const isEnterpriseEdition = computed(() => productSku.value === 'enterprise');
-const requiresEmail = computed(() => isEnterpriseEdition.value);
+const requiresEmailVerification = computed(
+  () => isEnterpriseEdition.value && Boolean(email.value.trim()),
+);
 
 const loginBackRoute = computed(() => ({
   name: 'login' as const,
@@ -65,9 +64,22 @@ const canSubmit = computed(() => {
   if (loading.value) return false;
   if (!username.value.trim() || password.value.length < 6) return false;
   if (password.value !== confirmPassword.value) return false;
-  if (requiresEmail.value && !email.value.trim()) return false;
+  if (requiresEmailVerification.value && verificationCode.value.trim().length < 4) return false;
   return true;
 });
+
+async function sendVerificationCode() {
+  if (!email.value.trim() || sendingCode.value) return;
+  sendingCode.value = true;
+  errorMessage.value = '';
+  try {
+    await authApi.sendRegisterVerificationCode(email.value.trim());
+  } catch (error) {
+    errorMessage.value = formatRegisterError(error);
+  } finally {
+    sendingCode.value = false;
+  }
+}
 
 onMounted(async () => {
   productSku.value = await fetchProductSku();
@@ -95,8 +107,8 @@ async function submitRegister() {
     return;
   }
   if (!canSubmit.value) {
-    errorMessage.value = requiresEmail.value
-      ? '请填写用户名、邮箱和密码（至少 6 位）'
+    errorMessage.value = requiresEmailVerification.value
+      ? '填写邮箱后，请先获取并填写验证码'
       : '请填写用户名和密码（至少 6 位）';
     return;
   }
@@ -108,8 +120,7 @@ async function submitRegister() {
       username: username.value.trim(),
       password: password.value,
       email: email.value.trim() || undefined,
-      budget_range: budgetRange.value || undefined,
-      industry_id: isEnterpriseEdition.value ? industryId.value : undefined,
+      verification_code: verificationCode.value.trim() || undefined,
     });
     const raw = result as unknown as Record<string, unknown>;
     const ok = raw?.success === true;
@@ -125,11 +136,13 @@ async function submitRegister() {
     await applyMarketTokensAfterFhdLogin(raw);
 
     if (isEnterpriseEdition.value) {
-      try {
-        const { useModsStore } = await import('@/stores/mods');
-        await useModsStore().initialize(true);
-      } catch (modErr) {
-        console.warn('[Register] enterprise mods refresh:', modErr);
+      if (raw.desktop_access !== true) {
+        pendingPurchaseUrl.value =
+          (typeof raw.purchase_url === 'string' && raw.purchase_url.trim())
+            ? raw.purchase_url.trim()
+            : purchaseAuthorizationUrl();
+        registrationComplete.value = true;
+        return;
       }
     }
 
@@ -147,14 +160,28 @@ async function submitRegister() {
     <section class="login-panel" aria-labelledby="register-heading">
       <router-link class="login-register-corner" :to="loginBackRoute"> 登录 </router-link>
 
-      <h1 id="register-heading" class="login-heading">账号注册</h1>
-      <p class="register-hint" role="note">
-        {{
-          isEnterpriseEdition
-            ? '将在本机数据库创建用户，并同步注册修茈市场账号（需市场服务可达）。'
-            : '在本机服务器数据库创建账号，注册成功后自动登录。'
-        }}
-      </p>
+      <template v-if="registrationComplete">
+        <h1 id="register-heading" class="login-heading">账号注册成功</h1>
+        <p class="register-hint" role="status">
+          注册只完成账号开立。请继续选择套餐并支付，权益生效后再回到桌面端登录。
+        </p>
+        <a
+          class="login-submit register-purchase-link"
+          :href="pendingPurchaseUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+        >选择套餐并支付</a>
+      </template>
+
+      <template v-else>
+        <h1 id="register-heading" class="login-heading">账号注册</h1>
+        <p class="register-hint" role="note">
+          {{
+            isEnterpriseEdition
+              ? '先开立修茈市场账号，再选套餐、支付并开通桌面端权益。'
+              : '在本机服务器数据库创建账号，注册成功后自动登录。'
+          }}
+        </p>
 
       <form class="login-form" @submit.prevent="submitRegister">
         <div class="login-field-line">
@@ -169,17 +196,7 @@ async function submitRegister() {
           />
         </div>
 
-        <div v-if="requiresEmail" class="login-field-line">
-          <input
-            v-model="email"
-            type="email"
-            name="email"
-            autocomplete="email"
-            placeholder="邮箱（企业版必填）"
-            :disabled="loading"
-          />
-        </div>
-        <div v-else class="login-field-line">
+        <div class="login-field-line">
           <input
             v-model="email"
             type="email"
@@ -190,19 +207,19 @@ async function submitRegister() {
           />
         </div>
 
-        <template v-if="isEnterpriseEdition">
-          <div class="login-field-line login-field-line--select">
-            <select v-model="industryId" name="industry" :disabled="loading" aria-label="行业">
-              <option v-for="opt in industryOptions" :key="opt" :value="opt">{{ opt }}</option>
-            </select>
-          </div>
-          <div class="login-field-line login-field-line--select">
-            <select v-model="budgetRange" name="budget" :disabled="loading" aria-label="预算区间">
-              <option value="">预算区间（选填，决定账号等级）</option>
-              <option v-for="opt in BUDGET_OPTIONS" :key="opt" :value="opt">{{ opt }}</option>
-            </select>
-          </div>
-        </template>
+        <div v-if="requiresEmailVerification" class="login-field-line register-code-line">
+          <input
+            v-model="verificationCode"
+            type="text"
+            name="verification-code"
+            autocomplete="one-time-code"
+            placeholder="邮箱验证码"
+            :disabled="loading"
+          />
+          <button type="button" :disabled="sendingCode" @click="sendVerificationCode">
+            {{ sendingCode ? '发送中…' : '获取验证码' }}
+          </button>
+        </div>
 
         <div class="login-field-line login-field-line--password">
           <input
@@ -238,7 +255,7 @@ async function submitRegister() {
         <p v-if="errorMessage" class="login-error" role="alert">{{ errorMessage }}</p>
 
         <button class="login-submit" type="submit" :disabled="!canSubmit">
-          <span>{{ loading ? '正在注册...' : '注册并登录' }}</span>
+          <span>{{ loading ? '正在注册...' : (isEnterpriseEdition ? '注册并选择套餐' : '注册并登录') }}</span>
           <i class="fa fa-long-arrow-right" aria-hidden="true"></i>
         </button>
       </form>
@@ -247,6 +264,7 @@ async function submitRegister() {
         已有账号？
         <router-link :to="loginBackRoute">返回登录</router-link>
       </p>
+      </template>
     </section>
   </main>
 </template>
@@ -372,6 +390,20 @@ async function submitRegister() {
   padding-right: 40px;
 }
 
+.register-code-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.register-code-line button {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: #0052d9;
+  cursor: pointer;
+}
+
 .login-password-toggle {
   position: absolute;
   right: 0;
@@ -416,6 +448,12 @@ async function submitRegister() {
 .login-submit:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.register-purchase-link {
+  justify-content: center;
+  box-sizing: border-box;
+  text-decoration: none;
 }
 
 .register-footer-link {
