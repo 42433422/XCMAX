@@ -45,11 +45,11 @@ export const DEFAULT_POST_AUTH: RouteLocationRaw = { name: 'workbench-home' }
 
 /**
  * 注册只完成账号开立，不代表已获得产品权益。
- * 新用户的唯一默认下一步是选择企业套餐。
+ * 新用户的唯一默认下一步是选择 XCAGI 账号授权；VIP/SVIP 额度会员不是账号权限。
  */
 export const DEFAULT_POST_REGISTER: RouteLocationRaw = {
-  name: 'plans',
-  query: { plan: 'plan_enterprise' },
+  name: 'account-plans',
+  query: { plan: 'saas-trial-30' },
 }
 
 export function pickRegistrationNextFromRoute(
@@ -57,9 +57,9 @@ export function pickRegistrationNextFromRoute(
 ): RouteLocationRaw {
   const source = firstQueryValue(route.query.source)
   return {
-    name: 'plans',
+    name: 'account-plans',
     query: {
-      plan: 'plan_enterprise',
+      plan: 'saas-trial-30',
       ...(source === XCAGI_DESKTOP_REGISTRATION_SOURCE
         ? { source: XCAGI_DESKTOP_REGISTRATION_SOURCE }
         : {}),

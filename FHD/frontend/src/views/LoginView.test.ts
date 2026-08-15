@@ -62,7 +62,7 @@ describe('LoginView.vue', () => {
     )
     expect(actions[1].text()).toContain('购买与授权')
     expect(actions[1].attributes('href')).toBe(
-      'https://xiu-ci.com/market/plans?plan=plan_enterprise&source=xcagi-desktop',
+      'https://xiu-ci.com/market/account-plans?plan=saas-trial-30&source=xcagi-desktop',
     )
     expect(wrapper.find('.login-subheading').text()).toContain('同步账号权益')
   })

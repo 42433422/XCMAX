@@ -1,9 +1,13 @@
 import { requestJson } from '../infrastructure/http/client'
-import type { EntitlementList, OrderSummary, PaymentPlan } from '../domain/payment/types'
+import type { AccountLicensePlan, EntitlementList, OrderSummary, PaymentPlan } from '../domain/payment/types'
 import type { WalletBalance, WalletTransaction } from '../domain/wallet/types'
 
 export function listPlans(): Promise<{ plans: PaymentPlan[] }> {
   return requestJson('/api/payment/plans')
+}
+
+export function listAccountPlans(): Promise<{ plans: AccountLicensePlan[] }> {
+  return requestJson('/api/payment/account-plans')
 }
 
 export function queryOrder(outTradeNo: string): Promise<OrderSummary> {

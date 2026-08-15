@@ -383,6 +383,57 @@ class TestFinalizeEnterpriseLogin:
         assert out["market_is_enterprise"] is False
 
     @pytest.mark.asyncio
+    async def test_market_account_license_is_applied_to_local_tenant(self):
+        result = {"user": {"id": 7}}
+        market = {
+            "success": True,
+            "token": "mtok",
+            "active_plan_id": "saas-permanent-growth",
+            "account_tier": "pro",
+        }
+        with (
+            patch("app.fastapi_routes.market_account.save_session_market_token"),
+            patch(
+                "app.application.enterprise_login_flow.extract_market_user_blob",
+                return_value={"id": 10, "username": "alice"},
+            ),
+            patch(
+                "app.application.enterprise_login_flow.company_brand_from_user_blob",
+                return_value="Brand",
+            ),
+            patch(
+                "app.application.enterprise_login_flow.bind_tenant_for_login",
+                return_value={"tenant_id": 42, "tenant_name": "Brand"},
+            ),
+            patch(
+                "app.application.tenant_subscription_app_service.apply_paid_plan_for_user",
+                return_value=True,
+            ) as mock_apply,
+            patch(
+                "app.application.enterprise_login_flow._derive_and_heal_account_kind",
+                return_value="enterprise",
+            ),
+            patch("app.application.enterprise_login_flow.persist_session_account_meta"),
+            patch(
+                "app.fastapi_routes.market_account.fetch_market_membership_tier",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+        ):
+            out = await finalize_enterprise_login(
+                result=result,
+                session_id="sid",
+                market_result=market,
+                account_kind="personal",
+                username="alice",
+                sku="personal",
+            )
+
+        mock_apply.assert_called_once_with(user_id=7, plan_id="saas-permanent-growth")
+        assert out["account_license_plan_id"] == "saas-permanent-growth"
+        assert out["account_tier"] == "pro"
+
+    @pytest.mark.asyncio
     async def test_market_success_no_refresh_token(self):
         """market_result.success=True 且有 token 但无 refresh_token。"""
         result = {"user": {"id": 1}}

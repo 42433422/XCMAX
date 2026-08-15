@@ -762,6 +762,7 @@ def _market_lifecycle_from_payloads(*payloads: Any) -> dict[str, Any]:
         "next_action": "select_plan",
         "desktop_access": False,
         "active_plan_id": "",
+        "account_tier": "",
     }
     for payload in payloads:
         sources: list[dict[str, Any]] = []
@@ -783,6 +784,9 @@ def _market_lifecycle_from_payloads(*payloads: Any) -> dict[str, Any]:
             active_plan_id = str(source.get("active_plan_id") or "").strip()
             if active_plan_id:
                 result["active_plan_id"] = active_plan_id
+            account_tier = str(source.get("account_tier") or "").strip().lower()
+            if account_tier in {"normal", "pro", "max", "ultra"}:
+                result["account_tier"] = account_tier
             if "desktop_access" in source:
                 result["desktop_access"] = _truthy_identity_flag(source.get("desktop_access"))
     return result
@@ -1134,6 +1138,7 @@ async def market_register(request: Request, body: dict[str, Any] = Body(default_
             "next_action": result.get("next_action"),
             "desktop_access": bool(result.get("desktop_access")),
             "active_plan_id": result.get("active_plan_id"),
+            "account_tier": result.get("account_tier"),
             "raw": result.get("raw"),
         },
     }
@@ -1169,6 +1174,7 @@ async def market_login(request: Request, body: dict[str, Any] = Body(default_fac
             "next_action": market_result.get("next_action"),
             "desktop_access": bool(market_result.get("desktop_access")),
             "active_plan_id": market_result.get("active_plan_id"),
+            "account_tier": market_result.get("account_tier"),
             "raw": market_result.get("raw"),
         },
     }

@@ -34,6 +34,7 @@ from modstore_server import (
     payment_orders,
     webhook_dispatcher,
 )
+from modstore_server.account_license_plans import public_account_license_plans
 from modstore_server.api.deps import _get_current_user
 from modstore_server.application.payment_gateway import (
     PaymentGatewayService,
@@ -164,16 +165,20 @@ def api_payment_plans():
         return result
 
 
+@router.get("/account-plans")
+def api_payment_account_plans():
+    """Public XCAGI desktop account licenses; never mixed with VIP/SVIP quota plans."""
+
+    return {"plans": public_account_license_plans()}
+
+
 @router.get("/my-plan")
 def api_my_plan(user: User = Depends(_get_current_user)):
+    from modstore_server.account_lifecycle import active_membership_plan
+
     sf = get_session_factory()
     with sf() as session:
-        row = (
-            session.query(UserPlan)
-            .filter(UserPlan.user_id == user.id, UserPlan.is_active == True)
-            .order_by(UserPlan.id.desc())
-            .first()
-        )
+        row = active_membership_plan(session, int(user.id))
         if not row:
             return {"plan": None, "quotas": [], "membership": _membership_meta(None)}
         plan = session.query(PlanTemplate).filter(PlanTemplate.id == row.plan_id).first()
@@ -383,7 +388,7 @@ async def api_payment_checkout(
 
         from modstore_server.account_lifecycle import mark_pending_payment
 
-        mark_pending_payment(int(user_id))
+        mark_pending_payment(int(user_id), plan_id=plan_id)
 
         ua = request.headers.get("user-agent", "")
         return_url = _checkout_return_url(request, out_trade_no)

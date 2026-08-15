@@ -209,6 +209,8 @@ describe('low coverage view business branches', () => {
     expect(lowMocks.refreshSession).toHaveBeenCalledWith(true)
     expect(sessionStorage.getItem('modstore_svip_ladder_reveal')).toBe('1')
     expect(wrapper.text()).toContain('支付成功')
+    expect(wrapper.text()).toContain('会员额度或商品权益')
+    expect(wrapper.text()).not.toContain('桌面端访问资格已同步生效')
 
     await vi.advanceTimersByTimeAsync(14_000)
     await (wrapper.vm as unknown as { fetchOrder: () => Promise<void> }).fetchOrder()
@@ -220,6 +222,25 @@ describe('low coverage view business branches', () => {
     expect(lowMocks.api.paymentCancelOrder).toHaveBeenCalledWith('ord_1')
     expect(lowMocks.router.replace).toHaveBeenCalledWith({ name: 'checkout', params: { orderId: 'ord_2' } })
     expect(wrapper.text()).toContain('打开支付宝扫码支付')
+    wrapper.unmount()
+  })
+
+  it('shows desktop authorization completion only for an account-license order', async () => {
+    lowMocks.api.paymentQuery.mockResolvedValueOnce({
+      ...pendingOrder,
+      status: 'paid',
+      plan_id: 'saas-trial-30',
+      subject: '30 天试用',
+    })
+    const { default: PaymentCheckoutView } = await import('./views/PaymentCheckoutView.vue')
+    const wrapper = mount(PaymentCheckoutView, { global: globalOptions })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('XCAGI 账号授权和桌面端访问资格已同步生效')
+    expect(wrapper.text()).toContain('回到桌面端')
+    expect((wrapper.vm as unknown as { planSelectionRoute: string }).planSelectionRoute).toBe(
+      '/account-plans',
+    )
     wrapper.unmount()
   })
 

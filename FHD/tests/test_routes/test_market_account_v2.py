@@ -373,6 +373,7 @@ class TestMarketLifecycleFromPayloads:
             "next_action": "select_plan",
             "desktop_access": False,
             "active_plan_id": "",
+            "account_tier": "",
         }
 
 

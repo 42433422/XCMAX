@@ -62,6 +62,7 @@ export type NormalizedMe = {
   next_action?: string
   desktop_access?: boolean
   active_plan_id?: string
+  account_tier?: string
 }
 
 function normalizeAccessFlag(value: unknown): boolean {
@@ -102,6 +103,7 @@ export function normalizeMeResponse(me: unknown): NormalizedMe | null | undefine
       next_action: (u.next_action ?? m.next_action) as string | undefined,
       desktop_access: normalizeAccessFlag(u.desktop_access ?? m.desktop_access),
       active_plan_id: (u.active_plan_id ?? m.active_plan_id) as string | undefined,
+      account_tier: (u.account_tier ?? m.account_tier) as string | undefined,
     }
   }
   return m as NormalizedMe

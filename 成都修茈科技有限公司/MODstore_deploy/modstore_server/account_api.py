@@ -10,7 +10,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from modstore_server import account_level_service
-from modstore_server.account_lifecycle import lifecycle_for_user, lifecycle_for_user_id
+from modstore_server.account_lifecycle import (
+    active_membership_plan,
+    lifecycle_for_user,
+    lifecycle_for_user_id,
+)
 from modstore_server.api.deps import _get_current_user
 from modstore_server.auth_service import create_access_token, create_refresh_token, register_user
 from modstore_server.llm_api import _membership_meta, _provider_labels
@@ -92,7 +96,8 @@ def api_account_bootstrap(user: User = Depends(_get_current_user)):
             provider_status.append(row)
         default_llm = _load_default_llm(getattr(db_user, "default_llm_json", ""))
         lifecycle = lifecycle_for_user(session, db_user).to_dict()
-        membership = _membership_meta(str(lifecycle.get("active_plan_id") or "") or None)
+        membership_row = active_membership_plan(session, int(user.id))
+        membership = _membership_meta(membership_row.plan_id if membership_row else None)
         level_profile: Dict[str, Any] = account_level_service.build_level_profile(
             int(getattr(db_user, "experience", 0) or 0)
         ).to_dict()

@@ -73,7 +73,10 @@ public class WalletService {
             n = 0;
         }
         if (n == 0) {
-            n = userPlanRepository.findFirstByUserAndActiveTrueOrderByStartedAtDesc(user)
+            n = userPlanRepository.findByUserAndActiveTrue(user).stream()
+                    .filter(up -> up.getPlan() != null)
+                    .filter(up -> !AccountLicensePlans.isAccountLicense(up.getPlan().getId()))
+                    .findFirst()
                     .map(up -> MoneyUtils.toIntYuanHalfUp(up.getPlan().getPrice()))
                     .orElse(0);
         }
@@ -105,15 +108,20 @@ public class WalletService {
         if (order == null || !"plan".equals(order.getOrderKind())) {
             return;
         }
-        int grantYuan = MoneyUtils.toIntYuanHalfUp(order.getTotalAmount());
+        int grantYuan = AccountLicensePlans.find(order.getPlanId())
+                .map(meta -> meta.quotaCents() / 100)
+                .orElseGet(() -> MoneyUtils.toIntYuanHalfUp(order.getTotalAmount()));
         if (grantYuan <= 0) {
             return;
         }
         addBalance(
                 order.getUser(),
                 BigDecimal.valueOf(grantYuan),
-                "plan_membership_tokens",
-                "会员随单：按实付价取整的 LLM 可用余额(元)",
+                AccountLicensePlans.isAccountLicense(order.getPlanId())
+                        ? "account_license_quota" : "plan_membership_tokens",
+                AccountLicensePlans.isAccountLicense(order.getPlanId())
+                        ? "账号授权随单 AI 额度(元)"
+                        : "会员随单：按实付价取整的 LLM 可用余额(元)",
                 order.getOutTradeNo() + ":membership-tokens"
         );
     }
@@ -126,7 +134,9 @@ public class WalletService {
         if (order == null || !"plan".equals(order.getOrderKind())) {
             return;
         }
-        int grantYuan = MoneyUtils.toIntYuanHalfUp(order.getTotalAmount());
+        int grantYuan = AccountLicensePlans.find(order.getPlanId())
+                .map(meta -> meta.quotaCents() / 100)
+                .orElseGet(() -> MoneyUtils.toIntYuanHalfUp(order.getTotalAmount()));
         if (grantYuan <= 0) {
             return;
         }

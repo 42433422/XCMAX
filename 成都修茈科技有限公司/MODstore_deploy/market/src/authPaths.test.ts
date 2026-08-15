@@ -69,19 +69,19 @@ describe('DEFAULT_POST_AUTH', () => {
 describe('registration lifecycle redirect', () => {
   it('always continues from account creation to plan selection', () => {
     expect(DEFAULT_POST_REGISTER).toEqual({
-      name: 'plans',
-      query: { plan: 'plan_enterprise' },
+      name: 'account-plans',
+      query: { plan: 'saas-trial-30' },
     })
     expect(pickRegistrationNextFromRoute({ query: { redirect: '/workbench/home' } })).toEqual({
-      name: 'plans',
-      query: { plan: 'plan_enterprise' },
+      name: 'account-plans',
+      query: { plan: 'saas-trial-30' },
     })
   })
 
   it('preserves only the known desktop source', () => {
     expect(pickRegistrationNextFromRoute({ query: { source: 'xcagi-desktop' } })).toEqual({
-      name: 'plans',
-      query: { plan: 'plan_enterprise', source: 'xcagi-desktop' },
+      name: 'account-plans',
+      query: { plan: 'saas-trial-30', source: 'xcagi-desktop' },
     })
   })
 })

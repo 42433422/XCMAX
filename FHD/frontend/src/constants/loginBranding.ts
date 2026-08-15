@@ -63,7 +63,7 @@ export function marketRegisterUrl(): string {
 export function purchaseAuthorizationUrl(): string {
   return String(
     import.meta.env.VITE_XCAGI_PURCHASE_URL
-      || `${marketBaseUrl()}/plans?plan=plan_enterprise&source=xcagi-desktop`,
+      || `${marketBaseUrl()}/account-plans?plan=saas-trial-30&source=xcagi-desktop`,
   ).trim();
 }
 

@@ -79,6 +79,7 @@ REFUND_PAYLOAD_FIELDS: Final[tuple[str, ...]] = tuple(
 
 PAYMENT_ENDPOINTS: Final[tuple[tuple[str, str, bool, bool], ...]] = (
     ("GET", "/api/payment/plans", False, False),
+    ("GET", "/api/payment/account-plans", False, False),
     ("GET", "/api/payment/my-plan", True, False),
     ("POST", "/api/payment/sign-checkout", True, False),
     ("POST", "/api/payment/checkout", True, False),
@@ -109,6 +110,7 @@ WEBHOOK_ENDPOINTS: Final[tuple[tuple[str, str, bool, bool], ...]] = (
 # ``market/src/api.ts`` and ``market/src/application/paymentApi.ts``.
 FRONTEND_PAYMENT_PATHS: Final[tuple[str, ...]] = (
     "/api/payment/plans",
+    "/api/payment/account-plans",
     "/api/payment/my-plan",
     "/api/payment/sign-checkout",
     "/api/payment/checkout",

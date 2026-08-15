@@ -626,7 +626,7 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
 
     if sku == "enterprise":
         # 企业注册只在市场创建身份。未付费前不创建 FHD 用户、
-        # 租户或本地会话，避免绕过套餐权益直接进入企业工作台。
+        # 租户或本地会话，避免绕过账号授权直接进入企业工作台。
         reg_email = email
         market_reg = await register_market_user(username, password, reg_email, verification_code)
         if not market_reg.get("success"):
@@ -640,9 +640,9 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
         if not bool(market_reg.get("desktop_access")):
             market_base = str(market_reg.get("market_base_url") or "").rstrip("/")
             purchase_url = (
-                f"{market_base}/plans?plan=plan_enterprise&source=xcagi-desktop"
+                f"{market_base}/account-plans?plan=saas-trial-30&source=xcagi-desktop"
                 if market_base
-                else "/market/plans?plan=plan_enterprise&source=xcagi-desktop"
+                else "/market/account-plans?plan=saas-trial-30&source=xcagi-desktop"
             )
             return JSONResponse(
                 {

@@ -26,6 +26,7 @@ describe('RegisterView', () => {
         { path: '/login', name: 'login', component: { template: '<div />' } },
         { path: '/workbench/home', name: 'workbench-home', component: { template: '<div />' } },
         { path: '/plans', name: 'plans', component: { template: '<div />' } },
+        { path: '/account-plans', name: 'account-plans', component: { template: '<div />' } },
       ],
     })
   })
@@ -88,8 +89,8 @@ describe('RegisterView', () => {
 
     expect(registerMock).toHaveBeenCalledWith('no-email-user', 'secret123', '', '')
     expect(replaceSpy).toHaveBeenCalledWith({
-      name: 'plans',
-      query: { plan: 'plan_enterprise' },
+      name: 'account-plans',
+      query: { plan: 'saas-trial-30' },
     })
   })
 
@@ -109,8 +110,8 @@ describe('RegisterView', () => {
 
     expect(registerMock).toHaveBeenCalledWith('web-user', 'secret123', 'web@example.test', '123456')
     expect(replaceSpy).toHaveBeenCalledWith({
-      name: 'plans',
-      query: { plan: 'plan_enterprise' },
+      name: 'account-plans',
+      query: { plan: 'saas-trial-30' },
     })
   })
 
@@ -134,8 +135,8 @@ describe('RegisterView', () => {
 
     expect(registerMock).toHaveBeenCalledWith('desktop-user', 'secret123', 'desktop@example.test', '654321')
     expect(wrapper.text()).toContain('账号注册成功')
-    expect(wrapper.text()).toContain('选择套餐并完成支付')
-    expect(wrapper.text()).toContain('权益生效后，再回到 XCAGI 桌面端登录')
+    expect(wrapper.text()).toContain('选择 XCAGI 账号授权并完成支付')
+    expect(wrapper.text()).toContain('授权生效后，再回到桌面端登录')
     expect(replaceSpy).not.toHaveBeenCalled()
   })
 })

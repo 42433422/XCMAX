@@ -48,6 +48,7 @@ export interface LoginResponse {
   next_action?: string;
   desktop_access?: boolean;
   active_plan_id?: string;
+  account_tier?: string;
   purchase_url?: string;
 }
 

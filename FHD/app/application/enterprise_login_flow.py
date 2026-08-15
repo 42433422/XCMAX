@@ -313,6 +313,22 @@ async def finalize_enterprise_login(
                 if tenant_info.get("tenant_name"):
                     tenant_name = str(tenant_info["tenant_name"])
                     result["tenant_name"] = tenant_name
+                active_license_plan_id = str(
+                    (market_result or {}).get("active_plan_id") or ""
+                ).strip()
+                if active_license_plan_id:
+                    from app.application.tenant_subscription_app_service import (
+                        apply_paid_plan_for_user,
+                    )
+
+                    if apply_paid_plan_for_user(
+                        user_id=int(user_id),
+                        plan_id=active_license_plan_id,
+                    ):
+                        result["account_license_plan_id"] = active_license_plan_id
+                        result["account_tier"] = str(
+                            (market_result or {}).get("account_tier") or "normal"
+                        )
             market_is_admin = bool(market_result.get("is_market_admin"))
             market_is_enterprise = bool(market_result.get("is_enterprise"))
             # 单一真相源 + 自动派生：account_kind 由本地 User.tier 派生（市场身份可向上提升），

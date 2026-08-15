@@ -163,14 +163,14 @@ async function submitRegister() {
       <template v-if="registrationComplete">
         <h1 id="register-heading" class="login-heading">账号注册成功</h1>
         <p class="register-hint" role="status">
-          注册只完成账号开立。请继续选择套餐并支付，权益生效后再回到桌面端登录。
+          注册只完成账号开立。请继续选择 XCAGI 账号授权并支付，授权生效后再回到桌面端登录。
         </p>
         <a
           class="login-submit register-purchase-link"
           :href="pendingPurchaseUrl"
           target="_blank"
           rel="noopener noreferrer"
-        >选择套餐并支付</a>
+        >选择账号授权并支付</a>
       </template>
 
       <template v-else>
@@ -178,7 +178,7 @@ async function submitRegister() {
         <p class="register-hint" role="note">
           {{
             isEnterpriseEdition
-              ? '先开立修茈市场账号，再选套餐、支付并开通桌面端权益。'
+              ? '先开立修茈市场账号，再选账号授权、支付并开通桌面端使用权。'
               : '在本机服务器数据库创建账号，注册成功后自动登录。'
           }}
         </p>
@@ -255,7 +255,7 @@ async function submitRegister() {
         <p v-if="errorMessage" class="login-error" role="alert">{{ errorMessage }}</p>
 
         <button class="login-submit" type="submit" :disabled="!canSubmit">
-          <span>{{ loading ? '正在注册...' : (isEnterpriseEdition ? '注册并选择套餐' : '注册并登录') }}</span>
+          <span>{{ loading ? '正在注册...' : (isEnterpriseEdition ? '注册并选择账号授权' : '注册并登录') }}</span>
           <i class="fa fa-long-arrow-right" aria-hidden="true"></i>
         </button>
       </form>

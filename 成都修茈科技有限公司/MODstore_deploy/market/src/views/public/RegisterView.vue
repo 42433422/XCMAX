@@ -7,10 +7,10 @@
       <p class="success-lead">网页与 XCAGI 桌面端共用这一个修茈市场账号。</p>
       <div class="next-step">
         <strong>下一步</strong>
-        <span>选择套餐并完成支付。权益生效后，再回到 XCAGI 桌面端登录。</span>
+        <span>选择 XCAGI 账号授权并完成支付。授权生效后，再回到桌面端登录。</span>
       </div>
       <router-link :to="registrationNext" class="btn btn-primary-solid btn-block success-action">
-        选择套餐
+        选择账号授权
       </router-link>
     </div>
     <div v-else class="auth-card">
