@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildLevelProfileDict, isMeAdminPayload, normalizeMeResponse, LEVEL_THRESHOLDS } from './accountLevel'
+import {
+  buildLevelProfileDict,
+  isMeAdminPayload,
+  normalizeMeResponse,
+  LEVEL_THRESHOLDS,
+} from './accountLevel'
 
 describe('accountLevel', () => {
   it('buildLevelProfileDict matches low tiers', () => {
@@ -161,6 +166,13 @@ describe('accountLevel', () => {
     })
     if (!flat) throw new Error('expected flat to be non-null')
     expect(flat.is_admin).toBe(true)
+  })
+
+  it('fails closed when desktop access is a false-like string', () => {
+    const flat = normalizeMeResponse({
+      user: { id: 2, username: 'pending', desktop_access: 'false' },
+    })
+    expect(flat?.desktop_access).toBe(false)
   })
 
   it('isMeAdminPayload reads nested admin', () => {

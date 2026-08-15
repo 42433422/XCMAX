@@ -15,7 +15,21 @@ export type AuthResponse = {
   access_token?: string
   refresh_token?: string
   ok?: boolean
-  user?: { id: number; username?: string; email?: string }
+  user?: {
+    id: number
+    username?: string
+    email?: string
+    account_state?: string
+    next_action?: string
+    desktop_access?: boolean
+    active_plan_id?: string
+    account_tier?: string
+  }
+  account_state?: string
+  next_action?: string
+  desktop_access?: boolean
+  active_plan_id?: string
+  account_tier?: string
 }
 
 export function setTokensFromAuthResponse(res: AuthResponse | null | undefined) {

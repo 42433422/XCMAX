@@ -392,6 +392,9 @@ def init_default_plan_templates() -> None:
             "quotas_json": '{"employee_count":999999,"storage_mb":1048576}',
         },
     ]
+    from modstore_server.account_license_plans import account_license_plan_rows
+
+    defaults.extend(account_license_plan_rows())
     sf = get_session_factory()
     with sf() as session:
         for row in defaults:

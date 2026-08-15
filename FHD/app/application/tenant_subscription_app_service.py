@@ -10,7 +10,7 @@ from typing import Any
 from app.db.models.tenant import Tenant
 from app.db.models.user import User
 from app.db.session import get_db
-from app.infrastructure.billing.saas_plans import is_saas_plan_id, trial_days
+from app.infrastructure.billing.saas_plans import is_saas_plan_id, plan_by_id, trial_days
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
 
@@ -128,7 +128,13 @@ def subscription_status_for_user(user_id: int) -> dict[str, Any]:
         if user.tenant_id:
             tenant = db.query(Tenant).filter(Tenant.id == int(user.tenant_id)).first()
 
-        if tenant and tenant.plan_id and is_saas_plan_id(str(tenant.plan_id)):
+        plan = plan_by_id(str(tenant.plan_id)) if tenant and tenant.plan_id else None
+        paid_plan_active = bool(plan)
+        if plan and str(plan.get("license_type") or "") == "trial":
+            paid_plan_active = bool(
+                tenant and tenant.trial_expires_at and tenant.trial_expires_at >= now
+            )
+        if tenant and tenant.plan_id and paid_plan_active:
             return {
                 "active": True,
                 "reason": "paid_plan",
@@ -168,7 +174,13 @@ def apply_paid_plan_to_tenant(*, tenant_id: int, plan_id: str) -> bool:
         if not tenant:
             return False
         tenant.plan_id = str(plan_id).strip()
-        if str(plan_id).strip().startswith("saas-permanent-"):
+        plan = plan_by_id(plan_id) or {}
+        if str(plan.get("license_type") or "") == "trial":
+            now = utc_now_naive()
+            duration_days = max(1, int(plan.get("duration_days") or trial_days()))
+            tenant.trial_started_at = now
+            tenant.trial_expires_at = now + timedelta(days=duration_days)
+        elif str(plan_id).strip().startswith("saas-permanent-"):
             tenant.trial_expires_at = None
         db.commit()
         logger.info(
@@ -188,8 +200,45 @@ def apply_paid_plan_to_tenant(*, tenant_id: int, plan_id: str) -> bool:
 
 
 def apply_paid_plan_for_user(*, user_id: int, plan_id: str) -> bool:
+    if not is_saas_plan_id(plan_id):
+        return False
+    plan = plan_by_id(plan_id) or {}
     with get_db() as db:
         user = db.query(User).filter(User.id == int(user_id)).first()
         if not user or not user.tenant_id:
             return False
-        return apply_paid_plan_to_tenant(tenant_id=int(user.tenant_id), plan_id=plan_id)
+        tenant_id = int(user.tenant_id)
+        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+        if tenant is None:
+            return False
+        tenant.plan_id = str(plan_id).strip()
+        if str(plan.get("license_type") or "") == "trial":
+            now = utc_now_naive()
+            duration_days = max(1, int(plan.get("duration_days") or trial_days()))
+            tenant.trial_started_at = now
+            tenant.trial_expires_at = now + timedelta(days=duration_days)
+        elif str(plan_id).strip().startswith("saas-permanent-"):
+            tenant.trial_expires_at = None
+        user.tier = "enterprise"
+        account_tier = str(plan.get("account_tier") or "normal").strip().lower()
+        user.account_tier = (
+            account_tier if account_tier in {"normal", "pro", "max", "ultra"} else "normal"
+        )
+        db.commit()
+        logger.info(
+            "[tenant-subscription] market license applied user_id=%s tenant_id=%s account_tier=%s",
+            user_id,
+            tenant_id,
+            account_tier,
+        )
+        try:
+            from app.neuro_bus.application_neuro_bridge import neuro_notify_tenant_changed
+
+            neuro_notify_tenant_changed(
+                "updated",
+                tenant_id=str(tenant.id),
+                tenant_name=tenant.name or "",
+            )
+        except RECOVERABLE_ERRORS:
+            logger.debug("neuro_notify_tenant_changed skipped", exc_info=True)
+        return True

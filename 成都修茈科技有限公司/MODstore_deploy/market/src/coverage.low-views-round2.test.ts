@@ -81,6 +81,10 @@ vi.mock('vue-router', () => ({
 }))
 vi.mock('./authPaths', () => ({
   pickRedirectFromRoute: vi.fn(() => '/console'),
+  pickRegistrationNextFromRoute: vi.fn(() => ({
+    name: 'plans',
+    query: { plan: 'plan_enterprise' },
+  })),
   isXcagiDesktopRegistration: vi.fn(() => false),
   DEFAULT_POST_AUTH: '/console',
 }))
@@ -152,7 +156,12 @@ beforeEach(() => {
   document.body.innerHTML = ''
   authMock.isAdmin = true
 
-  apiMock.adminListAiAccounts.mockResolvedValue({ items: [aiAccount()], total: 1, limit: 200, offset: 0 })
+  apiMock.adminListAiAccounts.mockResolvedValue({
+    items: [aiAccount()],
+    total: 1,
+    limit: 200,
+    offset: 0,
+  })
   apiMock.butlerQqStatus.mockResolvedValue({
     configured: true,
     credential_source: 'env',
@@ -234,7 +243,12 @@ beforeEach(() => {
   apiMock.developerListWebhooks.mockResolvedValue([webhookSub()])
   apiMock.developerWebhookEventCatalog.mockResolvedValue([
     { name: 'order.created', version: 1, aggregate: 'order', description: 'Order created' },
-    { name: 'payment.succeeded', version: 1, aggregate: 'payment', description: 'Payment succeeded' },
+    {
+      name: 'payment.succeeded',
+      version: 1,
+      aggregate: 'payment',
+      description: 'Payment succeeded',
+    },
   ])
   apiMock.developerCreateWebhook.mockResolvedValue({})
   apiMock.developerUpdateWebhook.mockResolvedValue({})
@@ -268,7 +282,10 @@ beforeEach(() => {
     configurable: true,
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
   })
-  vi.stubGlobal('confirm', vi.fn(() => true))
+  vi.stubGlobal(
+    'confirm',
+    vi.fn(() => true),
+  )
   vi.stubGlobal('alert', vi.fn())
   Object.defineProperty(URL, 'createObjectURL', {
     configurable: true,
@@ -321,7 +338,10 @@ describe('low coverage admin and developer views, round 2', () => {
     vm.openEdit(row)
     vm.editForm.display_name = 'Updated'
     await vm.submitEdit()
-    expect(apiMock.adminUpdateAiAccount).toHaveBeenCalledWith(7, expect.objectContaining({ display_name: 'Updated' }))
+    expect(apiMock.adminUpdateAiAccount).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ display_name: 'Updated' }),
+    )
 
     vm.openRotate(row)
     await vm.submitRotate()
@@ -335,7 +355,6 @@ describe('low coverage admin and developer views, round 2', () => {
       app_secret: 'secret2',
       bot_token: 'token2',
     })
-
     ;(window.confirm as any).mockReturnValueOnce(false).mockReturnValueOnce(true)
     await vm.removeAccount(row)
     expect(apiMock.adminDeleteAiAccount).not.toHaveBeenCalled()
@@ -546,7 +565,9 @@ describe('low coverage admin and developer views, round 2', () => {
 
     vm.copyDownloadPath(5)
     await flushPromises()
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('/api/workbench/studio-assets/5/file')
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      '/api/workbench/studio-assets/5/file',
+    )
 
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -570,7 +591,9 @@ describe('low coverage admin and developer views, round 2', () => {
     })
 
     const input = document.createElement('input')
-    await vm.onPickUpload({ target: Object.assign(input, { files: [new File(['x'], 'clip.txt')] }) })
+    await vm.onPickUpload({
+      target: Object.assign(input, { files: [new File(['x'], 'clip.txt')] }),
+    })
     expect(apiMock.uploadStudioAsset).toHaveBeenCalled()
 
     vm.confirmDelete(item)
@@ -624,7 +647,6 @@ describe('low coverage admin and developer views, round 2', () => {
       name: 'workbench-shell',
       params: { target: 'employee', id: 'emp_alpha' },
     })
-
     ;(window.confirm as any).mockReturnValueOnce(false)
     vm.hideLocally('emp_alpha')
     expect([...vm.hiddenPkgIds]).not.toContain('emp_alpha')
@@ -633,14 +655,12 @@ describe('low coverage admin and developer views, round 2', () => {
     expect([...vm.hiddenPkgIds]).toContain('emp_alpha')
     vm.clearHiddenPkgIds()
     expect([...vm.hiddenPkgIds]).toHaveLength(0)
-
     ;(window.confirm as any).mockReturnValueOnce(false)
     await vm.confirmDeleteEmployee({ id: 'emp_alpha', name: 'Alpha' })
     expect(apiMock.adminDeleteEmployeePack).not.toHaveBeenCalled()
     ;(window.confirm as any).mockReturnValueOnce(true)
     await vm.confirmDeleteEmployee({ id: 'emp_alpha', name: 'Alpha' })
     expect(apiMock.adminDeleteEmployeePack).toHaveBeenCalledWith('emp_alpha')
-
     ;(window.confirm as any).mockReturnValueOnce(true)
     await vm.purgeAllEmployees()
     expect(apiMock.adminPurgeAllEmployeePacks).toHaveBeenCalled()
@@ -707,13 +727,15 @@ describe('low coverage admin and developer views, round 2', () => {
     expect(apiMock.developerUpdateWebhook).toHaveBeenCalledWith(11, { is_active: false })
 
     await vm.openDeliveries(sub)
-    expect(apiMock.developerListWebhookDeliveries).toHaveBeenCalledWith(11, { limit: 100, status: undefined })
+    expect(apiMock.developerListWebhookDeliveries).toHaveBeenCalledWith(11, {
+      limit: 100,
+      status: undefined,
+    })
     await vm.retryDelivery(vm.deliveriesPanel.rows[0])
     expect(apiMock.developerRetryWebhookDelivery).toHaveBeenCalledWith(99)
 
     await vm.sendTest(sub)
     expect(apiMock.developerTestWebhook).toHaveBeenCalledWith(11)
-
     ;(window.confirm as any).mockReturnValueOnce(false)
     await vm.deleteSub(sub)
     expect(apiMock.developerDeleteWebhook).not.toHaveBeenCalled()
@@ -791,8 +813,16 @@ describe('low coverage public auth views, round 2', () => {
     vm.password = 'secret123'
     vm.verificationCode = '123456'
     await vm.doRegister()
-    expect(apiMock.register).toHaveBeenCalledWith('tester', 'secret123', 'new@example.test', '123456')
-    expect(routerMock.replace).toHaveBeenCalledWith('/console')
+    expect(apiMock.register).toHaveBeenCalledWith(
+      'tester',
+      'secret123',
+      'new@example.test',
+      '123456',
+    )
+    expect(routerMock.replace).toHaveBeenCalledWith({
+      name: 'plans',
+      query: { plan: 'plan_enterprise' },
+    })
 
     apiMock.sendRegisterVerificationCode.mockRejectedValueOnce(new Error('send failed'))
     vm.cooldown = 0

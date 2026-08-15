@@ -51,6 +51,7 @@ describe('authApi', () => {
     await authApi.getSubscriptionStatus()
     await authApi.updateCompanyBrand('brand')
     await authApi.register({ username: 'u', password: 'p' })
+    await authApi.sendRegisterVerificationCode('a@b.com')
     await authApi.getCurrentUser()
     await authApi.getProfile()
     await authApi.updateProfile({ display_name: 'x' })
@@ -60,6 +61,7 @@ describe('authApi', () => {
     await authApi.resetForgotPassword('a@b.com', '123', 'newpass')
     expect(apiMock.get).toHaveBeenCalled()
     expect(apiMock.patch).toHaveBeenCalledWith('/api/auth/profile', { display_name: 'x' })
+    expect(apiMock.post).toHaveBeenCalledWith('/api/market/send-register-code', { email: 'a@b.com' })
   })
 
   it('uploadAvatar posts FormData', async () => {

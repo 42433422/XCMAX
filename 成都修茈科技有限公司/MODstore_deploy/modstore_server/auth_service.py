@@ -223,6 +223,9 @@ def issue_market_tokens_for_sso_identity(
     if user is None:
         raise ValueError("未找到对应的市场账号")
     is_admin = bool(getattr(user, "is_admin", False))
+    from modstore_server.account_lifecycle import lifecycle_for_user_id
+
+    lifecycle = lifecycle_for_user_id(int(user.id)).to_dict()
     access = create_access_token(user.id, user.username, is_admin=is_admin)
     refresh = create_refresh_token(user.id, user.username)
     return {
@@ -235,7 +238,9 @@ def issue_market_tokens_for_sso_identity(
             "email": getattr(user, "email", None),
             "is_admin": is_admin,
             "is_enterprise": bool(getattr(user, "is_enterprise", False)),
+            **lifecycle,
         },
+        **lifecycle,
     }
 
 

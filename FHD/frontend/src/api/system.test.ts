@@ -66,4 +66,10 @@ describe('systemApi', () => {
     const { api } = await import('./core')
     expect(api.get).toHaveBeenCalledWith('/api/system/employee-registry-rules')
   })
+
+  it('getDutyRoster calls the roster SSOT endpoint', async () => {
+    await systemApi.getDutyRoster()
+    const { api } = await import('./core')
+    expect(api.get).toHaveBeenCalledWith('/api/system/duty-roster')
+  })
 })

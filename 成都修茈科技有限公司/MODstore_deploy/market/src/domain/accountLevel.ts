@@ -58,6 +58,17 @@ export type NormalizedMe = {
   experience: number
   level_profile?: unknown
   avatar_url?: string | null
+  account_state?: string
+  next_action?: string
+  desktop_access?: boolean
+  active_plan_id?: string
+  account_tier?: string
+}
+
+function normalizeAccessFlag(value: unknown): boolean {
+  if (value === true || value === 1) return true
+  if (typeof value !== 'string') return false
+  return ['1', 'true', 'yes'].includes(value.trim().toLowerCase())
 }
 
 /**
@@ -71,7 +82,12 @@ export function normalizeMeResponse(me: unknown): NormalizedMe | null | undefine
   if (typeof me !== 'object') return null
   const m = me as Record<string, unknown>
   const inner = m.user
-  if (inner && typeof inner === 'object' && m.id === undefined && (inner as { id?: unknown }).id !== undefined) {
+  if (
+    inner &&
+    typeof inner === 'object' &&
+    m.id === undefined &&
+    (inner as { id?: unknown }).id !== undefined
+  ) {
     const u = inner as Record<string, unknown>
     return {
       id: u.id as number | string | undefined,
@@ -83,6 +99,11 @@ export function normalizeMeResponse(me: unknown): NormalizedMe | null | undefine
       experience: Number(u.experience ?? m.experience ?? 0) || 0,
       level_profile: u.level_profile ?? m.level_profile,
       avatar_url: (u.avatar_url ?? m.avatar_url ?? null) as string | null | undefined,
+      account_state: (u.account_state ?? m.account_state) as string | undefined,
+      next_action: (u.next_action ?? m.next_action) as string | undefined,
+      desktop_access: normalizeAccessFlag(u.desktop_access ?? m.desktop_access),
+      active_plan_id: (u.active_plan_id ?? m.active_plan_id) as string | undefined,
+      account_tier: (u.account_tier ?? m.account_tier) as string | undefined,
     }
   }
   return m as NormalizedMe

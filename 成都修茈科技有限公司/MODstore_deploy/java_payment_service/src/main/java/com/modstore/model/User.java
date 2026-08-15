@@ -27,6 +27,13 @@ public class User {
     @Column(name = "is_admin", nullable = false, columnDefinition = "BOOLEAN DEFAULT false")
     private boolean admin;
 
+    @Column(name = "is_enterprise", nullable = false, columnDefinition = "BOOLEAN DEFAULT false")
+    private boolean enterprise;
+
+    @Column(name = "account_state", nullable = false, length = 32,
+            columnDefinition = "VARCHAR(32) DEFAULT 'pending_plan'")
+    private String accountState = "pending_plan";
+
     @Column(name = "experience", nullable = false, columnDefinition = "INTEGER DEFAULT 0")
     private long experience;
 

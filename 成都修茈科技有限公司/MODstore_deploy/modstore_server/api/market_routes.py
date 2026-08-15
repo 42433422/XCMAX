@@ -27,6 +27,13 @@ from fastapi import (
 from pydantic import BaseModel, Field
 
 from modstore_server import account_level_service, catalog_sync
+from modstore_server.account_lifecycle import (
+    ACCOUNT_ACTIVE,
+    ACCOUNT_PENDING_PLAN,
+    auth_token_response,
+    lifecycle_for_user,
+    lifecycle_for_user_id,
+)
 from modstore_server.api.deps import get_current_user, require_admin
 from modstore_server.auth_service import (
     authenticate_user,
@@ -288,19 +295,7 @@ def api_register(body: RegisterDTO):
         raise HTTPException(409, str(e))
     access_token = create_access_token(user.id, user.username, is_admin=bool(user.is_admin))
     refresh_token = create_refresh_token(user.id, user.username)
-    return {
-        "ok": True,
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "is_admin": bool(user.is_admin),
-            "is_enterprise": bool(getattr(user, "is_enterprise", False)),
-            "company": getattr(user, "company", "") or "",
-        },
-    }
+    return auth_token_response(user, access_token, refresh_token)
 
 
 @router.post("/auth/login")
@@ -310,19 +305,7 @@ def api_login(body: LoginDTO):
         raise HTTPException(401, "用户名或密码错误")
     access_token = create_access_token(user.id, user.username, is_admin=bool(user.is_admin))
     refresh_token = create_refresh_token(user.id, user.username)
-    return {
-        "ok": True,
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "is_admin": bool(user.is_admin),
-            "is_enterprise": bool(getattr(user, "is_enterprise", False)),
-            "company": getattr(user, "company", "") or "",
-        },
-    }
+    return auth_token_response(user, access_token, refresh_token)
 
 
 @router.get("/auth/me")
@@ -346,6 +329,7 @@ def api_me(user: Optional[User] = Depends(_get_optional_user)):
         "experience": exp,
         "level_profile": level_profile,
         "avatar_url": public_avatar_url_for_user(user),
+        **lifecycle_for_user_id(int(user.id)).to_dict(),
     }
 
 
@@ -450,12 +434,7 @@ def api_login_with_code(body: LoginWithCodeDTO):
 
     access_token = create_access_token(user.id, user.username, is_admin=bool(user.is_admin))
     refresh_token = create_refresh_token(user.id, user.username)
-    return {
-        "ok": True,
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "user": {"id": user.id, "username": user.username, "email": user.email},
-    }
+    return auth_token_response(user, access_token, refresh_token)
 
 
 @router.post("/auth/send-reset-password-code", status_code=202)
@@ -613,12 +592,7 @@ def api_refresh_token(body: RefreshTokenDTO):
     new_access_token = create_access_token(user_id, username, is_admin=bool(user.is_admin))
     new_refresh_token = create_refresh_token(user_id, username)
 
-    return {
-        "ok": True,
-        "access_token": new_access_token,
-        "refresh_token": new_refresh_token,
-        "user": {"id": user.id, "username": user.username, "email": user.email},
-    }
+    return auth_token_response(user, new_access_token, new_refresh_token)
 
 
 @router.get("/admin/status")
@@ -2163,8 +2137,14 @@ def api_admin_set_enterprise_status(
         if not target:
             raise HTTPException(404, "用户不存在")
         target.is_enterprise = is_enterprise
+        target.account_state = ACCOUNT_ACTIVE if is_enterprise else ACCOUNT_PENDING_PLAN
         session.commit()
-        return {"ok": True, "user_id": user_id, "is_enterprise": is_enterprise}
+        return {
+            "ok": True,
+            "user_id": user_id,
+            "is_enterprise": is_enterprise,
+            **lifecycle_for_user(session, target).to_dict(),
+        }
 
 
 @router.get("/admin/enterprise/assignable-mods")

@@ -301,6 +301,18 @@ async def mobile_auth_register(body: MobileRegisterRequest):
     payload, status = _parse_web_auth_login_response(web_resp)
     if not payload.get("success"):
         return _mobile_auth_error_response(payload, status, fallback_message="注册失败")
+    if payload.get("registered") and not payload.get("desktop_access"):
+        return format_mobile_response(
+            data={
+                "registered": True,
+                "authenticated": False,
+                "account_state": payload.get("account_state") or "pending_plan",
+                "next_action": payload.get("next_action") or "select_plan",
+                "desktop_access": False,
+                "purchase_url": payload.get("purchase_url"),
+            },
+            message="注册成功，请选择套餐并完成支付",
+        )
     data = _mobile_auth_success_payload(
         payload,
         account_kind=account_kind,

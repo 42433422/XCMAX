@@ -120,8 +120,10 @@ describe('loginBranding', () => {
   })
 
   describe('purchaseAuthorizationUrl', () => {
-    it('returns the official HTTPS pricing entry', () => {
-      expect(purchaseAuthorizationUrl()).toBe('https://xiu-ci.com/#pricing')
+    it('returns the canonical authenticated plan entry', () => {
+      expect(purchaseAuthorizationUrl()).toBe(
+        'https://xiu-ci.com/market/account-plans?plan=saas-trial-30&source=xcagi-desktop',
+      )
     })
   })
 

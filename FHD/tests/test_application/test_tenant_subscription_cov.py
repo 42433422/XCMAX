@@ -283,8 +283,7 @@ def test_subscription_status_superadmin():
 
 
 def test_subscription_status_paid_plan():
-    future = datetime.utcnow() + timedelta(days=30)
-    tenant = MagicMock(id=5, plan_id="saas-pro", trial_expires_at=future)
+    tenant = MagicMock(id=5, plan_id="saas-permanent-growth", trial_expires_at=None)
     user = MagicMock(id=1, role="user", username="alice", tenant_id=5)
     db = MagicMock()
     db.query.return_value.filter.return_value.first.side_effect = [user, tenant]
@@ -292,13 +291,27 @@ def test_subscription_status_paid_plan():
     with patch(
         "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
     ):
-        with patch(
-            "app.application.tenant_subscription_app_service.is_saas_plan_id", return_value=True
-        ):
-            status = subscription_status_for_user(1)
+        status = subscription_status_for_user(1)
 
     assert status["active"] is True
     assert status["reason"] == "paid_plan"
+
+
+def test_subscription_status_paid_trial_expires():
+    past = datetime.utcnow() - timedelta(seconds=1)
+    tenant = MagicMock(id=5, plan_id="saas-trial-30", trial_expires_at=past)
+    user = MagicMock(id=1, role="user", username="alice", tenant_id=5)
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.side_effect = [user, tenant]
+
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
+        status = subscription_status_for_user(1)
+
+    assert status["active"] is False
+    assert status["reason"] == "trial_expired"
+    assert status["plan_id"] == "saas-trial-30"
 
 
 def test_subscription_status_active_trial():
@@ -418,7 +431,7 @@ def test_apply_paid_plan_for_user_user_not_found():
     with patch(
         "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
     ):
-        result = apply_paid_plan_for_user(user_id=99, plan_id="saas-pro")
+        result = apply_paid_plan_for_user(user_id=99, plan_id="saas-trial-30")
 
     assert result is False
 
@@ -431,24 +444,52 @@ def test_apply_paid_plan_for_user_no_tenant():
     with patch(
         "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
     ):
-        result = apply_paid_plan_for_user(user_id=1, plan_id="saas-pro")
+        result = apply_paid_plan_for_user(user_id=1, plan_id="saas-trial-30")
 
     assert result is False
 
 
-def test_apply_paid_plan_for_user_delegates_to_tenant():
+def test_apply_paid_plan_for_user_updates_user_and_tenant_atomically():
     user = MagicMock(id=1, tenant_id=5)
+    user.tier = "personal"
+    user.account_tier = None
+    tenant = MagicMock(id=5, plan_id=None, name="Acme")
+    tenant.trial_started_at = None
+    tenant.trial_expires_at = None
     db = MagicMock()
-    db.query.return_value.filter.return_value.first.return_value = user
+    db.query.return_value.filter.return_value.first.side_effect = [user, tenant]
 
     with patch(
         "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
     ):
         with patch(
-            "app.application.tenant_subscription_app_service.apply_paid_plan_to_tenant",
-            return_value=True,
-        ) as mock_apply:
-            result = apply_paid_plan_for_user(user_id=1, plan_id="saas-pro")
+            "app.neuro_bus.application_neuro_bridge.neuro_notify_tenant_changed"
+        ) as mock_notify:
+            result = apply_paid_plan_for_user(user_id=1, plan_id="saas-trial-30")
 
     assert result is True
-    mock_apply.assert_called_once_with(tenant_id=5, plan_id="saas-pro")
+    assert user.tier == "enterprise"
+    assert user.account_tier == "normal"
+    assert tenant.plan_id == "saas-trial-30"
+    assert tenant.trial_started_at is not None
+    assert tenant.trial_expires_at > tenant.trial_started_at
+    db.commit.assert_called_once()
+    mock_notify.assert_called_once()
+
+
+def test_apply_paid_plan_for_user_missing_tenant_has_no_partial_user_update():
+    user = MagicMock(id=1, tenant_id=5)
+    user.tier = "personal"
+    user.account_tier = None
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.side_effect = [user, None]
+
+    with patch(
+        "app.application.tenant_subscription_app_service.get_db", return_value=_make_db_ctx(db)
+    ):
+        result = apply_paid_plan_for_user(user_id=1, plan_id="saas-trial-30")
+
+    assert result is False
+    assert user.tier == "personal"
+    assert user.account_tier is None
+    db.commit.assert_not_called()

@@ -1788,23 +1788,18 @@ class TestRegisterMarketUser:
         assert result["success"] is False
 
     @pytest.mark.asyncio
-    async def test_proxy_error_verification_required_fallback_succeeds(self):
-        good = {"token": "reg_tok", "refresh_token": "reg_rf"}
-        responses = [
-            {
-                "__proxy_error__": True,
-                "status_code": 400,
-                "payload": {"detail": "verification code required"},
-            },
-            good,
-        ]
-        with patch.object(ma, "_proxy_json", new=AsyncMock(side_effect=responses)):
-            with patch.object(
-                ma, "_register_without_verification", new=AsyncMock(return_value=good)
-            ):
+    async def test_proxy_error_verification_required_fails_closed(self):
+        error = {
+            "__proxy_error__": True,
+            "status_code": 400,
+            "payload": {"detail": "verification code required"},
+        }
+        with patch.object(ma, "_proxy_json", new=AsyncMock(return_value=error)):
+            with patch.object(ma, "_register_without_verification", new=AsyncMock()) as bypass:
                 result = await ma.register_market_user("u", "p123", "u@x.com")
-        assert result["success"] is True
-        assert result["token"] == "reg_tok"
+        assert result["success"] is False
+        assert "verification code required" in result["message"]
+        bypass.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_proxy_error_verification_required_fallback_also_fails(self):
@@ -1834,9 +1829,7 @@ class TestRegisterMarketUser:
         assert result["success"] is False
 
     @pytest.mark.asyncio
-    async def test_proxy_error_verification_fallback_success_status_200(self):
-        """Covers the else: status_code = 200 branch."""
-        good = {"token": "fallback_tok"}
+    async def test_proxy_error_verification_required_never_bypasses(self):
         with patch.object(
             ma,
             "_proxy_json",
@@ -1848,11 +1841,11 @@ class TestRegisterMarketUser:
                 }
             ),
         ):
-            with patch.object(
-                ma, "_register_without_verification", new=AsyncMock(return_value=good)
-            ):
+            with patch.object(ma, "_register_without_verification", new=AsyncMock()) as bypass:
                 result = await ma.register_market_user("u", "p123", "u@x.com")
-        assert result["success"] is True
+        assert result["success"] is False
+        assert "code required" in result["message"]
+        bypass.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_success_extracts_token(self):

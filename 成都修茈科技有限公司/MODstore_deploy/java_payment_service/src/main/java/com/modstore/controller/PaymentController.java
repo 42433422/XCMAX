@@ -10,6 +10,7 @@ import com.modstore.model.Transaction;
 import com.modstore.model.User;
 import com.modstore.model.UserPlan;
 import com.modstore.service.AlipayService;
+import com.modstore.service.AccountLicensePlans;
 import com.modstore.service.CurrentUserService;
 import com.modstore.service.EntitlementService;
 import com.modstore.service.OrderService;
@@ -84,11 +85,35 @@ public class PaymentController {
     @GetMapping("/plans")
     public Map<String, Object> getPlans() {
         List<Map<String, Object>> plans = planTemplateRepository.findByActiveTrue().stream()
+                .filter(plan -> !AccountLicensePlans.isAccountLicense(plan.getId()))
                 .sorted(Comparator
                         .<PlanTemplate, Integer>comparing(p -> MEMBERSHIP_TIER_ORDER.getOrDefault(
                                 p.getId(), Integer.MAX_VALUE))
                         .thenComparing(PlanTemplate::getId, String::compareTo))
                 .map(this::planToMap)
+                .toList();
+        return Map.of("plans", plans);
+    }
+
+    @GetMapping("/account-plans")
+    public Map<String, Object> getAccountPlans() {
+        List<Map<String, Object>> plans = AccountLicensePlans.PLANS.stream()
+                .map(meta -> {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("id", meta.id());
+                    row.put("name", meta.name());
+                    row.put("description", meta.description());
+                    row.put("price", meta.price());
+                    row.put("amount_cents", meta.price().movePointRight(2).intValueExact());
+                    row.put("features", meta.features());
+                    row.put("catalog", "account_license");
+                    row.put("license_type", meta.licenseType());
+                    row.put("duration_days", meta.durationDays());
+                    row.put("account_tier", meta.accountTier());
+                    row.put("badge", meta.badge());
+                    row.put("quota_cents", meta.quotaCents());
+                    return row;
+                })
                 .toList();
         return Map.of("plans", plans);
     }

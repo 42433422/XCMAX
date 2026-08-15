@@ -10,12 +10,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from modstore_server import account_level_service
+from modstore_server.account_lifecycle import (
+    active_membership_plan,
+    lifecycle_for_user,
+    lifecycle_for_user_id,
+)
 from modstore_server.api.deps import _get_current_user
 from modstore_server.auth_service import create_access_token, create_refresh_token, register_user
 from modstore_server.llm_api import _membership_meta, _provider_labels
 from modstore_server.llm_crypto import fernet_configured
 from modstore_server.llm_key_resolver import KNOWN_PROVIDERS, credential_status
-from modstore_server.models import Transaction, User, UserPlan, Wallet, get_session_factory
+from modstore_server.models import Transaction, User, Wallet, get_session_factory
 
 router = APIRouter(prefix="/api/account", tags=["auth"])
 open_router = APIRouter(prefix="/api/market/open", tags=["auth"])
@@ -24,7 +29,7 @@ open_router = APIRouter(prefix="/api/market/open", tags=["auth"])
 class OpenRegisterDTO(BaseModel):
     username: str = Field(..., min_length=2, max_length=64)
     password: str = Field(..., min_length=6, max_length=128)
-    email: str = Field(..., min_length=5, max_length=128)
+    email: str = Field(default="", max_length=128)
 
 
 def _load_default_llm(raw: str | None) -> Dict[str, str]:
@@ -51,7 +56,7 @@ def api_market_open_register(body: OpenRegisterDTO):
     if not _open_registration_enabled():
         raise HTTPException(404, "open registration API is disabled")
     email = (body.email or "").strip().lower()
-    if "@" not in email:
+    if email and "@" not in email:
         raise HTTPException(400, "邮箱格式不正确")
     try:
         user = register_user(body.username.strip(), body.password, email)
@@ -59,11 +64,13 @@ def api_market_open_register(body: OpenRegisterDTO):
         raise HTTPException(409, str(exc)) from exc
     access_token = create_access_token(user.id, user.username, is_admin=bool(user.is_admin))
     refresh_token = create_refresh_token(user.id, user.username)
+    lifecycle = lifecycle_for_user_id(int(user.id)).to_dict()
     return {
         "ok": True,
         "access_token": access_token,
         "refresh_token": refresh_token,
-        "user": {"id": user.id, "username": user.username, "email": user.email},
+        "user": {"id": user.id, "username": user.username, "email": user.email, **lifecycle},
+        **lifecycle,
     }
 
 
@@ -74,12 +81,6 @@ def api_account_bootstrap(user: User = Depends(_get_current_user)):
     with sf() as session:
         db_user = session.query(User).filter(User.id == user.id).first() or user
         wallet = session.query(Wallet).filter(Wallet.user_id == user.id).first()
-        plan = (
-            session.query(UserPlan)
-            .filter(UserPlan.user_id == user.id, UserPlan.is_active == True)
-            .order_by(UserPlan.id.desc())
-            .first()
-        )
         recent_transactions = (
             session.query(Transaction)
             .filter(Transaction.user_id == user.id)
@@ -94,7 +95,9 @@ def api_account_bootstrap(user: User = Depends(_get_current_user)):
             row["label"] = labels.get(provider, provider)
             provider_status.append(row)
         default_llm = _load_default_llm(getattr(db_user, "default_llm_json", ""))
-        membership = _membership_meta(plan.plan_id if plan else None)
+        lifecycle = lifecycle_for_user(session, db_user).to_dict()
+        membership_row = active_membership_plan(session, int(user.id))
+        membership = _membership_meta(membership_row.plan_id if membership_row else None)
         level_profile: Dict[str, Any] = account_level_service.build_level_profile(
             int(getattr(db_user, "experience", 0) or 0)
         ).to_dict()
@@ -125,6 +128,7 @@ def api_account_bootstrap(user: User = Depends(_get_current_user)):
                 ],
             },
             "membership": membership,
+            "account": lifecycle,
             "llm": {
                 "default": default_llm,
                 "fernet_configured": fernet_configured(),

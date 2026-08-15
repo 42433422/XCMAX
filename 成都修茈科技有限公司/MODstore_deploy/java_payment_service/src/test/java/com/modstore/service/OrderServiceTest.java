@@ -29,6 +29,7 @@ class OrderServiceTest {
 
     @Mock OrderRepository orderRepository;
     @Mock TransactionRepository transactionRepository;
+    @Mock UserRepository userRepository;
     @Mock WalletService walletService;
     @Mock EntitlementService entitlementService;
     @Mock PlanTemplateRepository planTemplateRepository;
@@ -115,6 +116,42 @@ class OrderServiceTest {
             assertThat(result.getStatus()).isEqualTo("pending");
             assertThat(result.isFulfilled()).isFalse();
             assertThat(result.getRequestId()).isEqualTo("req-1");
+            assertThat(user.getAccountState()).isEqualTo("pending_plan");
+            verify(userRepository, never()).save(any());
+        }
+
+        @Test
+        void accountLicenseOrderMovesUnlicensedAccountToPendingPayment() {
+            when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            orderService.createOrder(user, "OT-LICENSE", "30 天试用", new BigDecimal("99.00"),
+                    "plan", null, "saas-trial-30", "req-license");
+
+            assertThat(user.getAccountState()).isEqualTo("pending_payment");
+            verify(userRepository).save(user);
+        }
+
+        @Test
+        void membershipOrderDoesNotChangeDesktopAccountState() {
+            when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            orderService.createOrder(user, "OT-MEMBER", "企业版额度", new BigDecimal("999.00"),
+                    "plan", null, "plan_enterprise", "req-member");
+
+            assertThat(user.getAccountState()).isEqualTo("pending_plan");
+            verify(userRepository, never()).save(any());
+        }
+
+        @Test
+        void keepsAlreadyActiveAccountActiveWhenCreatingAnotherOrder() {
+            user.setAccountState("active");
+            when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            orderService.createOrder(user, "OT-ACTIVE", "test", new BigDecimal("9.90"),
+                    "plan", null, "plan_enterprise", "req-active");
+
+            assertThat(user.getAccountState()).isEqualTo("active");
+            verify(userRepository, never()).save(any());
         }
     }
 

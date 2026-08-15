@@ -1319,6 +1319,9 @@ class TestAuthRegisterAdditional:
                         "token": "tok",
                         "refresh_token": "rtok",
                         "market_user_id": 61,
+                        "desktop_access": True,
+                        "account_state": "active",
+                        "next_action": "login",
                     }
                 ),
             ),
