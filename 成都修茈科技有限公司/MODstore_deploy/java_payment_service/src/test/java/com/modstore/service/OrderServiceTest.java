@@ -29,6 +29,7 @@ class OrderServiceTest {
 
     @Mock OrderRepository orderRepository;
     @Mock TransactionRepository transactionRepository;
+    @Mock UserRepository userRepository;
     @Mock WalletService walletService;
     @Mock EntitlementService entitlementService;
     @Mock PlanTemplateRepository planTemplateRepository;
@@ -115,6 +116,20 @@ class OrderServiceTest {
             assertThat(result.getStatus()).isEqualTo("pending");
             assertThat(result.isFulfilled()).isFalse();
             assertThat(result.getRequestId()).isEqualTo("req-1");
+            assertThat(user.getAccountState()).isEqualTo("pending_payment");
+            verify(userRepository).save(user);
+        }
+
+        @Test
+        void keepsAlreadyActiveAccountActiveWhenCreatingAnotherOrder() {
+            user.setAccountState("active");
+            when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            orderService.createOrder(user, "OT-ACTIVE", "test", new BigDecimal("9.90"),
+                    "plan", null, "plan_enterprise", "req-active");
+
+            assertThat(user.getAccountState()).isEqualTo("active");
+            verify(userRepository, never()).save(any());
         }
     }
 

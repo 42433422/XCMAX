@@ -41,7 +41,11 @@ def test_register_email_is_optional_but_verified_when_present(client):
         json={"username": username, "password": password},
     )
     assert registered.status_code == 200, registered.text
-    assert registered.json()["user"]["email"] is None
+    registration = registered.json()
+    assert registration["user"]["email"] is None
+    assert registration["account_state"] == "pending_plan"
+    assert registration["next_action"] == "select_plan"
+    assert registration["desktop_access"] is False
 
     login = client.post(
         "/api/auth/login",

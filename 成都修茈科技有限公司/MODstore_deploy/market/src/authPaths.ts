@@ -43,6 +43,30 @@ export function safeRedirectPath(raw: unknown): string {
  */
 export const DEFAULT_POST_AUTH: RouteLocationRaw = { name: 'workbench-home' }
 
+/**
+ * 注册只完成账号开立，不代表已获得产品权益。
+ * 新用户的唯一默认下一步是选择企业套餐。
+ */
+export const DEFAULT_POST_REGISTER: RouteLocationRaw = {
+  name: 'plans',
+  query: { plan: 'plan_enterprise' },
+}
+
+export function pickRegistrationNextFromRoute(
+  route: Pick<RouteLocationNormalizedLoaded, 'query'>,
+): RouteLocationRaw {
+  const source = firstQueryValue(route.query.source)
+  return {
+    name: 'plans',
+    query: {
+      plan: 'plan_enterprise',
+      ...(source === XCAGI_DESKTOP_REGISTRATION_SOURCE
+        ? { source: XCAGI_DESKTOP_REGISTRATION_SOURCE }
+        : {}),
+    },
+  }
+}
+
 export function pickRedirectFromRoute(
   route: Pick<RouteLocationNormalizedLoaded, 'query'>,
 ): RouteLocationRaw {

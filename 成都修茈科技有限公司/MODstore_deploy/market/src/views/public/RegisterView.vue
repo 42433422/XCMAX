@@ -4,13 +4,13 @@
       <div class="success-mark" aria-hidden="true">✓</div>
       <p class="source-badge">XCAGI 桌面端</p>
       <h2>账号注册成功</h2>
-      <p class="success-lead">网页与 XCAGI 桌面端共用这一个修茈市场账号，不需要再注册。</p>
+      <p class="success-lead">网页与 XCAGI 桌面端共用这一个修茈市场账号。</p>
       <div class="next-step">
         <strong>下一步</strong>
-        <span>可以关闭本页，回到 XCAGI 桌面端登录。桌面端仅向已开通企业授权的账号开放；若尚未开通，请先完成授权。</span>
+        <span>选择套餐并完成支付。权益生效后，再回到 XCAGI 桌面端登录。</span>
       </div>
-      <router-link :to="DEFAULT_POST_AUTH" class="btn btn-primary-solid btn-block success-action">
-        继续使用网页版
+      <router-link :to="registrationNext" class="btn btn-primary-solid btn-block success-action">
+        选择套餐
       </router-link>
     </div>
     <div v-else class="auth-card">
@@ -70,7 +70,7 @@
         已有账号？请关闭本页，回到 XCAGI 桌面端登录
       </p>
       <p v-else class="auth-footer">
-        已有账号？<router-link to="/login" class="link">登录</router-link>
+        已有账号？<router-link :to="loginRoute" class="link">登录</router-link>
       </p>
     </div>
   </div>
@@ -81,9 +81,8 @@ import { ref, computed, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api'
 import {
-  DEFAULT_POST_AUTH,
   isXcagiDesktopRegistration,
-  pickRedirectFromRoute,
+  pickRegistrationNextFromRoute,
 } from '@/authPaths'
 
 const router = useRouter()
@@ -101,6 +100,8 @@ let tick: ReturnType<typeof setInterval> | null = null
 
 const emailTrimmed = computed(() => email.value.trim())
 const desktopRegistration = computed(() => isXcagiDesktopRegistration(route))
+const registrationNext = computed(() => pickRegistrationNextFromRoute(route))
+const loginRoute = computed(() => ({ name: 'login', query: route.query }))
 
 const sendDisabled = computed(
   () => cooldown.value > 0 || loading.value || sendCodeLoading.value || !emailTrimmed.value,
@@ -160,7 +161,7 @@ async function doRegister() {
       registrationComplete.value = true
       return
     }
-    await router.replace(pickRedirectFromRoute(route))
+    await router.replace(registrationNext.value)
   } catch (e) {
     err.value = (e as Error)?.message || String(e)
   } finally {

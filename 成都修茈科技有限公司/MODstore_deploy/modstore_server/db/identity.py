@@ -40,6 +40,7 @@ class User(Base):
     password_hash = Column(String(256), nullable=False)
     is_admin = Column(Boolean, default=False)
     is_enterprise = Column(Boolean, default=False, nullable=False, index=True)
+    account_state = Column(String(32), default="pending_plan", nullable=False, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     default_llm_json = Column(Text, default="")
     experience = Column(Integer, default=0, nullable=False)

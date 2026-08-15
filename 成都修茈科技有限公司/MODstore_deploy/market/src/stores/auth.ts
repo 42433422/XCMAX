@@ -33,6 +33,7 @@ export const useAuthStore = defineStore('auth', () => {
   const membershipFetchFailed = ref(false)
   const isLoggedIn = computed(() => Boolean(user.value && getAccessToken()))
   const isAdmin = computed(() => user.value?.is_admin === true)
+  const hasDesktopAccess = computed(() => user.value?.desktop_access === true)
   const username = computed(() => displayName(user.value))
 
   const ADMIN_DIGEST_UNLOCK_KEY = 'modstore_admin_digest_unlock_expires'
@@ -157,7 +158,11 @@ export const useAuthStore = defineStore('auth', () => {
         resetSession()
         return null
       }
-      user.value = me
+      user.value = {
+        ...me,
+        id: Number(me.id),
+        username: String(me.username || me.email || ''),
+      }
       lastValidatedToken.value = token
       lastMeFetchedAt.value = Date.now()
       // 拿到会员档位用于导航栏用户名颜色等场景；失败不阻塞登录态
@@ -208,6 +213,7 @@ export const useAuthStore = defineStore('auth', () => {
     currentMode,
     isLoggedIn,
     isAdmin,
+    hasDesktopAccess,
     username,
     levelProfile,
     membership,

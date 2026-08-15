@@ -24,6 +24,7 @@ class EntitlementServiceTest {
     @Mock PurchaseRepository purchaseRepository;
     @Mock EntitlementRepository entitlementRepository;
     @Mock UserPlanRepository userPlanRepository;
+    @Mock UserRepository userRepository;
     @Mock QuotaRepository quotaRepository;
     @Mock CatalogItemRepository catalogItemRepository;
 
@@ -264,6 +265,8 @@ class EntitlementServiceTest {
             verify(userPlanRepository).save(argThat(up -> !up.isActive()));
             verify(userPlanRepository).save(argThat(up -> up.isActive() && "pro".equals(up.getPlan().getId())));
             verify(entitlementRepository).save(argThat(e -> "plan".equals(e.getEntitlementType())));
+            assertThat(user.getAccountState()).isEqualTo("active");
+            verify(userRepository).save(user);
             verify(quotaRepository).save(argThat(q -> q.getTotal() == 100));
         }
 

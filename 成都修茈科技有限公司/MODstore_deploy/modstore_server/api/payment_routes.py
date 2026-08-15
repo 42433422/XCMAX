@@ -381,6 +381,10 @@ async def api_payment_checkout(
         if not order_result["ok"]:
             raise HTTPException(500, f"创建订单失败: {order_result.get('message')}")
 
+        from modstore_server.account_lifecycle import mark_pending_payment
+
+        mark_pending_payment(int(user_id))
+
         ua = request.headers.get("user-agent", "")
         return_url = _checkout_return_url(request, out_trade_no)
         notify_url = (

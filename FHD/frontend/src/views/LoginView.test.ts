@@ -61,7 +61,9 @@ describe('LoginView.vue', () => {
       'https://xiu-ci.com/market/register?source=xcagi-desktop',
     )
     expect(actions[1].text()).toContain('购买与授权')
-    expect(actions[1].attributes('href')).toBe('https://xiu-ci.com/#pricing')
+    expect(actions[1].attributes('href')).toBe(
+      'https://xiu-ci.com/market/plans?plan=plan_enterprise&source=xcagi-desktop',
+    )
     expect(wrapper.find('.login-subheading').text()).toContain('同步账号权益')
   })
 })

@@ -61,7 +61,10 @@ export function marketRegisterUrl(): string {
 }
 
 export function purchaseAuthorizationUrl(): string {
-  return String(import.meta.env.VITE_XCAGI_PURCHASE_URL || 'https://xiu-ci.com/#pricing').trim();
+  return String(
+    import.meta.env.VITE_XCAGI_PURCHASE_URL
+      || `${marketBaseUrl()}/plans?plan=plan_enterprise&source=xcagi-desktop`,
+  ).trim();
 }
 
 export function marketForgotPasswordUrl(): string {

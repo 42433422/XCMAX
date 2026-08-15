@@ -5,7 +5,9 @@
 
       <div v-if="paidConfirmedFlash" role="status" class="confirm-banner confirm-banner--success">
         <strong>支付已确认到账</strong>
-        <span class="confirm-banner-sub">系统已向支付宝核对，订单为「已支付」，权益将按套餐生效。</span>
+        <span class="confirm-banner-sub"
+          >系统已向支付宝核对，订单为「已支付」，权益将按套餐生效。</span
+        >
       </div>
       <div
         v-else-if="burstSyncActive && order?.status === 'pending'"
@@ -15,10 +17,7 @@
         <strong>正在向支付宝确认付款结果…</strong>
         <span class="confirm-banner-sub">请稍候，通常几秒内完成；请勿关闭本页。</span>
       </div>
-      <div
-        v-else-if="order?.status === 'pending'"
-        class="confirm-banner confirm-banner--hint"
-      >
+      <div v-else-if="order?.status === 'pending'" class="confirm-banner confirm-banner--hint">
         <strong>到账结果以本页「状态」为准</strong>
         <span class="confirm-banner-sub">
           付款成功后系统会自动向支付宝核对；若仍为「待支付」，请点击下方「刷新订单状态」主动对账。
@@ -69,10 +68,7 @@
         </div>
 
         <!-- 浏览器跳转支付（alipay page/wap）：无二维码，需提示回站后自动对账 / 手动刷新 -->
-        <div
-          v-if="order.status === 'pending' && !qrCode"
-          class="pending-redirect-section"
-        >
+        <div v-if="order.status === 'pending' && !qrCode" class="pending-redirect-section">
           <p class="pending-redirect-title">等待支付结果同步</p>
           <p class="pending-redirect-desc">
             当前订单为<strong>浏览器跳转支付宝</strong>付款：下单后会跳转到支付宝页面；支付完成后请返回本站，状态会自动更新。
@@ -87,7 +83,12 @@
             >
               {{ refreshing ? '正在向支付宝核对…' : '刷新订单状态（对账）' }}
             </button>
-            <button type="button" class="btn btn-ghost" :disabled="refreshing" @click="retryPayment">
+            <button
+              type="button"
+              class="btn btn-ghost"
+              :disabled="refreshing"
+              @click="retryPayment"
+            >
               重新发起支付
             </button>
           </div>
@@ -121,10 +122,15 @@
         <div v-if="order.status === 'paid'" class="success-section">
           <div class="success-icon">✓</div>
           <h2 class="success-title">支付成功</h2>
-          <p class="success-desc">资金已进入钱包账本，订单消费与权益发放已完成。</p>
+          <p class="success-desc">资金已入账，订单、套餐权益和桌面端访问资格已同步生效。</p>
+          <p class="success-desc success-desc--desktop">
+            如果你从 XCAGI 桌面端前来，现在请回到桌面端，使用刚注册的账号登录。
+          </p>
           <div class="success-actions">
             <router-link to="/wallet" class="btn btn-primary">查看钱包资金账户</router-link>
-            <router-link :to="{ name: 'wallet-purchased' }" class="btn btn-ghost">已购资产</router-link>
+            <router-link :to="{ name: 'wallet-purchased' }" class="btn btn-ghost"
+              >已购资产</router-link
+            >
             <router-link to="/plans" class="btn btn-ghost">继续选购</router-link>
           </div>
           <p class="refund-hint">
@@ -216,7 +222,7 @@ const isExpired = computed(() => {
   const created = new Date(order.value.created_at || '').getTime()
   if (Number.isNaN(created)) return false
   const now = Date.now()
-  return (now - created) > 15 * 60 * 1000
+  return now - created > 15 * 60 * 1000
 })
 
 function stopPolling() {
@@ -253,9 +259,9 @@ function onPageShow() {
 function looksLikeAlipayReturnQuery(q: Record<string, string | string[] | undefined>): boolean {
   const keys = Object.keys(q)
   if (keys.length === 0) return false
-  const sign = String(Array.isArray(q.sign) ? q.sign[0] : q.sign ?? '')
-  const method = String(Array.isArray(q.method) ? q.method[0] : q.method ?? '')
-  const tradeNo = String(Array.isArray(q.trade_no) ? q.trade_no[0] : q.trade_no ?? '')
+  const sign = String(Array.isArray(q.sign) ? q.sign[0] : (q.sign ?? ''))
+  const method = String(Array.isArray(q.method) ? q.method[0] : (q.method ?? ''))
+  const tradeNo = String(Array.isArray(q.trade_no) ? q.trade_no[0] : (q.trade_no ?? ''))
   return sign.length > 20 || method.includes('alipay.trade') || tradeNo.length > 8
 }
 
@@ -296,11 +302,7 @@ onMounted(async () => {
   await fetchOrder()
   startPollingIfPending()
   const q = route.query as Record<string, string | string[] | undefined>
-  if (
-    order.value?.status === 'pending'
-    && looksLikeAlipayReturnQuery(q)
-    && orderParamId.value
-  ) {
+  if (order.value?.status === 'pending' && looksLikeAlipayReturnQuery(q) && orderParamId.value) {
     void burstConfirmPaymentFromAlipayReturn()
   }
 })
@@ -321,7 +323,8 @@ async function fetchOrder() {
     transientWarning.value = ''
     const res = await api.paymentQuery(orderParamId.value, { reconcile: true })
     if (isPaymentQueryFailedEnvelope(res)) {
-      const msg = (typeof res.message === 'string' && res.message.trim()) ? res.message.trim() : '加载订单失败'
+      const msg =
+        typeof res.message === 'string' && res.message.trim() ? res.message.trim() : '加载订单失败'
       if (order.value) {
         transientWarning.value = msg
       } else {
@@ -371,7 +374,9 @@ async function pollOrder() {
     const res = await api.paymentQuery(orderParamId.value, { reconcile: true })
     if (isPaymentQueryFailedEnvelope(res)) {
       transientWarning.value =
-        (typeof res.message === 'string' && res.message.trim()) ? res.message.trim() : '订单状态暂时无法确认，正在继续重试'
+        typeof res.message === 'string' && res.message.trim()
+          ? res.message.trim()
+          : '订单状态暂时无法确认，正在继续重试'
       return
     }
     transientWarning.value = ''
@@ -496,7 +501,11 @@ async function retryPayment() {
   min-height: 100vh;
   background: #0a0a0a;
   color: #ffffff;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
   display: flex;
   justify-content: center;
   padding-top: 80px;
@@ -562,7 +571,8 @@ async function retryPayment() {
   color: rgba(255, 255, 255, 0.88);
 }
 
-.loading, .not-found {
+.loading,
+.not-found {
   text-align: center;
   padding: 48px 0;
   color: rgba(255, 255, 255, 0.5);
@@ -787,12 +797,14 @@ async function retryPayment() {
   color: #ffffff;
 }
 
-.failed-section, .closed-section {
+.failed-section,
+.closed-section {
   text-align: center;
   padding: 48px 24px;
 }
 
-.failed-section p, .closed-section p {
+.failed-section p,
+.closed-section p {
   font-size: 16px;
   color: #ff6b6b;
   margin: 0 0 24px;
@@ -879,7 +891,9 @@ async function retryPayment() {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 768px) {

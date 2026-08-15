@@ -11,6 +11,7 @@ import com.modstore.repository.CatalogItemRepository;
 import com.modstore.repository.EntitlementRepository;
 import com.modstore.repository.QuotaRepository;
 import com.modstore.repository.UserPlanRepository;
+import com.modstore.repository.UserRepository;
 import com.modstore.repository.PurchaseRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +40,7 @@ public class EntitlementService {
     private final PurchaseRepository purchaseRepository;
     private final EntitlementRepository entitlementRepository;
     private final UserPlanRepository userPlanRepository;
+    private final UserRepository userRepository;
     private final QuotaRepository quotaRepository;
     private final CatalogItemRepository catalogItemRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -112,6 +114,9 @@ public class EntitlementService {
         entitlement.setSourceOrderId(sourceOrderId);
         entitlement.setMetadataJson("{\"plan_id\":\"" + plan.getId() + "\"}");
         entitlementRepository.save(entitlement);
+
+        user.setAccountState("active");
+        userRepository.save(user);
 
         applyPlanQuotas(user, plan);
     }

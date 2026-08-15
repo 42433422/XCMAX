@@ -741,6 +741,8 @@ def _market_identity_from_payloads(*payloads: Any) -> tuple[bool, bool, dict[str
                 source.get("market_is_enterprise")
             ):
                 is_enterprise = True
+            if _truthy_identity_flag(source.get("desktop_access")):
+                is_enterprise = True
             if tier == "enterprise" or account_kind == "enterprise":
                 is_enterprise = True
             if _truthy_identity_flag(source.get("is_admin")) or _truthy_identity_flag(
@@ -752,6 +754,38 @@ def _market_identity_from_payloads(*payloads: Any) -> tuple[bool, bool, dict[str
             if role in {"admin", "super_admin", "owner"}:
                 is_market_admin = True
     return is_enterprise, is_market_admin, user_blob
+
+
+def _market_lifecycle_from_payloads(*payloads: Any) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "account_state": "pending_plan",
+        "next_action": "select_plan",
+        "desktop_access": False,
+        "active_plan_id": "",
+    }
+    for payload in payloads:
+        sources: list[dict[str, Any]] = []
+        if isinstance(payload, dict):
+            sources.append(payload)
+            data = payload.get("data")
+            if isinstance(data, dict):
+                sources.append(data)
+            user = payload.get("user")
+            if isinstance(user, dict):
+                sources.append(user)
+        for source in sources:
+            state = str(source.get("account_state") or "").strip()
+            if state:
+                result["account_state"] = state
+            next_action = str(source.get("next_action") or "").strip()
+            if next_action:
+                result["next_action"] = next_action
+            active_plan_id = str(source.get("active_plan_id") or "").strip()
+            if active_plan_id:
+                result["active_plan_id"] = active_plan_id
+            if "desktop_access" in source:
+                result["desktop_access"] = _truthy_identity_flag(source.get("desktop_access"))
+    return result
 
 
 def _market_user_id_from_auth_payload(payload: Any) -> int | None:
@@ -908,12 +942,19 @@ async def resolve_valid_market_access_token_fast(session_id: str) -> str:
 
 
 def _looks_like_verification_required(payload: Any) -> bool:
+    """Classify a market response without changing registration behavior."""
+
     msg = _error_message(payload, 400)
     return bool(re.search(r"验证码|verification|code", msg, re.I))
 
 
 async def _register_without_verification(username: str, password: str, email: str):
-    """Use the server-side open registration API when the normal market form requires email code."""
+    """Use the explicitly enabled server-side API for the dev diagnostic only.
+
+    The public registration flow never calls this helper and therefore cannot
+    silently bypass email verification.
+    """
+
     payload = await _proxy_json(
         "POST",
         "/api/market/open/register",
@@ -960,6 +1001,32 @@ async def send_market_reset_password_code(email: str) -> dict[str, Any]:
         "market_base_url": _market_base_url(),
         "raw": payload,
     }
+
+
+async def send_market_register_code(email: str) -> dict[str, Any]:
+    """Request a registration code from the canonical market identity service."""
+
+    email_norm = (email or "").strip().lower()
+    if not email_norm or "@" not in email_norm:
+        return {"success": False, "message": "请填写有效邮箱", "status_code": 400}
+    payload = await _proxy_json(
+        "POST",
+        "/api/auth/send-register-code",
+        json_body={"email": email_norm},
+        return_error_payload=True,
+    )
+    if isinstance(payload, JSONResponse):
+        return {"success": False, "message": "市场服务不可用", "status_code": 502}
+    if isinstance(payload, dict) and payload.get("__proxy_error__"):
+        status_code = int(payload.get("status_code") or 502)
+        raw = payload.get("payload")
+        return {
+            "success": False,
+            "message": _error_message(raw, status_code) or "发送验证码失败",
+            "status_code": status_code,
+        }
+    message = str(payload.get("message") or "") if isinstance(payload, dict) else ""
+    return {"success": True, "message": message or "验证码已发送"}
 
 
 async def reset_market_password_with_code(
@@ -1014,7 +1081,7 @@ async def register_market_user(
         "username": username,
         "password": password,
         "email": email,
-        "verification_code": (verification_code or "").strip() or "000000",
+        "verification_code": (verification_code or "").strip(),
     }
     payload = await _proxy_json(
         "POST", "/api/auth/register", json_body=register_body, return_error_payload=True
@@ -1024,30 +1091,15 @@ async def register_market_user(
     if isinstance(payload, dict) and payload.get("__proxy_error__"):
         status_code = int(payload.get("status_code") or 400)
         raw_error = payload.get("payload")
-        if not verification_code and _looks_like_verification_required(raw_error):
-            payload = await _register_without_verification(username, password, email)
-            if isinstance(payload, dict) and payload.get("__proxy_error__"):
-                status_code = int(payload.get("status_code") or 400)
-                raw_error = payload.get("payload")
-            else:
-                status_code = 200
         if status_code >= 400:
             return {
                 "success": False,
                 "message": _error_message(raw_error, status_code),
                 "raw": raw_error,
             }
-    token = _token_from_auth_response(payload)
-    refresh = _refresh_token_from_auth_response(payload)
-    return {
-        "success": True,
-        "message": "",
-        "token": token,
-        "refresh_token": refresh,
-        "market_user_id": _market_user_id_from_auth_payload(payload),
-        "raw": payload,
-        "market_base_url": _market_base_url(),
-    }
+    normalized = await _normalize_market_auth_payload(payload)
+    normalized["market_user_id"] = _market_user_id_from_auth_payload(payload)
+    return normalized
 
 
 @router.post("/register")
@@ -1057,9 +1109,9 @@ async def market_register(request: Request, body: dict[str, Any] = Body(default_
     password = str(body.get("password") or "")
     email = str(body.get("email") or "").strip()
     verification_code = str(body.get("verification_code") or body.get("code") or "").strip()
-    if not username or not password or not email:
+    if not username or not password:
         return JSONResponse(
-            {"success": False, "message": "username、password、email 必填"}, status_code=400
+            {"success": False, "message": "username、password 必填"}, status_code=400
         )
     result = await register_market_user(username, password, email, verification_code)
     if not result.get("success"):
@@ -1077,6 +1129,11 @@ async def market_register(request: Request, body: dict[str, Any] = Body(default_
         "data": {
             "market_base_url": result.get("market_base_url"),
             "token": token,
+            "refresh_token": result.get("refresh_token"),
+            "account_state": result.get("account_state"),
+            "next_action": result.get("next_action"),
+            "desktop_access": bool(result.get("desktop_access")),
+            "active_plan_id": result.get("active_plan_id"),
             "raw": result.get("raw"),
         },
     }
@@ -1107,6 +1164,11 @@ async def market_login(request: Request, body: dict[str, Any] = Body(default_fac
         "data": {
             "market_base_url": _market_base_url(),
             "token": token,
+            "refresh_token": refresh,
+            "account_state": market_result.get("account_state"),
+            "next_action": market_result.get("next_action"),
+            "desktop_access": bool(market_result.get("desktop_access")),
+            "active_plan_id": market_result.get("active_plan_id"),
             "raw": market_result.get("raw"),
         },
     }
@@ -1175,6 +1237,7 @@ async def _normalize_market_auth_payload(
         "GET", "/api/auth/me", authorization=f"Bearer {token}", return_error_payload=True
     )
     is_enterprise, is_market_admin, user_blob = _market_identity_from_payloads(payload, me)
+    lifecycle = _market_lifecycle_from_payloads(payload, me)
     logger.info(
         "market auth normalized base=%s success=True is_enterprise=%s is_market_admin=%s username=%s raw_keys=%s me_keys=%s",
         market_base or _market_base_url(),
@@ -1194,6 +1257,7 @@ async def _normalize_market_auth_payload(
         "refresh_token": refresh,
         "is_enterprise": is_enterprise,
         "is_market_admin": is_market_admin,
+        **lifecycle,
         "raw": raw_out,
     }
 
@@ -1531,6 +1595,15 @@ async def market_send_phone_code(body: dict[str, Any] = Body(default_factory=dic
     if not phone:
         return JSONResponse({"success": False, "message": "请填写手机号"}, status_code=400)
     result = await send_market_phone_code(phone)
+    if not result.get("success"):
+        status = int(result.get("status_code") or 502)
+        return JSONResponse(result, status_code=status if status >= 400 else 502)
+    return {"success": True, "message": result.get("message") or "验证码已发送"}
+
+
+@router.post("/send-register-code")
+async def market_send_register_code(body: dict[str, Any] = Body(default_factory=dict)):
+    result = await send_market_register_code(str(body.get("email") or ""))
     if not result.get("success"):
         status = int(result.get("status_code") or 502)
         return JSONResponse(result, status_code=status if status >= 400 else 502)

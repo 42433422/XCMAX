@@ -8,6 +8,7 @@ import com.modstore.repository.CatalogItemRepository;
 import com.modstore.repository.OrderRepository;
 import com.modstore.repository.PlanTemplateRepository;
 import com.modstore.repository.TransactionRepository;
+import com.modstore.repository.UserRepository;
 import com.modstore.util.MoneyUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +34,7 @@ public class OrderService {
     
     private final OrderRepository orderRepository;
     private final TransactionRepository transactionRepository;
+    private final UserRepository userRepository;
     private final WalletService walletService;
     private final EntitlementService entitlementService;
     private final PlanTemplateRepository planTemplateRepository;
@@ -63,6 +65,10 @@ public class OrderService {
     @Transactional
     public Order createOrder(User user, String outTradeNo, String subject, BigDecimal totalAmount,
                              String orderKind, Long itemId, String planId, String requestId) {
+        if (!user.isAdmin() && !"active".equalsIgnoreCase(user.getAccountState())) {
+            user.setAccountState("pending_payment");
+            userRepository.save(user);
+        }
         Order order = new Order();
         order.setUser(user);
         order.setOutTradeNo(outTradeNo);
