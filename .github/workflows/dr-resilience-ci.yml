@@ -57,6 +57,7 @@ jobs:
           python -m py_compile \
             ops/monitor/xcmax_monitor.py \
             ops/dr/xcmax_release_order.py \
+            ops/dr/xcmax_release_sync_prune.py \
             ops/dr/xcmax_dr_failover_guard.py
           python -m unittest discover -s ops/dr/tests -v
 
