@@ -46,10 +46,7 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
         "import fastapi, pytest, pytest_cov, uvicorn, modstore_server.app"
     )
     assert 'BUILD_JWT_SECRET="$(read_env_value "$ENV_FILE" MODSTORE_JWT_SECRET)"' in script
-    assert (
-        'BUILD_DATABASE_URL="$(read_env_value "$ENV_FILE" MODSTORE_DATABASE_URL)"'
-        in script
-    )
+    assert 'BUILD_DATABASE_URL="$(read_env_value "$ENV_FILE" MODSTORE_DATABASE_URL)"' in script
     assert 'BUILD_DATABASE_URL="$(read_env_value "$ENV_FILE" DATABASE_URL)"' in script
     assert "MODSTORE_ENV=production" in script
     assert 'MODSTORE_JWT_SECRET="$BUILD_JWT_SECRET"' in script
