@@ -48,9 +48,19 @@ LOG="${OPS_LOG_DIR:-/var/log/xcmax-ops}/release-sync.log"
 LOCK="/run/lock/xcmax-release-sync-${COMPONENT}.lock"
 TRANSFER_LOCK="${OPS_DR_TRANSFER_LOCK:-/run/lock/xcmax-dr-transfer.lock}"
 TRANSFER_WAIT_SECONDS="${OPS_DR_TRANSFER_WAIT_SECONDS:-1800}"
+REMOTE_COMPONENT_KEEP="${OPS_DR_INCOMING_COMPONENT_KEEP:-2}"
+PRUNE_HELPER="${OPS_RELEASE_SYNC_PRUNE_HELPER:-$(dirname -- "${BASH_SOURCE[0]}")/xcmax_release_sync_prune.py}"
 
 [[ -n "$TARGET" && -f "$KEY" ]] || {
   echo "温备 SSH 目标或私钥未配置" >&2
+  exit 1
+}
+[[ "$REMOTE_COMPONENT_KEEP" =~ ^[0-9]+$ && "$REMOTE_COMPONENT_KEEP" -ge 2 ]] || {
+  echo "OPS_DR_INCOMING_COMPONENT_KEEP 必须是不小于 2 的整数" >&2
+  exit 2
+}
+[[ -r "$PRUNE_HELPER" ]] || {
+  echo "DR 入站容量选择器不可用: $PRUNE_HELPER" >&2
   exit 1
 }
 install -d -m 0700 "$SPOOL" "$STATE" "$(dirname "$LOG")"
@@ -68,7 +78,18 @@ if [[ -f "$last_sha_file" && "$(cat "$last_sha_file")" == "$SHA" ]]; then
 fi
 
 staging="$SPOOL/.staging-${SHA}-${COMPONENT}-$$"
-trap 'rm -rf -- "$staging"' EXIT
+remote_listing="$SPOOL/.remote-listing-${SHA}-${COMPONENT}-$$"
+remote_victims="$SPOOL/.remote-victims-${SHA}-${COMPONENT}-$$"
+missing_source="$SPOOL/.remote-delete-missing-${SHA}-${COMPONENT}-$$"
+cleanup() {
+  rm -rf -- "$staging"
+  rm -f -- "$remote_listing" "$remote_victims"
+}
+trap cleanup EXIT
+[[ ! -e "$missing_source" ]] || {
+  echo "拒绝使用已存在的删除哨兵: $missing_source" >&2
+  exit 1
+}
 install -d -m 0700 "$staging"
 
 if [[ "$COMPONENT" == "modstore" ]]; then
@@ -140,6 +161,27 @@ date -u +%s >"$staging/${COMPONENT}.CREATED_AT"
 
 (
   flock -w "$TRANSFER_WAIT_SECONDS" 8 || exit 1
+  LC_ALL=C rsync --list-only -r \
+    -e "ssh -i $KEY -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+    "${TARGET}:${REMOTE_ROOT}/runtime-releases/" \
+    >"$remote_listing" 2>>"$LOG"
+  python3 "$PRUNE_HELPER" \
+    --component "$COMPONENT" \
+    --target-sha "$SHA" \
+    --keep "$REMOTE_COMPONENT_KEEP" \
+    <"$remote_listing" >"$remote_victims"
+  while IFS= read -r victim; do
+    [[ "$victim" =~ ^[0-9a-f]{40}$ && "$victim" != "$SHA" ]] || {
+      log "ERROR: DR 入站容量选择器返回非法 SHA"
+      exit 1
+    }
+    rsync -r --delete-missing-args --ignore-missing-args \
+      -e "ssh -i $KEY -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+      "$missing_source" \
+      "${TARGET}:${REMOTE_ROOT}/runtime-releases/${victim}" \
+      >>"$LOG" 2>&1
+    log "DR 入站发布已安全腾位: component=$COMPONENT removed_sha=$victim"
+  done <"$remote_victims"
   rsync -a --partial --delay-updates \
     -e "ssh -i $KEY -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
     "$staging/" "${TARGET}:${REMOTE_ROOT}/runtime-releases/${SHA}/" \
