@@ -80,17 +80,18 @@ fi
 staging="$SPOOL/.staging-${SHA}-${COMPONENT}-$$"
 remote_listing="$SPOOL/.remote-listing-${SHA}-${COMPONENT}-$$"
 remote_victims="$SPOOL/.remote-victims-${SHA}-${COMPONENT}-$$"
-missing_source="$SPOOL/.remote-delete-missing-${SHA}-${COMPONENT}-$$"
+remote_cleared_listing="$SPOOL/.remote-cleared-listing-${SHA}-${COMPONENT}-$$"
+empty_source="$SPOOL/.remote-empty-${SHA}-${COMPONENT}-$$"
 cleanup() {
-  rm -rf -- "$staging"
-  rm -f -- "$remote_listing" "$remote_victims"
+  rm -rf -- "$staging" "$empty_source"
+  rm -f -- "$remote_listing" "$remote_victims" "$remote_cleared_listing"
 }
 trap cleanup EXIT
-[[ ! -e "$missing_source" ]] || {
-  echo "拒绝使用已存在的删除哨兵: $missing_source" >&2
+[[ ! -e "$empty_source" ]] || {
+  echo "拒绝使用已存在的腾位目录: $empty_source" >&2
   exit 1
 }
-install -d -m 0700 "$staging"
+install -d -m 0700 "$staging" "$empty_source"
 
 if [[ "$COMPONENT" == "modstore" ]]; then
   git -C "$SOURCE_ROOT" cat-file -e "${SHA}^{commit}"
@@ -175,12 +176,22 @@ date -u +%s >"$staging/${COMPONENT}.CREATED_AT"
       log "ERROR: DR 入站容量选择器返回非法 SHA"
       exit 1
     }
-    rsync -r --delete-missing-args --ignore-missing-args \
+    rsync -a --delete --force \
       -e "ssh -i $KEY -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
-      "$missing_source" \
-      "${TARGET}:${REMOTE_ROOT}/runtime-releases/${victim}" \
+      "$empty_source/" \
+      "${TARGET}:${REMOTE_ROOT}/runtime-releases/${victim}/" \
       >>"$LOG" 2>&1
-    log "DR 入站发布已安全腾位: component=$COMPONENT removed_sha=$victim"
+    LC_ALL=C rsync --list-only -r \
+      -e "ssh -i $KEY -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+      "${TARGET}:${REMOTE_ROOT}/runtime-releases/" \
+      >"$remote_cleared_listing" 2>>"$LOG"
+    if awk -v prefix="${victim}/" \
+      'NF >= 5 && index($5, prefix) == 1 { found = 1 } END { exit found ? 0 : 1 }' \
+      "$remote_cleared_listing"; then
+      log "ERROR: DR 入站候选腾位后仍包含文件: component=$COMPONENT sha=$victim"
+      exit 1
+    fi
+    log "DR 入站发布已安全腾位: component=$COMPONENT cleared_sha=$victim"
   done <"$remote_victims"
   rsync -a --partial --delay-updates \
     -e "ssh -i $KEY -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
