@@ -42,12 +42,17 @@ def upgrade() -> None:
         op.create_index(
             "ix_users_account_state", "users", ["account_state"], unique=False
         )
-    grant_conditions = ["is_admin = 1"]
+    users = sa.table(
+        "users",
+        sa.column("account_state", sa.String(length=32)),
+        sa.column("is_admin", sa.Boolean()),
+        sa.column("is_enterprise", sa.Boolean()),
+    )
+    grant_conditions = [users.c.is_admin.is_(True)]
     if "is_enterprise" in columns:
-        grant_conditions.append("is_enterprise = 1")
+        grant_conditions.append(users.c.is_enterprise.is_(True))
     op.execute(
-        "UPDATE users SET account_state = 'active' WHERE "
-        + " OR ".join(grant_conditions)
+        users.update().where(sa.or_(*grant_conditions)).values(account_state="active")
     )
 
 
