@@ -15,6 +15,7 @@ from typing import Any, Optional
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
+from modstore_server.account_license_plans import is_account_license_plan_id
 from modstore_server.models import (
     CatalogItem,
     PlanTemplate,
@@ -272,7 +273,11 @@ def _catalog_entitlement_metadata(item: CatalogItem, source: str) -> str:
 
 
 def _plan_rows(session) -> list[PlanTemplate]:
-    rows = list(session.query(PlanTemplate).filter(PlanTemplate.is_active == True).all())
+    rows = [
+        row
+        for row in session.query(PlanTemplate).filter(PlanTemplate.is_active == True).all()
+        if not is_account_license_plan_id(row.id)
+    ]
     rows.sort(
         key=lambda p: (
             MEMBERSHIP_TIER_ORDER.get(p.id, 9999),

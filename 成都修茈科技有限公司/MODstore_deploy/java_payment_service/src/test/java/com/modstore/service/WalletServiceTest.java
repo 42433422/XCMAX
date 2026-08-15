@@ -532,8 +532,7 @@ class WalletServiceTest {
         @Test
         void returnsZeroWhenNoData() {
             when(transactionRepository.sumMembershipReferenceNet(user)).thenReturn(null);
-            when(userPlanRepository.findFirstByUserAndActiveTrueOrderByStartedAtDesc(user))
-                    .thenReturn(Optional.empty());
+            when(userPlanRepository.findByUserAndActiveTrue(user)).thenReturn(List.of());
 
             int line = walletService.getMembershipReferenceLineYuan(user);
 
@@ -554,15 +553,29 @@ class WalletServiceTest {
             when(transactionRepository.sumMembershipReferenceNet(user)).thenReturn(BigDecimal.ZERO);
 
             PlanTemplate plan = new PlanTemplate();
+            plan.setId("plan_pro");
             plan.setPrice(new BigDecimal("99.00"));
             UserPlan userPlan = new UserPlan();
             userPlan.setPlan(plan);
-            when(userPlanRepository.findFirstByUserAndActiveTrueOrderByStartedAtDesc(user))
-                    .thenReturn(Optional.of(userPlan));
+            when(userPlanRepository.findByUserAndActiveTrue(user)).thenReturn(List.of(userPlan));
 
             int line = walletService.getMembershipReferenceLineYuan(user);
 
             assertThat(line).isEqualTo(99);
+        }
+
+        @Test
+        void ignoresAccountLicensePriceForMembershipReferenceLine() {
+            when(transactionRepository.sumMembershipReferenceNet(user)).thenReturn(BigDecimal.ZERO);
+
+            PlanTemplate license = new PlanTemplate();
+            license.setId("saas-permanent-ultra");
+            license.setPrice(new BigDecimal("999999.00"));
+            UserPlan userPlan = new UserPlan();
+            userPlan.setPlan(license);
+            when(userPlanRepository.findByUserAndActiveTrue(user)).thenReturn(List.of(userPlan));
+
+            assertThat(walletService.getMembershipReferenceLineYuan(user)).isZero();
         }
     }
 }

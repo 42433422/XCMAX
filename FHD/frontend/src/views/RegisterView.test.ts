@@ -383,7 +383,7 @@ describe('RegisterView.vue', () => {
     register.mockResolvedValue({
       success: true,
       desktop_access: false,
-      purchase_url: 'https://xiu-ci.com/market/plans?plan=plan_enterprise',
+      purchase_url: 'https://xiu-ci.com/market/account-plans?plan=saas-trial-30',
     })
     const { wrapper, router } = await mountView({}, 'enterprise')
     const replaceSpy = vi.spyOn(router, 'replace')
@@ -395,8 +395,8 @@ describe('RegisterView.vue', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.text()).toContain('账号注册成功')
-    expect(wrapper.text()).toContain('选择套餐并支付')
-    expect(wrapper.find('.register-purchase-link').attributes('href')).toContain('/market/plans')
+    expect(wrapper.text()).toContain('选择账号授权并支付')
+    expect(wrapper.find('.register-purchase-link').attributes('href')).toContain('/market/account-plans')
     expect(replaceSpy).not.toHaveBeenCalled()
   })
 })

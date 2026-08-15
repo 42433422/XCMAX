@@ -17,6 +17,7 @@
 | Method | 路径 | 归属(java=true 表示已能由 Java 承接) | 鉴权 | 错误码 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | GET | `/api/payment/plans` | both | 公开（缓存 5 分钟） | 200 | `{plans: PlanItem[]}` |
+| GET | `/api/payment/account-plans` | both | 公开 | 200 | `{plans: AccountLicensePlan[]}` |
 | GET | `/api/payment/my-plan` | both | Bearer JWT | 200 | 返回 `plan` 与 `quotas` |
 | POST | `/api/payment/sign-checkout` | both | Bearer JWT | 200 / 400 / 403 / 404 | 服务端用 `PAYMENT_SECRET_KEY` 生成 `request_id`/`timestamp`/`signature` |
 | POST | `/api/payment/checkout` | both | Bearer JWT | 200 / 400 / 403 / 503 | 验签 + 防重放 + 创建订单 + 发起支付。Python 收到时若 `PAYMENT_BACKEND=java` 会再次转发到 Java |

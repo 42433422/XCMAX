@@ -13,6 +13,7 @@ from modstore_server.models import (
     get_session_factory,
 )
 from modstore_server.account_lifecycle import mark_pending_payment
+from modstore_server.account_license_plans import ACCOUNT_LICENSE_PLANS
 from modstore_server.payment_fulfilment import FulfilContext, PlanFulfilStrategy
 from modstore_server.api.app_factory import _iter_route_method_signatures
 
@@ -37,14 +38,14 @@ def test_registration_payment_and_expiry_drive_desktop_access(client):
     assert before.json()["desktop_access"] is False
 
     user_id = int(registration["user"]["id"])
-    mark_pending_payment(user_id)
+    mark_pending_payment(user_id, plan_id="saas-trial-30")
     awaiting_payment = client.get("/api/auth/me", headers=headers)
     assert awaiting_payment.status_code == 200, awaiting_payment.text
     assert awaiting_payment.json()["account_state"] == "pending_payment"
     assert awaiting_payment.json()["next_action"] == "complete_payment"
     assert awaiting_payment.json()["desktop_access"] is False
 
-    plan_id = "plan_enterprise"
+    plan_id = "saas-trial-30"
     out_trade_no = f"LIFECYCLE-{uuid.uuid4().hex[:16]}"
     now = datetime.now(timezone.utc)
     sf = get_session_factory()
@@ -120,3 +121,94 @@ def test_public_auth_register_has_one_runtime_owner(client):
         if signature == ("/api/auth/register", "POST")
     ]
     assert len(owners) == 1
+
+
+def test_vip_membership_never_grants_desktop_access_and_coexists_with_license(client):
+    username = f"separate_{uuid.uuid4().hex[:12]}"
+    registration = client.post(
+        "/api/auth/register",
+        json={"username": username, "password": "separate-pass-12"},
+    ).json()
+    user_id = int(registration["user"]["id"])
+    token = registration["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    sf = get_session_factory()
+    strategy = PlanFulfilStrategy()
+
+    with sf() as session:
+        membership = (
+            session.query(PlanTemplate)
+            .filter(PlanTemplate.id == "plan_enterprise")
+            .one()
+        )
+        ctx = FulfilContext(
+            out_trade_no=f"MEMBERSHIP-{uuid.uuid4().hex[:12]}",
+            user_id=user_id,
+            total_amount=float(membership.price),
+            item_id=0,
+            plan_id=membership.id,
+            kind="plan",
+            order={"subject": membership.name},
+        )
+        strategy.fulfill(
+            session,
+            ctx,
+            now=datetime.now(timezone.utc),
+            description="VIP/SVIP 额度会员",
+            txn_type="plan_purchase",
+        )
+        session.commit()
+
+    after_membership = client.get("/api/auth/me", headers=headers).json()
+    assert after_membership["desktop_access"] is False
+    assert after_membership["active_plan_id"] == ""
+
+    with sf() as session:
+        license_plan = (
+            session.query(PlanTemplate).filter(PlanTemplate.id == "saas-trial-30").one()
+        )
+        ctx = FulfilContext(
+            out_trade_no=f"LICENSE-{uuid.uuid4().hex[:12]}",
+            user_id=user_id,
+            total_amount=float(license_plan.price),
+            item_id=0,
+            plan_id=license_plan.id,
+            kind="plan",
+            order={"subject": license_plan.name},
+        )
+        strategy.fulfill(
+            session,
+            ctx,
+            now=datetime.now(timezone.utc),
+            description="XCAGI 账号授权",
+            txn_type="plan_purchase",
+        )
+        session.commit()
+        active_ids = {
+            row.plan_id
+            for row in session.query(UserPlan)
+            .filter(UserPlan.user_id == user_id, UserPlan.is_active.is_(True))
+            .all()
+        }
+        assert active_ids == {"plan_enterprise", "saas-trial-30"}
+
+    after_license = client.get("/api/auth/me", headers=headers).json()
+    assert after_license["desktop_access"] is True
+    assert after_license["active_plan_id"] == "saas-trial-30"
+    assert after_license["account_tier"] == "normal"
+
+    my_membership = client.get("/api/payment/my-plan", headers=headers).json()
+    assert my_membership["plan"]["id"] == "plan_enterprise"
+
+
+def test_account_license_catalog_is_separate_from_usage_memberships(client):
+    memberships = client.get("/api/payment/plans").json()["plans"]
+    licenses = client.get("/api/payment/account-plans").json()["plans"]
+    membership_ids = {row["id"] for row in memberships}
+    license_ids = {row["id"] for row in licenses}
+    expected_license_ids = {str(row["id"]) for row in ACCOUNT_LICENSE_PLANS}
+
+    assert license_ids == expected_license_ids
+    assert membership_ids.isdisjoint(license_ids)
+    assert "plan_enterprise" in membership_ids
+    assert "saas-trial-30" in license_ids

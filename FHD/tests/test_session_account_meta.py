@@ -44,4 +44,4 @@ def test_企业入口只允许非管理员企业账号():
         is_market_admin=False,
     )
     assert normal_err is not None
-    assert "企业版账号" in normal_err
+    assert "XCAGI 账号授权" in normal_err

@@ -113,7 +113,7 @@
           <p v-if="isExpired" class="qr-expired-hint">
             订单已超时未支付。
             <button type="button" class="btn-retry" @click="retryPayment">重新支付</button>
-            <router-link to="/plans" class="link-muted">或返回套餐页</router-link>
+            <router-link :to="planSelectionRoute" class="link-muted">或返回方案页</router-link>
           </p>
           <p v-else class="qr-waiting">等待支付中，支付成功后自动跳转...</p>
         </div>
@@ -122,8 +122,11 @@
         <div v-if="order.status === 'paid'" class="success-section">
           <div class="success-icon">✓</div>
           <h2 class="success-title">支付成功</h2>
-          <p class="success-desc">资金已入账，订单、套餐权益和桌面端访问资格已同步生效。</p>
-          <p class="success-desc success-desc--desktop">
+          <p v-if="isAccountLicenseOrder" class="success-desc">
+            资金已入账，XCAGI 账号授权和桌面端访问资格已同步生效。
+          </p>
+          <p v-else class="success-desc">资金已入账，订单对应的会员额度或商品权益已同步生效。</p>
+          <p v-if="isAccountLicenseOrder" class="success-desc success-desc--desktop">
             如果你从 XCAGI 桌面端前来，现在请回到桌面端，使用刚注册的账号登录。
           </p>
           <div class="success-actions">
@@ -131,7 +134,7 @@
             <router-link :to="{ name: 'wallet-purchased' }" class="btn btn-ghost"
               >已购资产</router-link
             >
-            <router-link to="/plans" class="btn btn-ghost">继续选购</router-link>
+            <router-link :to="planSelectionRoute" class="btn btn-ghost">继续选购</router-link>
           </div>
           <p class="refund-hint">
             如需退款，可
@@ -148,14 +151,14 @@
         <!-- 支付失败 -->
         <div v-if="order.status === 'failed'" class="failed-section">
           <p>支付失败</p>
-          <router-link to="/plans" class="btn btn-primary">重新下单</router-link>
+          <router-link :to="planSelectionRoute" class="btn btn-primary">重新下单</router-link>
         </div>
 
         <!-- 已关闭 -->
         <div v-if="order.status === 'closed'" class="closed-section">
           <p>订单已关闭</p>
           <button type="button" class="btn btn-primary" @click="retryPayment">重新支付</button>
-          <router-link to="/plans" class="btn btn-ghost">返回套餐页</router-link>
+          <router-link :to="planSelectionRoute" class="btn btn-ghost">返回方案页</router-link>
         </div>
       </template>
 
@@ -211,6 +214,11 @@ const burstSyncActive = ref(false)
 /** 刚从待支付变为已支付：给用户明确的「到账」反馈 */
 const paidConfirmedFlash = ref(false)
 const pollingTimer = ref<ReturnType<typeof setInterval> | null>(null)
+
+const isAccountLicenseOrder = computed(() =>
+  String(order.value?.plan_id || '').startsWith('saas-'),
+)
+const planSelectionRoute = computed(() => (isAccountLicenseOrder.value ? '/account-plans' : '/plans'))
 
 const qrImageUrl = computed(() => {
   if (!qrCode.value) return ''

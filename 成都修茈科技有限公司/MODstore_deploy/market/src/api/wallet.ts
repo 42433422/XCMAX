@@ -19,6 +19,7 @@ export const wallet = {
 
 export const payment = {
   paymentPlans: () => req('/api/payment/plans'),
+  paymentAccountPlans: () => req('/api/payment/account-plans'),
   paymentMyPlan: () => req('/api/payment/my-plan'),
   paymentQuery: (orderId: string, options?: { reconcile?: boolean }) => {
     const r = options?.reconcile ? '?reconcile=true' : ''

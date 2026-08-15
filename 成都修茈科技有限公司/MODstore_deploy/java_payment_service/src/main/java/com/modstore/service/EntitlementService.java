@@ -94,11 +94,14 @@ public class EntitlementService {
 
     @Transactional
     public void activatePlan(User user, PlanTemplate plan, String sourceOrderId) {
-        Optional<UserPlan> current = userPlanRepository.findFirstByUserAndActiveTrueOrderByStartedAtDesc(user);
-        current.ifPresent(row -> {
-            row.setActive(false);
-            userPlanRepository.save(row);
-        });
+        boolean accountLicense = AccountLicensePlans.isAccountLicense(plan.getId());
+        userPlanRepository.findByUserAndActiveTrue(user).stream()
+                .filter(row -> row.getPlan() != null)
+                .filter(row -> AccountLicensePlans.isAccountLicense(row.getPlan().getId()) == accountLicense)
+                .forEach(row -> {
+                    row.setActive(false);
+                    userPlanRepository.save(row);
+                });
 
         UserPlan userPlan = new UserPlan();
         userPlan.setUser(user);
@@ -106,6 +109,10 @@ public class EntitlementService {
         userPlan.setStartedAt(LocalDateTime.now());
         userPlan.setSourceOrderId(sourceOrderId);
         userPlan.setActive(true);
+        AccountLicensePlans.find(plan.getId())
+                .map(AccountLicensePlans.Metadata::durationDays)
+                .filter(days -> days != null && days > 0)
+                .ifPresent(days -> userPlan.setExpiresAt(LocalDateTime.now().plusDays(days)));
         userPlanRepository.save(userPlan);
 
         Entitlement entitlement = new Entitlement();
@@ -113,10 +120,13 @@ public class EntitlementService {
         entitlement.setEntitlementType("plan");
         entitlement.setSourceOrderId(sourceOrderId);
         entitlement.setMetadataJson("{\"plan_id\":\"" + plan.getId() + "\"}");
+        entitlement.setExpiresAt(userPlan.getExpiresAt());
         entitlementRepository.save(entitlement);
 
-        user.setAccountState("active");
-        userRepository.save(user);
+        if (accountLicense) {
+            user.setAccountState("active");
+            userRepository.save(user);
+        }
 
         applyPlanQuotas(user, plan);
     }
@@ -149,7 +159,12 @@ public class EntitlementService {
 
     @Transactional(readOnly = true)
     public Optional<UserPlan> getActivePlan(User user) {
-        return userPlanRepository.findFirstByUserAndActiveTrueOrderByStartedAtDesc(user);
+        return userPlanRepository.findByUserAndActiveTrue(user).stream()
+                .filter(row -> row.getPlan() != null)
+                .filter(row -> !AccountLicensePlans.isAccountLicense(row.getPlan().getId()))
+                .max(Comparator.comparing(
+                        UserPlan::getStartedAt,
+                        Comparator.nullsFirst(Comparator.naturalOrder())));
     }
 
     /**

@@ -65,7 +65,9 @@ public class OrderService {
     @Transactional
     public Order createOrder(User user, String outTradeNo, String subject, BigDecimal totalAmount,
                              String orderKind, Long itemId, String planId, String requestId) {
-        if (!user.isAdmin() && !"active".equalsIgnoreCase(user.getAccountState())) {
+        if (AccountLicensePlans.isAccountLicense(planId)
+                && !user.isAdmin()
+                && !"active".equalsIgnoreCase(user.getAccountState())) {
             user.setAccountState("pending_payment");
             userRepository.save(user);
         }

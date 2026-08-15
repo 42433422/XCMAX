@@ -242,16 +242,18 @@ class EntitlementServiceTest {
     @Nested
     class ActivatePlan {
         @Test
-        void deactivatesPreviousPlanAndActivatesNew() {
+        void deactivatesPreviousMembershipAndActivatesNewWithoutGrantingDesktopAccess() {
             UserPlan oldPlan = new UserPlan();
             oldPlan.setActive(true);
-            when(userPlanRepository.findFirstByUserAndActiveTrueOrderByStartedAtDesc(user))
-                    .thenReturn(Optional.of(oldPlan));
+            PlanTemplate oldTemplate = new PlanTemplate();
+            oldTemplate.setId("plan_basic");
+            oldPlan.setPlan(oldTemplate);
+            when(userPlanRepository.findByUserAndActiveTrue(user)).thenReturn(List.of(oldPlan));
             when(userPlanRepository.save(any(UserPlan.class))).thenAnswer(inv -> inv.getArgument(0));
             when(entitlementRepository.save(any(Entitlement.class))).thenAnswer(inv -> inv.getArgument(0));
 
             PlanTemplate plan = new PlanTemplate();
-            plan.setId("pro");
+            plan.setId("plan_pro");
             plan.setQuotasJson("{\"ai_calls\":100}");
 
             Quota existingQuota = new Quota();
@@ -263,17 +265,41 @@ class EntitlementServiceTest {
             entitlementService.activatePlan(user, plan, "OT-PLAN1");
 
             verify(userPlanRepository).save(argThat(up -> !up.isActive()));
-            verify(userPlanRepository).save(argThat(up -> up.isActive() && "pro".equals(up.getPlan().getId())));
+            verify(userPlanRepository).save(argThat(up -> up.isActive() && "plan_pro".equals(up.getPlan().getId())));
             verify(entitlementRepository).save(argThat(e -> "plan".equals(e.getEntitlementType())));
-            assertThat(user.getAccountState()).isEqualTo("active");
-            verify(userRepository).save(user);
+            assertThat(user.getAccountState()).isEqualTo("pending_plan");
+            verify(userRepository, never()).save(any());
             verify(quotaRepository).save(argThat(q -> q.getTotal() == 100));
         }
 
         @Test
+        void accountLicenseActivatesDesktopAndPreservesMembership() {
+            UserPlan membership = new UserPlan();
+            membership.setActive(true);
+            PlanTemplate membershipTemplate = new PlanTemplate();
+            membershipTemplate.setId("plan_enterprise");
+            membership.setPlan(membershipTemplate);
+            when(userPlanRepository.findByUserAndActiveTrue(user)).thenReturn(List.of(membership));
+            when(userPlanRepository.save(any(UserPlan.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(entitlementRepository.save(any(Entitlement.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            PlanTemplate license = new PlanTemplate();
+            license.setId("saas-trial-30");
+            license.setQuotasJson("{}");
+
+            entitlementService.activatePlan(user, license, "OT-LICENSE1");
+
+            assertThat(membership.isActive()).isTrue();
+            verify(userPlanRepository).save(argThat(up -> up.isActive()
+                    && "saas-trial-30".equals(up.getPlan().getId())
+                    && up.getExpiresAt() != null));
+            assertThat(user.getAccountState()).isEqualTo("active");
+            verify(userRepository).save(user);
+        }
+
+        @Test
         void handlesMalformedQuotasJson() {
-            when(userPlanRepository.findFirstByUserAndActiveTrueOrderByStartedAtDesc(user))
-                    .thenReturn(Optional.empty());
+            when(userPlanRepository.findByUserAndActiveTrue(user)).thenReturn(List.of());
             when(userPlanRepository.save(any(UserPlan.class))).thenAnswer(inv -> inv.getArgument(0));
             when(entitlementRepository.save(any(Entitlement.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -288,8 +314,7 @@ class EntitlementServiceTest {
 
         @Test
         void handlesNullQuotasJson() {
-            when(userPlanRepository.findFirstByUserAndActiveTrueOrderByStartedAtDesc(user))
-                    .thenReturn(Optional.empty());
+            when(userPlanRepository.findByUserAndActiveTrue(user)).thenReturn(List.of());
             when(userPlanRepository.save(any(UserPlan.class))).thenAnswer(inv -> inv.getArgument(0));
             when(entitlementRepository.save(any(Entitlement.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -304,8 +329,7 @@ class EntitlementServiceTest {
 
         @Test
         void createsNewQuotaWhenNotExists() {
-            when(userPlanRepository.findFirstByUserAndActiveTrueOrderByStartedAtDesc(user))
-                    .thenReturn(Optional.empty());
+            when(userPlanRepository.findByUserAndActiveTrue(user)).thenReturn(List.of());
             when(userPlanRepository.save(any(UserPlan.class))).thenAnswer(inv -> inv.getArgument(0));
             when(entitlementRepository.save(any(Entitlement.class))).thenAnswer(inv -> inv.getArgument(0));
             when(quotaRepository.findByUserAndQuotaType(user, "storage")).thenReturn(Optional.empty());

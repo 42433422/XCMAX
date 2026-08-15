@@ -12,11 +12,13 @@ export interface AuthTokens {
     next_action?: string
     desktop_access?: boolean
     active_plan_id?: string
+    account_tier?: string
   }
   account_state?: string
   next_action?: string
   desktop_access?: boolean
   active_plan_id?: string
+  account_tier?: string
 }
 
 /**
@@ -42,6 +44,7 @@ export interface CurrentUser {
   next_action?: string
   desktop_access?: boolean
   active_plan_id?: string
+  account_tier?: string
 }
 
 /**
