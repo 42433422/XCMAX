@@ -15,11 +15,13 @@ except ModuleNotFoundError:  # Python 3.10 release-gate runner.
 ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = ROOT.parents[1]
 RELEASE_SCRIPT = ROOT / "scripts/xcmax-immutable-release.sh"
+UPGRADE_DATABASE_SCRIPT = ROOT / "scripts/upgrade_database.py"
 PYPROJECT = ROOT / "pyproject.toml"
 
 
 def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     script = RELEASE_SCRIPT.read_text(encoding="utf-8")
+    upgrade_script = UPGRADE_DATABASE_SCRIPT.read_text(encoding="utf-8")
     pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
 
     assert "XCMAX_TARGET_SHA must be a full 40-character commit SHA" in script
@@ -44,17 +46,28 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
         "import fastapi, pytest, pytest_cov, uvicorn, modstore_server.app"
     )
     assert 'BUILD_JWT_SECRET="$(read_env_value "$ENV_FILE" MODSTORE_JWT_SECRET)"' in script
+    assert 'BUILD_DATABASE_URL="$(read_env_value "$ENV_FILE" MODSTORE_DATABASE_URL)"' in script
+    assert 'BUILD_DATABASE_URL="$(read_env_value "$ENV_FILE" DATABASE_URL)"' in script
     assert "MODSTORE_ENV=production" in script
     assert 'MODSTORE_JWT_SECRET="$BUILD_JWT_SECRET"' in script
     assert 'MODSTORE_RUNTIME_DIR="$BUILD_ROOT/.runtime-build"' in script
     assert "MODSTORE_INSECURE_EMPTY_JWT" not in script
     assert ".[web,knowledge,evolution-metrics]" in script
+    assert "alembic>=1.16,<2" in pyproject["project"]["optional-dependencies"]["web"]
     assert "pandas>=2.0" in pyproject["project"]["optional-dependencies"]["evolution-metrics"]
     assert "import fastapi, pytest, pytest_cov, uvicorn, modstore_server.app" in script
     assert "Environment=MODSTORE_BUS=rabbitmq" not in script
     assert "npm ci --no-audit --legacy-peer-deps --ignore-scripts" in script
     assert "node scripts/install-native-bindings.mjs" in script
     assert script.index("--ignore-scripts") < script.index("npm run build")
+    assert (
+        'MODSTORE_DATABASE_URL="$BUILD_DATABASE_URL" .venv/bin/python scripts/upgrade_database.py'
+        in script
+    )
+    assert "schema migration verified heads=" in upgrade_script
+    assert script.index("applying database migrations") < script.index(
+        'ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"'
+    )
     assert "resolve_java_home" in script
     assert "/usr/lib/jvm/java-17-*" in script
     assert 'PAYMENT_JAVA_BIN="${JAVA_HOME}/bin/java"' in script

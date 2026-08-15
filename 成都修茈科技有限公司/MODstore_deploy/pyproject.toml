@@ -13,6 +13,7 @@ web = [
     "httpx[socks]>=0.27",
     "socksio>=1.0",
     "sqlalchemy>=2.0",
+    "alembic>=1.16,<2",
     "psycopg2-binary>=2.9",
     "PyJWT>=2.8",
     "passlib[bcrypt]>=1.7",
