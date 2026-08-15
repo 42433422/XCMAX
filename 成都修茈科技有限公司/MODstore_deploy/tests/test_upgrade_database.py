@@ -44,9 +44,7 @@ def test_account_lifecycle_backfill_uses_cross_dialect_booleans() -> None:
         Path(__file__).resolve().parents[1]
         / "alembic/versions/20260815_account_registration_lifecycle.py"
     )
-    spec = importlib.util.spec_from_file_location(
-        "account_lifecycle_migration", migration_path
-    )
+    spec = importlib.util.spec_from_file_location("account_lifecycle_migration", migration_path)
     assert spec is not None and spec.loader is not None
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
