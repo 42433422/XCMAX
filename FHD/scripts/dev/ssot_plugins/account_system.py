@@ -39,6 +39,12 @@ INDUSTRY_ALIASES = ROOT / "config" / "industry_mod_aliases.json"
 REGISTER_VIEW = ROOT / "frontend" / "src" / "views" / "RegisterView.vue"
 ADMIN_VIEW = ROOT / "frontend" / "src" / "views" / "AdminEntitlementsView.vue"
 AUTH_API = ROOT / "frontend" / "src" / "api" / "auth.ts"
+MARKET_ROOT = ROOT.parent / "成都修茈科技有限公司" / "MODstore_deploy"
+ACCOUNT_LICENSE_VIEW = (
+    MARKET_ROOT / "market" / "src" / "views" / "public" / "AccountLicensePlansView.vue"
+)
+ACCOUNT_LICENSE_CATALOG = MARKET_ROOT / "modstore_server" / "account_license_plans.py"
+BUDGET_FRONT_FILES = (ADMIN_VIEW, AUTH_API)
 
 EXPECTED_BUDGETS = ("1–5 万", "5–10 万", "10–50 万", "50–100 万")
 EXPECTED_BUDGET_TO_TIER = {
@@ -61,9 +67,18 @@ REQUIRED_DOC_SNIPPETS = (
 )
 
 
+def _display_path(path: Path) -> Path:
+    for base in (ROOT, ROOT.parent):
+        try:
+            return path.relative_to(base)
+        except ValueError:
+            continue
+    return path
+
+
 def _read_text(path: Path, errors: list[str]) -> str:
     if not path.is_file():
-        errors.append(f"缺少文件: {path.relative_to(ROOT)}")
+        errors.append(f"缺少文件: {_display_path(path)}")
         return ""
     return path.read_text(encoding="utf-8")
 
@@ -152,19 +167,28 @@ def _check_budgets(errors: list[str]) -> None:
             if trial.get(key) != expected:
                 errors.append(f"saas-trial-30.{key}={trial.get(key)!r}，应为 {expected!r}")
 
-    front_files = (REGISTER_VIEW, ADMIN_VIEW, AUTH_API)
     budget_pattern = re.compile("|".join(re.escape(b) for b in EXPECTED_BUDGETS))
-    for path in front_files:
+    for path in (*BUDGET_FRONT_FILES, ACCOUNT_LICENSE_CATALOG):
         text = _read_text(path, errors)
         if not text:
             continue
         found = set(budget_pattern.findall(text))
         missing = set(EXPECTED_BUDGETS) - found
         if missing:
-            errors.append(f"{path.relative_to(ROOT)} 缺少前端新档位: {sorted(missing)}")
+            errors.append(f"{_display_path(path)} 缺少新档位: {sorted(missing)}")
         leaked_legacy = [b for b in LEGACY_BUDGETS if b in text]
         if leaked_legacy:
-            errors.append(f"{path.relative_to(ROOT)} 前端仍展示旧档位: {leaked_legacy}")
+            errors.append(f"{_display_path(path)} 仍包含旧档位: {leaked_legacy}")
+
+    registration_text = _read_text(REGISTER_VIEW, errors)
+    for snippet in ("raw.purchase_url", "选择 XCAGI 账号授权并支付"):
+        if snippet not in registration_text:
+            errors.append(f"{REGISTER_VIEW.relative_to(ROOT)} 缺少授权购买交接: {snippet}")
+
+    license_view_text = _read_text(ACCOUNT_LICENSE_VIEW, errors)
+    for snippet in ("paymentAccountPlans", "VIP / SVIP 是 AI 额度会员"):
+        if snippet not in license_view_text:
+            errors.append(f"{_display_path(ACCOUNT_LICENSE_VIEW)} 缺少账号授权契约: {snippet}")
 
 
 def _check_industries(errors: list[str]) -> None:

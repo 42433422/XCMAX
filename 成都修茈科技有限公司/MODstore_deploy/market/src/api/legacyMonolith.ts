@@ -107,7 +107,6 @@ export const legacyApi = {
   transactions: (limit = 50, offset = 0) => req(`/api/wallet/transactions?limit=${limit}&offset=${offset}`),
 
   paymentPlans: () => req('/api/payment/plans'),
-  paymentAccountPlans: () => req('/api/payment/account-plans'),
   paymentMyPlan: () => req('/api/payment/my-plan'),
   /** reconcile=true 时由后端主动调支付宝「交易查询」对账，补发异步通知未达时的权益 */
   paymentQuery: (orderId: string, options?: { reconcile?: boolean }) => {

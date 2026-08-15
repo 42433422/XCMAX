@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { ApiError } from '@/api'
 
@@ -377,6 +377,16 @@ describe('RegisterView.vue', () => {
     await wrapper.find('form').trigger('submit')
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.login-error').text()).toContain('验证码')
+  })
+
+  it('requests a verification code only after an optional email is entered', async () => {
+    sendRegisterVerificationCode.mockResolvedValue({ success: true })
+    const { wrapper } = await mountView({}, 'enterprise')
+    await wrapper.find('input[name="email"]').setValue(' user@example.com ')
+    await wrapper.find('.register-code-line button').trigger('click')
+    await flushPromises()
+
+    expect(sendRegisterVerificationCode).toHaveBeenCalledWith('user@example.com')
   })
 
   it('keeps a pending enterprise account out of the desktop workbench', async () => {

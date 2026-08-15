@@ -226,10 +226,9 @@ def apply_paid_plan_for_user(*, user_id: int, plan_id: str) -> bool:
         )
         db.commit()
         logger.info(
-            "[tenant-subscription] market license applied user_id=%s tenant_id=%s plan_id=%s account_tier=%s",
+            "[tenant-subscription] market license applied user_id=%s tenant_id=%s account_tier=%s",
             user_id,
             tenant_id,
-            plan_id,
             account_tier,
         )
         try:

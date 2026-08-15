@@ -5,6 +5,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from modstore_server.account_license_plans import ACCOUNT_LICENSE_PLANS
+from modstore_server.account_lifecycle import mark_pending_payment
+from modstore_server.api.app_factory import _iter_route_method_signatures
 from modstore_server.models import (
     Entitlement,
     PlanTemplate,
@@ -12,10 +15,7 @@ from modstore_server.models import (
     UserPlan,
     get_session_factory,
 )
-from modstore_server.account_lifecycle import mark_pending_payment
-from modstore_server.account_license_plans import ACCOUNT_LICENSE_PLANS
 from modstore_server.payment_fulfilment import FulfilContext, PlanFulfilStrategy
-from modstore_server.api.app_factory import _iter_route_method_signatures
 
 
 def test_registration_payment_and_expiry_drive_desktop_access(client):
@@ -90,10 +90,7 @@ def test_registration_payment_and_expiry_drive_desktop_access(client):
             .count()
             == 1
         )
-        assert (
-            session.query(User).filter(User.id == user_id).one().account_state
-            == "active"
-        )
+        assert session.query(User).filter(User.id == user_id).one().account_state == "active"
 
     after = client.get("/api/auth/me", headers=headers)
     assert after.status_code == 200, after.text
@@ -136,11 +133,7 @@ def test_vip_membership_never_grants_desktop_access_and_coexists_with_license(cl
     strategy = PlanFulfilStrategy()
 
     with sf() as session:
-        membership = (
-            session.query(PlanTemplate)
-            .filter(PlanTemplate.id == "plan_enterprise")
-            .one()
-        )
+        membership = session.query(PlanTemplate).filter(PlanTemplate.id == "plan_enterprise").one()
         ctx = FulfilContext(
             out_trade_no=f"MEMBERSHIP-{uuid.uuid4().hex[:12]}",
             user_id=user_id,
@@ -164,9 +157,7 @@ def test_vip_membership_never_grants_desktop_access_and_coexists_with_license(cl
     assert after_membership["active_plan_id"] == ""
 
     with sf() as session:
-        license_plan = (
-            session.query(PlanTemplate).filter(PlanTemplate.id == "saas-trial-30").one()
-        )
+        license_plan = session.query(PlanTemplate).filter(PlanTemplate.id == "saas-trial-30").one()
         ctx = FulfilContext(
             out_trade_no=f"LICENSE-{uuid.uuid4().hex[:12]}",
             user_id=user_id,

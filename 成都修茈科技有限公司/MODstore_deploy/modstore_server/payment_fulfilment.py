@@ -24,6 +24,10 @@ from typing import Any, Dict
 
 from sqlalchemy.orm import Session
 
+from modstore_server.account_license_plans import (
+    account_license_plan,
+    is_account_license_plan_id,
+)
 from modstore_server.models import (
     AuthorEarning,
     CatalogItem,
@@ -38,10 +42,6 @@ from modstore_server.models import (
     Wallet,
 )
 from modstore_server.payment_common import _plan_quotas
-from modstore_server.account_license_plans import (
-    account_license_plan,
-    is_account_license_plan_id,
-)
 
 _PLATFORM_FEE_RATE: float = float(os.environ.get("PLATFORM_FEE_RATE", "0.30"))
 
@@ -302,9 +302,7 @@ class PlanFulfilStrategy(FulfilStrategy):
                 int(license_meta.get("quota_cents") or 0) // 100
                 if is_license
                 else int(
-                    Decimal(str(ctx.total_amount)).quantize(
-                        Decimal("1"), rounding=ROUND_HALF_UP
-                    )
+                    Decimal(str(ctx.total_amount)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
                 )
             )
         except Exception:  # noqa: BLE001
@@ -326,11 +324,7 @@ class PlanFulfilStrategy(FulfilStrategy):
                 Transaction(
                     user_id=ctx.user_id,
                     amount=float(grant_yuan),
-                    txn_type=(
-                        "account_license_quota"
-                        if is_license
-                        else "plan_membership_tokens"
-                    ),
+                    txn_type=("account_license_quota" if is_license else "plan_membership_tokens"),
                     status="completed",
                     description=(
                         f"账号授权随单 AI 额度(元) ({ctx.out_trade_no})"

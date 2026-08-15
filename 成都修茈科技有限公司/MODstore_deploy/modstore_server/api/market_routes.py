@@ -30,6 +30,7 @@ from modstore_server import account_level_service, catalog_sync
 from modstore_server.account_lifecycle import (
     ACCOUNT_ACTIVE,
     ACCOUNT_PENDING_PLAN,
+    auth_token_response,
     lifecycle_for_user,
     lifecycle_for_user_id,
 )
@@ -157,19 +158,6 @@ class ResetPasswordDTO(BaseModel):
     email: str
     code: str = Field(..., min_length=4, max_length=16)
     new_password: str = Field(..., min_length=6, max_length=128)
-
-
-def _auth_user_payload(user: User) -> dict[str, Any]:
-    lifecycle = lifecycle_for_user_id(int(user.id)).to_dict()
-    return {
-        "id": user.id,
-        "username": user.username,
-        "email": user.email,
-        "is_admin": bool(user.is_admin),
-        "is_enterprise": bool(getattr(user, "is_enterprise", False)),
-        "company": getattr(user, "company", "") or "",
-        **lifecycle,
-    }
 
 
 class AdminResetUserPasswordDTO(BaseModel):
@@ -307,14 +295,7 @@ def api_register(body: RegisterDTO):
         raise HTTPException(409, str(e))
     access_token = create_access_token(user.id, user.username, is_admin=bool(user.is_admin))
     refresh_token = create_refresh_token(user.id, user.username)
-    lifecycle = lifecycle_for_user_id(int(user.id)).to_dict()
-    return {
-        "ok": True,
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "user": _auth_user_payload(user),
-        **lifecycle,
-    }
+    return auth_token_response(user, access_token, refresh_token)
 
 
 @router.post("/auth/login")
@@ -324,14 +305,7 @@ def api_login(body: LoginDTO):
         raise HTTPException(401, "用户名或密码错误")
     access_token = create_access_token(user.id, user.username, is_admin=bool(user.is_admin))
     refresh_token = create_refresh_token(user.id, user.username)
-    lifecycle = lifecycle_for_user_id(int(user.id)).to_dict()
-    return {
-        "ok": True,
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "user": _auth_user_payload(user),
-        **lifecycle,
-    }
+    return auth_token_response(user, access_token, refresh_token)
 
 
 @router.get("/auth/me")
@@ -460,14 +434,7 @@ def api_login_with_code(body: LoginWithCodeDTO):
 
     access_token = create_access_token(user.id, user.username, is_admin=bool(user.is_admin))
     refresh_token = create_refresh_token(user.id, user.username)
-    lifecycle = lifecycle_for_user_id(int(user.id)).to_dict()
-    return {
-        "ok": True,
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "user": _auth_user_payload(user),
-        **lifecycle,
-    }
+    return auth_token_response(user, access_token, refresh_token)
 
 
 @router.post("/auth/send-reset-password-code", status_code=202)
@@ -625,13 +592,7 @@ def api_refresh_token(body: RefreshTokenDTO):
     new_access_token = create_access_token(user_id, username, is_admin=bool(user.is_admin))
     new_refresh_token = create_refresh_token(user_id, username)
 
-    return {
-        "ok": True,
-        "access_token": new_access_token,
-        "refresh_token": new_refresh_token,
-        "user": _auth_user_payload(user),
-        **lifecycle_for_user_id(int(user.id)).to_dict(),
-    }
+    return auth_token_response(user, new_access_token, new_refresh_token)
 
 
 @router.get("/admin/status")
