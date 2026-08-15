@@ -267,6 +267,11 @@ migrate_env_file "$SCHEDULER_ENV_FILE" \
 BUILD_JWT_SECRET="$(read_env_value "$ENV_FILE" MODSTORE_JWT_SECRET)"
 [[ -n "$BUILD_JWT_SECRET" ]] || fail "protected production env is missing MODSTORE_JWT_SECRET"
 [[ ${#BUILD_JWT_SECRET} -ge 32 ]] || fail "protected production MODSTORE_JWT_SECRET is shorter than 32 characters"
+BUILD_DATABASE_URL="$(read_env_value "$ENV_FILE" MODSTORE_DATABASE_URL)"
+if [[ -z "$BUILD_DATABASE_URL" ]]; then
+  BUILD_DATABASE_URL="$(read_env_value "$ENV_FILE" DATABASE_URL)"
+fi
+[[ -n "$BUILD_DATABASE_URL" ]] || fail "protected production env is missing MODSTORE_DATABASE_URL or DATABASE_URL"
 BUILD_AUTO_PUBLISH_TOKEN="$(read_env_value "$ENV_FILE" MODSTORE_AUTO_PUBLISH_TOKEN)"
 [[ -n "$BUILD_AUTO_PUBLISH_TOKEN" ]] || fail "protected production env is missing MODSTORE_AUTO_PUBLISH_TOKEN"
 [[ ${#BUILD_AUTO_PUBLISH_TOKEN} -ge 32 ]] || fail "protected production MODSTORE_AUTO_PUBLISH_TOKEN is shorter than 32 characters"
@@ -366,6 +371,17 @@ chmod 0555 "$FINAL_ROOT"
 DEPLOY_DIR="$FINAL_ROOT/$MODSTORE_SUBDIR"
 EXPECTED_ARTIFACT_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["artifact_sha256"])' "$FINAL_ROOT/.xcmax-release.json")"
 [[ "$EXPECTED_ARTIFACT_SHA" =~ ^[0-9a-f]{64}$ ]] || fail "release artifact SHA256 is invalid"
+
+# Apply the exact release's schema before switching the public/runtime symlinks.
+# The helper verifies and stamps the last known pre-Alembic production baseline
+# before applying newer revisions, then proves every declared head is recorded.
+# A migration failure therefore leaves the currently served release untouched.
+log "applying database migrations for $TARGET_SHA"
+(
+  cd "$DEPLOY_DIR"
+  MODSTORE_DATABASE_URL="$BUILD_DATABASE_URL" .venv/bin/python scripts/upgrade_database.py
+)
+unset BUILD_DATABASE_URL
 
 # Move the legacy inline SECRET_KEY into the protected environment without logging it.
 LEGACY_SECRET_DROPIN="/etc/systemd/system/modstore.service.d/zz-secret-key.conf"
