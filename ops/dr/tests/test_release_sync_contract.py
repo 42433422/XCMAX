@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import subprocess
 import tempfile
+import unittest
 from pathlib import Path
-
-import pytest
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "xcmax_release_sync.sh"
@@ -44,7 +43,7 @@ def test_missing_source_sync_really_removes_release_directory() -> None:
         ["rsync", "--help"], capture_output=True, check=True, text=True
     )
     if "--delete-missing-args" not in rsync_help.stdout:
-        pytest.skip("system rsync does not support --delete-missing-args")
+        raise unittest.SkipTest("system rsync does not support --delete-missing-args")
 
     with tempfile.TemporaryDirectory() as temp_dir:
         root = Path(temp_dir)
