@@ -1,16 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { ApiError } from '@/api'
 
-const { register, applyMarketTokensAfterFhdLogin, fetchProductSku } = vi.hoisted(() => ({
+const { register, sendRegisterVerificationCode, applyMarketTokensAfterFhdLogin, fetchProductSku } = vi.hoisted(() => ({
   register: vi.fn(),
+  sendRegisterVerificationCode: vi.fn(),
   applyMarketTokensAfterFhdLogin: vi.fn().mockResolvedValue(undefined),
   fetchProductSku: vi.fn().mockResolvedValue('generic'),
 }))
 
 vi.mock('@/api/auth', () => ({
-  authApi: { register },
+  authApi: { register, sendRegisterVerificationCode },
 }))
 vi.mock('@/api/marketAccount', () => ({
   applyMarketTokensAfterFhdLogin,
@@ -22,7 +23,7 @@ vi.mock('@/utils/productSku', () => ({
 
 import RegisterView from './RegisterView.vue'
 
-function makeRouter(initialPath = '/register') {
+function makeRouter() {
   return createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -282,10 +283,10 @@ describe('RegisterView.vue', () => {
     expect(wrapper.find('.register-hint').text()).toContain('本机服务器数据库')
   })
 
-  it('shows email as required for enterprise edition', async () => {
+  it('shows email as optional for enterprise edition', async () => {
     const { wrapper } = await mountView({}, 'enterprise')
     const emailInput = wrapper.find('input[name="email"]')
-    expect(emailInput.attributes('placeholder')).toContain('必填')
+    expect(emailInput.attributes('placeholder')).toContain('选填')
   })
 
   it('shows email as optional for generic edition', async () => {
@@ -294,10 +295,10 @@ describe('RegisterView.vue', () => {
     expect(emailInput.attributes('placeholder')).toContain('选填')
   })
 
-  it('shows industry and budget selects for enterprise edition', async () => {
+  it('does not turn enterprise registration into an industry questionnaire', async () => {
     const { wrapper } = await mountView({}, 'enterprise')
-    expect(wrapper.find('select[name="industry"]').exists()).toBe(true)
-    expect(wrapper.find('select[name="budget"]').exists()).toBe(true)
+    expect(wrapper.find('select[name="industry"]').exists()).toBe(false)
+    expect(wrapper.find('select[name="budget"]').exists()).toBe(false)
   })
 
   it('does not show industry and budget selects for generic edition', async () => {
@@ -306,20 +307,23 @@ describe('RegisterView.vue', () => {
     expect(wrapper.find('select[name="budget"]').exists()).toBe(false)
   })
 
-  it('requires email for enterprise edition to submit', async () => {
+  it('allows enterprise registration without email', async () => {
     const { wrapper } = await mountView({}, 'enterprise')
     await wrapper.find('input[name="username"]').setValue('user')
     await wrapper.find('input[name="password"]').setValue('password123')
     await wrapper.find('input[name="confirm-password"]').setValue('password123')
-    expect(wrapper.find('.login-submit').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.login-submit').attributes('disabled')).toBeUndefined()
   })
 
-  it('enables submit for enterprise when email is filled', async () => {
+  it('requires verification only when an enterprise email is filled', async () => {
     const { wrapper } = await mountView({}, 'enterprise')
     await wrapper.find('input[name="username"]').setValue('user')
     await wrapper.find('input[name="email"]').setValue('user@example.com')
     await wrapper.find('input[name="password"]').setValue('password123')
     await wrapper.find('input[name="confirm-password"]').setValue('password123')
+    expect(wrapper.find('.login-submit').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('input[name="verification-code"]').exists()).toBe(true)
+    await wrapper.find('input[name="verification-code"]').setValue('123456')
     expect(wrapper.find('.login-submit').attributes('disabled')).toBeUndefined()
   })
 
@@ -364,13 +368,45 @@ describe('RegisterView.vue', () => {
     expect(wrapper.find('.login-error').text()).toContain('请填写用户名')
   })
 
-  it('shows email-required error for enterprise edition', async () => {
+  it('asks for verification after an optional enterprise email is entered', async () => {
     const { wrapper } = await mountView({}, 'enterprise')
     await wrapper.find('input[name="username"]').setValue('user')
+    await wrapper.find('input[name="email"]').setValue('user@example.com')
     await wrapper.find('input[name="password"]').setValue('password123')
     await wrapper.find('input[name="confirm-password"]').setValue('password123')
     await wrapper.find('form').trigger('submit')
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('.login-error').text()).toContain('邮箱')
+    expect(wrapper.find('.login-error').text()).toContain('验证码')
+  })
+
+  it('requests a verification code only after an optional email is entered', async () => {
+    sendRegisterVerificationCode.mockResolvedValue({ success: true })
+    const { wrapper } = await mountView({}, 'enterprise')
+    await wrapper.find('input[name="email"]').setValue(' user@example.com ')
+    await wrapper.find('.register-code-line button').trigger('click')
+    await flushPromises()
+
+    expect(sendRegisterVerificationCode).toHaveBeenCalledWith('user@example.com')
+  })
+
+  it('keeps a pending enterprise account out of the desktop workbench', async () => {
+    register.mockResolvedValue({
+      success: true,
+      desktop_access: false,
+      purchase_url: 'https://xiu-ci.com/market/account-plans?plan=saas-trial-30',
+    })
+    const { wrapper, router } = await mountView({}, 'enterprise')
+    const replaceSpy = vi.spyOn(router, 'replace')
+    await wrapper.find('input[name="username"]').setValue('pending-user')
+    await wrapper.find('input[name="password"]').setValue('password123')
+    await wrapper.find('input[name="confirm-password"]').setValue('password123')
+    await wrapper.find('form').trigger('submit')
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('账号注册成功')
+    expect(wrapper.text()).toContain('选择账号授权并支付')
+    expect(wrapper.find('.register-purchase-link').attributes('href')).toContain('/market/account-plans')
+    expect(replaceSpy).not.toHaveBeenCalled()
   })
 })

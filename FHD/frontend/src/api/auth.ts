@@ -43,6 +43,13 @@ export interface LoginResponse {
   error?: unknown;
   market_access_token?: string;
   market_refresh_token?: string;
+  registered?: boolean;
+  account_state?: string;
+  next_action?: string;
+  desktop_access?: boolean;
+  active_plan_id?: string;
+  account_tier?: string;
+  purchase_url?: string;
 }
 
 export interface RegisterRequest {
@@ -184,6 +191,11 @@ export const authApi = {
       markEnterpriseSessionValid();
     }
     return res;
+  },
+
+  async sendRegisterVerificationCode(email: string): Promise<ApiResponse<{ message?: string }>> {
+    await primeCsrfCookie();
+    return api.post<ApiResponse<{ message?: string }>>('/api/market/send-register-code', { email });
   },
 
   async logout(): Promise<ApiResponse<void>> {

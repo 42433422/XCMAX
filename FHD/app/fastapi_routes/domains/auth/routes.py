@@ -10,6 +10,7 @@ from fastapi import APIRouter, Body, Depends, File, Query, Request, UploadFile
 from fastapi.background import BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
 
+import app.application.enterprise_registration_response as registration_response
 from app.http.error_codes import (
     ACCOUNT_DISABLED,
     CREATE_FAILED,
@@ -625,13 +626,8 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
     auth_app_service = get_auth_app_service()
 
     if sku == "enterprise":
-        # 企业注册统一走市场(单一鉴权源):有邮箱用真实邮箱;无邮箱用占位邮箱
-        # {username}@auto.xiu-ci.com,同样 register_market_user → 账号在市场可登录,
-        # 注册=登录账号打通(market-first 登录认得)。占位后缀供前端显示「无邮箱」。
-        # 见 app/utils/no_email.py。register_market_user 无验证码会走免验证兜底。
-        from app.utils.no_email import synth_no_email_address
-
-        reg_email = email or synth_no_email_address(username)
+        # 企业注册只在市场创建身份；未付费前不创建 FHD 用户、租户或本地会话。
+        reg_email = email
         market_reg = await register_market_user(username, password, reg_email, verification_code)
         if not market_reg.get("success"):
             return JSONResponse(
@@ -641,6 +637,10 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
                 ),
                 status_code=400,
             )
+        if not bool(market_reg.get("desktop_access")):
+            payload = registration_response.pending_registration_payload(market_reg)
+            return JSONResponse(payload)
+
         email_market = _market_user_email_from_raw(market_reg.get("raw")) or reg_email
         _jit_create_local_user_for_enterprise(username, password, email_market)
         result = auth_app_service.login(username, password)

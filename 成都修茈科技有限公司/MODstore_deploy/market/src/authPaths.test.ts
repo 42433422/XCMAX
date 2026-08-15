@@ -3,7 +3,9 @@ import {
   safeRedirectPath,
   pickRedirectFromRoute,
   DEFAULT_POST_AUTH,
+  DEFAULT_POST_REGISTER,
   isXcagiDesktopRegistration,
+  pickRegistrationNextFromRoute,
 } from './authPaths'
 
 describe('safeRedirectPath', () => {
@@ -61,6 +63,26 @@ describe('safeRedirectPath', () => {
 describe('DEFAULT_POST_AUTH', () => {
   it('points to workbench-home', () => {
     expect(DEFAULT_POST_AUTH).toEqual({ name: 'workbench-home' })
+  })
+})
+
+describe('registration lifecycle redirect', () => {
+  it('always continues from account creation to plan selection', () => {
+    expect(DEFAULT_POST_REGISTER).toEqual({
+      name: 'account-plans',
+      query: { plan: 'saas-trial-30' },
+    })
+    expect(pickRegistrationNextFromRoute({ query: { redirect: '/workbench/home' } })).toEqual({
+      name: 'account-plans',
+      query: { plan: 'saas-trial-30' },
+    })
+  })
+
+  it('preserves only the known desktop source', () => {
+    expect(pickRegistrationNextFromRoute({ query: { source: 'xcagi-desktop' } })).toEqual({
+      name: 'account-plans',
+      query: { plan: 'saas-trial-30', source: 'xcagi-desktop' },
+    })
   })
 })
 

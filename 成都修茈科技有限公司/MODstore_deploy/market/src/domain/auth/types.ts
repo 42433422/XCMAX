@@ -8,7 +8,17 @@ export interface AuthTokens {
     id: number
     username?: string
     email?: string
+    account_state?: string
+    next_action?: string
+    desktop_access?: boolean
+    active_plan_id?: string
+    account_tier?: string
   }
+  account_state?: string
+  next_action?: string
+  desktop_access?: boolean
+  active_plan_id?: string
+  account_tier?: string
 }
 
 /**
@@ -29,6 +39,12 @@ export interface CurrentUser {
   level_profile?: LevelProfileDict
   /** 相对 API 路径，如 `/api/auth/avatar/file?v=1`；需带 Authorization 拉取 */
   avatar_url?: string | null
+  /** 注册 -> 套餐 -> 支付 -> 权益的账号状态。 */
+  account_state?: string
+  next_action?: string
+  desktop_access?: boolean
+  active_plan_id?: string
+  account_tier?: string
 }
 
 /**

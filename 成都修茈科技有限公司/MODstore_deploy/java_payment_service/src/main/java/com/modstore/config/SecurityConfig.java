@@ -36,7 +36,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(authorize -> authorize
                 .requestMatchers("/api/payment/notify/alipay", "/api/payment/notify/wechat").permitAll()
                 .requestMatchers("/api/internal/payment/**").permitAll()
-                .requestMatchers("/api/payment/plans").permitAll()
+                .requestMatchers("/api/payment/plans", "/api/payment/account-plans").permitAll()
                 .requestMatchers("/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/api/refunds/admin/**").hasRole("ADMIN")

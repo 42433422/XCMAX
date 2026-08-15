@@ -24,6 +24,10 @@ from typing import Any, Dict
 
 from sqlalchemy.orm import Session
 
+from modstore_server.account_license_plans import (
+    account_license_plan,
+    is_account_license_plan_id,
+)
 from modstore_server.models import (
     AuthorEarning,
     CatalogItem,
@@ -32,6 +36,7 @@ from modstore_server.models import (
     Purchase,
     Quota,
     Transaction,
+    User,
     UserMod,
     UserPlan,
     Wallet,
@@ -231,10 +236,27 @@ class PlanFulfilStrategy(FulfilStrategy):
         if not plan:
             return
 
-        session.query(UserPlan).filter(
-            UserPlan.user_id == ctx.user_id, UserPlan.is_active == True  # noqa: E712
-        ).update({"is_active": False})
-        expires = now + timedelta(days=30)
+        user = session.query(User).filter(User.id == ctx.user_id).first()
+        if user is None:
+            return
+
+        is_license = is_account_license_plan_id(plan.id)
+        active_rows = (
+            session.query(UserPlan)
+            .filter(UserPlan.user_id == ctx.user_id, UserPlan.is_active == True)  # noqa: E712
+            .all()
+        )
+        for active_row in active_rows:
+            if is_account_license_plan_id(active_row.plan_id) is is_license:
+                active_row.is_active = False
+                session.add(active_row)
+        license_meta = account_license_plan(plan.id) or {}
+        duration_days = int(license_meta.get("duration_days") or 0)
+        expires = (
+            now + timedelta(days=duration_days)
+            if is_license and duration_days > 0
+            else (None if is_license else now + timedelta(days=30))
+        )
         session.add(
             UserPlan(
                 user_id=ctx.user_id,
@@ -244,6 +266,9 @@ class PlanFulfilStrategy(FulfilStrategy):
                 is_active=True,
             )
         )
+        from modstore_server.account_lifecycle import mark_active_after_plan
+
+        mark_active_after_plan(user, plan_id=plan.id, session=session)
         session.add(
             Entitlement(
                 user_id=ctx.user_id,
@@ -271,10 +296,14 @@ class PlanFulfilStrategy(FulfilStrategy):
             row.reset_at = now + timedelta(days=30)
             session.add(row)
 
-        # 与 java_payment_service 对齐：按实付价取整元给钱包加 LLM 可用余额
+        # 额度会员按实付价赠送余额；账号授权只按明示 quota_cents 发放。
         try:
-            grant_yuan = int(
-                Decimal(str(ctx.total_amount)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+            grant_yuan = (
+                int(license_meta.get("quota_cents") or 0) // 100
+                if is_license
+                else int(
+                    Decimal(str(ctx.total_amount)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+                )
             )
         except Exception:  # noqa: BLE001
             grant_yuan = int(round(float(ctx.total_amount or 0)))
@@ -295,9 +324,13 @@ class PlanFulfilStrategy(FulfilStrategy):
                 Transaction(
                     user_id=ctx.user_id,
                     amount=float(grant_yuan),
-                    txn_type="plan_membership_tokens",
+                    txn_type=("account_license_quota" if is_license else "plan_membership_tokens"),
                     status="completed",
-                    description=f"会员随单：按实付价取整的 LLM 可用余额(元) ({ctx.out_trade_no})",
+                    description=(
+                        f"账号授权随单 AI 额度(元) ({ctx.out_trade_no})"
+                        if is_license
+                        else f"会员随单：按实付价取整的 LLM 可用余额(元) ({ctx.out_trade_no})"
+                    ),
                 )
             )
 

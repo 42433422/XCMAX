@@ -6,6 +6,16 @@ export interface PaymentPlan {
   features?: string[]
 }
 
+export interface AccountLicensePlan extends PaymentPlan {
+  catalog: 'account_license'
+  amount_cents: number
+  license_type: 'trial' | 'permanent'
+  duration_days?: number | null
+  account_tier: 'normal' | 'pro' | 'max' | 'ultra'
+  badge?: string
+  quota_cents?: number
+}
+
 export interface OrderSummary {
   out_trade_no?: string
   order_id?: string

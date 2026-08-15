@@ -590,9 +590,7 @@ class TestAuthRegister:
         assert result.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_enterprise_missing_email_uses_synth_and_registers_market(self):
-        # 新契约:无邮箱企业注册不再被拒,而是用占位邮箱 {username}@auto.xiu-ci.com
-        # 统一走市场注册(单一鉴权源 → market-first 登录认得 = 注册=登录账号打通)。
+    async def test_enterprise_missing_email_creates_pending_market_identity(self):
         from app.fastapi_routes.domains.auth.routes import auth_register
 
         captured: dict = {}
@@ -604,6 +602,10 @@ class TestAuthRegister:
                 "raw": {"user": {"email": email}},
                 "token": "tok",
                 "refresh_token": "r",
+                "account_state": "pending_plan",
+                "next_action": "select_plan",
+                "desktop_access": False,
+                "market_base_url": "https://xiu-ci.com/market",
             }
 
         request = MagicMock()
@@ -630,10 +632,11 @@ class TestAuthRegister:
             }
             mock_get.return_value = mock_service
             result = await auth_register(request, {"username": "u", "password": "pass123"})
-        # 无邮箱 → 占位邮箱进市场,不再 400
-        assert captured["email"] == "u@auto.xiu-ci.com"
+        assert captured["email"] == ""
         assert isinstance(result, JSONResponse)
         assert result.status_code == 200
+        assert b'"desktop_access":false' in result.body
+        mock_get.return_value.login.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_enterprise_market_register_failure(self):
@@ -670,6 +673,7 @@ class TestAuthRegister:
                         "token": "tok",
                         "refresh_token": "rtok",
                         "market_user_id": 61,
+                        "desktop_access": True,
                     }
                 ),
             ),
@@ -711,6 +715,7 @@ class TestAuthRegister:
                         "token": "tok",
                         "refresh_token": "rtok",
                         "market_user_id": 61,
+                        "desktop_access": True,
                     }
                 ),
             ),
@@ -747,6 +752,7 @@ class TestAuthRegister:
                         "token": "tok",
                         "refresh_token": "rtok",
                         "market_user_id": 61,
+                        "desktop_access": True,
                     }
                 ),
             ),

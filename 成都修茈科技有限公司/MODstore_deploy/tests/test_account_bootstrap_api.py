@@ -10,6 +10,8 @@ def test_account_bootstrap_returns_wallet_auth_and_llm_state(client, auth_header
     assert body["user"]["id"]
     assert body["wallet"]["balance"] == 0.0
     assert body["membership"]["tier"] == "free"
+    assert body["account"]["account_state"] == "pending_plan"
+    assert body["account"]["desktop_access"] is False
     assert body["llm"]["default"]["provider"] == "openai"
     assert isinstance(body["llm"]["providers"], list)
     assert isinstance(body["llm"]["byok_configured_count"], int)
