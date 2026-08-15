@@ -64,6 +64,16 @@ def test_docs_ssot_adapter_run_check():
     assert code in (0, 1)
 
 
+def test_account_system_uses_registration_handoff_and_license_catalog():
+    """注册页负责交接；价格档位由独立账号授权目录展示。"""
+    from scripts.dev.ssot_plugins import account_system
+
+    assert account_system.REGISTER_VIEW not in account_system.BUDGET_FRONT_FILES
+    assert account_system.ACCOUNT_LICENSE_CATALOG.is_file()
+    assert account_system.ACCOUNT_LICENSE_VIEW.is_file()
+    assert account_system.check_drift() == 0
+
+
 def test_test_files_adapter_run_check():
     """test_files 适配器 lint tests/ 目录。"""
     from scripts.dev.ssot_plugins.base import find_domain, load_registry

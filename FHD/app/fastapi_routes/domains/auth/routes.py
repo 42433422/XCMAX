@@ -10,6 +10,7 @@ from fastapi import APIRouter, Body, Depends, File, Query, Request, UploadFile
 from fastapi.background import BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
 
+import app.application.enterprise_registration_response as registration_response
 from app.http.error_codes import (
     ACCOUNT_DISABLED,
     CREATE_FAILED,
@@ -625,8 +626,7 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
     auth_app_service = get_auth_app_service()
 
     if sku == "enterprise":
-        # 企业注册只在市场创建身份。未付费前不创建 FHD 用户、
-        # 租户或本地会话，避免绕过账号授权直接进入企业工作台。
+        # 企业注册只在市场创建身份；未付费前不创建 FHD 用户、租户或本地会话。
         reg_email = email
         market_reg = await register_market_user(username, password, reg_email, verification_code)
         if not market_reg.get("success"):
@@ -638,25 +638,8 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
                 status_code=400,
             )
         if not bool(market_reg.get("desktop_access")):
-            market_base = str(market_reg.get("market_base_url") or "").rstrip("/")
-            purchase_url = (
-                f"{market_base}/account-plans?plan=saas-trial-30&source=xcagi-desktop"
-                if market_base
-                else "/market/account-plans?plan=saas-trial-30&source=xcagi-desktop"
-            )
-            return JSONResponse(
-                {
-                    "success": True,
-                    "registered": True,
-                    "account_state": str(market_reg.get("account_state") or "pending_plan"),
-                    "next_action": str(market_reg.get("next_action") or "select_plan"),
-                    "desktop_access": False,
-                    "purchase_url": purchase_url,
-                    "market_access_token": str(market_reg.get("token") or ""),
-                    "market_refresh_token": str(market_reg.get("refresh_token") or ""),
-                    "market_user_id": market_reg.get("market_user_id"),
-                }
-            )
+            payload = registration_response.pending_registration_payload(market_reg)
+            return JSONResponse(payload)
 
         email_market = _market_user_email_from_raw(market_reg.get("raw")) or reg_email
         _jit_create_local_user_for_enterprise(username, password, email_market)

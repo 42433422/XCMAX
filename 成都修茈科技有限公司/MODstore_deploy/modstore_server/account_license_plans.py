@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-
 ACCOUNT_LICENSE_PLANS: tuple[dict[str, Any], ...] = (
     {
         "id": "saas-trial-30",

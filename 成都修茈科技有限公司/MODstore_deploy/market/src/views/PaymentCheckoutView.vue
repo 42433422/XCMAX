@@ -215,10 +215,10 @@ const burstSyncActive = ref(false)
 const paidConfirmedFlash = ref(false)
 const pollingTimer = ref<ReturnType<typeof setInterval> | null>(null)
 
-const isAccountLicenseOrder = computed(() =>
-  String(order.value?.plan_id || '').startsWith('saas-'),
+const isAccountLicenseOrder = computed(() => String(order.value?.plan_id || '').startsWith('saas-'))
+const planSelectionRoute = computed(() =>
+  isAccountLicenseOrder.value ? '/account-plans' : '/plans',
 )
-const planSelectionRoute = computed(() => (isAccountLicenseOrder.value ? '/account-plans' : '/plans'))
 
 const qrImageUrl = computed(() => {
   if (!qrCode.value) return ''
@@ -325,6 +325,21 @@ onBeforeUnmount(() => {
   stopPolling()
 })
 
+function applyOrderSnapshot(nextOrder: CheckoutOrder) {
+  order.value = nextOrder
+  qrCode.value = nextOrder.qr_code ? String(nextOrder.qr_code) : ''
+  if (nextOrder.status !== 'paid') return
+  void authStore.refreshSession(true)
+  if (String(nextOrder.plan_id || '').trim() === 'plan_enterprise') {
+    try {
+      sessionStorage.setItem('modstore_svip_ladder_reveal', '1')
+    } catch {
+      /* ignore */
+    }
+  }
+  stopPolling()
+}
+
 async function fetchOrder() {
   try {
     error.value = ''
@@ -341,28 +356,7 @@ async function fetchOrder() {
       }
       return
     }
-    const o = res as CheckoutOrder
-    order.value = o
-
-    if (o.qr_code) {
-      qrCode.value = String(o.qr_code)
-    } else {
-      qrCode.value = ''
-    }
-
-    if (o.status === 'paid') {
-      void authStore.refreshSession(true)
-      if (String(o.plan_id || '').trim() === 'plan_enterprise') {
-        try {
-          sessionStorage.setItem('modstore_svip_ladder_reveal', '1')
-        } catch {
-          /* ignore */
-        }
-      }
-    }
-    if (o.status === 'paid') {
-      stopPolling()
-    }
+    applyOrderSnapshot(res as CheckoutOrder)
   } catch (err) {
     const msg = (err as Error)?.message || '加载订单信息失败，请重试'
     if (order.value) {
@@ -388,27 +382,7 @@ async function pollOrder() {
       return
     }
     transientWarning.value = ''
-    const o = res as CheckoutOrder
-    order.value = o
-    if (o.qr_code) {
-      qrCode.value = String(o.qr_code)
-    } else {
-      qrCode.value = ''
-    }
-
-    if (o.status === 'paid') {
-      void authStore.refreshSession(true)
-      if (String(o.plan_id || '').trim() === 'plan_enterprise') {
-        try {
-          sessionStorage.setItem('modstore_svip_ladder_reveal', '1')
-        } catch {
-          /* ignore */
-        }
-      }
-    }
-    if (o.status === 'paid') {
-      stopPolling()
-    }
+    applyOrderSnapshot(res as CheckoutOrder)
   } catch (err) {
     //  polling errors，不显示错误，避免干扰用户
     console.error('Polling error:', err)

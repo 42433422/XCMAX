@@ -33,7 +33,6 @@
         class="plan-card"
         :class="[
           'plan-card',
-          isRequested(plan) ? 'plan-card--requested' : '',
           isCurrent(plan) ? 'plan-card--current' : '',
           isBelowMyPlan(plan) ? 'plan-card--lower-tier' : '',
           `plan-card--${tierOf(plan)}`,
@@ -81,7 +80,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { ApiError } from '@/infrastructure/http/client'
@@ -89,7 +88,6 @@ import { ApiError } from '@/infrastructure/http/client'
 const SVIP_LADDER_REVEAL_KEY = 'modstore_svip_ladder_reveal'
 
 const router = useRouter()
-const route = useRoute()
 const authStore = useAuthStore()
 const plans = ref([])
 const myPlan = ref(null)
@@ -98,10 +96,6 @@ const checkingOut = ref(false)
 const checkingOutId = ref('')
 const errorMsg = ref('')
 const errorBannerRef = ref(null)
-const requestedPlanId = computed(() => {
-  const raw = Array.isArray(route.query.plan) ? route.query.plan[0] : route.query.plan
-  return String(raw || '').trim()
-})
 
 const svipEntryRevealOverlay = ref(false)
 const hideSvipLadderTiers = ref(false)
@@ -235,10 +229,6 @@ function isCurrent(plan) {
   return plan?.id && myPlan.value?.id && plan.id === myPlan.value.id
 }
 
-function isRequested(plan) {
-  return Boolean(requestedPlanId.value && plan?.id === requestedPlanId.value)
-}
-
 async function loadPlans() {
   try {
     const [planRes, myPlanRes] = await Promise.all([
@@ -352,11 +342,6 @@ async function handleBuy(plan) {
   background: rgba(255, 255, 255, 0.02);
   transition: all 0.2s ease-out;
   --tier-color: rgba(255, 255, 255, 0.4);
-}
-
-.plan-card--requested {
-  outline: 2px solid rgba(255, 255, 255, 0.9);
-  outline-offset: 4px;
 }
 
 .plan-card::before {
