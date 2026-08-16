@@ -91,10 +91,7 @@ def test_registration_payment_and_expiry_drive_desktop_access(client):
             .count()
             == 1
         )
-        assert (
-            session.query(User).filter(User.id == user_id).one().account_state
-            == "active"
-        )
+        assert session.query(User).filter(User.id == user_id).one().account_state == "active"
 
     after = client.get("/api/auth/me", headers=headers)
     assert after.status_code == 200, after.text
@@ -137,11 +134,7 @@ def test_vip_membership_never_grants_desktop_access_and_coexists_with_license(cl
     strategy = PlanFulfilStrategy()
 
     with sf() as session:
-        membership = (
-            session.query(PlanTemplate)
-            .filter(PlanTemplate.id == "plan_enterprise")
-            .one()
-        )
+        membership = session.query(PlanTemplate).filter(PlanTemplate.id == "plan_enterprise").one()
         ctx = FulfilContext(
             out_trade_no=f"MEMBERSHIP-{uuid.uuid4().hex[:12]}",
             user_id=user_id,
@@ -165,9 +158,7 @@ def test_vip_membership_never_grants_desktop_access_and_coexists_with_license(cl
     assert after_membership["active_plan_id"] == ""
 
     with sf() as session:
-        license_plan = (
-            session.query(PlanTemplate).filter(PlanTemplate.id == "saas-trial-30").one()
-        )
+        license_plan = session.query(PlanTemplate).filter(PlanTemplate.id == "saas-trial-30").one()
         ctx = FulfilContext(
             out_trade_no=f"LICENSE-{uuid.uuid4().hex[:12]}",
             user_id=user_id,
@@ -229,12 +220,8 @@ def test_account_license_catalog_is_separate_from_usage_memberships(client):
         "saas-permanent-ultra": 999999.0,
     }
     by_id = {row["id"]: row for row in licenses}
-    assert {
-        plan_id: by_id[plan_id]["name"] for plan_id in expected_titles
-    } == expected_titles
-    assert {
-        plan_id: by_id[plan_id]["price"] for plan_id in expected_prices
-    } == expected_prices
+    assert {plan_id: by_id[plan_id]["name"] for plan_id in expected_titles} == expected_titles
+    assert {plan_id: by_id[plan_id]["price"] for plan_id in expected_prices} == expected_prices
 
     public_copy = " ".join(
         " ".join(
