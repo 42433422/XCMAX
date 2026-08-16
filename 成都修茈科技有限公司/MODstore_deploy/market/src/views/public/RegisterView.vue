@@ -4,20 +4,20 @@
       <div class="success-mark" aria-hidden="true">✓</div>
       <p class="source-badge">XCAGI 桌面端</p>
       <h2>账号注册成功</h2>
-      <p class="success-lead">网页与 XCAGI 桌面端共用这一个修茈市场账号。</p>
+      <p class="success-lead">你的账号可同时登录网页和 XCAGI 桌面端。</p>
       <div class="next-step">
         <strong>下一步</strong>
-        <span>选择 XCAGI 账号授权并完成支付。授权生效后，再回到桌面端登录。</span>
+        <span>选择适合的 XCAGI 方案并完成支付，随后回到桌面端登录即可。</span>
       </div>
       <router-link :to="registrationNext" class="btn btn-primary-solid btn-block success-action">
-        选择账号授权
+        选择 XCAGI 方案
       </router-link>
     </div>
     <div v-else class="auth-card">
       <p v-if="desktopRegistration" class="source-badge">来自 XCAGI 桌面端</p>
-      <h2>注册修茈市场账号</h2>
+      <h2>创建 XCAGI 账号</h2>
       <p v-if="desktopRegistration" class="auth-intro">
-        桌面端与网页端共用同一账号。在这里完成一次注册即可。
+        一个账号即可在网页和 XCAGI 桌面端使用。
       </p>
       <div v-if="err" class="flash flash-err">{{ err }}</div>
       <form @submit.prevent="doRegister">
@@ -27,7 +27,7 @@
         </div>
         <div class="form-group">
           <label>邮箱（选填）</label>
-          <p class="field-hint">不填写也可注册；填写后可用于邮箱登录、验证和密码找回。</p>
+          <p class="field-hint">可不填；填写后可使用邮箱登录和找回密码。</p>
           <input
             class="input"
             type="email"
@@ -67,7 +67,7 @@
         </button>
       </form>
       <p v-if="desktopRegistration" class="auth-footer">
-        已有账号？请关闭本页，回到 XCAGI 桌面端登录
+        已有账号？回到 XCAGI 桌面端登录
       </p>
       <p v-else class="auth-footer">
         已有账号？<router-link :to="loginRoute" class="link">登录</router-link>

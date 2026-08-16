@@ -25,7 +25,7 @@ export function loginEyebrow(sku: LoginSku): string {
 export function loginSubtitle(sku: LoginSku): string {
   switch (normalizeLoginSku(sku)) {
     case 'enterprise':
-      return '使用修茈市场账号登录';
+      return '使用 XCAGI 账号登录';
     case 'personal':
       return '本地账号登录';
     default:
@@ -34,13 +34,13 @@ export function loginSubtitle(sku: LoginSku): string {
 }
 
 export function loginUsernamePlaceholder(sku: LoginSku): string {
-  return normalizeLoginSku(sku) === 'enterprise' ? '市场账号' : '账号';
+  return normalizeLoginSku(sku) === 'enterprise' ? 'XCAGI 账号' : '账号';
 }
 
 export function loginAccountInputPlaceholder(sku: LoginSku): string {
   switch (normalizeLoginSku(sku)) {
     case 'enterprise':
-      return '市场账号或邮箱';
+      return 'XCAGI 账号或邮箱';
     case 'personal':
       return '本地账号';
     default:
@@ -96,11 +96,11 @@ export const LOGIN_HELP_SECTIONS: LoginHelpSection[] = [
     items: ['确认本机后端已启动（桌面默认 17500 端口）', '检查数据库是否运行'],
   },
   {
-    title: '市场同步',
-    items: ['登录后可在设置同步市场 Token', '502 多为市场服务不可达'],
+    title: '账号同步',
+    items: ['登录后会自动同步账号信息', '同步失败时可稍后重新登录'],
   },
   {
     title: '注册与购买',
-    items: ['企业版请使用登录页的“注册账号”入口', '购买完成后返回桌面重新登录以同步账号权益'],
+    items: ['企业版请使用登录页的“注册账号”入口', '完成支付后返回桌面重新登录即可使用'],
   },
 ];

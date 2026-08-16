@@ -1,27 +1,23 @@
 <template>
   <div class="checkout-page">
     <div class="checkout-container">
-      <h1 class="checkout-title">支付订单</h1>
+      <h1 class="checkout-title">完成支付</h1>
 
       <div v-if="paidConfirmedFlash" role="status" class="confirm-banner confirm-banner--success">
-        <strong>支付已确认到账</strong>
-        <span class="confirm-banner-sub"
-          >系统已向支付宝核对，订单为「已支付」，权益将按套餐生效。</span
-        >
+        <strong>付款已确认</strong>
+        <span class="confirm-banner-sub">支付状态已更新，你购买的方案已经生效。</span>
       </div>
       <div
         v-else-if="burstSyncActive && order?.status === 'pending'"
         role="status"
         class="confirm-banner confirm-banner--sync"
       >
-        <strong>正在向支付宝确认付款结果…</strong>
-        <span class="confirm-banner-sub">请稍候，通常几秒内完成；请勿关闭本页。</span>
+        <strong>正在确认支付结果…</strong>
+        <span class="confirm-banner-sub">通常几秒即可完成，请稍候。</span>
       </div>
       <div v-else-if="order?.status === 'pending'" class="confirm-banner confirm-banner--hint">
-        <strong>到账结果以本页「状态」为准</strong>
-        <span class="confirm-banner-sub">
-          付款成功后系统会自动向支付宝核对；若仍为「待支付」，请点击下方「刷新订单状态」主动对账。
-        </span>
+        <strong>等待付款</strong>
+        <span class="confirm-banner-sub"> 完成支付宝付款后返回本页，状态会自动更新。 </span>
       </div>
 
       <div v-if="loading" class="loading">
@@ -69,10 +65,9 @@
 
         <!-- 浏览器跳转支付（alipay page/wap）：无二维码，需提示回站后自动对账 / 手动刷新 -->
         <div v-if="order.status === 'pending' && !qrCode" class="pending-redirect-section">
-          <p class="pending-redirect-title">等待支付结果同步</p>
+          <p class="pending-redirect-title">等待付款</p>
           <p class="pending-redirect-desc">
-            当前订单为<strong>浏览器跳转支付宝</strong>付款：下单后会跳转到支付宝页面；支付完成后请返回本站，状态会自动更新。
-            若您已付款仍显示「待支付」，请点击下方按钮<strong>向支付宝主动对账</strong>（通常立即生效）。
+            请在支付宝完成付款后返回本页，我们会自动更新结果。如果状态没有变化，请点击“更新支付结果”。
           </p>
           <div class="pending-redirect-actions">
             <button
@@ -81,7 +76,7 @@
               :disabled="refreshing"
               @click="manualRefreshStatus"
             >
-              {{ refreshing ? '正在向支付宝核对…' : '刷新订单状态（对账）' }}
+              {{ refreshing ? '正在更新…' : '更新支付结果' }}
             </button>
             <button
               type="button"
@@ -89,17 +84,17 @@
               :disabled="refreshing"
               @click="retryPayment"
             >
-              重新发起支付
+              重新打开支付宝
             </button>
           </div>
           <p class="pending-redirect-foot">
-            长时间未更新请核对是否登录了同一账号；仍异常请保存订单号联系客服。
+            长时间未更新？请确认当前登录账号与下单账号一致，或凭订单号联系客服。
           </p>
         </div>
 
         <!-- 二维码展示（precreate 模式） -->
         <div v-if="qrCode && order.status === 'pending'" class="qr-section">
-          <p class="qr-hint">打开支付宝扫码支付</p>
+          <p class="qr-hint">使用支付宝扫码付款</p>
           <div class="qr-wrapper">
             <img
               v-if="qrImageUrl"
@@ -115,7 +110,7 @@
             <button type="button" class="btn-retry" @click="retryPayment">重新支付</button>
             <router-link :to="planSelectionRoute" class="link-muted">或返回方案页</router-link>
           </p>
-          <p v-else class="qr-waiting">等待支付中，支付成功后自动跳转...</p>
+          <p v-else class="qr-waiting">付款完成后会自动更新</p>
         </div>
 
         <!-- 已支付成功 -->
@@ -123,16 +118,16 @@
           <div class="success-icon">✓</div>
           <h2 class="success-title">支付成功</h2>
           <p v-if="isAccountLicenseOrder" class="success-desc">
-            资金已入账，XCAGI 账号授权和桌面端访问资格已同步生效。
+            你的 XCAGI 方案已生效，现在可以回到桌面端登录使用。
           </p>
-          <p v-else class="success-desc">资金已入账，订单对应的会员额度或商品权益已同步生效。</p>
+          <p v-else class="success-desc">你购买的内容已到账，可以开始使用。</p>
           <p v-if="isAccountLicenseOrder" class="success-desc success-desc--desktop">
-            如果你从 XCAGI 桌面端前来，现在请回到桌面端，使用刚注册的账号登录。
+            现在可以回到 XCAGI 桌面端，使用这个账号登录。
           </p>
           <div class="success-actions">
-            <router-link to="/wallet" class="btn btn-primary">查看钱包资金账户</router-link>
+            <router-link to="/wallet" class="btn btn-primary">查看订单与账户</router-link>
             <router-link :to="{ name: 'wallet-purchased' }" class="btn btn-ghost"
-              >已购资产</router-link
+              >查看已购内容</router-link
             >
             <router-link :to="planSelectionRoute" class="btn btn-ghost">继续选购</router-link>
           </div>

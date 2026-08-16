@@ -46,20 +46,21 @@ describe('marketAccount – normalizePastedAuthorization', () => {
 })
 
 describe('marketAccount – formatMarketServiceError', () => {
-  it('maps 500 with generic message to Chinese hint', () => {
+  it('maps 500 with generic message to a safe retry hint', () => {
     const msg = formatMarketServiceError(500, 'Internal Server Error', 'http://example.com')
-    expect(msg).toContain('500')
-    expect(msg).toContain('XCAGI_MARKET_BASE_URL')
+    expect(msg).toBe('服务暂时不可用，请稍后重试；如果问题持续，请联系管理员。')
+    expect(msg).not.toContain('example.com')
   })
 
   it('maps 500 with specific message', () => {
     const msg = formatMarketServiceError(500, 'Database connection failed', 'http://example.com')
-    expect(msg).toContain('Database connection failed')
+    expect(msg).not.toContain('Database connection failed')
+    expect(msg).toContain('稍后重试')
   })
 
-  it('maps 401 to bind hint', () => {
+  it('maps 401 to a new-login hint', () => {
     const msg = formatMarketServiceError(401, 'Unauthorized')
-    expect(msg).toContain('市场账号')
+    expect(msg).toBe('登录状态已失效，请重新登录。')
   })
 
   it('maps 429 to rate limit hint', () => {
@@ -67,14 +68,14 @@ describe('marketAccount – formatMarketServiceError', () => {
     expect(msg).toContain('频繁')
   })
 
-  it('includes default market URL hint when no base provided', () => {
+  it('never exposes deployment configuration when no base is provided', () => {
     const msg = formatMarketServiceError(500, '', '')
-    expect(msg).toContain('XCAGI_MARKET_BASE_URL')
+    expect(msg).not.toContain('XCAGI_MARKET_BASE_URL')
   })
 
-  it('returns raw message for other status codes', () => {
+  it('uses a fixed message for bad requests', () => {
     const msg = formatMarketServiceError(400, 'Bad request')
-    expect(msg).toBe('Bad request')
+    expect(msg).toBe('请求未完成，请检查输入后重试。')
   })
 
   it('returns HTTP status for unknown errors without message', () => {
@@ -184,7 +185,8 @@ describe('marketAccount – fetchMarketAccountOverview', () => {
     } as Response)
     const data = await fetchMarketAccountOverview('tok')
     expect(data.degraded).toBe(true)
-    expect(data.sync_warning).toContain('Timeout')
+    expect(data.sync_warning).toBe('部分账号信息暂时无法同步，请稍后重试。')
+    expect(data.sync_warning).not.toContain('Timeout')
   })
 })
 

@@ -29,15 +29,17 @@ describe('marketAccount', () => {
     expect(normalizePastedAuthorization('')).toBe('')
   })
 
-  it('formatMarketServiceError maps 500 to Chinese hint', () => {
+  it('formatMarketServiceError maps 500 to a safe retry hint', () => {
     const msg = formatMarketServiceError(500, 'Internal Server Error', 'http://example.com')
-    expect(msg).toContain('市场服务')
-    expect(msg).toContain('500')
+    expect(msg).toBe('服务暂时不可用，请稍后重试；如果问题持续，请联系管理员。')
+    expect(msg).not.toContain('Internal Server Error')
+    expect(msg).not.toContain('http://example.com')
   })
 
-  it('formatMarketServiceError maps 401 to bind hint', () => {
+  it('formatMarketServiceError maps 401 to a login hint', () => {
     const msg = formatMarketServiceError(401, 'Unauthorized')
-    expect(msg).toContain('市场')
+    expect(msg).toBe('登录状态已失效，请重新登录。')
+    expect(msg).not.toContain('Unauthorized')
   })
 
   it('degradedMarketAccountOverview returns degraded shape', () => {
