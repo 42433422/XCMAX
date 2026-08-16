@@ -203,13 +203,13 @@ describe('low coverage view business branches', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('待支付')
-    expect(wrapper.text()).toContain('浏览器跳转支付宝')
+    expect(wrapper.text()).toContain('如果状态没有变化，请点击“更新支付结果”')
     await (wrapper.vm as unknown as { manualRefreshStatus: () => Promise<void> }).manualRefreshStatus()
     await flushPromises()
     expect(lowMocks.refreshSession).toHaveBeenCalledWith(true)
     expect(sessionStorage.getItem('modstore_svip_ladder_reveal')).toBe('1')
     expect(wrapper.text()).toContain('支付成功')
-    expect(wrapper.text()).toContain('会员额度或商品权益')
+    expect(wrapper.text()).toContain('你购买的内容已到账，可以开始使用')
     expect(wrapper.text()).not.toContain('桌面端访问资格已同步生效')
 
     await vi.advanceTimersByTimeAsync(14_000)
@@ -221,7 +221,7 @@ describe('low coverage view business branches', () => {
     await flushPromises()
     expect(lowMocks.api.paymentCancelOrder).toHaveBeenCalledWith('ord_1')
     expect(lowMocks.router.replace).toHaveBeenCalledWith({ name: 'checkout', params: { orderId: 'ord_2' } })
-    expect(wrapper.text()).toContain('打开支付宝扫码支付')
+    expect(wrapper.text()).toContain('使用支付宝扫码付款')
     wrapper.unmount()
   })
 
@@ -236,8 +236,9 @@ describe('low coverage view business branches', () => {
     const wrapper = mount(PaymentCheckoutView, { global: globalOptions })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('XCAGI 账号授权和桌面端访问资格已同步生效')
+    expect(wrapper.text()).toContain('你的 XCAGI 方案已生效')
     expect(wrapper.text()).toContain('回到桌面端')
+    expect(wrapper.text()).not.toContain('账号授权')
     expect((wrapper.vm as unknown as { planSelectionRoute: string }).planSelectionRoute).toBe(
       '/account-plans',
     )

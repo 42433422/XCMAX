@@ -10,6 +10,17 @@ export interface Suggestion {
   actionRoute?: string
 }
 
+const SILENT_SUGGESTION_ROUTES = new Set([
+  'login',
+  'login-email',
+  'forgot-password',
+  'register',
+  'plans',
+  'account-plans',
+  'checkout',
+  'recharge',
+])
+
 /** Phase 3 主动建议规则引擎 */
 export function useAgentSuggestions() {
   const route = useRoute()
@@ -28,6 +39,11 @@ export function useAgentSuggestions() {
 
   function checkSuggestions() {
     if (!agentStore.consentGiven) return
+
+    if (SILENT_SUGGESTION_ROUTES.has(String(route.name || ''))) {
+      currentSuggestion.value = null
+      return
+    }
 
     // 规则 1：余额低于 10 元提醒充值
     const balance = walletStore.balance

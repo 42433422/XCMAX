@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from modstore_server.account_license_plans import ACCOUNT_LICENSE_PLANS
 from modstore_server.account_lifecycle import mark_pending_payment
@@ -90,7 +91,10 @@ def test_registration_payment_and_expiry_drive_desktop_access(client):
             .count()
             == 1
         )
-        assert session.query(User).filter(User.id == user_id).one().account_state == "active"
+        assert (
+            session.query(User).filter(User.id == user_id).one().account_state
+            == "active"
+        )
 
     after = client.get("/api/auth/me", headers=headers)
     assert after.status_code == 200, after.text
@@ -133,7 +137,11 @@ def test_vip_membership_never_grants_desktop_access_and_coexists_with_license(cl
     strategy = PlanFulfilStrategy()
 
     with sf() as session:
-        membership = session.query(PlanTemplate).filter(PlanTemplate.id == "plan_enterprise").one()
+        membership = (
+            session.query(PlanTemplate)
+            .filter(PlanTemplate.id == "plan_enterprise")
+            .one()
+        )
         ctx = FulfilContext(
             out_trade_no=f"MEMBERSHIP-{uuid.uuid4().hex[:12]}",
             user_id=user_id,
@@ -157,7 +165,9 @@ def test_vip_membership_never_grants_desktop_access_and_coexists_with_license(cl
     assert after_membership["active_plan_id"] == ""
 
     with sf() as session:
-        license_plan = session.query(PlanTemplate).filter(PlanTemplate.id == "saas-trial-30").one()
+        license_plan = (
+            session.query(PlanTemplate).filter(PlanTemplate.id == "saas-trial-30").one()
+        )
         ctx = FulfilContext(
             out_trade_no=f"LICENSE-{uuid.uuid4().hex[:12]}",
             user_id=user_id,
@@ -203,3 +213,71 @@ def test_account_license_catalog_is_separate_from_usage_memberships(client):
     assert membership_ids.isdisjoint(license_ids)
     assert "plan_enterprise" in membership_ids
     assert "saas-trial-30" in license_ids
+
+    expected_titles = {
+        "saas-trial-30": "30 天全功能体验",
+        "saas-permanent-starter": "企业启航版",
+        "saas-permanent-growth": "企业成长版",
+        "saas-permanent-max": "集团协同版",
+        "saas-permanent-ultra": "企业旗舰版",
+    }
+    expected_prices = {
+        "saas-trial-30": 99.0,
+        "saas-permanent-starter": 49999.0,
+        "saas-permanent-growth": 99999.0,
+        "saas-permanent-max": 499999.0,
+        "saas-permanent-ultra": 999999.0,
+    }
+    by_id = {row["id"]: row for row in licenses}
+    assert {
+        plan_id: by_id[plan_id]["name"] for plan_id in expected_titles
+    } == expected_titles
+    assert {
+        plan_id: by_id[plan_id]["price"] for plan_id in expected_prices
+    } == expected_prices
+
+    public_copy = " ".join(
+        " ".join(
+            [
+                str(row.get("name") or ""),
+                str(row.get("description") or ""),
+                str(row.get("badge") or ""),
+                *[str(feature) for feature in row.get("features") or []],
+            ]
+        )
+        for row in licenses
+    )
+    for prohibited in (
+        "VIP / SVIP",
+        "不代替账号授权",
+        "桌面端账号授权",
+        "永久账号授权",
+        "永久授权 ·",
+    ):
+        assert prohibited not in public_copy
+
+
+def test_java_plan_copy_migration_matches_public_catalog():
+    migration = (
+        Path(__file__).resolve().parent.parent
+        / "java_payment_service"
+        / "src"
+        / "main"
+        / "resources"
+        / "db"
+        / "migration"
+        / "V15__refresh_xcagi_account_plan_copy.sql"
+    ).read_text(encoding="utf-8")
+
+    for plan_id, title in (
+        ("saas-trial-30", "30 天全功能体验"),
+        ("saas-permanent-starter", "企业启航版"),
+        ("saas-permanent-growth", "企业成长版"),
+        ("saas-permanent-max", "集团协同版"),
+        ("saas-permanent-ultra", "企业旗舰版"),
+    ):
+        assert plan_id in migration
+        assert title in migration
+    assert "ON CONFLICT (id) DO UPDATE" in migration
+    assert "永久授权 ·" not in migration
+    assert "VIP / SVIP" not in migration

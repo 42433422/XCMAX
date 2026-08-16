@@ -187,6 +187,21 @@ describe('small composable and agent skill coverage', () => {
     mockRoute.fullPath = '/wallet'
     await nextTick()
     expect(suggestions.currentSuggestion.value?.id).toBe('low-balance')
+
+    mockRoute.name = 'account-plans'
+    mockRoute.fullPath = '/account-plans'
+    await nextTick()
+    expect(suggestions.currentSuggestion.value).toBeNull()
+
+    mockRoute.name = 'checkout'
+    mockRoute.fullPath = '/checkout/order-1'
+    await nextTick()
+    expect(suggestions.currentSuggestion.value).toBeNull()
+
+    mockRoute.name = 'wallet'
+    mockRoute.fullPath = '/wallet?tab=overview'
+    await nextTick()
+    expect(suggestions.currentSuggestion.value?.id).toBe('low-balance')
     suggestions.dismiss('low-balance')
     expect(suggestions.currentSuggestion.value).toBeNull()
 
