@@ -131,7 +131,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mac-ota-enterprise-${{ github.event.inputs.version }}
-          path: FHD/release/xcagi-${{ github.event.inputs.version }}/enterprise
+          path: FHD/release/xcagi-v${{ github.event.inputs.version }}/enterprise
           if-no-files-found: error
           retention-days: 7
 
