@@ -70,8 +70,8 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/public/AccountLicensePlansView.vue'),
     meta: {
       layout: 'public',
-      pageTitle: 'XCAGI 账号授权',
-      pageDescription: '选择 XCAGI 桌面端试用或永久账号授权。',
+      pageTitle: 'XCAGI 使用方案',
+      pageDescription: '选择 30 天体验或适合企业的永久方案。',
     },
   },
   { path: '/workflow', name: 'workflow', component: () => import('../views/WorkflowView.vue'), meta: { auth: true } },

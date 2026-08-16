@@ -123,8 +123,8 @@ describe('RegisterView', () => {
 
     const wrapper = mount(RegisterView, { global: { plugins: [router] } })
     expect(wrapper.text()).toContain('来自 XCAGI 桌面端')
-    expect(wrapper.text()).toContain('桌面端与网页端共用同一账号')
-    expect(wrapper.text()).toContain('请关闭本页，回到 XCAGI 桌面端登录')
+    expect(wrapper.text()).toContain('一个账号即可在网页和 XCAGI 桌面端使用')
+    expect(wrapper.text()).toContain('已有账号？回到 XCAGI 桌面端登录')
     expect(wrapper.find('a[href="/login"]').exists()).toBe(false)
     await wrapper.find('input[autocomplete="username"]').setValue('desktop-user')
     await wrapper.find('input[type="email"]').setValue('desktop@example.test')
@@ -135,8 +135,9 @@ describe('RegisterView', () => {
 
     expect(registerMock).toHaveBeenCalledWith('desktop-user', 'secret123', 'desktop@example.test', '654321')
     expect(wrapper.text()).toContain('账号注册成功')
-    expect(wrapper.text()).toContain('选择 XCAGI 账号授权并完成支付')
-    expect(wrapper.text()).toContain('授权生效后，再回到桌面端登录')
+    expect(wrapper.text()).toContain('选择适合的 XCAGI 方案并完成支付')
+    expect(wrapper.text()).toContain('随后回到桌面端登录即可')
+    expect(wrapper.text()).not.toContain('账号授权')
     expect(replaceSpy).not.toHaveBeenCalled()
   })
 })

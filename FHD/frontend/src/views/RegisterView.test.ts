@@ -275,7 +275,7 @@ describe('RegisterView.vue', () => {
 
   it('renders enterprise hint when sku is enterprise', async () => {
     const { wrapper } = await mountView({}, 'enterprise')
-    expect(wrapper.find('.register-hint').text()).toContain('修茈市场')
+    expect(wrapper.find('.register-hint').text()).toContain('创建 XCAGI 账号')
   })
 
   it('renders generic hint when sku is not enterprise', async () => {
@@ -405,7 +405,8 @@ describe('RegisterView.vue', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.text()).toContain('账号注册成功')
-    expect(wrapper.text()).toContain('选择账号授权并支付')
+    expect(wrapper.text()).toContain('选择 XCAGI 方案')
+    expect(wrapper.text()).not.toContain('账号授权')
     expect(wrapper.find('.register-purchase-link').attributes('href')).toContain('/market/account-plans')
     expect(replaceSpy).not.toHaveBeenCalled()
   })

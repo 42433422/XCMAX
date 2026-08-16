@@ -114,34 +114,28 @@ export async function syncMarketAccount(authorization: string): Promise<MarketAc
   return j.data;
 }
 
-const DEFAULT_MARKET_BASE_HINT =
-  'https://xiu-ci.com/market（公网）或 http://119.27.178.147:9999（直连）';
-
-/** 将 HTTP 状态与英文 statusText 转为可展示的中文说明（含 XCAGI_MARKET_BASE_URL 提示）。 */
+/** 将底层服务错误收敛为可执行、不会泄露部署细节的用户提示。 */
 export function formatMarketServiceError(
   status: number,
-  rawMessage: string,
-  marketBaseUrl = '',
+  _rawMessage: string,
+  _marketBaseUrl = '',
 ): string {
-  const base = (marketBaseUrl || '').trim();
-  const baseHint = base
-    ? `请检查服务器 .env 中 XCAGI_MARKET_BASE_URL=${base}`
-    : `请检查服务器 .env 中 XCAGI_MARKET_BASE_URL（示例：${DEFAULT_MARKET_BASE_HINT}）`;
-  const msg = (rawMessage || '').trim();
-  const genericEn = /^internal server error$/i.test(msg) || !msg;
-  if (status >= 500) {
-    const detail = genericEn ? '' : msg;
-    return detail
-      ? `市场服务返回 ${status}：${detail}。${baseHint}`
-      : `市场服务返回 ${status}（服务器内部错误）。${baseHint}`;
+  if (status < 400) {
+    return '部分账号信息暂时无法同步，请稍后重试。';
   }
-  if (status === 401 || /凭证无效|未授权|unauthorized/i.test(msg)) {
-    return '尚未绑定修茈市场账号；请重新登录本软件以自动同步市场会话。';
+  if (status >= 500) {
+    return '服务暂时不可用，请稍后重试；如果问题持续，请联系管理员。';
+  }
+  if (status === 401) {
+    return '登录状态已失效，请重新登录。';
   }
   if (status === 429) {
-    return '市场请求过于频繁，请稍后再试。';
+    return '请求过于频繁，请稍后再试。';
   }
-  return msg || `市场请求失败（HTTP ${status}）`;
+  if (status === 400) {
+    return '请求未完成，请检查输入后重试。';
+  }
+  return `请求未完成（错误 ${status}），请稍后重试。`;
 }
 
 export function degradedMarketAccountOverview(

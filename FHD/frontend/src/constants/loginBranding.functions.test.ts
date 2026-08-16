@@ -70,7 +70,7 @@ describe('loginBranding', () => {
 
   describe('loginSubtitle', () => {
     it('returns enterprise subtitle', () => {
-      expect(loginSubtitle('enterprise')).toBe('使用修茈市场账号登录')
+      expect(loginSubtitle('enterprise')).toBe('使用 XCAGI 账号登录')
     })
 
     it('returns personal subtitle', () => {
@@ -83,8 +83,8 @@ describe('loginBranding', () => {
   })
 
   describe('loginUsernamePlaceholder', () => {
-    it('returns 市场账号 for enterprise', () => {
-      expect(loginUsernamePlaceholder('enterprise')).toBe('市场账号')
+    it('returns XCAGI 账号 for enterprise', () => {
+      expect(loginUsernamePlaceholder('enterprise')).toBe('XCAGI 账号')
     })
 
     it('returns 账号 for non-enterprise', () => {
@@ -95,7 +95,7 @@ describe('loginBranding', () => {
 
   describe('loginAccountInputPlaceholder', () => {
     it('returns enterprise placeholder', () => {
-      expect(loginAccountInputPlaceholder('enterprise')).toBe('市场账号或邮箱')
+      expect(loginAccountInputPlaceholder('enterprise')).toBe('XCAGI 账号或邮箱')
     })
 
     it('returns personal placeholder', () => {
