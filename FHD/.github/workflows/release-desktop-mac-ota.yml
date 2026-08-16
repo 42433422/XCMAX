@@ -136,7 +136,7 @@ jobs:
           retention-days: 7
 
       - name: Publish macOS OTA artifacts to CVM (official + stable)
-        timeout-minutes: 45
+        timeout-minutes: 180
         working-directory: .
         env:
           DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
@@ -153,18 +153,24 @@ jobs:
           src_dir="${GITHUB_WORKSPACE}/FHD/release/xcagi-v${v}/${sku}"
           test -d "$src_dir"
           test -f "$src_dir/latest-mac.yml"
-          find "$src_dir" -maxdepth 1 -type f -name '*.zip' -print -quit | grep -q .
+          dmg_name="$(basename "$(find "$src_dir" -maxdepth 1 -name '*.dmg' -print -quit)")"
+          zip_name="$(basename "$(find "$src_dir" -maxdepth 1 -name '*.zip' -print -quit)")"
+          test -n "${dmg_name}" && test -n "${zip_name}"
 
+          # The GitHub-runner -> CVM link is slow and flaky (observed ~40-150 KB/s
+          # with intermittent drops), so a 45-minute timeout and 3 blind retries is
+          # not enough: each retry restarted every file from zero. This step now
+          # (1) gives rsync a 3-hour Actions budget, (2) keeps partial files
+          # (--partial + --delay-updates) so interrupted transfers RESUME instead
+          # of restarting, and (3) verifies remote file sizes after each pass
+          # before declaring success.
           publish_mac_payload() {
             local dest="$1"
-            # macOS runners do not provide GNU `timeout`. The step already has
-            # a 45-minute Actions timeout and rsync enforces a 120-second I/O
-            # timeout, so invoking rsync directly is both bounded and portable.
-            # Retry transient GitHub-runner -> CVM network failures up to 3x.
             local attempt=1
-            while [ "${attempt}" -le 3 ]; do
+            while [ "${attempt}" -le 12 ]; do
+              echo "[publish] attempt ${attempt}: ${dest}"
               if ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p '$dest'" && \
-                 rsync -avz --delay-updates --timeout=120 \
+                 rsync -avz --partial --delay-updates --timeout=120 \
                    --include='*.dmg' \
                    --include='*.dmg.blockmap' \
                    --include='*.zip' \
@@ -172,9 +178,15 @@ jobs:
                    --include='latest-mac.yml' \
                    --exclude='*' \
                    -e "ssh ${SSH_OPTS[*]}" "$src_dir/" "root@${HOST}:$dest/"; then
-                return 0
+                if ssh "${SSH_OPTS[@]}" "root@${HOST}" \
+                    "test -f '$dest/latest-mac.yml' && test -s '$dest/${dmg_name}' && test -s '$dest/${zip_name}'"; then
+                  echo "[publish] verified: ${dest}"
+                  return 0
+                fi
+                echo "[publish] rsync exited 0 but remote size check failed for ${dest}, re-checking..." >&2
+              else
+                echo "[publish] attempt ${attempt} incomplete for ${dest}, resuming in 30s..." >&2
               fi
-              echo "[publish] attempt ${attempt} failed for ${dest}, retrying in 30s..." >&2
               attempt=$((attempt + 1))
               sleep 30
             done
