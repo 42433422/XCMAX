@@ -18,51 +18,51 @@
   "plans": [
     {
       "id": "saas-trial-30",
-      "title": "30 天试用",
-      "description": "99 元体验账户，含 100 元额度，30 天到期后冻结，可购买永久授权继续使用。",
+      "title": "30 天全功能体验",
+      "description": "用 30 天完整体验 XCAGI，包含 100 元 AI 使用额度。",
       "amount_cents": 9900,
       "quota_cents": 10000,
       "duration_days": 30,
       "license_type": "trial",
       "expires_behavior": "freeze",
       "account_tier": "normal",
-      "badge": "试用"
+      "badge": "体验"
     },
     {
       "id": "saas-permanent-starter",
-      "title": "永久授权 · 1–5 万",
-      "description": "适用于预算 1–5 万的企业：1 个行业 Mod 定制 + 四部门 AI 员工配置 + 1-3 天上线交付 + 1 年免费维护，一次购买永久使用。",
+      "title": "企业启航版",
+      "description": "适合首次部署 XCAGI 的企业，包含 1 个行业 Mod、四部门 AI 员工配置、上线交付与 1 年维护。",
       "amount_cents": 4999900,
       "license_type": "permanent",
       "account_tier": "normal",
-      "badge": "永久"
+      "badge": "永久使用"
     },
     {
       "id": "saas-permanent-growth",
-      "title": "永久授权 · 5–10 万",
-      "description": "适用于预算 5–10 万的企业：多行业 Mod 组合 + 现有系统对接（金蝶/用友/ERP）+ 专属 AI 员工训练 + 2 年免费维护，一次购买永久使用。",
+      "title": "企业成长版",
+      "description": "适合需要多业务协同或现有系统对接的企业，包含专属 AI 员工训练与 2 年维护。",
       "amount_cents": 9999900,
       "license_type": "permanent",
       "account_tier": "pro",
-      "badge": "永久"
+      "badge": "永久使用"
     },
     {
       "id": "saas-permanent-max",
-      "title": "永久授权 · 10–50 万",
-      "description": "适用于预算 10–50 万的集团企业：集团多组织架构 + 3 年免费维护，一次购买永久使用。",
+      "title": "集团协同版",
+      "description": "适合多组织、多分支机构协同的集团企业，包含集团架构支持与 3 年维护。",
       "amount_cents": 49999900,
       "license_type": "permanent",
       "account_tier": "max",
-      "badge": "永久"
+      "badge": "永久使用"
     },
     {
       "id": "saas-permanent-ultra",
-      "title": "永久授权 · 50–100 万",
-      "description": "适用于预算 50–100 万的集团企业：源码托管 + 二开授权 + SLA 99.9% 保障，一次购买永久使用。",
+      "title": "企业旗舰版",
+      "description": "适合需要深度定制与长期技术保障的企业，包含源码托管、二次开发授权与 99.9% SLA。",
       "amount_cents": 99999900,
       "license_type": "permanent",
       "account_tier": "ultra",
-      "badge": "永久"
+      "badge": "永久使用"
     }
   ]
 }

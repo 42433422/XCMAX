@@ -21,26 +21,26 @@ public final class AccountLicensePlans {
             List<String> features) {}
 
     public static final List<Metadata> PLANS = List.of(
-            new Metadata("saas-trial-30", "30 天试用", new BigDecimal("99.00"), "trial", 30,
-                    "normal", "试用", 10000,
-                    "99 元体验账户，含 100 元额度，30 天到期后冻结，可购买永久授权继续使用。",
-                    List.of("XCAGI 桌面端账号授权", "30 天全功能体验", "含 100 元 AI 额度")),
-            new Metadata("saas-permanent-starter", "永久授权 · 1–5 万", new BigDecimal("49999.00"),
-                    "permanent", null, "normal", "永久", 0,
-                    "1 个行业 Mod 定制 + 四部门 AI 员工配置 + 1-3 天上线交付 + 1 年免费维护。",
-                    List.of("XCAGI 永久账号授权", "1 个行业 Mod 定制", "1 年免费维护")),
-            new Metadata("saas-permanent-growth", "永久授权 · 5–10 万", new BigDecimal("99999.00"),
-                    "permanent", null, "pro", "永久", 0,
-                    "多行业 Mod 组合 + 现有系统对接 + 专属 AI 员工训练 + 2 年免费维护。",
-                    List.of("XCAGI 永久账号授权", "多行业 Mod 与系统对接", "2 年免费维护")),
-            new Metadata("saas-permanent-max", "永久授权 · 10–50 万", new BigDecimal("499999.00"),
-                    "permanent", null, "max", "永久", 0,
-                    "集团多组织架构 + 3 年免费维护，一次购买永久使用。",
-                    List.of("XCAGI 永久账号授权", "集团多组织架构", "3 年免费维护")),
-            new Metadata("saas-permanent-ultra", "永久授权 · 50–100 万", new BigDecimal("999999.00"),
-                    "permanent", null, "ultra", "永久", 0,
-                    "源码托管 + 二开授权 + SLA 99.9% 保障，一次购买永久使用。",
-                    List.of("XCAGI 永久账号授权", "源码托管与二开授权", "SLA 99.9% 保障"))
+            new Metadata("saas-trial-30", "30 天全功能体验", new BigDecimal("99.00"), "trial", 30,
+                    "normal", "体验", 10000,
+                    "用 30 天完整体验 XCAGI，包含 100 元 AI 使用额度。",
+                    List.of("XCAGI 桌面端完整功能", "30 天使用期", "100 元 AI 使用额度")),
+            new Metadata("saas-permanent-starter", "企业启航版", new BigDecimal("49999.00"),
+                    "permanent", null, "normal", "永久使用", 0,
+                    "适合首次部署 XCAGI 的企业，包含 1 个行业 Mod、四部门 AI 员工配置、上线交付与 1 年维护。",
+                    List.of("永久使用 XCAGI", "1 个行业 Mod", "四部门 AI 员工配置", "1 年维护")),
+            new Metadata("saas-permanent-growth", "企业成长版", new BigDecimal("99999.00"),
+                    "permanent", null, "pro", "永久使用", 0,
+                    "适合需要多业务协同或现有系统对接的企业，包含专属 AI 员工训练与 2 年维护。",
+                    List.of("永久使用 XCAGI", "多行业 Mod 组合", "现有系统对接", "专属 AI 员工训练", "2 年维护")),
+            new Metadata("saas-permanent-max", "集团协同版", new BigDecimal("499999.00"),
+                    "permanent", null, "max", "永久使用", 0,
+                    "适合多组织、多分支机构协同的集团企业，包含集团架构支持与 3 年维护。",
+                    List.of("永久使用 XCAGI", "集团多组织架构", "多分支协同", "3 年维护")),
+            new Metadata("saas-permanent-ultra", "企业旗舰版", new BigDecimal("999999.00"),
+                    "permanent", null, "ultra", "永久使用", 0,
+                    "适合需要深度定制与长期技术保障的企业，包含源码托管、二次开发授权与 99.9% SLA。",
+                    List.of("永久使用 XCAGI", "源码托管", "二次开发授权", "99.9% SLA"))
     );
 
     private static final Map<String, Metadata> BY_ID = PLANS.stream()

@@ -40,9 +40,12 @@ REGISTER_VIEW = ROOT / "frontend" / "src" / "views" / "RegisterView.vue"
 ADMIN_VIEW = ROOT / "frontend" / "src" / "views" / "AdminEntitlementsView.vue"
 AUTH_API = ROOT / "frontend" / "src" / "api" / "auth.ts"
 MARKET_ROOT = ROOT.parent / "成都修茈科技有限公司" / "MODstore_deploy"
+OFFICIAL_SITE = ROOT.parent / "成都修茈科技有限公司" / "index.html"
 ACCOUNT_LICENSE_VIEW = (
     MARKET_ROOT / "market" / "src" / "views" / "public" / "AccountLicensePlansView.vue"
 )
+MARKET_REGISTER_VIEW = MARKET_ROOT / "market" / "src" / "views" / "public" / "RegisterView.vue"
+PAYMENT_CHECKOUT_VIEW = MARKET_ROOT / "market" / "src" / "views" / "PaymentCheckoutView.vue"
 ACCOUNT_LICENSE_CATALOG = MARKET_ROOT / "modstore_server" / "account_license_plans.py"
 BUDGET_FRONT_FILES = (ADMIN_VIEW, AUTH_API)
 
@@ -54,6 +57,20 @@ EXPECTED_BUDGET_TO_TIER = {
     "50–100 万": "ultra",
 }
 LEGACY_BUDGETS = ("5 万以内", "5–20 万", "20–50 万", "50 万以上")
+EXPECTED_PUBLIC_PLAN_TITLES = {
+    "saas-trial-30": "30 天全功能体验",
+    "saas-permanent-starter": "企业启航版",
+    "saas-permanent-growth": "企业成长版",
+    "saas-permanent-max": "集团协同版",
+    "saas-permanent-ultra": "企业旗舰版",
+}
+PROHIBITED_PUBLIC_COPY = (
+    "VIP / SVIP",
+    "不代替账号授权",
+    "账号授权生效",
+    "注册只完成账号开立",
+    "永久授权 ·",
+)
 EXPECTED_PRESET_IDS = ("通用", "涂料", "考勤", "批发", "电商", "餐饮", "物流", "管理端")
 REGISTERABLE_INDUSTRIES = tuple(i for i in EXPECTED_PRESET_IDS if i != "管理端")
 REQUIRED_DOC_SNIPPETS = (
@@ -151,6 +168,12 @@ def _check_budgets(errors: list[str]) -> None:
 
     plans_raw = cfg.get("plans") or []
     plans = [p for p in plans_raw if isinstance(p, dict)]
+    for plan_id, expected_title in EXPECTED_PUBLIC_PLAN_TITLES.items():
+        plan = _plan_by_id(plans, plan_id)
+        if not plan:
+            errors.append(f"saas_plans.json 缺少 {plan_id}")
+        elif plan.get("title") != expected_title:
+            errors.append(f"{plan_id}.title={plan.get('title')!r}，应为 {expected_title!r}")
     trial = _plan_by_id(plans, "saas-trial-30")
     if not trial:
         errors.append("saas_plans.json 缺少 saas-trial-30")
@@ -168,7 +191,7 @@ def _check_budgets(errors: list[str]) -> None:
                 errors.append(f"saas-trial-30.{key}={trial.get(key)!r}，应为 {expected!r}")
 
     budget_pattern = re.compile("|".join(re.escape(b) for b in EXPECTED_BUDGETS))
-    for path in (*BUDGET_FRONT_FILES, ACCOUNT_LICENSE_CATALOG):
+    for path in BUDGET_FRONT_FILES:
         text = _read_text(path, errors)
         if not text:
             continue
@@ -181,14 +204,56 @@ def _check_budgets(errors: list[str]) -> None:
             errors.append(f"{_display_path(path)} 仍包含旧档位: {leaked_legacy}")
 
     registration_text = _read_text(REGISTER_VIEW, errors)
-    for snippet in ("raw.purchase_url", "选择 XCAGI 账号授权并支付"):
+    for snippet in ("raw.purchase_url", "选择 XCAGI 方案"):
         if snippet not in registration_text:
             errors.append(f"{REGISTER_VIEW.relative_to(ROOT)} 缺少授权购买交接: {snippet}")
 
     license_view_text = _read_text(ACCOUNT_LICENSE_VIEW, errors)
-    for snippet in ("paymentAccountPlans", "VIP / SVIP 是 AI 额度会员"):
+    for snippet in (
+        "paymentAccountPlans",
+        "选择适合你的方案",
+        "完成支付后即可在 XCAGI 桌面端登录使用",
+    ):
         if snippet not in license_view_text:
-            errors.append(f"{_display_path(ACCOUNT_LICENSE_VIEW)} 缺少账号授权契约: {snippet}")
+            errors.append(f"{_display_path(ACCOUNT_LICENSE_VIEW)} 缺少购买流程契约: {snippet}")
+
+    public_texts = {
+        ACCOUNT_LICENSE_VIEW: license_view_text,
+        MARKET_REGISTER_VIEW: _read_text(MARKET_REGISTER_VIEW, errors),
+        PAYMENT_CHECKOUT_VIEW: _read_text(PAYMENT_CHECKOUT_VIEW, errors),
+        ACCOUNT_LICENSE_CATALOG: _read_text(ACCOUNT_LICENSE_CATALOG, errors),
+    }
+    for path, text in public_texts.items():
+        for prohibited in PROHIBITED_PUBLIC_COPY:
+            if prohibited in text:
+                errors.append(f"{_display_path(path)} 包含内部解释词: {prohibited}")
+
+    market_registration_text = public_texts[MARKET_REGISTER_VIEW]
+    for snippet in ("创建 XCAGI 账号", "选择适合的 XCAGI 方案并完成支付"):
+        if snippet not in market_registration_text:
+            errors.append(f"{_display_path(MARKET_REGISTER_VIEW)} 缺少注册流程文案: {snippet}")
+
+    checkout_text = public_texts[PAYMENT_CHECKOUT_VIEW]
+    for snippet in ("完成支付", "更新支付结果", "你的 XCAGI 方案已生效"):
+        if snippet not in checkout_text:
+            errors.append(f"{_display_path(PAYMENT_CHECKOUT_VIEW)} 缺少支付流程文案: {snippet}")
+
+    catalog_text = public_texts[ACCOUNT_LICENSE_CATALOG]
+    for title in EXPECTED_PUBLIC_PLAN_TITLES.values():
+        if title not in catalog_text:
+            errors.append(f"{_display_path(ACCOUNT_LICENSE_CATALOG)} 缺少方案名称: {title}")
+
+    official_site_text = _read_text(OFFICIAL_SITE, errors)
+    for snippet in (
+        "99 元体验 30 天",
+        "查看企业启航方案",
+        "查看企业成长方案",
+        "查看集团协同方案",
+        "查看企业旗舰方案",
+        "/market/account-plans?plan=saas-permanent-starter",
+    ):
+        if snippet not in official_site_text:
+            errors.append(f"{_display_path(OFFICIAL_SITE)} 缺少统一方案文案: {snippet}")
 
 
 def _check_industries(errors: list[str]) -> None:

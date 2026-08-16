@@ -1,14 +1,14 @@
 <template>
   <main class="license-page">
     <header class="license-header">
-      <p class="eyebrow">XCAGI 账号授权</p>
-      <h1>选择桌面端账号授权</h1>
-      <p>这里购买的是 XCAGI 桌面端使用权。VIP / SVIP 是 AI 额度会员，不代替账号授权。</p>
+      <p class="eyebrow">XCAGI 使用方案</p>
+      <h1>选择适合你的方案</h1>
+      <p>先体验，再决定；也可以直接选择永久方案。完成支付后即可在 XCAGI 桌面端登录使用。</p>
     </header>
 
     <div v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</div>
-    <div v-if="loading" class="loading">正在加载授权方案…</div>
-    <section v-else class="license-grid" aria-label="XCAGI 账号授权方案">
+    <div v-if="loading" class="loading">正在加载方案…</div>
+    <section v-else class="license-grid" aria-label="XCAGI 使用方案">
       <article
         v-for="plan in plans"
         :key="plan.id"
@@ -16,7 +16,7 @@
         :class="{ 'license-card--requested': requestedPlanId === plan.id }"
       >
         <div class="card-top">
-          <span class="badge">{{ plan.badge || '账号授权' }}</span>
+          <span class="badge">{{ plan.badge || '使用方案' }}</span>
           <h2>{{ plan.name }}</h2>
           <p class="price"><small>¥</small>{{ Number(plan.price || 0).toLocaleString('zh-CN') }}</p>
           <p class="description">{{ plan.description }}</p>
@@ -25,14 +25,14 @@
           <li v-for="feature in plan.features || []" :key="feature">{{ feature }}</li>
         </ul>
         <button :disabled="checkingOut" @click="buy(plan)">
-          {{ checkingOutId === plan.id ? '正在创建订单…' : (plan.license_type === 'trial' ? '开通 30 天试用' : '购买永久授权') }}
+          {{ checkingOutId === plan.id ? '正在前往支付…' : (plan.license_type === 'trial' ? '立即体验' : '选择此方案') }}
         </button>
       </article>
     </section>
 
     <aside class="flow-note">
-      <strong>购买后怎么做？</strong>
-      <span>支付成功 → 账号授权生效 → 回到 XCAGI 桌面端 → 使用刚注册的账号登录。</span>
+      <strong>接下来</strong>
+      <span>选择方案后将前往支付宝。支付完成后，回到 XCAGI 桌面端登录即可。</span>
     </aside>
   </main>
 </template>
@@ -58,8 +58,8 @@ onMounted(async () => {
   try {
     const result = await api.paymentAccountPlans()
     plans.value = Array.isArray(result?.plans) ? result.plans : []
-  } catch (error) {
-    errorMessage.value = `加载账号授权失败：${(error as Error)?.message || String(error)}`
+  } catch {
+    errorMessage.value = '暂时无法加载方案，请稍后重试。'
   } finally {
     loading.value = false
   }
@@ -77,16 +77,16 @@ async function buy(plan: AccountLicensePlan) {
   try {
     const result = await api.paymentCheckout({ plan_id: plan.id })
     if (!result.ok) {
-      errorMessage.value = result.message || '创建账号授权订单失败'
+      errorMessage.value = '暂时无法前往支付，请稍后重试。'
     } else if (result.type === 'page' || result.type === 'wap') {
       window.location.assign(String(result.redirect_url))
     } else if (result.type === 'precreate' || result.type === 'wechat_native') {
       await router.push({ name: 'checkout', params: { orderId: result.order_id } })
     } else {
-      errorMessage.value = '支付服务返回了未知类型，请稍后重试'
+      errorMessage.value = '暂时无法打开支付页面，请稍后重试。'
     }
-  } catch (error) {
-    errorMessage.value = `创建账号授权订单失败：${(error as Error)?.message || String(error)}`
+  } catch {
+    errorMessage.value = '暂时无法前往支付，请稍后重试。'
   } finally {
     checkingOut.value = false
     checkingOutId.value = ''
