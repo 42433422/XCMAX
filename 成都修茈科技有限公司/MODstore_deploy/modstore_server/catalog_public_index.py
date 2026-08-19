@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Iterable, Set
+from typing import Any, Dict, Set
 
 from modstore_server.catalog_store import load_store, norm_pkg_id, norm_version
 from modstore_server.duty_roster import all_planned_employee_ids, is_planned_duty_employee_pack

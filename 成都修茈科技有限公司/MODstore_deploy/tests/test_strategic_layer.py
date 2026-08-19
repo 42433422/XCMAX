@@ -22,7 +22,6 @@ from modstore_server.strategic_layer import (
     AutonomyEvaluator,
     CouncilMeetingService,
     DecidedBy,
-    DecisionAlreadyDecidedError,
     DecisionLifecycleError,
     DecisionProposer,
     DecisionStatus,

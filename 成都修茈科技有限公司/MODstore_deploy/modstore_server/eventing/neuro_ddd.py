@@ -28,13 +28,12 @@ from __future__ import annotations
 import logging
 import os
 import time
-from collections import defaultdict
 from collections.abc import Callable
 from enum import IntEnum
 from typing import Any, Optional
 
 from .bus import InMemoryNeuroBus
-from .events import DomainEvent, new_event
+from .events import DomainEvent
 
 logger = logging.getLogger(__name__)
 
@@ -187,12 +186,13 @@ class NeuroDDDBus:
         self._tier_handlers: list[_TierHandler] = []
         self._wildcard_handlers: list[_TierHandler] = []
 
-        env_flag = lambda name, default=False: os.environ.get(name, "").strip().lower() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }
+        def env_flag(name, default=False):
+            return os.environ.get(name, "").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
 
         self._dedup = (
             _Deduplicator()

@@ -8,7 +8,6 @@ report vibe_code ESkill counts from the workflow attachment.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List
 
 
 def _emp_dir(pack_dir: Path) -> Path:

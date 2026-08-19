@@ -93,7 +93,6 @@ def test_knowledge_search_validator_requires_query(tmp_path, monkeypatch):
     from modstore_server.models import (
         User,
         Workflow,
-        WorkflowEdge,
         WorkflowNode,
         get_session_factory,
     )

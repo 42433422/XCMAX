@@ -7,21 +7,17 @@ import os
 import re
 import time
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
 
-from fastapi import Depends, Header, HTTPException, Request
-from pydantic import BaseModel, Field
+from fastapi import Header, HTTPException, Request
 
 from modstore_server.api.deps import get_current_user, require_admin
 from modstore_server.duty_roster import employee_partition_meta
 from modstore_server.models import (
     CatalogItem,
     Entitlement,
-    LandingContactSubmission,
     User,
-    VerificationCode,
-    get_session_factory,
 )
 
 _get_current_user = get_current_user
@@ -210,7 +206,7 @@ def _grant_catalog_entitlement(
         .filter(
             Entitlement.user_id == user_id,
             Entitlement.catalog_id == item.id,
-            Entitlement.is_active == True,
+            Entitlement.is_active.is_(True),
         )
         .first()
     )

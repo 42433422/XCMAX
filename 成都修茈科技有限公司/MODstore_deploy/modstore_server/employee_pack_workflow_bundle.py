@@ -20,9 +20,13 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
+
+from modstore_server.employee_pack_workflow_refs import (
+    collect_referenced_ids as _collect_referenced_ids,
+)
 
 from modstore_server.models import (
     ScriptWorkflow,
@@ -158,58 +162,6 @@ def export_script_workflow_bundle(db: Session, script_workflow_id: int) -> Optio
 
 
 # ── Embed into manifest ───────────────────────────────────────────────────────
-
-
-def _collect_referenced_ids(
-    manifest: Dict[str, Any],
-) -> Tuple[List[int], List[int]]:
-    """Walk a manifest and return (workflow_ids, script_workflow_ids)."""
-    wf_ids: List[int] = []
-    swf_ids: List[int] = []
-
-    def _add_wf(val: Any) -> None:
-        try:
-            v = int(val or 0)
-        except (TypeError, ValueError):
-            v = 0
-        if v > 0 and v not in wf_ids:
-            wf_ids.append(v)
-
-    def _add_swf(val: Any) -> None:
-        try:
-            v = int(val or 0)
-        except (TypeError, ValueError):
-            v = 0
-        if v > 0 and v not in swf_ids:
-            swf_ids.append(v)
-
-    for row in manifest.get("workflow_employees") or []:
-        if isinstance(row, dict):
-            _add_wf(row.get("workflow_id") or row.get("workflowId"))
-
-    v2 = (
-        manifest.get("employee_config_v2")
-        if isinstance(manifest.get("employee_config_v2"), dict)
-        else {}
-    )
-    collab = v2.get("collaboration") if isinstance(v2.get("collaboration"), dict) else {}
-
-    wf_entry = collab.get("workflow") if isinstance(collab.get("workflow"), dict) else {}
-    _add_wf(wf_entry.get("workflow_id") or wf_entry.get("workflowId"))
-
-    for entry in collab.get("script_workflows") or []:
-        if isinstance(entry, dict):
-            _add_swf(entry.get("script_workflow_id") or entry.get("workflow_id"))
-
-    swa = manifest.get("script_workflow_attachment")
-    if isinstance(swa, dict):
-        _add_swf(swa.get("script_workflow_id") or swa.get("workflow_id"))
-
-    wa = manifest.get("workflow_attachment")
-    if isinstance(wa, dict):
-        _add_wf(wa.get("workflow_id"))
-
-    return wf_ids, swf_ids
 
 
 def embed_workflow_bundles_in_manifest(

@@ -13,7 +13,7 @@ import logging
 import os
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -264,7 +264,7 @@ def prepend_changelog(project_root: str, entry: str) -> bool:
 
     unreleased_marker = "## Unreleased"
     if unreleased_marker in content:
-        parts = content.split(unrecovered_marker, 1)
+        parts = content.split(unreleased_marker, 1)
         new_content = parts[0] + unreleased_marker + "\n\n" + entry + parts[1]
     else:
         first_h2 = content.find("\n## ")

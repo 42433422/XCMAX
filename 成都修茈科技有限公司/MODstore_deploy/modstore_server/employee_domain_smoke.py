@@ -7,7 +7,7 @@ import json
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 def _load_run_from_pack(pack_dir: Path, pack_id: str):

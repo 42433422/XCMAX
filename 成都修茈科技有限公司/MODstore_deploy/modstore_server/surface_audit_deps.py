@@ -20,71 +20,19 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
+from modstore_server.surface_audit_paths import (
+    auto_start_enabled as _auto_start_enabled,
+    fhd_root as _fhd_root,
+    is_local_url as _is_local_url,
+    modstore_deploy_root as _modstore_deploy_root,
+    repo_root as _repo_root,
+    runtime_state_root as _runtime_state_root,
+)
+
 logger = logging.getLogger(__name__)
-
-
-def _auto_start_enabled() -> bool:
-    return (os.environ.get("MODSTORE_SURFACE_AUDIT_AUTO_START", "1") or "").strip().lower() not in (
-        "0",
-        "false",
-        "no",
-        "off",
-    )
-
-
-def _repo_root() -> Path:
-    mono = (os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
-    if mono:
-        return Path(mono).expanduser().resolve()
-    repo = (os.environ.get("MODSTORE_REPO_ROOT") or "").strip()
-    if repo:
-        p = Path(repo).expanduser().resolve()
-        if (p / "FHD").is_dir():
-            return p
-    try:
-        from modstore_server.daily_digest import _repo_root as root_fn
-
-        return Path(root_fn())
-    except Exception:
-        return Path(__file__).resolve().parents[3]
-
-
-def _fhd_root() -> Path:
-    candidates: List[Path] = []
-    explicit = (
-        os.environ.get("XCAGI_FHD_ROOT") or os.environ.get("MODSTORE_DAILY_FHD_ROOT") or ""
-    ).strip()
-    if explicit:
-        candidates.append(Path(explicit).expanduser().resolve())
-    mono = (os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
-    if mono:
-        candidates.append(Path(mono).expanduser().resolve() / "FHD")
-    root = _repo_root()
-    candidates.extend((root / "FHD", root.parent / "FHD"))
-    for fhd in candidates:
-        if fhd.is_dir():
-            return fhd
-    return candidates[0] if candidates else root / "FHD"
-
-
-def _modstore_deploy_root() -> Path:
-    root = _repo_root()
-    deploy = root / "成都修茈科技有限公司" / "MODstore_deploy"
-    if deploy.is_dir():
-        return deploy
-    local = root / "MODstore_deploy"
-    return local if local.is_dir() else deploy
-
-
-def _runtime_state_root() -> Optional[Path]:
-    for key in ("MODSTORE_RUNTIME_STATE_ROOT", "MODSTORE_RUNTIME_DIR"):
-        raw = (os.environ.get(key) or "").strip()
-        if raw:
-            return Path(raw).expanduser().resolve()
-    return None
 
 
 def _pids_dir() -> Path:
@@ -157,11 +105,6 @@ def _wait_fhd_api_health(url: str, *, label: str, tries: int = 45) -> bool:
         time.sleep(1)
     logger.warning("surface audit deps: %s not ready after %ds (%s)", label, tries, url)
     return False
-
-
-def _is_local_url(url: str) -> bool:
-    host = (urlparse(url).hostname or "").lower()
-    return host in ("127.0.0.1", "localhost", "::1", "0.0.0.0")
 
 
 def _spawn(

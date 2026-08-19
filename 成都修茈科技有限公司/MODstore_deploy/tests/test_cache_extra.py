@@ -6,7 +6,6 @@ import os
 import time
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from modstore_server.cache import delete, get_json, set_json
 

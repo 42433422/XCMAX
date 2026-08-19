@@ -12,7 +12,6 @@ from fastapi.testclient import TestClient
 def client(monkeypatch):
     monkeypatch.setenv("XCAGI_MARKET_INTERNAL_API_KEY", "unit-test-internal-key")
     monkeypatch.setenv("MODSTORE_JWT_SECRET", "unit-test-jwt-secret-at-least-32-chars-long")
-    from fastapi.testclient import TestClient
 
     from modstore_server.app import app
 

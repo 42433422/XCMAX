@@ -105,4 +105,3 @@ class AiModelPrice(Base):
 
 # CatalogComplaint 已迁至 ``modstore_server.models``（主 Base.metadata / init_db）。
 # 与 ``modstore_server.models`` 共用一张表与同一 Declarative Base，避免双 metadata 下同表冲突。
-from modstore_server.models import LlmModelCapability  # noqa: E402

@@ -26,10 +26,12 @@ import argparse
 import json
 import os
 import sys
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from modstore_server.website_runner_models import ActionResult, DispatchReport
 
 try:
     import httpx
@@ -56,43 +58,6 @@ ACTION_ESCALATE_EVENTS = {
     "on_quality_fail",
     "incident.unknown",
 }
-
-
-# =====================================================================
-# 数据模型
-# =====================================================================
-
-
-@dataclass
-class ActionResult:
-    """单个 action 执行结果。"""
-
-    action: str  # "redeploy" / "escalate"
-    ok: bool
-    detail: str = ""
-    # GitHub API 响应摘录（成功时含 run_id / issue_number）
-    response_excerpt: str = ""
-    duration_ms: float = 0.0
-
-
-@dataclass
-class DispatchReport:
-    """一次 dispatch_incident 调用的整体报告。"""
-
-    event_id: int
-    event_type: str
-    scope: str
-    action: str  # "redeploy" / "escalate" / "skip"
-    ok: bool
-    reason: str = ""
-    results: list[ActionResult] = field(default_factory=list)
-    dispatched_count_before: int = 0
-    dispatched_count_after: int = 0
-    started_at: str = ""
-    finished_at: str = ""
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
 
 
 # =====================================================================

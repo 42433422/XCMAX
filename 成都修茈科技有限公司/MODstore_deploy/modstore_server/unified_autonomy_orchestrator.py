@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import json
-import os
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from modstore_server.models import IncidentEvent, get_session_factory
 

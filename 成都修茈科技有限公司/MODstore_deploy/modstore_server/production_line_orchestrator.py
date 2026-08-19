@@ -1,3 +1,4 @@
+# ruff: noqa: E402, F401, I001
 """制作线全流程编排器：双线 10+10 与五线映射共存。
 
 ═══ 五线（v9.1 产品视图）═══
@@ -19,9 +20,7 @@
 
 红线操作通过审批门控：AI 执行 → 等待审批 → 审批通过后继续。
 """
-
 from __future__ import annotations
-
 import logging
 import os
 from dataclasses import dataclass, field, replace
@@ -29,60 +28,14 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Literal, Optional, Sequence
 
 StepExecutor = Literal["fhd", "craft", "ci", "external", "admin"]
-
 logger = logging.getLogger(__name__)
-
-
-class StepStatus(str, Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    AWAITING_APPROVAL = "awaiting_approval"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    SKIPPED = "skipped"
-
-
-class ApprovalGate(str, Enum):
-    NONE = "none"
-    ADMIN = "admin"
-    CI_PASS = "ci_pass"
-    ADMIN_AND_CI = "admin_and_ci"
-
-
-class LineType(str, Enum):
-    PRODUCTION = "production"
-    OPERATIONS = "operations"
-
-
-class FiveLineId(str, Enum):
-    """六线全自动：运营 2 + 制作 3 + 共享归档 1（见 FHD/docs/guides/FIVE_LINE_AUTOMATION.md）。"""
-
-    OPS_ACQUISITION = "ops_acquisition"
-    OPS_PARTNER = "ops_partner"
-    PROD_WEB = "prod_web"
-    PROD_MOD = "prod_mod"
-    PROD_SOFTWARE = "prod_software"
-    SHARED_RETENTION = "shared_retention"
-
-
-@dataclass
-class FlowStep:
-    step_id: str
-    name: str
-    line: LineType
-    description: str
-    employee_ids: List[str]
-    sub_steps: List[str] = field(default_factory=list)
-    approval_gate: ApprovalGate = ApprovalGate.NONE
-    auto_trigger_next: bool = True
-    retry_on_failure: bool = True
-    max_retries: int = 2
-    timeout_seconds: int = 3600
-    cross_line_trigger: Optional[str] = None
-    executor: StepExecutor = "fhd"
-
+from modstore_server.production_line_orchestrator_part01 import (
+    StepStatus as StepStatus,
+    ApprovalGate as ApprovalGate,
+    LineType as LineType,
+    FiveLineId as FiveLineId,
+    FlowStep as FlowStep,
+)
 
 PRODUCTION_LINE_STEPS: List[FlowStep] = [
     FlowStep(
@@ -289,7 +242,6 @@ PRODUCTION_LINE_STEPS: List[FlowStep] = [
         cross_line_trigger="O7",
     ),
 ]
-
 OPERATIONS_LINE_STEPS: List[FlowStep] = [
     FlowStep(
         step_id="O1",
@@ -395,10 +347,7 @@ OPERATIONS_LINE_STEPS: List[FlowStep] = [
         line=LineType.OPERATIONS,
         description="QA验收 + 交付物冒烟 + 客户签收",
         employee_ids=["delivery-receipt-officer", "test-qa-runner"],
-        sub_steps=[
-            "ACCEPTANCE_GOVERNANCE + deliverable_smoke",
-            "客户UAT签收(待补齐)",
-        ],
+        sub_steps=["ACCEPTANCE_GOVERNANCE + deliverable_smoke", "客户UAT签收(待补齐)"],
         approval_gate=ApprovalGate.CI_PASS,
     ),
     FlowStep(
@@ -428,7 +377,6 @@ OPERATIONS_LINE_STEPS: List[FlowStep] = [
         approval_gate=ApprovalGate.ADMIN,
     ),
 ]
-
 PARTNER_LINE_STEPS: List[FlowStep] = [
     FlowStep(
         step_id="B1",
@@ -476,7 +424,6 @@ PARTNER_LINE_STEPS: List[FlowStep] = [
         approval_gate=ApprovalGate.ADMIN,
     ),
 ]
-
 _STEP_EXECUTOR_MAP: Dict[str, StepExecutor] = {
     "P1": "external",
     "P2": "craft",
@@ -504,680 +451,23 @@ _STEP_EXECUTOR_MAP: Dict[str, StepExecutor] = {
     "B4": "external",
     "B5": "admin",
 }
-
 _STATIC_SKIP_STEP_IDS = frozenset({"P4", "O1", "O3", "O4", "O5", "O6", "O8", "O9", "O10"})
-
-
-def _bind_step_executors(steps: List[FlowStep]) -> List[FlowStep]:
-    return [replace(s, executor=_STEP_EXECUTOR_MAP.get(s.step_id, "fhd")) for s in steps]
-
+from modstore_server.production_line_orchestrator_part02 import (
+    _bind_step_executors as _bind_step_executors,
+)
 
 PRODUCTION_LINE_STEPS = _bind_step_executors(PRODUCTION_LINE_STEPS)
 OPERATIONS_LINE_STEPS = _bind_step_executors(OPERATIONS_LINE_STEPS)
 PARTNER_LINE_STEPS = _bind_step_executors(PARTNER_LINE_STEPS)
 ALL_STEPS: List[FlowStep] = PRODUCTION_LINE_STEPS + OPERATIONS_LINE_STEPS + PARTNER_LINE_STEPS
-
-
-@dataclass
-class StepResult:
-    step_id: str
-    status: StepStatus
-    data: Dict[str, Any] = field(default_factory=dict)
-    error: Optional[str] = None
-    approval_id: Optional[int] = None
-
-
-class ProductionLineOrchestrator:
-    def __init__(self):
-        self._step_results: Dict[str, StepResult] = {}
-        self._callbacks: Dict[str, Callable] = {}
-        self._running = False
-
-    def register_callback(self, event: str, callback: Callable) -> None:
-        self._callbacks[event] = callback
-
-    def _fire(self, event: str, **kwargs) -> Any:
-        cb = self._callbacks.get(event)
-        if cb:
-            return cb(**kwargs)
-        return None
-
-    def get_step(self, step_id: str) -> Optional[FlowStep]:
-        for s in ALL_STEPS:
-            if s.step_id == step_id:
-                return s
-        return None
-
-    def get_step_status(self, step_id: str) -> StepStatus:
-        r = self._step_results.get(step_id)
-        return r.status if r else StepStatus.PENDING
-
-    def get_pipeline_status(self) -> Dict[str, Any]:
-        production_steps = []
-        for s in PRODUCTION_LINE_STEPS:
-            r = self._step_results.get(s.step_id)
-            production_steps.append(
-                {
-                    "step_id": s.step_id,
-                    "name": s.name,
-                    "status": r.status.value if r else "pending",
-                    "executor": s.executor,
-                    "approval_gate": s.approval_gate.value,
-                    "sub_steps": s.sub_steps,
-                    "cross_line_trigger": s.cross_line_trigger,
-                }
-            )
-
-        operations_steps = []
-        for s in OPERATIONS_LINE_STEPS:
-            r = self._step_results.get(s.step_id)
-            operations_steps.append(
-                {
-                    "step_id": s.step_id,
-                    "name": s.name,
-                    "status": r.status.value if r else "pending",
-                    "executor": s.executor,
-                    "approval_gate": s.approval_gate.value,
-                    "sub_steps": s.sub_steps,
-                    "cross_line_trigger": s.cross_line_trigger,
-                }
-            )
-
-        p_completed = sum(1 for s in production_steps if s["status"] == "completed")
-        o_completed = sum(1 for s in operations_steps if s["status"] == "completed")
-
-        return {
-            "production_line": {
-                "total": len(PRODUCTION_LINE_STEPS),
-                "completed": p_completed,
-                "automation_rate": round(p_completed / len(PRODUCTION_LINE_STEPS) * 100, 1),
-                "steps": production_steps,
-            },
-            "operations_line": {
-                "total": len(OPERATIONS_LINE_STEPS),
-                "completed": o_completed,
-                "automation_rate": round(o_completed / len(OPERATIONS_LINE_STEPS) * 100, 1),
-                "steps": operations_steps,
-            },
-            "overall_automation_rate": round(
-                (p_completed + o_completed)
-                / (len(PRODUCTION_LINE_STEPS) + len(OPERATIONS_LINE_STEPS))
-                * 100,
-                1,
-            ),
-        }
-
-    async def run_step(self, step_id: str, context: Optional[Dict[str, Any]] = None) -> StepResult:
-        step = self.get_step(step_id)
-        if not step:
-            return StepResult(step_id=step_id, status=StepStatus.FAILED, error="step not found")
-
-        self._step_results[step_id] = StepResult(step_id=step_id, status=StepStatus.RUNNING)
-        self._fire("step_started", step_id=step_id, step_name=step.name, line=step.line.value)
-
-        try:
-            result_data = await self._execute_step(step, context or {})
-
-            if step.approval_gate != ApprovalGate.NONE:
-                self._step_results[step_id] = StepResult(
-                    step_id=step_id,
-                    status=StepStatus.AWAITING_APPROVAL,
-                    data=result_data,
-                )
-                self._fire(
-                    "step_awaiting_approval",
-                    step_id=step_id,
-                    step_name=step.name,
-                    gate=step.approval_gate.value,
-                )
-                return self._step_results[step_id]
-
-            self._step_results[step_id] = StepResult(
-                step_id=step_id,
-                status=StepStatus.COMPLETED,
-                data=result_data,
-            )
-            self._fire("step_completed", step_id=step_id, step_name=step.name)
-
-            if step.cross_line_trigger:
-                self._fire("cross_line_trigger", from_step=step_id, to_step=step.cross_line_trigger)
-
-            ctx = context or {}
-            if step.auto_trigger_next and not getattr(self, "_release_train_subset", False):
-                next_step = self._get_next_step(step)
-                if next_step:
-                    return await self.run_step(next_step.step_id, context=result_data)
-
-            return self._step_results[step_id]
-
-        except Exception as exc:
-            logger.exception("pipeline step %s failed: %s", step_id, exc)
-            self._step_results[step_id] = StepResult(
-                step_id=step_id,
-                status=StepStatus.FAILED,
-                error=str(exc),
-            )
-            self._fire("step_failed", step_id=step_id, step_name=step.name, error=str(exc))
-
-            if step.retry_on_failure and step.max_retries > 0:
-                return await self._retry_step(step, context, remaining=step.max_retries)
-
-            return self._step_results[step_id]
-
-    def _get_next_step(self, step: FlowStep) -> Optional[FlowStep]:
-        if step.line == LineType.PRODUCTION:
-            steps = PRODUCTION_LINE_STEPS
-        else:
-            steps = OPERATIONS_LINE_STEPS
-        idx = next((i for i, s in enumerate(steps) if s.step_id == step.step_id), -1)
-        if 0 <= idx < len(steps) - 1:
-            return steps[idx + 1]
-        return None
-
-    async def _retry_step(
-        self, step: FlowStep, context: Optional[Dict], remaining: int
-    ) -> StepResult:
-        logger.info("retrying step %s (%s), remaining=%d", step.step_id, step.name, remaining)
-        try:
-            result_data = await self._execute_step(step, context or {})
-            self._step_results[step.step_id] = StepResult(
-                step_id=step.step_id,
-                status=StepStatus.COMPLETED,
-                data=result_data,
-            )
-            self._fire("step_completed", step_id=step.step_id, step_name=step.name)
-            return self._step_results[step.step_id]
-        except Exception as exc:
-            if remaining > 1:
-                return await self._retry_step(step, context, remaining - 1)
-            self._step_results[step.step_id] = StepResult(
-                step_id=step.step_id,
-                status=StepStatus.FAILED,
-                error=str(exc),
-            )
-            self._fire("step_failed", step_id=step.step_id, step_name=step.name, error=str(exc))
-            return self._step_results[step.step_id]
-
-    async def _execute_step(self, step: FlowStep, context: Dict[str, Any]) -> Dict[str, Any]:
-        executor_map = {
-            "P1": self._step_site_and_seo,
-            "P2": self._step_ai_coding,
-            "P3": self._step_auto_test,
-            "P4": self._step_build_and_package,
-            "P5": self._step_auto_release,
-            "P6": self._step_push_updates,
-            "P7": self._step_runtime_monitor,
-            "P8": self._step_auto_purify,
-            "P9": self._step_version_evolution,
-            "P10": self._step_ai_self_driven,
-            "O1": self._step_acquisition,
-            "O2": self._step_crm,
-            "O3": self._step_quotation,
-            "O4": self._step_payment,
-            "O5": self._step_delivery,
-            "O6": self._step_usage,
-            "O7": self._step_feedback,
-            "O8": self._step_acceptance,
-            "O9": self._step_documents,
-            "O10": self._step_reconciliation,
-        }
-        fn = executor_map.get(step.step_id)
-        if fn:
-            return await fn(context)
-        return {"step": step.step_id, "result": {"ok": True, "message": f"{step.name} executed"}}
-
-    async def approve_step(self, step_id: str, admin_user_id: int = 0) -> StepResult:
-        step = self.get_step(step_id)
-        if not step:
-            return StepResult(step_id=step_id, status=StepStatus.FAILED, error="step not found")
-
-        current = self._step_results.get(step_id)
-        if not current or current.status != StepStatus.AWAITING_APPROVAL:
-            return StepResult(
-                step_id=step_id, status=StepStatus.FAILED, error="step not awaiting approval"
-            )
-
-        self._step_results[step_id] = StepResult(
-            step_id=step_id,
-            status=StepStatus.APPROVED,
-            data=current.data,
-            approval_id=admin_user_id or None,
-        )
-        self._fire(
-            "step_approved", step_id=step_id, step_name=step.name, admin_user_id=admin_user_id
-        )
-
-        self._step_results[step_id] = StepResult(
-            step_id=step_id,
-            status=StepStatus.COMPLETED,
-            data=current.data,
-        )
-        self._fire("step_completed", step_id=step_id, step_name=step.name)
-
-        if step.cross_line_trigger:
-            self._fire("cross_line_trigger", from_step=step_id, to_step=step.cross_line_trigger)
-
-        ctx = current.data if isinstance(current.data, dict) else {}
-        if step.auto_trigger_next and not getattr(self, "_release_train_subset", False):
-            next_step = self._get_next_step(step)
-            if next_step:
-                return await self.run_step(next_step.step_id, context=current.data)
-
-        return self._step_results[step_id]
-
-    async def reject_step(
-        self, step_id: str, admin_user_id: int = 0, reason: str = ""
-    ) -> StepResult:
-        current = self._step_results.get(step_id)
-        if not current or current.status != StepStatus.AWAITING_APPROVAL:
-            return StepResult(
-                step_id=step_id, status=StepStatus.FAILED, error="step not awaiting approval"
-            )
-
-        self._step_results[step_id] = StepResult(
-            step_id=step_id,
-            status=StepStatus.REJECTED,
-            data=current.data,
-            error=reason,
-        )
-        self._fire("step_rejected", step_id=step_id, admin_user_id=admin_user_id, reason=reason)
-        return self._step_results[step_id]
-
-    async def run_full_pipeline(
-        self,
-        line: LineType = LineType.PRODUCTION,
-        start_from: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        self._running = True
-        steps = PRODUCTION_LINE_STEPS if line == LineType.PRODUCTION else OPERATIONS_LINE_STEPS
-        self._fire("pipeline_started", line=line.value, start_from=start_from)
-
-        current_context = context or {}
-        if current_context.get("release_train_subset"):
-            self._release_train_subset = True
-        started = start_from is None
-
-        for step in steps:
-            if not started:
-                if step.step_id == start_from:
-                    started = True
-                else:
-                    continue
-            if not self._running:
-                break
-
-            result = await self.run_step(step.step_id, context=current_context)
-            if result.status == StepStatus.AWAITING_APPROVAL:
-                self._fire("pipeline_paused", step_id=step.step_id, reason="awaiting approval")
-                return {
-                    "ok": True,
-                    "paused": True,
-                    "paused_at_step": step.step_id,
-                    "paused_at_name": step.name,
-                    "line": line.value,
-                    "message": f"步骤 {step.step_id}({step.name}) 等待审批后继续",
-                    "pipeline_status": self.get_pipeline_status(),
-                }
-
-            if result.status == StepStatus.FAILED:
-                self._fire("pipeline_failed", step_id=step.step_id, error=result.error)
-                return {
-                    "ok": False,
-                    "failed_at_step": step.step_id,
-                    "failed_at_name": step.name,
-                    "line": line.value,
-                    "error": result.error,
-                    "pipeline_status": self.get_pipeline_status(),
-                }
-
-            current_context = result.data
-
-        self._running = False
-        self._fire("pipeline_completed", line=line.value)
-        return {
-            "ok": True,
-            "paused": False,
-            "line": line.value,
-            "message": f"{'制作线' if line == LineType.PRODUCTION else '运营线'}全流程完成",
-            "pipeline_status": self.get_pipeline_status(),
-        }
-
-    async def run_pipeline_steps(
-        self,
-        step_ids: Sequence[str],
-        *,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        """按给定 step_id 列表顺序执行（用于 digest release_train Phase C 子集）。"""
-        wanted = [str(s).strip().upper() for s in step_ids if str(s).strip()]
-        if not wanted:
-            return {"ok": True, "skipped": True, "reason": "empty step_ids"}
-
-        self._running = True
-        self._fire("pipeline_started", line=LineType.PRODUCTION.value, start_from=wanted[0])
-        current_context = context or {}
-        if current_context.get("release_train_subset"):
-            self._release_train_subset = True
-        executed: List[str] = []
-
-        for step_id in wanted:
-            if not self._running:
-                break
-            result = await self.run_step(step_id, context=current_context)
-            executed.append(step_id)
-            if result.status == StepStatus.AWAITING_APPROVAL:
-                self._fire("pipeline_paused", step_id=step_id, reason="awaiting approval")
-                return {
-                    "ok": True,
-                    "paused": True,
-                    "paused_at_step": step_id,
-                    "executed_steps": executed,
-                    "pipeline_status": self.get_pipeline_status(),
-                }
-            if result.status == StepStatus.FAILED:
-                self._fire("pipeline_failed", step_id=step_id, error=result.error)
-                return {
-                    "ok": False,
-                    "failed_at_step": step_id,
-                    "executed_steps": executed,
-                    "error": result.error,
-                    "pipeline_status": self.get_pipeline_status(),
-                }
-            current_context = result.data
-
-        self._running = False
-        self._fire("pipeline_completed", line=LineType.PRODUCTION.value)
-        return {
-            "ok": True,
-            "paused": False,
-            "executed_steps": executed,
-            "pipeline_status": self.get_pipeline_status(),
-        }
-
-    def stop_pipeline(self) -> None:
-        self._running = False
-        self._fire("pipeline_stopped")
-
-    def _skipped_step_result(
-        self,
-        step: FlowStep,
-        message: str,
-    ) -> Dict[str, Any]:
-        """静态步：由 CI/外部系统/admin 门控完成，编排器不 dispatch 员工。"""
-        return {
-            "step": step.step_id,
-            "result": {
-                "ok": True,
-                "skipped": True,
-                "executor": step.executor,
-                "message": message,
-            },
-        }
-
-    async def _step_site_and_seo(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        from modstore_server.employee_orchestrator import plan_and_dispatch
-
-        out = plan_and_dispatch(
-            "更新官网内容、SEO站点地图、robots.txt、营销站构建；确保所有页面可访问、SEO合规。",
-            context,
-            target_employee_id="site-content-editor",
-            created_by_user_id=0,
-            include_dependencies=True,
-        )
-        return {"step": "P1", "result": out}
-
-    async def _step_ai_coding(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        from modstore_server.craft_executor import (
-            CRAFT_PIPELINE_ORDER,
-            CRAFT_STEP_EMPLOYEE_MAP,
-            dispatch_craft_step,
-        )
-
-        results = {}
-        for employee_id in CRAFT_PIPELINE_ORDER:
-            step_id = next(
-                (s for s, e in CRAFT_STEP_EMPLOYEE_MAP.items() if e == employee_id),
-                employee_id,
-            )
-            try:
-                r = await dispatch_craft_step(step_id, **context)
-                results[employee_id] = r
-            except Exception as exc:
-                logger.warning("craft step %s failed: %s", step_id, exc)
-                results[employee_id] = {"ok": False, "error": str(exc)}
-        fhd_out: Dict[str, Any] = {}
-        try:
-            from modstore_server.employee_orchestrator import plan_and_dispatch
-
-            fhd_out = plan_and_dispatch(
-                context.get("task_description")
-                or "根据运营线反馈或遥测 backlog 修复 FHD app/ 并提交 PR。",
-                context,
-                target_employee_id="fhd-core-maintainer",
-                created_by_user_id=int(context.get("created_by_user_id") or 0),
-                include_dependencies=True,
-            )
-        except Exception as exc:
-            logger.warning("fhd-core-maintainer dispatch failed: %s", exc)
-            fhd_out = {"ok": False, "error": str(exc)}
-        return {"step": "P2", "craft_results": results, "fhd_core": fhd_out}
-
-    async def _step_auto_test(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        from modstore_server.employee_orchestrator import plan_and_dispatch
-
-        out = plan_and_dispatch(
-            "运行全站测试套件：pytest+vitest+Playwright E2E+覆盖率门禁；报告失败项并尝试自动修复。",
-            context,
-            target_employee_id="test-qa-runner",
-            created_by_user_id=0,
-            include_dependencies=True,
-        )
-        return {"step": "P3", "result": out}
-
-    async def _step_build_and_package(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        step = self.get_step("P4")
-        assert step
-        return self._skipped_step_result(step, "构建打包已由 CI 工作流自动完成")
-
-    async def _step_auto_release(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        from modstore_server.employee_orchestrator import plan_and_dispatch
-
-        strategy = os.environ.get("XCAGI_DEPLOY_STRATEGY", "canary").strip().lower()
-        out = plan_and_dispatch(
-            f"执行自动发布：GitHub Release+更新元数据+{strategy}策略部署到K8s；"
-            f"先部署到staging验证，再推进到production。",
-            context,
-            target_employee_id="deploy-release-officer",
-            created_by_user_id=0,
-            include_dependencies=True,
-        )
-        return {"step": "P5", "result": out, "strategy": strategy}
-
-    async def _step_push_updates(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        from modstore_server.employee_orchestrator import plan_and_dispatch
-
-        out = plan_and_dispatch(
-            "推送更新：生成electron-updater元数据+Ed25519签名+Mod索引更新+上传发布SKU。",
-            context,
-            target_employee_id="push-update-context-officer",
-            created_by_user_id=0,
-            include_dependencies=True,
-        )
-        return {"step": "P6", "result": out}
-
-    async def _step_runtime_monitor(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        from modstore_server.employee_orchestrator import plan_and_dispatch
-
-        out = plan_and_dispatch(
-            "运行时监控：采集日志+异常检测+告警摘要+熔断状态检查；发现问题触发自动修复。",
-            context,
-            target_employee_id="log-monitor-incident",
-            created_by_user_id=0,
-            include_dependencies=True,
-        )
-        return {"step": "P7", "result": out}
-
-    async def _step_auto_purify(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        from modstore_server.employee_orchestrator import plan_and_dispatch
-
-        out = plan_and_dispatch(
-            "自动净化：CVE扫描+依赖更新+技术债清理+过期文件清理+安全审计；"
-            "低风险自动修复，高风险提交审批。",
-            context,
-            target_employee_id="daily-orchestrator",
-            created_by_user_id=0,
-            include_dependencies=True,
-        )
-        return {"step": "P8", "result": out}
-
-    async def _step_version_evolution(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        from modstore_server.auto_version_bump import auto_version_bump
-        from modstore_server.integrations.ops_action_handlers import repo_root
-
-        root = str(repo_root())
-        out = auto_version_bump(root)
-        return {"step": "P9", "result": out}
-
-    async def _step_ai_self_driven(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        from modstore_server.telemetry_backlog_loop import run_telemetry_scan
-
-        out = run_telemetry_scan()
-        return {"step": "P10", "result": out}
-
-    async def _step_acquisition(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        step = self.get_step("O1")
-        assert step
-        return self._skipped_step_result(step, "获客引流由官网与 SEO 流水线自动完成")
-
-    async def _step_crm(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        import os
-
-        import httpx
-
-        health: Dict[str, Any] = {}
-        fhd = (os.environ.get("XCAGI_FHD_INTERNAL_URL") or "").rstrip("/")
-        if fhd:
-            try:
-                resp = httpx.get(f"{fhd}/api/operations-line/health", timeout=10.0)
-                if resp.status_code < 400:
-                    payload = resp.json()
-                    health = payload.get("data") if isinstance(payload, dict) else {}
-            except Exception:
-                pass
-        from modstore_server.employee_orchestrator import plan_and_dispatch
-
-        out = plan_and_dispatch(
-            "处理客户需求：AI客服对话+工单分类+需求结构化→待派发队列。",
-            context,
-            target_employee_id="user-customer-service-officer",
-            created_by_user_id=0,
-            include_dependencies=True,
-        )
-        return {"step": "O2", "result": out, "operations_health": health}
-
-    async def _step_quotation(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        step = self.get_step("O3")
-        assert step
-        return self._skipped_step_result(step, "报价与合同在 admin 审批门控后由业务系统完成")
-
-    async def _step_payment(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        step = self.get_step("O4")
-        assert step
-        return self._skipped_step_result(
-            step, "收费由支付系统（PostgreSQL SoT）自动处理，需 admin 审批"
-        )
-
-    async def _step_delivery(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        step = self.get_step("O5")
-        assert step
-        return self._skipped_step_result(step, "软件交付由 CI/CD 与 K8s 发布流水线自动完成")
-
-    async def _step_usage(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        step = self.get_step("O6")
-        assert step
-        return self._skipped_step_result(step, "用户使用由 FHD 运行时与 NeuroBus 自动处理")
-
-    async def _step_feedback(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        from modstore_server.employee_orchestrator import plan_and_dispatch
-
-        out = plan_and_dispatch(
-            "处理用户反馈：审批流+变更请求+OPS_CLOSURE值班派发→交叉驱动制作线。",
-            context,
-            target_employee_id="change-request-auditor",
-            created_by_user_id=0,
-            include_dependencies=True,
-        )
-        return {"step": "O7", "result": out}
-
-    async def _step_acceptance(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        step = self.get_step("O8")
-        assert step
-        return self._skipped_step_result(step, "交付确认由 QA 验收与 CI 门控完成")
-
-    async def _step_documents(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        step = self.get_step("O9")
-        assert step
-        return self._skipped_step_result(step, "单据处理在 admin 审批后由模板引擎完成")
-
-    async def _step_reconciliation(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        import os
-
-        import httpx
-
-        step = self.get_step("O10")
-        assert step
-        fhd = (
-            os.environ.get("XCAGI_FHD_INTERNAL_URL") or os.environ.get("FHD_INTERNAL_URL") or ""
-        ).rstrip("/")
-        auto = (os.environ.get("RECONCILIATION_AUTO_CONFIRM") or "").strip().lower() in (
-            "1",
-            "true",
-            "yes",
-            "on",
-        )
-        if fhd and auto:
-            try:
-                resp = httpx.post(
-                    f"{fhd}/api/operations-line/reconciliation/run",
-                    params={"dry_run": "false"},
-                    timeout=120.0,
-                )
-                if resp.status_code < 400:
-                    payload = (
-                        resp.json()
-                        if resp.headers.get("content-type", "").startswith("application/json")
-                        else {}
-                    )
-                    inner = payload.get("data") if isinstance(payload, dict) else {}
-                    return {
-                        "step": "O10",
-                        "result": inner or payload,
-                        "auto_reconciliation": True,
-                    }
-            except Exception as exc:
-                return {
-                    "step": "O10",
-                    "result": {"ok": False, "error": str(exc)[:300]},
-                    "auto_reconciliation": False,
-                }
-        note = (
-            "已配置全自动对账时请设置 RECONCILIATION_AUTO_CONFIRM=1 与 XCAGI_FHD_INTERNAL_URL；"
-            "否则在 admin 确认 draft 报告或 POST /api/operations-line/reconciliation/run"
-        )
-        return self._skipped_step_result(step, note)
-
-
-@dataclass(frozen=True)
-class FiveLineDefinition:
-    line_id: FiveLineId
-    name: str
-    subtitle: str
-    step_ids: tuple[str, ...]
-    baseline_automation_rate: float
-    release_channels: tuple[str, ...] = ()
-    channel_notes: Dict[str, str] = field(default_factory=dict)
-
+from modstore_server.production_line_orchestrator_part03 import StepResult as StepResult
+from modstore_server.production_line_orchestrator_productionlineorchestrator_mixin01 import (
+    _ProductionLineOrchestratorPart01Mixin,
+)
+from modstore_server.production_line_orchestrator_part04 import (
+    ProductionLineOrchestrator as ProductionLineOrchestrator,
+    FiveLineDefinition as FiveLineDefinition,
+)
 
 FIVE_LINE_DEFINITIONS: tuple[FiveLineDefinition, ...] = (
     FiveLineDefinition(
@@ -1230,106 +520,18 @@ FIVE_LINE_DEFINITIONS: tuple[FiveLineDefinition, ...] = (
         baseline_automation_rate=78.0,
     ),
 )
-
-# Docker/K8s/SaaS 自托管：开发/内测/运维用，不计入 P-S 四发布渠道
 NON_RELEASE_DEPLOY_TARGETS: tuple[str, ...] = ("docker", "k8s", "saas_self_hosted")
-
-
-def _step_status_map(pipeline: Dict[str, Any]) -> Dict[str, str]:
-    out: Dict[str, str] = {}
-    for block in ("production_line", "operations_line"):
-        for s in pipeline.get(block, {}).get("steps", []):
-            out[str(s.get("step_id"))] = str(s.get("status", "pending"))
-    return out
-
-
-def get_five_line_status() -> Dict[str, Any]:
-    """五线独立自动化率 + 步骤映射（baseline 与实时 completed 取较大展示值）。"""
-    pipeline = get_production_line_orchestrator().get_pipeline_status()
-    statuses = _step_status_map(pipeline)
-    lines: List[Dict[str, Any]] = []
-
-    for defn in FIVE_LINE_DEFINITIONS:
-        mapped = [sid for sid in defn.step_ids if sid in statuses]
-        completed = sum(1 for sid in mapped if statuses[sid] == "completed")
-        live_rate = (
-            round(completed / len(mapped) * 100, 1) if mapped else defn.baseline_automation_rate
-        )
-        display_rate = (
-            max(live_rate, defn.baseline_automation_rate)
-            if mapped
-            else defn.baseline_automation_rate
-        )
-
-        entry: Dict[str, Any] = {
-            "line_id": defn.line_id.value,
-            "name": defn.name,
-            "subtitle": defn.subtitle,
-            "step_ids": list(defn.step_ids),
-            "steps_completed": completed,
-            "steps_total": len(mapped),
-            "automation_rate": display_rate,
-            "live_automation_rate": live_rate,
-            "baseline_automation_rate": defn.baseline_automation_rate,
-        }
-        if defn.release_channels:
-            entry["release_channels"] = list(defn.release_channels)
-            entry["channel_notes"] = dict(defn.channel_notes)
-            entry["non_release_targets"] = list(NON_RELEASE_DEPLOY_TARGETS)
-        lines.append(entry)
-
-    rates = [ln["automation_rate"] for ln in lines]
-    return {
-        "schema_version": 1,
-        "lines": lines,
-        "overall_automation_rate": round(sum(rates) / len(rates), 1) if rates else 0.0,
-        "legacy": {
-            "production_line": pipeline.get("production_line"),
-            "operations_line": pipeline.get("operations_line"),
-        },
-    }
-
+from modstore_server.production_line_orchestrator_part05 import (
+    _step_status_map as _step_status_map,
+    get_five_line_status as get_five_line_status,
+)
 
 _orchestrator: Optional[ProductionLineOrchestrator] = None
-
-
-def get_production_line_orchestrator() -> ProductionLineOrchestrator:
-    global _orchestrator
-    if _orchestrator is None:
-        _orchestrator = ProductionLineOrchestrator()
-    return _orchestrator
-
-
-async def run_production_line_steps(
-    step_ids: Sequence[str],
-    context: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    orch = get_production_line_orchestrator()
-    return await orch.run_pipeline_steps(step_ids, context=context)
-
-
-async def run_production_line(
-    line: str = "production",
-    start_from: Optional[str] = None,
-    context: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    orch = get_production_line_orchestrator()
-    lt = LineType.PRODUCTION if line == "production" else LineType.OPERATIONS
-    return await orch.run_full_pipeline(line=lt, start_from=start_from, context=context)
-
-
-async def approve_production_line_step(step_id: str, admin_user_id: int = 0) -> StepResult:
-    orch = get_production_line_orchestrator()
-    return await orch.approve_step(step_id, admin_user_id=admin_user_id)
-
-
-async def reject_production_line_step(
-    step_id: str, admin_user_id: int = 0, reason: str = ""
-) -> StepResult:
-    orch = get_production_line_orchestrator()
-    return await orch.reject_step(step_id, admin_user_id=admin_user_id, reason=reason)
-
-
-def get_production_line_status() -> Dict[str, Any]:
-    orch = get_production_line_orchestrator()
-    return orch.get_pipeline_status()
+from modstore_server.production_line_orchestrator_part06 import (
+    get_production_line_orchestrator as get_production_line_orchestrator,
+    run_production_line_steps as run_production_line_steps,
+    run_production_line as run_production_line,
+    approve_production_line_step as approve_production_line_step,
+    reject_production_line_step as reject_production_line_step,
+    get_production_line_status as get_production_line_status,
+)

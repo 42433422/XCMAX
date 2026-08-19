@@ -15,13 +15,21 @@ import os
 import re
 from collections import Counter
 from datetime import datetime, timedelta, timezone
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Callable
 
 import httpx
 from sqlalchemy.exc import SQLAlchemyError
 
 from modstore_server import payment_orders
+from modstore_server.customer_value_classification import (
+    amount_cents as _amount_cents,
+    classify_payment_order,
+    parse_datetime as _parse_datetime,
+    payment_amount_cents,
+    sanitize_evidence as _sanitize_evidence,
+    text as _text,
+    truthy as _truthy,
+)
 from modstore_server.models import CustomerValueReceipt, get_session_factory
 
 UTC = timezone.utc  # noqa: UP017 - MODstore CI and production still support Python 3.10
@@ -29,164 +37,9 @@ UTC = timezone.utc  # noqa: UP017 - MODstore CI and production still support Pyt
 EVIDENCE_SCHEMA = "customer_value_evidence.v1"
 RECEIPT_KINDS = frozenset({"goal", "delivery", "acceptance", "refund"})
 VERIFICATION_STATUSES = frozenset({"pending_evidence", "verified", "reversed"})
-PROVIDER_VERIFICATIONS = frozenset(
-    {
-        "alipay_signed_callback",
-        "alipay_remote_query",
-        "wechat_signed_callback",
-        "wechat_remote_query",
-        "java_gateway_verified",
-        "bank_statement_reconciled",
-    }
-)
-PAYMENT_PROVIDERS = frozenset({"alipay", "wechat", "wechatpay", "bank"})
-PRODUCTION_ENVIRONMENTS = frozenset({"production", "prod"})
-
-_TEST_MARKERS = (
-    "pilot",
-    "pytest",
-    "smoke",
-    "sandbox",
-    "\u8bd5\u70b9",
-    "\u6c99\u7bb1",
-    "\u6d4b\u8bd5",
-)
-_INTERNAL_MARKERS = (
-    "internal",
-    "auto-renew",
-    "auto_renew",
-    "\u5185\u90e8",
-    "\u81ea\u52a8\u7eed\u8d39",
-)
-_SENSITIVE_KEY = re.compile(r"secret|token|password|authorization|api[_-]?key", re.I)
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _JAVA_PAGE_SIZE = 1000
 _JAVA_MAX_ORDERS = 100_000
-
-
-def _text(value: Any, limit: int = 512) -> str:
-    return str(value or "").strip()[:limit]
-
-
-def _truthy(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    return _text(value).lower() in {"1", "true", "yes", "on"}
-
-
-def _parse_datetime(value: Any) -> datetime | None:
-    raw = _text(value, 128)
-    if not raw:
-        return None
-    try:
-        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
-
-
-def _amount_cents(order: dict[str, Any]) -> int:
-    direct = order.get("amount_cents")
-    if direct not in (None, ""):
-        try:
-            return int(direct)
-        except (TypeError, ValueError):
-            return 0
-    try:
-        amount = Decimal(str(order.get("total_amount") or "0"))
-    except (InvalidOperation, ValueError):
-        return 0
-    return int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-
-
-def payment_amount_cents(order: dict[str, Any]) -> int:
-    """Public canonical amount conversion shared by receipt reconciliation."""
-
-    return _amount_cents(order)
-
-
-def _has_marker(order: dict[str, Any], markers: tuple[str, ...]) -> bool:
-    haystack = " ".join(
-        _text(order.get(key), 512).lower()
-        for key in (
-            "out_trade_no",
-            "order_no",
-            "subject",
-            "description",
-            "trade_no",
-            "provider_trade_no",
-        )
-    )
-    return any(marker in haystack for marker in markers)
-
-
-def classify_payment_order(
-    order: dict[str, Any],
-    *,
-    cutoff: datetime | None = None,
-) -> tuple[bool, str]:
-    """Return whether an order is acceptable production-payment evidence."""
-
-    if _text(order.get("status")).lower() != "paid":
-        return False, "not_paid"
-    if _truthy(order.get("provider_test_mode")) or _has_marker(order, _TEST_MARKERS):
-        return False, "test_record"
-    order_no = _text(order.get("out_trade_no") or order.get("order_no"), 96).lower()
-    if order_no.startswith("renew_") or _has_marker(order, _INTERNAL_MARKERS):
-        return False, "internal_order"
-    if _truthy(order.get("refunded")) or _text(order.get("refund_status")).lower() in {
-        "refunded",
-        "approved",
-    }:
-        return False, "refunded"
-    if _amount_cents(order) <= 0:
-        return False, "nonpositive_amount"
-
-    paid_at = _parse_datetime(order.get("paid_at"))
-    if paid_at is None:
-        return False, "missing_paid_at"
-
-    verification = _text(order.get("provider_verification"), 64).lower()
-    provider = _text(order.get("payment_provider") or order.get("provider"), 32).lower()
-    trade_no = _text(order.get("provider_trade_no") or order.get("trade_no"), 128)
-    if (
-        verification not in PROVIDER_VERIFICATIONS
-        or provider not in PAYMENT_PROVIDERS
-        or not trade_no
-    ):
-        return False, "missing_provider_proof"
-
-    environment = _text(
-        order.get("payment_environment") or order.get("environment") or order.get("deploy_tier"),
-        32,
-    ).lower()
-    if environment not in PRODUCTION_ENVIRONMENTS:
-        return False, "nonproduction"
-    if cutoff is not None and paid_at < cutoff:
-        return False, "outside_window"
-    return True, "eligible"
-
-
-def _sanitize_evidence(value: Any, *, depth: int = 0) -> Any:
-    if depth > 4:
-        return "<truncated>"
-    if isinstance(value, dict):
-        result: dict[str, Any] = {}
-        for raw_key, child in list(value.items())[:50]:
-            key = _text(raw_key, 96)
-            result[key] = (
-                "<redacted>"
-                if _SENSITIVE_KEY.search(key)
-                else _sanitize_evidence(child, depth=depth + 1)
-            )
-        return result
-    if isinstance(value, list):
-        return [_sanitize_evidence(item, depth=depth + 1) for item in value[:50]]
-    if isinstance(value, (bool, int, float)) or value is None:
-        return value
-    return _text(value, 2000)
 
 
 def _canonical_json(value: Any) -> str:

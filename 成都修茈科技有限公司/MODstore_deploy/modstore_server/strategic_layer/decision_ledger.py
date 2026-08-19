@@ -27,19 +27,19 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from sqlalchemy import desc, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from modstore_server.db.base import get_session_factory
-from modstore_server.db.strategic import (
-    StrategicActionItem,
-)
 from modstore_server.db.strategic import StrategicDecision as StrategicDecisionModel
 from modstore_server.strategic_layer.autonomy_boundary import (
     AutonomyAction,
     AutonomyEvaluator,
+)
+from modstore_server.strategic_layer.decision_ledger_lifecycle import (
+    DecisionLedgerLifecycleMixin,
 )
 
 logger = logging.getLogger(__name__)
@@ -157,7 +157,7 @@ class StrategicDecisionRecord:
         return d
 
 
-class StrategicDecisionLedger:
+class StrategicDecisionLedger(DecisionLedgerLifecycleMixin):
     """战略决策账本服务。
 
     所有决策的提议、评估、批准、执行、完成、复盘均通过此服务，确保审计日志完整。
@@ -409,193 +409,6 @@ class StrategicDecisionLedger:
             execution_result=execution_result,
             review_at=review_at,
         )
-
-    # ---------------- 复盘 ----------------
-
-    def review(
-        self,
-        decision_id: str,
-        *,
-        reviewer: str,
-        review_notes: str,
-    ) -> StrategicDecisionRecord:
-        """复盘（``completed`` 状态可调用，仅一次）。"""
-        if not review_notes.strip():
-            raise ValueError("review_notes required for review")
-        session = self._session_factory()()
-        try:
-            row = session.execute(
-                select(StrategicDecisionModel).where(
-                    StrategicDecisionModel.decision_id == decision_id
-                )
-            ).scalar_one_or_none()
-            if row is None:
-                raise DecisionLifecycleError(f"decision not found: {decision_id}")
-            if row.status != DecisionStatus.COMPLETED.value:
-                raise DecisionLifecycleError(
-                    f"cannot review decision in status {row.status}; must be completed"
-                )
-            if row.reviewed_by:
-                raise DecisionLifecycleError("decision already reviewed")
-            row.review_notes = review_notes.strip()
-            row.reviewed_by = reviewer
-            row.updated_at = datetime.now(timezone.utc)
-            session.commit()
-            return _model_to_record(row)
-        except Exception:
-            session.rollback()
-            raise
-        finally:
-            session.close()
-
-    # ---------------- 查询 ----------------
-
-    def get(self, decision_id: str) -> Optional[StrategicDecisionRecord]:
-        """按 ``decision_id`` 查询单条决策。"""
-        session = self._session_factory()()
-        try:
-            row = session.execute(
-                select(StrategicDecisionModel).where(
-                    StrategicDecisionModel.decision_id == decision_id
-                )
-            ).scalar_one_or_none()
-            return _model_to_record(row) if row else None
-        finally:
-            session.close()
-
-    def list_recent(
-        self,
-        *,
-        status: Optional[DecisionStatus] = None,
-        decision_type: Optional[DecisionType] = None,
-        scope: Optional[str] = None,
-        limit: int = 50,
-    ) -> List[StrategicDecisionRecord]:
-        """列出最近的决策（按 ``proposed_at`` 倒序）。"""
-        session = self._session_factory()()
-        try:
-            stmt = (
-                select(StrategicDecisionModel)
-                .order_by(desc(StrategicDecisionModel.proposed_at))
-                .limit(max(1, min(limit, 500)))
-            )
-            if status is not None:
-                stmt = stmt.where(StrategicDecisionModel.status == status.value)
-            if decision_type is not None:
-                stmt = stmt.where(StrategicDecisionModel.decision_type == decision_type.value)
-            if scope is not None:
-                stmt = stmt.where(StrategicDecisionModel.scope == scope)
-            rows = session.execute(stmt).scalars().all()
-            return [_model_to_record(r) for r in rows]
-        finally:
-            session.close()
-
-    def list_action_items(self, decision_id: str) -> List[Dict[str, Any]]:
-        """列出决策关联的 action items。"""
-        session = self._session_factory()()
-        try:
-            rows = (
-                session.execute(
-                    select(StrategicActionItem)
-                    .where(StrategicActionItem.decision_id == decision_id)
-                    .order_by(StrategicActionItem.created_at)
-                )
-                .scalars()
-                .all()
-            )
-            return [
-                {
-                    "action_id": r.action_id,
-                    "decision_id": r.decision_id,
-                    "meeting_id": r.meeting_id,
-                    "description": r.description,
-                    "assigned_to": r.assigned_to,
-                    "status": r.status,
-                    "due_at": r.due_at.isoformat() if r.due_at else None,
-                    "completed_at": r.completed_at.isoformat() if r.completed_at else None,
-                    "block_reason": r.block_reason,
-                }
-                for r in rows
-            ]
-        finally:
-            session.close()
-
-    # ---------------- 内部 ----------------
-
-    def _transition(
-        self,
-        decision_id: str,
-        *,
-        target_status: DecisionStatus,
-        decided_by: Optional[DecidedBy] = None,
-        decided_by_str: str = "",
-        review_notes: str = "",
-        execution_plan: Optional[Dict[str, Any]] = None,
-        execution_result: Optional[Dict[str, Any]] = None,
-        review_at: Optional[datetime] = None,
-    ) -> StrategicDecisionRecord:
-        session = self._session_factory()()
-        try:
-            row = session.execute(
-                select(StrategicDecisionModel).where(
-                    StrategicDecisionModel.decision_id == decision_id
-                )
-            ).scalar_one_or_none()
-            if row is None:
-                raise DecisionLifecycleError(f"decision not found: {decision_id}")
-
-            current = DecisionStatus(row.status)
-            if current == target_status:
-                # 幂等：已经是目标状态
-                return _model_to_record(row)
-
-            allowed = _ALLOWED_TRANSITIONS.get(current, frozenset())
-            if target_status not in allowed:
-                raise DecisionLifecycleError(
-                    f"illegal transition {current.value} → {target_status.value} "
-                    f"(decision_id={decision_id}); allowed: {[s.value for s in allowed] or 'terminal'}"
-                )
-
-            # 终态保护：rejected/withdrawn/completed 不可再变
-            if current in (
-                DecisionStatus.REJECTED,
-                DecisionStatus.WITHDRAWN,
-                DecisionStatus.COMPLETED,
-            ):
-                raise DecisionAlreadyDecidedError(
-                    f"decision {decision_id} already in terminal status {current.value}"
-                )
-
-            now = datetime.now(timezone.utc)
-            row.status = target_status.value
-            row.updated_at = now
-            if decided_by is not None:
-                row.decided_by = decided_by.value
-                row.decided_at = now
-            elif decided_by_str:
-                row.decided_by = decided_by_str
-                row.decided_at = now
-            if review_notes:
-                row.review_notes = review_notes
-            if execution_plan is not None:
-                row.execution_plan_json = json.dumps(execution_plan, ensure_ascii=False)
-            if execution_result is not None:
-                row.execution_result_json = json.dumps(execution_result, ensure_ascii=False)
-            if review_at is not None:
-                row.review_at = review_at
-            session.commit()
-            logger.info(
-                "decision transitioned decision_id=%s %s → %s",
-                decision_id,
-                current.value,
-                target_status.value,
-            )
-            return _model_to_record(row)
-        except Exception:
-            session.rollback()
-            raise
-        finally:
-            session.close()
 
 
 def _record_to_model(record: StrategicDecisionRecord) -> StrategicDecisionModel:

@@ -257,6 +257,9 @@ def build_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:
 
 
 def public_board_targets() -> List[Path]:
+    isolated_output = (os.environ.get("MODSTORE_PUBLIC_OUTPUT_ROOT") or "").strip()
+    if isolated_output:
+        return [Path(isolated_output).expanduser().resolve() / "download-action-board.json"]
     root = _repo_root()
     targets = [
         root / "成都修茈科技有限公司" / "download-action-board.json",

@@ -87,7 +87,6 @@ def skip_employee_plan_llm(payload: Optional[Dict[str, Any]], routing_brief: str
     rb = (routing_brief or "").strip()
     if not rb:
         return False
-    bl = rb.lower()
     rk_inline = _inline_runtime_kind(rb)
     has_pack = bool(_PACK_ID_MARKERS.search(rb))
     if has_pack and rk_inline and is_direct_python_template_runtime(rk_inline):

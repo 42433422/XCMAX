@@ -10,7 +10,6 @@ Covers:
 from __future__ import annotations
 
 import json
-from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -363,7 +362,7 @@ async def test_generate_bench_tasks_platform_dispatch_returns_valid_tasks():
 @pytest.mark.asyncio
 async def test_generate_bench_tasks_non_strict_falls_back_silently():
     """Without strict=True, a failed LLM call returns placeholder tasks."""
-    from modstore_server.employee_bench import _fallback_tasks, generate_bench_tasks
+    from modstore_server.employee_bench import generate_bench_tasks
 
     with patch(
         "modstore_server.services.llm.chat_dispatch_via_platform_only",

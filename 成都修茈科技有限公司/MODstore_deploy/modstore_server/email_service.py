@@ -15,7 +15,6 @@ from __future__ import annotations
 import mimetypes
 import os
 import random
-import re
 import smtplib
 from email import encoders
 from email.mime.application import MIMEApplication

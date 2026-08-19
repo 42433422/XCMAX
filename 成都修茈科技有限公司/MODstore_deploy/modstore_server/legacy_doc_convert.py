@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, Dict, Tuple
 
 from modstore_server.legacy_doc_vendor import (
     ensure_docx_for_extract,

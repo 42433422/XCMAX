@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
-from typing import Any, AsyncIterator, Dict, List
+from typing import Any, Dict, List
 
 import pytest
 

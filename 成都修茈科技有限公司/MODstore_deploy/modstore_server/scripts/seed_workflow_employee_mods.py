@@ -10,7 +10,7 @@ import sys
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 MODSTORE_ROOT = Path(__file__).resolve().parents[2]
 if str(MODSTORE_ROOT) not in sys.path:

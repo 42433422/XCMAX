@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from html import unescape
 from typing import Any, Dict, List, Set
 from urllib.parse import quote_plus, urlparse
 

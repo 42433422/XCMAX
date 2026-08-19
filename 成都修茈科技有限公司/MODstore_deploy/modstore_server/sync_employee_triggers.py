@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +155,7 @@ def sync_all_employee_triggers() -> int:
     try:
         import zipfile
 
-        from modstore_server.models import CatalogItem, EmployeeTriggerBinding, get_session_factory
+        from modstore_server.models import CatalogItem, get_session_factory
 
         sf = get_session_factory()
         total = 0

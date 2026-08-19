@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, List
+from typing import List
 
 from modstore_server.script_agent.brief import Brief, PlanResult, Verdict
 from modstore_server.script_agent.llm_client import SCRIPT_AGENT_JUDGE_MAX_TOKENS, LlmClient

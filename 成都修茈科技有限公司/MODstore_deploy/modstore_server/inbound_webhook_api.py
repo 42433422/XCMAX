@@ -34,7 +34,6 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Request
-from sqlalchemy.orm import Session
 
 from modstore_server.models import OnDemandOrchestrateJob, User, get_session_factory
 

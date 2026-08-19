@@ -27,7 +27,6 @@ router = APIRouter(prefix="/api/ops", tags=["ops"])
 
 def _employee_status_summary() -> List[Dict[str, Any]]:
     sf = get_session_factory()
-    cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
     cutoff_7d = datetime.now(timezone.utc) - timedelta(days=7)
 
     with sf() as session:

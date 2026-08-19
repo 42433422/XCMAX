@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 EMU_PER_INCH = 914400
 

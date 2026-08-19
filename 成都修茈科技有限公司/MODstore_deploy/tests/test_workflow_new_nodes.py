@@ -1,7 +1,7 @@
 """工作流新节点类型测试。"""
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 

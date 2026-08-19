@@ -21,9 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import desc, select
@@ -37,50 +35,16 @@ from modstore_server.strategic_layer.decision_ledger import (
     DecidedBy,
     StrategicDecisionLedger,
 )
+from modstore_server.strategic_layer.council_meeting_models import (
+    MeetingDecisionRef,
+    MeetingParticipants,
+    MeetingStatus,
+    MeetingType,
+    meeting_row_to_dict as _meeting_row_to_dict,
+    parse_json as _loads,
+)
 
 logger = logging.getLogger(__name__)
-
-
-class MeetingType(str, Enum):
-    DAILY_STANDUP = "daily_standup"
-    WEEKLY_REVIEW = "weekly_review"
-    MONTHLY_STRATEGY = "monthly_strategy"
-    AD_HOC = "ad_hoc"
-    INCIDENT_REVIEW = "incident_review"
-
-
-class MeetingStatus(str, Enum):
-    SCHEDULED = "scheduled"
-    IN_PROGRESS = "in_progress"
-    CONCLUDED = "concluded"
-    CANCELLED = "cancelled"
-
-
-@dataclass
-class MeetingParticipants:
-    """会议参与者值对象。"""
-
-    required: List[str] = field(default_factory=list)  # 必到员工 ID
-    optional: List[str] = field(default_factory=list)  # 选到员工 ID
-    chair: str = ""  # 主持人员工 ID
-
-    def all_ids(self) -> List[str]:
-        ids = list(self.required) + list(self.optional)
-        if self.chair and self.chair not in ids:
-            ids.insert(0, self.chair)
-        return ids
-
-    def to_json(self) -> str:
-        return json.dumps(asdict(self), ensure_ascii=False)
-
-
-@dataclass
-class MeetingDecisionRef:
-    """会议决议引用：指向 StrategicDecision。"""
-
-    decision_id: str
-    vote_outcome: str  # approved | rejected
-    vote_summary: Dict[str, Any] = field(default_factory=dict)
 
 
 class CouncilMeetingService:
@@ -468,38 +432,6 @@ class CouncilMeetingService:
         return session.execute(
             select(CouncilMeetingModel).where(CouncilMeetingModel.meeting_id == meeting_id)
         ).scalar_one_or_none()
-
-
-def _loads(s: str, default: Any) -> Any:
-    if not s:
-        return default
-    try:
-        return json.loads(s)
-    except Exception:
-        return default
-
-
-def _meeting_row_to_dict(row: CouncilMeetingModel) -> Dict[str, Any]:
-    return {
-        "meeting_id": row.meeting_id,
-        "title": row.title,
-        "agenda": row.agenda,
-        "meeting_type": row.meeting_type,
-        "scheduled_at": row.scheduled_at.isoformat() if row.scheduled_at else None,
-        "started_at": row.started_at.isoformat() if row.started_at else None,
-        "concluded_at": row.concluded_at.isoformat() if row.concluded_at else None,
-        "status": row.status,
-        "participants": _loads(
-            row.participants_json, {"required": [], "optional": [], "chair": ""}
-        ),
-        "minutes_md": row.minutes_md or "",
-        "decisions": _loads(row.decisions_json, []),
-        "action_items": _loads(row.action_items_json, []),
-        "source_digest_record_id": row.source_digest_record_id,
-        "source_context": _loads(row.source_context_json, {}),
-        "created_at": row.created_at.isoformat() if row.created_at else None,
-        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-    }
 
 
 __all__ = [

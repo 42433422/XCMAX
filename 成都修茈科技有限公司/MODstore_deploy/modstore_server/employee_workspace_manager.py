@@ -13,10 +13,9 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 

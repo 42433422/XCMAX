@@ -235,7 +235,6 @@ def authed(client):
 
     from modstore_server.api import deps as api_deps
     from modstore_server.app import _require_user, app
-    from modstore_server.infrastructure import db as db_infra
     from modstore_server.models import User, get_session_factory
 
     sf = get_session_factory()

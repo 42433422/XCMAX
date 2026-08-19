@@ -71,6 +71,9 @@ def default_db_path() -> Path:
 
 
 def database_url(db_path: Optional[Path] = None) -> str:
+    if (os.environ.get("MODSTORE_PYTEST_USE_SQLITE") or "").strip() == "1":
+        p = db_path or default_db_path()
+        return f"sqlite:///{p}"
     raw = (os.environ.get("DATABASE_URL") or "").strip()
     if raw:
         if raw.startswith("postgres://"):

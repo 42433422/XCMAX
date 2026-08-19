@@ -8,7 +8,6 @@ critical-modules coverage gate stays above 80%.
 from __future__ import annotations
 
 import json
-import logging
 
 import pytest
 

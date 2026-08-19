@@ -1,12 +1,9 @@
 """语义分块器单元测试。"""
 
-import pytest
-
 from modstore_server.knowledge_ingest import (
     SemanticChunker,
     _get_chunker,
     _split_sentences,
-    chunk_text,
 )
 
 

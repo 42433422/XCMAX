@@ -8,9 +8,25 @@
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Any
+
+from modstore_server.alipay_config import (
+    alipay_app_id as alipay_app_id,
+    alipay_debug as alipay_debug,
+    alipay_public_key_pem as alipay_public_key_pem,
+    alipay_ui_ready as alipay_ui_ready,
+    app_private_key_pem as app_private_key_pem,
+    build_client as build_client,
+    credentials_ready as credentials_ready,
+    default_bundled_alipay_public_key as _default_bundled_alipay_public_key,
+    env as _env,
+    notify_url_default as notify_url_default,
+    pem_from_env as _pem_from_env,
+    read_file_from_env as _read_file_from_env,
+    sdk_import_error as sdk_import_error,
+    warn_notify_url_path_once as warn_notify_url_path_once,
+)
 
 try:
     from dotenv import load_dotenv
@@ -23,130 +39,6 @@ except Exception:
     pass
 
 logger = logging.getLogger(__name__)
-
-
-def _env(name: str) -> str:
-    return (os.environ.get(name) or "").strip()
-
-
-def _pem_from_env(name: str) -> str:
-    raw = _env(name)
-    if not raw:
-        return ""
-    return raw.replace("\\n", "\n")
-
-
-def _read_file_from_env(name: str) -> str:
-    path = _env(name)
-    if not path:
-        return ""
-    try:
-        with open(path, encoding="utf-8") as f:
-            return f.read().strip()
-    except OSError:
-        logger.warning("无法读取 %s=%s", name, path)
-        return ""
-
-
-def _default_bundled_alipay_public_key() -> str:
-    p = Path(__file__).resolve().parent / "alipayPublicKey_RSA2.txt"
-    if not p.is_file():
-        return ""
-    try:
-        return p.read_text(encoding="utf-8").strip()
-    except OSError:
-        logger.warning("无法读取默认支付宝公钥文件: %s", p)
-        return ""
-
-
-def alipay_app_id() -> str:
-    return _env("ALIPAY_APP_ID") or _env("ALIPAY_PID")
-
-
-def app_private_key_pem() -> str:
-    pem = _pem_from_env("ALIPAY_APP_PRIVATE_KEY")
-    if pem:
-        return pem
-    return _read_file_from_env("ALIPAY_APP_PRIVATE_KEY_PATH")
-
-
-def alipay_public_key_pem() -> str:
-    pem = _pem_from_env("ALIPAY_ALIPAY_PUBLIC_KEY")
-    if pem:
-        return pem
-    path_pem = _read_file_from_env("ALIPAY_ALIPAY_PUBLIC_KEY_PATH")
-    if path_pem:
-        return path_pem
-    return _default_bundled_alipay_public_key()
-
-
-def alipay_debug() -> bool:
-    return _env("ALIPAY_DEBUG").lower() in ("1", "true", "yes")
-
-
-def notify_url_default() -> str | None:
-    u = _env("ALIPAY_NOTIFY_URL")
-    return u or None
-
-
-def warn_notify_url_path_once() -> None:
-    global _warned_notify_url
-    if _warned_notify_url:
-        return
-    _warned_notify_url = True
-    u = notify_url_default()
-    if not u:
-        return
-    from urllib.parse import urlparse
-
-    path = (urlparse(u).path or "").rstrip("/")
-    expected = "/api/payment/notify/alipay"
-    if path != expected:
-        logger.warning(
-            "ALIPAY_NOTIFY_URL 的 path 应为「%s」，当前为「%s」。",
-            expected,
-            urlparse(u).path or "/",
-        )
-
-
-_warned_notify_url: bool = False
-
-
-def sdk_import_error() -> str | None:
-    try:
-        from alipay import AliPay  # noqa: F401
-    except ImportError:
-        return "未安装 python-alipay-sdk，请执行: pip install python-alipay-sdk"
-    return None
-
-
-def credentials_ready() -> bool:
-    return bool(alipay_app_id() and app_private_key_pem() and alipay_public_key_pem())
-
-
-def alipay_ui_ready() -> bool:
-    return credentials_ready() and sdk_import_error() is None
-
-
-def build_client():
-    missing_sdk = sdk_import_error()
-    if missing_sdk:
-        raise RuntimeError(missing_sdk)
-    if not credentials_ready():
-        raise RuntimeError(
-            "支付宝配置不完整：需要 ALIPAY_APP_ID、ALIPAY_APP_PRIVATE_KEY（或 ALIPAY_APP_PRIVATE_KEY_PATH）、"
-            "以及 ALIPAY_ALIPAY_PUBLIC_KEY / ALIPAY_ALIPAY_PUBLIC_KEY_PATH"
-        )
-    from alipay import AliPay
-
-    return AliPay(
-        appid=alipay_app_id(),
-        app_notify_url=notify_url_default(),
-        app_private_key_string=app_private_key_pem(),
-        alipay_public_key_string=alipay_public_key_pem(),
-        sign_type="RSA2",
-        debug=alipay_debug(),
-    )
 
 
 def _build_common_kwargs(

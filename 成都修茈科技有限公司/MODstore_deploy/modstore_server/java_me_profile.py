@@ -6,7 +6,6 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
-import httpx
 
 from modstore_server.application.payment_gateway import PaymentGatewayService
 

@@ -12,7 +12,6 @@ import hashlib
 import json
 import os
 import time
-from pathlib import Path
 from typing import Any, Dict, List, Sequence, Tuple
 
 INDEX_PREFIX = "xcmax:self_evolution_kb:"

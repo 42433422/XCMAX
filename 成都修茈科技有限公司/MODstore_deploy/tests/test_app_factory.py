@@ -1,16 +1,11 @@
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from modstore_server.api.app_factory import (
     AppConfig,
     _init_background_jobs,
-    _init_database,
-    _init_event_subscribers,
-    _register_core_routes,
-    _register_diagnostics,
-    _register_optional_routes,
     create_app,
     load_default_config,
 )

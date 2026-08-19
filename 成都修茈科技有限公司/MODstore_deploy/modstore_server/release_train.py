@@ -7,87 +7,32 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional, Tuple
+from typing import Any, Dict, Optional
+
+from modstore_server.release_train_digest import (
+    attach_release_train_to_digest,
+    release_train_context_for_digest as _release_train_context_for_digest,
+)
+from modstore_server.release_train_history import list_history
+from modstore_server.release_train_versions import (
+    bump_daily,
+    bump_quad,
+    classify_release_kind,
+    decennial_generation,
+    decennial_generation_label,
+    format_quad,
+    is_installer_day,
+    is_major_day,
+    next_decennial_anchor,
+    parse_quad,
+)
 
 logger = logging.getLogger(__name__)
 
-ReleaseKind = Literal["daily", "installer", "major"]
-Quad = Tuple[int, int, int, int]
-
-
-def parse_quad(version: str) -> Quad:
-    raw = (version or "").strip().lstrip("vV")
-    parts = raw.split(".")
-    if len(parts) != 4:
-        raise ValueError(f"release_train expects 4 segments, got {version!r}")
-    try:
-        return tuple(int(p) for p in parts)  # type: ignore[return-value]
-    except ValueError as exc:
-        raise ValueError(f"release_train non-integer segment in {version!r}") from exc
-
-
-def format_quad(a: int, b: int, c: int, d: int) -> str:
-    return f"{a}.{b}.{c}.{d}"
-
-
-def bump_quad(current: str) -> str:
-    a, b, c, d = parse_quad(current)
-    d += 1
-    if d >= 10:
-        d = 0
-        c += 1
-    if c >= 10:
-        c = 0
-        b += 1
-    if b >= 10:
-        b = 0
-        a += 1
-    return format_quad(a, b, c, d)
-
-
-def is_installer_day(version: str, *, day_index: int) -> bool:
-    """第 4 段为 0 且非 epoch 首日（day_index > 0）。"""
-    _a, _b, _c, d = parse_quad(version)
-    return d == 0 and int(day_index) > 0
-
-
-def is_major_day(day_index: int) -> bool:
-    return int(day_index) > 0 and int(day_index) % 100 == 0
-
-
-def decennial_generation(version: str) -> int:
-    """十日线代际（类比营销 v1→v2→v3）：第 3 段 +1 即下一代，G = c + 1。
-
-    例：1.0.0.x → G1 · 1.0.1.0 → G2（installer + P9 演进锚点）· 1.0.2.0 → G3
-    """
-    _a, _b, c, _d = parse_quad(version)
-    return int(c) + 1
-
-
-def decennial_generation_label(version: str) -> str:
-    return f"G{decennial_generation(version)}"
-
-
-def next_decennial_anchor(version: str) -> str:
-    """下一十日线代际锚点（第 4 段归零）。"""
-    a, b, c, _d = parse_quad(version)
-    return format_quad(a, b, c + 1, 0)
-
-
-def classify_release_kind(version: str, day_index: int) -> ReleaseKind:
-    if is_major_day(day_index):
-        return "major"
-    if is_installer_day(version, day_index=day_index):
-        return "installer"
-    return "daily"
-
-
-def bump_daily(current: str, *, day_index: int) -> Tuple[str, ReleaseKind]:
-    """进位并返回 (new_version, kind)。"""
-    new_version = bump_quad(current)
-    new_day_index = int(day_index) + 1
-    kind = classify_release_kind(new_version, new_day_index)
-    return new_version, kind
+__all__ = [
+    "format_quad",
+    "parse_quad",
+]
 
 
 def ssot_path() -> Path:
@@ -459,36 +404,7 @@ def list_release_train_history(
     *, limit: int = 50, path: Optional[Path] = None
 ) -> list[Dict[str, Any]]:
     """读取历史快照（最新在前）；用于回滚选择与可视化。"""
-    hdir = history_dir(path=path)
-    jl = hdir / "history.jsonl"
-    if not jl.is_file():
-        return []
-    rows: list[Dict[str, Any]] = []
-    try:
-        for line in jl.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entry = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            state = entry.get("state") or {}
-            rows.append(
-                {
-                    "saved_at": entry.get("saved_at"),
-                    "reason": entry.get("reason"),
-                    "current": state.get("current"),
-                    "day_index": state.get("day_index"),
-                    "last_bump_at": state.get("last_bump_at"),
-                    "last_bump_day": state.get("last_bump_day"),
-                }
-            )
-    except Exception:
-        logger.exception("release_train: read history failed")
-        return []
-    rows.reverse()
-    return rows[: max(1, int(limit))]
+    return list_history(history_dir(path=path), limit=limit, logger=logger)
 
 
 def rollback_release_train(
@@ -581,55 +497,5 @@ def rollback_release_train(
     }
 
 
-def attach_release_train_to_digest(record_id: int, bump_result: Dict[str, Any]) -> None:
-    try:
-        from modstore_server.models import DailyDigestRecord, get_session_factory
-
-        sf = get_session_factory()
-        with sf() as session:
-            row = session.get(DailyDigestRecord, int(record_id))
-            if row is None:
-                return
-            row.release_train_before = str(bump_result.get("before") or "")
-            row.release_train_after = str(bump_result.get("after") or "")
-            row.release_kind = str(bump_result.get("kind") or "daily")
-            session.commit()
-    except Exception:
-        logger.exception("release_train: attach to digest record_id=%s failed", record_id)
-
-
 def release_train_context_for_digest(record_id: int) -> Dict[str, Any]:
-    try:
-        from modstore_server.models import DailyDigestRecord, get_session_factory
-
-        sf = get_session_factory()
-        with sf() as session:
-            row = session.get(DailyDigestRecord, int(record_id))
-            if row is None:
-                return {}
-            before = (row.release_train_before or "").strip()
-            after = (row.release_train_after or "").strip()
-            kind = (row.release_kind or "").strip()
-            if not after:
-                snap = snapshot_public()
-                return {
-                    "release_train": snap.get("current"),
-                    "release_train_before": before or snap.get("current"),
-                    "release_train_after": after or snap.get("current"),
-                    "release_kind": kind or "daily",
-                }
-            return {
-                "release_train": after,
-                "release_train_before": before,
-                "release_train_after": after,
-                "release_kind": kind or "daily",
-            }
-    except Exception:
-        logger.exception("release_train: context for digest record_id=%s failed", record_id)
-        snap = snapshot_public()
-        return {
-            "release_train": snap.get("current"),
-            "release_train_before": snap.get("current"),
-            "release_train_after": snap.get("current"),
-            "release_kind": "daily",
-        }
+    return _release_train_context_for_digest(record_id, snapshot_public=snapshot_public)

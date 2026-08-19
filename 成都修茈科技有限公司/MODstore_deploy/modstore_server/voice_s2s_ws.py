@@ -20,7 +20,6 @@ from sqlalchemy.orm import Session
 from modstore_server.llm_billing import (
     JavaWalletClient,
     WalletHold,
-    authorization_header,
     calculate_charge,
     enforce_risk_limits,
     estimate_preauthorization,

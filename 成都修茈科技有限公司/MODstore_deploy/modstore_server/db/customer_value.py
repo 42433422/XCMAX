@@ -53,45 +53,53 @@ class CustomerValueReceipt(Base):
 event.listen(
     CustomerValueReceipt.__table__,
     "after_create",
-    DDL("""
+    DDL(
+        """
         CREATE TRIGGER customer_value_receipts_no_update
         BEFORE UPDATE ON customer_value_receipts
         BEGIN
           SELECT RAISE(ABORT, 'customer_value_receipts is append-only');
         END
-        """).execute_if(dialect="sqlite"),
+        """
+    ).execute_if(dialect="sqlite"),
 )
 event.listen(
     CustomerValueReceipt.__table__,
     "after_create",
-    DDL("""
+    DDL(
+        """
         CREATE TRIGGER customer_value_receipts_no_delete
         BEFORE DELETE ON customer_value_receipts
         BEGIN
           SELECT RAISE(ABORT, 'customer_value_receipts is append-only');
         END
-        """).execute_if(dialect="sqlite"),
+        """
+    ).execute_if(dialect="sqlite"),
 )
 event.listen(
     CustomerValueReceipt.__table__,
     "after_create",
-    DDL("""
+    DDL(
+        """
         CREATE OR REPLACE FUNCTION reject_customer_value_receipt_mutation()
         RETURNS trigger AS $$
         BEGIN
           RAISE EXCEPTION 'customer_value_receipts is append-only';
         END;
         $$ LANGUAGE plpgsql
-        """).execute_if(dialect="postgresql"),
+        """
+    ).execute_if(dialect="postgresql"),
 )
 event.listen(
     CustomerValueReceipt.__table__,
     "after_create",
-    DDL("""
+    DDL(
+        """
         CREATE TRIGGER customer_value_receipts_no_mutation
         BEFORE UPDATE OR DELETE ON customer_value_receipts
         FOR EACH ROW EXECUTE FUNCTION reject_customer_value_receipt_mutation()
-        """).execute_if(dialect="postgresql"),
+        """
+    ).execute_if(dialect="postgresql"),
 )
 
 

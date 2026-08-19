@@ -4,22 +4,19 @@ from __future__ import annotations
 
 import io
 import json
-import re
 import zipfile
 from typing import Any, Dict, List, Optional, Tuple
 
 from modman.manifest_util import validate_manifest_dict
 from modman.scaffold import template_dir
+from modstore_server.mod_ai_manifest import (
+    extract_json_text as _extract_json_text,
+    normalize_mod_id as normalize_mod_id,
+    parse_llm_manifest_json as parse_llm_manifest_json,
+    strip_json_fence as _strip_json_fence,
+)
 
-_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
-_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*([\s\S]*?)```", re.IGNORECASE)
-
-
-def normalize_mod_id(s: str) -> Optional[str]:
-    x = str(s or "").strip().lower()
-    if not x or not _ID_RE.match(x):
-        return None
-    return x
+__all__ = ["_strip_json_fence", "normalize_mod_id", "parse_llm_manifest_json"]
 
 
 SYSTEM_PROMPT = """你是 XCAGI Mod 清单生成器。用户会用自然语言描述想要的扩展 Mod。
@@ -33,100 +30,6 @@ SYSTEM_PROMPT = """你是 XCAGI Mod 清单生成器。用户会用自然语言�
 示例：
 {"id":"demo-helper","name":"演示助手","version":"1.0.0","description":"示例 Mod","workflow_employees":[{"id":"helper-1","label":"助手","panel_title":"助手","panel_summary":"占位说明"}]}
 """
-
-
-def _strip_json_fence(text: str) -> str:
-    t = (text or "").strip()
-    if t.startswith("```"):
-        t = re.sub(r"^```(?:json)?\s*", "", t, flags=re.I)
-        t = re.sub(r"\s*```\s*$", "", t)
-    return t.strip()
-
-
-def _extract_json_text(content: str) -> str:
-    """提取可 `json.loads` 的片段：支持前文 + 任意位置的 ``` fenced 块，或从首字符 `{` 起的对象。"""
-    t = (content or "").replace("\ufeff", "").strip()
-    if not t:
-        return ""
-    m = _JSON_FENCE_RE.search(t)
-    if m:
-        return m.group(1).strip()
-    t2 = _strip_json_fence(t)
-    if t2.startswith("{"):
-        return t2
-    brace = t.find("{")
-    if brace != -1:
-        candidate = t[brace:].strip()
-        # 从末尾匹配最后一个 `}`，兼容模型在 JSON 后追加少量非括号文字
-        rb = candidate.rfind("}")
-        if rb != -1 and rb > 0:
-            return candidate[: rb + 1].strip()
-    return t2
-
-
-def parse_llm_manifest_json(content: str) -> Tuple[Optional[Dict[str, Any]], str]:
-    raw = _extract_json_text(content)
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as e:
-        return None, f"模型返回非合法 JSON: {e}"
-    if not isinstance(data, dict):
-        return None, "JSON 根须为对象"
-    mid = str(data.get("id") or "").strip().lower()
-    if not mid or not _ID_RE.match(mid):
-        return None, "id 无效：须匹配小写字母/数字/._- 且不以连字符开头"
-    name = str(data.get("name") or mid).strip() or mid
-    ver = str(data.get("version") or "1.0.0").strip() or "1.0.0"
-    desc = str(data.get("description") or "").strip()
-    wf_in = data.get("workflow_employees")
-    wf_out: List[Dict[str, Any]] = []
-    if isinstance(wf_in, list):
-        for i, item in enumerate(wf_in):
-            if not isinstance(item, dict):
-                continue
-            eid = str(item.get("id") or "").strip()
-            label = str(item.get("label") or "").strip()
-            pt = str(item.get("panel_title") or "").strip()
-            ps = str(item.get("panel_summary") or "").strip()
-            if not eid and not label and not pt:
-                continue
-            wf_out.append(
-                {
-                    "id": eid or f"{mid}-wf-{i + 1}",
-                    "label": label or pt or eid,
-                    "panel_title": pt or label or eid,
-                    "panel_summary": ps or desc[:240],
-                }
-            )
-    manifest: Dict[str, Any] = {
-        "id": mid,
-        "name": name,
-        "version": ver,
-        "author": "",
-        "description": desc,
-        "primary": False,
-        "dependencies": {"xcagi": ">=1.0.0"},
-        "backend": {"entry": "blueprints", "init": "mod_init"},
-        "frontend": {
-            "routes": "frontend/routes",
-            "menu": [
-                {
-                    "id": f"{mid}-home",
-                    "label": name,
-                    "icon": "fa-cube",
-                    "path": f"/{mid}",
-                }
-            ],
-        },
-        "hooks": {},
-        "comms": {"exports": []},
-    }
-    if wf_out:
-        manifest["workflow_employees"] = wf_out
-    ve = validate_manifest_dict(manifest)
-    if ve:
-        return None, "manifest 校验: " + "; ".join(ve)
-    return manifest, ""
 
 
 def _sub_template(text: str, mod_id: str, mod_name: str) -> str:

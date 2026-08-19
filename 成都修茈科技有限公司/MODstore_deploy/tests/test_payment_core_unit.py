@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import time
 
 import pytest
@@ -12,7 +11,6 @@ from modstore_server.payment_common import (
     SVIP_LOCKED_PLAN_IDS,
     SVIP_TIER_PLAN_IDS,
     CheckoutDTO,
-    SignCheckoutBody,
     _amount_sign_str,
     _amounts_match,
     _membership_meta,

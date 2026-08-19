@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from modstore_server.catalog_quality import PUBLIC_TABULAR_PKG_IDS, resolve_employee_pack_dir
 
