@@ -1,8 +1,4 @@
-"""送货单 ETL LLM 辅助：仅补列映射 / 抬头 meta / sheet 类型。
-
-规则优先；低置信时调用 structured output。失败静默降级。
-数值明细仍由引擎确定性读单元格，LLM 不得编造数量/金额。
-"""
+"""送货单 ETL 的规则优先、失败降级式结构化 LLM 辅助。"""
 
 from __future__ import annotations
 
@@ -300,7 +296,8 @@ def _validate_and_normalize(data: dict[str, Any], probe: SheetProbe) -> AssistRe
             return AssistResult(used_llm=True, ok=False, error="header_row out of range")
 
     allowed = _allowed_columns(probe)
-    columns_in = data.get("columns") if isinstance(data.get("columns"), dict) else {}
+    raw_columns = data.get("columns")
+    columns_in: dict[str, Any] = dict(raw_columns) if isinstance(raw_columns, dict) else {}
     columns: dict[str, int] = {}
     for key in _FIELD_KEYS:
         if key not in columns_in:
@@ -318,6 +315,8 @@ def _validate_and_normalize(data: dict[str, Any], probe: SheetProbe) -> AssistRe
         return AssistResult(used_llm=True, ok=False, error="ledger missing order_number")
 
     meta_in = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+    if not isinstance(meta_in, dict):
+        meta_in = {}
     meta = {
         "unit_name": str(meta_in.get("unit_name") or "").strip(),
         "contact_person": str(meta_in.get("contact_person") or "").strip(),

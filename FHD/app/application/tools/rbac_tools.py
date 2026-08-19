@@ -87,7 +87,7 @@ def update_role(args: dict[str, Any]) -> dict[str, Any]:
         confirm: 写操作二次确认（默认 False）
     """
     try:
-        role_id = int(args.get("role_id"))
+        role_id = int(args.get("role_id") or 0)
     except (TypeError, ValueError):
         return {"success": False, "error": "role_id is required and must be int"}
 
@@ -138,7 +138,7 @@ def delete_role(args: dict[str, Any]) -> dict[str, Any]:
         confirm: 高危操作二次确认（默认 False）
     """
     try:
-        role_id = int(args.get("role_id"))
+        role_id = int(args.get("role_id") or 0)
     except (TypeError, ValueError):
         return {"success": False, "error": "role_id is required and must be int"}
 
@@ -175,7 +175,7 @@ def assign_role(args: dict[str, Any]) -> dict[str, Any]:
         confirm: 写操作二次确认（默认 False）
     """
     try:
-        user_id = int(args.get("user_id"))
+        user_id = int(args.get("user_id") or 0)
     except (TypeError, ValueError):
         return {"success": False, "error": "user_id is required and must be int"}
 

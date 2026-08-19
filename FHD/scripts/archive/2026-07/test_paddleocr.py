@@ -1,8 +1,9 @@
-from paddleocr import PaddleOCR
-from PIL import Image
-import numpy as np
 import glob
 import pprint
+
+import numpy as np
+from paddleocr import PaddleOCR
+from PIL import Image
 
 # 初始化 PaddleOCR (使用新 API)
 ocr = PaddleOCR(lang="ch")

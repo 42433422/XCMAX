@@ -1,10 +1,9 @@
-# -*- coding: utf-8 -*-
 import sys
 
 sys.path.insert(0, r"E:\FHD\XCAGI\resources\wechat-decrypt")
-from mcp_server import _decompress_content
-
 import sqlite3
+
+from mcp_server import _decompress_content
 
 msg_db = r"E:\FHD\XCAGI\resources\wechat-decrypt\decrypted\message\message_0.db"
 conn = sqlite3.connect(msg_db)

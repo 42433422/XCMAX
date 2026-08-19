@@ -6,12 +6,10 @@ XCAGI 前端兼容 API — AI 聊天辅助函数与数据模型。
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import logging
 import os
-import queue
 import re
 import threading
 import time
@@ -23,21 +21,31 @@ from fastapi import HTTPException, Request
 from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
-from app.application.agent_orchestrator.chat_trace import attach_chat_trace_run
-from app.application.chat_reply_safety import sanitize_model_chat_reply
-from app.application.modstore_conversation_app import create_modstore_openai_client_from_request
+from app.application.agent_orchestrator.chat_trace import (
+    attach_chat_trace_run as attach_chat_trace_run,
+)
+from app.application.chat_reply_safety import (
+    sanitize_model_chat_reply as sanitize_model_chat_reply,
+)
+from app.application.modstore_conversation_app import (
+    create_modstore_openai_client_from_request as create_modstore_openai_client_from_request,
+)
 from app.application.workflow.multimodal_user_content import (
     EmptyMultimodalResponseError,
     UnsupportedMultimodalModelError,
 )
-from app.domain.ai.tier import runtime_context_with_tier
+from app.domain.ai.tier import runtime_context_with_tier as runtime_context_with_tier
 from app.domain.context.session_context import (
-    planner_workflow_interrupt_reply,
-    runtime_context_after_workflow_interrupt,
+    planner_workflow_interrupt_reply as planner_workflow_interrupt_reply,
+)
+from app.domain.context.session_context import (
+    runtime_context_after_workflow_interrupt as runtime_context_after_workflow_interrupt,
 )
 from app.infrastructure.auth.db_token import effective_db_read_token
-from app.infrastructure.llm.client import set_mode as set_llm_mode
-from app.legacy.chat.legacy_chat_adapter import chat_stream_sse_events
+from app.infrastructure.llm.client import set_mode as set_llm_mode  # noqa: F401
+from app.legacy.chat.legacy_chat_adapter import (
+    chat_stream_sse_events as chat_stream_sse_events,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -256,98 +264,9 @@ def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
     return HTTPException(status_code=500, detail=f"对话处理失败: {exc}")
 
 
-def _xcagi_compat_reply_payload(
-    reply: str | dict,
-    *,
-    runtime_context_update: dict[str, Any] | None = None,
-    kitten_attachments: dict[str, Any] | None = None,
-) -> dict:
-    thinking_steps: str | None = None
-    if isinstance(reply, dict):
-        thinking_steps = reply.get("thinking_steps")
-        text = str(reply.get("response") or reply.get("text") or "")
-    else:
-        text = str(reply or "")
-
-    tool_data: dict = {}
-    last_result: dict = {}
-    reply_records: list[dict[str, Any]] = []
-    if isinstance(reply, dict):
-        raw_reply_records = reply.get("legacy_tool_records") or reply.get("_tool_records")
-        if isinstance(raw_reply_records, list):
-            reply_records = [item for item in raw_reply_records if isinstance(item, dict)]
-    try:
-        if reply_records:
-            last_record = reply_records[-1]
-            raw_output = last_record.get("output")
-            raw = dict(raw_output) if isinstance(raw_output, dict) else {}
-            raw.setdefault(
-                "tool_key", last_record.get("tool_id") or last_record.get("tool_name") or ""
-            )
-            raw.setdefault(
-                "tool_name", last_record.get("tool_name") or last_record.get("tool_id") or ""
-            )
-            raw.setdefault("tool_call_id", last_record.get("tool_call_id") or "")
-            raw.setdefault("tool_params", dict(last_record.get("params") or {}))
-            raw["_tool_records"] = reply_records
-        else:
-            from app.legacy.chat.legacy_chat_adapter import get_last_tool_result
-
-            raw = get_last_tool_result()
-        if isinstance(raw, dict) and raw:
-            last_result = raw
-            raw_records = raw.get("_tool_records")
-            records = raw_records if isinstance(raw_records, list) else []
-            if records:
-                tool_data["legacy_tool_records"] = records
-            from app.application.tools import flatten_tool_result_dict_for_client
-
-            tool_data = flatten_tool_result_dict_for_client(raw)
-            if records:
-                tool_data["legacy_tool_records"] = records
-            errs = raw.get("errors")
-            if isinstance(errs, list) and errs:
-                preview = errs[:5]
-                joined = "; ".join(str(x) for x in preview if x is not None)
-                tool_data["errors_preview"] = joined[:2000]
-                if len(errs) > 5:
-                    tool_data["errors_truncated"] = True
-    except RECOVERABLE_ERRORS:
-        logger.debug("compat: last tool result unavailable", exc_info=True)
-
-    err_code = str(last_result.get("error") or "").strip()
-    err_msg = str(last_result.get("message") or "").strip()
-    tool_key = str(last_result.get("tool_key") or "").strip()
-    if err_code or (last_result.get("success") is False):
-        notice_lines = ["---", "**工具反馈**（最近一次）"]
-        if tool_key:
-            notice_lines.append(f"- 工具：`{tool_key}`")
-        if err_code:
-            notice_lines.append(f"- 错误码：`{err_code}`")
-        if err_msg:
-            notice_lines.append(f"- 说明：{err_msg}")
-        ep = tool_data.get("errors_preview")
-        if ep:
-            notice_lines.append(f"- 明细摘要：{ep}")
-        notice = "\n".join(notice_lines)
-        if notice not in text:
-            text = f"{text.rstrip()}\n\n{notice}".strip()
-
-    data: dict[str, Any] = {
-        "response": text,
-        "text": text,
-        "thinking_steps": thinking_steps,
-        **tool_data,
-    }
-    if runtime_context_update is not None:
-        data["runtime_context"] = runtime_context_update
-    if kitten_attachments:
-        for k, v in kitten_attachments.items():
-            if v is not None:
-                data[k] = v
-
-    return {"success": True, "response": text, "data": data}
-
+from app.fastapi_routes.domains.conversation.reply_helpers import (
+    _xcagi_compat_reply_payload as _xcagi_compat_reply_payload,
+)
 
 _EXCEL_PATH_PATTERN = re.compile(
     r"@?([^\s'\"<>]+?\.(?:xlsx|xlsm|xls))(?=$|[\s,，。.!！?？])",
@@ -490,270 +409,21 @@ def _xcagi_chat_timeout_error_payload(timeout: float) -> dict:
     }
 
 
-def _xcagi_guarded_planner_stream_events(
-    body: XcagiCompatChatBody,
-    *,
-    runtime_context: dict[str, Any] | None,
-    workspace_root: str,
-    client: Any,
-):
-    event_queue: queue.Queue[Any] = queue.Queue()
-    done_marker = object()
-
-    def _worker() -> None:
-        try:
-            for ev in chat_stream_sse_events(
-                body.message,
-                runtime_context=runtime_context or None,
-                system_prompt=body.system_prompt,
-                workspace_root=workspace_root,
-                db_write_token=body.db_write_token,
-                client=client,
-            ):
-                event_queue.put(ev)
-        except BaseException as exc:  # noqa: BLE001
-            event_queue.put(exc)
-        finally:
-            event_queue.put(done_marker)
-
-    threading.Thread(target=_worker, daemon=True, name="xcagi-chat-stream-guard").start()
-
-    total_timeout = _xcagi_chat_timeout_seconds()
-    first_token_timeout = min(_xcagi_stream_first_token_timeout_seconds(), total_timeout)
-    idle_notice_seconds = _xcagi_stream_idle_notice_seconds()
-    started_at = time.monotonic()
-    # The HTTP/SSE connection is already established at this point.  Upstream
-    # market routing can legitimately take longer than the first visible model
-    # token, so acknowledge the accepted task immediately instead of treating
-    # "no text token yet" as a broken first packet.
-    first_event_seen = True
-    yield {
-        "type": "tool_progress",
-        "label": "模型服务",
-        "text": "模型服务已接收任务，正在思考…",
-        "phase": "accepted",
-    }
-
-    while True:
-        elapsed = time.monotonic() - started_at
-        if elapsed >= total_timeout:
-            raise TimeoutError(
-                f"流式对话总超时（>{int(total_timeout)} 秒）。请稍后重试，或缩短问题范围。"
-            )
-
-        wait_timeout = first_token_timeout if not first_event_seen else idle_notice_seconds
-        wait_timeout = max(0.2, min(wait_timeout, total_timeout - elapsed))
-        try:
-            item = event_queue.get(timeout=wait_timeout)
-        except queue.Empty:
-            elapsed_int = int(time.monotonic() - started_at)
-            if not first_event_seen:
-                raise TimeoutError(
-                    f"流式对话首包超时（>{int(first_token_timeout)} 秒）。模型服务暂未返回首个分片，请稍后重试。"
-                )
-            yield {
-                "type": "token",
-                "text": f"\n（仍在处理中，已等待 {elapsed_int} 秒，请稍候…）\n",
-                "ephemeral": True,
-            }
-            continue
-
-        if item is done_marker:
-            return
-        if isinstance(item, BaseException):
-            exc = _xcagi_chat_http_exc(item)
-            detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
-            yield {"type": "error", "message": detail, "status_code": exc.status_code}
-            return
-
-        first_event_seen = True
-        yield item
-
-
-def _sse_event_line(payload: dict) -> bytes:
-    return ("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8")
-
-
-def _thinking_steps_from_planner_stream_text(merged: str) -> str | None:
-    if not (merged or "").strip():
-        return None
-    lines: list[str] = []
-    for m in re.finditer(r"\[正在调用工具:[^\]\n]+\]", merged):
-        s = m.group(0).strip()
-        if s and s not in lines:
-            lines.append(s)
-    for m in re.finditer(r"\[工具已返回[^\]\n]*\]|\[工具未成功[^\]\n]*\]", merged):
-        s = m.group(0).strip()
-        if s and s not in lines:
-            lines.append(s)
-    for m in re.finditer(r"\[需要授权:[^\]\n]+\]|\[请提供令牌:[^\]\n]+\]", merged):
-        s = m.group(0).strip()
-        if s and s not in lines:
-            lines.append(s)
-    if not lines:
-        return None
-    return "\n".join(lines)
-
-
-def strip_planner_stream_markers(merged: str) -> tuple[str, str | None]:
-    text = str(merged or "")
-    thinking = _thinking_steps_from_planner_stream_text(text)
-    cleaned = re.sub(
-        r"\[(?:正在调用工具:[^\]\n]+|工具已返回[^\]\n]*|工具未成功[^\]\n]*|需要授权:[^\]\n]+|请提供令牌:[^\]\n]+)\]",
-        "",
-        text,
-    )
-    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
-    return cleaned, thinking
-
-
-async def _xcagi_planner_stream_bytes_async(
-    request: Request, body: XcagiCompatChatBody, *, ai_tier: str
-):
-    """Async generator wrapper around _xcagi_planner_stream_bytes.
-
-    Runs the sync generator in a background thread and feeds items through an
-    asyncio.Queue so the event loop is NEVER blocked.  This avoids the
-    Starlette BaseHTTPMiddleware / anyio thread-pool deadlock that occurs when
-    a sync StreamingResponse generator is iterated via iterate_in_threadpool
-    while the middleware task-group is still open.
-    """
-    _SENTINEL = object()
-    async_q: asyncio.Queue = asyncio.Queue(maxsize=128)
-    loop = asyncio.get_running_loop()
-
-    def _feed_queue() -> None:
-        try:
-            for chunk in _xcagi_planner_stream_bytes(request, body, ai_tier=ai_tier):
-                asyncio.run_coroutine_threadsafe(async_q.put(chunk), loop).result(timeout=120)
-        except BaseException as exc:  # noqa: BLE001
-            err_msg = str(exc).strip() or exc.__class__.__name__
-            err_line = _sse_event_line({"type": "error", "message": err_msg})
-            try:
-                asyncio.run_coroutine_threadsafe(async_q.put(err_line), loop).result(timeout=5)
-            except RECOVERABLE_ERRORS:
-                pass
-        finally:
-            asyncio.run_coroutine_threadsafe(async_q.put(_SENTINEL), loop).result(timeout=5)
-
-    thread = threading.Thread(target=_feed_queue, daemon=True, name="xcagi-stream-async-bridge")
-    thread.start()
-
-    while True:
-        item = await async_q.get()
-        if item is _SENTINEL:
-            break
-        yield item
-
-
-def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, ai_tier: str):
-    m = (body.mode or "").strip().lower()
-    if m in ("online", "offline"):
-        set_llm_mode(m)
-    runtime_context, _ = _merge_runtime_context_with_message_paths(body.context, body.message)
-    runtime_context = runtime_context_with_tier(runtime_context, ai_tier)
-    ok_read, read_req = _ensure_chat_db_read_authorized(
-        request,
-        message=body.message,
-        provided_token=body.db_read_token,
-    )
-    if not ok_read and read_req:
-        yield _sse_event_line(
-            {"type": "token", "text": f"[需要授权: {read_req.get('token_description')}]"}
-        )
-        yield _sse_event_line(
-            {
-                "type": "requires_token",
-                "token_name": read_req.get("token_name"),
-                "token_description": read_req.get("token_description"),
-            }
-        )
-        return
-    if ok_read and _message_requires_db_read_token(body.message):
-        runtime_context["chat_db_read_authorized"] = True
-    intr = planner_workflow_interrupt_reply(body.message)
-    if intr is not None:
-        cleared = runtime_context_after_workflow_interrupt(runtime_context)
-        yield _sse_event_line({"type": "token", "text": intr})
-        payload = _xcagi_compat_reply_payload(intr, runtime_context_update=cleared)
-        payload = attach_chat_trace_run(
-            payload,
-            message=body.message,
-            runtime_context=cleared,
-            user_id=body.user_id,
-            source=body.source,
-            channel="compat_chat_stream",
-        )
-        yield _sse_event_line(
-            {
-                "type": "done",
-                "result": payload,
-            }
-        )
-        return
-    vector_error = _ensure_vector_index_if_needed(body.message, runtime_context)
-    if vector_error:
-        yield _sse_event_line({"type": "error", "message": vector_error})
-        return
-    workspace_root = os.environ.get("WORKSPACE_ROOT", os.getcwd())
-    llm_client = create_modstore_openai_client_from_request(request)
-    reply_parts: list[str] = []
-    try:
-        halted_for_write_token = False
-        for ev in _xcagi_guarded_planner_stream_events(
-            body,
-            runtime_context=runtime_context,
-            workspace_root=workspace_root,
-            client=llm_client,
-        ):
-            et = ev.get("type")
-            if et == "error":
-                yield _sse_event_line(ev)
-                return
-            if et == "token":
-                text = str(ev.get("text") or "")
-                if not ev.get("ephemeral"):
-                    reply_parts.append(text)
-                yield _sse_event_line(ev)
-            elif et == "requires_token":
-                yield _sse_event_line(ev)
-                halted_for_write_token = True
-                break
-            elif et == "done":
-                continue
-            else:
-                yield _sse_event_line(ev)
-        if halted_for_write_token:
-            return
-        merged = sanitize_model_chat_reply("".join(reply_parts))
-        if not merged.strip():
-            msg = (
-                "模型服务已完成请求，但没有返回可显示的正文。"
-                "若附带图片，请确认当前账号已启用视觉模型，或上传文字更清晰的截图。"
-            )
-            yield _sse_event_line({"type": "error", "message": msg})
-            return
-        thinking = _thinking_steps_from_planner_stream_text(merged)
-        if thinking:
-            done_reply: str | dict = {"response": merged, "thinking_steps": thinking}
-        else:
-            done_reply = merged
-        payload = _xcagi_compat_reply_payload(done_reply)
-        payload = attach_chat_trace_run(
-            payload,
-            message=body.message,
-            runtime_context=runtime_context,
-            user_id=body.user_id,
-            source=body.source,
-            channel="compat_chat_stream",
-        )
-        yield _sse_event_line({"type": "done", "result": payload})
-    except RECOVERABLE_ERRORS as e:
-        exc = _xcagi_chat_http_exc(e)
-        yield _sse_event_line(
-            {
-                "type": "error",
-                "message": exc.detail if isinstance(exc.detail, str) else str(exc.detail),
-                "status_code": exc.status_code,
-            }
-        )
+from app.fastapi_routes.domains.conversation.stream_helpers import (
+    _sse_event_line as _sse_event_line,
+)
+from app.fastapi_routes.domains.conversation.stream_helpers import (
+    _thinking_steps_from_planner_stream_text as _thinking_steps_from_planner_stream_text,
+)
+from app.fastapi_routes.domains.conversation.stream_helpers import (
+    _xcagi_guarded_planner_stream_events as _xcagi_guarded_planner_stream_events,
+)
+from app.fastapi_routes.domains.conversation.stream_helpers import (
+    _xcagi_planner_stream_bytes as _xcagi_planner_stream_bytes,
+)
+from app.fastapi_routes.domains.conversation.stream_helpers import (
+    _xcagi_planner_stream_bytes_async as _xcagi_planner_stream_bytes_async,
+)
+from app.fastapi_routes.domains.conversation.stream_helpers import (
+    strip_planner_stream_markers as strip_planner_stream_markers,
+)

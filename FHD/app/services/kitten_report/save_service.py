@@ -149,6 +149,7 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
 
             wb = Workbook()
             ws = wb.active
+            assert ws is not None
             ws.title = "财务报表"
 
             header_font = Font(bold=True, size=12, color="FFFFFF")
@@ -298,7 +299,7 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
         try:
             analyses = self.list_saved_analyses()
 
-            type_counts = {}
+            type_counts: dict[str, int] = {}
             for a in analyses:
                 atype = a.get("type", "unknown")
                 type_counts[atype] = type_counts.get(atype, 0) + 1

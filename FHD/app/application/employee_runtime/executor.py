@@ -25,7 +25,7 @@ from app.application.shipment_excel_etl_security import (
 )
 from app.mod_sdk.employee_specialized_tools import get_employee_tools, handle_specialized
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import get_app_data_dir
+from app.utils.path_io.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ def _build_enriched_ctx(employee_id: str, workspace_root: str) -> dict[str, Any]
                 if isinstance(result, dict)
                 else "未知错误",
             }
-        except Exception as exc:  # noqa: BLE001  LLM 调用边界：异常转结构化结果
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001  LLM 调用边界：异常转结构化结果
             return {"ok": False, "error": repr(exc)}
 
     async def _http_request(method: str, url: str, **kw: Any) -> dict[str, Any]:
@@ -70,10 +70,10 @@ def _build_enriched_ctx(employee_id: str, workspace_root: str) -> dict[str, Any]
                 resp = await client.request(method, url, **kw)
                 try:
                     body = resp.json()
-                except Exception:  # noqa: BLE001  JSON 解析失败降级为文本
+                except RECOVERABLE_ERRORS:  # noqa: BLE001  JSON 解析失败降级为文本
                     body = resp.text
                 return {"ok": resp.is_success, "status": resp.status_code, "body": body}
-        except Exception as exc:  # noqa: BLE001  HTTP 调用边界：异常转结构化结果
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001  HTTP 调用边界：异常转结构化结果
             return {"ok": False, "error": repr(exc)}
 
     async def _http_get(url: str, **kw: Any) -> dict[str, Any]:
@@ -271,6 +271,8 @@ def _action_direct_python_module(
         if isinstance(actions_cfg.get("direct_python"), dict)
         else {}
     )
+    if not isinstance(direct_cfg, dict):
+        direct_cfg = {}
     module_name = str(direct_cfg.get("module") or "worker").strip() or "worker"
     module_path = pack_root / "backend" / "employees" / f"{module_name}.py"
     if not module_path.is_file():
@@ -336,10 +338,14 @@ def _cognition_fhd(
 ) -> dict[str, Any]:
     cog_cfg = _get_section(config, "cognition")
     agent = cog_cfg.get("agent") if isinstance(cog_cfg.get("agent"), dict) else {}
+    if not isinstance(agent, dict):
+        agent = {}
     system_prompt = str(
         agent.get("system_prompt") or cog_cfg.get("system_prompt") or "你是智能员工助手。"
     )
     model_cfg = agent.get("model") if isinstance(agent.get("model"), dict) else {}
+    if not isinstance(model_cfg, dict):
+        model_cfg = {}
     max_tokens = int(model_cfg.get("max_tokens") or 4000)
     normalized = perceived.get("normalized_input") if isinstance(perceived, dict) else {}
     user_payload = json.dumps({"task": task, "input": normalized}, ensure_ascii=False)[:12000]
@@ -478,11 +484,7 @@ def execute_employee_task_local(
     workspace_root: str | None = None,
     session_id: str | None = None,
 ) -> dict[str, Any]:
-    """本地 employee_pack 执行入口（无 MODstore DB 依赖）。
-
-    委托给 :class:`app.application.employee_runtime.agent.EmployeeAgent`：
-    感知 → 记忆召回 → 认知 → 行动（多轮）→ 记忆回写。保留原返回结构与所有调用方兼容。
-    """
+    """委托给 EmployeeAgent 执行本地 employee_pack，保持原返回契约。"""
     from app.application.employee_runtime.agent import EmployeeAgent
 
     return EmployeeAgent(employee_id).run(

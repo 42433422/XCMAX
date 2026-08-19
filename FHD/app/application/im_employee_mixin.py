@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import desc, select
 
 from app.db.models.ai_employee import AiEmployeeProfile
 from app.db.models.im import ImConversation, ImConversationMember, ImMessage
 from app.db.models.user import User
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,17 @@ AI_EMPLOYEE_ROLE = "ai_employee"
 
 
 class ImEmployeeMixin:
+    if TYPE_CHECKING:
+        _count_unread: Any
+        _db: Any
+        _direct_peer_id: Any
+        _display_name: Any
+        _ensure_enterprise_dedicated_cs_user: Any
+        get_or_create_direct: Any
+        list_messages: Any
+        mark_read: Any
+        send_message: Any
+
     def enterprise_cs_user_id(self) -> int | None:
         cs = self._ensure_enterprise_dedicated_cs_user()
         return int(cs.id) if cs is not None else None
@@ -158,7 +170,7 @@ class ImEmployeeMixin:
                         avatar_url=meta["avatar_url"],
                     )
                     eid_to_uid[eid] = uid
-                except Exception:  # noqa: BLE001 - best-effort enrichment for employee list rows
+                except RECOVERABLE_ERRORS:  # noqa: BLE001 - best-effort enrichment for employee list rows
                     logger.debug("ensure_employee_user failed for %s", eid, exc_info=True)
         if not eid_to_uid:
             return {}
@@ -216,7 +228,7 @@ class ImEmployeeMixin:
                             "im_last_message_at": "",
                             "im_unread_count": 0,
                         }
-                except Exception:  # noqa: BLE001 - summary must tolerate one employee bootstrap failure
+                except RECOVERABLE_ERRORS:  # noqa: BLE001 - summary must tolerate one employee bootstrap failure
                     logger.debug("get_or_create_direct failed for employee %s", eid, exc_info=True)
         return out
 
@@ -339,13 +351,13 @@ class ImEmployeeMixin:
             last_id = int(messages[-1].get("id") or 0) if messages else 0
             if last_id > 0:
                 self.mark_read(conversation_id, int(cs_id), last_id)
-        except Exception:  # noqa: BLE001 - 标已读失败不应影响读消息本身
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - 标已读失败不应影响读消息本身
             logger.debug("cs_inbox_messages mark_read skipped", exc_info=True)
-        return messages
+        return cast("list[dict[str, Any]]", messages)
 
     def cs_reply(self, conversation_id: int, body: str) -> dict[str, Any]:
         """Reply as the dedicated enterprise CS user."""
         cs_id = self.enterprise_cs_user_id()
         if cs_id is None:
             raise ValueError("客服通道不可用")
-        return self.send_message(conversation_id, cs_id, body)
+        return cast("dict[str, Any]", self.send_message(conversation_id, cs_id, body))

@@ -735,11 +735,12 @@ class TestAdminActivateEnterpriseImpersonation:
                 return_value="ent-sid",
             ),
         ):
+            client.cookies.set("session_id", "cookie-sid")
             resp = client.post(
                 "/api/xcmax/admin/impersonate/activate-enterprise",
                 json={"bridge_token": "valid"},
-                cookies={"session_id": "cookie-sid"},
             )
+            client.cookies.delete("session_id")
         assert resp.status_code == 200
 
 

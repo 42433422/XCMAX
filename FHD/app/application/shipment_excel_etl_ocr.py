@@ -103,6 +103,7 @@ def grid_to_workbook_path(
     path.parent.mkdir(parents=True, exist_ok=True)
     wb = Workbook()
     ws = wb.active
+    assert ws is not None
     ws.title = (sheet_name or "OCR")[:31]
     row_idx = 1
     for line in meta_lines or []:

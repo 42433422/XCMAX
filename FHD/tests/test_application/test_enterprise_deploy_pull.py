@@ -6,7 +6,7 @@ import json
 import os
 import time
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -21,6 +21,12 @@ from app.application.enterprise_deploy_pull import (
     get_pull_job,
     start_enterprise_pull,
 )
+
+
+def _consume_scheduled_coroutine(coro):
+    """Model create_task ownership without leaving an un-awaited test coroutine."""
+    coro.close()
+    return Mock()
 
 # ========================= _read_deployed_sha256 ==============================
 
@@ -214,6 +220,7 @@ class TestStartEnterprisePull:
     @patch("app.application.enterprise_deploy_pull.asyncio.create_task")
     @patch("app.application.enterprise_deploy_pull._PULL_LOCK")
     async def test_start_pull_creates_job(self, mock_lock, mock_create_task):
+        mock_create_task.side_effect = _consume_scheduled_coroutine
         mock_lock.__aenter__ = AsyncMock(return_value=None)
         mock_lock.__aexit__ = AsyncMock(return_value=False)
 
@@ -225,6 +232,7 @@ class TestStartEnterprisePull:
     @patch("app.application.enterprise_deploy_pull.asyncio.create_task")
     @patch("app.application.enterprise_deploy_pull._PULL_LOCK")
     async def test_start_pull_default_options(self, mock_lock, mock_create_task):
+        mock_create_task.side_effect = _consume_scheduled_coroutine
         mock_lock.__aenter__ = AsyncMock(return_value=None)
         mock_lock.__aexit__ = AsyncMock(return_value=False)
 

@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import httpx
+from sqlalchemy import Table
 from sqlalchemy import inspect as sa_inspect
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -116,7 +117,7 @@ def enqueue_outbox(
         with get_db() as db:
             bind = db.get_bind()
             if not sa_inspect(bind).has_table(MobileNotificationOutbox.__tablename__):
-                MobileNotificationOutbox.__table__.create(bind, checkfirst=True)
+                cast("Table", MobileNotificationOutbox.__table__).create(bind, checkfirst=True)
             db.add(
                 MobileNotificationOutbox(
                     user_id=int(user_id),
@@ -142,7 +143,7 @@ def notify_user(
     with get_db() as db:
         bind = db.get_bind()
         if not sa_inspect(bind).has_table(MobileDeviceToken.__tablename__):
-            MobileDeviceToken.__table__.create(bind, checkfirst=True)
+            cast("Table", MobileDeviceToken.__table__).create(bind, checkfirst=True)
         rows = db.query(MobileDeviceToken).filter(MobileDeviceToken.user_id == user_id).all()
         devices = [
             {

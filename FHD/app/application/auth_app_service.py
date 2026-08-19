@@ -8,7 +8,7 @@ from app.db.models import Permission, Role, User
 from app.db.session import get_db
 from app.infrastructure.session import get_session_manager
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.password_hash import check_password_hash, generate_password_hash
+from app.utils.security.password_hash import check_password_hash, generate_password_hash
 from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
@@ -109,7 +109,7 @@ class AuthApplicationService:
 
     def authenticate_oidc_user(self, profile: dict[str, Any]) -> dict[str, Any]:
         """OIDC userinfo → 本地用户 JIT + session。"""
-        from app.utils.password_hash import generate_password_hash
+        from app.utils.security.password_hash import generate_password_hash
 
         username = str(
             profile.get("preferred_username") or profile.get("email") or profile.get("sub") or ""

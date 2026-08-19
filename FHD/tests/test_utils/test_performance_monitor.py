@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.utils.performance_monitor import (
+from app.utils.performance.performance_monitor import (
     APIMetric,
     MemorySnapshot,
     PerformanceAlert,
@@ -395,7 +395,7 @@ class TestClearHistory:
 
 class TestGlobalFunctions:
     def test_get_performance_monitor(self):
-        import app.utils.performance_monitor as pm
+        import app.utils.performance.performance_monitor as pm
 
         old = pm._performance_monitor_instance
         pm._performance_monitor_instance = None

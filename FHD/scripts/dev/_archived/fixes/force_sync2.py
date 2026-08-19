@@ -1,10 +1,14 @@
-# -*- coding: utf-8 -*-
-import sys, os, glob, json, shutil
+import glob
+import json
+import os
+import shutil
+import sys
 
 sys.path.insert(0, r"E:\FHD\XCAGI\resources\wechat-decrypt")
-from config import load_config
-from key_utils import get_key_info, strip_key_metadata
 from decrypt_db import decrypt_database
+from key_utils import get_key_info, strip_key_metadata
+
+from config import load_config
 
 cfg = load_config()
 db_dir = cfg.get("db_dir")
@@ -36,7 +40,7 @@ for f in glob.glob(os.path.join(src_msg, "*.db")):
 print(f"复制完成: {copy_count} 个文件")
 
 # 解密
-with open(cfg.get("keys_file"), "r", encoding="utf-8") as f:
+with open(cfg.get("keys_file"), encoding="utf-8") as f:
     keys = json.load(f)
 keys = strip_key_metadata(keys)
 

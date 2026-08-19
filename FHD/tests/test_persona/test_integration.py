@@ -179,7 +179,7 @@ class TestPersonaIntegration:
     @pytest.mark.asyncio
     async def test_fallback_when_persona_service_fails(self, service, mock_repo):
         """persona 服务异常时不阻塞（容错）。"""
-        mock_repo.find_by_user_id = AsyncMock(side_effect=Exception("DB down"))
+        mock_repo.find_by_user_id = AsyncMock(side_effect=RuntimeError("DB down"))
 
         # 应该抛异常还是返回默认？根据设计，异常时由 api.py fallback
         # 这里测试 service 层的异常传播

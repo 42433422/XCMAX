@@ -598,7 +598,7 @@ class TestPrintRoutesWorkflowLabel:
 
 class TestPrintRoutesListLabels:
     def test_list_labels_dir_missing(self, print_client: TestClient):
-        with patch("app.utils.path_utils.get_resource_path", return_value="/no/such/dir"):
+        with patch("app.utils.path_io.path_utils.get_resource_path", return_value="/no/such/dir"):
             r = print_client.get("/api/print/list_labels")
         assert r.status_code == 200
         assert r.json()["labels"] == []
@@ -608,7 +608,7 @@ class TestPrintRoutesListLabels:
         labels_dir.mkdir()
         (labels_dir / "order1_第1项.png").write_text("png")
         (labels_dir / "order2.txt").write_text("txt")
-        with patch("app.utils.path_utils.get_resource_path", return_value=str(labels_dir)):
+        with patch("app.utils.path_io.path_utils.get_resource_path", return_value=str(labels_dir)):
             r = print_client.get("/api/print/list_labels")
         data = r.json()
         assert len(data["labels"]) == 1
@@ -619,13 +619,13 @@ class TestPrintRoutesListLabels:
         labels_dir.mkdir()
         for i in range(5):
             (labels_dir / f"order{i}.png").write_text("png")
-        with patch("app.utils.path_utils.get_resource_path", return_value=str(labels_dir)):
+        with patch("app.utils.path_io.path_utils.get_resource_path", return_value=str(labels_dir)):
             r = print_client.get("/api/print/list_labels?limit=2")
         assert len(r.json()["labels"]) == 2
 
     def test_serve_label_image_not_found(self, print_client: TestClient):
         with (
-            patch("app.utils.path_utils.get_resource_path", return_value="/no/such/dir"),
+            patch("app.utils.path_io.path_utils.get_resource_path", return_value="/no/such/dir"),
             patch("os.path.exists", return_value=False),
         ):
             r = print_client.get("/api/print/label/missing.png")

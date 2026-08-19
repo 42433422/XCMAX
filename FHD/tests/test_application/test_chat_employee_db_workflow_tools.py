@@ -144,7 +144,7 @@ def test_fallback_planner_ignores_recoverable_memory_rag_error():
     from app.application.workflow.planner import LLMWorkflowPlanner
     from app.services.tools_execution.registry import get_workflow_tool_registry
 
-    rag_error = OperationalError("CREATE EXTENSION", {}, Exception("sqlite does not support it"))
+    rag_error = OperationalError("CREATE EXTENSION", {}, RuntimeError("sqlite does not support it"))
     with (
         patch("app.application.workflow.planner.get_ai_conversation_service"),
         patch.object(LLMWorkflowPlanner, "_plan_with_react_multiagent", return_value=None),

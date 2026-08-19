@@ -18,7 +18,7 @@ def ensure_sandbox_admin() -> None:
 
     from app.db import SessionLocal
     from app.db.models.user import User
-    from app.utils.password_hash import generate_password_hash
+    from app.utils.security.password_hash import generate_password_hash
 
     db = SessionLocal()
     try:

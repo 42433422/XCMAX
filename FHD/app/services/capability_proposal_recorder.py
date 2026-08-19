@@ -95,7 +95,9 @@ def _load_recent_keys(lookback_seconds: int = _DEDUP_WINDOW_SECONDS) -> set[str]
                 ts = float(rec.get("ts_unix") or 0)
                 if ts < cutoff:
                     continue
-                k = rec.get("dedup_key")
+                k = str(rec.get("dedup_key") or "").strip()
+                if not k:
+                    continue
                 if isinstance(k, str):
                     keys.add(k)
     except OSError:
@@ -213,7 +215,9 @@ def list_pending_proposals(since_unix: float | None = None) -> list[dict[str, An
                     continue
                 if since_unix is not None and float(rec.get("ts_unix") or 0) <= since_unix:
                     continue
-                k = rec.get("dedup_key")
+                k = str(rec.get("dedup_key") or "").strip()
+                if not k:
+                    continue
                 if k in processed_keys:
                     continue
                 if k in seen_keys:

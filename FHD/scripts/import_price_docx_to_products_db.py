@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 从 424 目录下「转 Word_扫描全能王 … 13.22.docx」类报价表导入：
 - 客户名称 → purchase_units（若不存在）
@@ -19,7 +18,6 @@ import os
 import re
 import sqlite3
 import sys
-import zipfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]

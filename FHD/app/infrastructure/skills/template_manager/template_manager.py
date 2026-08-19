@@ -39,7 +39,7 @@ def get_default_template(template_type: str = "发货单") -> dict | None:
 
 
 def decompose_template_file(
-    file_path: str, sheet_name: str = None, sample_rows: int = 5
+    file_path: str, sheet_name: str | None = None, sample_rows: int = 5
 ) -> dict[str, Any]:
     from app.application.excel_template_http_app_service import _decompose_template
 
@@ -281,7 +281,7 @@ def list_label_templates(active_only: bool = True) -> list[dict]:
     return list_templates_by_type("标签", active_only)
 
 
-def export_products_with_template(unit_name: str = None, keyword: str = None) -> dict:
+def export_products_with_template(unit_name: str | None = None, keyword: str | None = None) -> dict:
     from app.bootstrap import get_products_service
 
     service = get_products_service()

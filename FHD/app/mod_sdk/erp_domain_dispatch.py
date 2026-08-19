@@ -104,14 +104,7 @@ def try_invoke_erp_domain_handler(
         return out
     except RECOVERABLE_ERRORS:
         logger.exception("erp domain handler failed domain=%s action=%s", dom, act)
-        return {
-            "success": False,
-            "error": "erp_domain_handler_failed",
-            "domain": dom,
-            "action": act,
-            "source": f"mod:{ERP_DOMAIN_BRIDGE_MOD_ID}",
-            "execution_path": "mod_domain_handler",
-        }
+        return None
 
 
 def invoke_erp_domain_handler(domain: str, action: str, **kwargs: Any) -> Any:

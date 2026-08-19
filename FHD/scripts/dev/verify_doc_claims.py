@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """文档数字宣称校验（P2-3：文档与实测一致）。
 
 背景：本仓库多处文档（docs/**、workspace 规则、CHANGELOG）手工维护覆盖率/指标数字，
@@ -179,7 +178,7 @@ def scan_docs(docs: list[Path], ssot: dict[str, float]) -> list[str]:
     * changelog 文件（Q 历史条目）；
     * 非代码覆盖率指标（如 CI workflow / 全景图覆盖）。
     """
-    allowed = set(round(v, 2) for k, v in ssot.items() if not k.startswith("target_"))
+    allowed = {round(v, 2) for k, v in ssot.items() if not k.startswith("target_")}
     issues: list[str] = []
     for doc in docs:
         if not doc.is_file():

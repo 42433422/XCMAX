@@ -533,7 +533,7 @@ class TestExportShipmentRecords:
                 }
             ]
         )
-        with patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)):
+        with patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)):
             svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
             result = svc.export_shipment_records()
             assert result["success"] is True
@@ -560,7 +560,7 @@ class TestExportShipmentRecords:
                 },
             ]
         )
-        with patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)):
+        with patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)):
             svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
             result = svc.export_shipment_records(unit_name="单位A")
             assert result["success"] is True
@@ -600,7 +600,7 @@ class TestExportShipmentRecords:
                 },
             ]
         )
-        with patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)):
+        with patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)):
             svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
             result = svc.export_shipment_records(status_filter="printed")
             assert result["success"] is True
@@ -641,7 +641,7 @@ class TestExportShipmentRecords:
                 },
             ]
         )
-        with patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)):
+        with patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)):
             svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
             result = svc.export_shipment_records(status_filter="pending")
             assert result["success"] is True
@@ -653,7 +653,7 @@ class TestExportShipmentRecords:
         mock_template_svc.get_templates.return_value = {"templates": []}
 
         with (
-            patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
+            patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)),
             patch("app.application.get_template_app_service", return_value=mock_template_svc),
         ):
             svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
@@ -676,7 +676,7 @@ class TestExportShipmentRecords:
         }
 
         with (
-            patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
+            patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)),
             patch("app.application.get_template_app_service", return_value=mock_template_svc),
         ):
             svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
@@ -700,7 +700,7 @@ class TestExportShipmentRecords:
         }
 
         with (
-            patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
+            patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)),
             patch("app.application.get_template_app_service", return_value=mock_template_svc),
         ):
             svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
@@ -723,7 +723,7 @@ class TestExportShipmentRecords:
         }
 
         with (
-            patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
+            patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)),
             patch("app.application.get_template_app_service", return_value=mock_template_svc),
             patch("os.path.exists", return_value=False),
         ):
@@ -742,7 +742,7 @@ class TestExportShipmentRecords:
 
     def test_export_with_empty_records(self, tmp_path):
         rq = DummyRecordQuery(data=[])
-        with patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)):
+        with patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)):
             svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
             result = svc.export_shipment_records()
             assert result["success"] is True
@@ -768,7 +768,7 @@ class TestExportShipmentRecords:
                 },
             ]
         )
-        with patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)):
+        with patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)):
             svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
             result = svc.export_shipment_records(status_filter="已打印")
             assert result["success"] is True
@@ -794,7 +794,7 @@ class TestExportShipmentRecords:
                 },
             ]
         )
-        with patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)):
+        with patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)):
             svc = ShipmentApplicationService(repository=DummyRepository(), record_query=rq)
             result = svc.export_shipment_records(status_filter="未打印")
             assert result["success"] is True
@@ -838,14 +838,14 @@ class TestDownloadShipmentOrder:
         test_file = output_dir / "test.xlsx"
         test_file.write_text("data")
 
-        with patch("app.utils.path_utils.get_app_data_dir", return_value=str(tmp_path)):
+        with patch("app.utils.path_io.path_utils.get_app_data_dir", return_value=str(tmp_path)):
             svc = ShipmentApplicationService(repository=DummyRepository())
             result = svc.download_shipment_order("test.xlsx")
             assert result["success"] is True
             assert result["file_path"] is not None
 
     def test_file_not_exists(self, tmp_path):
-        with patch("app.utils.path_utils.get_app_data_dir", return_value=str(tmp_path)):
+        with patch("app.utils.path_io.path_utils.get_app_data_dir", return_value=str(tmp_path)):
             svc = ShipmentApplicationService(repository=DummyRepository())
             result = svc.download_shipment_order("missing.xlsx")
             assert result["success"] is False

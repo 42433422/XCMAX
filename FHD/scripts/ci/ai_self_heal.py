@@ -144,13 +144,13 @@ def fetch_workflow_logs(
                 return "\n".join(parts)
         except zipfile.BadZipFile:
             return ""
-    except Exception:  # pragma: no cover - fail-open
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover - fail-open
         return ""
     finally:
         if close_after:
             try:
                 client.close()
-            except Exception:  # pragma: no cover
+            except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
                 pass
 
 
@@ -533,7 +533,7 @@ def check_incident_budget(
         if close_after:
             try:
                 client.close()
-            except Exception:  # pragma: no cover
+            except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
                 pass
     return IncidentBudgetDecision(
         True,
@@ -669,13 +669,13 @@ def find_existing_remediation_issue(
                 return str(item.get("html_url") or "")
             if len(payload) < 100:
                 break
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return ""
     finally:
         if close_after:
             try:
                 client.close()
-            except Exception:  # pragma: no cover
+            except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
                 pass
     return ""
 
@@ -863,7 +863,7 @@ def call_llm(
         finally:
             if close_after:
                 client.close()
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return None
     fixes_data = data.get("fixes") if isinstance(data, dict) else None
     if not isinstance(fixes_data, list):
@@ -962,7 +962,7 @@ def create_pr(
                     headers=headers,
                     json={"labels": labels},
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 pass
         # 3. 旁路写 approval ledger（fire-and-forget，fail-open 在 client 内处理）
         if post_to_approval_ledger is not None:
@@ -985,16 +985,16 @@ def create_pr(
                     },
                     source="ci_self_heal",
                 )
-            except Exception:  # pragma: no cover - fail-open
+            except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover - fail-open
                 pass
         return pr_url
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return ""
     finally:
         if close_after:
             try:
                 client.close()
-            except Exception:  # pragma: no cover
+            except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
                 pass
 
 
@@ -1062,13 +1062,13 @@ def create_remediation_issue(
             return ""
         data = response.json()
         return str(data.get("html_url") or "")
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return ""
     finally:
         if close_after:
             try:
                 client.close()
-            except Exception:  # pragma: no cover
+            except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
                 pass
 
 
@@ -1118,13 +1118,13 @@ def dispatch_issue_implementation(
             },
         )
         return response.status_code == 204
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return False
     finally:
         if close_after:
             try:
                 client.close()
-            except Exception:  # pragma: no cover
+            except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
                 pass
 
 

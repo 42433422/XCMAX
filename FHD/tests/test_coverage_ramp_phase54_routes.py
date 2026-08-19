@@ -858,7 +858,7 @@ def test_ai_print_file_failure(
     out_dir = tmp_path / "shipment_outputs"
     out_dir.mkdir()
     (out_dir / "fail.docx").write_bytes(b"doc")
-    monkeypatch.setattr("app.utils.path_utils.get_app_data_dir", lambda: str(tmp_path))
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path))
     printer = MagicMock()
     printer.print_document.return_value = {"success": False, "message": "offline"}
     monkeypatch.setattr(ai_routes_mod, "_printer_svc", lambda: printer)

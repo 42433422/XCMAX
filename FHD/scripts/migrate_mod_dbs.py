@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 对每个扩展库 {基库名}__<mod_suffix> 依次执行 alembic upgrade head。
 

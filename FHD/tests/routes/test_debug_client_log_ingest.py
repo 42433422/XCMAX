@@ -18,13 +18,14 @@ from app.fastapi_routes.debug_client_log import router
 def client() -> TestClient:
     app = FastAPI()
     app.include_router(router)
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 class TestClientDebugLog:
     def test_success(self, client: TestClient) -> None:
         with patch(
-            "app.utils.logging_utils.ingest_client_debug_json",
+            "app.utils.logging.logging_utils.ingest_client_debug_json",
             return_value={"success": True, "stored": True},
         ):
             r = client.post("/api/debug/client-log", json={"level": "info", "msg": "hi"})
@@ -50,7 +51,7 @@ class TestClientDebugLog:
 
     def test_empty_body_uses_default(self, client: TestClient) -> None:
         with patch(
-            "app.utils.logging_utils.ingest_client_debug_json",
+            "app.utils.logging.logging_utils.ingest_client_debug_json",
             return_value={"success": True},
         ):
             r = client.post("/api/debug/client-log", json={})

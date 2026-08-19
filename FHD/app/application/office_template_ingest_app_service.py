@@ -76,6 +76,8 @@ def _build_create_payload_from_analyze(
         or str(analyzed.get("template_name") or "").strip()
         or Path(filename or "template").stem
     )
+    if not isinstance(preview, dict):
+        preview = {}
     file_path = str(preview.get("file_path") or preview.get("image_path") or "").strip() or None
     scope = str(template_scope or "").strip()
     return {
@@ -103,7 +105,7 @@ def ingest_office_bytes_to_template_library(
     source: str = "office_upload",
 ) -> tuple[dict[str, Any], int]:
     """解析办公文件字节并写入模版库 ``templates`` 表。"""
-    from app.fastapi_routes.document_templates_compat import (
+    from app.legacy.routes.document_templates_compat import (
         run_archive_template_analyze,
         run_archive_template_create,
     )

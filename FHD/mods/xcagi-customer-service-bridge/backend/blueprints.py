@@ -205,7 +205,7 @@ class PassiveLoopConfigBody(BaseModel):
 
 async def _run_user_cs_employee(payload: Dict[str, Any]) -> Dict[str, Any]:
     """调用 user-customer-service-officer 员工包（mods/_employees）。"""
-    from app.services.user_cs_employee_runner import run_user_cs_employee
+    from app.mod_sdk.host_services import run_user_cs_employee
 
     return await run_user_cs_employee(payload)
 
@@ -235,7 +235,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/demand-intake")
     async def user_cs_demand_intake(body: DemandIntakeBody):
-        from app.services.user_cs_demand_form import build_intake_form_url
+        from app.mod_sdk.host_services import build_intake_form_url
 
         signed_url = ""
         if body.market_user_id:
@@ -254,7 +254,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             "use_llm": body.use_llm,
         }
         result = await _run_user_cs_employee(payload)
-        from app.application.user_cs_demand_intake_bridge import (
+        from app.mod_sdk.host_services import (
             mark_demand_intake_sent,
             normalize_demand_intake_result,
         )
@@ -274,13 +274,13 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.get("/user-cs/clients")
     async def user_cs_list_clients():
         """已有商机 pipeline 档案的市场用户（供内部客服列表与「添加客户」合并）。"""
-        from app.services.user_cs_pipeline import list_pipeline_client_summaries
+        from app.mod_sdk.host_services import list_pipeline_client_summaries
 
         return {"success": True, "data": {"clients": list_pipeline_client_summaries()}}
 
     @router.get("/user-cs/pipeline/funnel")
     async def user_cs_pipeline_funnel(max_clients_per_stage: int = 8):
-        from app.services.user_cs_pipeline import PIPELINE_STAGES, build_pipeline_funnel_summary
+        from app.mod_sdk.host_services import PIPELINE_STAGES, build_pipeline_funnel_summary
 
         data = build_pipeline_funnel_summary(max_clients_per_stage=max_clients_per_stage)
         return {
@@ -290,8 +290,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/pipeline/repair-crm")
     async def user_cs_pipeline_repair_crm(body: PipelineBody):
-        from app.services.user_cs_crm_store import CrmSyncError, get_crm_bundle_for_market_user
-        from app.services.user_cs_pipeline import PipelineCrmGateError, repair_pipeline_crm
+        from app.mod_sdk.host_services import CrmSyncError, get_crm_bundle_for_market_user
+        from app.mod_sdk.host_services import PipelineCrmGateError, repair_pipeline_crm
 
         try:
             doc = repair_pipeline_crm(int(body.market_user_id), username=body.username)
@@ -307,7 +307,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/pipeline/repair-all")
     async def user_cs_pipeline_repair_all(body: PipelineBody):
-        from app.services.user_cs_pipeline import repair_all_pipelines
+        from app.mod_sdk.host_services import repair_all_pipelines
 
         summary = repair_all_pipelines(username=body.username)
         return {"success": True, "data": summary}
@@ -317,14 +317,14 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         market_user_id: int,
         username: str = "",
     ):
-        from app.services.user_cs_enterprise_credentials import get_enterprise_credentials
+        from app.mod_sdk.host_services import get_enterprise_credentials
 
         data = get_enterprise_credentials(int(market_user_id), username=username)
         return {"success": True, "data": data}
 
     @router.post("/user-cs/enterprise-credentials/issue")
     async def user_cs_issue_enterprise_credentials(body: EnterpriseCredentialsIssueBody):
-        from app.services.user_cs_enterprise_credentials import issue_enterprise_credentials
+        from app.mod_sdk.host_services import issue_enterprise_credentials
 
         pwd = (body.password or "").strip() or None
         result = issue_enterprise_credentials(
@@ -342,7 +342,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         username: str = "",
         auto_advance: bool = False,
     ):
-        from app.services.user_cs_pipeline import (
+        from app.mod_sdk.host_services import (
             PIPELINE_STAGES,
             auto_advance_pipeline_if_ready,
             load_pipeline,
@@ -354,7 +354,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             doc, advanced = auto_advance_pipeline_if_ready(uid, username=username)
         else:
             doc = load_pipeline(uid, username=username)
-        from app.services.user_cs_crm_store import get_crm_bundle_for_market_user
+        from app.mod_sdk.host_services import get_crm_bundle_for_market_user
 
         return {
             "success": True,
@@ -367,7 +367,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         }
 
     def _apply_pipeline_body(body: PipelineBody):
-        from app.services.user_cs_pipeline import load_pipeline, save_pipeline, set_pipeline_stage
+        from app.mod_sdk.host_services import load_pipeline, save_pipeline, set_pipeline_stage
 
         uid = int(body.market_user_id)
         doc = load_pipeline(uid, username=body.username)
@@ -383,11 +383,11 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             except ValueError as exc:
                 return {"success": False, "error": str(exc)}
             except Exception as exc:
-                from app.services.user_cs_pipeline import PipelineCrmGateError
+                from app.mod_sdk.host_services import PipelineCrmGateError
 
                 if isinstance(exc, PipelineCrmGateError):
                     return {"success": False, "error": str(exc), "code": "crm_gate"}
-                from app.services.user_cs_crm_store import CrmSyncError
+                from app.mod_sdk.host_services import CrmSyncError
 
                 if isinstance(exc, CrmSyncError):
                     return {
@@ -412,8 +412,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/demand-form/sync")
     async def user_cs_demand_form_sync(body: DemandFormSyncBody, request: Request):
-        from app.services.user_cs_demand_form import verify_webhook_secret
-        from app.services.user_cs_landing_crm import apply_landing_submission_to_funnel
+        from app.mod_sdk.host_services import verify_webhook_secret
+        from app.mod_sdk.host_services import apply_landing_submission_to_funnel
 
         if not verify_webhook_secret(request.headers.get("x-intake-webhook-secret")):
             return {"success": False, "error": "unauthorized"}
@@ -436,8 +436,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/landing-funnel/sync")
     async def user_cs_landing_funnel_sync(body: LandingFunnelSyncBody, request: Request):
-        from app.services.user_cs_demand_form import verify_webhook_secret
-        from app.services.user_cs_landing_crm import apply_landing_submission_to_funnel
+        from app.mod_sdk.host_services import verify_webhook_secret
+        from app.mod_sdk.host_services import apply_landing_submission_to_funnel
 
         if not verify_webhook_secret(request.headers.get("x-intake-webhook-secret")):
             return {"success": False, "error": "unauthorized"}
@@ -454,8 +454,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.get("/user-cs/change-requests")
     def user_cs_change_requests_list(market_user_id: int, username: str = ""):
-        from app.services.user_cs_change_request import list_change_requests
-        from app.services.user_cs_pipeline import load_pipeline
+        from app.mod_sdk.host_services import list_change_requests
+        from app.mod_sdk.host_services import load_pipeline
 
         uid = int(market_user_id)
         return {
@@ -468,7 +468,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/change-requests")
     def user_cs_change_requests_create(body: ChangeRequestCreateBody):
-        from app.services.user_cs_change_request import create_change_request
+        from app.mod_sdk.host_services import create_change_request
 
         try:
             row = create_change_request(
@@ -486,7 +486,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.put("/user-cs/change-requests/{ticket_id}/status")
     def user_cs_change_requests_status(ticket_id: str, body: ChangeRequestStatusBody):
-        from app.services.user_cs_change_request import update_change_request_status
+        from app.mod_sdk.host_services import update_change_request_status
 
         try:
             row = update_change_request_status(
@@ -506,12 +506,12 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         body: ChangeRequestNotifyBody,
         request: Request,
     ):
-        from app.services.user_cs_change_request import (
+        from app.mod_sdk.host_services import (
             build_ops_dispatch_task_description,
             list_change_requests,
             mark_change_request_ops_dispatched,
         )
-        from app.services.user_cs_pipeline import load_pipeline
+        from app.mod_sdk.host_services import load_pipeline
 
         uid = int(body.market_user_id)
         rows = list_change_requests(uid, username=body.username)
@@ -535,7 +535,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             row, market_user_id=uid, client_name=client
         )
         try:
-            from app.fastapi_routes.market_account import _authorization_from_request, _proxy_json
+            from app.mod_sdk.host_services import _authorization_from_request, _proxy_json
         except Exception as exc:
             return {"success": False, "error": f"市场代理不可用: {exc}"}
         authorization = _authorization_from_request(request, {})
@@ -578,14 +578,14 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/change-requests/{ticket_id}/notify-wechat")
     def user_cs_change_requests_notify_wechat(ticket_id: str, body: ChangeRequestNotifyBody):
-        from app.services.user_cs_change_request import (
+        from app.mod_sdk.host_services import (
             build_change_request_wechat_message,
             list_change_requests,
             mark_change_request_wechat_notified,
         )
-        from app.services.user_cs_intake_notice import _primary_contact_name
-        from app.services.user_cs_pipeline import load_pipeline
-        from app.desktop_automation.service import get_desktop_automation_service
+        from app.mod_sdk.host_services import _primary_contact_name
+        from app.mod_sdk.host_services import load_pipeline
+        from app.mod_sdk.host_services import get_desktop_automation_service
 
         uid = int(body.market_user_id)
         rows = list_change_requests(uid, username=body.username)
@@ -619,7 +619,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         client_name: str = "",
         brief: str = "",
     ):
-        from app.services.user_cs_demand_form import build_intake_form_url
+        from app.mod_sdk.host_services import build_intake_form_url
 
         url = build_intake_form_url(
             int(market_user_id),
@@ -634,8 +634,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         client_name: str = "",
         brief: str = "",
     ):
-        from app.services.user_cs_demand_form import build_intake_form_url
-        from app.services.user_cs_intake_notice import build_intake_form_notice_message
+        from app.mod_sdk.host_services import build_intake_form_url
+        from app.mod_sdk.host_services import build_intake_form_notice_message
 
         uid = int(market_user_id)
         url = build_intake_form_url(uid, brief=brief, client_name=client_name)
@@ -650,7 +650,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     async def user_cs_demand_form_manual(body: DemandFormManualBody):
         from datetime import datetime, timezone
 
-        from app.services.user_cs_demand_form import apply_landing_submission_to_pipeline
+        from app.mod_sdk.host_services import apply_landing_submission_to_pipeline
 
         doc = apply_landing_submission_to_pipeline(
             int(body.market_user_id),
@@ -674,7 +674,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         audit_code: str,
         market_user_id: int | None = None,
     ):
-        from app.services.user_cs_demand_form import fetch_submission_by_audit_code
+        from app.mod_sdk.host_services import fetch_submission_by_audit_code
 
         try:
             submission = await fetch_submission_by_audit_code(
@@ -690,7 +690,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/demand-form/redeem-code")
     async def user_cs_demand_form_redeem_code(body: DemandFormRedeemCodeBody):
-        from app.services.user_cs_demand_form import redeem_submission_by_audit_code
+        from app.mod_sdk.host_services import redeem_submission_by_audit_code
 
         try:
             doc = await redeem_submission_by_audit_code(
@@ -707,13 +707,13 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.get("/user-cs/demand-form/status")
     async def user_cs_demand_form_status(market_user_id: int, username: str = ""):
-        from app.services.user_cs_demand_form import sync_intake_from_market_if_newer
-        from app.services.user_cs_intake_finalize import finalize_intake_submission
+        from app.mod_sdk.host_services import sync_intake_from_market_if_newer
+        from app.mod_sdk.host_services import finalize_intake_submission
 
         uid = int(market_user_id)
         doc = await sync_intake_from_market_if_newer(uid, username=username)
         if doc is None:
-            from app.services.user_cs_pipeline import load_pipeline
+            from app.mod_sdk.host_services import load_pipeline
 
             doc = load_pipeline(uid, username=username)
         elif doc.get("intake_submitted_at") and not doc.get("crm_funnel_synced_at"):
@@ -722,8 +722,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/demand-form/finalize")
     async def user_cs_demand_form_finalize(body: PipelineBody):
-        from app.services.user_cs_intake_finalize import finalize_intake_submission
-        from app.services.user_cs_pipeline import load_pipeline
+        from app.mod_sdk.host_services import finalize_intake_submission
+        from app.mod_sdk.host_services import load_pipeline
 
         uid = int(body.market_user_id)
         doc = load_pipeline(uid, username=body.username)
@@ -739,14 +739,14 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.get("/user-cs/crm")
     def user_cs_crm_bundle(market_user_id: int):
-        from app.services.user_cs_crm_store import get_crm_bundle_for_market_user
+        from app.mod_sdk.host_services import get_crm_bundle_for_market_user
 
         return {"success": True, "data": get_crm_bundle_for_market_user(int(market_user_id))}
 
     @router.post("/user-cs/crm/sync")
     async def user_cs_crm_sync(body: PipelineBody):
-        from app.services.user_cs_crm_store import get_crm_bundle_for_market_user, sync_crm_from_pipeline_doc
-        from app.services.user_cs_pipeline import load_pipeline, save_pipeline
+        from app.mod_sdk.host_services import get_crm_bundle_for_market_user, sync_crm_from_pipeline_doc
+        from app.mod_sdk.host_services import load_pipeline, save_pipeline
 
         uid = int(body.market_user_id)
         doc = load_pipeline(uid, username=body.username)
@@ -759,7 +759,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/crm/push-external")
     async def user_cs_crm_push_external(body: PipelineBody):
-        from app.services.user_cs_crm_store import CrmSyncError, push_external_crm_for_market_user
+        from app.mod_sdk.host_services import CrmSyncError, push_external_crm_for_market_user
 
         try:
             out = push_external_crm_for_market_user(int(body.market_user_id), username=body.username)
@@ -771,7 +771,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/crm/pull-external")
     async def user_cs_crm_pull_external(body: PipelineBody):
-        from app.services.user_cs_crm_store import CrmSyncError, pull_external_crm_for_market_user
+        from app.mod_sdk.host_services import CrmSyncError, pull_external_crm_for_market_user
 
         try:
             out = pull_external_crm_for_market_user(int(body.market_user_id), username=body.username)
@@ -786,8 +786,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.get("/user-cs/delivery")
     def user_cs_delivery_get(market_user_id: int, username: str = ""):
-        from app.services.user_cs_delivery import ensure_delivery_on_doc
-        from app.services.user_cs_pipeline import load_pipeline
+        from app.mod_sdk.host_services import ensure_delivery_on_doc
+        from app.mod_sdk.host_services import load_pipeline
 
         doc = ensure_delivery_on_doc(load_pipeline(int(market_user_id), username=username))
         return {
@@ -801,8 +801,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.put("/user-cs/delivery/plan")
     def user_cs_delivery_save_plan(body: DeliveryPlanBody):
-        from app.services.user_cs_delivery import ensure_delivery_on_doc, update_delivery_plan
-        from app.services.user_cs_pipeline import load_pipeline, save_pipeline, set_pipeline_stage
+        from app.mod_sdk.host_services import ensure_delivery_on_doc, update_delivery_plan
+        from app.mod_sdk.host_services import load_pipeline, save_pipeline, set_pipeline_stage
 
         uid = int(body.market_user_id)
         doc = ensure_delivery_on_doc(load_pipeline(uid, username=body.username))
@@ -832,7 +832,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/delivery/signoff/request")
     def user_cs_delivery_signoff_request(body: PipelineBody):
-        from app.services.user_cs_delivery_signoff import create_signoff_request
+        from app.mod_sdk.host_services import create_signoff_request
 
         try:
             out = create_signoff_request(
@@ -847,7 +847,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/delivery/signoff/confirm")
     def user_cs_delivery_signoff_confirm(body: PipelineBody):
-        from app.services.user_cs_delivery_signoff import confirm_signoff
+        from app.mod_sdk.host_services import confirm_signoff
 
         sid = int(getattr(body, "signoff_id", 0) or 0)
         if sid <= 0:
@@ -864,10 +864,10 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/delivery/notify-progress")
     def user_cs_delivery_notify_progress(body: PipelineBody):
-        from app.services.user_cs_delivery import build_delivery_progress_message, ensure_delivery_on_doc
-        from app.services.user_cs_intake_notice import _primary_contact_name
-        from app.services.user_cs_pipeline import load_pipeline, save_pipeline
-        from app.desktop_automation.service import get_desktop_automation_service
+        from app.mod_sdk.host_services import build_delivery_progress_message, ensure_delivery_on_doc
+        from app.mod_sdk.host_services import _primary_contact_name
+        from app.mod_sdk.host_services import load_pipeline, save_pipeline
+        from app.mod_sdk.host_services import get_desktop_automation_service
 
         uid = int(body.market_user_id)
         doc = ensure_delivery_on_doc(load_pipeline(uid, username=body.username))
@@ -898,7 +898,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/delivery/notify-software")
     def user_cs_delivery_notify_software(body: PipelineBody):
-        from app.services.user_cs_software_delivery import notify_software_delivery
+        from app.mod_sdk.host_services import notify_software_delivery
 
         force = bool(getattr(body, "force", False))
         out = notify_software_delivery(
@@ -912,9 +912,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/delivery/check-payment")
     def user_cs_delivery_check_payment(body: DeliveryPaymentBody):
-        from app.services.user_cs_delivery import ensure_delivery_on_doc, try_confirm_payment_and_invoice
-        from app.services.user_cs_pipeline import load_pipeline, save_pipeline
-        from app.services.wechat_group_customer_bridge import build_starred_group_feed
+        from app.mod_sdk.host_services import ensure_delivery_on_doc, try_confirm_payment_and_invoice
+        from app.mod_sdk.host_services import load_pipeline, save_pipeline
+        from app.mod_sdk.host_services import build_starred_group_feed
 
         uid = int(body.market_user_id)
         doc = ensure_delivery_on_doc(load_pipeline(uid, username=body.username))
@@ -950,7 +950,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/pipeline/auto-advance")
     async def user_cs_auto_advance_pipeline(body: PipelineBody):
-        from app.services.user_cs_pipeline import auto_advance_pipeline_if_ready
+        from app.mod_sdk.host_services import auto_advance_pipeline_if_ready
 
         doc, advanced = auto_advance_pipeline_if_ready(
             int(body.market_user_id),
@@ -960,8 +960,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/analyze")
     async def user_cs_analyze(body: AnalyzePipelineBody):
-        from app.services.user_cs_pipeline import PIPELINE_STAGES, analyze_customer_pipeline
-        from app.services.wechat_group_customer_bridge import build_starred_group_feed, get_bindings_for_user
+        from app.mod_sdk.host_services import PIPELINE_STAGES, analyze_customer_pipeline
+        from app.mod_sdk.host_services import build_starred_group_feed, get_bindings_for_user
 
         uid = int(body.market_user_id)
         has_binding = body.has_binding or bool(get_bindings_for_user(uid))
@@ -977,17 +977,17 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         )
         if preview:
             doc["last_message_preview"] = preview[:500]
-            from app.services.user_cs_pipeline import save_pipeline
+            from app.mod_sdk.host_services import save_pipeline
 
             doc = save_pipeline(doc)
 
         connected_welcome = None
         if str(doc.get("stage")) == "connected" and has_binding:
-            from app.services.user_cs_connected_welcome import maybe_send_connected_welcome
+            from app.mod_sdk.host_services import maybe_send_connected_welcome
 
             connected_welcome = maybe_send_connected_welcome(uid, username=body.username)
             if connected_welcome.get("sent"):
-                from app.services.user_cs_pipeline import load_pipeline
+                from app.mod_sdk.host_services import load_pipeline
 
                 doc = load_pipeline(uid, username=body.username)
 
@@ -1003,13 +1003,13 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.get("/user-cs/contract/schema")
     def user_cs_contract_schema():
-        from app.services.service_contract_fill import list_field_schema
+        from app.mod_sdk.host_services import list_field_schema
 
         return {"success": True, "data": list_field_schema()}
 
     @router.get("/user-cs/contract/fields")
     def user_cs_contract_fields(market_user_id: int, username: str = ""):
-        from app.services.service_contract_fill import build_merged_fields, load_field_overrides
+        from app.mod_sdk.host_services import build_merged_fields, load_field_overrides
 
         uid = int(market_user_id)
         return {
@@ -1022,9 +1022,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.put("/user-cs/contract/fields")
     def user_cs_contract_save_fields(body: ContractFieldsBody):
-        from app.services.service_contract_fill import build_merged_fields, save_field_overrides
-        from app.services.user_cs_delivery import apply_contract_snapshot_to_doc
-        from app.services.user_cs_pipeline import load_pipeline, save_pipeline
+        from app.mod_sdk.host_services import build_merged_fields, save_field_overrides
+        from app.mod_sdk.host_services import apply_contract_snapshot_to_doc
+        from app.mod_sdk.host_services import load_pipeline, save_pipeline
 
         uid = int(body.market_user_id)
         save_field_overrides(uid, body.values, username=body.username)
@@ -1037,11 +1037,11 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/contract/generate")
     async def user_cs_contract_generate(body: ContractGenerateBody):
-        from app.services.service_contract_fill import (
+        from app.mod_sdk.host_services import (
             build_contract_wechat_hint,
             generate_contract_docx,
         )
-        from app.services.user_cs_pipeline import load_pipeline, save_pipeline
+        from app.mod_sdk.host_services import load_pipeline, save_pipeline
 
         uid = int(body.market_user_id)
         result = generate_contract_docx(uid, username=body.username, field_values=body.values)
@@ -1071,7 +1071,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     def user_cs_contract_download(filename: str):
         from fastapi.responses import FileResponse
 
-        from app.services.service_contract_fill import generated_contracts_dir
+        from app.mod_sdk.host_services import generated_contracts_dir
 
         safe = os.path.basename(filename)
         path = generated_contracts_dir() / safe
@@ -1087,7 +1087,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     def user_cs_contract_sample_pdf():
         from fastapi.responses import FileResponse
 
-        from app.services.service_contract_fill import contract_assets_dir
+        from app.mod_sdk.host_services import contract_assets_dir
 
         path = contract_assets_dir() / "sample_party_b_prefilled.pdf"
         if not path.is_file():
@@ -1096,8 +1096,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/wechat/send")
     async def user_cs_wechat_send(body: WechatSendBody):
-        from app.desktop_automation.service import get_desktop_automation_service
-        from app.services.wechat_group_customer_bridge import get_bindings_for_user
+        from app.mod_sdk.host_services import get_desktop_automation_service
+        from app.mod_sdk.host_services import get_bindings_for_user
 
         uid = int(body.market_user_id)
         contact = body.contact_name.strip()
@@ -1113,7 +1113,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         sent = bool(result.get("success")) and bool(result.get("message_sent", result.get("success")))
         if sent:
             try:
-                from app.services.user_cs_pipeline import load_pipeline, save_pipeline
+                from app.mod_sdk.host_services import load_pipeline, save_pipeline
 
                 doc = load_pipeline(uid, username=body.username)
                 if doc.get("stage") in ("idle", "connected"):
@@ -1125,8 +1125,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/wechat/send-connected-welcome")
     async def user_cs_send_connected_welcome(body: ConnectedWelcomeBody):
-        from app.services.user_cs_connected_welcome import maybe_send_connected_welcome
-        from app.services.user_cs_pipeline import load_pipeline, save_pipeline
+        from app.mod_sdk.host_services import maybe_send_connected_welcome
+        from app.mod_sdk.host_services import load_pipeline, save_pipeline
 
         uid = int(body.market_user_id)
         doc = load_pipeline(uid, username=body.username)
@@ -1144,8 +1144,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/wechat/send-intake-notice")
     async def user_cs_send_intake_notice(body: IntakeNoticeBody):
-        from app.services.user_cs_intake_notice import maybe_send_intake_form_notice
-        from app.services.user_cs_pipeline import load_pipeline, save_pipeline
+        from app.mod_sdk.host_services import maybe_send_intake_form_notice
+        from app.mod_sdk.host_services import load_pipeline, save_pipeline
 
         uid = int(body.market_user_id)
         doc = load_pipeline(uid, username=body.username)
@@ -1165,8 +1165,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.get("/user-cs/wechat/llm-status")
     def user_cs_wechat_llm_status(request: Request):
-        from app.fastapi_routes.market_account import session_id_from_request
-        from app.services.wechat_passive_group_monitor import probe_passive_llm_ready
+        from app.mod_sdk.host_services import session_id_from_request
+        from app.mod_sdk.host_services import probe_passive_llm_ready
 
         return {
             "success": True,
@@ -1179,8 +1179,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.post("/user-cs/wechat/passive-poll")
     async def user_cs_passive_poll(request: Request, body: PassivePollBody):
         """被动探测：快照复制解密 → 读绑定群新消息 → 可选自动回复。"""
-        from app.fastapi_routes.market_account import session_id_from_request
-        from app.services.wechat_passive_group_monitor import passive_poll_once
+        from app.mod_sdk.host_services import session_id_from_request
+        from app.mod_sdk.host_services import passive_poll_once
 
         out = passive_poll_once(
             market_user_id=int(body.market_user_id),
@@ -1200,12 +1200,12 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.get("/user-cs/wechat/passive-loop")
     def user_cs_passive_loop_get(market_user_id: int, username: str = ""):
-        from app.services.wechat_passive_group_monitor import get_passive_poll_config
+        from app.mod_sdk.host_services import get_passive_poll_config
 
         return {"success": True, "data": get_passive_poll_config(market_user_id, username=username)}
 
     def _user_cs_passive_loop_save(body: PassiveLoopConfigBody) -> dict:
-        from app.services.wechat_passive_group_monitor import save_passive_poll_config
+        from app.mod_sdk.host_services import save_passive_poll_config
 
         data = save_passive_poll_config(
             int(body.market_user_id),
@@ -1231,7 +1231,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/user-cs/wechat/passive-reset-watch")
     def user_cs_passive_reset_watch(body: PassiveLoopConfigBody):
-        from app.services.wechat_passive_group_monitor import reset_passive_watch
+        from app.mod_sdk.host_services import reset_passive_watch
 
         state = reset_passive_watch(int(body.market_user_id), username=body.username)
         return {"success": True, "data": state}

@@ -94,6 +94,8 @@ class EmployeeRegistry:
                         raw = json.load(f)
                     if isinstance(raw, dict):
                         cfg = raw.get("config") if isinstance(raw.get("config"), dict) else {}
+                        if not isinstance(cfg, dict):
+                            cfg = {}
                         if cfg.get("host_foundation_pack"):
                             wf = []
                         else:
@@ -169,6 +171,8 @@ class EmployeeRegistry:
                     json.dump(receipt, receipt_file, ensure_ascii=False, sort_keys=True)
                 logger.info("Installed employee_pack to %s", dest)
                 cfg = manifest.get("config") if isinstance(manifest.get("config"), dict) else {}
+                if not isinstance(cfg, dict):
+                    cfg = {}
                 if cfg.get("host_foundation_pack"):
                     from app.mod_sdk.host_foundation import materialize_host_foundation_bridges
 

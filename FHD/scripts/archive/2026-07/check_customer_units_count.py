@@ -70,7 +70,7 @@ def check_customer_units_count():
             "bandao_exists": bool(bandao_exists),
         }
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查购买单位数量时出错: {e}")
         return {"error": str(e)}
 
@@ -117,7 +117,7 @@ def fix_bandao_fengqing_status():
         conn.close()
         return True
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 修复半岛风情状态时出错: {e}")
         return False
 
@@ -132,7 +132,7 @@ if __name__ == "__main__":
     print("\n" + "=" * 50)
 
     if "error" not in result:
-        print(f"📊 当前状态:")
+        print("📊 当前状态:")
         print(f"   活跃购买单位: {result['active_units']} 个")
         print(f"   总购买单位: {result['total_units']} 个")
         print(f"   半岛风情存在: {result['bandao_exists']}")

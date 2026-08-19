@@ -53,7 +53,7 @@ def generate_shipment_order(
     except RECOVERABLE_ERRORS as e:
         logger.exception("生成发货单失败：%s", e)
         try:
-            self.retry(exc=e, countdown=60)
+            raise self.retry(exc=e, countdown=60)
         except self.MaxRetriesExceededError:
             logger.error("生成发货单达到最大重试次数")
             return {
@@ -120,7 +120,7 @@ def generate_batch_shipment_orders(self, orders: list[dict[str, Any]]) -> dict[s
     except RECOVERABLE_ERRORS as e:
         logger.exception("批量生成发货单失败：%s", e)
         try:
-            self.retry(exc=e, countdown=120)
+            raise self.retry(exc=e, countdown=120)
         except self.MaxRetriesExceededError:
             logger.error("批量生成发货单达到最大重试次数")
             return {
@@ -172,7 +172,7 @@ def print_shipment_document(
     except RECOVERABLE_ERRORS as e:
         logger.exception("打印发货单失败：%s", e)
         try:
-            self.retry(exc=e, countdown=30)
+            raise self.retry(exc=e, countdown=30)
         except self.MaxRetriesExceededError:
             logger.error("打印发货单达到最大重试次数")
             return {"success": False, "message": f"打印失败：{str(e)}"}
@@ -194,7 +194,7 @@ def cleanup_old_shipment_documents(days: int = 90) -> int:
 
         from datetime import datetime, timedelta
 
-        from app.utils.path_utils import get_app_data_dir
+        from app.utils.path_io.path_utils import get_app_data_dir
 
         output_dir = os.path.join(get_app_data_dir(), "shipment_outputs")
 
@@ -267,7 +267,7 @@ def export_shipment_records_task(
     except RECOVERABLE_ERRORS as e:
         logger.exception("导出出货记录失败：%s", e)
         try:
-            self.retry(exc=e, countdown=60)
+            raise self.retry(exc=e, countdown=60)
         except self.MaxRetriesExceededError:
             logger.error("导出出货记录达到最大重试次数")
             return {
@@ -316,7 +316,7 @@ def import_products_batch_task(
             for item in batch:
                 try:
                     item["unit"] = unit_name
-                    result = service.add_product(item)
+                    result = service.create_product(item)
                     if result.get("success"):
                         imported += 1
                     elif skip_duplicates and "已存在" in str(result.get("message", "")):
@@ -341,7 +341,7 @@ def import_products_batch_task(
     except RECOVERABLE_ERRORS as e:
         logger.exception("批量导入产品失败：%s", e)
         try:
-            self.retry(exc=e, countdown=60)
+            raise self.retry(exc=e, countdown=60)
         except self.MaxRetriesExceededError:
             logger.error("批量导入产品达到最大重试次数")
             return {
@@ -408,7 +408,7 @@ def generate_labels_batch_task(self, labels: list[dict[str, Any]]) -> dict[str, 
     except RECOVERABLE_ERRORS as e:
         logger.exception("批量生成标签失败：%s", e)
         try:
-            self.retry(exc=e, countdown=60)
+            raise self.retry(exc=e, countdown=60)
         except self.MaxRetriesExceededError:
             logger.error("批量生成标签达到最大重试次数")
             return {
@@ -449,7 +449,7 @@ def generate_parallel_shipment_orders(self, orders: list[dict[str, Any]]) -> dic
         )
 
         result = job.apply_async()
-        task_ids = result.results
+        task_ids = cast(Any, result).results
 
         logger.info("并行任务已提交，task_ids: %s", [t.id for t in task_ids])
 

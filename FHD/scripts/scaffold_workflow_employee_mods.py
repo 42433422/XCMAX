@@ -106,7 +106,7 @@ def _load_employee_module(mod_id: str, stem: str):
         return None
     try:
         return import_mod_backend_py(mod_path, mod_id, f"employees/{{stem}}")
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         logger.exception("load employee module failed mod=%s stem=%s", mod_id, stem)
         return None
 
@@ -145,7 +145,7 @@ async def _build_ctx(mod_id: str, employee_id: str) -> Dict[str, Any]:
             )
 
         ctx["call_llm"] = _call_llm
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
         logger.warning("mod_employee_complete unavailable: %s", exc)
     return ctx
 

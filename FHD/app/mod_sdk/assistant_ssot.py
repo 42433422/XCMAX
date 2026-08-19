@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from app.mod_sdk.host_profile import resolve_fhd_config_dir
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -222,7 +222,7 @@ def get_assistant(assistant_id: str = "xiaoc") -> dict[str, Any]:
     entity = assistants.get(aid)
     if isinstance(entity, dict):
         return entity
-    return _FALLBACK_DOC["assistants"]["xiaoc"]
+    return cast("dict[str, Any]", _FALLBACK_DOC["assistants"]["xiaoc"])
 
 
 def xiaoc() -> dict[str, Any]:
@@ -330,6 +330,8 @@ def surface_composition(device: str, side: str) -> list[str]:
     if not isinstance(surfaces, dict) or dev not in surfaces:
         surfaces = _FALLBACK_DOC["surfaces"]
     device_block = surfaces.get(dev) if isinstance(surfaces.get(dev), dict) else {}
+    if not isinstance(device_block, dict):
+        device_block = {}
     raw = device_block.get(sd)
     if not isinstance(raw, list):
         raw = (_FALLBACK_DOC["surfaces"].get(dev, {}) or {}).get(sd, [])
@@ -353,7 +355,7 @@ def platform_source_for_side(side: str) -> dict[str, Any]:
         if tier.get("id") == "platform":
             by_side = tier.get("source_by_side")
             if isinstance(by_side, dict) and isinstance(by_side.get(sd), dict):
-                return by_side[sd]
+                return cast("dict[str, Any]", by_side[sd])
             break
     return {}
 

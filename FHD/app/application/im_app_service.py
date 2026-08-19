@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
@@ -90,7 +90,7 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
         if changed:
             self._db.commit()
             self._db.refresh(row)
-        return row
+        return cast("User | None", row)
 
     @staticmethod
     def _contact_dict(user: User, *, dedicated_cs: bool = False) -> dict[str, Any]:
@@ -218,12 +218,15 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
         )
 
     def _get_member(self, conversation_id: int, user_id: int) -> ImConversationMember | None:
-        return self._db.execute(
-            select(ImConversationMember).where(
-                ImConversationMember.conversation_id == conversation_id,
-                ImConversationMember.user_id == user_id,
-            )
-        ).scalar_one_or_none()
+        return cast(
+            "ImConversationMember | None",
+            self._db.execute(
+                select(ImConversationMember).where(
+                    ImConversationMember.conversation_id == conversation_id,
+                    ImConversationMember.user_id == user_id,
+                )
+            ).scalar_one_or_none(),
+        )
 
     def get_or_create_direct(self, user_id: int, peer_user_id: int) -> dict[str, Any]:
         if user_id == peer_user_id:

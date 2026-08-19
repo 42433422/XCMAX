@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 
 def _load_ops_module():
@@ -21,7 +21,7 @@ def _load_ops_module():
 
 
 def build_runtime_inventory(*, host: str = "127.0.0.1") -> dict[str, Any]:
-    return _load_ops_module().build_inventory(host=host)
+    return cast("dict[str, Any]", _load_ops_module().build_inventory(host=host))
 
 
 def write_runtime_inventory_projection(

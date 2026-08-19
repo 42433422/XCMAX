@@ -1,4 +1,4 @@
-"""Tests for app.fastapi_routes.openapi_route_compat."""
+"""Tests for app.legacy.routes.openapi_route_compat."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi import FastAPI
 
-from app.fastapi_routes.openapi_route_compat import (
+from app.legacy.routes.openapi_route_compat import (
     hide_trailing_slash_openapi_duplicates,
     include_router_with_slash_compat,
     iter_effective_routes,

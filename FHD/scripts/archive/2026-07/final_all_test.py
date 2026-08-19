@@ -18,13 +18,13 @@ def final_test():
         data = response.json()
         customers = data.get("data", [])
 
-        print(f"✅ 客户 API 工作正常")
+        print("✅ 客户 API 工作正常")
         print(f"📊 客户数量：{len(customers)} 个")
         print("📋 客户列表:")
         for customer in customers:
             print(f"  - ID: {customer['id']}, 名称：{customer['customer_name']}")
     else:
-        print(f"❌ 客户 API 失败")
+        print("❌ 客户 API 失败")
 
     # 测试 2: 原材料列表 API
     print("\n📋 测试 2: 原材料列表 API")
@@ -34,10 +34,10 @@ def final_test():
     if response.status_code == 200:
         data = response.json()
 
-        print(f"✅ 原材料 API 工作正常")
+        print("✅ 原材料 API 工作正常")
         print(f"📊 响应数据：{data}")
     else:
-        print(f"❌ 原材料 API 失败")
+        print("❌ 原材料 API 失败")
         print(f"📄 响应内容：{response.text}")
 
     # 测试 3: 产品列表 API
@@ -48,10 +48,10 @@ def final_test():
     if response.status_code == 200:
         data = response.json()
 
-        print(f"✅ 产品 API 工作正常")
+        print("✅ 产品 API 工作正常")
         print(f"📊 产品数量：{len(data.get('data', []))} 个")
     else:
-        print(f"❌ 产品 API 失败")
+        print("❌ 产品 API 失败")
         print(f"📄 响应内容：{response.text}")
 
     print("\n🎉 所有 API 测试完成！")

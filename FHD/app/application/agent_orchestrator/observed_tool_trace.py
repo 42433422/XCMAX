@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from app.application.agent_orchestrator.run_models import (
     AgentRun,
@@ -84,13 +84,13 @@ def create_observed_tool_trace_run(
     assert isinstance(safe_params, dict)
     assert isinstance(safe_output, dict)
     succeeded = safe_output.get("success") is not False
-    status = "completed" if succeeded else "failed"
+    run_status: Literal["completed", "failed"] = "completed" if succeeded else "failed"
     finished_at = utc_now_iso()
     runtime = _task_runtime_context(runtime_context, user_id=user_id)
     run = AgentRun(
         user_id=user_id,
         message=str(message or "")[:_MAX_TEXT],
-        status=status,
+        status=run_status,
         intent=f"{spec.tool_id}_{spec.action}",
         metadata={
             "channel": "desktop_observed_tool",
@@ -111,7 +111,7 @@ def create_observed_tool_trace_run(
         risk=spec.risk,
         idempotent=spec.idempotent,
         description="桌面快速路径已执行工具调用",
-        status=status,
+        status=run_status,
         output=safe_output,
         finished_at=finished_at,
     )
@@ -121,7 +121,7 @@ def create_observed_tool_trace_run(
         tool_id=step.tool_id,
         action=step.action,
         params=safe_params,
-        status=status,
+        status=run_status,
         output=safe_output,
         error="" if succeeded else "observed tool reported failure",
         cost_units=int(spec.cost_units or 0),

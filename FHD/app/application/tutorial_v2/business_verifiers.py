@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,9 @@ from app.infrastructure.tenant_scope import tenant_scope
 
 
 class TutorialBusinessVerifierMixin:
+    if TYPE_CHECKING:
+        _observed_task_execution_count: Any
+
     def _sales_entities(self, db: Session, run: TutorialRun) -> dict[str, Any]:
         tenant_id = run.workspace.tutorial_tenant_id
         with tenant_scope(tenant_id):

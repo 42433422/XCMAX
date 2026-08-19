@@ -15,14 +15,28 @@ import asyncio
 import logging
 import os
 import threading
-import time
 from collections import defaultdict
-from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from heapq import heappop, heappush
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
-from app.neuro_bus.events.base import AsyncEventHandler, EventHandler, NeuroEvent
+from app.neuro_bus.bus_primitives import (
+    HandlerSubscription,
+    PriorityEventQueue,
+    _neuro_env_flag,
+    _neuro_reliability_wanted,
+    _should_trace_event,
+)
+from app.neuro_bus.bus_primitives import (
+    _deployment_is_production as _deployment_is_production,
+)
+from app.neuro_bus.bus_primitives import (
+    _deployment_is_staging as _deployment_is_staging,
+)
+from app.neuro_bus.bus_primitives import (
+    _neuro_trace_sample_rate as _neuro_trace_sample_rate,
+)
+from app.neuro_bus.bus_subscriptions import NeuroBusSubscriptionsMixin
+from app.neuro_bus.events.base import NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -32,189 +46,9 @@ if TYPE_CHECKING:
     from app.neuro_bus.transports.redis_streams import RedisStreamsBridge
 
 
-def _neuro_env_flag(name: str) -> bool:
-    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _deployment_is_staging() -> bool:
-    """k8s/CI：设置 FHD_ENV=staging；与本仓库 staging 部署约定一致。"""
-    return os.environ.get("FHD_ENV", "").strip().lower() == "staging"
-
-
-def _deployment_is_production() -> bool:
-    """k8s/CI：设置 FHD_ENV=production；生产环境安全优先，可靠性机制默认全开。"""
-    return os.environ.get("FHD_ENV", "").strip().lower() == "production"
-
-
-def _neuro_trace_sample_rate() -> float:
-    """生产 trace 采样率，避免洪泛。XCAGI_NEURO_BUS_TRACE_SAMPLE_RATE 默认 0.1。"""
-    raw = os.environ.get("XCAGI_NEURO_BUS_TRACE_SAMPLE_RATE", "0.1").strip()
-    try:
-        rate = float(raw)
-    except ValueError:
-        rate = 0.1
-    return max(0.0, min(1.0, rate))
-
-
-def _should_trace_event() -> bool:
-    """未启用 tracer 时忽略；启用后按采样率决定是否记录 span。"""
-    rate = _neuro_trace_sample_rate()
-    if rate >= 1.0:
-        return True
-    if rate <= 0.0:
-        return False
-    import random
-
-    return random.random() < rate
-
-
-def _neuro_reliability_wanted(
-    env_name: str, *, staging_default: bool, production_default: bool = True
-) -> bool:
-    """
-    可靠性层开关：显式设置环境变量时以变量为准；未设置时在 staging/production
-    采用默认值（生产安全优先，production_default 默认 True）。
-    """
-    raw = os.environ.get(env_name)
-    if raw is not None and str(raw).strip() != "":
-        return _neuro_env_flag(env_name)
-    if _deployment_is_staging():
-        return staging_default
-    if _deployment_is_production():
-        return production_default
-    return False
-
-
-class HandlerSubscription:
-    """处理器订阅信息"""
-
-    def __init__(
-        self,
-        event_type: str,
-        handler: EventHandler | AsyncEventHandler,
-        priority: int = 0,
-        is_async: bool = True,
-        filter_fn: Callable[[NeuroEvent], bool] | None = None,
-    ):
-        self.event_type = event_type
-        self.handler = handler
-        self.priority = priority
-        self.is_async = is_async
-        self.filter_fn = filter_fn
-        self.created_at = time.time()
-        self.call_count = 0
-        self.error_count = 0
-
-    def should_handle(self, event: NeuroEvent) -> bool:
-        """检查是否应该处理该事件"""
-        if self.filter_fn:
-            return self.filter_fn(event)
-        return True
-
-    def record_call(self, success: bool = True):
-        """记录调用统计"""
-        self.call_count += 1
-        if not success:
-            self.error_count += 1
-
-    @property
-    def error_rate(self) -> float:
-        """计算错误率"""
-        if self.call_count == 0:
-            return 0.0
-        return self.error_count / self.call_count
-
-
-class PriorityEventQueue:
-    """
-    优先级事件队列
-
-    使用堆实现的高效优先级队列
-    """
-
-    def __init__(self, max_size: int = 10000):
-        self._queue: list[tuple] = []  # (priority, timestamp, event_id, event)
-        self._event_ids: set[str] = set()
-        self._max_size = max_size
-        self._lock = threading.RLock()
-        self._dropped_count = 0
-
-    def put(self, event: NeuroEvent) -> bool:
-        """
-        放入事件
-
-        Returns:
-            是否成功放入（队列满时丢弃低优先级事件）
-        """
-        with self._lock:
-            # 同一 event_id 已在队列中则无法入队；自动 remint 避免静默丢件导致上游阻塞
-            for attempt in range(4):
-                if event.metadata.event_id not in self._event_ids:
-                    break
-                if attempt == 3:
-                    logger.error(
-                        "NeuroBus: event_id %s still conflicts after remint; dropping",
-                        event.metadata.event_id,
-                    )
-                    self._dropped_count += 1
-                    return False
-                logger.warning(
-                    "NeuroBus: duplicate event_id %s in queue; reminting (attempt %s)",
-                    event.metadata.event_id,
-                    attempt + 1,
-                )
-                event.remint_queue_identity()
-
-            # 队列满时处理
-            if len(self._queue) >= self._max_size:
-                # 如果新事件优先级比队列中最低的高，则替换
-                if self._queue and event.priority.value < self._queue[0][0]:
-                    _, _, _, old_event = heappop(self._queue)
-                    self._event_ids.discard(old_event.metadata.event_id)
-                    self._dropped_count += 1
-                    logger.warning("Dropped low priority event due to queue full: %s", old_event)
-                else:
-                    self._dropped_count += 1
-                    logger.warning("Queue full, dropping event: %s", event)
-                    return False
-
-            # 放入队列 (优先级数值小的在前)
-            heappush(
-                self._queue,
-                (event.priority.value, event.metadata.timestamp, event.metadata.event_id, event),
-            )
-            self._event_ids.add(event.metadata.event_id)
-            return True
-
-    def get(self) -> NeuroEvent | None:
-        """取出最高优先级事件"""
-        with self._lock:
-            if not self._queue:
-                return None
-            _, _, event_id, event = heappop(self._queue)
-            self._event_ids.discard(event_id)
-            return cast("NeuroEvent | None", event)
-
-    def peek(self) -> NeuroEvent | None:
-        """查看最高优先级事件（不取出）"""
-        with self._lock:
-            if not self._queue:
-                return None
-            return cast("NeuroEvent | None", self._queue[0][3])
-
-    def size(self) -> int:
-        """队列大小"""
-        with self._lock:
-            return len(self._queue)
-
-    def clear(self):
-        """清空队列"""
-        with self._lock:
-            self._queue.clear()
-            self._event_ids.clear()
-
-
-class NeuroBus:
+class NeuroBus(NeuroBusSubscriptionsMixin):
     """
     神经总线 - 高性能事件总线实现
 
@@ -637,171 +471,6 @@ class NeuroBus:
                     pass
         return success
 
-    def subscribe(
-        self,
-        event_type: str,
-        handler: EventHandler | AsyncEventHandler,
-        priority: int = 0,
-        is_async: bool = True,
-        filter_fn: Callable[[NeuroEvent], bool] | None = None,
-    ) -> HandlerSubscription:
-        """
-        订阅特定类型事件
-
-        Args:
-            event_type: 事件类型
-            handler: 处理器函数
-            priority: 处理器优先级（数值小的先执行）
-            is_async: 是否为异步处理器
-            filter_fn: 可选的过滤函数
-
-        Returns:
-            订阅对象
-        """
-        subscription = HandlerSubscription(
-            event_type=event_type,
-            handler=handler,
-            priority=priority,
-            is_async=is_async,
-            filter_fn=filter_fn,
-        )
-
-        self._handlers[event_type].append(subscription)
-
-        # 按优先级排序
-        self._handlers[event_type].sort(key=lambda s: s.priority)
-
-        logger.debug("Subscribed to %s: %s", event_type, handler.__name__)
-        return subscription
-
-    def subscribe_event(
-        self,
-        event_type: str,
-        handler: EventHandler | AsyncEventHandler,
-        priority: int = 0,
-        is_async: bool = True,
-        filter_fn: Callable[[NeuroEvent], bool] | None = None,
-        domain: str | None = None,
-    ) -> HandlerSubscription:
-        """订阅事件；指定 domain 时路由到领域处理器。"""
-        if domain:
-            return self.subscribe_to_domain(domain, event_type, handler, priority, is_async)
-        return self.subscribe(event_type, handler, priority, is_async, filter_fn)
-
-    def subscribe_global(
-        self,
-        handler: EventHandler | AsyncEventHandler,
-        filter_fn: Callable[[NeuroEvent], bool] | None = None,
-    ) -> HandlerSubscription:
-        """订阅所有事件（subscribe_all 别名）。"""
-        return self.subscribe_all(handler, filter_fn)
-
-    def subscribe_to_domain(
-        self,
-        domain: str,
-        event_type: str,
-        handler: EventHandler | AsyncEventHandler,
-        priority: int = 0,
-        is_async: bool = True,
-    ) -> HandlerSubscription:
-        """订阅特定领域的事件"""
-        subscription = HandlerSubscription(
-            event_type=event_type,
-            handler=handler,
-            priority=priority,
-            is_async=is_async,
-        )
-
-        self._domain_handlers[domain][event_type].append(subscription)
-        self._domain_handlers[domain][event_type].sort(key=lambda s: s.priority)
-
-        logger.debug("Subscribed to %s.%s: %s", domain, event_type, handler.__name__)
-        return subscription
-
-    def subscribe_all(
-        self,
-        handler: EventHandler | AsyncEventHandler,
-        filter_fn: Callable[[NeuroEvent], bool] | None = None,
-    ) -> HandlerSubscription:
-        """订阅所有事件（全局处理器）"""
-        subscription = HandlerSubscription(
-            event_type="*",
-            handler=handler,
-            filter_fn=filter_fn,
-        )
-
-        self._global_handlers.append(subscription)
-        logger.debug("Global subscription: %s", handler.__name__)
-        return subscription
-
-    def unsubscribe(self, subscription: HandlerSubscription) -> bool:
-        """取消订阅"""
-        if subscription.event_type in self._handlers:
-            if subscription in self._handlers[subscription.event_type]:
-                self._handlers[subscription.event_type].remove(subscription)
-                return True
-        return False
-
-    def get_stats(self) -> dict[str, Any]:
-        """获取总线统计信息"""
-        return {
-            "published": self._published_count,
-            "processed": self._processed_count,
-            "errors": self._error_count,
-            "dropped": self._dropped_count,
-            "queue_size": self._event_queue.size(),
-            "handlers": sum(len(h) for h in self._handlers.values()),
-            "global_handlers": len(self._global_handlers),
-            "running": self._running,
-            "reliability": self.get_reliability_status(),
-        }
-
-    def get_reliability_status(self) -> dict[str, Any]:
-        """总线级可靠性层是否启用（与 /api/neurobus 诊断一致）。"""
-        out: dict[str, Any] = {
-            "fhd_env": os.environ.get("FHD_ENV", ""),
-            "dedup": self._rel_dedup is not None,
-            "rate_limit": self._rel_rate is not None,
-            "circuit_breaker": self._rel_circuit is not None,
-            "lifeline": self._rel_lifeline is not None,
-            "tracer": self._rel_tracer is not None,
-            "sla_log": self._rel_sla_log,
-            "sla_controller": self._rel_sla_controller is not None,
-            "retry": self._rel_retry_handler is not None,
-            "dlq_auto": self._dlq_integration is not None,
-            "redis_pubsub": self._redis_bridge is not None,
-            "trace_sample_rate": (
-                _neuro_trace_sample_rate() if self._rel_tracer is not None else None
-            ),
-        }
-        if self._rel_circuit is not None:
-            try:
-                out["circuit_open"] = not self._rel_circuit.can_execute()
-            except RECOVERABLE_ERRORS:
-                out["circuit_open"] = None
-        return out
-
-    def summarize_subscriptions(self) -> dict[str, Any]:
-        """Startup diagnostics: handler counts per event type (flat + per-domain)."""
-        flat = {k: len(v) for k, v in sorted(self._handlers.items())}
-        domain_nested: dict[str, dict[str, int]] = {}
-        for d, evs in self._domain_handlers.items():
-            domain_nested[d] = {e: len(subs) for e, subs in sorted(evs.items())}
-        return {
-            "flat_event_handlers": flat,
-            "domain_handlers": domain_nested,
-            "global_handlers": len(self._global_handlers),
-        }
-
-    @property
-    def registered_domains(self) -> list[str]:
-        """已注册神经域名称（来自 DomainRegistry，供启动日志与健康检查）。"""
-        try:
-            from app.neuro_bus.domains.base import get_domain_registry
-
-            return get_domain_registry().list_domains()
-        except RECOVERABLE_ERRORS:
-            return []
 
 
 # 全局 NeuroBus 实例

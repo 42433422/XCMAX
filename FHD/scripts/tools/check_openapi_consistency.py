@@ -141,7 +141,7 @@ def collect_runtime_routes(app) -> list[RuntimeRoute]:
     except ImportError:  # pragma: no cover - FastAPI 必然提供
         from starlette.routing import APIRoute  # type: ignore[no-redef]
 
-    from app.fastapi_routes.openapi_route_compat import iter_effective_routes
+    from app.legacy.routes.openapi_route_compat import iter_effective_routes
     from app.utils.openapi_path import normalize_path_template
 
     out: list[RuntimeRoute] = []
@@ -269,7 +269,7 @@ def diff_routes_vs_openapi(
         # 用 fq name（module.qualname）区分，避免把不同模块的同名函数误判为"同一处理器重复挂载"。
         unique_names = sorted({fq for _, fq, _ in entries})
         visible_count = sum(1 for _, _, vis in entries if vis)
-        if len(unique_names) == 1:
+        if len(unique_names) == 1 and visible_count >= 2:
             findings.append(
                 Finding(
                     level="warn",
@@ -278,6 +278,20 @@ def diff_routes_vs_openapi(
                         f"{method} {path} 被同一处理器注册了 {len(entries)} 次"
                         f"（endpoint: {unique_names[0]}）；建议把多余的尾斜杠变体标记为"
                         " ``include_in_schema=False`` 或改用 FastAPI 默认重定向"
+                    ),
+                    method=method,
+                    path=path,
+                    extra={"endpoints": [e[1] for e in entries]},
+                )
+            )
+        elif len(unique_names) == 1:
+            findings.append(
+                Finding(
+                    level="info",
+                    code="TRAILING_SLASH_COMPAT_ALIAS",
+                    message=(
+                        f"{method} {path} 的兼容别名已从 OpenAPI 隐藏"
+                        f"（endpoint: {unique_names[0]}）"
                     ),
                     method=method,
                     path=path,
@@ -580,6 +594,9 @@ def _build_app():
 
     # 避免启动期 LAN 门禁 / license 初始化对环境敏感
     os.environ.setdefault("XCAGI_NEURO_INTENT", "1")
+    # This is a full-server contract check. Desktop fast-start mounts only the
+    # bootstrap API and would hide all deferred business routes from OpenAPI.
+    os.environ["XCAGI_DESKTOP_FAST_START"] = "0"
 
     from app.fastapi_app import create_fastapi_app
 

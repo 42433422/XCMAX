@@ -13,7 +13,6 @@ Voice / ASR Routes - FastAPI Implementation
 from __future__ import annotations
 
 import logging
-import os
 import sys
 import tempfile
 import time
@@ -22,6 +21,21 @@ from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
+from app.fastapi_routes.voice_model_source import (
+    env as _env,
+)
+from app.fastapi_routes.voice_model_source import (
+    resolve_compute_type as _resolve_compute_type,
+)
+from app.fastapi_routes.voice_model_source import (
+    resolve_device as _resolve_device,
+)
+from app.fastapi_routes.voice_model_source import (
+    resolve_model_name as _resolve_model_name,
+)
+from app.fastapi_routes.voice_model_source import (
+    resolve_model_source as _resolve_model_source,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -32,109 +46,6 @@ _MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB；等同于 OpenAI Whisper 官方�
 
 # 懒加载：第一次调用才把 faster-whisper 模型加载进内存，避免服务冷启动时白耗几百 MB
 _model_holder: dict[str, Any] = {"instance": None, "signature": None}
-
-_MODEL_ALLOW_PATTERNS = (
-    "config.json",
-    "preprocessor_config.json",
-    "model.bin",
-    "tokenizer.json",
-    "vocabulary.*",
-)
-_DEFAULT_MODEL_ENDPOINTS = (
-    "https://huggingface.co",
-    "https://hf-mirror.com",
-)
-
-
-def _env(name: str, default: str = "") -> str:
-    v = os.environ.get(name)
-    return (v or default).strip()
-
-
-def _resolve_device() -> str:
-    d = _env("XCAGI_CHAT_ASR_DEVICE").lower()
-    if d in ("cpu", "cuda"):
-        return d
-    try:
-        import torch
-
-        return "cuda" if torch.cuda.is_available() else "cpu"
-    except RECOVERABLE_ERRORS:
-        return "cpu"
-
-
-def _resolve_compute_type(device: str) -> str:
-    ct = _env("XCAGI_CHAT_ASR_COMPUTE_TYPE").lower()
-    if ct:
-        return ct
-    return "float16" if device == "cuda" else "int8"
-
-
-def _resolve_model_name() -> str:
-    # 主聊天用短语音，默认 small 在中英文混合时命中率/速度平衡较好；可以在环境变量覆盖成 tiny / medium
-    return _env("XCAGI_CHAT_ASR_MODEL", "small")
-
-
-def _model_download_endpoints() -> tuple[str, ...]:
-    raw = _env("XCAGI_CHAT_ASR_MODEL_ENDPOINTS")
-    values = raw.split(",") if raw else list(_DEFAULT_MODEL_ENDPOINTS)
-    endpoints: list[str] = []
-    for value in values:
-        endpoint = value.strip().rstrip("/")
-        if endpoint and endpoint not in endpoints:
-            endpoints.append(endpoint)
-    return tuple(endpoints)
-
-
-def _resolve_model_source(model_name: str) -> str:
-    """Resolve a cached model or download it through a recoverable endpoint chain."""
-    model_path = Path(model_name).expanduser()
-    if model_path.exists():
-        return str(model_path)
-
-    try:
-        from faster_whisper.utils import _MODELS, download_model
-    except ImportError:
-        # Unit-test doubles and older faster-whisper builds can omit utils. In
-        # that case retain WhisperModel's native resolution behaviour.
-        return model_name
-
-    try:
-        return str(download_model(model_name, local_files_only=True))
-    except RECOVERABLE_ERRORS:
-        pass
-
-    repo_id = model_name if "/" in model_name else _MODELS.get(model_name)
-    if not repo_id:
-        raise RuntimeError(f"不支持的语音模型：{model_name}")
-
-    try:
-        from huggingface_hub import snapshot_download
-    except ImportError as exc:
-        raise RuntimeError("语音模型下载组件未安装") from exc
-
-    errors: list[str] = []
-    for endpoint in _model_download_endpoints():
-        logger.info("准备语音识别模型：model=%s endpoint=%s", model_name, endpoint)
-        try:
-            return str(
-                snapshot_download(
-                    repo_id,
-                    allow_patterns=list(_MODEL_ALLOW_PATTERNS),
-                    endpoint=endpoint,
-                    etag_timeout=5,
-                    max_workers=4,
-                )
-            )
-        except RECOVERABLE_ERRORS as exc:
-            errors.append(f"{endpoint}: {exc}")
-            logger.warning("语音模型源不可用：endpoint=%s error=%s", endpoint, exc)
-
-    detail = errors[-1] if errors else "没有可用下载源"
-    raise RuntimeError(
-        f"语音模型尚未缓存，且官方源与备用源均不可用；请检查网络后重试。最后错误：{detail}"
-    )
-
 
 def _get_model():
     """返回已就绪的 faster-whisper 模型实例；未安装 faster-whisper 时抛 HTTPException 503"""
@@ -358,9 +269,9 @@ def _recognize_intent(text: str) -> dict[str, Any]:
         }
 
     try:
-        from app.services.intent_service import recognize_intents
+        from app.application.business_route_facade import recognize_business_intents
 
-        rule_result = recognize_intents(text_norm)
+        rule_result = recognize_business_intents(text_norm)
     except RECOVERABLE_ERRORS as exc:
         logger.warning("语音指令意图识别失败（规则引擎）: %s", exc)
         rule_result = {

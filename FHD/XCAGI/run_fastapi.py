@@ -262,7 +262,7 @@ def main(argv: list[str] | None = None) -> None:
     # Clash 常注入 ALL_PROXY=socks5://…；无 socksio 时 httpx 会直接失败。
     _ensure_sys_path()
     try:
-        from app.utils.proxy_env import sanitize_socks_all_proxy
+        from app.utils.security.proxy_env import sanitize_socks_all_proxy
 
         sanitize_socks_all_proxy()
     except Exception:

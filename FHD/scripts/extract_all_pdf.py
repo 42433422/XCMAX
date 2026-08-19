@@ -1,5 +1,6 @@
-import fitz
 import glob
+
+import fitz
 
 # 找到 PDF 文件
 pdf_file = glob.glob("E:/FHD/XCAGI/*.pdf")[0]

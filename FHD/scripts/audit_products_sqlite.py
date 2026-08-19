@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Audit SQLite products.db: schema, counts, duplicates, orphan units, FK-like issues."""
 from __future__ import annotations
 

@@ -70,7 +70,7 @@ def _score(decomp: dict, etl: dict, analyzed: dict) -> dict:
 def main() -> int:
     from app.application.excel_template_http_app_service import _decompose_template
     from app.application.shipment_excel_etl_app_service import preview_shipment_excel_etl
-    from app.fastapi_routes.document_templates_compat import run_archive_template_analyze
+    from app.legacy.routes.document_templates_compat import run_archive_template_analyze
 
     files = sorted(FIXTURE_DIR.glob("*.xlsx"))
     if not files:

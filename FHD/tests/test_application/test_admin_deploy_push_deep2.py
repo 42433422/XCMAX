@@ -32,6 +32,11 @@ from app.application.admin_deploy_push import (
     start_deploy_push,
 )
 
+
+def _consume_scheduled_coroutine(coro):
+    coro.close()
+    return Mock()
+
 # ── _local_git_sha deep ──────────────────────────────────────────────────────
 
 
@@ -731,7 +736,7 @@ class TestStartDeployPushDeep:
         monkeypatch.setattr(adp, "_ACTIVE_JOB", None)
         monkeypatch.setattr(adp, "_JOBS", {})
 
-        with patch("asyncio.create_task", new=Mock()):
+        with patch("asyncio.create_task", new=Mock(side_effect=_consume_scheduled_coroutine)):
             job1 = await start_deploy_push({"channel": "stable"})
             job2 = await start_deploy_push({"channel": "stable"})
         assert job1.job_id != job2.job_id
@@ -742,7 +747,7 @@ class TestStartDeployPushDeep:
         monkeypatch.setattr(adp, "_ACTIVE_JOB", None)
         monkeypatch.setattr(adp, "_JOBS", {})
 
-        with patch("asyncio.create_task", new=Mock()):
+        with patch("asyncio.create_task", new=Mock(side_effect=_consume_scheduled_coroutine)):
             job = await start_deploy_push({"channel": "staging"})
         assert adp._JOBS[job.job_id] is job
         assert job.job_id == adp._ACTIVE_JOB
@@ -752,7 +757,7 @@ class TestStartDeployPushDeep:
         monkeypatch.setattr(adp, "_JOBS", {})
         monkeypatch.setenv("FHD_PUSH_SSH_KEY", "env_ssh_key")
 
-        with patch("asyncio.create_task", new=Mock()):
+        with patch("asyncio.create_task", new=Mock(side_effect=_consume_scheduled_coroutine)):
             job = await start_deploy_push()
         # The ssh_key is read in _execute_deploy_job, not start_deploy_push
         # But we can verify the job was created

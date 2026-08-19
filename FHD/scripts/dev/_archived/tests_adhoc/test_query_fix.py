@@ -1,11 +1,8 @@
-# -*- coding: utf-8 -*-
 import sys
-import os
 
 sys.path.insert(0, r"E:\FHD\XCAGI")
 sys.path.insert(0, r"E:\FHD\XCAGI\resources\wechat-decrypt")
 
-from app.utils.path_utils import get_resource_path
 from mcp_server import _decompress_content
 
 
@@ -53,7 +50,7 @@ for table in tables:
                 content = decompress(row[0], row[1]).strip()
                 if content:
                     print(f"    {repr(content[:60])}")
-    except Exception as e:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         continue
 if not found:
     print("  No messages found with numeric_id")
@@ -73,13 +70,13 @@ for table in tables:
                 found = True
                 print(f"  Found in {table}: {repr(content[:60])}")
                 break
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         continue
 if not found:
     print("  No messages found with wxid in content")
 
 # Step 3: Find single-sender tables (should find Msg_89707d4abce0cecdca50a8d0718b152b)
-print(f"\nStep 3: Find single-sender tables")
+print("\nStep 3: Find single-sender tables")
 for table in tables:
     try:
         cur.execute(f"PRAGMA table_info([{table}])")
@@ -100,7 +97,7 @@ for table in tables:
                 content = decompress(msg_row[0], msg_row[1]).strip()
                 if content:
                     print(f"    {repr(content[:60])}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"  Error in {table}: {e}")
 
 conn.close()

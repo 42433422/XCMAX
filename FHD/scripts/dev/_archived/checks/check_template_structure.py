@@ -1,6 +1,7 @@
 """查看模板文件结构"""
 
 import os
+
 from openpyxl import load_workbook
 
 dir_path = r"e:\FHD\424"
@@ -31,7 +32,7 @@ for ws_name in wb.sheetnames:
     print(f"  合并单元格：{len(merged)} 个")
 
     # 显示前 10 行
-    print(f"  前 10 行:")
+    print("  前 10 行:")
     for row_idx in range(1, min(11, ws.max_row + 1)):
         row_data = []
         for col_idx in range(1, min(15, ws.max_column + 1)):

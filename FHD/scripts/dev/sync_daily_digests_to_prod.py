@@ -65,7 +65,7 @@ def _export_rows() -> list[dict]:
     con = sqlite3.connect(str(DB_PATH))
     con.row_factory = sqlite3.Row
     # 每天取最新一条；排除本地校验假日
-    sql = f"""
+    sql = """
     SELECT t.*
     FROM daily_digest_records t
     INNER JOIN (

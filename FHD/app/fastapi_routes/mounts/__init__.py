@@ -1,7 +1,7 @@
 """Route mount phases."""
 
 from app.fastapi_routes.mounts.business import register_business_routes
-from app.fastapi_routes.mounts.essential_compat import register_essential_compat_routes
+from app.legacy.routes.mounts.essential_compat import register_essential_compat_routes
 from app.fastapi_routes.mounts.health import register_health_routes
 from app.fastapi_routes.mounts.infrastructure import register_infrastructure_routes
 from app.fastapi_routes.mounts.lan import register_lan_routes

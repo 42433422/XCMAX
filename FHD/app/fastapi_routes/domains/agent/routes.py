@@ -95,11 +95,12 @@ def create_agent_run(
             auto_execute=False,
         )
         if auto_execute and run.status == "running":
-            run = orchestrator.stage_run_for_dispatch(
+            staged_run = orchestrator.stage_run_for_dispatch(
                 run.run_id,
                 requested_by=principal.user_id,
             )
-            if run is not None:
+            if staged_run is not None:
+                run = staged_run
                 _enqueue_run(run, requested_by=principal.user_id)
         status_code = 202 if run.status in {"queued", "waiting_user", "blocked"} else 200
         return JSONResponse(_run_response(run, principal=principal), status_code=status_code)
@@ -215,6 +216,8 @@ def continue_agent_run(
             current, error = _owned_run(orchestrator, run_id, principal)
             if error is not None:
                 return error
+            if current is None:
+                return _internal_error_response("approve agent run")
             claims = consume_approval_grant(
                 str(data.get("approval_grant") or ""),
                 run=current,

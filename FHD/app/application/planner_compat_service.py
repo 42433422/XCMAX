@@ -1,12 +1,11 @@
 """Planner 兼容对话服务（3d）：供宿主 /api/ai/* 与 Mod facade 共用。"""
-
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
 import os
-from typing import Any
+from typing import Any, cast
 
 from fastapi import HTTPException, Request
 
@@ -14,6 +13,16 @@ from app.application.agent_orchestrator.chat_trace import (
     attach_chat_trace_run,
     finalize_legacy_chat_run,
     start_legacy_chat_run,
+)
+from app.application.planner_compat_execute import (
+    execute_compat_chat as _execute_compat_chat_impl,
+)
+from app.application.planner_compat_execute import (
+    execute_compat_chat_batch as _execute_compat_chat_batch_impl,
+)
+from app.application.planner_compat_execute import (
+    reset_facade_globals,
+    set_facade_globals,
 )
 from app.domain.ai.tier import (
     assert_p2_elevated_claim_or_raise,
@@ -42,6 +51,16 @@ from app.infrastructure.llm.client import set_mode as set_llm_mode
 from app.legacy.chat.legacy_chat_adapter import chat as run_agent_chat
 from app.services.conversation.modstore_adapter import create_modstore_openai_client_from_request
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+_COMPAT_PATCH_EXPORTS: tuple[Any, ...] = (
+    json, cast, HTTPException, finalize_legacy_chat_run, start_legacy_chat_run
+)
+_COMPAT_PATCH_EXPORTS += (assert_p2_elevated_claim_or_raise, runtime_context_with_tier)
+_COMPAT_PATCH_EXPORTS += (planner_workflow_interrupt_reply, runtime_context_after_workflow_interrupt)
+_COMPAT_PATCH_EXPORTS += (_ensure_chat_db_read_authorized, _ensure_vector_index_if_needed)
+_COMPAT_PATCH_EXPORTS += (_message_requires_db_read_token, _xcagi_chat_http_exc)
+_COMPAT_PATCH_EXPORTS += (_xcagi_chat_timeout_error_payload, _xcagi_chat_timeout_seconds)
+_COMPAT_PATCH_EXPORTS += (set_llm_mode, run_agent_chat, create_modstore_openai_client_from_request)
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +102,7 @@ def _request_session_candidates(request: Request) -> list[str]:
         from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
 
         _append(_session_id_from_request(request))
-    except Exception:  # noqa: BLE001 - request identity derivation is best effort
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - request identity derivation is best effort
         logger.debug("planner session candidate extraction failed", exc_info=True)
     return candidates
 
@@ -199,7 +218,7 @@ def _derive_industry_from_session(request: Request) -> str:
                 row = db.query(User.industry_id).filter(User.id == local_user_id).first()
                 if row and row[0]:
                     return str(row[0]).strip()
-    except Exception:  # noqa: BLE001  # best-effort 派生，失败回退到默认行业
+    except RECOVERABLE_ERRORS:  # noqa: BLE001  # best-effort 派生，失败回退到默认行业
         logger.debug("derive_industry_from_session failed", exc_info=True)
     return state_industry or "通用"
 
@@ -319,7 +338,7 @@ def _merge_kitten_attachments(
         return payload
     enriched = dict(payload)
     data = enriched.get("data") if isinstance(enriched.get("data"), dict) else {}
-    data = dict(data)
+    data = dict(data or {})
     for key, value in kitten_extra.items():
         if value is not None:
             data[key] = value
@@ -358,547 +377,21 @@ async def _execute_ai_chat_mainline(
 
 
 async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> dict[str, Any]:
-    m = (body.mode or "").strip().lower()
-    if m in ("online", "offline"):
-        set_llm_mode(m)
-
-    runtime_context, _ = _merge_runtime_context_with_message_paths(body.context, body.message)
-    runtime_context = _runtime_context_with_authenticated_actor(request, runtime_context)
-    assert_p2_elevated_claim_or_raise(request)
-    tier = resolve_ai_tier(request)
-    runtime_context = runtime_context_with_tier(runtime_context, tier)
-    # Business facts and side effects must be backed by a deterministic tool
-    # receipt.  Guard before either the new app service or legacy planner so
-    # deployment flags cannot reopen an LLM-only success path.
-    from app.application.chat_business_safety import try_handle_business_chat_action
-
-    business_payload = try_handle_business_chat_action(
-        body.message,
-        runtime_context=runtime_context,
-        user_id=getattr(body, "user_id", None),
-        request=request,
-    )
-    if business_payload is not None:
-        return business_payload
+    token = set_facade_globals(globals())
     try:
-        from app.application.kitten_planner_context import (
-            enrich_kitten_analyzer_runtime,
-            kitten_reply_attachments,
-        )
-
-        runtime_context = await enrich_kitten_analyzer_runtime(runtime_context, body.message)
-        kitten_extra = kitten_reply_attachments(runtime_context)
-    except RECOVERABLE_ERRORS:
-        logger.debug("kitten planner context enrich skipped", exc_info=True)
-        kitten_extra = {}
-
-    from app.application.normal_chat_dispatch import try_normal_slot_read_payload
-
-    slot_payload = try_normal_slot_read_payload(body.message, request=request)
-    if isinstance(slot_payload, dict) and slot_payload.get("response"):
-        return _attach_compat_chat_trace(
-            slot_payload,
-            body,
-            message=body.message,
-            runtime_context=runtime_context,
-            channel=(
-                "compat_chat_agent_tool"
-                if slot_payload.get("agent_tool_dispatch")
-                else "compat_chat_slot"
-            ),
-        )
-
-    ok_read, read_req = _ensure_chat_db_read_authorized(
-        request,
-        message=body.message,
-        provided_token=body.db_read_token,
-    )
-    if not ok_read and read_req:
-        payload = {
-            "success": True,
-            "requires_token": True,
-            "token_name": read_req.get("token_name"),
-            "token_description": read_req.get("token_description"),
-            "message": read_req.get("message"),
-            "response": read_req.get("message"),
-            "data": {
-                "requires_token": True,
-                "token_name": read_req.get("token_name"),
-                "token_description": read_req.get("token_description"),
-            },
-        }
-        return _attach_compat_chat_trace(
-            payload,
-            body,
-            message=body.message,
-            runtime_context=runtime_context,
-            channel="compat_chat",
-        )
-    if ok_read and _message_requires_db_read_token(body.message):
-        runtime_context["chat_db_read_authorized"] = True
-    intr = planner_workflow_interrupt_reply(body.message)
-    if intr is not None:
-        cleared = runtime_context_after_workflow_interrupt(runtime_context)
-        payload = _xcagi_compat_reply_payload(
-            intr, runtime_context_update=cleared, kitten_attachments=kitten_extra or None
-        )
-        return _attach_compat_chat_trace(
-            payload,
-            body,
-            message=body.message,
-            runtime_context=cleared,
-            channel="compat_chat",
-        )
-
-    vector_error = _ensure_vector_index_if_needed(body.message, runtime_context)
-    if vector_error:
-        payload = _xcagi_compat_reply_payload(vector_error, kitten_attachments=kitten_extra or None)
-        return _attach_compat_chat_trace(
-            payload,
-            body,
-            message=body.message,
-            runtime_context=runtime_context,
-            channel="compat_chat",
-        )
-
-    timeout = _xcagi_chat_timeout_seconds()
-    pre_run = None
-    planner_runtime_context = dict(runtime_context or {})
-    if body.system_prompt:
-        planner_runtime_context["system_prompt"] = body.system_prompt
-    if body.db_write_token:
-        planner_runtime_context["db_write_token_present"] = True
-    if _use_ai_chat_mainline(planner_runtime_context):
-        try:
-            payload = await _await_with_timeout(
-                _execute_ai_chat_mainline(
-                    body,
-                    planner_runtime_context,
-                    kitten_extra=kitten_extra or None,
-                ),
-                timeout=timeout,
-            )
-            if payload.get("run_id") or payload.get("agent_run_id"):
-                return payload
-            return _attach_compat_chat_trace(
-                payload,
-                body,
-                message=body.message,
-                runtime_context=planner_runtime_context,
-                channel="compat_chat_mainline",
-            )
-        except TimeoutError:
-            payload = _xcagi_chat_timeout_error_payload(timeout)
-            return _attach_compat_chat_trace(
-                payload,
-                body,
-                message=body.message,
-                runtime_context=planner_runtime_context,
-                channel="compat_chat_mainline",
-            )
-        except RECOVERABLE_ERRORS as e:
-            if not _legacy_chat_fallback_allowed(planner_runtime_context):
-                raise _xcagi_chat_http_exc(e) from e
-            logger.warning(
-                "AIChatApplicationService mainline failed; legacy fallback explicitly allowed: %s",
-                e,
-                exc_info=True,
-            )
-    try:
-        workspace_root = os.environ.get("WORKSPACE_ROOT", os.getcwd())
-        llm_client = create_modstore_openai_client_from_request(request)
-        try:
-            pre_run = start_legacy_chat_run(
-                message=body.message,
-                runtime_context=planner_runtime_context,
-                user_id=getattr(body, "user_id", None),
-                source=getattr(body, "source", None),
-                channel="compat_chat",
-            )
-            planner_runtime_context["run_id"] = pre_run.run_id
-            planner_runtime_context["agent_run_id"] = pre_run.run_id
-        except RECOVERABLE_ERRORS:
-            logger.debug("legacy planner AgentRun pre-create skipped", exc_info=True)
-        reply = await _await_with_timeout(
-            asyncio.to_thread(
-                run_agent_chat,
-                body.message,
-                runtime_context=planner_runtime_context or None,
-                system_prompt=body.system_prompt,
-                workspace_root=workspace_root,
-                db_write_token=body.db_write_token,
-                client=llm_client,
-            ),
-            timeout=timeout,
-        )
-        try:
-            parsed = reply if isinstance(reply, dict) else None
-            if parsed is None and isinstance(reply, str):
-                parsed = json.loads(reply)
-            if isinstance(parsed, dict) and parsed.get("requires_token"):
-                payload = _legacy_requires_token_payload(parsed)
-                if pre_run is not None:
-                    return finalize_legacy_chat_run(
-                        pre_run.run_id,
-                        payload,
-                        message=body.message,
-                        runtime_context=planner_runtime_context,
-                        user_id=getattr(body, "user_id", None),
-                        source=getattr(body, "source", None),
-                        channel="compat_chat",
-                    )
-                return _attach_compat_chat_trace(
-                    payload,
-                    body,
-                    message=body.message,
-                    runtime_context=planner_runtime_context,
-                    channel="compat_chat",
-                )
-        except json.JSONDecodeError:
-            pass
-        _clear_legacy_tool_result_if_reply_has_no_records(reply)
-    except TimeoutError:
-        payload = _xcagi_chat_timeout_error_payload(timeout)
-        if pre_run is not None:
-            return finalize_legacy_chat_run(
-                pre_run.run_id,
-                payload,
-                message=body.message,
-                runtime_context=planner_runtime_context,
-                user_id=getattr(body, "user_id", None),
-                source=getattr(body, "source", None),
-                channel="compat_chat",
-            )
-        return _attach_compat_chat_trace(
-            payload,
-            body,
-            message=body.message,
-            runtime_context=planner_runtime_context,
-            channel="compat_chat",
-        )
-    except RECOVERABLE_ERRORS as e:
-        if pre_run is not None:
-            err_payload = {
-                "success": False,
-                "message": str(e),
-                "response": str(e),
-                "data": {"error": str(e)},
-            }
-            finalize_legacy_chat_run(
-                pre_run.run_id,
-                err_payload,
-                message=body.message,
-                runtime_context=planner_runtime_context,
-                user_id=getattr(body, "user_id", None),
-                source=getattr(body, "source", None),
-                channel="compat_chat",
-            )
-        raise _xcagi_chat_http_exc(e) from e
-    payload = _xcagi_compat_reply_payload(reply, kitten_attachments=kitten_extra or None)
-    if pre_run is not None:
-        return finalize_legacy_chat_run(
-            pre_run.run_id,
-            payload,
-            message=body.message,
-            runtime_context=planner_runtime_context,
-            user_id=getattr(body, "user_id", None),
-            source=getattr(body, "source", None),
-            channel="compat_chat",
-        )
-    return _attach_compat_chat_trace(
-        payload,
-        body,
-        message=body.message,
-        runtime_context=planner_runtime_context,
-        channel="compat_chat",
-    )
+        return await _execute_compat_chat_impl(request, body)
+    finally:
+        reset_facade_globals(token)
 
 
 async def execute_compat_chat_batch(
     request: Request, body: XcagiCompatChatBatchBody
 ) -> dict[str, Any]:
-    msgs = [str(x).strip() for x in (body.messages or []) if str(x).strip()]
-    if not msgs:
-        raise HTTPException(status_code=400, detail="messages 须为非空字符串数组")
-    assert_p2_elevated_claim_or_raise(request)
-    batch_tier = resolve_ai_tier(request)
-    m = (body.mode or "").strip().lower()
-    if m in ("online", "offline"):
-        set_llm_mode(m)
-    results: list[dict[str, Any]] = []
-    timeout = _xcagi_chat_timeout_seconds()
-    rolling_ctx = body.context
-    llm_client = create_modstore_openai_client_from_request(request)
-    for txt in msgs:
-        runtime_context, _ = _merge_runtime_context_with_message_paths(rolling_ctx, txt)
-        runtime_context = _runtime_context_with_authenticated_actor(request, runtime_context)
-        runtime_context = runtime_context_with_tier(runtime_context, batch_tier)
-        from app.application.chat_business_safety import try_handle_business_chat_action
-
-        business_payload = try_handle_business_chat_action(
-            txt,
-            runtime_context=runtime_context,
-            user_id=getattr(body, "user_id", None),
-            request=request,
-        )
-        if business_payload is not None:
-            results.append(business_payload)
-            continue
-        ok_read, read_req = _ensure_chat_db_read_authorized(
-            request,
-            message=txt,
-            provided_token=body.db_read_token,
-        )
-        if not ok_read and read_req:
-            payload = {
-                "success": True,
-                "requires_token": True,
-                "token_name": read_req.get("token_name"),
-                "token_description": read_req.get("token_description"),
-                "message": read_req.get("message"),
-                "response": read_req.get("message"),
-                "data": {
-                    "requires_token": True,
-                    "token_name": read_req.get("token_name"),
-                    "token_description": read_req.get("token_description"),
-                },
-            }
-            results.append(
-                _attach_compat_chat_trace(
-                    payload,
-                    body,
-                    message=txt,
-                    runtime_context=runtime_context,
-                    channel="compat_chat_batch",
-                )
-            )
-            continue
-        if ok_read and _message_requires_db_read_token(txt):
-            runtime_context["chat_db_read_authorized"] = True
-        intr = planner_workflow_interrupt_reply(txt)
-        if intr is not None:
-            cleared = runtime_context_after_workflow_interrupt(runtime_context)
-            rolling_ctx = cleared
-            payload = _xcagi_compat_reply_payload(intr, runtime_context_update=cleared)
-            results.append(
-                _attach_compat_chat_trace(
-                    payload,
-                    body,
-                    message=txt,
-                    runtime_context=cleared,
-                    channel="compat_chat_batch",
-                )
-            )
-            continue
-        vector_error = _ensure_vector_index_if_needed(txt, runtime_context)
-        if vector_error:
-            payload = _xcagi_compat_reply_payload(vector_error)
-            results.append(
-                _attach_compat_chat_trace(
-                    payload,
-                    body,
-                    message=txt,
-                    runtime_context=runtime_context,
-                    channel="compat_chat_batch",
-                )
-            )
-            continue
-        pre_run = None
-        planner_runtime_context = dict(runtime_context or {})
-        if body.system_prompt:
-            planner_runtime_context["system_prompt"] = body.system_prompt
-        if body.db_write_token:
-            planner_runtime_context["db_write_token_present"] = True
-        if _use_ai_chat_mainline(planner_runtime_context):
-            try:
-                payload = await _await_with_timeout(
-                    _execute_ai_chat_mainline(
-                        body,
-                        planner_runtime_context,
-                        message=txt,
-                    ),
-                    timeout=timeout,
-                )
-                results.append(
-                    payload
-                    if payload.get("run_id") or payload.get("agent_run_id")
-                    else _attach_compat_chat_trace(
-                        payload,
-                        body,
-                        message=txt,
-                        runtime_context=planner_runtime_context,
-                        channel="compat_chat_batch_mainline",
-                    )
-                )
-                continue
-            except TimeoutError:
-                payload = _xcagi_chat_timeout_error_payload(timeout)
-                results.append(
-                    _attach_compat_chat_trace(
-                        payload,
-                        body,
-                        message=txt,
-                        runtime_context=planner_runtime_context,
-                        channel="compat_chat_batch_mainline",
-                    )
-                )
-                continue
-            except RECOVERABLE_ERRORS as e:
-                if not _legacy_chat_fallback_allowed(planner_runtime_context):
-                    err = _xcagi_chat_http_exc(e)
-                    results.append(
-                        {
-                            "success": False,
-                            "message": (
-                                err.detail if isinstance(err.detail, str) else str(err.detail)
-                            ),
-                            "response": err.detail
-                            if isinstance(err.detail, str)
-                            else str(err.detail),
-                            "data": {"error": str(e)},
-                        }
-                    )
-                    continue
-                logger.warning(
-                    "AIChatApplicationService batch mainline failed; legacy fallback explicitly allowed: %s",
-                    e,
-                    exc_info=True,
-                )
-        try:
-            try:
-                pre_run = start_legacy_chat_run(
-                    message=txt,
-                    runtime_context=planner_runtime_context,
-                    user_id=getattr(body, "user_id", None),
-                    source=getattr(body, "source", None),
-                    channel="compat_chat_batch",
-                )
-                planner_runtime_context["run_id"] = pre_run.run_id
-                planner_runtime_context["agent_run_id"] = pre_run.run_id
-            except RECOVERABLE_ERRORS:
-                logger.debug("legacy batch planner AgentRun pre-create skipped", exc_info=True)
-            workspace_root = os.environ.get("WORKSPACE_ROOT", os.getcwd())
-            reply = await _await_with_timeout(
-                asyncio.to_thread(
-                    run_agent_chat,
-                    txt,
-                    runtime_context=planner_runtime_context or None,
-                    system_prompt=body.system_prompt,
-                    workspace_root=workspace_root,
-                    db_write_token=body.db_write_token,
-                    client=llm_client,
-                ),
-                timeout=timeout,
-            )
-            try:
-                parsed = reply if isinstance(reply, dict) else None
-                if parsed is None and isinstance(reply, str):
-                    parsed = json.loads(reply)
-                if isinstance(parsed, dict) and parsed.get("requires_token"):
-                    payload = _legacy_requires_token_payload(parsed)
-                    if pre_run is not None:
-                        results.append(
-                            finalize_legacy_chat_run(
-                                pre_run.run_id,
-                                payload,
-                                message=txt,
-                                runtime_context=planner_runtime_context,
-                                user_id=getattr(body, "user_id", None),
-                                source=getattr(body, "source", None),
-                                channel="compat_chat_batch",
-                            )
-                        )
-                    else:
-                        results.append(
-                            _attach_compat_chat_trace(
-                                payload,
-                                body,
-                                message=txt,
-                                runtime_context=planner_runtime_context,
-                                channel="compat_chat_batch",
-                            )
-                        )
-                    continue
-            except json.JSONDecodeError:
-                pass
-            _clear_legacy_tool_result_if_reply_has_no_records(reply)
-            payload = _xcagi_compat_reply_payload(reply)
-            if pre_run is not None:
-                results.append(
-                    finalize_legacy_chat_run(
-                        pre_run.run_id,
-                        payload,
-                        message=txt,
-                        runtime_context=planner_runtime_context,
-                        user_id=getattr(body, "user_id", None),
-                        source=getattr(body, "source", None),
-                        channel="compat_chat_batch",
-                    )
-                )
-            else:
-                results.append(
-                    _attach_compat_chat_trace(
-                        payload,
-                        body,
-                        message=txt,
-                        runtime_context=planner_runtime_context,
-                        channel="compat_chat_batch",
-                    )
-                )
-        except TimeoutError:
-            payload = _xcagi_chat_timeout_error_payload(timeout)
-            if pre_run is not None:
-                results.append(
-                    finalize_legacy_chat_run(
-                        pre_run.run_id,
-                        payload,
-                        message=txt,
-                        runtime_context=planner_runtime_context,
-                        user_id=getattr(body, "user_id", None),
-                        source=getattr(body, "source", None),
-                        channel="compat_chat_batch",
-                    )
-                )
-            else:
-                results.append(
-                    _attach_compat_chat_trace(
-                        payload,
-                        body,
-                        message=txt,
-                        runtime_context=planner_runtime_context,
-                        channel="compat_chat_batch",
-                    )
-                )
-        except RECOVERABLE_ERRORS as e:
-            err = _xcagi_chat_http_exc(e)
-            payload = {
-                "success": False,
-                "message": err.detail if isinstance(err.detail, str) else str(err.detail),
-            }
-            if pre_run is not None:
-                results.append(
-                    finalize_legacy_chat_run(
-                        pre_run.run_id,
-                        payload,
-                        message=txt,
-                        runtime_context=planner_runtime_context,
-                        user_id=getattr(body, "user_id", None),
-                        source=getattr(body, "source", None),
-                        channel="compat_chat_batch",
-                    )
-                )
-            else:
-                results.append(
-                    _attach_compat_chat_trace(
-                        payload,
-                        body,
-                        message=txt,
-                        runtime_context=planner_runtime_context,
-                        channel="compat_chat_batch",
-                    )
-                )
-    ok = all(r.get("success") for r in results)
-    return {"success": ok, "batch": True, "results": results, "count": len(results)}
+    token = set_facade_globals(globals())
+    try:
+        return await _execute_compat_chat_batch_impl(request, body)
+    finally:
+        reset_facade_globals(token)
 
 
 def _recent_history(svc, user_id: str) -> list[dict]:
@@ -913,7 +406,7 @@ def _recent_history(svc, user_id: str) -> list[dict]:
         ctx = contexts.get(user_id)
         hist = getattr(ctx, "conversation_history", None) if ctx else None
         return list(hist) if hist else []
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         return []
 
 
@@ -929,7 +422,7 @@ def _resolve_chat_user_id(request: Request, body: XcagiCompatChatBody) -> str:
         hdr = request.headers.get("X-User-Id") or request.headers.get("X-User-ID")
         if hdr and str(hdr).strip():
             return str(hdr).strip()
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         pass
     return "1"
 
@@ -999,7 +492,7 @@ async def compat_chat_stream_async(
                 )
                 body.system_prompt = prompt
                 logger.info("persona_inject OK: prompt_len=%d", len(prompt))
-        except Exception as e:  # noqa: BLE001  # persona 注入为尽力而为，失败不应中断流式响应
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001  # persona 注入为尽力而为，失败不应中断流式响应
             logger.warning("persona_inject FAIL: %s", e, exc_info=True)
 
     tier = ai_tier or resolve_ai_tier(request)

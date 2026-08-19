@@ -22,7 +22,8 @@ from app.application.etl.service_support import (
 )
 from app.db.models.etl import EtlUpload
 from app.infrastructure.tenant_scope import tenant_id_for_write
-from app.utils.path_utils import get_app_data_dir
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_io.path_utils import get_app_data_dir
 
 
 class UploadServiceMixin:
@@ -71,7 +72,7 @@ class UploadServiceMixin:
                         )
                     digest.update(chunk)
                     handle.write(chunk)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             destination.unlink(missing_ok=True)
             raise
         if total == 0:

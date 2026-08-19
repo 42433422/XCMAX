@@ -1,4 +1,6 @@
-import json, base64, urllib.request
+import base64
+import json
+import urllib.request
 
 # 模拟前端发送的完整请求
 test_cases = [
@@ -35,5 +37,5 @@ for i, payload in enumerate(test_cases):
             with open(filename, "wb") as f:
                 f.write(audio_data)
             print(f"  Saved to: {filename}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"  Error: {e}")

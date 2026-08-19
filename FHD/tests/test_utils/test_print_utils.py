@@ -1,4 +1,4 @@
-"""Tests for app.utils.print_utils — coverage ramp."""
+"""Tests for app.utils.path_io.print_utils — coverage ramp."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, Mock, mock_open, patch
 
 import pytest
 
-from app.utils.print_utils import PrinterUtils
+from app.utils.path_io.print_utils import PrinterUtils
 
 # ========================= PrinterUtils ==================================
 
@@ -39,8 +39,8 @@ class TestPrinterUtils:
     def test_get_printer_status_known_code(self):
         pu = PrinterUtils()
         with (
-            patch("app.utils.print_utils._PRINT_BACKEND_AVAILABLE", True),
-            patch("app.utils.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils._PRINT_BACKEND_AVAILABLE", True),
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
         ):
             mock_win32print.PRINTER_STATUS_PAUSED = 1
             mock_win32print.PRINTER_STATUS_ERROR = 2
@@ -58,7 +58,7 @@ class TestPrinterUtils:
         pu = PrinterUtils()
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.pythoncom") as mock_com,
+            patch("app.utils.path_io.print_utils.pythoncom") as mock_com,
         ):
             pu._ensure_com_initialized()
             mock_com.CoInitialize.assert_called_once()
@@ -69,7 +69,7 @@ class TestPrinterUtils:
         pu._com_initialized = True
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.pythoncom") as mock_com,
+            patch("app.utils.path_io.print_utils.pythoncom") as mock_com,
         ):
             pu._ensure_com_initialized()
             mock_com.CoInitialize.assert_not_called()
@@ -203,7 +203,7 @@ class TestPrinterUtils:
         pu = PrinterUtils()
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
         ):
             mock_win32print.GetDefaultPrinter.side_effect = RuntimeError("no printer")
             result = pu.get_default_printer()
@@ -231,11 +231,11 @@ class TestPrinterUtils:
 class TestMacosCupsPrinterUtils:
     def test_cups_backend_requires_both_commands(self):
         with (
-            patch("app.utils.print_utils.sys.platform", "darwin"),
-            patch("app.utils.print_utils.os.path.isfile", return_value=True),
-            patch("app.utils.print_utils.os.access", return_value=True),
-            patch("app.utils.print_utils.win32print", None),
-            patch("app.utils.print_utils.win32api", None),
+            patch("app.utils.path_io.print_utils.sys.platform", "darwin"),
+            patch("app.utils.path_io.print_utils.os.path.isfile", return_value=True),
+            patch("app.utils.path_io.print_utils.os.access", return_value=True),
+            patch("app.utils.path_io.print_utils.win32print", None),
+            patch("app.utils.path_io.print_utils.win32api", None),
         ):
             assert PrinterUtils._is_cups_backend_available() is True
 
@@ -256,7 +256,7 @@ class TestMacosCupsPrinterUtils:
         )
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.win32print", None),
+            patch("app.utils.path_io.print_utils.win32print", None),
             patch.object(pu, "_run_cups", side_effect=[printer_result, default_result]),
         ):
             printers = pu.get_available_printers()
@@ -288,7 +288,7 @@ class TestMacosCupsPrinterUtils:
         )
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.win32print", None),
+            patch("app.utils.path_io.print_utils.win32print", None),
             patch.object(pu, "_run_cups", side_effect=[printer_result, default_result]),
         ):
             printers = pu.get_available_printers()
@@ -310,7 +310,7 @@ class TestMacosCupsPrinterUtils:
         )
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.win32print", None),
+            patch("app.utils.path_io.print_utils.win32print", None),
             patch.object(pu, "_run_cups", return_value=result),
         ):
             assert pu.get_default_printer() == "Canon_TS3700_series"
@@ -324,9 +324,9 @@ class TestMacosCupsPrinterUtils:
         )
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.win32print", None),
-            patch("app.utils.print_utils.win32api", None),
-            patch("app.utils.print_utils.os.path.exists", return_value=True),
+            patch("app.utils.path_io.print_utils.win32print", None),
+            patch("app.utils.path_io.print_utils.win32api", None),
+            patch("app.utils.path_io.print_utils.os.path.exists", return_value=True),
             patch.object(
                 pu,
                 "_resolve_cups_printer_name",
@@ -439,7 +439,7 @@ class TestMacosCupsPrinterUtils:
         pu = PrinterUtils()
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.win32print", None),
+            patch("app.utils.path_io.print_utils.win32print", None),
             patch.object(
                 pu,
                 "get_available_printers",

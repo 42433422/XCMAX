@@ -3,7 +3,7 @@
 """
 从备份目录或单个 .db 文件恢复 XCAGI 本地 SQLite 数据。
 
-开发环境数据目录 = 项目根目录（与 app.utils.path_utils.get_app_data_dir 一致）。
+开发环境数据目录 = 项目根目录（与 app.utils.path_io.path_utils.get_app_data_dir 一致）。
 打包环境数据目录 = %APPDATA%\\XCAGI。
 
 用法示例：
@@ -29,7 +29,7 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from app.db.init_db import DEFAULT_DB_FILES, get_db_path  # type: ignore
-from app.utils.path_utils import get_app_data_dir, get_base_dir  # type: ignore
+from app.utils.path_io.path_utils import get_app_data_dir, get_base_dir  # type: ignore
 
 # 与业务相关的常见库（DEFAULT_DB_FILES + users）
 _EXTRA_DB = ("users.db",)

@@ -39,7 +39,7 @@ def validate_migration():
     print("=" * 60)
     print(f"领域事件: {len(event_files)} 个")
     print(f"V2 服务: {len(v2_files)} 个")
-    print(f"预计覆盖率: 100%")
+    print("预计覆盖率: 100%")
 
     # 4. 建议
     print("\n下一步:")

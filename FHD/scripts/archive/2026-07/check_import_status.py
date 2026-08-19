@@ -71,7 +71,7 @@ def check_bandao_import_status():
             "success": bandao_count > 0,
         }
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查导入状态时出错: {e}")
         return {"success": False, "error": str(e)}
 

@@ -107,7 +107,7 @@ async def llm_chat(model_key: str, messages: list[dict], **params) -> str:
                 r.raise_for_status()
                 content = r.json()["choices"][0]["message"]["content"]
             return strip_think(content)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             last_err = e
             # 429 限流用更长延迟（15秒），其他错误 2 秒
             is_rate_limit = "429" in str(e) or "Too Many Requests" in str(e)
@@ -242,7 +242,7 @@ async def run_evaluator(
             if "error" not in score:
                 break
             print(f"  [打分重试 {score_attempt+1}/3] 解析失败，重试...")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"  [打分重试 {score_attempt+1}/3] {type(e).__name__}: {e}")
             score_raw = f"打分异常: {type(e).__name__}: {e}"
 
@@ -333,7 +333,7 @@ async def main():
                 prompt_boost=args.boost,
             )
             results[eval_m] = result
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             import traceback
             print(f"评估员 {eval_m} 失败: {type(e).__name__}: {e}")
             traceback.print_exc()

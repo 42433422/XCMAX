@@ -115,7 +115,7 @@ def register_order_domain_handlers(domain):
                 row_id,
                 order_id,
             )
-        except Exception:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:  # noqa: BLE001
             logger.debug("order.created persist skipped", exc_info=True)
         # 样板闭环副作用（非全域）：可查询 EventStore + 投影
         try:

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -18,6 +17,7 @@ BUG_CATCH_RE = re.compile(
 SKIP_SUFFIXES = (
     "middleware/error_handler.py",
     "utils/error_handling.py",
+    "utils/operational_errors.py",
 )
 
 

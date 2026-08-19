@@ -19,7 +19,7 @@ from app.infrastructure.tenant_scope import apply_tenant_filter, tenant_id_for_w
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-_REPOSITORY_ERRORS = (*RECOVERABLE_ERRORS, Exception)
+_REPOSITORY_ERRORS = RECOVERABLE_ERRORS
 
 
 class SQLAlchemyProductRepository(ProductRepository, ProductExportMixin):

@@ -447,7 +447,7 @@ class TestSearchProducts:
         call_kwargs = ps.get_products.call_args.kwargs
         assert call_kwargs["page"] == 3
         assert call_kwargs["per_page"] == 50
-        assert call_kwargs["unit"] == "u1"
+        assert call_kwargs["unit_name"] == "u1"
 
 
 class TestGetProductStatistics:

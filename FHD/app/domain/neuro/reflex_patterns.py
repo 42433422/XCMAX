@@ -19,7 +19,7 @@ class PatternRule:
 
     pattern: str
     weight: float = 1.0
-    context_required: list[str] = None
+    context_required: list[str] | None = None
 
 
 class ReflexPatternMatcher:

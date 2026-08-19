@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+
 from openpyxl import load_workbook
 
 # 设置 WORKSPACE_ROOT
@@ -31,9 +32,9 @@ try:
 
         wb.close()
     else:
-        print(f"✗ 模板文件不存在")
+        print("✗ 模板文件不存在")
 
-except Exception as e:
+except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"✗ 错误：{e}")
 
 # 列出 424 目录下所有 Excel 文件

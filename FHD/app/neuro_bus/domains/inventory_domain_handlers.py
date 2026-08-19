@@ -82,7 +82,7 @@ async def handle_auto_inbound_requested(event: NeuroEvent) -> dict[str, Any]:
         service_cls = _resolve_purchase_service_cls()
         svc = service_cls()
         result = svc.create_purchase_inbound(inbound_data)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("[InventoryServiceDomain] create_purchase_inbound 失败: %s", exc)
         _publish_event(
             "inventory.inbound_failed",
@@ -221,7 +221,7 @@ class InventoryServiceDomainHandlers:
 
 
 # 全局处理器实例
-_handlers: InventoryServiceDomainHandlers = None
+_handlers: InventoryServiceDomainHandlers | None = None
 
 
 def get_inventory_handlers() -> InventoryServiceDomainHandlers:

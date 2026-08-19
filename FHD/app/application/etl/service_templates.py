@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -20,6 +20,9 @@ from app.infrastructure.tenant_scope import tenant_id_for_write
 
 
 class TemplateServiceMixin:
+    if TYPE_CHECKING:
+        _validate_draft: Any
+
     def create_template(
         self,
         db: Session,

@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from app.application.employee_runtime.tool_scope import CODE_WRITE_TOOLS, WRITE_TOOLS, is_read_only
 
@@ -93,12 +93,14 @@ def _workspace_policy(manifest: dict[str, Any], config: dict[str, Any]) -> dict[
         config.get("workspace_policy") if isinstance(config.get("workspace_policy"), dict) else None
     )
     if wp:
-        return wp
+        return cast("dict[str, Any]", wp)
     v2 = (
         manifest.get("employee_config_v2")
         if isinstance(manifest.get("employee_config_v2"), dict)
         else {}
     )
+    if not isinstance(v2, dict):
+        v2 = {}
     wp2 = v2.get("workspace_policy") if isinstance(v2.get("workspace_policy"), dict) else {}
     return wp2 or {}
 

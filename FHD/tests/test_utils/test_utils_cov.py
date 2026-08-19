@@ -13,7 +13,7 @@ import pytest
 
 class TestTaskContextService:
     def _make(self):
-        from app.utils.task_context import TaskContextService
+        from app.utils.async_task.task_context import TaskContextService
 
         return TaskContextService()
 
@@ -97,10 +97,10 @@ class TestTaskContextService:
 
     # singleton
     def test_get_task_context_service_singleton(self):
-        import app.utils.task_context as mod
+        import app.utils.async_task.task_context as mod
 
         mod._task_context_service = None  # reset
-        from app.utils.task_context import get_task_context_service
+        from app.utils.async_task.task_context import get_task_context_service
 
         s1 = get_task_context_service()
         s2 = get_task_context_service()
@@ -114,7 +114,7 @@ class TestTaskContextService:
 
 class TestFormatMobileResponse:
     def test_defaults(self):
-        from app.utils.mobile_api import format_mobile_response
+        from app.utils.device_system.mobile_api import format_mobile_response
 
         r = format_mobile_response(data={"key": "value"})
         assert r["code"] == 200
@@ -123,7 +123,7 @@ class TestFormatMobileResponse:
         assert r["data"] == {"key": "value"}
 
     def test_custom_params(self):
-        from app.utils.mobile_api import format_mobile_response
+        from app.utils.device_system.mobile_api import format_mobile_response
 
         r = format_mobile_response(data=None, message="ok", success=False, code=201)
         assert r["code"] == 201
@@ -132,7 +132,7 @@ class TestFormatMobileResponse:
 
 class TestFormatErrorResponse:
     def test_defaults(self):
-        from app.utils.mobile_api import format_error_response
+        from app.utils.device_system.mobile_api import format_error_response
 
         r = format_error_response("E001")
         assert r["code"] == 400
@@ -140,7 +140,7 @@ class TestFormatErrorResponse:
         assert r["data"]["message"] == "E001"
 
     def test_custom(self):
-        from app.utils.mobile_api import format_error_response
+        from app.utils.device_system.mobile_api import format_error_response
 
         r = format_error_response("E002", message="bad request", code=422)
         assert r["code"] == 422
@@ -148,7 +148,7 @@ class TestFormatErrorResponse:
 
 class TestPaginateList:
     def test_basic(self):
-        from app.utils.mobile_api import paginate_list
+        from app.utils.device_system.mobile_api import paginate_list
 
         items = [1, 2, 3]
         r = paginate_list(items, total=10, page=1, per_page=3)
@@ -158,14 +158,14 @@ class TestPaginateList:
         assert r["pagination"]["has_prev"] is False
 
     def test_last_page(self):
-        from app.utils.mobile_api import paginate_list
+        from app.utils.device_system.mobile_api import paginate_list
 
         r = paginate_list([1], total=5, page=2, per_page=3)
         assert r["pagination"]["has_next"] is False
         assert r["pagination"]["has_prev"] is True
 
     def test_zero_per_page(self):
-        from app.utils.mobile_api import paginate_list
+        from app.utils.device_system.mobile_api import paginate_list
 
         r = paginate_list([], total=5, page=1, per_page=0)
         assert r["pagination"]["total_pages"] == 0
@@ -174,17 +174,17 @@ class TestPaginateList:
 
 class TestOptimizeProductData:
     def test_empty_product(self):
-        from app.utils.mobile_api import optimize_product_data
+        from app.utils.device_system.mobile_api import optimize_product_data
 
         assert optimize_product_data({}) == {}
 
     def test_none_product(self):
-        from app.utils.mobile_api import optimize_product_data
+        from app.utils.device_system.mobile_api import optimize_product_data
 
         assert optimize_product_data(None) == {}  # type: ignore[arg-type]
 
     def test_full_product(self):
-        from app.utils.mobile_api import optimize_product_data
+        from app.utils.device_system.mobile_api import optimize_product_data
 
         p = {
             "id": 1,
@@ -202,14 +202,14 @@ class TestOptimizeProductData:
         assert "extra_field" not in r
 
     def test_product_name_fallback(self):
-        from app.utils.mobile_api import optimize_product_data
+        from app.utils.device_system.mobile_api import optimize_product_data
 
         p = {"product_name": "FallbackName", "price": 1}
         r = optimize_product_data(p)
         assert r.get("name") == "FallbackName"
 
     def test_none_fields_excluded(self):
-        from app.utils.mobile_api import optimize_product_data
+        from app.utils.device_system.mobile_api import optimize_product_data
 
         p = {"id": 1}
         r = optimize_product_data(p)
@@ -218,17 +218,17 @@ class TestOptimizeProductData:
 
 class TestOptimizeCustomerData:
     def test_empty(self):
-        from app.utils.mobile_api import optimize_customer_data
+        from app.utils.device_system.mobile_api import optimize_customer_data
 
         assert optimize_customer_data({}) == {}
 
     def test_none(self):
-        from app.utils.mobile_api import optimize_customer_data
+        from app.utils.device_system.mobile_api import optimize_customer_data
 
         assert optimize_customer_data(None) == {}  # type: ignore[arg-type]
 
     def test_full(self):
-        from app.utils.mobile_api import optimize_customer_data
+        from app.utils.device_system.mobile_api import optimize_customer_data
 
         c = {
             "id": 1,
@@ -245,17 +245,17 @@ class TestOptimizeCustomerData:
 
 class TestOptimizeShipmentData:
     def test_empty(self):
-        from app.utils.mobile_api import optimize_shipment_data
+        from app.utils.device_system.mobile_api import optimize_shipment_data
 
         assert optimize_shipment_data({}) == {}
 
     def test_none(self):
-        from app.utils.mobile_api import optimize_shipment_data
+        from app.utils.device_system.mobile_api import optimize_shipment_data
 
         assert optimize_shipment_data(None) == {}  # type: ignore[arg-type]
 
     def test_full(self):
-        from app.utils.mobile_api import optimize_shipment_data
+        from app.utils.device_system.mobile_api import optimize_shipment_data
 
         s = {
             "id": 1,
@@ -277,39 +277,39 @@ class TestOptimizeShipmentData:
 
 class TestParsePaginationParams:
     def test_defaults(self):
-        from app.utils.mobile_api import parse_pagination_params
+        from app.utils.device_system.mobile_api import parse_pagination_params
 
         page, per_page = parse_pagination_params({})
         assert page == 1
         assert per_page == 20
 
     def test_custom_values(self):
-        from app.utils.mobile_api import parse_pagination_params
+        from app.utils.device_system.mobile_api import parse_pagination_params
 
         page, per_page = parse_pagination_params({"page": "3", "per_page": "50"})
         assert page == 3
         assert per_page == 50
 
     def test_page_min_1(self):
-        from app.utils.mobile_api import parse_pagination_params
+        from app.utils.device_system.mobile_api import parse_pagination_params
 
         page, _ = parse_pagination_params({"page": "-5"})
         assert page == 1
 
     def test_per_page_clamped_to_max(self):
-        from app.utils.mobile_api import parse_pagination_params
+        from app.utils.device_system.mobile_api import parse_pagination_params
 
         _, per_page = parse_pagination_params({"per_page": "9999"}, max_per_page=100)
         assert per_page == 100
 
     def test_invalid_page_falls_back(self):
-        from app.utils.mobile_api import parse_pagination_params
+        from app.utils.device_system.mobile_api import parse_pagination_params
 
         page, _ = parse_pagination_params({"page": "abc"})
         assert page == 1
 
     def test_invalid_per_page_falls_back(self):
-        from app.utils.mobile_api import parse_pagination_params
+        from app.utils.device_system.mobile_api import parse_pagination_params
 
         _, per_page = parse_pagination_params({"per_page": "abc"})
         assert per_page == 20
@@ -317,26 +317,26 @@ class TestParsePaginationParams:
 
 class TestParseSearchParams:
     def test_no_keyword(self):
-        from app.utils.mobile_api import parse_search_params
+        from app.utils.device_system.mobile_api import parse_search_params
 
         r = parse_search_params({})
         assert r == {}
 
     def test_with_keyword(self):
-        from app.utils.mobile_api import parse_search_params
+        from app.utils.device_system.mobile_api import parse_search_params
 
         r = parse_search_params({"keyword": "  foo  "})
         assert r["keyword"] == "foo"
 
     def test_allowed_fields(self):
-        from app.utils.mobile_api import parse_search_params
+        from app.utils.device_system.mobile_api import parse_search_params
 
         r = parse_search_params({"status": "active", "color": "blue"}, allowed_fields=["status"])
         assert r.get("status") == "active"
         assert "color" not in r
 
     def test_allowed_field_none_value_excluded(self):
-        from app.utils.mobile_api import parse_search_params
+        from app.utils.device_system.mobile_api import parse_search_params
 
         r = parse_search_params({"status": None}, allowed_fields=["status"])
         assert "status" not in r
@@ -344,21 +344,21 @@ class TestParseSearchParams:
 
 class TestFormatMobileLists:
     def test_product_list(self):
-        from app.utils.mobile_api import format_mobile_product_list
+        from app.utils.device_system.mobile_api import format_mobile_product_list
 
         products = [{"id": 1, "name": "P1", "price": 5}]
         r = format_mobile_product_list(products, total=1)
         assert r["success"] is True
 
     def test_customer_list(self):
-        from app.utils.mobile_api import format_mobile_customer_list
+        from app.utils.device_system.mobile_api import format_mobile_customer_list
 
         customers = [{"id": 1, "customer_name": "C1"}]
         r = format_mobile_customer_list(customers, total=1)
         assert r["success"] is True
 
     def test_shipment_list(self):
-        from app.utils.mobile_api import format_mobile_shipment_list
+        from app.utils.device_system.mobile_api import format_mobile_shipment_list
 
         shipments = [{"id": 1, "unit_name": "公司"}]
         r = format_mobile_shipment_list(shipments, total=1)

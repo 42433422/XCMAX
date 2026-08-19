@@ -2,7 +2,7 @@ from typing import Any
 
 from app.db.models import ShipmentRecord
 from app.domain.shipment.aggregates import Shipment
-from app.domain.value_objects import ContactInfo, OrderNumber
+from app.legacy.domain.legacy_vo import ContactInfo, OrderNumber
 
 
 def shipment_to_domain(db_record: ShipmentRecord) -> Shipment:
@@ -12,8 +12,8 @@ def shipment_to_domain(db_record: ShipmentRecord) -> Shipment:
         purchase_unit_name=db_record.purchase_unit or "",
         contact_info=ContactInfo.empty(),
         status=db_record.status or "pending",
-        created_at=db_record.created_at,
-        updated_at=db_record.updated_at,
+        created_at=db_record.created_at or __import__("datetime").datetime.now(),
+        updated_at=db_record.updated_at or __import__("datetime").datetime.now(),
         printed_at=db_record.printed_at,
         printer_name=db_record.printer_name,
         raw_text=db_record.raw_text,

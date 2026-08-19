@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:
-    from app.application.office_plaintext_generate import (
+    from app.mod_sdk.host_services import (
         resolve_table_spec as _shared_resolve_table_spec,
     )
 except Exception:  # noqa: BLE001 - employee packs must remain self-contained outside MODstore.

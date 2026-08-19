@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 测试垂直合并检测 - 创建一个有垂直合并的测试图片
 """
@@ -37,11 +36,11 @@ print(f"✓ 测试图片已创建：{test_image_path}")
 print(f"  尺寸：{width} x {height}")
 print(f"  水平线 Y：{h_lines}")
 print(f"  垂直线 X：{v_lines}")
-print(f"\n这个测试图片有以下垂直合并：")
-print(f"  - 第2列（中间列）将有垂直合并的单元格")
+print("\n这个测试图片有以下垂直合并：")
+print("  - 第2列（中间列）将有垂直合并的单元格")
 
 # 现在测试垂直合并检测
-print(f"\n" + "=" * 70)
+print("\n" + "=" * 70)
 print("垂直合并检测测试")
 print("=" * 70)
 
@@ -109,14 +108,14 @@ def merge_lines(lines, threshold=50):
     return merged
 
 
-horizontal_lines = sorted(list(set(horizontal_lines)))
-vertical_lines = sorted(list(set(vertical_lines)))
+horizontal_lines = sorted(set(horizontal_lines))
+vertical_lines = sorted(set(vertical_lines))
 horizontal_lines = merge_very_close(horizontal_lines, threshold=5)
 vertical_lines = merge_very_close(vertical_lines, threshold=5)
 horizontal_lines = merge_lines(horizontal_lines, threshold=30)
 vertical_lines = merge_lines(vertical_lines, threshold=30)
 
-print(f"\n检测到的网格线：")
+print("\n检测到的网格线：")
 print(f"  水平线 Y：{horizontal_lines}")
 print(f"  垂直线 X：{vertical_lines}")
 
@@ -172,7 +171,7 @@ for i in range(rows):
 
         cells.append(cell)
 
-print(f"\n单元格边框检测：")
+print("\n单元格边框检测：")
 for cell in cells:
     right_info = f"右侧{cell['right_border_ratio']*100:.0f}%"
     bottom_info = f"底部{cell['bottom_border_ratio']*100:.0f}%"

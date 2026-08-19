@@ -49,9 +49,11 @@ def handle_price_list_export(
         from app.application import get_product_app_service
 
         svc = get_product_app_service()
-        products = svc.search_products(keyword=keyword) if keyword else svc.get_all_products()
-        if not isinstance(products, list):
-            products = []
+        result = (
+            svc.search_products(keyword=keyword) if keyword else svc.get_products(per_page=10000)
+        )
+        raw_products = result.get("data") if isinstance(result, dict) else []
+        products = list(raw_products) if isinstance(raw_products, list) else []
     except RECOVERABLE_ERRORS as e:
         logger.error("price_list_export: 获取产品失败: %s", e)
         return {"success": False, "message": f"获取产品列表失败: {e}"}

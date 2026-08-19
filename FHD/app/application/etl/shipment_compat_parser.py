@@ -10,11 +10,14 @@ from typing import Any
 
 from app.application.etl.errors import EtlError
 from app.application.etl.parser_types import ParsedDataset, ParsedRow
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _is_unreliable_filename_fallback(note: dict[str, Any], path: Path) -> bool:
     unit_name = str(note.get("unit_name") or "").strip()
     assist = note.get("assist") if isinstance(note.get("assist"), dict) else {}
+    if not isinstance(assist, dict):
+        assist = {}
     lacks_business_identity = not str(note.get("order_number") or "").strip() and not bool(
         assist.get("ok")
     )
@@ -110,7 +113,7 @@ def parse_delivery_note_with_compat_profile(
             include_ledger=False,
             profile_id=compatibility_preset_id,
         )
-    except Exception:  # noqa: BLE001 - compatibility detection is a non-blocking probe
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - compatibility detection is a non-blocking probe
         return None
     notes = result.get("notes") if isinstance(result, dict) else None
     if not result.get("success") or not isinstance(notes, list) or not notes:
@@ -226,7 +229,7 @@ def parse_delivery_note_with_compat_profile(
 
     if not rows:
         return None
-    warnings = [
+    warnings: list[dict[str, Any]] = [
         {
             "code": "ETL_COMPATIBILITY_PROFILE_APPLIED",
             "message": "已使用原送货单兼容预设解析；执行仍需在通用 ETL 中预演确认。",

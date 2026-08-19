@@ -114,7 +114,7 @@ class TestRouteToBackend:
     def test_modstore_proxy_failure_defers(self) -> None:
         with patch(
             "app.infrastructure.payment.modstore_payment_proxy.record_market_metering",
-            side_effect=Exception("proxy down"),
+            side_effect=RuntimeError("proxy down"),
         ):
             out = _route_to_backend("modstore", _rec())
         assert out["routed"] == "modstore_wallet"

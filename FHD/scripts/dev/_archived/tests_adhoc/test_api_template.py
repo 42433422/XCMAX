@@ -1,8 +1,9 @@
 """测试带模板的 API 调用"""
 
-import requests
 import json
 import os
+
+import requests
 
 url = "http://127.0.0.1:8000/api/mod/taiyangniao-pro/attendance/convert-upload"
 source_file = r"e:\FHD\424\钉钉导出来的考勤数据.xlsx"
@@ -33,5 +34,5 @@ with open(source_file, "rb") as f:
         print(f"状态码: {response.status_code}")
         result = response.json()
         print(f"响应: {json.dumps(result, ensure_ascii=False, indent=2)}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"请求失败: {e}")

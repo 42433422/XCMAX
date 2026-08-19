@@ -184,7 +184,7 @@ def _current_trace_id() -> str | None:
         from app.neuro_bus.tracer import current_trace
 
         return current_trace.get()
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         return None
 
 

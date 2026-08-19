@@ -2,8 +2,9 @@
 测试 AI 对话接口返回的数据
 """
 
-import requests
 import json
+
+import requests
 
 BASE_URL = "http://127.0.0.1:8000"
 
@@ -23,10 +24,10 @@ def test_ai_chat_detailed():
     if response.status_code == 200:
         result = response.json()
 
-        print(f"\n完整响应:")
+        print("\n完整响应:")
         print(json.dumps(result, indent=2, ensure_ascii=False))
 
-        print(f"\n\n=== 分析 ===")
+        print("\n\n=== 分析 ===")
         print(f"text 字段长度：{len(result.get('text', ''))}")
         print(f"data 字段：{json.dumps(result.get('data', {}), indent=2, ensure_ascii=False)}")
 

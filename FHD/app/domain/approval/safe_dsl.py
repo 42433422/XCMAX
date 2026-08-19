@@ -17,6 +17,7 @@ DO NOT use this for complex business logic that requires external function calls
 import ast
 import logging
 import operator
+from collections.abc import Callable
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -52,15 +53,13 @@ ALLOWED_NODES = {
     ast.Div,
     ast.Mod,
     ast.Pow,
-    ast.Num,
     ast.Constant,
     ast.Name,
     ast.Load,
-    ast.Str,  # For older Python compatibility
 }
 
 # Whitelisted operators
-OPERATORS = {
+OPERATORS: dict[type[Any], Callable[..., Any]] = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,
     ast.Mult: operator.mul,
@@ -170,10 +169,6 @@ class SafeExpressionEvaluator:
         """Safely evaluate an AST node."""
         if isinstance(node, ast.Constant):  # Python 3.8+
             return node.value
-        elif isinstance(node, ast.Num):  # Legacy
-            return node.n
-        elif isinstance(node, ast.Str):  # Legacy
-            return node.s
         elif isinstance(node, ast.Name):
             if node.id in self.context:
                 return self.context[node.id]
@@ -189,25 +184,25 @@ class SafeExpressionEvaluator:
         elif isinstance(node, ast.BinOp):
             left = self._eval_node(node.left)
             right = self._eval_node(node.right)
-            op_type = type(node.op)
-            if op_type in OPERATORS:
+            binary_op_type = type(node.op)
+            if binary_op_type in OPERATORS:
                 try:
-                    return OPERATORS[op_type](left, right)
+                    return OPERATORS[binary_op_type](left, right)
                 except (TypeError, ZeroDivisionError) as e:
                     raise SafeEvaluationError(f"Operation error: {e}") from e
-            raise SafeEvaluationError(f"Unsupported binary operator: {op_type}")
+            raise SafeEvaluationError(f"Unsupported binary operator: {binary_op_type}")
 
         elif isinstance(node, ast.Compare):
             # Handle comparisons like a > b, a == b, etc.
             left = self._eval_node(node.left)
             for op, comparator in zip(node.ops, node.comparators):
                 right = self._eval_node(comparator)
-                op_type = type(op)
-                if op_type in OPERATORS:
-                    if not OPERATORS[op_type](left, right):
+                compare_op_type = type(op)
+                if compare_op_type in OPERATORS:
+                    if not OPERATORS[compare_op_type](left, right):
                         return False
                 else:
-                    raise SafeEvaluationError(f"Unsupported comparison operator: {op_type}")
+                    raise SafeEvaluationError(f"Unsupported comparison operator: {compare_op_type}")
                 left = right  # For chained comparisons
             return True
 
@@ -221,10 +216,10 @@ class SafeExpressionEvaluator:
 
         elif isinstance(node, ast.UnaryOp):
             operand = self._eval_node(node.operand)
-            op_type = type(node.op)
-            if op_type in OPERATORS:
-                return OPERATORS[op_type](operand)
-            raise SafeEvaluationError(f"Unsupported unary operator: {op_type}")
+            unary_op_type = type(node.op)
+            if unary_op_type in OPERATORS:
+                return OPERATORS[unary_op_type](operand)
+            raise SafeEvaluationError(f"Unsupported unary operator: {unary_op_type}")
 
         raise SafeEvaluationError(f"Unsupported AST node: {type(node).__name__}")
 

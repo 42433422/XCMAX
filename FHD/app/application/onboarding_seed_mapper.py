@@ -86,8 +86,12 @@ def resolve_onboarding_seed_profile(industry_id: str) -> OnboardingSeedProfile:
         return profile
 
     industry = manifest.get("industry") if isinstance(manifest.get("industry"), dict) else {}
+    if not isinstance(industry, dict):
+        industry = {}
     subsystems = industry.get("subsystems") if isinstance(industry.get("subsystems"), dict) else {}
 
+    if not isinstance(subsystems, dict):
+        subsystems = {}
     customers = subsystems.get("customers") if isinstance(subsystems.get("customers"), dict) else {}
     products = subsystems.get("products") if isinstance(subsystems.get("products"), dict) else {}
 
@@ -148,6 +152,8 @@ def build_customer_row(*, tenant_id: int, profile: OnboardingSeedProfile) -> dic
         else {}
     )
     schema = subsystems.get("customers") if isinstance(subsystems.get("customers"), dict) else {}
+    if not isinstance(schema, dict):
+        schema = {}
     fields = schema.get("fields") if isinstance(schema.get("fields"), list) else []
 
     row: dict[str, Any] = {"tenant_id": tenant_id}
@@ -194,6 +200,8 @@ def build_product_row(*, tenant_id: int, profile: OnboardingSeedProfile) -> dict
         else {}
     )
     schema = subsystems.get("products") if isinstance(subsystems.get("products"), dict) else {}
+    if not isinstance(schema, dict):
+        schema = {}
     fields = schema.get("fields") if isinstance(schema.get("fields"), list) else []
 
     ctx = {
@@ -203,7 +211,7 @@ def build_product_row(*, tenant_id: int, profile: OnboardingSeedProfile) -> dict
     }
 
     mapped: dict[str, Any] = {}
-    for f in fields:
+    for f in fields or []:
         if not isinstance(f, dict):
             continue
         key = str(f.get("key") or "").strip()

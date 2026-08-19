@@ -16,12 +16,17 @@ import hashlib
 import json
 import logging
 import os
-from collections import defaultdict
-from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.user_memory_analysis import (
+    analyze_action_sequence,
+    feedback_stats,
+    habit_suggestions,
+    memory_summary,
+)
+from app.utils.user_memory_models import ActionPattern, ContextSummary, FeedbackRecord, UserMemory
 
 logger = logging.getLogger(__name__)
 
@@ -34,77 +39,11 @@ MAX_FREQUENT_ACTIONS = 20
 MAX_CONTEXT_SUMMARIES = 10
 
 
-@dataclass
-class ActionPattern:
-    pattern: str
-    intent: str
-    slots: dict[str, Any]
-    frequency: int = 1
-    last_used: str = field(default_factory=lambda: datetime.now().isoformat())
-    confidence: float = 0.5
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ActionPattern":
-        return cls(**data)
-
-
-@dataclass
-class FeedbackRecord:
-    timestamp: str
-    message: str
-    recognized_intent: str
-    user_feedback: str
-    corrected_intent: str | None = None
-    slots: dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "FeedbackRecord":
-        return cls(**data)
-
-
-@dataclass
-class ContextSummary:
-    timestamp: str
-    intent: str
-    slots: dict[str, Any]
-    message: str
-    turn_count: int = 1
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ContextSummary":
-        return cls(**data)
-
-
-@dataclass
-class UserMemory:
-    user_id: str
-    preferences: dict[str, Any] = field(default_factory=dict)
-    frequent_actions: list[dict[str, Any]] = field(default_factory=list)
-    historical_contexts: list[dict[str, Any]] = field(default_factory=list)
-    feedback_history: list[dict[str, Any]] = field(default_factory=list)
-    updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "UserMemory":
-        return cls(**data)
-
-
 class UserMemoryStore:
     """用户记忆存储后端"""
 
-    _instance = None
+    _instance: "UserMemoryStore | None" = None
+    _initialized: bool
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
@@ -183,7 +122,8 @@ class UserMemoryService:
     - add_feedback: 添加反馈
     """
 
-    _instance = None
+    _instance: "UserMemoryService | None" = None
+    _initialized: bool
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
@@ -458,7 +398,7 @@ class UserMemoryService:
         feedback: str,
     ) -> None:
         """调整模式权重"""
-        weight_delta = 0
+        weight_delta = 0.0
         target_intent = recognized_intent
 
         if feedback == "confirmed":
@@ -476,34 +416,7 @@ class UserMemoryService:
 
     def get_feedback_stats(self, user_id: str) -> dict[str, Any]:
         """获取反馈统计"""
-        memory = self._store.get_memory(user_id)
-        if not memory:
-            return {"total": 0, "confirmed": 0, "negated": 0, "corrected": 0}
-
-        feedback_counts: object = defaultdict(int)
-        intent_error_rates: object = defaultdict(lambda: {"total": 0, "errors": 0})
-
-        for record in memory.feedback_history:
-            fb_type = record.get("user_feedback", "unknown")
-            feedback_counts[fb_type] += 1
-
-            recognized = record.get("recognized_intent", "")
-            intent_error_rates[recognized]["total"] += 1
-            if fb_type in ("negated", "corrected"):
-                intent_error_rates[recognized]["errors"] += 1
-
-        error_rates = {}
-        for intent, stats in intent_error_rates.items():
-            if stats["total"] >= 3:
-                error_rates[intent] = round(stats["errors"] / stats["total"], 3)
-
-        return {
-            "total": len(memory.feedback_history),
-            "confirmed": feedback_counts.get("confirmed", 0),
-            "negated": feedback_counts.get("negated", 0),
-            "corrected": feedback_counts.get("corrected", 0),
-            "error_rates": error_rates,
-        }
+        return feedback_stats(self._store.get_memory(user_id))
 
     def get_habit_suggestions(self, user_id: str) -> list[dict[str, Any]]:
         """
@@ -512,51 +425,11 @@ class UserMemoryService:
         Returns:
             习惯建议列表 (如：生成发货单后经常打印标签)
         """
-        memory = self._store.get_memory(user_id)
-        if not memory:
-            return []
-
-        suggestions = []
-        action_sequence = self._analyze_action_sequence(memory)
-
-        for seq in action_sequence:
-            if seq["confidence"] >= 0.8 and len(seq["actions"]) >= 2:
-                suggestions.append(
-                    {
-                        "type": "action_sequence",
-                        "actions": seq["actions"],
-                        "confidence": seq["confidence"],
-                        "suggestion": f"执行 {seq['actions'][0]} 后主动提示 {seq['actions'][1]}",
-                    }
-                )
-
-        return suggestions
+        return habit_suggestions(self._store.get_memory(user_id))
 
     def _analyze_action_sequence(self, memory: UserMemory) -> list[dict[str, Any]]:
         """分析操作序列"""
-        sequences: object = defaultdict(lambda: {"count": 0, "first_action": ""})
-
-        for i in range(len(memory.historical_contexts) - 1):
-            current = memory.historical_contexts[i]
-            next_ctx = memory.historical_contexts[i + 1]
-
-            seq_key = f"{current.get('intent')}->{next_ctx.get('intent')}"
-            sequences[seq_key]["count"] += 1
-            sequences[seq_key]["first_action"] = current.get("intent")
-
-        result = []
-        for seq_key, stats in sequences.items():
-            if stats["count"] >= 2:
-                actions = seq_key.split("->")
-                result.append(
-                    {
-                        "actions": actions,
-                        "confidence": min(0.95, stats["count"] * 0.15),
-                        "count": stats["count"],
-                    }
-                )
-
-        return result
+        return analyze_action_sequence(memory)
 
     def apply_preference_to_slots(
         self, user_id: str, intent: str, slots: dict[str, Any]
@@ -588,18 +461,7 @@ class UserMemoryService:
 
     def get_memory_summary(self, user_id: str) -> dict[str, Any]:
         """获取用户记忆摘要"""
-        memory = self._store.get_memory(user_id)
-        if not memory:
-            return {"has_memory": False}
-
-        return {
-            "has_memory": True,
-            "preference_count": len(memory.preferences),
-            "action_count": len(memory.frequent_actions),
-            "feedback_count": len(memory.feedback_history),
-            "last_updated": memory.updated_at,
-            "top_intents": [a.get("intent") for a in memory.frequent_actions[:3]],
-        }
+        return memory_summary(self._store.get_memory(user_id))
 
 
 _user_memory_service: UserMemoryService | None = None

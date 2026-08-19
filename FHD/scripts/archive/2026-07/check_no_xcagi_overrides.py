@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 防漂移检测：禁止 XCAGI/ 下出现"和 FHD/ 同相对路径但内容不同"的代码副本。
 
@@ -37,7 +36,6 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
-
 
 # 这些子目录在 XCAGI/ 下是"独有/运行时/巨大/无关"的，扫描时直接跳过
 SKIP_DIR_NAMES = {

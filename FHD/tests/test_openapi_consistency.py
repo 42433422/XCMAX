@@ -65,6 +65,13 @@ def test_openapi_and_routes_are_consistent(monkeypatch):
     routes = checker.collect_runtime_routes(app)
     ops, _schema = checker.collect_openapi_operations(app)
 
+    capability_routes = [
+        route
+        for route in routes
+        if route.method == "GET" and route.path == "/api/platform-shell/capabilities"
+    ]
+    assert len(capability_routes) == 1, "platform-shell bootstrap must be registered once"
+
     ignores = checker._compile_ignores(list(checker._DEFAULT_IGNORE_PATTERNS))
 
     findings = []

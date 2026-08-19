@@ -1,4 +1,4 @@
-"""Tests for app.utils.async_tasks."""
+"""Tests for app.utils.async_task.async_tasks."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.utils.async_tasks import (
+from app.utils.async_task.async_tasks import (
     AsyncTaskConfig,
     AsyncTaskManager,
     TaskResult,
@@ -337,7 +337,7 @@ class TestAsyncTaskManager:
 
 
 class TestAsyncTaskDecorator:
-    @patch("app.utils.async_tasks.get_async_task_manager")
+    @patch("app.utils.async_task.async_tasks.get_async_task_manager")
     def test_sync_mode(self, mock_get_manager):
         mock_manager = MagicMock()
         mock_result = TaskResult(task_id="t1", status=TaskStatus.SUCCESS, result=42)
@@ -353,7 +353,7 @@ class TestAsyncTaskDecorator:
 
         assert result == 42
 
-    @patch("app.utils.async_tasks.get_async_task_manager")
+    @patch("app.utils.async_task.async_tasks.get_async_task_manager")
     def test_async_submit(self, mock_get_manager):
         mock_manager = MagicMock()
         mock_result = TaskResult(task_id="t1", status=TaskStatus.PENDING)
@@ -367,7 +367,7 @@ class TestAsyncTaskDecorator:
         result = my_func.async_submit(1)
         assert result.task_id == "t1"
 
-    @patch("app.utils.async_tasks.get_async_task_manager")
+    @patch("app.utils.async_task.async_tasks.get_async_task_manager")
     def test_get_task_status(self, mock_get_manager):
         mock_manager = MagicMock()
         mock_result = TaskResult(task_id="t1", status=TaskStatus.SUCCESS)
@@ -483,7 +483,7 @@ class TestRetryOnFailure:
 
 class TestGetAsyncTaskManager:
     def test_returns_singleton(self):
-        import app.utils.async_tasks as mod
+        import app.utils.async_task.async_tasks as mod
 
         mod._async_task_manager = None
 
@@ -494,7 +494,7 @@ class TestGetAsyncTaskManager:
         mod._async_task_manager = None
 
     def test_registers_default_tasks(self):
-        import app.utils.async_tasks as mod
+        import app.utils.async_task.async_tasks as mod
 
         mod._async_task_manager = None
 

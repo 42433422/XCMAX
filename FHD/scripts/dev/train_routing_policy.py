@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """训练 NeuroBus 路由策略 MLP（16→32→3）。
 
 数据来源：
@@ -133,7 +132,7 @@ def _split(
     idx = list(range(len(samples)))
     rng.shuffle(idx)
     n_val = int(len(idx) * val_ratio)
-    val_idx = set(idx[:n_val])
+    set(idx[:n_val])
     train = [samples[i] for i in idx[n_val:]]
     val = [samples[i] for i in idx[:n_val]]
     return train, val
@@ -155,7 +154,7 @@ def train(
 
     model = RoutingMLP()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    criterion = nn.CrossEntropyLoss()
+    nn.CrossEntropyLoss()
 
     if not train_samples:
         print("ERROR: 训练集为空", file=sys.stderr)

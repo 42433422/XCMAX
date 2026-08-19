@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 def compat_product_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    from app.fastapi_routes.domains.product import compat_routes as product_compat
+    from app.legacy.routes.product import compat_routes as product_compat
 
     monkeypatch.setattr(product_compat, "_business_mod_json_block", lambda: None)
     monkeypatch.setattr(
@@ -25,7 +25,7 @@ def compat_product_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 def test_products_list_keyword_sqli_attempt(compat_product_client: TestClient) -> None:
     with patch(
-        "app.fastapi_routes.domains.product.compat_routes._load_products_list_impl_pg",
+        "app.legacy.routes.product.compat_routes._load_products_list_impl_pg",
         return_value=([], 0, None),
     ):
         r = compat_product_client.get(
@@ -39,7 +39,7 @@ def test_products_list_keyword_sqli_attempt(compat_product_client: TestClient) -
 
 def test_products_list_unit_sqli_attempt(compat_product_client: TestClient) -> None:
     with patch(
-        "app.fastapi_routes.domains.product.compat_routes._load_products_list_impl_pg",
+        "app.legacy.routes.product.compat_routes._load_products_list_impl_pg",
         return_value=([], 0, None),
     ):
         r = compat_product_client.get(

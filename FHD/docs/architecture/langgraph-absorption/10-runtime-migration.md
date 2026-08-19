@@ -288,7 +288,7 @@ from langgraph_sdk.client import LangGraphClient              # vendored sdk (W0
 - **验收**：
   ```bash
   cd FHD
-  .venv/bin/python -c "from app.infrastructure.workflow.legacy_engine_adapter import LegacyEngineAdapter; print('OK')"
+  .venv/bin/python -c "from app.legacy.workflow.legacy_engine_adapter import LegacyEngineAdapter; print('OK')"
   .venv/bin/python -m pytest tests/langgraph_absorption/test_legacy_runtime_contract.py -q
   ruff check app/infrastructure/workflow/legacy_engine_adapter.py
   ```

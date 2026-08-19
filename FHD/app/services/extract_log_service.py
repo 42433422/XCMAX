@@ -208,7 +208,7 @@ class ExtractLogService(NeuroEventPublisherMixin):
                 from sqlalchemy import text
 
                 conditions = []
-                params = {"limit": limit, "offset": offset}
+                params: dict[str, Any] = {"limit": limit, "offset": offset}
 
                 if data_type:
                     conditions.append("data_type = :data_type")

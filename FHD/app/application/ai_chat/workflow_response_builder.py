@@ -4,14 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.application import agent_task_context
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-
-OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 
 
 def normalize_product_float_query(raw: str) -> str:
@@ -32,6 +29,9 @@ def normalize_product_float_query(raw: str) -> str:
 
 
 class AIChatWorkflowResponseMixin:
+    if TYPE_CHECKING:
+        _workflow_products_float_query: Any
+
     @staticmethod
     def _attach_task_tenant(runtime_context: dict[str, Any]) -> None:
         agent_task_context.attach_scoped_tenant(runtime_context)
@@ -257,6 +257,8 @@ class AIChatWorkflowResponseMixin:
         if item.tool_id == "employee":
             if item.action in ("list", "query"):
                 data = out.get("data") if isinstance(out.get("data"), dict) else {}
+                if not isinstance(data, dict):
+                    data = {}
                 count = data.get("registered_tool_count", 0)
                 line = f"- {item.node_id}: 成功（发现 {count} 个可调用员工）"
             else:

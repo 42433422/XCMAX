@@ -1,11 +1,11 @@
-# -*- coding: utf-8 -*-
 """
 使用 PaddleOCR 3.2.0 表格识别
 """
 
-from paddleocr import TableRecognitionPipelineV2
-import json
 import glob
+import json
+
+from paddleocr import TableRecognitionPipelineV2
 
 # 读取图片
 files = glob.glob(r"e:\FHD\26-0300001A*.png")
@@ -25,7 +25,7 @@ if result is None:
     print("❌ 未检测到任何内容")
     exit(1)
 
-print(f"\n" + "=" * 70)
+print("\n" + "=" * 70)
 print("表格识别结果")
 print("=" * 70)
 
@@ -34,7 +34,7 @@ if isinstance(result, dict):
     print(f"结果 keys：{result.keys()}")
 
     if "table_html" in result:
-        print(f"\n表格 HTML：")
+        print("\n表格 HTML：")
         print(
             result["table_html"][:500]
             if len(result.get("table_html", "")) > 500
@@ -42,7 +42,7 @@ if isinstance(result, dict):
         )
 
     if "table_structure" in result:
-        print(f"\n表格结构：")
+        print("\n表格结构：")
         print(json.dumps(result["table_structure"], indent=2, ensure_ascii=False)[:1000])
 
     if "dt_polys" in result:

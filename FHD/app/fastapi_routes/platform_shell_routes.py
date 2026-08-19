@@ -144,7 +144,7 @@ async def _save_workspace_upload(file: UploadFile, *, subdir: str) -> dict[str, 
 
     from fastapi import HTTPException
 
-    from app.utils.secure_filename import secure_filename
+    from app.utils.security.secure_filename import secure_filename
 
     name = (file.filename or "").strip()
     suffix = Path(name).suffix.lower()

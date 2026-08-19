@@ -1,8 +1,7 @@
 """调试上传 API"""
 
+
 import requests
-import os
-import sys
 
 # 测试文件路径
 test_file = r"e:\FHD\424\钉钉导出来的考勤数据.xlsx"
@@ -45,7 +44,7 @@ except requests.exceptions.Timeout:
     print("\n请求超时")
 except requests.exceptions.ConnectionError as e:
     print(f"\n连接错误：{e}")
-except Exception as e:
+except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"\n请求失败：{e}")
     import traceback
 

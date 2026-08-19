@@ -124,7 +124,7 @@ def _make_employee_yaml(pkg_id: str, mf: dict) -> str:
         f'version: "{version}"',
         f"owner: {owner}",
         f"area: {area}",
-        f"domain: >-",
+        "domain: >-",
         f"  {domain_single}",
         "",
         "scope_globs:",
@@ -149,8 +149,8 @@ def _make_employee_yaml(pkg_id: str, mf: dict) -> str:
         "",
         "changelog:",
         f'  - version: "{version}"',
-        f'    date: "2026-06-07"',
-        f'    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"',
+        '    date: "2026-06-07"',
+        '    note: "yuangon 骨架由 bootstrap_yuangon.py 从 manifest 反向生成（v10 线内迭代）"',
         "",
     ]
     return "\n".join(lines)
@@ -313,7 +313,7 @@ def bootstrap_all(dry_run: bool = False) -> None:
             continue
         try:
             mf = json.loads(mf_path.read_text())
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"WARN: skip {emp_dir.name} – {e}")
             continue
 

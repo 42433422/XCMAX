@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 清空 XCAGI / FHD 业务库中与「产品、购买单位、客户、出货」等相关数据，便于重新上传。
 
@@ -53,7 +52,7 @@ def _has_column(conn, table: str, col: str) -> bool:
 
     try:
         cols = {c["name"] for c in inspect(conn).get_columns(table)}
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return False
     return col in cols
 

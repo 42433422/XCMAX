@@ -64,7 +64,7 @@ def du_bytes(path: Path) -> int | None:
         if out.returncode == 0:
             kb = int(out.stdout.split()[0])
             return kb * 1024
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         pass
     if path.is_file():
         return path.stat().st_size
@@ -92,7 +92,7 @@ def git_context() -> dict[str, str]:
             return subprocess.run(
                 ["git", *args], cwd=REPO_ROOT, capture_output=True, text=True, timeout=10
             ).stdout.strip()
-        except Exception:
+        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return ""
     return {"branch": _q(["rev-parse", "--abbrev-ref", "HEAD"]), "commit": _q(["rev-parse", "--short", "HEAD"])}
 
@@ -333,7 +333,7 @@ def measure_runtime_perf() -> dict[str, Any]:
             r = f.stat().st_size
             try:
                 g = len(gzip.compress(f.read_bytes(), 6))
-            except Exception:
+            except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 g = 0
             raw += r
             gz += g
@@ -531,7 +531,7 @@ def main() -> int:
     ap.add_argument("--no-write", action="store_true", help="只打印,不落盘")
     args = ap.parse_args()
 
-    now = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     chosen = {args.only: MEASURERS[args.only]} if args.only else MEASURERS
     baselines = {name: fn() for name, fn in chosen.items()}
     snap = {
@@ -547,7 +547,7 @@ def main() -> int:
     if latest_json.exists():
         try:
             prev = json.loads(latest_json.read_text())
-        except Exception:
+        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             prev = None
 
     md = render_markdown(snap, prev) if not args.only else json.dumps(snap, ensure_ascii=False, indent=2)

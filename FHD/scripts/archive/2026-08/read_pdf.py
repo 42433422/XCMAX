@@ -4,8 +4,9 @@ import sys
 # 使用 pip 安装 pdfplumber
 subprocess.check_call([sys.executable, "-m", "pip", "install", "pdfplumber", "-q"])
 
-import pdfplumber
 import os
+
+import pdfplumber
 
 # 列出所有 PDF 文件
 pdf_path = r"E:\FHD\XCAGI\龙象 AI 方案 (文案).pdf"

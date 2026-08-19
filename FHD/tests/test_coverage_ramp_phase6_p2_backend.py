@@ -280,8 +280,8 @@ def test_evaluate_plan_low_risk_only_no_approval_needed() -> None:
     assert decision.approval_request_ids == []
 
 
-def test_evaluate_plan_runtime_context_auto_approve_high_risk() -> None:
-    """context.workflow_auto_approve_high_risk=True → HybridRiskGate 直接放行。"""
+def test_evaluate_plan_runtime_context_cannot_auto_approve_high_risk() -> None:
+    """模型运行时标志不能绕过高风险人工审批。"""
     engine = _make_engine()
     plan = _make_plan()
     decision = engine.evaluate_plan(
@@ -289,11 +289,10 @@ def test_evaluate_plan_runtime_context_auto_approve_high_risk() -> None:
         runtime_context={"workflow_auto_approve_high_risk": True},
         strategy=ApprovalGatedEngine.APPROVAL_STRATEGY_INTERACTIVE,
     )
-    # risk_gate 直接返回 requires_confirmation=False, blocking_nodes=[]
-    assert decision.risk_decision.requires_confirmation is False
-    assert decision.risk_decision.blocking_nodes == []
-    assert decision.all_approved is True
-    assert decision.pending_approval is False
+    assert decision.risk_decision.requires_confirmation is True
+    assert decision.risk_decision.blocking_nodes == ["write_op"]
+    assert decision.all_approved is False
+    assert decision.pending_approval is True
 
 
 # ---------------------------------------------------------------------------

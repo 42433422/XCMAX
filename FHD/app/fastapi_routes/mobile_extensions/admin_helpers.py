@@ -12,6 +12,7 @@ from typing import Any
 from fastapi import Request
 
 from app.fastapi_routes.mobile_extensions.constants import _MARKET_AI_EMPLOYEE_CACHE
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +115,7 @@ async def _load_market_ai_employee_profile_index() -> tuple[dict[str, dict[str, 
             }
         )
         return profiles, True, ""
-    except Exception as exc:  # noqa: BLE001  # pragma: no cover - network availability is environment-specific
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001  # pragma: no cover - network availability is environment-specific
         error = _compact_text(exc)
         if isinstance(cached_profiles, dict) and cached_profiles:
             _MARKET_AI_EMPLOYEE_CACHE.update(
@@ -326,7 +327,7 @@ def _mobile_session_meta(request: Request) -> dict[str, Any]:
 def _require_mobile_admin(request: Request, user: Any) -> tuple[dict[str, Any], Any | None]:
     from fastapi.responses import JSONResponse
 
-    from app.utils.mobile_api import format_mobile_response
+    from app.utils.device_system.mobile_api import format_mobile_response
 
     if user is None:
         return {}, JSONResponse(
@@ -352,7 +353,7 @@ def _require_mobile_admin_or_enterprise(
     """企业端 + 管理端都可访问的 Codex 超级员工专用鉴权。"""
     from fastapi.responses import JSONResponse
 
-    from app.utils.mobile_api import format_mobile_response
+    from app.utils.device_system.mobile_api import format_mobile_response
 
     if user is None:
         return {}, JSONResponse(

@@ -28,11 +28,11 @@ def test_ingest_bytes_analyze_then_create_success() -> None:
     }
     with (
         patch(
-            "app.fastapi_routes.document_templates_compat.run_archive_template_analyze",
+            "app.legacy.routes.document_templates_compat.run_archive_template_analyze",
             return_value=(analyzed, 200),
         ),
         patch(
-            "app.fastapi_routes.document_templates_compat.run_archive_template_create",
+            "app.legacy.routes.document_templates_compat.run_archive_template_create",
             return_value=(created, 200),
         ) as create_mock,
     ):
@@ -56,11 +56,11 @@ def test_ingest_bytes_analyze_then_create_success() -> None:
 def test_ingest_bytes_analyze_failure_short_circuits() -> None:
     with (
         patch(
-            "app.fastapi_routes.document_templates_compat.run_archive_template_analyze",
+            "app.legacy.routes.document_templates_compat.run_archive_template_analyze",
             return_value=({"success": False, "message": "坏文件"}, 400),
         ),
         patch(
-            "app.fastapi_routes.document_templates_compat.run_archive_template_create"
+            "app.legacy.routes.document_templates_compat.run_archive_template_create"
         ) as create_mock,
     ):
         data, code = ingest_office_bytes_to_template_library(
@@ -129,11 +129,11 @@ def test_shipment_etl_source_tags_template_type_as_shipment() -> None:
     created = {"success": True, "template": {"id": "db:3"}}
     with (
         patch(
-            "app.fastapi_routes.document_templates_compat.run_archive_template_analyze",
+            "app.legacy.routes.document_templates_compat.run_archive_template_analyze",
             return_value=(analyzed, 200),
         ),
         patch(
-            "app.fastapi_routes.document_templates_compat.run_archive_template_create",
+            "app.legacy.routes.document_templates_compat.run_archive_template_create",
             return_value=(created, 200),
         ) as create_mock,
     ):

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 
@@ -18,7 +18,8 @@ from app.application.etl.service_support import (
 from app.application.etl.shipment_template_extractor import extract_shipment_template
 from app.db.models.etl import EtlTemplate, EtlTemplateVersion
 from app.infrastructure.tenant_scope import tenant_id_for_write
-from app.utils.path_utils import get_app_data_dir
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_io.path_utils import get_app_data_dir
 
 
 def _safe_template_name(value: str, fallback: str) -> str:
@@ -150,6 +151,10 @@ def shipment_template_candidates(
 
 
 class ShipmentTemplateServiceMixin:
+    if TYPE_CHECKING:
+        _owned_run: Any
+        _owned_upload: Any
+
     def save_run_shipment_template(
         self,
         db: Session,
@@ -254,7 +259,7 @@ class ShipmentTemplateServiceMixin:
         run.summary_json = dump_json(details)
         try:
             db.commit()
-        except Exception as exc:  # noqa: BLE001 - file must not outlive an unregistered private record
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - file must not outlive an unregistered private record
             db.rollback()
             destination.unlink(missing_ok=True)
             raise EtlError(
@@ -266,7 +271,7 @@ class ShipmentTemplateServiceMixin:
             from app.application.shipment_template_resolve import clear_template_list_cache
 
             clear_template_list_cache()
-        except Exception:  # noqa: BLE001 - cache invalidation must not roll back the template
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - cache invalidation must not roll back the template
             pass
         return result
 

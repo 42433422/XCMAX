@@ -16,7 +16,7 @@
     - ``/api/ai/intent/test`` → :mod:`app.fastapi_routes.ai_intent`
     - ``/api/ai/chat-unified`` / ``batch`` → :mod:`app.fastapi_routes.ai_intent`
 
-    Domain 层真正的 ``/api/ai/chat`` 在 ``app.fastapi_routes.xcagi_compat`` 中、
+    Domain 层真正的 ``/api/ai/chat`` 在 ``app.legacy.routes.xcagi_compat`` 中、
     需要 DB 与 p2 鉴权,不适合在此做冒烟,交给整机集成测试覆盖。
 """
 
@@ -109,7 +109,7 @@ def test_intent_test_missing_message(client: TestClient) -> None:
 def test_intent_test_recognizer_raises(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "app.application.ai_chat_helpers.recognize_intents",
-        MagicMock(side_effect=Exception("意图识别错误")),
+        MagicMock(side_effect=RuntimeError("意图识别错误")),
     )
     r = client.post("/api/ai/intent/test", json={"message": "测试"})
     assert r.status_code == 500

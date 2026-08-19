@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 TARGET = Path(
@@ -84,7 +84,7 @@ def main() -> None:
         TARGET.write_text(text, encoding="utf-8")
         print("patched", TARGET, "removed_catalog_loops", n)
 
-    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    day = datetime.now(UTC).strftime("%Y-%m-%d")
     for root in (
         Path("/root/成都修茈科技有限公司/MODstore_deploy/playwright-report/digest-surfaces"),
         Path("/root/modstore-git/MODstore_deploy/playwright-report/digest-surfaces"),

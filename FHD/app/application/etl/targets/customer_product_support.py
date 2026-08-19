@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.orm import Session
 
@@ -19,11 +19,14 @@ CUSTOMER_MODEL_FIELDS = {
 
 
 def customer_values(obj: PurchaseUnit) -> dict[str, Any]:
-    return json_safe(
-        {
-            target: getattr(obj, model_field, None)
-            for target, model_field in CUSTOMER_MODEL_FIELDS.items()
-        }
+    return cast(
+        "dict[str, Any]",
+        json_safe(
+            {
+                target: getattr(obj, model_field, None)
+                for target, model_field in CUSTOMER_MODEL_FIELDS.items()
+            }
+        ),
     )
 
 

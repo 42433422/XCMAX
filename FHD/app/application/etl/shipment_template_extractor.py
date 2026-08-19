@@ -84,6 +84,7 @@ def _copy_sheet_region(
 ) -> Workbook:
     output = Workbook()
     target = output.active
+    assert target is not None
     target.title = "送货单"
     for source_row in range(start_row, end_row + 1):
         target_row = source_row - start_row + 1

@@ -1,9 +1,10 @@
 """快速检查输出文件"""
 
-from openpyxl import load_workbook
 import os
-import tempfile
 import shutil
+import tempfile
+
+from openpyxl import load_workbook
 
 output_file = r"e:\FHD\424\考勤转换输出.xlsx"
 

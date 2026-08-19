@@ -13,6 +13,39 @@ from typing import Any
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
+from app.infrastructure.documents.price_list_borders import (
+    border_el_effective as _border_el_effective,
+)
+from app.infrastructure.documents.price_list_borders import (
+    border_element_as_w_bottom as _border_element_as_w_bottom,
+)
+from app.infrastructure.documents.price_list_content import (
+    detect_header_row_count as _detect_header_row_count,
+)
+from app.infrastructure.documents.price_list_content import (
+    format_price_cell as _format_price_cell,  # noqa: F401 - compatibility export
+)
+from app.infrastructure.documents.price_list_content import (
+    product_row_cell_values as _product_row_cell_values,
+)
+from app.infrastructure.documents.price_list_content import (
+    replace_placeholders_in_paragraphs as _replace_placeholders_in_paragraphs,
+)
+from app.infrastructure.documents.price_list_content import (
+    row_keyword_score as _row_keyword_score,  # noqa: F401 - compatibility export
+)
+from app.infrastructure.documents.price_list_rows import (
+    append_tr_clone_from_last as _append_tr_clone_from_last,
+)
+from app.infrastructure.documents.price_list_rows import (
+    clear_tr_text_content as _clear_tr_text_content,  # noqa: F401 - compatibility export
+)
+from app.infrastructure.documents.price_list_rows import (
+    header_text as _header_text,
+)
+from app.infrastructure.documents.price_list_rows import (
+    tbl_row_count as _tbl_row_count,
+)
 from app.infrastructure.documents.sales_contract_excel import (
     read_excel_sales_contract_preview,
 )
@@ -42,105 +75,6 @@ def build_price_list_template_preview_json(slug: str | None = None) -> dict:
         "template_hint": rel,
         "path": str(path),
     }
-
-
-def _format_price_cell(val: Any) -> str:
-    if val is None or val == "":
-        return ""
-    try:
-        n = float(val)
-        if abs(n - round(n)) < 1e-9:
-            return str(int(round(n)))
-        return f"{n:.2f}"
-    except (TypeError, ValueError):
-        return str(val)
-
-
-def _replace_placeholders_in_paragraphs(doc, mapping: dict[str, str]) -> None:
-    def repl(text: str) -> str:
-        if not text:
-            return text
-        for k, v in mapping.items():
-            text = text.replace(k, v)
-        return text
-
-    keys = tuple(mapping.keys())
-
-    def fix_paragraph(p) -> None:
-        txt = "".join(r.text for r in p.runs) if p.runs else (p.text or "")
-        if not txt or not any(k in txt for k in keys):
-            return
-        merged = repl(txt)
-        p.clear()
-        if merged:
-            p.add_run(merged)
-
-    for p in doc.paragraphs:
-        fix_paragraph(p)
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for p in cell.paragraphs:
-                    fix_paragraph(p)
-
-
-def _product_row_cell_values(prod: dict[str, Any]) -> list[str]:
-    model = str(prod.get("model_number") or prod.get("型号") or "")
-    name = str(prod.get("name") or prod.get("产品名称") or prod.get("名称") or "")
-    spec = str(prod.get("specification") or prod.get("spec") or prod.get("规格") or "")
-    price = _format_price_cell(prod.get("price") or prod.get("单价") or prod.get("unit_price"))
-    return [model, name, spec, price]
-
-
-def _row_keyword_score(row_cells) -> int:
-    blob = "".join((c.text or "") for c in row_cells)
-    keywords = (
-        "型号",
-        "名称",
-        "规格",
-        "单价",
-        "数量",
-        "金额",
-        "产品",
-        "序号",
-        "单位",
-        "售价",
-        "定价",
-    )
-    return sum(1 for k in keywords if k in blob)
-
-
-def _detect_header_row_count(table) -> int:
-    """表头占几行：常见 1 行；若第 2 行更像列标题且第 1 行不像，则视为「标题行 + 表头」共 2 行。"""
-    if len(table.rows) < 2:
-        return 1
-    s0 = _row_keyword_score(table.rows[0].cells)
-    s1 = _row_keyword_score(table.rows[1].cells)
-    if s1 >= 2 and s1 > s0:
-        return 2
-    return 1
-
-
-def _tbl_row_count(table) -> int:
-    """以 ``<w:tr>`` 实际个数为准（避免个别版式下 ``len(table.rows)`` 与真实行数不一致）。"""
-    return len([c for c in table._tbl if c.tag == qn("w:tr")])
-
-
-def _clear_tr_text_content(tr_el: Any) -> None:
-    for el in tr_el.iter():
-        if el.tag == qn("w:t"):
-            el.text = ""
-
-
-def _append_tr_clone_from_last(table) -> None:
-    """``add_row()`` 未增加行数时的兜底：深拷贝最后一行 ``<w:tr>`` 并追加。"""
-    tbl = table._tbl
-    trs = [c for c in tbl if c.tag == qn("w:tr")]
-    if not trs:
-        return
-    new_tr = copy.deepcopy(trs[-1])
-    _clear_tr_text_content(new_tr)
-    tbl.append(new_tr)
 
 
 def _tc_ensure_tc_pr(cell) -> Any:
@@ -216,10 +150,6 @@ def _ensure_table_row_count_at_least(table, min_tr_count: int) -> None:
                 break
         else:
             stagnant = 0
-
-
-def _header_text(cell) -> str:
-    return (cell.text or "").strip()
 
 
 def _parse_header_serial_and_column_map(header_row_cells) -> tuple[bool, dict[str, int]]:
@@ -328,15 +258,6 @@ def _restore_tbl_borders(table, borders_el: Any | None) -> None:
     tbl_pr.append(copy.deepcopy(borders_el))
 
 
-def _border_el_effective(el: Any | None) -> bool:
-    if el is None:
-        return False
-    v = el.get(qn("w:val"))
-    if not v:
-        return False
-    return str(v).lower() not in ("nil", "none")
-
-
 def _tbl_borders_ensure_bottom_edge(tbl_borders_el: Any) -> None:
     """表级 ``tblBorders`` 若缺底边或底边为 nil，则从 ``insideH``/``top`` 复制样式补底边（保留线型/颜色）。"""
     bottom = tbl_borders_el.find(qn("w:bottom"))
@@ -387,18 +308,6 @@ def _tc_set_side_border(cell, side: str, border_el: Any) -> None:
     if old is not None:
         tcb.remove(old)
     tcb.append(copy.deepcopy(border_el))
-
-
-def _border_element_as_w_bottom(src: Any | None) -> Any | None:
-    """把 ``insideH``/``top`` 等边线元素转成 ``w:bottom``（属性沿用模板线型/颜色/粗细）。"""
-    if src is None:
-        return None
-    if src.tag == qn("w:bottom"):
-        return copy.deepcopy(src)
-    out = OxmlElement("w:bottom")
-    for k, v in src.attrib.items():
-        out.set(k, v)
-    return out
 
 
 def _sample_horizontal_border_for_row_separation(table) -> Any | None:

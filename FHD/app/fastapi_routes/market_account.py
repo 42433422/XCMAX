@@ -42,2043 +42,232 @@ _ACCOUNT_OVERVIEW_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _bootstrap_overview_needs_live_merge = _market_account_live.bootstrap_overview_needs_live_merge
 
 
-def _market_base_url() -> str:
-    return (os.environ.get("XCAGI_MARKET_BASE_URL") or "http://127.0.0.1:8765").strip().rstrip("/")
-
-
-def _auth_header(raw: str) -> str:
-    token = (raw or "").strip()
-    if token.lower().startswith("authorization:"):
-        token = token.split(":", 1)[1].strip()
-    if token and not token.lower().startswith("bearer "):
-        token = f"Bearer {token}"
-    return token
-
-
-def session_id_from_request(request: Request) -> str:
-    cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
-    cookies = getattr(request, "cookies", None)
-    headers = getattr(request, "headers", None)
-    cookie_sid = cookies.get(cookie_name) if isinstance(cookies, Mapping) else ""
-    header_sid = headers.get("X-Session-ID") if isinstance(headers, Mapping) else ""
-    return str(cookie_sid or header_sid or "").strip()
-
-
-def bind_market_auth_to_session(
-    request: Request,
-    market_result: dict[str, Any],
-) -> tuple[str, str]:
-    """Write market JWT from ``login_market_with_password`` (or register) onto the current FHD session."""
-    token = str(market_result.get("token") or "").strip()
-    refresh = str(market_result.get("refresh_token") or "").strip()
-    if token:
-        save_session_market_token(session_id_from_request(request), token, refresh or None)
-    return token, refresh
-
-
-def save_session_market_token(
-    session_id: str,
-    token: str,
-    refresh_token: str | None = None,
-) -> None:
-    sid = (session_id or "").strip()
-    tok = (token or "").strip()
-    if not sid or not tok:
-        return
-    _MARKET_SESSION_TOKENS[sid] = tok
-    rtok = (refresh_token or "").strip()
-    if rtok:
-        _MARKET_SESSION_REFRESH_TOKENS[sid] = rtok
-    try:
-        from app.db.models.user import Session as UserSession
-        from app.db.session import get_db
-
-        with get_db() as db:
-            row = db.query(UserSession).filter(UserSession.session_id == sid).first()
-            if row is not None:
-                row.market_access_token = tok
-                if rtok:
-                    row.market_refresh_token = rtok
-                db.commit()
-    except RECOVERABLE_ERRORS:
-        logger.exception(
-            "save_session_market_token: failed to persist market token for session_id=%s", sid
-        )
-
-
-def clear_session_market_token(session_id: str) -> None:
-    sid = (session_id or "").strip()
-    if sid:
-        _MARKET_SESSION_TOKENS.pop(sid, None)
-        _MARKET_SESSION_REFRESH_TOKENS.pop(sid, None)
-    try:
-        from app.db.models.user import Session as UserSession
-        from app.db.session import get_db
-
-        with get_db() as db:
-            row = db.query(UserSession).filter(UserSession.session_id == sid).first()
-            if row is not None:
-                if getattr(row, "market_access_token", None):
-                    row.market_access_token = None
-                if getattr(row, "market_refresh_token", None):
-                    row.market_refresh_token = None
-                db.commit()
-    except RECOVERABLE_ERRORS:
-        logger.exception(
-            "clear_session_market_token: failed to clear persisted token for session_id=%s", sid
-        )
-
-
-def session_market_token(session_id: str) -> str:
-    sid = (session_id or "").strip()
-    if not sid:
-        return ""
-    mem = _MARKET_SESSION_TOKENS.get(sid, "").strip()
-    if mem:
-        return mem
-    try:
-        from app.db.models.user import Session as UserSession
-        from app.db.session import get_db
-
-        with get_db() as db:
-            row = db.query(UserSession).filter(UserSession.session_id == sid).first()
-            raw = getattr(row, "market_access_token", None) if row is not None else None
-            t = (raw or "").strip() if raw is not None else ""
-            if t:
-                _MARKET_SESSION_TOKENS[sid] = t
-                return t
-    except RECOVERABLE_ERRORS:
-        logger.exception("session_market_token: DB read failed for session_id=%s", sid)
-    return ""
-
-
-def session_market_refresh_token(session_id: str) -> str:
-    sid = (session_id or "").strip()
-    if not sid:
-        return ""
-    mem = _MARKET_SESSION_REFRESH_TOKENS.get(sid, "").strip()
-    if mem:
-        return mem
-    try:
-        from app.db.models.user import Session as UserSession
-        from app.db.session import get_db
-
-        with get_db() as db:
-            row = db.query(UserSession).filter(UserSession.session_id == sid).first()
-            raw = getattr(row, "market_refresh_token", None) if row is not None else None
-            t = (raw or "").strip() if raw is not None else ""
-            if t:
-                _MARKET_SESSION_REFRESH_TOKENS[sid] = t
-                return t
-    except RECOVERABLE_ERRORS:
-        logger.exception("session_market_refresh_token: DB read failed for session_id=%s", sid)
-    return ""
-
-
-def latest_session_market_refresh_token() -> str:
-    try:
-        from app.db.models.user import Session as UserSession
-        from app.db.session import get_db
-
-        with get_db() as db:
-            rows = (
-                db.query(UserSession)
-                .filter(UserSession.market_refresh_token.isnot(None))
-                .order_by(UserSession.created_at.desc())
-                .limit(10)
-                .all()
-            )
-            for row in rows:
-                tok = str(getattr(row, "market_refresh_token", "") or "").strip()
-                if tok:
-                    return tok
-    except RECOVERABLE_ERRORS:
-        logger.exception("latest_session_market_refresh_token: DB read failed")
-    return ""
-
-
-def latest_session_market_token(user_id: int | None = None) -> str:
-    """Desktop fallback: use the newest persisted market token when browser cookies are unavailable.
-
-    LAN/IP access can miss the ``session_id`` cookie even though the local single-user desktop
-    session has a freshly persisted market token from login. Prefer that over stale localStorage
-    tokens sent by the SPA.
-
-    多用户环境必须传 ``user_id`` 以避免串号：若不传则返回全局最新 token（仅适用于
-    单用户桌面模式）。云后端/多用户场景下，调用方应传入当前登录用户的 ``user_id``，
-    本函数将只返回该用户绑定的市场 token，防止 A 用户拿到 B 用户的市场凭证。
-    """
-    try:
-        from app.db.models.user import Session as UserSession
-        from app.db.session import get_db
-
-        with get_db() as db:
-            query = db.query(UserSession).filter(UserSession.market_access_token.isnot(None))
-            if user_id is not None:
-                query = query.filter(UserSession.user_id == user_id)
-            rows = query.order_by(UserSession.created_at.desc()).limit(10).all()
-            for row in rows:
-                tok = str(getattr(row, "market_access_token", "") or "").strip()
-                if tok:
-                    return tok
-    except RECOVERABLE_ERRORS:
-        logger.exception("latest_session_market_token: DB read failed")
-    return ""
-
-
-def _user_id_from_session(session_id: str) -> int | None:
-    """从 session_id 反查 user_id，用于多用户环境下的 market token fallback 隔离。
-
-    返回 None 表示查不到（如 session 不存在或 DB 不可用），调用方应保持原 fallback 行为。
-    """
-    sid = (session_id or "").strip()
-    if not sid:
-        return None
-    try:
-        from app.db.models.user import Session as UserSession
-        from app.db.session import get_db
-
-        with get_db() as db:
-            row = db.query(UserSession).filter(UserSession.session_id == sid).first()
-            return getattr(row, "user_id", None) if row is not None else None
-    except RECOVERABLE_ERRORS:
-        logger.exception("_user_id_from_session: DB read failed for sid=%s", sid[:8])
-        return None
-
-
-def _normalize_bearer_token(raw: str) -> str:
-    """Strip ``Bearer `` prefix for consistent ``market_access_token`` JSON fields."""
-    t = (raw or "").strip()
-    if t.lower().startswith("bearer "):
-        return t[7:].strip()
-    return t
-
-
-def _proxy_error_http_status(payload: Any) -> int | None:
-    """Parse HTTP status from ``_proxy_json(..., return_error_payload=True)`` error dict."""
-    if not isinstance(payload, dict) or not payload.get("__proxy_error__"):
-        return None
-    raw = payload.get("status_code")
-    if raw is None:
-        return None
-    try:
-        return int(raw)
-    except (TypeError, ValueError):
-        return None
-
-
-@router.get("/session-handoff")
-async def market_session_handoff(request: Request):
-    """Return the Xiuci market JWT bound to the current FHD session.
-
-    Login stores this in-memory via ``save_session_market_token``; the SPA needs it in
-    ``localStorage`` to append ``xcagi_mt=`` on cross-origin links (cookies do not carry).
-    """
-    try:
-        from app.infrastructure.auth.dependencies import resolve_session_user
-
-        user = resolve_session_user(request)
-        if user is None:
-            tok = _normalize_bearer_token(latest_session_market_token())
-            if tok:
-                return {
-                    "success": True,
-                    "data": {
-                        "market_access_token": tok,
-                        "market_base_url": _market_base_url(),
-                    },
-                }
-            return JSONResponse(
-                {
-                    "success": False,
-                    "message": (
-                        "当前会话未绑定修茈市场账号。请使用与本软件相同的用户名与密码重新登录，"
-                        "或在设置中粘贴修茈 Authorization 完成同步。"
-                    ),
-                },
-                status_code=404,
-            )
-        sid = session_id_from_request(request)
-        tok = await resolve_valid_market_access_token(sid)
-        if not tok:
-            tok = _normalize_bearer_token(
-                latest_session_market_token(user_id=getattr(user, "id", None))
-            )
-            if tok:
-                tok = await resolve_valid_market_access_token(sid)
-        if not tok:
-            return JSONResponse(
-                {
-                    "success": False,
-                    "message": (
-                        "当前会话未绑定修茈市场账号。请使用与本软件相同的用户名与密码重新登录，"
-                        "或在设置中粘贴修茈 Authorization 完成同步。"
-                    ),
-                },
-                status_code=404,
-            )
-        _ = user  # validated logged-in user
-        refresh_out = session_market_refresh_token(sid) or latest_session_market_refresh_token()
-        data: dict[str, Any] = {
-            "market_access_token": tok,
-            "market_base_url": _market_base_url(),
-        }
-        if refresh_out:
-            data["market_refresh_token"] = refresh_out
-        try:
-            if sid:
-                from app.enterprise.mod_entitlements import sync_entitlements_for_session
-
-                await sync_entitlements_for_session(sid)
-        except RECOVERABLE_ERRORS:
-            logger.exception("enterprise entitlements refresh on session-handoff failed")
-        return {"success": True, "data": data}
-    except RECOVERABLE_ERRORS:
-        logger.exception("market_session_handoff failed")
-        sid = session_id_from_request(request)
-        fallback_tok = _normalize_bearer_token(
-            session_market_token(sid) or latest_session_market_token()
-        )
-        if fallback_tok:
-            return {
-                "success": True,
-                "data": {
-                    "market_access_token": fallback_tok,
-                    "market_base_url": _market_base_url(),
-                },
-            }
-        return JSONResponse(
-            {
-                "success": False,
-                "message": (
-                    "修茈市场会话交接暂时不可用，请稍后重试或检查 XCAGI_MARKET_BASE_URL 与市场服务状态。"
-                ),
-                "data": {"market_base_url": _market_base_url()},
-            },
-            status_code=502,
-        )
-
-
-def _authorization_from_request(request: Request, body: dict[str, Any]) -> str:
-    """Current desktop session token → newest persisted token → explicit browser token.
-
-    The browser may keep an old market JWT in localStorage while the local backend already has
-    a fresh token bound to the current FHD login session. Strong account state should follow the
-    backend session, not stale client storage.
-    """
-    sid = session_id_from_request(request)
-    session_auth = _auth_header(session_market_token(sid))
-    if session_auth:
-        return session_auth
-    # 多用户环境按当前登录 user_id 过滤，防止串号
-    try:
-        from app.infrastructure.auth.dependencies import resolve_session_user
-
-        current_user = resolve_session_user(request)
-        user_id = getattr(current_user, "id", None) if current_user else None
-    except RECOVERABLE_ERRORS:
-        user_id = None
-    if sid or user_id is not None:
-        latest_auth = _auth_header(latest_session_market_token(user_id=user_id))
-        if latest_auth:
-            return latest_auth
-    auth = _auth_header(str(body.get("authorization") or body.get("token") or ""))
-    if auth:
-        return auth
-    hdr = str(
-        request.headers.get("Authorization") or request.headers.get("authorization") or ""
-    ).strip()
-    if hdr:
-        return _auth_header(hdr)
-    return ""
-
-
-async def _authorization_from_request_resolved(request: Request, body: dict[str, Any]) -> str:
-    """Like ``_authorization_from_request`` but refreshes expired session-bound market JWTs."""
-    sid = session_id_from_request(request)
-    # 多用户环境按当前登录 user_id 过滤，防止串号
-    try:
-        from app.infrastructure.auth.dependencies import resolve_session_user
-
-        current_user = resolve_session_user(request)
-        user_id = getattr(current_user, "id", None) if current_user else None
-    except RECOVERABLE_ERRORS:
-        user_id = None
-    session_tok = _normalize_bearer_token(session_market_token(sid))
-    if not session_tok and (sid or user_id is not None):
-        session_tok = _normalize_bearer_token(latest_session_market_token(user_id=user_id))
-    if session_tok:
-        resolved = await resolve_valid_market_access_token(sid)
-        if resolved:
-            return _auth_header(resolved)
-    return _authorization_from_request(request, body)
-
-
-def _body_snippet(payload: Any, limit: int = 240) -> str:
-    if isinstance(payload, dict):
-        try:
-            import json as _json
-
-            text = _json.dumps(payload, ensure_ascii=False)
-        except RECOVERABLE_ERRORS:
-            text = str(payload)
-    else:
-        text = str(payload or "")
-    text = text.replace("\n", " ").strip()
-    return text[:limit] + ("…" if len(text) > limit else "")
-
-
-def _error_message(payload: Any, status_code: int) -> str:
-    base = _market_base_url()
-    if status_code == 429:
-        return "市场服务请求过于频繁，请稍后再试"
-    if isinstance(payload, dict):
-        detail = payload.get("detail") or payload.get("message") or payload.get("error")
-        if isinstance(detail, list):
-            msg = "; ".join(str(x.get("msg") if isinstance(x, dict) else x) for x in detail)
-        elif detail:
-            msg = str(detail)
-        else:
-            msg = ""
-        if status_code >= 500:
-            hint = f"请检查 XCAGI_MARKET_BASE_URL={base}"
-            if msg and not re.match(r"^internal server error$", msg, re.I):
-                return f"市场服务返回 {status_code}：{msg}。{hint}"
-            return f"市场服务返回 {status_code}（服务器内部错误）。{hint}"
-        if msg:
-            return msg
-    if status_code >= 500:
-        return f"市场服务返回 {status_code}（服务器内部错误）。请检查 XCAGI_MARKET_BASE_URL={base}"
-    return f"HTTP {status_code}"
-
-
-def _market_http_timeout() -> float:
-    try:
-        return float(os.environ.get("XCAGI_MARKET_HTTP_TIMEOUT", "20"))
-    except ValueError:
-        return 20.0
-
-
-def _market_http_retries() -> int:
-    try:
-        return max(1, int(os.environ.get("XCAGI_MARKET_HTTP_RETRIES", "1")))
-    except ValueError:
-        return 1
-
-
-def _account_overview_cache_ttl() -> float:
-    try:
-        return max(0.0, float(os.environ.get("XCAGI_MARKET_OVERVIEW_CACHE_TTL", "45")))
-    except ValueError:
-        return 45.0
-
-
-def _overview_cache_key(authorization: str) -> str:
-    return sha256(_auth_header(authorization).encode("utf-8")).hexdigest()
-
-
-def _transport_error_message(exc: Exception) -> tuple[str, int]:
-    import httpx
-
-    label = str(exc).strip() or type(exc).__name__
-    base = _market_base_url()
-    if isinstance(exc, httpx.ReadTimeout):
-        return (
-            f"连接修茈市场超时（{label}）。请检查网络或增大 XCAGI_MARKET_HTTP_TIMEOUT；"
-            f"当前 XCAGI_MARKET_BASE_URL={base}",
-            503,
-        )
-    return (
-        f"无法连接修茈市场服务器：{label}。请确认 XCAGI_MARKET_BASE_URL={base} 可达，且 FHD 后端已启动。",
-        502,
-    )
-
-
-async def _proxy_json(
-    method: str,
-    path: str,
-    *,
-    json_body: dict[str, Any] | None = None,
-    authorization: str = "",
-    extra_headers: dict[str, str] | None = None,
-    return_error_payload: bool = False,
-    timeout: float | None = None,
-    retries: int | None = None,
-):
-    url = f"{_market_base_url()}{path}"
-    headers: dict[str, str] = {"Accept": "application/json"}
-    if authorization:
-        headers["Authorization"] = _auth_header(authorization)
-    if extra_headers:
-        for key, val in extra_headers.items():
-            if key and val:
-                headers[str(key)] = str(val)
-    timeout = _market_http_timeout() if timeout is None else float(timeout)
-    retries = _market_http_retries() if retries is None else max(0, int(retries))
-    last_exc: Exception | None = None
-    mutating = str(method).upper() in {"POST", "PUT", "PATCH", "DELETE"}
-    for attempt in range(retries):
-        try:
-            async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
-                req_headers = dict(headers)
-                if mutating:
-                    # 市场对变更类请求强制 CSRF 双提交:先 GET 任意端点拿 csrf_token cookie,
-                    # 再以同值 X-CSRF-Token 头回传(cookie 由同一 client 自动携带)。
-                    # 失败不阻断主请求(老市场无 CSRF 时无副作用)。
-                    try:
-                        await client.get(f"{_market_base_url()}/api/csrf")
-                        csrf = client.cookies.get("csrf_token")
-                        if csrf:
-                            req_headers["X-CSRF-Token"] = csrf
-                    except httpx.HTTPError:
-                        pass
-                res = await client.request(method, url, json=json_body, headers=req_headers)
-            break
-        except httpx.HTTPError as exc:
-            last_exc = exc
-            if attempt + 1 >= retries:
-                message, status_code = _transport_error_message(exc)
-                return JSONResponse(
-                    {
-                        "success": False,
-                        "message": message,
-                        "error": {"code": "MARKET_AUTH_UNAVAILABLE", "message": message},
-                        "data": {"market_base_url": _market_base_url()},
-                    },
-                    status_code=status_code,
-                )
-        except RECOVERABLE_ERRORS as exc:
-            logger.warning("_proxy_json transport error to %s: %s", url, exc)
-            message, status_code = _transport_error_message(exc)
-            return JSONResponse(
-                {
-                    "success": False,
-                    "message": message,
-                    "error": {"code": "MARKET_AUTH_UNAVAILABLE", "message": message},
-                    "data": {"market_base_url": _market_base_url()},
-                },
-                status_code=status_code,
-            )
-    else:
-        if last_exc is not None:
-            message, status_code = _transport_error_message(last_exc)
-            return JSONResponse(
-                {
-                    "success": False,
-                    "message": message,
-                    "error": {"code": "MARKET_AUTH_UNAVAILABLE", "message": message},
-                    "data": {"market_base_url": _market_base_url()},
-                },
-                status_code=status_code,
-            )
-        return JSONResponse({"success": False, "message": "市场请求失败"}, status_code=502)
-    try:
-        payload = res.json()
-    except ValueError:
-        payload = {"detail": res.text}
-    if res.status_code >= 400:
-        if res.status_code >= 500:
-            logger.warning(
-                "market proxy %s %s -> %s body=%s",
-                method,
-                url,
-                res.status_code,
-                _body_snippet(payload),
-            )
-        if return_error_payload:
-            return {"__proxy_error__": True, "status_code": res.status_code, "payload": payload}
-        detail = _error_message(payload, res.status_code)
-        return JSONResponse(
-            {
-                "success": False,
-                "message": str(detail),
-                "data": {
-                    **(payload if isinstance(payload, dict) else {}),
-                    "market_base_url": _market_base_url(),
-                },
-            },
-            status_code=res.status_code,
-        )
-    return payload
-
-
-async def fetch_market_membership_tier(market_token: str) -> str | None:
-    """登录后从修茈市场拉取当前用户会员等级 tier（free/vip/vip_plus/svip1..8）。
-
-    市场登录响应不含会员等级，需单独调 ``GET /api/payment/my-plan``。
-    任何失败均返回 None（不阻断登录）。
-    """
-    token = (market_token or "").strip()
-    if not token:
-        return None
-    try:
-        data = await _proxy_json(
-            "GET", "/api/payment/my-plan", authorization=token, return_error_payload=True
-        )
-    except RECOVERABLE_ERRORS:
-        logger.warning("fetch_market_membership_tier 调用失败", exc_info=True)
-        return None
-    if not isinstance(data, dict) or data.get("__proxy_error__"):
-        return None
-    membership = data.get("membership")
-    if isinstance(membership, dict):
-        tier = str(membership.get("tier") or "").strip()
-        return tier or None
-    return None
-
-
-@router.get("/membership-plans")
-async def market_membership_plans():
-    """会员套餐列表（代理市场公开接口 ``GET /api/payment/plans``）。
-
-    供 ModelPaymentView 读取，替代前端硬编码；市场不可达时返回空列表，前端用本地 FALLBACK。
-    """
-    data = await _proxy_json("GET", "/api/payment/plans", return_error_payload=True)
-    if isinstance(data, dict) and not data.get("__proxy_error__"):
-        plans = data.get("plans")
-        return {"success": True, "data": {"plans": plans if isinstance(plans, list) else []}}
-    return {"success": True, "data": {"plans": []}}
-
-
-def _token_from_auth_response(payload: Any) -> str:
-    """Extract access JWT from market ``POST /api/auth/login`` JSON (several response shapes)."""
-    if not isinstance(payload, dict):
-        return ""
-    inner = payload.get("data") if isinstance(payload.get("data"), dict) else None
-    candidates: list[Any] = []
-    if inner:
-        candidates.extend(
-            [
-                inner.get("access_token"),
-                inner.get("token"),
-                inner.get("market_access_token"),
-            ]
-        )
-        nested = inner.get("tokens") if isinstance(inner.get("tokens"), dict) else None
-        if nested:
-            candidates.extend([nested.get("access_token"), nested.get("accessToken")])
-    candidates.extend(
-        [
-            payload.get("access_token"),
-            payload.get("token"),
-            payload.get("market_access_token"),
-        ]
-    )
-    nested_top = payload.get("tokens") if isinstance(payload.get("tokens"), dict) else None
-    if nested_top:
-        candidates.extend([nested_top.get("access_token"), nested_top.get("accessToken")])
-    for c in candidates:
-        if c is None:
-            continue
-        s = str(c).strip()
-        if s:
-            return s
-    return ""
-
-
-def _refresh_token_from_auth_response(payload: Any) -> str:
-    if not isinstance(payload, dict):
-        return ""
-    inner = payload.get("data") if isinstance(payload.get("data"), dict) else None
-    candidates: list[Any] = []
-    if inner:
-        candidates.extend([inner.get("refresh_token"), inner.get("refreshToken")])
-        nested = inner.get("tokens") if isinstance(inner.get("tokens"), dict) else None
-        if nested:
-            candidates.extend([nested.get("refresh_token"), nested.get("refreshToken")])
-    candidates.extend([payload.get("refresh_token"), payload.get("refreshToken")])
-    nested_top = payload.get("tokens") if isinstance(payload.get("tokens"), dict) else None
-    if nested_top:
-        candidates.extend([nested_top.get("refresh_token"), nested_top.get("refreshToken")])
-    for c in candidates:
-        if c is None:
-            continue
-        s = str(c).strip()
-        if s:
-            return s
-    return ""
-
-
-async def refresh_session_market_token(session_id: str) -> str:
-    """Use persisted modstore refresh_token to obtain a new access_token."""
-    sid = (session_id or "").strip()
-    if not sid:
-        return ""
-    refresh = session_market_refresh_token(sid)
-    if not refresh:
-        return ""
-    payload = await _proxy_json(
-        "POST",
-        "/api/auth/refresh",
-        json_body={"refresh_token": refresh},
-        return_error_payload=True,
-    )
-    if isinstance(payload, JSONResponse):
-        return ""
-    if isinstance(payload, dict) and payload.get("__proxy_error__"):
-        return ""
-    access = _token_from_auth_response(payload)
-    new_refresh = _refresh_token_from_auth_response(payload) or refresh
-    if access and sid:
-        save_session_market_token(sid, access, new_refresh)
-    return access
-
-
-async def resolve_valid_market_access_token(session_id: str) -> str:
-    """Return a working market access token, refreshing when /api/auth/me returns 401."""
-    from app.application.surface_audit_demo_account import is_local_demo_market_token
-
-    sid = (session_id or "").strip()
-    # 多用户环境：从 session_id 反查 user_id，防止 fallback 串号
-    user_id = _user_id_from_session(sid)
-    tok = _normalize_bearer_token(session_market_token(sid))
-    if not tok and user_id is not None:
-        tok = _normalize_bearer_token(latest_session_market_token(user_id=user_id))
-    if not tok:
-        return ""
-    if is_local_demo_market_token(tok):
-        return tok
-    me = await _proxy_json(
-        "GET", "/api/auth/me", authorization=f"Bearer {tok}", return_error_payload=True
-    )
-    if isinstance(me, JSONResponse):
-        logger.warning(
-            "market unreachable during token validation (session_id=%s), using local token",
-            sid[:8] if sid else "",
-        )
-        return tok
-    if isinstance(me, dict) and me.get("__proxy_error__"):
-        if _proxy_error_http_status(me) == 401:
-            refreshed = await refresh_session_market_token(sid)
-            return _normalize_bearer_token(refreshed)
-        logger.warning(
-            "market /api/auth/me error status=%s, using local token",
-            me.get("status_code"),
-        )
-        return tok
-    # MODstore intentionally returns HTTP 200 for an anonymous /auth/me so
-    # browser consoles do not fill with 401s.  The authentication state is in
-    # the JSON contract instead.  Treat either explicit false flag as an
-    # expired access token; otherwise a stale token is cached forever and all
-    # downstream admin evidence calls fail with 401 despite a valid persisted
-    # refresh token.
-    if isinstance(me, dict) and (me.get("ok") is False or me.get("success") is False):
-        refreshed = await refresh_session_market_token(sid)
-        return _normalize_bearer_token(refreshed)
-    return tok
-
-
-def _market_validate_fast_timeout() -> float:
-    """会话校验专用快速超时：宁可 fail-open 也不阻塞导航。"""
-    try:
-        return max(0.5, float(os.environ.get("XCAGI_MARKET_VALIDATE_TIMEOUT", "2")))
-    except ValueError:
-        return 2.0
-
-
-async def resolve_valid_market_access_token_fast(session_id: str) -> str:
-    """返回市场 token，但绝不因市场慢而阻塞调用方。
-
-    供路由守卫/会话校验等对延迟敏感的路径使用：用短超时 + 零重试探测
-    /api/auth/me，任何瞬时失败（超时/连接不上/5xx）都直接返回本地 token
-    （fail-open），因为本地会话本身已有效。仅当市场明确返回 401 判定
-    token 过期时才尝试刷新。
-    """
-    from app.application.surface_audit_demo_account import is_local_demo_market_token
-
-    sid = (session_id or "").strip()
-    user_id = _user_id_from_session(sid)
-    tok = _normalize_bearer_token(session_market_token(sid))
-    if not tok and user_id is not None:
-        tok = _normalize_bearer_token(latest_session_market_token(user_id=user_id))
-    if not tok:
-        return ""
-    if is_local_demo_market_token(tok):
-        return tok
-    try:
-        me = await _proxy_json(
-            "GET",
-            "/api/auth/me",
-            authorization=f"Bearer {tok}",
-            return_error_payload=True,
-            timeout=_market_validate_fast_timeout(),
-            retries=0,
-        )
-    except RECOVERABLE_ERRORS:
-        logger.warning(
-            "market token fast-validate transport error (session_id=%s), fail-open to local token",
-            sid[:8] if sid else "",
-        )
-        return tok
-    if isinstance(me, JSONResponse):
-        # 连接失败/超时：fail-open，返回本地 token，不刷新（避免二次慢请求）。
-        return tok
-    if isinstance(me, dict) and me.get("__proxy_error__"):
-        if _proxy_error_http_status(me) == 401:
-            refreshed = await refresh_session_market_token(sid)
-            return _normalize_bearer_token(refreshed)
-        return tok
-    if isinstance(me, dict) and (me.get("ok") is False or me.get("success") is False):
-        refreshed = await refresh_session_market_token(sid)
-        return _normalize_bearer_token(refreshed)
-    return tok
-
-
-def _looks_like_verification_required(payload: Any) -> bool:
-    """Classify a market response without changing registration behavior."""
-
-    msg = _error_message(payload, 400)
-    return bool(re.search(r"验证码|verification|code", msg, re.I))
-
-
-async def _register_without_verification(username: str, password: str, email: str):
-    """Use the explicitly enabled server-side API for the dev diagnostic only.
-
-    The public registration flow never calls this helper and therefore cannot
-    silently bypass email verification.
-    """
-
-    payload = await _proxy_json(
-        "POST",
-        "/api/market/open/register",
-        json_body={"username": username, "password": password, "email": email},
-        return_error_payload=True,
-    )
-    if isinstance(payload, dict) and payload.get("__proxy_error__"):
-        payload = await _proxy_json(
-            "POST",
-            "/api/auth/register-open",
-            json_body={"username": username, "password": password, "email": email},
-            return_error_payload=True,
-        )
-    return payload
-
-
-async def send_market_reset_password_code(email: str) -> dict[str, Any]:
-    """Request password-reset verification email from the configured market server."""
-    email_norm = (email or "").strip().lower()
-    if not email_norm or "@" not in email_norm:
-        return {"success": False, "message": "请填写有效邮箱"}
-    payload = await _proxy_json(
-        "POST",
-        "/api/auth/send-reset-password-code",
-        json_body={"email": email_norm},
-        return_error_payload=True,
-    )
-    if isinstance(payload, JSONResponse):
-        return {"success": False, "message": "市场服务不可用"}
-    if isinstance(payload, dict) and payload.get("__proxy_error__"):
-        status_code = int(payload.get("status_code") or 502)
-        raw = payload.get("payload")
-        return {
-            "success": False,
-            "message": _error_message(raw, status_code) or "无法连接修茈市场发送验证码",
-            "market_base_url": _market_base_url(),
-        }
-    msg = ""
-    if isinstance(payload, dict):
-        msg = str(payload.get("message") or "").strip()
-    return {
-        "success": True,
-        "message": msg or "若该邮箱已注册，将收到验证码邮件",
-        "market_base_url": _market_base_url(),
-        "raw": payload,
-    }
-
-
-async def send_market_register_code(email: str) -> dict[str, Any]:
-    """Request a registration code from the canonical market identity service."""
-
-    email_norm = (email or "").strip().lower()
-    if not email_norm or "@" not in email_norm:
-        return {"success": False, "message": "请填写有效邮箱", "status_code": 400}
-    payload = await _proxy_json(
-        "POST",
-        "/api/auth/send-register-code",
-        json_body={"email": email_norm},
-        return_error_payload=True,
-    )
-    if isinstance(payload, JSONResponse):
-        return {"success": False, "message": "市场服务不可用", "status_code": 502}
-    if isinstance(payload, dict) and payload.get("__proxy_error__"):
-        status_code = int(payload.get("status_code") or 502)
-        raw = payload.get("payload")
-        return {
-            "success": False,
-            "message": _error_message(raw, status_code) or "发送验证码失败",
-            "status_code": status_code,
-        }
-    message = str(payload.get("message") or "") if isinstance(payload, dict) else ""
-    return {"success": True, "message": message or "验证码已发送"}
-
-
-async def reset_market_password_with_code(
-    email: str, code: str, new_password: str
-) -> dict[str, Any]:
-    """Reset password on market server using email verification code."""
-    email_norm = (email or "").strip().lower()
-    code_s = (code or "").strip()
-    if not email_norm or "@" not in email_norm:
-        return {"success": False, "message": "请填写有效邮箱"}
-    if len(code_s) < 4:
-        return {"success": False, "message": "请填写验证码"}
-    if len(new_password or "") < 6:
-        return {"success": False, "message": "新密码至少 6 个字符"}
-    payload = await _proxy_json(
-        "POST",
-        "/api/auth/reset-password",
-        json_body={"email": email_norm, "code": code_s, "new_password": new_password},
-        return_error_payload=True,
-    )
-    if isinstance(payload, JSONResponse):
-        return {"success": False, "message": "市场服务不可用"}
-    if isinstance(payload, dict) and payload.get("__proxy_error__"):
-        status_code = int(payload.get("status_code") or 400)
-        raw = payload.get("payload")
-        return {
-            "success": False,
-            "message": _error_message(raw, status_code) or "重置失败",
-            "raw": raw,
-        }
-    if isinstance(payload, dict) and payload.get("success") is False:
-        return {
-            "success": False,
-            "message": str(payload.get("message") or payload.get("detail") or "重置失败"),
-            "raw": payload,
-        }
-    return {
-        "success": True,
-        "message": "密码已重置",
-        "raw": payload,
-    }
-
-
-async def register_market_user(
-    username: str,
-    password: str,
-    email: str,
-    verification_code: str = "",
-) -> dict[str, Any]:
-    """Register on the configured Xiuci market server. Returns success/message/token/raw."""
-    register_body = {
-        "username": username,
-        "password": password,
-        "email": email,
-        "verification_code": (verification_code or "").strip(),
-    }
-    payload = await _proxy_json(
-        "POST", "/api/auth/register", json_body=register_body, return_error_payload=True
-    )
-    if isinstance(payload, JSONResponse):
-        return {"success": False, "message": "市场服务不可用"}
-    if isinstance(payload, dict) and payload.get("__proxy_error__"):
-        status_code = int(payload.get("status_code") or 400)
-        raw_error = payload.get("payload")
-        if status_code >= 400:
-            return {
-                "success": False,
-                "message": _error_message(raw_error, status_code),
-                "raw": raw_error,
-            }
-    normalized = await _normalize_market_auth_payload(payload)
-    normalized["market_user_id"] = _market_user_id_from_auth_payload(payload)
-    return normalized
-
-
-@router.post("/register")
-async def market_register(request: Request, body: dict[str, Any] = Body(default_factory=dict)):
-    """Register a Xiuci market account through the configured market server."""
-    username = str(body.get("username") or "").strip()
-    password = str(body.get("password") or "")
-    email = str(body.get("email") or "").strip()
-    verification_code = str(body.get("verification_code") or body.get("code") or "").strip()
-    if not username or not password:
-        return JSONResponse(
-            {"success": False, "message": "username、password 必填"}, status_code=400
-        )
-    result = await register_market_user(username, password, email, verification_code)
-    if not result.get("success"):
-        return JSONResponse(
-            {
-                "success": False,
-                "message": result.get("message", "注册失败"),
-                "data": result.get("raw"),
-            },
-            status_code=400,
-        )
-    token, _ = bind_market_auth_to_session(request, result)
-    return {
-        "success": True,
-        "data": {
-            "market_base_url": result.get("market_base_url"),
-            "token": token,
-            "refresh_token": result.get("refresh_token"),
-            "account_state": result.get("account_state"),
-            "next_action": result.get("next_action"),
-            "desktop_access": bool(result.get("desktop_access")),
-            "active_plan_id": result.get("active_plan_id"),
-            "account_tier": result.get("account_tier"),
-            "raw": result.get("raw"),
-        },
-    }
-
-
-@router.post("/login")
-async def market_login(request: Request, body: dict[str, Any] = Body(default_factory=dict)):
-    """Login to Xiuci market (username/password) and bind JWT to the current FHD session.
-
-    Prefer ``POST /api/auth/login`` for the desktop app; this route remains for
-    settings/tools that only need market credentials. Token-only bind: ``POST /account-sync``.
-    """
-    username = str(body.get("username") or body.get("email") or "").strip()
-    password = str(body.get("password") or "")
-    if not username or not password:
-        return JSONResponse(
-            {"success": False, "message": "username 与 password 必填"}, status_code=400
-        )
-    market_result = await login_market_with_password(username, password)
-    if not market_result.get("success"):
-        return JSONResponse(
-            {"success": False, "message": market_result.get("message", "市场登录失败")},
-            status_code=403,
-        )
-    token, refresh = bind_market_auth_to_session(request, market_result)
-    return {
-        "success": True,
-        "data": {
-            "market_base_url": _market_base_url(),
-            "token": token,
-            "refresh_token": refresh,
-            "account_state": market_result.get("account_state"),
-            "next_action": market_result.get("next_action"),
-            "desktop_access": bool(market_result.get("desktop_access")),
-            "active_plan_id": market_result.get("active_plan_id"),
-            "account_tier": market_result.get("account_tier"),
-            "raw": market_result.get("raw"),
-        },
-    }
-
-
-def _is_local_market_base(url: str) -> bool:
-    host = (url or "").strip().lower()
-    return "127.0.0.1" in host or "localhost" in host
-
-
-def _demo_market_login_payload(shim: dict[str, Any], *, market_base_url: str) -> dict[str, Any]:
-    raw_out = dict(shim.get("raw") or {})
-    if not isinstance(raw_out.get("user"), dict):
-        raw_out["user"] = {
-            "id": int((shim.get("raw") or {}).get("user", {}).get("id") or 900001),
-            "username": str((shim.get("raw") or {}).get("user", {}).get("username") or ""),
-            "is_enterprise": True,
-            "is_admin": False,
-        }
-    return {
-        "success": True,
-        "market_base_url": market_base_url,
-        "token": str(shim.get("token") or "").strip(),
-        "refresh_token": str(shim.get("refresh_token") or "").strip(),
-        "is_enterprise": bool(shim.get("is_enterprise")),
-        "is_market_admin": bool(shim.get("is_market_admin")),
-        "raw": raw_out,
-    }
-
-
-async def _normalize_market_auth_payload(
-    payload: Any,
-    *,
-    market_base: str | None = None,
-) -> dict[str, Any]:
-    """Turn market login JSON into normalized token payload."""
-    if isinstance(payload, JSONResponse):
-        try:
-            raw_body = json.loads(payload.body.decode("utf-8") if payload.body else "{}")
-        except RECOVERABLE_ERRORS:
-            raw_body = {}
-        status_code = int(payload.status_code or 502)
-        message = (
-            str(raw_body.get("message") or "").strip()
-            or str(raw_body.get("detail") or "").strip()
-            or _error_message(raw_body, status_code)
-        )
-        err = raw_body.get("error") if isinstance(raw_body.get("error"), dict) else {}
-        code = str(err.get("code") or "").strip()
-        if status_code >= 500 and not code:
-            code = "MARKET_AUTH_UNAVAILABLE"
-        return {
-            "success": False,
-            "message": message,
-            "status_code": status_code,
-            "error_code": code
-            or ("MARKET_AUTH_UNAVAILABLE" if status_code >= 500 else "MARKET_AUTH_FAILED"),
-            "raw": raw_body,
-            "market_base_url": market_base or _market_base_url(),
-        }
-    token = _token_from_auth_response(payload)
-    refresh = _refresh_token_from_auth_response(payload)
-    if not token:
-        return {"success": False, "message": "市场登录成功但未返回 access_token", "raw": payload}
-    me = await _proxy_json(
-        "GET", "/api/auth/me", authorization=f"Bearer {token}", return_error_payload=True
-    )
-    is_enterprise, is_market_admin, user_blob = _market_identity_from_payloads(payload, me)
-    lifecycle = _market_lifecycle_from_payloads(payload, me)
-    logger.info(
-        "market auth normalized base=%s success=True is_enterprise=%s is_market_admin=%s username=%s raw_keys=%s me_keys=%s",
-        market_base or _market_base_url(),
-        is_enterprise,
-        is_market_admin,
-        str(user_blob.get("username") or ""),
-        sorted(payload.keys()) if isinstance(payload, dict) else [],
-        sorted(me.keys()) if isinstance(me, dict) else [],
-    )
-    raw_out = dict(payload) if isinstance(payload, dict) else {}
-    if user_blob and not isinstance(raw_out.get("user"), dict):
-        raw_out["user"] = user_blob
-    return {
-        "success": True,
-        "market_base_url": market_base or _market_base_url(),
-        "token": token,
-        "refresh_token": refresh,
-        "is_enterprise": is_enterprise,
-        "is_market_admin": is_market_admin,
-        **lifecycle,
-        "raw": raw_out,
-    }
-
-
-async def login_market_with_password(username: str, password: str) -> dict[str, Any]:
-    """Authenticate against the market server and return a normalized token payload."""
-    from app.application.surface_audit_demo_account import try_local_demo_market_login
-
-    market_base = _market_base_url()
-    demo_shim = try_local_demo_market_login(username, password)
-    if demo_shim and _is_local_market_base(market_base):
-        return _demo_market_login_payload(demo_shim, market_base_url=market_base)
-
-    payload = await _proxy_json(
-        "POST", "/api/auth/login", json_body={"username": username, "password": password}
-    )
-    if isinstance(payload, JSONResponse):
-        try:
-            status_code = int(payload.status_code or 502)
-        except (TypeError, ValueError):
-            status_code = 502
-        if demo_shim and _is_local_market_base(market_base) and status_code >= 400:
-            return _demo_market_login_payload(demo_shim, market_base_url=market_base)
-    result = await _normalize_market_auth_payload(payload, market_base=market_base)
-    if not result.get("success") and demo_shim and _is_local_market_base(market_base):
-        sc = int(result.get("status_code") or 502)
-        if sc >= 400:
-            return _demo_market_login_payload(demo_shim, market_base_url=market_base)
-    return result
-
-
-async def login_market_with_phone_code(phone: str, code: str) -> dict[str, Any]:
-    """Authenticate against market via phone verification code."""
-    market_base = _market_base_url()
-    payload = await _proxy_json(
-        "POST",
-        "/api/auth/login-with-phone-code",
-        json_body={"phone": (phone or "").strip(), "code": (code or "").strip()},
-    )
-    return await _normalize_market_auth_payload(payload, market_base=market_base)
-
-
-def _market_internal_api_key() -> str:
-    return (
-        os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")
-        or os.environ.get("XCAGI_CS_INTAKE_LINK_SECRET")
-        or ""
-    ).strip()
-
-
-async def ensure_market_enterprise_profile(
-    market_user_id: int | str | None,
-    *,
-    username: str = "",
-    company: str = "",
-    mod_ids: list[str] | tuple[str, ...] | None = None,
-) -> dict[str, Any]:
-    """Mark a registered market account as enterprise through the internal market API."""
-    try:
-        uid = int(str(market_user_id or "").strip())
-    except (TypeError, ValueError):
-        uid = 0
-    if uid <= 0:
-        return {
-            "success": False,
-            "message": "修茈市场注册成功但未返回用户ID，无法标记企业账号",
-            "market_base_url": _market_base_url(),
-        }
-    internal_key = _market_internal_api_key()
-    if not internal_key:
-        return {
-            "success": False,
-            "message": "未配置 XCAGI_MARKET_INTERNAL_API_KEY，无法标记市场企业账号",
-            "market_base_url": _market_base_url(),
-        }
-    body: dict[str, Any] = {
-        "market_user_id": uid,
-        "company": (company or "").strip(),
-        "display_name": (username or "").strip(),
-    }
-    requested_mod_ids = _dedupe_mod_ids([str(x) for x in (mod_ids or [])])
-    if requested_mod_ids:
-        body["mod_ids"] = requested_mod_ids
-    payload = await _proxy_json(
-        "POST",
-        "/api/internal/cs-intake/ensure-enterprise-profile",
-        json_body=body,
-        extra_headers={"X-Internal-Api-Key": internal_key},
-        return_error_payload=True,
-    )
-    if isinstance(payload, JSONResponse):
-        return {
-            "success": False,
-            "message": "市场服务不可用，无法标记企业账号",
-            "status_code": int(getattr(payload, "status_code", 502) or 502),
-            "market_base_url": _market_base_url(),
-        }
-    if isinstance(payload, dict) and payload.get("__proxy_error__"):
-        status_code = int(payload.get("status_code") or 502)
-        raw = payload.get("payload")
-        return {
-            "success": False,
-            "message": _error_message(raw, status_code) or "市场企业标记失败",
-            "status_code": status_code,
-            "raw": raw,
-            "market_base_url": _market_base_url(),
-        }
-    if not isinstance(payload, dict):
-        return {
-            "success": False,
-            "message": "市场企业标记返回格式异常",
-            "raw": payload,
-            "market_base_url": _market_base_url(),
-        }
-    is_enterprise = _truthy_identity_flag(payload.get("is_enterprise")) or _truthy_identity_flag(
-        payload.get("market_is_enterprise")
-    )
-    if not (payload.get("ok") or payload.get("success")) or not is_enterprise:
-        return {
-            "success": False,
-            "message": str(payload.get("message") or payload.get("detail") or "市场企业标记失败"),
-            "raw": payload,
-            "market_base_url": _market_base_url(),
-        }
-    return {
-        "success": True,
-        "market_user_id": uid,
-        "username": str(payload.get("username") or username or "").strip(),
-        "is_enterprise": True,
-        "mod_ids": [
-            str(x).strip()
-            for x in (payload.get("mod_ids") or requested_mod_ids)
-            if str(x or "").strip()
-        ],
-        "added_mod_ids": [
-            str(x).strip() for x in (payload.get("added_mod_ids") or []) if str(x or "").strip()
-        ],
-        "raw": payload,
-        "market_base_url": _market_base_url(),
-    }
-
-
-def _dedupe_mod_ids(mod_ids: list[str]) -> list[str]:
-    out: list[str] = []
-    seen: set[str] = set()
-    for raw in mod_ids:
-        mid = str(raw or "").strip()
-        if not mid or mid in seen:
-            continue
-        seen.add(mid)
-        out.append(mid)
-    return out
-
-
-def enterprise_mod_ids_for_industry(industry_id: str) -> list[str]:
-    """Resolve the MODstore entitlements implied by a selected industry."""
-    iid = str(industry_id or "").strip()
-    if not iid:
-        return []
-    mod_ids: list[str] = []
-    try:
-        from app.mod_sdk.industry_seed import industry_mod_id_for
-
-        mid = str(industry_mod_id_for(iid) or "").strip()
-        if mid:
-            mod_ids.append(mid)
-    except RECOVERABLE_ERRORS:
-        logger.exception("enterprise_mod_ids_for_industry: industry_seed failed industry=%s", iid)
-    try:
-        from app.mod_sdk.industry_mod_aliases import canonical_mod_id_for_industry
-
-        mid = str(canonical_mod_id_for_industry(iid) or "").strip()
-        if mid:
-            mod_ids.append(mid)
-    except RECOVERABLE_ERRORS:
-        logger.exception("enterprise_mod_ids_for_industry: alias failed industry=%s", iid)
-    try:
-        from app.mod_sdk.customer_delivery import deliveries_for_industry
-
-        for row in deliveries_for_industry(iid):
-            if not isinstance(row, dict):
-                continue
-            mid = str(row.get("industry_mod_id") or "").strip()
-            if mid:
-                mod_ids.append(mid)
-    except RECOVERABLE_ERRORS:
-        logger.exception("enterprise_mod_ids_for_industry: delivery failed industry=%s", iid)
-    return _dedupe_mod_ids(mod_ids)
-
-
-async def grant_market_enterprise_entitlements_for_session(
-    session_id: str,
-    industry_id: str,
-) -> dict[str, Any]:
-    """Grant selected-industry MODstore entitlements for the current FHD session."""
-    sid = str(session_id or "").strip()
-    mod_ids = enterprise_mod_ids_for_industry(industry_id)
-    if not mod_ids:
-        return {"success": True, "mod_ids": [], "added_mod_ids": []}
-    if not sid:
-        return {"success": False, "message": "缺少登录会话，无法写入市场行业权限"}
-    market_user_id: int | None = None
-    try:
-        from app.application.session_account_meta import load_session_account_meta
-
-        meta = load_session_account_meta(sid) or {}
-        raw_uid = meta.get("market_user_id")
-        if raw_uid is not None:
-            market_user_id = int(raw_uid)
-    except (TypeError, ValueError):
-        market_user_id = None
-    except RECOVERABLE_ERRORS:
-        logger.exception("grant_market_enterprise_entitlements: load session meta failed")
-    if market_user_id is None:
-        token = await resolve_valid_market_access_token(sid)
-        from app.enterprise.mod_entitlements import _market_user_id_from_access_token
-
-        market_user_id = _market_user_id_from_access_token(token)
-    if market_user_id is None:
-        return {"success": False, "message": "当前会话没有市场用户ID，无法写入市场行业权限"}
-    return await ensure_market_enterprise_profile(
-        market_user_id,
-        mod_ids=mod_ids,
-    )
-
-
-def _oidc_identity_from_profile(profile: dict[str, Any]) -> tuple[str, str, str]:
-    username = str(
-        profile.get("preferred_username") or profile.get("email") or profile.get("sub") or ""
-    ).strip()
-    email = str(profile.get("email") or "").strip()
-    oidc_sub = str(profile.get("sub") or "").strip()
-    return username, email, oidc_sub
-
-
-async def login_market_for_oidc_profile(
-    profile: dict[str, Any],
-    *,
-    oidc_access_token: str = "",
-) -> dict[str, Any]:
-    """OIDC SSO 后自动签发/绑定 MODstore JWT（内部桥接；可选 IdP bearer 探测）。"""
-    market_base = _market_base_url()
-    username, email, oidc_sub = _oidc_identity_from_profile(profile or {})
-    if not username and not email:
-        return {
-            "success": False,
-            "message": "OIDC 未返回可用于市场同步的身份字段",
-            "market_base_url": market_base,
-        }
-
-    oidc_tok = _normalize_bearer_token(oidc_access_token or "")
-    if oidc_tok:
-        me_payload = await _proxy_json(
-            "GET",
-            "/api/auth/me",
-            authorization=f"Bearer {oidc_tok}",
-            return_error_payload=True,
-        )
-        if isinstance(me_payload, dict) and not me_payload.get("__proxy_error__"):
-            is_enterprise, is_market_admin, user_blob = _market_identity_from_payloads(
-                me_payload, me_payload
-            )
-            raw_out: dict[str, Any] = dict(me_payload) if isinstance(me_payload, dict) else {}
-            if user_blob and not isinstance(raw_out.get("user"), dict):
-                raw_out["user"] = user_blob
-            return {
-                "success": True,
-                "market_base_url": market_base,
-                "token": oidc_tok,
-                "refresh_token": "",
-                "is_enterprise": is_enterprise,
-                "is_market_admin": is_market_admin,
-                "raw": raw_out,
-            }
-
-    internal_key = _market_internal_api_key()
-    if not internal_key:
-        return {
-            "success": False,
-            "message": ("未配置 XCAGI_MARKET_INTERNAL_API_KEY，SSO 会话无法自动绑定修茈市场 token"),
-            "market_base_url": market_base,
-        }
-
-    payload = await _proxy_json(
-        "POST",
-        "/api/auth/internal/sso-issue-token",
-        json_body={
-            "username": username,
-            "email": email,
-            "oidc_sub": oidc_sub,
-            "display_name": str(
-                profile.get("name") or profile.get("given_name") or username
-            ).strip()[:128],
-        },
-        extra_headers={"X-Internal-Api-Key": internal_key},
-        return_error_payload=True,
-    )
-    if isinstance(payload, dict) and payload.get("__proxy_error__"):
-        raw = payload.get("payload") if isinstance(payload.get("payload"), dict) else {}
-        msg = str(raw.get("detail") or raw.get("message") or "市场 SSO 桥接失败")
-        return {
-            "success": False,
-            "message": msg,
-            "status_code": int(payload.get("status_code") or 502),
-            "market_base_url": market_base,
-        }
-    return await _normalize_market_auth_payload(payload, market_base=market_base)
-
-
-async def send_market_phone_code(phone: str) -> dict[str, Any]:
-    """Proxy send-phone-code to market."""
-    payload = await _proxy_json(
-        "POST",
-        "/api/auth/send-phone-code",
-        json_body={"phone": (phone or "").strip()},
-    )
-    if isinstance(payload, JSONResponse):
-        try:
-            raw_body = json.loads(payload.body.decode("utf-8") if payload.body else "{}")
-        except RECOVERABLE_ERRORS:
-            raw_body = {}
-        return {
-            "success": False,
-            "message": str(raw_body.get("message") or raw_body.get("detail") or "发送验证码失败"),
-            "status_code": int(payload.status_code or 502),
-        }
-    if isinstance(payload, dict):
-        return {"success": True, "message": str(payload.get("message") or "验证码已发送")}
-    return {"success": True, "message": "验证码已发送"}
-
-
-@router.post("/send-phone-code")
-async def market_send_phone_code(body: dict[str, Any] = Body(default_factory=dict)):
-    phone = str(body.get("phone") or "").strip()
-    if not phone:
-        return JSONResponse({"success": False, "message": "请填写手机号"}, status_code=400)
-    result = await send_market_phone_code(phone)
-    if not result.get("success"):
-        status = int(result.get("status_code") or 502)
-        return JSONResponse(result, status_code=status if status >= 400 else 502)
-    return {"success": True, "message": result.get("message") or "验证码已发送"}
-
-
-@router.post("/send-register-code")
-async def market_send_register_code(body: dict[str, Any] = Body(default_factory=dict)):
-    result = await send_market_register_code(str(body.get("email") or ""))
-    if not result.get("success"):
-        status = int(result.get("status_code") or 502)
-        return JSONResponse(result, status_code=status if status >= 400 else 502)
-    return {"success": True, "message": result.get("message") or "验证码已发送"}
-
-
-@router.post("/login-with-phone-code")
-async def market_login_with_phone_code_route(body: dict[str, Any] = Body(default_factory=dict)):
-    phone = str(body.get("phone") or "").strip()
-    code = str(body.get("code") or "").strip()
-    if not phone or not code:
-        return JSONResponse({"success": False, "message": "请填写手机号和验证码"}, status_code=400)
-    result = await login_market_with_phone_code(phone, code)
-    if not result.get("success"):
-        status = int(result.get("status_code") or 401)
-        return JSONResponse(
-            {
-                "success": False,
-                "message": result.get("message"),
-                "error": {
-                    "code": result.get("error_code") or "MARKET_AUTH_FAILED",
-                    "message": result.get("message"),
-                },
-            },
-            status_code=status if status >= 400 else 401,
-        )
-    return {
-        "success": True,
-        "data": {
-            "token": result.get("token"),
-            "refresh_token": result.get("refresh_token"),
-            "market_base_url": result.get("market_base_url"),
-        },
-    }
-
-
-@router.post("/account-sync")
-async def market_account_sync(request: Request, body: dict[str, Any] = Body(default_factory=dict)):
-    authorization = _auth_header(str(body.get("authorization") or body.get("token") or ""))
-    if not authorization:
-        hdr = str(
-            request.headers.get("Authorization") or request.headers.get("authorization") or ""
-        ).strip()
-        if hdr:
-            authorization = _auth_header(hdr)
-    if not authorization:
-        return JSONResponse({"success": False, "message": "authorization 必填"}, status_code=400)
-    payload = await _proxy_json("GET", "/api/auth/me", authorization=authorization)
-    if isinstance(payload, JSONResponse):
-        return payload
-    save_session_market_token(
-        session_id_from_request(request), _normalize_bearer_token(authorization)
-    )
-    data = (
-        payload.get("data")
-        if isinstance(payload, dict) and isinstance(payload.get("data"), dict)
-        else payload
-    )
-    user = (
-        data.get("user") if isinstance(data, dict) and isinstance(data.get("user"), dict) else data
-    )
-    return {"success": True, "data": {"user": user, "market_base_url": _market_base_url()}}
-
-
-def _degraded_account_overview(message: str) -> dict[str, Any]:
-    """Market unreachable — return 200 so SPA can still show wallet/plan links."""
-    return {
-        "degraded": True,
-        "market_unreachable": True,
-        "sync_warning": message,
-        "user": {},
-        "wallet": {"balance": None},
-        "membership": {"label": "未同步", "tier": "unknown", "can_byok": False},
-        "quotas": [],
-        "llm": {"providers": []},
-        "market_base_url": _market_base_url(),
-    }
-
-
-def _merge_live_overview_fields(data: dict[str, Any], live: dict[str, Any]) -> None:
-    for key in ("wallet", "plan", "membership", "quotas"):
-        if live.get(key) is not None:
-            data[key] = live.get(key)
-    if isinstance(live.get("llm"), dict):
-        current_llm = data.get("llm") if isinstance(data.get("llm"), dict) else {}
-        data["llm"] = {**current_llm, **live["llm"]}
-    if live.get("user") is not None:
-        data["user"] = live.get("user")
-
-
-@router.post("/account-overview")
-async def market_account_overview(
-    request: Request, body: dict[str, Any] = Body(default_factory=dict)
-):
-    try:
-        authorization = await _authorization_from_request_resolved(request, body)
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("market_account_overview: resolve authorization failed")
-        return {
-            "success": True,
-            "data": _degraded_account_overview(f"读取市场令牌失败：{exc}"),
-        }
-    if not authorization:
-        return JSONResponse(
-            {"success": False, "message": "尚未绑定市场账号；请重新登录软件以自动同步"},
-            status_code=401,
-        )
-    cache_key = _overview_cache_key(authorization)
-    if not bool(body.get("refresh")):
-        cached = _ACCOUNT_OVERVIEW_CACHE.get(cache_key)
-        if cached is not None:
-            stored_at, cached_data = cached
-            if time.monotonic() - stored_at <= _account_overview_cache_ttl():
-                data = dict(cached_data)
-                data.setdefault("market_base_url", _market_base_url())
-                return {"success": True, "data": data}
-            _ACCOUNT_OVERVIEW_CACHE.pop(cache_key, None)
-    try:
-        payload = await _proxy_json(
-            "GET", "/api/account/bootstrap", authorization=authorization, return_error_payload=True
-        )
-        data: dict[str, Any] | None = None
-        sync_warning = ""
-
-        if isinstance(payload, JSONResponse):
-            try:
-                import json as _json
-
-                proxy_body = _json.loads(payload.body.decode() if payload.body else "{}")
-                err = str(proxy_body.get("message") or proxy_body.get("detail") or "市场服务不可用")
-            except RECOVERABLE_ERRORS:
-                err = "市场服务不可用"
-            data = _degraded_account_overview(err)
-            sync_warning = err
-        elif isinstance(payload, dict) and not payload.get("__proxy_error__"):
-            raw = payload.get("data") if isinstance(payload.get("data"), dict) else payload
-            data = raw if isinstance(raw, dict) else None
-            if isinstance(data, dict):
-                if _market_account_live.bootstrap_overview_needs_live_merge(data):
-                    live = await _legacy_account_overview(authorization)
-                    if isinstance(live, dict) and not live.get("__proxy_error__"):
-                        _merge_live_overview_fields(data, live)
-                    elif isinstance(live, dict) and live.get("__proxy_error__"):
-                        sync_warning = _error_message(
-                            live.get("payload"), int(live.get("status_code") or 502)
-                        )
-
-        if data is None:
-            legacy = await _legacy_account_overview(authorization)
-            if isinstance(legacy, dict) and not legacy.get("__proxy_error__"):
-                data = legacy
-            else:
-                err = ""
-                if isinstance(legacy, dict) and legacy.get("__proxy_error__"):
-                    err = _error_message(
-                        legacy.get("payload"), int(legacy.get("status_code") or 502)
-                    )
-                elif isinstance(payload, dict) and payload.get("__proxy_error__"):
-                    err = _error_message(
-                        payload.get("payload"), int(payload.get("status_code") or 502)
-                    )
-                else:
-                    err = "无法连接修茈市场服务器"
-                data = _degraded_account_overview(err)
-                logger.warning(
-                    "market_account_overview degraded: %s (base=%s)", err, _market_base_url()
-                )
-
-        if not isinstance(data, dict):
-            data = _degraded_account_overview("市场账户概览返回格式异常")
-
-        sync_warning = await _market_account_live.refresh_overview_wallet(
-            data, authorization, sync_warning, proxy_json=_proxy_json, error_message=_error_message
-        )
-
-        data = {**data, "market_base_url": _market_base_url()}
-        if sync_warning and not data.get("sync_warning"):
-            data["sync_warning"] = sync_warning
-        _ACCOUNT_OVERVIEW_CACHE[cache_key] = (time.monotonic(), dict(data))
-        return {"success": True, "data": data}
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("market_account_overview failed")
-        return {
-            "success": True,
-            "data": _degraded_account_overview(f"账户概览异常：{exc}"),
-        }
-
-
-async def _market_llm_catalog_impl(request: Request, body: dict[str, Any]):
-    authorization = await _authorization_from_request_resolved(request, body)
-    if not authorization:
-        return JSONResponse(
-            {"success": False, "message": "尚未绑定市场账号；请重新登录软件以自动同步"},
-            status_code=401,
-        )
-    refresh = "1" if bool(body.get("refresh")) else "0"
-    payload = await _proxy_json(
-        "GET",
-        f"/api/llm/catalog?refresh={refresh}",
-        authorization=authorization,
-        return_error_payload=True,
-    )
-    if isinstance(payload, JSONResponse):
-        return _market_account_live.degraded_llm_catalog(payload, _market_base_url())
-    if isinstance(payload, dict) and payload.get("__proxy_error__"):
-        status_code = int(payload.get("status_code") or 502)
-        raw_error = payload.get("payload")
-        msg = _error_message(raw_error, status_code)
-        return {
-            "success": True,
-            "data": {
-                "degraded": True,
-                "providers": [],
-                "sync_warning": msg,
-                "market_base_url": _market_base_url(),
-            },
-        }
-    if not isinstance(payload, dict):
-        return {
-            "success": True,
-            "data": {
-                "degraded": True,
-                "providers": [],
-                "sync_warning": "模型目录返回格式异常",
-                "market_base_url": _market_base_url(),
-            },
-        }
-    return {"success": True, "data": {**payload, "market_base_url": _market_base_url()}}
-
-
-@router.post("/llm-catalog")
-async def market_llm_catalog_post(
-    request: Request, body: dict[str, Any] = Body(default_factory=dict)
-):
-    return await _market_llm_catalog_impl(request, body)
-
-
-@router.get("/llm-catalog")
-async def market_llm_catalog_get(request: Request, refresh: bool = False):
-    return await _market_llm_catalog_impl(request, {"refresh": refresh})
-
-
-async def _legacy_account_overview(authorization: str) -> dict[str, Any]:
-    """Compose account overview from older market APIs when /api/account/bootstrap is not deployed."""
-    me = await _proxy_json(
-        "GET", "/api/auth/me", authorization=authorization, return_error_payload=True
-    )
-    if isinstance(me, dict) and me.get("__proxy_error__"):
-        return me
-    wallet = await _proxy_json(
-        "GET", "/api/wallet/overview", authorization=authorization, return_error_payload=True
-    )
-    if isinstance(wallet, dict) and wallet.get("__proxy_error__"):
-        balance = await _proxy_json(
-            "GET", "/api/wallet/balance", authorization=authorization, return_error_payload=True
-        )
-        wallet_data = (
-            {}
-            if isinstance(balance, dict) and balance.get("__proxy_error__")
-            else {"wallet": balance}
-        )
-    else:
-        wallet_data = wallet if isinstance(wallet, dict) else {}
-    plan = await _proxy_json(
-        "GET", "/api/payment/my-plan", authorization=authorization, return_error_payload=True
-    )
-    plan_data = (
-        {}
-        if isinstance(plan, dict) and plan.get("__proxy_error__")
-        else (plan if isinstance(plan, dict) else {})
-    )
-    llm = await _proxy_json(
-        "GET", "/api/llm/status", authorization=authorization, return_error_payload=True
-    )
-    llm_data = (
-        {}
-        if isinstance(llm, dict) and llm.get("__proxy_error__")
-        else (llm if isinstance(llm, dict) else {})
-    )
-    user = me.get("user") if isinstance(me, dict) and isinstance(me.get("user"), dict) else me
-    wallet_obj = (
-        wallet_data.get("wallet") if isinstance(wallet_data.get("wallet"), dict) else wallet_data
-    )
-    return {
-        "success": True,
-        "user": user,
-        "wallet": wallet_obj,
-        "plan": plan_data.get("plan"),
-        "membership": plan_data.get("membership"),
-        "quotas": plan_data.get("quotas") or [],
-        "llm": {
-            "providers": llm_data.get("providers") or [],
-            "fernet_configured": llm_data.get("fernet_configured"),
-            "byok_configured_count": len(
-                [p for p in (llm_data.get("providers") or []) if p.get("has_user_override")]
-            ),
-        },
-    }
-
-
-def _market_auth_from_request(request: Request) -> str:
-    sid = session_id_from_request(request)
-    tok = session_market_token(sid)
-    if tok:
-        return tok
-    return str(request.headers.get("Authorization") or "").strip()
-
-
-@router.get("/payment/plans")
-async def market_payment_plans(request: Request):
-    """修茈市场套餐（含微信/支付宝统一收银，Java SoT）。"""
-    payload = await _proxy_json(
-        "GET",
-        "/api/payment/plans",
-        authorization=_market_auth_from_request(request),
-        return_error_payload=True,
-    )
-    if isinstance(payload, dict) and payload.get("__proxy_error__"):
-        return JSONResponse(
-            {
-                "success": False,
-                "message": _error_message(
-                    payload.get("payload"), int(payload.get("status_code") or 502)
-                ),
-            },
-            status_code=int(payload.get("status_code") or 502),
-        )
-    return {"success": True, "data": payload, "market_base_url": _market_base_url()}
-
-
-@router.post("/payment/checkout")
-async def market_payment_checkout(
-    request: Request, body: dict[str, Any] = Body(default_factory=dict)
-):
-    payload = await _proxy_json(
-        "POST",
-        "/api/payment/checkout",
-        json_body=body,
-        authorization=_market_auth_from_request(request),
-        return_error_payload=True,
-    )
-    if isinstance(payload, dict) and payload.get("__proxy_error__"):
-        return JSONResponse(
-            {
-                "success": False,
-                "message": _error_message(
-                    payload.get("payload"), int(payload.get("status_code") or 502)
-                ),
-            },
-            status_code=int(payload.get("status_code") or 502),
-        )
-    return {"success": True, "data": payload}
-
-
-def _checkout_sign_body_from_request(body: dict[str, Any]) -> dict[str, Any]:
-    out: dict[str, Any] = {}
-    if body.get("plan_id"):
-        out["plan_id"] = str(body.get("plan_id"))
-    wallet_recharge = body.get("wallet_recharge")
-    if wallet_recharge is True or str(wallet_recharge).strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }:
-        out["wallet_recharge"] = True
-        try:
-            out["total_amount"] = float(body.get("total_amount") or 0)
-        except (TypeError, ValueError):
-            out["total_amount"] = 0.0
-        out["subject"] = str(body.get("subject") or "钱包充值")
-    for key in ("out_trade_no", "metadata"):
-        if key in body:
-            out[key] = body[key]
-    return out
-
-
-def _checkout_body_has_signature(body: dict[str, Any]) -> bool:
-    return all(bool(body.get(key)) for key in ("request_id", "signature", "timestamp"))
-
-
-async def _resolve_market_authorization_for_checkout(
-    request: Request, body: dict[str, Any]
-) -> tuple[str, dict[str, Any] | None]:
-    return await _authorization_from_request_resolved(request, body), None
-
-
-@router.post("/payment/direct-checkout")
-async def market_payment_direct_checkout(
-    request: Request, body: dict[str, Any] = Body(default_factory=dict)
-):
-    resolved = await _resolve_market_authorization_for_checkout(request, body)
-    authorization = resolved[0] if isinstance(resolved, tuple) else str(resolved or "")
-    if not authorization:
-        return JSONResponse(
-            {"success": False, "message": "尚未绑定市场账号；请重新登录软件以自动同步"},
-            status_code=401,
-        )
-    sign_body = _checkout_sign_body_from_request(body)
-    signed = await _proxy_json(
-        "POST",
-        "/api/payment/sign-checkout",
-        json_body=sign_body,
-        authorization=authorization,
-        return_error_payload=True,
-    )
-    if isinstance(signed, dict) and signed.get("__proxy_error__"):
-        return JSONResponse(
-            {
-                "success": False,
-                "message": _error_message(
-                    signed.get("payload"), int(signed.get("status_code") or 502)
-                ),
-            },
-            status_code=int(signed.get("status_code") or 502),
-        )
-    checkout_body = {**body}
-    if isinstance(signed, dict):
-        checkout_body.update(signed)
-    payload = await _proxy_json(
-        "POST",
-        "/api/payment/checkout",
-        json_body=checkout_body,
-        authorization=authorization,
-        return_error_payload=True,
-    )
-    if isinstance(payload, dict) and payload.get("__proxy_error__"):
-        return JSONResponse(
-            {
-                "success": False,
-                "message": _error_message(
-                    payload.get("payload"), int(payload.get("status_code") or 502)
-                ),
-            },
-            status_code=int(payload.get("status_code") or 502),
-        )
-    return {"success": True, "data": payload, "signed": signed}
-
-
-@router.get("/payment/orders")
-async def market_payment_orders(
-    request: Request,
-    status: str | None = None,
-    limit: int = 50,
-    offset: int = 0,
-):
-    path = f"/api/payment/orders?limit={int(limit)}&offset={int(offset)}"
-    if status:
-        path += f"&status={status.strip()}"
-    payload = await _proxy_json(
-        "GET",
-        path,
-        authorization=_market_auth_from_request(request),
-        return_error_payload=True,
-    )
-    if isinstance(payload, dict) and payload.get("__proxy_error__"):
-        return JSONResponse(
-            {
-                "success": False,
-                "message": _error_message(
-                    payload.get("payload"), int(payload.get("status_code") or 502)
-                ),
-            },
-            status_code=int(payload.get("status_code") or 502),
-        )
-    return {"success": True, "data": payload}
-
-
-@router.get("/payment/query/{out_trade_no}")
-async def market_payment_query(request: Request, out_trade_no: str):
-    payload = await _proxy_json(
-        "GET",
-        f"/api/payment/query/{out_trade_no}",
-        authorization=_market_auth_from_request(request),
-        return_error_payload=True,
-    )
-    if isinstance(payload, dict) and payload.get("__proxy_error__"):
-        return JSONResponse(
-            {
-                "success": False,
-                "message": _error_message(
-                    payload.get("payload"), int(payload.get("status_code") or 502)
-                ),
-            },
-            status_code=int(payload.get("status_code") or 502),
-        )
-    return {"success": True, "data": payload}
-
-
-@router.get("/wallet/overview")
-async def market_wallet_overview(request: Request):
-    authorization = await _authorization_from_request_resolved(request, {})
-    if not authorization:
-        # Backward-compatible explicit/header lookup for API clients without a local session.
-        authorization = _market_auth_from_request(request)
-    if not authorization:
-        return JSONResponse(
-            {"success": False, "message": "尚未绑定市场账号；请重新登录软件以自动同步"},
-            status_code=401,
-        )
-    payload = await _proxy_json(
-        "GET",
-        "/api/wallet/overview",
-        authorization=authorization,
-        return_error_payload=True,
-    )
-    if isinstance(payload, dict) and payload.get("__proxy_error__"):
-        return JSONResponse(
-            {
-                "success": False,
-                "message": _error_message(
-                    payload.get("payload"), int(payload.get("status_code") or 502)
-                ),
-            },
-            status_code=int(payload.get("status_code") or 502),
-        )
-    return {"success": True, "data": payload}
-
-
-@router.get("/status")
-async def market_status():
-    """Check whether the local backend can reach the configured Xiuci market server."""
-    payload = await _proxy_json("GET", "/api/health", return_error_payload=True)
-    if isinstance(payload, JSONResponse):
-        return payload
-    reachable = not (isinstance(payload, dict) and payload.get("__proxy_error__"))
-    return {
-        "success": reachable,
-        "data": {
-            "market_base_url": _market_base_url(),
-            "reachable": reachable,
-            "raw": (
-                payload.get("payload")
-                if isinstance(payload, dict) and payload.get("__proxy_error__")
-                else payload
-            ),
-        },
-    }
-
-
-@router.post("/dev-create-account")
-async def market_dev_create_account(body: dict[str, Any] = Body(default_factory=dict)):
-    """Create a market account via server-side open API and verify login/overview connectivity."""
-    username = str(body.get("username") or f"xcagi_{uuid.uuid4().hex[:10]}").strip()
-    password = str(body.get("password") or uuid.uuid4().hex[:12])
-    email = str(body.get("email") or f"{username}@xcagi.local").strip()
-    if len(password) < 6:
-        return JSONResponse({"success": False, "message": "password 至少 6 位"}, status_code=400)
-
-    payload = await _register_without_verification(username, password, email)
-    if isinstance(payload, JSONResponse):
-        return payload
-    if isinstance(payload, dict) and payload.get("__proxy_error__"):
-        status_code = int(payload.get("status_code") or 400)
-        raw_error = payload.get("payload")
-        if status_code == 409 or "存在" in _error_message(raw_error, status_code):
-            payload = await _proxy_json(
-                "POST", "/api/auth/login", json_body={"username": username, "password": password}
-            )
-        else:
-            return JSONResponse(
-                {
-                    "success": False,
-                    "message": _error_message(raw_error, status_code),
-                    "data": raw_error,
-                },
-                status_code=status_code,
-            )
-    token = _token_from_auth_response(payload)
-    if not token:
-        return JSONResponse(
-            {"success": False, "message": "账号创建成功但未返回 token", "data": payload},
-            status_code=502,
-        )
-    overview = await _proxy_json(
-        "GET", "/api/account/bootstrap", authorization=token, return_error_payload=True
-    )
-    return {
-        "success": True,
-        "data": {
-            "market_base_url": _market_base_url(),
-            "username": username,
-            "email": email,
-            "password": password,
-            "token": token,
-            "overview_ok": not (isinstance(overview, dict) and overview.get("__proxy_error__")),
-            "overview": (
-                overview.get("payload")
-                if isinstance(overview, dict) and overview.get("__proxy_error__")
-                else overview
-            ),
-        },
-    }
+from app.fastapi_routes.market_account_part01 import (
+    _account_overview_cache_ttl as _account_overview_cache_ttl,
+)
+from app.fastapi_routes.market_account_part01 import (
+    _auth_header as _auth_header,
+)
+from app.fastapi_routes.market_account_part01 import (
+    _authorization_from_request as _authorization_from_request,
+)
+from app.fastapi_routes.market_account_part01 import (
+    _authorization_from_request_resolved as _authorization_from_request_resolved,
+)
+from app.fastapi_routes.market_account_part01 import (
+    _body_snippet as _body_snippet,
+)
+from app.fastapi_routes.market_account_part01 import (
+    _error_message as _error_message,
+)
+from app.fastapi_routes.market_account_part01 import (
+    _market_base_url as _market_base_url,
+)
+from app.fastapi_routes.market_account_part01 import (
+    _market_http_retries as _market_http_retries,
+)
+from app.fastapi_routes.market_account_part01 import (
+    _market_http_timeout as _market_http_timeout,
+)
+from app.fastapi_routes.market_account_part01 import (
+    _normalize_bearer_token as _normalize_bearer_token,
+)
+from app.fastapi_routes.market_account_part01 import (
+    _overview_cache_key as _overview_cache_key,
+)
+from app.fastapi_routes.market_account_part01 import (
+    _proxy_error_http_status as _proxy_error_http_status,
+)
+from app.fastapi_routes.market_account_part01 import (
+    _transport_error_message as _transport_error_message,
+)
+from app.fastapi_routes.market_account_part01 import (
+    _user_id_from_session as _user_id_from_session,
+)
+from app.fastapi_routes.market_account_part01 import (
+    bind_market_auth_to_session as bind_market_auth_to_session,
+)
+from app.fastapi_routes.market_account_part01 import (
+    clear_session_market_token as clear_session_market_token,
+)
+from app.fastapi_routes.market_account_part01 import (
+    latest_session_market_refresh_token as latest_session_market_refresh_token,
+)
+from app.fastapi_routes.market_account_part01 import (
+    latest_session_market_token as latest_session_market_token,
+)
+from app.fastapi_routes.market_account_part01 import (
+    market_session_handoff as market_session_handoff,
+)
+from app.fastapi_routes.market_account_part01 import (
+    save_session_market_token as save_session_market_token,
+)
+from app.fastapi_routes.market_account_part01 import (
+    session_id_from_request as session_id_from_request,
+)
+from app.fastapi_routes.market_account_part01 import (
+    session_market_refresh_token as session_market_refresh_token,
+)
+from app.fastapi_routes.market_account_part01 import (
+    session_market_token as session_market_token,
+)
+from app.fastapi_routes.market_account_part02 import (
+    _demo_market_login_payload as _demo_market_login_payload,
+)
+from app.fastapi_routes.market_account_part02 import (
+    _is_local_market_base as _is_local_market_base,
+)
+from app.fastapi_routes.market_account_part02 import (
+    _looks_like_verification_required as _looks_like_verification_required,
+)
+from app.fastapi_routes.market_account_part02 import (
+    _market_validate_fast_timeout as _market_validate_fast_timeout,
+)
+from app.fastapi_routes.market_account_part02 import (
+    _normalize_market_auth_payload as _normalize_market_auth_payload,
+)
+from app.fastapi_routes.market_account_part02 import (
+    _proxy_json as _proxy_json,
+)
+from app.fastapi_routes.market_account_part02 import (
+    _refresh_token_from_auth_response as _refresh_token_from_auth_response,
+)
+from app.fastapi_routes.market_account_part02 import (
+    _register_without_verification as _register_without_verification,
+)
+from app.fastapi_routes.market_account_part02 import (
+    _token_from_auth_response as _token_from_auth_response,
+)
+from app.fastapi_routes.market_account_part02 import (
+    fetch_market_membership_tier as fetch_market_membership_tier,
+)
+from app.fastapi_routes.market_account_part02 import (
+    market_login as market_login,
+)
+from app.fastapi_routes.market_account_part02 import (
+    market_membership_plans as market_membership_plans,
+)
+from app.fastapi_routes.market_account_part02 import (
+    market_register as market_register,
+)
+from app.fastapi_routes.market_account_part02 import (
+    refresh_session_market_token as refresh_session_market_token,
+)
+from app.fastapi_routes.market_account_part02 import (
+    register_market_user as register_market_user,
+)
+from app.fastapi_routes.market_account_part02 import (
+    reset_market_password_with_code as reset_market_password_with_code,
+)
+from app.fastapi_routes.market_account_part02 import (
+    resolve_valid_market_access_token as resolve_valid_market_access_token,
+)
+from app.fastapi_routes.market_account_part02 import (
+    resolve_valid_market_access_token_fast as resolve_valid_market_access_token_fast,
+)
+from app.fastapi_routes.market_account_part02 import (
+    send_market_register_code as send_market_register_code,
+)
+from app.fastapi_routes.market_account_part02 import (
+    send_market_reset_password_code as send_market_reset_password_code,
+)
+from app.fastapi_routes.market_account_part03 import (
+    _dedupe_mod_ids as _dedupe_mod_ids,
+)
+from app.fastapi_routes.market_account_part03 import (
+    _degraded_account_overview as _degraded_account_overview,
+)
+from app.fastapi_routes.market_account_part03 import (
+    _legacy_account_overview as _legacy_account_overview,
+)
+from app.fastapi_routes.market_account_part03 import (
+    _market_auth_from_request as _market_auth_from_request,
+)
+from app.fastapi_routes.market_account_part03 import (
+    _market_internal_api_key as _market_internal_api_key,
+)
+from app.fastapi_routes.market_account_part03 import (
+    _market_llm_catalog_impl as _market_llm_catalog_impl,
+)
+from app.fastapi_routes.market_account_part03 import (
+    _merge_live_overview_fields as _merge_live_overview_fields,
+)
+from app.fastapi_routes.market_account_part03 import (
+    _oidc_identity_from_profile as _oidc_identity_from_profile,
+)
+from app.fastapi_routes.market_account_part03 import (
+    ensure_market_enterprise_profile as ensure_market_enterprise_profile,
+)
+from app.fastapi_routes.market_account_part03 import (
+    enterprise_mod_ids_for_industry as enterprise_mod_ids_for_industry,
+)
+from app.fastapi_routes.market_account_part03 import (
+    grant_market_enterprise_entitlements_for_session as grant_market_enterprise_entitlements_for_session,
+)
+from app.fastapi_routes.market_account_part03 import (
+    login_market_for_oidc_profile as login_market_for_oidc_profile,
+)
+from app.fastapi_routes.market_account_part03 import (
+    login_market_with_password as login_market_with_password,
+)
+from app.fastapi_routes.market_account_part03 import (
+    login_market_with_phone_code as login_market_with_phone_code,
+)
+from app.fastapi_routes.market_account_part03 import (
+    market_account_overview as market_account_overview,
+)
+from app.fastapi_routes.market_account_part03 import (
+    market_account_sync as market_account_sync,
+)
+from app.fastapi_routes.market_account_part03 import (
+    market_llm_catalog_get as market_llm_catalog_get,
+)
+from app.fastapi_routes.market_account_part03 import (
+    market_llm_catalog_post as market_llm_catalog_post,
+)
+from app.fastapi_routes.market_account_part03 import (
+    market_login_with_phone_code_route as market_login_with_phone_code_route,
+)
+from app.fastapi_routes.market_account_part03 import (
+    market_payment_checkout as market_payment_checkout,
+)
+from app.fastapi_routes.market_account_part03 import (
+    market_payment_plans as market_payment_plans,
+)
+from app.fastapi_routes.market_account_part03 import (
+    market_send_phone_code as market_send_phone_code,
+)
+from app.fastapi_routes.market_account_part03 import (
+    market_send_register_code as market_send_register_code,
+)
+from app.fastapi_routes.market_account_part03 import (
+    send_market_phone_code as send_market_phone_code,
+)
+from app.fastapi_routes.market_account_part04 import (
+    _checkout_body_has_signature as _checkout_body_has_signature,
+)
+from app.fastapi_routes.market_account_part04 import (
+    _checkout_sign_body_from_request as _checkout_sign_body_from_request,
+)
+from app.fastapi_routes.market_account_part04 import (
+    _resolve_market_authorization_for_checkout as _resolve_market_authorization_for_checkout,
+)
+from app.fastapi_routes.market_account_part04 import (
+    market_dev_create_account as market_dev_create_account,
+)
+from app.fastapi_routes.market_account_part04 import (
+    market_payment_direct_checkout as market_payment_direct_checkout,
+)
+from app.fastapi_routes.market_account_part04 import (
+    market_payment_orders as market_payment_orders,
+)
+from app.fastapi_routes.market_account_part04 import (
+    market_payment_query as market_payment_query,
+)
+from app.fastapi_routes.market_account_part04 import (
+    market_status as market_status,
+)
+from app.fastapi_routes.market_account_part04 import (
+    market_wallet_overview as market_wallet_overview,
+)
+# ruff: noqa: F401

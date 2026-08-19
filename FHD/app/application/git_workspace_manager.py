@@ -16,7 +16,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from app.utils.path_utils import get_desktop_state_dir
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_io.path_utils import get_desktop_state_dir
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ class GitWorkspaceManager:
         try:
             r = self.git(cwd, "rev-parse", "--is-inside-work-tree", timeout=15)
             return r.returncode == 0 and r.stdout.strip() == "true"
-        except Exception:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:  # noqa: BLE001
             return False
 
     @staticmethod
@@ -96,14 +97,14 @@ class GitWorkspaceManager:
                 f"+refs/heads/{branch}:refs/remotes/origin/{branch}",
                 timeout=120,
             )
-        except Exception:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:  # noqa: BLE001
             pass
         for ref in (f"origin/{branch}", branch):
             try:
                 r = self.git(base_cwd, "rev-parse", "--verify", "--quiet", ref, timeout=15)
                 if r.returncode == 0:
                     return ref
-            except Exception:  # noqa: BLE001
+            except RECOVERABLE_ERRORS:  # noqa: BLE001
                 continue
         return ""
 
@@ -133,7 +134,7 @@ class GitWorkspaceManager:
             return  # 持久复用 worktree：保留以供下个任务复用，不删（下次 prepare 时重置为干净基线）。
         try:
             self.git(base_cwd, "worktree", "remove", "--force", wt_path, timeout=60)
-        except Exception:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:  # noqa: BLE001
             logger.warning("worktree remove 失败 %s", wt_path, exc_info=True)
 
     def commit_and_push(self, cwd: str, branch: str, text: str) -> tuple[bool, str]:
@@ -154,7 +155,7 @@ class GitWorkspaceManager:
                     :300
                 ]
             return True, f"已 push 到 origin/{branch}"
-        except Exception as e:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001
             return False, f"git 异常：{str(e)[:300]}"
 
 

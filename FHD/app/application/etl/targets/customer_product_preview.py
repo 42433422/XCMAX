@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.orm import Session
 
@@ -83,7 +83,7 @@ class CustomerProductPreviewMixin:
         state["conflicts_in_row"] = conflicts
         if state["is_new"]:
             state["changed_in_row"] = False
-            return state
+            return cast("dict[str, Any]", state)
         updates = {
             key: data.get(key)
             for key in allowed_update_fields & self._customer_fields
@@ -92,7 +92,7 @@ class CustomerProductPreviewMixin:
         state["changed_in_row"] = bool(updates)
         if updates:
             state["after"] = {**state["after"], **updates}
-        return state
+        return cast("dict[str, Any]", state)
 
     def _product_preview_state(
         self,
@@ -154,7 +154,7 @@ class CustomerProductPreviewMixin:
             return state
         if state.get("seen"):
             state["duplicate_in_source"] = True
-            return state
+            return cast("dict[str, Any]", state)
         state["seen"] = True
         updates = {
             key: product_data.get(key)
@@ -165,4 +165,4 @@ class CustomerProductPreviewMixin:
         state["changed_in_row"] = bool(updates)
         if updates:
             state["after"] = {**state["after"], **updates}
-        return state
+        return cast("dict[str, Any]", state)

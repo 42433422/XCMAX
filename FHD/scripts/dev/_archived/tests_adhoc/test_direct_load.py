@@ -1,4 +1,5 @@
 import os
+
 from openpyxl import load_workbook
 
 folder = r"e:\FHD\424"
@@ -20,7 +21,7 @@ if matching_files:
     try:
         wb = load_workbook(full_path)
         print(f"✓ 加载成功！工作表：{wb.sheetnames}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"✗ 加载失败：{e}")
 else:
     print("未找到匹配的文件")

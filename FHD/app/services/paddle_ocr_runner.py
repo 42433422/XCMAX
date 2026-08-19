@@ -76,19 +76,16 @@ def _pick_det_rec_dirs(root: str) -> tuple[str | None, str | None]:
 
 def _resolve_local_model_dirs() -> tuple[str | None, str | None]:
     """返回 (det_dir, rec_dir)，均为 PaddleX 格式目录。"""
-    det = os.environ.get("PADDLEOCR_TEXT_DET_MODEL_DIR", "").strip()
-    rec = os.environ.get("PADDLEOCR_TEXT_REC_MODEL_DIR", "").strip()
+    det: str | None = os.environ.get("PADDLEOCR_TEXT_DET_MODEL_DIR", "").strip() or None
+    rec: str | None = os.environ.get("PADDLEOCR_TEXT_REC_MODEL_DIR", "").strip() or None
 
     root = os.environ.get("XCAGI_PADDLE_MODEL_ROOT", "").strip()
     if root:
         root = os.path.abspath(root)
         if not det or not rec:
             rd, rr = _pick_det_rec_dirs(root)
-            det = det or (rd or "")
-            rec = rec or (rr or "")
-
-    det = det or None
-    rec = rec or None
+            det = det or rd
+            rec = rec or rr
     return det, rec
 
 

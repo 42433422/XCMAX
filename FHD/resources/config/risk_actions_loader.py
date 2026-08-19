@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from app.domain.autonomy.autonomy_guard import get_autonomy_guard, reload_autonomy_guard
 
@@ -17,7 +17,7 @@ def invalidate_risk_registry_cache() -> None:
 
 
 def get_workflow_tools_from_registry() -> dict[str, Any]:
-    return json.loads(json.dumps(load_risk_registry().get("tools") or {}))
+    return cast("dict[str, Any]", json.loads(json.dumps(load_risk_registry().get("tools") or {})))
 
 
 def _resolve_action_spec(tool_id: str, action: str) -> dict[str, Any] | None:

@@ -1,11 +1,11 @@
-# -*- coding: utf-8 -*-
 """
 使用 PaddleOCR 表格识别
 """
 
-from paddleocr import PaddleOCR
-import json
 import glob
+import json
+
+from paddleocr import PaddleOCR
 
 # 读取图片
 files = glob.glob(r"e:\FHD\26-0300001A*.png")
@@ -25,7 +25,7 @@ if result is None or len(result) == 0:
     print("❌ 未检测到任何内容")
     exit(1)
 
-print(f"\n" + "=" * 70)
+print("\n" + "=" * 70)
 print("OCR 结果")
 print("=" * 70)
 

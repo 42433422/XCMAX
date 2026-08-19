@@ -16,6 +16,19 @@ from app.neuro_bus.__main__ import (
     test_reflex_arc,
 )
 
+# These are diagnostic helpers whose historical names start with ``test_``;
+# this module tests them explicitly inside classes, so do not let pytest also
+# collect the imported helpers as standalone tests (they intentionally return
+# a boolean status for the CLI entry point).
+for _diagnostic_helper in (
+    test_domains,
+    test_imports,
+    test_neurobus,
+    test_processors,
+    test_reflex_arc,
+):
+    _diagnostic_helper.__test__ = False
+
 # ---------------------------------------------------------------------------
 # test_imports
 # ---------------------------------------------------------------------------

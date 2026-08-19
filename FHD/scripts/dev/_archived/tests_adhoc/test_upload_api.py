@@ -1,7 +1,7 @@
 """测试上传并转换接口"""
 
+
 import requests
-import os
 
 # 测试文件路径
 test_file = r"e:\FHD\424\钉钉导出来的考勤数据.xlsx"
@@ -35,5 +35,5 @@ try:
     response = requests.post(url, files=files, data=data)
     print(f"\n状态码：{response.status_code}")
     print(f"响应：{response.json()}")
-except Exception as e:
+except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"\n请求失败：{e}")

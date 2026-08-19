@@ -63,7 +63,7 @@ def autonomy_callback(
             source=source,
             action_id=action_id,
         )
-    except Exception as exc:  # pragma: no cover
+    except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
         print(f"[autonomy_callback] error: {exc!r}", file=sys.stderr)
         return None
 
@@ -168,7 +168,7 @@ def _post_github_decision(
             },
             timeout=10.0,
         )
-    except Exception as exc:  # pragma: no cover
+    except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
         print(f"[autonomy_callback] http error: {exc!r}", file=sys.stderr)
         return None
 
@@ -182,7 +182,7 @@ def _post_github_decision(
 
     try:
         data = resp.json()
-    except Exception as exc:  # pragma: no cover
+    except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
         print(f"[autonomy_callback] json decode error: {exc!r}", file=sys.stderr)
         return None
     if not isinstance(data, dict):

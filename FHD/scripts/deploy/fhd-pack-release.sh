@@ -131,6 +131,8 @@ cp "$SCRIPT_DIR/fhd-auto-update.sh" \
   "$SCRIPT_DIR/fhd-apply-release.sh" \
   "$SCRIPT_DIR/fhd-apply-release-compose.sh" \
   "$SCRIPT_DIR/fhd-install-online-update-cron.sh" \
+  "$SCRIPT_DIR/fhd-install-temp-cleanup-cron.sh" \
+  "$SCRIPT_DIR/fhd-clean-temp-files.sh" \
   "$SCRIPT_DIR/online_update_daemon.py" \
   "$SCRIPT_DIR/prune_release_cache.py" \
   "$STAGING/scripts/deploy/"

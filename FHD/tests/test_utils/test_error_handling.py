@@ -148,24 +148,24 @@ class TestWithSqliteRetry:
 
 class TestDatabaseHelpers:
     def test_is_database_locked_error(self):
-        assert is_database_locked_error(Exception("database is locked")) is True
-        assert is_database_locked_error(Exception("other")) is False
+        assert is_database_locked_error(RuntimeError("database is locked")) is True
+        assert is_database_locked_error(RuntimeError("other")) is False
 
     def test_handle_database_locked(self):
-        out = handle_database_error(Exception("database is locked"), "insert")
+        out = handle_database_error(RuntimeError("database is locked"), "insert")
         assert out["error_code"] == "database_locked"
         assert out["retryable"] is True
 
     def test_handle_foreign_key(self):
-        out = handle_database_error(Exception("FOREIGN KEY constraint failed"))
+        out = handle_database_error(RuntimeError("FOREIGN KEY constraint failed"))
         assert out["error_code"] == "foreign_key_violation"
 
     def test_handle_duplicate(self):
-        out = handle_database_error(Exception("UNIQUE constraint failed: duplicate"))
+        out = handle_database_error(RuntimeError("UNIQUE constraint failed: duplicate"))
         assert out["error_code"] == "duplicate_error"
 
     def test_handle_generic(self):
-        out = handle_database_error(Exception("weird"), "select")
+        out = handle_database_error(RuntimeError("weird"), "select")
         assert out["error_code"] == "database_error"
 
     def test_defaults_constants(self):

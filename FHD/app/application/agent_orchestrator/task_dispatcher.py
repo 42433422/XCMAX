@@ -20,6 +20,7 @@ from app.application.agent_orchestrator.task_execution_repository import (
     TaskExecutionRepository,
     get_task_execution_repository,
 )
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -124,31 +125,41 @@ class AgentTaskDispatcher:
 
     def _run_loop(self) -> None:
         while not self._stop.is_set():
-            self._prune_and_heartbeat()
-            while not self._stop.is_set() and self._active_count() < self._max_workers:
-                owner_id = f"{self._instance_id}:{uuid.uuid4().hex}"
-                execution = self._execution_repo.claim(
-                    owner_id,
-                    lease_seconds=self._lease_seconds,
-                )
-                if execution is None:
-                    break
-                worker = threading.Thread(
-                    target=self._execute_claim,
-                    args=(execution, owner_id),
-                    name=f"agent-task-{execution.run_id[-10:]}",
-                    daemon=True,
-                )
-                with self._active_lock:
-                    self._active[execution.run_id] = _ActiveWorker(
-                        execution=execution,
-                        owner_id=owner_id,
-                        thread=worker,
-                        last_heartbeat=time.monotonic(),
-                    )
-                worker.start()
-            self._wake.wait(timeout=self._poll_seconds)
+            try:
+                self._dispatch_available()
+            except RECOVERABLE_ERRORS:
+                # Database startup, migration, or a transient outage must not
+                # escape the daemon thread as an unhandled exception.
+                logger.exception("agent task dispatcher cycle failed; retrying")
+                self._wake.wait(timeout=max(1.0, self._poll_seconds))
+            else:
+                self._wake.wait(timeout=self._poll_seconds)
             self._wake.clear()
+
+    def _dispatch_available(self) -> None:
+        self._prune_and_heartbeat()
+        while not self._stop.is_set() and self._active_count() < self._max_workers:
+            owner_id = f"{self._instance_id}:{uuid.uuid4().hex}"
+            execution = self._execution_repo.claim(
+                owner_id,
+                lease_seconds=self._lease_seconds,
+            )
+            if execution is None:
+                break
+            worker = threading.Thread(
+                target=self._execute_claim,
+                args=(execution, owner_id),
+                name=f"agent-task-{execution.run_id[-10:]}",
+                daemon=True,
+            )
+            with self._active_lock:
+                self._active[execution.run_id] = _ActiveWorker(
+                    execution=execution,
+                    owner_id=owner_id,
+                    thread=worker,
+                    last_heartbeat=time.monotonic(),
+                )
+            worker.start()
 
     def _active_count(self) -> int:
         with self._active_lock:
@@ -198,12 +209,14 @@ class AgentTaskDispatcher:
                 }.get(run.status, "failed")
                 if state == "failed" and run.status != "failed":
                     error_code = "worker_incomplete_state"
-        except Exception:  # thread boundary: preserve the worker pool and persist safe evidence
+        except (
+            RECOVERABLE_ERRORS
+        ):  # thread boundary: preserve the worker pool and persist safe evidence
             logger.exception("agent task worker failed for run %s", execution.run_id)
             error_code = "worker_execution_failed"
             try:
                 self._orchestrator_factory(self._run_repo).fail_dispatched_run(execution.run_id)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 logger.exception("agent task failure receipt could not be persisted")
         finally:
             self._execution_repo.finish(

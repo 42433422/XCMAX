@@ -9,6 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
@@ -474,7 +476,7 @@ def import_attendance_workbook(
             "daily_rows_written": daily_rows_written,
             "sync_ui_tables": sync_ui_tables,
         }
-    except Exception:
+    except RECOVERABLE_ERRORS:
         conn.rollback()
         raise
     finally:

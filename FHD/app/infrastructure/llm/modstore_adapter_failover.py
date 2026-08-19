@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 import httpx
 
@@ -67,7 +67,7 @@ def _fetch_resolve_chat_default_sync(self) -> dict[str, Any] | None:
 def _ensure_catalog_sync(self) -> dict[str, Any] | None:
     catalog = self._cached_catalog()
     if catalog is not None:
-        return catalog
+        return cast("dict[str, Any] | None", catalog)
     try:
         with httpx.Client(
             timeout=httpx.Timeout(min(self.timeout, 15.0), connect=5.0),
@@ -178,4 +178,4 @@ def _post_market_chat_sync(
         result.get("billed", False),
         result.get("failover_from"),
     )
-    return self._normalize_response(result, used_provider, used_model)
+    return cast("dict[str, Any]", self._normalize_response(result, used_provider, used_model))

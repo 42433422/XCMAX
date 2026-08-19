@@ -5,9 +5,11 @@
 """
 
 import os
+from collections.abc import Iterator
 from contextlib import contextmanager
 
 from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -31,8 +33,8 @@ class DatabaseManager:
         )
         self._pool_size = pool_size
         self._max_overflow = max_overflow
-        self._engine = None
-        self._session_factory = None
+        self._engine: Engine
+        self._session_factory: sessionmaker[Session]
         self._init_engine()
 
     def _init_engine(self):
@@ -55,7 +57,7 @@ class DatabaseManager:
         self._session_factory = sessionmaker(bind=self._engine, autocommit=False, autoflush=False)
 
     @contextmanager
-    def get_session(self) -> Session:
+    def get_session(self) -> Iterator[Session]:
         """
         获取数据库会话上下文管理器
 

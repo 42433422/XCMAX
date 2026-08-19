@@ -5,7 +5,6 @@
 警告: 此脚本会直接修改路由文件，请确保已备份！
 """
 
-import re
 from pathlib import Path
 
 # V1 到 V2 的导入映射
@@ -95,8 +94,8 @@ def main():
                     updated_count += 1
                     print(f"  [UPDATED] {route_file.name}")
                 else:
-                    print(f"  [SKIP] 无需更新")
-            except Exception as e:
+                    print("  [SKIP] 无需更新")
+            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"  [ERROR] {e}")
 
     print("\n" + "=" * 60)

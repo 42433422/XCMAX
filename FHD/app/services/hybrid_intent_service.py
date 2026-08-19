@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 from typing import Any
 
@@ -190,7 +191,9 @@ class HybridIntentService(NeuroEventPublisherMixin):
         if not self.use_rasa or self.rasa_service is None:
             return rule_result
 
-        rasa_result = await self.rasa_service.parse(message)
+        rasa_result = self.rasa_service.parse(message)
+        if inspect.isawaitable(rasa_result):
+            rasa_result = await rasa_result
         rasa_intent = rasa_result.get("intent", {})
         rasa_intent_name = rasa_intent.get("name") if rasa_intent else None
         rasa_confidence = rasa_intent.get("confidence", 0.0) if rasa_intent else 0.0

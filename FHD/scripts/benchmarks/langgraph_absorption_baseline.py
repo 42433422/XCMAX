@@ -485,7 +485,7 @@ def _markdown(doc: dict) -> str:
             lines.append(f"| {engine} | {name} | {g['limit']} | {g['measured']} | {'✅' if g['pass'] else '❌'} |")
     lines.append("")
     c = doc["legacy_contract"]
-    lines.append(f"## legacy 契约门禁（W0-06 fixture）")
+    lines.append("## legacy 契约门禁（W0-06 fixture）")
     lines.append("")
     lines.append(f"- fixture：`{c['fixture']}`")
     lines.append(f"- 期望 executed_nodes：`{c['expected_executed_nodes']}` · 实测：`{c['actual_executed_nodes']}` · success=`{c['success']}`")

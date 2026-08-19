@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 检查半岛风情.db数据库结构
 """
 
-import sqlite3
 import os
+import sqlite3
 
 db_path = r"424\半岛风情.db"
 
@@ -32,14 +31,14 @@ def check_database():
         # 获取表结构
         cursor.execute(f"PRAGMA table_info({table_name})")
         columns = cursor.fetchall()
-        print(f"\n表结构:")
+        print("\n表结构:")
         for col in columns:
             print(f"  {col[1]} ({col[2]})")
 
         # 获取数据样本
         cursor.execute(f"SELECT * FROM {table_name} LIMIT 5")
         rows = cursor.fetchall()
-        print(f"\n数据样本 (前5条):")
+        print("\n数据样本 (前5条):")
         for i, row in enumerate(rows, 1):
             print(f"  记录 {i}: {row}")
 

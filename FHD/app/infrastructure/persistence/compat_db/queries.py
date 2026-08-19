@@ -398,7 +398,7 @@ def _units_select_data_unified() -> list[dict]:
         seen.add(lk)
         rid = row.get("id")
         try:
-            oid = int(rid)
+            oid = int(rid) if rid not in (None, "") else None
         except (TypeError, ValueError):
             oid = None
         staged.append((name, oid))

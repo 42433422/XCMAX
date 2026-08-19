@@ -30,7 +30,8 @@ def app_with_router() -> FastAPI:
 
 @pytest.fixture
 def client(app_with_router: FastAPI) -> TestClient:
-    return TestClient(app_with_router, raise_server_exceptions=False)
+    with TestClient(app_with_router, raise_server_exceptions=False) as test_client:
+        yield test_client
 
 
 # ---------------------------------------------------------------------------

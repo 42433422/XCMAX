@@ -109,7 +109,7 @@ async def bootstrap_app(body: BootstrapBody):
     vision_call = None
     if body.use_vision_api:
 
-        async def _vision(prompt: str, image_b64: str) -> str:
+        async def _vision(prompt: str, image_b64: str) -> Any:
             try:
                 from app.mod_sdk.mod_employee_llm import mod_employee_complete
 

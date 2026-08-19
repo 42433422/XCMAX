@@ -79,7 +79,7 @@ class ServiceContainer:
         self._ai_chat_application_service = None
         self._unit_products_import_application_service = None
         self._file_analysis_application_service = None
-        self._template_application_service = None
+        self._template_application_service: TemplateApplicationService | None = None
         self._materials_service = None
         self._products_service = None
         self._extract_log_service = None
@@ -87,10 +87,10 @@ class ServiceContainer:
         self._shipment_application_service_core = None
         self._shipment_event_primary_facade = None
         # LG-W1-T9-A workflow 运行时组合根：懒加载，首次访问时构建，close/reload 后清空重建。
-        self._workflow_runtime = None
-        self._workflow_checkpointer = None
-        self._workflow_shadow_checkpointer = None
-        self._workflow_resource_stack = None
+        self._workflow_runtime: WorkflowRuntime | None = None
+        self._workflow_checkpointer: CheckpointStore | None = None
+        self._workflow_shadow_checkpointer: CheckpointStore | None = None
+        self._workflow_resource_stack: ExitStack[bool | None] | None = None
 
     def _lazy(self, attr: str, factory):
         """线程安全懒加载：模块级 ``_lock``（RLock，可重入）下双重检查初始化。
@@ -325,7 +325,7 @@ class ServiceContainer:
         from app.infrastructure.workflow.checkpoint_bridge import LanggraphCheckpointBridge
         from app.infrastructure.workflow.neuro_bus_bridge import NeuroBusEventBridge
         from app.infrastructure.workflow.runtime_selector import build_runtime_pair
-        from app.utils.path_utils import get_data_dir
+        from app.utils.path_io.path_utils import get_data_dir
 
         def _dispatch(tool_id: str, action: str, params: dict[str, Any]) -> dict[str, Any]:
             return execute_registered_workflow_tool(tool_id, action, params)
@@ -359,6 +359,7 @@ class ServiceContainer:
             mode = lg_runtime_mode()
             canary_ratio = lg_runtime_canary_ratio()
 
+            runtime: WorkflowRuntime
             if mode == "legacy":
                 runtime = legacy_runtime
             elif mode == "primary":

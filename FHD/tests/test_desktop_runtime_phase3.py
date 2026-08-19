@@ -48,12 +48,18 @@ def test_get_desktop_cache_singleton():
 
 def test_attach_desktop_file_logging_idempotent(tmp_path):
     root = logging.getLogger()
-    before = len(root.handlers)
-    attach_desktop_file_logging(tmp_path)
-    after_first = len(root.handlers)
-    attach_desktop_file_logging(tmp_path)
-    assert len(root.handlers) == after_first
-    assert (tmp_path / "xcagi.log").is_file() or after_first > before
+    original_handlers = set(root.handlers)
+    try:
+        before = len(root.handlers)
+        attach_desktop_file_logging(tmp_path)
+        after_first = len(root.handlers)
+        attach_desktop_file_logging(tmp_path)
+        assert len(root.handlers) == after_first
+        assert (tmp_path / "xcagi.log").is_file() or after_first > before
+    finally:
+        for handler in set(root.handlers) - original_handlers:
+            root.removeHandler(handler)
+            handler.close()
 
 
 def test_submit_background_runs_func():

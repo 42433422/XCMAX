@@ -45,7 +45,7 @@ def _load_yaml_depends(yaml_path: Path) -> list[str]:
             if isinstance(data, dict):
                 deps = data.get("depends_on", [])
                 return [str(x).strip() for x in deps if str(x).strip()] if isinstance(deps, list) else []
-        except Exception:
+        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             pass
     # Fallback: regex parse
     content = yaml_path.read_text(encoding="utf-8")
@@ -64,7 +64,7 @@ def _load_yaml_handlers(yaml_path: Path) -> list[str]:
                 if isinstance(actions, dict):
                     h = actions.get("handlers", [])
                     return [str(x).strip() for x in h if str(x).strip()] if isinstance(h, list) else []
-        except Exception:
+        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             pass
     return []
 
@@ -95,7 +95,7 @@ def check_employee(emp_dir: Path) -> tuple[str, list[tuple[str, str]]]:
 
     try:
         mf = json.loads(mf_path.read_text())
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return emp_dir.name, [(ERROR, f"manifest.json parse error: {e}")]
 
     pkg_id = mf.get("id", emp_dir.name)

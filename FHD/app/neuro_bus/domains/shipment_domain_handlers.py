@@ -73,7 +73,7 @@ class ShipmentDomainHandlers:
             event.payload.get("quantity"),
         )
 
-        result: object = {
+        result: dict[str, Any] = {
             "success": True,
             "shipment_id": event.payload.get("shipment_id"),
             "actions": [],
@@ -106,7 +106,7 @@ class ShipmentDomainHandlers:
         )
         core = get_shipment_application_service_core()
         try:
-            sid = int(event.payload.get("shipment_id"))
+            sid = int(event.payload.get("shipment_id") or 0)
             result = core.mark_as_printed(sid, str(event.payload.get("printer_name") or ""))
             try_complete_command_reply(event, result)
             return result
@@ -123,7 +123,9 @@ class ShipmentDomainHandlers:
         )
         core = get_shipment_application_service_core()
         try:
-            sid = int(event.payload.get("shipment_id"))
+            sid = int(event.payload.get("shipment_id") or 0)
+            if sid <= 0:
+                raise ValueError("shipment_id must be a positive integer")
             result = core.cancel_shipment(sid)
             try_complete_command_reply(event, result)
             return result
@@ -136,7 +138,7 @@ class ShipmentDomainHandlers:
         logger.info("[ShipmentDomain] 处理删除: %s", event.payload.get("shipment_id"))
         core = get_shipment_application_service_core()
         try:
-            sid = int(event.payload.get("shipment_id"))
+            sid = int(event.payload.get("shipment_id") or 0)
             result = core.delete_shipment(sid)
             try_complete_command_reply(event, result)
             return result
@@ -160,7 +162,7 @@ class ShipmentDomainHandlers:
             event.payload.get("record_count", 0),
         )
 
-        result: object = {
+        result: dict[str, Any] = {
             "success": True,
             "file_path": event.payload.get("file_path"),
             "actions": [],
@@ -199,7 +201,7 @@ class ShipmentDomainHandlers:
             len(event.payload.get("items", [])),
         )
 
-        result: object = {
+        result: dict[str, Any] = {
             "success": True,
             "shipment_id": event.payload.get("shipment_id"),
             "actions": [],

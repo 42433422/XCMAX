@@ -30,7 +30,7 @@ class ModProductRepositoryAdapter:
 
     def __init__(self, inner: Any | None = None) -> None:
         if inner is None:
-            from app.infrastructure.repositories.product_repository_impl import (
+            from app.mod_sdk.host_services import (
                 SQLAlchemyProductRepository,
             )
 
@@ -53,7 +53,7 @@ class ModShipmentRepositoryAdapter:
 
     def __init__(self, inner: Any | None = None) -> None:
         if inner is None:
-            from app.infrastructure.repositories.shipment_repository_impl import (
+            from app.mod_sdk.host_services import (
                 SQLAlchemyShipmentRepository,
             )
 
@@ -79,7 +79,7 @@ class ModCustomersSessionAdapter:
 
     def resolve(self):
         """与宿主 ``get_customers_session`` 一致：返回已打开的 ORM session。"""
-        from app.db import SessionLocal
+        from app.mod_sdk.host_services import SessionLocal
 
         return SessionLocal()
 

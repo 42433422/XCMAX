@@ -1,0 +1,99 @@
+# CI SSOT: generated from 成都修茈科技有限公司/.github/workflows/ci-marketing-site.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+# 组件级 CI：营销官网静态页（根层 *.html + site/ + new/ + assets 等）
+#
+# 责任边界：仅校验静态营销页改动；无需 Vue 构建或 Playwright。
+# 未拆仓前，此工作流保证营销页变更不会触发 Vue/Python/Java 的全量流水线。
+
+name: CI - Marketing Site
+
+on:
+  pull_request:
+    paths:
+      - '成都修茈科技有限公司/index.html'
+      - '成都修茈科技有限公司/about.html'
+      - '成都修茈科技有限公司/case-*.html'
+      - '成都修茈科技有限公司/cases.html'
+      - '成都修茈科技有限公司/contact.html'
+      - '成都修茈科技有限公司/honors.html'
+      - '成都修茈科技有限公司/news.html'
+      - '成都修茈科技有限公司/services.html'
+      - '成都修茈科技有限公司/solutions.html'
+      - '成都修茈科技有限公司/excel-to-ai.html'
+      - '成都修茈科技有限公司/baidu_verify_*.html'
+      - '成都修茈科技有限公司/styles.css'
+      - '成都修茈科技有限公司/main.js'
+      - '成都修茈科技有限公司/assets/**'
+      - '成都修茈科技有限公司/new/**'
+      - '成都修茈科技有限公司/site/**'
+      - '.github/workflows/corp-marketing-site.yml'
+  push:
+    branches: [main]
+    paths:
+      - '成都修茈科技有限公司/index.html'
+      - '成都修茈科技有限公司/about.html'
+      - '成都修茈科技有限公司/case-*.html'
+      - '成都修茈科技有限公司/cases.html'
+      - '成都修茈科技有限公司/contact.html'
+      - '成都修茈科技有限公司/honors.html'
+      - '成都修茈科技有限公司/news.html'
+      - '成都修茈科技有限公司/services.html'
+      - '成都修茈科技有限公司/solutions.html'
+      - '成都修茈科技有限公司/excel-to-ai.html'
+      - '成都修茈科技有限公司/baidu_verify_*.html'
+      - '成都修茈科技有限公司/styles.css'
+      - '成都修茈科技有限公司/main.js'
+      - '成都修茈科技有限公司/assets/**'
+      - '成都修茈科技有限公司/new/**'
+      - '成都修茈科技有限公司/site/**'
+      - '.github/workflows/corp-marketing-site.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-marketing-site-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+
+defaults:
+  run:
+    working-directory: 成都修茈科技有限公司
+
+jobs:
+  marketing-site-ci:
+    name: Marketing site (static pages)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.0'
+
+      - name: Install HTML validator
+        run: npm install --global html-validate@9 htmlhint@1
+
+      # 只校验根层与 site/、new/ 下的静态页；忽略 MODstore_deploy 与 market 下的模板
+      - name: HTML validate (root)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=( *.html site/*.html new/*.html )
+          filtered=()
+          for file in "${files[@]}"; do
+            # 百度站点所有权验证文件按协议必须是裸 token，并不是 HTML 文档。
+            [[ "$(basename "$file")" == baidu_verify_* ]] && continue
+            filtered+=("$file")
+          done
+          files=("${filtered[@]}")
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No static HTML files to validate."
+            exit 0
+          fi
+          echo "Validating ${#files[@]} marketing HTML file(s) with htmlhint..."
+          htmlhint "${files[@]}"

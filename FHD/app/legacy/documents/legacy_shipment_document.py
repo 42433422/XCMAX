@@ -26,7 +26,7 @@ def load_legacy_shipment_document_generator(*, caller_file: str) -> LegacyGenera
 
     # 优先从 XCAGI/resources 引用旧 AI 助手代码（避免项目外依赖）
     try:
-        from app.utils.path_utils import get_resource_path
+        from app.utils.path_io.path_utils import get_resource_path
 
         resources_ai_assistant_dir = get_resource_path("tools_legacy", "AI助手")
         resources_ai_assistant_alt = get_resource_path("ai_assistant")

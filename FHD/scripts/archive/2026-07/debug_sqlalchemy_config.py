@@ -1,5 +1,6 @@
 import os
 import sqlite3
+
 import requests
 
 
@@ -54,7 +55,7 @@ def debug_sqlalchemy_config():
                         if count > 0:
                             cursor.execute(f"SELECT * FROM {table_name} LIMIT 5")
                             rows = cursor.fetchall()
-                            print(f"    样本数据:")
+                            print("    样本数据:")
                             for i, row in enumerate(rows):
                                 print(f"      {i+1}. {row}")
 
@@ -63,7 +64,7 @@ def debug_sqlalchemy_config():
 
                 conn.close()
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"  ❌ 无法连接: {e}")
 
     # 检查后端API返回的数据来源
@@ -97,7 +98,7 @@ def debug_sqlalchemy_config():
                 cursor.execute("SELECT id, customer_name FROM customers")
                 db_customers = cursor.fetchall()
 
-                print(f"\n  🔍 products.db中的customers表:")
+                print("\n  🔍 products.db中的customers表:")
                 print(f"    记录数: {count}")
                 print(f"    客户列表: {[c[1] for c in db_customers]}")
 
@@ -108,7 +109,7 @@ def debug_sqlalchemy_config():
                 cursor.execute("SELECT id, unit_name FROM purchase_units WHERE is_active = 1")
                 db_units = cursor.fetchall()
 
-                print(f"\n  🔍 products.db中的purchase_units表:")
+                print("\n  🔍 products.db中的purchase_units表:")
                 print(f"    活跃记录数: {count}")
                 print(f"    购买单位列表: {[u[1] for u in db_units]}")
 
@@ -126,13 +127,13 @@ def debug_sqlalchemy_config():
                 cursor.execute("SELECT id, unit_name FROM purchase_units WHERE is_active = 1")
                 db_units = cursor.fetchall()
 
-                print(f"\n  🔍 customers.db中的purchase_units表:")
+                print("\n  🔍 customers.db中的purchase_units表:")
                 print(f"    活跃记录数: {count}")
                 print(f"    购买单位列表: {[u[1] for u in db_units]}")
 
                 conn.close()
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"  ❌ 检查API失败: {e}")
 
     # 检查SQLAlchemy配置
@@ -144,7 +145,7 @@ def debug_sqlalchemy_config():
     if os.path.exists(service_file):
         print(f"\n📄 检查服务文件: {service_file}")
 
-        with open(service_file, "r", encoding="utf-8") as f:
+        with open(service_file, encoding="utf-8") as f:
             content = f.read()
 
             # 检查导入的模型
@@ -178,7 +179,7 @@ def check_sqlalchemy_models():
     if os.path.exists(model_file):
         print(f"\n📄 PurchaseUnit模型文件: {model_file}")
 
-        with open(model_file, "r", encoding="utf-8") as f:
+        with open(model_file, encoding="utf-8") as f:
             content = f.read()
 
             if '__tablename__ = "purchase_units"' in content:
@@ -197,7 +198,7 @@ def check_sqlalchemy_models():
     if os.path.exists(init_file):
         print(f"\n📄 模型初始化文件: {init_file}")
 
-        with open(init_file, "r", encoding="utf-8") as f:
+        with open(init_file, encoding="utf-8") as f:
             content = f.read()
 
             if "PurchaseUnit" in content:

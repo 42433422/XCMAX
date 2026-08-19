@@ -1,5 +1,5 @@
-from app.db.session import get_db
 from app.db.models.material import Material
+from app.db.session import get_db
 
 with get_db() as db:
     total = db.query(Material).filter(Material.is_active == 1).count()

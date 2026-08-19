@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 
@@ -15,10 +15,14 @@ from app.application.etl.service_support import (
     utcnow,
 )
 from app.db.models.etl import EtlRun, EtlRunRow, EtlUpload
-from app.utils.path_utils import get_app_data_dir
+from app.utils.path_io.path_utils import get_app_data_dir
 
 
 class HistoryServiceMixin:
+    if TYPE_CHECKING:
+        _owned_run: Any
+        _owned_upload_record: Any
+
     def get_run(self, db: Session, *, run_id: str, owner_user_id: int) -> dict[str, Any]:
         run = self._owned_run(db, run_id, owner_user_id)
         if self._execution_is_stale(run):

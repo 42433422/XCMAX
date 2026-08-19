@@ -4,14 +4,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-checkpoint-postgres"
-version = "3.1.0"
+version = "3.1.1"
 description = "Library with a Postgres implementation of LangGraph checkpoint saver. XCAGI vendored fork (LG-W0-04)."
 authors = []
 requires-python = ">=3.10"
 readme = "README.md"
 license = "MIT"
 license-files = ['LICENSE']
-# 依赖声明与上游一致（langgraph-checkpoint-postgres 3.1.0）。langgraph-checkpoint 经
+# 依赖声明与上游一致（langgraph-checkpoint-postgres 3.1.1）。langgraph-checkpoint 经
 # [tool.uv.sources] 重定向到 XCAGI vendored 兄弟包。其余依赖保持上游 registry。
 dependencies = [
     "langgraph-checkpoint>=4.1.0,<5.0.0",
@@ -25,7 +25,7 @@ Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint-po
 Twitter = "https://x.com/langchain_oss"
 Slack = "https://www.langchain.com/join-community"
 Reddit = "https://www.reddit.com/r/LangChain/"
-# 本地吸收副本来源：langgraph tag 1.2.10 @ commit 41341457342327166d72fc11952ab28fb61ec0bf
+# 本地吸收副本来源：langgraph commit fcdf520938469c8e0992ca2075d6a9582c33260f
 
 [dependency-groups]
 test = [

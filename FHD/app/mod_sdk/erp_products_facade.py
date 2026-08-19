@@ -121,7 +121,7 @@ def products_get(request: Request, product_id: int) -> dict | JSONResponse:
     return JSONResponse(result, status_code=404)
 
 
-def products_add(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+def products_add(request: Request | None, body: dict[str, Any]) -> dict[str, Any]:
     gate = _write_gate(request)
     if gate:
         return gate
@@ -141,7 +141,7 @@ def products_add(request: Request, body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def products_update(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+def products_update(request: Request | None, body: dict[str, Any]) -> dict[str, Any]:
     from app.infrastructure.persistence.compat_db.base import _product_parse_id
 
     gate = _write_gate(request)
@@ -166,7 +166,7 @@ def products_update(request: Request, body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def products_delete(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+def products_delete(request: Request | None, body: dict[str, Any]) -> dict[str, Any]:
     from app.infrastructure.persistence.compat_db.base import _product_parse_id
 
     gate = _write_gate(request)
@@ -186,7 +186,7 @@ def products_delete(request: Request, body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def products_batch_delete(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+def products_batch_delete(request: Request | None, body: dict[str, Any]) -> dict[str, Any]:
     from app.infrastructure.persistence.compat_db.base import _product_parse_id
 
     gate = _write_gate(request)

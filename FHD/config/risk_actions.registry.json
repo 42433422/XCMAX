@@ -4,7 +4,7 @@
   "autonomous_actions": {
     "apply_release_to_cvm": {
       "risk": "HIGH",
-      "allow_auto_execute": true,
+      "allow_auto_execute": false,
       "rollback_path": "rollback_release",
       "entrypoints": [".github/workflows/fhd-deploy.yml", "scripts/deploy/fhd-auto-update.sh"]
     },
@@ -41,7 +41,7 @@
     },
     "self_heal_pr_merge": {
       "risk": "HIGH",
-      "allow_auto_execute": true,
+      "allow_auto_execute": false,
       "rollback_path": "revert_merge_commit",
       "entrypoints": ["modstore_server/approval_dispatcher.py"]
     },
@@ -68,7 +68,7 @@
     },
     "mod_auto_publish": {
       "risk": "HIGH",
-      "allow_auto_execute": true,
+      "allow_auto_execute": false,
       "rollback_path": "unpublish_mod_version",
       "entrypoints": ["modstore_server/workbench_api.py"]
     },
@@ -92,7 +92,7 @@
     },
     "archive_historical_loop_debt": {
       "risk": "HIGH",
-      "allow_auto_execute": true,
+      "allow_auto_execute": false,
       "rollback_path": "restore_loop_memory_snapshot",
       "entrypoints": ["modstore_server/self_maintenance_loop_runner.py"]
     },
@@ -110,7 +110,7 @@
     },
     "code_write": {
       "risk": "HIGH",
-      "allow_auto_execute": true,
+      "allow_auto_execute": false,
       "rollback_path": "git_revert_commit",
       "entrypoints": ["app/application/employee_runtime/agent.py"]
     },

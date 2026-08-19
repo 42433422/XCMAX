@@ -235,17 +235,17 @@ class TestRiskGateCodeWrite:
         )
         assert result["risk_level"] == "high"
 
-    def test_registered_high_risk_auto_approves_without_flag(self, monkeypatch):
+    def test_registered_high_risk_requires_human_without_flag(self, monkeypatch):
         monkeypatch.delenv("FHD_RISK_HIGH_GATE_TOKEN", raising=False)
         manifest = {"employee_config_v2": {}}
         result = gate_action_or_block(
             "fhd-core-maintainer", manifest, ["agent"], {"tool": "patch_file"}
         )
-        assert result["ok"]
-        assert result["decision"] == "auto_approve"
-        assert result.get("pending_approval", False) is False
+        assert not result["ok"]
+        assert result["decision"] == "require_human"
+        assert result["pending_approval"] is True
 
-    def test_high_risk_allowed_with_allow_flag(self, monkeypatch):
+    def test_high_risk_allow_flag_without_server_token_is_rejected(self, monkeypatch):
         monkeypatch.delenv("FHD_RISK_HIGH_GATE_TOKEN", raising=False)
         manifest = {"employee_config_v2": {}}
         result = gate_action_or_block(
@@ -254,9 +254,10 @@ class TestRiskGateCodeWrite:
             ["agent"],
             {"tool": "write_file", "allow_high_risk_real_run": True},
         )
-        assert result["ok"]
+        assert not result["ok"]
+        assert result["pending_approval"] is True
 
-    def test_registered_high_risk_ignores_wrong_legacy_token(self, monkeypatch):
+    def test_registered_high_risk_rejects_wrong_legacy_token(self, monkeypatch):
         monkeypatch.setenv("FHD_RISK_HIGH_GATE_TOKEN", "secret123")
         manifest = {"employee_config_v2": {}}
         result = gate_action_or_block(
@@ -269,8 +270,8 @@ class TestRiskGateCodeWrite:
                 "high_risk_gate_token": "wrong",
             },
         )
-        assert result["ok"]
-        assert result["decision"] == "auto_approve"
+        assert not result["ok"]
+        assert result["decision"] == "require_human"
 
     def test_high_risk_allowed_with_correct_token(self, monkeypatch):
         monkeypatch.setenv("FHD_RISK_HIGH_GATE_TOKEN", "secret123")
@@ -286,7 +287,18 @@ class TestRiskGateCodeWrite:
             },
         )
         assert result["ok"]
-        assert result["decision"] == "auto_approve"
+        assert result["decision"] == "approved"
+
+    def test_high_risk_allowed_with_explicit_human_approval(self):
+        manifest = {"employee_config_v2": {}}
+        result = gate_action_or_block(
+            "fhd-core-maintainer",
+            manifest,
+            ["agent"],
+            {"tool": "patch_file", "human_approved": True, "approved_by": "reviewer"},
+        )
+        assert result["ok"]
+        assert result["decision"] == "approved"
 
 
 class TestWorkspaceGuardCodeWrite:
@@ -338,29 +350,39 @@ class TestWorkspaceGuardCodeWrite:
 
 
 class TestWriteApprovalGateCodeWrite:
-    """代码修改工具由 autonomy_guard 自动决策。"""
+    """代码修改工具由 autonomy_guard 强制人工审批。"""
 
     def test_write_file_uses_autonomy_ssot(self):
         gate = build_write_approval_gate("fhd-core-maintainer", {})
         result = gate("write_file", {"path": "x.py"})
-        assert result["ok"]
-        assert result["risk_decision"]["decision"] == "auto_approve"
+        assert not result["ok"]
+        assert result["pending_approval"] is True
+        assert result["risk_decision"]["decision"] == "require_human"
 
     def test_write_file_approved_write_passes(self):
         gate = build_write_approval_gate("fhd-core-maintainer", {"approved_write": True})
         result = gate("write_file", {"path": "x.py"})
-        assert result["ok"]
+        assert not result["ok"]
 
     def test_write_file_allow_write_passes(self):
         gate = build_write_approval_gate("fhd-core-maintainer", {"allow_write": True})
         result = gate("write_file", {"path": "x.py"})
-        assert result["ok"]
+        assert not result["ok"]
 
     def test_patch_file_uses_autonomy_ssot(self):
         gate = build_write_approval_gate("fhd-core-maintainer", {})
         result = gate("patch_file", {"path": "x.py"})
+        assert not result["ok"]
+        assert result["pending_approval"] is True
+        assert result["risk_decision"]["decision"] == "require_human"
+
+    def test_explicit_human_approval_passes(self):
+        gate = build_write_approval_gate(
+            "fhd-core-maintainer", {"human_approved": True, "approved_by": "reviewer"}
+        )
+        result = gate("write_file", {"path": "x.py"})
         assert result["ok"]
-        assert result["risk_decision"]["decision"] == "auto_approve"
+        assert result["risk_decision"]["decision"] == "approved"
 
     def test_non_write_tool_passes(self):
         gate = build_write_approval_gate("fhd-core-maintainer", {})

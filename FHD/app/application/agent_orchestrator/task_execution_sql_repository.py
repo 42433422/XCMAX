@@ -5,8 +5,9 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from typing import cast
 
-from sqlalchemy import and_, or_
+from sqlalchemy import Table, and_, or_
 from sqlalchemy.orm import Session
 
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
@@ -29,6 +30,7 @@ class SQLAlchemyTaskExecutionRepository:
         self._session_factory = session_factory
         self._auto_create = auto_create
         self._schema_ready = False
+        self._schema_bind: object | None = None
         self._schema_lock = threading.RLock()
 
     def enqueue(
@@ -281,20 +283,22 @@ class SQLAlchemyTaskExecutionRepository:
             db.close()
 
     def _ensure_schema(self) -> None:
-        if not self._auto_create or self._schema_ready:
+        if not self._auto_create:
             return
         with self._schema_lock:
-            if self._schema_ready:
-                return
             with self._session_scope(read_only=True) as db:
                 from app.db.base import Base
                 from app.db.models.agent import AgentTaskExecutionRecord
 
+                bind = db.get_bind()
+                if self._schema_ready and self._schema_bind is bind:
+                    return
                 Base.metadata.create_all(
-                    bind=db.get_bind(),
-                    tables=[AgentTaskExecutionRecord.__table__],
+                    bind=bind,
+                    tables=[cast("Table", AgentTaskExecutionRecord.__table__)],
                     checkfirst=True,
                 )
+                self._schema_bind = bind
             self._schema_ready = True
 
     @staticmethod

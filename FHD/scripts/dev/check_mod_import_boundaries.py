@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 检查 Mod 侧代码对主程的 import 是否只走 ``app.mod_sdk.*`` 契约层。
 
@@ -17,7 +16,7 @@
 
 本脚本纯 AST 静态分析，不执行 Mod 代码；零依赖。
 CI / 冒烟脚本里建议当作一个独立 step 跑。
-退出码：存在违规时为 ``1``；否则 ``0``。
+现有债务由精确键基线锁定；退出码：出现新违规时为 ``1``；否则 ``0``。
 
 用法：
 
@@ -42,6 +41,7 @@ MOD_ROOTS = (
 
 # 允许跨边界导入的前缀（严格匹配起始 token）
 ALLOWED_PREFIXES = ("app.mod_sdk",)
+BASELINE_FILE = Path(__file__).with_name("mod_import_boundary_baseline.txt")
 
 # 视为违规的前缀
 FORBIDDEN_PREFIXES = (
@@ -118,9 +118,34 @@ def _iter_mod_py_files(repo_root: Path) -> list[Path]:
     return files
 
 
+def _violation_key(violation: Violation, repo_root: Path) -> str:
+    path = violation.file
+    try:
+        path = path.relative_to(repo_root)
+    except ValueError:
+        pass
+    rel = str(path).replace("\\", "/")
+    return f"{rel}|{violation.module}|{','.join(violation.names)}"
+
+
+def _load_baseline() -> set[str]:
+    if not BASELINE_FILE.is_file():
+        return set()
+    return {
+        line.strip()
+        for line in BASELINE_FILE.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true", help="以 JSON 输出违规清单")
+    parser.add_argument(
+        "--update-baseline",
+        action="store_true",
+        help="Replace the debt baseline with the exact current violation keys.",
+    )
     parser.add_argument(
         "--repo-root",
         type=Path,
@@ -139,6 +164,25 @@ def main(argv: list[str] | None = None) -> int:
     for f in files:
         all_violations.extend(_scan_file(f))
 
+    if args.update_baseline:
+        keys = sorted({_violation_key(v, repo_root) for v in all_violations})
+        BASELINE_FILE.write_text(
+            "# MOD host-import debt snapshot. New exact keys fail the gate.\n"
+            + "\n".join(keys)
+            + "\n",
+            encoding="utf-8",
+        )
+        print(f"[mod-boundary] updated baseline with {len(keys)} exact violation key(s)")
+        return 0
+
+    baseline = _load_baseline()
+    new_violations = [
+        violation
+        for violation in all_violations
+        if _violation_key(violation, repo_root) not in baseline
+    ]
+    known_count = len(all_violations) - len(new_violations)
+
     if args.json:
         payload = {
             "repo_root": str(repo_root).replace("\\", "/"),
@@ -147,23 +191,28 @@ def main(argv: list[str] | None = None) -> int:
             "allowed_prefixes": list(ALLOWED_PREFIXES),
             "forbidden_prefixes": list(FORBIDDEN_PREFIXES),
             "violation_count": len(all_violations),
+            "known_violation_count": known_count,
+            "new_violation_count": len(new_violations),
             "violations": [v.to_dict() for v in all_violations],
+            "new_violations": [v.to_dict() for v in new_violations],
         }
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         print(f"[mod-boundary] repo={repo_root}")
         print(f"[mod-boundary] scanned {len(files)} .py files under {len(MOD_ROOTS)} mod roots")
         print(f"[mod-boundary] allowed prefixes: {', '.join(ALLOWED_PREFIXES)}")
-        if not all_violations:
-            print("[mod-boundary] OK — no forbidden imports found")
+        if known_count:
+            print(f"[mod-boundary] baseline: {known_count} known violation(s)")
+        if not new_violations:
+            print("[mod-boundary] OK — no new forbidden imports")
         else:
-            print(f"[mod-boundary] {len(all_violations)} VIOLATION(S):")
-            for v in all_violations:
+            print(f"[mod-boundary] {len(new_violations)} NEW VIOLATION(S):")
+            for v in new_violations:
                 rel = v.file.relative_to(repo_root) if v.file.is_absolute() else v.file
                 names = ", ".join(v.names)
                 print(f"  {rel}:{v.lineno}  from {v.module} import {names}")
 
-    return 1 if all_violations else 0
+    return 1 if new_violations else 0
 
 
 if __name__ == "__main__":

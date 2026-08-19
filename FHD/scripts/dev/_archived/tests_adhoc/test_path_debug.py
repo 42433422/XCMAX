@@ -21,5 +21,5 @@ try:
         if "考勤" in f:
             print(f"  '{f}'")
             print(f"    normalized: '{f.replace(' ', '')}'")
-except Exception as e:
+except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"os.listdir error: {e}")

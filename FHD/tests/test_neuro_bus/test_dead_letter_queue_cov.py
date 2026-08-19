@@ -1033,7 +1033,7 @@ class TestNeuroBusDLQIntegration:
         dlq = make_dlq()
         integration = NeuroBusDLQIntegration(dlq=dlq)
         event = make_event()
-        eid = integration.handle_failure(event, Exception("unknown"), retry_count=0)
+        eid = integration.handle_failure(event, RuntimeError("unknown"), retry_count=0)
         entry = dlq.dequeue(eid)
         assert entry is not None
         assert entry.reason == DeadLetterReason.UNRECOVERABLE

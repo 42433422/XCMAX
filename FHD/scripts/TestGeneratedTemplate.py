@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 TestPEWhiteBottomPaint - 标签模板生成器
 
@@ -9,11 +8,12 @@ TestPEWhiteBottomPaint - 标签模板生成器
 保留原始精确位置信息。
 """
 
+import logging
 import os
 import platform
-import logging
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
 from PIL import Image, ImageDraw, ImageFont
 
 logger = logging.getLogger(__name__)
@@ -179,7 +179,7 @@ class TestPEWhiteBottomPaint:
             logger.info(f"标签已生成：{output_path}")
             return filename
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             logger.error(f"生成标签失败：{e}")
             return None
 

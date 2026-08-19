@@ -1,4 +1,4 @@
-"""Tests for app.fastapi_routes.domains.conversation.compat_extra — conversation compat routes."""
+"""Tests for app.legacy.routes.conversation.compat_extra — conversation compat routes."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
-from app.fastapi_routes.domains.conversation.compat_extra import (
+from app.legacy.routes.conversation.compat_extra import (
     _conversation_lock,
     _xcagi_evict_oldest_session_if_needed,
     _xcagi_iso_from_ts,
@@ -67,7 +67,7 @@ class TestXcagiRequestUserId:
 
     def test_mod_from_request_context(self):
         with patch(
-            "app.fastapi_routes.domains.conversation.compat_extra.get_request_active_mod_id",
+            "app.legacy.routes.conversation.compat_extra.get_request_active_mod_id",
             return_value="auto_mod",
         ):
             scope = _xcagi_resolve_session_scope("u1", None)
@@ -75,7 +75,7 @@ class TestXcagiRequestUserId:
 
     def test_mod_request_context_error_falls_back(self):
         with patch(
-            "app.fastapi_routes.domains.conversation.compat_extra.get_request_active_mod_id",
+            "app.legacy.routes.conversation.compat_extra.get_request_active_mod_id",
             side_effect=RuntimeError("no ctx"),
         ):
             scope = _xcagi_resolve_session_scope("u1", None)
@@ -210,7 +210,7 @@ class TestConversationsSaveMessage:
         client = TestClient(_make_app())
         with (
             patch(
-                "app.fastapi_routes.domains.conversation.compat_extra.publish_simple_event",
+                "app.legacy.routes.conversation.compat_extra.publish_simple_event",
                 create=True,
             ),
             patch(
@@ -225,7 +225,7 @@ class TestConversationsSaveMessage:
         client = TestClient(_make_app())
         with (
             patch(
-                "app.fastapi_routes.domains.conversation.compat_extra.publish_simple_event",
+                "app.legacy.routes.conversation.compat_extra.publish_simple_event",
                 create=True,
             ),
             patch(

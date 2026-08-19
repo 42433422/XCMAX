@@ -123,7 +123,7 @@ class ConversationService(NeuroEventPublisherMixin):
                         "channel": "xcagi_chat",
                     },
                 )
-            except Exception as exc:  # noqa: BLE001  推送边界：失败不影响消息保存
+            except RECOVERABLE_ERRORS as exc:  # noqa: BLE001  推送边界：失败不影响消息保存
                 logger.warning("conversation push notify failed: %s", exc)
 
         return message_id
@@ -270,7 +270,7 @@ class ConversationService(NeuroEventPublisherMixin):
                 logger.error("删除会话失败：%s", e)
                 raise
 
-    def create_session(self, user_id: str = "default", title: str = None) -> str:
+    def create_session(self, user_id: str = "default", title: str | None = None) -> str:
         """
         创建新会话
 

@@ -84,6 +84,8 @@ async def _build_and_publish_founder_autonomy(
     action_board_data = (
         action_board.get("data") if isinstance(action_board.get("data"), dict) else action_board
     )
+    if not isinstance(action_board_data, dict):
+        action_board_data = {}
     action_board_goal_section = action_board_data.get("goals")
     action_board_goal_summary = (
         action_board_goal_section.get("summary")

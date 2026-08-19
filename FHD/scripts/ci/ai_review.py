@@ -757,7 +757,7 @@ def call_llm_review(
         finally:
             if close_after:
                 client.close()
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return "unavailable"
     return _response_verdict(data)
 
@@ -810,13 +810,13 @@ def post_line_comment(
             json=payload,
         )
         return resp.status_code in (200, 201)
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return False
     finally:
         if close_after:
             try:
                 client.close()
-            except Exception:  # pragma: no cover
+            except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures  # pragma: no cover
                 pass
 
 

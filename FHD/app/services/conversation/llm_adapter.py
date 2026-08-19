@@ -146,7 +146,11 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
     }
 
     def __init__(
-        self, provider: str = "xiaomi", model: str = None, api_key: str = None, base_url: str = None
+        self,
+        provider: str = "xiaomi",
+        model: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
     ):
         """
         初始化LLM适配器
@@ -275,7 +279,7 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         response = await client.post(
             f"{self._minimax_anthropic_base_url()}/v1/messages",
             headers={
-                "x-api-key": self._api_key,
+                "x-api-key": str(self._api_key or ""),
                 "anthropic-version": "2023-06-01",
                 "content-type": "application/json",
             },

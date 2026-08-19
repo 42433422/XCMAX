@@ -30,7 +30,7 @@ def _redis_cache_backend():
     if os.environ.get("XCAGI_QUERY_CACHE_BACKEND", "memory").strip().lower() != "redis":
         return None
     try:
-        from app.utils.redis_cache import get_redis_cache
+        from app.utils.performance.redis_cache import get_redis_cache
 
         cache = get_redis_cache()
         return cache if cache.is_available else None

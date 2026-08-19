@@ -13,6 +13,7 @@ from app.application.group_chat.constants import (
     _REQUIRED_GROUP_MEMBER_IDS,
     _XIAOC_ASSISTANT_ID,
 )
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _utc_now() -> str:
@@ -126,7 +127,7 @@ def _default_departments() -> dict[str, Any]:
 
         depts = load_departments()
         return depts if isinstance(depts, dict) else {}
-    except Exception:  # noqa: BLE001 - 部门配置缺失时回退到内置 6 部门
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - 部门配置缺失时回退到内置 6 部门
         return {}
 
 
@@ -194,14 +195,14 @@ def _default_duty_employee_loader() -> list[dict[str, Any]]:
 
     try:
         from app.infrastructure.mods.mod_manager import get_mod_manager
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         get_mod_manager = None  # type: ignore[assignment]
 
     installed_by_id: dict[str, tuple[str, dict[str, Any], dict[str, Any]]] = {}
     if get_mod_manager is not None:
         try:
             mods = get_mod_manager().list_all_mods() or []
-        except Exception:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:  # noqa: BLE001
             mods = []
         for m in mods:
             if not isinstance(m, dict):
@@ -225,6 +226,8 @@ def _default_duty_employee_loader() -> list[dict[str, Any]]:
         manifest_employee = (
             manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
         )
+        if not isinstance(manifest_employee, dict):
+            manifest_employee = {}
         name = str(
             raw.get("name")
             or raw.get("label")
@@ -282,7 +285,7 @@ def _append_super_employees(employees: list[dict[str, Any]]) -> None:
             CURSOR_PROFILE,
             TRAE_PROFILE,
         )
-    except Exception:  # noqa: BLE001 - 超级员工模块不可用时静默跳过
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - 超级员工模块不可用时静默跳过
         return
     existing = {str(e.get("employee_id") or "") for e in employees if isinstance(e, dict)}
     for profile in (CODEX_PROFILE, CURSOR_PROFILE, CLAUDE_PROFILE, TRAE_PROFILE):
@@ -311,13 +314,13 @@ def _default_enterprise_employee_loader() -> list[dict[str, Any]]:
 
     try:
         from app.infrastructure.mods.mod_manager import get_mod_manager
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         return []
 
     employees: list[dict[str, Any]] = []
     try:
         mods = get_mod_manager().list_all_mods() or []
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         return []
     for m in mods:
         if not isinstance(m, dict):

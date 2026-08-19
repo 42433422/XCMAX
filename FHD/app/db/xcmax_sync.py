@@ -214,7 +214,7 @@ class SyncDb:
                     (change_id, entity_type, entity_id, operation, payload_json, now),
                 )
             conn.commit()
-        return change_id
+        return int(change_id or 0)
 
     def enqueue_inbox(
         self,

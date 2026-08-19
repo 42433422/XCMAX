@@ -1,10 +1,9 @@
-# -*- coding: utf-8 -*-
 """
 标签模板生成器 - 功能演示脚本
 """
 
-import sys
 import os
+import sys
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -21,7 +20,7 @@ def test_barcode_generator():
 
         # 创建条形码生成器
         bc = BarcodeGenerator("code128")
-        print(f"✓ BarcodeGenerator 创建成功")
+        print("✓ BarcodeGenerator 创建成功")
         print(f"  支持的条码类型：{bc.get_supported_types()}")
 
         # 生成条形码
@@ -33,12 +32,12 @@ def test_barcode_generator():
 
             # 保存图片
             img.save("test_barcode.png")
-            print(f"✓ 已保存：test_barcode.png")
+            print("✓ 已保存：test_barcode.png")
         else:
             print("✗ 条形码生成失败")
 
         print()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"✗ 测试失败：{e}")
         print()
 
@@ -53,7 +52,7 @@ def test_label_template_generator():
         from app.services.skills.label_template_generator import get_label_template_generator_skill
 
         skill = get_label_template_generator_skill()
-        print(f"✓ Label Template Generator Skill 加载成功")
+        print("✓ Label Template Generator Skill 加载成功")
         print(f"  技能名称：{skill.name}")
         print(f"  技能描述：{skill.description}")
         print()
@@ -74,7 +73,7 @@ def test_label_template_generator():
             )
 
             if result["success"]:
-                print(f"✓ 生成成功！")
+                print("✓ 生成成功！")
                 print(f"  代码长度：{len(result['code'])} 字符")
                 print(f"  输出文件：{result.get('output_file')}")
 
@@ -91,7 +90,7 @@ def test_label_template_generator():
             print(f"⚠ 测试图片不存在：{test_image}")
 
         print()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"✗ 测试失败：{e}")
         import traceback
 
@@ -123,7 +122,7 @@ def test_generated_template():
 
                 # 创建实例
                 generator = GeneratorClass(output_dir="./test_labels")
-                print(f"✓ 生成器实例创建成功")
+                print("✓ 生成器实例创建成功")
 
                 # 测试生成标签
                 data = {
@@ -150,7 +149,7 @@ def test_generated_template():
             print("⚠ 生成的模板文件不存在，请先运行测试 2")
 
         print()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"✗ 测试失败：{e}")
         import traceback
 

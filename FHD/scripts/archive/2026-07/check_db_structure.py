@@ -1,5 +1,5 @@
-import sqlite3
 import os
+import sqlite3
 
 db_files = [
     r"e:\FHD\424\半岛风情.db",
@@ -28,5 +28,5 @@ for db_file in db_files:
                 rows = cursor.fetchall()
                 print(f"  Sample: {rows}")
         conn.close()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"Error: {e}")

@@ -18,6 +18,7 @@ registered in sys.modules (not real package trees), we patch them via
 from __future__ import annotations
 
 import asyncio
+import importlib
 import os
 import sys
 import types
@@ -38,6 +39,10 @@ from starlette.testclient import TestClient
 def _ensure_stub(name: str, attrs: dict | None = None) -> types.ModuleType:
     if name in sys.modules:
         return sys.modules[name]
+    try:
+        return importlib.import_module(name)
+    except ImportError:
+        pass
     mod = types.ModuleType(name)
     mod.__path__ = []
     for k, v in (attrs or {}).items():

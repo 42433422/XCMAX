@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 复制标签图片到无中文路径
 """
@@ -21,7 +20,7 @@ for src in src_files:
             shutil.copy2(src, dst_path)
             print(f"✓ 已复制到：{dst_path}")
             break
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 复制失败：{e}")
 else:
     print("❌ 未找到任何源文件")

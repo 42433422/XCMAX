@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from decimal import Decimal
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -21,6 +21,9 @@ from app.infrastructure.tenant_scope import tenant_scope
 
 
 class TutorialWorkspaceMixin:
+    if TYPE_CHECKING:
+        _run_dto: Any
+
     def _owner(self, user: Any) -> tuple[int, int]:
         user_id = getattr(user, "id", None)
         source_tenant_id = getattr(user, "tenant_id", None)

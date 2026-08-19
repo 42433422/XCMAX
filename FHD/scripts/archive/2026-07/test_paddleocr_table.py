@@ -1,13 +1,10 @@
-# -*- coding: utf-8 -*-
 """
 使用 PaddleOCR 表格检测 + OCR
 """
 
-from paddleocr import PaddleOCR
-import cv2
-import numpy as np
-import json
 import glob
+
+from paddleocr import PaddleOCR
 
 # 读取图片
 files = glob.glob(r"e:\FHD\26-0300001A*.png")
@@ -28,7 +25,7 @@ if result is None:
     exit(1)
 
 # 分析结果
-print(f"\n" + "=" * 70)
+print("\n" + "=" * 70)
 print("OCR + 表格检测结果")
 print("=" * 70)
 
@@ -47,7 +44,7 @@ if isinstance(result, list):
             print(f"包含 keys：{item.keys()}")
 
             if "table" in item:
-                print(f"\n表格结果：")
+                print("\n表格结果：")
                 table_result = item["table"]
                 print(f"  类型：{type(table_result)}")
 
@@ -56,7 +53,7 @@ if isinstance(result, list):
                         print(f"  行 {j}: {row}")
 
             if "res" in item:
-                print(f"\nOCR 文本结果：")
+                print("\nOCR 文本结果：")
                 res = item["res"]
                 if isinstance(res, list):
                     for j, text in enumerate(res):
@@ -66,7 +63,7 @@ elif isinstance(result, dict):
     print(f"结果 keys：{result.keys()}")
 
     if "table" in result:
-        print(f"\n表格结果：")
+        print("\n表格结果：")
         table_result = result["table"]
         if isinstance(table_result, list):
             for j, row in enumerate(table_result):

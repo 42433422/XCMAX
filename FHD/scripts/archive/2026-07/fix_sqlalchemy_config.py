@@ -32,7 +32,7 @@ def fix_sqlalchemy_config():
         # 复制数据库文件
         shutil.copy2(source_db, target_db)
 
-        print(f"✅ 数据库复制成功")
+        print("✅ 数据库复制成功")
         print(f"   从 {source_db}")
         print(f"   到 {target_db}")
 
@@ -59,7 +59,7 @@ def fix_sqlalchemy_config():
 
         return True
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 数据库复制失败: {e}")
 
         # 方案2: 修改SQLAlchemy配置
@@ -81,8 +81,9 @@ def check_backend_after_fix():
     print("\n🔍 修复后检查后端API")
     print("=" * 60)
 
-    import requests
     import time
+
+    import requests
 
     base_url = "http://127.0.0.1:8000"
 
@@ -117,7 +118,7 @@ def check_backend_after_fix():
         else:
             print(f"❌ API请求失败，状态码: {response.status_code}")
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查后端API失败: {e}")
 
 
@@ -155,7 +156,7 @@ def restart_backend_service():
 
         print("✅ 后端服务已重启")
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 重启后端服务失败: {e}")
         print("💡 请手动重启后端服务")
 

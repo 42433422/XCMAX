@@ -80,7 +80,7 @@ class PerformanceAuditor:
         }
 
         try:
-            from app.utils.performance_initializer import get_performance_optimizer
+            from app.utils.performance.performance_initializer import get_performance_optimizer
             optimizer = get_performance_optimization()
 
             if optimizer._initialized:

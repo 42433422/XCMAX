@@ -1,12 +1,14 @@
 """检查钉钉导出文件的格式"""
 
-import pandas as pd
 import sys
+
+import pandas as pd
 
 sys.path.insert(0, r"e:\FHD\backend\shell")
 
-from taiyangniao_attendance.convert import read_dingtalk_dataframe, _auto_detect_header_row
 from pathlib import Path
+
+from taiyangniao_attendance.convert import _auto_detect_header_row, read_dingtalk_dataframe
 
 source_file = Path(r"e:\FHD\424\钉钉导出来的考勤数据.xlsx")
 

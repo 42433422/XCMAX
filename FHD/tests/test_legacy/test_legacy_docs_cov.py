@@ -32,7 +32,7 @@ class TestLoadLegacyShipmentDocumentGenerator:
         """No AI助手 directory anywhere → ImportError raised."""
         with (
             patch(
-                "app.utils.path_utils.get_resource_path", return_value=str(tmp_path / "nonexistent")
+                "app.utils.path_io.path_utils.get_resource_path", return_value=str(tmp_path / "nonexistent")
             ),
             patch("os.path.isdir", return_value=False),
             patch("os.path.exists", return_value=False),
@@ -44,7 +44,7 @@ class TestLoadLegacyShipmentDocumentGenerator:
         """get_resource_path raises → fallback dirs used, still no dir → ImportError."""
         with (
             patch(
-                "app.utils.path_utils.get_resource_path", side_effect=RuntimeError("no resource")
+                "app.utils.path_io.path_utils.get_resource_path", side_effect=RuntimeError("no resource")
             ),
             patch("os.path.isdir", return_value=False),
             patch("os.path.exists", return_value=False),
@@ -60,7 +60,7 @@ class TestLoadLegacyShipmentDocumentGenerator:
         doc_py.write_text("class ShipmentDocumentGenerator: pass\nclass PurchaseUnitInfo: pass\n")
 
         with (
-            patch("app.utils.path_utils.get_resource_path", return_value=str(legacy_dir)),
+            patch("app.utils.path_io.path_utils.get_resource_path", return_value=str(legacy_dir)),
             patch("os.path.isdir", side_effect=lambda p: str(p) == str(legacy_dir)),
             patch(
                 "os.path.exists",
@@ -96,7 +96,7 @@ class TestLoadLegacyShipmentDocumentGenerator:
             return original_import(name, *args, **kwargs)
 
         with (
-            patch("app.utils.path_utils.get_resource_path", return_value=str(legacy_dir)),
+            patch("app.utils.path_io.path_utils.get_resource_path", return_value=str(legacy_dir)),
             patch("os.path.isdir", side_effect=lambda p: str(p) == str(legacy_dir)),
             patch("os.path.exists", side_effect=lambda p: True),
             patch("builtins.__import__", side_effect=mock_import),
@@ -124,7 +124,7 @@ class TestLoadLegacyShipmentDocumentGenerator:
             return original_import(name, *args, **kwargs)
 
         with (
-            patch("app.utils.path_utils.get_resource_path", return_value=str(legacy_dir)),
+            patch("app.utils.path_io.path_utils.get_resource_path", return_value=str(legacy_dir)),
             patch("os.path.isdir", side_effect=lambda p: str(p) == str(legacy_dir)),
             patch("os.path.exists", side_effect=lambda p: str(p).endswith("AI助手")),
             patch("builtins.__import__", side_effect=fail_import),

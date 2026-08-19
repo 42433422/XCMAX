@@ -5,7 +5,7 @@ XCAGI 前端兼容 API — 系统 / 认证 / 偏好 / 工具目录等杂项路�
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -15,6 +15,8 @@ from app.domain.ai.tools_directory import (
     get_tools_payload,
     register_workflow_tool_registry_provider,
 )
+from app.fastapi_routes.domains.misc import memory_v2_agent as _memory_agent
+from app.fastapi_routes.domains.misc.persona_route_helpers import resolve_persona_user_id
 from app.infrastructure.auth.db_token import (
     configured_db_write_token,
     effective_db_read_token,
@@ -25,6 +27,7 @@ from app.infrastructure.db.sync_engine import (
     switch_to_production_mode,
     switch_to_test_mode,
 )
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _workflow_tool_registry_provider() -> list[dict]:
@@ -38,6 +41,12 @@ register_workflow_tool_registry_provider(_workflow_tool_registry_provider)
 
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)
+
+_memory_v2_agent_output = _memory_agent.agent_output
+_memory_v2_user_id_from_request = _memory_agent.user_id_from_request
+_run_memory_v2_agent = _memory_agent.run_memory_v2_agent
+_resolve_persona_user_id = resolve_persona_user_id
+_resolve_user_id_int = resolve_persona_user_id
 
 
 @router.post("/fhd/db-write-token/verify")
@@ -77,7 +86,7 @@ def fhd_db_read_token_verify(request: Request, body: dict = Body(default_factory
 
 @router.get("/system/openapi")
 def system_openapi(request: Request) -> dict:
-    return request.app.openapi()
+    return cast("dict[Any, Any]", request.app.openapi())
 
 
 def _test_db_toggle_from_body(body: dict) -> bool | None:
@@ -197,110 +206,6 @@ def _memory_v2_service():
 
 
 def _memory_v2_error(payload: dict, status_code: int = 400) -> JSONResponse:
-    return JSONResponse(payload, status_code=status_code)
-
-
-def _memory_v2_agent_output(run: Any, node_id: str) -> dict[str, Any]:
-    final_output = getattr(run, "final_output", None)
-    node_outputs = dict((final_output or {}).get("node_outputs") or {})
-    output = dict(node_outputs.get(node_id) or {})
-    if not output:
-        for step in getattr(run, "steps", []) or []:
-            if str(getattr(step, "node_id", "")) == node_id:
-                output = dict(getattr(step, "output", {}) or {})
-                break
-    if not output:
-        output = {"success": getattr(run, "status", "") == "completed"}
-    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
-        output["message"] = getattr(run, "error", "")
-    run_id = str(getattr(run, "run_id", "") or "")
-    if run_id:
-        output["run_id"] = run_id
-        output["agent_run_id"] = run_id
-    output["agent_status"] = str(getattr(run, "status", "") or "")
-    return output
-
-
-def _memory_v2_user_id_from_request(request: Request, params: dict[str, Any]) -> str:
-    return str(
-        request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
-        or params.get("user_id")
-        or params.get("userId")
-        or "default"
-    ).strip()
-
-
-def _run_memory_v2_agent(
-    *,
-    request: Request,
-    action: str,
-    params: dict[str, Any],
-    route_path: str,
-    failure_status: int,
-) -> JSONResponse:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.memory_v2_facade import get_memory_v2_action_meta
-    from app.application.workflow.types import PlanGraph, WorkflowNode
-
-    data = dict(params or {})
-    user_id = _memory_v2_user_id_from_request(request, data)
-    data.setdefault("user_id", user_id)
-    action_meta = get_memory_v2_action_meta(action)
-    if action_meta is None:
-        return JSONResponse(
-            {"success": False, "message": f"未注册的 Memory v2 动作: {action}"},
-            status_code=400,
-        )
-
-    node_id = f"memory_v2_{action}"
-    plan = PlanGraph(
-        plan_id=node_id,
-        intent=node_id,
-        todo_steps=[f"通过 AgentOrchestrator 执行 memory_v2.{action}"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id="memory_v2",
-                action=action,
-                params=data,
-                risk=str(action_meta.get("risk") or "medium"),
-                idempotent=bool(action_meta.get("idempotent", False)),
-                description=f"Execute memory_v2.{action} through the unified Agent runtime.",
-            )
-        ],
-        risk_level=str(action_meta.get("risk") or "medium"),
-        metadata={"source": "memory_v2_route", "route": route_path},
-    )
-    runtime_context = {
-        "source": "memory_v2_route",
-        "route": route_path,
-        "request_path": str(request.url.path),
-        "user_id": user_id,
-        "route_confirmed": True,
-    }
-    orchestrator = AgentOrchestrator()
-    run = orchestrator.start_run_from_plan(
-        user_id=user_id,
-        message=str(data.get("message") or f"Memory v2 {action}"),
-        plan=plan,
-        runtime_context=runtime_context,
-    )
-    if run.status in {"waiting_user", "running"}:
-        continued = orchestrator.continue_run(
-            run.run_id,
-            approved_by=user_id or "memory-v2-route",
-            approved_step_id=node_id,
-            runtime_context=runtime_context,
-        )
-        if continued is not None:
-            run = continued
-    payload = _memory_v2_agent_output(run, node_id)
-    status_code = 200 if payload.get("success") else failure_status
-    if payload.get("error_code") == "tool_exception":
-        status_code = 500
-    if run.status in {"waiting_user", "blocked"}:
-        status_code = 202
     return JSONResponse(payload, status_code=status_code)
 
 
@@ -484,32 +389,6 @@ def compat_tool_categories_list() -> dict:
 # ========== Butler Profile（拟人 Persy 系统）==========
 
 
-def _resolve_persona_user_id(
-    request: Request,
-    body: dict | None = None,
-    *,
-    query_user_id: str | None = None,
-) -> str:
-    """解析人格画像 user_id（字符串，与对话流 ``web_normal_<session>`` 对齐）。
-
-    旧实现强制 ``int``，Settings 读 ``1``、对话写 ``web_normal_*``，设置页永远默认空壳。
-    """
-    raw = (
-        request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
-        or (body or {}).get("user_id")
-        or (body or {}).get("userId")
-        or query_user_id
-        or "1"
-    )
-    text = str(raw).strip()
-    return text or "1"
-
-
-# 兼容旧测试命名（现返回 str，不再截断为 int）
-_resolve_user_id_int = _resolve_persona_user_id
-
-
 def _persona_backed_profile_view(uid: int | str) -> dict:
     """人格视图的**唯一派生路径**：Persona-A → butler 视图（经 persona_butler_bridge）。
 
@@ -524,23 +403,23 @@ def _persona_backed_profile_view(uid: int | str) -> dict:
         view = persona_view_for_user(key)
         if view is not None:
             return view
-    except Exception as exc:  # noqa: BLE001 - 桥接失败不应阻断 Settings 读取
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - 桥接失败不应阻断 Settings 读取
         logger.warning("persona 画像读取失败，回退 persona 默认视图: %s", exc)
     return persona_default_view(key)
 
 
-@router.get("/butler/profile")
-@router.get("/butler/profile/", include_in_schema=False)
+@router.get("/butler/profile", response_model=None)
+@router.get("/butler/profile/", response_model=None, include_in_schema=False)
 def butler_profile_get(
     request: Request,
     user_id: str = Query(default="1"),
-) -> dict:
+) -> dict[str, Any] | JSONResponse:
     """读取当前用户的 butler profile（身份 + 四轴，不含 MBTI 原始分数）。"""
     try:
         uid = _resolve_user_id_int(request, {"user_id": user_id})
         view = _persona_backed_profile_view(uid)
         return {"success": True, "profile": view}
-    except Exception as exc:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
         logger.warning("读取 butler profile 失败: %s", exc)
         return JSONResponse(
             {"success": False, "message": f"读取 profile 失败: {exc}"},
@@ -548,9 +427,11 @@ def butler_profile_get(
         )
 
 
-@router.post("/butler/profile/infer")
-@router.post("/butler/profile/infer/", include_in_schema=False)
-def butler_profile_infer(request: Request, body: dict = Body(default_factory=dict)) -> dict:
+@router.post("/butler/profile/infer", response_model=None)
+@router.post("/butler/profile/infer/", response_model=None, include_in_schema=False)
+def butler_profile_infer(
+    request: Request, body: dict = Body(default_factory=dict)
+) -> dict[str, Any] | JSONResponse:
     """刷新人格视图（**人格系统已合并：Persona-A 为单一真相源**）。
 
     历史上此端点跑 butler MBTI 推断并写 ``butler_user_profiles``。人格合并后，对话流
@@ -573,7 +454,7 @@ def butler_profile_infer(request: Request, body: dict = Body(default_factory=dic
                 "source": "persona",
             },
         }
-    except Exception as exc:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
         logger.warning("butler profile 刷新失败: %s", exc)
         return JSONResponse(
             {"success": False, "message": f"刷新失败: {exc}"},
@@ -581,11 +462,11 @@ def butler_profile_infer(request: Request, body: dict = Body(default_factory=dic
         )
 
 
-@router.post("/butler/profile/interaction")
-@router.post("/butler/profile/interaction/", include_in_schema=False)
+@router.post("/butler/profile/interaction", response_model=None)
+@router.post("/butler/profile/interaction/", response_model=None, include_in_schema=False)
 def butler_profile_record_interaction(
     request: Request, body: dict = Body(default_factory=dict)
-) -> dict:
+) -> dict[str, Any] | JSONResponse:
     """记录一次对话互动（**人格系统已合并：互动由对话流唯一记录**）。
 
     历史上此端点写 ``butler_user_profiles`` 的 rapport/互动计数。人格合并后，互动信号
@@ -597,7 +478,7 @@ def butler_profile_record_interaction(
     try:
         _resolve_user_id_int(request, body)  # 保持用户解析/错误语义
         return {"success": True, "source": "persona"}
-    except Exception as exc:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - 路由边界统一兜底返回 JSON
         logger.warning("记录 butler 互动失败: %s", exc)
         return JSONResponse(
             {"success": False, "message": f"记录互动失败: {exc}"},

@@ -370,36 +370,60 @@ class TestActionDirectPythonModule:
 
 class TestCognitionFhd:
     def test_returns_reasoning_on_success(self):
-        with patch(
-            "app.application.employee_runtime.agent_runner._run_async",
-            return_value={"choices": [{"message": {"content": "hello"}}]},
+        with (
+            patch(
+                "app.application.employee_runtime.agent_runner._chat_completion",
+                new=MagicMock(return_value=None),
+            ),
+            patch(
+                "app.application.employee_runtime.agent_runner._run_async",
+                return_value={"choices": [{"message": {"content": "hello"}}]},
+            ),
         ):
             out = exec_mod._cognition_fhd({}, {"normalized_input": {"q": 1}}, {}, "task")
             assert out["reasoning"] == "hello"
             assert out["system_prompt"]
 
     def test_returns_error_on_failure(self):
-        with patch(
-            "app.application.employee_runtime.agent_runner._run_async",
-            side_effect=RuntimeError("llm down"),
+        with (
+            patch(
+                "app.application.employee_runtime.agent_runner._chat_completion",
+                new=MagicMock(return_value=None),
+            ),
+            patch(
+                "app.application.employee_runtime.agent_runner._run_async",
+                side_effect=RuntimeError("llm down"),
+            ),
         ):
             out = exec_mod._cognition_fhd({}, {"normalized_input": {}}, {}, "task")
             assert out["reasoning"] == ""
             assert "llm down" in out["error"]
 
     def test_returns_error_when_raw_has_error(self):
-        with patch(
-            "app.application.employee_runtime.agent_runner._run_async",
-            return_value={"error": "bad request"},
+        with (
+            patch(
+                "app.application.employee_runtime.agent_runner._chat_completion",
+                new=MagicMock(return_value=None),
+            ),
+            patch(
+                "app.application.employee_runtime.agent_runner._run_async",
+                return_value={"error": "bad request"},
+            ),
         ):
             out = exec_mod._cognition_fhd({}, {"normalized_input": {}}, {}, "task")
             assert out["reasoning"] == ""
             assert "bad request" in out["error"]
 
     def test_empty_choices(self):
-        with patch(
-            "app.application.employee_runtime.agent_runner._run_async",
-            return_value={"choices": []},
+        with (
+            patch(
+                "app.application.employee_runtime.agent_runner._chat_completion",
+                new=MagicMock(return_value=None),
+            ),
+            patch(
+                "app.application.employee_runtime.agent_runner._run_async",
+                return_value={"choices": []},
+            ),
         ):
             out = exec_mod._cognition_fhd({}, {"normalized_input": {}}, {}, "task")
             assert out["reasoning"] == ""

@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy.engine import make_url
 
-from app.db import engine
+from app.db import get_runtime_engine
 from app.db.init_db import (
     ensure_product_query_indexes,
     ensure_sessions_account_meta_columns,
@@ -107,7 +107,7 @@ async def lifespan(app: FastAPI):
             logger.warning("Deliverable runtime setup skipped: %s", exc)
 
         try:
-            from app.utils.performance_initializer import init_performance_optimization
+            from app.utils.performance.performance_initializer import init_performance_optimization
 
             init_performance_optimization(app)
             mark_startup("performance_optimizer_ready")
@@ -144,6 +144,9 @@ async def lifespan(app: FastAPI):
         # 完成全部清理，避免神经总线、监控循环与各调度线程在异常关闭路径下泄漏。
         _stop_agent_tasks(app)
         _close_workflow_resources(app)
+        from app.fastapi_app.resource_cleanup import close_llm_http_clients
+
+        await close_llm_http_clients()
 
         logger.info("🛑 FastAPI 应用关闭中...")
         if fast_start:
@@ -193,8 +196,6 @@ async def lifespan(app: FastAPI):
                 logger.warning("⚠️ HealthMonitor 关闭失败: %s", hm_err)
         except RECOVERABLE_ERRORS as e:
             logger.warning("⚠️ 神经总线关闭失败: %s", e)
-
-
 async def _initialize_databases_async(app: FastAPI):
     """异步初始化数据库"""
     db_url = str(getattr(app.state.config, "DATABASE_URL", "") or "").strip()
@@ -239,6 +240,8 @@ def _initialize_databases_sync(app: FastAPI):
                 init_template_tables(sqlite_file)
             else:
                 init_template_tables()
+
+        engine = get_runtime_engine()
 
         init_distillation_tables(engine)
         init_extract_logs_tables(engine)

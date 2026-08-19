@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+
 from openpyxl import load_workbook
 
 # 使用 Unicode 路径
@@ -30,7 +31,7 @@ try:
                 print(f"    {m}")
 
         # 显示前几行数据
-        print(f"  前 3 行数据:")
+        print("  前 3 行数据:")
         for row_idx in range(1, min(4, ws.max_row + 1)):
             row_data = [
                 ws.cell(row=row_idx, column=col).value
@@ -38,7 +39,7 @@ try:
             ]
             print(f"    行{row_idx}: {row_data}")
 
-except Exception as e:
+except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"读取失败：{e}")
     import traceback
 

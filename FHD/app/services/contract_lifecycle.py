@@ -70,7 +70,7 @@ def handle_esign_webhook(payload: dict[str, Any]) -> dict[str, Any]:
         doc = transition_contract(doc, "signed", source="esign_webhook")
         block = get_contract_block(doc)
         task = block.get("esign_task") if isinstance(block.get("esign_task"), dict) else {}
-        task = dict(task)
+        task = dict(task or {})
         task["status"] = "signed"
         if payload.get("task_id"):
             task["task_id"] = payload.get("task_id")
@@ -111,8 +111,8 @@ def notify_contract_expiry_items(
             continue
         if repo.was_recently_notified(market_user_id=uid, end_date=end_date):
             continue
-        doc = load_pipeline(uid, username=username)
-        contact = _primary_contact_name(doc)
+        load_pipeline(uid, username=username)
+        contact = _primary_contact_name(uid)
         if not contact:
             repo.insert_notification(
                 market_user_id=uid,

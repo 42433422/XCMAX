@@ -7,8 +7,8 @@
 本文件聚焦运维开关 ``XCAGI_REQUIRE_SIGNED_MODS`` 在 *真正未签名*（signature
 字段为空）的 MOD 上的行为：
 
-* 未设 / "0" / "false" -> 不破坏安装（内容哈希仍校验，但缺签名时放行/返回 False）
-* "1" / "true"        -> fail-closed，抛 ModSignatureError
+* 未设 / "1" / "true" -> fail-closed，抛 ModSignatureError
+* "0" / "false"          -> 仅用于本地开发兼容未签名包
 
 为命中"未签名"分支，构造一个 content_hash 与 zip 成员实际哈希一致、且 signature
 字段为空字符串的包。
@@ -68,20 +68,15 @@ def _build_unsigned_pkg_with_matching_hash(tmp_path) -> tuple[str, str]:
     return package_path, target_dir
 
 
-def test_default_env_allows_unsigned_mod(tmp_path, monkeypatch):
-    """默认环境（未设开关）下，未签名（哈希通过）的 MOD 不破坏安装。
-
-    核心修复后：缺签名时不再 fail-open 地 return True，而是 return False（表示
-    "未通过密码学验签"），但默认不 raise，调用方据此保持历史的不破坏安装行为。
-    """
+def test_default_env_rejects_unsigned_mod(tmp_path, monkeypatch):
+    """默认环境（未设开关）下未签名 MOD fail-closed。"""
     monkeypatch.delenv("XCAGI_MOD_PUBLIC_KEY", raising=False)
     monkeypatch.delenv("XCAGI_REQUIRE_SIGNED_MODS", raising=False)
 
     package_path, target_dir = _build_unsigned_pkg_with_matching_hash(tmp_path)
 
-    with zipfile.ZipFile(package_path, "r") as zf:
-        result = ModPackage._verify_package_signature(target_dir, zf)
-    assert result is False
+    with zipfile.ZipFile(package_path, "r") as zf, pytest.raises(ModSignatureError):
+        ModPackage._verify_package_signature(target_dir, zf)
 
 
 def test_require_signed_false_still_allows(tmp_path, monkeypatch):

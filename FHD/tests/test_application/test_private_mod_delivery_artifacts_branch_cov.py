@@ -747,7 +747,7 @@ class TestUpdatePrivateModFromLibrary:
         assert result["current_version"] == "2.0.0"
         manager.install_mod_package.assert_called_once()
         _, kwargs = manager.install_mod_package.call_args
-        assert kwargs["verify_signature"] is False
+        assert kwargs["verify_signature"] is True
 
     async def test_verify_signature_env_enabled(self, monkeypatch):
         monkeypatch.setenv("XCAGI_REQUIRE_SIGNED_MODS", "1")

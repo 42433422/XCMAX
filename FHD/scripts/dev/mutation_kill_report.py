@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """变异测试杀死率报告生成器。
 
 解析 mutmut 输出，计算加权杀死率，记录到

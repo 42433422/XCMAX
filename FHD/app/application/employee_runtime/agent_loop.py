@@ -182,7 +182,7 @@ def run_employee_agent_loop(
 
         require_api_key()
         client = get_openai_compatible_client()
-    except (RuntimeError, *RECOVERABLE_ERRORS) as exc:
+    except RECOVERABLE_ERRORS as exc:
         return {
             "handler": "agent",
             "ok": False,

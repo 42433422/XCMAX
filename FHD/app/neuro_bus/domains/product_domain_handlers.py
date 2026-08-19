@@ -50,7 +50,7 @@ class ProductDomainHandlers:
             event.payload.get("product_id"),
         )
 
-        result: object = {
+        result: dict[str, Any] = {
             "success": True,
             "product_id": event.payload.get("product_id"),
             "actions": [],
@@ -93,7 +93,7 @@ class ProductDomainHandlers:
         """
         logger.info("[ProductDomain] 处理产品更新: %s", event.payload.get("product_id"))
 
-        result: object = {
+        result: dict[str, Any] = {
             "success": True,
             "product_id": event.payload.get("product_id"),
             "actions": [],
@@ -151,7 +151,7 @@ class ProductDomainHandlers:
         """
         logger.info("[ProductDomain] 处理产品删除: %s", event.payload.get("product_id"))
 
-        result: object = {
+        result: dict[str, Any] = {
             "success": True,
             "product_id": event.payload.get("product_id"),
             "actions": [],

@@ -55,7 +55,7 @@ def main() -> int:
         print(f"{'ok' if ok else 'FAIL'} {name}")
 
     from app.application.shipment_excel_etl_app_service import preview_shipment_excel_etl
-    from app.fastapi_routes.document_templates_compat import run_archive_template_analyze
+    from app.legacy.routes.document_templates_compat import run_archive_template_analyze
 
     rows = []
     for path in sorted(FIXTURE_DIR.glob("net_*.xlsx")):

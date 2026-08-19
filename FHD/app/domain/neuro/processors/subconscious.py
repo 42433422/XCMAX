@@ -328,7 +328,7 @@ class MetricsHandler:
 async def subconscious_log(
     message: str,
     level: str = "info",
-    context: dict[str, Any] = None,
+    context: dict[str, Any] | None = None,
 ):
     """
     潜意识日志

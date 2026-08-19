@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """LLM 交叉评审标注：4 模型盲标 + 一致性分级。
 
 读取 ``routing_decisions.jsonl``（或指定输入文件），对每条样本用 4 个 LLM
@@ -177,7 +176,7 @@ def _build_messages(features: list[float], row: dict[str, Any]) -> list[dict[str
 # 单模型调用
 # --------------------------------------------------------------------------- #
 async def _call_model(
-    client: "httpx.AsyncClient",
+    client: httpx.AsyncClient,
     provider: str,
     features: list[float],
     row: dict[str, Any],
@@ -308,7 +307,7 @@ def _grade_consensus(labels: dict[str, dict[str, Any] | None]) -> tuple[str, str
 # 主流程
 # --------------------------------------------------------------------------- #
 async def label_row(
-    client: "httpx.AsyncClient",
+    client: httpx.AsyncClient,
     providers: list[str],
     row: dict[str, Any],
     timeout: float,

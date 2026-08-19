@@ -17,97 +17,13 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from app.domain.context import session_excel_context as _excel_context
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-
-def detected_excel_header_row_1based(
-    excel_analysis: Any,
-    *,
-    preferred_sheet_name: str | None = None,
-) -> int | None:
-    """与 /templates/extract-grid 返回的表头行一致（Excel 行号从 1 开始）。"""
-    if not isinstance(excel_analysis, dict):
-        return None
-
-    def _from_tables(tables: Any) -> int | None:
-        if not isinstance(tables, list) or not tables:
-            return None
-        t0 = tables[0]
-        if not isinstance(t0, dict):
-            return None
-        hr = t0.get("header_row")
-        try:
-            n = int(hr) if hr is not None else 0
-        except (TypeError, ValueError):
-            return None
-        return n if n >= 1 else None
-
-    def _from_sheet_entry(s: Any) -> int | None:
-        if not isinstance(s, dict):
-            return None
-        gp = s.get("grid_preview")
-        if isinstance(gp, dict):
-            hri = gp.get("header_row_index")
-            try:
-                n = int(hri) if hri is not None else 0
-            except (TypeError, ValueError):
-                n = 0
-            if n >= 1:
-                return n
-        return _from_tables(s.get("tables"))
-
-    want = (preferred_sheet_name or "").strip()
-    if want:
-        for arr_key in ("sheets",):
-            arr = excel_analysis.get(arr_key)
-            if isinstance(arr, list):
-                for s in arr:
-                    if not isinstance(s, dict):
-                        continue
-                    if str(s.get("sheet_name") or "").strip() != want:
-                        continue
-                    hit = _from_sheet_entry(s)
-                    if hit is not None:
-                        return hit
-        pv0 = excel_analysis.get("preview_data")
-        if isinstance(pv0, dict):
-            for arr_key in ("all_sheets",):
-                arr = pv0.get(arr_key)
-                if isinstance(arr, list):
-                    for s in arr:
-                        if not isinstance(s, dict):
-                            continue
-                        if str(s.get("sheet_name") or "").strip() != want:
-                            continue
-                        hit = _from_sheet_entry(s)
-                        if hit is not None:
-                            return hit
-
-    pv = excel_analysis.get("preview_data")
-    if isinstance(pv, dict):
-        gp = pv.get("grid_preview")
-        if isinstance(gp, dict):
-            hri = gp.get("header_row_index")
-            try:
-                n = int(hri) if hri is not None else 0
-            except (TypeError, ValueError):
-                n = 0
-            if n >= 1:
-                return n
-        hit = _from_tables(pv.get("tables"))
-        if hit is not None:
-            return hit
-
-    sheets = excel_analysis.get("sheets")
-    if isinstance(sheets, list) and sheets:
-        s0 = sheets[0]
-        if isinstance(s0, dict):
-            hit2 = _from_sheet_entry(s0)
-            if hit2 is not None:
-                return hit2
-    return None
+detected_excel_header_row_1based = _excel_context.detected_excel_header_row_1based
+_excel_analysis_from_runtime = _excel_context.excel_analysis_from_runtime
 
 
 def enrich_excel_tool_arguments(
@@ -158,68 +74,15 @@ def enrich_excel_tool_arguments(
     return out
 
 
-def _excel_analysis_from_runtime(
-    runtime_context: Mapping[str, Any] | None,
-) -> dict[str, Any] | None:
-    """Return the active Excel analysis payload from runtime context, if present."""
-    if not runtime_context:
-        return None
-    ea = runtime_context.get("excel_analysis")
-    if isinstance(ea, dict):
-        return ea
-    last = runtime_context.get("last_excel_analysis_context")
-    if isinstance(last, dict):
-        nested = last.get("excel_analysis")
-        if isinstance(nested, dict):
-            return nested
-        return last
-    return None
-
-
 def enrich_template_preview_arguments(
     args: dict[str, Any],
     runtime_context: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
-    """Fill template_preview arguments from the same Excel runtime context used by planner tools."""
-    out = dict(args or {})
-    ea = _excel_analysis_from_runtime(runtime_context)
-    if not ea:
-        return out
-
-    ctx_fp = (
-        str(ea.get("file_path") or "").strip()
-        or str((ea.get("preview_data") or {}).get("file_path") or "").strip()
+    return _excel_context.enrich_template_preview_arguments(
+        args,
+        runtime_context,
+        header_detector=detected_excel_header_row_1based,
     )
-    if ctx_fp and not str(out.get("file_path") or "").strip():
-        out["file_path"] = ctx_fp
-
-    if not str(out.get("sheet_name") or "").strip() and runtime_context:
-        selected = runtime_context.get("excel_analysis_selected_sheet")
-        if isinstance(selected, dict) and str(selected.get("sheet_name") or "").strip():
-            out["sheet_name"] = str(selected.get("sheet_name")).strip()
-        elif str(runtime_context.get("preferred_sheet_name") or "").strip():
-            out["sheet_name"] = str(runtime_context.get("preferred_sheet_name")).strip()
-    if not str(out.get("sheet_name") or "").strip():
-        sheets = ea.get("sheets")
-        if isinstance(sheets, list) and sheets:
-            first = sheets[0]
-            if isinstance(first, dict) and str(first.get("sheet_name") or "").strip():
-                out["sheet_name"] = str(first.get("sheet_name")).strip()
-
-    sheet = str(out.get("sheet_name") or "").strip() or None
-    hdr = detected_excel_header_row_1based(ea, preferred_sheet_name=sheet)
-    if hdr is not None and out.get("header_row") in (None, ""):
-        out["header_row"] = hdr
-    if sheet and not str(out.get("template_name") or "").strip():
-        out["template_name"] = f"{sheet}-模板"
-
-    customer = str(ea.get("customer_hint") or "").strip()
-    preview = ea.get("preview_data")
-    if not customer and isinstance(preview, dict):
-        customer = str(preview.get("customer_hint") or "").strip()
-    if customer and not str(out.get("unit_name") or "").strip():
-        out["unit_name"] = customer
-    return out
 
 
 def _sanitize_untrusted_context_line(text: str, max_len: int) -> str:

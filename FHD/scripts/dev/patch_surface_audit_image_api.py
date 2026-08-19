@@ -42,7 +42,7 @@ async def xcmax_surface_audit_image(
             manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
             raw_rows = manifest.get("results") if isinstance(manifest.get("results"), list) else []
             rows = [r for r in raw_rows if isinstance(r, dict) and r.get("lane") == lane]
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return Response(content=str(exc), status_code=500, media_type="text/plain")
     else:
         for png in sorted(save_root.glob("*.png")):

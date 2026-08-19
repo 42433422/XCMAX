@@ -146,9 +146,13 @@ def operating_metrics_windows() -> dict[str, Any]:
 def extract_loop_run_summary(runtime: dict[str, Any] | None) -> dict[str, Any]:
     data = runtime if isinstance(runtime, dict) else {}
     memory = data.get("memory") if isinstance(data.get("memory"), dict) else {}
+    if not isinstance(memory, dict):
+        memory = {}
     last_run = memory.get("last_run") if isinstance(memory.get("last_run"), dict) else {}
     timelines = data.get("run_timelines") if isinstance(data.get("run_timelines"), list) else []
     latest_timeline = timelines[0] if timelines and isinstance(timelines[0], dict) else {}
+    if not isinstance(last_run, dict):
+        last_run = {}
     status = (
         last_run.get("status") or latest_timeline.get("status") or data.get("status") or "unknown"
     )
@@ -164,7 +168,8 @@ def extract_loop_run_summary(runtime: dict[str, Any] | None) -> dict[str, Any]:
 
 def closure_gap_count(closure_payload: dict[str, Any] | None) -> int:
     data = closure_payload if isinstance(closure_payload, dict) else {}
-    inner = data.get("data") if isinstance(data.get("data"), dict) else data
+    raw_inner = data.get("data")
+    inner: dict[str, Any] = dict(raw_inner) if isinstance(raw_inner, dict) else data
     for key in ("gap_count", "closure_gap_count", "open_gap_count"):
         if key in inner:
             try:
@@ -310,7 +315,7 @@ def _load_cross_tier_check():
     sys.modules[mod_name] = mod
     try:
         spec.loader.exec_module(mod)
-    except Exception:
+    except RECOVERABLE_ERRORS:
         sys.modules.pop(mod_name, None)
         raise
     return mod.check_before_action

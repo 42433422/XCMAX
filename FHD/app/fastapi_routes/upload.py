@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 
 from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.secure_filename import secure_filename
+from app.utils.security.secure_filename import secure_filename
 
 logger = logging.getLogger(__name__)
 

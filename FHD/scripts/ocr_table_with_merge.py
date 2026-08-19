@@ -1,13 +1,13 @@
-# -*- coding: utf-8 -*-
 """
 使用 PaddleOCR + 文本位置分析检测合并单元格
 """
 
-from paddleocr import PaddleOCR
-import numpy as np
-import cv2
-import json
 import glob
+import json
+
+import cv2
+import numpy as np
+from paddleocr import PaddleOCR
 
 # 读取图片
 files = glob.glob(r"e:\FHD\26-0300001A*.png")
@@ -67,7 +67,7 @@ print("\n" + "=" * 70)
 print("分行")
 print("=" * 70)
 
-y_centers = sorted(set([int(box["center_y"]) for box in text_boxes]))
+y_centers = sorted({int(box["center_y"]) for box in text_boxes})
 y_gaps = [
     (y_centers[i], y_centers[i + 1], y_centers[i + 1] - y_centers[i])
     for i in range(len(y_centers) - 1)
@@ -94,7 +94,7 @@ print("\n" + "=" * 70)
 print("分列")
 print("=" * 70)
 
-x_centers = sorted(set([int(box["center_x"]) for box in text_boxes]))
+x_centers = sorted({int(box["center_x"]) for box in text_boxes})
 x_gaps = [
     (x_centers[i], x_centers[i + 1], x_centers[i + 1] - x_centers[i])
     for i in range(len(x_centers) - 1)

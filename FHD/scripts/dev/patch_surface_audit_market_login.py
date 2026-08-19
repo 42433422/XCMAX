@@ -48,7 +48,7 @@ def _parse_set_cookie_headers(headers: Any) -> Dict[str, str]:
     if hasattr(headers, "get_all"):
         try:
             raw_lines = list(headers.get_all("Set-Cookie") or [])
-        except Exception:
+        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             raw_lines = []
     if not raw_lines:
         one = headers.get("Set-Cookie") if hasattr(headers, "get") else None
@@ -174,7 +174,7 @@ def main() -> None:
     text = text.replace(LOOP_OLD, LOOP_NEW, 1)
 
     old_pw = "    async with async_playwright() as pw:"
-    if LOGIN_BLOCK.split("\n")[0] not in text:
+    if LOGIN_BLOCK.split("\n", maxsplit=1)[0] not in text:
         if old_pw not in text:
             raise SystemExit("async_playwright block not found")
         text = text.replace(old_pw, LOGIN_BLOCK, 1)

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """One-shot: export frontend industryPresets.ts → config/industry_presets.json"""
 from __future__ import annotations
 

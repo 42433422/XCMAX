@@ -2332,7 +2332,7 @@ class TestChartDataServiceInventoryChart:
         from app.services.kitten_report.chart_data_service import ChartDataService
 
         svc = ChartDataService()
-        err = ProgrammingError("SELECT 1", {}, Exception("table does not exist"))
+        err = ProgrammingError("SELECT 1", {}, RuntimeError("table does not exist"))
         with patch(
             "app.db.session.get_db",
             side_effect=err,

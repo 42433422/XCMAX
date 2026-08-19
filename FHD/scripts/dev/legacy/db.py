@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 XCAGI 共享数据库与路径配置
 
@@ -9,10 +8,10 @@ XCAGI 共享数据库与路径配置
 - 技术债跟踪：#001
 """
 
-import os
-import sys
-import sqlite3
 import logging
+import os
+import sqlite3
+import sys
 import urllib.parse
 
 logging.basicConfig(
@@ -78,7 +77,7 @@ def initialize_databases():
             continue
 
         if os.path.exists(work_path):
-            logger.info(f"  工作数据库已存在，跳过复制")
+            logger.info("  工作数据库已存在，跳过复制")
             continue
 
         try:
@@ -90,7 +89,7 @@ def initialize_databases():
                 cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
                 tables = [t[0] for t in cur.fetchall()]
                 logger.info(f"  数据库表：{tables}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             logger.error(f"  处理数据库文件失败 {db_file}: {e}")
 
 
@@ -139,7 +138,7 @@ def _query_purchase_units_from_db(db_path):
         rows = [dict(r) for r in cur.fetchall()]
         conn.close()
         return rows
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         logger.warning(f"查询 purchase_units 失败 {db_path}: {e}")
         return []
 
@@ -235,7 +234,7 @@ def get_unit_db_connection(unit):
             return None
 
         return conn, cursor
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         logger.error(f"获取单位数据库连接失败：{e}")
         return None
 
@@ -250,7 +249,7 @@ def query_db(sql, params=(), fetch_one=False):
         result = cursor.fetchone() if fetch_one else cursor.fetchall()
         conn.close()
         return result
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         logger.error(f"数据库查询失败：{e}")
         return None
 
@@ -272,7 +271,7 @@ def execute_db(sql, params=()):
         last_id = cursor.lastrowid
         conn.close()
         return last_id
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         logger.error(f"数据库操作失败：{e}")
         return None
 
@@ -286,7 +285,7 @@ def get_unit_id_by_name(unit_name):
             fetch_one=True,
         )
         return unit["id"] if unit else None
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return None
 
 

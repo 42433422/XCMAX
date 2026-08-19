@@ -10,8 +10,6 @@ logger = logging.getLogger(__name__)
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
-
 
 class AIChatInstantToolsMixin:
     def _execute_pro_mode_tools(
@@ -43,7 +41,7 @@ class AIChatInstantToolsMixin:
             )
             tin_spec = slots.get("tin_spec") or parsed_params.get("tin_spec", "")
             products_list = slots.get("products") or []
-            parsed_products = []
+            parsed_products: list[dict[str, Any]] = []
             parsed_unit_name = ""
 
             # pro 模式优先从原消息解析整单，保留完整 products[]。
@@ -298,8 +296,8 @@ class AIChatInstantToolsMixin:
         unit_name: str,
         products: list,
         original_message: str = "",
-        default_qty: int = None,
-        default_spec: int = None,
+        default_qty: int | None = None,
+        default_spec: int | None = None,
     ) -> str:
         """根据产品列表构建订单文本"""
         import re

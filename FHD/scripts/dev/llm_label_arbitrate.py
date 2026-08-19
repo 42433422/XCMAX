@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """LLM-D 仲裁：对 disputed 样本用 MiniMax-M3 仲裁，并与规则路由交叉验证。
 
 读取 ``labeled_data.jsonl`` 中的 ``disputed`` 样本，调用 LLM-D（MiniMax-M3，
@@ -178,7 +177,7 @@ def _parse_arbitration(content: str) -> dict[str, Any] | None:
 
 
 async def _call_arbitrator(
-    client: "httpx.AsyncClient",
+    client: httpx.AsyncClient,
     row: dict[str, Any],
     timeout: float,
 ) -> dict[str, Any] | None:

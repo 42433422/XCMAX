@@ -1,8 +1,7 @@
 """测试上传 API - 详细错误"""
 
+
 import requests
-import os
-import sys
 
 # 测试文件路径
 test_file = r"e:\FHD\424\钉钉导出来的考勤数据.xlsx"
@@ -37,12 +36,12 @@ try:
     print(f"响应：{response.json()}")
 
     if response.status_code != 200:
-        print(f"\n错误详情:")
+        print("\n错误详情:")
         print(f"  请求 URL: {response.url}")
         print(f"  请求头：{dict(response.request.headers)}")
         print(f"  请求体：{response.request.body[:500] if response.request.body else None}")
 
-except Exception as e:
+except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"\n请求失败：{e}")
     import traceback
 

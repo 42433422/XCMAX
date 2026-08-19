@@ -9,7 +9,7 @@ import os
 import sys
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -102,7 +102,7 @@ def main() -> int:
     parser.add_argument("--out", default="")
     args = parser.parse_args()
 
-    day = datetime.now(timezone.utc).strftime("%Y%m%d")
+    day = datetime.now(UTC).strftime("%Y%m%d")
     out_path = Path(args.out) if args.out else METRICS_DIR / f"slo-measured-{day}.json"
 
     readings: dict[str, dict] = {}
@@ -118,7 +118,7 @@ def main() -> int:
         }
 
     payload = {
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "prometheus_url": args.prom_url,
         "window": args.window,
         "readings": readings,

@@ -96,7 +96,7 @@ def main() -> None:
                 copied = _copy_table(sqlite_conn, pg_engine, table)
                 total += copied
                 print(f"[migrate] {table}: {copied} rows")
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"[migrate] {table}: skipped ({exc})")
         print(f"[migrate] done, total rows copied: {total}")
     finally:

@@ -16,7 +16,8 @@ def client() -> TestClient:
     app = FastAPI()
     app.include_router(admin_router)
     app.include_router(xcmax_router)
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 def test_event_rail_status(client: TestClient) -> None:

@@ -68,8 +68,9 @@ REQUIRED_ACTIVATION_EVIDENCE = {
         'evaluate_risk(\n        "self_heal_pr_merge"',
     ),
     "mod_auto_publish": (
-        REPO_ROOT / "成都修茈科技有限公司/MODstore_deploy/modstore_server/workbench_api.py",
-        'evaluate_risk(\n        "mod_auto_publish"',
+        REPO_ROOT
+        / "成都修茈科技有限公司/MODstore_deploy/modstore_server/workbench_api_part04.py",
+        "evaluate_risk('mod_auto_publish'",
     ),
     "db_migration": (
         FHD_ROOT / "scripts/deploy/fhd-apply-release.sh",
@@ -108,7 +109,7 @@ def _registry_with_policy(tmp_path: Path, policy: str) -> Path:
     return path
 
 
-def test_four_risk_levels_have_automatic_allow_and_hard_block_branches() -> None:
+def test_four_risk_levels_enforce_human_approval_and_hard_block_branches() -> None:
     audit: list[dict] = []
     guard = AutonomyGuard(audit_sink=audit.append)
 
@@ -119,8 +120,8 @@ def test_four_risk_levels_have_automatic_allow_and_hard_block_branches() -> None
     assert low.risk_level is RiskLevel.LOW and low.allowed
     assert medium.risk_level is RiskLevel.MEDIUM and medium.allowed
     assert medium.requires_confirmation is False
-    assert high.risk_level is RiskLevel.HIGH and high.allowed
-    assert high.requires_confirmation is False
+    assert high.risk_level is RiskLevel.HIGH and not high.allowed
+    assert high.requires_confirmation is True
     with pytest.raises(ProhibitedActionError):
         guard.evaluate("db_migration", action_id="blocked")
     assert {RiskLevel.LOW, RiskLevel.MEDIUM, RiskLevel.HIGH, RiskLevel.BLOCKED} == set(RiskLevel)
@@ -316,13 +317,13 @@ def test_autonomous_registry_is_exhaustive_and_has_rollback_paths() -> None:
 @pytest.mark.parametrize(
     ("action", "expected_risk", "expected_decision"),
     [
-        ("apply_release_to_cvm", RiskLevel.HIGH, "auto_approve"),
+        ("apply_release_to_cvm", RiskLevel.HIGH, "require_human"),
         ("rollback_release", RiskLevel.MEDIUM, "auto_approve"),
         ("freeze_manifest", RiskLevel.MEDIUM, "auto_approve"),
         ("restart_service", RiskLevel.LOW, "allow"),
-        ("self_heal_pr_merge", RiskLevel.HIGH, "auto_approve"),
-        ("mod_auto_publish", RiskLevel.HIGH, "auto_approve"),
-        ("code_write", RiskLevel.HIGH, "auto_approve"),
+        ("self_heal_pr_merge", RiskLevel.HIGH, "require_human"),
+        ("mod_auto_publish", RiskLevel.HIGH, "require_human"),
+        ("code_write", RiskLevel.HIGH, "require_human"),
     ],
 )
 def test_required_automatic_actions_are_evaluated_by_ssot(

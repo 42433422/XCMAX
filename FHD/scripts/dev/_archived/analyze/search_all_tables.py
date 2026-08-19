@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import sqlite3
 import sys
 
@@ -34,7 +33,7 @@ for table in tables:
                     print()
                     total_found += 1
                     break
-    except Exception as e:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         pass
 
 print(f"总共在 {total_found} 个表中找到相关消息")

@@ -16,6 +16,8 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,7 +33,7 @@ def _default_base_dir() -> Path:
     explicit = (os.environ.get("XCAGI_GENAI_TRACE_DIR") or "").strip()
     if explicit:
         return Path(explicit)
-    from app.utils.path_utils import get_log_dir
+    from app.utils.path_io.path_utils import get_log_dir
 
     return Path(get_log_dir()) / "genai_traces"
 
@@ -62,7 +64,7 @@ class TraceStore:
         """入队（永不抛异常）。"""
         try:
             self._queue.put_nowait(span_dict)
-        except Exception:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:  # noqa: BLE001
             logger.warning("genai trace enqueue failed", exc_info=True)
 
     def start(self) -> None:
@@ -101,7 +103,7 @@ class TraceStore:
             with path.open("a", encoding="utf-8") as fh:
                 for item in batch:
                     fh.write(json.dumps(item, ensure_ascii=False, default=str) + "\n")
-        except Exception:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:  # noqa: BLE001
             logger.warning("genai trace flush failed", exc_info=True)
         for item in batch:
             self._export_otlp(item)
@@ -121,7 +123,7 @@ class TraceStore:
                     continue
                 if day < cutoff:
                     path.unlink(missing_ok=True)
-        except Exception:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:  # noqa: BLE001
             logger.warning("genai trace cleanup failed", exc_info=True)
 
     # ---- 查询 ----
@@ -157,7 +159,7 @@ class TraceStore:
                     ):
                         continue
                     items.append(item)
-        except Exception:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:  # noqa: BLE001
             logger.warning("genai trace query failed", exc_info=True)
         items.sort(key=lambda x: x.get("start_time") or 0, reverse=True)
         return items[:limit]
@@ -210,7 +212,7 @@ class TraceStore:
             with tracer.start_as_current_span(span_dict.get("name") or "chat") as ot_span:
                 for key, value in attrs.items():
                     ot_span.set_attribute(key, value)
-        except Exception:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:  # noqa: BLE001
             self._otlp_failed = True
             logger.warning("OTLP export disabled after failure", exc_info=True)
 

@@ -1,13 +1,12 @@
-# -*- coding: utf-8 -*-
 """
 使用 PaddleOCR predict 方法 - 检查结果结构
 """
 
-from paddleocr import PaddleOCR
-import numpy as np
-import cv2
-import json
 import glob
+
+import cv2
+import numpy as np
+from paddleocr import PaddleOCR
 
 # 读取图片
 files = glob.glob(r"e:\FHD\26-0300001A*.png")
@@ -37,7 +36,7 @@ if result and len(result) > 0:
 
     # 检查结果的所有属性
     if hasattr(result[0], "__dict__"):
-        print(f"\n结果的所有属性：")
+        print("\n结果的所有属性：")
         for attr in dir(result[0]):
             if not attr.startswith("_"):
                 try:
@@ -48,7 +47,7 @@ if result and len(result) > 0:
                     pass
 
     # 尝试不同的属性名
-    print(f"\n尝试获取识别结果...")
+    print("\n尝试获取识别结果...")
     for attr in ["dt_polys", "rec_res", "text", " texts", "data", "nec", "table_html", "table"]:
         if hasattr(result[0], attr):
             print(f"  {attr}: {getattr(result[0], attr)}")

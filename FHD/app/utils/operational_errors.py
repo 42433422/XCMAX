@@ -10,9 +10,10 @@ excluded — they should bubble to the HTTP boundary as 500s.
 from __future__ import annotations
 
 import json
+import sqlite3
 
 # Legacy alias for im-sync-backend compatibility
-OPERATIONAL_ERRORS: tuple[type[BaseException], ...] = (
+OPERATIONAL_ERRORS: tuple[type[Exception], ...] = (
     OSError,
     ValueError,
     TypeError,
@@ -28,7 +29,7 @@ OPERATIONAL_ERRORS: tuple[type[BaseException], ...] = (
     UnicodeError,
 )
 
-_operational_extra: tuple[type[BaseException], ...] = ()
+_operational_extra: tuple[type[Exception], ...] = ()
 try:
     from sqlalchemy.exc import OperationalError as SQLAlchemyOperationalError
 
@@ -36,7 +37,7 @@ try:
 except ImportError:
     pass
 
-_httpx_extra: tuple[type[BaseException], ...] = ()
+_httpx_extra: tuple[type[Exception], ...] = ()
 try:
     import httpx
 
@@ -47,7 +48,7 @@ except ImportError:
 # redis-py 的连接/超时错误继承自 ``redis.exceptions.RedisError(Exception)``，
 # 而非内建 ``ConnectionError``/``TimeoutError``（OSError 族），因此必须显式纳入，
 # 否则 redis 宕机时所有 ``except RECOVERABLE_ERRORS`` 探针都会 500。
-_redis_extra: tuple[type[BaseException], ...] = ()
+_redis_extra: tuple[type[Exception], ...] = ()
 try:
     from redis.exceptions import ConnectionError as _RedisConnectionError
     from redis.exceptions import TimeoutError as _RedisTimeoutError
@@ -57,8 +58,9 @@ except ImportError:
     pass
 
 # L2: infrastructure transient failures (IO, network, external deps)
-INFRA_TRANSIENT: tuple[type[BaseException], ...] = (
+INFRA_TRANSIENT: tuple[type[Exception], ...] = (
     OSError,
+    sqlite3.DatabaseError,
     ConnectionError,
     TimeoutError,
     RuntimeError,
@@ -70,7 +72,7 @@ INFRA_TRANSIENT: tuple[type[BaseException], ...] = (
 )
 
 # L2: data shape / parsing failures (often map to 400/422)
-DATA_SHAPE: tuple[type[BaseException], ...] = (
+DATA_SHAPE: tuple[type[Exception], ...] = (
     ValueError,
     json.JSONDecodeError,
     UnicodeError,
@@ -78,4 +80,4 @@ DATA_SHAPE: tuple[type[BaseException], ...] = (
 )
 
 # Union of recoverable operational failures (default inner catch tuple)
-RECOVERABLE_ERRORS: tuple[type[BaseException], ...] = INFRA_TRANSIENT + DATA_SHAPE
+RECOVERABLE_ERRORS: tuple[type[Exception], ...] = INFRA_TRANSIENT + DATA_SHAPE

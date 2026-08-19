@@ -100,6 +100,8 @@ def apply_database_profile_to_env(
     os.environ["XCAGI_MOD_ISOLATED_DATABASES"] = "0"
 
     remote = profile.get("remote") if isinstance(profile.get("remote"), dict) else {}
+    if not isinstance(remote, dict):
+        remote = {}
     remote_url = str(remote.get("database_url") or "").strip()
     use_remote = _as_bool(remote.get("enabled")) and is_valid_remote_database_url(remote_url)
 

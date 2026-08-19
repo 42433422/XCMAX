@@ -14,10 +14,11 @@ from typing import Any, cast
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.services.capability_proposal_recorder import record_capability_proposal
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-INTENT_REQUIRED_SLOTS = {
+INTENT_REQUIRED_SLOTS: dict[str, dict[str, Any]] = {
     "shipment_generate": {
         "required": ["unit_name"],
         "optional": ["quantity_tins", "tin_spec", "contact_phone"],
@@ -230,7 +231,7 @@ class IntentConfirmationService(NeuroEventPublisherMixin):
                     domain=str(intent_result.get("domain") or "generic"),
                 )
                 skill_route = enriched.get("skill_route")
-            except Exception:  # noqa: BLE001
+            except RECOVERABLE_ERRORS:  # noqa: BLE001
                 logger.debug("skill_route enrich failed", exc_info=True)
 
             # 有高分技能候选时，引导补槽而非纯「未理解」
@@ -301,7 +302,7 @@ class IntentConfirmationService(NeuroEventPublisherMixin):
                             },
                         },
                     )
-                except Exception:  # noqa: BLE001
+                except RECOVERABLE_ERRORS:  # noqa: BLE001
                     logger.debug("capability_proposal record failed", exc_info=True)
                 pid = str(proposal.get("proposed_skill_id") or "open")
                 question = (

@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-import re
+import ast
 import sys
 from pathlib import Path
 
@@ -11,7 +11,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 APP_ROOT = REPO_ROOT / "FHD" / "app"
 BASELINE_PATH = Path(__file__).resolve().parent / "broad_except_baseline.txt"
 
-BROAD_RE = re.compile(r"^\s*except\s+Exception\b")
 ALLOWLIST_SUFFIXES = (
     "middleware/error_handler.py",
     "utils/error_handling.py",
@@ -27,8 +26,23 @@ def _count_broad(root: Path) -> list[tuple[str, int]]:
         rel = path.relative_to(root).as_posix()
         if any(rel.endswith(s) for s in ALLOWLIST_SUFFIXES):
             continue
-        text = path.read_text(encoding="utf-8", errors="replace").splitlines()
-        count = sum(1 for line in text if BROAD_RE.match(line) and "noqa: broad-except-boundary" not in line)
+        source = path.read_text(encoding="utf-8", errors="replace")
+        lines = source.splitlines()
+        try:
+            tree = ast.parse(source, filename=str(path))
+        except SyntaxError:
+            # Syntax validity is enforced by the compile gate; do not mistake
+            # template text containing ``except Exception`` for executable code.
+            continue
+        count = 0
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ExceptHandler):
+                continue
+            if not isinstance(node.type, ast.Name) or node.type.id != "Exception":
+                continue
+            line = lines[node.lineno - 1]
+            if "noqa: broad-except-boundary" not in line:
+                count += 1
         if count:
             hits.append((rel, count))
     return hits

@@ -9,7 +9,7 @@ from urllib.parse import unquote
 from fastapi import APIRouter, Body, File, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
-from app.infrastructure.workspace import workspace_root
+from app.mod_sdk.host_services import workspace_root
 
 logger = logging.getLogger(__name__)
 DEFAULT_TEMPLATE_RELPATH = "424/考勤-2026-3月份考勤统计表.xlsx"
@@ -18,8 +18,8 @@ DEFAULT_TEMPLATE_RELPATH = "424/考勤-2026-3月份考勤统计表.xlsx"
 def _load_products_personnel_roster_from_host() -> list[tuple[str, str, str]]:
     """主应用「人员管理」同一套 Product 表（model 为 app.db.models.product.Product）。"""
     try:
-        from app.db.models.product import Product
-        from app.db.session import get_db
+        from app.mod_sdk.host_services import Product
+        from app.mod_sdk.host_services import get_db
     except Exception:  # noqa: BLE001 - optional host models may be unavailable
         return []
     out: list[tuple[str, str, str]] = []

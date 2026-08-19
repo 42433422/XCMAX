@@ -11,7 +11,7 @@ import logging
 import time
 import uuid
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 from fastapi import Request
 
@@ -247,7 +247,7 @@ def publish_route_event(
         except RECOVERABLE_ERRORS:
             logger.debug("suppressed exception", exc_info=True)
 
-        return wrapper
+        return cast("F", wrapper)
 
     return decorator
 

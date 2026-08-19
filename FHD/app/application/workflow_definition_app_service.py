@@ -10,8 +10,11 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
+from app.application.workflow_definition_serialization import (
+    coerce_serializable as _coerce_serializable,
+)
 from app.db.models.workflow import (
     WorkflowDefinition,
     WorkflowRun,
@@ -172,7 +175,7 @@ class WorkflowDefinitionAppService:
 
             session.commit()
             session.refresh(definition)
-            return definition.to_dict()
+            return cast("dict[str, Any]", definition.to_dict())
         except AppError:
             session.rollback()
             raise
@@ -193,7 +196,7 @@ class WorkflowDefinitionAppService:
                     message=f"工作流定义不存在: {definition_id}",
                     status_code=404,
                 )
-            return definition.to_dict()
+            return cast("dict[str, Any]", definition.to_dict())
         finally:
             session.close()
 
@@ -329,7 +332,7 @@ class WorkflowDefinitionAppService:
                 )
             data = run.to_dict()
             data["steps"] = [step.to_dict() for step in run.steps]
-            return data
+            return cast("dict[str, Any]", data)
         finally:
             session.close()
 
@@ -385,7 +388,7 @@ class WorkflowDefinitionAppService:
                     step.finished_at = datetime.utcnow()
             session.commit()
             session.refresh(run)
-            return run.to_dict()
+            return cast("dict[str, Any]", run.to_dict())
         except AppError:
             session.rollback()
             raise
@@ -449,35 +452,8 @@ class WorkflowDefinitionAppService:
             from dataclasses import asdict
 
             return asdict(node)
-        except Exception:  # noqa: BLE001 - 兜底序列化，所有异常都退化为 node_id 字符串
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - 兜底序列化，所有异常都退化为 node_id 字符串
             return {"node_id": str(node)}
-
-
-def _coerce_serializable(value: Any) -> Any:
-    """把 dataclass / Enum / datetime 等转为 JSON 可序列化值。"""
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    if isinstance(value, list):
-        return [_coerce_serializable(v) for v in value]
-    if isinstance(value, dict):
-        return {str(k): _coerce_serializable(v) for k, v in value.items()}
-    # Enum
-    try:
-        from enum import Enum
-
-        if isinstance(value, Enum):
-            return value.value
-    except RECOVERABLE_ERRORS:
-        pass
-    # datetime
-    if isinstance(value, datetime):
-        return value.isoformat()
-    # dataclass
-    if hasattr(value, "__dict__"):
-        return {
-            k: _coerce_serializable(v) for k, v in value.__dict__.items() if not k.startswith("_")
-        }
-    return str(value)
 
 
 # ── 单例工厂 ────────────────────────────────────────────────

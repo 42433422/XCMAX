@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from .approval_service import ApprovalService, get_approval_service
 from .engine import WorkflowEngine
@@ -290,11 +290,14 @@ class ApprovalGatedEngine:
                 message="; ".join(errors),
             )
 
-        return self._engine.run(
-            plan=plan,
-            runtime_context=runtime_context,
-            max_retries=1,
-            agentic_loop=False,
+        return cast(
+            "WorkflowRunResult",
+            self._engine.run(
+                plan=plan,
+                runtime_context=runtime_context,
+                max_retries=1,
+                agentic_loop=False,
+            ),
         )
 
 

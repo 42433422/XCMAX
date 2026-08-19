@@ -15,7 +15,9 @@ import copy
 import json
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
+
+from sqlalchemy import Table
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -110,9 +112,11 @@ class DatabaseWorkflowCheckpointer:
             from app.db.models.workflow import WorkflowCheckpoint
 
             Base.metadata.create_all(
-                bind=session.get_bind(), tables=[WorkflowCheckpoint.__table__], checkfirst=True
+                bind=session.get_bind(),
+                tables=[cast("Table", WorkflowCheckpoint.__table__)],
+                checkfirst=True,
             )
-        except Exception:  # noqa: BLE001 - 建表失败不阻断工作流，仅告警
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - 建表失败不阻断工作流，仅告警
             logger.warning(
                 "workflow_checkpoints 建表失败，checkpoint 将记录告警降级", exc_info=True
             )

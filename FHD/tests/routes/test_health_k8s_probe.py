@@ -24,7 +24,8 @@ from app.fastapi_routes.health_k8s import router
 def client() -> TestClient:
     app = FastAPI(version="10.0.0")
     app.include_router(router)
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 class TestLiveness:

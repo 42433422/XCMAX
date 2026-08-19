@@ -238,7 +238,7 @@ def test_print_list_labels_and_serve(
     labels_dir.mkdir()
     (labels_dir / "ORD_第1项.png").write_bytes(b"\x89PNG")
     monkeypatch.setattr(
-        "app.utils.path_utils.get_resource_path",
+        "app.utils.path_io.path_utils.get_resource_path",
         lambda *parts: str(labels_dir) if parts[-1] == "商标导出" else str(tmp_path),
     )
     listed = print_client.get("/api/print/list_labels", params={"limit": 5})
@@ -515,7 +515,7 @@ def debug_client():
 
 def test_debug_client_log_ok(debug_client, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "app.utils.logging_utils.ingest_client_debug_json",
+        "app.utils.logging.logging_utils.ingest_client_debug_json",
         lambda body: {"success": True, "ingested": True},
     )
     r = debug_client.post("/api/debug/client-log", json={"level": "info", "msg": "x"})
@@ -525,7 +525,7 @@ def test_debug_client_log_ok(debug_client, monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_debug_client_log_error(debug_client, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "app.utils.logging_utils.ingest_client_debug_json",
+        "app.utils.logging.logging_utils.ingest_client_debug_json",
         lambda body: (_ for _ in ()).throw(RuntimeError("fail")),
     )
     r = debug_client.post("/api/debug/client-log", json={})
@@ -567,7 +567,7 @@ def test_spa_register_fallback(tmp_path, monkeypatch: pytest.MonkeyPatch) -> Non
     (vue / "index.html").write_text("<html></html>")
     monkeypatch.setattr(spa_fallback, "_vue_dist_dir", lambda: str(vue))
     monkeypatch.setattr(
-        "app.utils.path_utils.get_base_dir",
+        "app.utils.path_io.path_utils.get_base_dir",
         lambda: str(tmp_path),
     )
     app = FastAPI()

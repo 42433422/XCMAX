@@ -25,7 +25,6 @@ from app.application.shipment_template_resolve import (
     resolve_shipment_template,
 )
 
-
 FIXTURE = ROOT / "tests/fixtures/shipment_etl/闭环测试_送货单模板.xlsx"
 
 

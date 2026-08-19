@@ -29,7 +29,7 @@ from collections.abc import Callable
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.redis_cache import RedisCache, get_redis_cache
+from app.utils.performance.redis_cache import RedisCache, get_redis_cache
 
 logger = logging.getLogger(__name__)
 

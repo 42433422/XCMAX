@@ -15,11 +15,18 @@
 
 from __future__ import annotations
 
-import time
-import uuid
 from typing import Any
 
-from .types import Branch, PlanGraph, WorkflowNode
+from . import clarification_lifecycle as _lifecycle
+from .types import PlanGraph, WorkflowNode
+
+build_clarify_node = _lifecycle.build_clarify_node
+clarification_ttl_seconds = _lifecycle.clarification_ttl_seconds
+entry_is_expired = _lifecycle.entry_is_expired
+insert_clarify_node = _lifecycle.insert_clarify_node
+make_pending_entry = _lifecycle.make_pending_entry
+resolve_confirmed_target = _lifecycle.resolve_confirmed_target
+sweep_expired = _lifecycle.sweep_expired
 
 # 写/高风险节点必填参数回退表（与 services/tools_execution/registry REQUIRED_PARAMS 对齐，
 # 规避依赖完整 registry 的耦合；调用方可传 tool_registry 覆盖，见 needs_clarification）。
@@ -57,21 +64,6 @@ _WRITE_REQUIRED_FALLBACK: dict[tuple[str, str], list[str]] = {
     ("sales", "cancel"): ["order_id"],
     ("finance", "journal_entry_create"): ["lines"],
 }
-
-# 澄清会话 TTL（秒），可通过环境变量覆盖。
-_DEFAULT_TTL_SECONDS = 1800
-
-
-def clarification_ttl_seconds() -> int:
-    import os
-
-    try:
-        return max(
-            30, int(os.environ.get("XCAGI_CLARIFICATION_TTL_SECONDS") or str(_DEFAULT_TTL_SECONDS))
-        )
-    except ValueError:
-        return _DEFAULT_TTL_SECONDS
-
 
 def _is_write_or_high_risk(node: WorkflowNode) -> bool:
     return node.risk == "high" or not node.idempotent
@@ -181,10 +173,10 @@ def needs_clarification(
                         }
                     )
                     continue
-        candidates = params.get("_candidates") or params.get("candidates")
+        general_candidates = params.get("_candidates") or params.get("candidates")
 
         # 多候选歧义优先：目标 id 未解析 && 存在 >1 个候选 → 反问确认目标。
-        if isinstance(candidates, list) and len(candidates) > 1:
+        if isinstance(general_candidates, list) and len(general_candidates) > 1:
             if not _missing_fields(params, ["id"]) and params.get("id"):
                 continue
             items.append(
@@ -194,8 +186,8 @@ def needs_clarification(
                     "action": node.action,
                     "reason": "ambiguous_target",
                     "field": _first_required(node, required) or "id",
-                    "candidates": candidates[:20],
-                    "question": _build_ambiguous_question(node, candidates),
+                    "candidates": general_candidates[:20],
+                    "question": _build_ambiguous_question(node, general_candidates),
                 }
             )
             continue
@@ -214,148 +206,6 @@ def needs_clarification(
                 }
             )
     return items
-
-
-def build_clarify_node(
-    question: str,
-    ambient: dict[str, Any] | None = None,
-) -> WorkflowNode:
-    """生成一个"反问节点"。
-
-    反问节点 ``tool_id="clarify"``、``action="ask"``，执行时引擎不调用业务工具，仅产出
-    ``requires_confirmation=true`` 与 ``question`` 从而暂停工作流（interrupt）。``branches``
-    依据用户后续消息中确认的答案（output 的 ``answer_confirmed``）路由到原操作节点
-    （``target_node_id``）；未确认时经 ``next``（默认 None）正常结束，屏蔽写节点。
-
-    ``ambient`` 支持：``node_id`` / ``target_node_id`` / ``answer_key`` / ``cancel_node_id``。
-    """
-    ambient = ambient or {}
-    node_id = str(ambient.get("node_id") or f"clarify_{uuid.uuid4().hex[:8]}")
-    target = str(ambient.get("target_node_id") or "")
-    return WorkflowNode(
-        node_id=node_id,
-        tool_id="clarify",
-        action="ask",
-        params={
-            "question": str(question or ""),
-            "answer_key": str(ambient.get("answer_key") or "confirmed"),
-            "target_node_id": target,
-        },
-        risk="low",
-        idempotent=True,
-        description="反问澄清：写/高风险操作参数缺失或歧义，待用户确认后再继续",
-        branches=[Branch(target=target, condition={"key": "answer_confirmed", "equals": True})],
-        next=ambient.get("cancel_node_id"),
-    )
-
-
-def insert_clarify_node(
-    plan: PlanGraph,
-    clarify_node: WorkflowNode,
-) -> None:
-    """将反问节点追加到计划节点列表（幂等：已存在同名节点则不重复插入）。"""
-    if any(n.node_id == clarify_node.node_id for n in plan.nodes):
-        return
-    plan.nodes.append(clarify_node)
-
-
-# ---------------------------------------------------------------------------
-# TTL 防堆积（澄清会话生命周期）
-# ---------------------------------------------------------------------------
-
-
-def entry_is_expired(entry: dict[str, Any] | None, now: float | None = None) -> bool:
-    """判断一条"澄清待确认"记录是否已过期（TTL 后自动取消）。"""
-    if not isinstance(entry, dict):
-        return False
-    if entry.get("kind") != "clarification":
-        return False
-    now = time.time() if now is None else now
-    try:
-        created = float(entry.get("created_at") or 0)
-    except (TypeError, ValueError):
-        created = 0.0
-    try:
-        ttl = float(entry.get("ttl_seconds") or clarification_ttl_seconds())
-    except (TypeError, ValueError):
-        ttl = float(clarification_ttl_seconds())
-    return created > 0 and (now - created) > ttl
-
-
-def sweep_expired(entries: dict[str, Any], now: float | None = None) -> list[str]:
-    """扫描并移除所有过期的澄清待确认记录；返回被移除的 user_id 列表（防堆积）。"""
-    now = time.time() if now is None else now
-    expired: list[str] = []
-    for uid, entry in list(entries.items()):
-        if entry_is_expired(entry, now):
-            expired.append(str(uid))
-            entries.pop(uid, None)
-    return expired
-
-
-def make_pending_entry(
-    *,
-    plan: PlanGraph,
-    runtime_context: dict[str, Any],
-    thinking_steps: str,
-    clarification: dict[str, Any],
-    clarify_node_id: str,
-    target_node_id: str,
-    now: float | None = None,
-) -> dict[str, Any]:
-    """构造一条与 ai_chat_app_service._pending_workflows 同构的"澄清待确认"记录。"""
-    return {
-        "plan": plan,
-        "runtime_context": runtime_context,
-        "pending_id": uuid.uuid4().hex,
-        "thinking_steps": thinking_steps,
-        "kind": "clarification",
-        "clarify_node_id": clarify_node_id,
-        "target_node_id": target_node_id,
-        "clarification": clarification,
-        "created_at": time.time() if now is None else now,
-        "ttl_seconds": clarification_ttl_seconds(),
-        "approval_required": False,
-        "approval_nodes": [],
-    }
-
-
-def resolve_confirmed_target(
-    message: str,
-    candidates: list[dict[str, Any]],
-) -> dict[str, Any] | None:
-    """从用户确认消息解析唯一目标参数（如 ``{"id": "cust_123"}``）；无法唯一确定返回 None。
-
-    支持：唯一 ID 精确匹配、候选名称匹配、序号（候选列表第 N 个）。
-    """
-    if not candidates:
-        return None
-    text = str(message or "").strip()
-    if not text:
-        return None
-
-    # 1) 唯一 ID 精确匹配
-    for cand in candidates:
-        cid = str(cand.get("id") or "").strip()
-        if cid and cid == text:
-            return {"id": cid}
-
-    # 2) 名称匹配（含别名）
-    for cand in candidates:
-        name = str(
-            cand.get("name") or cand.get("customer_name") or cand.get("unit_name") or ""
-        ).strip()
-        if name and (name == text or name in text or text in name):
-            return {"id": str(cand.get("id") or "")}
-
-    # 3) 序号匹配（候选列表第 N 个）
-    if text.isdigit():
-        idx = int(text)
-        if len(candidates) >= 1 and idx <= len(candidates):
-            cand = candidates[idx - 1]
-            return {"id": str(cand.get("id") or "")}
-
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -529,11 +379,11 @@ def detect_erp_clarification(
             credit_limit = params.get("credit_limit")
             credit_used = params.get("credit_used", 0)
             try:
-                limit_num = float(credit_limit)
+                limit_num = float(credit_limit or 0.0)
                 used_num = float(credit_used)
             except (TypeError, ValueError):
                 limit_num, used_num = None, None
-            if limit_num is not None and used_num > limit_num:
+            if limit_num is not None and used_num is not None and used_num > limit_num:
                 items.append(
                     _erp_clar(
                         node.node_id,

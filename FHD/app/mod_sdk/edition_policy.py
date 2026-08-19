@@ -6,7 +6,7 @@ import logging
 import os
 import shutil
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from app.mod_sdk.platform_shell import GENERIC_HOST_MOD_IDS, MINIMAL_HOST_MOD_IDS
 from app.mod_sdk.product_skus import (
@@ -36,7 +36,7 @@ def resolve_edition() -> Edition:
     """与 ``platform_shell._resolve_edition`` 一致，供路由与中间件共用。"""
     explicit = (os.environ.get("XCAGI_EDITION") or "").strip().lower()
     if explicit in ("minimal", "generic", "full"):
-        return explicit
+        return cast("Edition", explicit)
     minimal = (os.environ.get("XCAGI_MINIMAL_EDITION") or "").strip().lower() in {
         "1",
         "true",

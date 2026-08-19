@@ -9,7 +9,7 @@ import os
 import shutil
 import sqlite3
 from datetime import datetime
-from typing import Any, cast
+from typing import Any
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -24,20 +24,21 @@ class DatabaseService(NeuroEventPublisherMixin):
         """初始化数据库服务"""
         pass
 
-    def _get_db_path(self) -> str:
+    def _get_db_path(self) -> str | None:
         """获取数据库文件路径"""
-        from app.db.base import SQLALCHEMY_DATABASE_URI
+        from app.db import get_runtime_engine
 
-        if SQLALCHEMY_DATABASE_URI.startswith("sqlite:///"):
-            db_path = SQLALCHEMY_DATABASE_URI.replace("sqlite:///", "")
+        url = get_runtime_engine().url
+        if url.get_backend_name() == "sqlite" and url.database:
+            db_path = url.database
             if not os.path.isabs(db_path):
                 db_path = os.path.join(os.getcwd(), db_path)
-            return cast("str", db_path)
+            return str(db_path)
         return None
 
     def _get_backup_dir(self) -> str:
         """获取备份目录"""
-        from app.utils.path_utils import get_data_dir
+        from app.utils.path_io.path_utils import get_data_dir
 
         backup_dir = os.path.join(get_data_dir(), "database_backups")
         os.makedirs(backup_dir, exist_ok=True)
@@ -223,7 +224,7 @@ class DatabaseService(NeuroEventPublisherMixin):
                         }
                     )
 
-            backups.sort(key=lambda x: x["created_at"], reverse=True)
+            backups.sort(key=lambda item: str(item["created_at"]), reverse=True)
 
             return {"success": True, "backups": backups, "count": len(backups)}
 

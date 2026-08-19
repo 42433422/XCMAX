@@ -76,7 +76,7 @@ def _trace_qclaw_control_result(
         traced["run_id"] = run.run_id
         traced["agent_run_id"] = run.run_id
         return traced
-    except Exception:  # noqa: BLE001 - tracing must not break legacy control endpoints
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - tracing must not break legacy control endpoints
         logger.exception("failed to attach AgentRun trace to Qclaw control action")
         return payload
 

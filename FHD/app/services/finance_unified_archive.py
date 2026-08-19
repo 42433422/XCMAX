@@ -123,7 +123,7 @@ def list_ledger(
 
         crm = list_crm_invoices(market_user_id=market_user_id, limit=cap)
         rows = crm.get("items") if isinstance(crm, dict) else []
-        items = [_ledger_item_from_invoice(r) for r in rows if isinstance(r, dict)]
+        items = [_ledger_item_from_invoice(r) for r in (rows or []) if isinstance(r, dict)]
         if track:
             items = [x for x in items if x.get("track") == track]
         if items:
@@ -180,7 +180,7 @@ def rebuild_ledger_archive(*, market_user_id: int | None = None) -> dict[str, An
     data = list_crm_invoices(market_user_id=market_user_id, limit=500)
     rows = data.get("items") if isinstance(data, dict) else []
     rebuilt = 0
-    for inv in rows:
+    for inv in rows or []:
         if isinstance(inv, dict):
             archive_from_crm_invoice(inv, market_user_id=market_user_id)
             rebuilt += 1

@@ -1449,13 +1449,10 @@ async def test_handle_cancelled_invalid_shipment_id_raises(
             "app.neuro_bus.domains.shipment_domain_handlers.try_complete_command_reply"
         ) as mock_reply,
     ):
-        # int(None) 抛 TypeError（不属于 RECOVERABLE_ERRORS？TypeError 不在列表中）
-        # 实际：RECOVERABLE_ERRORS = INFRA_TRANSIENT + DATA_SHAPE
-        # DATA_SHAPE = (ValueError, json.JSONDecodeError, UnicodeError, LookupError)
-        # TypeError 不在其中 → 应该向上抛出
-        with pytest.raises(TypeError):
+        with pytest.raises(ValueError, match="positive integer"):
             await handlers.handle_cancelled(event)
     mock_core.cancel_shipment.assert_not_called()
+    mock_reply.assert_called_once()
 
 
 @pytest.mark.asyncio

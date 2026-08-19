@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """评估 NeuroBus 路由策略：准确率 + 推理延迟 P99 + 混淆矩阵。
 
 加载指定版本的 policy（默认 ``active_version``），在测试集上评估：

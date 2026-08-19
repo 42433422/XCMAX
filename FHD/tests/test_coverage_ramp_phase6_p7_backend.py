@@ -739,7 +739,7 @@ def test_compat_print_shipment_file_not_found_returns_404(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     client = _ai_assistant_client()
-    monkeypatch.setattr("app.utils.path_utils.get_app_data_dir", lambda: str(tmp_path))
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path))
     resp = client.post("/api/print/missing.docx", json={})
     assert resp.status_code == 404
     body = resp.json()
@@ -756,7 +756,7 @@ def test_compat_print_shipment_file_success_returns_200(
     file_path = output_dir / "foo.docx"
     file_path.write_bytes(b"fake doc")
 
-    monkeypatch.setattr("app.utils.path_utils.get_app_data_dir", lambda: str(tmp_path))
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path))
     with patch.object(ai_assistant, "_printer_svc") as mock_svc_get:
         mock_svc = MagicMock()
         mock_svc.print_document.return_value = {"success": True, "printer": "p1"}
@@ -782,7 +782,7 @@ def test_compat_print_shipment_file_failure_returns_400(
     file_path = output_dir / "bar.docx"
     file_path.write_bytes(b"fake doc")
 
-    monkeypatch.setattr("app.utils.path_utils.get_app_data_dir", lambda: str(tmp_path))
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path))
     with patch.object(ai_assistant, "_printer_svc") as mock_svc_get:
         mock_svc = MagicMock()
         mock_svc.print_document.return_value = {

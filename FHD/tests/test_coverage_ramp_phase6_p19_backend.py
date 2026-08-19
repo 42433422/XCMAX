@@ -688,22 +688,22 @@ class TestPerformanceOptimizerInit:
     """Cover ``PerformanceOptimizer.initialize``."""
 
     def test_initialize_all_components_success(self):
-        from app.utils.performance_initializer import PerformanceOptimizer
+        from app.utils.performance.performance_initializer import PerformanceOptimizer
 
         opt = PerformanceOptimizer()
         mock_cache = MagicMock()
         mock_cache.is_available = True
         with (
-            patch("app.utils.redis_cache.init_redis_cache_from_app", return_value=mock_cache),
-            patch("app.utils.redis_cache.get_redis_cache", return_value=mock_cache),
-            patch("app.utils.query_optimizer.get_query_optimizer", return_value=MagicMock()),
-            patch("app.utils.async_tasks.get_async_task_manager", return_value=MagicMock()),
+            patch("app.utils.performance.redis_cache.init_redis_cache_from_app", return_value=mock_cache),
+            patch("app.utils.performance.redis_cache.get_redis_cache", return_value=mock_cache),
+            patch("app.utils.performance.query_optimizer.get_query_optimizer", return_value=MagicMock()),
+            patch("app.utils.async_task.async_tasks.get_async_task_manager", return_value=MagicMock()),
             patch(
                 "app.utils.resilience.request_deduplicator.get_request_deduplicator",
                 return_value=MagicMock(),
             ),
             patch(
-                "app.utils.performance_monitor.get_performance_monitor",
+                "app.utils.performance.performance_monitor.get_performance_monitor",
                 return_value=MagicMock(),
             ),
             patch("app.utils.resilience.rate_limiter.get_rate_limiter", return_value=MagicMock()),
@@ -717,19 +717,19 @@ class TestPerformanceOptimizerInit:
         assert opt._initialized is True
 
     def test_initialize_redis_failure(self):
-        from app.utils.performance_initializer import PerformanceOptimizer
+        from app.utils.performance.performance_initializer import PerformanceOptimizer
 
         opt = PerformanceOptimizer()
         with (
-            patch("app.utils.redis_cache.get_redis_cache", side_effect=RuntimeError("no redis")),
-            patch("app.utils.query_optimizer.get_query_optimizer", return_value=MagicMock()),
-            patch("app.utils.async_tasks.get_async_task_manager", return_value=MagicMock()),
+            patch("app.utils.performance.redis_cache.get_redis_cache", side_effect=RuntimeError("no redis")),
+            patch("app.utils.performance.query_optimizer.get_query_optimizer", return_value=MagicMock()),
+            patch("app.utils.async_task.async_tasks.get_async_task_manager", return_value=MagicMock()),
             patch(
                 "app.utils.resilience.request_deduplicator.get_request_deduplicator",
                 return_value=MagicMock(),
             ),
             patch(
-                "app.utils.performance_monitor.get_performance_monitor",
+                "app.utils.performance.performance_monitor.get_performance_monitor",
                 return_value=MagicMock(),
             ),
             patch("app.utils.resilience.rate_limiter.get_rate_limiter", return_value=MagicMock()),
@@ -741,7 +741,7 @@ class TestPerformanceOptimizerInit:
         assert status["redis_cache"] is False
 
     def test_initialize_skips_duplicate(self):
-        from app.utils.performance_initializer import PerformanceOptimizer
+        from app.utils.performance.performance_initializer import PerformanceOptimizer
 
         opt = PerformanceOptimizer()
         opt._initialized = True
@@ -760,7 +760,7 @@ class TestPerformanceOptimizerInit:
         assert status["components"] == {}
 
     def test_initialize_with_app_uses_init_redis_cache_from_app(self):
-        from app.utils.performance_initializer import PerformanceOptimizer
+        from app.utils.performance.performance_initializer import PerformanceOptimizer
 
         opt = PerformanceOptimizer()
         mock_app = MagicMock()
@@ -768,16 +768,16 @@ class TestPerformanceOptimizerInit:
         mock_cache.is_available = True
         with (
             patch(
-                "app.utils.redis_cache.init_redis_cache_from_app", return_value=mock_cache
+                "app.utils.performance.redis_cache.init_redis_cache_from_app", return_value=mock_cache
             ) as mock_init,
-            patch("app.utils.query_optimizer.get_query_optimizer", return_value=MagicMock()),
-            patch("app.utils.async_tasks.get_async_task_manager", return_value=MagicMock()),
+            patch("app.utils.performance.query_optimizer.get_query_optimizer", return_value=MagicMock()),
+            patch("app.utils.async_task.async_tasks.get_async_task_manager", return_value=MagicMock()),
             patch(
                 "app.utils.resilience.request_deduplicator.get_request_deduplicator",
                 return_value=MagicMock(),
             ),
             patch(
-                "app.utils.performance_monitor.get_performance_monitor",
+                "app.utils.performance.performance_monitor.get_performance_monitor",
                 return_value=MagicMock(),
             ),
             patch("app.utils.resilience.rate_limiter.get_rate_limiter", return_value=MagicMock()),
@@ -793,7 +793,7 @@ class TestPerformanceOptimizerGetStatus:
     """Cover ``PerformanceOptimizer.get_status``."""
 
     def test_status_before_init(self):
-        from app.utils.performance_initializer import PerformanceOptimizer
+        from app.utils.performance.performance_initializer import PerformanceOptimizer
 
         opt = PerformanceOptimizer()
         status = opt.get_status()
@@ -801,7 +801,7 @@ class TestPerformanceOptimizerGetStatus:
         assert "uptime_seconds" in status
 
     def test_status_with_redis(self):
-        from app.utils.performance_initializer import PerformanceOptimizer
+        from app.utils.performance.performance_initializer import PerformanceOptimizer
 
         opt = PerformanceOptimizer()
         mock_cache = MagicMock()
@@ -816,7 +816,7 @@ class TestPerformanceOptimizerHealthCheck:
     """Cover ``PerformanceOptimizer.get_health_check``."""
 
     def test_healthy_no_redis(self):
-        from app.utils.performance_initializer import PerformanceOptimizer
+        from app.utils.performance.performance_initializer import PerformanceOptimizer
 
         opt = PerformanceOptimizer()
         # 全量套件同进程内 RSS 常超 1GB，psutil 须 mock 以保证环境无关
@@ -828,7 +828,7 @@ class TestPerformanceOptimizerHealthCheck:
         assert health["status"] == "healthy"
 
     def test_degraded_redis_unavailable(self):
-        from app.utils.performance_initializer import PerformanceOptimizer
+        from app.utils.performance.performance_initializer import PerformanceOptimizer
 
         opt = PerformanceOptimizer()
         mock_cache = MagicMock()
@@ -838,7 +838,7 @@ class TestPerformanceOptimizerHealthCheck:
         assert health["status"] == "degraded"
 
     def test_memory_check_with_psutil(self):
-        from app.utils.performance_initializer import PerformanceOptimizer
+        from app.utils.performance.performance_initializer import PerformanceOptimizer
 
         opt = PerformanceOptimizer()
         mock_process = MagicMock()
@@ -849,7 +849,7 @@ class TestPerformanceOptimizerHealthCheck:
         assert "memory" in health["checks"]
 
     def test_memory_check_without_psutil(self):
-        from app.utils.performance_initializer import PerformanceOptimizer
+        from app.utils.performance.performance_initializer import PerformanceOptimizer
 
         opt = PerformanceOptimizer()
         with patch("builtins.__import__", side_effect=ImportError("no psutil")):
@@ -857,7 +857,7 @@ class TestPerformanceOptimizerHealthCheck:
         assert health["checks"]["memory"]["status"] == "unknown"
 
     def test_task_queue_warning(self):
-        from app.utils.performance_initializer import PerformanceOptimizer
+        from app.utils.performance.performance_initializer import PerformanceOptimizer
 
         opt = PerformanceOptimizer()
         mock_tm = MagicMock()
@@ -872,35 +872,35 @@ class TestPerformanceOptimizerProperties:
     """Cover property accessors."""
 
     def test_redis_cache_property(self):
-        from app.utils.performance_initializer import PerformanceOptimizer
+        from app.utils.performance.performance_initializer import PerformanceOptimizer
 
         opt = PerformanceOptimizer()
         opt._redis_cache = "test"
         assert opt.redis_cache == "test"
 
     def test_query_optimizer_property(self):
-        from app.utils.performance_initializer import PerformanceOptimizer
+        from app.utils.performance.performance_initializer import PerformanceOptimizer
 
         opt = PerformanceOptimizer()
         opt._query_optimizer = "test"
         assert opt.query_optimizer == "test"
 
     def test_async_task_manager_property(self):
-        from app.utils.performance_initializer import PerformanceOptimizer
+        from app.utils.performance.performance_initializer import PerformanceOptimizer
 
         opt = PerformanceOptimizer()
         opt._async_task_manager = "test"
         assert opt.async_task_manager == "test"
 
     def test_request_deduplicator_property(self):
-        from app.utils.performance_initializer import PerformanceOptimizer
+        from app.utils.performance.performance_initializer import PerformanceOptimizer
 
         opt = PerformanceOptimizer()
         opt._request_deduplicator = "test"
         assert opt.request_deduplicator == "test"
 
     def test_performance_monitor_property(self):
-        from app.utils.performance_initializer import PerformanceOptimizer
+        from app.utils.performance.performance_initializer import PerformanceOptimizer
 
         opt = PerformanceOptimizer()
         opt._performance_monitor = "test"
@@ -911,7 +911,7 @@ class TestGetPerformanceOptimizer:
     """Cover ``get_performance_optimizer`` singleton."""
 
     def test_returns_same_instance(self):
-        from app.utils.performance_initializer import get_performance_optimizer
+        from app.utils.performance.performance_initializer import get_performance_optimizer
 
         a = get_performance_optimizer()
         b = get_performance_optimizer()
@@ -922,9 +922,9 @@ class TestInitPerformanceOptimization:
     """Cover ``init_performance_optimization``."""
 
     def test_calls_initialize(self):
-        from app.utils.performance_initializer import init_performance_optimization
+        from app.utils.performance.performance_initializer import init_performance_optimization
 
-        with patch("app.utils.performance_initializer.get_performance_optimizer") as mock_get:
+        with patch("app.utils.performance.performance_initializer.get_performance_optimizer") as mock_get:
             mock_opt = MagicMock()
             mock_get.return_value = mock_opt
             result = init_performance_optimization()
@@ -935,7 +935,7 @@ class TestOptimizedServiceDecorator:
     """Cover ``optimized_service`` decorator."""
 
     def test_decorator_injects_attributes(self):
-        from app.utils.performance_initializer import optimized_service
+        from app.utils.performance.performance_initializer import optimized_service
 
         @optimized_service
         class DummyService:
@@ -950,7 +950,7 @@ class TestOptimizedServiceDecorator:
         mock_opt.performance_monitor = "pm"
 
         with patch(
-            "app.utils.performance_initializer.get_performance_optimizer",
+            "app.utils.performance.performance_initializer.get_performance_optimizer",
             return_value=mock_opt,
         ):
             svc = DummyService()

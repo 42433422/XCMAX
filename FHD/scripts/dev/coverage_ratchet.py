@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """覆盖率棘轮（ratchet）：行/分支（后端）+ lines/branches/functions/statements（前端），只升不降。
 
 与 ``check_layer_ratchet.py`` / ``count_type_debt.py`` / ``count_raw_sql.py`` 同级，
@@ -53,7 +52,7 @@ import math
 import re
 import subprocess
 import sys
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
@@ -283,7 +282,7 @@ def read_history_peaks() -> dict[str, float]:
 def append_history(be: dict | None, fe: dict | None, note: str = "", beh: dict | None = None) -> None:
     rec = {
         "date": date.today().isoformat(),
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": datetime.now(UTC).isoformat(),
         "backend_lines": be["line_pct"] if be else None,
         "backend_branches": be["branch_pct"] if be else None,
         "backend_statements": be["num_statements"] if be else None,
@@ -591,7 +590,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--peak-floor",
         action="store_true",
-        help="check：启用峰值硬阻断，低于历史峰值 %.1f%% 即失败" % PEAK_FLOOR_MARGIN,
+        help=f"check：启用峰值硬阻断，低于历史峰值 {PEAK_FLOOR_MARGIN:.1f}% 即失败",
     )
     args = parser.parse_args(argv)
 

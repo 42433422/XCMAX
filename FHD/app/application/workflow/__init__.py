@@ -17,6 +17,7 @@ from .types import (
     RiskLevel,
     WorkflowNode,
     WorkflowRunResult,
+    normalize_workflow_risk,
     validate_plan_graph,
 )
 
@@ -30,6 +31,7 @@ __all__ = [
     "PlanGraph",
     "WorkflowNode",
     "RiskLevel",
+    "normalize_workflow_risk",
     "WorkflowRunResult",
     "NodeExecutionResult",
     "validate_plan_graph",

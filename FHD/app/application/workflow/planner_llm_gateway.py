@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from app.infrastructure.llm.providers.credentials import default_chat_completions_url
 from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
@@ -35,29 +35,35 @@ def request_planner_completion(
                 "max_tokens": max_tokens,
             },
         )
-        return None if response.status_code >= 400 else response.json()
+        return None if response.status_code >= 400 else cast("dict[str, Any]", response.json())
 
     session_id = str(
         (context or {}).get("session_id") or (context or {}).get("conversation_id") or ""
     ).strip()
     if session_id:
         try:
-            adapter = ModstorePlatformAdapter.from_session(session_id=session_id)
-            if adapter.is_configured:
-                return adapter.chat_completion_sync(
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
+            session_adapter = ModstorePlatformAdapter.from_session(session_id=session_id)
+            if session_adapter.is_configured:
+                return cast(
+                    "dict[str, Any] | None",
+                    session_adapter.chat_completion_sync(
+                        messages=messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                    ),
                 )
         except RECOVERABLE_ERRORS as exc:
             logger.warning("从 Session 构建规划市场适配器失败: %s", exc)
 
-    adapter = getattr(ai_service, "modstore_adapter", None)
-    if adapter is None or not getattr(adapter, "is_configured", False):
+    configured_adapter = getattr(ai_service, "modstore_adapter", None)
+    if configured_adapter is None or not getattr(configured_adapter, "is_configured", False):
         return None
     logger.info("LLM 规划走修茈市场平台通道 (modstore_adapter)")
-    return adapter.chat_completion_sync(
-        messages=messages,
-        temperature=temperature,
-        max_tokens=max_tokens,
+    return cast(
+        "dict[str, Any]",
+        configured_adapter.chat_completion_sync(
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        ),
     )

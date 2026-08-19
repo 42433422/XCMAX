@@ -10,7 +10,7 @@ import json
 import re
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -320,7 +320,7 @@ def file_status(path: Path) -> dict:
 
 
 def build_manifest(local_pngs: list[dict], staging_pngs: list[dict], mod_pngs: list[dict]) -> dict:
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     local_ok = sum(1 for p in local_pngs if p["present"])
     staging_ok = sum(1 for p in staging_pngs if p["present"])
     mod_ok = sum(1 for p in mod_pngs if p["present"])
@@ -375,14 +375,14 @@ def build_manifest(local_pngs: list[dict], staging_pngs: list[dict], mod_pngs: l
         },
         "display": {
             "staging_slo_headline": (
-                f"✅ staging SLO 四图 · 4/4 · 7d 验收"
+                "✅ staging SLO 四图 · 4/4 · 7d 验收"
                 if staging_accepted == 4
                 else f"⏳ staging SLO 四图 · 脚手架 {staging_ok}/4 · 7d 验收 {staging_accepted}/4"
                 if staging_ok == 4
                 else f"❌ staging SLO 四图 · {staging_ok}/4"
             ),
             "mod_pilot_headline": (
-                f"✅ Mod 四图 · 商家流水 4/4"
+                "✅ Mod 四图 · 商家流水 4/4"
                 if mod_verified == 4
                 else f"⏳ Mod 四图 · 路径预览 {mod_ok}/4 · 流水 {mod_verified}/4"
                 if mod_ok == 4

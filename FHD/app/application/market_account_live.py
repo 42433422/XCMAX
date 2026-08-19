@@ -34,6 +34,8 @@ async def refresh_overview_wallet(
         )
         if isinstance(payload, dict) and not payload.get("__proxy_error__"):
             raw = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+            if not isinstance(raw, dict):
+                raw = {}
             wallet = raw.get("wallet") if isinstance(raw.get("wallet"), dict) else raw
             if isinstance(wallet, dict):
                 snapshot.update(wallet)

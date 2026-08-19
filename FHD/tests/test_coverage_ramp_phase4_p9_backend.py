@@ -17,7 +17,7 @@ from app.utils.excel.template_export_utils import (
     _to_header_lookup,
     fill_workbook_from_template,
 )
-from app.utils.upload_helpers import save_upload_bytes, save_upload_file
+from app.utils.path_io.upload_helpers import save_upload_bytes, save_upload_file
 
 # ---------------------------------------------------------------------------
 # small helpers
@@ -151,7 +151,7 @@ def test_fill_with_sheet_name(tmp_path: Path) -> None:
 
 
 def test_save_upload_bytes(tmp_path: Path) -> None:
-    with patch("app.utils.upload_helpers.get_upload_dir", return_value=str(tmp_path)):
+    with patch("app.utils.path_io.upload_helpers.get_upload_dir", return_value=str(tmp_path)):
         path = save_upload_bytes(b"hello", subdir="imports", filename="data.xlsx")
     assert Path(path).is_file()
     assert Path(path).read_bytes() == b"hello"
@@ -161,7 +161,7 @@ def test_save_upload_bytes(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_save_upload_file(tmp_path: Path) -> None:
     upload = UploadFile(filename="up.txt", file=io.BytesIO(b"content-bytes"))
-    with patch("app.utils.upload_helpers.get_upload_dir", return_value=str(tmp_path)):
+    with patch("app.utils.path_io.upload_helpers.get_upload_dir", return_value=str(tmp_path)):
         path = await save_upload_file(upload, subdir="docs")
     assert Path(path).is_file()
     assert Path(path).read_bytes() == b"content-bytes"

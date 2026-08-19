@@ -157,7 +157,7 @@ class TestVerifyMerged:
 
     def test_custom_verify_command_exception(self, tmp_path: Path) -> None:
         with patch.dict("os.environ", {"XCMAX_CLAUDE_VERIFY_CMD": "true"}):
-            with patch.object(relay_gitops.subprocess, "run", side_effect=Exception("oops")):
+            with patch.object(relay_gitops.subprocess, "run", side_effect=RuntimeError("oops")):
                 ok, msg = relay_gitops._verify_merged(str(tmp_path), "main")
                 assert ok is False
                 assert "异常" in msg
@@ -403,7 +403,7 @@ class TestGitMerge:
         ):
             mock_git.side_effect = [
                 _completed(returncode=0),  # fetch (outside try, must succeed)
-                Exception("boom"),  # worktree add (inside try, triggers except)
+                RuntimeError("boom"),  # worktree add (inside try, triggers except)
                 _completed(returncode=0),  # worktree remove (finally)
             ]
             result = relay_gitops.git_merge({"branch": "feature"}, repo="/repo")

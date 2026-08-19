@@ -22,6 +22,8 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+_OCR_ERRORS: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (subprocess.SubprocessError,)
+
 _MACOS_VISION_OCR_JXA = r"""
 function run(argv) {
   ObjC.import('Vision');
@@ -178,7 +180,7 @@ class OCRService(OCRAnalysisMixin):
                 logger.warning("macOS Vision OCR 失败: %s", (proc.stderr or "").strip()[:500])
                 return ""
             return self._clean_text(proc.stdout or "")
-        except (subprocess.SubprocessError, *RECOVERABLE_ERRORS) as exc:
+        except _OCR_ERRORS as exc:
             logger.warning("macOS Vision OCR 异常: %s", exc)
             return ""
         finally:
@@ -264,8 +266,11 @@ class OCRService(OCRAnalysisMixin):
 
     def _easyocr_text_blocks(self, image_array: np.ndarray) -> list[dict[str, Any]]:
         blocks: list[dict[str, Any]] = []
+        reader = self.reader
+        if reader is None:
+            return blocks
         try:
-            for bbox, text, confidence in self.reader.readtext(image_array, detail=1):
+            for bbox, text, confidence in reader.readtext(image_array, detail=1):
                 text = (text or "").strip()
                 if not text:
                     continue

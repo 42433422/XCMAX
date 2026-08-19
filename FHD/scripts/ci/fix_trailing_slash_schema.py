@@ -18,7 +18,7 @@ def main() -> int:
         sys.path.insert(0, str(root))
 
     from app.fastapi_app import get_fastapi_app
-    from app.fastapi_routes.openapi_route_compat import hide_trailing_slash_openapi_duplicates
+    from app.legacy.routes.openapi_route_compat import hide_trailing_slash_openapi_duplicates
 
     app = get_fastapi_app()
     hidden = hide_trailing_slash_openapi_duplicates(app)

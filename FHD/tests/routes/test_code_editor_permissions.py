@@ -27,7 +27,8 @@ from app.fastapi_routes.code_editor import router
 def client(tmp_path: Path) -> TestClient:
     app = FastAPI()
     app.include_router(router)
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 class TestSafePath:

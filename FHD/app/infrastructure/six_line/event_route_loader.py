@@ -17,13 +17,13 @@ _AUDIT_NAME = "six_line_event_audit.jsonl"
 
 
 def _config_path() -> Path:
-    from app.utils.path_utils import get_base_dir
+    from app.utils.path_io.path_utils import get_base_dir
 
     return Path(get_base_dir()) / "config" / _CONFIG_NAME
 
 
 def _customer_service_dir() -> Path:
-    from app.utils.path_utils import get_base_dir, get_data_dir
+    from app.utils.path_io.path_utils import get_base_dir, get_data_dir
 
     for base in (
         Path(get_data_dir()) / "customer_service",

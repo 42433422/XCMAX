@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import sqlite3
 import sys
 
@@ -67,7 +66,7 @@ for tbl in tables:
                 content = content.decode("utf-8", errors="replace")
             if content and "wxid_tfxzqdqt87oa22" in content and not content.startswith("<"):
                 found_text.append((tbl, row[2], content))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"Error in {tbl}: {e}")
 
 if found_text:
