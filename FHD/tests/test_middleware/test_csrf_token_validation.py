@@ -87,19 +87,19 @@ def test_mutating_missing_csrf_cookie_rejected(client):
 
 
 def test_mutating_cookie_header_mismatch_rejected(client):
+    client.cookies.set("csrf_token", "cookie-tok")
     r = client.post(
         "/api/items",
         headers={"X-CSRF-Token": "header-tok"},
-        cookies={"csrf_token": "cookie-tok"},
     )
     assert r.status_code == 403
 
 
 def test_mutating_matching_csrf_allowed(client):
+    client.cookies.set("csrf_token", "same-tok")
     r = client.post(
         "/api/items",
         headers={"X-CSRF-Token": "same-tok"},
-        cookies={"csrf_token": "same-tok"},
     )
     assert r.status_code == 200
     assert r.json() == {"success": True, "created": True}

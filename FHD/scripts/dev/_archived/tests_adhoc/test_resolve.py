@@ -1,7 +1,7 @@
 """测试路径解析"""
 
-import sys
 import os
+import sys
 
 # 设置环境变量
 os.environ["WORKSPACE_ROOT"] = r"e:\FHD"
@@ -27,7 +27,7 @@ try:
     # 手动验证
     parent_dir = template_path.parent
     file_name = template_path.name
-    print(f"\n手动验证:")
+    print("\n手动验证:")
     print(f"  父目录：{parent_dir}")
     print(f"  文件名：{file_name}")
     print(f"  文件名 repr: {repr(file_name)}")
@@ -44,9 +44,9 @@ try:
             break
 
     if not found:
-        print(f"  ✗ 未找到匹配文件")
+        print("  ✗ 未找到匹配文件")
 
-except Exception as e:
+except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"✗ 解析失败：{e}")
     import traceback
 

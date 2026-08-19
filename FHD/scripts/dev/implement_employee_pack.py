@@ -38,7 +38,7 @@ def _call_llm(proposal: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(resp, dict):
             return resp
         return json.loads(resp)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         raise RuntimeError(f"LLM call failed: {e}") from e
 
 

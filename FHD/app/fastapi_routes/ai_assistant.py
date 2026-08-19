@@ -17,28 +17,18 @@ from fastapi import APIRouter, Body, Query
 from fastapi.responses import JSONResponse
 
 from app.build_identity import build_identity
+from app.fastapi_routes.ai_assistant_responses import fail as _fail
+from app.fastapi_routes.ai_assistant_responses import ok as _ok
+from app.fastapi_routes.ai_assistant_tts import router as tts_router
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ai-assistant-compat"])
+router.include_router(tts_router)
 
 _TRACE_MAX_STRING = 500
 _TRACE_SECRET_KEYS = {"audiobase64", "audio_base64", "key", "token", "password", "secret"}
-
-
-def _ok(data: Any = None, **extra: Any) -> dict[str, Any]:
-    out: dict[str, Any] = {"success": True}
-    if data is not None:
-        out["data"] = data
-    out.update(extra)
-    return out
-
-
-def _fail(message: str, status: int = 400, **extra: Any) -> JSONResponse:
-    payload: dict[str, Any] = {"success": False, "message": message}
-    payload.update(extra)
-    return JSONResponse(payload, status_code=status)
 
 
 def _trace_safe_value(value: Any, *, key: str = "", depth: int = 0) -> Any:
@@ -104,7 +94,7 @@ def _trace_ai_assistant_route(
         traced["run_id"] = run.run_id
         traced["agent_run_id"] = run.run_id
         return traced
-    except Exception:  # noqa: BLE001 - route tracing must not break legacy compat endpoints
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - route tracing must not break legacy compat endpoints
         logger.exception("failed to attach AgentRun trace to ai_assistant compat route")
         return payload
 
@@ -399,7 +389,7 @@ def compat_print_diagnose():
 
 @router.post("/api/print/{filename:path}")
 def compat_print_shipment_file(filename: str, payload: dict[str, Any] = Body(default_factory=dict)):
-    from app.utils.path_utils import get_app_data_dir
+    from app.utils.path_io.path_utils import get_app_data_dir
 
     printer_name = payload.get("printer_name") or payload.get("printer")
     output_dir = os.path.join(get_app_data_dir(), "shipment_outputs")
@@ -449,12 +439,21 @@ def compat_print_single_label(payload: dict[str, Any] = Body(default_factory=dic
             from app.application import get_product_app_service
 
             svc = get_product_app_service()
-            products = svc.search_products(keyword=model_number, limit=1)
-            if products and isinstance(products, list):
-                p = products[0]
-                product_name = str(p.get("name") or p.get("product_name") or model_number)
-                specification = str(p.get("specification") or p.get("spec") or "") or None
-                unit = str(p.get("unit") or "个")
+            products_result = svc.search_products(keyword=model_number, filters={"per_page": 1})
+            products = (
+                products_result.get("data") or []
+                if isinstance(products_result, dict)
+                else products_result
+            )
+            if isinstance(products, list) and products and isinstance(products[0], dict):
+                product = products[0]
+                product_name = str(
+                    product.get("name") or product.get("product_name") or model_number
+                )
+                specification = (
+                    str(product.get("specification") or product.get("spec") or "") or None
+                )
+                unit = str(product.get("unit") or "个")
         except RECOVERABLE_ERRORS as e:
             logger.warning("single_label: 查询产品失败，使用型号作为名称: %s", e)
 
@@ -487,120 +486,3 @@ def compat_print_single_label(payload: dict[str, Any] = Body(default_factory=dic
         return JSONResponse(traced, status_code=500)
 
 
-@router.post("/api/tts/translate")
-def compat_tts_translate(payload: dict[str, Any] = Body(default_factory=dict)):
-    """朗读字幕短译：中文 → 英文。"""
-    import asyncio
-
-    text = str(payload.get("text") or "").strip()
-    if not text:
-        return JSONResponse(
-            {"success": False, "message": "text 不能为空", "data": {}},
-            status_code=400,
-        )
-    target = str(payload.get("target") or "en").strip().lower()
-    if target != "en":
-        return JSONResponse(
-            {"success": False, "message": "仅支持 target=en", "data": {}},
-            status_code=400,
-        )
-
-    try:
-        from app.application.tts_translate_app_service import translate_zh_to_en
-
-        async def _run() -> str:
-            out = await translate_zh_to_en(text, max_chars=500)
-            if not out.get("success"):
-                raise RuntimeError(str(out.get("message") or "translate failed"))
-            return str(out.get("translation") or "").strip().strip('"').strip("'")
-
-        try:
-            en = asyncio.run(_run())
-        except RuntimeError as loop_err:
-            if "asyncio.run()" not in str(loop_err):
-                raise
-            loop = asyncio.new_event_loop()
-            try:
-                en = loop.run_until_complete(_run())
-            finally:
-                loop.close()
-
-        if not en:
-            raise RuntimeError("empty translation")
-        traced = _trace_ai_assistant_route(
-            {"success": True, "message": "ok", "data": {"translation": en, "target": "en"}},
-            route="/api/tts/translate",
-            action="tts_translate",
-            body=payload,
-        )
-        return JSONResponse(traced)
-    except (RECOVERABLE_ERRORS, ValueError) as e:
-        logger.warning("TTS translate unavailable: %s", e)
-        return JSONResponse(
-            {"success": False, "message": "翻译暂不可用", "data": {}},
-            status_code=503,
-        )
-
-
-@router.post("/api/tts")
-def compat_tts(payload: dict[str, Any] = Body(default_factory=dict)):
-    text = str(payload.get("text") or "").strip()
-    if not text:
-        return JSONResponse(
-            {"success": False, "message": "text 不能为空", "data": {}},
-            status_code=400,
-        )
-
-    speaker_id = payload.get("speakerId")
-    lang = str(payload.get("lang") or "zh").lower()
-    voice = payload.get("voice")
-    rate = payload.get("rate")
-    pitch = payload.get("pitch")
-
-    try:
-        from app.application.facades.tts_facade import (
-            synthesize_to_data_uri,
-            trigger_common_tts_warmup,
-        )
-
-        trigger_common_tts_warmup()
-
-        tts_payload = synthesize_to_data_uri(
-            text=text,
-            voice=voice,
-            speaker_id=speaker_id,
-            lang=lang,
-            rate=rate,
-            pitch=pitch,
-        )
-
-        traced = _trace_ai_assistant_route(
-            {
-                "success": True,
-                "message": "ok",
-                "data": {
-                    "audioBase64": tts_payload.get("audioBase64"),
-                    "voice": tts_payload.get("voice"),
-                    "speakerId": speaker_id,
-                    "lang": tts_payload.get("lang") or lang,
-                    "provider": tts_payload.get("provider") or "edge",
-                },
-            },
-            route="/api/tts",
-            action="tts_synthesize",
-            body=payload,
-        )
-        return JSONResponse(traced)
-    except RECOVERABLE_ERRORS as e:
-        logger.warning("TTS 不可用（MiMo/Edge）: %s", e)
-        traced = _trace_ai_assistant_route(
-            {
-                "success": False,
-                "message": "TTS 服务暂不可用（已尝试 MiMo 与 Edge 神经音）",
-                "data": {},
-            },
-            route="/api/tts",
-            action="tts_synthesize",
-            body=payload,
-        )
-        return JSONResponse(traced, status_code=503)

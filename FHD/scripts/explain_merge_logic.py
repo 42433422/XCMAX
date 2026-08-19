@@ -1,12 +1,11 @@
-# -*- coding: utf-8 -*-
 """
 详细解释合并检测逻辑
 """
 
+import glob
+
 import cv2
 import numpy as np
-import json
-import glob
 
 # 读取图片
 files = glob.glob(r"e:\FHD\26-0300001A*.png")
@@ -80,8 +79,8 @@ def merge_lines(lines, threshold=50):
     return merged
 
 
-horizontal_lines = sorted(list(set(horizontal_lines)))
-vertical_lines = sorted(list(set(vertical_lines)))
+horizontal_lines = sorted(set(horizontal_lines))
+vertical_lines = sorted(set(vertical_lines))
 horizontal_lines = merge_very_close(horizontal_lines, threshold=5)
 vertical_lines = merge_very_close(vertical_lines, threshold=5)
 horizontal_lines = merge_lines(horizontal_lines, threshold=50)

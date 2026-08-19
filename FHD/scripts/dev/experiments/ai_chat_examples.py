@@ -1,12 +1,11 @@
-# -*- coding: utf-8 -*-
 """
 XCAGI AI 对话系统使用示例
 
 展示如何使用 AI 对话系统的各种功能
 """
 
+
 import requests
-import json
 
 # API 基础 URL
 BASE_URL = "http://localhost:5000/api/ai"
@@ -134,7 +133,7 @@ def test_config():
         data = result["data"]
         print(f"API 已配置：{data.get('api_configured')}")
         print(f"模型：{data.get('model')}")
-        print(f"功能列表:")
+        print("功能列表:")
         for feature in data.get("features", []):
             print(f"  - {feature}")
 
@@ -186,7 +185,7 @@ def main():
         print("  cd e:\\FHD\\XCAGI")
         print("  set DEEPSEEK_API_KEY=your_api_key")
         print("  python -m flask run\n")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"\n❌ 发生错误：{e}")
 
 

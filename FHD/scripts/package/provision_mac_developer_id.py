@@ -15,7 +15,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -93,7 +92,7 @@ def generate_csr() -> None:
         )
         KEY_PATH.chmod(0o600)
     team = _env("APPLE_TEAM_ID", _env("IOS_TEAM_ID"))
-    subj = f"/CN=XCAGI Desktop Developer ID/O=XCAGI/C=CN"
+    subj = "/CN=XCAGI Desktop Developer ID/O=XCAGI/C=CN"
     if team:
         subj += f"/OU={team}"
     subprocess.run(

@@ -75,7 +75,10 @@ def _resolve_storage_to_path(storage_relpath: str) -> Path | None:
     if rel.startswith("mods/"):
         from app.shell.xcagi_mods_discover import xcagi_root
 
-        p = (xcagi_root() / rel).resolve()
+        root = xcagi_root()
+        if root is None:
+            return None
+        p = (root / rel).resolve()
         return p
     return (fhd_repo_root() / rel).resolve()
 

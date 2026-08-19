@@ -122,7 +122,7 @@ def main() -> int:
                 db.commit()
                 try:
                     mirror_catalog_file_to_market_files(row.stored_filename)
-                except Exception:
+                except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
                     pass
         print(f"[SEED] {PACK_ID} ok")
         return 0

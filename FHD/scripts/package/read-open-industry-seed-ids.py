@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """输出 onboarding_open 行业对应的 mod_id（JSON 数组），供 stage-industry-seeds.ps1 调用。"""
 from __future__ import annotations
 

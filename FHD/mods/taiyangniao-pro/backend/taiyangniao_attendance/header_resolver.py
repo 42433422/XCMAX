@@ -284,7 +284,7 @@ def _llm_resolve_columns(header: list[str], *, missing: list[str]) -> dict[str, 
     任何失败都静默返回 ``{}``，不让业务流程爆炸。
     """
     try:
-        from app.infrastructure.llm.client import get_llm_client, resolve_chat_model
+        from app.mod_sdk.host_services import get_llm_client, resolve_chat_model
     except Exception as exc:
         logger.info("attendance LLM resolver unavailable (import failed): %s", exc)
         return {}

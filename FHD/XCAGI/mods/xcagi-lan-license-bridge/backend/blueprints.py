@@ -6,7 +6,7 @@ import logging
 
 from fastapi import APIRouter, Body, Depends, Path, Request, Response
 
-from app.fastapi_routes.lan_admin_routes import (
+from app.mod_sdk.host_services import (
     AccessRequestReview,
     IssueKeyRequest,
     approve_access_request_endpoint,
@@ -23,7 +23,7 @@ from app.fastapi_routes.lan_admin_routes import (
     revoke_key_endpoint,
     whoami,
 )
-from app.fastapi_routes.lan_routes import (
+from app.mod_sdk.host_services import (
     AccessRequestPayload,
     ActivateRequest,
     activate,
@@ -33,7 +33,7 @@ from app.fastapi_routes.lan_routes import (
     request_access,
     status,
 )
-from app.fastapi_routes.lan_settings_routes import (
+from app.mod_sdk.host_services import (
     LanSettingsUpdate,
     get_settings as get_settings_view,
     update_settings as update_settings_view,
@@ -49,13 +49,13 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.get("/status")
     def mod_status_meta():
-        from app.legacy.lan.lan_compat import list_lan_facade_registry
+        from app.mod_sdk.host_services import list_lan_facade_registry
 
         return {"success": True, "data": {**list_lan_facade_registry(), "mod_id": mod_id, "phase": "J"}}
 
     @router.get("/registry")
     def mod_registry():
-        from app.legacy.lan.lan_compat import list_lan_facade_registry
+        from app.mod_sdk.host_services import list_lan_facade_registry
 
         return {"success": True, "data": list_lan_facade_registry()}
 

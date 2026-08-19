@@ -20,6 +20,8 @@ from typing import Any
 
 from fastapi import APIRouter, Body, Query, Request
 
+from app.application.workflow.types import normalize_workflow_risk
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["purchase"])
@@ -42,8 +44,8 @@ def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
                 break
     if not output:
         output = {"success": getattr(run, "status", "") == "completed"}
-    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
-        output["message"] = getattr(run, "error", "")
+    if not output.get("success") and getattr(run, "error", False) and not output.get("message"):
+        output["message"] = getattr(run, "error", False)
     run_id = str(getattr(run, "run_id", "") or "")
     if run_id:
         output["run_id"] = run_id
@@ -94,12 +96,12 @@ def _run_purchase_agent(
                 tool_id="purchase",
                 action=action,
                 params=dict(params or {}),
-                risk=str(action_meta.get("risk") or "medium"),
+                risk=normalize_workflow_risk(str(action_meta.get("risk") or "medium")),
                 idempotent=bool(action_meta.get("idempotent", False)),
                 description=f"Execute purchase.{action} through the unified Agent runtime.",
             )
         ],
-        risk_level=str(action_meta.get("risk") or "medium"),
+        risk_level=normalize_workflow_risk(str(action_meta.get("risk") or "medium")),
         metadata={"source": "purchase_route", "route": route_path},
     )
     runtime_context = {

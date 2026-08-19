@@ -25,7 +25,7 @@ from app.infrastructure.workflow.neuro_bus_bridge import NeuroBusEventBridge
 from app.neuro_bus.events.base import NeuroEvent
 
 _BUS_PATH = Path(__file__).resolve().parents[2] / "app" / "neuro_bus" / "bus.py"
-_BUS_SHA256 = "43e1210406190d59d1d6298c00dc466549af127172c4433135d722475fb598a9"
+_BUS_SHA256 = "0743e744939be2ef8fa0da4f30fe2a7263b11c311e251b269a2f4bdc90acc045"
 
 
 class RecordingBus:

@@ -5,17 +5,14 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-
-import pytest
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 from retry_with_adjusted_prompt import (
+    MAX_RETRIES,
     adjust_prompt_for_retry,
     run_with_retries,
-    MAX_RETRIES,
 )
 
 
@@ -99,7 +96,7 @@ def test_run_with_retries_writes_ledger(tmp_path, monkeypatch):
     ledger_path = tmp_path / "evolution_decisions.jsonl"
     monkeypatch.setenv("MODSTORE_EVOLUTION_LEDGER_PATH", str(ledger_path))
 
-    result = run_with_retries(
+    run_with_retries(
         base_prompt="Implement X.",
         action=lambda p: {"success": False},
         failure_checker=lambda r: (True, "x"),

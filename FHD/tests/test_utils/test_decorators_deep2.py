@@ -36,7 +36,7 @@ class TestGetOptimizerComponentsDeep:
         """When the performance_initializer module raises ImportError,
         get_optimizer_components catches it and returns defaults."""
         # Patching the module to None causes ``import`` to raise ImportError
-        with patch.dict("sys.modules", {"app.utils.performance_initializer": None}):
+        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": None}):
             out = dec.get_optimizer_components()
         assert out == {
             "cache": None,
@@ -49,7 +49,7 @@ class TestGetOptimizerComponentsDeep:
         """ValueError is in RECOVERABLE_ERRORS and should be caught."""
         fake_module = MagicMock()
         fake_module.get_performance_optimizer.side_effect = ValueError("bad value")
-        with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
             out = dec.get_optimizer_components()
         assert all(v is None for v in out.values())
 
@@ -57,7 +57,7 @@ class TestGetOptimizerComponentsDeep:
         """RuntimeError is in RECOVERABLE_ERRORS and should be caught."""
         fake_module = MagicMock()
         fake_module.get_performance_optimizer.side_effect = RuntimeError("boom")
-        with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
             out = dec.get_optimizer_components()
         assert all(v is None for v in out.values())
 
@@ -65,7 +65,7 @@ class TestGetOptimizerComponentsDeep:
         """AttributeError is NOT in RECOVERABLE_ERRORS and should propagate."""
         fake_module = MagicMock()
         fake_module.get_performance_optimizer.side_effect = AttributeError("missing")
-        with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
             with pytest.raises(AttributeError):
                 dec.get_optimizer_components()
 
@@ -89,7 +89,7 @@ class TestOptimizedServiceMixinDeep:
             pass
 
         svc = MyService()
-        with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
             svc._init_optimizers()
         assert svc._cache == "cache_obj"
         assert svc._monitor == "monitor_obj"
@@ -98,7 +98,7 @@ class TestOptimizedServiceMixinDeep:
 
     def test_init_optimizers_with_none_components(self):
         """When components are all None, attributes are set to None."""
-        with patch.dict("sys.modules", {"app.utils.performance_initializer": None}):
+        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": None}):
 
             class MyService(dec.OptimizedServiceMixin):
                 pass
@@ -201,8 +201,7 @@ class TestCachedDeep:
         assert fn(5) == 10
 
     def test_invalidate_cache_with_kwargs(self):
-        """invalidate_cache lambda raises NameError due to source bug
-        (cache variable is local to wrapper, not decorator scope)."""
+        """invalidate_cache uses the same stable key builder as the wrapper."""
         cache = MagicMock()
         cache.get.return_value = None
 
@@ -211,10 +210,8 @@ class TestCachedDeep:
             return x
 
         fn(5)
-        # The lambda references `cache` which is local to wrapper, causing
-        # NameError when called from outside
-        with pytest.raises(NameError):
-            fn.invalidate_cache(5, y=2)
+        fn.invalidate_cache(5, y=2)
+        cache.delete.assert_called_once()
 
     def test_skip_args_multiple(self):
         cache = MagicMock()
@@ -386,7 +383,7 @@ class TestMonitoredDeep:
             request_deduplicator=None,
             async_task_manager=None,
         )
-        with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
 
             @dec.monitored()  # name=None
             def fn(x):
@@ -417,7 +414,7 @@ class TestMonitoredDeep:
             request_deduplicator=None,
             async_task_manager=None,
         )
-        with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
 
             @dec.monitored("slow_metric", slow_threshold_ms=500)
             def fn():
@@ -444,7 +441,7 @@ class TestMonitoredDeep:
             request_deduplicator=None,
             async_task_manager=None,
         )
-        with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
 
             @dec.monitored("fast_metric", slow_threshold_ms=500)
             def fn():
@@ -468,7 +465,7 @@ class TestMonitoredDeep:
             async_task_manager=None,
         )
         long_error = RuntimeError("x" * 300)
-        with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
 
             @dec.monitored("my_metric")
             def fn():
@@ -706,7 +703,7 @@ class TestCombinedOptimizationDeep:
             request_deduplicator=dedup,
             async_task_manager=None,
         )
-        with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
 
             @dec.combined_optimization(dedup_window=30)
             def fn(x):
@@ -743,7 +740,7 @@ class TestCombinedOptimizationDeep:
             request_deduplicator=None,
             async_task_manager=None,
         )
-        with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
 
             @dec.combined_optimization(monitor_slow_ms=500)
             def fn(x):
@@ -764,7 +761,7 @@ class TestCombinedOptimizationDeep:
             request_deduplicator=None,
             async_task_manager=None,
         )
-        with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
 
             @dec.combined_optimization(cache_ttl=60)
             def fn(x):
@@ -808,7 +805,7 @@ class TestCombinedOptimizationDeep:
         with patch.dict(
             "sys.modules",
             {
-                "app.utils.performance_initializer": fake_module,
+                "app.utils.performance.performance_initializer": fake_module,
                 "app.utils.resilience.rate_limiter": fake_rl_module,
             },
         ):
@@ -886,7 +883,7 @@ class TestAsyncTaskDeep:
             request_deduplicator=None,
             async_task_manager=async_mgr,
         )
-        with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
 
             @dec.async_task()
             def fn(x):
@@ -906,7 +903,7 @@ class TestAsyncTaskDeep:
             request_deduplicator=None,
             async_task_manager=async_mgr,
         )
-        with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
 
             @dec.async_task(queue="urgent")
             def fn(x):
@@ -940,7 +937,7 @@ class TestAsyncTaskDeep:
             request_deduplicator=None,
             async_task_manager=async_mgr,
         )
-        with patch.dict("sys.modules", {"app.utils.performance_initializer": fake_module}):
+        with patch.dict("sys.modules", {"app.utils.performance.performance_initializer": fake_module}):
 
             @dec.async_task()
             def fn(x):

@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 def _resolve_depends_on(manifest: dict[str, Any], config: dict[str, Any]) -> list[str]:
     deps: list[str] = []
     collab = config.get("collaboration") if isinstance(config.get("collaboration"), dict) else {}
+    if not isinstance(collab, dict):
+        collab = {}
     for item in collab.get("depends_on") or []:
         s = str(item or "").strip()
         if s:
@@ -62,6 +64,8 @@ def _employee_dispatcher(
     from app.application.employee_runtime.agent import EmployeeAgent
 
     ctx = params.get("_runtime_context") if isinstance(params.get("_runtime_context"), dict) else {}
+    if not isinstance(ctx, dict):
+        ctx = {}
     node_outputs = ctx.get("node_outputs") if isinstance(ctx.get("node_outputs"), dict) else {}
     task = str(
         params.get("task")
@@ -78,6 +82,8 @@ def _employee_dispatcher(
     input_data["root_employee_id"] = str(ctx.get("employee_id") or "")
     input_data["upstream_outputs"] = node_outputs
     input_data["skip_collaboration"] = True
+    if not isinstance(params, dict):
+        params = {}
     user_id = int(params.get("user_id") or ctx.get("user_id") or 0)
     workspace_root = params.get("workspace_root") or ctx.get("workspace_root")
     session_id = params.get("session_id") or ctx.get("session_id")

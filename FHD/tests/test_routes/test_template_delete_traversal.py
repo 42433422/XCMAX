@@ -1,6 +1,6 @@
 """回归测试：模板删除路径遍历漏洞（VULN-3）。
 
-针对 ``app.fastapi_routes.document_templates_compat.run_archive_template_delete``
+针对 ``app.legacy.routes.document_templates_compat.run_archive_template_delete``
 的 ``fs:`` 分支：合法 id 永远是裸文件名（来自 os.listdir）。任何含目录分隔符、
 ``..`` 或绝对路径的输入都属于路径遍历攻击。
 
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 
-from app.fastapi_routes.document_templates_compat import run_archive_template_delete
+from app.legacy.routes.document_templates_compat import run_archive_template_delete
 
 
 def test_absolute_path_traversal_is_rejected(tmp_path):

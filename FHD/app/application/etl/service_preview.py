@@ -4,20 +4,24 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy.orm import Session
 
 from app.application.etl.compatibility_presets import validate_compatibility_preset
 from app.application.etl.errors import EtlError
 from app.application.etl.mapping_assist import enhance_mappings_with_llm
-from app.application.etl.parser_structure import header_match_score
 from app.application.etl.parsers import (
     KNOWLEDGE_ONLY_SUFFIXES,
     ParsedDataset,
     parse_file,
 )
 from app.application.etl.product_identity import provenance_validation_issues
+from app.application.etl.service_preview_helpers import (
+    row_context,
+    suggest_mappings,
+    update_linked_companion_summary,
+)
 from app.application.etl.service_support import (
     ETL_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
     EXECUTOR,
@@ -34,11 +38,20 @@ from app.application.etl.targets import TargetAdapter, get_adapter
 from app.application.etl.transforms import apply_mapping
 from app.db.models.etl import EtlRun, EtlRunRow, EtlUpload
 from app.infrastructure.tenant_scope import tenant_id_for_write, tenant_scope
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 
 class PreviewServiceMixin:
+    if TYPE_CHECKING:
+        _adviser: Any
+        _current_version: Any
+        _owned_run: Any
+        _owned_template: Any
+        _owned_upload: Any
+        get_run: Any
+
     def create_preview(
         self,
         db: Session,
@@ -214,7 +227,7 @@ class PreviewServiceMixin:
         if companion_run is not None:
             self._submit_preview(companion_run.id, tenant_id, owner_user_id)
         db.expire_all()
-        return self.get_run(db, run_id=run_id, owner_user_id=owner_user_id)
+        return cast("dict[str, Any]", self.get_run(db, run_id=run_id, owner_user_id=owner_user_id))
 
     def _submit_preview(self, run_id: str, tenant_id: int, owner_user_id: int) -> None:
         with SUBMITTED_LOCK:
@@ -316,7 +329,7 @@ class PreviewServiceMixin:
             self._update_linked_companion_summary(db, run, status="preview_ready")
             db.commit()
             self._record_preview_metrics(run, started_at, status="success")
-        except Exception as exc:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
             db.rollback()
             code, message = safe_error(exc)
             try:
@@ -328,7 +341,7 @@ class PreviewServiceMixin:
                 self._update_linked_companion_summary(db, run, status="failed")
                 db.commit()
                 self._record_preview_metrics(run, started_at, status="failed")
-            except Exception:  # noqa: BLE001
+            except RECOVERABLE_ERRORS:  # noqa: BLE001
                 db.rollback()
                 logger.exception("Unable to persist ETL preview failure for run %s", run_id)
         finally:
@@ -342,51 +355,7 @@ class PreviewServiceMixin:
         *,
         status: str,
     ) -> None:
-        """Reflect a companion preview state on its shipment parent.
-
-        The linkage is UI/trace metadata only.  It never copies rows into the
-        shipment target and never changes any customer or product record.
-        """
-
-        details = load_json(run.summary_json, {})
-        parent_id = str(details.get("linked_from_shipment_preview") or "").strip()
-        if not parent_id:
-            return
-        parent = (
-            db.query(EtlRun)
-            .filter(
-                EtlRun.id == parent_id,
-                EtlRun.tenant_id == run.tenant_id,
-                EtlRun.owner_user_id == run.owner_user_id,
-                EtlRun.target_type == "shipment_records",
-            )
-            .first()
-        )
-        if parent is None:
-            return
-        parent_details = load_json(parent.summary_json, {})
-        link = parent_details.get("linked_customer_products_preview")
-        if not isinstance(link, dict) or str(link.get("run_id") or "") != str(run.id):
-            return
-        link = {
-            **link,
-            "status": status,
-            "progress": int(run.progress or 0),
-            "total_rows": int(run.total_rows or 0),
-            "summary": {
-                "new": int(run.new_rows or 0),
-                "update": int(run.update_rows or 0),
-                "skip": int(run.skip_rows or 0),
-                "error": int(run.error_rows or 0),
-            },
-            "error": (
-                {"code": run.error_code, "message": run.error_message}
-                if status == "failed" and run.error_code
-                else None
-            ),
-        }
-        parent_details["linked_customer_products_preview"] = link
-        parent.summary_json = dump_json(parent_details)
+        update_linked_companion_summary(db, run, status=status)
 
     @staticmethod
     def _record_preview_metrics(run: EtlRun, started_at: float, *, status: str) -> None:
@@ -414,7 +383,7 @@ class PreviewServiceMixin:
                 summary = load_json(run.summary_json, {})
                 if summary.get("llm_degraded"):
                     etl_llm_degradations_total.labels(run.target_type).inc()
-        except Exception:  # noqa: BLE001
+        except RECOVERABLE_ERRORS:  # noqa: BLE001
             logger.debug("ETL preview metrics unavailable", exc_info=True)
 
     def _materialize_preview_rows(
@@ -523,104 +492,7 @@ class PreviewServiceMixin:
     def _suggest_mappings(
         self, dataset: ParsedDataset, adapter: TargetAdapter
     ) -> list[dict[str, Any]]:
-        if adapter.allow_dynamic_fields:
-            return [
-                {
-                    "source": header,
-                    "target": header,
-                    "transforms": [{"op": "trim"}],
-                    "confidence": 1.0,
-                    "required": False,
-                }
-                for header in dataset.headers
-            ]
-        try:
-            from app.application.excel_etl_kb import get_excel_etl_kb
-
-            shared_synonyms = get_excel_etl_kb().synonyms()
-        except Exception:  # noqa: BLE001
-            shared_synonyms = {}
-        compatibility_keys = {
-            "external_order_no": ("order_number",),
-            "product_model": ("model_number",),
-            "quantity": ("quantity_tins",),
-        }
-        field_candidates: list[tuple[Any, tuple[str, ...]]] = []
-        for field in adapter.fields:
-            synonym_keys = (field.key, *compatibility_keys.get(field.key, ()))
-            shared_candidates = tuple(
-                alias
-                for synonym_key in synonym_keys
-                for alias in shared_synonyms.get(synonym_key, [])
-            )
-            candidates = (field.key, field.label, *field.aliases, *shared_candidates)
-            field_candidates.append((field, candidates))
-
-        # Assign the strongest source/target pairs first so a generic leaf such
-        # as “名称” cannot steal “产品信息/名称” from the required product field.
-        scored_pairs = sorted(
-            (
-                (
-                    header_match_score(header, candidates),
-                    0 if field.required else 1,
-                    field_index,
-                    header_index,
-                )
-                for field_index, (field, candidates) in enumerate(field_candidates)
-                for header_index, header in enumerate(dataset.headers)
-            ),
-            key=lambda item: (-item[0], item[1], item[2], item[3]),
-        )
-        matched_by_field: dict[int, tuple[str, float]] = {}
-        used_headers: set[int] = set()
-        for score, _required_rank, field_index, header_index in scored_pairs:
-            if score < 0.75:
-                break
-            if field_index in matched_by_field or header_index in used_headers:
-                continue
-            matched_by_field[field_index] = (dataset.headers[header_index], score)
-            used_headers.add(header_index)
-
-        mappings: list[dict[str, Any]] = []
-        for field_index, (field, _candidates) in enumerate(field_candidates):
-            matched, confidence = matched_by_field.get(field_index, ("", 0.0))
-            default_transforms: list[dict[str, Any]] = []
-            if matched:
-                if field.type == "string":
-                    default_transforms = [{"op": "trim"}]
-                elif field.type == "number":
-                    default_transforms = [{"op": "number"}]
-                elif field.type == "integer":
-                    default_transforms = [{"op": "cast", "type": "integer"}]
-                elif field.type == "date":
-                    default_transforms = [{"op": "date"}]
-            mappings.append(
-                {
-                    "source": matched,
-                    "target": field.key,
-                    "transforms": default_transforms,
-                    "confidence": round(confidence, 2),
-                    "required": field.required,
-                }
-            )
-        if (
-            dataset.source_features.get("kind") == "document"
-            and adapter.type == "knowledge"
-            and mappings
-        ):
-            for mapping in mappings:
-                if mapping["target"] == "document_path":
-                    mapping["source"] = "document_path"
-                    mapping["confidence"] = 1.0
-        return mappings
+        return suggest_mappings(dataset, adapter)
 
     def _row_context(self, run: EtlRun, upload: EtlUpload, source_row: int) -> dict[str, Any]:
-        return {
-            "run_id": run.id,
-            "owner_user_id": run.owner_user_id,
-            "file_sha256": upload.sha256,
-            "file_name": upload.file_name,
-            "relative_path": upload.relative_path or upload.file_name,
-            "upload_path": upload.storage_path,
-            "source_row": source_row,
-        }
+        return row_context(run, upload, source_row)

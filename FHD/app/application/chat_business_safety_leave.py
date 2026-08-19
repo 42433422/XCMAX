@@ -230,7 +230,7 @@ def _handle_leave_write(
                     now,
                 ),
             )
-            record_id = int(cur.lastrowid)
+            record_id = int(cur.lastrowid or 0)
             conn.commit()
             status = "created"
     except sqlite3.Error as exc:

@@ -240,6 +240,10 @@ def _summarize_ingest_result(
     request: dict[str, Any],
 ) -> dict[str, Any]:
     document = result.get("document") if isinstance(result.get("document"), dict) else {}
+    if not isinstance(document, dict):
+        document = {}
+    if not isinstance(result, dict):
+        result = {}
     return {
         "success": bool(result.get("success")),
         "dataset_id": str(result.get("dataset_id") or request.get("dataset_id") or ""),

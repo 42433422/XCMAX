@@ -89,7 +89,7 @@ class TestShipmentGenerate:
         assert r.status_code == 400
 
     def test_service_error(self, client: TestClient, _mock_svc: MagicMock):
-        _mock_svc.generate_shipment_document.side_effect = Exception("DB error")
+        _mock_svc.generate_shipment_document.side_effect = RuntimeError("DB error")
         r = client.post(
             "/api/shipment/generate", json={"unit_name": "单位", "products": [{"name": "A"}]}
         )
@@ -314,7 +314,7 @@ class TestApiOrdersExport:
         export_dir.mkdir()
         export_file = export_dir / "shipment_records_all_20260714_000000.xlsx"
         export_file.write_bytes(b"xlsx-test")
-        monkeypatch.setattr("app.utils.path_utils.get_data_dir", lambda: str(tmp_path))
+        monkeypatch.setattr("app.utils.path_io.path_utils.get_data_dir", lambda: str(tmp_path))
         _mock_svc.export_shipment_records.return_value = {
             "success": True,
             "file_path": str(export_file),

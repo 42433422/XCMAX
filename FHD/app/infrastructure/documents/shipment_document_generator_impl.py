@@ -13,9 +13,7 @@ try:
     _PIL_AVAILABLE = True
     _PIL_IMPORT_ERROR = ""
 except ImportError as _pil_import_error:
-    Image = None
-    ImageDraw = None
-    ImageFont = None
+    Image = ImageDraw = ImageFont = None  # type: ignore[assignment]
     _PIL_AVAILABLE = False
     _PIL_IMPORT_ERROR = str(_pil_import_error)
 
@@ -29,7 +27,7 @@ from app.infrastructure.lookups.purchase_unit_resolver import (
 from app.legacy.documents.legacy_shipment_document import (
     load_legacy_shipment_document_generator,
 )
-from app.utils.path_utils import get_app_data_dir, get_base_dir, get_resource_path
+from app.utils.path_io.path_utils import get_app_data_dir, get_base_dir, get_resource_path
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +56,7 @@ class SimpleLabelGenerator:
         for font_path in font_paths:
             try:
                 return ImageFont.truetype(font_path, size)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 continue
 
         import sys
@@ -73,7 +71,7 @@ class SimpleLabelGenerator:
             for font_path in win_fonts:
                 try:
                     return ImageFont.truetype(font_path, size)
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     continue
 
         return ImageFont.load_default()
@@ -89,7 +87,7 @@ class SimpleLabelGenerator:
             draw = ImageDraw.Draw(image)
 
             draw.rectangle(
-                [0, 0, self.width - 1, self.height - 1], outline=self.border_color, width=3
+                (0, 0, self.width - 1, self.height - 1), outline=self.border_color, width=3
             )
 
             product_name = product_data.get("name", "") or product_data.get("product_name", "")
@@ -266,7 +264,7 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
     def __init__(self):
         # 模板/外部资源统一放在 XCAGI/resources 下，避免依赖项目外目录
         # 兼容期：如果 resources 下不存在，再回退到 XCAGI/AI助手/uploads（仍在项目内）
-        from app.utils.path_utils import get_resource_path
+        from app.utils.path_io.path_utils import get_resource_path
 
         resources_template_dir = get_resource_path("ai_assistant", "uploads")
         legacy_template_dir = os.path.join(get_base_dir(), "AI助手", "uploads")

@@ -1,6 +1,6 @@
-import fitz
-import os
 import glob
+
+import fitz
 
 # 列出所有 PDF 文件
 pdf_files = glob.glob("E:/FHD/XCAGI/*.pdf")
@@ -8,7 +8,7 @@ print("找到的 PDF 文件:")
 for f in pdf_files:
     print(f"  {f}")
     if "龙象" in f or "longxiang" in f.lower():
-        print(f"    -> 这就是目标文件!")
+        print("    -> 这就是目标文件!")
 
         # 尝试打开
         try:
@@ -22,5 +22,5 @@ for f in pdf_files:
                 print(f"\n=== 第 {i+1} 页 ===")
                 print(text[:5000] if text else "[无文本]")
             doc.close()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"    打开失败：{e}")

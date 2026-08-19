@@ -6,12 +6,14 @@
 
 import os
 from datetime import timedelta
+from typing import cast
 
 from sqlalchemy.orm import joinedload, make_transient
 
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
 from app.db.session import get_host_db
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
 
 
@@ -82,9 +84,9 @@ class SessionManager:
             # SQLAlchemy resultproxy：桌面 SQLite 下偶发 tuple index out of range
             try:
                 return self._validate_session_once(session_id, use_joinedload=False)
-            except Exception:  # noqa: BLE001 - session validation must fail closed
+            except RECOVERABLE_ERRORS:  # noqa: BLE001 - session validation must fail closed
                 return None
-        except Exception:  # noqa: BLE001 - session validation must fail closed
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - session validation must fail closed
             return None
 
     def _validate_session_once(self, session_id: str, *, use_joinedload: bool = True):
@@ -144,13 +146,13 @@ class SessionManager:
         with get_host_db() as db:
             count = db.query(UserSession).filter(UserSession.user_id == user_id).delete()
             db.commit()
-            return count
+            return cast("int", count)
 
     def cleanup_expired_sessions(self) -> int:
         with get_host_db() as db:
             count = db.query(UserSession).filter(UserSession.expires_at < utc_now_naive()).delete()
             db.commit()
-            return count
+            return cast("int", count)
 
 
 _session_manager = None

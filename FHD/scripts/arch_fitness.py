@@ -7,14 +7,21 @@ Run: python scripts/arch_fitness.py
 Exit code: 0 = all checks pass, 1 = violations found
 """
 
+from __future__ import annotations
+
+import argparse
 import ast
-import os
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 APP_DIR = REPO_ROOT / "app"
-MODSTORE_SERVER_DIR = REPO_ROOT / "MODstore" / "modstore_server"
+MODSTORE_SERVER_DIR = (
+    REPO_ROOT.parent
+    / "成都修茈科技有限公司"
+    / "MODstore_deploy"
+    / "modstore_server"
+)
 
 MAX_FILE_LINES = 500
 BASELINE_FILE = Path(__file__).resolve().parent / "arch_fitness_baseline.txt"
@@ -137,7 +144,7 @@ def check_no_giant_files_in_modstore_server() -> None:
             continue
         line_count = _count_lines(py)
         if line_count > MAX_FILE_LINES:
-            rel = py.relative_to(MODSTORE_SERVER_DIR.parent)
+            rel = py.relative_to(REPO_ROOT.parent)
             VIOLATIONS.append(
                 f"[giant-file] {rel} — {line_count} lines "
                 f"(max {MAX_FILE_LINES} in modstore_server/)"
@@ -151,10 +158,15 @@ def check_legacy_boundary() -> None:
     必须统一收容到 ``app/legacy/``，防止同一功能双套实现散落各子目录。
     """
     legacy_root = APP_DIR / "legacy"
+    stable_compat_roots = (APP_DIR / "mod_sdk",)
     patterns = ("legacy_*.py", "*_compat.py", "compat_*.py")
     for glob in patterns:
         for py in APP_DIR.rglob(glob):
             if _is_excluded_path(py):
+                continue
+            if any(py.is_relative_to(root) for root in stable_compat_roots):
+                # ``mod_sdk`` is the public compatibility contract for bundled
+                # Mods, not a legacy implementation directory.
                 continue
             try:
                 py.relative_to(legacy_root)
@@ -167,7 +179,14 @@ def check_legacy_boundary() -> None:
             )
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--update-baseline",
+        action="store_true",
+        help="Replace the debt baseline with the exact current violation keys.",
+    )
+    args = parser.parse_args(argv)
     print("=== Architecture Fitness Check ===\n")
 
     check_no_v1_backup_files()
@@ -176,6 +195,17 @@ def main() -> int:
     check_no_giant_files_in_app()
     check_no_giant_files_in_modstore_server()
     check_legacy_boundary()
+
+    if args.update_baseline:
+        keys = sorted({_violation_key(v) for v in VIOLATIONS})
+        body = (
+            "# Architecture debt snapshot. New keys fail the gate; remove keys as files are split.\n"
+            + "\n".join(keys)
+            + "\n"
+        )
+        BASELINE_FILE.write_text(body, encoding="utf-8")
+        print(f"Updated {BASELINE_FILE.name}: {len(keys)} exact violation key(s).")
+        return 0
 
     baseline = _load_baseline_keys()
     new_violations = [v for v in VIOLATIONS if _violation_key(v) not in baseline]

@@ -6,36 +6,36 @@
 
 ## [WARN] DUPLICATE_TRAILING_SLASH_ROUTE  (35)
 
-- `GET /api/shipment/shipment-records/units` — GET /api/shipment/shipment-records/units 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.shipment_records_units）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `GET /api/purchase_units` — GET /api/purchase_units 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.purchase_units_list）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `GET /api/customers` — GET /api/customers 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.customers_all）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `GET /api/customers/match` — GET /api/customers/match 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.customers_match）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `GET /api/customers/{customer_id}` — GET /api/customers/{customer_id} 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.customers_get_one）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `POST /api/customers` — POST /api/customers 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.customers_create）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `PUT /api/customers/{customer_id}` — PUT /api/customers/{customer_id} 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.customers_update）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `DELETE /api/customers/{customer_id}` — DELETE /api/customers/{customer_id} 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.customers_delete）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `POST /api/customers/batch-delete` — POST /api/customers/batch-delete 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.customers_batch_delete）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `POST /api/customers/import` — POST /api/customers/import 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.customers_import）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `GET /api/customers/export` — GET /api/customers/export 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.customers_export_stub）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `GET /api/products/{product_id}` — GET /api/products/{product_id} 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.products_get_by_id）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `POST /api/products/resolve-name-hints` — POST /api/products/resolve-name-hints 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.products_resolve_name_hints）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `POST /api/products/update` — POST /api/products/update 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.products_update）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `POST /api/products/add` — POST /api/products/add 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.products_add）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `POST /api/products/delete` — POST /api/products/delete 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.products_delete）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `POST /api/products/batch-delete` — POST /api/products/batch-delete 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.products_batch_delete）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `GET /api/products/price-list-export` — GET /api/products/price-list-export 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.products_price_list_export）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `GET /api/products/export.docx` — GET /api/products/export.docx 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.products_export_docx）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `GET /api/products/price-list-template-preview` — GET /api/products/price-list-template-preview 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.products_price_list_template_preview）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `POST /api/templates/extract-grid` — POST /api/templates/extract-grid 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.templates_extract_grid）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `GET /api/system/test-db/status` — GET /api/system/test-db/status 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.system_test_db_status）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `POST /api/system/test-db/enable` — POST /api/system/test-db/enable 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.system_test_db_enable）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `POST /api/system/test-db/disable` — POST /api/system/test-db/disable 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.system_test_db_disable）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `GET /api/preferences` — GET /api/preferences 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.preferences_get）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `POST /api/preferences` — POST /api/preferences 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.preferences_post）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `GET /api/distillation/versions` — GET /api/distillation/versions 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.distillation_versions）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `GET /api/tools` — GET /api/tools 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.compat_tools_list）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `GET /api/db-tools` — GET /api/db-tools 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.compat_db_tools_list）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
-- `GET /api/tool-categories` — GET /api/tool-categories 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_compat.compat_tool_categories_list）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/shipment/shipment-records/units` — GET /api/shipment/shipment-records/units 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.shipment_records_units）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/purchase_units` — GET /api/purchase_units 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.purchase_units_list）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/customers` — GET /api/customers 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.customers_all）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/customers/match` — GET /api/customers/match 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.customers_match）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/customers/{customer_id}` — GET /api/customers/{customer_id} 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.customers_get_one）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/customers` — POST /api/customers 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.customers_create）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `PUT /api/customers/{customer_id}` — PUT /api/customers/{customer_id} 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.customers_update）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `DELETE /api/customers/{customer_id}` — DELETE /api/customers/{customer_id} 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.customers_delete）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/customers/batch-delete` — POST /api/customers/batch-delete 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.customers_batch_delete）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/customers/import` — POST /api/customers/import 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.customers_import）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/customers/export` — GET /api/customers/export 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.customers_export_stub）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/products/{product_id}` — GET /api/products/{product_id} 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.products_get_by_id）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/products/resolve-name-hints` — POST /api/products/resolve-name-hints 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.products_resolve_name_hints）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/products/update` — POST /api/products/update 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.products_update）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/products/add` — POST /api/products/add 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.products_add）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/products/delete` — POST /api/products/delete 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.products_delete）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/products/batch-delete` — POST /api/products/batch-delete 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.products_batch_delete）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/products/price-list-export` — GET /api/products/price-list-export 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.products_price_list_export）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/products/export.docx` — GET /api/products/export.docx 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.products_export_docx）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/products/price-list-template-preview` — GET /api/products/price-list-template-preview 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.products_price_list_template_preview）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/templates/extract-grid` — POST /api/templates/extract-grid 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.templates_extract_grid）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/system/test-db/status` — GET /api/system/test-db/status 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.system_test_db_status）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/system/test-db/enable` — POST /api/system/test-db/enable 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.system_test_db_enable）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/system/test-db/disable` — POST /api/system/test-db/disable 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.system_test_db_disable）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/preferences` — GET /api/preferences 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.preferences_get）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `POST /api/preferences` — POST /api/preferences 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.preferences_post）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/distillation/versions` — GET /api/distillation/versions 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.distillation_versions）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/tools` — GET /api/tools 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.compat_tools_list）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/db-tools` — GET /api/db-tools 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.compat_db_tools_list）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
+- `GET /api/tool-categories` — GET /api/tool-categories 被同一处理器注册了 2 次（endpoint: app.legacy.routes.xcagi_compat.compat_tool_categories_list）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
 - `GET /api/document-templates` — GET /api/document-templates 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.document_templates.list_document_templates）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
 - `GET /api/startup/status` — GET /api/startup/status 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.xcagi_startup.startup_status）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
 - `GET /api/templates` — GET /api/templates 被同一处理器注册了 2 次（endpoint: app.fastapi_routes.template_api.templates_list_compat）；建议把多余的尾斜杠变体标记为 ``include_in_schema=False`` 或改用 FastAPI 默认重定向
@@ -458,15 +458,15 @@
 
 ## [INFO] COMPAT_ALIAS_OVERRIDE  (9)
 
-- `GET /api/system/industries` — GET /api/system/industries 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes.system_routes.get_industries, app.fastapi_routes.xcagi_compat.system_industries）；多为历史兼容别名，后注册者运行时覆盖前者
-- `GET /api/system/industry` — GET /api/system/industry 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes.system_routes.get_current_industry_endpoint, app.fastapi_routes.xcagi_compat.system_industry_get）；多为历史兼容别名，后注册者运行时覆盖前者
-- `POST /api/system/industry` — POST /api/system/industry 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes.system_routes.set_industry_endpoint, app.fastapi_routes.xcagi_compat.system_industry_post）；多为历史兼容别名，后注册者运行时覆盖前者
+- `GET /api/system/industries` — GET /api/system/industries 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes.system_routes.get_industries, app.legacy.routes.xcagi_compat.system_industries）；多为历史兼容别名，后注册者运行时覆盖前者
+- `GET /api/system/industry` — GET /api/system/industry 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes.system_routes.get_current_industry_endpoint, app.legacy.routes.xcagi_compat.system_industry_get）；多为历史兼容别名，后注册者运行时覆盖前者
+- `POST /api/system/industry` — POST /api/system/industry 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes.system_routes.set_industry_endpoint, app.legacy.routes.xcagi_compat.system_industry_post）；多为历史兼容别名，后注册者运行时覆盖前者
 - `GET /api/health` — GET /api/health 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes._register_health_routes.<locals>.health_check, app.fastapi_routes.ai_assistant.compat_health）；多为历史兼容别名，后注册者运行时覆盖前者
 - `GET /api/lan/admin/settings` — GET /api/lan/admin/settings 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes.lan_admin_routes.get_settings, app.fastapi_routes.lan_settings_routes.get_settings）；多为历史兼容别名，后注册者运行时覆盖前者
 - `PUT /api/lan/admin/settings` — PUT /api/lan/admin/settings 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes.lan_admin_routes.update_settings, app.fastapi_routes.lan_settings_routes.update_settings）；多为历史兼容别名，后注册者运行时覆盖前者
 - `POST /api/lan/admin/settings` — POST /api/lan/admin/settings 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes.lan_admin_routes.update_settings, app.fastapi_routes.lan_settings_routes.update_settings）；多为历史兼容别名，后注册者运行时覆盖前者
-- `GET /api/intent-packages` — GET /api/intent-packages 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes.xcagi_compat.compat_intent_packages_hyphen, app.fastapi_routes.xcagi_compat.compat_intent_packages_hyphen_slash）；多为历史兼容别名，后注册者运行时覆盖前者
-- `GET /api/intent_packages` — GET /api/intent_packages 存在 2 个处理器但只有 1 个进入文档（endpoint: app.fastapi_routes.xcagi_compat.compat_intent_packages_underscore, app.fastapi_routes.xcagi_compat.compat_intent_packages_underscore_slash）；多为历史兼容别名，后注册者运行时覆盖前者
+- `GET /api/intent-packages` — GET /api/intent-packages 存在 2 个处理器但只有 1 个进入文档（endpoint: app.legacy.routes.xcagi_compat.compat_intent_packages_hyphen, app.legacy.routes.xcagi_compat.compat_intent_packages_hyphen_slash）；多为历史兼容别名，后注册者运行时覆盖前者
+- `GET /api/intent_packages` — GET /api/intent_packages 存在 2 个处理器但只有 1 个进入文档（endpoint: app.legacy.routes.xcagi_compat.compat_intent_packages_underscore, app.legacy.routes.xcagi_compat.compat_intent_packages_underscore_slash）；多为历史兼容别名，后注册者运行时覆盖前者
 
 ## [INFO] ROUTE_HIDDEN_FROM_SCHEMA  (11)
 

@@ -1,4 +1,5 @@
 import os
+
 from openpyxl import load_workbook
 
 folder = r"e:\FHD\424"
@@ -26,12 +27,12 @@ if target_file:
 
         # 保存
         wb.save("测试直接加载.xlsx")
-        print(f"✓ 保存成功！")
+        print("✓ 保存成功！")
 
         # 验证
         wb2 = load_workbook("测试直接加载.xlsx")
         print(f"验证 - 工作表：{wb2.sheetnames}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"✗ 失败：{e}")
         import traceback
 

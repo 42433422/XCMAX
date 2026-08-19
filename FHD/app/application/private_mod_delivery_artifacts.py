@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import tempfile
 from pathlib import Path
@@ -132,7 +131,7 @@ async def install_custom_delivery_artifact(
             if peek_artifact(str(tmp_path)) != ARTIFACT_EMPLOYEE_PACK:
                 raise ValueError("产物类型校验失败：期望 AI 员工包")
             ok, message = get_employee_registry().install_from_package(
-                str(tmp_path), verify_signature=False
+                str(tmp_path), verify_signature=True
             )
             if not ok:
                 raise RuntimeError(message)
@@ -148,12 +147,12 @@ async def install_custom_delivery_artifact(
 
             with tempfile.TemporaryDirectory(prefix="xcagi-custom-delivery-check-") as check_dir:
                 _, manifest = ModPackage.extract_package(
-                    str(tmp_path), check_dir, verify_signature=False
+                    str(tmp_path), check_dir, verify_signature=True
                 )
             artifact_id = str(manifest.get("id") or "").strip()
             installed_version = str(manifest.get("version") or "").strip()
             ok, message, metadata = get_mod_manager().install_mod_package(
-                str(tmp_path), verify_signature=False, activate=True
+                str(tmp_path), verify_signature=True, activate=True
             )
             if not ok:
                 raise RuntimeError(message)
@@ -280,7 +279,7 @@ async def update_private_mod_from_library(
 
         with tempfile.TemporaryDirectory(prefix="xcagi-private-mod-check-") as check_dir:
             _, manifest = ModPackage.extract_package(
-                str(tmp_path), check_dir, verify_signature=False
+                str(tmp_path), check_dir, verify_signature=True
             )
         manifest_id = str(manifest.get("id") or "").strip()
         manifest_version = str(manifest.get("version") or "").strip()
@@ -289,14 +288,8 @@ async def update_private_mod_from_library(
         if manifest_version and manifest_version != remote_version:
             raise ValueError("私有 Mod 包版本与私有目录不一致")
 
-        verify_signature = os.environ.get("XCAGI_REQUIRE_SIGNED_MODS", "0").strip().lower() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }
         ok, message, metadata = manager.install_mod_package(
-            str(tmp_path), verify_signature=verify_signature, activate=True
+            str(tmp_path), verify_signature=True, activate=True
         )
         if not ok:
             raise RuntimeError(message)

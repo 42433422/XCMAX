@@ -16,6 +16,7 @@ def fill_sales_contract_excel_template(
 ) -> None:
     wb = Workbook()
     ws = wb.active
+    assert ws is not None
     ws.title = "送货单"
     ws.cell(row=2, column=2, value=str(template_data.get("customer_name") or ""))
     ws.cell(row=3, column=9, value=str(template_data.get("contract_date") or ""))

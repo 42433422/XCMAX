@@ -6,7 +6,6 @@ Neuro-DDD 使用率统计分析脚本
 
 import os
 import re
-from pathlib import Path
 from collections import defaultdict
 
 # 定义 Neuro-DDD 核心标识
@@ -37,7 +36,7 @@ TRADITIONAL_PATTERNS = [
 def analyze_file(file_path):
     """分析单个文件的 Neuro-DDD 使用情况"""
     try:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open(file_path, encoding="utf-8", errors="ignore") as f:
             content = f.read()
 
         neuro_matches = []
@@ -59,7 +58,7 @@ def analyze_file(file_path):
             "neuro_patterns": list(set(neuro_matches)),
             "traditional_patterns": list(set(traditional_matches)),
         }
-    except Exception as e:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return None
 
 

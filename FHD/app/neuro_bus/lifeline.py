@@ -14,6 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from threading import RLock
+from typing import Any, cast
 
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -122,10 +123,25 @@ class Lifeline:
                 new_load = SystemLoad.NORMAL
 
             # 考虑资源使用率
-            if cpu_percent and cpu_percent > 90:
-                new_load = min(SystemLoad(new_load.value), SystemLoad.CRITICAL)
-            if memory_percent and memory_percent > 85:
-                new_load = min(SystemLoad(new_load.value), SystemLoad.HIGH)
+            severity = {
+                SystemLoad.NORMAL: 0,
+                SystemLoad.ELEVATED: 1,
+                SystemLoad.HIGH: 2,
+                SystemLoad.CRITICAL: 3,
+                SystemLoad.EMERGENCY: 4,
+            }
+            if (
+                cpu_percent
+                and cpu_percent > 90
+                and severity[new_load] < severity[SystemLoad.CRITICAL]
+            ):
+                new_load = SystemLoad.CRITICAL
+            if (
+                memory_percent
+                and memory_percent > 85
+                and severity[new_load] < severity[SystemLoad.HIGH]
+            ):
+                new_load = SystemLoad.HIGH
 
             # 触发回调
             if new_load != old_load:
@@ -246,7 +262,7 @@ class NeuroLifeline:
             return True
 
         queue_depth = self._queue_depth_fn()
-        return self._lifeline.should_process(event, queue_depth)
+        return cast("bool", self._lifeline.should_process(event, queue_depth))
 
     def check_critical_only_mode(self) -> bool:
         """检查是否处于仅关键模式"""
@@ -255,11 +271,11 @@ class NeuroLifeline:
 
     def get_stats(self) -> dict:
         """获取统计"""
-        return self._lifeline.get_stats()
+        return cast("dict[Any, Any]", self._lifeline.get_stats())
 
     def get_recommendations(self) -> list[str]:
         """获取当前建议"""
-        return self._lifeline.get_emergency_recommendations()
+        return cast("list[str]", self._lifeline.get_emergency_recommendations())
 
 
 # 关键路径定义

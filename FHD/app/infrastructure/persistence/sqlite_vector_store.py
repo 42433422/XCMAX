@@ -9,8 +9,8 @@ from typing import Any, cast
 import numpy as np
 
 from app.application.ports.vector_store import VectorStorePort
-from app.utils.external_sqlite import connect_sqlite
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_io.external_sqlite import connect_sqlite
 
 logger = logging.getLogger(__name__)
 

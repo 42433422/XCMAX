@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 在指定目录下扫描 .db（SQLite），查找 purchase_units.unit_name 或整张表文本是否包含关键字。
 用于定位「深圳百木鼎…」等业务库文件（若曾以 SQLite 保存）。
@@ -36,7 +35,7 @@ def _try_match(path: Path, needle: str) -> list[str]:
             n = cur.fetchone()[0]
             if n:
                 out.append(f"purchase_units.{name_col} match count={n}")
-        cur.execute(f"SELECT COUNT(*) FROM purchase_units")
+        cur.execute("SELECT COUNT(*) FROM purchase_units")
         total = cur.fetchone()[0]
         out.append(f"purchase_units total rows={total}")
         conn.close()

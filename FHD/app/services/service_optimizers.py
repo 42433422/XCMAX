@@ -38,7 +38,7 @@ class AIOptimizedService(NeuroEventPublisherMixin):
         self._rate_limiter = None
 
         try:
-            from app.utils.performance_initializer import get_performance_optimizer
+            from app.utils.performance.performance_initializer import get_performance_optimizer
 
             optimizer = get_performance_optimizer()
 
@@ -182,7 +182,7 @@ class AIOptimizedService(NeuroEventPublisherMixin):
             包含 task_id 的字典
         """
         try:
-            from app.utils.async_tasks import get_async_task_manager
+            from app.utils.async_task.async_tasks import get_async_task_manager
 
             manager = get_async_task_manager()
             task_result = manager.submit(
@@ -266,7 +266,7 @@ class CustomerServiceOptimizer:
         self._monitor = None
 
         try:
-            from app.utils.performance_initializer import get_performance_optimizer
+            from app.utils.performance.performance_initializer import get_performance_optimizer
 
             optimizer = get_performance_optimizer()
             self._cache = optimizer.redis_cache
@@ -330,7 +330,7 @@ class ShipmentServiceOptimizer:
         self._monitor = None
 
         try:
-            from app.utils.performance_initializer import get_performance_optimizer
+            from app.utils.performance.performance_initializer import get_performance_optimizer
 
             optimizer = get_performance_optimizer()
             self._cache = optimizer.redis_cache

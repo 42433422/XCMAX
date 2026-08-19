@@ -17,14 +17,12 @@ deployments can keep the same HTTP surface and replace this with external cron.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -194,187 +192,28 @@ _last_error = ""
 _alert_hook: AlertHook | None = None
 
 
-# ---------------------------------------------------------------------------
-# Job 发现
-# ---------------------------------------------------------------------------
-
-
-def _configured_jobs() -> dict[str, EmployeeCronJob]:
-    """环境变量配置的 daily-orchestrator job（向后兼容）。"""
-    from app.mod_sdk.product_plane import automatic_employee_runtime_enabled
-
-    if not automatic_employee_runtime_enabled():
-        return {}
-
-    tz = _timezone()
-    now = datetime.now(tz)
-    automation_enabled = automatic_employee_runtime_enabled()
-    auto_enabled = automation_enabled and _truthy(
-        os.environ.get("MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED"), default=True
-    )
-    daily_enabled = automation_enabled and _truthy(
-        os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_ENABLED"), default=True
-    )
-    hour = _int_env("MODSTORE_DAILY_ORCHESTRATOR_HOUR", 8, minimum=0, maximum=23)
-    minute = _int_env("MODSTORE_DAILY_ORCHESTRATOR_MINUTE", 15, minimum=0, maximum=59)
-    max_retries = _int_env("MODSTORE_EMPLOYEE_CRON_MAX_RETRIES", 0, minimum=0, maximum=5)
-    task = str(
-        os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_TASK")
-        or "每日定时：在独立分支上做最小修复，并把写操作提交到审批队列。"
-    )
-    job = EmployeeCronJob(
-        job_id="daily-orchestrator",
-        employee_id="daily-orchestrator",
-        task=task,
-        schedule="daily",
-        hour=hour,
-        minute=minute,
-        timezone=str(tz.key),
-        enabled=auto_enabled and daily_enabled,
-        max_retries=max_retries,
-        source="env",
-    )
-    if job.enabled:
-        job.next_run_at = _next_daily_run(now, hour, minute)
-    return {job.job_id: job}
-
-
-def _employees_root() -> Path | None:
-    """定位 _employees 目录：优先环境变量，其次 mod_manager，最后常见路径。"""
-    env_root = os.environ.get("MODSTORE_EMPLOYEES_ROOT", "").strip()
-    if env_root:
-        p = Path(env_root)
-        if p.is_dir():
-            return p
-    # lazy import infrastructure，避免 application 层硬依赖
-    try:
-        from app.infrastructure.mods.mod_manager import get_mod_manager
-
-        mgr = get_mod_manager()
-        roots: list[str] = []
-        try:
-            roots = list(mgr.all_mods_roots() or [])
-        except RECOVERABLE_ERRORS:
-            pass
-        if not roots:
-            primary = getattr(mgr, "mods_root", None)
-            if primary:
-                roots = [primary]
-        for mods_root in roots:
-            if not mods_root:
-                continue
-            cand = Path(mods_root) / "_employees"
-            if cand.is_dir():
-                return cand
-    except RECOVERABLE_ERRORS:
-        pass
-    return None
-
-
-def _parse_manifest_schedule(manifest: dict[str, Any]) -> dict[str, Any] | None:
-    """解析 manifest 的 employee_config_v2.metadata.schedule 声明。
-
-    schedule 格式::
-        {"enabled": true, "hour": 9, "minute": 0,
-         "task": "...", "max_retries": 2}
-
-    未声明 schedule 或 enabled=false 返回 None。
-    """
-    if not isinstance(manifest, dict):
-        return None
-    v2 = manifest.get("employee_config_v2")
-    if not isinstance(v2, dict):
-        return None
-    metadata = v2.get("metadata")
-    if not isinstance(metadata, dict):
-        return None
-    schedule = metadata.get("schedule")
-    if not isinstance(schedule, dict):
-        return None
-    if not _truthy(schedule.get("enabled"), default=False):
-        return None
-    return schedule
-
-
-def _job_from_manifest(
-    employee_id: str,
-    manifest: dict[str, Any],
-    tz: ZoneInfo,
-) -> EmployeeCronJob | None:
-    """从 manifest 构造 EmployeeCronJob，无 schedule 声明返回 None。"""
-    schedule = _parse_manifest_schedule(manifest)
-    if schedule is None:
-        return None
-    hour = int(schedule.get("hour") or 8)
-    minute = int(schedule.get("minute") or 0)
-    hour = max(0, min(23, hour))
-    minute = max(0, min(59, minute))
-    task = str(schedule.get("task") or manifest.get("description") or f"每日定时执行 {employee_id}")
-    max_retries = max(0, min(5, int(schedule.get("max_retries") or 0)))
-    depends_on_raw = manifest.get("depends_on")
-    depends_on = (
-        [str(x).strip() for x in depends_on_raw if str(x).strip()]
-        if isinstance(depends_on_raw, list)
-        else []
-    )
-    now = datetime.now(tz)
-    job = EmployeeCronJob(
-        job_id=employee_id,
-        employee_id=employee_id,
-        task=task,
-        schedule="daily",
-        hour=hour,
-        minute=minute,
-        timezone=str(tz.key),
-        enabled=True,
-        max_retries=max_retries,
-        source="manifest",
-        depends_on=depends_on,
-    )
-    job.next_run_at = _next_daily_run(now, hour, minute)
-    return job
-
-
-def _discover_manifest_jobs() -> dict[str, EmployeeCronJob]:
-    """扫描 _employees 目录，加载所有声明了 schedule 的员工 job。"""
-    from app.mod_sdk.product_plane import automatic_employee_runtime_enabled
-
-    if not automatic_employee_runtime_enabled():
-        return {}
-    root = _employees_root()
-    if root is None:
-        return {}
-    tz = _timezone()
-    jobs: dict[str, EmployeeCronJob] = {}
-    for child in root.iterdir():
-        if not child.is_dir():
-            continue
-        manifest_path = child / "manifest.json"
-        if not manifest_path.is_file():
-            continue
-        try:
-            data = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if not isinstance(data, dict):
-            continue
-        employee_id = str(data.get("id") or child.name).strip()
-        if not employee_id:
-            continue
-        # daily-orchestrator 由环境变量管理，manifest 声明跳过避免重复
-        if employee_id == "daily-orchestrator":
-            continue
-        # 允许通过环境变量按员工禁用
-        per_emp_flag = os.environ.get(
-            f"MODSTORE_EMPLOYEE_CRON_{employee_id.upper().replace('-', '_')}_ENABLED"
-        )
-        if per_emp_flag is not None and not _truthy(per_emp_flag, default=True):
-            continue
-        job = _job_from_manifest(employee_id, data, tz)
-        if job is not None:
-            jobs[employee_id] = job
-    return jobs
-
+from app.application.employee_runtime.scheduler_discovery import (
+    _configured_jobs as _configured_jobs,
+)
+from app.application.employee_runtime.scheduler_discovery import (
+    _discover_manifest_jobs as _discover_manifest_jobs,
+)
+from app.application.employee_runtime.scheduler_discovery import _employees_root as _employees_root
+from app.application.employee_runtime.scheduler_discovery import (
+    _job_from_manifest as _job_from_manifest,
+)
+from app.application.employee_runtime.scheduler_discovery import (
+    _parse_manifest_schedule as _parse_manifest_schedule,
+)
+from app.application.employee_runtime.scheduler_execution import (
+    _apply_job_outcome as _apply_job_outcome,
+)
+from app.application.employee_runtime.scheduler_execution import (
+    _execute_job_task as _execute_job_task,
+)
+from app.application.employee_runtime.scheduler_execution import (
+    run_employee_cron_job as run_employee_cron_job,
+)
 
 # ---------------------------------------------------------------------------
 # 调度状态管理
@@ -581,171 +420,6 @@ def _invoke_alert_hook(job_id: str, error: str, job_dict: dict[str, Any]) -> Non
         logger.warning("employee cron alert hook failed job_id=%s: %s", job_id, exc)
 
 
-# ---------------------------------------------------------------------------
-# Job 执行
-# ---------------------------------------------------------------------------
-
-
-def _execute_job_task(
-    job: EmployeeCronJob,
-    *,
-    task: str | None,
-    input_data: dict[str, Any] | None,
-    user_id: int,
-    workspace_root: str | None,
-    session_id: str | None,
-    source: str,
-) -> tuple[bool, dict[str, Any], str]:
-    """执行单个 job 的任务，返回 (ok, result, error)。"""
-    try:
-        from app.application.employee_runtime.executor import execute_employee_task_local
-
-        payload = dict(input_data or {})
-        payload.setdefault("trigger", source)
-        payload.setdefault("cron_job_id", job.job_id)
-        payload.setdefault("approved_write", False)
-        payload.setdefault("allow_write", False)
-        result = execute_employee_task_local(
-            job.employee_id,
-            task or job.task,
-            payload,
-            user_id=user_id,
-            workspace_root=workspace_root,
-            session_id=session_id,
-        )
-        ok = bool(result.get("success"))
-        error = "" if ok else _result_error(result)
-        if not error:
-            error = "employee task failed"
-        return ok, result, error
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("run employee cron job failed job_id=%s", job.job_id)
-        return False, {"success": False, "error": str(exc)[:800]}, str(exc)[:800]
-
-
-def _apply_job_outcome(
-    job: EmployeeCronJob,
-    *,
-    ok: bool,
-    error: str,
-    duration_ms: float,
-    finished: datetime,
-) -> None:
-    """根据执行结果更新 job 状态（含重试调度与告警）。必须在 _lock 内调用。"""
-    global _last_error
-    job.running = False
-    job.runs_total += 1
-    job.last_run_at = finished
-    job.last_duration_ms = duration_ms
-    if ok:
-        job.success_count += 1
-        job.last_status = "success"
-        job.last_error = ""
-        job.retry_count = 0
-        job.next_retry_at = None
-        _last_error = ""
-    else:
-        job.failure_count += 1
-        job.last_error = error or "employee task failed"
-        _last_error = job.last_error
-        # Missing credentials and an unavailable platform route cannot recover
-        # through retries.  Keep the job visible for the next daily preflight,
-        # but never requeue it in the current failure cycle.
-        if _is_non_retryable_configuration_error(job.last_error):
-            job.last_status = "blocked_config"
-            job.retry_count = 0
-            job.next_retry_at = None
-            logger.warning("employee cron job blocked by configuration job_id=%s", job.job_id)
-            _invoke_alert_hook(job.job_id, job.last_error, job.to_dict())
-        # 判断是否还能重试
-        elif job.max_retries > 0 and job.retry_count < job.max_retries:
-            job.retry_count += 1
-            job.last_status = "retrying"
-            backoff = _retry_backoff_seconds(job.retry_count)
-            job.next_retry_at = finished + timedelta(seconds=backoff)
-            logger.info(
-                "employee cron job retry scheduled job_id=%s retry=%d/%d backoff=%.0fs",
-                job.job_id,
-                job.retry_count,
-                job.max_retries,
-                backoff,
-            )
-        else:
-            # 重试耗尽或未启用重试：标记失败，等下一个每日周期
-            job.last_status = "failed"
-            job.retry_count = 0
-            job.next_retry_at = None
-            # 只在最终失败时告警（重试中不告警，避免噪音）
-            _invoke_alert_hook(job.job_id, job.last_error, job.to_dict())
-    # 无论成功失败，都计算下一个每日运行时间（重试期间 next_run_at 仍推进）
-    if job.enabled:
-        try:
-            tz = ZoneInfo(job.timezone or "UTC")
-        except ZoneInfoNotFoundError:
-            tz = ZoneInfo("UTC")
-        job.next_run_at = _next_daily_run(datetime.now(tz), job.hour, job.minute)
-
-
-def run_employee_cron_job(
-    job_id: str,
-    *,
-    task: str | None = None,
-    input_data: dict[str, Any] | None = None,
-    user_id: int = 0,
-    workspace_root: str | None = None,
-    session_id: str | None = None,
-    source: str = "manual",
-) -> dict[str, Any]:
-    """Run a configured employee cron job immediately.
-
-    失败时若 job.max_retries > 0 会自动调度指数退避重试（next_retry_at），
-    重试由调度循环在到期后触发；手动调用本函数始终执行一次新尝试。
-    """
-    global _last_error
-    jid = str(job_id or "").strip()
-    with _lock:
-        _ensure_jobs_locked()
-        job = _jobs.get(jid)
-        if job is None:
-            return {"success": False, "error": f"unknown employee cron job: {jid}"}
-        if job.running:
-            return {
-                "success": False,
-                "error": f"employee cron job already running: {jid}",
-                "job": job.to_dict(),
-            }
-        job.running = True
-        job.last_status = "running"
-        # 手动触发时清除待重试状态，立即执行一次新尝试
-        if source == "manual":
-            job.retry_count = 0
-            job.next_retry_at = None
-
-    started = datetime.now(UTC)
-    ok, result, error = _execute_job_task(
-        job,
-        task=task,
-        input_data=input_data,
-        user_id=user_id,
-        workspace_root=workspace_root,
-        session_id=session_id,
-        source=source,
-    )
-    finished = datetime.now(UTC)
-    duration_ms = round((finished - started).total_seconds() * 1000, 1)
-
-    with _lock:
-        job = _jobs[jid]
-        _apply_job_outcome(
-            job,
-            ok=ok,
-            error=error,
-            duration_ms=duration_ms,
-            finished=finished,
-        )
-        job_dict = job.to_dict()
-
-    return {"success": ok, "job": job_dict, "result": result}
 
 
 __all__ = [

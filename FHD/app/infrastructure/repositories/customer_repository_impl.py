@@ -39,7 +39,7 @@ class SQLAlchemyCustomerRepository(CustomerRepository):
                 existing.updated_at = datetime.now()
                 db.commit()
                 db.refresh(existing)
-                return self._to_unit_domain(existing)
+                return customer_to_domain(existing)
             unit = PurchaseUnitModel(
                 unit_name=customer.customer_name,
                 contact_person=contact.name,
@@ -50,7 +50,7 @@ class SQLAlchemyCustomerRepository(CustomerRepository):
             db.add(unit)
             db.commit()
             db.refresh(unit)
-            return self._to_unit_domain(unit)
+            return customer_to_domain(unit)
 
     def find_customer_by_id(self, customer_id: int) -> Customer | None:
         with get_db() as db:

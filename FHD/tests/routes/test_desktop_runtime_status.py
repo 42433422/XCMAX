@@ -29,7 +29,8 @@ def client() -> TestClient:
     app.state.mods_background_load_scheduled = False
     app.include_router(router)
     app.dependency_overrides[get_logged_in_user] = lambda: MagicMock(id=1, is_active=True)
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 @pytest.fixture
@@ -38,7 +39,8 @@ def anon_client() -> TestClient:
     app.state.mods_full_load_done = True
     app.state.mods_background_load_scheduled = False
     app.include_router(router)
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 class TestDesktopStatus:

@@ -34,6 +34,11 @@ from app.application.admin_deploy_push import (
 )
 
 
+def _consume_scheduled_coroutine(coro):
+    coro.close()
+    return Mock()
+
+
 class TestLocalGitShaExtended:
     def test_git_sha_success(self, tmp_path: Path) -> None:
         with patch("subprocess.run") as mock_run:
@@ -630,7 +635,7 @@ class TestStartDeployPushExtended:
         monkeypatch.setattr(adp, "_ACTIVE_JOB", None)
         monkeypatch.setattr(adp, "_JOBS", {})
 
-        with patch("asyncio.create_task", new=Mock()):
+        with patch("asyncio.create_task", new=Mock(side_effect=_consume_scheduled_coroutine)):
             job = await start_deploy_push({"channel": "staging"})
         assert job.job_id is not None
         assert job.status == "queued"
@@ -641,7 +646,7 @@ class TestStartDeployPushExtended:
         monkeypatch.setattr(adp, "_ACTIVE_JOB", None)
         monkeypatch.setattr(adp, "_JOBS", {})
 
-        with patch("asyncio.create_task", new=Mock()):
+        with patch("asyncio.create_task", new=Mock(side_effect=_consume_scheduled_coroutine)):
             job = await start_deploy_push()
         assert job.options["include_backend"] is True
         assert job.options["include_frontend"] is True
@@ -665,7 +670,7 @@ class TestStartDeployPushExtended:
         monkeypatch.setattr(adp, "_ACTIVE_JOB", "active")
         monkeypatch.setattr(adp, "_JOBS", {"active": active_job})
 
-        with patch("asyncio.create_task", new=Mock()):
+        with patch("asyncio.create_task", new=Mock(side_effect=_consume_scheduled_coroutine)):
             job = await start_deploy_push()
         assert job.job_id != "active"
 

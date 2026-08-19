@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from sqlalchemy import inspect
+from sqlalchemy import Table, inspect
 
 from app.db.base import Base
 from app.db.models.etl import (
@@ -38,13 +38,13 @@ def ensure_sqlite_etl_bootstrap(
         return
     try:
         existing = set(inspect(real_engine).get_table_names() or [])
-        model_tables = [
-            EtlUpload.__table__,
-            EtlTemplate.__table__,
-            EtlTemplateVersion.__table__,
-            EtlRun.__table__,
-            EtlRunRow.__table__,
-            EtlTargetConfig.__table__,
+        model_tables: list[Table] = [
+            cast("Table", EtlUpload.__table__),
+            cast("Table", EtlTemplate.__table__),
+            cast("Table", EtlTemplateVersion.__table__),
+            cast("Table", EtlRun.__table__),
+            cast("Table", EtlRunRow.__table__),
+            cast("Table", EtlTargetConfig.__table__),
         ]
         missing = [table for table in model_tables if table.name not in existing]
         if missing:

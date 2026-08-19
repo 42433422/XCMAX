@@ -1,6 +1,7 @@
-from docx import Document
 import os
 from datetime import datetime
+
+from docx import Document
 
 
 def create_sales_contract(

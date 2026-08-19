@@ -14,6 +14,7 @@ from typing import Any
 
 from app.application import ai_circle_service
 from app.application.modstore_local_client import modstore_get
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ async def sync_modstore_reports(*, limit: int = 200, force: bool = False) -> dic
 
     try:
         data = await modstore_get(_THREADS_PATH, query="limit=200")
-    except Exception:  # noqa: BLE001 - best-effort，MODstore 不可达即跳过
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - best-effort，MODstore 不可达即跳过
         logger.warning("circle sync: list threads failed", exc_info=True)
         return {"ok": False, "synced": 0, "error": "threads_unreachable"}
 
@@ -65,7 +66,7 @@ async def sync_modstore_reports(*, limit: int = 200, force: bool = False) -> dic
             mdata = await modstore_get(
                 f"{_THREADS_PATH}/{tid}/messages", query=f"limit={int(limit)}"
             )
-        except Exception:  # noqa: BLE001 - best-effort，单线程失败不影响其余
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - best-effort，单线程失败不影响其余
             logger.warning("circle sync: messages failed tid=%s", tid, exc_info=True)
             continue
         msgs = mdata.get("items") if isinstance(mdata, dict) else None
@@ -91,6 +92,6 @@ async def sync_modstore_reports(*, limit: int = 200, force: bool = False) -> dic
                 )
                 if new_id:
                     synced += 1
-            except Exception:  # noqa: BLE001 - 单条失败不影响其余
+            except RECOVERABLE_ERRORS:  # noqa: BLE001 - 单条失败不影响其余
                 logger.warning("circle sync: upsert failed mid=%s", mid, exc_info=True)
     return {"ok": True, "synced": synced, "scanned": scanned}

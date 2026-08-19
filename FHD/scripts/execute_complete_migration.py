@@ -10,9 +10,8 @@
 5. 验证迁移完成
 """
 
-import sys
 import subprocess
-from pathlib import Path
+import sys
 
 
 def run_command(cmd: list, description: str) -> bool:
@@ -37,7 +36,7 @@ def run_command(cmd: list, description: str) -> bool:
                 print(result.stderr[-500:])
             return False
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"[ERROR] {description} 异常: {e}")
         return False
 

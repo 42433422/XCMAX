@@ -6,7 +6,9 @@ import asyncio
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +59,11 @@ async def run_user_cs_employee(payload: dict[str, Any]) -> dict[str, Any]:
         blueprints = import_mod_backend_py(mod_path, EMPLOYEE_MOD_ID, "blueprints")
         dispatch = getattr(blueprints, "_dispatch_run", None) if blueprints else None
         if callable(dispatch):
-            return await _maybe_await(
-                dispatch(EMPLOYEE_MOD_ID, EMPLOYEE_MOD_ID, EMPLOYEE_STEM, payload or {})
+            return cast(
+                "dict[str, Any]",
+                await _maybe_await(
+                    dispatch(EMPLOYEE_MOD_ID, EMPLOYEE_MOD_ID, EMPLOYEE_STEM, payload or {})
+                ),
             )
 
         employee = import_mod_backend_py(
@@ -70,7 +75,7 @@ async def run_user_cs_employee(payload: dict[str, Any]) -> dict[str, Any]:
         if callable(run):
             out = await _maybe_await(run(payload or {}, {}))
             return {"success": True, "data": out}
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("user-cs employee run failed")
         return {
             "success": False,

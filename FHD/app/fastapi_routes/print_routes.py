@@ -12,11 +12,31 @@ from typing import Any
 from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 
+from app.fastapi_routes.print_agent_helpers import (
+    agent_node_output as _agent_node_output,
+)
+from app.fastapi_routes.print_agent_helpers import (
+    print_agent_status_code as _print_agent_status_code,
+)
+from app.fastapi_routes.print_agent_helpers import (
+    print_agent_user_id as _print_agent_user_id,
+)
+from app.fastapi_routes.print_agent_helpers import (
+    run_print_agent as _run_print_agent,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/print", tags=["print"])
+
+__all__ = [
+    "_agent_node_output",
+    "_print_agent_status_code",
+    "_print_agent_user_id",
+    "_run_print_agent",
+    "router",
+]
 
 _PRINT_CONFIRM_TTL_SECONDS = 300
 _print_confirm_cache: dict[str, dict[str, Any]] = {}
@@ -53,112 +73,6 @@ def _svc():
     from app.application.facades.print_facade import printer_service
 
     return printer_service
-
-
-def _print_agent_user_id(request: Request, payload: dict[str, Any]) -> str:
-    return str(
-        request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
-        or payload.get("user_id")
-        or payload.get("userId")
-        or "print-route"
-    ).strip()
-
-
-def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
-    final_output = getattr(run, "final_output", None)
-    node_outputs = dict((final_output or {}).get("node_outputs") or {})
-    output = dict(node_outputs.get(node_id) or {})
-    if not output:
-        for step in getattr(run, "steps", []) or []:
-            if str(getattr(step, "node_id", "")) == node_id:
-                output = dict(getattr(step, "output", {}) or {})
-                break
-    if not output:
-        output = {"success": getattr(run, "status", "") == "completed"}
-    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
-        output["message"] = getattr(run, "error", "")
-    run_id = str(getattr(run, "run_id", "") or "")
-    if run_id:
-        output["run_id"] = run_id
-        output["agent_run_id"] = run_id
-    output["agent_status"] = str(getattr(run, "status", "") or "")
-    return output
-
-
-def _print_agent_status_code(result: dict[str, Any], *, failure_status: int = 400) -> int:
-    if result.get("success"):
-        return 200
-    if str(result.get("error_code") or "") == "tool_exception":
-        return 500
-    return failure_status
-
-
-def _run_print_agent(
-    *,
-    request: Request,
-    action: str,
-    params: dict[str, Any],
-    route_path: str,
-) -> dict[str, Any]:
-    from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.application.workflow_registry_app import get_workflow_tool_registry
-
-    registry = get_workflow_tool_registry()
-    action_meta = dict((registry.get("print") or {}).get("actions") or {}).get(action)
-    if not isinstance(action_meta, dict):
-        return {
-            "success": False,
-            "message": f"未注册的 print 动作: {action}",
-            "agent_status": "failed",
-        }
-
-    node_id = f"print_{action}"
-    user_id = _print_agent_user_id(request, params)
-    plan = PlanGraph(
-        plan_id=node_id,
-        intent=node_id,
-        todo_steps=[f"通过 AgentOrchestrator 执行 print.{action}"],
-        nodes=[
-            WorkflowNode(
-                node_id=node_id,
-                tool_id="print",
-                action=action,
-                params=dict(params or {}),
-                risk=str(action_meta.get("risk") or "medium"),
-                idempotent=bool(action_meta.get("idempotent", False)),
-                description=f"Execute print.{action} through the unified Agent runtime.",
-            )
-        ],
-        risk_level=str(action_meta.get("risk") or "medium"),
-        metadata={"source": "print_route", "route": route_path},
-    )
-    runtime_context = {
-        "source": "print_route",
-        "route": route_path,
-        "request_path": str(request.url.path),
-        "user_id": user_id,
-        "route_confirmed": True,
-        "service_source": "fastapi_print_route",
-    }
-    orchestrator = AgentOrchestrator()
-    run = orchestrator.start_run_from_plan(
-        user_id=user_id,
-        message=str(params.get("message") or f"Print {action}"),
-        plan=plan,
-        runtime_context=runtime_context,
-    )
-    if run.status in {"waiting_user", "running"}:
-        continued = orchestrator.continue_run(
-            run.run_id,
-            approved_by=user_id or "print-route",
-            approved_step_id=node_id,
-            runtime_context=runtime_context,
-        )
-        if continued is not None:
-            run = continued
-    return _agent_node_output(run, node_id)
 
 
 @router.get("/printers")
@@ -463,7 +377,7 @@ def workflow_label_print_dispatch(
 @router.get("/list_labels")
 def list_labels(limit: int = Query(default=2, ge=1, le=20)):
     try:
-        from app.utils.path_utils import get_resource_path
+        from app.utils.path_io.path_utils import get_resource_path
 
         labels_dir = get_resource_path("ai_assistant", "商标导出")
         if not os.path.isdir(labels_dir):
@@ -507,7 +421,7 @@ def list_labels(limit: int = Query(default=2, ge=1, le=20)):
 @router.get("/label/{filename}")
 def serve_label_image(filename: str):
     try:
-        from app.utils.path_utils import get_resource_path
+        from app.utils.path_io.path_utils import get_resource_path
 
         labels_dir = get_resource_path("ai_assistant", "商标导出")
         safe_filename = os.path.basename(filename)

@@ -13,170 +13,30 @@
 - 向后兼容：旧的 failure_threshold 快速熔断仍有效
 """
 
-import asyncio
+import importlib
 import logging
-import threading
 import time
-from collections import deque
 from collections.abc import Callable
-from dataclasses import dataclass
-from enum import Enum
 from threading import RLock
-from typing import Any
+from typing import TYPE_CHECKING
 
+from app.neuro_bus.circuit_breaker_execution import CircuitBreakerExecutionMixin
+from app.neuro_bus.circuit_breaker_primitives import (
+    CircuitBreakerConfig,
+    CircuitState,
+    RollingWindowCounter,
+)
+from app.neuro_bus.circuit_breaker_primitives import (
+    CircuitBreakerOpen as CircuitBreakerOpen,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 
-class CircuitState(Enum):
-    """熔断器状态"""
-
-    CLOSED = "closed"  # 正常，请求通过
-    OPEN = "open"  # 熔断，拒绝请求
-    HALF_OPEN = "half_open"  # 半开，试探性允许
 
 
-@dataclass
-class CircuitBreakerConfig:
-    """熔断器配置（对标 Netflix Hystrix / resilience4j）"""
-
-    # ── 基础配置（向后兼容） ──
-    failure_threshold: int = 5  # 触发熔断的连续失败次数（快速熔断后备）
-    success_threshold: int = 3  # 半开状态恢复所需成功次数
-    timeout_seconds: float = 60.0  # 熔断后尝试恢复的时间
-    half_open_max_calls: int = 3  # 半开状态最大试探请求数（向后兼容）
-
-    # ── 滑动窗口失败率统计 ──
-    failure_rate_threshold: float = 0.5  # 失败率阈值（50%）
-    minimum_number_of_calls: int = 20  # 最小样本量，未达不熔断
-    window_size_seconds: float = 10.0  # 滑动窗口大小（秒）
-    bucket_size_seconds: float = 1.0  # 桶大小（秒）
-
-    # ── 慢调用熔断 ──
-    slow_call_duration_threshold: float = 5.0  # 慢调用阈值（秒）
-    slow_call_rate_threshold: float = 0.8  # 慢调用率阈值（80%）
-
-    # ── Fallback 降级 ──
-    fallback: Callable | None = None  # 降级函数
-    fallback_timeout_seconds: float = 5.0  # fallback 超时（秒）
-
-    # ── 自动转半开 ──
-    automatic_transition_from_open_to_half_open: bool = True
-
-    # ── 半开状态改进 ──
-    permitted_number_of_calls_in_half_open_state: int = 10  # 半开允许调用数
-    minimum_number_of_calls_in_half_open: int = 3  # 半开最小决策样本量
-
-
-class RollingWindowCounter:
-    """
-    滑动窗口计数器（桶计数 + 环形缓冲）
-
-    使用 collections.deque 实现环形缓冲，O(1) 更新。
-    每桶维护 success/failure/timeout/rejection/slow_call 计数。
-    """
-
-    def __init__(
-        self,
-        window_size_seconds: float = 10.0,
-        bucket_size_seconds: float = 1.0,
-    ):
-        self._window_size = window_size_seconds
-        self._bucket_size = max(0.001, bucket_size_seconds)
-        self._num_buckets = max(1, int(window_size_seconds / self._bucket_size))
-        # deque(maxlen=...) 自动丢弃最旧的桶，实现环形缓冲
-        self._buckets: deque[dict] = deque(maxlen=self._num_buckets)
-        self._lock = RLock()
-
-    def _current_bucket(self) -> dict:
-        """获取当前时间对应的桶，必要时创建新桶并淘汰过期桶。"""
-        now = time.monotonic()
-        bucket_start = (int(now / self._bucket_size)) * self._bucket_size
-        # 淘汰过期桶（start 早于窗口外）
-        cutoff = now - self._window_size
-        while self._buckets and self._buckets[0]["start"] < cutoff:
-            self._buckets.popleft()
-        # 复用当前桶或创建新桶
-        if self._buckets and self._buckets[-1]["start"] == bucket_start:
-            return self._buckets[-1]
-        new_bucket = {
-            "start": bucket_start,
-            "success": 0,
-            "failure": 0,
-            "timeout": 0,
-            "rejection": 0,
-            "slow_call": 0,
-        }
-        self._buckets.append(new_bucket)
-        return new_bucket
-
-    def record_success(self) -> None:
-        """记录一次成功调用。"""
-        with self._lock:
-            self._current_bucket()["success"] += 1
-
-    def record_failure(self) -> None:
-        """记录一次失败调用。"""
-        with self._lock:
-            self._current_bucket()["failure"] += 1
-
-    def record_timeout(self) -> None:
-        """记录一次超时调用。"""
-        with self._lock:
-            self._current_bucket()["timeout"] += 1
-
-    def record_rejection(self) -> None:
-        """记录一次拒绝调用（熔断器 OPEN 时）。"""
-        with self._lock:
-            self._current_bucket()["rejection"] += 1
-
-    def record_slow_call(self) -> None:
-        """记录一次慢调用。"""
-        with self._lock:
-            self._current_bucket()["slow_call"] += 1
-
-    def get_stats(self) -> dict:
-        """
-        获取窗口内累计统计。
-
-        Returns:
-            包含 total/success/failure/timeout/rejection/slow_call
-            及 failure_rate/slow_call_rate 的字典。
-            注意：failure_rate 不含 rejection（rejection 不是真实调用）。
-        """
-        with self._lock:
-            now = time.monotonic()
-            cutoff = now - self._window_size
-            while self._buckets and self._buckets[0]["start"] < cutoff:
-                self._buckets.popleft()
-            success = sum(b["success"] for b in self._buckets)
-            failure = sum(b["failure"] for b in self._buckets)
-            timeout = sum(b["timeout"] for b in self._buckets)
-            rejection = sum(b["rejection"] for b in self._buckets)
-            slow_call = sum(b["slow_call"] for b in self._buckets)
-            # failure_rate 的分母不含 rejection（rejection 不是真实调用）
-            total = success + failure + timeout
-            failure_rate = (failure + timeout) / total if total > 0 else 0.0
-            slow_call_rate = slow_call / total if total > 0 else 0.0
-            return {
-                "total": total,
-                "success": success,
-                "failure": failure,
-                "timeout": timeout,
-                "rejection": rejection,
-                "slow_call": slow_call,
-                "failure_rate": failure_rate,
-                "slow_call_rate": slow_call_rate,
-            }
-
-    def reset(self) -> None:
-        """清空所有桶。"""
-        with self._lock:
-            self._buckets.clear()
-
-
-class CircuitBreaker:
+class CircuitBreaker(CircuitBreakerExecutionMixin):
     """
     熔断器（工业级实现）
 
@@ -286,7 +146,7 @@ class CircuitBreaker:
         for callback in self._state_change_callbacks:
             try:
                 callback(old_state, new_state, ctx)
-            except Exception as e:  # noqa: BLE001 - 回调异常不应影响熔断
+            except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - 回调异常不应影响熔断
                 logger.warning("Circuit [%s] state change callback failed: %s", self._name, e)
 
     def can_execute(self) -> bool:
@@ -453,176 +313,6 @@ class CircuitBreaker:
             if self._state == CircuitState.HALF_OPEN:
                 self._half_open_window.record_slow_call()
 
-    def _acquire_execution_slot(self) -> None:
-        """占用一个并发执行槽位。"""
-        with self._lock:
-            self._concurrent_executions += 1
-
-    def _release_execution_slot(self) -> None:
-        """释放一个并发执行槽位。"""
-        with self._lock:
-            if self._concurrent_executions > 0:
-                self._concurrent_executions -= 1
-
-    def _call_fallback_sync(self) -> Any:
-        """
-        同步调用 fallback（含超时保护）。
-
-        使用守护线程执行 fallback，主线程 join(timeout)。
-        超时则抛 TimeoutError；fallback 自身异常则透传。
-        """
-        fallback = self._config.fallback
-        if fallback is None:
-            raise CircuitBreakerOpen(f"Circuit [{self._name}] is OPEN and no fallback")
-
-        result: list[Any] = [None]
-        exc: list[BaseException | None] = [None]
-
-        def _worker() -> None:
-            try:
-                result[0] = fallback()
-            except BaseException as e:  # noqa: BLE001 - 需捕获所有异常以透传
-                exc[0] = e
-
-        thread = threading.Thread(target=_worker, daemon=True)
-        thread.start()
-        thread.join(timeout=self._config.fallback_timeout_seconds)
-
-        if thread.is_alive():
-            # 守护线程仍在运行，无法真正终止，但主线程不再等待
-            with self._lock:
-                self._fallback_failure_count += 1
-            raise TimeoutError(f"Fallback timed out after {self._config.fallback_timeout_seconds}s")
-        if exc[0] is not None:
-            with self._lock:
-                self._fallback_failure_count += 1
-            raise exc[0]
-        with self._lock:
-            self._fallback_success_count += 1
-        return result[0]
-
-    async def _call_fallback_async(self) -> Any:
-        """
-        异步调用 fallback（含超时保护）。
-
-        使用 asyncio.wait_for 限制 fallback 执行时间。
-        fallback 可以是协程函数或返回协程的普通函数。
-        """
-        fallback = self._config.fallback
-        if fallback is None:
-            raise CircuitBreakerOpen(f"Circuit [{self._name}] is OPEN and no fallback")
-
-        try:
-            coro = fallback()
-            if asyncio.iscoroutine(coro):
-                result = await asyncio.wait_for(coro, timeout=self._config.fallback_timeout_seconds)
-            else:
-                # fallback 返回非协程值（同步 fallback 在 async 上下文中使用）
-                result = coro
-            with self._lock:
-                self._fallback_success_count += 1
-            return result
-        except BaseException:  # noqa: BLE001 - 需捕获所有异常以透传
-            with self._lock:
-                self._fallback_failure_count += 1
-            raise
-
-    def execute(self, fn: Callable, *args, **kwargs) -> Any:
-        """
-        执行函数，自动处理熔断逻辑
-
-        Args:
-            fn: 要执行的函数
-            *args, **kwargs: 函数参数
-
-        Returns:
-            函数返回值（或 fallback 返回值）
-
-        Raises:
-            CircuitBreakerOpen: 熔断器打开且无 fallback 时抛出
-            原始异常: 执行失败且无 fallback 时抛出
-
-        说明：
-        - 熔断 OPEN 时，若有 fallback 则调用 fallback 返回默认值
-        - 执行失败时，若有 fallback 则调用 fallback
-        - 记录调用耗时，慢调用计入 slow_call 统计
-        """
-        if not self.can_execute():
-            with self._lock:
-                self._rejected_count += 1
-                self._window.record_rejection()
-            if self._config.fallback is not None:
-                return self._call_fallback_sync()
-            raise CircuitBreakerOpen(f"Circuit [{self._name}] is OPEN")
-
-        self._acquire_execution_slot()
-        start_time = time.monotonic()
-        try:
-            result = fn(*args, **kwargs)
-            duration = time.monotonic() - start_time
-            if duration > self._config.slow_call_duration_threshold:
-                self.record_slow_call()
-            self.record_success()
-            return result
-        except RECOVERABLE_ERRORS:
-            duration = time.monotonic() - start_time
-            if duration > self._config.slow_call_duration_threshold:
-                self.record_slow_call()
-            self.record_failure()
-            if self._config.fallback is not None:
-                return self._call_fallback_sync()
-            raise
-        finally:
-            self._release_execution_slot()
-
-    async def execute_async(self, fn: Callable, *args, **kwargs) -> Any:
-        """
-        异步执行函数，自动处理熔断逻辑
-
-        Args:
-            fn: 要执行的异步函数
-            *args, **kwargs: 函数参数
-
-        Returns:
-            函数返回值（或 fallback 返回值）
-
-        Raises:
-            CircuitBreakerOpen: 熔断器打开且无 fallback 时抛出
-            原始异常: 执行失败且无 fallback 时抛出
-
-        说明：
-        - 熔断 OPEN 时，若有 fallback 则调用 fallback 返回默认值
-        - 执行失败时，若有 fallback 则调用 fallback
-        - 记录调用耗时，慢调用计入 slow_call 统计
-        """
-        if not self.can_execute():
-            with self._lock:
-                self._rejected_count += 1
-                self._window.record_rejection()
-            if self._config.fallback is not None:
-                return await self._call_fallback_async()
-            raise CircuitBreakerOpen(f"Circuit [{self._name}] is OPEN")
-
-        self._acquire_execution_slot()
-        start_time = time.monotonic()
-        try:
-            result = await fn(*args, **kwargs)
-            duration = time.monotonic() - start_time
-            if duration > self._config.slow_call_duration_threshold:
-                self.record_slow_call()
-            self.record_success()
-            return result
-        except RECOVERABLE_ERRORS:
-            duration = time.monotonic() - start_time
-            if duration > self._config.slow_call_duration_threshold:
-                self.record_slow_call()
-            self.record_failure()
-            if self._config.fallback is not None:
-                return await self._call_fallback_async()
-            raise
-        finally:
-            self._release_execution_slot()
-
     def get_metrics(self) -> dict:
         """
         获取 Prometheus 兼容的指标快照。
@@ -680,143 +370,13 @@ class CircuitBreaker:
             }
 
 
-class CircuitBreakerOpen(Exception):
-    """熔断器打开异常"""
-
-    pass
 
 
-class NeuroCircuitBreakerManager:
-    """
-    NeuroBus 熔断管理器
-
-    管理多个熔断器，按领域和事件类型划分。
-    提供 get_all_metrics / get_prometheus_metrics 用于监控集成。
-    """
-
-    # 各领域的熔断配置
-    DOMAIN_CONFIGS = {
-        "payment": CircuitBreakerConfig(
-            failure_threshold=3,  # 支付敏感，低阈值
-            timeout_seconds=30.0,  # 快速恢复尝试
-        ),
-        "wechat": CircuitBreakerConfig(
-            failure_threshold=5,
-            timeout_seconds=60.0,
-        ),
-        "intent": CircuitBreakerConfig(
-            failure_threshold=10,  # 意图识别容忍度高
-            timeout_seconds=30.0,
-        ),
-        "default": CircuitBreakerConfig(),
-    }
-
-    # 状态到数值的映射（用于 Prometheus gauge）
-    _STATE_TO_INT = {
-        CircuitState.CLOSED: 0,
-        CircuitState.HALF_OPEN: 1,
-        CircuitState.OPEN: 2,
-    }
-
-    def __init__(self):
-        self._breakers: dict[str, CircuitBreaker] = {}
-        self._lock = RLock()
-
-    def get_breaker(self, domain: str, event_type: str | None = None) -> CircuitBreaker:
-        """获取或创建熔断器"""
-        key = f"{domain}:{event_type}" if event_type else domain
-
-        with self._lock:
-            if key not in self._breakers:
-                config = self.DOMAIN_CONFIGS.get(domain, self.DOMAIN_CONFIGS["default"])
-                self._breakers[key] = CircuitBreaker(key, config)
-
-            return self._breakers[key]
-
-    def check(self, domain: str, event_type: str | None = None) -> bool:
-        """检查是否可以通过"""
-        breaker = self.get_breaker(domain, event_type)
-        return breaker.can_execute()
-
-    def record_success(self, domain: str, event_type: str | None = None):
-        """记录成功"""
-        breaker = self.get_breaker(domain, event_type)
-        breaker.record_success()
-
-    def record_failure(self, domain: str, event_type: str | None = None):
-        """记录失败"""
-        breaker = self.get_breaker(domain, event_type)
-        breaker.record_failure()
-
-    def get_all_stats(self) -> dict:
-        """获取所有熔断器统计（向后兼容）"""
-        with self._lock:
-            return {key: breaker.get_stats() for key, breaker in self._breakers.items()}
-
-    def get_all_metrics(self) -> dict:
-        """
-        获取所有熔断器的 Prometheus 兼容指标。
-
-        Returns:
-            {breaker_name: metrics_dict} 的字典。
-        """
-        with self._lock:
-            return {key: breaker.get_metrics() for key, breaker in self._breakers.items()}
-
-    def get_prometheus_metrics(self) -> str:
-        """
-        生成 Prometheus 文本格式指标。
-
-        输出格式符合 Prometheus exposition format，
-        可直接由 /metrics 端点返回。
-
-        指标列表：
-        - circuit_breaker_state{gauge}
-        - circuit_breaker_failure_rate
-        - circuit_breaker_slow_call_rate
-        - circuit_breaker_total_calls
-        - circuit_breaker_successful_calls
-        - circuit_breaker_failed_calls
-        - circuit_breaker_slow_calls
-        - circuit_breaker_rejected_calls
-        - circuit_breaker_fallback_calls
-        - circuit_breaker_concurrent_executions
-        """
-        with self._lock:
-            lines: list[str] = []
-            # 帮助文本
-            lines.append(
-                "# HELP circuit_breaker_state Circuit breaker state (0=closed,1=half_open,2=open)"
-            )
-            lines.append("# TYPE circuit_breaker_state gauge")
-            lines.append("# HELP circuit_breaker_failure_rate Failure rate in sliding window")
-            lines.append("# TYPE circuit_breaker_failure_rate gauge")
-            lines.append("# HELP circuit_breaker_total_calls Total calls in sliding window")
-            lines.append("# TYPE circuit_breaker_total_calls gauge")
-            lines.append(
-                "# HELP circuit_breaker_concurrent_executions Current concurrent executions"
-            )
-            lines.append("# TYPE circuit_breaker_concurrent_executions gauge")
-
-            for name, breaker in self._breakers.items():
-                m = breaker.get_metrics()
-                # 转义 name 中的特殊字符
-                safe_name = name.replace("\\", "\\\\").replace('"', '\\"')
-                label = f'name="{safe_name}"'
-                state_int = self._STATE_TO_INT.get(CircuitState(m["state"]), 0)
-                lines.append(f"circuit_breaker_state{{{label}}} {state_int}")
-                lines.append(f"circuit_breaker_failure_rate{{{label}}} {m['failure_rate']}")
-                lines.append(f"circuit_breaker_slow_call_rate{{{label}}} {m['slow_call_rate']}")
-                lines.append(f"circuit_breaker_total_calls{{{label}}} {m['total_calls']}")
-                lines.append(f"circuit_breaker_successful_calls{{{label}}} {m['successful_calls']}")
-                lines.append(f"circuit_breaker_failed_calls{{{label}}} {m['failed_calls']}")
-                lines.append(f"circuit_breaker_slow_calls{{{label}}} {m['slow_calls']}")
-                lines.append(f"circuit_breaker_rejected_calls{{{label}}} {m['rejected_calls']}")
-                lines.append(f"circuit_breaker_fallback_calls{{{label}}} {m['fallback_calls']}")
-                lines.append(
-                    f"circuit_breaker_concurrent_executions{{{label}}} {m['concurrent_executions']}"
-                )
-            return "\n".join(lines) + "\n" if lines else ""
+_manager_module = importlib.import_module("app.neuro_bus.circuit_breaker_manager")
+if TYPE_CHECKING:
+    from app.neuro_bus.circuit_breaker_manager import NeuroCircuitBreakerManager
+else:
+    NeuroCircuitBreakerManager = _manager_module.NeuroCircuitBreakerManager
 
 
 _neuro_circuit_manager: NeuroCircuitBreakerManager | None = None

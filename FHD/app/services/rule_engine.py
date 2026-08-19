@@ -15,7 +15,7 @@ import logging
 import re
 from typing import Any
 
-from app.utils.cache_manager import get_intent_rule_cache
+from app.utils.performance.cache_manager import get_intent_rule_cache
 from resources.config.intent_config import get_intent_config, reload_intent_config
 
 logger = logging.getLogger(__name__)

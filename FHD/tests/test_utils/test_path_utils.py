@@ -6,7 +6,7 @@ import os
 
 import pytest
 
-from app.utils.path_utils import (
+from app.utils.path_io.path_utils import (
     ensure_dir,
     get_base_dir,
     get_data_dir,

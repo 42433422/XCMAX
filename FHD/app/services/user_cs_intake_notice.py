@@ -18,6 +18,8 @@ def _primary_contact_name(market_user_id: int) -> str:
     doc = load_pipeline(int(market_user_id))
     intake = doc.get("intake_form") if isinstance(doc.get("intake_form"), dict) else {}
     for key in ("company", "name"):
+        if not isinstance(intake, dict):
+            intake = {}
         val = str(intake.get(key) or "").strip()
         if val:
             return val

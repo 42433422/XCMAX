@@ -6,7 +6,7 @@ import logging
 
 from fastapi import APIRouter, Body, Header, Query, Request
 
-from app.application import approval_workspace_app_service as svc
+from app.mod_sdk.host_services import approval_workspace_app_service as svc
 
 logger = logging.getLogger(__name__)
 

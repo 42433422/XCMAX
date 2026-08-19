@@ -1,7 +1,8 @@
 """检查测试输出"""
 
-from openpyxl import load_workbook
 import os
+
+from openpyxl import load_workbook
 
 output_file = r"e:\FHD\424\测试_直接转换.xlsx"
 
@@ -11,7 +12,7 @@ if os.path.exists(output_file):
 
     if "明细" in wb.sheetnames:
         ws = wb["明细"]
-        print(f'\n✓ 成功！包含"明细"工作表')
+        print('\n✓ 成功！包含"明细"工作表')
         print(f"最大行：{ws.max_row}, 最大列：{ws.max_column}")
 
         # 检查有多少行有数据
@@ -27,6 +28,6 @@ if os.path.exists(output_file):
 
         print(f"\n前 50 行中有数据的行数：{data_rows}")
     else:
-        print(f'\n✗ 问题：没有"明细"工作表')
+        print('\n✗ 问题：没有"明细"工作表')
 else:
     print("文件不存在")

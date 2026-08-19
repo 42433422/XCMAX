@@ -36,7 +36,7 @@ def check_redis_connection():
     """检查 Redis 连接"""
     print("\n📡 [1/6] 检查 Redis 连接...")
     try:
-        from app.utils.redis_cache import get_redis_cache
+        from app.utils.performance.redis_cache import get_redis_cache
 
         cache = get_redis_cache()
 
@@ -66,7 +66,7 @@ def check_query_optimizer():
     """检查查询优化器"""
     print("\n🔍 [2/6] 检查查询优化器...")
     try:
-        from app.utils.query_optimizer import get_query_optimizer
+        from app.utils.performance.query_optimizer import get_query_optimizer
 
         optimizer = get_query_optimizer()
         stats = optimizer.stats
@@ -86,7 +86,7 @@ def check_async_tasks():
     """检查异步任务管理"""
     print("\n⚡ [3/6] 检查异步任务管理...")
     try:
-        from app.utils.async_tasks import get_async_task_manager
+        from app.utils.async_task.async_tasks import get_async_task_manager
 
         manager = get_async_task_manager()
         stats = manager.stats
@@ -130,7 +130,7 @@ def check_performance_monitor():
     """检查性能监控"""
     print("\n📊 [5/6] 检查性能监控...")
     try:
-        from app.utils.performance_monitor import get_performance_monitor
+        from app.utils.performance.performance_monitor import get_performance_monitor
 
         monitor = get_performance_monitor()
         summary = monitor.get_metrics_summary(minutes=5)
@@ -196,7 +196,7 @@ def run_performance_test():
     # 测试1: 缓存读写
     start = time.perf_counter()
     try:
-        from app.utils.redis_cache import get_redis_cache
+        from app.utils.performance.redis_cache import get_redis_cache
         cache = get_redis_cache()
 
         for i in range(100):
@@ -214,7 +214,7 @@ def run_performance_test():
     # 测试2: 监控记录
     start = time.perf_counter()
     try:
-        from app.utils.performance_monitor import get_performance_monitor
+        from app.utils.performance.performance_monitor import get_performance_monitor
         monitor = get_performance_monitor()
 
         for i in range(50):

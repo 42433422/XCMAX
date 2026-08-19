@@ -5,9 +5,7 @@
 直接更新 backend 路由使用 V2 服务
 """
 
-import re
 from pathlib import Path
-
 
 # 导入替换映射
 IMPORT_MAP = {

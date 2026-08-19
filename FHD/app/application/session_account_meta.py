@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from app.db.models.user import Session as UserSession
 from app.db.session import get_host_db
@@ -18,8 +18,11 @@ VALID_ACCOUNT_KINDS: frozenset[str] = frozenset({"personal", "enterprise", "admi
 def normalize_account_kind(raw: Any, *, default: str = "enterprise") -> AccountKind:
     v = str(raw or default).strip().lower()
     if v in VALID_ACCOUNT_KINDS:
-        return v
-    return default
+        return cast("AccountKind", v)
+    normalized_default = str(default).strip().lower()
+    if normalized_default in VALID_ACCOUNT_KINDS:
+        return cast("AccountKind", normalized_default)
+    return "enterprise"
 
 
 def derive_account_kind_from_user(

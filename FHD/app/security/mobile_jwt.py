@@ -51,7 +51,7 @@ def _secret_key() -> str:
 def _redis_blacklist():
     """可选 Redis 后端，用于跨副本共享已消费的 refresh jti；不可用时返回 None。"""
     try:
-        from app.utils.redis_cache import get_redis_cache
+        from app.utils.performance.redis_cache import get_redis_cache
 
         cache = get_redis_cache()
         return cache if getattr(cache, "is_available", False) else None

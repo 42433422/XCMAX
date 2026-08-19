@@ -1,5 +1,6 @@
-import requests
 import json
+
+import requests
 
 
 def test_delete_function():
@@ -56,7 +57,7 @@ def test_delete_function():
                 print(f"📄 响应内容: {delete_response.text}")
 
             # 3. 再次获取客户列表验证删除结果
-            print(f"\n🔍 3. 验证删除结果")
+            print("\n🔍 3. 验证删除结果")
 
             response2 = requests.get(f"{base_url}/api/customers", timeout=10)
 
@@ -83,7 +84,7 @@ def test_delete_function():
         else:
             print(f"❌ 获取客户列表失败，状态码: {response.status_code}")
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 测试删除功能失败: {e}")
 
 
@@ -108,7 +109,7 @@ def check_database_after_delete():
         cursor.execute("SELECT COUNT(*) FROM purchase_units WHERE is_active = 0")
         inactive_count = cursor.fetchone()[0]
 
-        print(f"📊 数据库状态:")
+        print("📊 数据库状态:")
         print(f"  活跃客户: {active_count} 个")
         print(f"  非活跃客户: {inactive_count} 个")
         print(f"  总客户数: {active_count + inactive_count} 个")
@@ -121,7 +122,7 @@ def check_database_after_delete():
 
         conn.close()
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查数据库失败: {e}")
 
 
@@ -135,7 +136,7 @@ def check_delete_implementation():
     service_file = "e:/FHD/xcagi/app/services/customer_import_service.py"
 
     try:
-        with open(service_file, "r", encoding="utf-8") as f:
+        with open(service_file, encoding="utf-8") as f:
             content = f.read()
 
             # 查找删除相关的代码
@@ -150,7 +151,7 @@ def check_delete_implementation():
             if "软删除" in content:
                 print("💡 代码中包含软删除注释")
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查删除实现失败: {e}")
 
 

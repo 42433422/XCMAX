@@ -31,7 +31,7 @@ with engine.begin() as conn:
     print("=== 查询所有激活模板（Excel 优先）===")
     result = conn.execute(
         text(
-            """
+            r"""
         SELECT slug, storage_relpath, is_default, is_active,
                (CASE WHEN storage_relpath ~* '\.(xls|xlsx|xlsm)$' THEN 0 ELSE 1 END) as is_word
         FROM document_templates

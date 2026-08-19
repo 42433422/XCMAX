@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import get_base_dir
+from app.utils.path_io.path_utils import get_base_dir
 
 logger = logging.getLogger(__name__)
 
@@ -265,9 +265,9 @@ def read_file_response(rel_file: str) -> tuple[dict[str, Any], int]:
                 sheets_data: dict[str, Any] = {}
                 for sheet_name in sheet_names:
                     sheet = wb[sheet_name]
-                    rows_data = []
+                    rows_data: list[list[Any]] = []
                     for row in sheet.iter_rows(values_only=True):
-                        row_list = []
+                        row_list: list[Any] = []
                         for cell in row:
                             if cell is None:
                                 row_list.append(None)

@@ -117,7 +117,7 @@ def pick_primary_identity(mbti_type: str, mod_hints: List[str] | None = None) ->
             for ident in ATOMIC_IDENTITIES:
                 if hint and hint in ident:
                     return ident
-    return max(affinities, key=affinities.get)
+    return max(affinities, key=lambda identity: affinities[identity])
 
 
 def _clamp(value: int, low: int = 0, high: int = 100) -> int:

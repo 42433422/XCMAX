@@ -1,5 +1,6 @@
-import requests
 import json
+
+import requests
 
 
 def frontend_smoke_test():
@@ -110,7 +111,7 @@ def frontend_smoke_test():
                 print(f"  - ID: {unit[0]}, 名称: {unit[1]}")
 
         conn.close()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查customer数据库失败: {e}")
 
     # 测试4: 检查前端可能使用的其他数据源
@@ -134,7 +135,7 @@ def frontend_smoke_test():
 
     for js_file in js_files:
         try:
-            with open(js_file, "r", encoding="utf-8") as f:
+            with open(js_file, encoding="utf-8") as f:
                 content = f.read()
 
                 # 查找API调用
@@ -158,7 +159,7 @@ def frontend_smoke_test():
 
         except FileNotFoundError:
             print(f"❌ 文件不存在: {js_file}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"❌ 读取文件失败: {e}")
 
     print("\n" + "=" * 60)
@@ -179,7 +180,7 @@ def check_backend_implementation():
     routes_file = "e:/FHD/xcagi/app/fastapi_routes/domains/customer/routes.py"
 
     try:
-        with open(routes_file, "r", encoding="utf-8") as f:
+        with open(routes_file, encoding="utf-8") as f:
             content = f.read()
 
             # 查找路由定义
@@ -206,7 +207,7 @@ def check_backend_implementation():
                     if pattern in content:
                         print(f"  ✅ 使用服务: {pattern}")
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查后端实现失败: {e}")
 
 

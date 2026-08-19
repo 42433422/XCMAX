@@ -180,7 +180,7 @@ def test_redis_limiter_remaining_no_redis_returns_max():
 
 def test_redis_limiter_remaining_get_error_returns_zero():
     fake_redis = MagicMock()
-    fake_redis.get.side_effect = Exception("boom")
+    fake_redis.get.side_effect = RuntimeError("boom")
     with patch.object(rl, "_get_redis_client", return_value=fake_redis):
         limiter = rl._RedisRateLimiter(max_requests=5, window_seconds=60)
     assert limiter.get_remaining("u1") == 0
@@ -216,7 +216,7 @@ def test_get_redis_client_ping_failure():
     with patch.object(rl, "redis_url_from_env", return_value="redis://x"):
         with patch.dict("sys.modules", {"redis": MagicMock()}):
             fake_redis_mod = __import__("sys").modules["redis"]
-            fake_redis_mod.from_url.return_value.ping.side_effect = Exception("down")
+            fake_redis_mod.from_url.return_value.ping.side_effect = RuntimeError("down")
             rl._redis_client = None
             rl._redis_init_attempted = False
             assert rl._get_redis_client() is None

@@ -538,6 +538,14 @@ class TestActionDirectPythonModuleDeep:
 
 
 class TestCognitionFhdDeep:
+    @pytest.fixture(autouse=True)
+    def _no_unconsumed_chat_coroutine(self):
+        with patch(
+            "app.application.employee_runtime.agent_runner._chat_completion",
+            new=MagicMock(return_value=None),
+        ):
+            yield
+
     def test_with_agent_system_prompt(self) -> None:
         with patch(
             "app.application.employee_runtime.agent_runner._run_async",

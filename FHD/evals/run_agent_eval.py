@@ -2686,11 +2686,11 @@ def _run_system_maintenance_route_agent_task(task: dict[str, Any]) -> dict[str, 
                 )
             )
             stack.enter_context(
-                patch("app.utils.performance_initializer.get_performance_optimizer", return_value=optimizer)
+                patch("app.utils.performance.performance_initializer.get_performance_optimizer", return_value=optimizer)
             )
             stack.enter_context(
                 patch(
-                    "app.utils.performance_initializer.init_performance_optimization",
+                    "app.utils.performance.performance_initializer.init_performance_optimization",
                     return_value=optimizer,
                 )
             )
@@ -3592,7 +3592,7 @@ def _run_products_compat_route_agent_task(task: dict[str, Any]) -> dict[str, Any
 
     import app.application.excel_imports as excel_imports
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
-    from app.fastapi_routes.domains.product import compat_routes as product_compat_routes
+    from app.legacy.routes.product import compat_routes as product_compat_routes
 
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "create").strip().lower()
@@ -3646,30 +3646,30 @@ def _run_products_compat_route_agent_task(task: dict[str, Any]) -> dict[str, Any
                 )
                 stack.enter_context(
                     patch(
-                        "app.fastapi_routes.domains.product.compat_routes._products_write_raise"
+                        "app.legacy.routes.product.compat_routes._products_write_raise"
                     )
                 )
                 stack.enter_context(
                     patch(
-                        "app.fastapi_routes.domains.product.compat_routes._business_mod_json_block",
+                        "app.legacy.routes.product.compat_routes._business_mod_json_block",
                         return_value=None,
                     )
                 )
                 insert_row = stack.enter_context(
                     patch(
-                        "app.fastapi_routes.domains.product.compat_routes.products_pg_insert_row",
+                        "app.legacy.routes.product.compat_routes.products_pg_insert_row",
                         return_value=7,
                     )
                 )
                 update_row = stack.enter_context(
-                    patch("app.fastapi_routes.domains.product.compat_routes.products_pg_update_row")
+                    patch("app.legacy.routes.product.compat_routes.products_pg_update_row")
                 )
                 delete_row = stack.enter_context(
-                    patch("app.fastapi_routes.domains.product.compat_routes.products_pg_delete_row")
+                    patch("app.legacy.routes.product.compat_routes.products_pg_delete_row")
                 )
                 batch_delete_rows = stack.enter_context(
                     patch(
-                        "app.fastapi_routes.domains.product.compat_routes.products_pg_batch_delete_rows",
+                        "app.legacy.routes.product.compat_routes.products_pg_batch_delete_rows",
                         return_value=(2, []),
                     )
                 )
@@ -4615,7 +4615,7 @@ def _run_document_template_route_agent_task(task: dict[str, Any]) -> dict[str, A
                     "template": {"id": "db:1", "db_id": 1, "name": body.get("name")},
                 }
             )
-            patch_target = "app.fastapi_routes.document_templates_compat.run_archive_template_update"
+            patch_target = "app.legacy.routes.document_templates_compat.run_archive_template_update"
         elif action == "delete":
             body.setdefault("id", "db:1")
             mocked_response = dict(
@@ -4626,7 +4626,7 @@ def _run_document_template_route_agent_task(task: dict[str, Any]) -> dict[str, A
                     "deleted": {"id": body.get("id"), "db_id": 1},
                 }
             )
-            patch_target = "app.fastapi_routes.document_templates_compat.run_archive_template_delete"
+            patch_target = "app.legacy.routes.document_templates_compat.run_archive_template_delete"
         else:
             body.setdefault("name", "发货模板")
             body.setdefault("template_type", "Excel")
@@ -4638,7 +4638,7 @@ def _run_document_template_route_agent_task(task: dict[str, Any]) -> dict[str, A
                     "template": {"id": "db:1", "db_id": 1, "name": body.get("name")},
                 }
             )
-            patch_target = "app.fastapi_routes.document_templates_compat.run_archive_template_create"
+            patch_target = "app.legacy.routes.document_templates_compat.run_archive_template_create"
         mocked_status = int(task.get("mock_status_code") or 200)
         with (
             patch.dict(os.environ, env_patch, clear=False),

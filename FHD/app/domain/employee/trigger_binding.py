@@ -33,12 +33,18 @@ class TriggerBinding:
             if isinstance(manifest.get("employee_config_v2"), dict)
             else {}
         )
+        if not isinstance(v2, dict):
+            v2 = {}
         if not triggers and isinstance(v2.get("triggers"), dict):
             triggers = v2["triggers"]
         sla = manifest.get("sla") if isinstance(manifest.get("sla"), dict) else {}
         if not sla and isinstance(v2.get("sla"), dict):
             sla = v2["sla"]
         event_types = tuple(event_types_for_triggers(triggers))
+        if not isinstance(sla, dict):
+            sla = {}
+        if not isinstance(triggers, dict):
+            triggers = {}
         return cls(
             employee_id=str(employee_id or "").strip(),
             event_types=event_types,

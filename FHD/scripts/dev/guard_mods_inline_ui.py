@@ -86,7 +86,7 @@ def scan(repo_root: Path) -> list[tuple[Path, int, int]]:
 
 
 def _report(repo_root: Path, results: list[tuple[Path, int, int]]) -> None:
-    print(f"[guard-mods-inline-ui] views_root=mods/*/frontend/views")
+    print("[guard-mods-inline-ui] views_root=mods/*/frontend/views")
     print(
         f"[guard-mods-inline-ui] {len(results)} 个 .vue 视图，按非空 <style> 行数排行（块数 / 行数）："
     )

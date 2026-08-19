@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -13,9 +13,9 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 from implement_employee_pack import (
-    implement_pack,
-    count_generated_files,
     TooManyFilesError,
+    count_generated_files,
+    implement_pack,
 )
 
 

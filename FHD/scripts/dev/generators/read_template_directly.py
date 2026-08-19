@@ -1,9 +1,10 @@
 """直接读取模板文件"""
 
+import shutil
 import sys
 from pathlib import Path
+
 from openpyxl import load_workbook
-import shutil
 
 # 由于可能存在文件锁定，先复制文件再读取
 src = Path(r"e:\FHD\424\考勤 -2026-3 月份考勤统计表.xlsx")
@@ -12,7 +13,7 @@ dst = Path(r"e:\FHD\424\temp_copy.xlsx")
 if not src.exists():
     print(f"源文件不存在：{src}")
     # 尝试列出目录
-    print(f"\n424 目录内容:")
+    print("\n424 目录内容:")
     for f in Path(r"e:\FHD\424").iterdir():
         if f.is_file() and "考勤" in f.name:
             print(f"  {f.name} (size: {f.stat().st_size})")
@@ -41,7 +42,7 @@ try:
                 print(f"    {m}")
 
         # 显示前 3 行
-        print(f"  前 3 行:")
+        print("  前 3 行:")
         for row_idx in range(1, min(4, ws.max_row + 1)):
             row_data = []
             for col_idx in range(1, min(8, ws.max_column + 1)):
@@ -51,7 +52,7 @@ try:
 
     wb.close()
 
-except Exception as e:
+except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"错误：{e}")
     import traceback
 

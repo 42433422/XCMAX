@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+from typing import Literal, cast
 
 from fastapi import Request
 from fastapi.responses import Response
@@ -73,7 +74,13 @@ def attach_session_cookie(
         max_age=max_age,
         httponly=os.environ.get("SESSION_COOKIE_HTTPONLY", "1") not in ("0", "false", "False"),
         secure=os.environ.get("SESSION_COOKIE_SECURE", "").lower() in ("1", "true", "yes"),
-        samesite=os.environ.get("SESSION_COOKIE_SAMESITE", "Lax"),
+        samesite=cast(
+            "Literal['lax', 'strict', 'none']",
+            os.environ.get("SESSION_COOKIE_SAMESITE", "lax").strip().lower()
+            if os.environ.get("SESSION_COOKIE_SAMESITE", "lax").strip().lower()
+            in {"lax", "strict", "none"}
+            else "lax",
+        ),
         path="/",
     )
     return response

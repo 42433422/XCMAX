@@ -10,7 +10,7 @@ from typing import Any
 from app.db.models import User
 from app.db.session import get_db
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.password_hash import generate_password_hash
+from app.utils.security.password_hash import generate_password_hash
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,10 @@ class UserApplicationService:
                 "last_login": user.last_login.isoformat() if user.last_login else None,
                 "created_at": user.created_at.isoformat() if user.created_at else None,
             }
+
+    def get_user(self, user_id: int) -> dict[str, Any] | None:
+        """Compatibility name used by the administrative HTTP API."""
+        return self.get_user_by_id(user_id)
 
     def get_user_by_username(self, username: str) -> dict[str, Any] | None:
         with get_db() as db:
@@ -115,6 +119,7 @@ class UserApplicationService:
         display_name: str | None = None,
         email: str | None = None,
         role: str | None = None,
+        is_active: bool | None = None,
     ) -> dict[str, Any]:
         with get_db() as db:
             try:
@@ -128,6 +133,8 @@ class UserApplicationService:
                     user.email = email
                 if role is not None:
                     user.role = role
+                if is_active is not None:
+                    user.is_active = bool(is_active)
 
                 db.commit()
                 try:
@@ -146,6 +153,7 @@ class UserApplicationService:
                         "display_name": user.display_name,
                         "email": user.email,
                         "role": user.role,
+                        "is_active": user.is_active,
                     },
                 }
             except RECOVERABLE_ERRORS as e:

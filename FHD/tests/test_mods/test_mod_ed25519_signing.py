@@ -237,9 +237,9 @@ def test_e2_require_signed_no_signature_file_raises(tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# (f) 默认（开关关）+ 未签名 -> 不 raise（行为不变）
+# (f) 默认 + 未签名 -> fail-closed
 # --------------------------------------------------------------------------- #
-def test_f_default_unsigned_does_not_raise(tmp_path, monkeypatch):
+def test_f_default_unsigned_raises(tmp_path, monkeypatch):
     mod_dir, _, _ = _make_mod_dir(tmp_path)
     _, _, pub_pem = _gen_keypair()
     _trust_only(monkeypatch, pub_pem)
@@ -251,13 +251,12 @@ def test_f_default_unsigned_does_not_raise(tmp_path, monkeypatch):
     )
 
     target = str(tmp_path / "extract_f")
-    # 不得抛异常；安装主路径完成。
-    extracted, manifest = ModPackage.extract_package(pkg_path, target, verify_signature=True)
-    assert manifest["id"] == "sample-mod"
+    with pytest.raises(ModSignatureError):
+        ModPackage.extract_package(pkg_path, target, verify_signature=True)
 
 
-def test_f2_default_no_signature_file_does_not_raise(tmp_path, monkeypatch):
-    """开关关 + 无签名文件 -> 安装不被破坏（行为不变）。"""
+def test_f2_default_no_signature_file_raises(tmp_path, monkeypatch):
+    """未显式关闭验签时，无签名文件的包被拒绝。"""
     mod_dir, _, _ = _make_mod_dir(tmp_path)
     monkeypatch.delenv("XCAGI_REQUIRE_SIGNED_MODS", raising=False)
 
@@ -267,8 +266,8 @@ def test_f2_default_no_signature_file_does_not_raise(tmp_path, monkeypatch):
     )
 
     target = str(tmp_path / "extract_f2")
-    extracted, manifest = ModPackage.extract_package(pkg_path, target, verify_signature=True)
-    assert manifest["id"] == "sample-mod"
+    with pytest.raises(ModSignatureError):
+        ModPackage.extract_package(pkg_path, target, verify_signature=True)
 
 
 # --------------------------------------------------------------------------- #

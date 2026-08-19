@@ -4,8 +4,8 @@ import sys
 
 sys.path.insert(0, r"e:\FHD\backend\shell")
 
-from pathlib import Path
 import os
+from pathlib import Path
 
 # 模板路径
 template_path = Path(r"e:\FHD\424\考勤 -2026-3 月份考勤统计表.xlsx")
@@ -32,15 +32,15 @@ try:
 
     # 检查文件名是否在目录中
     if file_name in dir_contents:
-        print(f"\n✓ 文件名在目录中")
+        print("\n✓ 文件名在目录中")
     else:
-        print(f"\n✗ 文件名不在目录中")
+        print("\n✗ 文件名不在目录中")
 
     # 尝试找到匹配的文件
     for f in dir_contents:
         if "考勤统计表" in f:
             print(f"找到匹配文件：{f}")
-except Exception as e:
+except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"列出目录失败：{e}")
 
 # 尝试直接加载
@@ -50,7 +50,7 @@ try:
 
     wb = load_workbook(str(template_path))
     print(f"✓ 成功加载！工作表：{wb.sheetnames}")
-except Exception as e:
+except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"✗ 加载失败：{e}")
     import traceback
 

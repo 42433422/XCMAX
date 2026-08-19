@@ -7,7 +7,11 @@ import sqlite3
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+
+from sqlalchemy import Table
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 _LOCK = threading.Lock()
@@ -15,10 +19,10 @@ _LOCK = threading.Lock()
 
 def _legacy_db_path() -> Path:
     try:
-        from app.utils.path_utils import get_data_dir
+        from app.utils.path_io.path_utils import get_data_dir
 
         root = Path(get_data_dir())
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         root = Path.cwd() / "data"
     root.mkdir(parents=True, exist_ok=True)
     return root / "shipment_etl_fingerprints.sqlite3"
@@ -54,11 +58,11 @@ def _ensure_orm_table() -> bool:
 
         with get_db() as db:
             bind = db.get_bind()
-            ShipmentEtlImportFingerprint.__table__.create(bind=bind, checkfirst=True)
+            cast("Table", ShipmentEtlImportFingerprint.__table__).create(bind=bind, checkfirst=True)
             # touch mapper
             _ = Base.metadata.tables.get(ShipmentEtlImportFingerprint.__tablename__)
         return True
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         logger.debug("shipment etl orm fingerprint table ensure skipped", exc_info=True)
         return False
 
@@ -152,7 +156,7 @@ def _orm_has(tenant_key: str, fingerprint: str) -> bool:
                 .first()
             )
             return row is not None
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         return False
 
 
@@ -182,7 +186,7 @@ def _orm_get(tenant_key: str, fingerprint: str) -> dict[str, Any] | None:
                 "file_name": row.file_name,
                 "source_kind": row.source_kind,
             }
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         return None
 
 
@@ -242,7 +246,7 @@ def _orm_record(
                 db.rollback()
                 # 并发下另一事务已插入：视为已记录
             return True
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         logger.debug("orm fingerprint record failed; fallback legacy", exc_info=True)
         return False
 
@@ -258,7 +262,7 @@ def _orm_delete(tenant_key: str, fingerprint: str) -> None:
                 ShipmentEtlImportFingerprint.fingerprint == fingerprint,
             ).delete(synchronize_session=False)
             db.commit()
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         logger.debug("orm fingerprint delete failed", exc_info=True)
 
 

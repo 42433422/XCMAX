@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+
 from openpyxl import load_workbook
 
 # 设置 WORKSPACE_ROOT
@@ -37,7 +38,7 @@ try:
         header_row=2,  # 表头在第 3 行（0-indexed）
         template_path=None,  # 不使用模板
     )
-    print(f"✓ 转换成功！")
+    print("✓ 转换成功！")
     print(f"  输入行数：{result['rows_in']}")
     print(f"  输出行数：{result['rows_stats']}")
     print(f"  统计月份：{result['month']}")
@@ -56,7 +57,7 @@ try:
         print(f"    合并单元格：{len(merged)} 个")
 
         # 显示前 5 行
-        print(f"    前 5 行:")
+        print("    前 5 行:")
         for row_idx in range(1, min(6, ws.max_row + 1)):
             row_data = []
             for col_idx in range(1, min(10, ws.max_column + 1)):
@@ -68,7 +69,7 @@ try:
 
     print(f"\n✓ 测试完成！输出文件：{output_file}")
 
-except Exception as e:
+except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"✗ 转换失败：{e}")
     import traceback
 

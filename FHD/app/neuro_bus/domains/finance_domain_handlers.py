@@ -287,7 +287,7 @@ async def handle_approval_completed(event: NeuroEvent) -> dict[str, Any]:
     try:
         service = purchase_service_cls()
         result = service.update_inbound_approval_status(business_id, decision)
-    except Exception as exc:  # noqa: BLE001 — 任何异常都不能崩溃总线
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 — 任何异常都不能崩溃总线
         logger.exception("[FinanceServiceDomain] update_inbound_approval_status 抛异常: %s", exc)
         _publish_event(
             "finance.approval_completion_failed",
@@ -383,7 +383,7 @@ class FinanceServiceDomainHandlers:
         )
 
 
-_handlers: FinanceServiceDomainHandlers = None
+_handlers: FinanceServiceDomainHandlers | None = None
 
 
 def get_finance_handlers() -> FinanceServiceDomainHandlers:

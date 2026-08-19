@@ -290,7 +290,7 @@ def mock_etl_metrics(monkeypatch):
 @pytest.fixture
 def app_data(tmp_path, monkeypatch):
     for attr in (
-        "app.utils.path_utils.get_app_data_dir",
+        "app.utils.path_io.path_utils.get_app_data_dir",
         "app.application.etl.service_targets.get_app_data_dir",
         "app.application.etl.service_uploads.get_app_data_dir",
         "app.application.etl.service_history.get_app_data_dir",

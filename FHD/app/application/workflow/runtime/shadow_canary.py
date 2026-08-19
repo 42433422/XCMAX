@@ -24,15 +24,10 @@ shadow phase, preventing any real side effects from being executed twice.
 from __future__ import annotations
 
 import copy
-import datetime
-import hashlib
-import json
 import logging
 import math
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field, fields, is_dataclass
-from enum import Enum
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 from app.application.workflow.ports.runtime import (
     Callback,
@@ -42,6 +37,13 @@ from app.application.workflow.ports.runtime import (
     WorkflowRuntime,
 )
 from app.application.workflow.ports.tools import ToolDispatcher
+from app.application.workflow.runtime.shadow_canary_diff import (
+    ShadowDiff,
+    compute_normalized_diff,
+    deterministic_canary_selected,
+    normalize_context,
+)
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -58,159 +60,6 @@ __all__ = [
 # string). ``sep`` is the underscore separator; the exact constructor parameter
 # identifier is ``"shadow" + sep + "checkpointer"`` == ``shadow_checkpointer``.
 sep = chr(95)
-
-# Volatile keys stripped recursively before diffing. Matched by stripping
-# underscores and lowercasing, so ``started_at`` / ``startedAt`` / ``startedat``
-# all collapse to ``startedat``.
-_VOLATILE_KEYS = (
-    "timestamp",
-    "started_at",
-    "finished_at",
-    "duration_ms",
-    "trace_id",
-    "checkpoint_id",
-)
-
-
-# ---------------------------------------------------------------------------
-# Normalization (recursive, deterministic)
-# ---------------------------------------------------------------------------
-
-
-def _stripped_key(key: str) -> str:
-    """Accessibility-normalize a key: drop underscores, lowercase."""
-    return str(key).replace("_", "").lower()
-
-
-def _canonical_json(value: Any) -> str:
-    """Canonical, order-independent JSON serialization for set/item sorting."""
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
-
-
-def _normalize(value: Any, volatile: frozenset[str]) -> Any:
-    """Recursively produce a deterministic, comparable projection of ``value``.
-
-    - dict keys are sorted and recursively normalized; volatile keys removed;
-    - list/tuple order is preserved;
-    - set/frozenset items are sorted by canonical JSON;
-    - dataclasses → field dicts, Enums → their value, datetimes → ISO 8601,
-      bytes → hex;
-    - unknown objects → a deterministic type marker (never a memory address).
-    """
-    if isinstance(value, dict):
-        normalized: dict[str, Any] = {}
-        for key, item in value.items():
-            key_str = str(key)
-            if _stripped_key(key_str) in volatile:
-                continue
-            normalized[key_str] = _normalize(item, volatile)
-        return {k: normalized[k] for k in sorted(normalized)}
-    if isinstance(value, (list, tuple)):
-        return [_normalize(item, volatile) for item in value]
-    if isinstance(value, (set, frozenset)):
-        return sorted((_normalize(item, volatile) for item in value), key=_canonical_json)
-    if is_dataclass(value) and not isinstance(value, type):
-        return _normalize({f.name: getattr(value, f.name) for f in fields(value)}, volatile)
-    if isinstance(value, Enum):
-        return _normalize(value.value, volatile)
-    if isinstance(value, (datetime.datetime, datetime.date, datetime.time)):
-        return value.isoformat()
-    if isinstance(value, bytes):
-        return value.hex()
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return value
-    # Unknown object: deterministic type marker, intentionally avoids any
-    # memory-address ``repr`` so the same logical object never spuriously differs.
-    return {"__xcagi_object__": type(value).__name__}
-
-
-def normalize_context(ctx: Any, *, volatile_keys: tuple[str, ...] | None = None) -> Any:
-    """Recursively normalize a ``final_context`` into a deterministic, comparable shape.
-
-    Preserves every nonvolatile business key while stripping volatile noise
-    (timestamps, durations, trace/checkpoint ids) at any nesting depth. The
-    volatile-key set is configurable via ``volatile_keys``.
-    """
-    volatile = frozenset(_stripped_key(k) for k in (volatile_keys or _VOLATILE_KEYS))
-    return _normalize(ctx, volatile)
-
-
-# ---------------------------------------------------------------------------
-# Deterministic canary sampling
-# ---------------------------------------------------------------------------
-
-
-def deterministic_canary_selected(identity: str, ratio: float) -> bool:
-    """Deterministically select a canary bucket for a stable identity string.
-
-    Validates ``ratio`` fail-closed (rejects bool / NaN / inf / out-of-range),
-    then hashes ``identity`` with ``sha256`` and maps it to ``[0, 1)``. Exact
-    endpoints: ``ratio == 0`` → ``False``, ``ratio == 1`` → ``True``; strictly
-    between them the same identity always maps to the same bucket.
-    """
-    if isinstance(ratio, bool):
-        raise ValueError(f"ratio 不能是 bool: {ratio!r}")
-    if not isinstance(ratio, (int, float)):
-        raise ValueError(f"ratio 必须是实数: {ratio!r}")
-    if isinstance(ratio, float) and not math.isfinite(ratio):
-        raise ValueError(f"ratio 必须是有限实数: {ratio!r}")
-    if not 0.0 <= float(ratio) <= 1.0:
-        raise ValueError(f"ratio 必须在 [0, 1]（闭区间）内: {ratio!r}")
-    if ratio <= 0.0:
-        return False
-    if ratio >= 1.0:
-        return True
-    digest = hashlib.sha256(str(identity).encode("utf-8")).digest()
-    norm = int.from_bytes(digest[:8], "big") / 2**64
-    return norm < ratio
-
-
-def _executed_node_ids(result: WorkflowRunResult) -> list[str]:
-    return [r.node_id for r in result.node_results]
-
-
-@dataclass
-class ShadowDiff:
-    """A normalized comparison between the serving (legacy) and LangGraph runs.
-
-    Exact fields: ``operation``, ``plan_id``, whether the normalized contexts are
-    ``equal``, the normalized ``legacy_context``/``langgraph_context``, and an
-    optional ``langgraph_error`` (captured, never raised). The diff is recorded
-    via the (fail-soft) ``diff_sink`` — divergence is logged/observed but never
-    blocks or is served.
-    """
-
-    operation: str
-    plan_id: str
-    equal: bool
-    legacy_context: dict[str, Any] = field(default_factory=dict)
-    langgraph_context: dict[str, Any] = field(default_factory=dict)
-    langgraph_error: str = ""
-
-
-def compute_normalized_diff(
-    serving: WorkflowRunResult,
-    shadow: WorkflowRunResult,
-    *,
-    operation: str = "run",
-    langgraph_error: str = "",
-) -> ShadowDiff:
-    """Compare two run results on their normalized, deterministic projections."""
-    legacy_ctx = normalize_context(serving.final_context)
-    langgraph_ctx = normalize_context(shadow.final_context)
-    equal = (_executed_node_ids(serving) == _executed_node_ids(shadow)) and (
-        legacy_ctx == langgraph_ctx
-    )
-
-    return ShadowDiff(
-        operation=operation,
-        plan_id=serving.plan_id,
-        equal=equal,
-        legacy_context=legacy_ctx,
-        langgraph_context=langgraph_ctx,
-        langgraph_error=langgraph_error,
-    )
-
 
 # ---------------------------------------------------------------------------
 # Read-only tool dispatcher (shadow phase)
@@ -262,7 +111,7 @@ class ReadOnlyToolDispatcher:
                 "显式允许的读操作，写操作 deny 且不调用底层 delegate）"
             )
         # Explicitly allowed read: delegate handles it (no side effect).
-        return self._delegate(tool_id, action, params)
+        return cast("dict[str, Any]", self._delegate(tool_id, action, params))
 
 
 # ---------------------------------------------------------------------------
@@ -348,7 +197,7 @@ class ShadowCanaryRouter(WorkflowRuntime):
         if self._diff_sink is not None:
             try:
                 self._diff_sink(diff)
-            except Exception:  # noqa: BLE001 - diff must never break the run
+            except RECOVERABLE_ERRORS:  # noqa: BLE001 - diff must never break the run
                 logger.exception("shadow diff sink 处理失败 plan=%s", diff.plan_id)
             return
         if not diff.equal:
@@ -512,7 +361,7 @@ class ShadowCanaryRouter(WorkflowRuntime):
         def _run_langgraph_safely() -> tuple[WorkflowRunResult, str]:
             try:
                 return langgraph_call(), ""
-            except Exception as exc:  # noqa: BLE001 - shadow must never break serving
+            except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - shadow must never break serving
                 logger.warning("shadow 运行失败 plan=%s: %s", plan_id, exc)
                 return (
                     WorkflowRunResult(

@@ -6,7 +6,6 @@ customer-message write capability and stores no copy of the source transcript.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import secrets
@@ -16,20 +15,31 @@ from pathlib import Path
 from typing import Any
 
 from app.desktop_runtime.paths import ensure_desktop_dirs
+from app.services.kellai_copilot_llm import (
+    KellaiCopilotError,
+)
+from app.services.kellai_copilot_llm import (
+    content_from_completion as _content_from_completion,
+)
+from app.services.kellai_copilot_llm import (
+    conversation_input as _conversation_input,
+)
+from app.services.kellai_copilot_llm import (
+    now_iso as _now_iso,
+)
+from app.services.kellai_copilot_llm import (
+    parse_json_content as _parse_json_content,
+)
+from app.services.kellai_copilot_store import (
+    read_store,
+    write_store,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _LOCK = threading.Lock()
 _MAX_STORED_DRAFTS = 200
 _ALLOWED_RISKS = {"low", "medium", "high", "critical"}
 _TERMINAL_STATUSES = {"approved_for_manual_send", "rejected"}
-
-
-class KellaiCopilotError(RuntimeError):
-    """A safe client-facing copilot error."""
-
-
-def _now_iso() -> str:
-    return datetime.now(UTC).isoformat()
 
 
 def _store_path() -> Path:
@@ -39,34 +49,12 @@ def _store_path() -> Path:
     return path
 
 
-def _empty_store() -> dict[str, Any]:
-    return {"version": 2, "drafts": {}, "follow_up_tasks": {}}
-
-
 def _read() -> dict[str, Any]:
-    path = _store_path()
-    if not path.is_file():
-        return _empty_store()
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return _empty_store()
-    return value if isinstance(value, dict) else _empty_store()
+    return read_store(_store_path())
 
 
 def _write(value: dict[str, Any]) -> None:
-    path = _store_path()
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
-    try:
-        temporary.chmod(0o600)
-    except OSError:
-        pass
-    temporary.replace(path)
-    try:
-        path.chmod(0o600)
-    except OSError:
-        pass
+    write_store(_store_path(), value)
 
 
 def _public_draft(value: Any) -> dict[str, Any] | None:
@@ -119,68 +107,6 @@ def _audit(*, actor: int | str | None, action: str, payload: dict[str, Any]) -> 
         return
 
 
-def _content_from_completion(result: Any) -> str:
-    if not isinstance(result, dict):
-        return ""
-    choices = result.get("choices")
-    if isinstance(choices, list) and choices and isinstance(choices[0], dict):
-        message = choices[0].get("message")
-        if isinstance(message, dict):
-            return str(message.get("content") or "").strip()
-    return str(result.get("content") or "").strip()
-
-
-def _parse_json_content(content: str) -> dict[str, Any]:
-    text = content.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        if lines:
-            lines = lines[1:]
-        if lines and lines[-1].strip().startswith("```"):
-            lines = lines[:-1]
-        text = "\n".join(lines).strip()
-    start = text.find("{")
-    end = text.rfind("}")
-    if start < 0 or end <= start:
-        raise KellaiCopilotError("AI 没有返回可用的结构化草稿，请重试")
-    try:
-        value = json.loads(text[start : end + 1])
-    except json.JSONDecodeError as exc:
-        raise KellaiCopilotError("AI 草稿格式无效，请重试") from exc
-    if not isinstance(value, dict):
-        raise KellaiCopilotError("AI 草稿格式无效，请重试")
-    return value
-
-
-def _conversation_input(messages: list[dict[str, Any]]) -> tuple[str, list[str], str]:
-    usable: list[dict[str, Any]] = []
-    for message in messages[-24:]:
-        if not isinstance(message, dict):
-            continue
-        content = str(message.get("content") or "").strip()
-        if not content:
-            continue
-        usable.append(
-            {
-                "id": str(message.get("id") or ""),
-                "direction": "我方"
-                if str(message.get("direction") or "") == "outbound"
-                else "客户",
-                "content": content[:1200],
-                "created_at": str(message.get("created_at") or ""),
-            }
-        )
-    if not usable:
-        raise KellaiCopilotError("该客户还没有可用于分析的真实会话")
-    fingerprint_source = "\n".join(
-        f"{item['id']}|{item['direction']}|{item['created_at']}|{item['content']}"
-        for item in usable
-    )
-    fingerprint = hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()
-    evidence_ids = [item["id"] for item in usable[-8:] if item["id"]]
-    return json.dumps(usable, ensure_ascii=False), evidence_ids, fingerprint
-
-
 async def generate_draft(
     *,
     customer_id: int,
@@ -227,7 +153,7 @@ async def generate_draft(
             profile="customer_copilot",
             request=request,
         )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         raise KellaiCopilotError("当前 AI 模型暂时不可用，请检查模型配置后重试") from exc
     content = _content_from_completion(result)
     if not content:
@@ -266,10 +192,11 @@ async def generate_draft(
     }
     with _LOCK:
         state = _read()
-        drafts = state.get("drafts") if isinstance(state.get("drafts"), dict) else {}
+        raw_drafts = state.get("drafts")
+        drafts: dict[str, Any] = dict(raw_drafts) if isinstance(raw_drafts, dict) else {}
         drafts[draft_id] = record
         ordered = sorted(
-            drafts.values(),
+            (drafts or {}).values(),
             key=lambda item: str(item.get("created_at") or "") if isinstance(item, dict) else "",
             reverse=True,
         )[:_MAX_STORED_DRAFTS]
@@ -297,7 +224,7 @@ def latest_draft(customer_id: int) -> dict[str, Any] | None:
         drafts = state.get("drafts") if isinstance(state.get("drafts"), dict) else {}
         matching = [
             item
-            for item in drafts.values()
+            for item in (drafts or {}).values()
             if isinstance(item, dict) and int(item.get("customer_id") or 0) == int(customer_id)
         ]
     if not matching:
@@ -317,6 +244,8 @@ def decide_draft(
     with _LOCK:
         state = _read()
         drafts = state.get("drafts") if isinstance(state.get("drafts"), dict) else {}
+        if not isinstance(drafts, dict):
+            drafts = {}
         record = drafts.get(draft_id)
         if not isinstance(record, dict):
             raise KellaiCopilotError("回复草稿不存在或已被清理")
@@ -365,19 +294,20 @@ def create_follow_up_task(
     with _LOCK:
         state = _read()
         drafts = state.get("drafts") if isinstance(state.get("drafts"), dict) else {}
+        if not isinstance(drafts, dict):
+            drafts = {}
         draft = drafts.get(str(draft_id))
         if not isinstance(draft, dict):
             raise KellaiCopilotError("回复草稿不存在或已被清理")
         if str(draft.get("status") or "") == "rejected":
             raise KellaiCopilotError("已拒绝的草稿不能创建跟进任务")
 
-        tasks = (
-            state.get("follow_up_tasks") if isinstance(state.get("follow_up_tasks"), dict) else {}
-        )
+        raw_tasks = state.get("follow_up_tasks")
+        tasks: dict[str, Any] = dict(raw_tasks) if isinstance(raw_tasks, dict) else {}
         existing = next(
             (
                 item
-                for item in tasks.values()
+                for item in (tasks or {}).values()
                 if isinstance(item, dict)
                 and str(item.get("source_draft_id") or "") == str(draft_id)
             ),
@@ -443,7 +373,7 @@ def list_follow_up_tasks(customer_id: int) -> list[dict[str, Any]]:
         )
         matching = [
             item
-            for item in tasks.values()
+            for item in (tasks or {}).values()
             if isinstance(item, dict) and int(item.get("customer_id") or 0) == int(customer_id)
         ]
     matching.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
@@ -495,6 +425,8 @@ def decide_follow_up_task(
         tasks = (
             state.get("follow_up_tasks") if isinstance(state.get("follow_up_tasks"), dict) else {}
         )
+        if not isinstance(tasks, dict):
+            tasks = {}
         record = tasks.get(str(task_id))
         if not isinstance(record, dict):
             raise KellaiCopilotError("跟进任务不存在或已被清理")
@@ -539,10 +471,10 @@ def purge_all(*, actor: int | str | None = None) -> dict[str, int]:
 
     with _LOCK:
         state = _read()
-        drafts = state.get("drafts") if isinstance(state.get("drafts"), dict) else {}
-        tasks = (
-            state.get("follow_up_tasks") if isinstance(state.get("follow_up_tasks"), dict) else {}
-        )
+        raw_drafts = state.get("drafts")
+        drafts: dict[str, Any] = dict(raw_drafts) if isinstance(raw_drafts, dict) else {}
+        raw_tasks = state.get("follow_up_tasks")
+        tasks: dict[str, Any] = dict(raw_tasks) if isinstance(raw_tasks, dict) else {}
         counts = {"drafts_deleted": len(drafts), "tasks_deleted": len(tasks)}
         path = _store_path()
         try:

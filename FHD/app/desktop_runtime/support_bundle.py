@@ -11,9 +11,11 @@ import sys
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from app.desktop_runtime.migrate import export_config
 from app.security.log_redaction import redact_log_text
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .paths import ensure_desktop_dirs, is_desktop_mode
 
@@ -57,7 +59,7 @@ def build_support_bundle_zip(
     crash_dir = dirs["root"] / "crash-dumps"
 
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    manifest = {
+    manifest: dict[str, Any] = {
         "generatedAtUtc": stamp,
         "fastapiAppVersion": fastapi_version,
         "python": sys.version.split()[0],
@@ -79,7 +81,7 @@ def build_support_bundle_zip(
         manifest["modsLoaded"] = [
             str(m.get("id") or "") for m in get_mod_manager().list_all_mods() if m.get("id")
         ][:200]
-    except Exception as exc:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
         logger.warning("mod list for support bundle unavailable: %s", exc)
         manifest["modsLoaded"] = []
 

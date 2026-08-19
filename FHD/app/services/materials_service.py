@@ -3,7 +3,7 @@
 """
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from app.application.ports.material_repository import MaterialRepository
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
@@ -16,9 +16,11 @@ class MaterialsService(NeuroEventPublisherMixin):
 
     def __init__(self, repository: MaterialRepository | None = None):
         if repository is None:
-            from app.application.ports.material_repository import MaterialRepository
+            from app.infrastructure.repositories.material_repository_impl import (
+                SQLAlchemyMaterialRepository,
+            )
 
-            repository = MaterialRepository()
+            repository = cast("MaterialRepository", SQLAlchemyMaterialRepository())
         self._repository = repository
 
     def set_repository(self, repository: MaterialRepository):

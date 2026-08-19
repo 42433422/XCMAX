@@ -5,6 +5,7 @@ import sys
 sys.path.insert(0, r"e:\FHD\backend")
 
 from pathlib import Path
+
 from shell.taiyangniao_attendance.convert import convert_dingtalk_file
 
 source = Path(r"e:\FHD\424\钉钉导出来的考勤数据.xlsx")
@@ -25,7 +26,7 @@ try:
         template_path=template,
     )
     print(f"\n结果: {result}")
-except Exception as e:
+except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     import traceback
 
     print(f"\n错误: {e}")

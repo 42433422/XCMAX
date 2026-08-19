@@ -13,6 +13,7 @@ import json
 import uuid
 from typing import Any
 
+from app.application.workflow.types import normalize_workflow_risk
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 ERP_CAPABILITY_TOOL_NAME = "execute_erp_capability"
@@ -39,14 +40,15 @@ def _capability_catalog_lines(registry: dict[str, Any]) -> list[str]:
     lines: list[str] = []
     for tool_id in sorted(registry):
         tool = registry.get(tool_id)
-        actions = tool.get("actions") if isinstance(tool, dict) else {}
+        tool_data: dict[str, Any] = tool if isinstance(tool, dict) else {}
+        actions = tool_data.get("actions")
         if not isinstance(actions, dict):
             continue
         action_bits = []
         for action, spec in sorted(actions.items()):
             risk = str((spec or {}).get("risk") or "low").lower()
             action_bits.append(f"{action}({risk})")
-        description = str(tool.get("description") or "").strip()
+        description = str(tool_data.get("description") or "").strip()
         suffix = f" — {description}" if description else ""
         lines.append(f"{tool_id}: {', '.join(action_bits)}{suffix}")
     return lines
@@ -59,13 +61,14 @@ def registered_capability_catalog() -> dict[str, Any]:
     capabilities: list[dict[str, Any]] = []
     for tool_id in sorted(registry):
         tool = registry.get(tool_id)
-        actions = tool.get("actions") if isinstance(tool, dict) else {}
+        tool_data: dict[str, Any] = tool if isinstance(tool, dict) else {}
+        actions = tool_data.get("actions")
         if not isinstance(actions, dict):
             continue
         capabilities.append(
             {
                 "tool_id": tool_id,
-                "description": str(tool.get("description") or ""),
+                "description": str(tool_data.get("description") or ""),
                 "actions": {
                     str(action): {
                         "risk": str((spec or {}).get("risk") or "low").lower(),
@@ -226,12 +229,12 @@ def execute_registered_capability(
                 tool_id=tool_id,
                 action=action,
                 params=params,
-                risk=str(resolved["risk"]),
+                risk=normalize_workflow_risk(str(resolved["risk"])),
                 idempotent=bool(resolved["idempotent"]),
                 description=str(resolved["description"]),
             )
         ],
-        risk_level=str(resolved["risk"]),
+        risk_level=normalize_workflow_risk(str(resolved["risk"])),
         metadata={"source": "erp_agent_capability_tool"},
     )
     runtime_context = {
@@ -280,7 +283,7 @@ def execute_registered_capability(
             ensure_ascii=False,
         )
 
-    node_result = (run_result.node_results or [None])[0]
+    node_result = run_result.node_results[0] if run_result.node_results else None
     output = dict(getattr(node_result, "output", {}) or {})
     return json.dumps(
         {

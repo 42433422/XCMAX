@@ -64,7 +64,7 @@ def _fetch_admin_digest_code_sync(auth: Dict[str, str]) -> str:
         code = str(data.get("code") or "").strip().upper()
         if len(code) == 6:
             return code
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
         logger.warning("surface audit: digest-identity fetch failed: %s", exc)
     return ""
 
@@ -103,7 +103,7 @@ async def _prepare_admin_digest(context: Any, auth: Dict[str, str]) -> None:
             )
             with urllib.request.urlopen(req, timeout=30):
                 pass
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
             logger.warning("surface audit: verify-admin-digest-code failed: %s", exc)
     await _inject_admin_digest(context, code)
 

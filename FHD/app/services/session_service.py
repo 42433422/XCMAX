@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import timedelta
+from typing import cast
 
 from app.db.models.user import Session as UserSession
 from app.db.session import get_db
@@ -80,13 +81,13 @@ class SessionService(NeuroEventPublisherMixin):
         with get_db() as db:
             count = db.query(UserSession).filter(UserSession.user_id == user_id).delete()
             db.commit()
-            return count
+            return cast("int", count)
 
     def cleanup_expired_sessions(self) -> int:
         with get_db() as db:
             count = db.query(UserSession).filter(UserSession.expires_at < utc_now_naive()).delete()
             db.commit()
-            return count
+            return cast("int", count)
 
 
 def get_session_service() -> "SessionService":

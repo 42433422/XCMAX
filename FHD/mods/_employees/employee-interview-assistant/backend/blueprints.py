@@ -17,7 +17,7 @@ LABEL = "员工信息访谈员"
 
 def _resolve_mod_path(mod_id: str) -> Optional[str]:
     try:
-        from app.infrastructure.mods import get_mod_registry  # type: ignore
+        from app.mod_sdk.host_services import get_mod_registry  # type: ignore
 
         meta = get_mod_registry().get_mod_metadata(mod_id)
         mp = getattr(meta, 'mod_path', '') or ''

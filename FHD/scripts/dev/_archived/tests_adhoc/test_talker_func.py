@@ -1,12 +1,12 @@
-# -*- coding: utf-8 -*-
-import sys
 import os
+import sys
 
 sys.path.insert(0, r"E:\FHD\XCAGI")
+from app.services.wechat_contact_service import get_wechat_contact_service
+
 from app.db.models import WechatContact
 from app.db.session import get_db
-from app.services.wechat_contact_service import get_wechat_contact_service
-from app.utils.path_utils import get_resource_path
+from app.utils.path_io.path_utils import get_resource_path
 
 msg_db = os.path.join(get_resource_path("wechat-decrypt"), "decrypted", "message", "message_0.db")
 print(f"DB exists: {os.path.exists(msg_db)}")

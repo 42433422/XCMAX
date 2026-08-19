@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import time
 from collections.abc import Awaitable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from typing import Any, Literal, cast
 
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, LLMCall
 from app.infrastructure.billing.model_usage import estimate_llm_cost_units
@@ -63,15 +64,21 @@ def request_llm_repair(
     runtime_context: dict[str, Any],
 ) -> dict[str, Any]:
     started = time.perf_counter()
-    response = _run_async(
-        chat_completion_openai_format(
-            _repair_messages(run, step, runtime_context),
-            temperature=0,
-            max_tokens=600,
-            profile="agent_repair",
-            response_format={"type": "json_object"},
-        )
+    completion = chat_completion_openai_format(
+        _repair_messages(run, step, runtime_context),
+        temperature=0,
+        max_tokens=600,
+        profile="agent_repair",
+        response_format={"type": "json_object"},
     )
+    try:
+        response = _run_async(completion)
+    finally:
+        # Test doubles or future runner implementations may return without
+        # consuming the coroutine. Closing it here prevents leaked coroutine
+        # resources while remaining harmless after a normal completed await.
+        if inspect.iscoroutine(completion):
+            completion.close()
     latency_ms = (time.perf_counter() - started) * 1000
     if not isinstance(response, dict):
         return {
@@ -177,13 +184,16 @@ def _repair_messages(
 
 
 def _run_async(awaitable: Awaitable[Any]) -> Any:
+    async def wait_for_value() -> Any:
+        return await awaitable
+
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        return asyncio.run(awaitable)
+        return asyncio.run(wait_for_value())
 
     with ThreadPoolExecutor(max_workers=1) as executor:
-        return executor.submit(lambda: asyncio.run(awaitable)).result()
+        return executor.submit(lambda: asyncio.run(wait_for_value())).result()
 
 
 def _extract_content(response: dict[str, Any]) -> str:
@@ -238,6 +248,8 @@ def _llm_call_from_response(
     error: str = "",
 ) -> LLMCall:
     usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
+    if not isinstance(usage, dict):
+        usage = {}
     prompt_tokens = _coerce_int(usage.get("prompt_tokens"))
     completion_tokens = _coerce_int(usage.get("completion_tokens"))
     total_tokens = _coerce_int(usage.get("total_tokens")) or prompt_tokens + completion_tokens
@@ -265,7 +277,9 @@ def _llm_call_from_response(
         cost_units=cost_units,
         billing_status="metered" if cost_units else "unmetered",
         billing_source="estimated_token_units",
-        status=status if status in {"completed", "failed"} else "completed",
+        status=cast("Literal['completed', 'failed']", status)
+        if status in {"completed", "failed"}
+        else "completed",
         error=error,
         metadata={"source": "agent_orchestrator.llm_repair"},
     )

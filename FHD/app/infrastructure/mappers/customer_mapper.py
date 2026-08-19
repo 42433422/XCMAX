@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from app.db.models import PurchaseUnit as PurchaseUnitModel
 from app.domain.customer.entities import Customer, PurchaseUnit
 from app.domain.value_objects import Address, ContactInfo
@@ -16,8 +18,8 @@ def purchase_unit_to_domain(db_model: PurchaseUnitModel) -> PurchaseUnit:
         address=db_model.address or "",
         discount_rate=discount_rate,
         is_active=bool(db_model.is_active),
-        created_at=db_model.created_at,
-        updated_at=db_model.updated_at,
+        created_at=db_model.created_at or datetime.now(),
+        updated_at=db_model.updated_at or datetime.now(),
     )
 
 
@@ -44,6 +46,6 @@ def customer_to_domain(db_model: PurchaseUnitModel) -> Customer:
             phone=db_model.contact_phone or "",
             address=Address.from_string(address_str) if address_str else None,
         ),
-        created_at=db_model.created_at,
-        updated_at=db_model.updated_at,
+        created_at=db_model.created_at or datetime.now(),
+        updated_at=db_model.updated_at or datetime.now(),
     )

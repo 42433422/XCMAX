@@ -17,6 +17,7 @@ from app.services.persona.param_mapper import PersonaParamMapper
 from app.services.persona.prompt_builder import PersonaPromptBuilder
 from app.services.persona.rapport_calculator import RapportCalculator
 from app.services.persona.rule_inferencer import RuleInferencer
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -206,7 +207,7 @@ class PersonaService:
             result = await self._embedding_inferencer.infer(user_id, messages)
             if result.confidence > 0:
                 self._axes_cache.setdefault(user_id, {})["l2"] = result.axes
-        except Exception as exc:  # noqa: BLE001  后台推断失败不影响对话
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001  后台推断失败不影响对话
             logger.warning("L2 后台推断失败: %s", exc)
 
     async def _run_l3(self, user_id: str, history: list[dict], current_axes: PersonaAxes) -> None:
@@ -217,7 +218,7 @@ class PersonaService:
             result = await self._llm_inferencer.infer(user_id, history or [], current_axes)
             if result.confidence > 0:
                 self._axes_cache.setdefault(user_id, {})["l3"] = result.axes
-        except Exception as exc:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
             logger.warning("L3 后台推断失败: %s", exc)
 
     def build_prompt(self, profile: PersonaProfile, context_prompt: str) -> str:

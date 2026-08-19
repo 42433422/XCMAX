@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.utils.path_utils import get_app_data_dir
+from app.utils.path_io.path_utils import get_app_data_dir
 
 _CONVERSATION_STATE_FILENAME = "conversation_state.jsonl"
 

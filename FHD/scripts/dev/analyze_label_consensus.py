@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """标注一致性分析：统计 gold/silver/disputed 比例，检测共同偏差。
 
 读取 ``labeled_data.jsonl``，输出：
@@ -73,7 +72,7 @@ def analyze(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
     # 各模型标签分布
     per_provider: dict[str, Counter] = {p: Counter() for p in PROVIDERS}
-    per_provider_available: dict[str, int] = {p: 0 for p in PROVIDERS}
+    per_provider_available: dict[str, int] = dict.fromkeys(PROVIDERS, 0)
     for r in rows:
         labels = r.get("labels") or {}
         for p in PROVIDERS:

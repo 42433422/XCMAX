@@ -1,14 +1,13 @@
-# -*- coding: utf-8 -*-
 """
 完整的标签图片网格检测器 - 支持合并单元格
 """
 
-import cv2
-import numpy as np
-import json
-
 # 读取图片
 import glob
+import json
+
+import cv2
+import numpy as np
 
 files = glob.glob(r"e:\FHD\26-0300001A*.png")
 image_path = files[0]
@@ -71,7 +70,7 @@ for x in range(gray.shape[1]):
     if max_continuous > gray.shape[0] * 0.5:
         vertical_lines.append(x)
 
-print(f"\n原始线条：")
+print("\n原始线条：")
 print(f"  水平线：{len(horizontal_lines)} 条")
 print(f"  垂直线：{len(vertical_lines)} 条")
 
@@ -99,8 +98,8 @@ def merge_lines(lines, threshold=50):
     return merged
 
 
-horizontal_lines = sorted(list(set(horizontal_lines)))
-vertical_lines = sorted(list(set(vertical_lines)))
+horizontal_lines = sorted(set(horizontal_lines))
+vertical_lines = sorted(set(vertical_lines))
 
 horizontal_lines = merge_very_close(horizontal_lines, threshold=5)
 vertical_lines = merge_very_close(vertical_lines, threshold=5)
@@ -108,12 +107,12 @@ vertical_lines = merge_very_close(vertical_lines, threshold=5)
 horizontal_lines = merge_lines(horizontal_lines, threshold=50)
 vertical_lines = merge_lines(vertical_lines, threshold=50)
 
-print(f"\n合并后线条：")
+print("\n合并后线条：")
 print(f"  水平线：{len(horizontal_lines)} 条 {horizontal_lines}")
 print(f"  垂直线：{len(vertical_lines)} 条 {vertical_lines}")
 
 # ============ 分析单元格和合并情况 ============
-print(f"\n" + "=" * 70)
+print("\n" + "=" * 70)
 print("单元格分析")
 print("=" * 70)
 
@@ -540,9 +539,9 @@ output_path = r"e:\FHD\grid_analyzer_report.html"
 with open(output_path, "w", encoding="utf-8") as f:
     f.write(html_content)
 
-print(f"\n" + "=" * 70)
+print("\n" + "=" * 70)
 print(f"✓ 分析报告已生成：{output_path}")
-print(f"请在浏览器中打开查看完整的网格分析结果")
+print("请在浏览器中打开查看完整的网格分析结果")
 print("=" * 70)
 
 # 输出 JSON 数据供后端使用

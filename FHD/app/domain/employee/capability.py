@@ -47,6 +47,8 @@ def parse_capabilities(manifest: dict[str, Any] | None) -> list[EmployeeCapabili
             out.append(cap)
 
     emp = manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
+    if not isinstance(emp, dict):
+        emp = {}
     for item in emp.get("capabilities") or []:
         _add(item)
 
@@ -55,7 +57,11 @@ def parse_capabilities(manifest: dict[str, Any] | None) -> list[EmployeeCapabili
         if isinstance(manifest.get("employee_config_v2"), dict)
         else {}
     )
+    if not isinstance(v2, dict):
+        v2 = {}
     cog = v2.get("cognition") if isinstance(v2.get("cognition"), dict) else {}
+    if not isinstance(cog, dict):
+        cog = {}
     for item in cog.get("skills") or []:
         if isinstance(item, dict):
             _add({"label": item.get("name"), "description": item.get("brief")})

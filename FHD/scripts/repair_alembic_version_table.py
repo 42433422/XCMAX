@@ -55,7 +55,7 @@ def _redundant_ancestor_ids(script: ScriptDirectory, stamped: list[str]) -> set[
     for vid in stamped:
         try:
             objs.append(rm.get_revision(vid))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
             raise SystemExit(f"Unknown revision in alembic_version: {vid!r} ({exc})") from exc
 
     redundant: set[str] = set()

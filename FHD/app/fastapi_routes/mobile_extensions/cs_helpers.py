@@ -6,6 +6,8 @@ import json
 import logging
 from typing import Any
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,7 +28,7 @@ def _safe_user_id(user: Any) -> int:
 
         identity = sa_inspect(user).identity or ()
         return int(identity[0]) if identity else 0
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         return 0
 
 

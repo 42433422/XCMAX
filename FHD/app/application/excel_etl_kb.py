@@ -162,7 +162,7 @@ def _kb_path() -> Path:
     if override:
         return Path(override).expanduser().resolve()
     try:
-        from app.utils.path_utils import get_data_dir
+        from app.utils.path_io.path_utils import get_data_dir
 
         root = Path(get_data_dir())
     except RECOVERABLE_ERRORS:

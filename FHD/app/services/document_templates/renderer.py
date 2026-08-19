@@ -2,10 +2,22 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any, TypedDict
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+class _HeaderEntry(TypedDict):
+    name: str
+    column_index: int
+
+
+class _HeaderCandidate(TypedDict):
+    row: int
+    headers: list[_HeaderEntry]
+    score: float
 
 
 def _is_unreadable_workbook_error(error_message: str) -> bool:
@@ -20,7 +32,7 @@ def _is_unreadable_workbook_error(error_message: str) -> bool:
 
 
 def _extract_structured_excel_preview(
-    file_path: str, sheet_name: str = None, sample_limit: int = 6
+    file_path: str, sheet_name: str | None = None, sample_limit: int = 6
 ):
     try:
         from openpyxl import load_workbook
@@ -34,11 +46,11 @@ def _extract_structured_excel_preview(
             else:
                 return {"fields": [], "sample_rows": [], "sheet_name": ""}
 
-            header_row_idx = None
-            header_entries = []
+            header_row_idx: int | None = None
+            header_entries: list[_HeaderEntry] = []
             max_scan_rows = min(ws.max_row or 0, 30)
             max_scan_cols = min(ws.max_column or 0, 25)
-            best_candidate = None
+            best_candidate: _HeaderCandidate | None = None
 
             def _norm(text):
                 return str(text or "").strip().replace(" ", "").lower()
@@ -64,8 +76,8 @@ def _extract_structured_excel_preview(
                 return False
 
             for r in range(1, max_scan_rows + 1):
-                row_headers = []
-                norm_texts = []
+                row_headers: list[_HeaderEntry] = []
+                norm_texts: list[str] = []
                 str_like = 0
                 num_like = 0
                 date_like = 0
@@ -125,11 +137,11 @@ def _extract_structured_excel_preview(
 
             fields = [{"label": h["name"], "value": "", "type": "dynamic"} for h in header_entries]
 
-            sample_rows = []
+            sample_rows: list[dict[str, Any]] = []
             for r in range(
                 header_row_idx + 1, min((ws.max_row or 0), header_row_idx + sample_limit + 15) + 1
             ):
-                row_data = {}
+                row_data: dict[str, Any] = {}
                 has_non_empty = False
                 for h in header_entries:
                     value = ws.cell(r, h["column_index"]).value
@@ -149,7 +161,7 @@ def _extract_structured_excel_preview(
 
 
 def _extract_excel_grid_preview(
-    file_path: str, sheet_name: str = None, max_rows: int = 18, max_cols: int = 12
+    file_path: str, sheet_name: str | None = None, max_rows: int = 18, max_cols: int = 12
 ):
     try:
         from openpyxl import load_workbook
@@ -167,10 +179,14 @@ def _extract_excel_grid_preview(
             row_limit = min(ws.max_row or 1, max_rows)
             col_limit = min(ws.max_column or 1, max_cols)
 
-            merged_top_left = {}
-            merged_covered = set()
+            merged_top_left: dict[tuple[int, int], tuple[int, int]] = {}
+            merged_covered: set[tuple[int, int]] = set()
             for merged in ws.merged_cells.ranges:
-                min_col, min_row, max_col, max_row = range_boundaries(str(merged))
+                raw_min_col, raw_min_row, raw_max_col, raw_max_row = range_boundaries(str(merged))
+                min_col = int(raw_min_col or 1)
+                min_row = int(raw_min_row or 1)
+                max_col = int(raw_max_col or min_col)
+                max_row = int(raw_max_row or min_row)
                 if min_row > row_limit or min_col > col_limit:
                     continue
                 span_row = max(1, min(max_row, row_limit) - min_row + 1)
@@ -208,7 +224,7 @@ def _extract_excel_grid_preview(
 
 
 def _extract_excel_grid_style_cache(
-    file_path: str, sheet_name: str = None, max_rows: int = 24, max_cols: int = 14
+    file_path: str, sheet_name: str | None = None, max_rows: int = 24, max_cols: int = 14
 ):
     try:
         from copy import copy
@@ -331,11 +347,11 @@ def _extract_logical_tables_from_sheet(
             ws = wb[sheet_name]
             row_limit = min(ws.max_row or 0, max_scan_rows)
             col_limit = min(ws.max_column or 0, max_scan_cols)
-            tables = []
+            tables: list[dict[str, Any]] = []
             idx = 0
             r = 1
             while r <= row_limit:
-                non_empty_cells = []
+                non_empty_cells: list[_HeaderEntry] = []
                 for c in range(1, col_limit + 1):
                     v = ws.cell(r, c).value
                     if v is None:
@@ -345,10 +361,10 @@ def _extract_logical_tables_from_sheet(
                         non_empty_cells.append({"name": t, "column_index": c})
                 if len(non_empty_cells) >= 3:
                     header_entries = non_empty_cells
-                    sample_rows = []
+                    sample_rows: list[dict[str, Any]] = []
                     rr = r + 1
                     while rr <= row_limit:
-                        row_data = {}
+                        row_data: dict[str, Any] = {}
                         has_non_empty = False
                         for h in header_entries:
                             v = ws.cell(rr, h["column_index"]).value

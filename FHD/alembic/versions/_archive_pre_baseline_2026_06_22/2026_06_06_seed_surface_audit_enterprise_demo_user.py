@@ -12,7 +12,7 @@ from pathlib import Path
 from alembic import op
 from sqlalchemy import text
 
-from app.utils.password_hash import generate_password_hash
+from app.utils.security.password_hash import generate_password_hash
 from app.utils.time import utc_now_naive
 
 revision = "2026_06_06_surface_audit_demo"

@@ -1,4 +1,5 @@
 import sqlite3
+
 import requests
 
 
@@ -53,7 +54,7 @@ def check_backend_data_source():
                     if count > 0:
                         cursor.execute(f"SELECT * FROM {table_name} LIMIT 3")
                         rows = cursor.fetchall()
-                        print(f"    样本数据:")
+                        print("    样本数据:")
                         for i, row in enumerate(rows):
                             print(f"      {i+1}. {row}")
 
@@ -62,7 +63,7 @@ def check_backend_data_source():
 
             conn.close()
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"\n📁 数据库: {db_path}")
             print(f"  ❌ 无法连接: {e}")
 
@@ -106,7 +107,7 @@ def check_backend_service_implementation():
     bootstrap_file = "e:/FHD/xcagi/app/bootstrap.py"
 
     try:
-        with open(bootstrap_file, "r", encoding="utf-8") as f:
+        with open(bootstrap_file, encoding="utf-8") as f:
             content = f.read()
 
             # 查找客户服务相关代码
@@ -129,14 +130,14 @@ def check_backend_service_implementation():
 
     except FileNotFoundError:
         print(f"❌ 文件不存在: {bootstrap_file}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 读取文件失败: {e}")
 
     # 检查customer_import_service.py
     service_file = "e:/FHD/xcagi/app/services/customer_import_service.py"
 
     try:
-        with open(service_file, "r", encoding="utf-8") as f:
+        with open(service_file, encoding="utf-8") as f:
             content = f.read()
 
             # 查找数据源相关代码
@@ -158,7 +159,7 @@ def check_backend_service_implementation():
 
     except FileNotFoundError:
         print(f"❌ 文件不存在: {service_file}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 读取文件失败: {e}")
 
 
@@ -185,10 +186,10 @@ def fix_backend_data_source():
     service_file = "e:/FHD/xcagi/app/services/customer_import_service.py"
 
     if os.path.exists(service_file):
-        print(f"\n✅ customer_import_service.py 存在")
+        print("\n✅ customer_import_service.py 存在")
         print("💡 可以修改这个文件来修复数据源")
     else:
-        print(f"\n❌ customer_import_service.py 不存在")
+        print("\n❌ customer_import_service.py 不存在")
         print("💡 需要检查bootstrap.py中的服务配置")
 
 

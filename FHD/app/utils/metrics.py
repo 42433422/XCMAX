@@ -103,6 +103,52 @@ intent_cache_compute_seconds = Histogram(
     buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0),
 )
 
+# --- ETL lifecycle metrics -------------------------------------------------
+# Keep labels deliberately low-cardinality: phase and target_type come from the
+# registered ETL target catalogue; status/decision use bounded enum values.
+etl_runs_total = Counter(
+    "etl_runs_total",
+    "Total number of ETL preview and execution runs",
+    ["phase", "target_type", "status"],
+)
+
+etl_run_duration_seconds = Histogram(
+    "etl_run_duration_seconds",
+    "ETL preview and execution duration in seconds",
+    ["phase", "target_type"],
+    buckets=(0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0),
+)
+
+etl_rows_total = Counter(
+    "etl_rows_total",
+    "Total ETL rows grouped by preview decision",
+    ["target_type", "decision"],
+)
+
+etl_llm_degradations_total = Counter(
+    "etl_llm_degradations_total",
+    "Total ETL runs that degraded from LLM-assisted processing",
+    ["target_type"],
+)
+
+etl_retries_total = Counter(
+    "etl_retries_total",
+    "Total ETL execution retries",
+    ["target_type"],
+)
+
+etl_rollbacks_total = Counter(
+    "etl_rollbacks_total",
+    "Total ETL rollback attempts",
+    ["target_type", "status"],
+)
+
+etl_manual_corrections_total = Counter(
+    "etl_manual_corrections_total",
+    "Total manual corrections applied to ETL drafts",
+    ["kind"],
+)
+
 app_info = Info("app", "Application information")
 
 # --- NeuroBus 事件计数（M0 Grafana / observability）---------------------------------
@@ -294,7 +340,7 @@ def refresh_mod_sqlite_copy_metrics(mod_ids: list[str]) -> int:
 
     from app.db.init_db import DEFAULT_DB_FILES
     from app.db.sqlite_mod_paths import sqlite_filename_with_mod_suffix
-    from app.utils.path_utils import get_app_data_dir
+    from app.utils.path_io.path_utils import get_app_data_dir
 
     ready = 0
     work_dir = get_app_data_dir()

@@ -48,10 +48,14 @@ def _indexes(bind, name: str) -> dict[str, dict]:
 
 
 def _unique_index_on(bind, table: str, col: str) -> str | None:
-    """返回对 ``table.col`` 施加单列唯一的索引名（SQLite 由 unique=True 生成）。"""
+    """返回对 ``table.col`` 施加单列唯一的独立索引名。
+
+    PostgreSQL 会同时将 UNIQUE constraint 反射为 index；这类条目必须
+    通过 ``drop_constraint`` 删除，不能当成独立索引 ``drop_index``。
+    """
     for name, idx in _indexes(bind, table).items():
         cols = list(idx.get("column_names") or [])
-        if cols == [col] and idx.get("unique"):
+        if cols == [col] and idx.get("unique") and not idx.get("duplicates_constraint"):
             return name
     return None
 
@@ -64,7 +68,14 @@ def _add_column_if_missing(bind, table: str, col: str, column) -> None:
 
 
 def _ensure_tenant_unique(bind, table: str, col: str, constraint_name: str) -> None:
-    """将单列唯一改为 ``(tenant_id, col)`` 复合唯一；仅当旧唯一索引存在时处理。"""
+    """将单列唯一改为 ``(tenant_id, col)`` 复合唯一。"""
+    constraints = sa.inspect(bind).get_unique_constraints(table)
+    for constraint in constraints:
+        name = constraint.get("name")
+        if name and list(constraint.get("column_names") or []) == [col]:
+            with op.batch_alter_table(table, recreate="auto") as batch_op:
+                batch_op.drop_constraint(str(name), type_="unique")
+
     old = _unique_index_on(bind, table, col)
     if old:
         with op.batch_alter_table(table, recreate="auto") as batch_op:

@@ -328,7 +328,7 @@ def _parse_issue_number(issue_url: str) -> Optional[int]:
         return None
 
 
-def _dispatch_implement_workflow(issue_number: int) -> "subprocess.CompletedProcess[str]":
+def _dispatch_implement_workflow(issue_number: int) -> subprocess.CompletedProcess[str]:
     """连接点 4 显式触发：gh workflow run（非仅靠 issue 标签间接流转）。"""
     workflow = os.environ.get(
         "EVOLUTION_IMPLEMENT_WORKFLOW", "fhd-ai-issue-implement.yml"
@@ -348,7 +348,7 @@ def _dispatch_implement_workflow(issue_number: int) -> "subprocess.CompletedProc
     return subprocess.run(cmd, capture_output=True, text=True)
 
 
-def _run_implement_local(issue_number: int) -> "subprocess.CompletedProcess[str]":
+def _run_implement_local(issue_number: int) -> subprocess.CompletedProcess[str]:
     """本地 fallback：直接跑 ai_issue_implement.py --apply。"""
     repo = os.environ.get("GITHUB_REPOSITORY") or os.environ.get("GITHUB_REPO", "")
     token = os.environ.get("GITHUB_TOKEN", "")

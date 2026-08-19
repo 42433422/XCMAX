@@ -100,7 +100,7 @@ def main() -> int:
         ws.append([f"{PREFIX}市场部", f"{PREFIX}样品B", "大号"])
         ws.append([f"{PREFIX}研发部", f"{PREFIX}样品C", "定制"])
         wb.save(wb_path)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print("warn: dept-employee second sheet skipped:", exc, file=sys.stderr)
 
     print("wrote samples to", OUT)

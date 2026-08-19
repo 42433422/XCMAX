@@ -1,6 +1,7 @@
+import os
+
 import openpyxl
 from openpyxl import load_workbook
-import os
 
 folder = r"e:\FHD\424"
 files = [
@@ -58,7 +59,7 @@ if files:
     print(f"包含姓名的行：{data_rows_with_names[:10]}...")
 
     # 查看第 4 行的所有列
-    print(f"\n=== 第 4 行 (第一个数据行) 的所有列 ===")
+    print("\n=== 第 4 行 (第一个数据行) 的所有列 ===")
     for col_idx in range(1, ws.max_column + 1):
         cell = ws.cell(row=4, column=col_idx)
         if cell.value:

@@ -15,70 +15,18 @@ import hashlib
 import logging
 import time
 from collections.abc import Callable
-from typing import TypeVar
+from typing import Any, TypeVar, cast
 
+from app.utils.combined_optimization import combined_optimization
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.optimizer_components import (
+    OptimizedServiceMixin,
+    get_optimizer_components,
+)
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
-
-
-def get_optimizer_components():
-    """获取所有优化组件（懒加载）"""
-    components = {
-        "cache": None,
-        "monitor": None,
-        "deduplicator": None,
-        "async_manager": None,
-    }
-
-    try:
-        from app.utils.performance_initializer import get_performance_optimizer
-
-        optimizer = get_performance_optimizer()
-
-        if optimizer.redis_cache:
-            components["cache"] = optimizer.redis_cache
-        if optimizer.performance_monitor:
-            components["monitor"] = optimizer.performance_monitor
-        if optimizer.request_deduplicator:
-            components["deduplicator"] = optimizer.request_deduplicator
-        if optimizer.async_task_manager:
-            components["async_manager"] = optimizer.async_task_manager
-
-    except RECOVERABLE_ERRORS as e:
-        logger.debug("优化组件加载失败: %s", e)
-
-    return components
-
-
-class OptimizedServiceMixin:
-    """
-    服务优化混入类
-
-    用法：
-        class MyService(OptimizedServiceMixin):
-            def __init__(self):
-                self._init_optimizers()
-
-            @cached(ttl=300)
-            @rate_limited(max_requests=30)
-            @monitored("my_method")
-            def my_expensive_method(self, param):
-                ...
-    """
-
-    def _init_optimizers(self):
-        """初始化所有优化组件"""
-        components = get_optimizer_components()
-
-        self._cache = components["cache"]
-        self._monitor = components["monitor"]
-        self._deduplicator = components["deduplicator"]
-        self._async_manager = components["async_manager"]
-
-        logger.debug("服务 %s 优化组件已初始化", self.__class__.__name__)
 
 
 def cached(
@@ -103,6 +51,16 @@ def cached(
     skip_args = skip_args or []
 
     def decorator(func: Callable) -> Callable:
+        def _cache_key(args: tuple[Any, ...], kwargs: dict[str, Any]) -> str:
+            parts = [func.__name__]
+            for i, arg in enumerate(args):
+                if i not in skip_args:
+                    parts.append(str(arg))
+            for key, value in sorted(kwargs.items()):
+                parts.append(f"{key}={value}")
+            key_str = ":".join(parts)
+            return f"{key_prefix}{hashlib.sha256(key_str.encode()).hexdigest()}"
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             # 获取缓存实例
@@ -116,15 +74,7 @@ def cached(
 
             # 生成缓存键
             try:
-                parts = [func.__name__]
-                for i, arg in enumerate(args):
-                    if i not in skip_args:
-                        parts.append(str(arg))
-                for k, v in sorted(kwargs.items()):
-                    parts.append(f"{k}={v}")
-
-                key_str = ":".join(parts)
-                cache_key = f"{key_prefix}{hashlib.sha256(key_str.encode()).hexdigest()}"
+                cache_key = _cache_key(args, kwargs)
 
                 # 尝试从缓存获取
                 cached_result = cache.get(cache_key)
@@ -143,13 +93,11 @@ def cached(
                 logger.warning("缓存操作失败 [%s]: %s", func.__name__, e)
                 return func(*args, **kwargs)
 
-        wrapper.invalidate_cache = lambda *a, **kw: (
-            cache.delete(  # noqa: F821
-                f"{key_prefix}{hashlib.sha256(str(a + tuple(sorted(kw.items()))).encode()).hexdigest()}"
-            )
-            if cache  # noqa: F821
-            else None
-        )
+        def invalidate_cache(*args: Any, **kwargs: Any) -> Any:
+            cache = cache_instance or get_optimizer_components().get("cache")
+            return cache.delete(_cache_key(args, kwargs)) if cache else None
+
+        cast(Any, wrapper).invalidate_cache = invalidate_cache
 
         return wrapper
 
@@ -366,9 +314,10 @@ def async_task(
 
             raise RuntimeError("异步任务管理器未初始化")
 
-        wrapper.async_submit = staticmethod(async_submit)
-        wrapper.task_name = name
-        wrapper.queue = queue
+        wrapper_with_api = cast(Any, wrapper)
+        wrapper_with_api.async_submit = staticmethod(async_submit)
+        wrapper_with_api.task_name = name
+        wrapper_with_api.queue = queue
 
         return wrapper
 
@@ -495,68 +444,6 @@ def retry(
             raise last_exception
 
         return wrapper
-
-    return decorator
-
-
-def combined_optimization(
-    cache_ttl: int = 0,
-    rate_limit: int = 0,
-    monitor_slow_ms: float = 0,
-    dedup_window: int = 0,
-    circuit_failures: int = 0,
-    retry_times: int = 0,
-):
-    """
-    组合优化装饰器工厂
-
-    根据配置自动组合多个优化策略
-
-    Args:
-        cache_ttl: >0 时启用缓存
-        rate_limit: >0 时启用限流
-        monitor_slow_ms: >0 时启用监控
-        dedup_window: >0 时启用去重
-        circuit_failures: >0 时启用熔断
-        retry_times: >0 时启用重试
-
-    示例：
-        @combined_optimization(
-            cache_ttl=300,
-            rate_limit=30,
-            monitor_slow_ms=500,
-            dedup_window=60,
-            circuit_failures=5,
-            retry_times=3
-        )
-        def critical_api():
-            ...
-    """
-
-    def decorator(func: Callable) -> Callable:
-
-        # 按顺序应用装饰器（从外到内）
-        decorated = func
-
-        if retry_times > 0:
-            decorated = retry(max_retries=retry_times)(decorated)
-
-        if circuit_failures > 0:
-            decorated = circuit_breaker(failure_threshold=circuit_failures)(decorated)
-
-        if dedup_window > 0:
-            decorated = deduplicated(window_seconds=dedup_window)(decorated)
-
-        if rate_limit > 0:
-            decorated = rate_limited(max_requests=rate_limit)(decorated)
-
-        if cache_ttl > 0:
-            decorated = cached(ttl=cache_ttl)(decorated)
-
-        if monitor_slow_ms > 0:
-            decorated = monitored(slow_threshold_ms=monitor_slow_ms)(decorated)
-
-        return decorated
 
     return decorator
 

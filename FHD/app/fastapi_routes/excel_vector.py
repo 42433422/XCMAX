@@ -5,14 +5,14 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
-from fastapi import APIRouter, Body, Request
+from fastapi import APIRouter, Body, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.application import get_excel_vector_ingest_app_service, get_excel_vector_search_app_service
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import get_upload_dir
+from app.utils.path_io.path_utils import get_upload_dir
 
 logger = logging.getLogger(__name__)
 
@@ -91,8 +91,8 @@ def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
                 break
     if not output:
         output = {"success": getattr(run, "status", "") == "completed"}
-    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
-        output["message"] = getattr(run, "error", "")
+    if not output.get("success") and getattr(run, "error", False) and not output.get("message"):
+        output["message"] = getattr(run, "error", False)
     run_id = str(getattr(run, "run_id", "") or "")
     if run_id:
         output["run_id"] = run_id
@@ -111,23 +111,27 @@ def _excel_vector_status(payload: dict[str, Any]) -> int:
 
 @router.post("/ingest")
 async def ingest_excel_vector(request: Request):
+    upload_file: UploadFile | None = None
+    file_path = ""
+    should_cleanup = False
     try:
         payload: dict[str, Any] = {}
-        file_path: str = ""
-        should_cleanup = False
 
         ct = (request.headers.get("content-type") or "").lower()
         if "multipart/form-data" in ct:
             form = await request.form()
             upload = form.get("excel_file")
             if upload is not None and hasattr(upload, "filename") and upload.filename:
-                if not str(upload.filename).lower().endswith((".xlsx", ".xls")):
+                upload_file = cast("UploadFile", upload)
+                if not str(upload_file.filename).lower().endswith((".xlsx", ".xls")):
                     return JSONResponse(
                         {"success": False, "message": "只支持 .xlsx/.xls 文件"}, status_code=400
                     )
-                filename = f"vector_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{upload.filename}"
+                filename = (
+                    f"vector_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{upload_file.filename}"
+                )
                 file_path = os.path.join(get_upload_dir(), filename)
-                body = await upload.read()
+                body = await upload_file.read()
                 with open(file_path, "wb") as f:
                     f.write(body)
                 should_cleanup = True
@@ -165,13 +169,22 @@ async def ingest_excel_vector(request: Request):
             },
         )
         result = _agent_node_output(run, "excel_vector_ingest")
-        if should_cleanup and os.path.exists(file_path):
-            os.remove(file_path)
         status = _excel_vector_status(result)
         return JSONResponse(result, status_code=status)
     except RECOVERABLE_ERRORS as err:
         logger.exception("Excel 向量化 ingest 失败: %s", err)
         return JSONResponse({"success": False, "message": str(err)}, status_code=500)
+    finally:
+        if should_cleanup and file_path and os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except OSError:
+                logger.warning("清理 Excel 向量上传临时文件失败: %s", file_path)
+        if upload_file is not None:
+            try:
+                await upload_file.close()
+            except RECOVERABLE_ERRORS:
+                logger.warning("关闭 Excel 向量上传文件失败", exc_info=True)
 
 
 @router.post("/query")

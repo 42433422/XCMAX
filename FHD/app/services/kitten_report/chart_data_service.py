@@ -21,7 +21,7 @@ class ChartDataService(NeuroEventPublisherMixin):
             from app.db.models.shipment import ShipmentRecord
             from app.db.session import get_db
 
-            chart_data: object = {"labels": [], "revenue": [], "orders": []}
+            chart_data: dict[str, list[Any]] = {"labels": [], "revenue": [], "orders": []}
 
             with get_db() as db:
                 for i in range(months):
@@ -153,7 +153,12 @@ class ChartDataService(NeuroEventPublisherMixin):
             from app.db.models.shipment import ShipmentRecord
             from app.db.session import get_db
 
-            chart_data: object = {"labels": [], "revenue": [], "estimated_cost": [], "profit": []}
+            chart_data: dict[str, list[Any]] = {
+                "labels": [],
+                "revenue": [],
+                "estimated_cost": [],
+                "profit": [],
+            }
 
             with get_db() as db:
                 for i in range(months):

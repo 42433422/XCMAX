@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import get_base_dir, resolve_fhd_repo_root
+from app.utils.path_io.path_utils import get_base_dir, resolve_fhd_repo_root
 
 logger = logging.getLogger(__name__)
 

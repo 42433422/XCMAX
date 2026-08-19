@@ -1,11 +1,11 @@
-# -*- coding: utf-8 -*-
 """
 测试 PE白底漆 标签图片的网格检测
 """
 
+import glob
+
 import cv2
 import numpy as np
-import glob
 
 # 读取 PE白底漆 图片
 files = glob.glob(r"e:\FHD\26-0300001A_第1项_PE白底漆.png")
@@ -90,14 +90,14 @@ def merge_lines(lines, threshold=50):
     return merged
 
 
-horizontal_lines = sorted(list(set(horizontal_lines)))
-vertical_lines = sorted(list(set(vertical_lines)))
+horizontal_lines = sorted(set(horizontal_lines))
+vertical_lines = sorted(set(vertical_lines))
 horizontal_lines = merge_very_close(horizontal_lines, threshold=5)
 vertical_lines = merge_very_close(vertical_lines, threshold=5)
 horizontal_lines = merge_lines(horizontal_lines, threshold=50)
 vertical_lines = merge_lines(vertical_lines, threshold=50)
 
-print(f"\n" + "=" * 70)
+print("\n" + "=" * 70)
 print("网格线检测结果")
 print("=" * 70)
 print(f"水平线 Y：{horizontal_lines}")
@@ -155,7 +155,7 @@ for i in range(rows):
 
         cells.append(cell)
 
-print(f"\n" + "=" * 70)
+print("\n" + "=" * 70)
 print("单元格边框检测详情")
 print("=" * 70)
 print(f"{'单元格':<12} {'右侧边框':<12} {'底部边框':<12} {'状态'}")
@@ -177,6 +177,6 @@ for cell in cells:
 # 统计合并
 h_merged = sum(1 for c in cells if c["should_merge_right"])
 v_merged = sum(1 for c in cells if c["should_merge_down"])
-print(f"\n合并统计：")
+print("\n合并统计：")
 print(f"  水平合并：{h_merged} 个单元格")
 print(f"  垂直合并：{v_merged} 个单元格")

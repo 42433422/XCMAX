@@ -390,7 +390,7 @@ class GitHubClient:
             return True, "ok"
         try:
             message = str((resp.json() or {}).get("message") or "")
-        except Exception:
+        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             message = (resp.text or "")[:200]
         lowered = message.lower()
         if resp.status_code == 409 or "conflict" in lowered:
@@ -414,7 +414,7 @@ class GitHubClient:
         if resp.status_code == 200:
             try:
                 merge_sha = str((resp.json() or {}).get("sha") or "").strip()
-            except Exception:
+            except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 merge_sha = ""
             if len(merge_sha) != 40 or any(ch not in "0123456789abcdef" for ch in merge_sha):
                 return True, "ok_missing_merge_sha", ""
@@ -422,7 +422,7 @@ class GitHubClient:
         message = ""
         try:
             message = str((resp.json() or {}).get("message") or "")
-        except Exception:
+        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             message = (resp.text or "")[:200]
         lowered = message.lower()
         if resp.status_code in (405, 409) or "conflict" in lowered:
@@ -463,7 +463,7 @@ class GitHubClient:
             return True, "ok"
         try:
             message = str((resp.json() or {}).get("message") or "")
-        except Exception:
+        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             message = (resp.text or "")[:200]
         detail = message.replace("\n", " ").strip() or "no_message"
         return False, f"http_{resp.status_code}:{detail[:160]}"

@@ -9,10 +9,9 @@ AI 引擎层
 - 模型训练器
 """
 
-try:
-    from app.ai_engines.bert import BertIntentClassifier
-except ModuleNotFoundError:
-    BertIntentClassifier = None
+from app.ai_engines import bert as _bert
+
+BertIntentClassifier = getattr(_bert, "BertIntentClassifier", None)
 
 __all__ = [
     "BertIntentClassifier",

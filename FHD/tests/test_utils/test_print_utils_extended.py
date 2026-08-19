@@ -1,4 +1,4 @@
-"""Extended tests for app.utils.print_utils — covering more branches."""
+"""Extended tests for app.utils.path_io.print_utils — covering more branches."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from app.utils.print_utils import PrinterUtils
+from app.utils.path_io.print_utils import PrinterUtils
 
 
 def _patch_win32_deps():
@@ -42,8 +42,8 @@ class TestGetAvailablePrintersWithBackend:
         ]
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.pythoncom") as mock_com,
-            patch("app.utils.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils.pythoncom") as mock_com,
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
         ):
             mock_com.CoInitialize.return_value = None
             mock_win32print.GetDefaultPrinter.return_value = "Printer1"
@@ -63,8 +63,8 @@ class TestGetAvailablePrintersWithBackend:
         ]
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.pythoncom") as mock_com,
-            patch("app.utils.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils.pythoncom") as mock_com,
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
         ):
             mock_com.CoInitialize.return_value = None
             mock_win32print.GetDefaultPrinter.return_value = "Printer1"
@@ -83,8 +83,8 @@ class TestGetAvailablePrintersWithBackend:
         ]
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.pythoncom") as mock_com,
-            patch("app.utils.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils.pythoncom") as mock_com,
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
         ):
             mock_com.CoInitialize.return_value = None
             mock_win32print.GetDefaultPrinter.return_value = "Printer1"
@@ -102,8 +102,8 @@ class TestGetAvailablePrintersWithBackend:
         ]
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.pythoncom") as mock_com,
-            patch("app.utils.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils.pythoncom") as mock_com,
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
         ):
             mock_com.CoInitialize.return_value = None
             mock_win32print.GetDefaultPrinter.return_value = "Printer1"
@@ -120,11 +120,11 @@ class TestGetAvailablePrintersWithBackend:
         ]
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.pythoncom") as mock_com,
-            patch("app.utils.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils.pythoncom") as mock_com,
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
         ):
             mock_com.CoInitialize.return_value = None
-            mock_win32print.GetDefaultPrinter.side_effect = Exception("no default")
+            mock_win32print.GetDefaultPrinter.side_effect = RuntimeError("no default")
             mock_win32print.EnumPrinters.return_value = printers_data
             mock_win32print.PRINTER_ENUM_LOCAL = 2
             mock_win32print.PRINTER_ENUM_CONNECTIONS = 4
@@ -135,8 +135,8 @@ class TestGetAvailablePrintersWithBackend:
         pu = PrinterUtils()
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.pythoncom") as mock_com,
-            patch("app.utils.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils.pythoncom") as mock_com,
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
         ):
             mock_com.CoInitialize.return_value = None
             mock_win32print.EnumPrinters.side_effect = RuntimeError("enum failed")
@@ -153,8 +153,8 @@ class TestGetPrinterStatusMoreCodes:
     def test_status_paused(self):
         pu = PrinterUtils()
         with (
-            patch("app.utils.print_utils._PRINT_BACKEND_AVAILABLE", True),
-            patch("app.utils.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils._PRINT_BACKEND_AVAILABLE", True),
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
         ):
             mock_win32print.PRINTER_STATUS_PAUSED = 1
             assert pu._get_printer_status(1) == "已暂停"
@@ -162,8 +162,8 @@ class TestGetPrinterStatusMoreCodes:
     def test_status_paper_jam(self):
         pu = PrinterUtils()
         with (
-            patch("app.utils.print_utils._PRINT_BACKEND_AVAILABLE", True),
-            patch("app.utils.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils._PRINT_BACKEND_AVAILABLE", True),
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
         ):
             mock_win32print.PRINTER_STATUS_PAPER_JAM = 8
             assert pu._get_printer_status(8) == "卡纸"
@@ -171,8 +171,8 @@ class TestGetPrinterStatusMoreCodes:
     def test_status_paper_out(self):
         pu = PrinterUtils()
         with (
-            patch("app.utils.print_utils._PRINT_BACKEND_AVAILABLE", True),
-            patch("app.utils.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils._PRINT_BACKEND_AVAILABLE", True),
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
         ):
             mock_win32print.PRINTER_STATUS_PAPER_OUT = 16
             assert pu._get_printer_status(16) == "缺纸"
@@ -180,8 +180,8 @@ class TestGetPrinterStatusMoreCodes:
     def test_status_toner_low(self):
         pu = PrinterUtils()
         with (
-            patch("app.utils.print_utils._PRINT_BACKEND_AVAILABLE", True),
-            patch("app.utils.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils._PRINT_BACKEND_AVAILABLE", True),
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
         ):
             mock_win32print.PRINTER_STATUS_TONER_LOW = 262144
             assert pu._get_printer_status(262144) == "墨粉不足"
@@ -189,8 +189,8 @@ class TestGetPrinterStatusMoreCodes:
     def test_status_unknown_code_returns_ready(self):
         pu = PrinterUtils()
         with (
-            patch("app.utils.print_utils._PRINT_BACKEND_AVAILABLE", True),
-            patch("app.utils.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils._PRINT_BACKEND_AVAILABLE", True),
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
         ):
             mock_win32print.PRINTER_STATUS_PAUSED = 1
             assert pu._get_printer_status(99999) == "就绪"
@@ -204,8 +204,8 @@ class TestMonitorPrintJobWithBackend:
         pu = PrinterUtils()
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.win32print") as mock_win32print,
-            patch("app.utils.print_utils.time") as mock_time,
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils.time") as mock_time,
         ):
             mock_time.time.side_effect = [0, 0.5]  # start, then check
             mock_win32print.OpenPrinter.return_value = "handle"
@@ -218,8 +218,8 @@ class TestMonitorPrintJobWithBackend:
         pu = PrinterUtils()
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.win32print") as mock_win32print,
-            patch("app.utils.print_utils.time") as mock_time,
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils.time") as mock_time,
         ):
             mock_time.time.side_effect = [0, 5, 61]  # start, loop, timeout
             mock_win32print.OpenPrinter.return_value = "handle"
@@ -232,8 +232,8 @@ class TestMonitorPrintJobWithBackend:
         pu = PrinterUtils()
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.win32print") as mock_win32print,
-            patch("app.utils.print_utils.time") as mock_time,
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils.time") as mock_time,
         ):
             mock_win32print.OpenPrinter.side_effect = RuntimeError("open failed")
             # time.time() is called in while condition and then again after sleep
@@ -247,8 +247,8 @@ class TestMonitorPrintJobWithBackend:
         pu = PrinterUtils()
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.win32print") as _mock_win32print,
-            patch("app.utils.print_utils.time") as mock_time,
+            patch("app.utils.path_io.print_utils.win32print") as _mock_win32print,
+            patch("app.utils.path_io.print_utils.time") as mock_time,
         ):
             mock_time.time.side_effect = RuntimeError("unexpected")
             result = pu.monitor_print_job("Printer1")
@@ -304,7 +304,7 @@ class TestPrintFileWithBackend:
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
             patch("os.path.exists", return_value=True),
-            patch("app.utils.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
             patch.object(pu, "_print_pdf", return_value={"success": True}),
         ):
             mock_win32print.GetDefaultPrinter.return_value = "printer1"
@@ -316,8 +316,8 @@ class TestPrintFileWithBackend:
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
             patch("os.path.exists", return_value=True),
-            patch("app.utils.print_utils.win32print") as mock_win32print,
-            patch("app.utils.print_utils.time") as mock_time,
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils.time") as mock_time,
             patch.object(pu, "_print_pdf", return_value={"success": True}),
         ):
             mock_win32print.GetDefaultPrinter.side_effect = [
@@ -335,8 +335,8 @@ class TestPrintFileWithBackend:
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
             patch("os.path.exists", return_value=True),
-            patch("app.utils.print_utils.win32print") as mock_win32print,
-            patch("app.utils.print_utils.time") as mock_time,
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils.time") as mock_time,
             patch.object(pu, "_print_pdf", return_value={"success": True}),
         ):
             # First check: default is different
@@ -356,7 +356,7 @@ class TestPrintFileWithBackend:
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
             patch("os.path.exists", return_value=True),
-            patch("app.utils.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
             patch.object(pu, "_print_pdf", return_value={"success": True}),
         ):
             mock_win32print.GetDefaultPrinter.side_effect = RuntimeError("no default")
@@ -368,8 +368,8 @@ class TestPrintFileWithBackend:
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
             patch("os.path.exists", return_value=True),
-            patch("app.utils.print_utils.win32print") as mock_win32print,
-            patch("app.utils.print_utils.time") as mock_time,
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils.time") as mock_time,
             patch.object(pu, "_print_pdf", return_value={"success": True}),
         ):
             mock_win32print.GetDefaultPrinter.side_effect = [
@@ -420,7 +420,7 @@ class TestPrintExcel:
             patch.object(pu, "_is_print_backend_available", return_value=True),
             patch("os.path.basename", return_value="test.xlsx"),
             patch("os.startfile", create=True, side_effect=OSError("not available")),
-            patch("app.utils.print_utils.win32api") as mock_win32api,
+            patch("app.utils.path_io.print_utils.win32api") as mock_win32api,
         ):
             mock_win32api.ShellExecute.return_value = 33  # > 32 means success
             result = pu._print_excel("/tmp/test.xlsx", "printer1")
@@ -432,10 +432,10 @@ class TestPrintExcel:
             patch.object(pu, "_is_print_backend_available", return_value=True),
             patch("os.path.basename", return_value="test.xlsx"),
             patch("os.startfile", create=True, side_effect=OSError("not available")),
-            patch("app.utils.print_utils.win32api") as mock_win32api,
+            patch("app.utils.path_io.print_utils.win32api") as mock_win32api,
         ):
             mock_win32api.ShellExecute.return_value = 0  # failure
-            # ShellExecute returns 0 → raises Exception("ShellExecute失败，错误代码: 0")
+            # ShellExecute returns 0 → raises RuntimeError("ShellExecute失败，错误代码: 0")
             # which is NOT in RECOVERABLE_ERRORS, so it propagates out immediately
             with pytest.raises(Exception, match="ShellExecute失败"):
                 pu._print_excel("/tmp/test.xlsx", "printer1")
@@ -445,7 +445,7 @@ class TestPrintExcel:
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
             patch("os.startfile", create=True, side_effect=OSError("not available")),
-            patch("app.utils.print_utils.win32api") as mock_win32api,
+            patch("app.utils.path_io.print_utils.win32api") as mock_win32api,
         ):
             mock_win32api.ShellExecute.side_effect = RuntimeError("crash")
             # All methods fail → raises Exception
@@ -467,7 +467,7 @@ class TestPrintPdf:
         pu = PrinterUtils()
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
             patch("builtins.open", create=True) as mock_open,
             patch("os.path.basename", return_value="test.pdf"),
         ):
@@ -484,12 +484,12 @@ class TestPrintPdf:
         pu = PrinterUtils()
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
             patch("os.path.basename", return_value="test.pdf"),
             patch("os.path.exists", return_value=False),
         ):
             mock_win32print.OpenPrinter.side_effect = RuntimeError("open failed")
-            # The function raises Exception("所有PDF打印方法都失败") which
+            # The function raises RuntimeError("所有PDF打印方法都失败") which
             # is NOT in RECOVERABLE_ERRORS, so it propagates out
             with pytest.raises(Exception, match="所有PDF打印方法都失败"):
                 pu._print_pdf("/tmp/test.pdf", "printer1")
@@ -498,14 +498,14 @@ class TestPrintPdf:
         pu = PrinterUtils()
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
             patch("os.path.basename", return_value="test.pdf"),
             patch("builtins.open", create=True, side_effect=FileNotFoundError("no file")),
             patch("os.path.exists", return_value=False),
         ):
             mock_win32print.OpenPrinter.return_value = "handle"
             # FileNotFoundError is caught by inner RECOVERABLE_ERRORS, then Adobe not found,
-            # then raises Exception("所有PDF打印方法都失败")
+            # then raises RuntimeError("所有PDF打印方法都失败")
             with pytest.raises(Exception, match="所有PDF打印方法都失败"):
                 pu._print_pdf("/tmp/test.pdf", "printer1")
 
@@ -524,7 +524,7 @@ class TestPrintDefault:
         pu = PrinterUtils()
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.win32api") as mock_win32api,
+            patch("app.utils.path_io.print_utils.win32api") as mock_win32api,
             patch("os.path.basename", return_value="test.doc"),
         ):
             mock_win32api.ShellExecute.return_value = 33
@@ -536,7 +536,7 @@ class TestPrintDefault:
         pu = PrinterUtils()
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.win32api") as mock_win32api,
+            patch("app.utils.path_io.print_utils.win32api") as mock_win32api,
             patch("os.path.basename", return_value="test.doc"),
         ):
             mock_win32api.ShellExecute.return_value = 33
@@ -548,7 +548,7 @@ class TestPrintDefault:
         pu = PrinterUtils()
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.win32api") as mock_win32api,
+            patch("app.utils.path_io.print_utils.win32api") as mock_win32api,
         ):
             mock_win32api.ShellExecute.side_effect = RuntimeError("failed")
             result = pu._print_default("/tmp/test.doc", "printer1")
@@ -563,7 +563,7 @@ class TestTestPrinterWithBackend:
         pu = PrinterUtils()
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
         ):
             mock_win32print.OpenPrinter.return_value = "handle"
             mock_win32print.GetPrinter.return_value = {"Status": 0}
@@ -576,7 +576,7 @@ class TestTestPrinterWithBackend:
         pu = PrinterUtils()
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.win32print") as mock_win32print,
+            patch("app.utils.path_io.print_utils.win32print") as mock_win32print,
         ):
             mock_win32print.OpenPrinter.side_effect = RuntimeError("no such printer")
             result = pu.test_printer("BadPrinter")
@@ -592,7 +592,7 @@ class TestEnsureComInitialized:
         pu = PrinterUtils()
         with (
             patch.object(pu, "_is_print_backend_available", return_value=True),
-            patch("app.utils.print_utils.pythoncom") as mock_com,
+            patch("app.utils.path_io.print_utils.pythoncom") as mock_com,
         ):
             mock_com.CoInitialize.side_effect = RuntimeError("COM error")
             pu._ensure_com_initialized()

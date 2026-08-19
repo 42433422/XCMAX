@@ -110,13 +110,13 @@ def _extract_inline_customer_hits_from_cell(text: str) -> list[str]:
     for m in _CUSTOMER_LABEL_RE.finditer(raw):
         _push(m.group("name"))
     if not hits:
-        m = _PURCHASE_UNIT_PAREN_RE.search(raw)
-        if m:
-            _push(m.group("name"))
+        paren_match = _PURCHASE_UNIT_PAREN_RE.search(raw)
+        if paren_match:
+            _push(paren_match.group("name"))
     if not hits:
-        m = _PURCHASE_UNIT_PLAIN_RE.search(raw)
-        if m:
-            _push(m.group("name"))
+        plain_match = _PURCHASE_UNIT_PLAIN_RE.search(raw)
+        if plain_match:
+            _push(plain_match.group("name"))
 
     return hits
 

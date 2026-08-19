@@ -17,7 +17,7 @@ from app.schemas.ocr_schema import (
     OcrTestResponse,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.upload_helpers import save_upload_file
+from app.utils.path_io.upload_helpers import save_upload_file
 
 logger = logging.getLogger(__name__)
 
@@ -100,8 +100,8 @@ def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
                 break
     if not output:
         output = {"success": getattr(run, "status", "") == "completed"}
-    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
-        output["message"] = getattr(run, "error", "")
+    if not output.get("success") and getattr(run, "error", False) and not output.get("message"):
+        output["message"] = getattr(run, "error", False)
     run_id = str(getattr(run, "run_id", "") or "")
     if run_id:
         output["run_id"] = run_id

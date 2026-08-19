@@ -96,7 +96,7 @@ async def sync_modstore_library_to_local(
             normalized_path = normalize_package_zip_path(tmp_path)
             ok, message, metadata = mm.install_mod_package(
                 normalized_path,
-                verify_signature=False,
+                verify_signature=True,
                 activate=False,
             )
             if ok:

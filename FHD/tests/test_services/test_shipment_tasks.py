@@ -209,7 +209,7 @@ class TestCleanupOldShipmentDocuments:
         from app.tasks.shipment_tasks import cleanup_old_shipment_documents
 
         with (
-            patch("app.utils.path_utils.get_app_data_dir", return_value="/tmp/fake_data"),
+            patch("app.utils.path_io.path_utils.get_app_data_dir", return_value="/tmp/fake_data"),
             patch("os.path.exists", return_value=False),
         ):
             result = cleanup_old_shipment_documents(90)
@@ -222,7 +222,7 @@ class TestCleanupOldShipmentDocuments:
         recent_mtime = (datetime.now() - timedelta(days=1)).timestamp()
 
         with (
-            patch("app.utils.path_utils.get_app_data_dir", return_value="/tmp/fake_data"),
+            patch("app.utils.path_io.path_utils.get_app_data_dir", return_value="/tmp/fake_data"),
             patch("os.path.exists", return_value=True),
             patch("os.path.isdir", return_value=True),
             patch("os.path.isfile", return_value=True),
@@ -241,7 +241,7 @@ class TestCleanupOldShipmentDocuments:
         old_mtime = (datetime.now() - timedelta(days=100)).timestamp()
 
         with (
-            patch("app.utils.path_utils.get_app_data_dir", return_value="/tmp/fake_data"),
+            patch("app.utils.path_io.path_utils.get_app_data_dir", return_value="/tmp/fake_data"),
             patch("os.path.exists", return_value=True),
             patch("os.path.isdir", return_value=True),
             patch("os.path.isfile", return_value=True),
@@ -256,7 +256,7 @@ class TestCleanupOldShipmentDocuments:
     def test_outer_exception_returns_zero(self):
         from app.tasks.shipment_tasks import cleanup_old_shipment_documents
 
-        with patch("app.utils.path_utils.get_app_data_dir", side_effect=RuntimeError("fail")):
+        with patch("app.utils.path_io.path_utils.get_app_data_dir", side_effect=RuntimeError("fail")):
             result = cleanup_old_shipment_documents(90)
         assert result == 0
 
@@ -264,7 +264,7 @@ class TestCleanupOldShipmentDocuments:
         from app.tasks.shipment_tasks import cleanup_old_shipment_documents
 
         with (
-            patch("app.utils.path_utils.get_app_data_dir", return_value="/tmp/fake_data"),
+            patch("app.utils.path_io.path_utils.get_app_data_dir", return_value="/tmp/fake_data"),
             patch("os.path.exists", return_value=True),
             patch("os.path.isdir", return_value=True),
             patch("os.listdir", return_value=["subdir"]),
@@ -340,7 +340,7 @@ class TestImportProductsBatchTask:
         from app.tasks.shipment_tasks import import_products_batch_task
 
         mock_svc = MagicMock()
-        mock_svc.add_product.return_value = {"success": False, "message": "产品已存在"}
+        mock_svc.create_product.return_value = {"success": False, "message": "产品已存在"}
         with (
             patch("app.services.get_products_service", return_value=mock_svc),
             patch.object(import_products_batch_task, "retry", side_effect=MaxRetriesExceededError),
@@ -356,7 +356,7 @@ class TestImportProductsBatchTask:
         from app.tasks.shipment_tasks import import_products_batch_task
 
         mock_svc = MagicMock()
-        mock_svc.add_product.side_effect = RuntimeError("db error")
+        mock_svc.create_product.side_effect = RuntimeError("db error")
         with (
             patch("app.services.get_products_service", return_value=mock_svc),
             patch.object(import_products_batch_task, "retry", side_effect=MaxRetriesExceededError),

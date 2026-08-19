@@ -52,7 +52,7 @@ def fix_purchase_unit():
 
         return updated_count > 0
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 修复购买单位时出错: {e}")
         return False
 

@@ -1,6 +1,4 @@
-# -*- coding: utf-8 -*-
 import sys
-import os
 
 sys.path.insert(0, r"E:\FHD\XCAGI\resources\wechat-decrypt")
 sys.path.insert(0, r"E:\FHD\XCAGI\resources\wechat-cv")

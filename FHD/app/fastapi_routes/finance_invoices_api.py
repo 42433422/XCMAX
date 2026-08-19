@@ -77,7 +77,7 @@ def finance_crm_invoices_list(
     if gate is not None:
         return gate
     try:
-        from app.services.user_cs_crm_store import list_crm_invoices
+        from app.application.business_route_facade import list_crm_invoices
 
         data = list_crm_invoices(
             market_user_id=market_user_id,
@@ -97,9 +97,9 @@ def finance_crm_invoice_detail(request: Request, invoice_id: int):
     if gate is not None:
         return gate
     try:
-        from app.services.user_cs_crm_store import get_crm_invoice_by_id
+        from app.application.business_route_facade import get_crm_invoice
 
-        inv = get_crm_invoice_by_id(int(invoice_id))
+        inv = get_crm_invoice(int(invoice_id))
         if not inv:
             return JSONResponse({"success": False, "message": "发票不存在"}, status_code=404)
         return {"success": True, "invoice": inv}
@@ -114,9 +114,13 @@ def finance_crm_invoice_issue(request: Request, body: CrmInvoiceIssueBody):
     if gate is not None:
         return gate
     try:
-        from app.services.tax_invoice_provider import issue_crm_invoice_for_pipeline
-        from app.services.user_cs_crm_store import get_opportunity_by_market_user
-        from app.services.user_cs_pipeline import load_pipeline, save_pipeline
+        from app.application.business_route_facade import (
+            get_customer_opportunity,
+            issue_pipeline_invoice,
+            load_customer_pipeline,
+            market_user_id_for_opportunity,
+            save_customer_pipeline,
+        )
 
         uid = int(body.market_user_id or 0)
         opp_id = int(body.opportunity_id or 0)
@@ -126,24 +130,16 @@ def finance_crm_invoice_issue(request: Request, body: CrmInvoiceIssueBody):
                 status_code=400,
             )
         if uid <= 0 and opp_id > 0:
-            from app.services.user_cs_crm_store import _connect, ensure_crm_schema
-
-            ensure_crm_schema()
-            with _connect() as conn:
-                row = conn.execute(
-                    "SELECT market_user_id FROM cs_crm_opportunities WHERE id = ?",
-                    (opp_id,),
-                ).fetchone()
-            uid = int(row["market_user_id"]) if row else 0
+            uid = market_user_id_for_opportunity(opp_id)
         if uid <= 0:
             return JSONResponse(
                 {"success": False, "message": "无法解析 market_user_id"}, status_code=400
             )
-        doc = load_pipeline(uid, username=body.username)
+        doc = load_customer_pipeline(uid, username=body.username)
         if opp_id > 0:
             doc["crm_opportunity_id"] = opp_id
         elif not doc.get("crm_opportunity_id"):
-            opp = get_opportunity_by_market_user(uid)
+            opp = get_customer_opportunity(uid)
             if opp:
                 doc["crm_opportunity_id"] = int(opp["id"])
         if int(doc.get("crm_opportunity_id") or 0) <= 0:
@@ -151,8 +147,8 @@ def finance_crm_invoice_issue(request: Request, body: CrmInvoiceIssueBody):
                 {"success": False, "message": "商机未入库，请先在内部客服同步 CRM"},
                 status_code=400,
             )
-        doc = issue_crm_invoice_for_pipeline(doc)
-        doc = save_pipeline(doc, strict_crm=False)
+        doc = issue_pipeline_invoice(doc)
+        doc = save_customer_pipeline(doc, strict_crm=False)
         inv = doc.get("invoice") if isinstance(doc.get("invoice"), dict) else {}
         return {"success": True, "pipeline": doc, "invoice": inv}
     except ValueError as exc:
@@ -168,15 +164,14 @@ def finance_crm_invoice_archive(request: Request, invoice_id: int):
     if gate is not None:
         return gate
     try:
-        from app.services.finance_unified_archive import archive_from_crm_invoice
-        from app.services.user_cs_crm_store import get_crm_invoice_by_id
+        from app.application.business_route_facade import archive_crm_invoice, get_crm_invoice
 
-        inv = get_crm_invoice_by_id(int(invoice_id))
+        inv = get_crm_invoice(int(invoice_id))
         if not inv:
             return JSONResponse({"success": False, "message": "发票不存在"}, status_code=404)
         uid = int(inv.get("market_user_id") or 0)
-        result = archive_from_crm_invoice(inv, market_user_id=uid)
-        inv = get_crm_invoice_by_id(int(invoice_id))
+        result = archive_crm_invoice(inv, market_user_id=uid)
+        inv = get_crm_invoice(int(invoice_id))
         return {
             "success": True,
             "archive": result,

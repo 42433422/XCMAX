@@ -1,5 +1,6 @@
 import os
 import sqlite3
+
 import requests
 
 
@@ -74,7 +75,7 @@ def simple_db_check():
                         if count > 0:
                             cursor.execute(f"SELECT * FROM {table_name} LIMIT 3")
                             rows = cursor.fetchall()
-                            print(f"    样本数据:")
+                            print("    样本数据:")
                             for i, row in enumerate(rows):
                                 print(f"      {i+1}. {row}")
 
@@ -83,7 +84,7 @@ def simple_db_check():
 
                 conn.close()
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"  ❌ 无法连接: {e}")
 
     # 检查我们统一的customer数据库
@@ -138,7 +139,7 @@ def check_sqlalchemy_config():
             print(f"\n📄 配置文件: {config_file}")
 
             try:
-                with open(config_file, "r", encoding="utf-8") as f:
+                with open(config_file, encoding="utf-8") as f:
                     content = f.read()
 
                     # 查找数据库路径配置
@@ -160,7 +161,7 @@ def check_sqlalchemy_config():
                                 if pattern in line:
                                     print(f"    行 {i+1}: {line.strip()}")
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"  ❌ 读取失败: {e}")
 
 

@@ -15,52 +15,26 @@
 from __future__ import annotations
 
 import logging
-import re
 from contextlib import nullcontext
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from app.db.models import InventoryTransaction, SalesOrder, SalesOrderItem
 from app.db.session import get_db
+from app.services.fulfillment_quantities import (
+    effective_ordered as _effective_ordered,
+)
+from app.services.fulfillment_quantities import (
+    parse_source_item_id as _parse_source_item_id,
+)
+from app.services.fulfillment_quantities import (
+    to_decimal as _to_decimal,
+)
 from app.services.inventory_service import InventoryService
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-
-
-def _to_decimal(value: Any) -> Decimal:
-    if value is None:
-        return Decimal("0")
-    return Decimal(str(value))
-
-
-_SOURCE_ITEM_RE = re.compile(r"backorder source_item_id=(\d+)\Z")
-
-
-def _parse_source_item_id(remark: str | None) -> int | None:
-    """从子单明细 remark 精确解析来源父单明细 id。
-
-    仅当 remark 与 backorder 来源标记格式完全一致（如 ``backorder source_item_id=10``）
-    时才返回 id；带前后缀或其它文本的 remark（如 ``source_item_id=1x``、
-    ``backorder source_item_id=1 trailing``、``fake-prefix backorder source_item_id=1``）
-    一律返回 None，避免子串误配导致 id 前缀冲突（如 1 与 10/100）。
-    """
-    if not remark:
-        return None
-    match = _SOURCE_ITEM_RE.fullmatch(remark)
-    if match is None:
-        return None
-    return int(match.group(1))
-
-
-def _effective_ordered(item: SalesOrderItem) -> Decimal:
-    """订购量：优先明细的 ordered_quantity，未设置时回退到 quantity。"""
-    ordered = _to_decimal(getattr(item, "ordered_quantity", None))
-    if ordered <= 0:
-        ordered = _to_decimal(getattr(item, "quantity", None))
-    return ordered
-
 
 class FulfillmentService:
     """履行服务：预留、交付（partial/backorder）、退货（return）。"""
@@ -124,11 +98,12 @@ class FulfillmentService:
 
     def _backorder_child(self, db: Any, order_id: Any) -> SalesOrder | None:
         """返回该订单的唯一 backorder 子单（backorder_of_id 指向父单），不存在返回 None。"""
-        return (
+        return cast(
+            "SalesOrder | None",
             db.query(SalesOrder)
             .filter(SalesOrder.backorder_of_id == int(order_id))
             .order_by(SalesOrder.id.asc())
-            .first()
+            .first(),
         )
 
     @staticmethod
@@ -272,8 +247,8 @@ class FulfillmentService:
         with get_db() as db:
             try:
                 order, item, err = self._get_order_and_item(db, order_id, item_id)
-                if err:
-                    return {"success": False, "message": err}
+                if err or order is None or item is None:
+                    return {"success": False, "message": err or "订单或明细不存在"}
                 if self._idempotency_done(db, item_id, "reserve", idempotency_key):
                     return {
                         "success": True,
@@ -297,7 +272,7 @@ class FulfillmentService:
                 inv = self.inventory.reserve_for_order(
                     product_id=pid,
                     warehouse_id=warehouse_id,
-                    quantity=q,
+                    quantity=float(q),
                     sales_order_id=order.id,
                     sales_order_item_id=item.id,
                     batch_no=batch_no,
@@ -350,8 +325,8 @@ class FulfillmentService:
         with cm as ctx:
             try:
                 order, item, err = self._get_order_and_item(ctx, order_id, item_id)
-                if err:
-                    return {"success": False, "message": err}
+                if err or order is None or item is None:
+                    return {"success": False, "message": err or "订单或明细不存在"}
                 if self._idempotency_done(ctx, item_id, "deliver", idempotency_key):
                     return {
                         "success": True,
@@ -376,7 +351,7 @@ class FulfillmentService:
                 inv = self.inventory.deduct_for_order(
                     product_id=pid,
                     warehouse_id=warehouse_id,
-                    quantity=q,
+                    quantity=float(q),
                     sales_order_id=order.id,
                     sales_order_item_id=item.id,
                     batch_no=batch_no,
@@ -438,8 +413,8 @@ class FulfillmentService:
         with get_db() as db:
             try:
                 order, item, err = self._get_order_and_item(db, order_id, item_id)
-                if err:
-                    return {"success": False, "message": err}
+                if err or order is None or item is None:
+                    return {"success": False, "message": err or "订单或明细不存在"}
                 if self._idempotency_done(db, item_id, "return", idempotency_key):
                     return {
                         "success": True,
@@ -463,7 +438,7 @@ class FulfillmentService:
                 inv = self.inventory.restock_for_order(
                     product_id=pid,
                     warehouse_id=warehouse_id,
-                    quantity=q,
+                    quantity=float(q),
                     sales_order_id=order.id,
                     sales_order_item_id=item.id,
                     batch_no=batch_no,

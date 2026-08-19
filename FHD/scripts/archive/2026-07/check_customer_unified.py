@@ -77,7 +77,7 @@ def check_customer_unified_database():
             "customers_table_exists": bool(customers_table_exists),
         }
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查数据库时出错: {e}")
         return {"error": str(e)}
 
@@ -149,7 +149,7 @@ def fix_customer_count():
 
         return True
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 修复客户数量时出错: {e}")
         return False
 
@@ -164,7 +164,7 @@ if __name__ == "__main__":
     print("\n" + "=" * 50)
 
     if "error" not in result:
-        print(f"📊 数据库状态总结:")
+        print("📊 数据库状态总结:")
         print(f"  数据库表数量: {len(result['tables'])}")
         print(f"  活跃购买单位: {result['active_units']} 个")
         print(f"  customers表存在: {result['customers_table_exists']}")

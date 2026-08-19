@@ -22,7 +22,7 @@ def test_lan_blueprints_delegate_routes():
     text = (MOD_DIR / "backend" / "blueprints.py").read_text(encoding="utf-8")
     assert "/lan/activate" in text
     assert "/lan/admin/keys" in text
-    assert "app.fastapi_routes.lan_routes" in text
+    assert "app.mod_sdk.host_services" in text
 
 
 def test_list_lan_facade_registry_mod(monkeypatch):

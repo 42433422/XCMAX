@@ -5,13 +5,16 @@ XCAGI 前端兼容 API — 产品 / 库存 / 报价表导出路由。
 from __future__ import annotations
 
 import logging
-from datetime import date
-from typing import Any
-from urllib.parse import quote
+from typing import Any, cast
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 
+from app.application.workflow.types import normalize_workflow_risk
+from app.fastapi_routes.xcagi_compat_product_actions import (
+    execute_product_action,
+    price_list_word_response,
+)
 from app.infrastructure.auth.db_token import verify_db_read_token_header
 from app.infrastructure.persistence.compat_db.base import (
     _business_mod_json_block,
@@ -51,8 +54,8 @@ def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
                 break
     if not output:
         output = {"success": getattr(run, "status", "") == "completed"}
-    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
-        output["message"] = getattr(run, "error", "")
+    if not output.get("success") and getattr(run, "error", False) and not output.get("message"):
+        output["message"] = getattr(run, "error", False)
     run_id = str(getattr(run, "run_id", "") or "")
     if run_id:
         output["run_id"] = run_id
@@ -125,7 +128,7 @@ def _products_compat_preflight(
     _products_write_raise(request)
     gate = _business_mod_json_block()
     if gate:
-        return gate
+        return cast("dict[Any, Any]", gate)
     if action in {"update", "delete"}:
         pid = _product_parse_id(payload.get("id"))
         if pid is None:
@@ -150,124 +153,20 @@ def _http_exception_result(exc: HTTPException) -> dict[str, Any]:
 
 def _execute_products_compat_action(action: str, params: dict[str, Any]) -> dict[str, Any]:
     data = _normalize_products_create_payload(params) if action == "create" else dict(params or {})
-    try:
-        from app.mod_sdk.erp_products_facade import (
-            is_erp_products_via_service_enabled,
-        )
-        from app.mod_sdk.erp_products_facade import (
-            products_add as products_add_via_service,
-        )
-        from app.mod_sdk.erp_products_facade import (
-            products_batch_delete as products_batch_delete_via_service,
-        )
-        from app.mod_sdk.erp_products_facade import (
-            products_delete as products_delete_via_service,
-        )
-        from app.mod_sdk.erp_products_facade import (
-            products_update as products_update_via_service,
-        )
-
-        if is_erp_products_via_service_enabled():
-            if action == "create":
-                return products_add_via_service(None, data)
-            if action == "update":
-                return products_update_via_service(None, data)
-            if action == "delete":
-                return products_delete_via_service(None, data)
-            if action == "batch_delete":
-                return products_batch_delete_via_service(None, data)
-    except HTTPException as exc:
-        return _http_exception_result(exc)
-    except RECOVERABLE_ERRORS:
-        logger.debug("products compat via service skipped", exc_info=True)
-
-    if action == "create":
-        from app.application.excel_imports import _parse_price
-
-        try:
-            new_id = products_pg_insert_row(
-                data,
-                parse_price=_parse_price,
-                parse_quantity=_product_parse_quantity,
-                parse_is_active=_product_parse_is_active,
-            )
-            return {"success": True, "data": {"id": new_id}}
-        except HTTPException as exc:
-            return _http_exception_result(exc)
-        except RECOVERABLE_ERRORS as exc:
-            logger.exception("products add failed")
-            return {
-                "success": False,
-                "message": f"添加失败：{exc}",
-                "error_code": "tool_exception",
-            }
-
-    if action == "update":
-        from app.application.excel_imports import _parse_price
-
-        pid = _product_parse_id(data.get("id"))
-        if pid is None:
-            return {"success": False, "message": "id 无效或缺失", "status_code": 400}
-        try:
-            products_pg_update_row(
-                pid,
-                data,
-                parse_price=_parse_price,
-                parse_quantity=_product_parse_quantity,
-                parse_is_active=_product_parse_is_active,
-            )
-            return {"success": True, "data": {"id": pid}}
-        except HTTPException as exc:
-            return _http_exception_result(exc)
-        except RECOVERABLE_ERRORS as exc:
-            logger.exception("products update failed")
-            return {
-                "success": False,
-                "message": f"更新失败：{exc}",
-                "error_code": "tool_exception",
-            }
-
-    if action == "delete":
-        pid = _product_parse_id(data.get("id"))
-        if pid is None:
-            return {"success": False, "message": "id 无效或缺失", "status_code": 400}
-        try:
-            products_pg_delete_row(pid)
-            return {"success": True, "message": "已删除"}
-        except HTTPException as exc:
-            return _http_exception_result(exc)
-        except RECOVERABLE_ERRORS as exc:
-            logger.exception("products delete failed")
-            return {
-                "success": False,
-                "message": f"删除失败：{exc}",
-                "error_code": "tool_exception",
-            }
-
-    if action == "batch_delete":
-        ids = data.get("ids") or data.get("product_ids") or []
-        if not isinstance(ids, list) or not ids:
-            return {"success": False, "message": "ids 须为非空数组", "status_code": 400}
-        try:
-            deleted, skipped = products_pg_batch_delete_rows(ids)
-            skipped_items = (
-                skipped if isinstance(skipped, list) else ([] if not skipped else [skipped])
-            )
-            return {
-                "success": True,
-                "message": f"已删除 {deleted} 条",
-                "deleted": deleted,
-                "skipped": skipped_items,
-            }
-        except RECOVERABLE_ERRORS as exc:
-            logger.exception("products batch-delete failed")
-            return {
-                "success": False,
-                "message": f"批量删除失败：{exc}",
-                "error_code": "tool_exception",
-            }
-
-    return {"success": False, "message": f"未注册的 products compat 动作: {action}"}
+    return execute_product_action(
+        action,
+        data,
+        parse_id=_product_parse_id,
+        parse_quantity=_product_parse_quantity,
+        parse_is_active=_product_parse_is_active,
+        insert_row=products_pg_insert_row,
+        update_row=products_pg_update_row,
+        delete_row=products_pg_delete_row,
+        batch_delete_rows=products_pg_batch_delete_rows,
+        http_exception_result=_http_exception_result,
+        recoverable_errors=RECOVERABLE_ERRORS,
+        logger=logger,
+    )
 
 
 def _run_products_compat_agent(
@@ -302,12 +201,12 @@ def _run_products_compat_agent(
                 tool_id="products",
                 action=action,
                 params=dict(params or {}),
-                risk=str(action_meta.get("risk") or "medium"),
+                risk=normalize_workflow_risk(str(action_meta.get("risk") or "medium")),
                 idempotent=bool(action_meta.get("idempotent", False)),
                 description="Execute legacy products compat mutation through Agent runtime.",
             )
         ],
-        risk_level=str(action_meta.get("risk") or "medium"),
+        risk_level=normalize_workflow_risk(str(action_meta.get("risk") or "medium")),
         metadata={"source": "product_compat_route", "route": route_path},
     )
     runtime_context = {
@@ -344,62 +243,27 @@ def _products_price_list_word_response(
     export_date: str | None,
     template_slug: str | None = None,
 ) -> Response:
-    from app.infrastructure.documents.price_list_export import (
-        build_price_list_docx_bytes,
-        resolve_price_list_docx_template,
-    )
-    from app.shell.mod_business_scope import business_data_exposed, business_data_hidden_reason
-
-    if not business_data_exposed():
-        raise HTTPException(
-            status_code=503,
-            detail=business_data_hidden_reason() or "扩展 Mod 未就绪，无法导出价格表。",
-        )
-    tpl_path, tpl_rel = resolve_price_list_docx_template(template_slug)
-    if not tpl_path.is_file():
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                "未找到 Word 模板文件："
-                f"{tpl_rel}。请将 .docx 放到 424/document_templates/（如 price_list_default.docx），"
-                "或在「模板预览」中登记，或设置环境变量 FHD_PRICE_LIST_DOCX_TEMPLATE。"
-            ),
-        )
-    rows = _load_products_all_for_export(keyword, unit)
-    customer = (unit or "").strip()
-    qd = (export_date or "").strip() or date.today().strftime("%Y-%m-%d")
-    try:
-        body = build_price_list_docx_bytes(
-            tpl_path,
-            customer_name=customer,
-            quote_date=qd,
-            products=rows,
-        )
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("products export docx failed")
-        raise HTTPException(status_code=500, detail=f"生成 Word 失败：{e}") from e
-
-    today = date.today().strftime("%Y-%m-%d")
-    label = customer or "全部单位"
-    utf8_name = f"产品价格表_{label}_{today}.docx"
-    disp = "attachment; filename=\"price-list.docx\"; filename*=UTF-8''" + quote(utf8_name, safe="")
-    return Response(
-        content=body,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": disp},
+    return price_list_word_response(
+        unit,
+        keyword,
+        export_date,
+        template_slug,
+        load_products=_load_products_all_for_export,
+        recoverable_errors=RECOVERABLE_ERRORS,
+        logger=logger,
     )
 
 
 @router.get("/products/units")
 def products_units(request: Request) -> dict:
     verify_db_read_token_header(request)
-    return _products_units_for_select()
+    return cast("dict[Any, Any]", _products_units_for_select())
 
 
 @router.get("/shipment/shipment-records/units")
 @router.get("/shipment/shipment-records/units/")
 def shipment_records_units() -> dict:
-    return _products_units_for_select()
+    return cast("dict[Any, Any]", _products_units_for_select())
 
 
 @router.get("/mod/taiyangniao-pro/shipment/shipment-records/units")
@@ -439,7 +303,7 @@ def products_list(
             unit=unit,
         )
         if mod_out is not None:
-            return mod_out
+            return cast("dict[Any, Any]", mod_out)
     except RECOVERABLE_ERRORS:
         logger.debug("erp domain products.list dispatch skipped", exc_info=True)
     try:
@@ -449,8 +313,11 @@ def products_list(
         from app.mod_sdk.erp_products_facade import products_list as products_list_via_service
 
         if is_erp_products_via_service_enabled():
-            return products_list_via_service(
-                request, page=page, per_page=per_page, keyword=keyword, unit=unit
+            return cast(
+                "dict[Any, Any]",
+                products_list_via_service(
+                    request, page=page, per_page=per_page, keyword=keyword, unit=unit
+                ),
             )
     except RECOVERABLE_ERRORS:
         logger.debug("products list via service skipped", exc_info=True)
@@ -512,9 +379,9 @@ def products_resolve_name_hints(request: Request, body: dict = Body(default_fact
     )
 
 
-@router.post("/products/update")
-@router.post("/products/update/")
-def products_update(request: Request, body: dict = Body(default_factory=dict)) -> dict:
+@router.post("/products/update", response_model=None)
+@router.post("/products/update/", response_model=None)
+def products_update(request: Request, body: dict = Body(default_factory=dict)) -> dict | Response:
     payload = dict(body or {})
     gate = _products_compat_preflight(request, "update", payload)
     if gate:
@@ -528,9 +395,9 @@ def products_update(request: Request, body: dict = Body(default_factory=dict)) -
     return JSONResponse(result, status_code=_products_compat_status_code(result))
 
 
-@router.post("/products/add")
-@router.post("/products/add/")
-def products_add(request: Request, body: dict = Body(default_factory=dict)) -> dict:
+@router.post("/products/add", response_model=None)
+@router.post("/products/add/", response_model=None)
+def products_add(request: Request, body: dict = Body(default_factory=dict)) -> dict | Response:
     payload = _normalize_products_create_payload(dict(body or {}))
     gate = _products_compat_preflight(request, "create", payload)
     if gate:
@@ -544,9 +411,9 @@ def products_add(request: Request, body: dict = Body(default_factory=dict)) -> d
     return JSONResponse(result, status_code=_products_compat_status_code(result))
 
 
-@router.post("/products/delete")
-@router.post("/products/delete/")
-def products_delete(request: Request, body: dict = Body(default_factory=dict)) -> dict:
+@router.post("/products/delete", response_model=None)
+@router.post("/products/delete/", response_model=None)
+def products_delete(request: Request, body: dict = Body(default_factory=dict)) -> dict | Response:
     payload = dict(body or {})
     gate = _products_compat_preflight(request, "delete", payload)
     if gate:
@@ -560,9 +427,11 @@ def products_delete(request: Request, body: dict = Body(default_factory=dict)) -
     return JSONResponse(result, status_code=_products_compat_status_code(result))
 
 
-@router.post("/products/batch-delete")
-@router.post("/products/batch-delete/")
-def products_batch_delete(request: Request, body: dict = Body(default_factory=dict)) -> dict:
+@router.post("/products/batch-delete", response_model=None)
+@router.post("/products/batch-delete/", response_model=None)
+def products_batch_delete(
+    request: Request, body: dict = Body(default_factory=dict)
+) -> dict | Response:
     payload = dict(body or {})
     gate = _products_compat_preflight(request, "batch_delete", payload)
     if gate:
@@ -624,4 +493,4 @@ def products_price_list_template_preview(
             status_code=503,
             detail=business_data_hidden_reason() or "扩展 Mod 未就绪。",
         )
-    return build_price_list_template_preview_json(template_id)
+    return cast("dict[Any, Any]", build_price_list_template_preview_json(template_id))

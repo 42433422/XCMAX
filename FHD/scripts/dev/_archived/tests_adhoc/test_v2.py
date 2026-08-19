@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from app.services.intent_service import recognize_intents
 
 test_cases = [

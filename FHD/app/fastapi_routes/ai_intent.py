@@ -50,7 +50,8 @@ def _attach_unified_chat_run(
 ) -> dict[str, Any]:
     from app.application.agent_orchestrator.chat_trace import attach_chat_trace_run
 
-    runtime_context = body.get("context") if isinstance(body.get("context"), dict) else {}
+    raw_context = body.get("context")
+    runtime_context: dict[str, Any] = raw_context if isinstance(raw_context, dict) else {}
     runtime_context = {
         **runtime_context,
         "route": "/api/ai/chat-unified",
@@ -81,6 +82,8 @@ def _trace_intent_test_run(
         from app.application.agent_orchestrator.chat_trace import create_chat_trace_run
 
         data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        if not isinstance(data, dict):
+            data = {}
         run = create_chat_trace_run(
             {
                 **payload,
@@ -100,7 +103,7 @@ def _trace_intent_test_run(
             channel="intent_test_route",
             intent="intent_recognition",
         )
-    except Exception:  # noqa: BLE001 - tracing must not break intent recognition
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - tracing must not break intent recognition
         logger.exception("failed to attach AgentRun trace to intent test route")
         return payload
     traced = dict(payload)
@@ -123,7 +126,7 @@ def ai_chat_unified_alias(request: Request, body: dict = Body(default_factory=di
         return JSONResponse({"success": False, "message": "消息内容不能为空"}, status_code=400)
     payload = unified_chat_single_payload(
         message,
-        body.get("user_id"),
+        str(body.get("user_id") or ""),
         request.client.host if request.client else "",
         (body.get("source") or "").strip().lower(),
         body.get("mode"),
@@ -156,7 +159,7 @@ def ai_chat_unified_batch_alias(request: Request, body: dict = Body(default_fact
     for msg in messages:
         payload = unified_chat_single_payload(
             msg,
-            body.get("user_id"),
+            str(body.get("user_id") or ""),
             request.client.host if request.client else "",
             (body.get("source") or "").strip().lower(),
             body.get("mode"),

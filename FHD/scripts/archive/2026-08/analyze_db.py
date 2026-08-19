@@ -1,5 +1,4 @@
 import sqlite3
-import sys
 
 
 def analyze_database(db_path):
@@ -33,7 +32,7 @@ def analyze_database(db_path):
 
         conn.close()
         return True
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"分析数据库时出错: {e}")
         return False
 

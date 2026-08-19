@@ -1,4 +1,4 @@
-"""Tests for app.utils.cache_manager — LRU / LRUTTL / TimedCache / CacheManager / decorators."""
+"""Tests for app.utils.performance.cache_manager — LRU / LRUTTL / TimedCache / CacheManager / decorators."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.utils.cache_manager import (
+from app.utils.performance.cache_manager import (
     CacheManager,
     CacheStats,
     LRUCache,
@@ -427,13 +427,13 @@ class TestModuleLevelFunctions:
     def setup_method(self):
         # Reset singletons
         CacheManager._instance = None
-        import app.utils.cache_manager as m
+        import app.utils.performance.cache_manager as m
 
         m._cache_manager = None
 
     def teardown_method(self):
         CacheManager._instance = None
-        import app.utils.cache_manager as m
+        import app.utils.performance.cache_manager as m
 
         m._cache_manager = None
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 """
 服务层模块
 
@@ -22,10 +24,13 @@ from __future__ import annotations
 """
 
 # 桌面包 / 精简服务器可能未安装 torch；BERT 意图为可选能力，缺失时占位为 None。
-try:
+if TYPE_CHECKING:
     from app.ai_engines.bert import BertIntentClassifier
-except ModuleNotFoundError:
-    BertIntentClassifier = None
+else:
+    try:
+        from app.ai_engines.bert import BertIntentClassifier
+    except ModuleNotFoundError:
+        BertIntentClassifier = None
 from app.ai_engines.deepseek.intent_service import DeepseekIntentClassifier
 from app.ai_engines.rasa.nlu_service import RasaNLUService, get_rasa_nlu_service
 from app.di.registry import get_service_registry
@@ -61,8 +66,7 @@ from app.services.intent_service import get_tool_key_with_negation_check, recogn
 from app.services.task_agent import TaskAgent, get_task_agent
 from app.services.user_service import UserService, get_user_service
 from app.services.database_service import get_database_service
-from app.utils.system_service import get_system_service
-from app.utils.task_context import TaskContextService, get_task_context_service
+from app.utils.async_task.task_context import TaskContextService, get_task_context_service
 from app.utils.user_memory import UserMemoryService, get_user_memory_service
 
 
@@ -72,6 +76,11 @@ from app.services.session_service import SessionService, get_session_service
 from app.services.system_service import SystemService, get_system_service
 from app.services.tts_service import synthesize_to_data_uri
 from app.services.user_preference_service import UserPreferenceService, get_user_preference_service
+
+if TYPE_CHECKING:
+    from app.services.materials_service import MaterialsService
+    from app.services.printer_service import PrinterService
+    from app.services.product_import_service import ProductImportService
 
 
 def get_ai_product_parser() -> AIProductParser:

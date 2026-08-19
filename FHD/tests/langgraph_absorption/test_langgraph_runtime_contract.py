@@ -409,6 +409,7 @@ class TestProtocolIdentity:
 _FORBIDDEN_MODULES = (
     "app.application.workflow.engine",
     "app.infrastructure.workflow.legacy_engine_adapter",
+    "app.legacy.workflow.legacy_engine_adapter",
 )
 _FORBIDDEN_NAMES = ("WorkflowEngine", "LegacyEngineAdapter")
 _RUNTIME_PKG = "app.infrastructure.workflow"
@@ -517,7 +518,7 @@ class TestLegacyImportGuard:
         src = textwrap.dedent(
             """\
             def build():
-                import app.infrastructure.workflow.legacy_engine_adapter
+                import app.legacy.workflow.legacy_engine_adapter
                 return None
             """
         )

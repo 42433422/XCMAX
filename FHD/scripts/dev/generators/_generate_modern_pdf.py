@@ -6,7 +6,7 @@ md_path = r"e:\FHD\XCAGI\AI企业解决方案对比分析报告.md"
 pdf_path = r"e:\FHD\XCAGI\AI企业解决方案对比分析报告.pdf"
 
 # 读取 Markdown 文件
-with open(md_path, "r", encoding="utf-8") as f:
+with open(md_path, encoding="utf-8") as f:
     md_content = f.read()
 
 # 转换为 HTML
@@ -179,18 +179,17 @@ try:
         f.write(pdf)
 
     print(f"现代风格 PDF 生成成功: {pdf_path}")
-except Exception as e:
+except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"WeasyPrint 生成失败，使用备用方案: {e}")
 
     # 备用方案：使用 ReportLab
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
     from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import cm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-    from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
-    from reportlab.lib import colors
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
     # 注册中文字体
     pdfmetrics.registerFont(TTFont("SimHei", "C:\\Windows\\Fonts\\simhei.ttf"))

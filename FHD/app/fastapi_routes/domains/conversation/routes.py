@@ -56,7 +56,7 @@ def _trace_ai_message_save(payload: dict, *, body: dict) -> dict:
         traced["run_id"] = run.run_id
         traced["agent_run_id"] = run.run_id
         return traced
-    except Exception:  # noqa: BLE001 - tracing must not break legacy message persistence
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - tracing must not break legacy message persistence
         logger.exception("failed to attach AgentRun trace to /api/ai/message/save")
         return payload
 
@@ -112,7 +112,7 @@ def conversations_title_put(session_id: str, body: dict = Body(default_factory=d
 def ai_analyze_export(export_id: str):
     try:
         from app.application.facades.conversation_facade import get_data_analysis_service
-        from app.utils.path_utils import get_upload_dir
+        from app.utils.path_io.path_utils import get_upload_dir
 
         service = get_data_analysis_service()
         output_path = os.path.join(get_upload_dir(), f"report_{export_id}.xlsx")

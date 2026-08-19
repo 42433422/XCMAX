@@ -7,7 +7,7 @@ Skills 注册与管理服务
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -179,20 +179,20 @@ def execute_skill(skill_id: str, **params) -> dict[str, Any]:
         if module_name == "excel_analyzer":
             from .excel_analyzer.excel_template_analyzer import get_excel_analyzer_skill
 
-            skill = get_excel_analyzer_skill()
-            return skill.execute(**params)
+            analyzer_skill = get_excel_analyzer_skill()
+            return cast("dict[str, Any]", analyzer_skill.execute(**params))
         elif module_name == "excel_toolkit":
             from .excel_toolkit.excel_toolkit import get_excel_toolkit_skill
 
-            skill = get_excel_toolkit_skill()
-            return skill.execute(**params)
+            toolkit_skill = get_excel_toolkit_skill()
+            return cast("dict[str, Any]", toolkit_skill.execute(**params))
         elif module_name == "label_template_generator":
             from .label_template_generator.label_template_generator import (
                 get_label_template_generator_skill,
             )
 
-            skill = get_label_template_generator_skill()
-            return skill.execute(**params)
+            label_skill = get_label_template_generator_skill()
+            return cast("dict[str, Any]", label_skill.execute(**params))
         else:
             return {"success": False, "message": f"未知技能类型：{skill_id}"}
     except RECOVERABLE_ERRORS as e:

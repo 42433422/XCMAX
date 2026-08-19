@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import time
 from ipaddress import ip_address
+from typing import Literal, cast
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, Field
@@ -87,7 +88,12 @@ def _set_token_cookie(response: Response, token: str, max_age: int) -> None:
         max_age=max_age,
         httponly=True,
         secure=cfg.cookie_secure,
-        samesite=cfg.cookie_samesite,
+        samesite=cast(
+            "Literal['lax', 'strict', 'none']",
+            cfg.cookie_samesite.lower()
+            if cfg.cookie_samesite.lower() in {"lax", "strict", "none"}
+            else "lax",
+        ),
         domain=cfg.cookie_domain or None,
         path="/",
     )

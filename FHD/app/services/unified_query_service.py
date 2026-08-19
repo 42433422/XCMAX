@@ -22,6 +22,7 @@ T = TypeVar("T")
 class UnifiedQueryService(NeuroEventPublisherMixin):
     """统一查询服务"""
 
+    @staticmethod
     def _parse_filter(model_class, key, value):
         """解析过滤条件，支持 Django 风格的查找
 

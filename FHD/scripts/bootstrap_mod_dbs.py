@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 为每个扩展（Mod）在 PostgreSQL 上创建独立业务库，并启用 pgvector。
 
@@ -213,7 +212,7 @@ def _enable_pgvector(mod_url: str, dbname: str) -> None:
             c.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         eng.dispose()
         print(f"  OK pgvector enabled: {dbname}")
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(
             f"  WARN pgvector on {dbname} failed ({exc}). "
             f'Fix manually: psql "{mod_url}" -c "CREATE EXTENSION IF NOT EXISTS vector;"',

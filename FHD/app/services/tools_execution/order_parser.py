@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Any
 
 from app.services.tools_execution.order_parser_helpers import (
     build_missing_prompt,
@@ -218,8 +219,8 @@ def _parse_order_text(order_text: str) -> dict:
                     {
                         "name": "",
                         "model_number": str(slot_model),
-                        "quantity_tins": int(slot_qty_tins),
-                        "tin_spec": float(slot_spec),
+                        "quantity_tins": int(slot_qty_tins or 0),
+                        "tin_spec": float(slot_spec or 0.0),
                     }
                 ],
             }
@@ -293,12 +294,12 @@ def _parse_order_text(order_text: str) -> dict:
                                 else:
                                     digits = normalize_chinese_digits(token)
                                     quantity = float(digits) if digits else float(token)
-                        except Exception:
+                        except RECOVERABLE_ERRORS:
                             quantity = 1
 
                         product_name = groups[3].strip() if len(groups) > 3 else "产品"
 
-                        result = {
+                        result: dict[str, Any] = {
                             "success": True,
                             "unit_name": unit_name,
                             "products": [
@@ -328,7 +329,7 @@ def _parse_order_text(order_text: str) -> dict:
                                 return {"success": False, "message": "解析数字失败（型号无法识别）"}
 
                             spec = float(groups[3]) if len(groups) > 3 else 10.0
-                        except Exception:
+                        except RECOVERABLE_ERRORS:
                             return {"success": False, "message": "解析数字失败"}
 
                         return {
@@ -346,11 +347,13 @@ def _parse_order_text(order_text: str) -> dict:
 
         has_container_qty = any(k in text for k in ["桶", "箱", "件", "公斤", "kg"])
         if not has_container_qty:
-            m = re.search(rf"([^\d]+?)\s*({model_token_pattern})\s*规格\s*(\d+(?:\.\d+)?)", text)
-            if m:
-                unit_part = m.group(1)
-                model_token = m.group(2)
-                spec_token = m.group(3)
+            spec_match = re.search(
+                rf"([^\d]+?)\s*({model_token_pattern})\s*规格\s*(\d+(?:\.\d+)?)", text
+            )
+            if spec_match:
+                unit_part = spec_match.group(1)
+                model_token = spec_match.group(2)
+                spec_token = spec_match.group(3)
 
                 unit_name = normalize_trailing_unit_name(unit_part)
                 unit_name = re.sub(r"^(帮我|给我)?打印(一下)?|^打单|^开单", "", unit_name).strip()

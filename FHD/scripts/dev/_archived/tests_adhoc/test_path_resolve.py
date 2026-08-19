@@ -4,8 +4,9 @@ import sys
 
 sys.path.insert(0, r"e:\FHD\backend\shell")
 
-from taiyangniao_attendance.paths import resolve_workspace_excel, workspace_root
 import os
+
+from taiyangniao_attendance.paths import resolve_workspace_excel, workspace_root
 
 print(f'WORKSPACE_ROOT: {os.environ.get("WORKSPACE_ROOT", "未设置")}')
 print(f"workspace_root(): {workspace_root()}")
@@ -39,7 +40,7 @@ try:
             print(f'    标准化：{f.replace(" ", "")}')
             print(f'    匹配：{f.replace(" ", "") == normalized_file_name}')
 
-except Exception as e:
+except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"解析失败：{e}")
     import traceback
 

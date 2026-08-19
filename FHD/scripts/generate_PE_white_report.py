@@ -1,12 +1,12 @@
-# -*- coding: utf-8 -*-
 """
 PE白底漆 标签网格分析报告
 """
 
+import glob
+import json
+
 import cv2
 import numpy as np
-import json
-import glob
 
 # 读取图片
 files = glob.glob(r"e:\FHD\26-0300001A_第1项_PE白底漆.png")
@@ -80,8 +80,8 @@ def merge_lines(lines, threshold=50):
     return merged
 
 
-horizontal_lines = sorted(list(set(horizontal_lines)))
-vertical_lines = sorted(list(set(vertical_lines)))
+horizontal_lines = sorted(set(horizontal_lines))
+vertical_lines = sorted(set(vertical_lines))
 horizontal_lines = merge_very_close(horizontal_lines, threshold=5)
 vertical_lines = merge_very_close(vertical_lines, threshold=5)
 horizontal_lines = merge_lines(horizontal_lines, threshold=50)
@@ -308,7 +308,7 @@ with open(output_path, "w", encoding="utf-8") as f:
     f.write(html_content)
 
 print(f"✓ 报告已生成：{output_path}")
-print(f"\n检测结果：")
+print("\n检测结果：")
 print(f"  网格结构：{rows} 行 × {cols} 列")
 print(f"  水平合并：{sum(1 for c in cells if c['should_merge_right'])} 个")
 print(f"  垂直合并：{sum(1 for c in cells if c['should_merge_down'])} 个")

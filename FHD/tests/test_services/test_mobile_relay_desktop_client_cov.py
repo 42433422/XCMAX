@@ -277,6 +277,17 @@ class TestStopPoller:
         stop_desktop_relay_poller()
         assert _module._STOP_EVENT.is_set()
 
+    def test_joins_worker_and_clears_reference(self, monkeypatch):
+        worker = MagicMock()
+        worker.is_alive.return_value = False
+        monkeypatch.setattr(_module, "_WORKER_THREAD", worker)
+        monkeypatch.setenv("XCAGI_RELAY_POLL_TIMEOUT_SEC", "2")
+
+        stop_desktop_relay_poller()
+
+        worker.join.assert_called_once_with(timeout=3.0)
+        assert _module._WORKER_THREAD is None
+
 
 # ---------------------------------------------------------------------------
 # _terminal_codex_message

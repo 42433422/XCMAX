@@ -160,7 +160,7 @@ def _load_products_list_impl_pg(
             + " LIMIT :lim OFFSET :off"
         )
         qparams = {**params, "lim": per_page, "off": offset}
-        rows: list[Any] = []
+        rows: Any = []
         data_query_err: Exception | None = None
         with eng.connect() as conn:
             try:

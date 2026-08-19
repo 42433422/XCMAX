@@ -309,14 +309,12 @@ class AIProductParser:
                 return None
 
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    future = asyncio.ensure_future(call_api())
-                    content = future.result(timeout=30.0)
-                else:
-                    content = asyncio.run(call_api())
+                asyncio.get_running_loop()
             except RuntimeError:
                 content = asyncio.run(call_api())
+            else:
+                logger.debug("运行中的事件循环内跳过同步 AI 产品解析，降级到规则解析")
+                return None
 
             if not content:
                 return None

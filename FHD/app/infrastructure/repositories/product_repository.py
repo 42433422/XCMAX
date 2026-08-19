@@ -15,7 +15,7 @@ class ProductRepository(ABC):
         pass
 
     @abstractmethod
-    def find_all(self, page: int = 1, per_page: int = 20) -> list[Product]:
+    def find_all(self, page: int = 1, per_page: int = 20, **kwargs) -> tuple[list[Product], int]:
         pass
 
     @abstractmethod

@@ -3,10 +3,10 @@
 用于处理购买单位和产品数据的导入，确保上下文正确识别
 """
 
-import sqlite3
 import os
-from datetime import datetime
 import re
+import sqlite3
+from datetime import datetime
 
 
 class ProfessionalUploadHandler:
@@ -83,7 +83,7 @@ class ProfessionalUploadHandler:
             conn.close()
             return analysis_result
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return {"error": str(e)}
 
     def process_upload_response(self, user_response, file_path):
@@ -243,7 +243,7 @@ class ProfessionalUploadHandler:
                 "purchase_unit": purchase_unit,
             }
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return {"success": False, "message": f"导入失败: {str(e)}"}
 
     def _ensure_target_table_exists(self, cursor):

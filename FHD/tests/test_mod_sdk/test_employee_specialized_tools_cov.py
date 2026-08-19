@@ -352,7 +352,7 @@ class TestApiCall:
         mock_resp = Mock()
         mock_resp.is_success = True
         mock_resp.status_code = 200
-        mock_resp.json = Mock(side_effect=Exception("not json"))
+        mock_resp.json = Mock(side_effect=RuntimeError("not json"))
         mock_resp.text = "plain text"
         mock_client = AsyncMock()
         mock_client.request = AsyncMock(return_value=mock_resp)
@@ -365,7 +365,7 @@ class TestApiCall:
 
     async def test_network_exception(self):
         mock_client = AsyncMock()
-        mock_client.request = AsyncMock(side_effect=Exception("connection refused"))
+        mock_client.request = AsyncMock(side_effect=RuntimeError("connection refused"))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
         with patch.object(module, "httpx") as mock_httpx:
@@ -1539,7 +1539,12 @@ class TestQueryProviderUsage:
         assert r["ok"] is False
 
     async def test_no_keys_no_providers(self):
+        mock_resp = Mock()
+        mock_resp.status_code = 503
+        mock_resp.is_success = False
+        mock_resp.json = Mock(return_value={"status": "offline"})
         mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_resp)
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
         with patch("os.environ", {}):

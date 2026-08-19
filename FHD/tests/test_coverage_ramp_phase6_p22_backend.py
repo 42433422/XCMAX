@@ -357,7 +357,7 @@ class TestAiAssistantBranches:
         """打印文件时使用 printer_name 字段。"""
         client = _ai_assistant_client()
         with (
-            patch("app.utils.path_utils.get_app_data_dir", return_value="/tmp/app"),
+            patch("app.utils.path_io.path_utils.get_app_data_dir", return_value="/tmp/app"),
             patch("os.path.exists", return_value=True),
             patch.object(ai_assistant, "_printer_svc") as mock_svc_get,
         ):
@@ -376,7 +376,7 @@ class TestAiAssistantBranches:
         """printer 字段作为 printer_name 的回退。"""
         client = _ai_assistant_client()
         with (
-            patch("app.utils.path_utils.get_app_data_dir", return_value="/tmp/app"),
+            patch("app.utils.path_io.path_utils.get_app_data_dir", return_value="/tmp/app"),
             patch("os.path.exists", return_value=True),
             patch.object(ai_assistant, "_printer_svc") as mock_svc_get,
         ):

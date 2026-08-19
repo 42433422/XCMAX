@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 _ACTIONS = frozenset({"new", "update", "skip"})
 RowProvider = Callable[[dict[str, Any]], dict[str, Any] | None]
 BatchProvider = Callable[[list[dict[str, Any]]], dict[str, Any] | None]
@@ -75,7 +77,7 @@ class EtlRowAdviser:
                     "after": _bounded_record(after),
                 }
             )
-        except Exception:  # noqa: BLE001 - model failures never affect execution
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - model failures never affect execution
             return {
                 **fallback,
                 "degraded": True,
@@ -121,7 +123,7 @@ class EtlRowAdviser:
         ]
         try:
             result = self._batch_provider(payloads)
-        except Exception:  # noqa: BLE001 - model failures never affect execution
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - model failures never affect execution
             return [
                 {
                     **fallback,
@@ -133,6 +135,8 @@ class EtlRowAdviser:
         if not isinstance(result, dict):
             return fallbacks
         metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
+        if not isinstance(metadata, dict):
+            metadata = {}
         if metadata.get("degraded"):
             return [
                 {
@@ -151,7 +155,7 @@ class EtlRowAdviser:
             if not isinstance(item, dict):
                 continue
             try:
-                index = int(item.get("index"))
+                index = int(item.get("index") or 0)
             except (TypeError, ValueError):
                 continue
             action = str(item.get("action") or "").strip().lower()

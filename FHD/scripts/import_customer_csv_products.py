@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 将「公司名.csv」导入 purchase_units + products：
 - 文件名（不含 .csv）= 购买单位 unit_name
@@ -30,7 +29,7 @@ if str(REPO) not in sys.path:
 
 from app.utils.time import utc_now_iso_z
 
-_NO_CODE_CHARS = frozenset({"—", "-", "－", "–", "\u2014", ""})
+_NO_CODE_CHARS = frozenset({"—", "-", "－", "–", ""})
 
 
 def _resolve_db_path() -> Path:

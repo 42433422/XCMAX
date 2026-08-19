@@ -3,7 +3,7 @@
 Boot-time, fail-closed verification that every LangGraph runtime module resolves
 to a vendored ``FHD/packages/xcagi_langgraph_*`` editable source (never a PyPI
 site-packages distribution), and that each package's ``PROVENANCE.json`` pins
-upstream tag ``1.2.10`` at commit ``41341457…`` under the MIT license.
+the exact audited upstream release source under the MIT license.
 
 No ``sys.path`` / ``PYTHONPATH`` manipulation and no network access — this runs
 once per process at boot, on top of an ``uv sync``-ed venv. Any mismatch raises
@@ -20,6 +20,19 @@ from typing import Final
 UPSTREAM_TAG: Final[str] = "1.2.10"
 UPSTREAM_COMMIT: Final[str] = "41341457342327166d72fc11952ab28fb61ec0bf"
 UPSTREAM_LICENSE: Final[str] = "MIT"
+
+EXPECTED_PROVENANCE: Final[dict[str, tuple[str | None, str, str | None]]] = {
+    "xcagi_langgraph_checkpoint_backends/checkpoint-postgres": (
+        None,
+        "fcdf520938469c8e0992ca2075d6a9582c33260f",
+        "3.1.1",
+    ),
+    "xcagi_langgraph_checkpoint_backends/checkpoint-sqlite": (
+        None,
+        "b2926a0ff9589c28c7e01fe7cdbb337b86d5a4b4",
+        "3.1.1",
+    ),
+}
 
 # vendored module -> package directory relative to FHD/packages that must own it.
 # Assertions target concrete submodules (not ``langgraph.__file__``).
@@ -57,13 +70,20 @@ def _assert_provenance(package_dir: str) -> None:
     actual_tag = data.get("upstream_tag")
     actual_sha = data.get("upstream_commit_sha")
     actual_lic = data.get("license")
-    if actual_tag != UPSTREAM_TAG:
+    actual_version = data.get("version")
+    expected_tag, expected_sha, expected_version = EXPECTED_PROVENANCE.get(
+        package_dir,
+        (UPSTREAM_TAG, UPSTREAM_COMMIT, None),
+    )
+    if actual_tag != expected_tag:
         raise AssertionError(
-            f"{package_dir} PROVENANCE upstream_tag={actual_tag!r} != {UPSTREAM_TAG!r}"
+            f"{package_dir} PROVENANCE upstream_tag={actual_tag!r} != {expected_tag!r}"
         )
-    if actual_sha != UPSTREAM_COMMIT:
+    if actual_sha != expected_sha:
+        raise AssertionError(f"{package_dir} PROVENANCE commit={actual_sha!r} != {expected_sha!r}")
+    if expected_version is not None and actual_version != expected_version:
         raise AssertionError(
-            f"{package_dir} PROVENANCE commit={actual_sha!r} != {UPSTREAM_COMMIT!r}"
+            f"{package_dir} PROVENANCE version={actual_version!r} != {expected_version!r}"
         )
     if actual_lic != UPSTREAM_LICENSE:
         raise AssertionError(

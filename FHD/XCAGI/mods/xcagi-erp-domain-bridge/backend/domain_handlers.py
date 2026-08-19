@@ -49,8 +49,8 @@ def _products_list(**kw: Any) -> Any:
                 unit=unit,
             )
         )
-    from app.infrastructure.auth.db_token import verify_db_read_token_header
-    from app.fastapi_routes.domains.db.product_queries import _load_products_list_impl_pg
+    from app.mod_sdk.host_services import verify_db_read_token_header
+    from app.mod_sdk.host_services import _load_products_list_impl_pg
 
     if request is not None:
         verify_db_read_token_header(request)
@@ -70,7 +70,7 @@ def _products_get(**kw: Any) -> Any:
         from app.mod_sdk.erp_products_facade import products_get as svc_get
 
         return svc_get(**kw)
-    from app.fastapi_routes.domains.product.compat_routes import products_get_by_id
+    from app.mod_sdk.host_services import products_get_by_id
 
     return products_get_by_id(**kw)
 
@@ -80,7 +80,7 @@ def _products_add(**kw: Any) -> Any:
         from app.mod_sdk.erp_products_facade import products_add as svc_add
 
         return _tag(svc_add(kw.get("request"), kw.get("body") or {}))
-    from app.fastapi_routes.domains.product.compat_routes import products_add
+    from app.mod_sdk.host_services import products_add
 
     return _tag(products_add(**kw))
 
@@ -90,7 +90,7 @@ def _products_update(**kw: Any) -> Any:
         from app.mod_sdk.erp_products_facade import products_update as svc_update
 
         return _tag(svc_update(kw.get("request"), kw.get("body") or {}))
-    from app.fastapi_routes.domains.product.compat_routes import products_update
+    from app.mod_sdk.host_services import products_update
 
     return _tag(products_update(**kw))
 
@@ -100,7 +100,7 @@ def _products_delete(**kw: Any) -> Any:
         from app.mod_sdk.erp_products_facade import products_delete as svc_delete
 
         return _tag(svc_delete(kw.get("request"), kw.get("body") or {}))
-    from app.fastapi_routes.domains.product.compat_routes import products_delete
+    from app.mod_sdk.host_services import products_delete
 
     return _tag(products_delete(**kw))
 
@@ -110,7 +110,7 @@ def _products_batch_delete(**kw: Any) -> Any:
         from app.mod_sdk.erp_products_facade import products_batch_delete as svc_batch_del
 
         return _tag(svc_batch_del(kw.get("request"), kw.get("body") or {}))
-    from app.fastapi_routes.domains.product.compat_routes import products_batch_delete
+    from app.mod_sdk.host_services import products_batch_delete
 
     return _tag(products_batch_delete(**kw))
 
@@ -120,7 +120,7 @@ def _products_names(**kw: Any) -> Any:
         from app.mod_sdk.erp_products_facade import products_product_names
 
         return _tag(products_product_names())
-    from app.fastapi_routes.domains.product.routes import products_product_names
+    from app.mod_sdk.host_services import products_product_names
 
     return _tag(products_product_names(**kw))
 
@@ -130,7 +130,7 @@ def _products_names_search(**kw: Any) -> Any:
         from app.mod_sdk.erp_products_facade import products_product_names
 
         return _tag(products_product_names(keyword=str(kw.get("keyword") or "")))
-    from app.fastapi_routes.domains.product.routes import products_product_names_search
+    from app.mod_sdk.host_services import products_product_names_search
 
     return _tag(products_product_names_search(**kw))
 
@@ -140,13 +140,13 @@ def _products_batch(**kw: Any) -> Any:
         from app.mod_sdk.erp_products_facade import products_batch
 
         return _tag(products_batch(kw.get("body") or {}))
-    from app.fastapi_routes.domains.product.routes import products_batch
+    from app.mod_sdk.host_services import products_batch
 
     return _tag(products_batch(**kw))
 
 
 def _shipment_records_list(**kw: Any) -> Any:
-    from app.bootstrap import get_shipment_application_service_core
+    from app.mod_sdk.host_services import get_shipment_application_service_core
 
     unit = (kw.get("unit") or kw.get("unit_name") or "").strip() or None
     records = get_shipment_application_service_core().get_shipment_records(unit)
@@ -154,13 +154,13 @@ def _shipment_records_list(**kw: Any) -> Any:
 
 
 def _shipment_records_units(**kw: Any) -> Any:
-    from app.fastapi_routes.domains.product.compat_routes import shipment_records_units
+    from app.mod_sdk.host_services import shipment_records_units
 
     return _tag(shipment_records_units(**kw))
 
 
 def _shipment_orders_list(**kw: Any) -> Any:
-    from app.bootstrap import get_shipment_application_service_core
+    from app.mod_sdk.host_services import get_shipment_application_service_core
 
     limit = int(kw.get("limit") or 100)
     orders_list = get_shipment_application_service_core().get_orders(limit=limit) or []
@@ -185,8 +185,8 @@ def _customers_list(**kw: Any) -> Any:
         return _tag(
             svc_list(request, page=page, per_page=per_page, keyword=keyword)
         )
-    from app.infrastructure.auth.db_token import verify_db_read_token_header
-    from app.fastapi_routes.domains.db.queries import (
+    from app.mod_sdk.host_services import verify_db_read_token_header
+    from app.mod_sdk.host_services import (
         _customer_row_matches_keyword,
         _customers_schema_hint_if_empty,
         _load_customers_rows,
@@ -217,7 +217,7 @@ def _customers_get(**kw: Any) -> Any:
         from app.mod_sdk.erp_customers_facade import customers_get as svc_get
 
         return svc_get(**kw)
-    from app.fastapi_routes.domains.customer.routes import customers_get_one
+    from app.mod_sdk.host_services import customers_get_one
 
     return customers_get_one(**kw)
 
@@ -227,7 +227,7 @@ def _customers_create(**kw: Any) -> Any:
         from app.mod_sdk.erp_customers_facade import customers_create as svc_create
 
         return _tag(svc_create(kw.get("request"), kw.get("body") or {}))
-    from app.fastapi_routes.domains.customer.routes import customers_create
+    from app.mod_sdk.host_services import customers_create
 
     return _tag(customers_create(**kw))
 
@@ -239,7 +239,7 @@ def _customers_update(**kw: Any) -> Any:
         return _tag(
             svc_update(kw.get("request"), int(kw.get("customer_id")), kw.get("body") or {})
         )
-    from app.fastapi_routes.domains.customer.routes import customers_update
+    from app.mod_sdk.host_services import customers_update
 
     return _tag(customers_update(**kw))
 
@@ -249,7 +249,7 @@ def _customers_delete(**kw: Any) -> Any:
         from app.mod_sdk.erp_customers_facade import customers_delete as svc_delete
 
         return _tag(svc_delete(kw.get("request"), int(kw.get("customer_id"))))
-    from app.fastapi_routes.domains.customer.routes import customers_delete
+    from app.mod_sdk.host_services import customers_delete
 
     return _tag(customers_delete(**kw))
 

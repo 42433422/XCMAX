@@ -13,7 +13,7 @@
 | `app/fastapi_routes/mounts/legacy_compat.py` | `app/legacy/routes/legacy_compat.py` | 前端从 `xcagi_compat` 历史契约迁移到新 domain API 契约、`register_legacy_compat_routes` 内的历史路由逐个迁入 `app/fastapi_routes/domains/` 后 | FastAPI Routes / Frontend Compat |
 | `app/fastapi_routes/mounts/legacy_gap.py` | `app/legacy/routes/legacy_gap.py` | 所有 domain routes 通过 `xcagi_compat`（SSOT）统一注册、移除 `XCAGI_REGISTER_LEGACY_ROUTES` opt-in gap mount 后 | FastAPI Routes |
 | `app/infrastructure/documents/legacy_shipment_document.py` | `app/legacy/documents/legacy_shipment_document.py` | `ShipmentDocumentGenerator` 生成逻辑完全迁移到 `app/infrastructure/documents/` 原生实现、移除对 `resources/tools_legacy/AI助手/shipment_document.py` 的 `sys.path` + `importlib` 动态加载后 | Shipment Documents |
-| `app/domain/shipment/legacy_vo.py` | `app/legacy/domain/legacy_vo.py` | 涂料行业值对象迁移到 `app/domain/value_objects/` 分层模块、移除对 `app.domain.value_objects_compat` 的转发后 | Shipment Domain |
+| `app/domain/shipment/legacy_vo.py` | `app/legacy/domain/legacy_vo.py` | 涂料行业值对象迁移到 `app/domain/value_objects/` 分层模块、移除对 `app.legacy.domain.value_objects_compat` 的转发后 | Shipment Domain |
 | `app/mod_sdk/lan_compat.py` | `app/legacy/lan/lan_compat.py` | LAN 授权 API 门面逻辑迁移到 `app/application/lan_app_service.py` 原生实现后 | LAN 授权 |
 | `app/mod_sdk/lan_pages_compat.py` | `app/legacy/lan/lan_pages_compat.py` | 前端从 `lan_pages_compat` 历史契约迁移到新路由契约后 | 前端 LAN 页面 |
 

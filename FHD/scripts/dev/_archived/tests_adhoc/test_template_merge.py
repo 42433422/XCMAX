@@ -1,9 +1,9 @@
 """测试模板合并单元格保留功能"""
 
-import sys
 from pathlib import Path
-from openpyxl import Workbook, load_workbook
+
 import pandas as pd
+from openpyxl import Workbook, load_workbook
 
 # 创建一个带合并单元格的模板
 template_path = Path(r"e:\FHD\424\test_template_with_merge.xlsx")

@@ -25,6 +25,8 @@ def finalize_intake_submission(
     doc = dict(doc)
     uid = int(market_user_id)
     intake = doc.get("intake_form") if isinstance(doc.get("intake_form"), dict) else {}
+    if not isinstance(intake, dict):
+        intake = {}
     company = str(intake.get("company") or doc.get("erp_customer_name") or "").strip()
     if company and not doc.get("erp_customer_name"):
         doc["erp_customer_name"] = company

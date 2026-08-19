@@ -16,7 +16,7 @@ def main():
     if not os.path.exists(ARCH_DOC):
         print(f"ARCHITECTURE.md not found at {ARCH_DOC}")
         return 1
-    with open(ARCH_DOC, "r", encoding="utf-8") as f:
+    with open(ARCH_DOC, encoding="utf-8") as f:
         content = f.read()
     candidates = extract_paths(content)
     # filter plausible directory-like entries

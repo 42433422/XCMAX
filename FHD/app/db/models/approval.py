@@ -345,9 +345,13 @@ class ApprovalDelegation(Base):
         return {
             "id": self.id,
             "delegator_id": self.delegator_id,
-            "delegator_name": self.delegator.name if self.delegator else None,
+            "delegator_name": (
+                self.delegator.display_name or self.delegator.username if self.delegator else None
+            ),
             "delegate_id": self.delegate_id,
-            "delegate_name": self.delegate.name if self.delegate else None,
+            "delegate_name": (
+                self.delegate.display_name or self.delegate.username if self.delegate else None
+            ),
             "flow_ids": json.loads(self.flow_ids) if self.flow_ids else [],
             "start_time": self.start_time.isoformat() if self.start_time else None,
             "end_time": self.end_time.isoformat() if self.end_time else None,

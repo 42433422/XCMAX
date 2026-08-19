@@ -32,7 +32,7 @@ class ProductsService(NeuroEventPublisherMixin):
                 SQLAlchemyProductRepository,
             )
 
-            repository = SQLAlchemyProductRepository()
+            repository = cast("ProductRepository", SQLAlchemyProductRepository())
         self._repository = repository
 
         self._cache = None
@@ -41,7 +41,7 @@ class ProductsService(NeuroEventPublisherMixin):
         self._monitor = None
 
         try:
-            from app.utils.performance_initializer import get_performance_optimizer
+            from app.utils.performance.performance_initializer import get_performance_optimizer
 
             optimizer = get_performance_optimizer()
 
@@ -196,32 +196,7 @@ class ProductsService(NeuroEventPublisherMixin):
             if "unit" not in payload:
                 payload["unit"] = "个"
 
-            try:
-                result = self._repository.create(payload)
-            except AttributeError as err:
-                if "'dict' object has no attribute" not in str(err):
-                    raise
-                from app.domain.product.entities import Product
-                from app.domain.value_objects import ModelNumber, Money
-
-                product = Product(
-                    name=payload.get("name") or payload.get("product_name") or "",
-                    category=payload.get("category", ""),
-                    specification=payload.get("specification", ""),
-                    quantity=int(payload.get("quantity", 0) or 0),
-                    price=Money.from_float(
-                        float(payload.get("unit_price", payload.get("price", 0)))
-                    ),
-                    unit=payload.get("unit", "个"),
-                    description=payload.get("description", ""),
-                    brand=payload.get("brand", ""),
-                    model_number=(
-                        ModelNumber(payload.get("model_number", ""))
-                        if payload.get("model_number")
-                        else None
-                    ),
-                )
-                result = self._repository.create(product)
+            result = self._repository.create(payload)
 
             self._invalidate_product_cache()
 
@@ -276,7 +251,7 @@ class ProductsService(NeuroEventPublisherMixin):
             if self._query_optimizer and len(products_data) > 10:
                 batch_result = self._query_optimizer.batch_execute(
                     products_data,
-                    lambda item: self._repository.create_from_dict(item),
+                    lambda item: self._repository.create(item),
                     batch_size=50,
                 )
 

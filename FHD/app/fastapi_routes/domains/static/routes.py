@@ -24,8 +24,8 @@ from app.traditional_mode_fs import (
     write_text_response,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import get_base_dir
-from app.utils.secure_filename import secure_filename
+from app.utils.path_io.path_utils import get_base_dir
+from app.utils.security.secure_filename import secure_filename
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +157,7 @@ def gap_batch2_favicon():
 @router.get("/outputs/{filename:path}")
 def gap_batch2_outputs(filename: str):
     try:
-        from app.utils.path_utils import get_app_data_dir, get_resource_path
+        from app.utils.path_io.path_utils import get_app_data_dir, get_resource_path
 
         shipment_outputs_dir = os.path.join(get_app_data_dir(), "shipment_outputs")
         if os.path.isdir(shipment_outputs_dir):
@@ -304,6 +304,7 @@ def traditional_mode_write(body: dict = Body(default_factory=dict)):
         os.makedirs(parent_dir, exist_ok=True)
     wb = openpyxl.Workbook()
     default_sheet = wb.active
+    assert default_sheet is not None
     default_sheet.title = file_data.get("active_sheet", "Sheet")
     sheets_content = file_data.get("content", {})
     if isinstance(sheets_content, dict):
@@ -316,6 +317,7 @@ def traditional_mode_write(body: dict = Body(default_factory=dict)):
             for r_idx, row in enumerate(rows, start=1):
                 for c_idx, cell_value in enumerate(row, start=1):
                     if cell_value is not None:
+                        assert ws is not None
                         ws.cell(row=r_idx, column=c_idx, value=cell_value)
     if len(wb.sheetnames) > 1 and default_sheet.title in wb.sheetnames:
         if not sheets_content or default_sheet.title not in sheets_content:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TypedDict
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Table
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -51,7 +51,19 @@ class Permission(Base):
     )
 
 
-DEFAULT_PERMISSIONS = [
+class _PermissionSeed(TypedDict):
+    name: str
+    code: str
+    module: str
+
+
+class _RoleSeed(TypedDict):
+    name: str
+    description: str
+    permissions: list[str]
+
+
+DEFAULT_PERMISSIONS: list[_PermissionSeed] = [
     {"name": "查看客户", "code": "customer.view", "module": "customer"},
     {"name": "编辑客户", "code": "customer.edit", "module": "customer"},
     {"name": "查看产品", "code": "product.view", "module": "product"},
@@ -75,7 +87,7 @@ DEFAULT_PERMISSIONS = [
     {"name": "管理 ETL 目标", "code": "etl.target.manage", "module": "etl"},
 ]
 
-DEFAULT_ROLES = [
+DEFAULT_ROLES: list[_RoleSeed] = [
     {
         "name": "user",
         "description": "普通业务用户（默认角色，含基础业务与 ETL 操作）",

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """生产环境 Neuro Bus 开关验证脚本。
 
 通过 SSH 到 CVM 读取 /root/fhd-full.env,校验 Neuro Bus 7 个可靠性开关全部启用。
@@ -17,7 +16,6 @@ import json
 import os
 import subprocess
 import sys
-from pathlib import Path
 from typing import Dict, List
 
 # 生产 CVM 配置(与 cicd-e2e-prompt.md / fhd-deploy.yml 一致)
@@ -57,7 +55,7 @@ def ssh_read_env(host: str, user: str, env_file: str) -> Dict[str, str]:
         if result.returncode != 0:
             raise RuntimeError(f"SSH 失败: {result.stderr}")
     except subprocess.TimeoutExpired:
-        raise RuntimeError(f"SSH 超时(15s)")
+        raise RuntimeError("SSH 超时(15s)")
     except FileNotFoundError:
         raise RuntimeError("ssh 命令不存在,请确保已安装 OpenSSH 客户端")
     
@@ -77,7 +75,7 @@ def ssh_read_env(host: str, user: str, env_file: str) -> Dict[str, str]:
 
 def mock_read_env() -> Dict[str, str]:
     """模拟读取 env(用于 --dry-run 或无 SSH 环境)。"""
-    return {var: "1" for var in NEURO_BUS_VARS}
+    return dict.fromkeys(NEURO_BUS_VARS, "1")
 
 
 def verify_neuro_bus(env_dict: Dict[str, str]) -> List[Dict[str, str]]:

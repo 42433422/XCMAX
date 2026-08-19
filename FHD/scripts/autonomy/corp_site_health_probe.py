@@ -26,7 +26,7 @@ import json
 import os
 import sys
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -145,7 +145,7 @@ def probe_url(
         result.error = "httpx unavailable"
         return result
 
-    started = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
     close_after = False
     if client is None:
         client = httpx.Client(timeout=spec.timeout, follow_redirects=True)
@@ -175,7 +175,7 @@ def probe_url(
         result.error = f"http error: {exc!r}"
         return result
     finally:
-        finished = datetime.now(timezone.utc)
+        finished = datetime.now(UTC)
         result.duration_ms = (finished - started).total_seconds() * 1000.0
         if close_after:
             try:
@@ -194,7 +194,7 @@ def run_probe(
     surfaces = surfaces if surfaces is not None else DEFAULT_SURFACES
     report = ProbeReport(
         base_url=base_url,
-        started_at=datetime.now(timezone.utc).isoformat(),
+        started_at=datetime.now(UTC).isoformat(),
     )
     close_client = client is None
     if client is None and httpx is not None:
@@ -212,7 +212,7 @@ def run_probe(
                 client.close()
             except Exception:  # noqa: BLE001 - pragma: no cover
                 pass
-    report.finished_at = datetime.now(timezone.utc).isoformat()
+    report.finished_at = datetime.now(UTC).isoformat()
     return report
 
 
@@ -229,7 +229,7 @@ def write_audit(report: ProbeReport, audit_dir: Path) -> Path | None:
         except OSError as exc:
             print(f"[corp-probe] audit dir mkdir failed: {exc!r}", file=sys.stderr)
             return None
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d")
+    ts = datetime.now(UTC).strftime("%Y%m%d")
     audit_file = audit_dir / f"corp_site_health_{ts}.jsonl"
     try:
         with audit_file.open("a", encoding="utf-8") as f:

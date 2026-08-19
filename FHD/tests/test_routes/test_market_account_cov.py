@@ -28,10 +28,12 @@ _client = TestClient(_app, raise_server_exceptions=False)
 
 @pytest.fixture(autouse=True)
 def _clean_caches():
+    _client.cookies.clear()
     ma._MARKET_SESSION_TOKENS.clear()
     ma._MARKET_SESSION_REFRESH_TOKENS.clear()
     ma._ACCOUNT_OVERVIEW_CACHE.clear()
     yield
+    _client.cookies.clear()
     ma._MARKET_SESSION_TOKENS.clear()
     ma._MARKET_SESSION_REFRESH_TOKENS.clear()
     ma._ACCOUNT_OVERVIEW_CACHE.clear()
@@ -249,6 +251,7 @@ class TestProxyJson:
     async def test_read_timeout_returns_503(self):
         with patch("httpx.AsyncClient") as mock_cls:
             mock_client = AsyncMock()
+            mock_client.cookies = MagicMock()
             mock_client.request.side_effect = httpx.ReadTimeout("timed out")
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -260,6 +263,7 @@ class TestProxyJson:
     async def test_connect_error_returns_502(self):
         with patch("httpx.AsyncClient") as mock_cls:
             mock_client = AsyncMock()
+            mock_client.cookies = MagicMock()
             mock_client.request.side_effect = httpx.ConnectError("refused")
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -275,6 +279,7 @@ class TestProxyJson:
         mock_response.text = "plain text"
         with patch("httpx.AsyncClient") as mock_cls:
             mock_client = AsyncMock()
+            mock_client.cookies = MagicMock()
             mock_client.request = AsyncMock(return_value=mock_response)
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -288,6 +293,7 @@ class TestProxyJson:
         mock_response.json.return_value = {"detail": "unauthorized"}
         with patch("httpx.AsyncClient") as mock_cls:
             mock_client = AsyncMock()
+            mock_client.cookies = MagicMock()
             mock_client.request = AsyncMock(return_value=mock_response)
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -302,6 +308,7 @@ class TestProxyJson:
         mock_response.json.return_value = {"detail": "server error"}
         with patch("httpx.AsyncClient") as mock_cls:
             mock_client = AsyncMock()
+            mock_client.cookies = MagicMock()
             mock_client.request = AsyncMock(return_value=mock_response)
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -316,6 +323,7 @@ class TestProxyJson:
         mock_response.json.return_value = {"detail": "forbidden"}
         with patch("httpx.AsyncClient") as mock_cls:
             mock_client = AsyncMock()
+            mock_client.cookies = MagicMock()
             mock_client.request = AsyncMock(return_value=mock_response)
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -331,6 +339,7 @@ class TestProxyJson:
         mock_response.json.return_value = {"ok": True}
         with patch("httpx.AsyncClient") as mock_cls:
             mock_client = AsyncMock()
+            mock_client.cookies = MagicMock()
             mock_client.request = AsyncMock(return_value=mock_response)
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -1404,9 +1413,8 @@ class TestMarketSessionHandoff:
                         "app.enterprise.mod_entitlements.sync_entitlements_for_session",
                         new=AsyncMock(),
                     ):
-                        resp = _client.get(
-                            "/api/market/session-handoff", cookies={"session_id": "sid_abc"}
-                        )
+                        _client.cookies.set("session_id", "sid_abc")
+                        resp = _client.get("/api/market/session-handoff")
         assert resp.status_code == 200
         assert resp.json()["data"]["market_access_token"] == "valid_tok"
 
@@ -1451,9 +1459,8 @@ class TestMarketSessionHandoff:
             "app.infrastructure.auth.dependencies.resolve_session_user",
             side_effect=RuntimeError("boom"),
         ):
-            resp = _client.get(
-                "/api/market/session-handoff", cookies={"session_id": "fallback_sid"}
-            )
+            _client.cookies.set("session_id", "fallback_sid")
+            resp = _client.get("/api/market/session-handoff")
         assert resp.status_code == 200
         assert "market_access_token" in resp.json()["data"]
 
@@ -1480,9 +1487,8 @@ class TestMarketSessionHandoff:
                         "app.enterprise.mod_entitlements.sync_entitlements_for_session",
                         new=AsyncMock(),
                     ):
-                        resp = _client.get(
-                            "/api/market/session-handoff", cookies={"session_id": "s1"}
-                        )
+                        _client.cookies.set("session_id", "s1")
+                        resp = _client.get("/api/market/session-handoff")
         assert resp.status_code == 200
         assert resp.json()["data"]["market_refresh_token"] == "rf_val"
 
@@ -1500,9 +1506,8 @@ class TestMarketSessionHandoff:
                             "app.enterprise.mod_entitlements.sync_entitlements_for_session",
                             new=AsyncMock(side_effect=RuntimeError("ent_fail")),
                         ):
-                            resp = _client.get(
-                                "/api/market/session-handoff", cookies={"session_id": "s2"}
-                            )
+                            _client.cookies.set("session_id", "s2")
+                            resp = _client.get("/api/market/session-handoff")
         assert resp.status_code == 200
 
 
@@ -1675,6 +1680,7 @@ class TestProxyJsonRetries:
 
         with patch("httpx.AsyncClient") as mock_cls:
             mock_client = AsyncMock()
+            mock_client.cookies = MagicMock()
             mock_client.request = mock_request
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -1687,6 +1693,7 @@ class TestProxyJsonRetries:
 
         with patch("httpx.AsyncClient") as mock_cls:
             mock_client = AsyncMock()
+            mock_client.cookies = MagicMock()
             mock_client.request.side_effect = httpx.ConnectError("always fail")
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -1701,6 +1708,7 @@ class TestProxyJsonRetries:
         mock_response.json.return_value = {"ok": True}
         with patch("httpx.AsyncClient") as mock_cls:
             mock_client = AsyncMock()
+            mock_client.cookies = MagicMock()
             mock_client.request = AsyncMock(return_value=mock_response)
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)

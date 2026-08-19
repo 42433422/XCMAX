@@ -14,7 +14,7 @@ This fulfills the postgres-foundation todo and solves cross-database FK and conc
 
 import logging
 
-from sqlalchemy import event
+from sqlalchemy import event, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -67,7 +67,7 @@ def ensure_mod_schema(db: Session, mod_id: str) -> bool:
 
     schema_name = normalize_schema_name(mod_id)
     try:
-        db.execute(f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
+        db.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema_name}"))
         db.commit()
         logger.info("Ensured schema %s for Mod %s", schema_name, mod_id)
         return True
@@ -80,7 +80,7 @@ def ensure_mod_schema(db: Session, mod_id: str) -> bool:
 def get_current_schema(db: Session) -> str:
     """Get the current search_path schema (for debugging)."""
     try:
-        result = db.execute("SHOW search_path").scalar()
+        result = db.execute(text("SHOW search_path")).scalar()
         return str(result)
     except RECOVERABLE_ERRORS:
         return "unknown"

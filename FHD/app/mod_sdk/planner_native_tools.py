@@ -65,12 +65,18 @@ def _discover_native_tool_mods() -> list[dict[str, Any]]:
         for child in Path(root).iterdir():
             if not child.is_dir() or child.name.startswith("_"):
                 continue
-            meta = parse_manifest(str(child))
-            if not meta:
+            parsed_meta = parse_manifest(str(child))
+            if parsed_meta is None:
                 continue
-            tools = _native_tools_from_metadata(meta)
+            tools = _native_tools_from_metadata(parsed_meta)
             if tools:
-                rows.append({"mod_id": meta.id, "mod_path": meta.mod_path, "tool_names": tools})
+                rows.append(
+                    {
+                        "mod_id": parsed_meta.id,
+                        "mod_path": parsed_meta.mod_path,
+                        "tool_names": tools,
+                    }
+                )
     except RECOVERABLE_ERRORS:
         logger.debug("discover native planner mods via disk failed", exc_info=True)
     return rows
@@ -114,7 +120,9 @@ def try_execute_native_planner_tool(
         return None, None
 
     for row in _discover_native_tool_mods():
-        if tool not in row.get("tool_names") or []:
+        raw_tool_names = row.get("tool_names")
+        tool_names = raw_tool_names if isinstance(raw_tool_names, list) else []
+        if tool not in tool_names:
             continue
         mod_id = str(row.get("mod_id") or "")
         mod_path = str(row.get("mod_path") or "")

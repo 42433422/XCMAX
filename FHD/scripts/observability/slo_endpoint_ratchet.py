@@ -20,7 +20,7 @@ import re
 import sys
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,7 +33,7 @@ def load_baseline() -> dict:
 
 
 def save_baseline(data: dict) -> None:
-    data["updated"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    data["updated"] = datetime.now(UTC).strftime("%Y-%m-%d")
     BASELINE_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
 
 
@@ -73,7 +73,7 @@ def query_prometheus(prom_url: str, promql: str) -> float | None:
         if not result:
             return None
         return float(result[0]["value"][1])
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return None
 
 
@@ -115,7 +115,7 @@ def cmd_check(prom_url: str, window: str) -> int:
     MEASURED_PATH.write_text(
         json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "window": window,
                 "prometheus_url": prom_url,
                 "measured": measured,
@@ -171,7 +171,7 @@ def cmd_bump(prom_url: str, window: str) -> int:
             bumped.append(f"{endpoint} error_rate → {err_rate:.3f}%")
 
     baseline["last_measured"] = last_measured
-    baseline["last_measured_date"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    baseline["last_measured_date"] = datetime.now(UTC).strftime("%Y-%m-%d")
     save_baseline(baseline)
 
     if bumped:
@@ -201,7 +201,7 @@ def cmd_audit() -> int:
                 # 标准化：去掉末尾斜杠
                 path = path.rstrip("/") or "/"
                 all_endpoints.add(path)
-        except Exception:
+        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             continue
 
     print(f"[audit] 静态扫描发现 {len(all_endpoints)} 个端点")
@@ -262,7 +262,7 @@ def cmd_top20(prom_url: str, window: str) -> int:
             rate = float(item["value"][1])
             print(f"  {i:2d}. {ep:60s} {rate:>10.2f} req/s")
         return 0
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"[top20] ❌ Prometheus 查询失败: {e}", file=sys.stderr)
         return 1
 

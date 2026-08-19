@@ -469,25 +469,22 @@ def test_analyze_file_sqlite_detected_by_header(tmp_path) -> None:
 
 
 def test_analyze_file_xlsx_returns_unsupported_or_excel(tmp_path) -> None:
-    """xlsx files go through _analyze_excel_file which is not defined in this module.
-    Looking at the source: `cast("dict[str, Any]", self._analyze_excel_file(...))`
-    But _analyze_excel_file is never defined in this class! It would raise
-    AttributeError. Since AttributeError is NOT in RECOVERABLE_ERRORS, it would
-    propagate. Let's verify this is the actual behavior by testing it raises.
-    """
+    """Malformed xlsx input returns a structured parser error."""
     svc = FileAnalysisService()
     svc.upload_dir = str(tmp_path)
     f = _FakeUpload("data.xlsx", b"fake xlsx")
-    with pytest.raises(AttributeError):
-        svc.analyze_file(f)
+    out = svc.analyze_file(f)
+    assert out["success"] is False
+    assert "Excel 文件分析失败" in out["message"]
 
 
 def test_analyze_file_xls_returns_unsupported_or_excel(tmp_path) -> None:
     svc = FileAnalysisService()
     svc.upload_dir = str(tmp_path)
     f = _FakeUpload("data.xls", b"fake xls")
-    with pytest.raises(AttributeError):
-        svc.analyze_file(f)
+    out = svc.analyze_file(f)
+    assert out["success"] is False
+    assert "Excel 文件分析失败" in out["message"]
 
 
 # ---------------------------------------------------------------------------

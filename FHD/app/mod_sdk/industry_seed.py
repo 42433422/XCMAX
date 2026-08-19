@@ -38,11 +38,15 @@ def open_industry_seed_mod_ids() -> list[str]:
     host_foundation_ids = set(MINIMAL_HOST_MOD_IDS) | set(GENERIC_HOST_MOD_IDS)
     out: list[str] = []
     for iid in open_ids:
+        if not isinstance(packages, dict):
+            packages = {}
         row = packages.get(iid) if isinstance(packages.get(iid), dict) else {}
+        if not isinstance(row, dict):
+            row = {}
         mid = str(row.get("mod_id") or "").strip()
         if mid and mid not in host_foundation_ids:
             out.append(mid)
-    for row in packages.values():
+    for row in (packages or {}).values():
         if not isinstance(row, dict):
             continue
         mid = str(row.get("mod_id") or "").strip()
@@ -60,6 +64,8 @@ def industry_mod_id_for(industry_id: str) -> str | None:
     packages = (
         doc.get("industry_packages") if isinstance(doc.get("industry_packages"), dict) else {}
     )
+    if not isinstance(packages, dict):
+        packages = {}
     row = packages.get(iid)
     if not isinstance(row, dict):
         return None
@@ -126,7 +132,7 @@ def bundled_industry_seeds_dir() -> Path | None:
         bundled = Path(_default_mods_root()).resolve()
         if bundled.is_dir():
             return bundled
-    except Exception:  # noqa: BLE001 - 兜底路径解析失败不应阻断安装
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - 兜底路径解析失败不应阻断安装
         logger.debug("bundled mods root fallback for industry seeds skipped", exc_info=True)
     return None
 

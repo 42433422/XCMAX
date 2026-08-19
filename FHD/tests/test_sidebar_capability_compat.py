@@ -11,8 +11,8 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 def compat_app_client() -> TestClient:
-    from app.fastapi_routes.domains.conversation import compat_extra, compat_routes
-    from app.fastapi_routes.sidebar_capability_compat import router as sidebar_router
+    from app.legacy.routes.conversation import compat_extra, compat_routes
+    from app.legacy.routes.sidebar_capability_compat import router as sidebar_router
 
     app = FastAPI()
     app.include_router(compat_routes.router, prefix="/api")
@@ -23,7 +23,7 @@ def compat_app_client() -> TestClient:
 
 def test_chat_send_alias_registered(compat_app_client: TestClient) -> None:
     with patch(
-        "app.fastapi_routes.domains.conversation.compat_routes.execute_compat_chat",
+        "app.legacy.routes.conversation.compat_routes.execute_compat_chat",
         new=MagicMock(return_value={"success": True, "reply": "ok"}),
     ) as mock_chat:
         # execute_compat_chat is async — patch with AsyncMock-like

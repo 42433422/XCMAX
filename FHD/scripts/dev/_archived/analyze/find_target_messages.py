@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import sqlite3
 import sys
 
@@ -33,7 +32,7 @@ for table in tables:
                     print(f"  {content[:300]}")
                     print()
                     found += 1
-    except Exception as e:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         pass
 
 print(f"共找到 {found} 条消息")

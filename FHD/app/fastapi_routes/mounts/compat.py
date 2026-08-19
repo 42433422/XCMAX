@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
-from app.fastapi_routes.mounts.essential_compat import register_essential_compat_routes
 from app.legacy.routes.legacy_compat import register_legacy_compat_routes
+from app.legacy.routes.mounts.essential_compat import register_essential_compat_routes
 
 __all__ = ["register_essential_compat_routes", "register_legacy_compat_routes"]
 

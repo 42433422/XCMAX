@@ -1,18 +1,18 @@
-# -*- coding: utf-8 -*-
-"""
+r"""
 从 e:\FHD\424\ 目录下的多个 .db 文件批量导入购买单位和产品数据
 
 每个 .db 文件名代表一个购买单位，文件内的 products 表存储该单位的产品。
 """
 import os
-import sys
 import sqlite3
+import sys
 from datetime import datetime
 
 sys.path.insert(0, r"e:\FHD\XCAGI")
 
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
 from app.db.init_db import get_db_path
 from app.db.models.product import Product
 
@@ -119,8 +119,8 @@ def add_products_to_main_db(session, unit_name, columns, rows):
             brand = row[col_map["brand"]] if "brand" in col_map else None
             unit = row[col_map["unit"]] if "unit" in col_map else unit_name
             is_active = row[col_map["is_active"]] if "is_active" in col_map else 1
-            created_at = row[col_map["created_at"]] if "created_at" in col_map else None
-            updated_at = row[col_map["updated_at"]] if "updated_at" in col_map else None
+            row[col_map["created_at"]] if "created_at" in col_map else None
+            row[col_map["updated_at"]] if "updated_at" in col_map else None
 
             if not name:
                 continue
@@ -144,7 +144,7 @@ def add_products_to_main_db(session, unit_name, columns, rows):
             )
             session.add(product)
             added += 1
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"    [跳过产品] 错误: {e}")
     session.commit()
     return added
@@ -168,7 +168,7 @@ def main():
 
         columns, rows = read_products_from_db(db_path)
         if not columns:
-            print(f"  [跳过] 无 products 表")
+            print("  [跳过] 无 products 表")
             skipped_units += 1
             continue
 
@@ -183,7 +183,7 @@ def main():
             total_products += added
             total_units += 1
 
-    print(f"\n========== 导入完成 ==========")
+    print("\n========== 导入完成 ==========")
     print(f"处理购买单位: {total_units}")
     print(f"导入产品总数: {total_products}")
     print(f"跳过: {skipped_units}")

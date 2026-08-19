@@ -1,6 +1,4 @@
-import openpyxl
 from openpyxl import load_workbook
-import os
 
 output_file = r"e:\FHD\424\测试输出.xlsx"
 
@@ -9,7 +7,7 @@ wb = load_workbook(output_file)
 print(f"工作表：{wb.sheetnames}")
 
 ws = wb["明细"]
-print(f"\n=== Sheet: 明细 ===")
+print("\n=== Sheet: 明细 ===")
 print(f"最大行：{ws.max_row}, 最大列：{ws.max_column}")
 
 # 查看前 20 行

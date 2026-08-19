@@ -257,11 +257,11 @@ def bootstrap_sqlite_schema(data_dir: str | os.PathLike[str] | None = None) -> N
     configure_desktop_environment(data_dir)
     # Import model modules so Base.metadata contains the full schema.
     import app.db.models  # noqa: F401
-    from app.db import dispose_and_recreate_engine, engine
+    from app.db import dispose_and_recreate_engine, get_runtime_engine
     from app.db.base import Base
 
     dispose_and_recreate_engine()
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=get_runtime_engine())
 
 
 def export_config(data_dir: str | os.PathLike[str] | None = None) -> dict[str, str]:

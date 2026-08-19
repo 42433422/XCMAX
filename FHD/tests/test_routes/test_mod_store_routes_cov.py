@@ -11,6 +11,7 @@ registered in sys.modules (not real package trees), we patch them via
 """
 
 import asyncio
+import importlib
 import sys
 import types
 from typing import Any
@@ -29,6 +30,10 @@ from starlette.testclient import TestClient
 def _ensure_stub(name: str, attrs: dict | None = None) -> types.ModuleType:
     if name in sys.modules:
         return sys.modules[name]
+    try:
+        return importlib.import_module(name)
+    except ImportError:
+        pass
     mod = types.ModuleType(name)
     mod.__path__ = []  # mark as package so submodule imports don't raise "not a package"
     for k, v in (attrs or {}).items():

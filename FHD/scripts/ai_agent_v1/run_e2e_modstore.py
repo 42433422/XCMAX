@@ -14,9 +14,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -186,7 +185,7 @@ def run_modstore_e2e(strategy: str = "auto") -> dict[str, Any]:
     engine = WorkflowEngine(tool_dispatcher=dispatcher)
     gated = ApprovalGatedEngine(engine=engine)
 
-    plan_id = f"e2e-modstore-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+    plan_id = f"e2e-modstore-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
     plan = _build_modstore_plan(plan_id)
     runtime_ctx: dict[str, Any] = {
         "user_id": "e2e_modstore_demo",
@@ -204,7 +203,7 @@ def run_modstore_e2e(strategy: str = "auto") -> dict[str, Any]:
     )
     evidence["e2e_scenario"] = "modstore_anomaly_notify_and_report"
 
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     out = EVIDENCE_DIR / f"e2e-modstore-{stamp}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(evidence, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

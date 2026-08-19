@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import sqlite3
 
 msg_db = r"E:\FHD\XCAGI\resources\wechat-decrypt\decrypted\message\message_0.db"

@@ -9,13 +9,15 @@
 
 import logging
 import time
-import warnings
 from dataclasses import dataclass
 from threading import Lock, RLock
 
+from app.neuro_bus import deprecated_sliding_window as _compat
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.neuro_bus.rate_limiter_facade import NeuroRateLimiterMixin
 
 logger = logging.getLogger(__name__)
+SlidingWindowCounter = _compat.SlidingWindowCounter
 
 
 @dataclass
@@ -222,53 +224,6 @@ class TokenBucket:
         now = time.monotonic()
         refilled = self._refill(self._state, now)
         return refilled.current_tokens
-
-
-class SlidingWindowCounter:
-    """滑动窗口计数器（已废弃，仅保留向后兼容）。
-
-    .. deprecated::
-        该实现用 list 存储所有请求时间戳，高 QPS 下内存爆炸。
-        请改用 :class:`TokenBucket`。DynamicRateLimiter 内部已切换到令牌桶。
-    """
-
-    def __init__(self, window_size: float = 1.0):
-        warnings.warn(
-            "SlidingWindowCounter is deprecated and memory-inefficient; use TokenBucket instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        self._window_size = window_size
-        self._timestamps: list = []
-        self._lock = RLock()
-
-    def add(self) -> int:
-        """添加一个请求，返回当前窗口内计数"""
-        now = time.time()
-
-        with self._lock:
-            # 清理过期
-            cutoff = now - self._window_size
-            self._timestamps = [t for t in self._timestamps if t > cutoff]
-
-            # 添加新请求
-            self._timestamps.append(now)
-
-            return len(self._timestamps)
-
-    def count(self) -> int:
-        """获取当前窗口计数"""
-        now = time.time()
-
-        with self._lock:
-            cutoff = now - self._window_size
-            self._timestamps = [t for t in self._timestamps if t > cutoff]
-            return len(self._timestamps)
-
-    def reset(self):
-        """重置计数器"""
-        with self._lock:
-            self._timestamps.clear()
 
 
 class DynamicRateLimiter:
@@ -503,14 +458,10 @@ class DynamicRateLimiter:
             }
 
 
-class NeuroRateLimiter:
-    """
-    NeuroBus 专用限流器
+class NeuroRateLimiter(NeuroRateLimiterMixin):
+    """NeuroBus-specific dynamic limiter with domain defaults."""
 
-    提供领域感知的限流策略，支持运行时动态调整各领域配置。
-    """
-
-    # 各领域的默认限流配置
+    DYNAMIC_LIMITER_CLASS = DynamicRateLimiter
     DOMAIN_LIMITS = {
         "intent": RateLimitConfig(
             requests_per_second=50.0,  # 意图识别高频
@@ -529,67 +480,3 @@ class NeuroRateLimiter:
             burst_size=40,
         ),
     }
-
-    def __init__(self):
-        self._limiter = DynamicRateLimiter(default_config=self.DOMAIN_LIMITS["default"])
-
-        # 设置各领域限流
-        for domain, config in self.DOMAIN_LIMITS.items():
-            if domain != "default":
-                self._limiter.set_domain_limit(domain, config)
-
-    def check_rate(self, event: NeuroEvent) -> bool:
-        """检查事件是否通过限流"""
-        return self._limiter.allow(event)
-
-    def try_check_rate(self, event: NeuroEvent) -> tuple[bool, float]:
-        """非阻塞检查事件是否通过限流，返回 (是否允许, 需等待秒数)。"""
-        return self._limiter.try_allow(event)
-
-    def set_domain_limit(self, domain: str, config: RateLimitConfig) -> None:
-        """运行时动态调整某领域的限流配置。"""
-        self._limiter.set_domain_limit(domain, config)
-        logger.info("NeuroRateLimiter domain [%s] config updated", domain)
-
-    def set_event_limit(self, event_type: str, config: RateLimitConfig) -> None:
-        """运行时动态调整某事件类型的限流配置。"""
-        self._limiter.set_event_limit(event_type, config)
-        logger.info("NeuroRateLimiter event [%s] config updated", event_type)
-
-    def change_default_limit(self, new_rps: float) -> None:
-        """运行时动态修改默认 RPS。"""
-        self._limiter.change_limit_for_period(new_rps)
-
-    def change_default_burst(self, new_burst: int) -> None:
-        """运行时动态修改默认突发大小。"""
-        self._limiter.change_burst_size(new_burst)
-
-    def drain_domain(self, domain: str) -> None:
-        """紧急排空某领域的令牌桶（运维用）。"""
-        self._limiter.drain_domain(domain)
-
-    def drain_event(self, event_type: str) -> None:
-        """紧急排空某事件类型的令牌桶（运维用）。"""
-        self._limiter.drain_event(event_type)
-
-    def get_stats(self) -> dict:
-        """获取统计"""
-        return self._limiter.get_stats()
-
-    def get_all_metrics(self) -> dict:
-        """
-        获取所有维度的 metrics（全局 + 各领域 + 各事件类型）。
-
-        用于监控面板与配置变更追踪。
-        """
-        base = self._limiter.get_stats()
-        return {
-            "allowed": base["allowed"],
-            "rejected": base["rejected"],
-            "available_tokens": base["available_tokens"],
-            "wait_time_avg": base["wait_time_avg"],
-            "config_snapshot": base["config_snapshot"],
-            "global": base,
-            "domains": base["domain_stats"],
-            "event_types": base["event_stats"],
-        }

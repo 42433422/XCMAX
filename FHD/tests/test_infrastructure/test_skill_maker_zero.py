@@ -99,7 +99,7 @@ class TestCreateSkillMd:
             assert result["success"] is True
             md_path = os.path.join(str(skills_dir), "my-skill", "SKILL.md")
             assert os.path.isfile(md_path)
-            content = open(md_path).read()
+            content = Path(md_path).read_text(encoding="utf-8")
             assert "my-skill" in content
             assert "A test skill" in content
 
@@ -112,7 +112,7 @@ class TestCreateSkillMd:
             result = create_skill_md("custom-skill", "desc", content=custom)
             assert result["success"] is True
             md_path = os.path.join(str(skills_dir), "custom-skill", "SKILL.md")
-            assert "Custom content" in open(md_path).read()
+            assert "Custom content" in Path(md_path).read_text(encoding="utf-8")
 
     def test_creates_directory_if_missing(self, tmp_path: Path) -> None:
         skills_dir = tmp_path / "skills"
@@ -171,7 +171,7 @@ class TestCreateSkill:
             )
             assert result["success"] is True
             impl_path = os.path.join(str(skills_dir), "custom-impl", "custom_impl.py")
-            assert "custom_fn" in open(impl_path).read()
+            assert "custom_fn" in Path(impl_path).read_text(encoding="utf-8")
 
 
 class TestValidateSkill:

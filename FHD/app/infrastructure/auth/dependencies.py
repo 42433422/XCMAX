@@ -17,6 +17,8 @@ from typing import Any
 
 from fastapi import Header, HTTPException, Request
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def _write_lock_enabled() -> bool:
     v = (os.environ.get("FHD_DISABLE_DB_WRITE_LOCK") or "").strip().lower()
@@ -119,7 +121,7 @@ def resolve_session_user(request: Request) -> Any | None:
 
         if assert_desktop_allows_session_id(sid) is not None:
             return None
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         pass
     user = get_session_service().validate_session(sid)
     if user is not None:

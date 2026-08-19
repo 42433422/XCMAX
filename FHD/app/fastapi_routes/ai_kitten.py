@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 from io import BytesIO
-from typing import Any
+from typing import Any, Literal, cast
 from urllib.parse import quote
 
 from fastapi import APIRouter, Body, Query
@@ -46,6 +46,8 @@ def _trace_kitten_route(
     metadata = (
         request_body.get("metadata") if isinstance(request_body.get("metadata"), dict) else {}
     )
+    if not isinstance(metadata, dict):
+        metadata = {}
     tenant_id = str(
         request_body.get("tenant_id")
         or request_body.get("tenantId")
@@ -402,7 +404,7 @@ def kitten_document_generate(body: dict = Body(default_factory=dict)):
     try:
         from app.application.facades.kitten_facade import generate_office_file
 
-        content, file_name = generate_office_file(prompt, fmt)
+        content, file_name = generate_office_file(prompt, cast("Literal['docx', 'xlsx']", fmt))
         mime = (
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             if fmt == "xlsx"

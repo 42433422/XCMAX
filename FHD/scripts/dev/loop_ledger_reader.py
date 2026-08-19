@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """自维护循环 ledger 读取工具。
 
 读取 MODstore 自维护循环的执行历史记录,帮助诊断循环成功率、失败原因等。
@@ -122,7 +121,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     final_records = [r for r in records if r.get("phase") in ("final", "complete")]
     if final_records:
         success_count = sum(1 for r in final_records if r.get("status") == "completed")
-        fail_count = sum(1 for r in final_records if r.get("status") == "failed")
+        sum(1 for r in final_records if r.get("status") == "failed")
         total = len(final_records)
         success_rate = success_count / total * 100 if total > 0 else 0
         print(f"\n循环成功率: {success_count}/{total} ({success_rate:.1f}%)")

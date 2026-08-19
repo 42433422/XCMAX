@@ -13,12 +13,11 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sqlite3
+import sys
 from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
-import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -371,7 +370,7 @@ def import_departments_and_employees(
 
         conn.commit()
         return dept_rows, emp_rows, prod_rows, cust_rows
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         conn.rollback()
         raise
     finally:

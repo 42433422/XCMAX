@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.utils.listen_port import resolve_listen_port
+from app.utils.device_system.listen_port import resolve_listen_port
 
 
 def test_resolve_listen_port_prefers_fastapi_port(monkeypatch):

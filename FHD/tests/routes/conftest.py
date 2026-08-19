@@ -28,7 +28,8 @@ def fastapi_test_client() -> TestClient:
         from fastapi import FastAPI
 
         app = FastAPI()
-    return TestClient(app)
+    with TestClient(app) as client:
+        yield client
 
 
 @pytest.fixture

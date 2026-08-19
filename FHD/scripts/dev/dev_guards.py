@@ -45,8 +45,8 @@ GUARDS: list[tuple[str, list[str], bool]] = [
     ("requirements-lock", ["python", "scripts/dev/check_requirements_lock.py"], True),
     ("mods-inline-ui", ["python", "scripts/dev/guard_mods_inline_ui.py"], True),
     ("utils-boundary", ["python", "scripts/dev/guard_utils_boundary.py"], True),
-    ("mod-import-boundaries", ["python", "scripts/dev/check_mod_import_boundaries.py"], False),
-    ("arch-fitness", ["python", "scripts/arch_fitness.py"], False),
+    ("mod-import-boundaries", ["python", "scripts/dev/check_mod_import_boundaries.py"], True),
+    ("arch-fitness", ["python", "scripts/arch_fitness.py"], True),
 ]
 
 

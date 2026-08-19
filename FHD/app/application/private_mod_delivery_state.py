@@ -7,14 +7,14 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
-from typing import Any
+from typing import Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 # 与 customer_delivery.json delivery_model.tracks 对齐；business 为历史别名
-TRACKS: dict[str, dict[str, str]] = {
+TRACKS: dict[str, dict[str, Any]] = {
     "modules": {
         "label": "业务模块",
         "delivered_label": "已交付",
@@ -191,7 +191,7 @@ def merge_orphan_local_delivery_into_market(
                     dst_tracks = existing["tracks"]
                 existing["tracks"] = _migrate_tracks(dst_tracks)
                 dst_tracks = existing["tracks"]
-                for track, src_row in src_tracks.items():
+                for track, src_row in (src_tracks or {}).items():
                     track_id = normalize_track(str(track))
                     if track_id not in TRACKS or not isinstance(src_row, dict):
                         continue
@@ -203,7 +203,7 @@ def merge_orphan_local_delivery_into_market(
                     if not isinstance(dst_nodes, dict):
                         dst_row["nodes"] = {}
                         dst_nodes = dst_row["nodes"]
-                    for nid, nrow in src_nodes.items():
+                    for nid, nrow in (src_nodes or {}).items():
                         node_id = str(nid or "").strip()
                         if not node_id or not isinstance(nrow, dict):
                             continue
@@ -280,7 +280,7 @@ def _migrate_tracks(tracks: dict[str, Any]) -> dict[str, Any]:
             legacy_nodes = legacy.get("nodes") if isinstance(legacy.get("nodes"), dict) else {}
             current_nodes = current.setdefault("nodes", {})
             if isinstance(current_nodes, dict):
-                for nid, nrow in legacy_nodes.items():
+                for nid, nrow in (legacy_nodes or {}).items():
                     current_nodes.setdefault(nid, nrow)
     for track in TRACKS:
         row = tracks.setdefault(track, _default_track())
@@ -319,7 +319,7 @@ def _ensure_project(
         project["tracks"] = tracks
     project["tracks"] = _migrate_tracks(tracks)
     project.setdefault("updated_at", _now_iso())
-    return project
+    return cast("dict[str, Any]", project)
 
 
 def project_state(
@@ -335,7 +335,7 @@ def project_state(
         scope = accounts.setdefault(scope_key, {})
         project = _ensure_project(scope, mod_id, name=name, version=version)
         _write_state(state)
-        return json.loads(json.dumps(project, ensure_ascii=False))
+        return cast("dict[str, Any]", json.loads(json.dumps(project, ensure_ascii=False)))
 
 
 def account_projects(
@@ -415,7 +415,7 @@ def apply_account_state(scope_key: str, snapshot: dict[str, Any]) -> None:
                     continue
                 nodes_in = row.get("nodes") if isinstance(row.get("nodes"), dict) else {}
                 nodes_out: dict[str, Any] = {}
-                for nid, nrow in nodes_in.items():
+                for nid, nrow in (nodes_in or {}).items():
                     node_id = str(nid or "").strip()
                     if not node_id or not isinstance(nrow, dict):
                         continue

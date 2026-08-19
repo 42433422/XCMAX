@@ -19,7 +19,7 @@ from __future__ import annotations
 from contextlib import nullcontext
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from app.db.models import JournalEntry, SalesOrder
 from app.db.session import get_db
@@ -43,11 +43,13 @@ def _find_sale_entry(db, order_id: int) -> JournalEntry | None:
     tenant_id = current_tenant_id()
     if tenant_id is not None:
         query = query.filter(JournalEntry.tenant_id == tenant_id)
-    return query.order_by(JournalEntry.id.asc()).first()
+    return cast("JournalEntry | None", query.order_by(JournalEntry.id.asc()).first())
 
 
 def _get_order(db, order_id: int) -> SalesOrder | None:
-    return db.query(SalesOrder).filter(SalesOrder.id == int(order_id)).first()
+    return cast(
+        "SalesOrder | None", db.query(SalesOrder).filter(SalesOrder.id == int(order_id)).first()
+    )
 
 
 def invoice(

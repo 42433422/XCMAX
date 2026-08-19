@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """能力落地自检脚本（RASA + pgvector）。
 
 对应评审意见："能力（如 RASA、pgvector）仅停留在配置阶段，未看到深度落地证据。"
@@ -113,7 +112,7 @@ def _probe_pgvector() -> dict:
             "ivfflat_index_count": int(idx),
             "vector_tables": tables,
         }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return {"status": "unhealthy", "error": str(exc)}
 
 

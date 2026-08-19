@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 class ShipmentEtlPathError(ValueError):
     """ETL 路径不在允许沙箱内。"""
@@ -14,12 +16,12 @@ def _trusted_base_roots() -> list[Path]:
     """不可被请求参数扩展的受信根目录。"""
     roots: list[Path] = []
     try:
-        from app.utils.path_utils import get_app_data_dir, get_data_dir
+        from app.utils.path_io.path_utils import get_app_data_dir, get_data_dir
 
         roots.append(Path(get_app_data_dir()).resolve())
         roots.append(Path(get_data_dir()).resolve())
         roots.append((Path(get_app_data_dir()) / "temp_excel").resolve())
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         pass
     roots.append(Path.cwd().resolve())
     # OCR/上传临时文件落系统 temp
@@ -144,7 +146,7 @@ def tenant_key_for_etl() -> str:
         tid = current_tenant_id()
         if tid is not None:
             return f"tenant:{int(tid)}"
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         pass
     return "tenant:local"
 

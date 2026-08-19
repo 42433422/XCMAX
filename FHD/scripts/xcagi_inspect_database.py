@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 解析 XCAGI/.env 的 DATABASE_URL，并打印当前库标识 + purchase_units 摘要。
 用于确认「奇士美 / 百木鼎」等业务数据是否在本机 PostgreSQL 的 xcagi 库，或是否误连 SQLite。
@@ -44,7 +43,7 @@ def _redact_url(url: str) -> str:
             if p.port:
                 netloc += f":{p.port}"
             return p._replace(netloc=netloc).geturl()
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         pass
     return url
 
@@ -95,7 +94,7 @@ def _inspect_postgres(url: str, needle: str) -> int:
     print("PostgreSQL:", _redact_url(url))
     try:
         conn = psycopg.connect(conn_s, connect_timeout=8)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print("连接失败:", e, file=sys.stderr)
         return 3
     try:

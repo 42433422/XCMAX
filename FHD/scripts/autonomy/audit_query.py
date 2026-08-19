@@ -19,7 +19,7 @@ import json
 import os
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 
@@ -35,7 +35,7 @@ class AuditEntry:
     truth_snapshot: dict | None
 
     @classmethod
-    def from_dict(cls, raw: dict) -> "AuditEntry":
+    def from_dict(cls, raw: dict) -> AuditEntry:
         return cls(
             ts=raw.get("ts", ""),
             source_signal=raw.get("source_signal"),
@@ -71,7 +71,7 @@ def parse_since(since: str) -> datetime:
 
     支持格式：'24h' / '30m' / '7d' / ISO8601 字符串
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     since = since.strip().lower()
     # 相对时间：Nh / Nm / Nd
     if since.endswith("h"):
@@ -87,7 +87,7 @@ def parse_since(since: str) -> datetime:
     try:
         dt = datetime.fromisoformat(since)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return dt
     except ValueError:
         raise argparse.ArgumentTypeError(f"invalid --since format: {since}")
@@ -204,7 +204,7 @@ def _parse_entry_ts(ts: str) -> datetime | None:
     try:
         dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return dt
     except ValueError:
         return None

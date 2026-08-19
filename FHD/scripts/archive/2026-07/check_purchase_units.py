@@ -19,7 +19,7 @@ def check_all_purchase_units():
         cursor.execute("SELECT DISTINCT description FROM products WHERE description LIKE '%[%]%'")
         descriptions = cursor.fetchall()
 
-        print(f"\n🏷️ 系统中存在的购买单位:")
+        print("\n🏷️ 系统中存在的购买单位:")
 
         purchase_units = []
         for desc in descriptions:
@@ -64,7 +64,7 @@ def check_all_purchase_units():
             print(f"\n⚠️ 没有购买单位标记的产品: {no_unit_count} 个")
 
         # 显示所有产品列表
-        print(f"\n📋 系统中所有产品列表:")
+        print("\n📋 系统中所有产品列表:")
         cursor.execute("SELECT id, model_number, name, price, unit, description FROM products")
         products = cursor.fetchall()
 
@@ -82,7 +82,7 @@ def check_all_purchase_units():
             "products_without_units": no_unit_count,
         }
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查购买单位时出错: {e}")
         return {"error": str(e)}
 
@@ -95,7 +95,7 @@ if __name__ == "__main__":
 
     print("\n" + "=" * 50)
     if "error" not in result:
-        print(f"✅ 检查完成！")
+        print("✅ 检查完成！")
         print(f"   总产品数量: {result['total_products']}")
         print(f"   购买单位数量: {len(result['purchase_units'])}")
         if result["purchase_units"]:

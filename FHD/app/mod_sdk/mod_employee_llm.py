@@ -346,7 +346,7 @@ async def mod_employee_complete(
         pass
 
     try:
-        raw: dict[str, Any] | None = await svc.call_deepseek_api(
+        deepseek_raw: dict[str, Any] | None = await svc.call_deepseek_api(
             messages,
             temperature=float(temperature),
             max_tokens=int(max_tokens),
@@ -356,10 +356,10 @@ async def mod_employee_complete(
         logger.exception("mod_employee_complete: call_deepseek_api 异常")
         return {"success": False, "content": "", "error": str(e)[:500]}
 
-    if not raw:
+    if not deepseek_raw:
         return {"success": False, "content": "", "error": "LLM 返回空（请检查密钥与网络）"}
 
-    return _parse_chat_completions_response(raw)
+    return _parse_chat_completions_response(deepseek_raw)
 
 
 def _parse_chat_completions_response(raw: dict[str, Any]) -> dict[str, Any]:

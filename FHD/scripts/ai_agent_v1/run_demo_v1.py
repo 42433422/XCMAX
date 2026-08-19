@@ -29,7 +29,7 @@ import os
 import sys
 import traceback
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
 
@@ -86,7 +86,7 @@ def _database_reachable() -> bool:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return False
 
 
@@ -120,7 +120,7 @@ def _mock_dispatcher(
         return {
             "success": True,
             "id": 5001,
-            "order_number": f"MOCK-{datetime.now(timezone.utc).strftime('%Y%m%d')}-001",
+            "order_number": f"MOCK-{datetime.now(UTC).strftime('%Y%m%d')}-001",
             "message": "mock: 发货单已生成",
         }
     if key == ("inventory", "query"):
@@ -405,7 +405,7 @@ SCENARIOS: list[Scenario] = [
 
 
 def _default_output_path(scenario_id: int) -> Path:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     return EVIDENCE_DIR / f"scenario-{scenario_id}-{stamp}.json"
 
 
@@ -441,7 +441,7 @@ def run_scenario(
     engine = WorkflowEngine(tool_dispatcher=dispatcher)
     gated = ApprovalGatedEngine(engine=engine)
 
-    plan_id = f"v1-s{scenario.scenario_id}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+    plan_id = f"v1-s{scenario.scenario_id}-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
     plan = scenario.plan_builder(plan_id)
     runtime_ctx: dict[str, Any] = {
         "user_id": f"v1_scenario_{scenario.scenario_id}",
@@ -514,7 +514,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"rejected={decision.get('any_rejected')}"
             )
             print(f"  evidence: {ev.get('_evidence_path')}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             failures += 1
             print(f"  ERROR: {e}")
             traceback.print_exc()

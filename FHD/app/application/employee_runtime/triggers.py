@@ -158,12 +158,16 @@ def refresh_employee_triggers(pack_id: str | None = None) -> dict[str, Any]:
         subs: list[tuple[str, Any]] = []
         for event_type in binding.event_types:
             handler = _make_handler(eid, binding)
+
+            def employee_filter(event: Any, employee_id: str = eid) -> bool:
+                return _event_matches_employee(event, employee_id)
+
             sub = bus.subscribe(
                 event_type,
                 handler,
                 priority=5,
                 is_async=False,
-                filter_fn=lambda ev, emp=eid: _event_matches_employee(ev, emp),
+                filter_fn=employee_filter,
             )
             subs.append((event_type, sub))
             registered.append({"employee_id": eid, "event_type": event_type})

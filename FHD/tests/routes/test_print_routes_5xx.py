@@ -23,7 +23,8 @@ from app.fastapi_routes.print_routes import router
 def client() -> TestClient:
     app = FastAPI()
     app.include_router(router)
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 class TestConfirmTokenCache:

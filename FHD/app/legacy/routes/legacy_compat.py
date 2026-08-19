@@ -165,7 +165,7 @@ def _register_personnel_compat_routes(app: FastAPI) -> None:
     """Mount personnel compat routes (register_*_routes pattern)."""
     _register_compat_func(
         app,
-        "app.fastapi_routes.xcmax_personnel_compat",
+        "app.legacy.routes.xcmax_personnel_compat",
         register_func_name="register_xcmax_personnel_routes",
     )
 
@@ -174,13 +174,13 @@ def _register_xcagi_compat_routes(app: FastAPI) -> None:
     """Mount xcagi_compat aggregator (prefix=/api). Must come after early critical routes."""
     _mount_router(
         app,
-        "app.fastapi_routes.xcagi_compat",
+        "app.legacy.routes.xcagi_compat",
         log_name="xcagi_compat_router (prefix=/api)",
         prefix="/api",
     )
     _mount_router(
         app,
-        "app.fastapi_routes.sidebar_capability_compat",
+        "app.legacy.routes.sidebar_capability_compat",
         log_name="sidebar_capability_compat (/api/knowledge|persy|employees|data-sources|print/templates)",
     )
 

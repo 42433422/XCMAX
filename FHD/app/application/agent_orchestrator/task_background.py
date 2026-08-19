@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from app.application.agent_orchestrator.artifact_attachment import ArtifactAttachmentMixin
 from app.application.agent_orchestrator.budget import apply_ai_budget_metadata
@@ -26,6 +26,10 @@ def task_execution_context(run: AgentRun, step: Any) -> dict[str, Any]:
 
 
 class BackgroundTaskExecutionMixin:
+    if TYPE_CHECKING:
+        _apply_requested_control: Any
+        _execute_with_durable_lease: Any
+        _find_waiting_step: Any
     _repo: Any
 
     def stage_run_for_dispatch(
@@ -36,7 +40,7 @@ class BackgroundTaskExecutionMixin:
     ) -> AgentRun | None:
         run = self._repo.get(run_id)
         if run is None or run.status not in {"planning", "running", "queued", "retrying"}:
-            return run
+            return cast("AgentRun | None", run)
         run.status = "queued"
         run.error = ""
         run.metadata["dispatch"] = {
@@ -50,7 +54,7 @@ class BackgroundTaskExecutionMixin:
             "任务已进入后台执行队列",
             {"requested_by": str(requested_by or "")},
         )
-        return self._repo.save(run)
+        return cast("AgentRun | None", self._repo.save(run))
 
     def stage_approved_run(
         self,
@@ -65,7 +69,7 @@ class BackgroundTaskExecutionMixin:
             return None
         step = self._find_waiting_step(run, approved_step_id=approved_step_id)
         if step is None:
-            return self._repo.save(run)
+            return cast("AgentRun | None", self._repo.save(run))
         context = dict(run.metadata.get("runtime_context") or {})
         context.update(dict(runtime_context or {}))
         run.metadata["runtime_context"] = context
@@ -99,7 +103,7 @@ class BackgroundTaskExecutionMixin:
                 "approved_by": str(approved_by or ""),
             },
         )
-        return self._repo.save(run)
+        return cast("AgentRun | None", self._repo.save(run))
 
     def stage_resume_run(
         self,
@@ -110,7 +114,7 @@ class BackgroundTaskExecutionMixin:
     ) -> AgentRun | None:
         run = self._repo.get(run_id)
         if run is None or run.status != "paused":
-            return run
+            return cast("AgentRun | None", run)
         control = run.metadata.get("control")
         resume_status = str(control.get("resume_status") or "") if isinstance(control, dict) else ""
         command = self._repo.request_task_control(run_id, "resume", requested_by=requested_by)
@@ -137,7 +141,7 @@ class BackgroundTaskExecutionMixin:
         )
         stored = self._repo.save(run)
         self._repo.mark_task_control(command.command_id, "applied", applied_at=utc_now_iso())
-        return stored
+        return cast("AgentRun | None", stored)
 
     def execute_dispatched_run(
         self,
@@ -149,11 +153,11 @@ class BackgroundTaskExecutionMixin:
         if run is None:
             return None
         if run.status not in {"queued", "running", "retrying"}:
-            return run
+            return cast("AgentRun | None", run)
         if recovered and not self._prepare_expired_execution_recovery(run):
-            return self._repo.save(run)
+            return cast("AgentRun | None", self._repo.save(run))
         if self._apply_requested_control(run):
-            return self._repo.get(run_id)
+            return cast("AgentRun | None", self._repo.get(run_id))
         dispatch = run.metadata.get("dispatch")
         dispatch = dict(dispatch) if isinstance(dispatch, dict) else {}
         approved_step_id = str(dispatch.get("approved_step_id") or "")
@@ -174,12 +178,12 @@ class BackgroundTaskExecutionMixin:
         dispatch = dict(run.metadata.get("dispatch") or {})
         dispatch.update({"state": str(run.status), "finished_at": utc_now_iso()})
         run.metadata["dispatch"] = dispatch
-        return self._repo.save(run)
+        return cast("AgentRun | None", self._repo.save(run))
 
     def fail_dispatched_run(self, run_id: str) -> AgentRun | None:
         run = self._repo.get(run_id)
         if run is None or run.status in {"completed", "failed", "cancelled"}:
-            return run
+            return cast("AgentRun | None", run)
         run.status = "failed"
         run.error = _WORKER_EXECUTION_FAILED
         run.add_event(
@@ -187,7 +191,7 @@ class BackgroundTaskExecutionMixin:
             "后台执行失败",
             {"error_code": _WORKER_EXECUTION_FAILED},
         )
-        return self._repo.save(run)
+        return cast("AgentRun | None", self._repo.save(run))
 
     def _prepare_expired_execution_recovery(self, run: AgentRun) -> bool:
         running_steps = [step for step in run.steps if step.status == "running"]

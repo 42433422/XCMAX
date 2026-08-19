@@ -5,6 +5,7 @@
 """
 
 import logging
+from typing import cast
 
 from app.db.models import AIConversation, AIConversationSession
 from app.db.session import get_db
@@ -93,7 +94,7 @@ class ConversationApplicationService:
             )
 
             if session:
-                return session.session_id
+                return cast("str", session.session_id)
 
             new_session = AIConversationSession(user_id=user_id, context={})
             db.add(new_session)

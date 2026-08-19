@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 XCAGI 发货/AI助手 服务启动入口
 
@@ -9,7 +8,6 @@ XCAGI 发货/AI助手 服务启动入口
 
 from app import create_app
 from app.config import DevelopmentConfig
-
 
 # shipment 进程原本只注册“出货/AI助手”相关路由；
 # 但前端 `chat.js` 依赖对话/偏好接口（conversations 组），不加入会导致 404。

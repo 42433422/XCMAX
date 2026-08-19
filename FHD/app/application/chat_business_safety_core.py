@@ -8,9 +8,10 @@ import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from app.mod_sdk.private_sqlite import resolve_mod_private_sqlite_path
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 BusinessOperation = Literal[
     "personnel_read",
@@ -176,7 +177,7 @@ def _db_path() -> Path:
 
     resolver = getattr(facade, "_db_path", None)
     if callable(resolver) and resolver is not _db_path:
-        return resolver()
+        return cast("Path", resolver())
     return resolve_mod_private_sqlite_path(_DB_NAME)
 
 
@@ -201,7 +202,7 @@ def _authenticated_user_from_request(request: Any) -> Any | None:
         from app.infrastructure.auth.dependencies import resolve_session_user
 
         return resolve_session_user(request)
-    except Exception:  # noqa: BLE001 - identity resolution must fail closed
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - identity resolution must fail closed
         return None
 
 
@@ -408,12 +409,15 @@ def _resolve_person_from_actor(
         params.append(name)
     if not clauses:
         return None
-    return conn.execute(
-        f"""
+    return cast(
+        "sqlite3.Row | None",
+        conn.execute(
+            f"""
         SELECT employee_name, employee_no, department, position, user_id
         FROM attendance_employees
         WHERE {" OR ".join(clauses)}
         ORDER BY id DESC LIMIT 1
         """,
-        params,
-    ).fetchone()
+            params,
+        ).fetchone(),
+    )

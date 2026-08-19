@@ -3,19 +3,33 @@
 from __future__ import annotations
 
 import copy
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.task_models import AgentTask, TaskControlCommand
-from app.application.workflow.types import Branch, PlanGraph, WorkflowNode
+from app.application.workflow.types import Branch, PlanGraph, WorkflowNode, normalize_workflow_risk
 
 
 class UnifiedTaskPlanMixin:
+    if TYPE_CHECKING:
+        _repo: Any
+
+    def start_run_from_plan(
+        self,
+        *,
+        user_id: str,
+        message: str,
+        plan: PlanGraph,
+        runtime_context: dict[str, Any] | None = None,
+        auto_execute: bool = True,
+    ) -> AgentRun:
+        raise NotImplementedError
+
     def get_run(self, run_id: str) -> AgentRun | None:
-        return self._repo.get(run_id)
+        return cast("AgentRun | None", self._repo.get(run_id))
 
     def list_task_runs(self, *, user_id: str, task_id: str) -> list[AgentRun]:
-        return self._repo.list_task_runs(user_id=user_id, task_id=task_id)
+        return cast("list[AgentRun]", self._repo.list_task_runs(user_id=user_id, task_id=task_id))
 
     def get_task(
         self,
@@ -24,13 +38,16 @@ class UnifiedTaskPlanMixin:
         task_id: str,
         tenant_id: str | None = None,
     ) -> AgentTask | None:
-        return self._repo.get_task(user_id=user_id, task_id=task_id, tenant_id=tenant_id)
+        return cast(
+            "AgentTask | None",
+            self._repo.get_task(user_id=user_id, task_id=task_id, tenant_id=tenant_id),
+        )
 
     def save_task(self, task: AgentTask) -> AgentTask:
-        return self._repo.save_task(task)
+        return cast("AgentTask", self._repo.save_task(task))
 
     def latest_task_control(self, run_id: str) -> TaskControlCommand | None:
-        return self._repo.latest_task_control(run_id)
+        return cast("TaskControlCommand | None", self._repo.latest_task_control(run_id))
 
     def list_tasks(
         self,
@@ -40,11 +57,14 @@ class UnifiedTaskPlanMixin:
         limit: int = 50,
         include_archived: bool = False,
     ) -> list[AgentTask]:
-        return self._repo.list_tasks(
-            user_id=user_id,
-            tenant_id=tenant_id,
-            limit=limit,
-            include_archived=include_archived,
+        return cast(
+            "list[AgentTask]",
+            self._repo.list_tasks(
+                user_id=user_id,
+                tenant_id=tenant_id,
+                limit=limit,
+                include_archived=include_archived,
+            ),
         )
 
     def archive_task(
@@ -56,15 +76,18 @@ class UnifiedTaskPlanMixin:
     ) -> AgentTask | None:
         from app.application.agent_orchestrator.run_models import utc_now_iso
 
-        return self._repo.archive_task(
-            user_id=user_id,
-            task_id=task_id,
-            archived_at=utc_now_iso(),
-            tenant_id=tenant_id,
+        return cast(
+            "AgentTask | None",
+            self._repo.archive_task(
+                user_id=user_id,
+                task_id=task_id,
+                archived_at=utc_now_iso(),
+                tenant_id=tenant_id,
+            ),
         )
 
     def save_run(self, run: AgentRun) -> AgentRun:
-        return self._repo.save(run)
+        return cast("AgentRun", self._repo.save(run))
 
     def start_task_from_plan(
         self,
@@ -83,10 +106,10 @@ class UnifiedTaskPlanMixin:
             auto_execute=False,
         )
         if run.status != "running":
-            return run
+            return cast("AgentRun", run)
         step = next((item for item in run.steps if item.status == "pending"), None)
         if step is None:
-            return run
+            return cast("AgentRun", run)
         step.status = "waiting_user"
         run.status = "waiting_user"
         run.metadata["task_model"] = {
@@ -106,7 +129,7 @@ class UnifiedTaskPlanMixin:
                 "action": step.action,
             },
         )
-        return self._repo.save(run)
+        return cast("AgentRun", self._repo.save(run))
 
     @staticmethod
     def _plan_snapshot(plan: PlanGraph) -> dict[str, Any]:
@@ -148,7 +171,7 @@ class UnifiedTaskPlanMixin:
                     tool_id=str(row.get("tool_id") or ""),
                     action=str(row.get("action") or ""),
                     params=copy.deepcopy(row.get("params") or {}),
-                    risk=str(row.get("risk") or "medium"),
+                    risk=normalize_workflow_risk(str(row.get("risk") or "medium")),
                     idempotent=bool(row.get("idempotent", False)),
                     description=str(row.get("description") or ""),
                     depends_on=[str(item) for item in (row.get("depends_on") or [])],
@@ -168,7 +191,7 @@ class UnifiedTaskPlanMixin:
             intent=str(snapshot.get("intent") or ""),
             todo_steps=[str(item) for item in (snapshot.get("todo_steps") or [])],
             nodes=nodes,
-            risk_level=str(snapshot.get("risk_level") or "medium"),
+            risk_level=normalize_workflow_risk(str(snapshot.get("risk_level") or "medium")),
             metadata=copy.deepcopy(snapshot.get("metadata") or {}),
         )
 

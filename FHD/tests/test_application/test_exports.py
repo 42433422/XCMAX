@@ -76,7 +76,7 @@ class TestHandlePriceListExport:
 
     def test_success_with_keyword_search(self, tmp_path):
         mock_svc = MagicMock()
-        mock_svc.search_products.return_value = [{"name": "P"}]
+        mock_svc.search_products.return_value = {"data": [{"name": "P"}]}
         with (
             patch(
                 "app.application.get_product_app_service",
@@ -102,7 +102,7 @@ class TestHandlePriceListExport:
 
     def test_success_without_keyword(self, tmp_path):
         mock_svc = MagicMock()
-        mock_svc.get_all_products.return_value = [{"name": "P1"}, {"name": "P2"}]
+        mock_svc.get_products.return_value = {"data": [{"name": "P1"}, {"name": "P2"}]}
         with (
             patch(
                 "app.application.get_product_app_service",
@@ -123,7 +123,7 @@ class TestHandlePriceListExport:
             )
         assert result["success"] is True
         assert result["product_count"] == 2
-        mock_svc.get_all_products.assert_called_once()
+        mock_svc.get_products.assert_called_once()
 
     def test_success_without_workspace_root_uses_tempdir(self):
         mock_svc = MagicMock()

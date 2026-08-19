@@ -45,7 +45,7 @@ def build_employee_live_summary(
             employee_capability.get("production_window_hours")
         ),
         "platform_llm": (
-            dict(employee_capability.get("platform_llm"))
+            dict(employee_capability.get("platform_llm") or {})
             if isinstance(employee_capability.get("platform_llm"), dict)
             else {}
         ),

@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from app.db.models import ReceivableAllocation, SalesOrder
 from app.db.models.receivable_allocation import (
@@ -32,6 +32,7 @@ from app.db.models.receivable_allocation import (
 )
 from app.db.session import get_db
 from app.services.accounting_services import create_journal_entry
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +64,14 @@ def _compute_status(paid: Decimal, receivable: Decimal) -> str:
 
 def _existing_allocations(db, sales_order_id: int) -> list[ReceivableAllocation]:
     """订单当前生效（未退款）的收款分配。"""
-    return (
+    return cast(
+        "list[ReceivableAllocation]",
         db.query(ReceivableAllocation)
         .filter(
             ReceivableAllocation.sales_order_id == int(sales_order_id),
             ReceivableAllocation.status != RECEIVABLE_STATUS_REFUNDED,
         )
-        .all()
+        .all(),
     )
 
 
@@ -177,7 +179,7 @@ def payment(
             order.payment_state = status
             db.commit()
             db.refresh(alloc)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             db.rollback()
             logger.exception("收款分配写入失败，已回滚: order=%s", sales_order_id)
             return {"success": False, "message": "收款分配写入失败，已回滚"}
@@ -265,7 +267,7 @@ def refund(
                 _update_order_after_refund(db, alloc)
             db.commit()
             db.refresh(reversal)
-        except Exception:
+        except RECOVERABLE_ERRORS:
             db.rollback()
             logger.exception("收款退款更新失败，已回滚: allocation=%s", allocation_id)
             return {"success": False, "message": "收款退款更新失败，已回滚"}
@@ -283,6 +285,8 @@ def _update_order_after_refund(db, alloc: ReceivableAllocation) -> None:
     if order is None:
         return
     # 显式把本次退款分配排除（兼容 autoflush=False 的会话，内存状态未落库）
+    if alloc.sales_order_id is None:
+        return
     remaining = _sum_allocated(
         [a for a in _existing_allocations(db, alloc.sales_order_id) if a.id != alloc.id]
     )
@@ -294,7 +298,7 @@ def _find_line_id(entry_data: dict[str, Any], account_code: str) -> int | None:
     """在记账凭证返回的明细行中按科目 code 定位分录行 id。"""
     for line in entry_data.get("lines") or []:
         if line.get("account_code") == account_code:
-            return line.get("id")
+            return cast("int | None", line.get("id"))
     return None
 
 

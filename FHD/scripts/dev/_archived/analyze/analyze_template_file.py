@@ -1,10 +1,11 @@
 """查看模板文件结构"""
 
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+
 from openpyxl import load_workbook
-import shutil
 
 # 使用 PowerShell 获取文件的完整路径
 result = subprocess.run(
@@ -44,7 +45,7 @@ try:
         print(f"合并单元格：{len(merged)} 个")
 
         # 显示前 10 行
-        print(f"\n前 10 行:")
+        print("\n前 10 行:")
         for row_idx in range(1, min(11, ws.max_row + 1)):
             row_data = []
             for col_idx in range(1, min(15, ws.max_column + 1)):

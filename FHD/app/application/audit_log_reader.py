@@ -8,7 +8,7 @@ import json
 import os
 from typing import Any
 
-from app.utils.audit_events import audit_log_path
+from app.utils.logging.audit_events import audit_log_path
 
 
 def _load_all_records() -> list[dict[str, Any]]:

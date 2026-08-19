@@ -47,7 +47,7 @@ class TestGetBackupDir:
 
     def test_creates_backup_dir(self, tmp_path):
         svc = DatabaseService()
-        with patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)):
+        with patch("app.utils.path_io.path_utils.get_data_dir", return_value=str(tmp_path)):
             backup_dir = svc._get_backup_dir()
             assert os.path.isdir(backup_dir)
             assert "database_backups" in backup_dir

@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from app.application.private_mod_delivery_app import account_scope, apply_account_state
-from app.utils.operational_errors import OPERATIONAL_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ def apply_private_mod_delivery(item: dict[str, Any]) -> None:
             account_scope(int(entity_id), str(payload.get("username") or "")),
             payload,
         )
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("apply_private_mod_delivery failed user=%s: %s", entity_id, exc)
 
 

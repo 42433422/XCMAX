@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 # Data tables are externalised into the ``tool_spec_data`` package. They are
 # re-exported here under their original names so downstream code (and tests)
@@ -89,7 +89,7 @@ def _normalize_tool_action(action: str, params: dict[str, Any] | None = None) ->
 def _risk_value(value: Any) -> RiskLevel:
     text = str(value or "medium").strip().lower()
     if text in {"low", "medium", "high"}:
-        return text  # type: ignore[return-value]
+        return cast(RiskLevel, text)
     return "medium"
 
 
@@ -136,11 +136,11 @@ def _sample_payload_from_schema(schema: dict[str, Any]) -> dict[str, Any]:
     properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
     required = schema.get("required") if isinstance(schema.get("required"), list) else []
     payload: dict[str, Any] = {}
-    for key, prop in properties.items():
+    for key, prop in (properties or {}).items():
         payload[str(key)] = _sample_value_for_property(
             str(key), prop if isinstance(prop, dict) else {}
         )
-    for key in required:
+    for key in required or []:
         normalized_key = str(key)
         if normalized_key not in payload:
             payload[normalized_key] = f"sample_{normalized_key}"
@@ -186,8 +186,8 @@ def _cost_units(tool_id: str, action: str, risk: RiskLevel) -> int:
 
 def _aiopen_tool_risk(action: str) -> tuple[RiskLevel, bool]:
     if action in AIOPEN_LOW_RISK_ACTIONS:
-        return AIOPEN_LOW_RISK, True
-    return AIOPEN_DEFAULT_RISK, False
+        return cast("RiskLevel", AIOPEN_LOW_RISK), True
+    return cast("RiskLevel", AIOPEN_DEFAULT_RISK), False
 
 
 def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> None:
@@ -209,7 +209,7 @@ def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> No
             "status_code": {"type": "integer"},
         },
     }
-    for tool in TOOL_DEFINITIONS:
+    for tool in TOOL_DEFINITIONS or []:
         if not isinstance(tool, dict):
             continue
         action = _normalize_tool_action(str(tool.get("name") or ""))
@@ -218,9 +218,8 @@ def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> No
         input_schema = tool.get("inputSchema")
         if not isinstance(input_schema, dict):
             input_schema = {"type": "object", "properties": {}}
-        required = (
-            input_schema.get("required") if isinstance(input_schema.get("required"), list) else []
-        )
+        raw_required = input_schema.get("required")
+        required = list(raw_required) if isinstance(raw_required, list) else []
         required_params = [str(item) for item in required]
         risk, idempotent = _aiopen_tool_risk(action)
         fixture = _default_fixture("aiopen", action, input_schema, output_schema)
@@ -356,13 +355,13 @@ def _validate_schema_payload(
         return False, f"{subject} 必须是 object"
     required = schema.get("required") if isinstance(schema.get("required"), list) else []
     if subject == "工具输出" and payload.get("success") is False:
-        required = [key for key in required if str(key) == "success"]
-    for key in required:
+        required = [key for key in (required or []) if str(key) == "success"]
+    for key in required or []:
         if _is_empty(payload.get(str(key))):
             return False, f"{subject} 缺少字段：{key}"
 
     properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
-    for key, prop in properties.items():
+    for key, prop in (properties or {}).items():
         if key not in payload or _is_empty(payload.get(key)):
             continue
         if not isinstance(prop, dict):

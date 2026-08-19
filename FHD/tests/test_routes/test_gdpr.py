@@ -47,10 +47,10 @@ _mock_feature_flag.FeatureFlagName.EXPERIMENTAL_GDPR_API = "experimental.gdpr_ap
 _mock_feature_flag.is_enabled = MagicMock(return_value=True)
 sys.modules.setdefault("app.services.feature_flag", _mock_feature_flag)
 
-# Mock app.utils.audit_logger
-_mock_audit = type(sys)("app.utils.audit_logger")
+# Mock app.utils.logging.audit_logger
+_mock_audit = type(sys)("app.utils.logging.audit_logger")
 _mock_audit.audit_log = MagicMock(return_value=1)
-sys.modules.setdefault("app.utils.audit_logger", _mock_audit)
+sys.modules.setdefault("app.utils.logging.audit_logger", _mock_audit)
 
 # Mock app.infrastructure.auth.dependencies
 _mock_auth_deps = type(sys)("app.infrastructure.auth.dependencies")
@@ -337,14 +337,14 @@ class TestGdprEraseEndpoint:
 class TestGdprRectifyEndpoint:
     @patch("app.fastapi_routes.gdpr.is_enabled", return_value=True)
     @patch("app.fastapi_routes.gdpr.log_audit_event")
-    @patch("app.infrastructure.persistence.sqlalchemy_uow.SqlAlchemyUnitOfWork")
-    def test_rectify_success(self, mock_uow_cls, mock_audit, mock_enabled):
+    @patch("app.db.SessionLocal")
+    def test_rectify_success(self, mock_session_cls, mock_audit, mock_enabled):
         mock_uow = MagicMock()
         mock_user_obj = MagicMock()
         mock_uow.__enter__ = MagicMock(return_value=mock_uow)
         mock_uow.__exit__ = MagicMock(return_value=False)
         mock_uow.get.return_value = mock_user_obj
-        mock_uow_cls.return_value = mock_uow
+        mock_session_cls.return_value = mock_uow
 
         mock_audit.return_value = 99
 
@@ -358,6 +358,7 @@ class TestGdprRectifyEndpoint:
         assert data["user_id"] == 42
         assert "email" in data["fields"]
         assert data["audit_id"] == 99
+        mock_uow.commit.assert_called_once_with()
 
     @patch("app.fastapi_routes.gdpr.is_enabled", return_value=True)
     def test_rectify_invalid_field(self, mock_enabled):

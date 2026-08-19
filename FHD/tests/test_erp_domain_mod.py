@@ -132,6 +132,10 @@ def test_try_invoke_products_list(monkeypatch):
         lambda: ("xcagi-erp-domain-bridge", str(MOD_DIR)),
     )
     monkeypatch.setattr(
+        "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
+        lambda: False,
+    )
+    monkeypatch.setattr(
         "app.fastapi_routes.domains.db.product_queries._load_products_list_impl_pg",
         lambda page, per_page, keyword, unit: ([], 0, None),
     )

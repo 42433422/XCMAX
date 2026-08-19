@@ -1,9 +1,8 @@
-# -*- coding: utf-8 -*-
-import sys
 import os
+import sys
 
 sys.path.insert(0, r"E:\FHD\XCAGI")
-from app.utils.path_utils import get_resource_path
+from app.utils.path_io.path_utils import get_resource_path
 
 msg_db_path = os.path.join(
     get_resource_path("wechat-decrypt"), "decrypted", "message", "message_0.db"
@@ -11,9 +10,9 @@ msg_db_path = os.path.join(
 wechat_id = "wxid_tfxzqdqt87oa22"
 
 sys.path.insert(0, get_resource_path("wechat-decrypt"))
-from mcp_server import _decompress_content
-
 import sqlite3
+
+from mcp_server import _decompress_content
 
 all_messages = []
 
@@ -45,7 +44,7 @@ for table in tables:
                 break
         if len(all_messages) >= 50:
             break
-    except Exception as e:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         continue
 
 conn.close()

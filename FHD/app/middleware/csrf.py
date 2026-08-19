@@ -1,9 +1,12 @@
 import os
 import secrets
+from typing import cast
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _MUTATING_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
@@ -31,7 +34,7 @@ def _has_verified_bearer(request: Request) -> bool:
         from app.application.facades.session_facade import get_session_service
 
         return get_session_service().validate_session(token) is not None
-    except Exception:  # noqa: BLE001 - authentication failure must fail closed
+    except RECOVERABLE_ERRORS:  # noqa: BLE001 - authentication failure must fail closed
         return False
 
 
@@ -101,7 +104,7 @@ def _csrf_exempt_kellai_pairing(scope: Scope) -> bool:
     if not path.startswith("/api/kellai/binding/"):
         return False
     headers = dict(scope.get("headers") or [])
-    return headers.get(b"x-kellai-local-pairing", b"") == b"1"
+    return cast("bool", headers.get(b"x-kellai-local-pairing", b"") == b"1")
 
 
 def _csrf_exempt_ops_autonomy(scope: Scope) -> bool:

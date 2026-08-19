@@ -1179,7 +1179,7 @@ class TestSyncModstoreLibraryToLocal:
         assert result["data"]["errors"] == []
         mock_mm.install_mod_package.assert_called_once()
         args, kwargs = mock_mm.install_mod_package.call_args
-        assert kwargs.get("verify_signature") is False
+        assert kwargs.get("verify_signature") is True
         assert kwargs.get("activate") is False
 
     async def test_install_failure_records_error(self) -> None:

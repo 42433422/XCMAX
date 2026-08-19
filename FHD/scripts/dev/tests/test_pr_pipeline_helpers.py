@@ -5,17 +5,17 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import MagicMock
 
 import pytest
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-from read_issue_proposal import extract_proposal_from_issue_body
-from open_pr_for_employee_pack import create_branch_commit_pr
-from wait_for_pr_merge import is_pr_merged
 from escalate_to_human import escalate
+from open_pr_for_employee_pack import create_branch_commit_pr
+from read_issue_proposal import extract_proposal_from_issue_body
+from wait_for_pr_merge import is_pr_merged
 
 
 def _make_issue_body() -> str:

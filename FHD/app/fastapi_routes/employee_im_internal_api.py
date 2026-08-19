@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import logging
 import secrets
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +67,7 @@ def _resolve_boss_uid(svc, payload: EmployeeImSendRequest) -> int:
         return bid
     bid = svc.get_employee_owner(payload.employee_id)
     if bid > 0:
-        return bid
+        return cast("int", bid)
     raw = (os_get_env("FHD_BOSS_USER_ID") or "").strip()
     try:
         bid = int(raw) if raw else 0
@@ -147,7 +149,7 @@ async def employee_im_send(request: Request, payload: EmployeeImSendRequest = Bo
                     continue
                 await im_ws_hub.send_to_user(member_id, legacy_payload)
                 await im_ws_hub.send_to_user(member_id, sync_payload)
-        except Exception:  # noqa: BLE001 - websocket fanout is best-effort after DB write
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - websocket fanout is best-effort after DB write
             logger.debug("employee_im_send ws push skipped", exc_info=True)
 
         # 离线推送:老板 App 未在线(WS 未连)时,把员工主动汇报写进自建推送离线队列
@@ -163,7 +165,7 @@ async def employee_im_send(request: Request, payload: EmployeeImSendRequest = Bo
             await _notify_offline_im_members(
                 off_member_ids, off_sender_uid, payload.body, title=emp_title
             )
-        except Exception:  # noqa: BLE001 - offline push is best-effort after DB write
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - offline push is best-effort after DB write
             logger.debug("employee_im_send offline push skipped", exc_info=True)
 
         logger.info(
@@ -176,7 +178,7 @@ async def employee_im_send(request: Request, payload: EmployeeImSendRequest = Bo
         return JSONResponse({"success": True, "data": result, "boss_user_id": boss_uid})
     except ValueError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception(
             "employee_im_send failed: boss=%s employee=%s hook=%s err=%s",
             payload.boss_user_id,
@@ -188,7 +190,7 @@ async def employee_im_send(request: Request, payload: EmployeeImSendRequest = Bo
     finally:
         try:
             db.close()
-        except Exception:  # noqa: BLE001 - closing a request-scoped DB session must not mask response
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - closing a request-scoped DB session must not mask response
             pass
 
 
@@ -228,11 +230,11 @@ def employee_im_set_owner(request: Request, payload: EmployeeImSetOwnerRequest =
         return JSONResponse({"success": True})
     except ValueError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.exception("employee_im_set_owner failed: %s", exc)
         return JSONResponse({"success": False, "message": f"设置失败：{exc}"}, status_code=500)
     finally:
         try:
             db.close()
-        except Exception:  # noqa: BLE001 - closing a request-scoped DB session must not mask response
+        except RECOVERABLE_ERRORS:  # noqa: BLE001 - closing a request-scoped DB session must not mask response
             pass

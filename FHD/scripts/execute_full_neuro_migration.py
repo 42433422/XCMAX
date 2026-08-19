@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 完整 Neuro-DDD 迁移执行脚本
 
 完成 5 个核心 Services + Backend 路由的全部迁移
 """
 
-import os
-import sys
-import re
-import asyncio
-from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -136,7 +131,7 @@ from app.neuro_bus.events.base import NeuroEvent, EventPriority
                 self.log(f"已迁移: {service_config['name']}", "OK")
                 migrated += 1
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 self.log(f"迁移失败 {service_config['name']}: {e}", "ERROR")
                 failed.append(service_config["name"])
 

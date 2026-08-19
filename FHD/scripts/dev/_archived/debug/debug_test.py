@@ -5,8 +5,9 @@ import sys
 sys.path.insert(0, r"e:\FHD\backend\shell")
 
 from pathlib import Path
-from taiyangniao_attendance.convert import _write_workbook_to_path
+
 import pandas as pd
+from taiyangniao_attendance.convert import _write_workbook_to_path
 
 # 创建简单的测试数据
 stats_df = pd.DataFrame(
@@ -67,7 +68,7 @@ if template_path is not None:
                 print(f"目录列表成功：{template_file_path}")
             else:
                 print(f"文件名 {file_name} 不在目录中")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"目录列表失败：{e}")
 
 print(f"\n最终 template_file_path: {template_file_path}")
@@ -78,7 +79,7 @@ if template_file_path:
 
         wb = load_workbook(template_file_path)
         print(f"✓ 加载成功！工作表：{wb.sheetnames}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"✗ 加载失败：{e}")
 else:
     print("模板文件路径为 None，将使用无模板模式")

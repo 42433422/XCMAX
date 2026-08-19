@@ -13,7 +13,7 @@ from __future__ import annotations
 from .checkpoint_bridge import LanggraphCheckpointBridge
 from .langgraph_assert import assert_vendored_sources
 from .langgraph_runtime import XCAGILangGraphRuntime
-from .legacy_engine_adapter import LegacyEngineAdapter
+from app.legacy.workflow.legacy_engine_adapter import LegacyEngineAdapter
 
 __all__ = [
     "LanggraphCheckpointBridge",

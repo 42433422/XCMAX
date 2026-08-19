@@ -1,14 +1,14 @@
-# -*- coding: utf-8 -*-
-import sys
 import os
+import sys
 
 sys.path.insert(0, r"E:\FHD\XCAGI")
 
-from app.db.session import get_db
-from app.db.models import WechatContact
-from app.utils.path_utils import get_resource_path
 from app.services.wechat_contact_cache_import import ensure_decrypted_wechat_dbs
 from app.services.wechat_contact_service import get_wechat_contact_service
+
+from app.db.models import WechatContact
+from app.db.session import get_db
+from app.utils.path_io.path_utils import get_resource_path
 
 with get_db() as db:
     contact = db.query(WechatContact).filter(WechatContact.id == 1).first()

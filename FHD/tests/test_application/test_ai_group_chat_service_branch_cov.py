@@ -583,7 +583,7 @@ class TestDefaultDutyEmployeeLoader:
         )
         monkeypatch.setattr(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
-            MagicMock(side_effect=Exception("no mod manager")),
+            MagicMock(side_effect=RuntimeError("no mod manager")),
         )
         result = _default_duty_employee_loader()
         assert len(result) >= 1

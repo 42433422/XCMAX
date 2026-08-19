@@ -10,6 +10,7 @@ from fastapi import APIRouter, Body, Header, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.errors import ErrorCode, PaymentError
+from app.fastapi_routes.model_payment_plans import DEMO_PLANS as _DEMO_PLANS
 from app.infrastructure.billing.saas_plans import (
     list_saas_plans,
     plan_by_id,
@@ -32,36 +33,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/model-payment", tags=["model-payment"])
 
-# 与前端 ModelPaymentPlan 字段一致
-_DEMO_PLANS: list[dict[str, Any]] = [
-    {
-        "id": "demo-starter",
-        "title": "体验档",
-        "description": "本地演示：未接商户时仅展示流程与界面，不产生真实扣款。",
-        "amount_cents": 990,
-        "currency": "CNY",
-        "badge": "演示",
-    },
-    {
-        "id": "demo-standard",
-        "title": "标准档",
-        "description": "适合个人高频使用；接入支付宝后可替换为真实套餐与金额。",
-        "amount_cents": 4990,
-        "currency": "CNY",
-        "badge": None,
-    },
-    {
-        "id": "demo-pro",
-        "title": "专业档",
-        "description": "更高配额与优先响应；上线前请在环境变量中配置支付参数。",
-        "amount_cents": 19900,
-        "currency": "CNY",
-        "badge": "推荐",
-    },
-]
-
-
-def _integration_flags() -> dict[str, bool]:
+def _integration_flags() -> dict[str, Any]:
     """支付宝：APPID + 应用私钥 + 支付宝公钥 + 已安装 SDK 时为已开通。"""
     return {
         "alipay_configured": mp_ali.alipay_ui_ready(),

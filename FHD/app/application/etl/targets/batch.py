@@ -7,7 +7,7 @@ import itertools
 from collections.abc import Iterable
 from pathlib import Path
 from threading import Event
-from typing import Any
+from typing import Any, cast
 
 from app.application.etl.errors import EtlError
 from app.application.etl.secrets import read_webhook_secret
@@ -18,7 +18,8 @@ from app.application.etl.targets.base import (
     json_safe,
 )
 from app.application.etl.transforms import neutralize_spreadsheet_formula
-from app.utils.path_utils import get_app_data_dir
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_io.path_utils import get_app_data_dir
 
 
 class AttendanceAdapter(TargetAdapter):
@@ -46,7 +47,7 @@ class AttendanceAdapter(TargetAdapter):
         cache = context.get("_preview_cache")
         cache_key = f"attendance_batch:{self._source_file_key(context)}"
         if isinstance(cache, dict) and cache_key in cache:
-            return cache[cache_key]
+            return cast("dict[str, Any] | None", cache[cache_key])
         db_path = self._db_path()
         match = None
         if db_path.is_file():
@@ -163,7 +164,7 @@ class AttendanceAdapter(TargetAdapter):
                 conn.execute("DELETE FROM attendance_import_batches WHERE id = ?", (batch_id,))
             conn.commit()
             return deleted
-        except Exception:
+        except RECOVERABLE_ERRORS:
             conn.rollback()
             raise
         finally:
@@ -261,7 +262,7 @@ class WebhookAdapter(TargetAdapter):
         secret = read_webhook_secret(config.get("secret_ref"))
         if secret:
             headers["Authorization"] = f"Bearer {secret}"
-        total = int(context.get("row_count") or (len(rows) if hasattr(rows, "__len__") else 0))
+        total = int(context.get("row_count") or 0)
         chunk_count = max(1, (total + 499) // 500)
         iterator = iter(rows)
         receipts = []

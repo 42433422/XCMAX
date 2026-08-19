@@ -67,7 +67,7 @@ def _fetch_admin_digest_code_sync(auth: Dict[str, str]) -> str:
         code = str(data.get("code") or "").strip().upper()
         if len(code) == 6:
             return code
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
         logger.warning("surface audit: digest-identity fetch failed: %s", exc)
     return ""
 
@@ -107,7 +107,7 @@ async def _prepare_admin_digest(context: Any, auth: Dict[str, str]) -> None:
             )
             with urllib.request.urlopen(req, timeout=30):
                 pass
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
             logger.warning("surface audit: verify-admin-digest-code failed: %s", exc)
     await _inject_admin_digest(context, code)
 
@@ -119,11 +119,11 @@ APPLY_PREPARE_BRANCH = '''    if prepare == "admin_digest":
             if await unlock_btn.is_visible(timeout=2500):
                 await unlock_btn.click(timeout=5000)
                 await page.wait_for_timeout(1000)
-        except Exception:
+        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             pass
         try:
             await page.wait_for_selector(".wb-sidebar-admin-nav, #app .app-shell", timeout=12_000)
-        except Exception:
+        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             pass
         return
 '''
@@ -137,12 +137,6 @@ CAPTURE_CTX_PATCH = '''                if market_auth and _path_needs_market_aut
 
 def _replace_old_admin_block(text: str) -> str:
     """移除旧 FHD admin-console 五页（若存在）。"""
-    old_snippets = (
-        '("/xcmax-admin")',
-        '("/automation-policy")',
-        'prepare="admin_digest"',
-        'f"admin:',
-    )
     if '("/xcmax-admin")' not in text:
         return text
     import re

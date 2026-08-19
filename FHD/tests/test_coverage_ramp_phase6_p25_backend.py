@@ -1406,6 +1406,12 @@ class TestXcmaxSyncServiceUncoveredBranches:
         db.get_status.return_value = {"remote_cursor": 10}
 
         class FakeResp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
             def read(self, n):
                 return json.dumps({"data": []}).encode()
 

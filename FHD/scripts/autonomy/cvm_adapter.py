@@ -49,11 +49,11 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable
 
-from .types import Action, ActionResult, AuditEntry, RuntimeTruthSnapshot, Signal, ActionType
+from .types import Action, ActionResult, ActionType, AuditEntry, RuntimeTruthSnapshot, Signal
 
 # 健康检查 URL（与 docs/CI_SSOT.md 中 cvm-autonomy-watcher 健康检查一致）
 DEFAULT_HEALTH_URL = "https://xiu-ci.com/fhd-api/api/health"
@@ -160,7 +160,7 @@ class CvmAutonomyAdapter:
         github_token: str | None = None,
         github_repo: str | None = None,
         incident_dedup_window_h: int = DEFAULT_INCIDENT_DEDUP_WINDOW_H,
-    ) -> "CvmAutonomyAdapter":
+    ) -> CvmAutonomyAdapter:
         """测试用：创建一个不依赖真实 docker / df / curl 的 adapter 实例。
 
         测试通过设置 ``_subprocess_runner`` / ``_health_probe`` /
@@ -236,7 +236,7 @@ class CvmAutonomyAdapter:
         if self._health_probe is not None:
             try:
                 return bool(self._health_probe(self.health_url))
-            except Exception:
+            except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 return False
         # 真实路径：subprocess 调用 curl
         try:
@@ -255,7 +255,7 @@ class CvmAutonomyAdapter:
                 timeout=10,
             )
             return result.returncode == 0 and result.stdout.strip() == "200"
-        except Exception:
+        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return False
 
     def _probe_compose_status(self) -> tuple[str, bool]:
@@ -268,7 +268,7 @@ class CvmAutonomyAdapter:
             try:
                 status, running = self._compose_status_probe(self.deploy_root)
                 return status, running
-            except Exception:
+            except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 return "unknown", False
         compose_file = self._resolve_compose_file()
         if compose_file is None:
@@ -298,7 +298,7 @@ class CvmAutonomyAdapter:
                 except json.JSONDecodeError:
                     continue
             return status, service_running
-        except Exception:
+        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return "unknown", False
 
     def _resolve_compose_file(self) -> str | None:
@@ -330,7 +330,7 @@ class CvmAutonomyAdapter:
             if total <= 0:
                 return 0.0
             return round((used / total) * 100, 2)
-        except Exception:
+        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return 0.0
 
     def _probe_last_backup_ts(self, rollback_tarball: str) -> int | None:
@@ -378,7 +378,7 @@ class CvmAutonomyAdapter:
             return ActionResult(
                 action=action, ok=False, detail=f"not-implemented:{action.type.value}", ts=ts
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return ActionResult(
                 action=action,
                 ok=False,
@@ -713,7 +713,7 @@ class CvmAutonomyAdapter:
         """
         try:
             entries = list_audit_entries(self.audit_path)
-        except Exception:
+        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return False, "audit read failed"
         # 倒序找最近的同 key action（跳过 skipped / escalate / open_incident_issue 自身）
         for entry in reversed(entries):
@@ -757,7 +757,7 @@ class CvmAutonomyAdapter:
         previous_action_key = str(params.get("previous_action_key") or "")
         evidence = params.get("evidence") or {}
         truth_snapshot = params.get("truth_snapshot") or {}
-        audit_ts = datetime.now(timezone.utc).isoformat()
+        audit_ts = datetime.now(UTC).isoformat()
 
         evidence_json = (
             json.dumps(evidence, ensure_ascii=False, indent=2) if evidence else "(无附加证据)"
@@ -807,7 +807,7 @@ class CvmAutonomyAdapter:
             命中 issue 的 dict（含 number / html_url），无命中返回 None。
         """
         since_iso = (
-            datetime.now(timezone.utc) - timedelta(hours=self.incident_dedup_window_h)
+            datetime.now(UTC) - timedelta(hours=self.incident_dedup_window_h)
         ).strftime("%Y-%m-%dT%H:%M:%SZ")
         # title 中含 [incident:{type}] 前缀
         title_prefix = f"[incident:{incident_type}]"
@@ -836,7 +836,7 @@ class CvmAutonomyAdapter:
         if self._github_api_get is not None:
             try:
                 return self._github_api_get(url, token)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 return {"_error": "mock_threw", "_body": str(e)}
         req = urllib.request.Request(
             url,
@@ -848,7 +848,7 @@ class CvmAutonomyAdapter:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             return {"_error": exc.code, "_body": exc.read().decode("utf-8", errors="replace")}
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return {"_error": "request_threw", "_body": str(exc)}
 
     def _github_post(self, url: str, token: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -856,7 +856,7 @@ class CvmAutonomyAdapter:
         if self._github_api_post is not None:
             try:
                 return self._github_api_post(url, token, body)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 return {"_error": "mock_threw", "_body": str(e)}
         data = json.dumps(body).encode("utf-8")
         req = urllib.request.Request(
@@ -870,7 +870,7 @@ class CvmAutonomyAdapter:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             return {"_error": exc.code, "_body": exc.read().decode("utf-8", errors="replace")}
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - script boundary records arbitrary integration failures
             return {"_error": "request_threw", "_body": str(exc)}
 
     # ------------------------------------------------------------------ #
@@ -884,7 +884,7 @@ class CvmAutonomyAdapter:
             os.makedirs(self.audit_dir, exist_ok=True)
             with open(self.audit_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
-        except Exception:
+        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             # 审计失败不影响主流程
             pass
 
@@ -987,7 +987,7 @@ def cleanup_old_logs(deploy_root: str, days: int = 7) -> bool:
             check=False,
         )
         return result.returncode == 0
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return False
 
 

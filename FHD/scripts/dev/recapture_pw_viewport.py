@@ -6,7 +6,7 @@ import asyncio
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(os.environ.get("MODSTORE_DEPLOY_ROOT", "/root/modstore-git/MODstore_deploy"))
@@ -25,7 +25,7 @@ async def main() -> None:
     )
 
     auth = _login_surface_audit_sync()
-    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    day = datetime.now(UTC).strftime("%Y-%m-%d")
     out_dir = _save_dir(day)
     if out_dir is None:
         raise SystemExit("save dir unavailable")

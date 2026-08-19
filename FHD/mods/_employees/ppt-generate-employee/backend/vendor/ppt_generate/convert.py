@@ -42,7 +42,7 @@ async def _legacy_convert_file(
     ctx: Dict[str, Any],
     rule_spec: Dict[str, Any],
 ) -> Dict[str, Any]:
-    from app.application.office_plaintext_generate import resolve_presentation_spec
+    from app.mod_sdk.host_services import resolve_presentation_spec
 
     table, _warnings = await resolve_presentation_spec(src_path, payload or {}, ctx or {}, rule_spec or {})
     slides = table.get("slides") if isinstance(table.get("slides"), list) else []

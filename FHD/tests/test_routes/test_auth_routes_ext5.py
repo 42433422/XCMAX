@@ -38,7 +38,7 @@ class TestUserPublicDict:
         mock_user.wx_avatar_url = "/avatars/1.png"
 
         with patch(
-            "app.utils.user_avatar_storage.public_avatar_url",
+            "app.utils.path_io.user_avatar_storage.public_avatar_url",
             return_value="/avatars/1.png",
         ):
             result = _user_public_dict(mock_user)
@@ -64,7 +64,7 @@ class TestUserPublicDict:
         del mock_user.wx_avatar_url
 
         with patch(
-            "app.utils.user_avatar_storage.public_avatar_url",
+            "app.utils.path_io.user_avatar_storage.public_avatar_url",
             return_value="",
         ):
             result = _user_public_dict(mock_user)
@@ -84,7 +84,7 @@ class TestUserPublicDict:
         mock_user.wx_avatar_url = None
 
         with patch(
-            "app.utils.user_avatar_storage.public_avatar_url",
+            "app.utils.path_io.user_avatar_storage.public_avatar_url",
             return_value="",
         ):
             result = _user_public_dict(mock_user)
@@ -316,7 +316,7 @@ class TestJitCreateLocalUserForEnterprise:
     """Cover _jit_create_local_user_for_enterprise branches."""
 
     @patch("app.utils.time.utc_now_naive", return_value="2026-06-17T00:00:00")
-    @patch("app.utils.password_hash.generate_password_hash", return_value="hashed")
+    @patch("app.utils.security.password_hash.generate_password_hash", return_value="hashed")
     @patch("app.db.session.get_db")
     @patch("app.db.models.user.User")
     def test_create_success(self, mock_user_model, mock_get_db, mock_hash, mock_time):
@@ -334,7 +334,7 @@ class TestJitCreateLocalUserForEnterprise:
         mock_db.add.assert_called_once()
         mock_db.commit.assert_called_once()
 
-    @patch("app.utils.password_hash.generate_password_hash", return_value="hashed")
+    @patch("app.utils.security.password_hash.generate_password_hash", return_value="hashed")
     @patch("app.db.session.get_db")
     @patch("app.db.models.user.User")
     def test_user_already_exists(self, mock_user_model, mock_get_db, mock_hash):
@@ -365,7 +365,7 @@ class TestJitCreateLocalUserForEnterprise:
         result = _jit_create_local_user_for_enterprise("user", "pass123")
         assert result is False
 
-    @patch("app.utils.password_hash.generate_password_hash", return_value="hashed")
+    @patch("app.utils.security.password_hash.generate_password_hash", return_value="hashed")
     @patch("app.db.session.get_db")
     @patch("app.db.models.user.User")
     def test_create_no_email(self, mock_user_model, mock_get_db, mock_hash):
@@ -594,9 +594,9 @@ class TestAuthProfileAvatarUploadAdditional:
         mock_user.id = 1
 
         with (
-            patch("app.utils.secure_filename.secure_filename", return_value="avatar.png"),
+            patch("app.utils.security.secure_filename.secure_filename", return_value="avatar.png"),
             patch(
-                "app.utils.user_avatar_storage.save_user_avatar_file",
+                "app.utils.path_io.user_avatar_storage.save_user_avatar_file",
                 side_effect=ValueError("invalid file"),
             ),
         ):
@@ -615,9 +615,9 @@ class TestAuthProfileAvatarUploadAdditional:
         mock_user.id = 1
 
         with (
-            patch("app.utils.secure_filename.secure_filename", return_value="avatar.png"),
+            patch("app.utils.security.secure_filename.secure_filename", return_value="avatar.png"),
             patch(
-                "app.utils.user_avatar_storage.save_user_avatar_file",
+                "app.utils.path_io.user_avatar_storage.save_user_avatar_file",
                 side_effect=OSError("disk full"),
             ),
         ):
@@ -636,9 +636,9 @@ class TestAuthProfileAvatarUploadAdditional:
         mock_user.id = 1
 
         with (
-            patch("app.utils.secure_filename.secure_filename", return_value="avatar"),
-            patch("app.utils.user_avatar_storage.save_user_avatar_file") as mock_save,
-            patch("app.utils.user_avatar_storage.AVATAR_API_PATH", "/api/auth/avatar"),
+            patch("app.utils.security.secure_filename.secure_filename", return_value="avatar"),
+            patch("app.utils.path_io.user_avatar_storage.save_user_avatar_file") as mock_save,
+            patch("app.utils.path_io.user_avatar_storage.AVATAR_API_PATH", "/api/auth/avatar"),
             patch("app.db.session.get_db") as mock_get_db,
         ):
             mock_db = MagicMock()
@@ -662,9 +662,9 @@ class TestAuthProfileAvatarUploadAdditional:
         mock_user.id = 1
 
         with (
-            patch("app.utils.secure_filename.secure_filename", return_value="photo.jpg"),
-            patch("app.utils.user_avatar_storage.save_user_avatar_file") as mock_save,
-            patch("app.utils.user_avatar_storage.AVATAR_API_PATH", "/api/auth/avatar"),
+            patch("app.utils.security.secure_filename.secure_filename", return_value="photo.jpg"),
+            patch("app.utils.path_io.user_avatar_storage.save_user_avatar_file") as mock_save,
+            patch("app.utils.path_io.user_avatar_storage.AVATAR_API_PATH", "/api/auth/avatar"),
             patch("app.db.session.get_db") as mock_get_db,
         ):
             mock_db = MagicMock()
@@ -687,9 +687,9 @@ class TestAuthProfileAvatarUploadAdditional:
         mock_user.id = 1
 
         with (
-            patch("app.utils.secure_filename.secure_filename", return_value="avatar.png"),
-            patch("app.utils.user_avatar_storage.save_user_avatar_file"),
-            patch("app.utils.user_avatar_storage.AVATAR_API_PATH", "/api/auth/avatar"),
+            patch("app.utils.security.secure_filename.secure_filename", return_value="avatar.png"),
+            patch("app.utils.path_io.user_avatar_storage.save_user_avatar_file"),
+            patch("app.utils.path_io.user_avatar_storage.AVATAR_API_PATH", "/api/auth/avatar"),
             patch("app.db.session.get_db") as mock_get_db,
         ):
             mock_db = MagicMock()
@@ -710,9 +710,9 @@ class TestAuthProfileAvatarUploadAdditional:
         mock_user.id = 1
 
         with (
-            patch("app.utils.secure_filename.secure_filename", return_value=""),
-            patch("app.utils.user_avatar_storage.save_user_avatar_file") as mock_save,
-            patch("app.utils.user_avatar_storage.AVATAR_API_PATH", "/api/auth/avatar"),
+            patch("app.utils.security.secure_filename.secure_filename", return_value=""),
+            patch("app.utils.path_io.user_avatar_storage.save_user_avatar_file") as mock_save,
+            patch("app.utils.path_io.user_avatar_storage.AVATAR_API_PATH", "/api/auth/avatar"),
             patch("app.db.session.get_db") as mock_get_db,
         ):
             mock_db = MagicMock()
@@ -739,7 +739,7 @@ class TestAuthProfileAvatarGetAdditional:
 
         mock_user = MagicMock()
         mock_user.id = 1
-        with patch("app.utils.user_avatar_storage.avatar_file_for_user", return_value=None):
+        with patch("app.utils.path_io.user_avatar_storage.avatar_file_for_user", return_value=None):
             result = auth_profile_avatar_get(user=mock_user)
         assert isinstance(result, JSONResponse)
         assert result.status_code == 404
@@ -751,11 +751,11 @@ class TestAuthProfileAvatarGetAdditional:
         mock_user.id = 1
         with (
             patch(
-                "app.utils.user_avatar_storage.avatar_file_for_user",
+                "app.utils.path_io.user_avatar_storage.avatar_file_for_user",
                 return_value="/path/to/avatar.png",
             ),
             patch(
-                "app.utils.user_avatar_storage.media_type_for_path",
+                "app.utils.path_io.user_avatar_storage.media_type_for_path",
                 return_value="image/png",
             ),
         ):
@@ -770,11 +770,11 @@ class TestAuthProfileAvatarGetAdditional:
         mock_user.id = 1
         with (
             patch(
-                "app.utils.user_avatar_storage.avatar_file_for_user",
+                "app.utils.path_io.user_avatar_storage.avatar_file_for_user",
                 return_value="/path/to/avatar.jpg",
             ),
             patch(
-                "app.utils.user_avatar_storage.media_type_for_path",
+                "app.utils.path_io.user_avatar_storage.media_type_for_path",
                 return_value="image/jpeg",
             ),
         ):

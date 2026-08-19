@@ -7,7 +7,7 @@ import logging
 import os
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from app.mod_sdk.platform_shell import GENERIC_HOST_MOD_IDS, MINIMAL_HOST_MOD_IDS
 
@@ -214,6 +214,8 @@ def catalog_store_collection(row: dict[str, Any]) -> str:
     art = str(row.get("artifact") or "").strip().lower()
     if art == "employee_pack":
         cfg = row.get("config") if isinstance(row.get("config"), dict) else {}
+        if not isinstance(cfg, dict):
+            cfg = {}
         if cfg.get("host_foundation_pack"):
             return STORE_COLLECTION_HOST_FOUNDATION
         return STORE_COLLECTION_WORKFLOW_EMPLOYEE
@@ -237,9 +239,10 @@ def materialize_host_foundation_bridges(edition: str | None = None) -> dict[str,
         seed_edition_mods_from_bundle,
     )
 
-    ed: Edition = edition or resolve_edition() or "generic"
-    if ed not in ("minimal", "generic", "full"):
-        ed = "generic"
+    raw_edition = (edition or resolve_edition() or "generic").strip().lower()
+    ed: Edition = (
+        cast("Edition", raw_edition) if raw_edition in {"minimal", "generic", "full"} else "generic"
+    )
 
     seeded = seed_edition_mods_from_bundle(ed)
     mm = get_mod_manager()
@@ -272,11 +275,12 @@ def host_foundation_employee_present() -> bool:
 def host_foundation_bridges_ready(edition: str | None = None) -> bool:
     """当前 edition 所需 bridge Mod 均已出现在 mods 根目录（可被 ModManager 加载）。"""
     from app.infrastructure.mods.mod_manager import get_mod_manager
-    from app.mod_sdk.edition_policy import edition_mod_ids, resolve_edition
+    from app.mod_sdk.edition_policy import Edition, edition_mod_ids, resolve_edition
 
-    ed = (edition or resolve_edition() or "generic").strip().lower()
-    if ed not in ("minimal", "generic", "full"):
-        ed = "generic"
+    raw_edition = (edition or resolve_edition() or "generic").strip().lower()
+    ed = (
+        cast("Edition", raw_edition) if raw_edition in {"minimal", "generic", "full"} else "generic"
+    )
     expected = [mid for mid in edition_mod_ids(ed) if is_host_bridge_mod_id(mid)]
     if not expected:
         return False

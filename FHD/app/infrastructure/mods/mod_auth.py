@@ -13,7 +13,7 @@ import hmac
 import logging
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from fastapi import HTTPException, Request
@@ -36,8 +36,8 @@ class ModContext:
 
     mod_id: str | None = None
     verified: bool = False
-    permissions: list[str] = None
-    metadata: dict[str, Any] = None
+    permissions: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         if self.permissions is None:

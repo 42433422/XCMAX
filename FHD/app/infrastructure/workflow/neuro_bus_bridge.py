@@ -92,7 +92,7 @@ class NeuroBusEventBridge:
                     "NeuroBusEventBridge publish rejected/dropped node=%s",
                     payload.get("node_id"),
                 )
-        except Exception:  # noqa: BLE001 — fail-soft 端口契约：绝不外抛
+        except Exception:  # noqa: BLE001 — fail-soft boundary; noqa: broad-except-boundary
             logger.exception(
                 "NeuroBusEventBridge publish failed node=%s",
                 payload.get("node_id"),

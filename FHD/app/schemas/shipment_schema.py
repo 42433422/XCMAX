@@ -6,7 +6,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ShipmentItemCreate(BaseModel):
@@ -18,6 +18,8 @@ class ShipmentItemCreate(BaseModel):
 
 
 class ShipmentItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     product_id: int
     product_name: str | None = None
@@ -25,9 +27,6 @@ class ShipmentItemResponse(BaseModel):
     unit_price: float
     discount: float
     subtotal: float
-
-    class Config:
-        from_attributes = True
 
 
 class ShipmentCreate(BaseModel):
@@ -62,6 +61,8 @@ class ShipmentUpdate(BaseModel):
 
 
 class ShipmentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     shipment_number: str
     customer_id: int
@@ -76,12 +77,9 @@ class ShipmentResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 class ShipmentDetailResponse(ShipmentResponse):
-    items: list[ShipmentItemResponse] = []
+    items: list[ShipmentItemResponse] = Field(default_factory=list)
 
 
 class ShipmentListResponse(BaseModel):

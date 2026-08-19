@@ -1,11 +1,10 @@
-# -*- coding: utf-8 -*-
 # Direct test of _query_messages_by_numeric_id logic
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, r"E:\FHD\XCAGI")
-from app.utils.path_utils import get_resource_path
+from app.utils.path_io.path_utils import get_resource_path
 
 msg_db_path = os.path.join(
     get_resource_path("wechat-decrypt"), "decrypted", "message", "message_0.db"
@@ -24,7 +23,7 @@ try:
     from mcp_server import _decompress_content
 
     print(f"_decompress_content: {_decompress_content}")
-except Exception as e:
+except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"Import error: {e}")
     _decompress_content = None
 
@@ -67,7 +66,7 @@ try:
                         break
                 if len(all_messages) >= limit:
                     break
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"  Error in {table}: {e}")
                 continue
 
@@ -97,12 +96,12 @@ try:
                             break
                     if all_messages:
                         break
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"  Error in {table}: {e}")
                 continue
 
     conn.close()
-except Exception as e:
+except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
     print(f"Outer error: {e}")
 
 print(f"\nTotal messages: {len(all_messages)}")

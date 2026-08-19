@@ -208,6 +208,7 @@ class TestAlembicForwardUpgrade:
         } <= product_cols
         inv_cols = _columns(_db_url, "inventory_transactions")
         assert {"ordered_quantity", "delivered_quantity", "sales_order_id"} <= inv_cols
+
         # 履行维度：两个销售外键 + 两个索引 + 三个数量 CHECK
         inv_fks = _foreign_keys(_db_url, "inventory_transactions")
         assert {
@@ -272,6 +273,33 @@ class TestAlembicForwardUpgrade:
         assert "uq_journal_entries_tenant_entry_no" in _unique_constraint_names(
             _db_url, "journal_entries"
         )
+
+    def test_repair_revision_fixes_stamped_incomplete_products(self, _db_url: str) -> None:
+        from sqlalchemy import create_engine
+
+        engine = create_engine(_db_url)
+        try:
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "CREATE TABLE products ("
+                        "id INTEGER PRIMARY KEY, name TEXT NOT NULL, tenant_id INTEGER)"
+                    )
+                )
+                connection.execute(text("CREATE TABLE uom_units (id INTEGER PRIMARY KEY)"))
+        finally:
+            engine.dispose()
+
+        command.stamp(_alembic_config(), "2026_08_13_tutorial_v2")
+        command.upgrade(_alembic_config(), "head")
+
+        assert {
+            "base_uom_id",
+            "uom_category",
+            "uom_factor",
+            "min_stock",
+            "max_stock",
+        } <= _columns(_db_url, "products")
 
     def test_upgrade_downgrade_upgrade_idempotent(self, _db_url: str) -> None:
         cfg = _alembic_config()

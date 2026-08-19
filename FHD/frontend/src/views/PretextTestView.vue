@@ -13,18 +13,20 @@
       <div v-if="singleTestResult" class="test-result">
         <h3>测试结果</h3>
         <table>
-          <tr>
-            <td>DOM 测量耗时</td>
-            <td>{{ singleTestResult.domTime.toFixed(3) }} ms</td>
-          </tr>
-          <tr>
-            <td>Pretext.js 耗时</td>
-            <td>{{ singleTestResult.pretextTime.toFixed(3) }} ms</td>
-          </tr>
-          <tr>
-            <td>加速比</td>
-            <td class="highlight">{{ singleTestResult.speedup.toFixed(1) }}x</td>
-          </tr>
+          <tbody>
+            <tr>
+              <td>DOM 测量耗时</td>
+              <td>{{ singleTestResult.domTime.toFixed(3) }} ms</td>
+            </tr>
+            <tr>
+              <td>Pretext.js 耗时</td>
+              <td>{{ singleTestResult.pretextTime.toFixed(3) }} ms</td>
+            </tr>
+            <tr>
+              <td>加速比</td>
+              <td class="highlight">{{ singleTestResult.speedup.toFixed(1) }}x</td>
+            </tr>
+          </tbody>
         </table>
       </div>
     </div>
@@ -37,22 +39,24 @@
       <div v-if="batchTestResult" class="test-result">
         <h3>测试结果</h3>
         <table>
-          <tr>
-            <td>消息数量</td>
-            <td>10 条</td>
-          </tr>
-          <tr>
-            <td>DOM 测量耗时</td>
-            <td>{{ batchTestResult.domTime.toFixed(3) }} ms</td>
-          </tr>
-          <tr>
-            <td>Pretext.js 耗时</td>
-            <td>{{ batchTestResult.pretextTime.toFixed(3) }} ms</td>
-          </tr>
-          <tr>
-            <td>加速比</td>
-            <td class="highlight">{{ batchTestResult.speedup.toFixed(1) }}x</td>
-          </tr>
+          <tbody>
+            <tr>
+              <td>消息数量</td>
+              <td>10 条</td>
+            </tr>
+            <tr>
+              <td>DOM 测量耗时</td>
+              <td>{{ batchTestResult.domTime.toFixed(3) }} ms</td>
+            </tr>
+            <tr>
+              <td>Pretext.js 耗时</td>
+              <td>{{ batchTestResult.pretextTime.toFixed(3) }} ms</td>
+            </tr>
+            <tr>
+              <td>加速比</td>
+              <td class="highlight">{{ batchTestResult.speedup.toFixed(1) }}x</td>
+            </tr>
+          </tbody>
         </table>
       </div>
     </div>

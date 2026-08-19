@@ -28,6 +28,7 @@ from .cors import (
 )
 from .lifespan import lifespan
 from .middleware_extra import register_extra_middleware, register_prometheus_metrics
+from .openapi_enrichment import install_openapi_enrichment
 
 
 def _desktop_fast_start_enabled() -> bool:
@@ -173,6 +174,15 @@ def create_fastapi_app(
     except RECOVERABLE_ERRORS as e:
         logger.exception("Failed to register SPA history fallback: %s", e)
         raise
+
+    # Apply documentation normalization only after every route has been
+    # registered. Runtime slash aliases stay available, while duplicate schema
+    # entries are hidden and every documented operation receives complete
+    # tags, description and a 2xx response schema.
+    from app.legacy.routes.openapi_route_compat import hide_trailing_slash_openapi_duplicates
+
+    hide_trailing_slash_openapi_duplicates(app)
+    install_openapi_enrichment(app)
 
     # ``create_fastapi_app`` is also called directly by the desktop runner.  Keep
     # that serving instance as the process singleton so later login/entitlement

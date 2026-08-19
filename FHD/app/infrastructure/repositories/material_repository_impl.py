@@ -8,7 +8,7 @@ from app.db.models.material import Material
 from app.db.session import get_db
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-_REPOSITORY_ERRORS = (*RECOVERABLE_ERRORS, Exception)
+_REPOSITORY_ERRORS = RECOVERABLE_ERRORS
 
 
 class SQLAlchemyMaterialRepository(MaterialRepository):
@@ -237,7 +237,7 @@ class SQLAlchemyMaterialRepository(MaterialRepository):
             from openpyxl import Workbook
 
             from app.utils.excel.template_export_utils import fill_workbook_from_template
-            from app.utils.path_utils import get_data_dir
+            from app.utils.path_io.path_utils import get_data_dir
 
             with get_db() as db:
                 query = db.query(Material).filter(Material.is_active == 1)
@@ -315,6 +315,7 @@ class SQLAlchemyMaterialRepository(MaterialRepository):
             else:
                 wb = Workbook()
                 ws = wb.active
+                assert ws is not None
                 ws.title = "原材料列表"
                 ws.append(
                     ["原材料编码", "名称", "分类", "规格", "单位", "库存数量", "单价", "供应商"]

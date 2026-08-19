@@ -20,7 +20,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -79,7 +79,7 @@ def _database_reachable() -> bool:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
         return False
 
 
@@ -160,7 +160,7 @@ def _build_create_order_plan(
 
 
 def _default_output_path(tag: str) -> Path:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     return EVIDENCE_DIR / f"create-order-{tag}-{stamp}.json"
 
 
@@ -198,7 +198,7 @@ def run_create_order_demo(
     engine = WorkflowEngine(tool_dispatcher=dispatcher)
     gated = ApprovalGatedEngine(engine=engine)
 
-    plan_id = f"v1-create-order-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+    plan_id = f"v1-create-order-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
     plan = _build_create_order_plan(plan_id, message, params={})
 
     runtime_ctx: dict[str, Any] = {"user_id": user_id, "message": message}

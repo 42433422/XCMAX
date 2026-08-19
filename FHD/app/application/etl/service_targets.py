@@ -19,7 +19,7 @@ from app.application.etl.service_support import (
 from app.application.etl.targets import get_adapter
 from app.db.models.etl import EtlRun, EtlRunRow, EtlTargetConfig
 from app.infrastructure.tenant_scope import tenant_id_for_write
-from app.utils.path_utils import get_app_data_dir
+from app.utils.path_io.path_utils import get_app_data_dir
 
 
 class TargetConfigServiceMixin:

@@ -96,7 +96,7 @@ FILTERS_NEW = '''    if prepare.startswith("ai_store_tab:"):
             await btn.first.click(timeout=min(timeout_ms, 15_000))
             await page.wait_for_selector(".store-adv-filters", state="visible", timeout=6000)
             await page.wait_for_timeout(600)
-        except Exception:
+        except Exception:  # noqa: BLE001 - script boundary records arbitrary integration failures
             pass
         return'''
 

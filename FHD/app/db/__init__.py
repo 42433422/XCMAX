@@ -1,7 +1,9 @@
 import logging
 import os
 import threading
+from importlib import import_module
 from pathlib import Path
+from typing import cast
 
 from sqlalchemy import create_engine, event, inspection, pool
 from sqlalchemy.engine import Engine, make_url
@@ -15,6 +17,8 @@ from app.request_active_mod_ctx import get_request_active_mod_id
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+_DATABASE_URL_ERRORS: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (SQLAlchemyArgumentError,)
 
 # 与 app/config.py 保持一致：未设置 DATABASE_URL 时默认连接本机 PostgreSQL。
 _DEFAULT_DATABASE_URL = "postgresql+psycopg://xcagi:xcagi@localhost:5432/xcagi"
@@ -51,7 +55,7 @@ def _sqlite_url_with_mod_suffix(base_url: str, active_mod_id: str) -> str:
         return base_url
     try:
         u = make_url(base_url)
-    except (*RECOVERABLE_ERRORS, SQLAlchemyArgumentError):
+    except _DATABASE_URL_ERRORS:
         return base_url
     if u.get_dialect().name != "sqlite":
         return base_url
@@ -140,9 +144,8 @@ def database_url_for_active_extension(base_url: str) -> str:
 
 def _get_test_db_manager():
     try:
-        from app.db.test_db_manager import get_test_db_manager
-
-        return get_test_db_manager()
+        module = import_module("app.db.test_db_manager")
+        return module.get_test_db_manager()
     except RECOVERABLE_ERRORS:
         return None
 
@@ -225,15 +228,15 @@ def _create_engine_for_url(url: str):
         # 互相回滚以及 ``bad parameter or other API misuse``。为桌面文件库使用
         # 有界 QueuePool，让每个并发事务拥有独立连接，再由 WAL/busy_timeout
         # 负责 SQLite 的写入串行化。
+        parsed = make_url(url)
+        if not parsed.database or parsed.database == ":memory:":
+            return create_engine(
+                url,
+                connect_args={"check_same_thread": False, "timeout": 45},
+                poolclass=pool.StaticPool,
+                echo=False,
+            )
         if _sqlite_desktop_mode():
-            parsed = make_url(url)
-            if not parsed.database or parsed.database == ":memory:":
-                return create_engine(
-                    url,
-                    connect_args={"check_same_thread": False, "timeout": 45},
-                    poolclass=pool.StaticPool,
-                    echo=False,
-                )
             return create_engine(
                 url,
                 connect_args={"check_same_thread": False, "timeout": 45},
@@ -264,7 +267,7 @@ def _create_engine_for_url(url: str):
     )
 
 
-def get_engine(db_path: str = None):
+def get_engine(db_path: str | None = None):
     return _create_engine_for_url(_get_database_url(db_path))
 
 
@@ -280,7 +283,7 @@ def _database_url_cache_key(url: str) -> str:
         return str(url)
 
 
-def _get_engine_for_url(url: str):
+def _get_engine_for_url(url: str) -> Engine:
     key = _database_url_cache_key(url)
     with _engine_cache_lock:
         cached = _engine_cache.get(key)
@@ -288,11 +291,16 @@ def _get_engine_for_url(url: str):
             return cached
         created = _create_engine_for_url(url)
         _engine_cache[key] = created
-        return created
+        return cast("Engine", created)
 
 
-def _get_engine():
+def _get_engine() -> Engine:
     return _get_engine_for_url(_get_database_url())
+
+
+def get_runtime_engine() -> Engine:
+    """Return the cached engine for the current request/runtime database URL."""
+    return _get_engine()
 
 
 def _get_session_local():

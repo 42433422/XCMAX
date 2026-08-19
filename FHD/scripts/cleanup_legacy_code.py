@@ -8,12 +8,11 @@
 3. 生成清理报告
 """
 
-import os
 import re
-from pathlib import Path
-from dataclasses import dataclass, field
-from typing import List, Set, Dict
 from collections import defaultdict
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Dict, List, Set
 
 
 @dataclass
@@ -73,7 +72,7 @@ class LegacyCodeCleaner:
                     if imported:
                         import_graph[str(py_file)].add(imported)
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"[WARN] 分析文件失败 {py_file}: {e}")
 
         return import_graph
@@ -145,7 +144,7 @@ class LegacyCodeCleaner:
                     self.usage_stats[file_str].unused_functions = unused
                     self.usage_stats[file_str].used_functions = len(used_functions)
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"[WARN] 分析函数失败 {py_file}: {e}")
 
     def generate_cleanup_report(self) -> str:
@@ -249,7 +248,7 @@ class LegacyCodeCleaner:
             file_path.write_text(new_content, encoding="utf-8")
             print(f"[MARK] 已标记: {file_path}")
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"[ERROR] 标记失败 {file_path}: {e}")
 
 

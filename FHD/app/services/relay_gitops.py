@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from app.application.relay_workspace import resolve_verified_relay_workspace_root
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +51,13 @@ def _repo_root() -> str:
 
 def _repo_root_from_payload(payload: dict[str, Any] | None = None) -> str:
     raw_payload = payload if isinstance(payload, dict) else {}
-    context = raw_payload.get("context") if isinstance(raw_payload.get("context"), dict) else {}
+    raw_context = raw_payload.get("context")
+    context: dict[str, Any] = dict(raw_context) if isinstance(raw_context, dict) else {}
     root = resolve_verified_relay_workspace_root(
-        {"workspace_root": raw_payload.get("workspace_root") or context.get("workspace_root")}
+        {
+            "workspace_root": (raw_payload or {}).get("workspace_root")
+            or context.get("workspace_root")
+        }
     )
     if root:
         return root
@@ -92,7 +97,7 @@ def _verify_merged(wt: str, base: str) -> tuple[bool, str]:
                 r.returncode == 0,
                 "自定义验证通过" if r.returncode == 0 else (r.stderr or r.stdout)[:800],
             )
-        except Exception as e:  # noqa: BLE001
+        except RECOVERABLE_ERRORS as e:  # noqa: BLE001
             return False, f"验证命令异常：{str(e)[:300]}"
     # worktree 基于本地 base，故 base..HEAD = 本任务自身的改动（不含本地领先 origin 的历史）。
     diff = _git(wt, "diff", "--name-only", f"{base}..HEAD", timeout=30).stdout
@@ -342,7 +347,7 @@ def git_merge(payload: dict[str, Any], repo: str | None = None) -> dict[str, Any
                 "本机 checkout 如需同步请 git pull。"
             ),
         }
-    except Exception as e:  # noqa: BLE001
+    except RECOVERABLE_ERRORS as e:  # noqa: BLE001
         logger.warning("git_merge 异常", exc_info=True)
         return {"ok": False, "_relay_status": "failed", "reply": f"合并异常：{str(e)[:300]}"}
     finally:

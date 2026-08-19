@@ -33,7 +33,6 @@ from app.neuro_bus.events.base import EventPriority, NeuroEvent  # noqa: E402
 from app.neuro_bus.routing.features import build_routing_features  # noqa: E402
 from app.neuro_bus.routing.routing_log import append_routing_decision  # noqa: E402
 
-
 # =============================================================================
 # Real business event samples (extracted from domain definitions)
 # =============================================================================

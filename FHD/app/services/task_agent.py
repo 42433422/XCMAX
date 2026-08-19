@@ -120,20 +120,20 @@ class TaskAgent:
         order_signal = any(k in msg for k in ["编号", "型号", "规格", "桶"])
         # 只要明显是发货单语境，就进入结构化审查；有槽位就抽取，缺项就追问
         if order_action and (order_signal or any(k in msg for k in ["发货单", "送货单", "出货单"])):
-            slots: dict[str, Any] = {}
+            shipment_slots: dict[str, Any] = {}
             spec_span_end = -1
             m_model = re.search(r"(?:编号|型号)\s*[:：]?\s*(\d{3,6})", msg) or re.search(
                 r"(\d{3,6})\s*(?:的)?\s*规格", msg
             )
             if m_model:
-                slots["model_number"] = m_model.group(1)
+                shipment_slots["model_number"] = m_model.group(1)
             m_spec_ar = re.search(r"规格\s*[:：]?\s*(\d+(?:\.\d+)?)", msg)
             m_spec_cn = re.search(
                 r"规格\s*[:：]?\s*([一二两三四五六七八九十零〇]{1,4})(?=(?:[两一二三四五六七八九十零〇]{1,3}\s*桶)|[，,。\s]|一共|总共|共|$)",
                 msg,
             )
             if m_spec_ar:
-                slots["tin_spec"] = float(m_spec_ar.group(1))
+                shipment_slots["tin_spec"] = float(m_spec_ar.group(1))
                 spec_span_end = m_spec_ar.span()[1]
             elif m_spec_cn:
                 spec_token = m_spec_cn.group(1)
@@ -144,7 +144,7 @@ class TaskAgent:
                         spec_token = spec_token[:-1]
                 n = _cn_number(spec_token)
                 if n is not None:
-                    slots["tin_spec"] = float(n)
+                    shipment_slots["tin_spec"] = float(n)
                     spec_span_end = m_spec_cn.span()[1]
             m_qty = re.search(
                 r"(?:一共|总共|共|要|来|拿)?\s*(\d+|[一二三四五六七八九十零〇两]+)\s*桶", msg
@@ -162,7 +162,7 @@ class TaskAgent:
                     if n2:
                         qty_value = int(n2)
             if qty_value is not None:
-                slots["quantity_tins"] = qty_value
+                shipment_slots["quantity_tins"] = qty_value
             m_unit = re.search(
                 r"打印(?:一下)?\s*([^，,。]+?)\s*(?:的)?\s*(?:发货单|送货单|出货单)", msg
             ) or re.search(r"([^，,。]+?)\s*(?:的)?\s*(?:发货单|送货单|出货单)", msg)
@@ -191,8 +191,8 @@ class TaskAgent:
                 unit_part = re.sub(r"[，,。；;\s]+", "", unit_part).strip()
                 unit = unit_part
             if unit:
-                slots["unit_name"] = unit
-            return {"task_type": "shipment_generate", "slots": slots, "source": "nlu"}
+                shipment_slots["unit_name"] = unit
+            return {"task_type": "shipment_generate", "slots": shipment_slots, "source": "nlu"}
 
         # 3) 其他任务（全工作模式基础覆盖）
         if any(k in msg for k in ["产品", "型号", "产品库", "查产品", "搜产品"]):

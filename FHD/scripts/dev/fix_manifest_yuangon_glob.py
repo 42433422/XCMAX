@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
@@ -24,7 +23,7 @@ def fix_all(dry_run: bool = False) -> None:
             continue
         try:
             mf = json.loads(mf_path.read_text())
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"WARN: skip {d.name} – {e}")
             skipped += 1
             continue

@@ -140,7 +140,7 @@ def _do_verify_notify(path: Path) -> int:
     print(f"fields  = {sorted(data.keys())}")
     try:
         ok = mp_ali.verify_notify(data, signature)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"[verify-notify] 验签异常：{e}", file=sys.stderr)
         return 1
     print(f"verified = {ok}")

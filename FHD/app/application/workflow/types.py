@@ -3,11 +3,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 RiskLevel = Literal["low", "medium", "high"]
 
 MergeSemantics = Literal["set", "append", "merge_dict"]
+
+
+def normalize_workflow_risk(value: object, *, default: RiskLevel = "medium") -> RiskLevel:
+    """Normalize untrusted plan metadata to the workflow risk literal."""
+    text = str(value or default).strip().lower()
+    if text in {"low", "medium", "high"}:
+        return cast(RiskLevel, text)
+    return default
 
 
 @dataclass(frozen=True)

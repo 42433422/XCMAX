@@ -698,7 +698,7 @@ def test_note_fingerprint():
 
 
 def test_fingerprint_store_path_and_legacy(monkeypatch, tmp_path):
-    monkeypatch.setattr("app.utils.path_utils.get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_data_dir", lambda: tmp_path)
     path = svc_mod._fingerprint_store_path()
     assert path.name == "shipment_etl_fingerprints.json"
     assert svc_mod._legacy_json_has_fingerprint("x") is False
@@ -713,7 +713,7 @@ def test_fingerprint_store_path_and_legacy(monkeypatch, tmp_path):
 
 
 def test_load_save_fingerprints(monkeypatch, tmp_path):
-    monkeypatch.setattr("app.utils.path_utils.get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_data_dir", lambda: tmp_path)
     assert svc_mod._load_fingerprints() == {"entries": {}}
     svc_mod._save_fingerprints({"entries": {"a": 1}})
     assert svc_mod._load_fingerprints() == {"entries": {"a": 1}}

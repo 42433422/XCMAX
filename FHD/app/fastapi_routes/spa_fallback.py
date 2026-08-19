@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.path_utils import get_base_dir
+from app.utils.path_io.path_utils import get_base_dir
 
 logger = logging.getLogger(__name__)
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 
 def build_approval_card_payload(*, action: str, inner: dict[str, Any]) -> dict[str, Any]:
     blocking = inner.get("blocking_nodes") or []
@@ -29,7 +31,7 @@ def build_approval_card_payload(*, action: str, inner: dict[str, Any]) -> dict[s
             if tool_id and get_action_approval(tool_id, act) == "always":
                 approval_required = True
                 confirm_mode = "approval"
-    except Exception:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         pass
 
     return {

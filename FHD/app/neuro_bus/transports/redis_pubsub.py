@@ -54,8 +54,8 @@ class RedisPubSubBridge:
     def __init__(self, bus: NeuroBus) -> None:
         self._bus = bus
         self._instance_id = str(uuid.uuid4())
-        self._redis = None
-        self._pubsub = None
+        self._redis: Any = None
+        self._pubsub: Any = None
         self._listener_thread: threading.Thread | None = None
         self._stop = threading.Event()
 

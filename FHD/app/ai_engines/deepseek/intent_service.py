@@ -16,8 +16,8 @@ import time
 from collections import OrderedDict
 from typing import Any, cast
 
-from app.utils.cache_manager import get_intent_deepseek_cache
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.performance.cache_manager import get_intent_deepseek_cache
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +127,7 @@ class DeepseekIntentClassifier:
         key = os.environ.get("DEEPSEEK_API_KEY", "")
         if not key:
             try:
-                from app.utils.path_utils import get_resource_path
+                from app.utils.path_io.path_utils import get_resource_path
 
                 config_path = get_resource_path("config", "deepseek_config.py")
                 if config_path and os.path.exists(config_path):

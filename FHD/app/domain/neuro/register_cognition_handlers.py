@@ -60,8 +60,8 @@ def register_cognition_handlers() -> dict[str, Any]:
         from app.domain.neuro.evolution.evolution_handler import EvolutionHandler
         from app.domain.neuro.processors.conscious import get_conscious_processor
 
-        processor = get_conscious_processor()
-        handler = EvolutionHandler()
+        evolution_processor = get_conscious_processor()
+        evolution_handler = EvolutionHandler()
         for event_type in (
             "error.occurred",
             "evolution.mine",
@@ -70,7 +70,7 @@ def register_cognition_handlers() -> dict[str, Any]:
             "evolution.export",
             "evolution.reflect",
         ):
-            processor.register_handler(event_type, handler.handle)
+            evolution_processor.register_handler(event_type, evolution_handler.handle)
             registered.append(f"evolution:{event_type}")
         logger.info("✅ EvolutionHandler 已注册到 ConsciousProcessor（6 种事件）")
     except RECOVERABLE_ERRORS as e:
@@ -81,9 +81,9 @@ def register_cognition_handlers() -> dict[str, Any]:
         from app.domain.neuro.processors.subconscious import get_subconscious_processor
         from app.domain.neuro.subconscious.subconscious_ml_handler import SubconsciousMLHandler
 
-        processor = get_subconscious_processor()
-        handler = SubconsciousMLHandler()
-        processor.register_handler("routing.decision", handler.handle)
+        subconscious_processor = get_subconscious_processor()
+        subconscious_handler = SubconsciousMLHandler()
+        subconscious_processor.register_handler("routing.decision", subconscious_handler.handle)
         registered.append("subconscious:routing.decision")
         logger.info("✅ SubconsciousMLHandler 已注册到 SubconsciousProcessor（routing.decision）")
     except RECOVERABLE_ERRORS as e:

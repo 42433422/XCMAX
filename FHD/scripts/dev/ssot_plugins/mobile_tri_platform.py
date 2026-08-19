@@ -18,6 +18,7 @@ TOKENS = ROOT / "config" / "mobile_design_tokens.json"
 OPENAPI_CONTRACT = ROOT / "contracts" / "openapi.json"
 FASTAPI_MOBILE = ROOT / "app/fastapi_routes/mobile_api.py"
 FASTAPI_MOBILE_EXT = ROOT / "app/fastapi_routes/mobile_api_extensions.py"
+FASTAPI_MOBILE_EXT_PART03 = ROOT / "app/fastapi_routes/mobile_api_extensions_part03.py"
 FASTAPI_MOBILE_AI_GROUPS = ROOT / "app/fastapi_routes/mobile_extensions/routes_ai_groups.py"
 
 FLUTTER_README = ROOT / "mobile-flutter-poc/README.md"
@@ -173,12 +174,17 @@ def _check_unified_stack(errors: list[str]) -> None:
             if snippet not in fastapi_mobile:
                 errors.append(f"mobile_api.py 缺少 FastAPI mobile 片段: {snippet}")
     fastapi_ext = _read_text(FASTAPI_MOBILE_EXT, errors)
+    fastapi_ext_part03 = _read_text(FASTAPI_MOBILE_EXT_PART03, errors)
     if fastapi_ext:
         for snippet in (
             '@extension_router.get("/admin/home")',
             "extension_router.include_router(_ai_groups_router)",
         ):
-            if snippet not in fastapi_ext:
+            # /admin/home 允许以主文件直接写法或 part03 拆分写法存在。
+            if snippet not in fastapi_ext and (
+                snippet != '@extension_router.get("/admin/home")'
+                or "@_facade().extension_router.get('/admin/home')" not in (fastapi_ext_part03 or "")
+            ):
                 errors.append(f"mobile_api_extensions.py 缺少移动业务路由片段: {snippet}")
     fastapi_ai_groups = _read_text(FASTAPI_MOBILE_AI_GROUPS, errors)
     if fastapi_ai_groups and '@router.get("/ai-groups")' not in fastapi_ai_groups:

@@ -5,7 +5,7 @@ import sqlite3
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.fastapi_routes.xcmax_personnel_compat import (
+from app.legacy.routes.xcmax_personnel_compat import (
     MOD_ID,
     register_xcmax_personnel_routes,
 )

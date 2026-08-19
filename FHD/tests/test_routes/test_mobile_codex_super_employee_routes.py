@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 from fastapi.responses import JSONResponse
 
-from app.utils.mobile_api import format_mobile_response
+from app.utils.device_system.mobile_api import format_mobile_response
 
 
 @pytest.fixture

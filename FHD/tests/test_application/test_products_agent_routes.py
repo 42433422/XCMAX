@@ -7,8 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
-from app.fastapi_routes.domains.product import compat_routes as product_compat_routes
 from app.fastapi_routes.domains.product import routes as product_routes
+from app.legacy.routes.product import compat_routes as product_compat_routes
 
 
 def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestClient:
@@ -120,23 +120,23 @@ def test_product_compat_mutation_routes_execute_through_agent_orchestrator(
                 "app.mod_sdk.erp_products_facade.is_erp_products_via_service_enabled",
                 return_value=False,
             ),
-            patch("app.fastapi_routes.domains.product.compat_routes._products_write_raise"),
+            patch("app.legacy.routes.product.compat_routes._products_write_raise"),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes._business_mod_json_block",
+                "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.product.compat_routes.products_pg_insert_row",
+                "app.legacy.routes.product.compat_routes.products_pg_insert_row",
                 return_value=11,
             ) as insert_row,
             patch(
-                "app.fastapi_routes.domains.product.compat_routes.products_pg_update_row",
+                "app.legacy.routes.product.compat_routes.products_pg_update_row",
             ) as update_row,
             patch(
-                "app.fastapi_routes.domains.product.compat_routes.products_pg_delete_row",
+                "app.legacy.routes.product.compat_routes.products_pg_delete_row",
             ) as delete_row,
             patch(
-                "app.fastapi_routes.domains.product.compat_routes.products_pg_batch_delete_rows",
+                "app.legacy.routes.product.compat_routes.products_pg_batch_delete_rows",
                 return_value=(2, []),
             ) as batch_delete_rows,
         ):

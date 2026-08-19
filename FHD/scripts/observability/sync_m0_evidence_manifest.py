@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -79,7 +79,7 @@ def mod_step(step: dict) -> dict:
 
 
 def build_manifest() -> dict:
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     staging_panels = [slo_panel("staging", p) for p in SLO_PANELS]
     local_panels = [slo_panel("local", p) for p in SLO_PANELS]
     mod_steps = [mod_step(s) for s in MOD_STEPS]

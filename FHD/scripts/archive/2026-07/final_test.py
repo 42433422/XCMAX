@@ -1,5 +1,6 @@
-import requests
 import time
+
+import requests
 
 
 def final_test():
@@ -24,9 +25,9 @@ def final_test():
             data = response.json()
             customers = data.get("data", [])
 
-            print(f"✅ API请求成功")
+            print("✅ API请求成功")
             print(f"📊 返回客户数量: {len(customers)} 个")
-            print(f"📋 客户列表:")
+            print("📋 客户列表:")
 
             for customer in customers:
                 print(f"  - ID: {customer['id']}, 名称: {customer['customer_name']}")
@@ -35,7 +36,7 @@ def final_test():
             expected_customers = ["半岛风情", "半岛家具", "测试单位1", "测试单位2", "测试单位3"]
             actual_customers = [c["customer_name"] for c in customers]
 
-            print(f"\n🔍 数据验证:")
+            print("\n🔍 数据验证:")
             print(f"  期望的客户: {expected_customers}")
             print(f"  实际的客户: {actual_customers}")
 
@@ -52,7 +53,7 @@ def final_test():
             print(f"📄 响应内容: {response.text}")
             return False
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
         print(f"❌ 检查后端API失败: {e}")
         return False
 

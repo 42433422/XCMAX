@@ -1,7 +1,7 @@
 import inspect
 import logging
 import os
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -9,6 +9,13 @@ logger = logging.getLogger(__name__)
 
 
 class IntentMixin:
+    if TYPE_CHECKING:
+        intent_service: Any
+        offline_intent_service: Any
+        task_agent: Any
+        unified_recognizer: Any
+        user_preference_service: Any
+
     def _is_pro_source(self, source: str | None) -> bool:
         normalized = str(source or "").strip().lower().replace("-", "_")
         return normalized in {"pro", "pro_mode", "promode"}
@@ -235,7 +242,7 @@ class IntentMixin:
         if task_type not in task_to_tool:
             return intent_result
 
-        merged_slots = {}
+        merged_slots: dict[str, Any] = {}
         merged_slots.update(intent_result.get("slots") or {})
         merged_slots.update(task_slots)
         intent_result["slots"] = merged_slots

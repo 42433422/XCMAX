@@ -14,7 +14,9 @@ pytestmark = pytest.mark.integration
 
 BUDGET_MS = int(os.environ.get("XCAGI_SLA_HEALTH_MS", "500"))
 METRICS_DIR = Path(__file__).resolve().parents[1] / "metrics"
-SNAPSHOT_PATH = METRICS_DIR / "sla-snapshot.json"
+SNAPSHOT_PATH = Path(
+    os.environ.get("XCAGI_SLA_SNAPSHOT_PATH") or METRICS_DIR / "sla-snapshot.json"
+).expanduser()
 
 
 def _probe_health(client) -> dict:
@@ -65,7 +67,7 @@ def _write_snapshot(client, health: dict | None = None) -> None:
             },
         }
     )
-    METRICS_DIR.mkdir(parents=True, exist_ok=True)
+    SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
     SNAPSHOT_PATH.write_text(
         json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
@@ -93,8 +95,11 @@ def _market_reachable() -> bool:
 
     base = os.environ.get("XCAGI_MARKET_BASE_URL") or "http://127.0.0.1:8765"
     try:
-        resp = httpx.get(f"{base.rstrip('/')}/api/health", timeout=2.0)
-        return resp.status_code < 500
+        # Use an explicit client lifecycle so failed TLS/proxy handshakes do
+        # not leave a socket for the interpreter to collect at shutdown.
+        with httpx.Client(timeout=2.0) as http_client:
+            resp = http_client.get(f"{base.rstrip('/')}/api/health")
+            return resp.status_code < 500
     except httpx.HTTPError:
         return False
 

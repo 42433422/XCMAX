@@ -1,6 +1,6 @@
-import openpyxl
-from openpyxl import load_workbook
 import os
+
+from openpyxl import load_workbook
 
 # 获取目录中的所有 xlsx 文件
 folder = r"e:\FHD\424"

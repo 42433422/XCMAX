@@ -1,5 +1,5 @@
-import sqlite3
 import os
+import sqlite3
 
 
 def find_customer_data_source():
@@ -59,7 +59,7 @@ def find_customer_data_source():
 
                         # 显示样本数据
                         if sample_data:
-                            print(f"    样本数据:")
+                            print("    样本数据:")
                             for i, row in enumerate(sample_data[:2]):
                                 print(f"      {i+1}. {row}")
 
@@ -68,7 +68,7 @@ def find_customer_data_source():
 
                 conn.close()
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
                 print(f"  ❌ 检查数据库时出错: {e}")
 
     # 检查前端可能使用的其他数据源
@@ -130,7 +130,7 @@ def check_frontend_customer_data():
 
             conn.close()
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
             print(f"  ❌ 检查数据库时出错: {e}")
     else:
         print("  ❌ 数据库文件不存在")

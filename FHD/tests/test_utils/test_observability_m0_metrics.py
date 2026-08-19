@@ -45,7 +45,7 @@ def test_refresh_mod_sqlite_copy_metrics_sets_gauge(tmp_path, monkeypatch):
 
     monkeypatch.setenv("XCAGI_SQLITE_PER_MOD_COPIES", "1")
 
-    with patch("app.utils.path_utils.get_app_data_dir", return_value=str(work_dir)):
+    with patch("app.utils.path_io.path_utils.get_app_data_dir", return_value=str(work_dir)):
         ready = metrics.refresh_mod_sqlite_copy_metrics([mod_id])
 
     assert ready == 1
