@@ -6,7 +6,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import struct
 import subprocess
 import sys
 import tempfile

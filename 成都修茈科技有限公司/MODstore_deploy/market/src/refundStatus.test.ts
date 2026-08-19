@@ -39,7 +39,7 @@ describe('refundStatusMap', () => {
   })
 
   it('each status has label and tone', () => {
-    for (const [key, val] of Object.entries(refundStatusMap)) {
+    for (const [_key, val] of Object.entries(refundStatusMap)) {
       expect(val.label).toBeTruthy()
       expect(val.tone).toBeTruthy()
     }
@@ -137,7 +137,7 @@ describe('formatRefundTime edge cases', () => {
   })
 
   it('returns dash for false', () => {
-    expect(formatRefundTime(false as any)).toBe('—')
+    expect(formatRefundTime(false as UnsafeTestValue)).toBe('—')
   })
 
   it('formats with custom locale', () => {

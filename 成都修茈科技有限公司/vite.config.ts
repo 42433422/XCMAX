@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
+import { fileURLToPath } from 'node:url'
 
 const productionBase = (): string => {
   const raw = (process.env.VITE_PUBLIC_BASE || '').trim()
@@ -14,6 +15,24 @@ export default defineConfig(({ command }) => ({
   resolve: {
     alias: {
       '@': new URL('./src', import.meta.url).pathname,
+    },
+  },
+  optimizeDeps: {
+    // esbuild 0.28 drops transforms for some legacy browser targets; this app
+    // already targets modern browsers/Electron in production, so keep the dev
+    // dependency pre-bundle on the same target as the production build.
+    esbuildOptions: {
+      target: 'esnext',
+    },
+  },
+  build: {
+    // 当前客户端为现代浏览器/Electron；避免将 Vue 已生成的辅助模块
+    // 再交给新版 esbuild 做不必要的解构降级。
+    target: 'esnext',
+    // 根目录 index.html 是公司静态官网；Vue 市场应用使用独立入口，
+    // 避免 Vite 把官网已生成的非模块脚本当作源码再转译。
+    rollupOptions: {
+      input: fileURLToPath(new URL('./app.html', import.meta.url)),
     },
   },
   server: {
@@ -44,13 +63,12 @@ export default defineConfig(({ command }) => ({
         'src/**/*.test.ts',
         'src/**/*.spec.ts',
       ],
-      // 起步 "不退步" 基线：当前根项目仅 stores + api 有单元测试，多数 .vue 视图尚无组件测试。
-      // 此处门槛严格按当前实测值 -0.3% 设置，目的是阻止覆盖率回退；后续每补一批测试就把门槛抬高。
+      // API、路由、状态仓库和所有视图均纳入行为测试；四项指标统一守住 80%。
       thresholds: {
-        statements: 3,
-        branches: 60,
-        functions: 18,
-        lines: 3,
+        statements: 80,
+        branches: 80,
+        functions: 80,
+        lines: 80,
       },
     },
   },

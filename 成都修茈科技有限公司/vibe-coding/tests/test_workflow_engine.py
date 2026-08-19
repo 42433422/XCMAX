@@ -32,7 +32,13 @@ def _spec(skill_id: str, fn: str) -> str:
 
 def _identity_code(fn: str) -> str:
     return json.dumps(
-        {"source_code": f"def {fn}(text):\n    return {{'text': str(text)}}\n"}
+        {
+            "source_code": (
+                f"def {fn}(text):\n"
+                "    \"\"\"Return text in the workflow payload.\"\"\"\n"
+                "    return {'text': str(text)}\n"
+            )
+        }
     )
 
 

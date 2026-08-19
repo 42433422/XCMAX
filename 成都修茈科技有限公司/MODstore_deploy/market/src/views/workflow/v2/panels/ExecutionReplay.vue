@@ -45,10 +45,10 @@ const currentNodeId = computed(() => {
 async function loadExecutions() {
   loading.value = true
   try {
-    const res = await api.get(`/api/workflow/${props.workflowId}/executions`, {
-      params: { limit: 20 },
-    })
-    executions.value = res.data?.items || res.data || []
+    const res = (await api.listWorkflowExecutions(props.workflowId, 20)) as
+      | Execution[]
+      | { items?: Execution[] }
+    executions.value = Array.isArray(res) ? res : res.items || []
   } catch {
     executions.value = []
   } finally {
@@ -92,7 +92,7 @@ function togglePlay() {
   }, 800)
 }
 
-function nodeStatus(nodeId: number): 'success' | 'failed' | 'running' | 'pending' {
+function _nodeStatus(nodeId: number): 'success' | 'failed' | 'running' | 'pending' {
   if (nodeId === currentNodeId.value) return 'running'
   const stepIndex = steps.value.findIndex((s) => s.node_id === nodeId)
   if (stepIndex < 0) return 'pending'

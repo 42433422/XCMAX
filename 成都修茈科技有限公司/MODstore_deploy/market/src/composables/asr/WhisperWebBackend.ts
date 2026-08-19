@@ -194,7 +194,7 @@ export class WhisperWebBackend implements ASRBackend {
   private transcribeBuffer(merged: Float32Array, jobId: number): Promise<string> {
     return new Promise<string>((resolve) => {
       const handler = (e: MessageEvent<WorkerMsg>) => {
-        if (e.data.jobId != null && e.data.jobId !== jobId) return
+        if ('jobId' in e.data && e.data.jobId != null && e.data.jobId !== jobId) return
         if (e.data.type === 'result') {
           this.worker?.removeEventListener('message', handler)
           resolve((e.data.data || '').trim())

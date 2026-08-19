@@ -23,7 +23,11 @@ def _build_llm(args: argparse.Namespace) -> Any:
                         "name": "demo",
                         "domain": "demo",
                         "function_name": "demo",
-                        "source_code": "def demo(value=''):\n    return {'echo': str(value)}",
+                        "source_code": (
+                            "def demo(value=''):\n"
+                            "    \"\"\"Return the supplied value as an echo payload.\"\"\"\n"
+                            "    return {'echo': str(value)}"
+                        ),
                         "signature": {
                             "params": ["value"],
                             "return_type": "dict",

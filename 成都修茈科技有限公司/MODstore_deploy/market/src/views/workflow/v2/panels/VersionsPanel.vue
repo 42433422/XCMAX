@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { api } from '../../../../api'
+import { errorMessage } from '../../../../utils/typeNarrowing'
 
 const props = defineProps<{
   workflowId: number
@@ -28,10 +29,10 @@ async function refresh() {
   loading.value = true
   errMsg.value = ''
   try {
-    const list: any = await api.listWorkflowVersions(props.workflowId)
-    rows.value = Array.isArray(list) ? list : []
-  } catch (e: any) {
-    errMsg.value = e?.detail || e?.message || '加载失败'
+    const list = await api.listWorkflowVersions(props.workflowId)
+    rows.value = Array.isArray(list) ? (list as VersionRow[]) : []
+  } catch (e: unknown) {
+    errMsg.value = errorMessage(e, '加载失败')
   } finally {
     loading.value = false
   }
@@ -46,8 +47,8 @@ async function rollback(row: VersionRow) {
     await api.rollbackWorkflowVersion(props.workflowId, row.id)
     await refresh()
     emit('rolled-back', row.version_no)
-  } catch (e: any) {
-    errMsg.value = e?.detail || e?.message || '回滚失败'
+  } catch (e: unknown) {
+    errMsg.value = errorMessage(e, '回滚失败')
   }
 }
 

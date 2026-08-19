@@ -23,7 +23,7 @@ function sandboxStub(ok: boolean, phase: string): WorkflowSandboxResponse {
   }
 }
 
-function createFlow(overrides: Record<string, any> = {}) {
+function createFlow(overrides: Record<string, UnsafeTestValue> = {}) {
   return useEmployeePublishFlow({
     form: ref({ industry: '', price: 0 }),
     selectedFile: ref(new File(['zip'], 'employee.zip', { type: 'application/zip' })),

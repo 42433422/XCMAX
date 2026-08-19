@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { skillRegistry } from '../../utils/agent/agentSkillRegistry'
 import { readPageSkill } from './skills/readPageSkill'
-import type { AgentSkill, AgentContext } from '../../types/agent'
+import type {  AgentContext } from '../../types/agent'
 
 // 模拟 vue-router
 vi.mock('vue-router', () => ({
@@ -100,6 +100,6 @@ describe('useActionExecutor — enhance_current_page', () => {
 
     expect(result.success).toBe(false)
     expect(result.assistantReply).toContain('取消')
-    expect((api as any).butlerOrchestrateStart).not.toHaveBeenCalled()
+    expect((api as UnsafeTestValue).butlerOrchestrateStart).not.toHaveBeenCalled()
   })
 })

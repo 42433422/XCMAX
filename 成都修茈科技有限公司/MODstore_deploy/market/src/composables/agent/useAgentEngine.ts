@@ -20,7 +20,7 @@ function makeAssistantMsg(content: string, isLoading = false): AgentMessage {
 }
 
 export function useAgentEngine() {
-  const router = useRouter()
+  const _router = useRouter()
   const route = useRoute()
   const agentStore = useAgentStore()
   const executor = useActionExecutor()
@@ -129,7 +129,7 @@ export function useAgentEngine() {
 
     let response: LLMResponse
     try {
-      response = (await (api as any).agentButlerChat({
+      response = (await api.agentButlerChat({
         messages,
         conversation_id: agentStore.currentConversationId,
         page_context: context.pageSummary,

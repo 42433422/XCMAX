@@ -56,7 +56,7 @@ export function useButlerOrchestrator() {
 
     let sessionId: string
     try {
-      const resp = await (api as any).butlerOrchestrateStart({
+      const resp = await api.butlerOrchestrateStart({
         target_type: tgt.type,
         target_id: tgt.id,
         brief,
@@ -83,7 +83,7 @@ export function useButlerOrchestrator() {
   async function _pollLoop(sid: string): Promise<void> {
     while (true) {
       try {
-        const s = await (api as any).workbenchGetSession(sid) as {
+        const s = await api.workbenchGetSession(sid) as {
           status: string
           steps: OrchestrationSession['steps']
           error?: string | null
@@ -121,7 +121,7 @@ export function useButlerOrchestrator() {
   /** 回滚到快照（仅 mod 场景）。*/
   async function rollbackToSnapshot(modId: string, snapId: string): Promise<void> {
     try {
-      await (api as any).restoreModSnapshot(modId, snapId)
+      await api.restoreModSnapshot(modId, snapId)
       router.go(0)
     } catch (e: unknown) {
       console.error('rollback failed', e)
@@ -141,7 +141,7 @@ function _mergeStepsMonotonic(
   incoming: OrchestrationSession['steps'],
 ): OrchestrationSession['steps'] {
   if (!prev || !prev.length) return incoming
-  const prevMap = new Map<string, { status: string; started_at?: string }>()
+  const prevMap = new Map<string, OrchestrationSession['steps'][number]>()
   for (const st of prev) prevMap.set(String(st.id), st)
   return incoming.map((st) => {
     const prevSt = prevMap.get(String(st.id))
@@ -149,6 +149,6 @@ function _mergeStepsMonotonic(
     const prevRank = _STATUS_RANK[String(prevSt.status)] ?? 0
     const inRank = _STATUS_RANK[String(st.status)] ?? 0
     if (inRank >= prevRank) return st
-    return { ...st, status: prevSt.status as any, started_at: prevSt.started_at }
+    return { ...st, status: prevSt.status, started_at: prevSt.started_at }
   })
 }

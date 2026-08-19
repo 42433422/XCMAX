@@ -99,7 +99,7 @@ function storeItem(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function makeSseResponse(events: any[]) {
+function makeSseResponse(events: UnsafeTestValue[]) {
   const enc = new TextEncoder()
   const chunks = events.map((ev) => enc.encode(`data: ${JSON.stringify(ev)}\n\n`))
   let i = 0
@@ -182,7 +182,7 @@ describe('AI store view coverage', () => {
     routeMock.query = { attachModId: 'mod_1' }
     const wrapper = mount(AiStoreView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     const item = vm.items[0]
 
     expect(vm.artifactLabel('employee_pack')).toBe('AI 员工包')
@@ -248,7 +248,7 @@ describe('AI store view coverage', () => {
   it('covers AI store unauthenticated and API failure branches', async () => {
     const wrapper = mount(AiStoreView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     const item = vm.items[0]
 
     authMock.isLoggedIn = false
@@ -276,7 +276,7 @@ describe('AI store view coverage', () => {
     routeMock.query = { attachModId: 'mod_1' }
     const attachWrapper = mount(AiStoreView, globalMount)
     await flushPromises()
-    const attachVm = attachWrapper.vm as any
+    const attachVm = attachWrapper.vm as UnsafeTestValue
     apiMock.attachCatalogEmployeeToMod.mockRejectedValueOnce(new Error('attach failed'))
     await attachVm.attachCardToMod(attachVm.items[0])
     expect(attachVm.err).toContain('attach failed')
@@ -304,7 +304,7 @@ describe('AI store view coverage', () => {
   it('covers AI store delist guard, cancel, success and failure branches', async () => {
     const wrapper = mount(AiStoreView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     const item = vm.items[0]
 
     ensureAdminDigestUnlockedMock.mockResolvedValueOnce(false)
@@ -312,11 +312,11 @@ describe('AI store view coverage', () => {
     expect(apiMock.adminDeleteCatalog).not.toHaveBeenCalled()
 
     ensureAdminDigestUnlockedMock.mockResolvedValueOnce(true)
-    ;(window.confirm as any).mockReturnValueOnce(false)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(false)
     await vm.delistItem(item)
     expect(apiMock.adminDeleteCatalog).not.toHaveBeenCalled()
 
-    ;(window.confirm as any).mockReturnValueOnce(true)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(true)
     await vm.delistItem(item)
     expect(apiMock.adminDeleteCatalog).toHaveBeenCalledWith(10)
 
@@ -329,7 +329,7 @@ describe('AI store view coverage', () => {
     routeMock.query = { attachModId: 'mod_1' }
     const wrapper = mount(AiStoreView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     authMock.isLoggedIn = false
     await vm.attachCardToMod(vm.items[0])
@@ -386,7 +386,7 @@ describe('script workflow composer coverage', () => {
   it('covers brief helpers, file inputs, event handling and SSE loop', async () => {
     const wrapper = mount(ScriptWorkflowComposerView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     expect(vm.stageRank).toBe(1)
     expect(vm.headTitle).toBe('新建脚本工作流')
@@ -436,7 +436,7 @@ describe('script workflow composer coverage', () => {
     vi.useFakeTimers()
     const wrapper = mount(ScriptWorkflowComposerView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     vm.workflowId = 22
     await vm.startEditWithAi('improve')
@@ -477,14 +477,14 @@ describe('script workflow composer coverage', () => {
   it('covers script workflow API and SSE error branches', async () => {
     const wrapper = mount(ScriptWorkflowComposerView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
-    ;(fetch as any).mockResolvedValueOnce({ ok: false, status: 500, body: null, text: vi.fn(async () => 'bad') })
+    ;(fetch as UnsafeTestValue).mockResolvedValueOnce({ ok: false, status: 500, body: null, text: vi.fn(async () => 'bad') })
     await vm.startAgentLoop()
     expect(vm.events.at(-1).payload.reason).toContain('HTTP 500')
 
     vm.workflowId = 22
-    ;(fetch as any).mockRejectedValueOnce(new Error('sse failed'))
+    ;(fetch as UnsafeTestValue).mockRejectedValueOnce(new Error('sse failed'))
     await vm.startEditWithAi('bad')
     expect(vm.events.at(-1).payload.reason).toContain('sse failed')
 
@@ -512,7 +512,7 @@ describe('script workflow composer coverage', () => {
     routeMock.params = { id: '44' }
     const wrapper = mount(ScriptWorkflowComposerView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.headTitle).toBe('改进脚本工作流')
     expect(apiMock.getScriptWorkflow).toHaveBeenCalledWith('44')
     expect(vm.workflowId).toBe(44)

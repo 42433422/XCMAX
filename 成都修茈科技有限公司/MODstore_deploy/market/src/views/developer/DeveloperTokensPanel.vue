@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
-const props = withDefaults(
+const _props = withDefaults(
   defineProps<{
     /** 账户中心嵌入：精简列表，桌面加密导出见开发者门户 */
     embedded?: boolean
@@ -35,6 +35,15 @@ interface DeveloperToken {
   is_active: boolean
 }
 
+interface KeyExportAuditEvent {
+  id: number | string
+  created_at: string | null
+  action: string
+  success: boolean
+  detail: string
+  client_ip?: string | null
+}
+
 const tokens = ref<DeveloperToken[]>([])
 const activeTokens = computed(() => tokens.value.filter((t) => t.is_active))
 const loading = ref(false)
@@ -62,7 +71,7 @@ const exportPassword = ref('')
 const exportSelected = ref<number[]>([])
 const exportBusy = ref(false)
 const exportAuditOpen = ref(false)
-const exportAudit = ref<any[]>([])
+const exportAudit = ref<KeyExportAuditEvent[]>([])
 const exportAuditLoading = ref(false)
 
 function onExportCheck(id: number, ev: Event) {
@@ -100,13 +109,13 @@ async function runExportBundle() {
     return
   exportBusy.value = true
   try {
-    const resp: any = await api.developerExportKeyBundle({
+    const resp = (await api.developerExportKeyBundle({
       recipient_public_key_spki_b64: desktopPubB64.value.trim(),
       current_password: exportPassword.value,
       token_ids: exportSelected.value,
       rotate_source_tokens: true,
-    })
-    const b64 = resp?.cipher_b64 as string
+    })) as { cipher_b64?: string }
+    const b64 = resp.cipher_b64
     if (!b64) throw new Error('响应缺少 cipher_b64')
     const bin = atob(b64)
     const bytes = new Uint8Array(bin.length)
@@ -130,7 +139,7 @@ async function runExportBundle() {
 async function loadExportAudit() {
   exportAuditLoading.value = true
   try {
-    const r: any = await api.developerListKeyExportAudit(30)
+    const r = (await api.developerListKeyExportAudit(30)) as { events?: KeyExportAuditEvent[] }
     exportAudit.value = Array.isArray(r?.events) ? r.events : []
   } catch {
     exportAudit.value = []
@@ -148,7 +157,7 @@ async function refresh() {
   loading.value = true
   errMsg.value = ''
   try {
-    const list: any = await api.developerListTokens()
+    const list = await api.developerListTokens()
     tokens.value = Array.isArray(list) ? list : []
   } catch (e: unknown) {
     errMsg.value = errText(e, '加载失败')
@@ -199,11 +208,11 @@ async function submitCreate() {
       .map((s) => s.trim())
       .filter(Boolean)
     const days = draft.expiresDays.trim() ? Number(draft.expiresDays) : null
-    const resp: any = await api.developerCreateToken(
+    const resp = (await api.developerCreateToken(
       draft.name.trim(),
       scopes,
       Number.isFinite(days as number) && (days as number) > 0 ? (days as number) : null,
-    )
+    )) as DeveloperToken & { token?: string }
     showDialog.value = false
     if (resp?.token) {
       const { token, ...meta } = resp
@@ -253,7 +262,7 @@ async function revoke(row: DeveloperToken) {
   try {
     await api.developerRevokeToken(row.id)
     await refresh()
-  } catch (e: any) {
+  } catch (e: unknown) {
     errMsg.value = errText(e, '吊销失败')
   }
 }

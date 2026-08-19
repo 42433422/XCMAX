@@ -102,8 +102,8 @@ const connecting = ref(false)
 const connectError = ref('')
 const probeProgress = ref('')
 const pushing = ref(false)
-const hostInfo = ref(null)
-const iframeRef = ref(null)
+const hostInfo = ref<Record<string, unknown> | null>(null)
+const iframeRef = ref<HTMLIFrameElement | null>(null)
 const manualModId = ref('')
 const pushMessage = ref('')
 
@@ -140,14 +140,14 @@ const isMixedContentBlocked = computed(() => {
   }
 })
 
-function formatConnectFailure(e) {
+function formatConnectFailure(e: unknown): string {
   if (e instanceof ApiError) return e.message || `请求失败（${e.status}）`
-  if (e && typeof e === 'object' && 'message' in e && typeof e.message === 'string') return e.message
+  if (e instanceof Error) return e.message
   return String(e)
 }
 
 /** 规范为「协议 + host」，供 /api/health 探测 */
-function normalizeHostOrigin(raw) {
+function normalizeHostOrigin(raw: unknown): string {
   const t = String(raw || '').trim()
   if (!t) return ''
   if (t.startsWith('/')) {
@@ -162,12 +162,12 @@ function normalizeHostOrigin(raw) {
   }
 }
 
-function isLoopbackHost(hostname) {
+function isLoopbackHost(hostname: unknown): boolean {
   const h = String(hostname || '').trim().toLowerCase()
   return h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '::1'
 }
 
-function isLoopbackOrigin(raw) {
+function isLoopbackOrigin(raw: unknown): boolean {
   try {
     return isLoopbackHost(new URL(normalizeHostOrigin(raw)).hostname)
   } catch {
@@ -175,7 +175,7 @@ function isLoopbackOrigin(raw) {
   }
 }
 
-async function probeFromBrowser(url) {
+async function probeFromBrowser(url: string): Promise<Record<string, unknown> | null> {
   const base = normalizeHostOrigin(url)
   if (!base) return null
   const controller = new AbortController()
@@ -191,14 +191,14 @@ async function probeFromBrowser(url) {
     })
     if (sameOrigin && !resp.ok) return null
     return { ok: true, host_url: base, source: 'browser-local' }
-  } catch (_) {
+  } catch {
     return null
   } finally {
     window.clearTimeout(timer)
   }
 }
 
-function shouldProbeFromBrowser(url) {
+function shouldProbeFromBrowser(url: string): boolean {
   if (isLoopbackOrigin(url)) return true
   try {
     return new URL(normalizeHostOrigin(url)).origin === window.location.origin
@@ -218,7 +218,13 @@ const LOCAL_PROBE_PORTS = [
   8000, 8001,
 ]
 
-function addHostPortVariants(add, hostname, ports, includeHttps, includeHttp = true) {
+function addHostPortVariants(
+  add: (value: string) => void,
+  hostname: string,
+  ports: number[],
+  includeHttps: boolean,
+  includeHttp = true,
+): void {
   const h = String(hostname || '').trim()
   if (!h) return
   for (const p of ports) {
@@ -229,9 +235,9 @@ function addHostPortVariants(add, hostname, ports, includeHttps, includeHttp = t
 
 /** 合并去重：URL 参数 → 同源 /sandbox → 输入框 → 上次成功 → 本机端口 → 当前页同机多端口扫描 */
 function buildDiscoveryCandidates() {
-  const seen = new Set()
-  const out = []
-  const add = (raw) => {
+  const seen = new Set<string>()
+  const out: string[] = []
+  const add = (raw: unknown) => {
     const n = normalizeHostOrigin(raw)
     if (!n || seen.has(n)) return
     seen.add(n)
@@ -248,7 +254,7 @@ function buildDiscoveryCandidates() {
   try {
     const s = localStorage.getItem(SANDBOX_HOST_STORAGE)
     if (s) add(s)
-  } catch (_) {
+  } catch {
     /* ignore */
   }
 
@@ -258,7 +264,7 @@ function buildDiscoveryCandidates() {
     if (isLoopbackHost(hostname) && p && /^\d+$/.test(p) && p !== '80' && p !== '443') {
       add(`${protocol}//${hostname}:${p}`)
     }
-  } catch (_) {
+  } catch {
     /* ignore */
   }
 
@@ -271,7 +277,7 @@ function buildDiscoveryCandidates() {
       const isHttpsPage = protocol === 'https:'
       addHostPortVariants(add, hostname, LOCAL_PROBE_PORTS, isHttpsPage, !isHttpsPage)
     }
-  } catch (_) {
+  } catch {
     /* ignore */
   }
 
@@ -295,7 +301,7 @@ async function discoverAndConnect() {
     return
   }
 
-  let lastApiError = null
+  let lastApiError: unknown = null
 
   for (let i = 0; i < list.length; i++) {
     const url = list[i]
@@ -310,7 +316,7 @@ async function discoverAndConnect() {
         hostInfo.value = result
         try {
           localStorage.setItem(SANDBOX_HOST_STORAGE, url)
-        } catch (_) {
+        } catch {
           /* ignore */
         }
         probeProgress.value = ''
@@ -370,7 +376,7 @@ function openHostInNewTab() {
 
 function openFullscreen() {
   if (!iframeRef.value) return
-  const el = iframeRef.value
+  const el = iframeRef.value as HTMLIFrameElement & { webkitRequestFullscreen?: () => void }
   if (el.requestFullscreen) el.requestFullscreen()
   else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen()
 }
@@ -380,13 +386,11 @@ function shouldAutoPush() {
   return raw === '1' || raw === 'true' || raw === 'yes'
 }
 
-let messageHandler = null
+let messageHandler: ((event: MessageEvent) => void) | null = null
 
 onMounted(() => {
-  messageHandler = (e) => {
-    if (e.data?.type === 'sandbox:ready') {
-      console.log('[Sandbox] FHD 宿主已就绪')
-    }
+  messageHandler = (e: MessageEvent) => {
+    if (e.data?.type === 'sandbox:ready') return
   }
   window.addEventListener('message', messageHandler)
 

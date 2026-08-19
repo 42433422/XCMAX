@@ -24,7 +24,6 @@ import argparse
 import asyncio
 import json
 import os
-import struct
 import subprocess
 import sys
 import tempfile
@@ -239,9 +238,8 @@ async def check_funasr_direct() -> dict:
         if use_ssl:
             import ssl
 
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
+            ca_bundle = os.getenv("FUNASR_CA_BUNDLE", "").strip()
+            ctx = ssl.create_default_context(cafile=ca_bundle or None)
             kw["ssl"] = ctx
         async with websockets.connect(url, **kw):
             return {"ok": True, "step": "funasr_direct", "url": url}

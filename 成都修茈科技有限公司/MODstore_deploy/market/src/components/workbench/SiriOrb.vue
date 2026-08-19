@@ -35,28 +35,22 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
-const props = defineProps({
-  mode: {
-    type: String,
-    default: 'idle',
-    validator: (v) => ['idle', 'listening', 'processing', 'reporting'].includes(v)
-  },
-  progress: {
-    type: Number,
-    default: 0,
-    validator: (v) => v >= 0 && v <= 100
-  },
-  audioLevel: {
-    type: Number,
-    default: 0,
-    validator: (v) => v >= 0 && v <= 1
-  }
+type SiriOrbMode = 'idle' | 'listening' | 'processing' | 'reporting'
+
+const props = withDefaults(defineProps<{
+  mode?: SiriOrbMode
+  progress?: number
+  audioLevel?: number
+}>(), {
+  mode: 'idle',
+  progress: 0,
+  audioLevel: 0,
 })
 
-const themeColors = {
+const themeColors: Record<SiriOrbMode, { accent: string }> = {
   idle:       { accent: '#8b5cf6' },
   listening:  { accent: '#22c55e' },
   processing: { accent: '#7c3aed' },

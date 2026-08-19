@@ -212,7 +212,9 @@ export function detectMacDownloadArch(): XcagiMacArch {
       if (gl && 'getExtension' in gl) {
         const ext = (gl as WebGLRenderingContext).getExtension('WEBGL_debug_renderer_info')
         if (ext) {
-          const renderer = String((gl as WebGLRenderingContext).getParameter(ext.UNMASKED_RENDERER_INFO))
+          const renderer = String(
+            (gl as WebGLRenderingContext).getParameter(ext.UNMASKED_RENDERER_WEBGL),
+          )
           if (/Apple M\d|Apple GPU/i.test(renderer)) return 'arm64'
         }
       }

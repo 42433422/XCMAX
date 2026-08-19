@@ -1,4 +1,52 @@
 import { req, authHeaders, requestBlob, requestStreamBlob } from './shared'
+import type { OrchStepLike } from '../utils/orchestrationSteps'
+
+export interface WorkbenchSessionResponse {
+  [key: string]: unknown
+  session_id?: string
+  status?: string
+  error?: string
+  intent?: string
+  workflow_name?: string
+  steps?: OrchStepLike[]
+  artifact?: Record<string, unknown>
+  script_result?: {
+    outputs?: Array<{ filename: string; download_url: string }>
+    stderr?: string
+    stdout?: string
+  }
+  validate_warnings?: string[]
+}
+
+export interface KnowledgeItem {
+  [key: string]: unknown
+  text?: string
+  content?: string
+  snippet?: string
+  source?: string
+  document_id?: string
+  filename?: string
+  page_no?: number
+  pageNo?: number
+}
+
+export interface KnowledgeStatusResponse extends Record<string, unknown> {
+  embedding?: Record<string, unknown> & { configured?: boolean }
+}
+
+export interface KnowledgeDocumentResponse extends Record<string, unknown> {
+  document?: { doc_id?: string; docId?: string }
+  embedding?: Record<string, unknown>
+}
+
+export interface KnowledgeDocumentsResponse extends Record<string, unknown> {
+  documents?: Array<Record<string, unknown>>
+}
+
+export interface KnowledgeRetrieveResponse extends Record<string, unknown> {
+  items?: KnowledgeItem[]
+  chunks?: KnowledgeItem[]
+}
 
 const requestStreamResponse = (url: string, init: RequestInit = {}) => fetch(url, init)
 
@@ -6,20 +54,20 @@ export const workbench = {
   workbenchWebSearch: (body: { query: string; max_results?: number; max_chars?: number }) =>
     req('/api/workbench/web-search', { method: 'POST', body: JSON.stringify(body) }),
   workbenchResearchContext: (body: unknown) => req('/api/workbench/research-context', { method: 'POST', body: JSON.stringify(body) }),
-  workbenchStartSession: (body: unknown) => req('/api/workbench/sessions', { method: 'POST', body: JSON.stringify(body) }),
+  workbenchStartSession: (body: unknown) => req<WorkbenchSessionResponse>('/api/workbench/sessions', { method: 'POST', body: JSON.stringify(body) }),
   workbenchStartSessionWithFiles: (body: unknown, files: File[]) => {
     const fd = new FormData()
     fd.append('metadata', JSON.stringify(body || {}))
     for (const f of files || []) fd.append('files', f)
-    return req('/api/workbench/sessions', { method: 'POST', body: fd })
+    return req<WorkbenchSessionResponse>('/api/workbench/sessions', { method: 'POST', body: fd })
   },
   workbenchStartScriptSession: (metadata: unknown, files: File[]) => {
     const fd = new FormData()
     fd.append('metadata', JSON.stringify(metadata || {}))
     for (const f of files || []) fd.append('files', f)
-    return req('/api/workbench/script-sessions', { method: 'POST', body: fd })
+    return req<WorkbenchSessionResponse>('/api/workbench/script-sessions', { method: 'POST', body: fd })
   },
-  workbenchGetSession: (sessionId: string) => req(`/api/workbench/sessions/${encodeURIComponent(sessionId)}`),
+  workbenchGetSession: (sessionId: string) => req<WorkbenchSessionResponse>(`/api/workbench/sessions/${encodeURIComponent(sessionId)}`),
   streamEmployeeAiDraft: (brief: string, opts?: { provider?: string; model?: string; suggestedId?: string }) =>
     requestStreamResponse('/api/workbench/employee-ai/draft', {
       method: 'POST',
@@ -32,7 +80,7 @@ export const workbench = {
       }),
     }),
   refineSystemPrompt: (body: { current_prompt: string; instruction: string; role_context?: string; provider?: string; model?: string }) =>
-    req('/api/workbench/employee-ai/refine-prompt', { method: 'POST', body: JSON.stringify(body) }),
+    req<{ improved_prompt?: string; diff_explanation?: string }>('/api/workbench/employee-ai/refine-prompt', { method: 'POST', body: JSON.stringify(body) }),
   workbenchEdgeTts: (text: string, voice?: string, rate?: number) =>
     requestBlob('/api/workbench/tts/edge', {
       method: 'POST',
@@ -62,23 +110,23 @@ export const workbench = {
 }
 
 export const knowledge = {
-  knowledgeStatus: () => req('/api/knowledge/status'),
-  knowledgeListDocuments: () => req('/api/knowledge/documents'),
+  knowledgeStatus: () => req<KnowledgeStatusResponse>('/api/knowledge/status'),
+  knowledgeListDocuments: () => req<KnowledgeDocumentsResponse>('/api/knowledge/documents'),
   knowledgeUploadDocument: (file: File, opts?: { embeddingProvider?: string; embeddingModel?: string }) => {
     const form = new FormData()
     form.append('file', file)
     if (opts?.embeddingProvider) form.append('embedding_provider', opts.embeddingProvider)
     if (opts?.embeddingModel) form.append('embedding_model', opts.embeddingModel)
-    return req('/api/knowledge/documents', { method: 'POST', body: form })
+    return req<KnowledgeDocumentResponse>('/api/knowledge/documents', { method: 'POST', body: form })
   },
   knowledgeDeleteDocument: (docId: string) => req(`/api/knowledge/documents/${encodeURIComponent(docId)}`, { method: 'DELETE' }),
   knowledgeExtractText: (file: File) => {
     const form = new FormData()
     form.append('file', file)
-    return req('/api/knowledge/extract-text', { method: 'POST', body: form })
+    return req<{ text?: string }>('/api/knowledge/extract-text', { method: 'POST', body: form })
   },
   knowledgeSearch: (query: string, limit = 6, opts?: { embeddingProvider?: string; embeddingModel?: string }) =>
-    req('/api/knowledge/search', { method: 'POST', body: JSON.stringify({ query, limit, embedding_provider: opts?.embeddingProvider, embedding_model: opts?.embeddingModel }) }),
+    req<KnowledgeRetrieveResponse>('/api/knowledge/search', { method: 'POST', body: JSON.stringify({ query, limit, embedding_provider: opts?.embeddingProvider, embedding_model: opts?.embeddingModel }) }),
   knowledgeV2Status: () => req('/api/knowledge/v2/status'),
   knowledgeV2ListCollections: (params?: { ownerKind?: string; ownerId?: string }) => {
     const qs: string[] = []
@@ -109,7 +157,7 @@ export const knowledge = {
   knowledgeV2Retrieve: (body: {
     query: string; top_k?: number; min_score?: number; employee_id?: string | null; workflow_id?: number | null
     org_id?: string | null; collection_ids?: number[]; embedding_provider?: string | null; embedding_model?: string | null
-  }) => req('/api/knowledge/v2/retrieve', { method: 'POST', body: JSON.stringify(body) }),
+  }) => req<KnowledgeRetrieveResponse>('/api/knowledge/v2/retrieve', { method: 'POST', body: JSON.stringify(body) }),
 }
 
 export const openApiConnectors = {
@@ -131,7 +179,7 @@ export const openApiConnectors = {
 }
 
 export const customerService = {
-  customerServiceChat: (payload: { message: string; session_id?: number | null; context?: Record<string, unknown> }) =>
+  customerServiceChat: (payload: { message: string; session_id?: number | null; context?: Record<string, unknown>; image_data_url?: string }) =>
     req('/api/customer-service/chat', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -190,7 +238,7 @@ export const butler = {
       body: JSON.stringify(payload),
     }),
   csSsotRetrieve: (payload: { query: string; top_k?: number }) =>
-    req('/api/agent/butler/cs-ssot/retrieve', { method: 'POST', body: JSON.stringify(payload) }),
+    req<KnowledgeRetrieveResponse>('/api/agent/butler/cs-ssot/retrieve', { method: 'POST', body: JSON.stringify(payload) }),
   listButlerSkills: () => req('/api/agent/butler/skills'),
   recordButlerAction: (payload: { route: string; action: string; args?: Record<string, unknown>; risk: string; status: 'success' | 'failed' | 'cancelled' }) =>
     req('/api/agent/butler/actions', { method: 'POST', body: JSON.stringify(payload) }),

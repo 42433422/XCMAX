@@ -54,7 +54,7 @@ describe('tokenStore', () => {
 
   it('does not set undefined tokens', () => {
     clearAuthTokens()
-    setAuthTokens({ access_token: undefined as any, refresh_token: undefined as any })
+    setAuthTokens({ access_token: undefined as UnsafeTestValue, refresh_token: undefined as UnsafeTestValue })
     expect(getAccessToken()).toBe('')
     expect(getRefreshToken()).toBe('')
   })

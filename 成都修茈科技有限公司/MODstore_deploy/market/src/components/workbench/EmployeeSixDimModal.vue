@@ -5,7 +5,7 @@ import type { SixDimensionReport } from '../../types/sixDimension'
 export type { SixDimensionReport } from '../../types/sixDimension'
 export type { SixDimEntry } from '../../types/sixDimension'
 
-const props = defineProps<{
+const _props = defineProps<{
   open: boolean
   report: SixDimensionReport | null
 }>()

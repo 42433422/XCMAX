@@ -136,7 +136,6 @@ def _collect_globs() -> list[str]:
 
 def _glob_to_regex(glob: str) -> str:
     """Convert a recursive glob (with `**`) to a regex string anchored to full path."""
-    import re
 
     g = glob.replace("\\", "/")
     if g.startswith("./"):

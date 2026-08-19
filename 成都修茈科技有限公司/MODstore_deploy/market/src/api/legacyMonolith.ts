@@ -649,7 +649,16 @@ export const legacyApi = {
         const j = JSON.parse(m)
         const d = j?.detail
         if (d === 'Not Found') return true
-        if (Array.isArray(d) && d.some((x: any) => String(x?.msg || '').toLowerCase() === 'not found')) return true
+        if (
+          Array.isArray(d) &&
+          d.some(
+            (x: unknown) =>
+              typeof x === 'object' &&
+              x !== null &&
+              'msg' in x &&
+              String((x as { msg?: unknown }).msg || '').toLowerCase() === 'not found',
+          )
+        ) return true
       } catch {
         /* ignore */
       }
@@ -992,8 +1001,8 @@ export const legacyApi = {
   getEmployeeManifest: async (employeeId: string) => {
     try {
       return await req(`/api/employees/${encodeURIComponent(employeeId)}/manifest`)
-    } catch (e: any) {
-      const msg = String(e?.message || '')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e || '')
       if (msg.includes('404') || msg.includes('不存在') || msg.includes('Not Found')) {
         return { pack_id: employeeId, name: employeeId, version: '0.0.0', manifest: {} }
       }
@@ -1151,7 +1160,7 @@ export const legacyApi = {
     return req('/api/workbench/script-sessions', { method: 'POST', body: fd })
   },
   workbenchGetSession: (sessionId: string) => req(`/api/workbench/sessions/${encodeURIComponent(sessionId)}`),
-  workbenchRetrySession: (sessionId: string) => req(`/api/workbench/sessions/${encodeURIComponent(sessionId)}/retry`, { method: 'POST' }),
+  workbenchRetrySession: (sessionId: string) => req<{ session_id?: string; status?: string }>(`/api/workbench/sessions/${encodeURIComponent(sessionId)}/retry`, { method: 'POST' }),
 
   /**
    * 启动 6 阶段 AI 员工生成流水线（SSE）。

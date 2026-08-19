@@ -24,7 +24,7 @@ describe('employeePackClientExport', () => {
 
     expect(result.error).toBe('')
     expect(result.manifest?.id).toBe('sales-mod-assistant')
-    const employeeOut = (result.manifest as Record<string, any> | null)?.employee as
+    const employeeOut = (result.manifest as Record<string, UnsafeTestValue> | null)?.employee as
       | { label?: string }
       | undefined
     expect(employeeOut?.label).toBe('销售助手')
@@ -118,8 +118,8 @@ describe('employeePackClientExport', () => {
     expect(packId).toBe('x_pack-id')
     expect(manifest.name).toBe('x_pack-id')
     expect(manifest.version).toBe('1.0.0')
-    expect((manifest.employee as any).workflow_id).toBe(0)
-    expect((manifest.employee as any).capabilities).toEqual([
+    expect((manifest.employee as UnsafeTestValue).workflow_id).toBe(0)
+    expect((manifest.employee as UnsafeTestValue).capabilities).toEqual([
       'perception',
       'memory',
       'cognition',

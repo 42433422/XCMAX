@@ -56,7 +56,7 @@ async function fetchSkills() {
   loading.value = true
   error.value = ''
   try {
-    const data = await (api as any).listButlerSkills?.()
+    const data = await api.listButlerSkills()
     skills.value = Array.isArray(data) ? data : []
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : String(e)
@@ -68,7 +68,7 @@ async function fetchSkills() {
 async function toggleSkill(skill: ESkillDef) {
   try {
     // 复用 createESkill / updateESkill 或专用端点
-    await (api as any).updateButlerSkillActive?.(skill.id, !skill.is_active)
+    await api.updateButlerSkillActive(skill.id, !skill.is_active)
     skill.is_active = !skill.is_active
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : String(e)

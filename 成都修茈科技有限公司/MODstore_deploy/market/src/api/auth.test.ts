@@ -26,7 +26,7 @@ describe('auth api', () => {
   it('register omits verificationCode when empty', async () => {
     vi.mocked(authRequest).mockResolvedValue({ access_token: 'at' })
     await auth.register('u', 'p', 'e@e.com')
-    const call = vi.mocked(authRequest).mock.calls[0] as any[]
+    const call = vi.mocked(authRequest).mock.calls[0] as UnsafeTestValue[]
     const body = JSON.parse(call[1].body as string)
     expect(body.verification_code).toBe('')
   })
@@ -117,7 +117,7 @@ describe('auth api', () => {
       '/api/auth/reset-password',
       expect.objectContaining({ method: 'POST' }),
     )
-    const call = vi.mocked(req).mock.calls[0] as any[]
+    const call = vi.mocked(req).mock.calls[0] as UnsafeTestValue[]
     const body = JSON.parse(call[1].body as string)
     expect(body.email).toBe('e@e.com')
     expect(body.new_password).toBe('newPass')
@@ -126,7 +126,7 @@ describe('auth api', () => {
   it('submitLandingContact fills defaults for optional fields', async () => {
     vi.mocked(req).mockResolvedValue({})
     await auth.submitLandingContact({ name: 'n', email: 'e@e.com' })
-    const call = vi.mocked(req).mock.calls[0] as any[]
+    const call = vi.mocked(req).mock.calls[0] as UnsafeTestValue[]
     const body = JSON.parse(call[1].body as string)
     expect(body.phone).toBe('')
     expect(body.company).toBe('')
@@ -148,7 +148,7 @@ describe('auth api', () => {
       source: 'landing',
       privacy_agreed: true,
     })
-    const call = vi.mocked(req).mock.calls[0] as any[]
+    const call = vi.mocked(req).mock.calls[0] as UnsafeTestValue[]
     const body = JSON.parse(call[1].body as string)
     expect(body.phone).toBe('1')
     expect(body.source).toBe('landing')

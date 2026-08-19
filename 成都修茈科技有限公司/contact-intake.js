@@ -752,21 +752,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  function clearCompanyMatchUi() {
-    companyMatchCache = null
-    companyMatchQuerySynced = ''
-    companyResolvedName = ''
-    setCompanyMatchResult('hidden')
-    setCompanyMatchHint('')
-    const listEl = document.getElementById('intake-ai-company-suggest')
-    const inputEl = document.getElementById('intake-ai-company')
-    if (listEl) {
-      listEl.hidden = true
-      listEl.innerHTML = ''
-    }
-    if (inputEl) inputEl.setAttribute('aria-expanded', 'false')
-  }
-
   function readAiCompanyQuery() {
     return (document.getElementById('intake-ai-company')?.value || '').trim()
   }

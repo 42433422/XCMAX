@@ -1038,7 +1038,7 @@ def write_monthly_sheet(
         for ridx, row in enumerate(rows, start=2):
             if use_seq_formula:
                 c_seq = ws.cell(ridx, 1)
-                c_seq.value = f"=ROW()-1"
+                c_seq.value = "=ROW()-1"
                 _force_arabic_number_format(c_seq, None)
             name_key = str(row.get("姓名", "") or "").strip()
             ws.cell(ridx, name_col_roster).value = name_key or None

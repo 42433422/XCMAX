@@ -69,12 +69,23 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api'
 import { useNotificationStore } from '../stores/notifications'
+import { asUnknownRecord, errorMessage } from '../utils/typeNarrowing'
+
+interface NotificationItem {
+  id: string | number
+  is_read: boolean
+  type: string
+  title: string
+  content: string
+  created_at: string
+  data?: Record<string, unknown>
+}
 
 const router = useRouter()
 const notificationStore = useNotificationStore()
 const loading = ref(true)
 const err = ref('')
-const items = ref<any[]>([])
+const items = ref<NotificationItem[]>([])
 const unreadOnly = ref(false)
 const category = ref('')
 const expandedItems = ref(new Set<string | number>())
@@ -129,25 +140,25 @@ async function load() {
   loading.value = true
   err.value = ''
   try {
-    const res = await api.notificationsList(unreadOnly.value, 80, category.value || '')
-    items.value = res.notifications || []
-  } catch (e: any) {
-    err.value = e?.message || String(e)
+    const res = asUnknownRecord(await api.notificationsList(unreadOnly.value, 80, category.value || ''))
+    items.value = Array.isArray(res.notifications) ? (res.notifications as NotificationItem[]) : []
+  } catch (e: unknown) {
+    err.value = errorMessage(e)
   } finally {
     loading.value = false
   }
 }
 
-async function onItemClick(n: any) {
+async function onItemClick(n: NotificationItem) {
   try {
     if (!n.is_read) await notificationStore.markRead(n.id)
   } catch {
     /* ignore */
   }
-  const data = n.data || {}
+  const data = asUnknownRecord(n.data)
   switch (n.type) {
     case 'payment_success':
-      if (data.order_no) router.push({ name: 'order-detail', params: { orderId: data.order_no } })
+      if (data.order_no) router.push({ name: 'order-detail', params: { orderId: String(data.order_no) } })
       break
     case 'employee_execution_done':
       router.push({ path: '/workbench', query: { focus: 'employee' } })
@@ -160,12 +171,12 @@ async function onItemClick(n: any) {
   }
 }
 
-async function markOne(id: string) {
+async function markOne(id: string | number) {
   try {
     await notificationStore.markRead(id)
     await load()
-  } catch (e: any) {
-    err.value = e?.message || String(e)
+  } catch (e: unknown) {
+    err.value = errorMessage(e)
   }
 }
 
@@ -173,8 +184,8 @@ async function markAll() {
   try {
     await notificationStore.markAllRead()
     await load()
-  } catch (e: any) {
-    err.value = e?.message || String(e)
+  } catch (e: unknown) {
+    err.value = errorMessage(e)
   }
 }
 

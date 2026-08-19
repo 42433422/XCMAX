@@ -189,7 +189,7 @@ describe('corpIntakeSkill', () => {
 
   it('navigate task assigns location', async () => {
     const assign = vi.fn()
-    vi.stubGlobal('location', { assign } as Location)
+    vi.stubGlobal('location', { assign } as unknown as Location)
     const result = await runCorpQuickTask({
       label: '预约方案沟通',
       task: 'navigate',

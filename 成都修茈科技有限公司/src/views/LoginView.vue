@@ -26,10 +26,9 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { api } from '../api'
 
-const router = useRouter()
 const route = useRoute()
 const username = ref('')
 const password = ref('')

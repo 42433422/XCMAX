@@ -192,13 +192,13 @@ describe('App shell', () => {
     const { useWorkbenchSidebarStore } = await import('./stores/workbenchSidebar')
     const wbSidebar = useWorkbenchSidebarStore()
     wbSidebar.setConversations([
-      { id: 'c1', title: '第一轮', updatedAt: Date.now(), messages: [] },
-      { id: 'c2', title: '第二轮', updatedAt: Date.now() - 120_000, messages: [] },
+      { id: 'c1', title: '第一轮', createdAt: Date.now(), updatedAt: Date.now(), pinned: false, messages: [] },
+      { id: 'c2', title: '第二轮', createdAt: Date.now(), updatedAt: Date.now() - 120_000, pinned: false, messages: [] },
     ])
     wbSidebar.setActiveConversationId('c1')
     await wrapper.vm.$nextTick()
 
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.formatConvTime(Date.now())).toBe('刚刚')
     expect(vm.formatConvTime(Date.now() - 90_000)).toContain('分钟前')
     expect(vm.formatConvTime(Date.now() - 3_600_000 * 2)).toContain('小时前')
@@ -302,13 +302,13 @@ describe('App shell', () => {
     const wbSidebar = useWorkbenchSidebarStore()
     authStore.setAdminDigestUnlock(new Date(Date.now() + 60_000).toISOString())
     wbSidebar.setConversations([
-      { id: 'c1', title: '第一轮', updatedAt: Date.now(), messages: [] },
-      { id: 'c2', title: '', updatedAt: Date.now() - 10_000, messages: [] },
+      { id: 'c1', title: '第一轮', createdAt: Date.now(), updatedAt: Date.now(), pinned: false, messages: [] },
+      { id: 'c2', title: '', createdAt: Date.now(), updatedAt: Date.now() - 10_000, pinned: false, messages: [] },
     ])
     wbSidebar.setActiveConversationId('c1')
     await wrapper.vm.$nextTick()
 
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.wbSidebarWidthCss).toBe('0px')
     await wrapper.get('.wb-mobile-hamburger').trigger('click')
     expect(wbSidebar.mobileOpen).toBe(true)
@@ -378,7 +378,7 @@ describe('App shell', () => {
     await router.push('/workbench/mod/demo?embedded=android')
     await flushPromises()
 
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.isAndroidEmbeddedShell).toBe(true)
     expect(vm.wbSidebarWidthCss).toBe('0px')
     expect(vm.shouldShowButler).toBe(false)
@@ -421,7 +421,7 @@ describe('App shell', () => {
     await router.push('/plans')
     await flushPromises()
 
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     vm.openSelfCreditModal()
     vm.selfCreditAmount = '6'
     await vm.submitSelfCredit()
@@ -456,7 +456,7 @@ describe('App shell', () => {
       throw new Error('dispatch failed')
     })
     const legacyEvent = { initCustomEvent: vi.fn() }
-    const createEventSpy = vi.spyOn(document, 'createEvent').mockReturnValue(legacyEvent as any)
+    const createEventSpy = vi.spyOn(document, 'createEvent').mockReturnValue(legacyEvent as UnsafeTestValue)
     vm.emitWorkbenchModeSwitch('direct')
     expect(createEventSpy).toHaveBeenCalledWith('CustomEvent')
     expect(legacyEvent.initCustomEvent).toHaveBeenCalled()

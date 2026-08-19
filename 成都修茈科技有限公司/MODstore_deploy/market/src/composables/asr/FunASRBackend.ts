@@ -287,7 +287,9 @@ export class FunASRBackend implements ASRBackend {
       }
       this._audioBufferLen = this._audioBuffer.reduce((sum, b) => sum + b.length, 0)
       const i16 = float32ToInt16(merged)
-      this.ws!.send(i16.buffer.slice(i16.byteOffset, i16.byteOffset + i16.byteLength))
+      const payload = new Uint8Array(i16.byteLength)
+      payload.set(new Uint8Array(i16.buffer, i16.byteOffset, i16.byteLength))
+      this.ws!.send(payload.buffer)
       this._pcmChunksSent += 1
     }
   }
@@ -393,7 +395,9 @@ export class FunASRBackend implements ASRBackend {
     this._audioBufferLen = 0
     const i16 = float32ToInt16(remaining)
     try {
-      this.ws.send(i16.buffer.slice(i16.byteOffset, i16.byteOffset + i16.byteLength))
+      const payload = new Uint8Array(i16.byteLength)
+      payload.set(new Uint8Array(i16.buffer, i16.byteOffset, i16.byteLength))
+      this.ws.send(payload.buffer)
       if (remaining.length >= this._SEND_CHUNK_SAMPLES) {
         this._pcmChunksSent += Math.floor(remaining.length / this._SEND_CHUNK_SAMPLES)
       }

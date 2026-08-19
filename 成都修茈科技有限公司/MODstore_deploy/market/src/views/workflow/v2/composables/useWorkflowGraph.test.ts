@@ -169,10 +169,9 @@ describe('useWorkflowGraph', () => {
 
     const graph = useWorkflowGraph(8)
     graph.meta.value = {
-      id: 8,
       name: 'Original',
       description: 'Old description',
-      isActive: false,
+      is_active: false,
     }
     graph.nodes.value = [
       {

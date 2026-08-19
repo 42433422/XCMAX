@@ -712,7 +712,7 @@ const facetIndustries = computed(() => facets.value.industries || [])
 const facetArtifacts = computed(() => facets.value.artifacts || [])
 const facetMaterialCategories = computed(() => facets.value.material_categories || [])
 const facetLicenseScopes = computed(() => facets.value.license_scopes || [])
-const facetSecurityLevels = computed(() => facets.value.security_levels || [])
+const _facetSecurityLevels = computed(() => facets.value.security_levels || [])
 
 function artifactLabel(art: string | undefined): string {
   return (art && (ARTIFACT_LABELS as Record<string, string>)[art]) || art || '其他'
@@ -911,11 +911,11 @@ function scheduleLoadItems(cacheBust = false) {
   }, 80)
 }
 
-function selectOfficeTheme() {
+function _selectOfficeTheme() {
   setStoreNav('office')
 }
 
-function clearTheme() {
+function _clearTheme() {
   setStoreNav('all')
 }
 
@@ -1026,6 +1026,7 @@ onMounted(async () => {
   }
   await loadItems()
 })
+defineExpose({ securityLabel, securityLevelClass })
 </script>
 
 <style scoped>

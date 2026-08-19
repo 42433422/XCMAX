@@ -94,6 +94,9 @@ export interface SkillResult {
   assistantReply?: string
 }
 
+/** 官网管家技能的同步/异步执行结果。 */
+export type SkillExecuteResult = SkillResult
+
 export interface AgentSkill {
   id: string
   name: string
@@ -172,7 +175,6 @@ export interface EvolutionNeed {
   detectedAt: number
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export interface EvolutionEngine {
   detectMissingCapability(): Promise<EvolutionNeed>
   generateSkillCode(need: EvolutionNeed): Promise<string>

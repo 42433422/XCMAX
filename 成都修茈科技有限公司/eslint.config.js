@@ -20,6 +20,8 @@ export const ignores = {
     // 根目录 lint 不递归进去，避免把 market 的 venv/打包产物/三方源码全扫一遍。
     'MODstore_deploy/**',
     // 历史打包产物副本与第三方/独立站点目录
+    // corp-butler 是发布到静态站的预编译 bundle（含 ONNX worker），不是可维护源码。
+    'corp-butler/**',
     'new/**',
     'public/**',
     'site/**',

@@ -34,7 +34,7 @@ function safeUrl(raw: string): string {
   return s
 }
 
-interface Placeholder {
+interface _Placeholder {
   id: string
   html: string
 }

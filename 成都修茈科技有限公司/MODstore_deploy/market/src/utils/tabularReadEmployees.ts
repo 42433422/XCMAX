@@ -435,7 +435,7 @@ export function extractEmployeeExecuteDiagnostics(result: unknown): EmployeeExec
       const os = String(o.summary || '').trim()
       if (oe) error = error || oe
       if (os && !summary) summary = os
-      for (const w of o.warnings || []) {
+      for (const w of Array.isArray(o.warnings) ? o.warnings : []) {
         if (typeof w === 'string' && w.trim()) warnings.push(w.trim())
       }
     }
@@ -481,7 +481,7 @@ export function pickQuantitativeReportDownload(
   )
 }
 
-function summarizeDocumentFullJson(text: string): string {
+function _summarizeDocumentFullJson(text: string): string {
   try {
     const data = JSON.parse(text) as Record<string, unknown>
     const paragraphs = Array.isArray(data.paragraphs) ? data.paragraphs.length : 0

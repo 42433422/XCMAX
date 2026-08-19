@@ -207,7 +207,6 @@ import {
   pickDocumentFullJsonDownload,
   pickQuantitativeReportDownload,
   readEmployeeDisplayName,
-  resolveReadEmployeeForExtension,
   suggestEmployeeForUploadedFile,
   type EmployeeOutputDownload,
 } from '../utils/tabularReadEmployees'

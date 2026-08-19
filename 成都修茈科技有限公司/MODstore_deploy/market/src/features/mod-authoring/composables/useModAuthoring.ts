@@ -16,26 +16,76 @@ import {
 } from '../types'
 
 export function useModAuthoring(route: RouteLocationNormalizedLoaded, router: Router) {
+interface WorkflowEmployeeViewRow {
+  index: number
+  raw: LooseRecord
+  id: string
+  label: string
+  panelTitle: string
+  title: string
+  bodyFull: string
+  bodyShort: string
+  isEmpty: boolean
+  linkedWorkflowId: number
+  readiness: LooseRecord | null
+  ready: boolean
+}
+
+interface ModManifest extends LooseRecord {
+  name?: string
+  version?: string
+  description?: string
+  config?: LooseRecord
+  frontend?: LooseRecord
+  employee_config_v2?: LooseRecord
+  industry?: LooseRecord
+  backend?: LooseRecord
+  workflow_employees?: unknown[]
+  artifact?: string
+  kind?: string
+}
+
+interface ModAuthoringData extends LooseRecord {
+  id?: string
+  validation_ok?: boolean
+  manifest?: ModManifest
+  files?: unknown[]
+}
+
+interface ModAuthoringSummary extends LooseRecord {
+  blueprint_file?: string
+  validation_ok?: boolean
+  warnings?: unknown[]
+  blueprint_routes?: Array<{ methods?: string[]; path?: string }>
+}
+
+interface SnapshotRow extends LooseRecord {
+  snap_id: string
+  created_at: number
+  label?: string
+}
+
 const modDescriptionLine = computed(() => {
-  const d = (modData.value as LooseRecord | null)?.manifest?.description
+  const d = asLooseRecord(modData.value?.manifest).description
   return typeof d === 'string' && d.trim() ? d.trim() : ''
 })
 
-const employeeReadiness = computed<any>(() => {
-  const fromDetail = (modData.value as LooseRecord | null)?.employee_readiness
-  if (fromDetail && typeof fromDetail === 'object') return fromDetail
-  const fromSummary = (summary.value as LooseRecord | null)?.employee_readiness
-  if (fromSummary && typeof fromSummary === 'object') return fromSummary
-  const fromBlueprint = (aiBlueprint.value as LooseRecord | null)?.employee_readiness
-  if (fromBlueprint && typeof fromBlueprint === 'object') return fromBlueprint
+const employeeReadiness = computed<LooseRecord | null>(() => {
+  const fromDetail = modData.value?.employee_readiness
+  if (fromDetail && typeof fromDetail === 'object') return asLooseRecord(fromDetail)
+  const fromSummary = summary.value?.employee_readiness
+  if (fromSummary && typeof fromSummary === 'object') return asLooseRecord(fromSummary)
+  const fromBlueprint = aiBlueprint.value?.employee_readiness
+  if (fromBlueprint && typeof fromBlueprint === 'object') return asLooseRecord(fromBlueprint)
   return null
 })
 
 const employeeReadinessRowsByIndex = computed(() => {
   const rows = Array.isArray(employeeReadiness.value?.employees) ? employeeReadiness.value.employees : []
-  const map = new Map<number, any>()
-  for (const row of rows) {
-    const idx = Number(row?.index)
+  const map = new Map<number, LooseRecord>()
+  for (const value of rows) {
+    const row = asLooseRecord(value)
+    const idx = Number(row.index)
     if (Number.isFinite(idx) && idx >= 0) map.set(idx, row)
   }
   return map
@@ -43,19 +93,20 @@ const employeeReadinessRowsByIndex = computed(() => {
 
 const employeeReadinessGaps = computed(() => {
   const gaps = employeeReadiness.value?.gaps
-  return Array.isArray(gaps) ? gaps.map((x: any) => String(x)).filter(Boolean).slice(0, 8) : []
+  return Array.isArray(gaps) ? gaps.map((value: unknown) => String(value)).filter(Boolean).slice(0, 8) : []
 })
 
 const readinessSummaryLabel = computed(() => {
   const s = employeeReadiness.value?.summary
-  const total = Number(s?.total || 0)
-  const ready = Number(s?.ready || 0)
+  const summaryRecord = asLooseRecord(s)
+  const total = Number(summaryRecord.total || 0)
+  const ready = Number(summaryRecord.ready || 0)
   if (!total) return '无员工'
   return `${ready}/${total} 可工作`
 })
 
-const workflowEmployeesRows = computed(() => {
-  const raw = (modData.value as LooseRecord | null)?.manifest?.workflow_employees
+const workflowEmployeesRows = computed<WorkflowEmployeeViewRow[]>(() => {
+  const raw = asLooseRecord(modData.value?.manifest).workflow_employees
   if (!Array.isArray(raw)) return []
   return raw.map((item, index) => {
     const o = asLooseRecord(item)
@@ -95,8 +146,8 @@ const workflowEmployeesRows = computed(() => {
 const tab = ref('guide')
 const loading = ref(true)
 const loadError = ref('')
-const modData = ref<LooseRecord | null>(null)
-const summary = ref<LooseRecord | null>(null)
+const modData = ref<ModAuthoringData | null>(null)
+const summary = ref<ModAuthoringSummary | null>(null)
 const aiBlueprint = ref<LooseRecord | null>(null)
 const manifestText = ref('')
 const manifestSaveWarnings = ref<string[]>([])
@@ -112,7 +163,7 @@ const loadingSummary = ref(false)
 const frontendBusy = ref(false)
 const frontendBrief = ref('')
 
-const snapshotsRows = ref<LooseRecord[]>([])
+const snapshotsRows = ref<SnapshotRow[]>([])
 const snapshotsLoadErr = ref('')
 const snapshotBusy = ref(false)
 const snapshotLabelDraft = ref('')
@@ -120,24 +171,23 @@ const snapshotLabelDraft = ref('')
 const modId = computed(() => String(route.params.modId || ''))
 
 const frontendConfigPath = computed(() => {
-  const cfg = modData.value?.manifest?.config
-  return typeof cfg?.frontend_spec === 'string' && cfg.frontend_spec.trim()
+  const cfg = asLooseRecord(modData.value?.manifest?.config)
+  return typeof cfg.frontend_spec === 'string' && cfg.frontend_spec.trim()
     ? cfg.frontend_spec.trim()
     : 'config/frontend_spec.json'
 })
 
 const frontendEntryPath = computed(() => {
-  const frontend = modData.value?.manifest?.frontend
-  if (!frontend || typeof frontend !== 'object') return ''
+  const frontend = asLooseRecord(modData.value?.manifest?.frontend)
   if (typeof frontend.pro_entry_path === 'string' && frontend.pro_entry_path.trim()) return frontend.pro_entry_path.trim()
   const menu = Array.isArray(frontend.menu) ? frontend.menu : []
-  const first = menu[0]
-  return typeof first?.path === 'string' ? first.path.trim() : ''
+  const first = asLooseRecord(menu[0])
+  return typeof first.path === 'string' ? first.path.trim() : ''
 })
 
 const frontendSpecTitle = computed(() => {
-  const spec = aiBlueprint.value?.frontend_app
-  return spec && typeof spec === 'object' ? String(spec.title || spec.mod_name || '') : ''
+  const spec = asLooseRecord(aiBlueprint.value?.frontend_app)
+  return String(spec.title || spec.mod_name || '')
 })
 
 const frontendSpecPreview = computed(() => {
@@ -150,13 +200,17 @@ const PREFILL_KEY = 'modstore_employee_prefill'
 
 // ── AI pipeline suggestions (读自 employee_config_v2.metadata) ────────────────
 const suggestedSkills = computed<Array<{ name: string; brief: string }>>(() => {
-  const meta = modData.value?.manifest?.employee_config_v2?.metadata
-  return Array.isArray(meta?.suggested_skills) ? meta.suggested_skills : []
+  const meta = asLooseRecord(modData.value?.manifest?.employee_config_v2?.metadata)
+  return Array.isArray(meta.suggested_skills)
+    ? (meta.suggested_skills as Array<{ name: string; brief: string }>)
+    : []
 })
 
 const suggestedPricing = computed<{ tier: string; cny: number; period: string; reasoning?: string } | null>(() => {
-  const meta = modData.value?.manifest?.employee_config_v2?.metadata
-  return meta?.suggested_pricing && typeof meta.suggested_pricing === 'object' ? meta.suggested_pricing : null
+  const meta = asLooseRecord(modData.value?.manifest?.employee_config_v2?.metadata)
+  return meta.suggested_pricing && typeof meta.suggested_pricing === 'object'
+    ? (meta.suggested_pricing as { tier: string; cny: number; period: string; reasoning?: string })
+    : null
 })
 
 // ── Refine system prompt ──────────────────────────────────────────────────────
@@ -165,8 +219,10 @@ const refinePromptError = ref('')
 const refinePromptDiff = ref('')
 
 async function handleRefineSystemPrompt() {
-  const v2 = modData.value?.manifest?.employee_config_v2
-  const currentPrompt = v2?.cognition?.agent?.system_prompt || ''
+  const v2 = asLooseRecord(modData.value?.manifest?.employee_config_v2)
+  const cognition = asLooseRecord(v2.cognition)
+  const agent = asLooseRecord(cognition.agent)
+  const currentPrompt = String(agent.system_prompt || '')
   if (!currentPrompt) {
     flash('请先在配置中填写 system_prompt', false)
     return
@@ -214,14 +270,18 @@ function applyPricingSuggestion() {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-const industryCard = computed(() => {
+const industryCard = computed<{ name: string; scenario: string } | null>(() => {
   const card = aiBlueprint.value?.industry_card
-  if (card && typeof card === 'object') return card
+  if (card && typeof card === 'object') {
+    const record = asLooseRecord(card)
+    return { name: String(record.name || '通用'), scenario: String(record.scenario || '') }
+  }
   const industry = aiBlueprint.value?.industry
   if (industry && typeof industry === 'object') {
+    const record = asLooseRecord(industry)
     return {
-      name: industry.name || '通用',
-      scenario: industry.scenario || '',
+      name: String(record.name || '通用'),
+      scenario: String(record.scenario || ''),
     }
   }
   return null
@@ -290,44 +350,44 @@ const manifestSidebarStatus = computed(() => {
 })
 
 const apiSummary = computed(() => {
-  const src = aiBlueprint.value?.api_summary
-  const nodes = Array.isArray(src?.nodes) ? src.nodes : []
-  const warnings = Array.isArray(src?.warnings) ? src.warnings.map((x: unknown) => String(x)) : []
+  const src = asLooseRecord(aiBlueprint.value?.api_summary)
+  const nodes = Array.isArray(src.nodes) ? src.nodes : []
+  const warnings = Array.isArray(src.warnings) ? src.warnings.map((x: unknown) => String(x)) : []
   return { nodes, warnings }
 })
 
 const workflowSandboxRows = computed(() => {
-  const src = aiBlueprint.value?.workflow_sandbox
-  return Array.isArray(src?.reports) ? src.reports : []
+  const src = asLooseRecord(aiBlueprint.value?.workflow_sandbox)
+  return Array.isArray(src.reports) ? src.reports : []
 })
 
 const workflowSandboxOk = computed(() => {
-  const src = aiBlueprint.value?.workflow_sandbox
-  if (!src || typeof src !== 'object') return false
+  if (!aiBlueprint.value?.workflow_sandbox || typeof aiBlueprint.value.workflow_sandbox !== 'object') return false
+  const src = asLooseRecord(aiBlueprint.value?.workflow_sandbox)
   return src.ok !== false
 })
 
 const modSandboxChecks = computed(() => {
-  const src = aiBlueprint.value?.mod_sandbox
-  return Array.isArray(src?.checks) ? src.checks : []
+  const src = asLooseRecord(aiBlueprint.value?.mod_sandbox)
+  return Array.isArray(src.checks) ? src.checks : []
 })
 
 const modSandboxOk = computed(() => {
-  const src = aiBlueprint.value?.mod_sandbox
-  if (!src || typeof src !== 'object') return false
+  if (!aiBlueprint.value?.mod_sandbox || typeof aiBlueprint.value.mod_sandbox !== 'object') return false
+  const src = asLooseRecord(aiBlueprint.value?.mod_sandbox)
   return src.ok !== false
 })
 
 const vibeHealReport = computed(() => {
   const src = aiBlueprint.value?.vibe_heal
   if (!src || typeof src !== 'object') return null
-  return src as Record<string, any>
+  return asLooseRecord(src)
 })
 
 const vibeIndexReport = computed(() => {
   const src = aiBlueprint.value?.vibe_index
   if (!src || typeof src !== 'object') return null
-  return src as Record<string, any>
+  return asLooseRecord(src)
 })
 
 const linkableWorkflows = ref<Array<{ id: number; name?: string }>>([])
@@ -542,7 +602,7 @@ async function runWorkflowEmployeeClosure() {
     const res = await api.runWorkflowEmployeeClosure(modId.value, {
       register_missing: true,
       patch_canvas: true,
-      industry: String((modData.value as any)?.manifest?.industry?.id || '通用'),
+      industry: String(asLooseRecord(asLooseRecord(modData.value?.manifest).industry).id || '通用'),
     })
     const reg = res?.pack_register
     const regErrs = Array.isArray(reg?.errors) ? reg.errors.length : 0
@@ -580,11 +640,13 @@ async function patchWorkflowEmployeeNodesRetry() {
   patchWorkflowBusy.value = true
   try {
     const res = await api.patchModWorkflowEmployeeNodes(modId.value)
-    const patches = Array.isArray(res?.graph_patch?.patches) ? res.graph_patch.patches : []
-    const errs = patches.filter((p: any) => p && typeof p.error === 'string' && p.error)
-    const skips = patches.filter((p: any) => p && typeof p.skipped === 'string')
+    const patches: LooseRecord[] = Array.isArray(res?.graph_patch?.patches)
+      ? (res.graph_patch.patches as unknown[]).map(asLooseRecord)
+      : []
+    const errs = patches.filter((patch) => typeof patch.error === 'string' && patch.error)
+    const skips = patches.filter((patch) => typeof patch.skipped === 'string')
     if (errs.length) {
-      flash(`修图部分失败：${errs.map((e: any) => e.error).join('；')}`, false)
+      flash(`修图部分失败：${errs.map((item) => String(item.error)).join('；')}`, false)
     } else if (res?.employee_readiness?.ok) {
       flash('画布已对齐，员工可用性检查通过', true)
     } else {
@@ -596,14 +658,14 @@ async function patchWorkflowEmployeeNodesRetry() {
       flash(msg, false)
     }
     await reload()
-  } catch (e: any) {
-    flash(e?.message || String(e), false)
+  } catch (e: unknown) {
+    flash(e instanceof Error ? e.message : String(e), false)
   } finally {
     patchWorkflowBusy.value = false
   }
 }
 
-async function registerWorkflowEmployeeCatalog(row: any) {
+async function registerWorkflowEmployeeCatalog(row: { index: number }) {
   if (!localStorage.getItem('modstore_token')) {
     flash('请先登录工作台后再一键登记', false)
     return
@@ -615,7 +677,9 @@ async function registerWorkflowEmployeeCatalog(row: any) {
     const pid = pkg?.id || ''
     const ver = pkg?.version || ''
     const readyRow = Array.isArray(res?.employee_readiness?.employees)
-      ? res.employee_readiness.employees.find((x: any) => Number(x?.index) === Number(row.index))
+      ? (res.employee_readiness.employees as unknown[])
+          .map(asLooseRecord)
+          .find((item) => Number(item.index) === row.index)
       : null
     const nextGap = Array.isArray(readyRow?.gaps) && readyRow.gaps.length ? `；下一步：${readyRow.gaps[0]}` : ''
     flash(
@@ -630,7 +694,10 @@ async function registerWorkflowEmployeeCatalog(row: any) {
   }
 }
 
-function goEmployeePrefill(row: any) {
+function goEmployeePrefill(
+  row: Pick<WorkflowEmployeeViewRow, 'index'> &
+    Partial<Pick<WorkflowEmployeeViewRow, 'bodyFull' | 'id' | 'raw' | 'title'>>,
+) {
   const mid = modId.value
   const wi = row.index
   const desc = row.bodyFull
@@ -654,10 +721,9 @@ function goEmployeePrefill(row: any) {
 }
 
 function getWorkflowEmployeesArray() {
-  const m = modData.value?.manifest
-  const raw = m?.workflow_employees
+  const raw = modData.value?.manifest?.workflow_employees
   if (!Array.isArray(raw)) return []
-  return raw.map((x: any) => (x && typeof x === 'object' ? { ...x } : {}))
+  return raw.map(asLooseRecord).map((item) => ({ ...item }))
 }
 
 function openEmployeeModal(mode: 'add' | 'edit', index = -1) {
@@ -690,7 +756,7 @@ function closeEmployeeModal() {
   empScaffoldDone.value = false
 }
 
-async function persistWorkflowEmployees(nextList: any[]) {
+async function persistWorkflowEmployees(nextList: LooseRecord[]) {
   const parsed = JSON.parse(JSON.stringify(modData.value?.manifest || {}))
   parsed.workflow_employees = nextList
   await api.putModManifest(modId.value, parsed)
@@ -817,8 +883,8 @@ const sortedFiles = computed(() => {
 })
 
 const backendEntryRel = computed(() => {
-  const m = modData.value?.manifest
-  const entry = typeof m?.backend?.entry === 'string' ? m.backend.entry : 'blueprints'
+  const backend = asLooseRecord(modData.value?.manifest?.backend)
+  const entry = typeof backend.entry === 'string' ? backend.entry : 'blueprints'
   const stem = entry.replace(/\.py$/i, '')
   return `backend/${stem}.py`
 })
@@ -854,7 +920,7 @@ function flash(msg: string, ok = true, durationMs = 5000) {
   }, durationMs)
 }
 
-function openWorkflowSandboxDecompose(row: any) {
+function openWorkflowSandboxDecompose(row: Pick<WorkflowEmployeeViewRow, 'linkedWorkflowId'>) {
   const wid = row.linkedWorkflowId
   if (!wid) {
     flash('当前员工条目未声明 workflow_id，请先在 manifest 中关联 MODstore 工作流', false)
@@ -871,7 +937,7 @@ async function loadLinkableWorkflows() {
   }
 }
 
-async function applyWorkflowLinkToRow(row: any) {
+async function applyWorkflowLinkToRow(row: { index: number }) {
   const wid = Number(linkPick[row.index])
   if (!modId.value || !Number.isFinite(wid) || wid <= 0) {
     flash('请在下拉框中选择一个工作流', false)
@@ -909,8 +975,8 @@ async function refreshSnapshots() {
   snapshotsLoadErr.value = ''
   try {
     const res = await api.listModSnapshots(modId.value)
-    const rows = Array.isArray(res?.snapshots) ? res.snapshots : Array.isArray(res) ? res : []
-    snapshotsRows.value = rows
+    const rows = Array.isArray(res) ? res : Array.isArray(res.snapshots) ? res.snapshots : []
+    snapshotsRows.value = rows as SnapshotRow[]
   } catch (e: unknown) {
     snapshotsRows.value = []
     const status = (e as { status?: number })?.status
@@ -977,7 +1043,7 @@ async function refreshSummary() {
   if (!modId.value) return
   loadingSummary.value = true
   try {
-    summary.value = await api.getModAuthoringSummary(modId.value)
+    summary.value = (await api.getModAuthoringSummary(modId.value)) as ModAuthoringSummary
   } catch (e) {
     flash((e as Error)?.message || String(e), false)
   } finally {
@@ -992,7 +1058,7 @@ async function loadAiBlueprint() {
   try {
     const res = await api.getModFile(modId.value, 'config/ai_blueprint.json')
     const parsed = JSON.parse(String(res?.content || '{}'))
-    aiBlueprint.value = parsed && typeof parsed === 'object' ? parsed : null
+    aiBlueprint.value = parsed && typeof parsed === 'object' ? (parsed as LooseRecord) : null
   } catch {
     aiBlueprint.value = null
   }
@@ -1008,8 +1074,8 @@ async function reload() {
       api.getMod(modId.value),
       api.getModAuthoringSummary(modId.value).catch(() => null),
     ])
-    modData.value = detail
-    summary.value = sum
+    modData.value = detail as ModAuthoringData
+    summary.value = sum as ModAuthoringSummary | null
     manifestText.value = JSON.stringify(detail.manifest || {}, null, 2)
     await loadAiBlueprint()
     void loadLinkableWorkflows()
@@ -1139,7 +1205,7 @@ watch(
 )
   const nameDraft = ref('')
   watch(
-    () => String((modData.value as LooseRecord | null)?.manifest?.name || modId.value || '').trim(),
+    () => String(modData.value?.manifest?.name || modId.value || '').trim(),
     (v) => {
       nameDraft.value = v
     },

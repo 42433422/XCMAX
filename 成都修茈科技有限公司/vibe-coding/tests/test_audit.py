@@ -31,7 +31,13 @@ def _seed_skill_with_two_versions(tmp_path) -> tuple[JsonCodeSkillStore, str]:
         "quality_gate": {"required_keys": ["name"]},
         "domain_keywords": [],
     }
-    code = {"source_code": "def extract(user):\n    return {'name': user['name']}\n"}
+    code = {
+        "source_code": (
+            "def extract(user):\n"
+            "    \"\"\"Extract a user's name.\"\"\"\n"
+            "    return {'name': user['name']}\n"
+        )
+    }
     llm = MockLLM([json.dumps(spec), json.dumps(code)])
     factory = NLCodeSkillFactory(llm, store)
     factory.generate("brief")

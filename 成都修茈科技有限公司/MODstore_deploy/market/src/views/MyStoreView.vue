@@ -53,7 +53,7 @@ interface PurchasedItem {
 
 interface PlanInfo {
   name?: string
-  expires_at?: string
+  expires_at?: string | null
 }
 
 interface QuotaRow {
@@ -83,7 +83,7 @@ async function loadStore() {
   try {
     const [res, planRes] = await Promise.all([api.myStore(), api.paymentMyPlan()])
     items.value = res.items
-    myPlan.value = planRes.plan
+    myPlan.value = planRes.plan ?? null
     quotas.value = planRes.quotas || []
   } catch (e) {
     err.value = (e as Error)?.message || String(e)
@@ -114,7 +114,7 @@ function formatDate(iso: string | undefined): string {
   return new Date(iso).toLocaleDateString('zh-CN')
 }
 
-function formatDateTime(iso: string | undefined): string {
+function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('zh-CN')
 }

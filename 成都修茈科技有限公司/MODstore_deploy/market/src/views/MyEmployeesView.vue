@@ -180,7 +180,11 @@ async function purgeAllEmployees() {
   purgeBusy.value = true
   listError.value = ''
   try {
-    const res: any = await api.adminPurgeAllEmployeePacks()
+    const res = (await api.adminPurgeAllEmployeePacks()) as {
+      removed_packages_json?: number
+      removed_db_rows?: number
+      removed_files?: number
+    }
     const a = Number(res?.removed_packages_json || 0)
     const b = Number(res?.removed_db_rows || 0)
     const c = Number(res?.removed_files || 0)

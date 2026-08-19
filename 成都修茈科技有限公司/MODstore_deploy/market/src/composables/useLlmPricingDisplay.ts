@@ -59,7 +59,7 @@ export function formatPricingDetail(pricing: LlmModelPricing | null | undefined)
     if (pricing.suggested_input_per_1k != null) {
       official += `（×${fmtYuan(pricing.official_markup_multiplier ?? fee, 2)} 建议售价 ${formatPricePer1kLine({
         effective_input_per_1k: pricing.suggested_input_per_1k,
-        effective_output_per_1k: pricing.suggested_output_per_1k,
+        effective_output_per_1k: pricing.suggested_output_per_1k ?? undefined,
       })}）`
     }
   }

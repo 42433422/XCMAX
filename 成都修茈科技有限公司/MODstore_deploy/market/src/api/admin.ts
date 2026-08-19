@@ -1,5 +1,55 @@
 import { req } from './shared'
 
+interface AdminWalletRow extends Record<string, unknown> {
+  id: number | string
+  user_id?: number | string
+  balance: number
+  updated_at?: string
+}
+
+interface AdminCatalogRow extends Record<string, unknown> {
+  id: number | string
+  name?: string
+  pkg_id?: string
+  version?: string
+  price: number
+  downloads?: number
+  created_at?: string
+}
+
+interface AdminTransactionRow extends Record<string, unknown> {
+  id: number | string
+  user_id?: number | string
+  amount: number
+  txn_type?: string
+  status?: string
+  description?: string
+  created_at?: string
+}
+
+interface AdminUserRow extends Record<string, unknown> {
+  id: number | string
+  username?: string
+  email?: string
+  is_admin?: boolean
+  is_enterprise?: boolean
+  mod_ids?: string[]
+  created_at?: string
+}
+
+interface AdminUsersResponse extends Record<string, unknown> {
+  users?: AdminUserRow[]
+  data?: { users?: AdminUserRow[] }
+}
+
+interface AssignableModsResponse extends Record<string, unknown> {
+  mods?: Array<{ id: string; name: string }>
+}
+
+interface UserModsResponse extends Record<string, unknown> {
+  mod_ids?: string[]
+}
+
 export const admin = {
   adminStatus: () => req('/api/admin/status'),
   adminResearchSettings: () => req('/api/admin/research-settings'),
@@ -9,7 +59,7 @@ export const admin = {
   adminSaveVectorSettings: (data: Record<string, unknown>) =>
     req('/api/admin/vector-settings', { method: 'PUT', body: JSON.stringify(data || {}) }),
   adminUpload: (formData: FormData) => req('/api/admin/catalog', { method: 'POST', body: formData }),
-  adminListCatalog: (limit = 200, offset = 0) => req(`/api/admin/catalog?limit=${limit}&offset=${offset}`),
+  adminListCatalog: (limit = 200, offset = 0) => req<{ items?: AdminCatalogRow[] }>(`/api/admin/catalog?limit=${limit}&offset=${offset}`),
   adminDeleteCatalog: (id: string | number) => req(`/api/admin/catalog/${encodeURIComponent(String(id))}`, { method: 'DELETE' }),
   adminDeleteEmployeePack: (pkgId: string) =>
     req(`/api/admin/employee-packs/${encodeURIComponent(pkgId)}`, { method: 'DELETE' }),
@@ -107,7 +157,7 @@ export const admin = {
     req(`/api/admin/employee-autonomy/collab/threads/${encodeURIComponent(String(threadId))}/messages?limit=${encodeURIComponent(String(limit))}`),
   adminEmployeePostCollabMessage: (threadId: number | string, payload: { sender_employee_id?: string; content: string; mentions?: string[]; payload?: Record<string, unknown> }) =>
     req(`/api/admin/employee-autonomy/collab/threads/${encodeURIComponent(String(threadId))}/messages`, { method: 'POST', body: JSON.stringify(payload || {}) }),
-  opsOrchestrateAsync: (payload: { task_description: string; use_task_router?: boolean; target_employee_id?: string; max_concurrency?: number; allow_high_risk_real_run?: boolean }) =>
+  opsOrchestrateAsync: (payload: { task_description: string; use_task_router?: boolean; target_employee_id?: string; max_concurrency?: number; allow_high_risk_real_run?: boolean; dispatch_source?: string }) =>
     req('/api/ops/orchestrate/async', { method: 'POST', body: JSON.stringify({ use_task_router: true, max_concurrency: 2, allow_high_risk_real_run: false, ...payload }) }),
   opsOrchestrateJob: (jobId: string) => req(`/api/ops/orchestrate/jobs/${encodeURIComponent(jobId)}`),
   opsOrchestrateJobs: (limit = 20) => req(`/api/ops/orchestrate/jobs?limit=${encodeURIComponent(String(limit))}`),
@@ -155,14 +205,14 @@ export const admin = {
     const p = new URLSearchParams({ limit: String(limit), offset: String(offset) })
     if (isEnterprise === true) p.set('is_enterprise', 'true')
     else if (isEnterprise === false) p.set('is_enterprise', 'false')
-    return req(`/api/admin/users?${p}`)
+    return req<AdminUsersResponse>(`/api/admin/users?${p}`)
   },
   adminSetUserAdmin: (userId: string | number, isAdmin: boolean) => req(`/api/admin/users/${userId}/admin?is_admin=${isAdmin}`, { method: 'PUT' }),
   adminSetUserEnterprise: (userId: string | number, isEnterprise: boolean) =>
     req(`/api/admin/users/${userId}/enterprise?is_enterprise=${isEnterprise}`, { method: 'PUT' }),
-  adminEnterpriseAssignableMods: () => req('/api/admin/enterprise/assignable-mods'),
+  adminEnterpriseAssignableMods: () => req<AssignableModsResponse>('/api/admin/enterprise/assignable-mods'),
   adminListUserMods: (userId: string | number) =>
-    req(`/api/admin/users/${encodeURIComponent(String(userId))}/mods`),
+    req<UserModsResponse>(`/api/admin/users/${encodeURIComponent(String(userId))}/mods`),
   adminBindUserMod: (userId: string | number, modId: string) =>
     req(`/api/admin/users/${encodeURIComponent(String(userId))}/mods/${encodeURIComponent(modId)}`, {
       method: 'POST',
@@ -171,6 +221,6 @@ export const admin = {
     req(`/api/admin/users/${encodeURIComponent(String(userId))}/mods/${encodeURIComponent(modId)}`, {
       method: 'DELETE',
     }),
-  adminListWallets: (limit = 200, offset = 0) => req(`/api/admin/wallets?limit=${limit}&offset=${offset}`),
-  adminListTransactions: (limit = 200, offset = 0) => req(`/api/admin/transactions?limit=${limit}&offset=${offset}`),
+  adminListWallets: (limit = 200, offset = 0) => req<{ items?: AdminWalletRow[] }>(`/api/admin/wallets?limit=${limit}&offset=${offset}`),
+  adminListTransactions: (limit = 200, offset = 0) => req<{ items?: AdminTransactionRow[] }>(`/api/admin/transactions?limit=${limit}&offset=${offset}`),
 }

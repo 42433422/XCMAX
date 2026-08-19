@@ -115,7 +115,7 @@ describe('EmployeeAiDraftReview coverage extras', () => {
 
     const wrapper = mount(EmployeeAiDraftReview)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     expect(wrapper.text()).toContain('草稿已就绪')
     expect(wrapper.text()).toContain('所选工作流尚未通过沙箱测试')

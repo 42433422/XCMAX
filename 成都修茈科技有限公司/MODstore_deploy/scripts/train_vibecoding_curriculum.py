@@ -198,7 +198,6 @@ async def _run_one_pack(
             entry["parity_score"] = (art.get("golden_comparison") or {}).get("parity_score")
             entry["ok"] = final.get("status") == "done"
             entry["error"] = final.get("error")
-            rk = golden_id
             for k, v in RUNTIME_TO_GOLDEN_PACK.items():
                 if v == golden_id:
                     entry["runtime_kind"] = k

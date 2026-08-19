@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent, h, nextTick, ref } from 'vue'
+import type { NodeKind } from './domain/workflow/nodeKinds'
+import type { WorkflowFlowEdge, WorkflowFlowNode } from './domain/workflow/types'
 
 const wf2 = vi.hoisted(() => ({
-  currentGraph: null as any,
+  currentGraph: null as UnsafeTestValue,
   flowInstance: {
     applyNodeChanges: vi.fn(),
     applyEdgeChanges: vi.fn(),
@@ -68,15 +70,15 @@ const VersionsPanelStub = defineComponent({
   },
 })
 
-function makeNode(id: string, kind: string, config: Record<string, unknown> = {}) {
+function makeNode(id: string, kind: string, config: Record<string, unknown> = {}): WorkflowFlowNode {
   return {
     id,
     type: 'mod',
     position: { x: 10, y: 20 },
     data: {
-      kind,
+      kind: kind as NodeKind,
       label: `${kind}-${id}`,
-      backendId: id,
+      backendId: Number.parseInt(id, 10) || 0,
       config,
     },
   }
@@ -87,7 +89,13 @@ function makeGraph() {
     makeNode('start', 'start', { output_var: 'start_result' }),
     makeNode('employee', 'employee', { employee_id: 'emp-a', output_var: 'employee_result' }),
   ])
-  const edges = ref([{ id: 'edge-1', source: 'start', target: 'employee', sourceHandle: null }])
+  const edges = ref<WorkflowFlowEdge[]>([{
+    id: 'edge-1',
+    source: 'start',
+    target: 'employee',
+    sourceHandle: null,
+    data: { condition: '', backendId: 1 },
+  }])
   const meta = ref({ name: '覆盖工作流', description: 'desc', is_active: false })
   return {
     nodes,
@@ -102,7 +110,13 @@ function makeGraph() {
       return id
     }),
     addEdge: vi.fn(async (source: string, target: string, sourceHandle?: string | null) => {
-      edges.value.push({ id: `edge-${edges.value.length + 1}`, source, target, sourceHandle: sourceHandle ?? null })
+      edges.value.push({
+        id: `edge-${edges.value.length + 1}`,
+        source,
+        target,
+        sourceHandle: sourceHandle ?? null,
+        data: { condition: '', backendId: 0 },
+      })
     }),
     deleteEdge: vi.fn(async (id: string) => {
       edges.value = edges.value.filter((e) => e.id !== id)
@@ -269,7 +283,7 @@ describe('coverage workflow v2 panels and nodes', () => {
 
   it('covers generic node summaries for every node kind branch', async () => {
     const { default: GenericNode } = await import('./views/workflow/v2/nodes/GenericNode.vue')
-    const cases = [
+    const cases: Array<[string, Record<string, unknown>, string]> = [
       ['employee', { employee_id: 'emp-a' }, '员工 emp-a'],
       ['employee', {}, '未选择员工'],
       ['eskill', { skill_id: 'skill-a' }, 'ESkill skill-a'],
@@ -284,7 +298,11 @@ describe('coverage workflow v2 panels and nodes', () => {
     ]
     for (const [kind, config, expected] of cases) {
       const wrapper = mount(GenericNode, {
-        props: { id: `n-${kind}`, selected: true, data: { kind, label: `${kind} 节点`, config } },
+        props: {
+          id: `n-${kind}`,
+          selected: true,
+          data: { kind: kind as NodeKind, label: `${kind} 节点`, config, backendId: 0 },
+        },
         global: { stubs: { Handle: defineComponent({ template: '<span />' }) } },
       })
       expect(wrapper.text()).toContain(String(expected))

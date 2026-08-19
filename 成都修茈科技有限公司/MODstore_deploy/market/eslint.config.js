@@ -19,6 +19,8 @@ const ignores = {
     '**/*.min.js',
     '**/*.min.css',
     'public/**',
+    // 客来来是内置的 React/Tauri/Electron 独立工作区，由其自身工具链校验。
+    'src/domain/客来来/**',
     'src/views/_fix_refs.cjs',
   ],
 }
@@ -64,6 +66,22 @@ const languageOptions = {
   },
 }
 
+const testRules = {
+  files: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}'],
+  rules: {
+    // Unit tests intentionally define small inline Vue stubs and harness components.
+    'vue/one-component-per-file': 'off',
+  },
+}
+
+const commandLineRules = {
+  files: ['scripts/**/*.{cjs,js,mjs,ts}', 'playwright*.ts'],
+  rules: {
+    // Command-line tools intentionally use stdout for operator-facing progress.
+    'no-console': 'off',
+  },
+}
+
 export default [
   ignores,
   js.configs.recommended,
@@ -72,4 +90,6 @@ export default [
   prettierConfig,
   languageOptions,
   baseRules,
+  testRules,
+  commandLineRules,
 ]

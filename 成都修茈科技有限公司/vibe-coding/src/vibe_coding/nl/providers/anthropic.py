@@ -21,6 +21,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+from ..._internals.tls import ssl_context_for_endpoint
 from ..llm import LLMError
 
 
@@ -119,14 +120,7 @@ class AnthropicLLM:
         return ""
 
     def _ssl_context(self):
-        if self.verify_ssl:
-            return None
-        import ssl
-
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        return ctx
+        return ssl_context_for_endpoint(self.base_url, verify_ssl=self.verify_ssl)
 
 
 def _trim_to_first_json_block(text: str) -> str:

@@ -48,7 +48,13 @@ def _identity_skill_spec(skill_id: str, fn: str) -> str:
 
 def _identity_code(fn: str) -> str:
     return json.dumps(
-        {"source_code": f"def {fn}(x):\n    return {{'value': x}}\n"}
+        {
+            "source_code": (
+                f"def {fn}(x):\n"
+                "    \"\"\"Return the input in a workflow value payload.\"\"\"\n"
+                "    return {'value': x}\n"
+            )
+        }
     )
 
 

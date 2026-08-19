@@ -116,7 +116,7 @@ h.onAsrText('短', t + 3000)
 assert('低于 partialMinChars 不发送', !h.shouldFlushUtterance(t + 3000 + VOICE_ENDPOINT.silenceMs))
 
 const h2 = makeHarness()
-let t2 = 5000
+const t2 = 5000
 h2.onAsrText('现在听得到吗', t2)
 h2.onAudioLevel(0.001, t2 + 200)
 assert('7 字短问句停顿后可发送', h2.shouldFlushUtterance(t2 + VOICE_ENDPOINT.silenceMs))

@@ -3,11 +3,26 @@ import { AudioCapture } from './audioCapture'
 
 const BASE = import.meta.env.BASE_URL || '/'
 
-let _voskClient: any = null
+interface VoskMessage {
+  result?: { text?: string; partial?: string }
+}
+
+interface VoskRecognizer {
+  on(event: 'result' | 'partialresult', handler: (message: VoskMessage) => void): void
+  acceptWaveformFloat(data: Float32Array, sampleRate: number): void
+  retrieveFinalResult?(): VoskMessage
+  remove?(): void
+}
+
+interface VoskClient {
+  KaldiRecognizer: new (sampleRate: number) => VoskRecognizer
+}
+
+let _voskClient: VoskClient | null = null
 let _voskLoading = false
 let _voskFailed = false
 
-async function getVoskClient(): Promise<any> {
+async function getVoskClient(): Promise<VoskClient | null> {
   if (_voskClient) return _voskClient
   if (_voskLoading) return null
   if (_voskFailed) return null
@@ -19,9 +34,9 @@ async function getVoskClient(): Promise<any> {
       wasmUrl: `${BASE}vosk.wasm`,
       modelUrl: `${BASE}vosk/model.tar.gz`,
     })
-    _voskClient = client
-    return client
-  } catch (e: any) {
+    _voskClient = client as unknown as VoskClient
+    return _voskClient
+  } catch (e: unknown) {
     _voskFailed = true
     throw e
   } finally {
@@ -41,7 +56,7 @@ export class VoskBackend implements ASRBackend {
   id = 'vosk' as const
   label = 'Vosk 离线识别'
   private capture: AudioCapture | null = null
-  private recognizer: any = null
+  private recognizer: VoskRecognizer | null = null
   private _onResult: ((r: ASRResult) => void) | null = null
   private _onError: ((msg: string) => void) | null = null
   private _finalText = ''
@@ -76,14 +91,14 @@ export class VoskBackend implements ASRBackend {
     if (this._stopped) return
 
     this.recognizer = new client.KaldiRecognizer(16000)
-    this.recognizer.on('result', (msg: any) => {
+    this.recognizer.on('result', (msg: VoskMessage) => {
       const text = (msg?.result?.text || '').trim()
       if (text && !this._stopped) {
         this._finalText = text
         onResult({ text, isFinal: true })
       }
     })
-    this.recognizer.on('partialresult', (msg: any) => {
+    this.recognizer.on('partialresult', (msg: VoskMessage) => {
       const text = (msg?.result?.partial || '').trim()
       if (text && !this._stopped) {
         onResult({ text, isFinal: false })
@@ -103,8 +118,8 @@ export class VoskBackend implements ASRBackend {
         onAudioLevel: onAudioLevel ?? undefined,
       })
       onReady?.()
-    } catch (e: any) {
-      onError('麦克风启动失败：' + (e?.message || String(e)))
+    } catch (e: unknown) {
+      onError('麦克风启动失败：' + (e instanceof Error ? e.message : String(e)))
     }
   }
 

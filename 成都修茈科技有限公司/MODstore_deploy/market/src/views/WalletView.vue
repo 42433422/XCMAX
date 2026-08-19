@@ -334,7 +334,7 @@
               <img
                 v-if="llmTileShowsImg(block)"
                 class="llm-tile__img"
-                :src="llmProviderIconImgSrc(block.provider)"
+                :src="llmProviderIconImgSrc(block.provider) || undefined"
                 alt=""
                 width="36"
                 height="36"
@@ -545,7 +545,7 @@ import { useRouter } from 'vue-router'
 import { api } from '../api'
 import { parseByokPaste } from '../byokEnvImport'
 import { requestJson } from '../infrastructure/http/client'
-import { llmUiMeta, LLM_OAI_COMPAT_BASE_URL_PROVIDERS } from '../llmModels'
+import {  LLM_OAI_COMPAT_BASE_URL_PROVIDERS } from '../llmModels'
 import { classifyLlmCatalogIssue, catalogIssueCreditHint, hasAnyLlmKey, walletTileKeyConfigured } from '../llmProviderHealth'
 import { llmProviderIconImgSrc } from '../llmIconUrls'
 import { useWalletStore } from '../stores/wallet'
@@ -555,12 +555,18 @@ import {
   modelOptionLabelWithPricing,
   providerTileMinPriceHint,
 } from '../composables/useLlmPricingDisplay'
+import type {
+  LlmBillingSettings,
+  LlmModelPricing,
+} from '../composables/useLlmPricingDisplay'
 import { useAuthStore } from '../stores/auth'
 import LlmPricingAdminPanel from '../components/llm/LlmPricingAdminPanel.vue'
 import {
   providerHasImageCapability,
   providerHasVideoCapability,
 } from '../llmMedia'
+import type { CatalogProviderBlock } from '../llmMedia'
+import type { PaymentOrder } from '../types/api'
 
 /** 与后端 llm_model_taxonomy.CATEGORY_ORDER 一致 */
 const LLM_CATEGORY_ORDER = ['llm', 'vlm', 'image', 'video', 'other']
@@ -568,12 +574,99 @@ const LLM_CATEGORY_ORDER = ['llm', 'vlm', 'image', 'video', 'other']
 const router = useRouter()
 const authStore = useAuthStore()
 const walletStore = useWalletStore()
+
+interface TransactionRecord {
+  id: string | number
+  created_at?: string | null
+  type?: string | null
+  amount: number
+  description?: string
+  order_no?: string
+  refund_no?: string
+}
+
+interface RawTransactionRecord extends Omit<TransactionRecord, 'amount'> {
+  amount?: unknown
+}
+
+interface RefundRecord {
+  id: string | number
+  refund_no?: string
+  order_no?: string
+  amount?: number | string
+  status?: string | null
+}
+
+interface PlanRecord {
+  name?: string
+  expires_at?: string | null
+}
+
+interface QuotaRecord {
+  quota_type: string
+  remaining?: number
+  total?: number
+}
+
+interface LlmCapability {
+  l3_status?: string
+  l1_status?: string
+  platform_billing_ok?: boolean
+  [key: string]: unknown
+}
+
+interface WalletLlmModelRow {
+  id: string
+  category?: string
+  capability?: LlmCapability
+  pricing?: LlmModelPricing
+}
+
+interface WalletCatalogProvider extends CatalogProviderBlock {
+  provider: string
+  label: string
+  models: string[]
+  models_detailed?: WalletLlmModelRow[]
+  error?: string | null
+  fetch_source?: string | null
+  fetched_at?: string | null
+}
+
+interface WalletCatalog {
+  providers: WalletCatalogProvider[]
+  category_labels?: Record<string, string>
+  billing_settings?: LlmBillingSettings
+  gate_hints?: {
+    platform_catalog_gate?: boolean
+    byok_catalog_gate?: boolean
+    platform_require_priced?: boolean
+  }
+  preferences?: { provider?: string; model?: string }
+  fernet_configured?: boolean
+  cache_ttl_seconds?: number
+}
+
+interface LlmStatusRecord {
+  provider: string
+  label?: string
+  has_user_override?: boolean
+  has_platform_key?: boolean
+  masked_key?: string
+}
+
+interface BareCredentialResponse {
+  provider?: string
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
 const isAdmin = computed(() => authStore.isAdmin)
 const { balance, membershipReferenceYuan } = storeToRefs(walletStore)
-const transactions = ref([])
+const transactions = ref<TransactionRecord[]>([])
 const txLoading = ref(true)
 const financeLoading = ref(true)
-const recentOrders = ref([])
+const recentOrders = ref<PaymentOrder[]>([])
 const orderListTotal = ref(0)
 const dismissOrdersLoading = ref(false)
 /** 资金页「最近订单」只展示前 N 条，避免与「全部订单」重复堆叠 */
@@ -581,17 +674,17 @@ const RECENT_ORDERS_PANEL_LIMIT = 5
 /** 交易记录表默认只展示最近 N 条，其余由按钮展开 */
 const RECENT_TX_PANEL_LIMIT = 5
 const txListExpanded = ref(false)
-const recentRefunds = ref([])
-const payAmount = ref(null)
+const recentRefunds = ref<RefundRecord[]>([])
+const payAmount = ref<number | null>(null)
 const payNote = ref('')
 const paying = ref(false)
 const payErr = ref('')
 const payHint = ref('')
 const isUpdating = ref(false)
-const lastBalance = ref(null)
+const lastBalance = ref<number | null>(null)
 const amountError = ref('')
-const myPlan = ref(null)
-const myQuotas = ref([])
+const myPlan = ref<PlanRecord | null>(null)
+const myQuotas = ref<QuotaRecord[]>([])
 const isValidAmount = computed(() => {
   const amt = Number(payAmount.value)
   return !isNaN(amt) && amt > 0
@@ -606,25 +699,25 @@ const balanceGaugeFill = computed(() => {
   return Math.min(100, (b / refY) * 100)
 })
 
-const catalog = ref(null)
-const llmStatusList = ref([])
+const catalog = ref<WalletCatalog | null>(null)
+const llmStatusList = ref<LlmStatusRecord[]>([])
 const llmCatalogLoading = ref(false)
 const llmErr = ref('')
 const llmNote = ref('')
 const selectedProvider = ref('openai')
 const selectedModel = ref('')
-const iconLoadFailed = reactive({})
+const iconLoadFailed = reactive<Record<string, boolean>>({})
 const llmBootstrapped = ref(false)
-const byokKey = reactive({})
-const byokBaseUrl = reactive({})
+const byokKey = reactive<Record<string, string>>({})
+const byokBaseUrl = reactive<Record<string, string>>({})
 const byokSaving = ref('')
 const byokBulkPaste = ref('')
 const byokImportBusy = ref(false)
 /** @type {import('vue').Ref<'all'|'image'|'video'>} */
 const llmProviderFilter = ref('all')
 
-let _prefTimer = null
-let _catalogInterval = null
+let _prefTimer: ReturnType<typeof setTimeout> | null = null
+let _catalogInterval: ReturnType<typeof setInterval> | null = null
 
 const recentOrdersPanel = computed(() =>
   (recentOrders.value || []).slice(0, RECENT_ORDERS_PANEL_LIMIT)
@@ -641,20 +734,24 @@ const hiddenTxCount = computed(() => {
   return Math.max(0, n - RECENT_TX_PANEL_LIMIT)
 })
 
-const currentProviderBlock = computed(() => {
-  if (!catalog.value) return null
-  return catalog.value.providers.find((p) => p.provider === selectedProvider.value) || null
+const catalogProviderBlocks = computed(() => {
+  const providers = catalog.value?.providers
+  return Array.isArray(providers) ? providers : []
 })
 
-function categoryLabel(cat) {
+const currentProviderBlock = computed(() => {
+  return catalogProviderBlocks.value.find((p) => p.provider === selectedProvider.value) || null
+})
+
+function categoryLabel(cat: string): string {
   return catalog.value?.category_labels?.[cat] || cat
 }
 
 /** @param {{ id: string, category?: string, capability?: Record<string, unknown>, pricing?: Record<string, unknown> }} row */
-function modelOptionLabel(row) {
+function modelOptionLabel(row: WalletLlmModelRow): string {
   const id = row.id || ''
   const c = row.capability
-  const tags = []
+  const tags: string[] = []
   if (c && typeof c === 'object') {
     if (c.l3_status === 'approved') tags.push('L3已通过')
     else if (c.l3_status === 'pending') tags.push('L3审核中')
@@ -677,8 +774,8 @@ const selectedModelPricingDetail = computed(() => {
 })
 
 /** @param {{ models_detailed?: Array<{ pricing?: Record<string, unknown> }> }} block */
-function providerTilePriceHint(block) {
-  return providerTileMinPriceHint(block?.models_detailed, catalog.value?.billing_settings)
+function providerTilePriceHint(block: WalletCatalogProvider): string {
+  return providerTileMinPriceHint(block?.models_detailed, catalog.value?.billing_settings) || ''
 }
 
 async function onPricingAdminSaved() {
@@ -686,14 +783,14 @@ async function onPricingAdminSaved() {
   await refreshCatalog(true)
 }
 
-function modelsForCategory(cat) {
+function modelsForCategory(cat: string): WalletLlmModelRow[] {
   const block = currentProviderBlock.value
   const detailed = block?.models_detailed
   if (detailed && detailed.length) {
     return detailed.filter((r) => r.category === cat)
   }
   if (cat === 'llm' && block?.models?.length) {
-    return block.models.map((id) => ({ id, category: 'llm' }))
+    return (block.models as string[]).map((id: string) => ({ id, category: 'llm' }))
   }
   return []
 }
@@ -710,7 +807,7 @@ const byokImportDisabled = computed(() => {
 /** 目录同步元信息（用于工具栏徽章） */
 const catalogSyncMeta = computed(() => {
   if (!catalog.value) return null
-  const lines = catalog.value.providers.map((p) => p.fetched_at).filter(Boolean)
+  const lines = catalogProviderBlocks.value.map((p) => p.fetched_at).filter(Boolean)
   if (!lines.length) return null
   return {
     fetchedAt: lines[lines.length - 1],
@@ -720,7 +817,7 @@ const catalogSyncMeta = computed(() => {
 
 /** provider id -> /api/llm/status 行 */
 const llmStatusByProvider = computed(() => {
-  const m = {}
+  const m: Record<string, LlmStatusRecord> = {}
   for (const s of llmStatusList.value || []) {
     if (s && s.provider) m[s.provider] = s
   }
@@ -729,8 +826,8 @@ const llmStatusByProvider = computed(() => {
 
 /** 磁贴顺序：目录与健康检查均为 ok 的厂商靠前（密钥错误、降级列表靠后） */
 const catalogProvidersSorted = computed(() => {
-  const blocks = catalog.value?.providers
-  if (!Array.isArray(blocks) || !blocks.length) return []
+  const blocks = catalogProviderBlocks.value
+  if (!blocks.length) return []
   let list = blocks
   if (llmProviderFilter.value === 'image') {
     list = list.filter((b) => providerHasImageCapability(b))
@@ -753,18 +850,18 @@ const catalogProvidersSorted = computed(() => {
 })
 
 /** @param {{ media_counts?: Record<string, number>, supports_openai_images?: boolean, models_detailed?: unknown[] }} block */
-function providerTileMediaTags(block) {
-  const tags = []
+function providerTileMediaTags(block: WalletCatalogProvider): Array<{ kind: string; label: string }> {
+  const tags: Array<{ kind: string; label: string }> = []
   const imgN = Number(block?.media_counts?.image ?? 0)
   const vidN = Number(block?.media_counts?.video ?? 0)
   if (imgN > 0) tags.push({ kind: 'image', label: `生图 ${imgN}` })
-  else if (providerHasImageCapability(block)) tags.push({ kind: 'image', label: '生图' })
+  else if (providerHasImageCapability(block as CatalogProviderBlock)) tags.push({ kind: 'image', label: '生图' })
   if (vidN > 0) tags.push({ kind: 'video', label: `生视频 ${vidN}` })
-  else if (providerHasVideoCapability(block)) tags.push({ kind: 'video', label: '生视频' })
+  else if (providerHasVideoCapability(block as CatalogProviderBlock)) tags.push({ kind: 'video', label: '生视频' })
   return tags
 }
 
-function formatCatalogFetchedAt(iso) {
+function formatCatalogFetchedAt(iso: string | null | undefined): string {
   if (!iso) return ''
   try {
     const d = new Date(iso)
@@ -783,14 +880,14 @@ function formatCatalogFetchedAt(iso) {
 }
 
 /** @param {{ provider: string, label?: string, error?: string|null, fetch_source?: string|null }} block */
-function llmTileShowsImg(block) {
+function llmTileShowsImg(block: WalletCatalogProvider): boolean {
   const u = llmProviderIconImgSrc(block.provider)
   if (!u) return false
   return !iconLoadFailed[llmTileIconFailKey(block)]
 }
 
 /** @param {{ provider: string, label?: string, error?: string|null, fetch_source?: string|null }} block */
-function providerTileState(block) {
+function providerTileState(block: WalletCatalogProvider): string {
   const st = llmStatusByProvider.value[block.provider]
   if (!walletTileKeyConfigured(block.provider, st)) return 'inactive'
   const issue = classifyLlmCatalogIssue(block.error, block.fetch_source)
@@ -801,12 +898,12 @@ function providerTileState(block) {
 }
 
 /** 与图标 URL 联动，避免换色后仍沿用旧失败态 */
-function llmTileIconFailKey(block) {
+function llmTileIconFailKey(block: WalletCatalogProvider): string {
   return `${block.provider}__${providerTileState(block)}`
 }
 
 /** @param {{ provider: string, label?: string, error?: string|null, fetch_source?: string|null }} block */
-function providerTileTitle(block) {
+function providerTileTitle(block: WalletCatalogProvider): string {
   const n = block.label || block.provider
   const st = llmStatusByProvider.value[block.provider]
   const ps = providerTileState(block)
@@ -841,14 +938,13 @@ function providerTileTitle(block) {
 }
 
 /** 与磁贴同源：BYOK 列表行旁是否显示「目录报红」提示 */
-function llmByokCatalogDanger(provider) {
-  if (!catalog.value?.providers?.length) return false
-  const block = catalog.value.providers.find((p) => p.provider === provider)
+function llmByokCatalogDanger(provider: string): boolean {
+  const block = catalogProviderBlocks.value.find((p) => p.provider === provider)
   if (!block) return false
   return providerTileState(block) === 'danger'
 }
 
-function llmInitials(label) {
+function llmInitials(label: string): string {
   const parts = label.replace(/\s+/g, ' ').trim().split(' ')
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
   return label.slice(0, 2).toUpperCase()
@@ -857,12 +953,13 @@ function llmInitials(label) {
 function syncSelectionFromServerPrefs() {
   if (!catalog.value) return
   const pref = catalog.value.preferences || {}
+  const providers = catalogProviderBlocks.value
   let prov = pref.provider || 'openai'
-  if (!catalog.value.providers.some((p) => p.provider === prov)) {
-    prov = catalog.value.providers[0]?.provider || 'openai'
+  if (!providers.some((p) => p.provider === prov)) {
+    prov = providers[0]?.provider || 'openai'
   }
   selectedProvider.value = prov
-  const block = catalog.value.providers.find((p) => p.provider === prov)
+  const block = providers.find((p) => p.provider === prov)
   const models = block?.models || []
   let mod = pref.model || ''
   if (!mod || !models.includes(mod)) mod = models[0] || ''
@@ -871,7 +968,7 @@ function syncSelectionFromServerPrefs() {
 
 function validateSelectionAfterRefresh() {
   if (!catalog.value) return
-  const block = catalog.value.providers.find((p) => p.provider === selectedProvider.value)
+  const block = catalogProviderBlocks.value.find((p) => p.provider === selectedProvider.value)
   if (!block) {
     syncSelectionFromServerPrefs()
     return
@@ -885,13 +982,13 @@ async function loadLlmStatus() {
   try {
     const res = await api.llmStatus()
     llmStatusList.value = res.providers || []
-  } catch (e) {
+  } catch (e: unknown) {
     llmStatusList.value = []
-    if (localStorage.getItem('modstore_token')) llmErr.value = e.message || String(e)
+    if (localStorage.getItem('modstore_token')) llmErr.value = errorMessage(e)
   }
 }
 
-async function loadCatalog(isManualRefresh) {
+async function loadCatalog(isManualRefresh: boolean): Promise<void> {
   if (!localStorage.getItem('modstore_token')) return
   llmCatalogLoading.value = true
   llmErr.value = ''
@@ -904,20 +1001,20 @@ async function loadCatalog(isManualRefresh) {
     } else if (isManualRefresh) {
       validateSelectionAfterRefresh()
     }
-  } catch (e) {
-    llmErr.value = e.message || String(e)
+  } catch (e: unknown) {
+    llmErr.value = errorMessage(e)
   } finally {
     llmCatalogLoading.value = false
   }
 }
 
-async function refreshCatalog(isManual) {
+async function refreshCatalog(isManual: boolean): Promise<void> {
   await Promise.all([loadCatalog(isManual), loadLlmStatus()])
 }
 
-function selectProvider(id) {
+function selectProvider(id: string): void {
   selectedProvider.value = id
-  const block = catalog.value?.providers.find((p) => p.provider === id)
+  const block = catalogProviderBlocks.value.find((p) => p.provider === id)
   const models = block?.models || []
   if (!selectedModel.value || !models.includes(selectedModel.value)) {
     selectedModel.value = models[0] || ''
@@ -940,12 +1037,12 @@ async function persistPreferences() {
     setTimeout(() => {
       if (llmNote.value === '已保存默认模型') llmNote.value = ''
     }, 2000)
-  } catch (e) {
-    llmErr.value = e.message || String(e)
+  } catch (e: unknown) {
+    llmErr.value = errorMessage(e)
   }
 }
 
-async function saveByok(provider) {
+async function saveByok(provider: string): Promise<void> {
   const key = (byokKey[provider] || '').trim()
   if (!key) {
     llmErr.value = '请先粘贴 API Key'
@@ -964,14 +1061,14 @@ async function saveByok(provider) {
       if (llmNote.value === '已保存 BYOK') llmNote.value = ''
     }, 2000)
     await refreshCatalog(false)
-  } catch (e) {
-    llmErr.value = e.message || String(e)
+  } catch (e: unknown) {
+    llmErr.value = errorMessage(e)
   } finally {
     byokSaving.value = ''
   }
 }
 
-function detectBareCredential(apiKey) {
+function detectBareCredential(apiKey: string): Promise<BareCredentialResponse> {
   return requestJson('/api/llm/credentials/detect-bare', {
     method: 'POST',
     body: JSON.stringify({ api_key: apiKey }),
@@ -989,8 +1086,8 @@ async function importByokBulk() {
       return
     }
 
-    const ok = []
-    const fail = []
+    const ok: string[] = []
+    const fail: string[] = []
 
     if (entries.length) {
       const settled = await Promise.allSettled(
@@ -1012,7 +1109,7 @@ async function importByokBulk() {
       })
     }
 
-    const detected = []
+    const detected: string[] = []
     if (bareKeys.length) {
       const settled = await Promise.allSettled(bareKeys.map((k) => detectBareCredential(k)))
       settled.forEach((r, i) => {
@@ -1032,7 +1129,7 @@ async function importByokBulk() {
       })
     }
 
-    const parts = []
+    const parts: string[] = []
     if (ok.length) parts.push(`已保存 ${ok.length} 个：${ok.join('、')}`)
     if (detected.length) parts.push(`自动识别命中：${detected.join('、')}`)
     if (fail.length) parts.push(`失败 ${fail.length}：${fail.join('；')}`)
@@ -1040,14 +1137,14 @@ async function importByokBulk() {
     llmNote.value = parts.filter(Boolean).join('。') || '完成'
     if (ok.length && !fail.length) byokBulkPaste.value = ''
     await Promise.all([loadLlmStatus(), loadCatalog(false)])
-  } catch (e) {
-    llmErr.value = e.message || String(e)
+  } catch (e: unknown) {
+    llmErr.value = errorMessage(e)
   } finally {
     byokImportBusy.value = false
   }
 }
 
-async function clearByok(provider) {
+async function clearByok(provider: string): Promise<void> {
   const ok = await confirmDanger({
     title: '清除 API 密钥',
     message: `确定清除「${provider}」的 BYOK 配置？清除后该厂商将无法再使用你保存的密钥。`,
@@ -1061,8 +1158,8 @@ async function clearByok(provider) {
     await api.llmDeleteCredentials(provider)
     llmNote.value = '已清除 BYOK'
     await refreshCatalog(false)
-  } catch (e) {
-    llmErr.value = e.message || String(e)
+  } catch (e: unknown) {
+    llmErr.value = errorMessage(e)
   } finally {
     byokSaving.value = ''
   }
@@ -1088,7 +1185,7 @@ onMounted(() => {
 async function loadMyPlan() {
   try {
     const res = await api.paymentMyPlan()
-    myPlan.value = res.plan
+    myPlan.value = res.plan ?? null
     myQuotas.value = res.quotas || []
   } catch {
     myPlan.value = null
@@ -1096,9 +1193,9 @@ async function loadMyPlan() {
   }
 }
 
-function quotaLabel(t) {
+function quotaLabel(t: string): string {
   const m = { employee_count: '员工数', llm_calls: 'LLM 调用', storage_mb: '存储(MB)' }
-  return m[t] || t
+  return m[t as keyof typeof m] || t
 }
 
 onUnmounted(() => {
@@ -1111,7 +1208,7 @@ watch(selectedProvider, () => {
   schedulePersistPreferences()
 })
 
-function txnTypeLabel(type) {
+function txnTypeLabel(type: string | null | undefined): string {
   const m = {
     recharge: '管理员充值',
     admin_self_credit: '管理员本人加款',
@@ -1129,10 +1226,10 @@ function txnTypeLabel(type) {
     plan_membership_tokens_revoke: '会员额度扣回',
     llm_wallet_charge: '大模型扣费',
   }
-  return m[type] || type || '—'
+  return m[type as keyof typeof m] || type || '—'
 }
 
-function orderStatusText(status) {
+function orderStatusText(status: string | null | undefined): string {
   const m = {
     pending: '待支付',
     paid: '已支付',
@@ -1142,25 +1239,25 @@ function orderStatusText(status) {
     failed: '失败',
     closed: '已关闭',
   }
-  return m[status] || status || '—'
+  return m[status as keyof typeof m] || status || '—'
 }
 
-function refundStatusText(status) {
+function refundStatusText(status: string | null | undefined): string {
   const m = {
     pending: '待审核',
     approved: '已退回钱包',
     rejected: '已拒绝',
     failed: '失败',
   }
-  return m[status] || status || '—'
+  return m[status as keyof typeof m] || status || '—'
 }
 
-function money(value) {
+function money(value: unknown): string {
   const n = Number(value)
   return Number.isFinite(n) ? n.toFixed(2) : '0.00'
 }
 
-function goOrder(order) {
+function goOrder(order: PaymentOrder): void {
   if (!order?.out_trade_no) return
   router.push({ name: 'order-detail', params: { orderId: order.out_trade_no } })
 }
@@ -1215,8 +1312,8 @@ async function dismissNonActiveOrders() {
       }, 5000)
     }
     await loadWalletOverview()
-  } catch (e) {
-    payErr.value = e?.message || String(e)
+  } catch (e: unknown) {
+    payErr.value = errorMessage(e)
   } finally {
     dismissOrdersLoading.value = false
   }
@@ -1259,7 +1356,7 @@ async function loadTransactions() {
   }
 }
 
-function normalizeTransaction(t) {
+function normalizeTransaction(t: RawTransactionRecord): TransactionRecord {
   return {
     ...t,
     amount: Number(t?.amount ?? 0),
@@ -1313,14 +1410,14 @@ async function startAlipayRecharge() {
       return
     }
     payErr.value = '未知的支付类型'
-  } catch (e) {
-    payErr.value = e.message || String(e)
+  } catch (e: unknown) {
+    payErr.value = errorMessage(e)
   } finally {
     paying.value = false
   }
 }
 
-function formatDate(iso) {
+function formatDate(iso: string | null | undefined): string {
   if (!iso) return ''
   return new Date(iso).toLocaleString('zh-CN')
 }

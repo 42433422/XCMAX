@@ -4,7 +4,6 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 import { setActivePinia, createPinia } from 'pinia'
 import NotificationCenter from './NotificationCenter.vue'
 import { api } from '../api'
-import { useNotificationStore } from '../stores/notifications'
 
 vi.mock('../api', () => ({
   api: {

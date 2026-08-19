@@ -19,6 +19,16 @@ const employeesLoaded = ref(false)
 const eskills = ref<Array<{ id: string | number; name?: string; domain?: string }>>([])
 const eskillsLoaded = ref(false)
 
+function isEmployeeOption(value: unknown): value is { id: string; name?: string } {
+  return typeof value === 'object' && value !== null && 'id' in value && typeof (value as { id?: unknown }).id === 'string'
+}
+
+function isESkillOption(value: unknown): value is { id: string | number; name?: string; domain?: string } {
+  if (typeof value !== 'object' || value === null || !('id' in value)) return false
+  const id = (value as { id?: unknown }).id
+  return typeof id === 'string' || typeof id === 'number'
+}
+
 const meta = computed(() => (props.selected ? getNodeMeta(props.selected.data!.kind) : null))
 
 const labelDraft = ref('')
@@ -52,8 +62,8 @@ function setField(key: string, value: unknown) {
 async function ensureEmployees() {
   if (employeesLoaded.value) return
   try {
-    const list: any = await api.listEmployees()
-    const raw = Array.isArray(list) ? list : list?.employees || []
+    const list = await api.listEmployees()
+    const raw = list.filter(isEmployeeOption)
     employees.value = filterOutPlannedDutyEmployees(raw)
   } catch {
     employees.value = []
@@ -65,8 +75,9 @@ async function ensureEmployees() {
 async function ensureESkills() {
   if (eskillsLoaded.value) return
   try {
-    const list: any = await api.listESkills()
-    eskills.value = Array.isArray(list) ? list : list?.eskills || []
+    const list = await api.listESkills()
+    const record = typeof list === 'object' && list !== null ? (list as Record<string, unknown>) : {}
+    eskills.value = (Array.isArray(list) ? list : Array.isArray(record.eskills) ? record.eskills : []).filter(isESkillOption)
   } catch {
     eskills.value = []
   } finally {

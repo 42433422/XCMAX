@@ -6,6 +6,19 @@ import {
   type AuthResponse,
 } from './shared'
 
+export interface MeResponse extends Record<string, unknown> {
+  ok?: boolean
+  success?: boolean
+  username?: string
+  email?: string
+}
+
+export interface PasswordResetResponse extends Record<string, unknown> {
+  ok?: boolean
+  success?: boolean
+  message?: string
+}
+
 export const auth = {
   register: async (username: string, password: string, email: string, verificationCode = '') => {
     const res = await authRequest('/api/auth/register', {
@@ -41,16 +54,16 @@ export const auth = {
     setTokensFromAuthResponse(res as AuthResponse)
     return res
   },
-  me: () => req('/api/auth/me'),
+  me: () => req<MeResponse>('/api/auth/me'),
   accountBootstrap: () => req('/api/account/bootstrap'),
   sendVerificationCode: (email: string) =>
     req('/api/auth/send-code', { method: 'POST', body: JSON.stringify({ email }) }),
   sendRegisterVerificationCode: (email: string) =>
     req('/api/auth/send-register-code', { method: 'POST', body: JSON.stringify({ email }) }),
   sendResetPasswordCode: (email: string) =>
-    req('/api/auth/send-reset-password-code', { method: 'POST', body: JSON.stringify({ email }) }),
+    req<PasswordResetResponse>('/api/auth/send-reset-password-code', { method: 'POST', body: JSON.stringify({ email }) }),
   resetPassword: (email: string, code: string, newPassword: string) =>
-    req('/api/auth/reset-password', {
+    req<PasswordResetResponse>('/api/auth/reset-password', {
       method: 'POST',
       body: JSON.stringify({ email, code, new_password: newPassword }),
     }),

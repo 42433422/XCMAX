@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { llm } from './llm'
-import { req, authHeaders } from './shared'
+import { req } from './shared'
 
 vi.mock('./shared', () => ({
   req: vi.fn(),
@@ -115,7 +115,7 @@ describe('llm api', () => {
   it('llmAdminModelCapabilities builds query string', async () => {
     vi.mocked(req).mockResolvedValue({})
     await llm.llmAdminModelCapabilities({ provider: 'openai', q: 'gpt', limit: 10 })
-    const call = vi.mocked(req).mock.calls[0] as any[]
+    const call = vi.mocked(req).mock.calls[0] as UnsafeTestValue[]
     const url = call[0] as string
     expect(url).toContain('provider=openai')
     expect(url).toContain('q=gpt')

@@ -28,8 +28,9 @@ vi.mock('../api', () => ({
 }))
 
 import { api } from '../api'
+import type { VoiceRouteContext } from './voiceUtteranceRouter'
 
-const baseRouteCtx = {
+const baseRouteCtx: Omit<VoiceRouteContext, 'text'> = {
   orchPhase: 'idle',
   hasPlanSession: false,
   hasPendingHandoff: false,
@@ -591,7 +592,8 @@ describe('classifyVoiceTurn', () => {
       model: 'gpt-4o-mini',
     })
     expect(vi.mocked(api.llmChat)).toHaveBeenCalled()
-    expect(String(vi.mocked(api.llmChat).mock.calls[0][2][0].content)).toContain('工作台模式：employee')
+    const promptMessages = vi.mocked(api.llmChat).mock.calls[0][2] as Array<{ content: unknown }>
+    expect(String(promptMessages[0].content)).toContain('工作台模式：employee')
     expect(['open_plan', 'clarify', 'chat']).toContain(result.action)
   })
 })

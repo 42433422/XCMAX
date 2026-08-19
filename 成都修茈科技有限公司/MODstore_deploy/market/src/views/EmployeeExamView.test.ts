@@ -322,9 +322,9 @@ describe('EmployeeExamView', () => {
     await flushPromises()
     await mismatch.find('#exam-employee-select').setValue('json-report-employee')
 
-    ;(mismatch.vm as any).onDrop({
+    ;(mismatch.vm as UnsafeTestValue).onDrop({
       dataTransfer: { files: [new File(['doc'], 'paper.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })] },
-    } as DragEvent)
+    } as unknown as DragEvent)
     await flushPromises()
     expect(mismatch.text()).toContain('当前员工不接受 .docx')
     await mismatch.find('.btn-action').trigger('click')
@@ -345,7 +345,7 @@ describe('EmployeeExamView', () => {
     await plain.find('.exam-file-input').trigger('change')
     await plain.find('.btn-action').trigger('click')
     await flushPromises()
-    expect((plain.vm as any).rawJsonPreview).toContain('plain execute result')
+    expect((plain.vm as UnsafeTestValue).rawJsonPreview).toContain('plain execute result')
   })
 
   it('renders drag hover, file picker, summary, raw json, and download busy states', async () => {
@@ -363,7 +363,7 @@ describe('EmployeeExamView', () => {
     await dropzone.trigger('dragleave')
     expect(dropzone.classes()).not.toContain('exam-dropzone--active')
 
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     vm.resultSummary = '摘要一\n摘要二'
     vm.rawJsonPreview = '{"ok":true}'
     vm.downloads = [
@@ -386,7 +386,7 @@ describe('EmployeeExamView', () => {
   it('covers manual report, preview, and download error branches', async () => {
     const wrapper = mount(EmployeeExamView)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     vm.openHtmlReportInNewTab()
 
@@ -455,7 +455,7 @@ describe('EmployeeExamView', () => {
 
     const wrapper = mount(EmployeeExamView)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     vm.htmlReportPreviewUrl = 'blob:old-report'
     vm.revokeHtmlPreview()

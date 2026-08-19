@@ -147,7 +147,6 @@ const filters = reactive({
 
 const facetIndustries = computed(() => facets.value.industries || [])
 const facetArtifacts = computed(() => facets.value.artifacts || [])
-const facetSecurityLevels = computed(() => facets.value.security_levels || [])
 
 function artifactLabel(art) {
   return ARTIFACT_LABELS[art] || art || '其他'

@@ -66,7 +66,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22.13.0'
 
       - name: Install HTML validator
         run: npm install --global html-validate@9 htmlhint@1
@@ -77,6 +77,13 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           files=( *.html site/*.html new/*.html )
+          filtered=()
+          for file in "${files[@]}"; do
+            # 百度站点所有权验证文件按协议必须是裸 token，并不是 HTML 文档。
+            [[ "$(basename "$file")" == baidu_verify_* ]] && continue
+            filtered+=("$file")
+          done
+          files=("${filtered[@]}")
           if [ ${#files[@]} -eq 0 ]; then
             echo "No static HTML files to validate."
             exit 0

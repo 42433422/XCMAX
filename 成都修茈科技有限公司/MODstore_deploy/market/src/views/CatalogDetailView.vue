@@ -798,6 +798,7 @@ async function delistItem() {
 function navigateToWorkflow() {
   router.push('/workflow')
 }
+defineExpose({ materialCategoryLabel })
 </script>
 
 <style scoped>

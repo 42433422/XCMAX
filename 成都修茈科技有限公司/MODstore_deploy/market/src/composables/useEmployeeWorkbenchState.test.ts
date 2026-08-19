@@ -15,7 +15,7 @@ describe('useEmployeeWorkbenchState', () => {
 
   it('resolves workflow id from editor JSON before manifest fallback', () => {
     const state = useEmployeeWorkbenchState({
-      parseWorkflowIdFromEntry: (entry: any) => Number(entry.workflow_id || 0),
+      parseWorkflowIdFromEntry: (entry: UnsafeTestValue) => Number(entry.workflow_id || 0),
       inferWorkflowIdFromManifest: () => 99,
     })
 
@@ -45,7 +45,7 @@ describe('useEmployeeWorkbenchState', () => {
   it('uses manifest fallback and safe id guards', () => {
     const state = useEmployeeWorkbenchState({
       parseWorkflowIdFromEntry: () => 0,
-      inferWorkflowIdFromManifest: (_manifest: any, index: number) => index + 70,
+      inferWorkflowIdFromManifest: (_manifest: UnsafeTestValue, index: number) => index + 70,
     })
 
     state.workflowJsonText.value = '{bad json'
@@ -65,7 +65,7 @@ describe('useEmployeeWorkbenchState', () => {
 
   it('only passes workflow gate for eligible sandboxed workflows', () => {
     const state = useEmployeeWorkbenchState({
-      parseWorkflowIdFromEntry: (entry: any) => Number(entry.workflow_id || 0),
+      parseWorkflowIdFromEntry: (entry: UnsafeTestValue) => Number(entry.workflow_id || 0),
       inferWorkflowIdFromManifest: () => 0,
     })
 
@@ -88,7 +88,7 @@ describe('useEmployeeWorkbenchState', () => {
 
   it('reports workflow gate loading, errors, untested and failed statuses', () => {
     const state = useEmployeeWorkbenchState({
-      parseWorkflowIdFromEntry: (entry: any) => Number(entry.workflow_id || 0),
+      parseWorkflowIdFromEntry: (entry: UnsafeTestValue) => Number(entry.workflow_id || 0),
       inferWorkflowIdFromManifest: () => 0,
     })
 
@@ -115,7 +115,7 @@ describe('useEmployeeWorkbenchState', () => {
     vi.mocked(api.listEmployeeEligibleWorkflows).mockResolvedValueOnce({
       workflows: [{ id: 1, sandbox_status: { status: 'pass' } }],
       all_workflows: [{ id: 1 }, { id: 2, sandbox_status: { status: 'stale' } }],
-    } as any)
+    } as UnsafeTestValue)
     const state = useEmployeeWorkbenchState({
       parseWorkflowIdFromEntry: () => 0,
       inferWorkflowIdFromManifest: () => 0,

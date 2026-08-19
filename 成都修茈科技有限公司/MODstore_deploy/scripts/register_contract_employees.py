@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
-import shutil
 import subprocess
-import sys
 import zipfile
 
 BASE = "/root/成都修茈科技有限公司/MODstore_deploy"

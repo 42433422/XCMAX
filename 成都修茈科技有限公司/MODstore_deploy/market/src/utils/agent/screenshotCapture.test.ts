@@ -329,7 +329,7 @@ describe('screenshotCapture — captureViewport', () => {
   })
 
   it('未知 backend → reason=no_backend', async () => {
-    const r = await captureViewport({ backend: 'playwright' as any })
+    const r = await captureViewport({ backend: 'playwright' as UnsafeTestValue })
     expect(r.ok).toBe(false)
     if (!r.ok) {
       expect(r.reason).toBe('no_backend')
@@ -460,7 +460,7 @@ describe('screenshotCapture — captureViewport', () => {
 
   it('onCaptureMeta 钩子：成功/失败都触发，meta.elapsedMs 存在', async () => {
     const events: Array<{ ok: boolean; elapsed: number; backend: string }> = []
-    const listener = (r: any, m: any) => {
+    const listener = (r: UnsafeTestValue, m: UnsafeTestValue) => {
       events.push({ ok: r.ok, elapsed: m.elapsedMs, backend: m.backend })
     }
     onCaptureMeta(listener)

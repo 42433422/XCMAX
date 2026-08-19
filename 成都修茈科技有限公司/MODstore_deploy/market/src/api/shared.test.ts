@@ -43,7 +43,7 @@ describe('shared API helpers', () => {
   })
 
   it('authHeaders returns undefined when no token', () => {
-    vi.mocked(getAccessToken).mockReturnValue(null)
+    vi.mocked(getAccessToken).mockReturnValue('')
     const headers = authHeaders()
     expect(headers).toBeUndefined()
   })

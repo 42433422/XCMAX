@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../../api'
+import { errorMessage } from '../../utils/typeNarrowing'
 
 interface TemplateItem {
   id: number
@@ -39,7 +40,10 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 async function loadCategories() {
   try {
-    const r: any = await api.templatesCategories()
+    const r = (await api.templatesCategories()) as {
+      categories?: CategoryItem[]
+      difficulties?: Record<string, string>
+    }
     categories.value = Array.isArray(r?.categories) ? r.categories : []
     difficulties.value = r?.difficulties || {}
   } catch {
@@ -51,17 +55,17 @@ async function loadList() {
   loading.value = true
   errMsg.value = ''
   try {
-    const r: any = await api.templatesList({
+    const r = (await api.templatesList({
       q: filters.value.q,
       category: filters.value.category,
       difficulty: filters.value.difficulty,
       sort: filters.value.sort,
       limit: 60,
-    })
+    })) as { items?: TemplateItem[]; total?: number }
     items.value = Array.isArray(r?.items) ? r.items : []
     total.value = Number(r?.total || items.value.length)
-  } catch (e: any) {
-    errMsg.value = e?.detail || e?.message || '加载失败'
+  } catch (e: unknown) {
+    errMsg.value = errorMessage(e, '加载失败')
   } finally {
     loading.value = false
   }
@@ -99,14 +103,14 @@ function openDetail(item: TemplateItem) {
 async function quickInstall(item: TemplateItem) {
   if (!confirm(`一键安装 "${item.name}"？将在你的工作流列表创建一个副本。`)) return
   try {
-    const r: any = await api.templateInstall(item.id)
+    const r = (await api.templateInstall(item.id)) as { workflow_id?: number | string }
     if (r?.workflow_id) {
       router.push({ name: 'workflow-v2-editor', params: { id: String(r.workflow_id) } })
     } else {
       alert('安装完成，但未拿到 workflow_id')
     }
-  } catch (e: any) {
-    alert('安装失败：' + (e?.detail || e?.message || ''))
+  } catch (e: unknown) {
+    alert('安装失败：' + errorMessage(e, ''))
   }
 }
 
@@ -116,6 +120,7 @@ const sortOptions = [
 ]
 
 const totalCount = computed(() => total.value)
+defineExpose({ difficultyLabel })
 </script>
 
 <template>

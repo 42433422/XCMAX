@@ -63,7 +63,7 @@ export const useButlerWorkbenchTrayStore = defineStore('butlerWorkbenchTray', ()
   function setWorkbenchFiles(payload: {
     attachments?: ButlerTrayAttachment[]
     generated?: DirectGeneratedFile[]
-    maxVisible?: number
+    maxVisible?: number | null
   }) {
     if (payload.attachments) attachments.value = payload.attachments
     if (payload.generated) generated.value = payload.generated

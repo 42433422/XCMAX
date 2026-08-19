@@ -35,11 +35,25 @@ function looksLikeHtmlErrorBody(s: string): boolean {
   return t.startsWith('<!') || /^<html/i.test(t)
 }
 
-function errorMessage(data: any, fallback: string): string {
-  const m = data?.message
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+function errorMessage(data: unknown, fallback: string): string {
+  const record = asRecord(data)
+  const m = record?.message
   if (typeof m === 'string' && m.trim()) return m.trim()
-  const d = data?.detail
-  if (Array.isArray(d)) return d.map((x) => x.msg || JSON.stringify(x)).join('; ')
+  const d = record?.detail
+  if (Array.isArray(d)) {
+    return d
+      .map((value) => {
+        const item = asRecord(value)
+        return item?.msg ? String(item.msg) : JSON.stringify(value)
+      })
+      .join('; ')
+  }
   if (typeof d === 'string') {
     if (looksLikeHtmlErrorBody(d)) {
       if (/504|Gateway Time-out/i.test(d)) {
@@ -65,13 +79,16 @@ async function refreshAccessToken(): Promise<string | null> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refresh_token: refreshToken }),
   })
-  const data: any = await parseResponse(res)
+  const parsed = await parseResponse(res)
+  const data = asRecord(parsed)
   if (!res.ok) {
     clearAuthTokens()
     return null
   }
-  setAuthTokens(data)
-  return data?.access_token || null
+  const accessToken = typeof data?.access_token === 'string' ? data.access_token : undefined
+  const nextRefreshToken = typeof data?.refresh_token === 'string' ? data.refresh_token : undefined
+  setAuthTokens({ access_token: accessToken, refresh_token: nextRefreshToken })
+  return accessToken || null
 }
 
 let refreshInFlight: Promise<string | null> | null = null
@@ -158,7 +175,7 @@ async function throwIfNotOk(res: Response): Promise<void> {
       detail = null
     }
   }
-  throw new ApiError(errorMessage(detail as any, res.statusText), res.status, detail)
+  throw new ApiError(errorMessage(detail, res.statusText), res.status, detail)
 }
 
 export type RequestJsonInit = RequestInit & {
@@ -166,7 +183,7 @@ export type RequestJsonInit = RequestInit & {
   timeoutMs?: number
 }
 
-export async function requestJson<T extends unknown = any>(
+export async function requestJson<T = unknown>(
   path: string,
   opts: RequestJsonInit = {},
   authAttempt = 0,

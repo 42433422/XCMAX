@@ -49,7 +49,7 @@ describe('MediaGenPanel coverage extras', () => {
         runner,
       },
     })
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     await vm.onGenImage()
     expect(runner.generateImages).not.toHaveBeenCalled()
@@ -142,7 +142,7 @@ describe('SandboxView coverage extras', () => {
     const Component = (await import('./views/SandboxView.vue')).default
     const wrapper = mount(Component)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     expect(vm.connected).toBe(true)
     expect(vm.statusText).toBe('已匹配')

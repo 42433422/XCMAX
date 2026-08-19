@@ -4,7 +4,6 @@ import {
   routeVoiceUtterance,
   type VoiceRouteContext,
   VOICE_PUSHBACK_RE,
-  inferUserGoalFromVoiceMessages,
   hasEmployeePlanContext,
   looksLikeEmployeeTaskDescription,
   isLikelyShortProceedFragment,
@@ -349,7 +348,8 @@ export function coerceClassificationForEmployee(
     }
   }
 
-  let { action, confidence } = classification
+  let { action } = classification
+  const { confidence } = classification
 
   if (
     ctx?.planSessionPhase === 'checklist' &&

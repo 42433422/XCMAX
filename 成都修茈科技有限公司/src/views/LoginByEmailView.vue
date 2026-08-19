@@ -41,10 +41,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { api } from '../api'
 
-const router = useRouter()
 const email = ref('')
 const code = ref('')
 const err = ref('')
