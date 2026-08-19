@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import re
 import shutil
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from modstore_server.catalog_quality import OFFICE_AUX_PACK_1_PKG_IDS, PUBLIC_TABULAR_PKG_IDS

@@ -1,16 +1,27 @@
 from __future__ import annotations
 
 import os
+import secrets
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
-from xcagi_common.csrf import (
-    MUTATING_HTTP_METHODS,
-    SAFE_HTTP_METHODS,
-    csrf_tokens_match,
-    generate_csrf_token,
-)
+
+MUTATING_HTTP_METHODS = frozenset({"POST", "PUT", "DELETE", "PATCH"})
+SAFE_HTTP_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+def generate_csrf_token() -> str:
+    """Generate a cryptographically secure double-submit cookie token."""
+    return secrets.token_hex(32)
+
+
+def csrf_tokens_match(header_token: str | None, cookie_token: str | None) -> bool:
+    """Compare CSRF tokens in constant time after normalizing whitespace."""
+    if not header_token or not cookie_token:
+        return False
+    return secrets.compare_digest(str(header_token).strip(), str(cookie_token).strip())
+
 
 # 匿名即可调用的认证入口：无法要求「先 GET 再带 X-CSRF-Token」（首跳即登录页时常见）。
 _CSRF_EXEMPT_PATHS = frozenset(

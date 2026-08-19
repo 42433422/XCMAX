@@ -113,6 +113,7 @@ def test_verified_strategic_goal_is_visible_with_loop_linkage(monkeypatch):
 def test_write_public_action_board_corp_root(tmp_path, monkeypatch):
     monkeypatch.setenv("XCMAX_MONOREPO_ROOT", str(tmp_path))
     corp = tmp_path / "成都修茈科技有限公司"
+    monkeypatch.setenv("MODSTORE_PUBLIC_OUTPUT_ROOT", str(corp))
     corp.mkdir(parents=True)
     out = write_public_action_board(day=None)
     assert out["ok"] is True

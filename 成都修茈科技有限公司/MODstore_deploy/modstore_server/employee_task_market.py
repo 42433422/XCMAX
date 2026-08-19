@@ -39,9 +39,7 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 def _admin_user_id(session) -> int:
-    row = (
-        session.query(User).filter(User.is_admin == True).order_by(User.id.asc()).first()
-    )  # noqa: E712
+    row = session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
     if row:
         return int(row.id)
     row = session.query(User).order_by(User.id.asc()).first()

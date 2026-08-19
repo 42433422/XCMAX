@@ -106,7 +106,6 @@ def build_surface_audit_pptx(
     try:
         from pptx import Presentation
         from pptx.dml.color import RGBColor
-        from pptx.enum.text import PP_ALIGN
         from pptx.util import Inches, Pt
     except ImportError as exc:
         return {"ok": False, "error": f"未安装 python-pptx：{exc}", "path": "", "slides": 0}

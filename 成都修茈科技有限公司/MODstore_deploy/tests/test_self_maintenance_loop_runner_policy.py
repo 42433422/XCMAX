@@ -4003,7 +4003,6 @@ def test_reconcile_absorbed_para_merge_passes_base_ref_to_git_runner():
     policy_path = "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py"
     captured_base_refs: list[str] = []
     branch_ref = "origin/devfleet/cursor/sub-1-custom"
-    scope = "成都修茈科技有限公司/MODstore_deploy/modstore_server/"
 
     def tracking_git(_root, *args: str):
         if args[:2] == ("diff", "--name-only"):
@@ -4133,7 +4132,6 @@ def _absorbed_git_runner(policy_path: str, branch_suffix: str, remaining_diff: s
     """Fake git runner for absorption tests; matches batched two-dot name-only diff."""
 
     branch_ref = f"origin/devfleet/cursor/sub-1-{branch_suffix}"
-    scope = "成都修茈科技有限公司/MODstore_deploy/modstore_server/"
 
     def fake_git(_root, *args: str):
         if args[:4] == ("diff", "--name-only", "origin/main", branch_ref) and args[4] == "--":

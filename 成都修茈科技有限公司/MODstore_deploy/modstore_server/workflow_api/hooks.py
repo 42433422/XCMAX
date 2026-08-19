@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from modstore_server.infrastructure.db import get_db
 from modstore_server.models import (
-    Workflow,
     WorkflowTrigger,
 )
 from modstore_server.workflow_event_runner import run_workflow_for_trigger

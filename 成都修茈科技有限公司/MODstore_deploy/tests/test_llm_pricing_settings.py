@@ -18,7 +18,7 @@ from modstore_server.llm_billing import (
     model_price,
 )
 from modstore_server.llm_model_gates import merge_catalog_capabilities
-from modstore_server.models import AiModelPrice, LlmBillingSettings
+from modstore_server.models import AiModelPrice
 
 
 @pytest.fixture

@@ -19,48 +19,29 @@ import os
 import shutil
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, Optional
 
-from apscheduler.triggers.interval import IntervalTrigger
+from modstore_server import storage_pressure_metrics as _metrics
+from modstore_server import storage_pressure_scheduler as _scheduler
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_RUNTIME_DIR = str(Path.home() / ".xcmax" / "modstore-daily")
 DEFAULT_AUDIT_NAME = "storage_pressure_self_heal_runs.jsonl"
 DEFAULT_LEASE_NAME = "storage_pressure_self_heal.lock"
-GIB = 1024**3
 
+_bounded_env_int = _metrics.bounded_env_int
+_env_bool = _metrics.env_bool
+_parse_timestamp = _metrics.parse_timestamp
+_utc = _metrics.utc
+pressure_reasons = _metrics.pressure_reasons
+pressure_thresholds = _metrics.pressure_thresholds
+recovery_verified = _metrics.recovery_verified
+require_successful_storage_self_heal = _scheduler.require_successful_storage_self_heal
 
-def _utc(value: datetime | None = None) -> datetime:
-    current = value or datetime.now(timezone.utc)
-    if current.tzinfo is None:
-        current = current.replace(tzinfo=timezone.utc)
-    return current.astimezone(timezone.utc)
-
-
-def _env_bool(name: str, default: bool) -> bool:
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _bounded_env_float(name: str, default: float, minimum: float, maximum: float) -> float:
-    try:
-        value = float(str(os.environ.get(name) or default).strip())
-    except (TypeError, ValueError):
-        value = default
-    return max(minimum, min(maximum, value))
-
-
-def _bounded_env_int(name: str, default: int, minimum: int, maximum: int) -> int:
-    try:
-        value = int(str(os.environ.get(name) or default).strip())
-    except (TypeError, ValueError):
-        value = default
-    return max(minimum, min(maximum, value))
+_register_storage_pressure_job = _scheduler.register_storage_pressure_job
 
 
 def _runtime_dir() -> Path:
@@ -136,48 +117,6 @@ def collect_storage_snapshot(
     }
 
 
-def pressure_thresholds() -> Dict[str, Any]:
-    trigger_free_gib = _bounded_env_float("MODSTORE_STORAGE_MIN_FREE_GIB", 10.0, 0.25, 4096.0)
-    trigger_used_percent = _bounded_env_float("MODSTORE_STORAGE_MAX_USED_PERCENT", 90.0, 50.0, 99.9)
-    recovery_free_gib = _bounded_env_float(
-        "MODSTORE_STORAGE_RECOVERY_MIN_FREE_GIB",
-        max(12.0, trigger_free_gib),
-        trigger_free_gib,
-        4096.0,
-    )
-    recovery_used_percent = _bounded_env_float(
-        "MODSTORE_STORAGE_RECOVERY_MAX_USED_PERCENT",
-        min(88.0, trigger_used_percent),
-        40.0,
-        trigger_used_percent,
-    )
-    return {
-        "trigger_min_free_bytes": int(trigger_free_gib * GIB),
-        "trigger_max_used_percent": trigger_used_percent,
-        "recovery_min_free_bytes": int(recovery_free_gib * GIB),
-        "recovery_max_used_percent": recovery_used_percent,
-    }
-
-
-def pressure_reasons(snapshot: Dict[str, Any], thresholds: Dict[str, Any]) -> list[str]:
-    reasons: list[str] = []
-    if int(snapshot.get("free_bytes") or 0) < int(thresholds["trigger_min_free_bytes"]):
-        reasons.append("free_bytes_below_threshold")
-    if float(snapshot.get("used_percent") or 0.0) >= float(thresholds["trigger_max_used_percent"]):
-        reasons.append("used_percent_at_or_above_threshold")
-    return reasons
-
-
-def recovery_verified(snapshot: Dict[str, Any], thresholds: Dict[str, Any]) -> bool:
-    """Use hysteresis so a tiny reclaim does not cause repair/flap claims."""
-
-    return int(snapshot.get("free_bytes") or 0) >= int(
-        thresholds["recovery_min_free_bytes"]
-    ) and float(snapshot.get("used_percent") or 0.0) <= float(
-        thresholds["recovery_max_used_percent"]
-    )
-
-
 def _append_audit(record: Dict[str, Any]) -> None:
     path = audit_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -224,14 +163,6 @@ def _read_audit(limit: int = 100) -> list[Dict[str, Any]]:
         except OSError:
             logger.exception("storage pressure audit read failed: path=%s", source)
     return rows[-max(1, int(limit)) :]
-
-
-def _parse_timestamp(value: Any) -> datetime | None:
-    try:
-        parsed = datetime.fromisoformat(str(value or "").replace("Z", "+00:00"))
-    except (TypeError, ValueError):
-        return None
-    return _utc(parsed)
 
 
 def _last_action_at() -> datetime | None:
@@ -524,14 +455,6 @@ def run_storage_pressure_self_heal(
         return _finalize(result)
 
 
-def require_successful_storage_self_heal(result: Dict[str, Any]) -> Dict[str, Any]:
-    """Make unresolved pressure visible as a failed scheduler job."""
-
-    if result.get("ok") is not True:
-        raise RuntimeError(f"storage_self_heal_unresolved:{result.get('status') or 'unknown'}")
-    return result
-
-
 def register_storage_pressure_job(
     scheduler: Any,
     *,
@@ -540,45 +463,22 @@ def register_storage_pressure_job(
     misfire_grace_time: int,
 ) -> None:
     """Register the recurring guard without growing the legacy scheduler module."""
-
-    def _job() -> Dict[str, Any]:
-        result = track_job(
-            "storage_pressure_self_heal",
-            lambda: require_successful_storage_self_heal(run_storage_pressure_self_heal()),
-        )
-        logger.info(
-            "storage pressure guard: status=%s action=%s before_free=%s after_free=%s",
-            result.get("status"),
-            bool(result.get("action_taken")),
-            int((result.get("before") or {}).get("free_bytes") or 0),
-            int((result.get("after") or {}).get("free_bytes") or 0),
-        )
-        return result
-
-    scheduler.add_job(
-        _job,
-        IntervalTrigger(
-            minutes=_bounded_env_int("MODSTORE_STORAGE_SELF_HEAL_INTERVAL_MINUTES", 15, 1, 1440)
+    _register_storage_pressure_job(
+        scheduler,
+        track_job=track_job,
+        startup_probe=startup_probe,
+        misfire_grace_time=misfire_grace_time,
+        interval_minutes=_bounded_env_int(
+            "MODSTORE_STORAGE_SELF_HEAL_INTERVAL_MINUTES", 15, 1, 1440
         ),
-        id="storage_pressure_self_heal",
-        replace_existing=True,
-        misfire_grace_time=max(60, int(misfire_grace_time)),
-        coalesce=True,
-        max_instances=1,
+        run_self_heal=run_storage_pressure_self_heal,
+        require_success=require_successful_storage_self_heal,
     )
-    startup_probe("storage_pressure_self_heal", _job)
 
 
 def get_storage_pressure_status(*, limit: int = 20) -> Dict[str, Any]:
     rows = _read_audit(limit=max(1, min(int(limit), 200)))
-    latest = rows[-1] if rows else None
-    return {
-        "ok": bool(latest and latest.get("ok") is True),
-        "latest": latest,
-        "runs": rows,
-        "run_count": len(rows),
-        "audit_path": str(audit_path()),
-    }
+    return _metrics.build_storage_pressure_status(rows, str(audit_path()))
 
 
 __all__ = [

@@ -7,6 +7,7 @@ from modstore_server.employee_pipeline_routing import (
     resolve_deterministic_orchestration_plan,
     skip_employee_plan_llm,
 )
+from modstore_server.workbench_api import _contains_uploaded_docx
 
 
 def test_confident_word_extract_document_full_json():
@@ -36,3 +37,8 @@ def test_template_runtime_kinds():
     assert is_direct_python_template_runtime("word_full_extract")
     assert is_direct_python_template_runtime("json_quant_report")
     assert not is_direct_python_template_runtime("contract_doc_review")
+
+
+def test_uploaded_docx_detection_uses_normalized_file_names():
+    assert _contains_uploaded_docx([{"filename": "合同.DOCX", "content": b"docx"}])
+    assert not _contains_uploaded_docx([{"filename": "合同.pdf", "content": b"pdf"}])

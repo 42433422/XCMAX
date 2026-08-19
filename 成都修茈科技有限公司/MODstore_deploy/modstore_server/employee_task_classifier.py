@@ -16,7 +16,6 @@ human_report 在「发现什么」段反映。
 from __future__ import annotations
 
 import logging
-import re
 from typing import Any, Dict, List, Tuple
 
 logger = logging.getLogger(__name__)

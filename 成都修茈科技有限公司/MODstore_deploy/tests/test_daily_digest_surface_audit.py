@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 import pytest
 
 pytestmark = pytest.mark.release_gate

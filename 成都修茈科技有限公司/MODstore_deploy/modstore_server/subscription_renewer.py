@@ -15,7 +15,6 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -33,7 +32,6 @@ from modstore_server.models import (
     get_session_factory,
 )
 from modstore_server.notification_service import NotificationType, create_notification
-from modstore_server.payment_common import _plan_quotas
 
 logger = logging.getLogger(__name__)
 

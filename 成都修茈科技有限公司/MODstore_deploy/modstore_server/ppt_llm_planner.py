@@ -8,7 +8,6 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from modstore_server.ppt_edit_plan import (
-    empty_plan,
     parse_edit_plan_json,
     plan_from_presentation,
     validate_edit_plan,

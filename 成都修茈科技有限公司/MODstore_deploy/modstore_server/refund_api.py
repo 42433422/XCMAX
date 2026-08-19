@@ -136,7 +136,7 @@ async def admin_review_refund(
         refund.status = "refunded"
         db.query(Entitlement).filter(
             Entitlement.source_order_id == refund.order_no,
-            Entitlement.is_active == True,
+            Entitlement.is_active.is_(True),
         ).update({"is_active": False})
         try:
             account_level_service.revoke_order_xp(

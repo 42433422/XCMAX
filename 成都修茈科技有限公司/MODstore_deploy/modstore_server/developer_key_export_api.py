@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user
-from modstore_server.auth_service import generate_pat, hash_pat, verify_password
+from modstore_server.auth_service import generate_pat, verify_password
 from modstore_server.datetime_utils import as_utc_aware
 from modstore_server.infrastructure.db import get_db
 from modstore_server.key_export_crypto import encrypt_json_to_recipient

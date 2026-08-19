@@ -4,7 +4,6 @@ import json
 import re
 
 from starlette.requests import Request
-from starlette.responses import Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 _SCRIPT_RE = re.compile(r"<\s*script[^>]*>.*?<\s*/\s*script\s*>", re.IGNORECASE | re.DOTALL)

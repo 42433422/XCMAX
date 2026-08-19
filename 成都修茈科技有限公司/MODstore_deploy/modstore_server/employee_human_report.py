@@ -127,7 +127,6 @@ def _format_handoff(result: Dict[str, Any]) -> str:
     if not isinstance(h, dict):
         return ""
     tgt = _safe_str(h.get("to"), 60)
-    src = _safe_str(h.get("from"), 60)
     reason = _safe_str(h.get("reason"), 120)
     skipped = h.get("skipped")
     skip_reason = _safe_str(h.get("skip_reason"), 120)

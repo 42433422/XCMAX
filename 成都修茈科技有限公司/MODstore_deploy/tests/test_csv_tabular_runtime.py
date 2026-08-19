@@ -7,8 +7,6 @@ import json
 import tempfile
 from pathlib import Path
 
-import pytest
-
 
 def test_csv_routing_keywords():
     from modstore_server.csv_tabular_runtime import is_csv_full_read, is_csv_generate
@@ -49,8 +47,9 @@ def test_csv_read_convert_writes_json():
         assert result["row_count"] == 2
 
 
-@pytest.mark.xfail(strict=False, reason="csv_tabular_runtime generate/convert pre-existing failure")
 def test_csv_generate_convert_writes_csv():
+    import asyncio
+
     from modstore_server.csv_tabular_runtime import (
         minimal_json_fixture_bytes,
         render_csv_generate_convert_module,
@@ -66,13 +65,15 @@ def test_csv_generate_convert_writes_csv():
         src = root / "table.json"
         src.write_bytes(minimal_json_fixture_bytes())
         out = root / "outputs" / "output.csv"
-        convert_file(
-            src,
-            out,
-            template_path=None,
-            payload={},
-            ctx={},
-            rule_spec={"default_output_relpath": "outputs/output.csv", "output_schema": []},
+        asyncio.run(
+            convert_file(
+                src,
+                out,
+                template_path=None,
+                payload={},
+                ctx={},
+                rule_spec={"default_output_relpath": "outputs/output.csv", "output_schema": []},
+            )
         )
         assert out.is_file()
         rows = list(csv.DictReader(out.read_text(encoding="utf-8-sig").splitlines()))

@@ -314,7 +314,6 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
 def _maybe_create_pr(branch: str, diff_summary: str, files_n: int, staged_id: int) -> dict:
     """尝试通过 ``gh pr create`` 创建 GitHub PR。"""
     import subprocess
-    import sys
 
     from modstore_server.integrations.ops_action_handlers import repo_root
 

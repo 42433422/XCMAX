@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 # 动态阶段仅允许自动修补的审核维度（其余须 audit_passed=false + 人工）
 _TRIVIAL_AUDIT_DIMENSIONS = frozenset(

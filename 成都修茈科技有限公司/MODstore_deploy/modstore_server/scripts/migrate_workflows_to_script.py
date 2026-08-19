@@ -27,7 +27,7 @@ import logging
 import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 

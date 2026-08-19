@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import contextvars
 import logging
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
@@ -80,9 +79,7 @@ def _resolve_uid(created_by_user_id: int) -> int:
     if uid <= 0:
         sf = get_session_factory()
         with sf() as session:
-            u = (
-                session.query(User).filter(User.is_admin == True).order_by(User.id.asc()).first()
-            )  # noqa: E712
+            u = session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
             uid = int(u.id) if u else 0
             if uid <= 0:
                 u2 = session.query(User).order_by(User.id.asc()).first()

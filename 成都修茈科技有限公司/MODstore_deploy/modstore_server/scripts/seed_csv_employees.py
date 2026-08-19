@@ -41,7 +41,6 @@ def _build_pack(
     from modstore_server.csv_tabular_runtime import (
         build_csv_generate_rule_spec,
         build_csv_read_rule_spec,
-        is_csv_generate,
         render_csv_generate_convert_module,
         render_csv_read_convert_module,
     )
@@ -120,9 +119,7 @@ def main() -> int:
 
     session_factory = get_session_factory()
     with session_factory() as db:
-        author = (
-            db.query(User).filter(User.is_admin == True).order_by(User.id.asc()).first()
-        )  # noqa: E712
+        author = db.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
         author = author or db.query(User).order_by(User.id.asc()).first()
         if not author:
             print("No user in DB", file=sys.stderr)

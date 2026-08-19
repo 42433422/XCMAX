@@ -32,7 +32,7 @@ import logging
 import os
 import shutil
 from pathlib import Path
-from typing import Any, Awaitable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from modstore_server.script_agent.sandbox_host import (
     SandboxHostContext,
@@ -40,9 +40,7 @@ from modstore_server.script_agent.sandbox_host import (
 )
 from modstore_server.script_agent.sandbox_preamble import PREAMBLE_SOURCE
 from modstore_server.script_agent.sandbox_runner import (
-    DEFAULT_OUTPUT_FILE_LIMIT_BYTES,
     DEFAULT_TIMEOUT_SECONDS,
-    DEFAULT_TOTAL_OUTPUT_LIMIT_BYTES,
     SCRIPT_ROOT,
     STDERR_TAIL_BYTES,
     STDOUT_TAIL_BYTES,

@@ -38,11 +38,13 @@ from pydantic import BaseModel
 from modstore_server import payment_orders as _po
 from modstore_server.api.auth_deps import require_user
 from modstore_server.models import (
-    AuthorEarning,
     ReconciliationReport,
-    Transaction,
     User,
     get_session_factory,
+)
+from modstore_server.reconciliation_snapshot import (
+    build_skill_payload as _build_skill_payload,
+    compute_period_snapshot as _compute_period_snapshot,
 )
 
 logger = logging.getLogger(__name__)
@@ -167,110 +169,6 @@ def _report_row(r: ReconciliationReport) -> dict:
     }
 
 
-def _compute_period_snapshot(
-    session,
-    period_start: datetime,
-    period_end: datetime,
-) -> dict[str, Any]:
-    """按时间段从 payment_orders + Transaction + AuthorEarning 汇总数据（不写库）。"""
-
-    # --- 从 payment_orders（JSON 文件）加载已支付订单 ---
-    all_orders, _ = _po.list_orders(status="paid", limit=100_000)
-    paid_in_range = []
-    refunded_in_range = []
-    for o in all_orders:
-        raw_ts = o.get("paid_at") or o.get("created_at") or ""
-        try:
-            ts = datetime.fromisoformat(str(raw_ts).replace("Z", "+00:00")).replace(tzinfo=None)
-        except Exception:
-            continue
-        if period_start <= ts < period_end:
-            paid_in_range.append(o)
-        if o.get("refunded"):
-            refund_ts_raw = o.get("refunded_at") or o.get("updated_at") or ""
-            try:
-                refund_ts = datetime.fromisoformat(
-                    str(refund_ts_raw).replace("Z", "+00:00")
-                ).replace(tzinfo=None)
-            except Exception:
-                refund_ts = ts
-            if period_start <= refund_ts < period_end:
-                refunded_in_range.append(o)
-
-    modstore_trade_nos = {
-        str(o.get("out_trade_no") or "") for o in paid_in_range if o.get("out_trade_no")
-    }
-    modstore_orders = len(paid_in_range)
-    modstore_gmv = sum(float(o.get("total_amount") or 0) for o in paid_in_range)
-
-    fhd_host = _fetch_fhd_host_snapshot(period_start, period_end)
-    fhd_extra_orders = 0
-    fhd_extra_gmv = 0.0
-    if fhd_host.get("included"):
-        fhd_extra_orders = int(fhd_host.get("total_orders") or 0)
-        fhd_extra_gmv = float(fhd_host.get("total_gmv") or 0)
-        for sample in fhd_host.get("orders_sample") or []:
-            if not isinstance(sample, dict):
-                continue
-            ot = str(sample.get("out_trade_no") or "")
-            if ot and ot in modstore_trade_nos:
-                fhd_extra_orders = max(0, fhd_extra_orders - 1)
-                try:
-                    fhd_extra_gmv = max(
-                        0.0,
-                        fhd_extra_gmv - float(sample.get("amount_yuan") or 0),
-                    )
-                except (TypeError, ValueError):
-                    pass
-
-    total_orders = modstore_orders + fhd_extra_orders
-    total_gmv = modstore_gmv + fhd_extra_gmv
-    refunds_count = len(refunded_in_range)
-    refunds_amount = sum(float(o.get("total_amount") or 0) for o in refunded_in_range)
-
-    # --- 从 Transaction 表汇总钱包充值 ---
-    wallet_top_up_types = {"alipay_wallet", "alipay_recharge", "wallet"}
-    wallet_txns = (
-        session.query(Transaction)
-        .filter(
-            Transaction.txn_type.in_(wallet_top_up_types),
-            Transaction.created_at >= period_start,
-            Transaction.created_at < period_end,
-            Transaction.status == "completed",
-        )
-        .all()
-    )
-    wallet_top_ups = sum(float(t.amount or 0) for t in wallet_txns if (t.amount or 0) > 0)
-
-    # --- 从 AuthorEarning 汇总分润 ---
-    earnings = (
-        session.query(AuthorEarning)
-        .filter(
-            AuthorEarning.created_at >= period_start,
-            AuthorEarning.created_at < period_end,
-        )
-        .all()
-    )
-    author_payable = sum(float(e.net or 0) for e in earnings)
-    platform_revenue = sum(float(e.gross or 0) - float(e.net or 0) for e in earnings)
-
-    return {
-        "total_orders": total_orders,
-        "total_gmv": round(total_gmv, 2),
-        "platform_revenue": round(platform_revenue, 2),
-        "author_payable": round(author_payable, 2),
-        "refunds_count": refunds_count,
-        "refunds_amount": round(refunds_amount, 2),
-        "wallet_top_ups": round(wallet_top_ups, 2),
-        "alipay_income": round(total_gmv, 2),
-        "modstore_payment_orders": {
-            "total_orders": modstore_orders,
-            "total_gmv": round(modstore_gmv, 2),
-        },
-        "fhd_host_orders": fhd_host,
-    }
-
-
 def _generate_report(
     session,
     period_start: datetime,
@@ -311,112 +209,6 @@ def _previous_confirmed_snapshot(session, before: datetime) -> Optional[dict[str
     if not row:
         return None
     return _report_row(row)
-
-
-def _build_skill_payload(
-    snap: dict[str, Any],
-    *,
-    alipay_statement_total_cny: Optional[float],
-    previous: Optional[dict[str, Any]],
-) -> dict[str, Any]:
-    """与 yuangon `skill-payment-reconcile` 输出对齐的核心字段 + 扩展字段。"""
-    total_orders = int(snap["total_orders"])
-    local_book_total = round(float(snap["alipay_income"]) + float(snap["wallet_top_ups"]), 2)
-
-    diff_amount = 0.0
-    diff_count = 0
-    matched = total_orders
-    status = "ok"
-
-    if alipay_statement_total_cny is not None:
-        diff_amount = round(local_book_total - float(alipay_statement_total_cny), 2)
-        if abs(diff_amount) > 0.01:
-            status = "warning"
-            diff_count = 1
-            matched = max(total_orders - 1, 0)
-
-    history_vs_previous_period: Optional[dict[str, Any]] = None
-    if previous:
-        prev_gmv = float(previous.get("total_gmv") or 0)
-        cur_gmv = float(snap["total_gmv"])
-        delta = round(cur_gmv - prev_gmv, 2)
-        pct = None
-        if prev_gmv > 0:
-            pct = round(100.0 * delta / prev_gmv, 2)
-        history_vs_previous_period = {
-            "previous_report_id": previous.get("id"),
-            "previous_period_end": previous.get("period_end"),
-            "total_gmv_delta_cny": delta,
-            "total_gmv_delta_pct": pct,
-        }
-
-    fhd = snap.get("fhd_host_orders") if isinstance(snap.get("fhd_host_orders"), dict) else {}
-    mod = (
-        snap.get("modstore_payment_orders")
-        if isinstance(snap.get("modstore_payment_orders"), dict)
-        else {}
-    )
-    lines = [
-        "## 支付对账预览（只读）",
-        "",
-        f"- 区间订单数（已支付，含 FHD 宿主）: {total_orders}",
-        f"- MODstore payment_orders: {mod.get('total_orders', '—')} 笔 / {mod.get('total_gmv', '—')} CNY",
-    ]
-    if fhd.get("included"):
-        lines.append(
-            f"- FHD 宿主（PG/JSON）: {fhd.get('total_orders', 0)} 笔 / {float(fhd.get('total_gmv') or 0):.2f} CNY"
-        )
-    else:
-        lines.append(f"- FHD 宿主: 未并入（{fhd.get('reason', 'n/a')}）")
-    lines.extend(
-        [
-            f"- 合并 GMV: {snap['total_gmv']:.2f} CNY",
-            f"- 钱包充值（Transaction 汇总）: {snap['wallet_top_ups']:.2f} CNY",
-            f"- 本地账面收入粗算（GMV+钱包充值）: {local_book_total:.2f} CNY",
-            f"- 平台收益 / 作者应付: {snap['platform_revenue']:.2f} / {snap['author_payable']:.2f} CNY",
-        ]
-    )
-    if alipay_statement_total_cny is not None:
-        lines.append(f"- RPA 传入支付宝账单汇总: {alipay_statement_total_cny:.2f} CNY")
-        lines.append(f"- 差额（本地粗算 − 账单）: {diff_amount:.2f} CNY")
-    else:
-        lines.append("- 未提供 `alipay_statement_total_cny`：未与支付宝侧总额对碰。")
-    if history_vs_previous_period:
-        lines.extend(
-            [
-                "",
-                "### 相对上一段已确认报告",
-                f"- 上一报告 ID: {history_vs_previous_period.get('previous_report_id')}",
-                f"- GMV 变动: {history_vs_previous_period.get('total_gmv_delta_cny')} CNY"
-                + (
-                    f" ({history_vs_previous_period.get('total_gmv_delta_pct')}%)"
-                    if history_vs_previous_period.get("total_gmv_delta_pct") is not None
-                    else ""
-                ),
-            ]
-        )
-    lines.extend(
-        [
-            "",
-            "### 趋势与归因（LLM）",
-            "> 由 `payment-billing-reconciler` 动态阶段基于差异明细生成；本接口仅预留章节。",
-        ]
-    )
-    report_md = "\n".join(lines)
-
-    return {
-        "status": status,
-        "total_orders": total_orders,
-        "matched": matched,
-        "diff_count": diff_count,
-        "diff_amount_cny": diff_amount,
-        "report_md": report_md,
-        "platform_snapshot": snap,
-        "local_book_total_cny": local_book_total,
-        "history_vs_previous_period": history_vs_previous_period,
-        "llm_narrative": None,
-        "doc_archive_hint": "提交 `doc-knowledge-curator`：将定稿 `report_md` 归档至 MODstore docs/runbooks/ 或内部知识库（勿含密钥）。",
-    }
 
 
 # ---------------------------------------------------------------- API 端点

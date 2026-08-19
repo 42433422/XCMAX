@@ -15,9 +15,9 @@ from typing import Any
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from modstore_server.asr_proxy_ws import (
-    FUNASR_USE_SSL,
     _connect_funasr_parallel,
     _detect_funasr_host,
+    create_funasr_ssl_context,
 )
 from modstore_server.models import User, get_session_factory
 from modstore_server.voice_s2s_ws import _run_billed_s2s_turn, _send_json
@@ -72,14 +72,8 @@ async def voice_unified_ws(
     await _send_json(ws, {"type": "ready"})
     auth_header = f"Bearer {token}"
 
-    import ssl as _ssl
-
     funasr_urls = _detect_funasr_host()
-    ssl_ctx = None
-    if FUNASR_USE_SSL:
-        ssl_ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = _ssl.CERT_NONE
+    ssl_ctx = create_funasr_ssl_context()
 
     connect_result = await _connect_funasr_parallel(funasr_urls, ssl_ctx)
     if connect_result is None:

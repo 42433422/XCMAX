@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Dict, List, Optional
 
 from modstore_server.rag_service import RetrievedChunk
 

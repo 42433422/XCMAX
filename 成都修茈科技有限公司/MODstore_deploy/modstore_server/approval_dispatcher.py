@@ -29,9 +29,7 @@ logger = logging.getLogger(__name__)
 def _first_admin_user_id() -> int:
     sf = get_session_factory()
     with sf() as session:
-        u = (
-            session.query(User).filter(User.is_admin == True).order_by(User.id.asc()).first()
-        )  # noqa: E712
+        u = session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
         if u:
             return int(u.id)
         u2 = session.query(User).order_by(User.id.asc()).first()

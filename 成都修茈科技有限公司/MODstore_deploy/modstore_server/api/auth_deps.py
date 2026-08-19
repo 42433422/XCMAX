@@ -7,7 +7,6 @@ from typing import Optional
 from fastapi import Header, HTTPException
 
 from modstore_server.application.auth import AuthApplicationService, AuthenticationError
-from modstore_server.auth_service import decode_access_token, get_user_by_id
 from modstore_server.models import User, user_owns_mod
 
 _auth = AuthApplicationService()

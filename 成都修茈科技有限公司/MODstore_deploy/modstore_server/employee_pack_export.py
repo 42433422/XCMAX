@@ -334,7 +334,6 @@ def _build_employee_pack_zip_with_source(
                 zf.writestr(f"{pack_id}/backend/vendor/{runtime_mod_name}/{mod_name}", mod_src)
         elif is_direct_python:
             from modstore_server.employee_asset_pipeline import (
-                _fallback_convert_module,
                 render_runtime_modules,
             )
 

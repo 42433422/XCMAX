@@ -24,8 +24,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
 import os
 import sqlite3
@@ -35,8 +33,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, Body, Depends, Header, Query, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import APIRouter, Body, Depends, Header
+from fastapi.responses import JSONResponse
+from modstore_server import xcmax_admin_surface_routes as _surface_routes
+from modstore_server import xcmax_admin_sync_routes as _sync_routes
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,8 @@ def _init_schema_once() -> None:
     """幂等建表 + WAL；多 worker 安全。"""
     with _db_lock:
         with _connect() as conn:
-            conn.executescript("""
+            conn.executescript(
+                """
                 PRAGMA journal_mode=WAL;
                 PRAGMA synchronous=NORMAL;
                 CREATE TABLE IF NOT EXISTS xcmax_changes (
@@ -123,7 +124,8 @@ def _init_schema_once() -> None:
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL DEFAULT ''
                 );
-                """)
+                """
+            )
             conn.commit()
 
 
@@ -360,550 +362,6 @@ async def scheduler_health() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _last_change_id(conn: sqlite3.Connection) -> int:
-    row = conn.execute("SELECT MAX(id) AS mx FROM xcmax_changes").fetchone()
-    return int(row["mx"] or 0)
-
-
-def _inbox_pending_count(conn: sqlite3.Connection) -> int:
-    row = conn.execute("SELECT COUNT(1) AS c FROM xcmax_inbox WHERE status='pending'").fetchone()
-    return int(row["c"] or 0)
-
-
-def _inbox_conflict_count(conn: sqlite3.Connection) -> int:
-    row = conn.execute("SELECT COUNT(1) AS c FROM xcmax_inbox WHERE status='conflict'").fetchone()
-    return int(row["c"] or 0)
-
-
-@router.get("/sync/status", response_model=None)
-async def sync_status() -> dict[str, Any]:
-    _ensure_schema()
-    try:
-        with _connect() as conn:
-            local_cursor = _last_change_id(conn)
-            remote_cursor = int(_meta_get(conn, "remote_cursor", "0") or 0)
-            outbox_count = _inbox_pending_count(conn)
-            conflict_count = _inbox_conflict_count(conn)
-            last_sync_at = _meta_get(conn, "last_sync_at", "")
-        return {
-            "success": True,
-            "data": {
-                "healthy": True,
-                "local_cursor": local_cursor,
-                "remote_cursor": remote_cursor,
-                "outbox_count": outbox_count,
-                "last_sync_at": last_sync_at or None,
-                "conflict_count": conflict_count,
-                "role": "server",
-            },
-        }
-    except Exception as exc:
-        logger.warning("sync_status failed: %s", exc)
-        return {
-            "success": True,
-            "data": {
-                "healthy": False,
-                "local_cursor": None,
-                "remote_cursor": None,
-                "outbox_count": 0,
-                "last_sync_at": None,
-                "conflict_count": 0,
-                "role": "server",
-                "note": str(exc),
-            },
-        }
-
-
-@router.get("/sync/changes", response_model=None)
-async def sync_changes(
-    since_cursor: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
-) -> dict[str, Any]:
-    """供本地节点拉取增量。"""
-    _ensure_schema()
-    try:
-        with _connect() as conn:
-            rows = conn.execute(
-                "SELECT id, entity_type, entity_id, operation, payload_json, "
-                "version, actor, origin_node, created_at "
-                "FROM xcmax_changes WHERE id > ? ORDER BY id ASC LIMIT ?",
-                (int(since_cursor), int(limit)),
-            ).fetchall()
-        data: list[dict[str, Any]] = []
-        for r in rows:
-            try:
-                payload = json.loads(r["payload_json"] or "{}")
-            except Exception:
-                payload = {}
-            data.append(
-                {
-                    "id": r["id"],
-                    "entity_type": r["entity_type"],
-                    "entity_id": r["entity_id"],
-                    "operation": r["operation"],
-                    "payload": payload,
-                    "version": r["version"],
-                    "actor": r["actor"],
-                    "origin_node": r["origin_node"],
-                    "created_at": r["created_at"],
-                }
-            )
-        return {"success": True, "data": data, "count": len(data)}
-    except Exception as exc:
-        logger.warning("sync_changes failed: %s", exc)
-        return {"success": True, "data": [], "count": 0, "note": str(exc)}
-
-
-@router.post("/sync/receive", response_model=None)
-async def sync_receive(body: dict | list = Body(default=None)) -> dict[str, Any]:
-    """接收来自本地节点的变更。
-
-    兼容 ``app/services/xcmax_sync_service.py`` 的单条 payload 与批量数组。"""
-    _ensure_schema()
-    if body is None:
-        return JSONResponse({"success": False, "message": "missing body"}, status_code=400)
-
-    items = body if isinstance(body, list) else [body]
-    written = 0
-    now_iso = datetime.now(timezone.utc).isoformat()
-    try:
-        with _db_lock, _connect() as conn:
-            for raw in items:
-                if not isinstance(raw, dict):
-                    continue
-                entity_type = str(raw.get("entity_type") or "").strip()
-                entity_id = str(raw.get("entity_id") or "").strip()
-                operation = str(raw.get("operation") or "sync").strip()
-                if not entity_type or not entity_id:
-                    continue
-                payload = raw.get("payload") or {}
-                try:
-                    payload_json = json.dumps(payload, ensure_ascii=False, default=str)
-                except Exception:
-                    payload_json = "{}"
-                origin_node = str(raw.get("origin_node") or "remote").strip() or "remote"
-                conn.execute(
-                    "INSERT INTO xcmax_inbox(entity_type, entity_id, operation, "
-                    "payload_json, origin_node, status, received_at) "
-                    "VALUES(?, ?, ?, ?, ?, 'pending', ?)",
-                    (entity_type, entity_id, operation, payload_json, origin_node, now_iso),
-                )
-                # 同时镜像到 changes，便于其它节点级联拉取（“服务器作为信源”）。
-                conn.execute(
-                    "INSERT INTO xcmax_changes(entity_type, entity_id, operation, "
-                    "payload_json, version, actor, origin_node, created_at) "
-                    "VALUES(?, ?, ?, ?, 1, ?, ?, ?)",
-                    (
-                        entity_type,
-                        entity_id,
-                        operation,
-                        payload_json,
-                        str(raw.get("actor") or "remote"),
-                        origin_node,
-                        now_iso,
-                    ),
-                )
-                written += 1
-            _meta_set(conn, "last_sync_at", now_iso)
-            conn.commit()
-        return {
-            "success": True,
-            "received": written,
-            "apply_result": {"applied": written, "conflicts": 0},
-        }
-    except Exception as exc:
-        logger.warning("sync_receive failed: %s", exc)
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
-
-
-@router.post("/sync/push", response_model=None)
-async def sync_push() -> dict[str, Any]:
-    """服务器端通常不需要主动 push，但保留接口以便 UI 调用一致。"""
-    _ensure_schema()
-    return {
-        "success": True,
-        "data": {"sent": 0, "failed": 0, "total_pending": 0, "note": "server-side noop"},
-    }
-
-
-@router.post("/sync/pull", response_model=None)
-async def sync_pull() -> dict[str, Any]:
-    """占位：服务器端无远端可拉，返回空摘要。"""
-    _ensure_schema()
-    return {
-        "success": True,
-        "data": {"pull": {"pulled": 0}, "apply": {"applied": 0, "conflicts": 0}},
-    }
-
-
-# ---------------------------------------------------------------------------
-# 冲突
-# ---------------------------------------------------------------------------
-
-
-@router.get("/sync/conflicts", response_model=None)
-async def list_conflicts(limit: int = Query(50, ge=1, le=500)) -> dict[str, Any]:
-    _ensure_schema()
-    try:
-        with _connect() as conn:
-            rows = conn.execute(
-                "SELECT id, entity_type, entity_id, operation, payload_json, "
-                "conflict_note, received_at "
-                "FROM xcmax_inbox WHERE status='conflict' "
-                "ORDER BY id DESC LIMIT ?",
-                (int(limit),),
-            ).fetchall()
-        data: list[dict[str, Any]] = []
-        for r in rows:
-            try:
-                payload = json.loads(r["payload_json"] or "{}")
-            except Exception:
-                payload = {}
-            data.append(
-                {
-                    "id": r["id"],
-                    "entity_type": r["entity_type"],
-                    "entity_id": r["entity_id"],
-                    "operation": r["operation"],
-                    "payload": payload,
-                    "conflict_note": r["conflict_note"],
-                    "received_at": r["received_at"],
-                }
-            )
-        return {"success": True, "data": data, "count": len(data)}
-    except Exception as exc:
-        return {"success": True, "data": [], "count": 0, "note": str(exc)}
-
-
-@router.post("/sync/conflicts/{inbox_id}/resolve", response_model=None)
-async def resolve_conflict(
-    inbox_id: int, body: dict = Body(default_factory=dict)
-) -> dict[str, Any]:
-    _ensure_schema()
-    action = str((body or {}).get("action") or "skip").strip()
-    new_status = "applied" if action == "apply" else "skipped"
-    try:
-        with _db_lock, _connect() as conn:
-            conn.execute("UPDATE xcmax_inbox SET status=? WHERE id=?", (new_status, int(inbox_id)))
-            conn.commit()
-        return {"success": True, "inbox_id": int(inbox_id), "action": action}
-    except Exception as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
-
-
-# ---------------------------------------------------------------------------
-# SSE 心跳：与本地端 /sync/stream 对称，方便客户端复用同一前端组件
-# ---------------------------------------------------------------------------
-
-SYNC_POLL_INTERVAL_S = float(os.environ.get("XCMAX_SYNC_POLL_S", "10"))
-
-
-async def _sse_generator(request: Request, since_cursor: int):
-    cursor = int(since_cursor)
-    while True:
-        if await request.is_disconnected():
-            break
-        try:
-            _ensure_schema()
-            with _connect() as conn:
-                rows = conn.execute(
-                    "SELECT id, entity_type, entity_id, operation, payload_json, "
-                    "created_at FROM xcmax_changes WHERE id > ? "
-                    "ORDER BY id ASC LIMIT 50",
-                    (cursor,),
-                ).fetchall()
-                if rows:
-                    cursor = int(rows[-1]["id"])
-                    payload = {
-                        "cursor": cursor,
-                        "changes": [
-                            {
-                                "id": r["id"],
-                                "entity_type": r["entity_type"],
-                                "entity_id": r["entity_id"],
-                                "operation": r["operation"],
-                                "created_at": r["created_at"],
-                            }
-                            for r in rows
-                        ],
-                    }
-                    yield f"data: {json.dumps(payload, ensure_ascii=False, default=str)}\n\n"
-                else:
-                    status = {
-                        "healthy": True,
-                        "local_cursor": _last_change_id(conn),
-                        "remote_cursor": int(_meta_get(conn, "remote_cursor", "0") or 0),
-                        "outbox_count": _inbox_pending_count(conn),
-                        "last_sync_at": _meta_get(conn, "last_sync_at", "") or None,
-                        "conflict_count": _inbox_conflict_count(conn),
-                        "role": "server",
-                    }
-                    heartbeat = {"type": "heartbeat", "cursor": cursor, "status": status}
-                    yield f"data: {json.dumps(heartbeat, ensure_ascii=False, default=str)}\n\n"
-        except Exception as exc:
-            err = {"type": "error", "message": str(exc)}
-            yield f"data: {json.dumps(err, ensure_ascii=False)}\n\n"
-        await asyncio.sleep(SYNC_POLL_INTERVAL_S)
-
-
-@router.get("/sync/stream", response_model=None)
-async def sync_stream(
-    request: Request,
-    since_cursor: int = Query(0, ge=0),
-):
-    return StreamingResponse(
-        _sse_generator(request, since_cursor),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
-    )
-
-
-def _daily_digest_record_to_dict(row: Any, *, include_body: bool = False) -> dict[str, Any]:
-    data: dict[str, Any] = {
-        "id": row.id,
-        "day": row.day,
-        "subject": row.subject,
-        "body_text": row.body_text,
-        "meeting_minutes_html": row.meeting_minutes_html,
-        "recipients": json.loads(row.recipients_json or "[]"),
-        "delivery": json.loads(row.delivery_json or "[]"),
-        "delivered": bool(row.delivered),
-        "source": row.source,
-        "release_train_before": getattr(row, "release_train_before", "") or "",
-        "release_train_after": getattr(row, "release_train_after", "") or "",
-        "release_kind": getattr(row, "release_kind", "") or "",
-        "created_at": row.created_at.isoformat() + "Z" if row.created_at else "",
-    }
-    if include_body:
-        data["body_html"] = row.body_html
-    return data
-
-
-@router.get("/admin/daily-digests", response_model=None)
-async def xcmax_daily_digest_records(
-    limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0)
-) -> dict[str, Any]:
-    try:
-        from modstore_server.models import DailyDigestRecord, get_session_factory
-
-        sf = get_session_factory()
-        with sf() as session:
-            total = session.query(DailyDigestRecord.id).count()
-            rows = (
-                session.query(DailyDigestRecord)
-                .order_by(DailyDigestRecord.id.desc())
-                .offset(offset)
-                .limit(limit)
-                .all()
-            )
-            return {
-                "success": True,
-                "data": [_daily_digest_record_to_dict(r, include_body=False) for r in rows],
-                "total": total,
-            }
-    except Exception as exc:
-        logger.warning("xcmax daily-digests list failed: %s", exc)
-        return {"success": True, "data": [], "total": 0, "note": str(exc)}
-
-
-@router.get("/admin/daily-digests/{record_id}", response_model=None)
-async def xcmax_daily_digest_record_detail(record_id: int) -> dict[str, Any]:
-    try:
-        from modstore_server.models import DailyDigestRecord, get_session_factory
-
-        sf = get_session_factory()
-        with sf() as session:
-            row = session.get(DailyDigestRecord, record_id)
-            if row is None:
-                return JSONResponse({"success": False, "message": "not found"}, status_code=404)
-            return {"success": True, "data": _daily_digest_record_to_dict(row, include_body=True)}
-    except Exception as exc:
-        logger.warning("xcmax daily-digests detail failed: %s", exc)
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
-
-
-@router.get("/release-train", response_model=None)
-async def xcmax_release_train() -> dict[str, Any]:
-    """release_train 四段 SSOT（与 FHD 全景页 / 运维台 live 刷新同源）。"""
-    try:
-        from modstore_server.release_train import snapshot_public
-
-        return {"success": True, "data": snapshot_public()}
-    except Exception as exc:
-        logger.warning("xcmax release-train failed: %s", exc)
-        return {"success": True, "data": {"current": "1.0.0.0", "day_index": 0, "note": str(exc)}}
-
-
-@router.get("/admin/digest-identity", response_model=None)
-async def xcmax_digest_identity() -> dict[str, Any]:
-    """返回当前宜向 XCmax 展示的 6 位身份校验码及是否仍可通过市场管理端解锁校验。
-
-    与 ``POST /api/auth/verify-admin-digest-code`` 共用
-    :mod:`modstore_server.digest_identity` 实现，保证本地页眉与修茈市场解锁口径一致。
-    """
-    try:
-        from modstore_server.digest_identity import resolve_digest_identity_for_xcmax
-        from modstore_server.models import get_session_factory
-
-        sf = get_session_factory()
-        with sf() as session:
-            data = resolve_digest_identity_for_xcmax(session)
-        display_base = (
-            (
-                os.environ.get("MODSTORE_DIGEST_DISPLAY_API_BASE")
-                or os.environ.get("MODSTORE_PUBLIC_ORIGIN")
-                or ""
-            )
-            .strip()
-            .rstrip("/")
-        )
-        if display_base:
-            data = dict(data)
-            data["digest_api_base"] = display_base
-        return {"success": True, "data": data}
-    except Exception as exc:
-        logger.warning("xcmax digest-identity failed: %s", exc)
-        return {
-            "success": False,
-            "message": str(exc),
-            "data": {"code": "", "expires_at": "", "valid": False, "daily_digest_id": None},
-        }
-
-
-@router.get("/admin/surface-audit/lane", response_model=None)
-async def xcmax_surface_audit_lane(
-    lane: str = Query("P-W"),
-    refresh: bool = Query(False),
-) -> dict[str, Any]:
-    """P-W / P-S / P-App 截图+分析快照（对应时间轨 SW / SS / SA 节点）。"""
-    import base64
-    from datetime import datetime, timezone
-
-    lane = (lane or "P-W").strip()
-    workflow_nodes = {"P-W": "SW", "P-S": "SS", "P-App": "SA"}
-    try:
-        from modstore_server.daily_digest_surface_audit import (
-            _base_url,
-            _save_dir,
-            lane_employee_ids,
-            run_surface_audit_async,
-        )
-    except ImportError as exc:
-        return JSONResponse(
-            {"success": False, "message": f"daily_digest_surface_audit 未安装: {exc}"},
-            status_code=501,
-        )
-
-    try:
-        from modstore_server.daily_digest import digest_calendar_day
-
-        day = digest_calendar_day()
-    except Exception:
-        day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-    async def _lane_payload(report: dict[str, Any], *, cached: bool) -> dict[str, Any]:
-        la = {}
-        lane_analysis = report.get("lane_analysis")
-        if isinstance(lane_analysis, dict):
-            row = lane_analysis.get(lane)
-            if isinstance(row, dict):
-                la = row
-        pages: list[dict[str, Any]] = []
-        for row in report.get("results") if isinstance(report.get("results"), list) else []:
-            if row.get("lane") != lane:
-                continue
-            thumb_b64 = ""
-            saved = str(row.get("screenshot_saved") or "").strip()
-            if saved:
-                p = Path(saved)
-                if p.is_file():
-                    raw = p.read_bytes()
-                    if len(raw) <= 1_600_000:
-                        thumb_b64 = base64.b64encode(raw).decode("ascii")
-            pages.append(
-                {
-                    "name": row.get("name"),
-                    "url": row.get("url"),
-                    "status": row.get("status"),
-                    "title": row.get("title"),
-                    "viewport": row.get("viewport"),
-                    "console_errors": row.get("console_errors") or [],
-                    "error": row.get("error"),
-                    "screenshot_b64": thumb_b64,
-                    "screenshot_saved": saved,
-                }
-            )
-        return {
-            "lane": lane,
-            "lane_label": {"P-W": "网站", "P-S": "软件", "P-App": "App"}.get(lane, lane),
-            "workflow_node": workflow_nodes.get(lane, ""),
-            "day": day,
-            "base_url": _base_url(),
-            "cached": cached,
-            "ok": bool(report.get("ok")),
-            "skipped": bool(report.get("skipped")),
-            "error": report.get("error") or "",
-            "pages": pages,
-            "analysis": la,
-            "owners": la.get("owners") or lane_employee_ids(lane),
-        }
-
-    if refresh:
-        try:
-            report = await run_surface_audit_async()
-            return {"success": True, "data": await _lane_payload(report, cached=False)}
-        except Exception as exc:
-            logger.warning("surface audit refresh failed lane=%s: %s", lane, exc)
-            return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
-
-    save_root = _save_dir(day)
-    if save_root is None or not save_root.is_dir():
-        return {
-            "success": True,
-            "data": {
-                "lane": lane,
-                "workflow_node": workflow_nodes.get(lane, ""),
-                "day": day,
-                "cached": True,
-                "ok": False,
-                "pages": [],
-                "analysis": {},
-                "owners": lane_employee_ids(lane),
-                "error": "今日尚未巡检或未配置截图保存目录",
-            },
-        }
-
-    pages: list[dict[str, Any]] = []
-    for png in sorted(save_root.glob("*.png")):
-        if f"_{lane}_" not in png.name:
-            continue
-        slug_parts = png.stem.split("_", 2)
-        name = slug_parts[2] if len(slug_parts) >= 3 else png.stem
-        base = _base_url()
-        path_guess = "/" if "首页" in name else f"/{name}"
-        raw = png.read_bytes()
-        thumb_b64 = base64.b64encode(raw).decode("ascii") if len(raw) <= 480_000 else ""
-        pages.append(
-            {
-                "lane": lane,
-                "name": name,
-                "url": f"{base}{path_guess}",
-                "status": 200,
-                "title": name,
-                "viewport": "desktop",
-                "console_errors": [],
-                "error": None,
-                "screenshot_b64": thumb_b64,
-                "screenshot_saved": str(png),
-            }
-        )
-    report_stub = {"ok": bool(pages), "results": pages, "lane_analysis": {}}
-    return {"success": True, "data": await _lane_payload(report_stub, cached=True)}
-
-
 @router.post("/admin/loop/memory/evict", response_model=None)
 async def xcmax_admin_loop_memory_evict(
     body: dict[str, Any] = Body(default_factory=dict),
@@ -939,3 +397,27 @@ async def xcmax_admin_loop_memory_evict(
 
 
 __all__ = ["router"]
+
+
+router.routes.extend(_sync_routes.router.routes)
+router.routes.extend(_surface_routes.router.routes)
+
+_last_change_id = _sync_routes._last_change_id
+_inbox_pending_count = _sync_routes._inbox_pending_count
+_inbox_conflict_count = _sync_routes._inbox_conflict_count
+sync_status = _sync_routes.sync_status
+sync_changes = _sync_routes.sync_changes
+sync_receive = _sync_routes.sync_receive
+sync_push = _sync_routes.sync_push
+sync_pull = _sync_routes.sync_pull
+list_conflicts = _sync_routes.list_conflicts
+resolve_conflict = _sync_routes.resolve_conflict
+_sse_generator = _sync_routes._sse_generator
+sync_stream = _sync_routes.sync_stream
+
+_daily_digest_record_to_dict = _surface_routes._daily_digest_record_to_dict
+xcmax_daily_digest_records = _surface_routes.xcmax_daily_digest_records
+xcmax_daily_digest_record_detail = _surface_routes.xcmax_daily_digest_record_detail
+xcmax_release_train = _surface_routes.xcmax_release_train
+xcmax_digest_identity = _surface_routes.xcmax_digest_identity
+xcmax_surface_audit_lane = _surface_routes.xcmax_surface_audit_lane

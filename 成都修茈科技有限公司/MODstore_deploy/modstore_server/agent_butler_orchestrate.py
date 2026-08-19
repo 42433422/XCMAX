@@ -15,39 +15,16 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from modstore_server.agent_butler_models import (
+    ButlerOrchestrateBody,
+    butler_orchestrate_steps as _butler_orchestrate_steps,
+)
+from modstore_server.agent_butler_targets import (
+    default_mod_focus as _default_mod_focus,
+    locate_employee_mod as _locate_employee_mod,
+)
 
 logger = logging.getLogger(__name__)
-
-
-# ─── 步骤定义 ─────────────────────────────────────────────────────────
-
-
-def _butler_orchestrate_steps() -> List[Dict[str, Any]]:
-    return [
-        {"id": "snapshot", "label": "备份快照", "status": "pending", "message": None},
-        {"id": "plan", "label": "规划改动", "status": "pending", "message": None},
-        {"id": "vibe", "label": "vibe-coding 改写", "status": "pending", "message": None},
-        {"id": "validate", "label": "服务端校验", "status": "pending", "message": None},
-        {"id": "complete", "label": "完成", "status": "pending", "message": None},
-    ]
-
-
-# ─── 请求体 ───────────────────────────────────────────────────────────
-
-
-class ButlerOrchestrateBody(BaseModel):
-    target_type: str = Field(..., description="'mod' | 'workflow' | 'employee'")
-    target_id: str = Field(..., min_length=1, max_length=256)
-    brief: str = Field(..., min_length=3, max_length=8000)
-    scope: Optional[str] = Field(
-        None,
-        description="auto | manifest | backend | frontend | workflow_graph | employee_prompt",
-    )
-    focus_paths: Optional[List[str]] = None
-    with_snapshot: bool = True
-    provider: Optional[str] = Field(None, max_length=64)
-    model: Optional[str] = Field(None, max_length=128)
 
 
 # ─── 管线 ─────────────────────────────────────────────────────────────
@@ -62,8 +39,6 @@ async def _run_butler_orchestrate_pipeline(
     from modstore_server.models import User, get_session_factory
     from modstore_server.workbench_api import (
         _fail_session,
-        _finalize_session_done,
-        _set_step,
     )
 
     target_type = str(payload.get("target_type") or "mod").strip()
@@ -389,69 +364,6 @@ async def _pipeline_employee(
         }
 
     await _finalize_session_done(sid, artifact)
-
-
-# ─── 辅助函数 ─────────────────────────────────────────────────────────
-
-
-def _default_mod_focus(scope: str) -> List[str]:
-    mapping: Dict[str, List[str]] = {
-        "manifest": ["manifest.json"],
-        "backend": ["backend/blueprints.py", "backend/employees"],
-        "frontend": ["config/frontend_spec.json", "frontend/views"],
-        "employee_prompt": ["backend/employees"],
-    }
-    if scope in mapping:
-        return mapping[scope]
-    # auto / anything else → broad default
-    return [
-        "manifest.json",
-        "backend/blueprints.py",
-        "backend/employees",
-        "config",
-        "frontend/views",
-    ]
-
-
-def _locate_employee_mod(
-    employee_id: str,
-    scope: str,
-) -> tuple:
-    """Try to find the Mod directory that contains this employee.
-
-    Returns (mod_dir: Path | None, focus_paths: list[str]).
-    """
-    from pathlib import Path
-
-    try:
-        from modstore_server.infrastructure import library_paths
-
-        lib = library_paths.resolved_library()
-        mods_root = Path(lib)
-        for mod_dir in mods_root.iterdir():
-            if not mod_dir.is_dir():
-                continue
-            # Check manifest for employee declarations
-            manifest_path = mod_dir / "manifest.json"
-            if not manifest_path.is_file():
-                continue
-            import json
-
-            try:
-                data = json.loads(manifest_path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                continue
-            employees = data.get("workflow_employees") or []
-            for emp in employees:
-                if not isinstance(emp, dict):
-                    continue
-                eid = str(emp.get("id") or emp.get("employee_id") or "").strip()
-                if eid and (eid == employee_id or employee_id.startswith(eid)):
-                    focus = [f"backend/employees/{eid}.py", f"backend/employees/{eid}"]
-                    return mod_dir, focus
-    except Exception:
-        pass
-    return None, []
 
 
 def _do_vibe_edit(

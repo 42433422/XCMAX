@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import socket
+import ssl
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
@@ -33,6 +34,16 @@ FUNASR_USE_SSL = os.getenv("FUNASR_USE_SSL", "1").strip().lower() not in (
 
 def _funasr_scheme() -> str:
     return "wss" if FUNASR_USE_SSL else "ws"
+
+
+def create_funasr_ssl_context() -> ssl.SSLContext | None:
+    """Use normal certificate validation, with an optional private CA bundle."""
+    if not FUNASR_USE_SSL:
+        return None
+    ca_bundle = str(os.environ.get("FUNASR_CA_BUNDLE") or "").strip()
+    if ca_bundle:
+        return ssl.create_default_context(cafile=ca_bundle)
+    return ssl.create_default_context()
 
 
 def _detect_funasr_host() -> list[str]:
@@ -100,14 +111,8 @@ async def _connect_funasr_parallel(funasr_urls: list[str], ssl_ctx):
 
 
 async def _proxy_to_funasr(client_ws: WebSocket) -> None:
-    import ssl as _ssl
-
     funasr_urls = _detect_funasr_host()
-    ssl_ctx = None
-    if FUNASR_USE_SSL:
-        ssl_ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = _ssl.CERT_NONE
+    ssl_ctx = create_funasr_ssl_context()
 
     connect_result = await _connect_funasr_parallel(funasr_urls, ssl_ctx)
     if connect_result is None:

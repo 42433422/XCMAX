@@ -4,13 +4,20 @@ from __future__ import annotations
 
 import asyncio
 import datetime as _dt
-import hashlib
-import json
 import logging
 import time
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from modstore_server.llm_catalog_data import (
+    cache_key as _cache_key,
+    filter_openai_style as _filter_openai_style,
+    load_fallback as _load_fallback,
+    merge_model_records,
+    metadata_by_model_records,
+    model_id as _model_id,
+    openai_style_items as _openai_style_items,
+    runtime_model_ids as _runtime_model_ids,
+)
 from modstore_server.llm_key_resolver import (
     KNOWN_PROVIDERS,
     OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
@@ -40,46 +47,6 @@ _last_force_refresh: Dict[int, float] = {}
 
 # 能力目录需保留 TTS/STT/嵌入/图像/视频等非对话模型；
 # 只排除用户私有微调别名，避免混入平台公共能力目录。
-
-
-def _fallback_path() -> Path:
-    return Path(__file__).resolve().parent / "data" / "llm_fallback_models.json"
-
-
-def _load_fallback() -> Dict[str, List[Any]]:
-    p = _fallback_path()
-    if not p.is_file():
-        return {}
-    try:
-        raw = json.loads(p.read_text(encoding="utf-8"))
-        return {k: list(v) for k, v in raw.items() if isinstance(v, list)}
-    except Exception:
-        return {}
-
-
-def _cache_key(user_id: int, provider: str, api_key: str) -> str:
-    h = hashlib.sha256(f"{user_id}:{provider}:{api_key}".encode()).hexdigest()[:20]
-    return f"{provider}:{h}"
-
-
-def _filter_openai_style(ids: List[str]) -> List[str]:
-    out: List[str] = []
-    for mid in ids:
-        m = (mid or "").strip()
-        if not m or m.startswith("ft:"):
-            continue
-        out.append(m)
-    return sorted(set(out))
-
-
-def _openai_style_items(data: Any) -> Optional[List[Dict[str, Any]]]:
-    """兼容 OpenAI 的 ``{data: []}`` 与 Together 的顶层数组。"""
-
-    if isinstance(data, list):
-        return [dict(item) for item in data if isinstance(item, dict)]
-    if isinstance(data, dict) and isinstance(data.get("data"), list):
-        return [dict(item) for item in data["data"] if isinstance(item, dict)]
-    return None
 
 
 async def _fetch_openai_compatible_records(
@@ -333,50 +300,14 @@ async def _fetch_google(
     return sorted({str(item.get("id") or "") for item in records}), error
 
 
-def _model_id(value: Any) -> str:
-    if isinstance(value, dict):
-        for key in ("id", "name", "model"):
-            text = str(value.get(key) or "").strip()
-            if text:
-                return text
-        return ""
-    return str(value or "").strip()
-
-
 def _merge_fallback(provider: str, remote: List[str]) -> List[str]:
-    fb = _load_fallback().get(provider) or []
-    models: List[str] = []
-    seen = set()
-    for item in list(remote or []) + list(fb or []):
-        mid = _model_id(item)
-        if not mid or mid in seen:
-            continue
-        seen.add(mid)
-        models.append(mid)
-    return sorted(models)
+    return merge_model_records(remote, _load_fallback().get(provider) or [])
 
 
 def _metadata_by_model(
     provider: str, remote_records: List[Dict[str, Any]]
 ) -> Dict[str, Dict[str, Any]]:
-    metadata: Dict[str, Dict[str, Any]] = {}
-    for item in _load_fallback().get(provider) or []:
-        mid = _model_id(item)
-        if not mid:
-            continue
-        record = dict(item) if isinstance(item, dict) else {"id": mid}
-        record["id"] = mid
-        record["_catalog_origin"] = "fallback"
-        metadata[mid] = record
-    for item in remote_records:
-        mid = _model_id(item)
-        if not mid:
-            continue
-        record = dict(item)
-        record["id"] = mid
-        record["_catalog_origin"] = "provider_api"
-        metadata[mid] = record
-    return metadata
+    return metadata_by_model_records(_load_fallback().get(provider) or [], remote_records)
 
 
 def _models_detailed(
@@ -389,16 +320,6 @@ def _models_detailed(
         model_ids,
         metadata_by_id=_metadata_by_model(provider, remote_records or []),
     )
-
-
-def _runtime_model_ids(models_detailed: List[Dict[str, Any]]) -> List[str]:
-    return [
-        str(row.get("id") or "").strip()
-        for row in models_detailed
-        if isinstance(row, dict)
-        and row.get("runtime_selectable") is True
-        and str(row.get("id") or "").strip()
-    ]
 
 
 async def get_models_for_provider(

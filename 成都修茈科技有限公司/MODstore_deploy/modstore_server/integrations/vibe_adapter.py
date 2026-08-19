@@ -34,8 +34,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 from modstore_server.runtime_async import run_coro_sync
 
 if TYPE_CHECKING:  # pragma: no cover - 仅给类型检查;运行时 lazy import
-    from vibe_coding import LLMClient, VibeCoder
-    from vibe_coding.agent.coder import ProjectVibeCoder
+    pass
 
 logger = logging.getLogger(__name__)
 

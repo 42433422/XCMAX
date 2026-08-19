@@ -131,7 +131,9 @@ def _ensure_outputs_entrypoint(code: str, brief_text: str) -> str:
     if has_main_guard and "outputs" in src:
         return src
     brief_json = json.dumps((brief_text or "").strip()[:1200], ensure_ascii=False)
-    return src.rstrip() + f"""
+    return (
+        src.rstrip()
+        + f"""
 
 # --- MODstore artifact guard ---
 def _modstore_artifact_guard():
@@ -153,3 +155,4 @@ def _modstore_artifact_guard():
 if __name__ == "__main__":
     _modstore_artifact_guard()
 """
+    )

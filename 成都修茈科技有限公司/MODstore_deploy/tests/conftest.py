@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
+import atexit
 import os
+import shutil
+import tempfile
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from modman.repo_config import RepoConfig
 
 # ``create_app`` → ``register_all_middleware`` 要求非空 ``MODSTORE_JWT_SECRET``（除非显式不安全标志）。
 # 在收集/导入 ``modstore_server.app`` 之前写入，避免本地未配 .env 时整包测试失败。
@@ -17,23 +26,17 @@ os.environ.setdefault("MODSTORE_WEB_SEARCH_USE_TAVILY", "0")
 # 单元测试不抓取链接正文（集成测试可显式开启 MODSTORE_WEB_FETCH_PAGES=1）。
 os.environ.setdefault("MODSTORE_WEB_FETCH_PAGES", "0")
 
+_pytest_runtime_root = Path(tempfile.mkdtemp(prefix="modstore_pytest_runtime_"))
+atexit.register(shutil.rmtree, _pytest_runtime_root, True)
+os.environ.setdefault("MODSTORE_PUBLIC_OUTPUT_ROOT", str(_pytest_runtime_root / "public"))
+
 # 未显式配置时使用临时 SQLite，避免本机 modstore.db 历史表结构缺列（如 ORM 新增列）导致测试失败。
 if not (os.environ.get("MODSTORE_DB_PATH") or "").strip():
-    import tempfile
-    from pathlib import Path as _Path
-
-    _pytest_db_dir = _Path(tempfile.mkdtemp(prefix="modstore_pytest_"))
+    _pytest_db_dir = Path(tempfile.mkdtemp(prefix="modstore_pytest_"))
     os.environ["MODSTORE_DB_PATH"] = str(_pytest_db_dir / "test.db")
     # 本机 .env.local 常设 DATABASE_URL；与临时 SQLite 并存时 get_engine 会优先 URL 导致无表/缺列。
     os.environ.pop("DATABASE_URL", None)
     os.environ["MODSTORE_PYTEST_USE_SQLITE"] = "1"
-
-from pathlib import Path
-
-import pytest
-from fastapi.testclient import TestClient
-
-from modman.repo_config import RepoConfig
 
 
 @pytest.fixture(autouse=True)
@@ -104,10 +107,7 @@ def auth_headers(client, monkeypatch):
     """注册临时用户（固定邮箱验证码）并返回 Bearer，供需登录的 /api/mods 等接口使用。"""
     import uuid
 
-    for module_name in (
-        "modstore_server.market_api",
-        "modstore_server.api.market_routes",
-    ):
+    for module_name in ("modstore_server.api.market_routes",):
         monkeypatch.setattr(f"{module_name}.assert_email_outbound_configured", lambda: None)
         monkeypatch.setattr(f"{module_name}.generate_verification_code", lambda: "999999")
         monkeypatch.setattr(

@@ -313,7 +313,7 @@ def maybe_auto_approve(
                 "risk_decision": risk_decision.to_dict(),
             }
 
-        # 所有风险等级先经 SSOT，再由自动窄 CI 验证；不进入人工审批队列。
+        # 仅 SSOT 明确允许的风险等级进入窄 CI；高风险必须由上面的人工门禁拦截。
         narrow_ci: Dict[str, Any] = {"ok": True, "skipped": True}
         if _require_ci() or os.environ.get(
             "MODSTORE_CR_NARROW_CI_ENABLED", "1"

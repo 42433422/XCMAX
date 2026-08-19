@@ -29,7 +29,7 @@ from modstore_server.models import (
     OpenApiConnector,
     OpenApiCredential,
     OpenApiOperation,
-    get_session_factory,
+    get_session_factory as get_session_factory,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,11 +52,6 @@ _SENSITIVE_HEADER_PATTERNS = re.compile(
     r"(authorization|api[-_]?key|x[-_]?api[-_]?key|x[-_]?auth[-_]?token|cookie|set-cookie|secret|token)",
     re.IGNORECASE,
 )
-
-
-# ---------------------------------------------------------------------------
-# Outbound safety helpers
-# ---------------------------------------------------------------------------
 
 
 class OutboundBlocked(RuntimeError):
@@ -121,11 +116,6 @@ def assert_url_outbound_safe(url: str) -> None:
         ip = sockaddr[0]
         if _ip_is_blocked(ip):
             raise OutboundBlocked(f"主机 {host} 解析到禁用 IP {ip}")
-
-
-# ---------------------------------------------------------------------------
-# Auth helpers
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -493,192 +483,16 @@ def call_generated_operation(
 
     返回 ``{ok, status_code, body, headers, error, duration_ms}``，不抛异常。
     """
-    safe_timeout = _safe_timeout(timeout)
-    safe_source = (source or "manual").strip().lower() or "manual"
-    sf = get_session_factory()
-    started = time.perf_counter()
-    method = "GET"
-    full_url = ""
-    request_summary = ""
-    response_summary = ""
-    status_code: Optional[int] = None
-    error_text = ""
-    parsed_body: Any = None
-    response_headers: Dict[str, str] = {}
-    with sf() as session:
-        try:
-            connector, operation, credential = _load_runtime_context(
-                session,
-                connector_id=connector_id,
-                user_id=user_id,
-                operation_id=operation_id,
-            )
-            method = (operation.method or "GET").upper()
-            try:
-                spec_params = json.loads(operation.request_schema or "{}").get("parameters") or []
-            except (TypeError, ValueError):
-                spec_params = []
-            if not isinstance(spec_params, list):
-                spec_params = []
+    from modstore_server.openapi_connector_execution import execute_generated_operation
 
-            mutable_params = dict(params or {})
-            path_params, query_params, header_params = _split_params(mutable_params, spec_params)
-            applied_path = _apply_path_params(operation.path, path_params, spec_params)
-            full_url = _resolve_full_url(
-                connector.base_url, applied_path, override=base_url_override
-            )
-            assert_url_outbound_safe(full_url)
-
-            outgoing_headers: Dict[str, str] = {}
-            outgoing_headers.update(header_params)
-            for k, v in (headers or {}).items():
-                outgoing_headers[str(k)] = str(v)
-
-            outgoing_query: Dict[str, Any] = dict(query_params)
-            if credential is not None:
-                payload = decrypt_credential_payload(
-                    credential.auth_type, credential.config_encrypted
-                )
-                _apply_auth(
-                    payload.auth_type,
-                    payload.config,
-                    headers=outgoing_headers,
-                    params=outgoing_query,
-                )
-
-            json_body: Any = None
-            data_body: Any = None
-            if body is not None and method not in ("GET", "HEAD", "DELETE"):
-                try:
-                    json.dumps(body)
-                    json_body = body
-                    outgoing_headers.setdefault("Content-Type", "application/json")
-                except (TypeError, ValueError):
-                    data_body = body
-
-            request_summary = _summarize_request(
-                method, full_url, outgoing_query, outgoing_headers, body
-            )
-
-            with httpx.Client(
-                timeout=safe_timeout,
-                follow_redirects=False,
-                trust_env=False,
-            ) as client:
-                resp = client.request(
-                    method,
-                    full_url,
-                    params=outgoing_query or None,
-                    headers=outgoing_headers or None,
-                    json=json_body,
-                    data=data_body,
-                )
-            status_code = resp.status_code
-            response_headers = {str(k): str(v) for k, v in resp.headers.items()}
-            raw_bytes = resp.content[:_MAX_RESPONSE_BYTES]
-            try:
-                text_body = raw_bytes.decode(resp.encoding or "utf-8", errors="replace")
-            except (LookupError, AttributeError):
-                text_body = raw_bytes.decode("utf-8", errors="replace")
-            content_type = (resp.headers.get("content-type") or "").lower()
-            if "json" in content_type:
-                try:
-                    parsed_body = json.loads(text_body)
-                except (ValueError, TypeError):
-                    parsed_body = text_body
-            else:
-                parsed_body = text_body
-            response_summary = _summarize_response(resp, parsed_body, "")
-            ok = 200 <= resp.status_code < 400
-            return _finalize(
-                session,
-                user_id=user_id,
-                connector_id=connector_id,
-                operation_id=operation_id,
-                method=method,
-                full_url=full_url,
-                status_code=status_code,
-                request_summary=request_summary,
-                response_summary=response_summary,
-                duration_ms=round((time.perf_counter() - started) * 1000, 3),
-                response_headers=response_headers,
-                parsed_body=parsed_body,
-                error_text="",
-                source=safe_source,
-                ok=ok,
-            )
-        except OutboundBlocked as exc:
-            error_text = f"outbound_blocked: {exc}"
-        except (LookupError, PermissionError) as exc:
-            error_text = f"unavailable: {exc}"
-        except ValueError as exc:
-            error_text = f"validation_error: {exc}"
-        except httpx.HTTPError as exc:
-            error_text = f"http_error: {exc}"
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("openapi connector call crashed")
-            error_text = f"internal_error: {type(exc).__name__}: {exc}"
-        response_summary = _summarize_response(None, None, error_text)
-        return _finalize(
-            session,
-            user_id=user_id,
-            connector_id=connector_id,
-            operation_id=operation_id,
-            method=method,
-            full_url=full_url,
-            status_code=status_code,
-            request_summary=request_summary,
-            response_summary=response_summary,
-            duration_ms=round((time.perf_counter() - started) * 1000, 3),
-            response_headers={},
-            parsed_body=None,
-            error_text=error_text,
-            source=safe_source,
-            ok=False,
-        )
-
-
-def _finalize(
-    session,
-    *,
-    user_id: int,
-    connector_id: int,
-    operation_id: str,
-    method: str,
-    full_url: str,
-    status_code: Optional[int],
-    request_summary: str,
-    response_summary: str,
-    duration_ms: float,
-    response_headers: Mapping[str, str],
-    parsed_body: Any,
-    error_text: str,
-    source: str,
-    ok: bool,
-) -> Dict[str, Any]:
-    parsed_path = urlparse(full_url).path or full_url
-    _record_log(
-        session,
-        user_id=user_id,
+    return execute_generated_operation(
         connector_id=connector_id,
+        user_id=user_id,
         operation_id=operation_id,
-        method=method,
-        path=parsed_path[:512],
-        status_code=status_code,
-        duration_ms=duration_ms,
-        request_summary=request_summary,
-        response_summary=response_summary,
-        error=error_text,
+        params=params,
+        body=body,
+        headers=headers,
+        timeout=timeout,
         source=source,
+        base_url_override=base_url_override,
     )
-    return {
-        "ok": ok,
-        "status_code": status_code,
-        "body": parsed_body,
-        "headers": dict(response_headers or {}),
-        "error": error_text,
-        "duration_ms": duration_ms,
-        "operation_id": operation_id,
-        "url": full_url,
-        "method": method,
-    }

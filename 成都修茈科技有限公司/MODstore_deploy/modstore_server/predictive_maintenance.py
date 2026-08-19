@@ -6,7 +6,7 @@ import json
 import os
 import re
 import time
-from collections import Counter, defaultdict
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List

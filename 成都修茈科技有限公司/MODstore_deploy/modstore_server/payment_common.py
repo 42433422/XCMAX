@@ -8,8 +8,6 @@ import logging
 import os
 import threading
 import time
-from datetime import datetime, timedelta, timezone
-from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Optional
 
 from fastapi import HTTPException
@@ -21,7 +19,6 @@ from modstore_server.models import (
     PlanTemplate,
     Purchase,
     UserPlan,
-    get_session_factory,
 )
 
 logger = logging.getLogger(__name__)
@@ -275,7 +272,7 @@ def _catalog_entitlement_metadata(item: CatalogItem, source: str) -> str:
 def _plan_rows(session) -> list[PlanTemplate]:
     rows = [
         row
-        for row in session.query(PlanTemplate).filter(PlanTemplate.is_active == True).all()
+        for row in session.query(PlanTemplate).filter(PlanTemplate.is_active.is_(True)).all()
         if not is_account_license_plan_id(row.id)
     ]
     rows.sort(
@@ -299,7 +296,7 @@ def _user_max_membership_tier_order(session, user_id: int) -> int:
         return -1
     rows = (
         session.query(UserPlan.plan_id)
-        .filter(UserPlan.user_id == user_id, UserPlan.is_active == True)
+        .filter(UserPlan.user_id == user_id, UserPlan.is_active.is_(True))
         .all()
     )
     m = -1
@@ -317,7 +314,7 @@ def _user_owns_svip_tier(session, user_id: int) -> bool:
         return False
     rows = (
         session.query(UserPlan.plan_id)
-        .filter(UserPlan.user_id == user_id, UserPlan.is_active == True)
+        .filter(UserPlan.user_id == user_id, UserPlan.is_active.is_(True))
         .all()
     )
     return any((pid or "") in SVIP_TIER_PLAN_IDS for (pid,) in rows)
@@ -397,7 +394,7 @@ def _resolve_checkout_fields(
     elif body.plan_id:
         plan_row = (
             session.query(PlanTemplate)
-            .filter(PlanTemplate.id == body.plan_id, PlanTemplate.is_active == True)
+            .filter(PlanTemplate.id == body.plan_id, PlanTemplate.is_active.is_(True))
             .first()
         )
         if not plan_row:

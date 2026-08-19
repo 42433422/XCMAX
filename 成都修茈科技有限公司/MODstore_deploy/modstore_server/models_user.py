@@ -123,7 +123,7 @@ class Notification(Base):
 
 
 # 与 modstore_server.db.identity.LandingContactSubmission 同一表；请从 modstore_server.models 导入。
-from modstore_server.db.identity import LandingContactSubmission  # noqa: F401
+from modstore_server.db.identity import LandingContactSubmission  # noqa: E402, F401
 
 
 class EmployeeExecutionMetric(Base):

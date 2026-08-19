@@ -47,16 +47,16 @@ def _employee_trigger_limits(employee_id: str) -> Dict[str, int]:
     """读取 yuangon employee.yaml triggers 中的动态修复预算。"""
     trig = _load_yuangon_employee_meta(employee_id).get("triggers")
     if not isinstance(trig, dict):
-        return {"max_patch_budget_tokens": 3000, "max_patch_steps": 4}
+        return {"max_patch_budget_tokens": 4000, "max_patch_steps": 4}
     try:
-        budget = int(trig.get("max_patch_budget_tokens") or 3000)
+        budget = int(trig.get("max_patch_budget_tokens") or 4000)
     except (TypeError, ValueError):
-        budget = 3000
+        budget = 4000
     try:
         steps = int(trig.get("max_patch_steps") or 4)
     except (TypeError, ValueError):
         steps = 4
-    return {"max_patch_budget_tokens": max(500, budget), "max_patch_steps": max(1, steps)}
+    return {"max_patch_budget_tokens": max(4000, budget), "max_patch_steps": max(1, steps)}
 
 
 def invalid_workflow_sandbox_report(workflow_id: Any) -> Dict[str, Any]:

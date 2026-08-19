@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,6 @@ class SubTask:
 def _load_all_employee_profiles() -> List[Dict[str, Any]]:
     """从 catalog 读取所有已注册员工包的 manifest 摘要（id / name / description / domain / skills）。"""
     try:
-        import io
         import zipfile
 
         from modstore_server.models import CatalogItem, get_session_factory
