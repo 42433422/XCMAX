@@ -1,10 +1,67 @@
 import { req, authHeaders } from './shared'
+import type {
+  LlmBillingSettings,
+  LlmModelPricing,
+} from '../composables/useLlmPricingDisplay'
+
+export interface LlmStatusRow extends Record<string, unknown> {
+  provider: string
+  label?: string
+  has_user_override?: boolean
+  has_platform_key?: boolean
+  masked_key?: string
+}
+
+export interface LlmStatusResponse extends Record<string, unknown> {
+  fernet_configured?: boolean
+  providers?: LlmStatusRow[]
+}
+
+export interface LlmCatalogModelRow {
+  id: string
+  category?: string
+  capability?: Record<string, unknown> & {
+    l3_status?: string
+    l1_status?: string
+    platform_billing_ok?: boolean
+  }
+  pricing?: LlmModelPricing
+}
+
+export interface LlmCatalogProvider {
+  provider: string
+  label: string
+  models: string[]
+  models_detailed?: LlmCatalogModelRow[]
+  media_counts?: Partial<Record<'image' | 'video' | 'llm' | 'vlm' | 'other', number>>
+  supports_openai_images?: boolean
+  error?: string | null
+  fetch_source?: string | null
+  fetched_at?: string | null
+  title?: string
+  items?: LlmCatalogProvider[]
+}
+
+export interface LlmCatalogResponse {
+  [key: string]: unknown
+  providers: LlmCatalogProvider[]
+  preferences?: { provider?: string; model?: string }
+  category_labels?: Record<string, string>
+  fernet_configured?: boolean
+  billing_settings?: LlmBillingSettings
+  gate_hints?: {
+    platform_catalog_gate?: boolean
+    byok_catalog_gate?: boolean
+    platform_require_priced?: boolean
+  }
+  cache_ttl_seconds?: number
+}
 
 export const llm = {
-  llmStatus: () => req('/api/llm/status'),
-  llmResolveChatDefault: () => req('/api/llm/resolve-chat-default'),
+  llmStatus: () => req<LlmStatusResponse>('/api/llm/status'),
+  llmResolveChatDefault: () => req<{ provider?: string; model?: string }>('/api/llm/resolve-chat-default'),
   llmCatalog: (refresh = false) =>
-    req(`/api/llm/catalog?refresh=${refresh ? 1 : 0}`),
+    req<LlmCatalogResponse>(`/api/llm/catalog?refresh=${refresh ? 1 : 0}`),
   llmSaveCredentials: (provider: string, apiKey: string, baseUrl?: string | null) => req(`/api/llm/credentials/${encodeURIComponent(provider)}`, { method: 'PUT', body: JSON.stringify({ api_key: apiKey, base_url: baseUrl ?? null }) }),
   llmDeleteCredentials: (provider: string) => req(`/api/llm/credentials/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
   llmSavePreferences: (provider: string, model: string) => req('/api/llm/preferences', { method: 'PUT', body: JSON.stringify({ provider, model }) }),
@@ -68,12 +125,12 @@ export const llm = {
     })
   },
   llmGenerateImage: (provider: string, model: string, prompt: string, opts: { size?: string; count?: number; n?: number } = {}) =>
-    req('/api/llm/image', {
+    req<{ images?: string[] }>('/api/llm/image', {
       method: 'POST',
       body: JSON.stringify({ provider, model, prompt, size: opts.size || '1024x1024', n: opts.count || opts.n || 1 }),
     }),
   llmGenerateVideo: (provider: string, model: string, prompt: string, opts: { size?: string; seconds?: number; durationSec?: number } = {}) =>
-    req('/api/llm/video', {
+    req<{ status?: string; job_id?: string; preview_url?: string }>('/api/llm/video', {
       method: 'POST',
       body: JSON.stringify({
         provider,

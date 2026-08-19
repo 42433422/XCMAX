@@ -191,7 +191,7 @@ const props = defineProps<{
   initialTab?: MediaGenTabId
 }>()
 
-const emit = defineEmits<{
+const _emit = defineEmits<{
   (e: 'close'): void
   (e: 'insert', text: string): void
 }>()
@@ -271,8 +271,8 @@ async function onGenImage() {
       count: imgCount.value,
     })
     previewImages.value = Array.isArray(urls) ? urls : []
-  } catch (e: any) {
-    error.value = e?.message || String(e)
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e)
   } finally {
     busy.value = false
   }
@@ -295,8 +295,8 @@ async function onGenVideo() {
     const lines = [res.message]
     if (res.previewUrl) lines.push(`预览：${res.previewUrl}`)
     videoResultText.value = lines.filter(Boolean).join('\n\n')
-  } catch (e: any) {
-    error.value = e?.message || String(e)
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e)
   } finally {
     busy.value = false
   }
@@ -315,8 +315,8 @@ async function onGenPpt() {
       pptFilename.value = `${pptTopic.value.trim().slice(0, 32) || 'ai-presentation'}.pptx`
       pptDownloadUrl.value = URL.createObjectURL(blob)
     }
-  } catch (e: any) {
-    error.value = e?.message || String(e)
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e)
   } finally {
     busy.value = false
   }
@@ -328,8 +328,8 @@ async function onGenDoc() {
   error.value = ''
   try {
     docText.value = await props.runner.generateDocument(docKind.value, docInputs.value.trim())
-  } catch (e: any) {
-    error.value = e?.message || String(e)
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e)
   } finally {
     busy.value = false
   }

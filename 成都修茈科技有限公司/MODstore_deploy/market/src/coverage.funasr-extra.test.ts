@@ -221,7 +221,7 @@ describe('FunASR backend extra coverage', () => {
     const abortedDuringMic = new FunASRBackend()
     await abortedDuringMic.start(vi.fn(), vi.fn(), () => abortedDuringMic.abort())
 
-    const empty = new FunASRBackend() as any
+    const empty = new FunASRBackend() as UnsafeTestValue
     expect(empty.isLoading()).toBe(false)
     empty.flushPreConnectPcm()
     for (let i = 0; i < 205; i += 1) empty.onPcm(new Float32Array([i]))
@@ -240,7 +240,7 @@ describe('FunASR backend extra coverage', () => {
 
     const onResult = vi.fn()
     const onError = vi.fn()
-    const backend = new FunASRBackend() as any
+    const backend = new FunASRBackend() as UnsafeTestValue
     const start = backend.start(onResult, onError)
     await flushSocketHandshake()
     await start

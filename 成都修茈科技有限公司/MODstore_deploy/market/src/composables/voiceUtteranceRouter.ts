@@ -150,7 +150,11 @@ export function appendVoiceInject(existing: string, text: string): string {
 }
 
 export function buildOrchestrationStatusSummary(
-  steps: Array<{ label?: string; status?: string; message?: string }> | undefined,
+  steps: Array<{
+    label?: string | null
+    status?: string | null
+    message?: unknown
+  }> | undefined,
 ): string {
   if (!Array.isArray(steps) || !steps.length) return '当前还没有制作步骤。'
   const running = steps.find((s) => s.status === 'running')

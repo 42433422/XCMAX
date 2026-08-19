@@ -28,7 +28,7 @@ describe('employeeConfigV2', () => {
     const phone = applyTemplateV2('phone')
     const workflow = applyTemplateV2('workflow')
 
-    expect(phone.perception.audio.enabled).toBe(true)
+    expect(phone.perception?.audio?.enabled).toBe(true)
     expect(workflow.perception).toBeUndefined()
   })
 
@@ -44,7 +44,7 @@ describe('employeeConfigV2', () => {
     expect(upgraded.identity.id).toBe('sales-agent')
     expect(upgraded.cognition.agent.system_prompt).toBe('负责线索跟进')
     expect(upgraded.collaboration.workflow.workflow_id).toBe(42)
-    expect(upgraded.commerce.price).toBe(99)
+    expect(upgraded.commerce?.price).toBe(99)
   })
 
   it('validates required identity and workflow fields', () => {

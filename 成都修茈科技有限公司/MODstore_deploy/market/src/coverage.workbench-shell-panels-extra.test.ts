@@ -51,16 +51,16 @@ const workbenchStore = vi.hoisted(() => ({
     kind: 'employee',
     id: 'emp_1',
     name: 'Employee One',
-    manifest: {} as Record<string, any>,
-  },
-  canvasNodes: [] as any[],
-  canvasEdges: [] as any[],
-  selectedNode: null as any,
+    manifest: {} as Record<string, UnsafeTestValue>,
+  } as { kind: string; id: string | null; name: string; manifest: Record<string, UnsafeTestValue> },
+  canvasNodes: [] as UnsafeTestValue[],
+  canvasEdges: [] as UnsafeTestValue[],
+  selectedNode: null as UnsafeTestValue,
   inspectorMode: 'node',
   dirty: false,
   lastSavedAt: 0,
-  agentRuns: [] as any[],
-  currentRun: null as any,
+  agentRuns: [] as UnsafeTestValue[],
+  currentRun: null as UnsafeTestValue,
   setTarget: vi.fn((kind: string, id: string | null, manifest: Record<string, unknown>, name: string) => {
     workbenchStore.target.kind = kind
     workbenchStore.target.id = id
@@ -69,7 +69,7 @@ const workbenchStore = vi.hoisted(() => ({
   }),
   patchManifest: vi.fn((path: string, value: unknown) => {
     const parts = path.split('.')
-    let cur = workbenchStore.target.manifest as Record<string, any>
+    let cur = workbenchStore.target.manifest as Record<string, UnsafeTestValue>
     for (const key of parts.slice(0, -1)) {
       if (!cur[key] || typeof cur[key] !== 'object') cur[key] = {}
       cur = cur[key]
@@ -77,7 +77,7 @@ const workbenchStore = vi.hoisted(() => ({
     cur[parts[parts.length - 1]] = value
     workbenchStore.dirty = true
   }),
-  setCanvasGraph: vi.fn((nodes: any[], edges: any[]) => {
+  setCanvasGraph: vi.fn((nodes: UnsafeTestValue[], edges: UnsafeTestValue[]) => {
     workbenchStore.canvasNodes = nodes
     workbenchStore.canvasEdges = edges
   }),
@@ -183,7 +183,7 @@ vi.mock('./composables/useWorkbenchManifest', () => ({
 vi.mock('./employeeConfigV2', () => ({
   createEmptyEmployeeConfigV2: vi.fn((opts?: Record<string, unknown>) => ({
     identity: { id: '', name: '', version: '1.0.0' },
-    cognition: { agent: { model: (opts as any)?.model || { provider: 'auto', model_name: 'auto' } } },
+    cognition: { agent: { model: (opts as UnsafeTestValue)?.model || { provider: 'auto', model_name: 'auto' } } },
     collaboration: { workflow: { workflow_id: 0 } },
   })),
   upgradeLegacyToV2: vi.fn((raw: Record<string, unknown>) => ({
@@ -209,10 +209,10 @@ vi.mock('./composables/useStreamingTts', () => ({
 vi.mock('./composables/llmCatalogModelHelpers', () => ({
   LLM_CATEGORY_ORDER: ['chat', 'reasoning'],
   categoryLabel: vi.fn((_catalog: unknown, cat: string) => `cat:${cat}`),
-  modelsForCategory: vi.fn((block: any, cat: string) =>
-    (block?.models_detailed || []).filter((m: any) => (m.capability?.category || 'chat') === cat),
+  modelsForCategory: vi.fn((block: UnsafeTestValue, cat: string) =>
+    (block?.models_detailed || []).filter((m: UnsafeTestValue) => (m.capability?.category || 'chat') === cat),
   ),
-  modelOptionLabel: vi.fn((row: any) => `model:${row.id}`),
+  modelOptionLabel: vi.fn((row: UnsafeTestValue) => `model:${row.id}`),
 }))
 
 import WorkbenchShell from './views/workbench/WorkbenchShell.vue'
@@ -247,8 +247,8 @@ beforeEach(() => {
   authMock.isAdmin = true
   authMock.username = 'admin'
 
-  computeAutoLayoutMock.mockImplementation((nodes: any[]) => new Map(nodes.map((n, i) => [n.id, { x: i * 10, y: i * 20 }])))
-  manifestHelpers.manifestToNodes.mockImplementation((manifest: Record<string, any>) => [
+  computeAutoLayoutMock.mockImplementation((nodes: UnsafeTestValue[]) => new Map(nodes.map((n, i) => [n.id, { x: i * 10, y: i * 20 }])))
+  manifestHelpers.manifestToNodes.mockImplementation((manifest: Record<string, UnsafeTestValue>) => [
     {
       id: 'identity',
       position: { x: 0, y: 0 },
@@ -272,7 +272,7 @@ beforeEach(() => {
       },
     },
   ])
-  manifestHelpers.manifestToEdges.mockImplementation((nodes: any[]) => nodes.length > 1 ? [{ id: 'e-identity-prompt', source: 'identity', target: 'prompt' }] : [])
+  manifestHelpers.manifestToEdges.mockImplementation((nodes: UnsafeTestValue[]) => nodes.length > 1 ? [{ id: 'e-identity-prompt', source: 'identity', target: 'prompt' }] : [])
   manifestHelpers.addModuleToManifest.mockImplementation((manifest: Record<string, unknown>, kind: string) => ({ ...manifest, [`added_${kind}`]: true }))
   manifestHelpers.removeModuleFromManifest.mockImplementation((manifest: Record<string, unknown>, kind: string) => ({ ...manifest, [`removed_${kind}`]: true }))
 
@@ -342,7 +342,7 @@ describe('employee module node coverage', () => {
       [{ moduleKind: 'memory', label: 'Memory', meta, slice: {}, enabled: true }, '仅短期记忆'],
       [{ moduleKind: 'other', label: 'Other', meta, slice: { x: 1 }, enabled: true }, 'Fallback'],
       [{ moduleKind: 'other', label: 'Other', meta, slice: null, enabled: true }, '未配置'],
-    ] as any[]
+    ] as UnsafeTestValue[]
 
     for (const [data, expected] of cases) {
       const wrapper = mount(EmployeeModuleNode, { props: { id: 'n1', selected: true, data }, global: { stubs: { Handle: true } } })
@@ -356,7 +356,7 @@ describe('workbench canvas and rails coverage', () => {
   it('covers canvas sync, graph events, drop and exposed layout helpers', async () => {
     const wrapper = mount(CanvasStage, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     expect(workbenchStore.setCanvasGraph).toHaveBeenCalled()
     expect(workbenchStore.canvasNodes[0].position).toEqual({ x: 0, y: 0 })
@@ -394,15 +394,15 @@ describe('workbench canvas and rails coverage', () => {
     workbenchStore.target.id = '44'
     const workflow = mount(CanvasStage, globalMount)
     await flushPromises()
-    expect((workflow.vm as any).isWorkflowTarget).toBe(true)
-    expect((workflow.vm as any).activeWorkflowId).toBe(44)
+    expect((workflow.vm as UnsafeTestValue).isWorkflowTarget).toBe(true)
+    expect((workflow.vm as UnsafeTestValue).activeWorkflowId).toBe(44)
     workflow.unmount()
 
     workbenchStore.target.kind = 'mod'
     workbenchStore.target.id = null
     const mod = mount(CanvasStage, globalMount)
     await flushPromises()
-    expect((mod.vm as any).isEmployeeTarget).toBe(false)
+    expect((mod.vm as UnsafeTestValue).isEmployeeTarget).toBe(false)
   })
 
   it('covers left rail list, agent, delete, purge and route selection flows', async () => {
@@ -411,9 +411,9 @@ describe('workbench canvas and rails coverage', () => {
     workbenchStore.agentRuns = [{ id: 'run1', brief: 'brief', startedAt: 1, status: 'done', manifest: { identity: { id: 'generated' } } }]
     const wrapper = mount(LeftRail, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
-    expect(vm.visibleEmployees.map((e: any) => e.id)).toContain('emp_1')
+    expect(vm.visibleEmployees.map((e: UnsafeTestValue) => e.id)).toContain('emp_1')
     expect(wrapper.emitted('select-employee')?.[0]).toEqual(['emp_1'])
     vm.hideLocally('emp_1')
     expect([...vm.hiddenPkgIds]).toContain('emp_1')
@@ -439,14 +439,14 @@ describe('workbench canvas and rails coverage', () => {
     expect(workbenchStore.setTarget).toHaveBeenCalledWith('employee', 'emp_1', { identity: { id: 'generated' } }, 'Employee One')
     expect(vm.formatTs(Date.now())).toBeTruthy()
 
-    ;(window.confirm as any).mockReturnValueOnce(false)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(false)
     await vm.confirmDeleteEmployee({ id: 'emp_1', name: 'Employee One' })
     expect(apiMock.adminDeleteEmployeePack).not.toHaveBeenCalled()
-    ;(window.confirm as any).mockReturnValueOnce(true)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(true)
     await vm.confirmDeleteEmployee({ id: 'emp_1', name: 'Employee One' })
     expect(apiMock.adminDeleteEmployeePack).toHaveBeenCalledWith('emp_1')
 
-    ;(window.confirm as any).mockReturnValueOnce(true)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(true)
     await vm.purgeAllEmployees()
     expect(apiMock.adminPurgeAllEmployeePacks).toHaveBeenCalled()
     expect(vm.listError).toContain('packages.json')
@@ -456,7 +456,7 @@ describe('workbench canvas and rails coverage', () => {
     apiMock.listEmployees.mockRejectedValueOnce(new Error('list failed'))
     const wrapper = mount(LeftRail, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.listError).toContain('list failed')
 
     apiMock.adminDeleteEmployeePack.mockRejectedValueOnce(new Error('delete failed'))
@@ -485,7 +485,7 @@ describe('workbench right rail coverage', () => {
     }
     const wrapper = mount(RightRail, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     expect(vm.mode).toBe('node')
     expect(vm.identityName).toBe('Employee One')
@@ -496,7 +496,7 @@ describe('workbench right rail coverage', () => {
 
     await vm.refreshWorkbenchLlmCatalog()
     expect(apiMock.llmCatalog).toHaveBeenCalledWith(true)
-    expect(vm.catalogProviderPickerRows.map((r: any) => r.provider)).toContain('deepseek')
+    expect(vm.catalogProviderPickerRows.map((r: UnsafeTestValue) => r.provider)).toContain('deepseek')
     expect(vm.employeeHasStructuredModels).toBe(true)
     expect(vm.employeeCategoryLabel('chat')).toBe('cat:chat')
     expect(vm.employeeModelsForCategory('chat')).toHaveLength(1)
@@ -542,7 +542,7 @@ describe('workbench right rail coverage', () => {
     vi.useFakeTimers()
     const wrapper = mount(RightRail, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     expect(vm.presentModuleKinds.has('identity')).toBe(true)
     vm.addModule('memory')
@@ -599,7 +599,7 @@ describe('workbench right rail coverage', () => {
   it('covers right rail empty-id and error branches', async () => {
     const wrapper = mount(RightRail, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     workbenchStore.target.id = ''
     await vm.runEmployee()
@@ -647,7 +647,7 @@ describe('workbench shell coverage', () => {
     sessionStorage.setItem('modstore_employee_prefill', JSON.stringify({ identity: { id: 'emp_route', name: 'Prefill' } }))
     const wrapper = shallowMount(WorkbenchShell, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     expect(vm.resolveKind()).toBe('employee')
     expect(vm.resolveId()).toBe('emp_route')
@@ -719,7 +719,7 @@ describe('workbench shell coverage', () => {
     routeMock.params = { target: 'employee', id: 'emp_missing' }
     const wrapper = shallowMount(WorkbenchShell, { ...globalMount, props: { embedded: true, initialTarget: 'mod' } })
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.loadError).toContain('manifest failed')
 
     await vm.loadTarget('employee', null)

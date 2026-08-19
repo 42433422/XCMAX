@@ -577,7 +577,7 @@ function applyJsonEdit() {
 const refineLoading = ref(false)
 const refineError = ref('')
 const refineDiff = ref('')
-const refineInstruction = ref('')
+const _refineInstruction = ref('')
 
 async function openRefinePrompt() {
   const instruction = window.prompt('优化指令（例如：增加拒绝服务的边界说明）', '')

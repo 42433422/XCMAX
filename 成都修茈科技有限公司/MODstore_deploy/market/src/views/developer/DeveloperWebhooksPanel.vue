@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api } from '../../api'
+import { errorMessage } from '../../utils/typeNarrowing'
 
 interface Subscription {
   id: number
@@ -76,8 +77,8 @@ async function refresh() {
     ])
     subs.value = Array.isArray(list) ? (list as Subscription[]) : []
     eventCatalog.value = Array.isArray(catalog) ? (catalog as EventDef[]) : []
-  } catch (e: any) {
-    errMsg.value = e?.detail || e?.message || '加载失败'
+  } catch (e: unknown) {
+    errMsg.value = errorMessage(e, '加载失败')
   } finally {
     loading.value = false
   }
@@ -143,7 +144,14 @@ async function submitDialog() {
   dialog.busy = true
   errMsg.value = ''
   try {
-    const payload: any = {
+    const payload: {
+      name: string
+      target_url: string
+      description: string
+      enabled_events: string[]
+      is_active: boolean
+      secret?: string
+    } = {
       name: dialog.name.trim(),
       target_url: dialog.url.trim(),
       description: dialog.description.trim(),
@@ -158,8 +166,8 @@ async function submitDialog() {
     }
     dialog.open = false
     await refresh()
-  } catch (e: any) {
-    errMsg.value = e?.detail || e?.message || '保存失败'
+  } catch (e: unknown) {
+    errMsg.value = errorMessage(e, '保存失败')
   } finally {
     dialog.busy = false
   }
@@ -169,8 +177,8 @@ async function toggleActive(s: Subscription) {
   try {
     await api.developerUpdateWebhook(s.id, { is_active: !s.is_active })
     await refresh()
-  } catch (e: any) {
-    errMsg.value = e?.detail || e?.message || '切换失败'
+  } catch (e: unknown) {
+    errMsg.value = errorMessage(e, '切换失败')
   }
 }
 
@@ -179,8 +187,8 @@ async function deleteSub(s: Subscription) {
   try {
     await api.developerDeleteWebhook(s.id)
     await refresh()
-  } catch (e: any) {
-    errMsg.value = e?.detail || e?.message || '删除失败'
+  } catch (e: unknown) {
+    errMsg.value = errorMessage(e, '删除失败')
   }
 }
 
@@ -191,8 +199,8 @@ async function sendTest(s: Subscription) {
     if (deliveriesPanel.open && deliveriesPanel.subId === s.id) {
       await openDeliveries(s)
     }
-  } catch (e: any) {
-    errMsg.value = e?.detail || e?.message || '测试发送失败'
+  } catch (e: unknown) {
+    errMsg.value = errorMessage(e, '测试发送失败')
   }
 }
 
@@ -205,7 +213,7 @@ async function openDeliveries(s: Subscription) {
 async function loadDeliveries() {
   deliveriesPanel.loading = true
   try {
-    const rows: any = await api.developerListWebhookDeliveries(deliveriesPanel.subId, {
+    const rows = await api.developerListWebhookDeliveries(deliveriesPanel.subId, {
       limit: 100,
       status: deliveriesPanel.status || undefined,
     })
@@ -222,8 +230,8 @@ async function retryDelivery(d: Delivery) {
     await api.developerRetryWebhookDelivery(d.id)
     await loadDeliveries()
     await refresh()
-  } catch (e: any) {
-    errMsg.value = e?.detail || e?.message || '重试失败'
+  } catch (e: unknown) {
+    errMsg.value = errorMessage(e, '重试失败')
   }
 }
 

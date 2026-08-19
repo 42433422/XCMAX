@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import json
 import os
-import sys
 
 old_base = "/root/成都修茈科技有限公司/MODstore_deploy"
 new_base = "/root/modstore-git/MODstore_deploy"

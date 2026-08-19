@@ -75,11 +75,34 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api'
 
+interface ScriptWorkflowDetail {
+  id: number | string
+  name: string
+  status: string
+  brief?: { goal?: string; outputs?: string; acceptance?: string } | null
+  script_text?: string
+}
+
+interface ScriptWorkflowRun {
+  id: number | string
+  mode: string
+  status: string
+  started_at: string
+  completed_at?: string | null
+}
+
+interface ScriptWorkflowVersion {
+  id: number | string
+  version_no: number
+  is_current: boolean
+  created_at: string
+}
+
 const route = useRoute()
 const router = useRouter()
-const wf = ref<any>(null)
-const runs = ref<any[]>([])
-const versions = ref<any[]>([])
+const wf = ref<ScriptWorkflowDetail | null>(null)
+const runs = ref<ScriptWorkflowRun[]>([])
+const versions = ref<ScriptWorkflowVersion[]>([])
 const tab = ref<'code' | 'runs' | 'versions'>('code')
 
 const canActivate = computed(() =>
@@ -91,39 +114,44 @@ function goList() {
 }
 
 function editWithAi() {
+  if (!wf.value) return
   router.push({ name: 'workbench-script-workflow-edit', params: { id: wf.value.id } })
 }
 
 function goSandbox() {
+  if (!wf.value) return
   router.push({ name: 'workbench-script-workflow-edit', params: { id: wf.value.id }, query: { tab: 'sandbox' } })
 }
 
 async function activate() {
+  if (!wf.value) return
   try {
     await api.activateScriptWorkflow(wf.value.id)
     await load()
-  } catch (e: any) {
-    alert('启用失败：' + (e.message || e))
+  } catch (e: unknown) {
+    alert('启用失败：' + (e instanceof Error ? e.message : String(e)))
   }
 }
 
 async function deactivate() {
+  if (!wf.value) return
   if (!confirm('停用后不再触发自动调度，确认？')) return
   try {
     await api.deactivateScriptWorkflow(wf.value.id)
     await load()
-  } catch (e: any) {
-    alert('失败：' + (e.message || e))
+  } catch (e: unknown) {
+    alert('失败：' + (e instanceof Error ? e.message : String(e)))
   }
 }
 
 async function del() {
+  if (!wf.value) return
   if (!confirm('确定删除？此操作不可恢复。')) return
   try {
     await api.deleteScriptWorkflow(wf.value.id)
     goList()
-  } catch (e: any) {
-    alert('删除失败：' + (e.message || e))
+  } catch (e: unknown) {
+    alert('删除失败：' + (e instanceof Error ? e.message : String(e)))
   }
 }
 
@@ -147,14 +175,14 @@ function formatTime(t: string) {
 async function load() {
   const id = String(route.params.id || '')
   if (!id) return
-  const [w, r, v]: any[] = await Promise.all([
+  const [w, r, v] = await Promise.all([
     api.getScriptWorkflow(id),
     api.listScriptWorkflowRuns(id),
     api.listScriptWorkflowVersions(id),
   ])
-  wf.value = w
-  runs.value = r || []
-  versions.value = v || []
+  wf.value = w as ScriptWorkflowDetail
+  runs.value = Array.isArray(r) ? (r as ScriptWorkflowRun[]) : []
+  versions.value = Array.isArray(v) ? (v as ScriptWorkflowVersion[]) : []
 }
 
 onMounted(load)

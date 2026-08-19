@@ -28,7 +28,6 @@ export const useWalletStore = defineStore('wallet', () => {
           balance.value = n
           setMembershipReferenceYuan((res as { membership_reference_yuan?: unknown }).membership_reference_yuan)
           lastUpdated.value = Date.now()
-          console.log(`[Wallet] 余额刷新成功: ¥${n.toFixed(2)}`)
           return balance.value
         } else {
           throw new Error('Invalid API response format')

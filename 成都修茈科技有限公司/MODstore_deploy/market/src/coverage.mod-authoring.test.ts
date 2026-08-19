@@ -3,8 +3,8 @@ import { nextTick, reactive } from 'vue'
 import { useModAuthoring } from './features/mod-authoring/composables/useModAuthoring'
 
 const modMocks = vi.hoisted(() => ({
-  detail: null as any,
-  summary: null as any,
+  detail: null as UnsafeTestValue,
+  summary: null as UnsafeTestValue,
   api: {
     getMod: vi.fn(),
     getModAuthoringSummary: vi.fn(),
@@ -123,7 +123,7 @@ function wireApi() {
   api.captureModSnapshot.mockResolvedValue({ ok: true })
   api.restoreModSnapshot.mockResolvedValue({ ok: true })
   api.bumpModManifestPatchVersion.mockResolvedValue({ manifest: { version: '1.0.1' }, warnings: ['minor'] })
-  api.putModManifest.mockImplementation(async (_modId: string, manifest: any) => {
+  api.putModManifest.mockImplementation(async (_modId: string, manifest: UnsafeTestValue) => {
     modMocks.detail.manifest = clone(manifest)
     return { warnings: ['saved-warning'] }
   })
@@ -141,8 +141,8 @@ function wireApi() {
 }
 
 function createSubject(query: Record<string, unknown> = {}, params: Record<string, unknown> = { modId: 'mod-1' }) {
-  const route = reactive({ params, query }) as any
-  const router = { push: vi.fn() } as any
+  const route = reactive({ params, query }) as UnsafeTestValue
+  const router = { push: vi.fn() } as UnsafeTestValue
   const state = useModAuthoring(route, router)
   return { route, router, state }
 }
@@ -360,12 +360,12 @@ describe('coverage mod authoring composable', () => {
 
   it('covers computed fallback states and prompt/pricing edge branches', async () => {
     const detail = makeDetail()
-    delete (detail as any).employee_readiness
-    delete (detail.manifest as any).workflow_employees
-    delete (detail.manifest as any).config
-    delete (detail.manifest as any).frontend
-    ;(detail.manifest as any).artifact = 'bundle'
-    ;(detail.manifest as any).employee_config_v2 = { metadata: { suggested_pricing: { tier: 'team', cny: 199, period: 'year' } } }
+    delete (detail as UnsafeTestValue).employee_readiness
+    delete (detail.manifest as UnsafeTestValue).workflow_employees
+    delete (detail.manifest as UnsafeTestValue).config
+    delete (detail.manifest as UnsafeTestValue).frontend
+    ;(detail.manifest as UnsafeTestValue).artifact = 'bundle'
+    ;(detail.manifest as UnsafeTestValue).employee_config_v2 = { metadata: { suggested_pricing: { tier: 'team', cny: 199, period: 'year' } } }
     detail.files = []
     modMocks.detail = detail
     modMocks.summary = null
@@ -410,13 +410,13 @@ describe('coverage mod authoring composable', () => {
     expect(state.message.value).toContain('system_prompt')
 
     Object.defineProperty(window, 'prompt', { configurable: true, value: vi.fn(() => '   ') })
-    ;(modMocks.detail.manifest as any).employee_config_v2 = { cognition: { agent: { system_prompt: '旧提示' } } }
+    ;(modMocks.detail.manifest as UnsafeTestValue).employee_config_v2 = { cognition: { agent: { system_prompt: '旧提示' } } }
     await state.reload()
     await state.handleRefineSystemPrompt()
     expect(modMocks.api.refineSystemPrompt).not.toHaveBeenCalled()
 
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn(async () => Promise.reject(new Error('denied'))) } })
-    ;(modMocks.detail.manifest as any).employee_config_v2 = {
+    ;(modMocks.detail.manifest as UnsafeTestValue).employee_config_v2 = {
       metadata: { suggested_pricing: { tier: 'once', cny: 9, period: 'once' } },
     }
     await state.reload()
@@ -438,7 +438,7 @@ describe('coverage mod authoring composable', () => {
     await state.handleRefineSystemPrompt()
     expect(state.refinePromptError.value).toContain('未收到优化结果')
 
-    ;(modMocks.detail.manifest as any).employee_config_v2 = { cognition: { agent: { system_prompt: '旧提示' } } }
+    ;(modMocks.detail.manifest as UnsafeTestValue).employee_config_v2 = { cognition: { agent: { system_prompt: '旧提示' } } }
     modMocks.api.refineSystemPrompt.mockResolvedValueOnce({ improved_prompt: '补齐嵌套结构', diff_explanation: '' })
     await state.reload()
     await state.handleRefineSystemPrompt()
@@ -447,15 +447,15 @@ describe('coverage mod authoring composable', () => {
     await state.openEmployeePickModal()
     const catRow = state.empPickRows.value.find((row) => row.id === 'cat-employee')
     expect(catRow).toBeTruthy()
-    await state.confirmPickEmployee(catRow)
+    await state.confirmPickEmployee(catRow!)
     expect(modMocks.api.putModManifest).toHaveBeenCalled()
 
     state.empPickSaving.value = true
-    await state.confirmPickEmployee({ id: 'skip', name: '跳过' })
+    await state.confirmPickEmployee({ id: 'skip', name: '跳过', description: '', sourceLabel: '' })
     state.empPickSaving.value = false
 
     modMocks.api.putModManifest.mockRejectedValueOnce(new Error('pick failed'))
-    await state.confirmPickEmployee({ id: 'manual-employee', name: '', sourceLabel: '手动来源' })
+    await state.confirmPickEmployee({ id: 'manual-employee', name: '', description: '', sourceLabel: '手动来源' })
     expect(state.empPickError.value).toContain('pick failed')
 
     localStorage.setItem('modstore_token', 'token')

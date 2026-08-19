@@ -23,7 +23,7 @@ function adaptRemoteSkill(def: ESkillDef): AgentSkill {
     },
     async execute(context, args) {
       try {
-        const res = (await (api as any).runESkill(def.id, {
+        const res = (await api.runESkill(def.id, {
           context: {
             route: context.route,
             userMessage: context.userMessage,
@@ -52,7 +52,7 @@ export function useESkillRuntime() {
     loading.value = true
     error.value = ''
     try {
-      const data = (await (api as any).listButlerSkills?.()) as ESkillDef[] | undefined
+      const data = (await api.listButlerSkills()) as ESkillDef[] | undefined
       if (Array.isArray(data)) {
         remoteSkills.value = data
         for (const def of data) {

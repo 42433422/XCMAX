@@ -78,7 +78,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/workflow/v2/:id',
     name: 'workflow-v2-editor',
-    redirect: (to: any) => ({
+    redirect: (to) => ({
       name: 'workbench-shell',
       params: { target: 'workflow', id: to.params.id },
     }),
@@ -95,11 +95,11 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/script-workflows/:id',
-    redirect: (to: any) => ({ name: 'workbench-script-workflow-detail', params: { id: to.params.id } }),
+    redirect: (to) => ({ name: 'workbench-script-workflow-detail', params: { id: to.params.id } }),
   },
   {
     path: '/script-workflows/:id/edit',
-    redirect: (to: any) => ({ name: 'workbench-script-workflow-edit', params: { id: to.params.id } }),
+    redirect: (to) => ({ name: 'workbench-script-workflow-edit', params: { id: to.params.id } }),
   },
   {
     path: '/workbench',
@@ -124,17 +124,17 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'repository',
         name: 'workbench-repository',
-        redirect: (to: any) => ({ name: 'workbench-unified', query: { ...to.query, focus: 'repository' } }),
+        redirect: (to) => ({ name: 'workbench-unified', query: { ...to.query, focus: 'repository' } }),
       },
       {
         path: 'workflow',
         name: 'workbench-workflow',
-        redirect: (to: any) => ({ name: 'workbench-unified', query: { ...to.query, focus: 'skill' } }),
+        redirect: (to) => ({ name: 'workbench-unified', query: { ...to.query, focus: 'skill' } }),
       },
       {
         path: 'employee',
         name: 'workbench-employee',
-        redirect: (to: any) => ({
+        redirect: (to) => ({
           name: 'workbench-unified',
           query: { ...to.query, focus: 'employee' },
         }),
@@ -142,7 +142,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'integrations',
         name: 'workbench-integrations',
-        redirect: (to: any) => ({ name: 'workbench-unified', query: { ...to.query, focus: 'integrations' } }),
+        redirect: (to) => ({ name: 'workbench-unified', query: { ...to.query, focus: 'integrations' } }),
       },
       // Mod authoring still uses its own view for now
       { path: 'mod/:modId', name: 'mod-authoring', component: () => import('../views/ModAuthoringView.vue') },
@@ -204,7 +204,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/repository', redirect: '/workbench/repository' },
   {
     path: '/repository/mod/:modId',
-    redirect: (to: any) => ({ name: 'mod-authoring', params: { modId: to.params.modId } }),
+    redirect: (to) => ({ name: 'mod-authoring', params: { modId: to.params.modId } }),
   },
   { path: '/admin', redirect: '/admin/database', meta: { auth: true, admin: true } },
   { path: '/admin/database', name: 'admin-database', component: () => import('../views/AdminDatabaseView.vue'), meta: { auth: true, admin: true } },
@@ -265,7 +265,6 @@ const routes: RouteRecordRaw[] = [
   { path: '/knowledge', name: 'knowledge', component: () => import('../views/KnowledgeManagerView.vue'), meta: { auth: true } },
   {
     path: '/ai-test',
-    name: 'ai-test',
     component: () => import('../views/AiTestLayout.vue'),
     meta: { auth: true },
     children: [
@@ -339,10 +338,7 @@ function isChunkLoadError(err: unknown): boolean {
 
 function appLocationHref(to: { fullPath?: string; path?: string; name?: string | symbol | null }): string {
   try {
-    return router.resolve({
-      path: to.fullPath || to.path || '/',
-      name: to.name as string | undefined,
-    }).href
+    return router.resolve(to.fullPath || to.path || '/').href
   } catch {
     const base = import.meta.env.BASE_URL || '/'
     const p = to.fullPath || to.path || '/'

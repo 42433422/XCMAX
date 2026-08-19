@@ -65,7 +65,7 @@ async def main() -> int:
     if user is None:
         user = db.query(User).filter(User.email == "admin").first()
     if user is None:
-        user = db.query(User).filter(User.is_admin == True).first()
+        user = db.query(User).filter(User.is_admin.is_(True)).first()
     if user is None:
         user = db.query(User).first()
     if user is None:
@@ -234,7 +234,7 @@ async def main() -> int:
     output_path = Path(str(((result.get("items") or [{}])[0] or {}).get("output_path") or ""))
     xcemp_path = pack_dir / "taiyangniao-attendance-employee.xcemp"
     try:
-        with zipfile.ZipFile(io.BytesIO(raw_zip), "r") as zf:
+        with zipfile.ZipFile(io.BytesIO(raw_zip), "r"):
             xcemp_path.write_bytes(raw_zip)
     except Exception:
         pass

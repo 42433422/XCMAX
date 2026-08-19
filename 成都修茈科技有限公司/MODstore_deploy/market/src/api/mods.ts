@@ -1,14 +1,90 @@
 import { req, authHeaders, fetchZipBlob, catalogWriteHeaders } from './shared'
 
+export interface ModListItem extends Record<string, unknown> {
+  id: string
+  name?: string
+  version?: string
+  artifact?: string
+  ok?: boolean
+  primary?: boolean
+  warnings?: string[]
+  error?: string
+  workflow_employees?: Array<Record<string, unknown>>
+  path?: string
+  description?: string
+  library_blurb?: string
+  updated_at?: string
+  usage_scene?: string
+  manifest?: Record<string, unknown>
+}
+
+export interface ModListResponse extends Record<string, unknown> {
+  data?: ModListItem[]
+}
+
+export interface V1PackageRow extends Record<string, unknown> {
+  id?: string
+  name?: string
+  version?: string
+  description?: string
+  industry?: string
+  artifact?: string
+  release_channel?: string
+  probe_mod_id?: string
+  manifest?: Record<string, unknown>
+}
+
+export interface V1PackageListResponse extends Record<string, unknown> {
+  packages?: V1PackageRow[]
+}
+
+export interface ModMutationResponse extends Record<string, unknown> {
+  id: string
+  warnings?: string[]
+  manifest_warnings?: string[]
+  manifest?: Record<string, unknown>
+  content?: string
+  frontend_spec?: Record<string, unknown>
+  merge_hint?: string
+  merged_blueprint?: boolean
+}
+
+export interface ModDetailResponse extends Record<string, unknown> {
+  id?: string
+  validation_ok?: boolean
+  manifest?: Record<string, unknown>
+  files?: unknown[]
+  employee_readiness?: EmployeeReadiness
+}
+
+export interface EmployeeReadiness extends Record<string, unknown> {
+  ok?: boolean
+  gaps?: string[]
+  employees?: Array<Record<string, unknown>>
+}
+
+export interface WorkflowEmployeeOperationResponse extends Record<string, unknown> {
+  ok?: boolean
+  package?: { id?: string; version?: string }
+  pack_register?: { errors?: unknown[] }
+  graph_patch?: { patches?: unknown[] }
+  employee_readiness?: EmployeeReadiness
+  readiness_after?: EmployeeReadiness
+}
+
+export interface ModSnapshotsResponse extends Record<string, unknown> {
+  snapshots?: Array<Record<string, unknown>>
+}
+
 export const mods = {
-  listMods: (cacheBust = false) => req(`/api/mods${cacheBust ? `?_=${Date.now()}` : ''}`),
+  listMods: (cacheBust = false) => req<ModListResponse>(`/api/mods${cacheBust ? `?_=${Date.now()}` : ''}`),
   deleteMod: (modId: string) => req(`/api/mods/${encodeURIComponent(modId)}`, { method: 'DELETE' }),
   createMod: (mod_id: string, display_name: string, industry_id = '通用') =>
-    req('/api/mods/create', { method: 'POST', body: JSON.stringify({ mod_id, display_name, industry_id }) }),
+    req<ModMutationResponse>('/api/mods/create', { method: 'POST', body: JSON.stringify({ mod_id, display_name, industry_id }) }),
   importZIP: (file: File, replace = true) => {
     const fd = new FormData()
     fd.append('file', file)
-    return req(`/api/mods/import?replace=${replace}`, { method: 'POST', body: fd })
+    return req<ModMutationResponse>(`/api/mods/import?replace=${replace}`, { method: 'POST', body: fd })
   },
   modAiScaffold: (
     brief: string,
@@ -18,7 +94,7 @@ export const mods = {
     provider?: string,
     model?: string,
   ) =>
-    req('/api/mods/ai-scaffold', {
+    req<ModMutationResponse>('/api/mods/ai-scaffold', {
       method: 'POST',
       body: JSON.stringify({
         brief,
@@ -34,19 +110,19 @@ export const mods = {
   getRepoConfig: () => req('/api/config'),
   putRepoConfig: (body: { library_root?: string; xcagi_root?: string; xcagi_backend_url?: string }) =>
     req('/api/config', { method: 'PUT', body: JSON.stringify(body || {}) }),
-  getMod: (modId: string) => req(`/api/mods/${encodeURIComponent(modId)}`),
-  putModManifest: (modId: string, manifest: unknown) => req(`/api/mods/${encodeURIComponent(modId)}/manifest`, { method: 'PUT', body: JSON.stringify({ manifest }) }),
-  getModFile: (modId: string, path: string) => req(`/api/mods/${encodeURIComponent(modId)}/file?path=${encodeURIComponent(path)}`),
-  putModFile: (modId: string, path: string, content: string) => req(`/api/mods/${encodeURIComponent(modId)}/file`, { method: 'PUT', body: JSON.stringify({ path, content }) }),
+  getMod: (modId: string) => req<ModDetailResponse>(`/api/mods/${encodeURIComponent(modId)}`),
+  putModManifest: (modId: string, manifest: unknown) => req<ModMutationResponse>(`/api/mods/${encodeURIComponent(modId)}/manifest`, { method: 'PUT', body: JSON.stringify({ manifest }) }),
+  getModFile: (modId: string, path: string) => req<ModMutationResponse>(`/api/mods/${encodeURIComponent(modId)}/file?path=${encodeURIComponent(path)}`),
+  putModFile: (modId: string, path: string, content: string) => req<ModMutationResponse>(`/api/mods/${encodeURIComponent(modId)}/file`, { method: 'PUT', body: JSON.stringify({ path, content }) }),
   regenerateModFrontend: (modId: string, brief = '') =>
-    req(`/api/mods/${encodeURIComponent(modId)}/frontend/regenerate`, { method: 'POST', body: JSON.stringify({ brief }) }),
-  listModSnapshots: (modId: string) => req(`/api/mods/${encodeURIComponent(modId)}/snapshots`),
+    req<ModMutationResponse>(`/api/mods/${encodeURIComponent(modId)}/frontend/regenerate`, { method: 'POST', body: JSON.stringify({ brief }) }),
+  listModSnapshots: (modId: string) => req<ModSnapshotsResponse | Array<Record<string, unknown>>>(`/api/mods/${encodeURIComponent(modId)}/snapshots`),
   captureModSnapshot: (modId: string, label = '') => req(`/api/mods/${encodeURIComponent(modId)}/snapshots`, { method: 'POST', body: JSON.stringify({ label }) }),
   restoreModSnapshot: (modId: string, snapId: string) => req(`/api/mods/${encodeURIComponent(modId)}/snapshots/${encodeURIComponent(snapId)}/restore`, { method: 'POST', body: '{}' }),
-  bumpModManifestPatchVersion: (modId: string) => req(`/api/mods/${encodeURIComponent(modId)}/manifest/bump-patch-version`, { method: 'POST', body: '{}' }),
-  modWorkflowLink: (modId: string, body: unknown) => req(`/api/mods/${encodeURIComponent(modId)}/workflow-link`, { method: 'POST', body: JSON.stringify(body) }),
-  scaffoldWorkflowEmployee: (modId: string, body: unknown) => req(`/api/mods/${encodeURIComponent(modId)}/workflow-employees/scaffold`, { method: 'POST', body: JSON.stringify(body) }),
-  getModAuthoringSummary: (modId: string) => req(`/api/mods/${encodeURIComponent(modId)}/authoring-summary`),
+  bumpModManifestPatchVersion: (modId: string) => req<ModMutationResponse>(`/api/mods/${encodeURIComponent(modId)}/manifest/bump-patch-version`, { method: 'POST', body: '{}' }),
+  modWorkflowLink: (modId: string, body: unknown) => req<ModMutationResponse>(`/api/mods/${encodeURIComponent(modId)}/workflow-link`, { method: 'POST', body: JSON.stringify(body) }),
+  scaffoldWorkflowEmployee: (modId: string, body: unknown) => req<ModMutationResponse>(`/api/mods/${encodeURIComponent(modId)}/workflow-employees/scaffold`, { method: 'POST', body: JSON.stringify(body) }),
+  getModAuthoringSummary: (modId: string) => req<Record<string, unknown>>(`/api/mods/${encodeURIComponent(modId)}/authoring-summary`),
   getModBlueprintRoutes: (modId: string) => req(`/api/mods/${encodeURIComponent(modId)}/blueprint-routes`),
   getAuthoringExtensionSurface: (mergeHost = false) =>
     req(`/api/authoring/extension-surface?merge_host=${mergeHost ? 'true' : 'false'}`),
@@ -70,7 +146,16 @@ export const mods = {
         const j = JSON.parse(m)
         const d = j?.detail
         if (d === 'Not Found') return true
-        if (Array.isArray(d) && d.some((x: any) => String(x?.msg || '').toLowerCase() === 'not found')) return true
+        if (
+          Array.isArray(d) &&
+          d.some(
+            (x: unknown) =>
+              typeof x === 'object' &&
+              x !== null &&
+              'msg' in x &&
+              String((x as { msg?: unknown }).msg || '').toLowerCase() === 'not found',
+          )
+        ) return true
       } catch { /* ignore */ }
       return false
     }
@@ -106,7 +191,7 @@ export const packages = {
     if (artifact) p.set('artifact', artifact)
     if (q) p.set('q', q)
     if (cacheBust) p.set('_', String(Date.now()))
-    return req(`/v1/packages?${p}`)
+    return req<V1PackageListResponse>(`/v1/packages?${p}`)
   },
   listCatalogPackageVersions: (pkgId: string) => req(`/v1/packages/by-id/${encodeURIComponent(pkgId)}/versions`),
   promoteCatalogPackage: (pkgId: string, fromVersion: string) =>
@@ -119,17 +204,17 @@ export const packages = {
     return req('/v1/packages', { method: 'POST', body: fd, headers: catalogWriteHeaders() })
   },
   registerWorkflowEmployeeCatalog: (modId: string, workflowIndex = 0, opts: { industry?: string; price?: number; release_channel?: string } = {}) =>
-    req(`/api/mods/${encodeURIComponent(modId)}/register-workflow-employee-catalog`, {
+    req<WorkflowEmployeeOperationResponse>(`/api/mods/${encodeURIComponent(modId)}/register-workflow-employee-catalog`, {
       method: 'POST',
       body: JSON.stringify({ workflow_index: workflowIndex, industry: opts.industry || '通用', price: opts.price ?? 0, release_channel: opts.release_channel || 'stable' }),
     }),
   patchModWorkflowEmployeeNodes: (modId: string) =>
-    req(`/api/mods/${encodeURIComponent(modId)}/patch-workflow-employee-nodes`, { method: 'POST' }),
+    req<WorkflowEmployeeOperationResponse>(`/api/mods/${encodeURIComponent(modId)}/patch-workflow-employee-nodes`, { method: 'POST' }),
   runWorkflowEmployeeClosure: (
     modId: string,
     opts: { register_missing?: boolean; patch_canvas?: boolean; industry?: string } = {},
   ) =>
-    req(`/api/mods/${encodeURIComponent(modId)}/workflow-employee-closure`, {
+    req<WorkflowEmployeeOperationResponse>(`/api/mods/${encodeURIComponent(modId)}/workflow-employee-closure`, {
       method: 'POST',
       body: JSON.stringify({
         register_missing: opts.register_missing !== false,

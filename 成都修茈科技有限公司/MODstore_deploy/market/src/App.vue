@@ -335,7 +335,6 @@ import AppToastHost from './components/AppToastHost.vue'
 import AppConfirmDialog from './components/AppConfirmDialog.vue'
 import SidebarUserMenu from './components/workbench/SidebarUserMenu.vue'
 import { confirmDanger } from './composables/useDangerConfirm'
-import { showAppToast } from './composables/useAppToast'
 const router = useRouter()
 const route = useRoute()
 
@@ -638,7 +637,7 @@ async function submitAdminUnlock() {
   adminUnlockErr.value = ''
   adminUnlockCode.value = raw
   const VERIFY_MS = 45000
-  let verifyTimer: ReturnType<typeof setTimeout> | undefined
+  let verifyTimer: number | undefined
   const timeoutReject = new Promise<never>((_, rej) => {
     verifyTimer = window.setTimeout(
       () => rej(new Error(`校验请求超时（${VERIFY_MS / 1000}s），请检查网络或稍后重试`)),
@@ -848,6 +847,7 @@ async function doLogout() {
   notificationStore.clear()
   await router.push({ name: 'login' })
 }
+defineExpose({ isAiTestRoute })
 </script>
 
 <style>

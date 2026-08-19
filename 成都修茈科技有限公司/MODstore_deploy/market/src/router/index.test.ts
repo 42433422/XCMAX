@@ -19,7 +19,7 @@ afterEach(() => {
 
 describe('router index behavior', () => {
   it('applies scroll behavior and document metadata', async () => {
-    const router = (await import('./index')).default as any
+    const router = (await import('./index')).default as UnsafeTestValue
     const scrollBehavior = router.options.scrollBehavior
 
     expect(scrollBehavior({ path: '/' }, {}, { left: 4, top: 8 })).toEqual({ left: 4, top: 8 })
@@ -34,7 +34,7 @@ describe('router index behavior', () => {
   })
 
   it('reloads once when lazy route chunks fail and ignores non-chunk errors', async () => {
-    const router = (await import('./index')).default as any
+    const router = (await import('./index')).default as UnsafeTestValue
     router.addRoute({
       path: '/coverage-broken-chunk',
       name: 'coverage-broken-chunk',

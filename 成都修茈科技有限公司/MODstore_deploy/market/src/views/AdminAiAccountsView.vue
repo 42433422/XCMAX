@@ -280,6 +280,7 @@ async function copyText(text: string) {
 }
 
 onMounted(() => void loadAll())
+defineExpose({ fullWebhookList })
 </script>
 
 <template>

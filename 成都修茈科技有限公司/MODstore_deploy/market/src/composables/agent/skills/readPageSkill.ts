@@ -12,7 +12,7 @@ export const readPageSkill: AgentSkill = {
   },
   permission: 'read',
   metadata: { author: 'system', created_at: Date.now(), evolution_count: 0, usage_count: 0 },
-  async execute(context) {
+  async execute(_context) {
     const summary = serializeVisibleDom()
     const short = summary.slice(0, 600)
     return {

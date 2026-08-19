@@ -3,7 +3,7 @@
     <header class="swc-head">
       <button class="swc-back" type="button" @click="goList">← 返回列表</button>
       <h1>{{ headTitle }}</h1>
-      <ol class="swc-steps" :data-stage="stage">
+      <ol class="swc-steps">
         <li :class="{ done: stageRank >= 1, active: stage === 'brief' }">1 描述需求</li>
         <li :class="{ done: stageRank >= 2, active: stage === 'loop' }">2 AI 编码</li>
         <li :class="{ done: stageRank >= 3, active: stage === 'sandbox' }">3 沙箱试用</li>
@@ -122,7 +122,7 @@
           <li v-for="(ev, idx) in events" :key="idx" :class="`ev-${ev.type}`">
             <strong>{{ eventLabel(ev) }}</strong>
             <template v-if="ev.type === 'plan'">
-              <p class="swc-plan-summary">{{ formatPlanMdForDisplay(ev.payload?.plan_md) }}</p>
+              <p class="swc-plan-summary">{{ formatPlanMdForDisplay(String(ev.payload?.plan_md || '')) }}</p>
               <details v-if="planMdHasMermaid(ev.payload?.plan_md)" class="swc-plan-mermaid">
                 <summary>查看流程图原文</summary>
                 <pre>{{ mermaidExcerpt(ev.payload?.plan_md) }}</pre>
@@ -180,7 +180,7 @@
           <pre>{{ runStderr || '(无)' }}</pre>
           <h3>产物</h3>
           <ul v-if="runOutputs.length">
-            <li v-for="o in runOutputs" :key="o.filename">{{ o.filename }} · {{ humanSize(o.size) }}</li>
+            <li v-for="o in runOutputs" :key="o.filename">{{ o.filename }} · {{ humanSize(o.size || 0) }}</li>
           </ul>
           <p v-else>暂无</p>
         </div>
@@ -243,7 +243,48 @@ interface BriefInput {
 interface AgentEvent {
   type: string
   iteration: number
-  payload: any
+  payload: AgentPayload
+}
+
+interface AgentOutcome {
+  ok?: boolean
+  final_code?: string
+  [key: string]: unknown
+}
+
+interface SandboxOutput {
+  filename: string
+  size?: number
+  [key: string]: unknown
+}
+
+interface AgentPayload {
+  plan_md?: unknown
+  code?: string
+  ok?: boolean
+  errors?: unknown[]
+  outputs?: SandboxOutput[]
+  stdout_tail?: string
+  stderr_tail?: string
+  reason?: unknown
+  session_id?: string
+  outcome?: AgentOutcome
+  [key: string]: unknown
+}
+
+interface SandboxRun {
+  id: number | string
+  status?: string
+  stdout_tail?: string
+  stderr_tail?: string
+  outputs?: SandboxOutput[]
+}
+
+interface ScriptWorkflowResponse {
+  id: number
+  name: string
+  brief?: Partial<typeof brief>
+  script_text?: string
 }
 
 const route = useRoute()
@@ -269,7 +310,7 @@ const brief = reactive({
 const uploadedFiles = ref<File[]>([])
 const events = ref<AgentEvent[]>([])
 const sessionId = ref<string>('')
-const outcome = ref<any>(null)
+const outcome = ref<AgentOutcome | null>(null)
 const loopRunning = ref(false)
 const busy = ref(false)
 const tab = ref<'code' | 'output' | 'sandbox'>('code')
@@ -279,7 +320,7 @@ const workflowName = ref<string>('')
 const feedback = ref<string>('')
 const sandboxFiles = ref<File[]>([])
 const sandboxBusy = ref(false)
-const lastSandboxRun = ref<any>(null)
+const lastSandboxRun = ref<SandboxRun | null>(null)
 const canActivate = computed(() => lastSandboxRun.value?.status === 'success')
 
 const headTitle = computed(() => {
@@ -489,8 +530,8 @@ async function startAgentLoop() {
     fd.set('brief_json', JSON.stringify(brief))
     uploadedFiles.value.forEach((f) => fd.append('files', f))
     await consumeSseStream('/api/script-workflows/sessions', { method: 'POST', body: fd })
-  } catch (e: any) {
-    events.value.push({ type: 'error', iteration: -1, payload: { reason: e.message || String(e) } })
+  } catch (e: unknown) {
+    events.value.push({ type: 'error', iteration: -1, payload: { reason: e instanceof Error ? e.message : String(e) } })
     loopRunning.value = false
   } finally {
     busy.value = false
@@ -509,8 +550,8 @@ async function startEditWithAi(hint: string) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ hint }),
     })
-  } catch (e: any) {
-    events.value.push({ type: 'error', iteration: -1, payload: { reason: e.message || String(e) } })
+  } catch (e: unknown) {
+    events.value.push({ type: 'error', iteration: -1, payload: { reason: e instanceof Error ? e.message : String(e) } })
     loopRunning.value = false
   }
 }
@@ -533,8 +574,8 @@ async function submitFeedback() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ hint }),
     })
-  } catch (e: any) {
-    events.value.push({ type: 'error', iteration: -1, payload: { reason: e.message || String(e) } })
+  } catch (e: unknown) {
+    events.value.push({ type: 'error', iteration: -1, payload: { reason: e instanceof Error ? e.message : String(e) } })
     loopRunning.value = false
   }
 }
@@ -542,16 +583,16 @@ async function submitFeedback() {
 async function commitToWorkflow() {
   if (!sessionId.value || !workflowName.value.trim()) return
   try {
-    const wf: any = await api.commitScriptWorkflowSession(sessionId.value, {
+    const wf = (await api.commitScriptWorkflowSession(sessionId.value, {
       name: workflowName.value.trim(),
       schema_in: {},
-    })
+    })) as ScriptWorkflowResponse
     committed.value = true
     workflowId.value = wf.id
     stage.value = 'sandbox'
     tab.value = 'sandbox'
-  } catch (e: any) {
-    alert('保存失败：' + (e.message || e))
+  } catch (e: unknown) {
+    alert('保存失败：' + (e instanceof Error ? e.message : String(e)))
   }
 }
 
@@ -559,16 +600,16 @@ async function runManualSandbox() {
   if (!workflowId.value) return
   sandboxBusy.value = true
   try {
-    const r: any = await api.sandboxRunScriptWorkflow(workflowId.value, sandboxFiles.value)
+    const r = (await api.sandboxRunScriptWorkflow(workflowId.value, sandboxFiles.value)) as SandboxRun
     lastSandboxRun.value = r
-  } catch (e: any) {
-    alert('沙箱执行失败：' + (e.message || e))
+  } catch (e: unknown) {
+    alert('沙箱执行失败：' + (e instanceof Error ? e.message : String(e)))
   } finally {
     sandboxBusy.value = false
   }
 }
 
-async function downloadSandboxOutput(output: any) {
+async function downloadSandboxOutput(output: SandboxOutput) {
   if (!workflowId.value || !lastSandboxRun.value?.id || !output?.filename) return
   try {
     const blob = await api.downloadScriptWorkflowRunFile(
@@ -584,8 +625,8 @@ async function downloadSandboxOutput(output: any) {
     a.click()
     a.remove()
     setTimeout(() => URL.revokeObjectURL(url), 4000)
-  } catch (e: any) {
-    alert('下载失败：' + (e.message || e))
+  } catch (e: unknown) {
+    alert('下载失败：' + (e instanceof Error ? e.message : String(e)))
   }
 }
 
@@ -594,8 +635,8 @@ async function activate() {
   try {
     await api.activateScriptWorkflow(workflowId.value)
     router.push({ name: 'workbench-script-workflow-detail', params: { id: workflowId.value } })
-  } catch (e: any) {
-    alert('启用失败：' + (e.message || e))
+  } catch (e: unknown) {
+    alert('启用失败：' + (e instanceof Error ? e.message : String(e)))
   }
 }
 
@@ -608,22 +649,22 @@ onMounted(async () => {
   const id = route.params.id
   if (id && typeof id === 'string') {
     try {
-      const wf: any = await api.getScriptWorkflow(id)
+      const wf = (await api.getScriptWorkflow(id)) as ScriptWorkflowResponse
       Object.assign(brief, wf.brief || {})
       workflowId.value = wf.id
       workflowName.value = wf.name
       committed.value = true
       stage.value = 'sandbox'
       tab.value = 'sandbox'
-      const runRows: any[] = await api.listScriptWorkflowRuns(wf.id).catch(() => [])
+      const runRows = (await api.listScriptWorkflowRuns(wf.id).catch(() => [])) as SandboxRun[]
       lastSandboxRun.value = Array.isArray(runRows) && runRows.length ? runRows[0] : null
       events.value = [
         { type: 'context', iteration: 0, payload: { existing: true } },
         { type: 'done', iteration: 0, payload: { code: wf.script_text, outcome: { ok: true, final_code: wf.script_text } } },
       ]
       outcome.value = { ok: true, final_code: wf.script_text }
-    } catch (e: any) {
-      alert('加载工作流失败：' + (e.message || e))
+    } catch (e: unknown) {
+      alert('加载工作流失败：' + (e instanceof Error ? e.message : String(e)))
     }
   }
 })

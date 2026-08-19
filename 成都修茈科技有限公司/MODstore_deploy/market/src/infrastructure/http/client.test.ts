@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { ApiError, requestJson, fetchZipBlob, requestBlob, requestStreamBlob } from './client'
-import { getAccessToken, getRefreshToken, setAuthTokens, clearAuthTokens } from '../storage/tokenStore'
+import { getAccessToken, getRefreshToken, setAuthTokens } from '../storage/tokenStore'
 
 vi.mock('../storage/tokenStore', () => ({
   getAccessToken: vi.fn(() => ''),
@@ -53,7 +53,7 @@ describe('requestJson', () => {
     vi.stubGlobal('fetch', mockFetch)
 
     await requestJson('/api/test')
-    const call = mockFetch.mock.calls[0] as any[]
+    const call = mockFetch.mock.calls[0] as UnsafeTestValue[]
     const headers = call[1].headers as Headers
     expect(headers.get('Authorization')).toBe('Bearer my-token')
 
@@ -68,7 +68,7 @@ describe('requestJson', () => {
     vi.stubGlobal('fetch', mockFetch)
 
     await requestJson('/api/test', { method: 'POST', body: JSON.stringify({ key: 'val' }) })
-    const call = mockFetch.mock.calls[0] as any[]
+    const call = mockFetch.mock.calls[0] as UnsafeTestValue[]
     const headers = call[1].headers as Headers
     expect(headers.get('Content-Type')).toBe('application/json')
 
@@ -85,7 +85,7 @@ describe('requestJson', () => {
     const fd = new FormData()
     fd.append('file', new File(['content'], 'test.txt'))
     await requestJson('/api/test', { method: 'POST', body: fd })
-    const call = mockFetch.mock.calls[0] as any[]
+    const call = mockFetch.mock.calls[0] as UnsafeTestValue[]
     const headers = call[1].headers as Headers
     expect(headers.get('Content-Type')).toBeNull()
 

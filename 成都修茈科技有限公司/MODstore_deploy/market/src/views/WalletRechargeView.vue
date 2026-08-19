@@ -93,7 +93,7 @@ const qrImageUrl = computed(() => {
 onMounted(async () => {
   try {
     const res = await api.balance()
-    balance.value = res.balance || 0
+    balance.value = Number(res.balance ?? 0) || 0
   } catch (e) {
     console.error('获取余额失败:', e)
   }

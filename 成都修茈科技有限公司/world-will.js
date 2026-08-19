@@ -38,7 +38,7 @@
       var d = new Date(iso)
       if (isNaN(d.getTime())) return String(iso)
       return d.toLocaleString('zh-CN', { hour12: false })
-    } catch (e) {
+    } catch {
       return String(iso)
     }
   }
@@ -92,7 +92,7 @@
               '（北京时间）',
           }
         }
-      } catch (e) {
+      } catch {
         // Fall through to legacy day + HH:MM fields.
       }
     }

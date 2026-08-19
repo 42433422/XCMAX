@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { mods, packages } from './mods'
-import { req, authHeaders, fetchZipBlob, catalogWriteHeaders } from './shared'
+import { req, fetchZipBlob } from './shared'
 
 vi.mock('./shared', () => ({
   req: vi.fn(),
@@ -23,7 +23,7 @@ describe('mods api', () => {
   it('listMods adds cacheBust param', async () => {
     vi.mocked(req).mockResolvedValue([])
     await mods.listMods(true)
-    const call = vi.mocked(req).mock.calls[0] as any[]
+    const call = vi.mocked(req).mock.calls[0] as UnsafeTestValue[]
     const url = call[0] as string
     expect(url).toContain('_=')
   })
@@ -62,13 +62,13 @@ describe('mods api', () => {
   it('modAiScaffold and putRepoConfig apply fallback payload values', async () => {
     vi.mocked(req).mockResolvedValue({})
     await mods.modAiScaffold('brief', '', true, '', undefined, undefined)
-    expect(JSON.parse((vi.mocked(req).mock.calls[0] as any[])[1].body)).toEqual({
+    expect(JSON.parse((vi.mocked(req).mock.calls[0] as UnsafeTestValue[])[1].body)).toEqual({
       brief: 'brief',
       replace: true,
       industry_id: '通用',
     })
 
-    await mods.putRepoConfig(undefined as any)
+    await mods.putRepoConfig(undefined as UnsafeTestValue)
     expect(vi.mocked(req).mock.calls[1]).toEqual([
       '/api/config',
       expect.objectContaining({ method: 'PUT', body: '{}' }),
@@ -210,8 +210,8 @@ describe('mods api', () => {
 
   it('exportEmployeePackZip classifies stale route and non-route errors', async () => {
     vi.mocked(fetchZipBlob)
-      .mockRejectedValueOnce(new Error('{\"detail\":\"Not Found\"}'))
-      .mockRejectedValueOnce(new Error('{\"detail\":[{\"msg\":\"not found\"}]}'))
+      .mockRejectedValueOnce(new Error('{"detail":"Not Found"}'))
+      .mockRejectedValueOnce(new Error('{"detail":[{"msg":"not found"}]}'))
     await expect(mods.exportEmployeePackZip('mod1', 1)).rejects.toThrow('8765 上的 API 进程')
 
     vi.mocked(fetchZipBlob).mockReset()
@@ -235,7 +235,7 @@ describe('packages api', () => {
   it('listV1Packages builds query string', async () => {
     vi.mocked(req).mockResolvedValue([])
     await packages.listV1Packages('employee_pack', 'search', 10, 5)
-    const call = vi.mocked(req).mock.calls[0] as any[]
+    const call = vi.mocked(req).mock.calls[0] as UnsafeTestValue[]
     const url = call[0] as string
     expect(url).toContain('artifact=employee_pack')
     expect(url).toContain('q=search')
@@ -276,7 +276,7 @@ describe('packages api', () => {
   it('registerWorkflowEmployeeCatalog and closure use default options', async () => {
     vi.mocked(req).mockResolvedValue({})
     await packages.registerWorkflowEmployeeCatalog('mod1')
-    expect(JSON.parse((vi.mocked(req).mock.calls[0] as any[])[1].body)).toEqual({
+    expect(JSON.parse((vi.mocked(req).mock.calls[0] as UnsafeTestValue[])[1].body)).toEqual({
       workflow_index: 0,
       industry: '通用',
       price: 0,
@@ -284,7 +284,7 @@ describe('packages api', () => {
     })
 
     await packages.runWorkflowEmployeeClosure('mod1', { register_missing: false, patch_canvas: false, industry: '' })
-    expect(JSON.parse((vi.mocked(req).mock.calls[1] as any[])[1].body)).toEqual({
+    expect(JSON.parse((vi.mocked(req).mock.calls[1] as UnsafeTestValue[])[1].body)).toEqual({
       register_missing: false,
       patch_canvas: false,
       industry: '通用',

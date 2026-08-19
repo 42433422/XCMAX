@@ -20,38 +20,46 @@ function resolveOrtWasmBase(): string {
 }
 
 const ortRoot = resolveOrtWasmBase()
-env.backends.onnx.wasm.wasmPaths = {
+const wasmBackend = env.backends.onnx.wasm
+if (!wasmBackend) {
+  throw new Error('ONNX WASM backend is unavailable')
+}
+wasmBackend.wasmPaths = {
   mjs: `${ortRoot}ort-wasm-simd-threaded.asyncify.mjs`,
   wasm: `${ortRoot}ort-wasm-simd-threaded.asyncify.wasm`,
 }
 
-let transcriber: any = null
-let loadPromise: Promise<any> | null = null
+interface WhisperTranscriber {
+  (audio: unknown, options: Record<string, unknown>): Promise<{ text?: string }>
+}
+
+let transcriber: WhisperTranscriber | null = null
+let loadPromise: Promise<WhisperTranscriber> | null = null
 let loadError: string | null = null
 /** 递增 jobId；新任务 supersede 旧任务，避免 chunk/flush 结果串线 */
 let jobSeq = 0
 let activeJobId = 0
 
-async function getTranscriber(): Promise<any> {
+async function getTranscriber(): Promise<WhisperTranscriber> {
   if (transcriber) return transcriber
   if (loadError) throw new Error(loadError)
   if (loadPromise) return loadPromise
   loadPromise = (async () => {
     try {
-      transcriber = await pipeline('automatic-speech-recognition', 'onnx-community/whisper-base', {
+      transcriber = (await pipeline('automatic-speech-recognition', 'onnx-community/whisper-base', {
         dtype: {
           encoder_model: 'fp32',
           decoder_model_merged: 'q8',
         },
         device: 'wasm',
-        progress_callback: (p: any) => {
+        progress_callback: (p: unknown) => {
           self.postMessage({ type: 'progress', data: p })
         },
-      })
+      })) as unknown as WhisperTranscriber
       self.postMessage({ type: 'ready' })
       return transcriber
-    } catch (e: any) {
-      loadError = String(e?.message || e)
+    } catch (e: unknown) {
+      loadError = e instanceof Error ? e.message : String(e)
       self.postMessage({ type: 'error', data: loadError })
       throw e
     } finally {
@@ -86,9 +94,9 @@ self.onmessage = async (e: MessageEvent) => {
       })
       if (jobId !== activeJobId) return
       self.postMessage({ type: 'result', jobId, data: result.text || '' })
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (jobId !== activeJobId) return
-      self.postMessage({ type: 'error', jobId, data: String(err?.message || err) })
+      self.postMessage({ type: 'error', jobId, data: err instanceof Error ? err.message : String(err) })
     }
   }
 }

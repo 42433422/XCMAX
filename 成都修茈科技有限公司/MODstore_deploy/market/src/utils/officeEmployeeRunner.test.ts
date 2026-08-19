@@ -1,22 +1,23 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-const { employeeExecuteFileMock } = vi.hoisted(() => ({
+const { employeeExecuteFileMock, employeeOutputDownloadMock } = vi.hoisted(() => ({
   employeeExecuteFileMock: vi.fn(),
+  employeeOutputDownloadMock: vi.fn(),
 }))
 
 vi.mock('../api', () => ({
   api: {
     employeeExecuteFile: employeeExecuteFileMock,
-    employeeOutputDownload: vi.fn(),
+    employeeOutputDownload: employeeOutputDownloadMock,
   },
 }))
 
 import {
   pickGenerateFormat,
+  runOfficeGeneratePhase,
   runOfficeReadPhase,
   type OfficeReadFileItem,
 } from './officeEmployeeRunner'
-import type { OfficeFormat } from './officeEmployeeOrchestration'
 
 describe('pickGenerateFormat', () => {
   it('returns word for empty userText and empty attachments', () => {
@@ -198,5 +199,90 @@ describe('runOfficeReadPhase', () => {
     expect(result.inlineFiles).toHaveLength(1)
     expect(result.inlineFiles[0].text).toBe('extracted text content for LLM context')
     expect(result.rawResults).toHaveLength(1)
+  })
+})
+
+describe('runOfficeGeneratePhase', () => {
+  beforeEach(() => {
+    employeeExecuteFileMock.mockReset()
+    employeeOutputDownloadMock.mockReset()
+  })
+
+  it('returns an actionable error when neither source data nor text is supplied', async () => {
+    const result = await runOfficeGeneratePhase({ format: 'word' })
+    expect(result.downloads).toEqual([])
+    expect(result.errors[0]).toContain('未能得到')
+    expect(employeeExecuteFileMock).not.toHaveBeenCalled()
+  })
+
+  it('builds structured input from text and returns generated downloads', async () => {
+    employeeExecuteFileMock.mockResolvedValueOnce({
+      success: true,
+      output_downloads: [{ job_id: 'job-word', filename: 'proposal.docx', label: 'Proposal' }],
+    })
+    const result = await runOfficeGeneratePhase({
+      format: 'word',
+      userText: '生成一份三段式销售提案，包含背景、方案和下一步',
+    })
+    expect(result.errors).toEqual([])
+    expect(result.downloads[0].filename).toBe('proposal.docx')
+    expect(result.summary).toContain('文字描述')
+    expect(employeeExecuteFileMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ name: 'generate_input.json' }),
+      expect.objectContaining({ timeoutMs: 180_000 }),
+    )
+  })
+
+  it('reuses presentation JSON and template metadata for PPT generation', async () => {
+    employeeExecuteFileMock.mockResolvedValueOnce({
+      success: true,
+      output_downloads: [{ job_id: 'job-ppt', filename: 'output.pptx', label: 'Slides' }],
+    })
+    const template = new File(['template'], 'brand-template.pptx')
+    const result = await runOfficeGeneratePhase({
+      format: 'ppt',
+      userText: '增强这份演示',
+      templateFile: template,
+      readResults: [{
+        name: 'source.pptx',
+        employeeId: 'ppt-full-read-employee',
+        result: { llm_context_text: JSON.stringify({ slides: [{ title: 'Opening' }] }) },
+      }],
+    })
+    expect(result.downloads[0].filename).toBe('output.pptx')
+    expect(employeeExecuteFileMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ name: 'presentation_full.json' }),
+      expect.objectContaining({
+        template,
+        inputData: expect.objectContaining({
+          has_template: true,
+          source_filename: 'source.pptx',
+        }),
+      }),
+    )
+  })
+
+  it('downloads JSON fallbacks and reports execution or transport failures', async () => {
+    employeeOutputDownloadMock.mockResolvedValueOnce(new Blob(['{"paragraphs":[]}']))
+    employeeExecuteFileMock
+      .mockResolvedValueOnce({ ok: false, error: 'generator rejected input' })
+      .mockRejectedValueOnce(new Error('generator offline'))
+    const readResults = [{
+      name: 'source.docx',
+      employeeId: 'word-full-read-employee',
+      result: {
+        output_downloads: [{
+          job_id: 'job-json', filename: 'document_full.json', label: 'Document JSON',
+        }],
+      },
+    }]
+    const rejected = await runOfficeGeneratePhase({ format: 'word', readResults })
+    expect(rejected.errors).toContain('generator rejected input')
+    const offline = await runOfficeGeneratePhase({
+      format: 'word', userText: 'Generate from this description',
+    })
+    expect(offline.errors).toEqual(['generator offline'])
   })
 })

@@ -78,9 +78,33 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { api } from '../api'
+import { asUnknownRecord } from '../utils/typeNarrowing'
 
-const standards = ref<any[]>([])
-const integrations = ref<any[]>([])
+interface ReviewStandard {
+  id: number
+  name: string
+  scenario: string
+  description?: string
+  risk_level?: string
+  priority?: number
+  auto_enabled?: boolean
+  rules?: Record<string, unknown>
+  action_policy?: Record<string, unknown>
+}
+
+interface ServiceIntegration {
+  id: number
+  name: string
+  integration_type: string
+  connector_id?: number | null
+  workflow_id?: number | null
+  scenario: string
+  enabled?: boolean
+  config?: Record<string, unknown>
+}
+
+const standards = ref<ReviewStandard[]>([])
+const integrations = ref<ServiceIntegration[]>([])
 const message = ref('')
 const editingStandardId = ref<number | null>(null)
 const editingIntegrationId = ref<number | null>(null)
@@ -113,8 +137,10 @@ async function loadAll() {
     api.customerServiceStandards().catch(() => ({ items: [] })),
     api.customerServiceIntegrations().catch(() => ({ items: [] })),
   ])
-  standards.value = Array.isArray((s as any)?.items) ? (s as any).items : []
-  integrations.value = Array.isArray((i as any)?.items) ? (i as any).items : []
+  const standardResponse = asUnknownRecord(s)
+  const integrationResponse = asUnknownRecord(i)
+  standards.value = Array.isArray(standardResponse.items) ? (standardResponse.items as ReviewStandard[]) : []
+  integrations.value = Array.isArray(integrationResponse.items) ? (integrationResponse.items as ServiceIntegration[]) : []
 }
 
 async function saveStandard() {
@@ -129,12 +155,12 @@ async function saveStandard() {
     message.value = '审核标准已保存'
     resetStandard()
     await loadAll()
-  } catch (e: any) {
-    message.value = e?.message || '保存审核标准失败'
+  } catch (e: unknown) {
+    message.value = e instanceof Error ? e.message : '保存审核标准失败'
   }
 }
 
-function editStandard(item: any) {
+function editStandard(item: ReviewStandard) {
   editingStandardId.value = item.id
   standardForm.name = item.name || ''
   standardForm.scenario = item.scenario || 'general'
@@ -171,12 +197,12 @@ async function saveIntegration() {
     message.value = '对接配置已保存'
     resetIntegration()
     await loadAll()
-  } catch (e: any) {
-    message.value = e?.message || '保存对接配置失败'
+  } catch (e: unknown) {
+    message.value = e instanceof Error ? e.message : '保存对接配置失败'
   }
 }
 
-function editIntegration(item: any) {
+function editIntegration(item: ServiceIntegration) {
   editingIntegrationId.value = item.id
   integrationForm.name = item.name || ''
   integrationForm.integration_type = item.integration_type || 'openapi'

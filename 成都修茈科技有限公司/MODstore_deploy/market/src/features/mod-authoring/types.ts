@@ -22,7 +22,7 @@ export const MOD_AUTHORING_ATTACH_KEY = 'mod_authoring_attach_mod'
 
 export const WORKFLOW_SUMMARY_MAX = 280
 
-export type LooseRecord = Record<string, any>
+export type LooseRecord = Record<string, unknown>
 
 export function asLooseRecord(value: unknown): LooseRecord {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as LooseRecord) : {}

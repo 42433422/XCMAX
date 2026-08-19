@@ -25,8 +25,9 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
-from typing import Any
+from typing import Any, ClassVar
 
+from ..._internals.tls import ssl_context_for_endpoint
 from ..llm import LLMError
 
 
@@ -45,7 +46,7 @@ class OpenAICompatibleLLM:
     auth_header_template: str = "Bearer {api_key}"
     #: Some Chinese vendors require a per-request additional header
     #: (e.g. DashScope's ``X-DashScope-SSE``); subclasses override.
-    extra_headers: dict[str, str] = {}
+    extra_headers: ClassVar[dict[str, str]] = {}
 
     def __init__(
         self,
@@ -164,14 +165,7 @@ class OpenAICompatibleLLM:
         return payload
 
     def _ssl_context(self):
-        if self.verify_ssl:
-            return None
-        import ssl
-
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        return ctx
+        return ssl_context_for_endpoint(self.base_url, verify_ssl=self.verify_ssl)
 
 
 __all__ = ["OpenAICompatibleLLM"]

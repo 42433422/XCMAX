@@ -71,7 +71,7 @@ const props = defineProps<{
   onTurn: (userText: string, history: VoiceMessage[]) => Promise<string>
 }>()
 
-const emit = defineEmits<{
+const _emit = defineEmits<{
   (e: 'close'): void
 }>()
 
@@ -84,7 +84,33 @@ const rate = ref(1.0)
 const voiceName = ref('')
 const voiceList = ref<Array<{ name: string; label: string }>>([])
 
-let rec: any = null
+interface SpeechRecognitionResultLike {
+  0?: { transcript?: string }
+}
+
+interface SpeechRecognitionEventLike {
+  resultIndex: number
+  results: ArrayLike<SpeechRecognitionResultLike>
+}
+
+interface SpeechRecognitionLike {
+  lang: string
+  interimResults: boolean
+  continuous: boolean
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null
+  onerror: ((event: { error?: string }) => void) | null
+  onend: (() => void) | null
+  start(): void
+  stop(): void
+}
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike
+type SpeechWindow = Window & {
+  SpeechRecognition?: SpeechRecognitionConstructor
+  webkitSpeechRecognition?: SpeechRecognitionConstructor
+}
+
+let rec: SpeechRecognitionLike | null = null
 let synth: SpeechSynthesis | null = null
 let interim = ''
 
@@ -112,7 +138,7 @@ function loadVoices() {
   voiceList.value = [...zh, ...en]
 }
 
-function pickVoice(): SpeechSynthesisVoice | null {
+function _pickVoice(): SpeechSynthesisVoice | null {
   if (!synth) return null
   const all = synth.getVoices()
   if (voiceName.value) {
@@ -130,8 +156,8 @@ function speak(text: string): Promise<void> {
   })
 }
 
-function createRecognition(): any {
-  const w = window as any
+function createRecognition(): SpeechRecognitionLike | null {
+  const w = window as SpeechWindow
   const Ctor = w?.SpeechRecognition || w?.webkitSpeechRecognition
   if (!Ctor) return null
   const r = new Ctor()
@@ -153,14 +179,14 @@ function startListening() {
   }
   interim = ''
   state.value = 'listening'
-  rec.onresult = (e: any) => {
+  rec.onresult = (e: SpeechRecognitionEventLike) => {
     let txt = ''
     for (let i = e.resultIndex; i < e.results.length; i += 1) {
       txt += e.results[i][0]?.transcript || ''
     }
     interim = txt.trim()
   }
-  rec.onerror = (e: any) => {
+  rec.onerror = (e: { error?: string }) => {
     error.value = e?.error ? `语音识别失败：${e.error}` : '语音识别失败'
     state.value = 'idle'
   }
@@ -173,8 +199,8 @@ function startListening() {
   }
   try {
     rec.start()
-  } catch (e: any) {
-    error.value = e?.message || String(e)
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e)
     state.value = 'idle'
   }
 }
@@ -199,8 +225,8 @@ async function onUserSaid(text: string) {
   let reply = ''
   try {
     reply = (await props.onTurn(trimmed, messages.value.slice())) || ''
-  } catch (e: any) {
-    error.value = e?.message || String(e)
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e)
     state.value = 'idle'
     return
   }

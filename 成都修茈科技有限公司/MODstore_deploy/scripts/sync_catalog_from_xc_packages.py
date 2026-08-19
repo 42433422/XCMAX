@@ -40,8 +40,8 @@ def main() -> int:
     sf = get_session_factory()
     with sf() as session:
         admin = (
-            session.query(User).filter(User.is_admin == True).order_by(User.id.asc()).first()
-        )  # noqa: E712
+            session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
+        )
         admin = admin or session.query(User).order_by(User.id.asc()).first()
         if admin is None:
             print("No user in database; cannot assign author_id.", file=sys.stderr)

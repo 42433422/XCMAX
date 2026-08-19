@@ -6,9 +6,9 @@ import { useModAuthoringWizard } from './useModAuthoringWizard'
 function makeCtx() {
   return {
     modDescriptionLine: ref(''),
-    modData: ref<any>(null),
-    workflowEmployeesRows: ref<any[]>([]),
-    employeeReadiness: ref<any>(null),
+    modData: ref<UnsafeTestValue>(null),
+    workflowEmployeesRows: ref<UnsafeTestValue[]>([]),
+    employeeReadiness: ref<UnsafeTestValue>(null),
     fileSet: ref(new Set<string>()),
     checklist: ref([{ ok: false }, { ok: true }]),
   }
@@ -18,7 +18,7 @@ describe('useModAuthoringWizard', () => {
   it('tracks step completion, navigation bounds, and frontend skip storage', () => {
     localStorage.removeItem(WIZARD_FRONTEND_SKIP_KEY)
     const ctx = makeCtx()
-    const wizard = useModAuthoringWizard(ctx as any)
+    const wizard = useModAuthoringWizard(ctx as UnsafeTestValue)
 
     expect(wizard.WIZARD_STEPS).toBe(WIZARD_STEPS)
     expect(wizard.stepCompletion.value).toEqual([false, false, false, false])
@@ -70,7 +70,7 @@ describe('useModAuthoringWizard', () => {
     ctx.employeeReadiness.value = { ok: false }
     ctx.checklist.value = [{ ok: true }, { ok: false }]
 
-    const wizard = useModAuthoringWizard(ctx as any)
+    const wizard = useModAuthoringWizard(ctx as UnsafeTestValue)
 
     expect(wizard.frontendSkipped.value).toBe(true)
     expect(wizard.step1Done.value).toBe(false)

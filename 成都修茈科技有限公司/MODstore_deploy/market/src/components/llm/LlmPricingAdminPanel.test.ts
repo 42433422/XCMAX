@@ -58,7 +58,7 @@ describe('LlmPricingAdminPanel', () => {
     })
     await flushPromises()
 
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(apiMock.llmAdminListPricing).toHaveBeenCalledWith({ provider: 'openai', limit: 500 })
     expect(apiMock.llmAdminOfficialSources).toHaveBeenCalledWith('openai')
     expect(vm.officialSourceUrl).toBe('https://pricing.example/openai')
@@ -115,7 +115,7 @@ describe('LlmPricingAdminPanel', () => {
     })
     await flushPromises()
 
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     vm.newRow.model = '   '
     await vm.saveNewRow()
     expect(apiMock.llmAdminSavePrice).not.toHaveBeenCalled()

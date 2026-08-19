@@ -1,4 +1,66 @@
-type EmployeeConfigRecord = Record<string, any>
+type UnknownRecord = Record<string, unknown>
+
+interface EmployeeIdentity extends UnknownRecord {
+  id: string
+  version: string
+  artifact: string
+  name: string
+  description: string
+}
+
+interface EmployeeModel extends UnknownRecord {
+  provider?: unknown
+  model_name?: unknown
+  temperature?: unknown
+  max_tokens?: unknown
+  top_p?: unknown
+}
+
+interface EmployeeAgent extends UnknownRecord {
+  system_prompt?: unknown
+  role?: UnknownRecord & { tone?: unknown }
+  behavior_rules?: unknown
+  few_shot_examples?: unknown
+  model?: EmployeeModel
+}
+
+interface EmployeeConfigRecord extends UnknownRecord {
+  identity: EmployeeIdentity
+  perception?: UnknownRecord & {
+    audio?: UnknownRecord & { asr?: UnknownRecord & { enabled?: unknown } }
+  }
+  memory?: UnknownRecord & {
+    long_term?: UnknownRecord & { enabled?: unknown }
+  }
+  cognition?: UnknownRecord & { agent?: EmployeeAgent }
+  actions?: UnknownRecord & { voice_output?: unknown }
+  collaboration: UnknownRecord & {
+    workflow: UnknownRecord & { workflow_id: number }
+    permissions?: UnknownRecord & { access_level?: unknown }
+  }
+  commerce?: UnknownRecord & { price?: unknown }
+  workflow_employees: unknown[]
+  metadata: UnknownRecord
+}
+
+interface CompleteEmployeeConfig extends EmployeeConfigRecord {
+  cognition: UnknownRecord & {
+    agent: EmployeeAgent & { model: EmployeeModel }
+  }
+}
+
+type EmployeeConfigPatch = Omit<Partial<EmployeeConfigRecord>, 'identity' | 'collaboration'> & {
+  identity?: Partial<EmployeeIdentity>
+  collaboration?: Omit<Partial<EmployeeConfigRecord['collaboration']>, 'workflow'> & {
+    workflow?: Partial<EmployeeConfigRecord['collaboration']['workflow']>
+  }
+}
+
+function asRecord(value: unknown): UnknownRecord | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : null
+}
 
 const DEFAULT_IDENTITY = {
   id: '',
@@ -14,7 +76,7 @@ function clone<T>(v: T): T {
 
 export function createEmptyEmployeeConfigV2(opts?: {
   model?: Partial<{ provider: string; model_name: string }>
-}): EmployeeConfigRecord {
+}): CompleteEmployeeConfig {
   const provider = String(opts?.model?.provider ?? '').trim() || 'auto'
   const model_name = String(opts?.model?.model_name ?? '').trim() || 'auto'
   return {
@@ -58,7 +120,7 @@ export function createEmptyEmployeeConfigV2(opts?: {
   }
 }
 
-const TEMPLATE_MAP: Record<string, EmployeeConfigRecord> = {
+const TEMPLATE_MAP: Record<string, EmployeeConfigPatch> = {
   workflow: {},
   dialog: {
     memory: {
@@ -133,6 +195,7 @@ export function applyTemplateV2(templateId: string): EmployeeConfigRecord {
       ...base.collaboration,
       ...(patch.collaboration || {}),
       workflow: {
+        workflow_id: 0,
         ...(base.collaboration?.workflow || {}),
         ...(patch.collaboration?.workflow || {}),
       },
@@ -140,9 +203,8 @@ export function applyTemplateV2(templateId: string): EmployeeConfigRecord {
   }
 }
 
-export function upgradeLegacyToV2(inputManifest: unknown = {}): EmployeeConfigRecord {
-  const legacy: EmployeeConfigRecord =
-    inputManifest && typeof inputManifest === 'object' ? (inputManifest as EmployeeConfigRecord) : {}
+export function upgradeLegacyToV2(inputManifest: unknown = {}): CompleteEmployeeConfig {
+  const legacy = asRecord(inputManifest) ?? {}
   const c = createEmptyEmployeeConfigV2()
   c.identity.id = String(legacy.id || '').trim()
   c.identity.version = String(legacy.version || '1.0.0').trim() || '1.0.0'
@@ -151,11 +213,12 @@ export function upgradeLegacyToV2(inputManifest: unknown = {}): EmployeeConfigRe
   c.identity.description = String(legacy.description || '').trim()
   c.cognition.agent.system_prompt = String(legacy.panel_summary || '').trim()
   const wf = Array.isArray(legacy.workflow_employees) ? legacy.workflow_employees : []
-  const first = wf[0] && typeof wf[0] === 'object' ? wf[0] : {}
+  const first = asRecord(wf[0]) ?? {}
   const wid = Number.parseInt(String(first.workflow_id ?? first.workflowId ?? 0), 10)
   c.collaboration.workflow.workflow_id = Number.isFinite(wid) && wid > 0 ? wid : 0
   c.workflow_employees = wf
-  const price = Number(legacy?.commerce?.price)
+  const commerce = asRecord(legacy.commerce)
+  const price = Number(commerce?.price)
   if (legacy.industry || Number.isFinite(price)) {
     c.commerce = {
       industry: String(legacy.industry || '通用').trim() || '通用',
@@ -172,7 +235,7 @@ export function upgradeLegacyToV2(inputManifest: unknown = {}): EmployeeConfigRe
 
 export function validateEmployeeConfigV2(config: unknown): { valid: boolean; errors: string[] } {
   const errs: string[] = []
-  const c: EmployeeConfigRecord = config && typeof config === 'object' ? (config as EmployeeConfigRecord) : {}
+  const c = (asRecord(config) ?? {}) as Partial<EmployeeConfigRecord>
   if (!String(c?.identity?.id || '').trim()) errs.push('缺少 identity.id')
   if (!String(c?.identity?.name || '').trim()) errs.push('缺少 identity.name')
   if (!String(c?.identity?.version || '').trim()) errs.push('缺少 identity.version')

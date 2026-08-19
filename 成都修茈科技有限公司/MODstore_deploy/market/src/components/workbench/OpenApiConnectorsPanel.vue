@@ -195,7 +195,7 @@
               :class="{ 'oac-op--active': activeOperationId === op.operation_id }"
               @click="activeOperationId = op.operation_id"
             >
-              <span class="oac-op-method" :data-method="op.method">{{ op.method }}</span>
+              <span class="oac-op-method" :class="`oac-op-method--${op.method.toLowerCase()}`">{{ op.method }}</span>
               <span class="oac-op-path">{{ op.path }}</span>
               <span class="oac-op-id">{{ op.operation_id }}</span>
               <label class="oac-op-toggle" @click.stop>
@@ -787,22 +787,22 @@ select.oac-input {
   background: rgba(255, 255, 255, 0.08);
 }
 
-.oac-op-method[data-method='GET'] {
+.oac-op-method--get {
   background: rgba(60, 200, 120, 0.15);
   color: #6cf;
 }
 
-.oac-op-method[data-method='POST'] {
+.oac-op-method--post {
   background: rgba(43, 168, 255, 0.18);
 }
 
-.oac-op-method[data-method='DELETE'] {
+.oac-op-method--delete {
   background: rgba(255, 100, 100, 0.18);
   color: #fbb;
 }
 
-.oac-op-method[data-method='PUT'],
-.oac-op-method[data-method='PATCH'] {
+.oac-op-method--put,
+.oac-op-method--patch {
   background: rgba(255, 200, 50, 0.18);
   color: #ffd66e;
 }

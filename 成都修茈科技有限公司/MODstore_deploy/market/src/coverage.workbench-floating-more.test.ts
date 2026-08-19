@@ -197,10 +197,10 @@ describe('workbench and floating agent extra component coverage', () => {
       props: { msg: { ...base, role: 'tool_call', content: '', toolCall: { name: 'search', args: { q: '客户', limit: 2 } } } },
     }).text()).toContain('search: q=客户, limit=2')
     expect(mount(AgentMessageBubble, {
-      props: { msg: { ...base, role: 'action_preview', content: '', actionPreview: { id: 'a1', label: '删除资料', risk: 'high' } } },
+      props: { msg: { ...base, role: 'action_preview', content: '', actionPreview: { action: 'delete', label: '删除资料', risk: 'high', args: {} } } },
     }).text()).toContain('高风险')
     expect(mount(AgentMessageBubble, {
-      props: { msg: { ...base, role: 'action_preview', content: '', actionPreview: { id: 'a2', label: '同步客户', risk: 'medium' } } },
+      props: { msg: { ...base, role: 'action_preview', content: '', actionPreview: { action: 'sync', label: '同步客户', risk: 'medium', args: {} } } },
     }).text()).toContain('中风险')
     expect(mount(AgentMessageBubble, {
       props: { msg: { ...base, role: 'user', content: '用户问题' } },
@@ -224,7 +224,7 @@ describe('workbench and floating agent extra component coverage', () => {
 
   it('emits AgentActionPreview confirmation events for risk levels', async () => {
     const high = mount(AgentActionPreview, {
-      props: { action: { id: 'danger', label: '删除全部', risk: 'high' } },
+      props: { action: { id: 'danger', action: 'delete', label: '删除全部', risk: 'high', args: {}, resolve: vi.fn() } },
     })
     expect(high.text()).toContain('高风险')
     expect(high.text()).toContain('无法撤销')
@@ -234,10 +234,10 @@ describe('workbench and floating agent extra component coverage', () => {
     expect(high.emitted('confirm')).toHaveLength(1)
 
     expect(mount(AgentActionPreview, {
-      props: { action: { id: 'medium', label: '同步客户', risk: 'medium' } },
+      props: { action: { id: 'medium', action: 'sync', label: '同步客户', risk: 'medium', args: {}, resolve: vi.fn() } },
     }).text()).toContain('中风险')
     expect(mount(AgentActionPreview, {
-      props: { action: { id: 'low', label: '读取资料', risk: 'low' } },
+      props: { action: { id: 'low', action: 'read', label: '读取资料', risk: 'low', args: {}, resolve: vi.fn() } },
     }).text()).toContain('低风险')
   })
 

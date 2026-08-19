@@ -267,10 +267,10 @@ describe('low coverage public and template views, round 3', () => {
     sessionStorage.setItem('modstore_svip_ladder_reveal', '1')
     const wrapper = mount(PaymentPlansView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     expect(vm.hasSvipTier).toBe(true)
-    expect(vm.visiblePlans.map((p: any) => p.id)).toContain('plan_svip2')
+    expect(vm.visiblePlans.map((p: UnsafeTestValue) => p.id)).toContain('plan_svip2')
     expect(vm.planTierOrder('plan_svip8')).toBe(9)
     expect(vm.planTierOrder('missing')).toBe(-1)
     expect(vm.tierOf({ id: 'plan_basic' })).toBe('vip')
@@ -314,14 +314,14 @@ describe('low coverage public and template views, round 3', () => {
     apiMock.paymentPlans.mockRejectedValueOnce(new Error('plans failed'))
     const wrapper = mount(PaymentPlansView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.errorMsg).toContain('plans failed')
     expect(apiMock.paymentMyPlan).not.toHaveBeenCalled()
   })
 
   it('covers password login success and failure', async () => {
     const wrapper = mount(LoginView, globalMount)
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     vm.username = 'alice'
     vm.password = 'secret'
     await vm.doLogin()
@@ -337,7 +337,7 @@ describe('low coverage public and template views, round 3', () => {
     vi.useFakeTimers()
     const wrapper = mount(TemplatesView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     const item = vm.items[0]
 
     expect(vm.totalCount).toBe(1)
@@ -351,11 +351,11 @@ describe('low coverage public and template views, round 3', () => {
     vm.openDetail(item)
     expect(routerMock.push).toHaveBeenCalledWith({ name: 'template-detail', params: { id: '42' } })
 
-    ;(window.confirm as any).mockReturnValueOnce(false)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(false)
     await vm.quickInstall(item)
     expect(apiMock.templateInstall).not.toHaveBeenCalled()
 
-    ;(window.confirm as any).mockReturnValueOnce(true)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(true)
     await vm.quickInstall(item)
     expect(routerMock.push).toHaveBeenCalledWith({ name: 'workflow-v2-editor', params: { id: '777' } })
 
@@ -384,16 +384,16 @@ describe('low coverage public and template views, round 3', () => {
   it('covers template detail load, node labels, install and error paths', async () => {
     const wrapper = mount(TemplateDetailView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(apiMock.templateDetail).toHaveBeenCalledWith(42)
     expect(vm.nodeKindLabel('employee')).toBe('AI 员工')
     expect(vm.nodeKindLabel('custom')).toBe('custom')
 
-    ;(window.confirm as any).mockReturnValueOnce(false)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(false)
     await vm.install()
     expect(apiMock.templateInstall).not.toHaveBeenCalled()
 
-    ;(window.confirm as any).mockReturnValueOnce(true)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(true)
     await vm.install()
     expect(routerMock.push).toHaveBeenCalledWith({ name: 'workflow-v2-editor', params: { id: '777' } })
 
@@ -410,7 +410,7 @@ describe('low coverage public and template views, round 3', () => {
     routeMock.params = { id: '0' }
     const wrapper = mount(TemplateDetailView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.templateId).toBe(0)
     expect(apiMock.templateDetail).not.toHaveBeenCalled()
   })
@@ -420,7 +420,7 @@ describe('low coverage admin views, round 3', () => {
   it('covers Yuangon status and dry-run/run flows', async () => {
     const wrapper = mount(AdminYuangonOnboardView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.status.repo_root).toBe('/repo')
 
     vm.pkgIds = 'emp_a,emp_b'
@@ -450,7 +450,7 @@ describe('low coverage admin views, round 3', () => {
     authMock.isAdmin = false
     const wrapper = mount(AdminYuangonOnboardView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     await vm.loadStatus()
     await vm.runScript(true)
     expect(apiMock.adminYuangonOnboardStatus).not.toHaveBeenCalled()
@@ -460,7 +460,7 @@ describe('low coverage admin views, round 3', () => {
   it('covers duty employee health, align, dispatch, menu and document click flows', async () => {
     const wrapper = mount(AdminDutyEmployeesView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     expect(vm.missingCount).toBe(1)
     expect(vm.cronCount).toBe(1)
@@ -501,7 +501,7 @@ describe('low coverage admin views, round 3', () => {
     apiMock.adminDutyGraphHealth.mockRejectedValueOnce(new Error('health failed'))
     const wrapper = mount(AdminDutyEmployeesView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.healthErr).toContain('health failed')
 
     apiMock.adminAlignEmployeeLlmToAuto.mockRejectedValueOnce(new Error('align failed'))
@@ -526,7 +526,7 @@ describe('low coverage admin views, round 3', () => {
   it('covers change request list, detail, approve, reject and errors', async () => {
     const wrapper = mount(AdminEmployeeChangeRequestsView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.items).toHaveLength(1)
     expect(vm.formatBlob('x'.repeat(13000))).toContain('…')
 
@@ -538,7 +538,7 @@ describe('low coverage admin views, round 3', () => {
 
     vm.approveExtras = null
     vm.openDetail(crRow({ id: 4 }))
-    ;(window.prompt as any).mockReturnValueOnce('not safe')
+    ;(window.prompt as UnsafeTestValue).mockReturnValueOnce('not safe')
     await vm.reject()
     expect(apiMock.adminChangeRequestReject).toHaveBeenCalledWith(4, { reason: 'not safe' })
 
@@ -564,7 +564,7 @@ describe('low coverage admin views, round 3', () => {
     authMock.isAdmin = false
     const wrapper = mount(AdminEmployeeChangeRequestsView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     await vm.load()
     expect(apiMock.adminChangeRequestsList).not.toHaveBeenCalled()
   })
@@ -572,7 +572,7 @@ describe('low coverage admin views, round 3', () => {
   it('covers admin database load, filters, mod assignment, enterprise toggles and refund review', async () => {
     const wrapper = mount(AdminDatabaseView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     expect(vm.isAdmin).toBe(true)
     expect(vm.dbUsers).toHaveLength(2)
@@ -604,17 +604,17 @@ describe('low coverage admin views, round 3', () => {
     expect(apiMock.adminBindUserMod).toHaveBeenCalledWith(8, 'mod_new')
     expect(apiMock.adminUnbindUserMod).toHaveBeenCalledWith(8, 'mod_old')
 
-    ;(window.confirm as any).mockReturnValueOnce(false)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(false)
     await vm.toggleEnterprise(dbUser({ id: 9, username: 'bob', is_enterprise: false }), true)
     expect(apiMock.adminSetUserEnterprise).not.toHaveBeenCalled()
-    ;(window.confirm as any).mockReturnValueOnce(true)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(true)
     await vm.toggleEnterprise(dbUser({ id: 9, username: 'bob', is_enterprise: false }), true)
     expect(apiMock.adminSetUserEnterprise).toHaveBeenCalledWith(9, true)
 
-    ;(window.prompt as any).mockReturnValueOnce(null)
+    ;(window.prompt as UnsafeTestValue).mockReturnValueOnce(null)
     await vm.reviewRefund({ id: 9 }, 'approve')
     expect(apiMock.refundsAdminReview).not.toHaveBeenCalled()
-    ;(window.prompt as any).mockReturnValueOnce('ok')
+    ;(window.prompt as UnsafeTestValue).mockReturnValueOnce('ok')
     await vm.reviewRefund({ id: 9 }, 'reject')
     expect(apiMock.refundsAdminReview).toHaveBeenCalledWith(9, 'reject', 'ok')
   })
@@ -622,7 +622,7 @@ describe('low coverage admin views, round 3', () => {
   it('covers admin database partial load and action error branches', async () => {
     const wrapper = mount(AdminDatabaseView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     apiMock.adminListWallets.mockRejectedValueOnce(new Error('wallet failed'))
     await vm.loadDatabase()

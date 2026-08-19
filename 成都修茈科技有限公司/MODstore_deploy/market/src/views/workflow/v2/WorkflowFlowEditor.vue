@@ -133,7 +133,7 @@ async function addNodeAt(kind: NodeKind, clientX?: number, clientY?: number) {
   if (typeof clientX === 'number' && typeof clientY === 'number') {
     try {
       position = projectFromClient(clientX, clientY) || position
-    } catch {}
+    } catch { /* empty */ }
   } else {
     position = { x: 120 + Math.random() * 60, y: 120 + Math.random() * 60 }
   }
@@ -211,7 +211,7 @@ async function onSandbox() {
 async function onExecute() {
   if (!confirm('立即执行当前工作流？将真实调用员工和外部资源。')) return
   try {
-    const r: any = await api.executeWorkflow(props.workflowId, {})
+    const r = (await api.executeWorkflow(props.workflowId, {})) as { id?: number | string }
     showFlash('ok', `执行已提交（execution #${r?.id ?? '?'}）`)
   } catch (e) {
     showFlash('err', '执行失败：' + explainError(e))
@@ -245,7 +245,9 @@ async function onPublish() {
   const note = prompt('为本次发布写一段备注（可留空）', '')
   if (note === null) return
   try {
-    const r: any = await api.publishWorkflowVersion(props.workflowId, note.trim())
+    const r = (await api.publishWorkflowVersion(props.workflowId, note.trim())) as {
+      version_no?: number | string
+    }
     showFlash('ok', `已发布 v${r?.version_no ?? '?'}`)
   } catch (e) {
     showFlash('err', '发布失败：' + explainError(e))
@@ -307,14 +309,14 @@ async function submitSaveAsTemplate() {
   }
   m.busy = true
   try {
-    const r: any = await api.saveWorkflowAsTemplate(props.workflowId, {
+    const r = (await api.saveWorkflowAsTemplate(props.workflowId, {
       name: m.name.trim(),
       description: m.description.trim(),
       template_category: m.template_category,
       template_difficulty: m.template_difficulty,
       is_public: m.is_public,
       price: 0,
-    })
+    })) as { id?: number | string }
     m.open = false
     showFlash('ok', `已发布为模板（id ${r?.id ?? '?'}）`)
   } catch (e) {

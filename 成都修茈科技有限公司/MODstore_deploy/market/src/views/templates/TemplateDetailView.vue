@@ -57,8 +57,9 @@ async function load() {
   errMsg.value = ''
   try {
     detail.value = (await api.templateDetail(templateId.value)) as TemplateDetail
-  } catch (e: any) {
-    errMsg.value = e?.detail || e?.message || '加载失败'
+  } catch (e: unknown) {
+    const detail = typeof e === 'object' && e !== null && 'detail' in e ? (e as { detail?: unknown }).detail : null
+    errMsg.value = typeof detail === 'string' ? detail : e instanceof Error ? e.message : '加载失败'
   } finally {
     loading.value = false
   }
@@ -71,12 +72,13 @@ async function install() {
   if (!confirm('一键安装此模板到你的工作流？将创建一个新的可编辑副本。')) return
   installing.value = true
   try {
-    const r: any = await api.templateInstall(templateId.value)
+    const r = (await api.templateInstall(templateId.value)) as { workflow_id?: number | string }
     if (r?.workflow_id) {
       router.push({ name: 'workflow-v2-editor', params: { id: String(r.workflow_id) } })
     }
-  } catch (e: any) {
-    errMsg.value = e?.detail || e?.message || '安装失败'
+  } catch (e: unknown) {
+    const detail = typeof e === 'object' && e !== null && 'detail' in e ? (e as { detail?: unknown }).detail : null
+    errMsg.value = typeof detail === 'string' ? detail : e instanceof Error ? e.message : '安装失败'
   } finally {
     installing.value = false
   }

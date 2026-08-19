@@ -10,7 +10,7 @@ import { getAccessToken } from './infrastructure/storage/tokenStore'
 const mockGetAccessToken = vi.mocked(getAccessToken)
 
 describe('realtimeClient', () => {
-  let mockWs: any
+  let mockWs: UnsafeTestValue
 
   beforeEach(() => {
     vi.useFakeTimers()
@@ -29,10 +29,10 @@ describe('realtimeClient', () => {
     }
 
     const wsRef = mockWs
-    const WsFn = vi.fn(function (this: any) {
+    const WsFn = vi.fn(function (this: UnsafeTestValue) {
       return wsRef
-    })
-    WsFn.OPEN = 1
+    }) as unknown as typeof WebSocket
+    Object.defineProperty(WsFn, 'OPEN', { value: 1 })
     vi.stubGlobal('WebSocket', WsFn)
   })
 
@@ -42,7 +42,7 @@ describe('realtimeClient', () => {
   })
 
   it('does not connect when no token', () => {
-    mockGetAccessToken.mockReturnValue(null)
+    mockGetAccessToken.mockReturnValue('')
     connectRealtime()
     expect(WebSocket).not.toHaveBeenCalled()
   })
@@ -126,7 +126,7 @@ describe('realtimeClient', () => {
 
   it('does not reconnect on close when no token', () => {
     connectRealtime()
-    mockGetAccessToken.mockReturnValue(null)
+    mockGetAccessToken.mockReturnValue('')
     mockWs.onclose!()
     vi.advanceTimersByTime(90_000)
     expect(WebSocket).toHaveBeenCalledTimes(1)

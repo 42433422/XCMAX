@@ -182,12 +182,20 @@ import {
 } from '../utils/csTicketLifecycle'
 import { composeTicketUserMessage, toUserFacingCards } from '../utils/csTicketSummary'
 import { compressImageFileToDataUrl, isImageFileForVision } from '../utils/visionMultimodal'
+import { asUnknownRecord, errorMessage, type UnknownRecord } from '../utils/typeNarrowing'
+
+interface CustomerTicket extends UnknownRecord {
+  id: number | string
+  intent?: unknown
+  status?: unknown
+  title?: unknown
+}
 
 type UiMessage = {
   id: string
   role: 'user' | 'assistant'
   content: string
-  cards?: Record<string, any>[]
+  cards?: UnknownRecord[]
   imageDataUrl?: string | null
 }
 
@@ -197,7 +205,7 @@ const loading = ref(false)
 const error = ref('')
 const activeSessionId = ref<number | null>(null)
 const messages = ref<UiMessage[]>([])
-const tickets = ref<any[]>([])
+const tickets = ref<CustomerTicket[]>([])
 const expandedTicketIds = ref<Set<number>>(new Set())
 const messagesEl = ref<HTMLElement | null>(null)
 const pendingImageDataUrl = ref<string | null>(null)
@@ -267,7 +275,7 @@ function shortLifeLabel(label: string) {
   return map[label] || label
 }
 
-function friendlyTicketTitle(ticket: any) {
+function friendlyTicketTitle(ticket: CustomerTicket) {
   const intent = ticketIntentLabel(ticket?.intent)
   const title = String(ticket?.title || '').trim()
   if (title && !title.includes('CS') && title.length <= 18) return title
@@ -297,7 +305,7 @@ function toggleAllTickets() {
   )
 }
 
-function preferExpandWaitingTickets(items: any[]) {
+function preferExpandWaitingTickets(items: CustomerTicket[]) {
   const waiting = items
     .filter((t) => ticketLifecycleLabel(t) === '待补充')
     .map((t) => Number(t.id))
@@ -393,29 +401,34 @@ async function sendText(raw: string, extras?: { reason?: string }) {
       ...queryContext(),
       ...(extras?.reason ? { reason: extras.reason } : {}),
     }
-    const res: any = await api.customerServiceChat({
+    const res = asUnknownRecord(await api.customerServiceChat({
       message: text,
       session_id: activeSessionId.value,
       context: ctx,
       image_data_url: imageDataUrl || undefined,
-    })
-    activeSessionId.value = Number(res?.session?.id || activeSessionId.value || 0) || null
+    }))
+    const session = asUnknownRecord(res.session)
+    const responseMessage = asUnknownRecord(res.message)
+    const ticket = Object.keys(asUnknownRecord(res.ticket)).length
+      ? (asUnknownRecord(res.ticket) as CustomerTicket)
+      : null
+    activeSessionId.value = Number(session.id || activeSessionId.value || 0) || null
     // 对话里只用白话正文；不再堆「进度/下一步/已办理」多卡
-    let content = String(res?.message?.content || '已处理。')
-    if (res?.ticket) {
-      const fromCards = Array.isArray(res?.cards) ? res.cards : []
-      const decisionCard = fromCards.find((c: any) => c?.type === 'decision')
-      const actionsCard = fromCards.find((c: any) => c?.type === 'actions')
+    let content = String(responseMessage.content || '已处理。')
+    if (ticket) {
+      const fromCards = Array.isArray(res.cards) ? res.cards.map(asUnknownRecord) : []
+      const decisionCard = fromCards.find((card) => card.type === 'decision')
+      const actionsCard = fromCards.find((card) => card.type === 'actions')
       const composed = composeTicketUserMessage({
-        ticket: res.ticket,
-        decision: decisionCard || res.decision || null,
+        ticket,
+        decision: decisionCard || asUnknownRecord(res.decision),
         actions: Array.isArray(actionsCard?.items)
           ? actionsCard.items
-          : Array.isArray(res?.actions)
+          : Array.isArray(res.actions)
             ? res.actions
             : [],
       })
-      const st = String(res.ticket?.status || '').toLowerCase()
+      const st = String(ticket.status || '').toLowerCase()
       // 已结案用侧栏口径摘要；跟进中优先后端话术（含问题复述），避免盖成「已处理完成」
       if (['resolved', 'closed', 'done', 'rejected'].includes(st)) {
         content = composed
@@ -431,12 +444,12 @@ async function sendText(raw: string, extras?: { reason?: string }) {
     })
     // 先结束「处理中」，侧栏刷新失败/慢不得挡住对话
     loading.value = false
-    if (res?.ticket) {
+    if (ticket) {
       void loadTickets()
     }
     await scrollMessagesToEnd()
-  } catch (e: any) {
-    error.value = e?.message || 'AI 客服处理失败'
+  } catch (e: unknown) {
+    error.value = errorMessage(e, 'AI 客服处理失败')
     loading.value = false
   }
 }
@@ -449,8 +462,8 @@ function newSession() {
 
 async function loadTickets() {
   try {
-    const res: any = await api.customerServiceTickets()
-    tickets.value = Array.isArray(res?.items) ? res.items : []
+    const res = asUnknownRecord(await api.customerServiceTickets())
+    tickets.value = Array.isArray(res.items) ? (res.items as CustomerTicket[]) : []
     preferExpandWaitingTickets(tickets.value)
   } catch {
     tickets.value = []
@@ -462,7 +475,7 @@ function visibleCards(msg: UiMessage) {
   return toUserFacingCards(Array.isArray(msg.cards) ? msg.cards : [])
 }
 
-async function openTicket(ticket: any) {
+async function openTicket(ticket: CustomerTicket) {
   const tid = Number(ticket?.id || 0)
   if (tid) {
     const next = new Set(expandedTicketIds.value)
@@ -470,10 +483,10 @@ async function openTicket(ticket: any) {
     expandedTicketIds.value = next
   }
   try {
-    const res: any = await api.customerServiceTicketDetail(ticket.id)
-    const t = res?.ticket || ticket
-    const decision = Array.isArray(res?.decisions) && res.decisions[0] ? res.decisions[0] : null
-    const actions = Array.isArray(res?.actions) ? res.actions : []
+    const res = asUnknownRecord(await api.customerServiceTicketDetail(ticket.id))
+    const t = Object.keys(asUnknownRecord(res.ticket)).length ? asUnknownRecord(res.ticket) : ticket
+    const decision = Array.isArray(res.decisions) && res.decisions[0] ? asUnknownRecord(res.decisions[0]) : null
+    const actions = Array.isArray(res.actions) ? res.actions : []
     messages.value.push({
       id: `t-${Date.now()}`,
       role: 'assistant',
@@ -481,10 +494,11 @@ async function openTicket(ticket: any) {
       cards: [],
     })
     await scrollMessagesToEnd()
-  } catch (e: any) {
-    error.value = e?.message || '打开进度失败'
+  } catch (e: unknown) {
+    error.value = errorMessage(e, '打开进度失败')
   }
 }
+defineExpose({ visibleCards })
 </script>
 
 <style scoped>

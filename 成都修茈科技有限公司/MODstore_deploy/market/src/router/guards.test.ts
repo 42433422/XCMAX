@@ -12,12 +12,12 @@ vi.mock('../api', () => ({
 import { api } from '../api'
 
 function installAndGetGuard() {
-  let guard: any
+  let guard: UnsafeTestValue
   installAuthGuards({
-    beforeEach(fn: any) {
+    beforeEach(fn: UnsafeTestValue) {
       guard = fn
     },
-  } as any)
+  } as UnsafeTestValue)
   return guard
 }
 

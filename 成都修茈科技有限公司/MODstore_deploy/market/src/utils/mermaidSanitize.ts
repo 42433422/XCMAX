@@ -44,7 +44,7 @@ function fixStructuralMermaidErrors(input: string): string {
 
   // end 后同一行跟中文子图标题 + 下一节点：end 员工：xxx B[
   s = s.replace(
-    /\bend\b\s+([^\[\n\r\->|]+?)\s+([A-Za-z0-9_\-]+\[)/gi,
+    /\bend\b\s+([^[\n\r\->|]+?)\s+([A-Za-z0-9_-]+\[)/gi,
     (_match, title: string, nodeStart: string) => {
       const t = title.trim()
       if (!t || t.includes('-->')) return _match
@@ -55,12 +55,12 @@ function fixStructuralMermaidErrors(input: string): string {
 
   // 独立一行 subgraph 中文/冒号标题：`subgraph 员工：文档文本提取员`
   s = s.replace(
-    /^(\s*)subgraph\s+([^\[\n\r"]+)$/gm,
+    /^(\s*)subgraph\s+([^[\n\r"]+)$/gm,
     (match, indent: string, title: string) => {
       const t = title.trim()
       if (!t) return match
-      if (/^[A-Za-z0-9_\-]+\[/.test(t)) return match
-      if (/^[A-Za-z0-9_\-]+$/.test(t) && !CJK.test(t) && !t.includes(':')) return match
+      if (/^[A-Za-z0-9_-]+\[/.test(t)) return match
+      if (/^[A-Za-z0-9_-]+$/.test(t) && !CJK.test(t) && !t.includes(':')) return match
       const id = nextSubgraphId()
       return `${indent}subgraph ${id}[${quoteLabel(t)}]`
     },
@@ -68,10 +68,10 @@ function fixStructuralMermaidErrors(input: string): string {
 
   // end 后换行跟孤立的子图标题行
   s = s.replace(
-    /^(\s*)end\s*\n\s*([^\[\n\r\->|]+?)\s*$/gm,
+    /^(\s*)end\s*\n\s*([^[\n\r\->|]+?)\s*$/gm,
     (match, indent: string, title: string) => {
       const t = title.trim()
-      if (!t || /^[A-Za-z0-9_\-]+\s*\[/.test(t) || t.includes('-->')) return match
+      if (!t || /^[A-Za-z0-9_-]+\s*\[/.test(t) || t.includes('-->')) return match
       const id = nextSubgraphId()
       return `${indent}end\n${indent}subgraph ${id}[${quoteLabel(t)}]`
     },
@@ -90,21 +90,21 @@ export function sanitizeMermaidSource(input: string): string {
 
   // 方括号节点：A[label]
   s = s.replace(
-    /([A-Za-z0-9_\-]+)(\[)([^\[\]\n]*?)(\])/g,
+    /([A-Za-z0-9_-]+)(\[)([^[\]\n]*?)(\])/g,
     (match, id: string, open: string, label: string, close: string) =>
       quoteIfNeeded(id, open, label, close) ?? match,
   )
 
   // 圆括号节点：A(label)
   s = s.replace(
-    /([A-Za-z0-9_\-]+)(\()([^()\n]*?)(\))/g,
+    /([A-Za-z0-9_-]+)(\()([^()\n]*?)(\))/g,
     (match, id: string, open: string, label: string, close: string) =>
       quoteIfNeeded(id, open, label, close) ?? match,
   )
 
   // 花括号节点：A{label}
   s = s.replace(
-    /([A-Za-z0-9_\-]+)(\{)([^{}\n]*?)(\})/g,
+    /([A-Za-z0-9_-]+)(\{)([^{}\n]*?)(\})/g,
     (match, id: string, open: string, label: string, close: string) =>
       quoteIfNeeded(id, open, label, close) ?? match,
   )

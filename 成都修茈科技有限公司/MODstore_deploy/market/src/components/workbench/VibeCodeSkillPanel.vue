@@ -139,7 +139,22 @@ const pubIndustry = ref('通用')
 
 const busy = ref(false)
 const error = ref('')
-const result = ref<any>(null)
+interface VibeCodeResult {
+  error?: unknown
+  run?: unknown
+  skill?: {
+    skill_id?: unknown
+    code?: unknown
+    code_excerpt?: unknown
+  }
+  publish?: {
+    pkg_id?: unknown
+    name?: unknown
+    description?: unknown
+  }
+}
+
+const result = ref<VibeCodeResult | null>(null)
 
 const resultCode = computed(() => String(result.value?.skill?.code || result.value?.skill?.code_excerpt || ''))
 
@@ -178,7 +193,7 @@ async function submit() {
         industry: pubIndustry.value.trim() || '通用',
       }
     }
-    const data = await req('/api/workbench/vibe-code-skill', {
+    const data = await req<VibeCodeResult>('/api/workbench/vibe-code-skill', {
       method: 'POST',
       body: JSON.stringify(body),
     })
@@ -186,8 +201,8 @@ async function submit() {
     if (data?.error) {
       error.value = String(data.error)
     }
-  } catch (e: any) {
-    error.value = String(e?.message || e)
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e)
   } finally {
     busy.value = false
   }

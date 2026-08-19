@@ -240,15 +240,21 @@ interface DocItem {
   created_at: number
 }
 
+interface KnowledgeStatus {
+  engine?: { backend?: string; persist_dir?: string }
+  embedding?: { model?: string; dim?: number; configured?: boolean }
+  owned_collections?: number
+}
+
 const ACCEPT = '.txt,.md,.json,.csv,.pdf,.docx,.xlsx'
 
 const authStore = useAuthStore()
 const myUserId = computed<string>(() => {
-  const uid = (authStore.user as any)?.id
+  const uid = authStore.user?.id
   return uid != null ? String(uid) : ''
 })
 
-const status = ref<any>(null)
+const status = ref<KnowledgeStatus | null>(null)
 const collections = ref<Collection[]>([])
 const docsByColl = reactive<Record<number, { docs: DocItem[]; error?: string }>>({})
 
@@ -358,10 +364,10 @@ function formatDate(ts: number): string {
 
 async function loadStatus() {
   try {
-    status.value = await api.knowledgeV2Status()
-  } catch (e: any) {
+    status.value = (await api.knowledgeV2Status()) as KnowledgeStatus
+  } catch (e: unknown) {
     status.value = null
-    if (e?.message) error.value = e.message
+    if (e instanceof Error && e.message) error.value = e.message
   }
 }
 
@@ -369,10 +375,10 @@ async function loadCollections() {
   loading.value = true
   error.value = ''
   try {
-    const res: any = await api.knowledgeV2ListCollections()
+    const res = (await api.knowledgeV2ListCollections()) as { collections?: Collection[] }
     collections.value = Array.isArray(res?.collections) ? res.collections : []
-  } catch (e: any) {
-    error.value = e?.message || String(e)
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e)
     collections.value = []
   } finally {
     loading.value = false
@@ -393,12 +399,12 @@ async function toggleCollection(coll: Collection) {
 
 async function loadDocs(coll: Collection) {
   try {
-    const res: any = await api.knowledgeV2ListDocuments(coll.id)
+    const res = (await api.knowledgeV2ListDocuments(coll.id)) as { documents?: DocItem[] }
     docsByColl[coll.id] = {
       docs: Array.isArray(res?.documents) ? res.documents : [],
     }
-  } catch (e: any) {
-    docsByColl[coll.id] = { docs: [], error: e?.message || String(e) }
+  } catch (e: unknown) {
+    docsByColl[coll.id] = { docs: [], error: e instanceof Error ? e.message : String(e) }
   }
 }
 
@@ -421,8 +427,8 @@ async function submitCreate() {
     })
     showCreate.value = false
     await Promise.all([loadCollections(), loadStatus()])
-  } catch (e: any) {
-    createError.value = e?.message || String(e)
+  } catch (e: unknown) {
+    createError.value = e instanceof Error ? e.message : String(e)
   } finally {
     creating.value = false
   }
@@ -453,8 +459,8 @@ async function submitShare() {
       permission: shareForm.permission,
     })
     closeShareModal()
-  } catch (e: any) {
-    shareError.value = e?.message || String(e)
+  } catch (e: unknown) {
+    shareError.value = e instanceof Error ? e.message : String(e)
   } finally {
     sharing.value = false
   }
@@ -468,8 +474,8 @@ async function deleteCollection(coll: Collection) {
     if (openedId.value === coll.id) openedId.value = null
     delete docsByColl[coll.id]
     await Promise.all([loadCollections(), loadStatus()])
-  } catch (e: any) {
-    error.value = e?.message || String(e)
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e)
   }
 }
 
@@ -480,10 +486,10 @@ async function deleteDoc(coll: Collection, doc: DocItem) {
     await api.knowledgeV2DeleteDocument(coll.id, doc.doc_id)
     await loadDocs(coll)
     await loadCollections()
-  } catch (e: any) {
+  } catch (e: unknown) {
     docsByColl[coll.id] = {
       ...(docsByColl[coll.id] || { docs: [] }),
-      error: e?.message || String(e),
+      error: e instanceof Error ? e.message : String(e),
     }
   }
 }
@@ -498,10 +504,10 @@ async function onPickFile(ev: Event, coll: Collection) {
     await api.knowledgeV2UploadDocument(coll.id, file)
     await loadDocs(coll)
     await loadCollections()
-  } catch (e: any) {
+  } catch (e: unknown) {
     docsByColl[coll.id] = {
       ...(docsByColl[coll.id] || { docs: [] }),
-      error: e?.message || String(e),
+      error: e instanceof Error ? e.message : String(e),
     }
   } finally {
     uploading.value = false

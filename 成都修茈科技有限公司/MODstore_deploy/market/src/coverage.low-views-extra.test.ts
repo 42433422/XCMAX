@@ -1,6 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 
+type DeveloperTokenFixture = {
+  id: number
+  name: string
+  prefix: string
+  scopes: string[]
+  created_at: string | null
+  last_used_at: string | null
+  expires_at: string | null
+  revoked_at: string | null
+  is_active: boolean
+}
+
 const lowMocks = vi.hoisted(() => ({
   route: {
     params: { orderId: 'ord_1' } as Record<string, unknown>,
@@ -12,7 +24,7 @@ const lowMocks = vi.hoisted(() => ({
   },
   refreshSession: vi.fn(async () => undefined),
   isAdmin: { value: true },
-  confirmDanger: vi.fn(async () => true),
+  confirmDanger: vi.fn(async (..._args: unknown[]) => true),
   walletBalance: { value: null as number | null },
   membershipReferenceYuan: { value: 0 },
   walletSetBalance: vi.fn((value: number) => {
@@ -149,7 +161,7 @@ const pendingOrder = {
   order_kind: 'plan',
 }
 
-const activeToken = {
+const activeToken: DeveloperTokenFixture = {
   id: 1,
   name: 'CI',
   prefix: 'sk_ci',
@@ -707,7 +719,13 @@ describe('low coverage view business branches', () => {
       version: '2.0.0',
       artifact: 'bundle',
       ok: false,
+      primary: false,
+      industry: { id: 'finance', name: '金融' },
+      library_blurb: '',
       description: '很长的描述 '.repeat(30),
+      updated_at: '',
+      usage_scene: '',
+      path: '',
       industry_id: 'finance',
       workflow_employees: [],
     }
@@ -815,7 +833,7 @@ describe('low coverage view business branches', () => {
 
     expect(vm.modIndustryId(modA)).toBe('retail')
     expect(vm.modIndustryLabel(modA)).toContain('retail')
-    expect(vm.modIndustryLabel({ ...modA, industry: '制造业' })).toBe('制造业')
+    expect(vm.modIndustryLabel({ ...modA, industry: '制造业' } as unknown as typeof modA)).toBe('制造业')
     expect(vm.modShelfStatus(modA)).toBe('primary')
     expect(vm.modShelfStatus(modB)).toBe('bundle')
     expect(vm.usageText('mod-a')).toContain('企业一')
@@ -1074,7 +1092,7 @@ describe('low coverage view business branches', () => {
     expect(vm.transactions[0].amount).toBe(10)
     expect(vm.categoryLabel('llm')).toBe('语言')
     expect(vm.modelOptionLabel(catalog.providers[0].models_detailed[0])).toContain('L3已通过')
-    expect(vm.providerTilePriceHint(catalog.providers[0])).toBeNull()
+    expect(vm.providerTilePriceHint(catalog.providers[0])).toBe('')
     expect(vm.modelsForCategory('image')).toHaveLength(1)
     expect(vm.providerTileMediaTags(catalog.providers[0]).map((t) => t.kind)).toContain('image')
     expect(vm.formatCatalogFetchedAt('bad')).toBe('bad')
@@ -1144,7 +1162,7 @@ describe('low coverage view business branches', () => {
     expect(lowMocks.router.push).toHaveBeenCalledWith({ name: 'checkout', params: { orderId: 'recharge_1' } })
     expect(vm.formatDate()).toBe('')
 
-    const anyVm = vm as any
+    const anyVm = vm as UnsafeTestValue
     lowMocks.membershipReferenceYuan.value = 0
     lowMocks.walletBalance.value = -10
     expect(vm.money(-10)).toBe('-10.00')

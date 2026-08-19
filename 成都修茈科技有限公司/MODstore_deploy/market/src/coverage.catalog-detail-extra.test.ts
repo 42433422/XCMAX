@@ -124,7 +124,7 @@ describe('catalog detail coverage', () => {
   it('covers mount, labels, author follow, quality and employee status paths', async () => {
     const wrapper = mount(CatalogDetailView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     expect(apiMock.catalogDetail).toHaveBeenCalledWith('10')
     expect(vm.itemCapabilities).toHaveLength(1)
@@ -183,7 +183,7 @@ describe('catalog detail coverage', () => {
   it('covers favorite, reviews and complaint branches', async () => {
     const wrapper = mount(CatalogDetailView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     localStorage.removeItem('modstore_token')
     await vm.toggleFavorite()
@@ -248,7 +248,7 @@ describe('catalog detail coverage', () => {
   it('covers buy, download, delist, navigate and mount error branches', async () => {
     const wrapper = mount(CatalogDetailView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
 
     localStorage.removeItem('modstore_token')
     await vm.doBuy()
@@ -288,10 +288,10 @@ describe('catalog detail coverage', () => {
     await vm.doDownload()
     expect(window.alert).toHaveBeenCalledWith('download failed')
 
-    ;(window.confirm as any).mockReturnValueOnce(false)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(false)
     await vm.delistItem()
     expect(apiMock.adminDeleteCatalog).not.toHaveBeenCalled()
-    ;(window.confirm as any).mockReturnValueOnce(true)
+    ;(window.confirm as UnsafeTestValue).mockReturnValueOnce(true)
     await vm.delistItem()
     expect(apiMock.adminDeleteCatalog).toHaveBeenCalledWith(10)
     expect(routerMock.push).toHaveBeenCalledWith({ name: 'ai-store' })
@@ -306,7 +306,7 @@ describe('catalog detail coverage', () => {
     apiMock.catalogDetail.mockRejectedValueOnce(new Error('detail failed'))
     const bad = mount(CatalogDetailView, globalMount)
     await flushPromises()
-    expect((bad.vm as any).err).toContain('detail failed')
+    expect((bad.vm as UnsafeTestValue).err).toContain('detail failed')
   })
 
   it('covers array route param and author self computed branch', async () => {
@@ -315,7 +315,7 @@ describe('catalog detail coverage', () => {
     apiMock.catalogDetail.mockResolvedValueOnce(catalogItem({ id: 88, author_id: 2, author: { id: 2, name: 'Self' } }))
     const wrapper = mount(CatalogDetailView, globalMount)
     await flushPromises()
-    const vm = wrapper.vm as any
+    const vm = wrapper.vm as UnsafeTestValue
     expect(vm.catalogParamId).toBe('88')
     expect(vm.isAuthorSelf).toBe(true)
   })

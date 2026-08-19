@@ -48,7 +48,7 @@ class FakeAudioContext {
     disconnect: vi.fn(),
   }
   audioWorklet = {
-    addModule: vi.fn(async () => {
+    addModule: vi.fn(async (): Promise<void> => {
       throw new Error('force script processor fallback')
     }),
   }

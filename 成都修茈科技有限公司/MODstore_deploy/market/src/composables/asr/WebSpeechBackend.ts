@@ -1,6 +1,34 @@
 import type { ASRBackend, ASRResult } from './types'
 import { AudioCapture } from './audioCapture'
 
+interface SpeechRecognitionResultLike {
+  0?: { transcript?: string }
+  isFinal?: boolean
+}
+
+interface SpeechRecognitionEventLike {
+  resultIndex: number
+  results: ArrayLike<SpeechRecognitionResultLike>
+}
+
+interface SpeechRecognitionLike {
+  lang: string
+  interimResults: boolean
+  continuous: boolean
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null
+  onerror: ((event: { error?: string }) => void) | null
+  onend: (() => void) | null
+  start(): void
+  stop(): void
+  abort(): void
+}
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike
+type SpeechWindow = Window & {
+  SpeechRecognition?: SpeechRecognitionConstructor
+  webkitSpeechRecognition?: SpeechRecognitionConstructor
+}
+
 const ERR_MAP: Record<string, string> = {
   network: '语音服务连接失败，正在尝试其他方案…',
   'not-allowed': '麦克风权限被拒绝，请在浏览器设置中允许。',
@@ -18,7 +46,7 @@ function isIosSafari(): boolean {
 export class WebSpeechBackend implements ASRBackend {
   id = 'webspeech' as const
   label = '浏览器语音识别'
-  private rec: any = null
+  private rec: SpeechRecognitionLike | null = null
   private levelCapture: AudioCapture | null = null
   private _onResult: ((r: ASRResult) => void) | null = null
   private _onError: ((msg: string) => void) | null = null
@@ -36,7 +64,7 @@ export class WebSpeechBackend implements ASRBackend {
 
   isAvailable(): boolean {
     if (typeof window === 'undefined') return false
-    const w = window as any
+    const w = window as SpeechWindow
     return !!(w.SpeechRecognition || w.webkitSpeechRecognition)
   }
 
@@ -59,7 +87,7 @@ export class WebSpeechBackend implements ASRBackend {
     this._restartCount = 0
     this._restartFailures = 0
     this.clearRestartTimer()
-    const w = window as any
+    const w = window as SpeechWindow
     const Ctor = w.SpeechRecognition || w.webkitSpeechRecognition
     if (!Ctor) {
       onError('当前浏览器不支持语音识别，请使用其他识别方案。')
@@ -72,7 +100,7 @@ export class WebSpeechBackend implements ASRBackend {
     rec.interimResults = true
     this._continuous = !isIosSafari()
     rec.continuous = this._continuous
-    rec.onresult = (event: any) => {
+    rec.onresult = (event: SpeechRecognitionEventLike) => {
       if (this._stopped) return
       let text = ''
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -91,7 +119,7 @@ export class WebSpeechBackend implements ASRBackend {
         onResult({ text: trimmed, isFinal: false })
       }
     }
-    rec.onerror = (event: any) => {
+    rec.onerror = (event: { error?: string }) => {
       if (this._stopped) return
       const code = event?.error
       if (code === 'no-speech' || code === 'aborted') return
@@ -144,7 +172,7 @@ export class WebSpeechBackend implements ASRBackend {
     }
   }
 
-  private scheduleIosRestart(rec: any) {
+  private scheduleIosRestart(rec: SpeechRecognitionLike) {
     if (this._restartTimer) return
     if (this._restartCount >= WebSpeechBackend.MAX_IOS_RESTARTS) return
     if (this._restartFailures >= WebSpeechBackend.MAX_IOS_RESTART_FAILURES) return

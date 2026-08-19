@@ -271,13 +271,12 @@ describe('llm stream extra coverage', () => {
   it('normalizes aborts before fallback output and while stream or fallback promises fail', async () => {
     const { streamLLMChat } = await import('./utils/llmStream')
 
-    let beforeFallbackAbort: ReturnType<typeof streamLLMChat>
     mockApi.llmChatStream.mockRejectedValueOnce(new Error('stream down'))
     mockApi.llmChat.mockImplementationOnce(async () => {
       beforeFallbackAbort.abort()
       return { content: 'late fallback' }
     })
-    beforeFallbackAbort = streamLLMChat({
+    const beforeFallbackAbort = streamLLMChat({
       provider: 'p',
       model: 'm',
       messages: [{ role: 'user', content: 'hi' }],
@@ -285,7 +284,6 @@ describe('llm stream extra coverage', () => {
     })
     await expect(beforeFallbackAbort.done).resolves.toEqual({ content: '', aborted: true })
 
-    let streamAbort: ReturnType<typeof streamLLMChat>
     mockApi.llmChatStream.mockImplementationOnce(
       () => new Promise((_resolve, reject) => {
         queueMicrotask(() => {
@@ -294,7 +292,7 @@ describe('llm stream extra coverage', () => {
         })
       }),
     )
-    streamAbort = streamLLMChat({
+    const streamAbort = streamLLMChat({
       provider: 'p',
       model: 'm',
       messages: [{ role: 'user', content: 'hi' }],
@@ -302,7 +300,6 @@ describe('llm stream extra coverage', () => {
     })
     await expect(streamAbort.done).resolves.toEqual({ content: '', aborted: true })
 
-    let fallbackAbort: ReturnType<typeof streamLLMChat>
     mockApi.llmChatStream.mockRejectedValueOnce(new Error('stream down'))
     mockApi.llmChat.mockImplementationOnce(
       () => new Promise((_resolve, reject) => {
@@ -312,7 +309,7 @@ describe('llm stream extra coverage', () => {
         })
       }),
     )
-    fallbackAbort = streamLLMChat({
+    const fallbackAbort = streamLLMChat({
       provider: 'p',
       model: 'm',
       messages: [{ role: 'user', content: 'hi' }],

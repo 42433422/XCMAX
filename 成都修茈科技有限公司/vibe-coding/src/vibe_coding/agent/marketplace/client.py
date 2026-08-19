@@ -31,6 +31,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..._internals.tls import ssl_context_for_endpoint
+
 DEFAULT_TIMEOUT_S: float = 30.0
 _RESERVED_TEST_SUFFIXES = (".example", ".example.com", ".example.test")
 
@@ -268,14 +270,7 @@ class MODstoreClient:
             raise MODstoreError(f"network error: {exc.reason}") from exc
 
     def _ssl_context(self):
-        if self.verify_ssl:
-            return None
-        import ssl
-
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        return ctx
+        return ssl_context_for_endpoint(self.base_url, verify_ssl=self.verify_ssl)
 
 
 # ---------------------------------------------------------------------- pure
@@ -368,7 +363,7 @@ def _build_multipart(
     parts: list[bytes] = []
     for key, value in fields.items():
         parts.append(b"--" + boundary.encode("ascii") + crlf)
-        disp = f'Content-Disposition: form-data; name="{key}"'.encode("utf-8")
+        disp = f'Content-Disposition: form-data; name="{key}"'.encode()
         parts.append(disp + crlf + crlf)
         parts.append((value or "").encode("utf-8") + crlf)
     parts.append(b"--" + boundary.encode("ascii") + crlf)
@@ -377,9 +372,9 @@ def _build_multipart(
     disp = (
         f'Content-Disposition: form-data; name="{file_field}"; '
         f'filename="{filename}"'
-    ).encode("utf-8")
+    ).encode()
     parts.append(disp + crlf)
-    parts.append(f"Content-Type: {content_type}".encode("utf-8") + crlf + crlf)
+    parts.append(f"Content-Type: {content_type}".encode() + crlf + crlf)
     parts.append(file_path.read_bytes())
     parts.append(crlf)
     parts.append(b"--" + boundary.encode("ascii") + b"--" + crlf)
@@ -388,9 +383,9 @@ def _build_multipart(
 
 
 __all__ = [
+    "DEFAULT_TIMEOUT_S",
     "MODstoreAuthError",
     "MODstoreClient",
     "MODstoreError",
     "UploadResult",
-    "DEFAULT_TIMEOUT_S",
 ]

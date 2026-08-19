@@ -68,11 +68,6 @@ function getRefreshToken(): string {
   return localStorage.getItem(REFRESH_TOKEN_KEY) || ''
 }
 
-function setRefreshToken(value: string): void {
-  if (value) localStorage.setItem(REFRESH_TOKEN_KEY, value)
-  else localStorage.removeItem(REFRESH_TOKEN_KEY)
-}
-
 function clearTokens(): void {
   localStorage.removeItem('modstore_token')
   localStorage.removeItem(REFRESH_TOKEN_KEY)
@@ -151,7 +146,7 @@ export function buildCheckoutSignData(
   }
 }
 
-function paymentSecretKey(): string {
+export function paymentSecretKey(): string {
   // P0-2 修复：支付签名必须在后端完成，前端不持有任何签名密钥。
   // 后端 /api/model-payment/checkout 直接用 plan_id 查套餐金额并调支付宝下单，
   // 不信任前端传值，因此前端签名是"假安全"——已移除密钥，保留空实现以兼容旧调用点。

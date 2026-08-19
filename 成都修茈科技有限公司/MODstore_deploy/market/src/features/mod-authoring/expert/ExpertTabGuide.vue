@@ -6,7 +6,6 @@ import EmployeeTable from '../shared/EmployeeTable.vue'
 import ModChecklist from '../shared/ModChecklist.vue'
 
 const {
-  modData,
   modDescriptionLine,
   aiBlueprint,
   industryCard,

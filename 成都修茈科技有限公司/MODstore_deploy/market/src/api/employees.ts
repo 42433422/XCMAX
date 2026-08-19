@@ -1,13 +1,35 @@
 import { req, requestBlob } from './shared'
 
+export interface EmployeeRow extends Record<string, unknown> {
+  id?: string
+  name?: string
+}
+
+export interface EmployeeManifestResponse extends Record<string, unknown> {
+  pack_id: string
+  name: string
+  version: string
+  manifest: Record<string, unknown>
+}
+
+export interface EmployeeStatusResponse extends Record<string, unknown> {
+  status?: string
+  execution_stats?: {
+    total_executions?: number
+    total_runs?: number
+    success_rate?: number
+  } | null
+}
+
 export const employees = {
-  listEmployees: () => req('/api/employees/'),
-  getEmployeeStatus: (employeeId: string) => req(`/api/employees/${encodeURIComponent(employeeId)}/status`),
-  getEmployeeManifest: async (employeeId: string) => {
+  listEmployees: () => req<EmployeeRow[]>('/api/employees/'),
+  getEmployeeStatus: (employeeId: string) =>
+    req<EmployeeStatusResponse>(`/api/employees/${encodeURIComponent(employeeId)}/status`),
+  getEmployeeManifest: async (employeeId: string): Promise<EmployeeManifestResponse> => {
     try {
-      return await req(`/api/employees/${encodeURIComponent(employeeId)}/manifest`)
-    } catch (e: any) {
-      const msg = String(e?.message || '')
+      return await req<EmployeeManifestResponse>(`/api/employees/${encodeURIComponent(employeeId)}/manifest`)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e || '')
       if (msg.includes('404') || msg.includes('不存在') || msg.includes('Not Found')) {
         return { pack_id: employeeId, name: employeeId, version: '0.0.0', manifest: {} }
       }

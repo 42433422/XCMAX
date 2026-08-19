@@ -273,13 +273,13 @@ interface ModRow {
   primary?: boolean
   warnings?: string[]
   error?: string
-  workflow_employees?: Array<Record<string, any>>
+  workflow_employees?: Array<Record<string, unknown>>
   path?: string
   description?: string
   library_blurb?: string
   updated_at?: string
   usage_scene?: string
-  [key: string]: any
+  [key: string]: unknown
 }
 
 const mods = ref<ModRow[]>([])
@@ -378,9 +378,9 @@ const filteredMods = computed(() => {
 function modIndustryId(m: ModRow): string {
   const industry = m?.industry
   if (industry && typeof industry === 'object') {
-    const id = String((industry as Record<string, any>).id || '').trim()
+    const id = String((industry as Record<string, unknown>).id || '').trim()
     if (id) return id
-    const name = String((industry as Record<string, any>).name || '').trim()
+    const name = String((industry as Record<string, unknown>).name || '').trim()
     if (name) return name
   }
   if (typeof industry === 'string' && industry.trim()) return industry.trim()
@@ -570,12 +570,15 @@ async function purgeRepoLibraryAndLocalState() {
   purgeLibraryBusy.value = true
   clearRepoPageLocalOnly()
   try {
-    const res: any = await api.adminPurgeAllMods()
+    const res = (await api.adminPurgeAllMods()) as {
+      removed_dir_count?: number
+      removed_user_mod_rows?: number
+    }
     const removed = Number(res?.removed_dir_count || 0)
     const removedRows = Number(res?.removed_user_mod_rows || 0)
     flash(`已清空能力货架：删除 ${removed} 个目录，截断 user_mods ${removedRows} 行`, true)
-  } catch (e: any) {
-    flash(`一键清空失败：${e?.message || String(e)}`, false)
+  } catch (e: unknown) {
+    flash(`一键清空失败：${e instanceof Error ? e.message : String(e)}`, false)
   } finally {
     purgeLibraryBusy.value = false
     await load({ cacheBust: true })
@@ -684,7 +687,7 @@ async function registerWorkflowToCatalog(modId: string, workflowIndex: number) {
   }
 }
 
-function goEmployeePrefill(modId: string, emp: Record<string, any>, workflowIndex = 0) {
+function goEmployeePrefill(modId: string, emp: Record<string, unknown>, workflowIndex = 0) {
   const label = (emp && (emp.label || emp.id)) || '员工'
   const sum = typeof emp?.panel_summary === 'string' ? emp.panel_summary.trim() : ''
   const desc = sum
@@ -766,7 +769,10 @@ async function load(opts?: { cacheBust?: boolean }) {
 async function loadEnterpriseUsage() {
   usageLoadError.value = ''
   try {
-    const res: any = await api.adminListUsers(200, 0, true)
+    const res = (await api.adminListUsers(200, 0, true)) as {
+      users?: EnterpriseUserRow[]
+      data?: { users?: EnterpriseUserRow[] }
+    }
     const rows: EnterpriseUserRow[] = Array.isArray(res?.users)
       ? res.users
       : Array.isArray(res?.data?.users)

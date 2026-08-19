@@ -440,7 +440,9 @@ export class StreamingTtsPlayer {
         }
         const { done, value } = await reader.read()
         if (value?.byteLength) {
-          const buf = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength)
+          const copy = new Uint8Array(value.byteLength)
+          copy.set(new Uint8Array(value.buffer, value.byteOffset, value.byteLength))
+          const buf = copy.buffer
           await append(buf)
           if (!started && sb.buffered.length > 0) {
             started = true

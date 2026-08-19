@@ -21,7 +21,7 @@ describe('butlerTaskBus', () => {
   })
 
   it('publishButlerTask defaults empty source to unknown', () => {
-    const event = publishButlerTask({ source: '', employeeId: 'e', brief: 'b' } as any)
+    const event = publishButlerTask({ source: '', employeeId: 'e', brief: 'b' } as UnsafeTestValue)
     expect(event.source).toBe('unknown')
   })
 
@@ -44,12 +44,12 @@ describe('butlerTaskBus', () => {
   })
 
   it('publishButlerTask handles non-object inputData', () => {
-    const event = publishButlerTask({ source: 's', employeeId: 'e', brief: 'b', inputData: 'bad' } as any)
+    const event = publishButlerTask({ source: 's', employeeId: 'e', brief: 'b', inputData: 'bad' } as UnsafeTestValue)
     expect(event.inputData).toEqual({})
   })
 
   it('publishButlerTask clamps maxConcurrency to 2 for invalid values', () => {
-    const event = publishButlerTask({ source: 's', employeeId: 'e', brief: 'b', maxConcurrency: 0 } as any)
+    const event = publishButlerTask({ source: 's', employeeId: 'e', brief: 'b', maxConcurrency: 0 } as UnsafeTestValue)
     expect(event.maxConcurrency).toBe(2)
   })
 
@@ -99,7 +99,7 @@ describe('butlerTaskBus', () => {
     const handler = vi.fn()
     const unsub = subscribeButlerTask(handler)
 
-    const empty = publishButlerTask({ source: 's', employeeId: '  ', brief: '  ', maxConcurrency: Number.NaN } as any)
+    const empty = publishButlerTask({ source: 's', employeeId: '  ', brief: '  ', maxConcurrency: Number.NaN } as UnsafeTestValue)
     expect(empty.employeeId).toBe('')
     expect(empty.brief).toBe('')
     expect(empty.maxConcurrency).toBe(2)

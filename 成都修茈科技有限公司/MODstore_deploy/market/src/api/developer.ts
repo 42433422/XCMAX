@@ -1,5 +1,10 @@
 import { req } from './shared'
 
+export interface NotificationListResponse extends Record<string, unknown> {
+  unread_count?: number
+  notifications?: Array<Record<string, unknown>>
+}
+
 export const developer = {
   developerListTokens: () => req('/api/developer/tokens'),
   developerCreateToken: (name: string, scopes: string[] = [], expiresDays: number | null = null) =>
@@ -61,7 +66,7 @@ export const notifications = {
   notificationsList: (unreadOnly = false, limit = 50, kind = '') => {
     const p = new URLSearchParams({ unread_only: unreadOnly ? 'true' : 'false', limit: String(limit) })
     if (kind) p.set('kind', kind)
-    return req(`/api/notifications/?${p}`)
+    return req<NotificationListResponse>(`/api/notifications/?${p}`)
   },
   notificationMarkRead: (id: string | number) => req(`/api/notifications/${id}/read`, { method: 'POST' }),
   notificationsMarkAllRead: () => req('/api/notifications/read-all', { method: 'POST' }),

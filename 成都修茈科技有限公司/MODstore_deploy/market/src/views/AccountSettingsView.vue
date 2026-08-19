@@ -249,8 +249,8 @@ async function onAvatarSelected(ev: Event) {
     msg.value = '头像已更新'
     await authStore.refreshSession(true)
     await loadAvatarPreview()
-  } catch (e: any) {
-    err.value = e?.message || '头像上传失败'
+  } catch (e: unknown) {
+    err.value = e instanceof Error ? e.message : '头像上传失败'
   } finally {
     avatarBusy.value = false
   }
@@ -267,8 +267,8 @@ async function removeAvatar() {
     avatarPreviewUrl.value = ''
     msg.value = '已移除头像'
     await authStore.refreshSession(true)
-  } catch (e: any) {
-    err.value = e?.message || '移除失败'
+  } catch (e: unknown) {
+    err.value = e instanceof Error ? e.message : '移除失败'
   } finally {
     avatarBusy.value = false
   }
@@ -340,8 +340,8 @@ onMounted(async () => {
     await authStore.refreshSession(true)
     await authStore.refreshMembership()
     await loadAvatarPreview()
-  } catch (e: any) {
-    err.value = e?.message || '加载失败'
+  } catch (e: unknown) {
+    err.value = e instanceof Error ? e.message : '加载失败'
   }
 })
 
@@ -357,8 +357,8 @@ async function saveProfile() {
     await api.updateProfile(username.value.trim())
     msg.value = '已保存'
     await authStore.refreshSession(true)
-  } catch (e: any) {
-    err.value = e?.message || '保存失败'
+  } catch (e: unknown) {
+    err.value = e instanceof Error ? e.message : '保存失败'
   } finally {
     saving.value = false
   }
@@ -372,8 +372,8 @@ async function changePw() {
     await api.changePassword(pw.value.current, pw.value.new1)
     msg.value = '密码已更新'
     pw.value = { current: '', new1: '', new2: '' }
-  } catch (e: any) {
-    err.value = e?.message || '修改失败'
+  } catch (e: unknown) {
+    err.value = e instanceof Error ? e.message : '修改失败'
   } finally {
     savingPw.value = false
   }

@@ -1,6 +1,67 @@
 import { req, authHeaders } from './shared'
 import type { WorkflowSandboxRequest, WorkflowSandboxResponse } from '../types/api'
 
+export interface WorkflowApiRow extends Record<string, unknown> {
+  id: number
+  name?: string
+  description?: string
+  is_active?: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+export interface WorkflowApiNode extends Record<string, unknown> {
+  id: number
+  workflow_id?: number
+  name?: string
+  node_type?: string
+  config?: Record<string, unknown>
+  position_x: number
+  position_y: number
+}
+
+export interface WorkflowApiEdge extends Record<string, unknown> {
+  id: number
+  source_node_id?: number
+  target_node_id?: number
+  condition?: string | null
+}
+
+export interface WorkflowApiDetail extends WorkflowApiRow {
+  nodes: WorkflowApiNode[]
+  edges: WorkflowApiEdge[]
+}
+
+export interface WorkflowEmployeeLookupResponse extends Record<string, unknown> {
+  workflows?: WorkflowApiRow[]
+  node_hits?: number
+  manifest_hits?: number
+}
+
+export interface EligibleWorkflowsResponse extends Record<string, unknown> {
+  workflows?: WorkflowApiRow[]
+  all_workflows?: WorkflowApiRow[]
+}
+
+export interface WorkflowExecutionResponse extends Record<string, unknown> {
+  id: number
+  workflow_id?: number
+  status?: string
+  started_at?: string
+  completed_at?: string
+  error_message?: string
+  output_data?: unknown
+}
+
+export interface WorkflowTriggerResponse extends Record<string, unknown> {
+  id: number
+  workflow_id?: number
+  trigger_type?: string
+  trigger_key?: string
+  is_active?: boolean
+  config?: Record<string, unknown>
+}
+
 export const scriptWorkflows = {
   listScriptWorkflows: (status: string = '') =>
     req(`/api/script-workflows${status ? `?status=${encodeURIComponent(status)}` : ''}`),
@@ -37,18 +98,18 @@ export const scriptWorkflows = {
 }
 
 export const workflow = {
-  listWorkflows: () => req('/api/workflow/'),
+  listWorkflows: () => req<WorkflowApiRow[]>('/api/workflow/'),
   listESkills: () => req('/api/eskills'),
   createESkill: (body: unknown) => req('/api/eskills', { method: 'POST', body: JSON.stringify(body || {}) }),
   runESkill: (id: string | number, body: unknown) => req(`/api/eskills/${id}/run`, { method: 'POST', body: JSON.stringify(body || {}) }),
-  listEmployeeEligibleWorkflows: () => req('/api/workflow/employee-eligible'),
-  listWorkflowsByEmployee: (employeeId: string) => req(`/api/workflow/by-employee?employee_id=${encodeURIComponent(employeeId)}`),
-  getWorkflow: (id: string | number) => req(`/api/workflow/${id}`),
-  createWorkflow: (name: string, description: string) => req('/api/workflow/', { method: 'POST', body: JSON.stringify({ name, description }) }),
+  listEmployeeEligibleWorkflows: () => req<EligibleWorkflowsResponse>('/api/workflow/employee-eligible'),
+  listWorkflowsByEmployee: (employeeId: string) => req<WorkflowEmployeeLookupResponse>(`/api/workflow/by-employee?employee_id=${encodeURIComponent(employeeId)}`),
+  getWorkflow: (id: string | number) => req<WorkflowApiDetail>(`/api/workflow/${id}`),
+  createWorkflow: (name: string, description: string) => req<WorkflowApiDetail>('/api/workflow/', { method: 'POST', body: JSON.stringify({ name, description }) }),
   updateWorkflow: (id: string | number, name: string | null, description: string | null, isActive: boolean) => req(`/api/workflow/${id}`, { method: 'PUT', body: JSON.stringify({ name, description, is_active: isActive }) }),
   deleteWorkflow: (id: string | number) => req(`/api/workflow/${id}`, { method: 'DELETE' }),
   addWorkflowNode: (workflowId: string | number, nodeType: string, name: string, config: unknown, positionX: number, positionY: number) =>
-    req(`/api/workflow/${workflowId}/nodes`, { method: 'POST', body: JSON.stringify({ node_type: nodeType, name, config, position_x: positionX, position_y: positionY }) }),
+    req<WorkflowApiNode>(`/api/workflow/${workflowId}/nodes`, { method: 'POST', body: JSON.stringify({ node_type: nodeType, name, config, position_x: positionX, position_y: positionY }) }),
   updateWorkflowNode: (nodeId: string | number, name: string, config: unknown, positionX: number, positionY: number) =>
     req(`/api/workflow/nodes/${nodeId}`, { method: 'PUT', body: JSON.stringify({ name, config, position_x: positionX, position_y: positionY }) }),
   deleteWorkflowNode: (nodeId: string | number) => req(`/api/workflow/nodes/${nodeId}`, { method: 'DELETE' }),
@@ -58,9 +119,9 @@ export const workflow = {
   executeWorkflow: (workflowId: string | number, inputData = {}) => req(`/api/workflow/${workflowId}/execute`, { method: 'POST', body: JSON.stringify({ input_data: inputData }) }),
   workflowValidate: (workflowId: string | number) => req(`/api/workflow/${workflowId}/validate`),
   workflowSandboxRun: (workflowId: string | number, payload: WorkflowSandboxRequest): Promise<WorkflowSandboxResponse> => req(`/api/workflow/${workflowId}/sandbox-run`, { method: 'POST', body: JSON.stringify(payload || {}) }),
-  listWorkflowExecutions: (workflowId: string | number, limit = 50, offset = 0) => req(`/api/workflow/${workflowId}/executions?limit=${limit}&offset=${offset}`),
-  listWorkflowTriggers: (workflowId: string | number) => req(`/api/workflow/${workflowId}/triggers`),
-  createWorkflowTrigger: (workflowId: string | number, payload: unknown) => req(`/api/workflow/${workflowId}/triggers`, { method: 'POST', body: JSON.stringify(payload || {}) }),
+  listWorkflowExecutions: (workflowId: string | number, limit = 50, offset = 0) => req<WorkflowExecutionResponse[]>(`/api/workflow/${workflowId}/executions?limit=${limit}&offset=${offset}`),
+  listWorkflowTriggers: (workflowId: string | number) => req<WorkflowTriggerResponse[]>(`/api/workflow/${workflowId}/triggers`),
+  createWorkflowTrigger: (workflowId: string | number, payload: unknown) => req<WorkflowTriggerResponse>(`/api/workflow/${workflowId}/triggers`, { method: 'POST', body: JSON.stringify(payload || {}) }),
   deleteWorkflowTrigger: (workflowId: string | number, triggerId: string | number) => req(`/api/workflow/${workflowId}/triggers/${triggerId}`, { method: 'DELETE' }),
   workflowWebhookRun: (workflowId: string | number, payload = {}) => req(`/api/workflow/${workflowId}/webhook-run`, { method: 'POST', body: JSON.stringify(payload) }),
   publishWorkflowVersion: (workflowId: string | number, note = '') =>

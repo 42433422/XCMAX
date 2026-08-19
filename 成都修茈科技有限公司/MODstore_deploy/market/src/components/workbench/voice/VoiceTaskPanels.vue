@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { orchStepEmployee } from '../../../utils/orchestrationSteps'
+import type { OrchStepLike } from '../../../utils/orchestrationSteps'
 
 const props = defineProps<{
   planSession: {
@@ -19,7 +20,7 @@ const props = defineProps<{
     intentKey?: string
   } | null
   orchestrationSession: {
-    steps?: Array<{ id?: string; label?: string; status?: string }>
+    steps?: OrchStepLike[]
     status?: string
     error?: string
   } | null
@@ -137,7 +138,7 @@ const showCompletion = computed(
       <ul v-if="orchestrationSession?.steps?.length" class="wb-voice-task-steps">
         <li
           v-for="st in orchestrationSession.steps"
-          :key="st.id || st.label"
+          :key="String(st.id || st.label || '')"
           class="wb-voice-task-step"
           :class="`wb-voice-task-step--${st.status || 'pending'}`"
         >

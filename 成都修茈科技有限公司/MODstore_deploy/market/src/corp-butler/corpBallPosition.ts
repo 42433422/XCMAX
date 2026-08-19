@@ -27,7 +27,7 @@ function overlapsMobileBackToTop(x: number, y: number): boolean {
   if (!isCorpMobileViewport()) return false
   const zoneLeft = window.innerWidth - 72
   const zoneTop = window.innerHeight - 80
-  return x >= zoneLeft && y >= zoneTop
+  return x + CORP_BALL_W >= zoneLeft && y + CORP_BALL_H >= zoneTop
 }
 
 export function clampCorpBallPosition(x: number, y: number): { x: number; y: number } {

@@ -18,7 +18,7 @@ function readExpertMode(): boolean {
 
 const expertMode = ref(readExpertMode())
 const ctx = provideModAuthoring()
-const { loading, loadError, modData, message, messageOk, goRepo, tab } = ctx
+const { loading, loadError, modData, message, messageOk, goRepo } = ctx
 
 watch(expertMode, (v) => {
   try {

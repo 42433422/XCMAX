@@ -24,7 +24,7 @@
           <h2>{{ wf.name }}</h2>
           <span class="swl-badge" :class="`status-${wf.status}`">{{ statusLabel(wf.status) }}</span>
         </header>
-        <p class="swl-goal">{{ formatBriefGoalForDisplay(wf.brief?.goal) }}</p>
+        <p class="swl-goal">{{ formatBriefGoalForDisplay(wf.brief?.goal || '') }}</p>
         <footer>
           <small>更新于 {{ formatTime(wf.updated_at) }}</small>
           <small v-if="wf.migrated_from_workflow_id">迁移自旧工作流 #{{ wf.migrated_from_workflow_id }}</small>
@@ -44,7 +44,7 @@ interface Wf {
   id: number
   name: string
   status: string
-  brief: any
+  brief: { goal?: string } | null
   updated_at: string
   migrated_from_workflow_id: number | null
 }
@@ -106,10 +106,10 @@ function formatTime(t: string) {
 async function load() {
   loading.value = true
   try {
-    const rows: any = await api.listScriptWorkflows()
-    list.value = rows || []
-  } catch (e: any) {
-    alert('加载失败：' + (e.message || e))
+    const rows = await api.listScriptWorkflows()
+    list.value = Array.isArray(rows) ? (rows as Wf[]) : []
+  } catch (e: unknown) {
+    alert('加载失败：' + (e instanceof Error ? e.message : String(e)))
   } finally {
     loading.value = false
   }

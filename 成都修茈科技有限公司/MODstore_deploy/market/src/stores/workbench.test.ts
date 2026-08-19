@@ -120,7 +120,7 @@ describe('useWorkbenchStore', () => {
 
   it('setTarget with null id defaults to null', () => {
     const store = useWorkbenchStore()
-    store.setTarget('employee', undefined as any, undefined, undefined)
+    store.setTarget('employee', undefined as UnsafeTestValue, undefined, undefined)
     expect(store.target.id).toBeNull()
     expect(store.target.name).toBe('新员工')
   })
@@ -190,7 +190,7 @@ describe('useWorkbenchStore', () => {
 
   it('finishRun without manifest does not auto-apply', () => {
     const store = useWorkbenchStore()
-    const originalManifest = { ...store.target.manifest }
+    const _originalManifest = { ...store.target.manifest }
     const run = {
       id: 'run-1',
       source: 'employee-draft' as const,

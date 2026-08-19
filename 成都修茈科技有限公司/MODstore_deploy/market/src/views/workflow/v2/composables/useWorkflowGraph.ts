@@ -38,6 +38,18 @@ export type {
 export type BackendNode = BackendWorkflowNode
 export type BackendEdge = BackendWorkflowEdge
 
+interface WorkflowDetailResponse {
+  name?: string
+  description?: string
+  is_active?: boolean
+  nodes?: BackendWorkflowNode[]
+  edges?: BackendWorkflowEdge[]
+}
+
+interface CreatedEntityResponse {
+  id: number | string
+}
+
 function genTmpId(): string {
   return `tmp_${Math.random().toString(36).slice(2, 10)}_${Date.now()}`
 }
@@ -85,7 +97,7 @@ export function useWorkflowGraph(workflowId: number) {
   async function loadGraph() {
     loading.value = true
     try {
-      const detail: any = await api.getWorkflow(workflowId)
+      const detail = (await api.getWorkflow(workflowId)) as WorkflowDetailResponse
       meta.value = {
         name: detail.name || '',
         description: detail.description || '',
@@ -119,14 +131,14 @@ export function useWorkflowGraph(workflowId: number) {
 
     saving.value = true
     try {
-      const created: any = await api.addWorkflowNode(
+      const created = (await api.addWorkflowNode(
         workflowId,
         kind,
         m.label,
         local.data!.config,
         position.x,
         position.y,
-      )
+      )) as CreatedEntityResponse
       const realId = String(created.id)
       nodes.value = nodes.value.map((n): WorkflowFlowNode => {
         if (n.id !== tmpId) return n
@@ -235,12 +247,12 @@ export function useWorkflowGraph(workflowId: number) {
     const condition = sourceHandle === 'true' || sourceHandle === 'false' ? sourceHandle : ''
     saving.value = true
     try {
-      const created: any = await api.addWorkflowEdge(
+      const created = (await api.addWorkflowEdge(
         workflowId,
         sn.data.backendId,
         tn.data.backendId,
         condition,
-      )
+      )) as CreatedEntityResponse
       edges.value = [
         ...edges.value,
         {

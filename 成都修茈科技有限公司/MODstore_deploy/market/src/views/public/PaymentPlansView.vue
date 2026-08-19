@@ -89,13 +89,23 @@ const SVIP_LADDER_REVEAL_KEY = 'modstore_svip_ladder_reveal'
 
 const router = useRouter()
 const authStore = useAuthStore()
-const plans = ref([])
-const myPlan = ref(null)
+type PaymentPlan = {
+  id: string
+  name?: string
+  price: number
+  description?: string
+  features?: string[]
+  requires_plan?: string | boolean | null
+  [key: string]: unknown
+}
+
+const plans = ref<PaymentPlan[]>([])
+const myPlan = ref<PaymentPlan | null>(null)
 const loading = ref(true)
 const checkingOut = ref(false)
 const checkingOutId = ref('')
 const errorMsg = ref('')
-const errorBannerRef = ref(null)
+const errorBannerRef = ref<HTMLElement | null>(null)
 
 const svipEntryRevealOverlay = ref(false)
 const hideSvipLadderTiers = ref(false)
@@ -133,10 +143,10 @@ const MEMBERSHIP_TIER_ORDER = {
   plan_svip8: 9,
 }
 
-function planTierOrder(planId) {
+function planTierOrder(planId: string | null | undefined): number {
   const id = String(planId || '').trim()
   return Object.prototype.hasOwnProperty.call(MEMBERSHIP_TIER_ORDER, id)
-    ? MEMBERSHIP_TIER_ORDER[id]
+    ? MEMBERSHIP_TIER_ORDER[id as keyof typeof MEMBERSHIP_TIER_ORDER]
     : -1
 }
 
@@ -146,7 +156,7 @@ const myPlanTierOrder = computed(() => planTierOrder(myPlan.value?.id))
  * 当前用户已拥有比该套餐更高的有效档位，不应再购买这一档（降级/重复买低档）。
  * 无会员或 current 为未知 id 时不过滤，避免误伤。
  */
-function isBelowMyPlan(plan) {
+function isBelowMyPlan(plan: PaymentPlan): boolean {
   if (!plan?.id || isCurrent(plan)) return false
   const cur = myPlanTierOrder.value
   const t = planTierOrder(plan.id)
@@ -154,12 +164,12 @@ function isBelowMyPlan(plan) {
   return t < cur
 }
 
-function isSvipLadderPlan(plan) {
+function isSvipLadderPlan(plan: PaymentPlan): boolean {
   return /^plan_svip[2-8]$/.test(String(plan?.id || ''))
 }
 
 /** SVIP2→0 … SVIP8→6s */
-function svipLadderStaggerDelay(plan) {
+function svipLadderStaggerDelay(plan: PaymentPlan): string {
   const m = String(plan?.id || '').match(/^plan_svip(\d+)$/)
   if (!m) return '0s'
   const n = Math.min(8, Math.max(2, parseInt(m[1], 10) || 2))
@@ -197,7 +207,7 @@ function startSvipEntryRevealIfDue() {
 }
 
 /** 把后端 plan_id 映射成 tier 关键字，用于卡片渐变色等样式 hook */
-function tierOf(plan) {
+function tierOf(plan: PaymentPlan): string {
   const id = String(plan?.id || '')
   if (id === 'plan_basic') return 'vip'
   if (id === 'plan_pro') return 'vip_plus'
@@ -225,8 +235,8 @@ const visiblePlans = computed(() => {
   })
 })
 
-function isCurrent(plan) {
-  return plan?.id && myPlan.value?.id && plan.id === myPlan.value.id
+function isCurrent(plan: PaymentPlan): boolean {
+  return Boolean(plan.id && myPlan.value?.id && plan.id === myPlan.value.id)
 }
 
 async function loadPlans() {
@@ -239,8 +249,8 @@ async function loadPlans() {
     myPlan.value = myPlanRes?.plan || null
     // 把最新会员状态同步给全局 auth store，导航栏用户名颜色随之更新
     void authStore.refreshMembership()
-  } catch (e) {
-    errorMsg.value = '加载会员套餐失败：' + (e?.message || String(e))
+  } catch (e: unknown) {
+    errorMsg.value = '加载会员套餐失败：' + (e instanceof Error ? e.message : String(e))
   } finally {
     loading.value = false
     await nextTick()
@@ -250,7 +260,7 @@ async function loadPlans() {
 
 onMounted(loadPlans)
 
-async function handleBuy(plan) {
+async function handleBuy(plan: PaymentPlan) {
   if (checkingOut.value) return
   if (isCurrent(plan)) return
   if (isBelowMyPlan(plan)) return
@@ -270,14 +280,15 @@ async function handleBuy(plan) {
       return
     }
     if (res.type === 'page' || res.type === 'wap') {
-      window.location.href = res.redirect_url
+      if (res.redirect_url) window.location.href = res.redirect_url
+      else errorMsg.value = '支付网关未返回跳转地址'
     } else if (res.type === 'precreate' || res.type === 'wechat_native') {
       router.push({ name: 'checkout', params: { orderId: res.order_id } })
     } else {
       errorMsg.value = '未知的支付返回类型：' + (res.type || '空')
     }
-  } catch (e) {
-    let detail = e?.message || String(e)
+  } catch (e: unknown) {
+    let detail = e instanceof Error ? e.message : String(e)
     if (e instanceof ApiError && typeof e.status === 'number') {
       detail += `（HTTP ${e.status}）`
     }

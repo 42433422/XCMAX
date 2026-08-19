@@ -77,7 +77,7 @@ describe('payment api', () => {
   it('paymentOrders builds query string with status', async () => {
     vi.mocked(req).mockResolvedValue({})
     await payment.paymentOrders('paid', 10, 0)
-    const call = vi.mocked(req).mock.calls[0] as any[]
+    const call = vi.mocked(req).mock.calls[0] as UnsafeTestValue[]
     const url = call[0] as string
     expect(url).toContain('status=paid')
     expect(url).toContain('limit=10')
@@ -167,7 +167,7 @@ describe('payment api', () => {
       .mockResolvedValueOnce({ plan_id: 'p', request_id: 'r', timestamp: 1, signature: 's' })
       .mockResolvedValueOnce(checkout)
     await payment.paymentCheckout({ plan_id: 'p', pay_channel: 'alipay', pay_type: 'wap' })
-    const secondCall = vi.mocked(req).mock.calls[1] as any[]
+    const secondCall = vi.mocked(req).mock.calls[1] as UnsafeTestValue[]
     const body = JSON.parse(secondCall[1].body as string)
     expect(body.pay_channel).toBe('alipay')
     expect(body.pay_type).toBe('wap')

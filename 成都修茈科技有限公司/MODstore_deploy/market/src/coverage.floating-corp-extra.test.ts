@@ -5,7 +5,7 @@ const mockRunIntakeTask = vi.hoisted(() => vi.fn(async () => ({ success: true })
 const mockHandleInput = vi.hoisted(() => vi.fn(async () => 'ok'))
 const mockRunContactAiAssistFill = vi.hoisted(() => vi.fn())
 const mockStreamingTts = vi.hoisted(() => ({
-  speak: vi.fn(async () => undefined),
+  speak: vi.fn(async (): Promise<void> => undefined),
   stop: vi.fn(),
 }))
 const mockAgentStore = vi.hoisted(() => ({
@@ -14,10 +14,10 @@ const mockAgentStore = vi.hoisted(() => ({
   position: { x: 20, y: 20 },
   consentGiven: false,
   isLoading: false,
-  openPanel: vi.fn(function (this: any) { this.isOpen = true }),
-  grantConsent: vi.fn(function (this: any) { this.consentGiven = true; this.showPermissionDialog = false }),
-  dismissLater: vi.fn(function (this: any) { this.showPermissionDialog = false }),
-  savePosition: vi.fn(function (this: any, x: number, y: number) { this.position = { x, y } }),
+  openPanel: vi.fn(function (this: UnsafeTestValue) { this.isOpen = true }),
+  grantConsent: vi.fn(function (this: UnsafeTestValue) { this.consentGiven = true; this.showPermissionDialog = false }),
+  dismissLater: vi.fn(function (this: UnsafeTestValue) { this.showPermissionDialog = false }),
+  savePosition: vi.fn(function (this: UnsafeTestValue, x: number, y: number) { this.position = { x, y } }),
   addMessage: vi.fn(),
   updateLastMessage: vi.fn(),
 }))
@@ -95,15 +95,15 @@ class FakeRecognition {
   lang = ''
   interimResults = false
   continuous = false
-  onresult: ((event: any) => void) | null = null
-  onerror: ((event: any) => void) | null = null
+  onresult: ((event: UnsafeTestValue) => void) | null = null
+  onerror: ((event: UnsafeTestValue) => void) | null = null
   onend: (() => void) | null = null
   start = vi.fn(() => {
     if (FakeRecognition.startError) throw FakeRecognition.startError
   })
   stop = vi.fn(() => {
     this.onend?.()
-  }, 15_000)
+  })
   constructor() {
     FakeRecognition.instances.push(this)
   }
