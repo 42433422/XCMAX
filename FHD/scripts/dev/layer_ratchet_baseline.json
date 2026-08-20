@@ -1,6 +1,6 @@
 {
   "_note": "分层债棘轮基线（只减不增）。由 check_layer_ratchet.py --update-baseline 维护。",
-  "services_py_file_count": 171,
+  "services_py_file_count": 190,
   "routes_importing_services": [],
   "domain_reverse_imports": [],
   "domain_reverse_imports_whitelist": {}
