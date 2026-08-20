@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 import tempfile
 import zipfile
@@ -19,6 +20,7 @@ from sandbox_app.operational_errors import BOUNDARY_ERRORS
 from sandbox_app.sandbox_settings import default_mods_root
 
 router = APIRouter(prefix="/api/mod-store", tags=["sandbox-mod-store"])
+logger = logging.getLogger(__name__)
 
 
 def _safe_extract(zf: zipfile.ZipFile, dest: Path) -> None:
@@ -80,11 +82,12 @@ async def install_mod(file: UploadFile = File(...)):
         mm = get_mod_manager()
         mm._refresh_mods_root_if_needed()
         mm.load_all_mods()
-    except BOUNDARY_ERRORS as exc:
+    except BOUNDARY_ERRORS:
+        logger.exception("sandbox mod reload warning")
         return {
             "success": True,
-            "message": f"Mod {mod_id} 已安装，但重新加载时有警告: {exc}",
-            "data": {"id": mod_id, "path": str(target), "reload_warning": str(exc)},
+            "message": f"Mod {mod_id} 已安装，但重新加载时有警告",
+            "data": {"id": mod_id, "path": str(target), "reload_warning": "unavailable"},
             "sandbox": True,
         }
 

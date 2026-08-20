@@ -55,9 +55,9 @@ def intent_test(body: dict[str, Any] | None) -> dict[str, Any] | JSONResponse:
         return JSONResponse({"success": False, "message": "消息内容不能为空"}, status_code=400)
     try:
         return {"success": True, "data": recognize_intents(message)}
-    except RECOVERABLE_ERRORS as e:
+    except RECOVERABLE_ERRORS:
         return JSONResponse(
-            {"success": False, "message": f"意图识别失败：{str(e)}"},
+            {"success": False, "message": "意图识别失败，请稍后重试"},
             status_code=500,
         )
 

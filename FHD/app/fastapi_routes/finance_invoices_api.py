@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+_INVOICE_UNAVAILABLE = "发票服务暂时不可用，请稍后重试"
 
 router = APIRouter(prefix="/api/finance/invoices", tags=["finance-invoices"])
 
@@ -86,9 +87,9 @@ def finance_crm_invoices_list(
             offset=offset,
         )
         return {"success": True, "finance_self_hosted": True, **data}
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("crm invoices list failed")
-        return JSONResponse({"success": False, "message": str(exc)[:500]}, status_code=500)
+        return JSONResponse({"success": False, "message": _INVOICE_UNAVAILABLE}, status_code=500)
 
 
 @router.get("/crm/{invoice_id}")
@@ -103,9 +104,9 @@ def finance_crm_invoice_detail(request: Request, invoice_id: int):
         if not inv:
             return JSONResponse({"success": False, "message": "发票不存在"}, status_code=404)
         return {"success": True, "invoice": inv}
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("crm invoice detail failed")
-        return JSONResponse({"success": False, "message": str(exc)[:500]}, status_code=500)
+        return JSONResponse({"success": False, "message": _INVOICE_UNAVAILABLE}, status_code=500)
 
 
 @router.post("/crm/issue")
@@ -151,11 +152,11 @@ def finance_crm_invoice_issue(request: Request, body: CrmInvoiceIssueBody):
         doc = save_customer_pipeline(doc, strict_crm=False)
         inv = doc.get("invoice") if isinstance(doc.get("invoice"), dict) else {}
         return {"success": True, "pipeline": doc, "invoice": inv}
-    except ValueError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
-    except RECOVERABLE_ERRORS as exc:
+    except ValueError:
+        return JSONResponse({"success": False, "message": "发票参数无效"}, status_code=400)
+    except RECOVERABLE_ERRORS:
         logger.exception("crm invoice issue failed")
-        return JSONResponse({"success": False, "message": str(exc)[:500]}, status_code=500)
+        return JSONResponse({"success": False, "message": _INVOICE_UNAVAILABLE}, status_code=500)
 
 
 @router.post("/crm/{invoice_id}/archive")
@@ -177,9 +178,9 @@ def finance_crm_invoice_archive(request: Request, invoice_id: int):
             "archive": result,
             "invoice": inv,
         }
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("crm invoice archive failed")
-        return JSONResponse({"success": False, "message": str(exc)[:500]}, status_code=500)
+        return JSONResponse({"success": False, "message": _INVOICE_UNAVAILABLE}, status_code=500)
 
 
 @router.get("/market")

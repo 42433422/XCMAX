@@ -44,7 +44,6 @@ import {
   resolveClientWorkshopRoute,
 } from '@/domain/clientWorkshops'
 
-import { createEmptyEmployeeConfigV2 } from '@/domain/employeeConfigV2'
 
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -3545,17 +3544,6 @@ function onNodeClick({ node }: { node: Node }) {
   syncEmployeeRouteQuery(emp.id)
 }
 
-function buildDutyGraphEmployeePrefill(emp: EmpRow): Record<string, unknown> {
-  const base = createEmptyEmployeeConfigV2() as Record<string, unknown>
-  const ident = { ...(base.identity as Record<string, unknown>), id: emp.id, name: emp.name || emp.id }
-  return {
-    ...base,
-    id: emp.id,
-    name: emp.name || emp.id,
-    identity: ident,
-  }
-}
-
 function goUse(emp: EmpRow) {
   currentMode.value = 'client'
   if (!isPage.value) emit('close')
@@ -3563,13 +3551,6 @@ function goUse(emp: EmpRow) {
     // 数字管家是常驻浮窗，没有独立工作台路由；带管理员到技能管理页
     void router.push({ name: 'admin-butler-skills' })
     return
-  }
-  if (emp.source === 'v1_catalog') {
-    try {
-      sessionStorage.setItem('modstore_employee_prefill', JSON.stringify(buildDutyGraphEmployeePrefill(emp)))
-    } catch {
-      /* quota / private mode */
-    }
   }
   void router.push({ name: 'workbench-shell', params: { target: 'employee' }, query: { packId: emp.id, fromDutyGraph: '1' } })
 }

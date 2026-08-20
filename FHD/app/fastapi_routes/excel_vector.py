@@ -15,6 +15,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_upload_dir
 
 logger = logging.getLogger(__name__)
+_EXCEL_VECTOR_UNAVAILABLE = "Excel 向量服务暂时不可用，请稍后重试"
 
 router = APIRouter(prefix="/api/excel/vector", tags=["excel-vector"])
 
@@ -204,9 +205,11 @@ def query_excel_vector(request: Request, data: dict[str, Any] = Body(default_fac
         result = _agent_node_output(run, "excel_vector_query")
         status = _excel_vector_status(result)
         return JSONResponse(result, status_code=status)
-    except RECOVERABLE_ERRORS as err:
-        logger.exception("Excel 向量 query 失败: %s", err)
-        return JSONResponse({"success": False, "message": str(err)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("Excel 向量 query 失败")
+        return JSONResponse(
+            {"success": False, "message": _EXCEL_VECTOR_UNAVAILABLE}, status_code=500
+        )
 
 
 @router.get("/indexes")
@@ -214,9 +217,11 @@ def list_excel_vector_indexes():
     try:
         search_service = get_excel_vector_search_app_service()
         return JSONResponse(search_service.list_indexes())
-    except RECOVERABLE_ERRORS as err:
-        logger.exception("获取向量索引失败: %s", err)
-        return JSONResponse({"success": False, "message": str(err)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("获取向量索引失败")
+        return JSONResponse(
+            {"success": False, "message": _EXCEL_VECTOR_UNAVAILABLE}, status_code=500
+        )
 
 
 @router.delete("/indexes/{index_id}")
@@ -226,6 +231,8 @@ def delete_excel_vector_index(index_id: str):
         result = search_service.delete_index(index_id=index_id)
         status = 200 if result.get("success") else 404
         return JSONResponse(result, status_code=status)
-    except RECOVERABLE_ERRORS as err:
-        logger.exception("删除向量索引失败: %s", err)
-        return JSONResponse({"success": False, "message": str(err)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("删除向量索引失败")
+        return JSONResponse(
+            {"success": False, "message": _EXCEL_VECTOR_UNAVAILABLE}, status_code=500
+        )

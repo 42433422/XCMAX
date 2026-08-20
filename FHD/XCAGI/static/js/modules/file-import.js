@@ -367,7 +367,7 @@ function handleFileSelect(files) {
         return;
     }
 
-    const uploadSessionId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const uploadSessionId = crypto.randomUUID();
     activeUploadSessionId = uploadSessionId;
     isUploadProcessing = true;
 

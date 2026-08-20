@@ -88,8 +88,8 @@ async def _build_ctx(mod_id: str, employee_id: str) -> Dict[str, Any]:
             )
 
         ctx["call_llm"] = _call_llm
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("mod_employee_complete unavailable: %s", exc)
+    except RECOVERABLE_ERRORS:
+        logger.warning("mod_employee_complete unavailable", exc_info=True)
 
     try:
         import httpx as _httpx
@@ -104,8 +104,9 @@ async def _build_ctx(mod_id: str, employee_id: str) -> Dict[str, Any]:
                         "text": r.text,
                         "error": "",
                     }
-            except RECOVERABLE_ERRORS as e:  # noqa: BLE001
-                return {"ok": False, "status": 0, "text": "", "error": str(e)[:500]}
+            except RECOVERABLE_ERRORS:  # noqa: BLE001
+                logger.debug("employee http GET failed", exc_info=True)
+                return {"ok": False, "status": 0, "text": "", "error": "request failed"}
 
         async def _http_post(url, *, json_body=None, data=None, headers=None, timeout=30):
             try:
@@ -117,8 +118,9 @@ async def _build_ctx(mod_id: str, employee_id: str) -> Dict[str, Any]:
                         "text": r.text,
                         "error": "",
                     }
-            except RECOVERABLE_ERRORS as e:  # noqa: BLE001
-                return {"ok": False, "status": 0, "text": "", "error": str(e)[:500]}
+            except RECOVERABLE_ERRORS:  # noqa: BLE001
+                logger.debug("employee http POST failed", exc_info=True)
+                return {"ok": False, "status": 0, "text": "", "error": "request failed"}
 
         ctx["http_get"] = _http_get
         ctx["http_post"] = _http_post
@@ -143,9 +145,9 @@ async def _dispatch_run(mod_id: str, emp_id: str, stem: str, payload: Optional[D
         if asyncio.iscoroutine(out):
             out = await out
         return {"success": True, "data": out}
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+    except BOUNDARY_ERRORS:  # noqa: BLE001
         logger.exception("employee run failed emp=%s", emp_id)
-        return _unified_err(f"employee run failed: {exc!s}"[:300], employee_id=emp_id)
+        return _unified_err("employee run failed", employee_id=emp_id)
 
 
 def register_fastapi_routes(app, mod_id: str) -> None:

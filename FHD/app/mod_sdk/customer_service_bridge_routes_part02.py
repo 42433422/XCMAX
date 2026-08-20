@@ -59,8 +59,8 @@ def _register_routes_part02(router, mod_id, facade):
             submission = await fetch_submission_by_audit_code(
                 audit_code, market_user_id=int(market_user_id) if market_user_id else None
             )
-        except ValueError as exc:
-            return {"success": False, "error": str(exc)}
+        except ValueError:
+            return {"success": False, "error": "请求参数无效"}
         except facade.BOUNDARY_ERRORS:
             facade.logger.exception("fetch intake by audit code failed")
             return {"success": False, "error": "获取表单失败，请稍后重试"}
@@ -74,8 +74,8 @@ def _register_routes_part02(router, mod_id, facade):
             doc = await redeem_submission_by_audit_code(
                 int(body.market_user_id), body.audit_code, username=body.username
             )
-        except ValueError as exc:
-            return {"success": False, "error": str(exc)}
+        except ValueError:
+            return {"success": False, "error": "请求参数无效"}
         except facade.BOUNDARY_ERRORS:
             facade.logger.exception("redeem intake audit code failed")
             return {"success": False, "error": "校验审核码失败，请稍后重试"}
@@ -147,10 +147,10 @@ def _register_routes_part02(router, mod_id, facade):
                 int(body.market_user_id), username=body.username
             )
             return {"success": True, "data": out}
-        except CrmSyncError as exc:
-            return {"success": False, "error": str(exc)}
-        except ValueError as exc:
-            return {"success": False, "error": str(exc)}
+        except CrmSyncError:
+            return {"success": False, "error": "CRM 同步服务暂时不可用"}
+        except ValueError:
+            return {"success": False, "error": "请求参数无效"}
 
     @router.post("/user-cs/crm/pull-external")
     async def user_cs_crm_pull_external(body: facade.PipelineBody):
@@ -164,10 +164,10 @@ def _register_routes_part02(router, mod_id, facade):
             if isinstance(pull, dict) and (not pull.get("ok")) and (not pull.get("skipped")):
                 return {"success": False, "error": pull.get("error") or "pull_failed", "data": out}
             return {"success": True, "data": out}
-        except CrmSyncError as exc:
-            return {"success": False, "error": str(exc)}
-        except ValueError as exc:
-            return {"success": False, "error": str(exc)}
+        except CrmSyncError:
+            return {"success": False, "error": "CRM 同步服务暂时不可用"}
+        except ValueError:
+            return {"success": False, "error": "请求参数无效"}
 
     @router.get("/user-cs/delivery")
     def user_cs_delivery_get(market_user_id: int, username: str = ""):
@@ -213,8 +213,8 @@ def _register_routes_part02(router, mod_id, facade):
                     source="delivery_plan",
                     note="delivery_plan_saved",
                 )
-            except ValueError as exc:
-                return {"success": False, "error": str(exc)}
+            except ValueError:
+                return {"success": False, "error": "请求参数无效"}
         else:
             doc = save_pipeline(doc)
         return {"success": True, "data": {"pipeline": doc}}
@@ -231,8 +231,8 @@ def _register_routes_part02(router, mod_id, facade):
                 notes=body.note or "",
             )
             return {"success": True, "data": out}
-        except ValueError as exc:
-            return {"success": False, "error": str(exc)}
+        except ValueError:
+            return {"success": False, "error": "请求参数无效"}
 
     @router.post("/user-cs/delivery/signoff/confirm")
     def user_cs_delivery_signoff_confirm(body: facade.PipelineBody):
@@ -246,8 +246,8 @@ def _register_routes_part02(router, mod_id, facade):
                 sid, market_user_id=int(body.market_user_id), username=body.username
             )
             return {"success": True, "data": out}
-        except ValueError as exc:
-            return {"success": False, "error": str(exc)}
+        except ValueError:
+            return {"success": False, "error": "请求参数无效"}
 
     @router.post("/user-cs/delivery/notify-progress")
     def user_cs_delivery_notify_progress(body: facade.PipelineBody):
@@ -270,8 +270,9 @@ def _register_routes_part02(router, mod_id, facade):
         )
         try:
             send_result = get_desktop_automation_service().send_wechat_message(contact, text)
-        except facade.BOUNDARY_ERRORS as exc:
-            return {"success": False, "error": str(exc)[:300]}
+        except facade.BOUNDARY_ERRORS:
+            facade.logger.exception("customer service send failed")
+            return {"success": False, "error": "客服消息发送服务暂时不可用"}
         ok = bool(send_result.get("success")) and bool(
             send_result.get("message_sent", send_result.get("success"))
         )

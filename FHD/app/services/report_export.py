@@ -29,9 +29,9 @@ def export_report_to_excel(
             "filename": f"{filename}.xlsx",
             "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         }
-    except RECOVERABLE_ERRORS as exc:
-        logger.error("导出Excel失败: %s", exc)
-        return {"success": False, "message": str(exc)}
+    except RECOVERABLE_ERRORS:
+        logger.exception("导出Excel失败")
+        return {"success": False, "message": "报表导出服务暂时不可用"}
 
 
 __all__ = ["export_report_to_excel"]

@@ -29,6 +29,7 @@ from app.bootstrap import get_shipment_application_service_core
 from app.db.models import ShipmentRecord
 from app.fastapi_routes import shipment_agent_runtime as _shipment_agent_runtime
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.security.secure_filename import secure_filename
 
 _agent_node_output = _shipment_agent_runtime.agent_node_output
 _shipment_agent_user_id = _shipment_agent_runtime.shipment_agent_user_id
@@ -139,10 +140,10 @@ def shipment_generate(request: Request, payload: dict[str, Any] = Body(default_f
             route_path="/api/shipment/generate",
         )
         return JSONResponse(result, status_code=200 if result.get("success") else 500)
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("shipment generate: %s", e)
+    except RECOVERABLE_ERRORS:
+        logger.exception("shipment generate failed")
         return JSONResponse(
-            {"success": False, "message": f"生成失败：{str(e)}"},
+            {"success": False, "message": "发货单生成服务暂时不可用"},
             status_code=500,
         )
 
@@ -155,9 +156,6 @@ def shipment_print(request: Request, payload: dict[str, Any] = Body(default_fact
 
     if not file_path:
         raise HTTPException(status_code=400, detail="文件路径不能为空")
-    if not os.path.exists(str(file_path)):
-        raise HTTPException(status_code=404, detail="文件不存在")
-
     try:
         if order_id:
             try:
@@ -177,10 +175,10 @@ def shipment_print(request: Request, payload: dict[str, Any] = Body(default_fact
         return JSONResponse(result, status_code=200 if result.get("success") else 500)
     except HTTPException:
         raise
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("shipment print: %s", e)
+    except RECOVERABLE_ERRORS:
+        logger.exception("shipment print failed")
         return JSONResponse(
-            {"success": False, "message": f"打印失败：{str(e)}"},
+            {"success": False, "message": "发货单打印服务暂时不可用"},
             status_code=500,
         )
 
@@ -190,7 +188,10 @@ def shipment_download(filename: str):
     from app.utils.path_io.path_utils import get_app_data_dir
 
     output_dir = os.path.join(get_app_data_dir(), "shipment_outputs")
-    safe = os.path.basename(filename) or filename
+    base_name = os.path.basename(str(filename or "").replace("\\", "/"))
+    safe = secure_filename(base_name)
+    if not safe or safe != base_name:
+        return JSONResponse({"success": False, "message": "文件名无效"}, status_code=400)
     file_path = os.path.join(output_dir, safe)
     if file_path and os.path.exists(file_path):
         return FileResponse(

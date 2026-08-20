@@ -53,7 +53,7 @@ def _get_model():
     try:
         from faster_whisper import WhisperModel
     except ImportError as exc:
-        logger.error("faster-whisper 未安装，无法处理语音转写请求: %s", exc)
+        logger.exception("faster-whisper 未安装，无法处理语音转写请求")
         if getattr(sys, "frozen", False):
             detail = "当前桌面安装包缺少语音识别组件，请更新或重新安装 XCAGI。"
         else:
@@ -81,10 +81,10 @@ def _get_model():
         model_source = _resolve_model_source(model_name)
         instance = WhisperModel(model_source, device=device, compute_type=compute_type)
     except RECOVERABLE_ERRORS as exc:  # 例如 CUDA 不可用、模型未下载、依赖 DLL 缺失
-        logger.exception("加载 faster-whisper 模型失败: %s", exc)
+        logger.exception("加载 faster-whisper 模型失败")
         raise HTTPException(
             status_code=503,
-            detail=f"语音识别模型加载失败：{exc}",
+            detail="语音识别模型暂时不可用，请稍后重试",
         ) from exc
 
     _model_holder["instance"] = instance
@@ -135,8 +135,8 @@ def _run_transcribe(path: Path, language: str | None) -> dict[str, Any]:
             without_timestamps=True,
         )
     except RECOVERABLE_ERRORS as exc:
-        logger.exception("faster-whisper 转写失败: %s", exc)
-        raise HTTPException(status_code=500, detail=f"语音识别执行失败：{exc}") from exc
+        logger.exception("faster-whisper 转写失败")
+        raise HTTPException(status_code=500, detail="语音识别执行失败，请稍后重试") from exc
 
     parts = [(seg.text or "").strip() for seg in segments_iter]
     text = "".join(parts).strip()
@@ -192,9 +192,9 @@ async def voice_health():
 
         ready = True
         reason = ""
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         ready = False
-        reason = str(exc)
+        reason = "faster-whisper not installed"
     return {
         "success": True,
         "data": {
@@ -470,10 +470,10 @@ async def voice_command(
             executed = bool(exec_payload.get("executed", False))
             result = exec_payload.get("result")
             reason = exec_payload.get("reason", "executed" if executed else "execution_failed")
-        except RECOVERABLE_ERRORS as exc:
-            logger.exception("语音指令自动执行失败: tool=%s error=%s", tool_key, exc)
+        except RECOVERABLE_ERRORS:
+            logger.exception("语音指令自动执行失败")
             reason = "execution_failed"
-            result = {"error": str(exc)}
+            result = {"error": "语音指令执行服务暂时不可用"}
 
     return {
         "success": True,

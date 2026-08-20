@@ -150,9 +150,9 @@ async def ocr_recognize(
         result = _agent_node_output(run, "ocr_recognize")
         status_code = _ocr_status(result)
         return JSONResponse(result, status_code=status_code)
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("OCR识别失败: %s", e)
-        return JSONResponse({"success": False, "message": f"识别失败: {str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("OCR识别失败")
+        return JSONResponse({"success": False, "message": "识别服务暂时不可用"}, status_code=500)
 
 
 @router.post("/extract", response_model=OcrExtractResponse)
@@ -170,9 +170,11 @@ def ocr_extract(request: Request, data: dict = Body(default_factory=dict)):
         )
         result = _agent_node_output(run, "ocr_extract")
         return JSONResponse(result, status_code=_ocr_status(result))
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("提取结构化数据失败: %s", e)
-        return JSONResponse({"success": False, "message": f"提取失败: {str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("提取结构化数据失败")
+        return JSONResponse(
+            {"success": False, "message": "数据提取服务暂时不可用"}, status_code=500
+        )
 
 
 @router.post("/analyze", response_model=OcrAnalyzeResponse)
@@ -190,9 +192,11 @@ def ocr_analyze(request: Request, data: dict = Body(default_factory=dict)):
         )
         result = _agent_node_output(run, "ocr_analyze")
         return JSONResponse(result, status_code=_ocr_status(result))
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("分析文本失败: %s", e)
-        return JSONResponse({"success": False, "message": f"分析失败: {str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("分析文本失败")
+        return JSONResponse(
+            {"success": False, "message": "文本分析服务暂时不可用"}, status_code=500
+        )
 
 
 @router.post("/recognize-and-extract", response_model=OcrRecognizeAndExtractResponse)
@@ -217,9 +221,11 @@ async def ocr_recognize_and_extract(
         )
         result = _agent_node_output(run, "ocr_recognize_and_extract")
         return JSONResponse(result, status_code=_ocr_status(result))
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("OCR识别和提取失败: %s", e)
-        return JSONResponse({"success": False, "message": f"处理失败: {str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("OCR识别和提取失败")
+        return JSONResponse(
+            {"success": False, "message": "OCR 处理服务暂时不可用"}, status_code=500
+        )
 
 
 @router.get("/test", response_model=OcrTestResponse)

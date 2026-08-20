@@ -136,7 +136,9 @@ def load_spec(text: str) -> Dict[str, Any]:
         data = json.loads(s)
     except (ValueError, TypeError):
         if yaml is None:
-            raise OpenApiParseError("无法解析为 JSON，且当前环境未安装 PyYAML，无法解析 YAML")
+            raise OpenApiParseError(
+                "无法解析为 JSON，且当前环境未安装 PyYAML，无法解析 YAML"
+            )
         try:
             data = yaml.safe_load(s)
         except BOUNDARY_ERRORS as exc:  # noqa: BLE001
@@ -169,7 +171,9 @@ def _validate_basic(spec: Mapping[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_ref(spec: Mapping[str, Any], ref: str, *, _seen: Optional[set] = None) -> Any:
+def _resolve_ref(
+    spec: Mapping[str, Any], ref: str, *, _seen: Optional[set] = None
+) -> Any:
     """只解析同文档内 ``#/...`` 形式的 $ref，外部引用忽略后留原样。"""
     if not isinstance(ref, str) or not ref.startswith("#/"):
         return None
@@ -254,7 +258,16 @@ def _slugify_symbol(parts: List[str]) -> str:
 
 
 def _operation_id_from_path(method: str, path: str, used: set) -> str:
-    cleaned = re.sub(r"\{[^}]+\}", "", path)
+    cleaned_chars: List[str] = []
+    inside_parameter = False
+    for char in path[:4096]:
+        if char == "{":
+            inside_parameter = True
+        elif char == "}":
+            inside_parameter = False
+        elif not inside_parameter:
+            cleaned_chars.append(char)
+    cleaned = "".join(cleaned_chars)
     parts = [method.lower()] + [p for p in cleaned.split("/") if p]
     base = _slugify_symbol(parts) or "operation"
     candidate = base
@@ -276,7 +289,9 @@ def _extract_base_url(spec: Mapping[str, Any]) -> str:
     return ""
 
 
-def _content_schema(content: Any, spec: Mapping[str, Any]) -> Tuple[Optional[Dict[str, Any]], str]:
+def _content_schema(
+    content: Any, spec: Mapping[str, Any]
+) -> Tuple[Optional[Dict[str, Any]], str]:
     if not isinstance(content, Mapping):
         return None, ""
     preferred = (
@@ -385,11 +400,15 @@ def parse_operations(spec: Mapping[str, Any]) -> List[ParsedOperation]:
                     rb.get("content"), spec
                 )
 
-            response_schema, response_status = _select_response_schema(op.get("responses"), spec)
+            response_schema, response_status = _select_response_schema(
+                op.get("responses"), spec
+            )
 
             tags_raw = op.get("tags") or []
             tags = tuple(
-                str(t).strip() for t in tags_raw if isinstance(t, (str, int)) and str(t).strip()
+                str(t).strip()
+                for t in tags_raw
+                if isinstance(t, (str, int)) and str(t).strip()
             )
 
             operations.append(

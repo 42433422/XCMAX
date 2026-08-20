@@ -365,9 +365,9 @@ async def send_outbox(body: OutboxCreate):
                 db.flush()
                 result = req.to_dict()
         return {"success": False, "data": result, "error": "无法连接到主服务器"}
-    except RECOVERABLE_ERRORS as e:
-        logger.error("outbox forward failed: %s", e)
-        raise HTTPException(status_code=502, detail=f"转发到主服务器失败: {e}") from e
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("outbox forward failed")
+        raise HTTPException(status_code=502, detail="转发到主服务器失败，请稍后重试") from exc
 
 
 @router.get("/outbox")
@@ -435,10 +435,11 @@ async def ping_main_server():
             resp = await client.get(f"{main_server_url}/api/ping")
             resp.raise_for_status()
             return {"success": True, "connected": True, "main_server": main_server_url}
-    except RECOVERABLE_ERRORS as e:
+    except RECOVERABLE_ERRORS:
+        logger.exception("main server connectivity check failed")
         return {
             "success": False,
             "connected": False,
             "main_server": main_server_url,
-            "error": str(e),
+            "error": "unavailable",
         }

@@ -8,6 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Body, File, Form, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse
 
+from app.fastapi_routes.domains.system.admin_llm_handlers import reload_llm_registry_payload
 from app.fastapi_routes.domains.system.agent_handlers import (
     run_document_template_agent as _run_document_template_agent,
 )
@@ -25,8 +26,15 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_base_dir as get_base_dir
 
 logger = logging.getLogger(__name__)
+_SYSTEM_UNAVAILABLE = "系统服务暂时不可用，请稍后重试"
 
 router = APIRouter(tags=["legacy-system"], deprecated=True)
+
+
+def _system_failure(**extra: object) -> JSONResponse:
+    return JSONResponse(
+        {"success": False, "message": _SYSTEM_UNAVAILABLE, **extra}, status_code=500
+    )
 
 
 @router.get("/api/system/config")
@@ -41,15 +49,15 @@ def system_config_get():
                 "available_industries": ic.get_available_industries(),
             },
         }
-    except RECOVERABLE_ERRORS as e:
-        logger.exception("system config: %s", e)
+    except RECOVERABLE_ERRORS:
+        logger.exception("system config unavailable")
         return {
             "success": True,
             "data": {
                 "current_industry": "涂料",
                 "available_industries": [{"id": "涂料", "name": "涂料/油漆行业"}],
                 "degraded": True,
-                "hint": (str(e) or "error")[:300],
+                "hint": _SYSTEM_UNAVAILABLE,
             },
         }
 
@@ -60,8 +68,9 @@ def system_info_get():
         from app.application.facades.session_facade import get_system_service
 
         return {"success": True, "data": get_system_service().get_system_info()}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("system info unavailable")
+        return _system_failure()
 
 
 @router.get("/api/system/printer")
@@ -70,8 +79,9 @@ def system_printer_get():
         from app.application.facades.session_facade import get_system_service
 
         return {"success": True, "data": get_system_service().get_printer_config()}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("system printer config unavailable")
+        return _system_failure()
 
 
 @router.post("/api/system/printer")
@@ -91,8 +101,9 @@ def system_startup_get():
         from app.application.facades.session_facade import get_system_service
 
         return {"success": True, "data": get_system_service().get_startup_config()}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("system startup config unavailable")
+        return _system_failure()
 
 
 @router.post("/api/system/startup")
@@ -123,8 +134,9 @@ def database_backups_list():
         from app.application.facades.session_facade import get_database_service
 
         return get_database_service().list_backups()
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("database backup list unavailable")
+        return _system_failure()
 
 
 @router.delete("/api/database/backup/{backup_file:path}")
@@ -174,8 +186,9 @@ def performance_status():
                 status_code=503,
             )
         return {"success": True, "data": optimizer.get_status(), "timestamp": _time.time()}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e), "data": None}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("performance status unavailable")
+        return _system_failure(data=None)
 
 
 @router.get("/api/performance/health")
@@ -200,9 +213,10 @@ def performance_health():
         if "issues" in health:
             resp["issues"] = health["issues"]
         return JSONResponse(resp, status_code=code)
-    except RECOVERABLE_ERRORS as e:
+    except RECOVERABLE_ERRORS:
+        logger.exception("performance health unavailable")
         return JSONResponse(
-            {"status": "unhealthy", "error": str(e), "timestamp": _time.time()},
+            {"status": "unhealthy", "error": _SYSTEM_UNAVAILABLE, "timestamp": _time.time()},
             status_code=500,
         )
 
@@ -221,8 +235,9 @@ def performance_metrics_summary(minutes: int = Query(default=5)):
             )
         summary = optimizer.performance_monitor.get_metrics_summary(minutes=minutes)
         return {"success": True, "data": summary}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e), "data": None}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("performance metrics summary unavailable")
+        return _system_failure(data=None)
 
 
 @router.get("/api/performance/metrics/prometheus")
@@ -237,8 +252,9 @@ def performance_metrics_prometheus():
             optimizer.performance_monitor.get_prometheus_metrics(),
             media_type="text/plain; version=0.0.4; charset=utf-8",
         )
-    except RECOVERABLE_ERRORS as e:
-        return PlainTextResponse(f"# Error: {str(e)}\n", status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("prometheus metrics unavailable")
+        return PlainTextResponse("# Metrics unavailable\n", status_code=500)
 
 
 @router.get("/api/performance/cache/stats")
@@ -253,8 +269,9 @@ def performance_cache_stats():
                 status_code=503,
             )
         return {"success": True, "data": optimizer.redis_cache.stats}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e), "data": None}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("performance cache stats unavailable")
+        return _system_failure(data=None)
 
 
 @router.post("/api/performance/cache/clear")
@@ -297,8 +314,9 @@ def performance_alerts(level: str | None = Query(default=None), limit: int = Que
             )
         alerts = optimizer.performance_monitor.get_alerts(level=level, limit=limit)
         return {"success": True, "data": alerts, "count": len(alerts)}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e), "data": []}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("performance alerts unavailable")
+        return _system_failure(data=[])
 
 
 @router.get("/api/performance/slow-queries")
@@ -314,8 +332,9 @@ def performance_slow_queries(limit: int = Query(default=20)):
             )
         slow = optimizer.query_optimizer.get_slow_queries(limit=limit)
         return {"success": True, "data": slow, "count": len(slow)}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e), "data": []}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("slow query diagnostics unavailable")
+        return _system_failure(data=[])
 
 
 @router.post("/api/performance/optimize/reinitialize")
@@ -445,8 +464,9 @@ def skills_list():
 
         registry = get_skill_registry()
         return {"success": True, "skills": registry.list_all()}
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("skill registry unavailable")
+        return _system_failure()
 
 
 @router.get("/api/skills/info/{skill_id}")
@@ -468,22 +488,12 @@ def skills_info(skill_id: str):
                 },
             }
         return JSONResponse({"success": False, "message": "技能不存在"}, status_code=404)
-    except RECOVERABLE_ERRORS as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("skill info unavailable")
+        return _system_failure()
 
 
 @router.post("/api/admin/llm/reload")
 async def admin_llm_reload() -> JSONResponse:
     """热切换：清空进程内 LLM Provider 注册表。"""
-    import os
-
-    from app.infrastructure.llm.providers import registry as reg_mod
-
-    reg_mod._registry = None
-    return JSONResponse(
-        {
-            "success": True,
-            "LLM_PROVIDER": (os.environ.get("LLM_PROVIDER") or "").strip(),
-            "LLM_ROUTING_ORDER": (os.environ.get("LLM_ROUTING_ORDER") or "").strip(),
-        }
-    )
+    return JSONResponse(reload_llm_registry_payload())

@@ -39,8 +39,9 @@ def try_precreate(
         }
     try:
         client = build_client()
-    except RuntimeError as exc:
-        return {"success": False, "qr_code": None, "message": str(exc), "raw": None}
+    except RuntimeError:
+        logger.exception("alipay client initialization failed")
+        return {"success": False, "qr_code": None, "message": "支付宝服务暂时不可用", "raw": None}
     kwargs = build_common_kwargs(
         out_trade_no=out_trade_no,
         subject=subject,
@@ -49,12 +50,12 @@ def try_precreate(
     )
     try:
         result = client.api_alipay_trade_precreate(**kwargs)
-    except transient_errors as exc:
+    except transient_errors:
         logger.exception("alipay.trade.precreate 请求异常")
         return {
             "success": False,
             "qr_code": None,
-            "message": f"请求支付宝异常: {exc}",
+            "message": "支付宝服务暂时不可用",
             "raw": None,
         }
     if not isinstance(result, dict):
@@ -86,8 +87,9 @@ def try_web_pay(
         return _web_failure("支付宝密钥未配全")
     try:
         client = build_client()
-    except RuntimeError as exc:
-        return _web_failure(str(exc))
+    except RuntimeError:
+        logger.exception("alipay client initialization failed")
+        return _web_failure("支付宝服务暂时不可用")
 
     kwargs = build_common_kwargs(
         out_trade_no=out_trade_no,
@@ -104,9 +106,9 @@ def try_web_pay(
             order_string = client.api_alipay_trade_wap_pay(**kwargs)
         else:
             order_string = client.api_alipay_trade_page_pay(**kwargs)
-    except transient_errors as exc:
+    except transient_errors:
         logger.exception("alipay.trade.%s.pay 请求异常", channel)
-        return _web_failure(f"请求支付宝异常: {exc}")
+        return _web_failure("支付宝服务暂时不可用")
 
     gateway = (
         "https://openapi-sandbox.dl.alipaydev.com/gateway.do"
@@ -135,8 +137,9 @@ def query_order(
         return {"success": False, "message": "out_trade_no 与 trade_no 至少提供一个", "raw": None}
     try:
         client = build_client()
-    except RuntimeError as exc:
-        return {"success": False, "message": str(exc), "raw": None}
+    except RuntimeError:
+        logger.exception("alipay client initialization failed")
+        return {"success": False, "message": "支付宝服务暂时不可用", "raw": None}
     kwargs = {
         key: value
         for key, value in (("out_trade_no", out_trade_no), ("trade_no", trade_no))
@@ -144,9 +147,9 @@ def query_order(
     }
     try:
         result = client.api_alipay_trade_query(**kwargs)
-    except transient_errors as exc:
+    except transient_errors:
         logger.exception("alipay.trade.query 请求异常")
-        return {"success": False, "message": f"请求支付宝异常: {exc}", "raw": None}
+        return {"success": False, "message": "支付宝服务暂时不可用", "raw": None}
     return standard_result(result, "交易查询失败")
 
 
@@ -166,8 +169,9 @@ def refund_order(
         return {"success": False, "message": "out_trade_no 与 trade_no 至少提供一个", "raw": None}
     try:
         client = build_client()
-    except RuntimeError as exc:
-        return {"success": False, "message": str(exc), "raw": None}
+    except RuntimeError:
+        logger.exception("alipay client initialization failed")
+        return {"success": False, "message": "支付宝服务暂时不可用", "raw": None}
     kwargs: dict[str, Any] = {"refund_amount": refund_amount}
     for key, value in (
         ("out_trade_no", out_trade_no),
@@ -179,9 +183,9 @@ def refund_order(
             kwargs[key] = value
     try:
         result = client.api_alipay_trade_refund(**kwargs)
-    except transient_errors as exc:
+    except transient_errors:
         logger.exception("alipay.trade.refund 请求异常")
-        return {"success": False, "message": f"请求支付宝异常: {exc}", "raw": None}
+        return {"success": False, "message": "支付宝服务暂时不可用", "raw": None}
     return standard_result(result, "退款失败")
 
 
@@ -198,8 +202,9 @@ def close_order(
         return {"success": False, "message": "out_trade_no 与 trade_no 至少提供一个", "raw": None}
     try:
         client = build_client()
-    except RuntimeError as exc:
-        return {"success": False, "message": str(exc), "raw": None}
+    except RuntimeError:
+        logger.exception("alipay client initialization failed")
+        return {"success": False, "message": "支付宝服务暂时不可用", "raw": None}
     kwargs = {
         key: value
         for key, value in (("out_trade_no", out_trade_no), ("trade_no", trade_no))
@@ -207,9 +212,9 @@ def close_order(
     }
     try:
         result = client.api_alipay_trade_close(**kwargs)
-    except transient_errors as exc:
+    except transient_errors:
         logger.exception("alipay.trade.close 请求异常")
-        return {"success": False, "message": f"请求支付宝异常: {exc}", "raw": None}
+        return {"success": False, "message": "支付宝服务暂时不可用", "raw": None}
     return standard_result(result, "关闭交易失败")
 
 
@@ -226,12 +231,13 @@ def query_refund(
         return {"success": False, "message": "out_trade_no 必填", "raw": None}
     try:
         client = build_client()
-    except RuntimeError as exc:
-        return {"success": False, "message": str(exc), "raw": None}
+    except RuntimeError:
+        logger.exception("alipay client initialization failed")
+        return {"success": False, "message": "支付宝服务暂时不可用", "raw": None}
     request_no = out_request_no or out_trade_no
     try:
         result = client.api_alipay_trade_fastpay_refund_query(request_no, out_trade_no=out_trade_no)
-    except transient_errors as exc:
+    except transient_errors:
         logger.exception("alipay.trade.fastpay.refund.query 请求异常")
-        return {"success": False, "message": f"请求支付宝异常: {exc}", "raw": None}
+        return {"success": False, "message": "支付宝服务暂时不可用", "raw": None}
     return standard_result(result, "退款查询失败")

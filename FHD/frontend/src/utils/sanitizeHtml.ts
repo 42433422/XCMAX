@@ -149,6 +149,7 @@ function sanitizedHtmlToPlainText(sanitizedHtml: string): string {
     return DOMPurify.sanitize(sanitizedHtml, { ALLOWED_TAGS: [], ALLOWED_ATTR: [], KEEP_CONTENT: true })
   }
   const doc = new DOMParser().parseFromString(sanitizedHtml, 'text/html')
+  doc.body.querySelectorAll('br').forEach((node) => node.replaceWith(doc.createTextNode('\n')))
   const text = String(doc.body.textContent || '').replace(/\u00a0/g, ' ')
   if (!text.includes('&')) return text
   const decoded = new DOMParser().parseFromString(text, 'text/html')

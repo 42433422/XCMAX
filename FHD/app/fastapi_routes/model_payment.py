@@ -321,8 +321,9 @@ def diagnostics():
         try:
             data["order_count"] = mp_orders.count_orders()
             data["json_migration_pending"] = mp_orders.json_store_has_unmigrated_orders()
-        except RECOVERABLE_ERRORS as exc:
-            data["order_count_error"] = str(exc)[:200]
+        except RECOVERABLE_ERRORS:
+            logger.exception("model payment diagnostics count failed")
+            data["order_count_error"] = "unavailable"
     return JSONResponse({"success": True, "data": data})
 
 

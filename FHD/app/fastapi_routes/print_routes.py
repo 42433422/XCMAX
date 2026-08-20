@@ -25,6 +25,7 @@ from app.fastapi_routes.print_agent_helpers import (
     run_print_agent as _run_print_agent,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.security.secure_filename import secure_filename
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ __all__ = [
 ]
 
 _PRINT_CONFIRM_TTL_SECONDS = 300
+_PRINT_UNAVAILABLE = "打印服务暂时不可用，请稍后重试"
 _print_confirm_cache: dict[str, dict[str, Any]] = {}
 
 
@@ -80,12 +82,12 @@ def get_printers():
     try:
         result = _svc().get_printers()
         return JSONResponse(result)
-    except RECOVERABLE_ERRORS as e:
-        logger.error("获取打印机列表失败: %s", e, exc_info=True)
+    except RECOVERABLE_ERRORS:
+        logger.exception("获取打印机列表失败")
         return JSONResponse(
             {
                 "success": False,
-                "message": f"获取打印机列表失败: {str(e)}",
+                "message": _PRINT_UNAVAILABLE,
                 "printers": [],
             },
             status_code=500,
@@ -97,10 +99,10 @@ def get_printer_selection():
     try:
         selection = _svc().get_printer_selection()
         return JSONResponse({"success": True, "selection": selection})
-    except RECOVERABLE_ERRORS as e:
-        logger.error("获取打印机选择失败: %s", e, exc_info=True)
+    except RECOVERABLE_ERRORS:
+        logger.exception("获取打印机选择失败")
         return JSONResponse(
-            {"success": False, "message": f"获取打印机选择失败: {str(e)}"},
+            {"success": False, "message": _PRINT_UNAVAILABLE},
             status_code=500,
         )
 
@@ -121,10 +123,10 @@ def save_printer_selection(
             route_path="/api/print/printer-selection",
         )
         return JSONResponse(result, status_code=_print_agent_status_code(result))
-    except RECOVERABLE_ERRORS as e:
-        logger.error("保存打印机选择失败: %s", e, exc_info=True)
+    except RECOVERABLE_ERRORS:
+        logger.exception("保存打印机选择失败")
         return JSONResponse(
-            {"success": False, "message": f"保存打印机选择失败: {str(e)}"},
+            {"success": False, "message": _PRINT_UNAVAILABLE},
             status_code=500,
         )
 
@@ -134,9 +136,9 @@ def get_default_printer():
     try:
         result = _svc().get_default_printer()
         return JSONResponse(result)
-    except RECOVERABLE_ERRORS as e:
-        logger.error("获取默认打印机失败: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("获取默认打印机失败")
+        return JSONResponse({"success": False, "message": _PRINT_UNAVAILABLE}, status_code=500)
 
 
 @router.post("/document")
@@ -147,10 +149,6 @@ def print_document(request: Request, data: dict[str, Any] = Body(default_factory
         use_automation = data.get("use_automation", False)
         if not file_path:
             return JSONResponse({"success": False, "message": "文件路径不能为空"}, status_code=400)
-        if not os.path.exists(file_path):
-            return JSONResponse(
-                {"success": False, "message": f"文件不存在: {file_path}"}, status_code=400
-            )
         result = _run_print_agent(
             request=request,
             action="print_document",
@@ -162,9 +160,9 @@ def print_document(request: Request, data: dict[str, Any] = Body(default_factory
             route_path="/api/print/document",
         )
         return JSONResponse(result, status_code=_print_agent_status_code(result))
-    except RECOVERABLE_ERRORS as e:
-        logger.error("打印文档失败: %s", e, exc_info=True)
-        return JSONResponse({"success": False, "message": f"打印失败: {str(e)}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("打印文档失败")
+        return JSONResponse({"success": False, "message": _PRINT_UNAVAILABLE}, status_code=500)
 
 
 @router.post("/label")
@@ -182,10 +180,6 @@ def print_label(request: Request, data: dict[str, Any] = Body(default_factory=di
             copies = 0
         if not file_path:
             return JSONResponse({"success": False, "message": "文件路径不能为空"}, status_code=400)
-        if not os.path.exists(file_path):
-            return JSONResponse(
-                {"success": False, "message": f"文件不存在: {file_path}"}, status_code=400
-            )
         if copies < 1 or copies > 100:
             return JSONResponse(
                 {"success": False, "message": "打印份数必须在1-100之间"}, status_code=400
@@ -256,11 +250,9 @@ def print_label(request: Request, data: dict[str, Any] = Body(default_factory=di
             result.setdefault("status", "printed")
             result.setdefault("require_confirm", False)
         return JSONResponse(result, status_code=_print_agent_status_code(result))
-    except RECOVERABLE_ERRORS as e:
-        logger.error("打印标签失败: %s", e, exc_info=True)
-        return JSONResponse(
-            {"success": False, "message": f"打印标签失败: {str(e)}"}, status_code=500
-        )
+    except RECOVERABLE_ERRORS:
+        logger.exception("打印标签失败")
+        return JSONResponse({"success": False, "message": _PRINT_UNAVAILABLE}, status_code=500)
 
 
 @router.post("/test")
@@ -278,9 +270,9 @@ def test_printer_post(request: Request, data: dict[str, Any] = Body(default_fact
             route_path="/api/print/test",
         )
         return JSONResponse(result, status_code=_print_agent_status_code(result))
-    except RECOVERABLE_ERRORS as e:
-        logger.error("测试打印机失败: %s", e, exc_info=True)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("测试打印机失败")
+        return JSONResponse({"success": False, "message": _PRINT_UNAVAILABLE}, status_code=500)
 
 
 @router.get("/validate")
@@ -288,10 +280,10 @@ def validate_printer_separation():
     try:
         result = _svc().validate_printer_separation()
         return JSONResponse({"success": True, **result})
-    except RECOVERABLE_ERRORS as e:
-        logger.error("验证打印机分离失败: %s", e, exc_info=True)
+    except RECOVERABLE_ERRORS:
+        logger.exception("验证打印机分离失败")
         return JSONResponse(
-            {"success": False, "valid": False, "error": str(e)},
+            {"success": False, "valid": False, "error": _PRINT_UNAVAILABLE},
             status_code=500,
         )
 
@@ -303,9 +295,9 @@ def get_document_printer():
         if printer:
             return JSONResponse({"success": True, "printer": printer})
         return JSONResponse({"success": False, "message": "未找到发货单打印机"})
-    except RECOVERABLE_ERRORS as e:
-        logger.error("获取发货单打印机失败: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("获取发货单打印机失败")
+        return JSONResponse({"success": False, "message": _PRINT_UNAVAILABLE}, status_code=500)
 
 
 @router.get("/label-printer")
@@ -315,9 +307,9 @@ def get_label_printer():
         if printer:
             return JSONResponse({"success": True, "printer": printer})
         return JSONResponse({"success": False, "message": "未找到标签打印机"})
-    except RECOVERABLE_ERRORS as e:
-        logger.error("获取标签打印机失败: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("获取标签打印机失败")
+        return JSONResponse({"success": False, "message": _PRINT_UNAVAILABLE}, status_code=500)
 
 
 @router.get("/test")
@@ -369,9 +361,9 @@ def workflow_label_print_dispatch(
             route_path="/api/print/workflow/label-print/dispatch",
         )
         return JSONResponse(result, status_code=_print_agent_status_code(result))
-    except RECOVERABLE_ERRORS as e:
-        logger.error("workflow_label_print_dispatch 失败: %s", e, exc_info=True)
-        return JSONResponse({"success": False, "message": f"打印失败: {e}"}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("workflow_label_print_dispatch 失败")
+        return JSONResponse({"success": False, "message": _PRINT_UNAVAILABLE}, status_code=500)
 
 
 @router.get("/list_labels")
@@ -413,9 +405,11 @@ def list_labels(limit: int = Query(default=2, ge=1, le=20)):
         labels.sort(key=lambda x: x.get("filename", ""), reverse=True)
         labels = labels[:limit]
         return JSONResponse({"success": True, "labels": labels})
-    except RECOVERABLE_ERRORS as e:
-        logger.error("获取标签列表失败: %s", e, exc_info=True)
-        return JSONResponse({"success": False, "labels": [], "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("获取标签列表失败")
+        return JSONResponse(
+            {"success": False, "labels": [], "message": _PRINT_UNAVAILABLE}, status_code=500
+        )
 
 
 @router.get("/label/{filename}")
@@ -424,12 +418,15 @@ def serve_label_image(filename: str):
         from app.utils.path_io.path_utils import get_resource_path
 
         labels_dir = get_resource_path("ai_assistant", "商标导出")
-        safe_filename = os.path.basename(filename)
+        base_name = os.path.basename(str(filename or "").replace("\\", "/"))
+        safe_filename = secure_filename(base_name)
+        if not safe_filename or safe_filename != base_name:
+            return JSONResponse({"success": False, "message": "文件名无效"}, status_code=400)
         file_path = os.path.join(labels_dir, safe_filename)
         if not os.path.exists(file_path):
             logger.warning("标签文件不存在: %s", file_path)
             return JSONResponse({"success": False, "message": "文件不存在"}, status_code=404)
         return FileResponse(file_path, media_type="image/png")
-    except RECOVERABLE_ERRORS as e:
-        logger.error("获取标签图片失败: %s", e, exc_info=True)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("获取标签图片失败")
+        return JSONResponse({"success": False, "message": _PRINT_UNAVAILABLE}, status_code=500)

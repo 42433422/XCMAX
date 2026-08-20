@@ -144,20 +144,19 @@ def decompose_template_xls_pandas(
 ) -> tuple[dict, int]:
     try:
         import pandas as pd
-    except ImportError as exc:
-        return {"success": False, "message": f"读取 .xls 需要 pandas：{exc}"}, 500
+    except ImportError:
+        return {"success": False, "message": "读取 .xls 需要安装 pandas"}, 500
     try:
         workbook = pd.ExcelFile(file_path, engine="xlrd")
     except RECOVERABLE_ERRORS as exc:
-        logger.error("pandas/xlrd 打开 .xls 失败: %s", exc)
+        logger.exception("pandas/xlrd 打开 .xls 失败")
         if is_unreadable_workbook_error(str(exc)):
             return {
                 "success": False,
                 "message": "无法读取该 .xls 文件（可能损坏）。请另存为 .xlsx 后重试。",
                 "error_code": "UNREADABLE_WORKBOOK",
             }, 200
-        hint = "请确认已安装 xlrd：pip install xlrd"
-        return {"success": False, "message": f"{hint}。原始错误：{exc}"}, 500
+        return {"success": False, "message": "请确认已安装 xlrd：pip install xlrd"}, 500
 
     names = list(workbook.sheet_names)
     if not names:
@@ -238,11 +237,11 @@ def decompose_template(
                 }, 200
             raise
     except RECOVERABLE_ERRORS as exc:
-        logger.error("分解 Excel 模板失败: %s", exc)
+        logger.exception("分解 Excel 模板失败")
         if is_unreadable_workbook_error(str(exc)):
             return {
                 "success": False,
                 "message": "模板文件损坏或格式异常，无法读取。请重新导出或另存为 .xlsx 后重试。",
                 "error_code": "UNREADABLE_WORKBOOK",
             }, 200
-        return {"success": False, "message": str(exc)}, 500
+        return {"success": False, "message": "模板分解服务暂时不可用，请稍后重试"}, 500

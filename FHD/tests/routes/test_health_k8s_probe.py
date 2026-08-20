@@ -237,7 +237,7 @@ class TestCapabilities:
             g.return_value = rec
             r = client.get("/api/diagnostics/capabilities")
         assert r.status_code == 200
-        assert r.json()["intent_engines"] == {"error": "engine snapshot fail"}
+        assert r.json()["intent_engines"] == {"error": "unavailable"}
 
 
 class TestCheckHelpers:
@@ -283,4 +283,4 @@ class TestCheckHelpers:
             g.return_value = rec
             out = _check_ai_service()
         assert out["status"] == "healthy"
-        assert out["engines"] == {"error": "status fail"}
+        assert out["engines"] == {"error": "unavailable"}

@@ -31,7 +31,10 @@ _ORDER_SCHEMA = {
 
 def _parse_order_text(order_text: str) -> dict:
     try:
-        original_text = (order_text or "").strip()
+        # The parser handles short, human-entered order sentences. Bounding the
+        # input and every regex repetition keeps malformed payloads from turning
+        # the fallback parser into a CPU denial-of-service vector.
+        original_text = (order_text or "").strip()[:4096]
 
         text = original_text
         for kw in ["发货单", "送货单", "出货单"]:
@@ -66,22 +69,25 @@ def _parse_order_text(order_text: str) -> dict:
 
         model_token_pattern = r"[0-9A-Za-z-]{3,16}"
         m_model = re.search(
-            rf"(?:编号|型号)\s*(?:是)?\s*[:：]?\s*({model_token_pattern})", slot_text
+            rf"(?:编号|型号)\s{{0,16}}(?:是)?\s{{0,16}}[:：]?\s{{0,16}}({model_token_pattern})",
+            slot_text,
         )
         if m_model:
             slot_model = (m_model.group(1) or "").strip().upper()
         else:
-            m_model2 = re.search(rf"({model_token_pattern})\s*(?:的)?\s*规格", slot_text)
+            m_model2 = re.search(
+                rf"({model_token_pattern})\s{{0,16}}(?:的)?\s{{0,16}}规格", slot_text
+            )
             if m_model2:
                 slot_model = (m_model2.group(1) or "").strip().upper()
 
         if "规格" in slot_text:
             after_spec = slot_text.split("规格", 1)[1]
-            number_token_pattern = r"(?:\d+(?:\.\d+)?|[一二两三四五六七八九]?十[一二三四五六七八九]?|[一二两三四五六七八九零〇])"
-            qty_token_pattern = r"(?:\d+|[一二两三四五六七八九十零〇两]+)"
+            number_token_pattern = r"(?:\d{1,12}(?:\.\d{1,6})?|[一二两三四五六七八九]?十[一二三四五六七八九]?|[一二两三四五六七八九零〇])"
+            qty_token_pattern = r"(?:\d{1,12}|[一二两三四五六七八九十零〇两]{1,16})"
 
             m_spec_qty = re.search(
-                rf"^\s*[:：]?\s*({number_token_pattern})(?:\s*(?:要|来|拿|共|一共|总共)?\s*({qty_token_pattern})\s*桶)?",
+                rf"^\s{{0,16}}[:：]?\s{{0,16}}({number_token_pattern})(?:\s{{0,16}}(?:要|来|拿|共|一共|总共)?\s{{0,16}}({qty_token_pattern})\s{{0,16}}桶)?",
                 after_spec,
             )
             if m_spec_qty:
@@ -93,14 +99,17 @@ def _parse_order_text(order_text: str) -> dict:
                     if qty_num is not None:
                         slot_qty_tins = int(qty_num)
             else:
-                m_spec = re.search(r"^\s*[:：]?\s*(\d+(?:\.\d+)?)", after_spec)
+                m_spec = re.search(
+                    r"^\s{0,16}[:：]?\s{0,16}(\d{1,12}(?:\.\d{1,6})?)",
+                    after_spec,
+                )
                 if m_spec:
                     spec_num = parse_cn_number(m_spec.group(1))
                     if spec_num is not None:
                         slot_spec = float(spec_num)
                 else:
                     m_spec_cn = re.search(
-                        r"^\s*[:：]?\s*([一二两三四五六七八九]?十[一二三四五六七八九]?|[一二两三四五六七八九零〇])",
+                        r"^\s{0,16}[:：]?\s{0,16}([一二两三四五六七八九]?十[一二三四五六七八九]?|[一二两三四五六七八九零〇])",
                         after_spec,
                     )
                     if m_spec_cn:
@@ -110,7 +119,7 @@ def _parse_order_text(order_text: str) -> dict:
 
         if slot_qty_tins is None:
             m_qty = re.search(
-                r"(?:一共|总共|共|要|来|拿)?\s*(\d+|[一二两三四五六七八九十零〇两]+)\s*桶",
+                r"(?:一共|总共|共|要|来|拿)?\s{0,16}(\d{1,12}|[一二两三四五六七八九十零〇两]{1,16})\s{0,16}桶",
                 slot_text,
             )
             if m_qty:
@@ -121,15 +130,17 @@ def _parse_order_text(order_text: str) -> dict:
         unit_candidate = slot_text
         unit_candidate = re.sub(r"(发货单|送货单|出货单)", " ", unit_candidate)
         unit_candidate = re.sub(
-            rf"(?:编号|型号)\s*(?:是)?\s*[:：]?\s*{model_token_pattern}", " ", unit_candidate
-        )
-        unit_candidate = re.sub(
-            r"规格\s*[:：]?\s*(?:\d+(?:\.\d+)?|[一二两三四五六七八九十零〇两]+)(?:\s*(?:\d+|[一二两三四五六七八九十零〇两]+)\s*桶)?",
+            rf"(?:编号|型号)\s{{0,16}}(?:是)?\s{{0,16}}[:：]?\s{{0,16}}{model_token_pattern}",
             " ",
             unit_candidate,
         )
         unit_candidate = re.sub(
-            r"(?:一共|总共|共|要|来|拿)?\s*(?:\d+|[一二两三四五六七八九十零〇两]+)\s*桶",
+            r"规格\s{0,16}[:：]?\s{0,16}(?:\d{1,12}(?:\.\d{1,6})?|[一二两三四五六七八九十零〇两]{1,16})(?:\s{0,16}(?:\d{1,12}|[一二两三四五六七八九十零〇两]{1,16})\s{0,16}桶)?",
+            " ",
+            unit_candidate,
+        )
+        unit_candidate = re.sub(
+            r"(?:一共|总共|共|要|来|拿)?\s{0,16}(?:\d{1,12}|[一二两三四五六七八九十零〇两]{1,16})\s{0,16}桶",
             " ",
             unit_candidate,
         )
@@ -138,14 +149,18 @@ def _parse_order_text(order_text: str) -> dict:
         slot_unit = cleanup_unit_name(unit_candidate)
         if not slot_unit:
             m_unit = re.search(
-                r"(?:打印(?:一下)?)\s*([^，,。]+?)\s*的?\s*(?:发货单|送货单|出货单)", slot_text
+                r"(?:打印(?:一下)?)\s{0,16}([^，,。]{1,120}?)\s{0,16}的?\s{0,16}(?:发货单|送货单|出货单)",
+                slot_text,
             )
             if not m_unit:
-                m_unit = re.search(r"([^，,。]+?)\s*的?\s*(?:发货单|送货单|出货单)", slot_text)
+                m_unit = re.search(
+                    r"([^，,。]{1,120}?)\s{0,16}的?\s{0,16}(?:发货单|送货单|出货单)",
+                    slot_text,
+                )
             if m_unit:
                 slot_unit = cleanup_unit_name(m_unit.group(1))
         if not slot_unit:
-            m_unit3 = re.search(r"([^，,。0-9]+?)的(?:发货单|送货单|出货单)", slot_text)
+            m_unit3 = re.search(r"([^，,。0-9]{1,120}?)的(?:发货单|送货单|出货单)", slot_text)
             if m_unit3:
                 slot_unit = cleanup_unit_name(m_unit3.group(1))
         if not slot_unit:
@@ -156,7 +171,8 @@ def _parse_order_text(order_text: str) -> dict:
                         break
         if not slot_unit:
             m_unit4 = re.search(
-                r"打印(?:一下)?\s*([^，,。]+?)\s*(?:发货单|送货单|出货单)", slot_text
+                r"打印(?:一下)?\s{0,16}([^，,。]{1,120}?)\s{0,16}(?:发货单|送货单|出货单)",
+                slot_text,
             )
             if m_unit4:
                 slot_unit = cleanup_unit_name(m_unit4.group(1))
@@ -182,13 +198,16 @@ def _parse_order_text(order_text: str) -> dict:
                 or "总共" in slot_text
                 or "共" in slot_text
             )
-            or re.search(rf"{model_token_pattern}\s*(?:的)?\s*规格", slot_text)
-            or re.search(r"(?:要|来|拿)\s*(?:\d+|[一二两三四五六七八九十零〇两]+)\s*桶", slot_text)
+            or re.search(rf"{model_token_pattern}\s{{0,16}}(?:的)?\s{{0,16}}规格", slot_text)
+            or re.search(
+                r"(?:要|来|拿)\s{0,16}(?:\d{1,12}|[一二两三四五六七八九十零〇两]{1,16})\s{0,16}桶",
+                slot_text,
+            )
         )
         multi_product_hint = (
             len(
                 re.findall(
-                    r"(?:\d+|[一二两三四五六七八九十零〇]+)\s*桶\s*[0-9A-Za-z-]+\s*规格\s*\d+(?:\.\d+)?",
+                    r"(?:\d{1,12}|[一二两三四五六七八九十零〇]{1,16})\s{0,16}桶\s{0,16}[0-9A-Za-z-]{1,32}\s{0,16}规格\s{0,16}\d{1,12}(?:\.\d{1,6})?",
                     slot_text,
                 )
             )
@@ -225,9 +244,7 @@ def _parse_order_text(order_text: str) -> dict:
                 ],
             }
 
-        multi_pattern = (
-            r"(\d+|[一二两三四五六七八九十零〇]+)\s*桶\s*([0-9A-Za-z-]+)\s*规格\s*(\d+(?:\.\d+)?)"
-        )
+        multi_pattern = r"(\d{1,12}|[一二两三四五六七八九十零〇]{1,16})\s{0,16}桶\s{0,16}([0-9A-Za-z-]{1,32})\s{0,16}规格\s{0,16}(\d{1,12}(?:\.\d{1,6})?)"
         multi_matches = list(re.finditer(multi_pattern, slot_text))
         if multi_matches:
             products = []
@@ -269,10 +286,10 @@ def _parse_order_text(order_text: str) -> dict:
                     return {"success": True, "unit_name": unit_candidate, "products": products}
 
         patterns = [
-            r"^([^\d]+?)(\d+|[一二三四五六七八九十零〇两]+)\s*桶\s*(.+?)\s*规格\s*(\d+(?:\.\d+)?)",
-            r"^([^\d]+?)(\d+|[一二三四五六七八九十零〇两]+)\s*桶\s*(.+)$",
-            r"^([^\d]+?)(\d+|[一二三四五六七八九十零〇两]+)\s*(箱|件)\s*(.+)",
-            r"^([^\d]+?)(\d+(?:\.\d+)?|[一二三四五六七八九十零〇两]+)\s*(公斤|kg)\s*(.+)",
+            r"^([^\d]{1,120}?)(\d{1,12}|[一二三四五六七八九十零〇两]{1,16})\s{0,16}桶\s{0,16}(.{1,80}?)\s{0,16}规格\s{0,16}(\d{1,12}(?:\.\d{1,6})?)",
+            r"^([^\d]{1,120}?)(\d{1,12}|[一二三四五六七八九十零〇两]{1,16})\s{0,16}桶\s{0,16}(.{1,80})$",
+            r"^([^\d]{1,120}?)(\d{1,12}|[一二三四五六七八九十零〇两]{1,16})\s{0,16}(箱|件)\s{0,16}(.{1,80})",
+            r"^([^\d]{1,120}?)(\d{1,12}(?:\.\d{1,6})?|[一二三四五六七八九十零〇两]{1,16})\s{0,16}(公斤|kg)\s{0,16}(.{1,80})",
         ]
 
         for pattern in patterns:
@@ -289,7 +306,7 @@ def _parse_order_text(order_text: str) -> dict:
                                 quantity = float(normalize_quantity_token(groups[1]) or 0)
                             else:
                                 token = (groups[1] or "").strip()
-                                if re.fullmatch(r"\d+(?:\.\d+)?", token):
+                                if re.fullmatch(r"\d{1,12}(?:\.\d{1,6})?", token):
                                     quantity = float(token)
                                 else:
                                     digits = normalize_chinese_digits(token)
@@ -348,7 +365,8 @@ def _parse_order_text(order_text: str) -> dict:
         has_container_qty = any(k in text for k in ["桶", "箱", "件", "公斤", "kg"])
         if not has_container_qty:
             spec_match = re.search(
-                rf"([^\d]+?)\s*({model_token_pattern})\s*规格\s*(\d+(?:\.\d+)?)", text
+                rf"([^\d]{{1,120}}?)\s{{0,16}}({model_token_pattern})\s{{0,16}}规格\s{{0,16}}(\d{{1,12}}(?:\.\d{{1,6}})?)",
+                text,
             )
             if spec_match:
                 unit_part = spec_match.group(1)

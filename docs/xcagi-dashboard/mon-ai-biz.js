@@ -322,6 +322,25 @@
   let screenshotGallery = { list: [], index: 0, terminal: 'web', animating: false };
   const screenshotImageCache = new Map();
   const terminalFetchControllers = {};
+  const transparentPixel =
+    'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+  function safeScreenshotImageSrc(raw) {
+    const value = String(raw || '');
+    if (value.startsWith('data:image/png;base64,')) return value;
+    try {
+      const parsed = new URL(value, window.location.origin);
+      if (
+        parsed.origin === window.location.origin &&
+        (parsed.protocol === 'http:' || parsed.protocol === 'https:')
+      ) {
+        return parsed.href;
+      }
+    } catch (_) {
+      // Invalid URLs fall through to the inert placeholder.
+    }
+    return transparentPixel;
+  }
 
   function surfaceImgSrc(terminal, index, page, view) {
     const wantViewport = view === 'viewport' || (view !== 'thumb' && terminal === 'web' && terminal !== 'app');
@@ -356,7 +375,7 @@
   }
 
   function preloadScreenshotImage(terminal, index, page) {
-    const src = surfaceImgSrc(terminal, index, page);
+    const src = safeScreenshotImageSrc(surfaceImgSrc(terminal, index, page));
     if (screenshotImageCache.has(src)) return screenshotImageCache.get(src);
     const promise = new Promise((resolve) => {
       const img = new Image();
@@ -853,7 +872,9 @@
       next.src =
         loaded && loaded.ok && loaded.src
           ? loaded.src
-          : surfaceImgSrc(terminal, idx, page, terminal === 'app' ? '' : 'viewport');
+          : safeScreenshotImageSrc(
+              surfaceImgSrc(terminal, idx, page, terminal === 'app' ? '' : 'viewport')
+            );
       next.alt = page.name || 'screenshot';
       next.classList.add('is-active');
       prev.classList.remove('is-active');
@@ -880,7 +901,7 @@
     const strip = root.querySelector('.aibiz-shot-thumbs');
     const imgs = root.querySelectorAll('.aibiz-shot-thumb img[data-src]');
     const loadImg = (img) => {
-      const src = img.getAttribute('data-src');
+      const src = safeScreenshotImageSrc(img.getAttribute('data-src'));
       if (!src || img.dataset.loaded) return;
       img.dataset.loaded = '1';
       img.src = src;
@@ -926,7 +947,7 @@
       .map(
         (p, i) =>
           `<button type="button" class="aibiz-shot-thumb" data-aibiz-shot-thumb="${i}" title="${esc(p.name || '')}">` +
-          `<img loading="lazy" decoding="async" alt="${esc(p.name || '')}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src="${esc(surfaceImgSrc(terminal, i, p, 'thumb'))}" />` +
+          `<img loading="lazy" decoding="async" alt="${esc(p.name || '')}" src="${transparentPixel}" data-src="${esc(safeScreenshotImageSrc(surfaceImgSrc(terminal, i, p, 'thumb')))}" />` +
           `</button>`
       )
       .join('');

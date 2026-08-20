@@ -70,25 +70,6 @@ type PersistedSessionsV1 = {
   sessions: Record<string, WorkflowEmployeeSession>
 }
 
-function normalizeWorkflowEmployeeId(value: unknown): CoreWorkflowEmployeeId | null {
-  switch (String(value ?? '').trim()) {
-    case 'label_print':
-      return 'label_print'
-    case 'shipment_mgmt':
-      return 'shipment_mgmt'
-    case 'receipt_confirm':
-      return 'receipt_confirm'
-    case 'wechat_msg':
-      return 'wechat_msg'
-    case 'wechat_phone':
-      return 'wechat_phone'
-    case 'real_phone':
-      return 'real_phone'
-    default:
-      return null
-  }
-}
-
 function safeParsePersisted(raw: string | null): PersistedV1 | null {
   if (!raw) return null
   try {
@@ -271,7 +252,7 @@ export const useWorkflowEmployeeSpaceStore = defineStore('workflowEmployeeSpace'
     payload: Record<string, unknown> | null | undefined,
     options: { isHeartbeat?: boolean } = {},
   ) {
-    const empId = normalizeWorkflowEmployeeId(payload?.employeeId)
+    const empId = String(payload?.employeeId ?? '').trim()
     if (!empId) return
     const stage = String(payload?.workflowStageLine ?? '').trim()
     const progressPct = Math.max(0, Math.min(100, Number(payload?.workflowProgressPct ?? 0) || 0))

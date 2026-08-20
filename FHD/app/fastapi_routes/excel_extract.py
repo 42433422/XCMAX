@@ -5,15 +5,23 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, File, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
+from app.application.shipment_excel_etl_security import (
+    ShipmentEtlPathError,
+    resolve_etl_output_path,
+    resolve_etl_path,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
+from app.utils.security.secure_filename import secure_filename
 
 logger = logging.getLogger(__name__)
+_EXCEL_UNAVAILABLE = "Excel 服务暂时不可用，请稍后重试"
 
 router: APIRouter = APIRouter(prefix="/api/excel/data", tags=["excel-data"])
 
@@ -50,10 +58,11 @@ def _extract_from_excel(file_path, sheet_name=None, header_row=1) -> tuple[dict,
         from openpyxl import load_workbook
         from openpyxl.utils import get_column_letter
 
-        if not os.path.exists(file_path):
-            return {"success": False, "message": f"文件不存在: {file_path}"}, 404
+        safe_file_path = resolve_etl_path(file_path)
+        if not safe_file_path.is_file():
+            return {"success": False, "message": "文件不存在"}, 404
 
-        wb = load_workbook(file_path, data_only=True)
+        wb = load_workbook(safe_file_path, data_only=True)
 
         if sheet_name and sheet_name in wb.sheetnames:
             ws = wb[sheet_name]
@@ -83,7 +92,7 @@ def _extract_from_excel(file_path, sheet_name=None, header_row=1) -> tuple[dict,
 
         return {
             "success": True,
-            "file": os.path.basename(file_path),
+            "file": safe_file_path.name,
             "sheet": ws.title,
             "header_row": header_row,
             "headers": headers,
@@ -91,9 +100,11 @@ def _extract_from_excel(file_path, sheet_name=None, header_row=1) -> tuple[dict,
             "total_rows": len(rows),
         }, 200
 
-    except RECOVERABLE_ERRORS as e:
-        logger.error("提取 Excel 数据失败: %s", e)
-        return {"success": False, "message": str(e)}, 500
+    except ShipmentEtlPathError:
+        return {"success": False, "message": "文件不存在"}, 404
+    except RECOVERABLE_ERRORS:
+        logger.exception("提取 Excel 数据失败")
+        return {"success": False, "message": _EXCEL_UNAVAILABLE}, 500
 
 
 def _generate_excel(data, filename=None, sheet_name="Sheet1") -> tuple[dict, int]:
@@ -105,7 +116,10 @@ def _generate_excel(data, filename=None, sheet_name="Sheet1") -> tuple[dict, int
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"export_{timestamp}.xlsx"
 
-        file_path = os.path.join(TEMP_EXCEL_DIR, filename)
+        safe_name = secure_filename(str(filename))
+        if not safe_name:
+            return {"success": False, "message": "文件名无效"}, 400
+        file_path = resolve_etl_output_path(Path(TEMP_EXCEL_DIR) / safe_name)
 
         wb = Workbook()
         ws = wb.active
@@ -130,31 +144,34 @@ def _generate_excel(data, filename=None, sheet_name="Sheet1") -> tuple[dict, int
 
         return {
             "success": True,
-            "file_path": file_path,
-            "filename": filename,
+            "file_path": str(file_path),
+            "filename": safe_name,
             "sheet": sheet_name,
             "rows": len(data),
         }, 200
 
-    except RECOVERABLE_ERRORS as e:
-        logger.error("生成 Excel 文件失败: %s", e)
-        return {"success": False, "message": str(e)}, 500
+    except ShipmentEtlPathError:
+        return {"success": False, "message": "输出路径无效"}, 400
+    except RECOVERABLE_ERRORS:
+        logger.exception("生成 Excel 文件失败")
+        return {"success": False, "message": _EXCEL_UNAVAILABLE}, 500
 
 
 def _extract_attendance_detail_roster(
-    file_path: str, sheet_name: str | None = None
+    file_path: str | Path, sheet_name: str | None = None
 ) -> tuple[dict, int]:
     """解析太阳鸟/钉钉考勤统计表「明细」：自第 4 行起每 6 行一块，A 部门、B 性质、C 姓名。"""
     try:
         from openpyxl import load_workbook
 
-        if not os.path.exists(file_path):
-            return {"success": False, "message": f"文件不存在: {file_path}"}, 404
+        safe_file_path = resolve_etl_path(file_path)
+        if not safe_file_path.is_file():
+            return {"success": False, "message": "文件不存在"}, 404
 
         header_rows = 3
         block_rows = 6
 
-        wb = load_workbook(file_path, data_only=True)
+        wb = load_workbook(safe_file_path, data_only=True)
         try:
             if sheet_name and sheet_name in wb.sheetnames:
                 ws = wb[sheet_name]
@@ -191,7 +208,7 @@ def _extract_attendance_detail_roster(
             ]
             return {
                 "success": True,
-                "file": os.path.basename(file_path),
+                "file": safe_file_path.name,
                 "sheet": ws.title,
                 "header_row": header_rows,
                 "headers": headers,
@@ -201,9 +218,11 @@ def _extract_attendance_detail_roster(
             }, 200
         finally:
             wb.close()
-    except RECOVERABLE_ERRORS as e:
-        logger.error("考勤明细人员提取失败: %s", e)
-        return {"success": False, "message": str(e)}, 500
+    except ShipmentEtlPathError:
+        return {"success": False, "message": "文件不存在"}, 404
+    except RECOVERABLE_ERRORS:
+        logger.exception("考勤明细人员提取失败")
+        return {"success": False, "message": _EXCEL_UNAVAILABLE}, 500
 
 
 @router.post("/extract")
@@ -218,9 +237,9 @@ def extract_from_excel(data: dict[str, Any] = Body(default_factory=dict)):
             )
         result, status = _extract_from_excel(file_path, sheet_name, header_row)
         return JSONResponse(result, status_code=status)
-    except RECOVERABLE_ERRORS as e:
-        logger.error("提取 Excel 数据失败: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("提取 Excel 数据失败")
+        return JSONResponse({"success": False, "message": _EXCEL_UNAVAILABLE}, status_code=500)
 
 
 @router.post("/extract/upload")
@@ -238,8 +257,11 @@ async def extract_upload(
                 {"success": False, "message": "只支持 .xlsx 和 .xls 格式"}, status_code=400
             )
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"extract_{timestamp}_{excel_file.filename}"
-        file_path = os.path.join(TEMP_EXCEL_DIR, filename)
+        upload_name = secure_filename(excel_file.filename)
+        if not upload_name:
+            return JSONResponse({"success": False, "message": "文件名无效"}, status_code=400)
+        filename = f"extract_{timestamp}_{upload_name}"
+        file_path = resolve_etl_output_path(Path(TEMP_EXCEL_DIR) / filename)
         body = await excel_file.read()
         with open(file_path, "wb") as f:
             f.write(body)
@@ -251,9 +273,9 @@ async def extract_upload(
         if os.path.exists(file_path):
             os.remove(file_path)
         return JSONResponse(result, status_code=status)
-    except RECOVERABLE_ERRORS as e:
-        logger.error("上传并提取 Excel 数据失败: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("上传并提取 Excel 数据失败")
+        return JSONResponse({"success": False, "message": _EXCEL_UNAVAILABLE}, status_code=500)
 
 
 @router.post("/generate")
@@ -268,9 +290,9 @@ def generate_excel(data: dict[str, Any] = Body(default_factory=dict)):
             )
         result, status = _generate_excel(excel_data, filename, sheet_name)
         return JSONResponse(result, status_code=status)
-    except RECOVERABLE_ERRORS as e:
-        logger.error("生成 Excel 文件失败: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("生成 Excel 文件失败")
+        return JSONResponse({"success": False, "message": _EXCEL_UNAVAILABLE}, status_code=500)
 
 
 @router.post("/generate/download")
@@ -288,16 +310,16 @@ def download_generated_excel(data: dict[str, Any] = Body(default_factory=dict)):
             return JSONResponse(result, status_code=status)
         file_path = result.get("file_path")
         download_filename = result.get("filename")
-        if not file_path or not os.path.exists(file_path):
+        if not file_path or not Path(file_path).is_file():
             return JSONResponse({"success": False, "message": "生成的文件不存在"}, status_code=500)
         return FileResponse(
             file_path,
             filename=download_filename,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
-    except RECOVERABLE_ERRORS as e:
-        logger.error("生成并下载 Excel 文件失败: %s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("生成并下载 Excel 文件失败")
+        return JSONResponse({"success": False, "message": _EXCEL_UNAVAILABLE}, status_code=500)
 
 
 @router.get("/extract/test")

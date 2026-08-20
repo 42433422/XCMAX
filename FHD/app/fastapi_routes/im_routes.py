@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["im-v0"])
 
 _schema_ready = False
+_IM_UNAVAILABLE = "即时通信服务暂时不可用，请稍后重试"
 
 
 def _ensure_schema() -> None:
@@ -165,8 +166,7 @@ async def _notify_offline_im_members(
                     uid,
                     title=title,
                     body=preview,
-                    # channel 必须是 App 已注册的通知渠道(NotificationChannels:
-                    # xcagi_chat/sync/approval/system)。原值 "xcagi_im" 未注册,
+                    # channel 必须是 App 已注册渠道 xcagi_chat/sync/approval/system；原值未注册，
                     # Android O+ 会直接丢弃整条通知(所有 IM 离线通知都不弹的真因之一)。
                     data={
                         "channel": "xcagi_chat",
@@ -194,9 +194,9 @@ def im_list_conversations(
             include_enterprise_dedicated_cs=_include_enterprise_dedicated_cs(request, db),
         )
         return {"success": True, "user_id": uid, "conversations": items}
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("im_list_conversations")
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
     finally:
         db.close()
 
@@ -224,9 +224,9 @@ def im_list_contacts(
                 or keyword in str(c.get("username", "")).lower()
             ]
         return {"success": True, "contacts": contacts}
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("im_list_contacts")
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
     finally:
         db.close()
 
@@ -246,9 +246,9 @@ def im_unread_total(
         )
         total = sum(int(c.get("unread_count") or 0) for c in items)
         return {"success": True, "unread_total": total}
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("im_unread_total")
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
     finally:
         db.close()
 
@@ -265,9 +265,9 @@ def im_cs_inbox(request: Request, user: CurrentUser = Depends(require_identified
             )
         items = ImApplicationService(db).list_cs_inbox()
         return {"success": True, "conversations": items}
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("im_cs_inbox")
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
     finally:
         db.close()
 
@@ -288,9 +288,9 @@ def im_cs_inbox_messages(
             )
         messages = ImApplicationService(db).cs_inbox_messages(conversation_id)
         return {"success": True, "messages": messages}
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("im_cs_inbox_messages")
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
     finally:
         db.close()
 
@@ -315,11 +315,11 @@ def im_cs_inbox_reply(
             return JSONResponse({"success": False, "message": "消息不能为空"}, status_code=400)
         result = ImApplicationService(db).cs_reply(conversation_id, text)
         return {"success": True, **result}
-    except (ValueError, PermissionError) as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
-    except RECOVERABLE_ERRORS as exc:
+    except (ValueError, PermissionError):
+        return JSONResponse({"success": False, "message": "消息参数无效"}, status_code=400)
+    except RECOVERABLE_ERRORS:
         logger.exception("im_cs_inbox_reply")
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
     finally:
         db.close()
 
@@ -338,11 +338,11 @@ def im_create_direct(
     try:
         conv = ImApplicationService(db).get_or_create_direct(uid, peer)
         return {"success": True, "conversation": conv}
-    except ValueError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
-    except RECOVERABLE_ERRORS as exc:
+    except ValueError:
+        return JSONResponse({"success": False, "message": "会话参数无效"}, status_code=400)
+    except RECOVERABLE_ERRORS:
         logger.exception("im_create_direct")
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
     finally:
         db.close()
 
@@ -371,11 +371,11 @@ def im_list_messages(
             except RECOVERABLE_ERRORS:  # noqa: BLE001 - 标已读失败不应影响读消息本身
                 logger.debug("im_list_messages auto mark_read skipped", exc_info=True)
         return {"success": True, "messages": messages}
-    except PermissionError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
-    except RECOVERABLE_ERRORS as exc:
+    except PermissionError:
+        return JSONResponse({"success": False, "message": "无权访问该会话"}, status_code=403)
+    except RECOVERABLE_ERRORS:
         logger.exception("im_list_messages")
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
     finally:
         db.close()
 
@@ -424,13 +424,13 @@ async def im_send_message(
             except RECOVERABLE_ERRORS:
                 logger.debug("im_send_message employee relay skipped", exc_info=True)
         return {"success": True, **result}
-    except PermissionError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
-    except ValueError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
-    except RECOVERABLE_ERRORS as exc:
+    except PermissionError:
+        return JSONResponse({"success": False, "message": "无权访问该会话"}, status_code=403)
+    except ValueError:
+        return JSONResponse({"success": False, "message": "消息参数无效"}, status_code=400)
+    except RECOVERABLE_ERRORS:
         logger.exception("im_send_message")
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
     finally:
         db.close()
 

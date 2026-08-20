@@ -126,8 +126,11 @@ def register_sandbox_spa_fallback(app: FastAPI, vue_dist_dir: Path) -> None:
             )
         try:
             raw = index_html.read_text(encoding="utf-8")
-        except OSError as e:
-            return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+        except OSError:
+            logger.exception("sandbox SPA entry read failed")
+            return JSONResponse(
+                {"success": False, "message": "页面服务暂时不可用"}, status_code=500
+            )
         body = inject_sandbox_banner(raw)
         return HTMLResponse(content=body)
 
