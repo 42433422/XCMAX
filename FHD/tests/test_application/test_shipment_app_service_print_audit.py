@@ -88,4 +88,4 @@ class TestCreateShipment:
         ):
             out = svc.create_shipment(unit_name="X", items_data=[])
         assert out["success"] is False
-        assert "boom" in out["message"]
+        assert out["message"] == "创建失败"

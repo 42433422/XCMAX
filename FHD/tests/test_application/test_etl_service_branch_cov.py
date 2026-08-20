@@ -1797,6 +1797,7 @@ class TestShipmentTemplateService:
         run = _make_run(
             etl_db, upload_id="upx", target_type="shipment_records", status="preview_ready"
         )
+        run.file_sha256 = "a" * 64
         run.source_features_json = dump_json(
             {
                 "regions": [

@@ -552,7 +552,7 @@ class TestCheckShipmentAssociationsAdditional:
         assert result["has_associations"] is False
         assert result["shipment_count"] == 0
         assert result["sample_records"] == []
-        assert "db error" in result["message"]
+        assert result["message"] == "关联发货记录检查失败"
 
 
 # ---------------------------------------------------------------------------

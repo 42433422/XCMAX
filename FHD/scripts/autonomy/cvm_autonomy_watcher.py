@@ -19,10 +19,12 @@
 部署模式：GitHub Actions cron 每 10 分钟 SSH 触发，不在服务器端常驻 systemd。
 """
 
+import argparse
 import os
 import sys
-
-from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+import time
+from datetime import UTC, datetime
+from typing import Any
 
 
 def _bootstrap_direct_script_import() -> None:
@@ -35,7 +37,7 @@ def _bootstrap_direct_script_import() -> None:
     for entry in list(sys.path):
         try:
             real_entry = os.path.realpath(entry)
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - script boundary records arbitrary integration failures
+        except OSError:
             real_entry = entry
         if real_entry == script_dir:
             continue
@@ -51,10 +53,7 @@ def _bootstrap_direct_script_import() -> None:
 
 _bootstrap_direct_script_import()
 
-import argparse
-import time
-from datetime import UTC, datetime
-from typing import Any
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS  # noqa: E402
 
 # 支持直接 ``python scripts/autonomy/cvm_autonomy_watcher.py --help``：
 # 当直接执行脚本时，__package__ 为 None，需将 FHD 根目录放到 sys.path

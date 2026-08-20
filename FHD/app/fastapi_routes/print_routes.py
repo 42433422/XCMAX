@@ -7,6 +7,7 @@ import os
 import re
 import time
 import uuid
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, Query, Request
@@ -25,7 +26,6 @@ from app.fastapi_routes.print_agent_helpers import (
     run_print_agent as _run_print_agent,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.security.secure_filename import secure_filename
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +149,8 @@ def print_document(request: Request, data: dict[str, Any] = Body(default_factory
         use_automation = data.get("use_automation", False)
         if not file_path:
             return JSONResponse({"success": False, "message": "文件路径不能为空"}, status_code=400)
+        if not os.path.isfile(str(file_path)):
+            return JSONResponse({"success": False, "message": "文件不存在"}, status_code=400)
         result = _run_print_agent(
             request=request,
             action="print_document",
@@ -415,17 +417,23 @@ def list_labels(limit: int = Query(default=2, ge=1, le=20)):
 @router.get("/label/{filename}")
 def serve_label_image(filename: str):
     try:
+        from app.infrastructure.workspace import resolve_existing_file_under_root
         from app.utils.path_io.path_utils import get_resource_path
 
         labels_dir = get_resource_path("ai_assistant", "商标导出")
-        base_name = os.path.basename(str(filename or "").replace("\\", "/"))
-        safe_filename = secure_filename(base_name)
-        if not safe_filename or safe_filename != base_name:
+        raw_name = str(filename or "").replace("\\", "/")
+        base_name = os.path.basename(raw_name)
+        if not base_name or raw_name != base_name:
             return JSONResponse({"success": False, "message": "文件名无效"}, status_code=400)
-        file_path = os.path.join(labels_dir, safe_filename)
-        if not os.path.exists(file_path):
-            logger.warning("标签文件不存在: %s", file_path)
+        if Path(base_name).suffix.lower() not in {".png", ".jpg", ".jpeg", ".gif", ".bmp"}:
+            return JSONResponse({"success": False, "message": "文件名无效"}, status_code=400)
+        try:
+            file_path = resolve_existing_file_under_root(Path(labels_dir), base_name)
+        except FileNotFoundError:
+            logger.warning("标签文件不存在: %s", base_name)
             return JSONResponse({"success": False, "message": "文件不存在"}, status_code=404)
+        except ValueError:
+            return JSONResponse({"success": False, "message": "文件名无效"}, status_code=400)
         return FileResponse(file_path, media_type="image/png")
     except RECOVERABLE_ERRORS:
         logger.exception("获取标签图片失败")

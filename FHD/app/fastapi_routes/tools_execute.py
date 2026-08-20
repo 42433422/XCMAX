@@ -51,13 +51,21 @@ def tool_route_agent_payload(run: Any, node_id: str) -> dict[str, Any]:
     if not output.get("success"):
         # Tool implementations historically returned ``str(exc)`` and persisted
         # tracebacks in their failure payload.  Rebuild the public failure shape
-        # from stable fields so neither can cross the HTTP boundary.
+        # from stable fields so neither can cross the HTTP boundary.  Preserve
+        # only a validated HTTP status because route adapters need to distinguish
+        # validation/not-found/unavailable failures without exposing raw details.
         raw_error_code = str(output.get("error_code") or "tool_failed")[:64]
+        try:
+            raw_http_status = int(output.get("http_status_code") or 0)
+        except (TypeError, ValueError):
+            raw_http_status = 0
         output = {
             "success": False,
             "message": "工具执行失败，请稍后重试",
             "error_code": raw_error_code,
         }
+        if 400 <= raw_http_status <= 599:
+            output["http_status_code"] = raw_http_status
     run_id = str(getattr(run, "run_id", "") or "")
     if run_id:
         output["run_id"] = run_id

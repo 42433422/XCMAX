@@ -131,7 +131,7 @@ class TestProcessChatAIServiceErrors:
                 return_value=None,
             ):
                 result = svc.process_chat("u1", "hello")
-        assert "API Key" in result["message"]
+        assert "AI 服务暂时不可用" in result["message"]
 
     def test_recoverable_error_connection(self):
         svc = self._svc_with_no_workflow()
@@ -145,7 +145,7 @@ class TestProcessChatAIServiceErrors:
                 return_value=None,
             ):
                 result = svc.process_chat("u1", "hello")
-        assert "连接" in result["message"]
+        assert "AI 服务暂时不可用" in result["message"]
 
     def test_recoverable_error_other(self):
         svc = self._svc_with_no_workflow()

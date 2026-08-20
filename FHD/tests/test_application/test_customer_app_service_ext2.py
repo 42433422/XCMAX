@@ -49,7 +49,7 @@ class TestGetAllErrorPath:
         with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
             result = svc.get_all()
         assert result["success"] is False
-        assert "db error" in result["message"]
+        assert result["message"] == "获取客户列表失败"
         assert result["data"] == []
         assert result["total"] == 0
 
@@ -65,7 +65,7 @@ class TestGetByIdErrorPath:
         with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
             result = svc.get_by_id(1)
         assert result["success"] is False
-        assert "db error" in result["message"]
+        assert result["message"] == "获取客户失败"
         assert result["data"] is None
 
 
@@ -80,7 +80,7 @@ class TestCreateErrorPath:
         with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
             result = svc.create({"customer_name": "test"})
         assert result["success"] is False
-        assert "db error" in result["message"]
+        assert result["message"] == "创建客户失败"
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +94,7 @@ class TestUpdateErrorPath:
         with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
             result = svc.update(1, {"customer_name": "test"})
         assert result["success"] is False
-        assert "db error" in result["message"]
+        assert result["message"] == "更新客户失败"
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +108,7 @@ class TestDeleteErrorPath:
         with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
             result = svc.delete(1)
         assert result["success"] is False
-        assert "db error" in result["message"]
+        assert result["message"] == "删除客户失败"
         assert result["deleted_count"] == 0
 
 
@@ -123,7 +123,7 @@ class TestBatchDeleteErrorPath:
         with patch.object(svc, "_get_session", side_effect=RuntimeError("db error")):
             result = svc.batch_delete([1, 2])
         assert result["success"] is False
-        assert "db error" in result["message"]
+        assert result["message"] == "批量删除失败"
         assert result["deleted_count"] == 0
 
 
@@ -610,7 +610,7 @@ class TestCheckShipmentAssociationsExtended:
             result = svc._check_shipment_associations("TestCo")
         assert result["has_associations"] is False
         assert result["shipment_count"] == 0
-        assert "db error" in result["message"]
+        assert result["message"] == "关联发货记录检查失败"
 
 
 # ---------------------------------------------------------------------------

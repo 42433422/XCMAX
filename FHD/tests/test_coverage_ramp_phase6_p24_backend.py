@@ -291,7 +291,7 @@ class TestPrintRoutesPrinters:
             svc.return_value.get_printers.side_effect = RuntimeError("boom")
             r = print_client.get("/api/print/printers")
         assert r.status_code == 500
-        assert "boom" in r.json()["message"]
+        assert r.json()["message"] == "打印服务暂时不可用，请稍后重试"
 
     def test_get_printer_selection_success(self, print_client: TestClient):
         with patch("app.fastapi_routes.print_routes._svc") as svc:
@@ -355,38 +355,43 @@ class TestPrintRoutesDocument:
         assert r.status_code == 400
         assert "文件不存在" in r.json()["message"]
 
-    def test_print_document_success(self, print_client: TestClient):
+    def test_print_document_success(self, print_client: TestClient, tmp_path: Path):
+        document = tmp_path / "x.pdf"
+        document.write_bytes(b"%PDF")
         with (
             patch("app.fastapi_routes.print_routes._svc") as svc,
-            patch("os.path.exists", return_value=True),
         ):
             svc.return_value.print_document.return_value = {"success": True}
             r = print_client.post(
                 "/api/print/document",
-                json={"file_path": "/tmp/x.pdf", "printer_name": "P1"},
+                json={"file_path": str(document), "printer_name": "P1"},
             )
         assert r.status_code == 200
         assert r.json()["success"] is True
 
-    def test_print_document_failed_result_returns_400(self, print_client: TestClient):
+    def test_print_document_failed_result_returns_400(
+        self, print_client: TestClient, tmp_path: Path
+    ):
+        document = tmp_path / "x.pdf"
+        document.write_bytes(b"%PDF")
         with (
             patch("app.fastapi_routes.print_routes._svc") as svc,
-            patch("os.path.exists", return_value=True),
         ):
             svc.return_value.print_document.return_value = {
                 "success": False,
                 "message": "printer busy",
             }
-            r = print_client.post("/api/print/document", json={"file_path": "/tmp/x.pdf"})
+            r = print_client.post("/api/print/document", json={"file_path": str(document)})
         assert r.status_code == 400
 
-    def test_print_document_exception(self, print_client: TestClient):
+    def test_print_document_exception(self, print_client: TestClient, tmp_path: Path):
+        document = tmp_path / "x.pdf"
+        document.write_bytes(b"%PDF")
         with (
             patch("app.fastapi_routes.print_routes._svc") as svc,
-            patch("os.path.exists", return_value=True),
         ):
             svc.return_value.print_document.side_effect = RuntimeError("boom")
-            r = print_client.post("/api/print/document", json={"file_path": "/tmp/x.pdf"})
+            r = print_client.post("/api/print/document", json={"file_path": str(document)})
         assert r.status_code == 500
 
 
