@@ -76,7 +76,10 @@ jobs:
             'MODstore_deploy/modstore_server/data/chroma/'
           )
           git fetch origin "$BASE_SHA" --depth=1 || true
-          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)
+          # Deletions are the remediation path for artifacts that were already
+          # committed. Only block paths that remain added, copied, modified,
+          # renamed, or type-changed in the proposed tree.
+          changed=$(git diff --name-only --diff-filter=ACMRT "$BASE_SHA" "$HEAD_SHA" || true)
           failures=0
           for pat in "${FORBIDDEN_PATTERNS[@]}"; do
             hits=$(echo "$changed" | grep -E "$pat" || true)
