@@ -19,12 +19,8 @@
 部署模式：GitHub Actions cron 每 10 分钟 SSH 触发，不在服务器端常驻 systemd。
 """
 
-import argparse
 import os
 import sys
-import time
-from datetime import UTC, datetime
-from typing import Any
 
 
 def _bootstrap_direct_script_import() -> None:
@@ -52,6 +48,11 @@ def _bootstrap_direct_script_import() -> None:
 
 
 _bootstrap_direct_script_import()
+
+import argparse  # noqa: E402
+import time  # noqa: E402
+from datetime import UTC, datetime  # noqa: E402
+from typing import Any  # noqa: E402
 
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS  # noqa: E402
 
