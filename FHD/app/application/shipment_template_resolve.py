@@ -24,6 +24,9 @@ import time
 from pathlib import Path
 from typing import Any
 
+from app.application.shipment_products_for_unit import (
+    resolve_products_for_unit as resolve_products_for_unit,
+)
 from app.application.shipment_template_usage import log_template_usage as _log_template_usage
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir, get_base_dir
@@ -485,43 +488,3 @@ def resolve_shipment_template(
         error_code="TEMPLATE_NOT_FOUND",
         unit_name=unit or None,
     )
-
-
-def resolve_products_for_unit(unit_name: str, *, limit: int = 1) -> list[dict[str, Any]]:
-    """打单缺产品明细时，用该客户最近出货记录明细兜底。"""
-    name = str(unit_name or "").strip()
-    if not name:
-        return []
-    try:
-        from app.bootstrap import get_shipment_app_service
-
-        svc = get_shipment_app_service()
-        getter = getattr(svc, "get_latest_products_for_unit", None)
-        if callable(getter):
-            rows = getter(name, limit=limit)
-            if isinstance(rows, list) and rows:
-                return list(rows)
-        orders = svc.get_orders(20) or []
-        unit_token = _normalize_unit_token(name)
-        for order in orders:
-            if not isinstance(order, dict):
-                continue
-            customer = str(
-                order.get("customer_name")
-                or order.get("unit_name")
-                or order.get("purchase_unit")
-                or ""
-            ).strip()
-            cust_token = _normalize_unit_token(customer)
-            if customer and (
-                customer == name
-                or name in customer
-                or customer in name
-                or (unit_token and cust_token and unit_token in cust_token)
-            ):
-                items = order.get("products") or order.get("items") or []
-                if isinstance(items, list) and items:
-                    return list(items)
-    except RECOVERABLE_ERRORS as exc:
-        logger.debug("resolve_products_for_unit failed: %s", exc, exc_info=True)
-    return []

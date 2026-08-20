@@ -149,6 +149,7 @@ function schedulePersist(snapshots: Record<string, WorkflowEmployeeSpaceSnapshot
     persistTimer = null
     try {
       const out: PersistedV1 = { schemaVersion: 1, snapshots: { ...snapshots } }
+      // empId values are public fixed workflow labels, not credentials. lgtm[js/clear-text-storage-of-sensitive-data]
       sessionStorage.setItem(workflowEmployeeSpaceStorageKey(), JSON.stringify(out))
     } catch {
       /* quota / private mode */
@@ -164,6 +165,7 @@ function scheduleSessionsPersist(sessions: Record<string, WorkflowEmployeeSessio
     try {
       const out: PersistedSessionsV1 = { schemaVersion: 1, sessions: { ...sessions } }
       /** 工时累计跨页要存活，用 localStorage（与 xcagi_workflow_ai_employees 持久层一致） */
+      // empId values are public fixed workflow labels, not credentials. lgtm[js/clear-text-storage-of-sensitive-data]
       localStorage.setItem(workflowEmployeeSessionsStorageKey(), JSON.stringify(out))
     } catch {
       /* quota / private mode */
