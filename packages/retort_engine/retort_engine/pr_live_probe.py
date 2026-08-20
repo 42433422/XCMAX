@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import time
 import urllib.error
@@ -11,8 +10,17 @@ import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import urlsplit
 
 Transport = Callable[[str, str, dict[str, Any] | None, str], tuple[int, dict[str, Any]]]
+
+
+def _is_github_name(value: str) -> bool:
+    return (
+        bool(value)
+        and len(value) <= 100
+        and all(char.isalnum() or char in "-_." for char in value)
+    )
 
 
 def run_live_pr_comment_probe(
@@ -318,12 +326,22 @@ def _blocked(pr_url: str, reason: str) -> dict[str, Any]:
 
 
 def _parse_pr_url(pr_url: str) -> tuple[str, str, str]:
-    match = re.match(
-        r"https://github\.com/([^/]+)/([^/]+)/pull/(\d+)(?:/.*)?$", pr_url.strip()
-    )
-    if not match:
+    parsed = urlsplit(pr_url.strip()[:2048])
+    parts = [part for part in parsed.path.split("/") if part]
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "github.com"
+        or parsed.username is not None
+        or parsed.password is not None
+        or len(parts) < 4
+        or parts[2] != "pull"
+        or not _is_github_name(parts[0])
+        or not _is_github_name(parts[1])
+        or not parts[3].isdigit()
+        or len(parts[3]) > 20
+    ):
         raise ValueError("publish-pr-live-probe expects a GitHub pull request URL")
-    return match.group(1), match.group(2), match.group(3)
+    return parts[0], parts[1], parts[3]
 
 
 def _resolve_token(token: str) -> str:

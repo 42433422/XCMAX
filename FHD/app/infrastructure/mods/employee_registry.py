@@ -169,7 +169,7 @@ class EmployeeRegistry:
                     encoding="utf-8",
                 ) as receipt_file:
                     json.dump(receipt, receipt_file, ensure_ascii=False, sort_keys=True)
-                logger.info("Installed employee_pack to %s", dest)
+                logger.info("Installed employee_pack")
                 cfg = manifest.get("config") if isinstance(manifest.get("config"), dict) else {}
                 if not isinstance(cfg, dict):
                     cfg = {}

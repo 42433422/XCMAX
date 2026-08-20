@@ -328,9 +328,9 @@ def products_list(
         if schema_hint:
             out["schema_hint"] = schema_hint
         return out
-    except RECOVERABLE_ERRORS as e:
+    except RECOVERABLE_ERRORS:
         logger.exception("products list failed (postgresql)")
-        return {"success": False, "message": str(e), "data": [], "total": 0}
+        return {"success": False, "message": "产品服务暂时不可用", "data": [], "total": 0}
 
 
 @router.get("/products/{product_id:int}", response_model=None)

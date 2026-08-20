@@ -55,9 +55,9 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
                 "filepath": filepath,
                 "created_at": save_data["created_at"],
             }
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("Failed to save analysis: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("Failed to save analysis")
+            return {"success": False, "message": "分析保存服务暂时不可用，请稍后重试"}
 
     def list_saved_analyses(self, analysis_type: str | None = None) -> list[dict[str, Any]]:
         try:
@@ -291,9 +291,9 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
                 "file_name": file_name,
                 "content": output.read(),
             }
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("Export to XLSX failed: %s", e)
-            return {"success": False, "message": str(e)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("Export to XLSX failed")
+            return {"success": False, "message": "分析导出服务暂时不可用，请稍后重试"}
 
     def get_statistics_summary(self) -> dict[str, Any]:
         try:

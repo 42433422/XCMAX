@@ -442,7 +442,7 @@ class TestModEmployeeComplete:
         ):
             out = await mod_employee_llm.mod_employee_complete([{"role": "user", "content": "hi"}])
         assert out["success"] is False
-        assert "db down" in out["error"]
+        assert out["error"] == "LLM service unavailable"
 
     @pytest.mark.asyncio
     async def test_default_path_success(self, monkeypatch: pytest.MonkeyPatch) -> None:

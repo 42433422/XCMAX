@@ -93,10 +93,10 @@ def _register_routes_part01(router, mod_id, facade):
                 "success": True,
                 "data": {"pipeline": doc, "crm": get_crm_bundle_for_market_user(uid)},
             }
-        except (PipelineCrmGateError, CrmSyncError) as exc:
-            return {"success": False, "error": str(exc), "crm_gate": True}
-        except ValueError as exc:
-            return {"success": False, "error": str(exc)}
+        except (PipelineCrmGateError, CrmSyncError):
+            return {"success": False, "error": "CRM 服务暂时不可用", "crm_gate": True}
+        except ValueError:
+            return {"success": False, "error": "请求参数无效"}
 
     @router.post("/user-cs/pipeline/repair-all")
     async def user_cs_pipeline_repair_all(body: facade.PipelineBody):
@@ -166,19 +166,19 @@ def _register_routes_part01(router, mod_id, facade):
                     source="manual" if body.manual else "api",
                     note=body.note,
                 )
-            except ValueError as exc:
-                return {"success": False, "error": str(exc)}
+            except ValueError:
+                return {"success": False, "error": "请求参数无效"}
             except facade.BOUNDARY_ERRORS as exc:
                 from app.mod_sdk.host_services import PipelineCrmGateError
 
                 if isinstance(exc, PipelineCrmGateError):
-                    return {"success": False, "error": str(exc), "code": "crm_gate"}
+                    return {"success": False, "error": "CRM 服务暂时不可用", "code": "crm_gate"}
                 from app.mod_sdk.host_services import CrmSyncError
 
                 if isinstance(exc, CrmSyncError):
                     return {
                         "success": False,
-                        "error": str(exc),
+                        "error": "CRM 同步服务暂时不可用",
                         "code": "crm_sync",
                         "details": getattr(exc, "details", ""),
                     }
@@ -273,8 +273,8 @@ def _register_routes_part01(router, mod_id, facade):
                 username=body.username,
                 source=body.source,
             )
-        except ValueError as exc:
-            return {"success": False, "error": str(exc)}
+        except ValueError:
+            return {"success": False, "error": "请求参数无效"}
         return {"success": True, "data": {"request": row}}
 
     @router.put("/user-cs/change-requests/{ticket_id}/status")
@@ -289,8 +289,8 @@ def _register_routes_part01(router, mod_id, facade):
                 admin_note=body.admin_note,
                 username=body.username,
             )
-        except ValueError as exc:
-            return {"success": False, "error": str(exc)}
+        except ValueError:
+            return {"success": False, "error": "请求参数无效"}
         return {"success": True, "data": {"request": row}}
 
     @router.post("/user-cs/change-requests/{ticket_id}/ops-dispatch")
@@ -327,8 +327,9 @@ def _register_routes_part01(router, mod_id, facade):
         )
         try:
             from app.mod_sdk.host_services import _authorization_from_request, _proxy_json
-        except facade.BOUNDARY_ERRORS as exc:
-            return {"success": False, "error": f"市场代理不可用: {exc}"}
+        except facade.BOUNDARY_ERRORS:
+            facade.logger.exception("market agent unavailable")
+            return {"success": False, "error": "市场代理暂时不可用"}
         authorization = _authorization_from_request(request, {})
         if not authorization:
             return {"success": False, "error": "尚未绑定修茈服务器账号，无法派发运维任务"}
@@ -388,8 +389,9 @@ def _register_routes_part01(router, mod_id, facade):
         text = build_change_request_wechat_message(row, client_name=client)
         try:
             send_result = get_desktop_automation_service().send_wechat_message(contact, text)
-        except facade.BOUNDARY_ERRORS as exc:
-            return {"success": False, "error": str(exc)[:300]}
+        except facade.BOUNDARY_ERRORS:
+            facade.logger.exception("customer service send failed")
+            return {"success": False, "error": "客服消息发送服务暂时不可用"}
         ok = bool(send_result.get("success")) and bool(
             send_result.get("message_sent", send_result.get("success"))
         )

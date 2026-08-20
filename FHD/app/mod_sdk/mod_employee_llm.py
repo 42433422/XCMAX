@@ -243,10 +243,9 @@ def _prefer_vlm_candidates(
     seen = {(str(p.get("provider")), str(p.get("model"))) for p in promoted}
     rest = [c for c in candidates if (str(c.get("provider")), str(c.get("model"))) not in seen]
     logger.info(
-        "mod_employee_complete: 启用 VLM 路由 %s/%s (source=%s)",
+        "mod_employee_complete: 启用 VLM 路由 %s/%s",
         provider,
         model,
-        route.get("source"),
     )
     return promoted + rest
 
@@ -307,8 +306,8 @@ async def mod_employee_complete(
 
     try:
         from app.services.ai_conversation_service import get_ai_conversation_service
-    except ImportError as e:
-        logger.warning("mod_employee_complete: get_ai_conversation_service 不可用: %s", e)
+    except ImportError:
+        logger.warning("mod_employee_complete: get_ai_conversation_service 不可用", exc_info=True)
         return {
             "success": False,
             "content": "",
@@ -352,9 +351,9 @@ async def mod_employee_complete(
             max_tokens=int(max_tokens),
             **kwargs,
         )
-    except RECOVERABLE_ERRORS as e:  # noqa: BLE001
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
         logger.exception("mod_employee_complete: call_deepseek_api 异常")
-        return {"success": False, "content": "", "error": str(e)[:500]}
+        return {"success": False, "content": "", "error": "LLM service unavailable"}
 
     if not deepseek_raw:
         return {"success": False, "content": "", "error": "LLM 返回空（请检查密钥与网络）"}
@@ -372,5 +371,6 @@ def _parse_chat_completions_response(raw: dict[str, Any]) -> dict[str, Any]:
         if content is None:
             return {"success": False, "content": "", "error": "LLM 响应缺少 message.content"}
         return {"success": True, "content": str(content), "error": ""}
-    except (KeyError, IndexError, TypeError) as e:
-        return {"success": False, "content": "", "error": f"无法解析 LLM 响应: {e}"[:500]}
+    except (KeyError, IndexError, TypeError):
+        logger.exception("mod_employee_complete: 无法解析 LLM 响应")
+        return {"success": False, "content": "", "error": "无法解析 LLM 响应"}

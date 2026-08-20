@@ -160,9 +160,9 @@ class FileAnalysisService:
                         "table_columns": table_columns,
                     },
                 }
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("SQLite 数据库分析失败：%s", e)
-            return {"success": False, "message": f"文件分析失败：{str(e)}"}
+        except RECOVERABLE_ERRORS:
+            logger.exception("SQLite 数据库分析失败")
+            return {"success": False, "message": "文件分析失败，服务暂时不可用，请稍后重试"}
 
     def _analyze_excel_file(
         self, saved_path: str, saved_name: str, raw_filename: str, filename: str
@@ -201,9 +201,9 @@ class FileAnalysisService:
                 "suggested_use": "excel_import",
                 "excel_meta": {"sheet_count": len(sheets), "sheets": sheets},
             }
-        except RECOVERABLE_ERRORS + (BadZipFile, InvalidFileException) as exc:
-            logger.exception("Excel 文件分析失败：%s", exc)
-            return {"success": False, "message": f"Excel 文件分析失败：{exc}"}
+        except RECOVERABLE_ERRORS + (BadZipFile, InvalidFileException):
+            logger.exception("Excel 文件分析失败")
+            return {"success": False, "message": "Excel 文件分析失败，请确认文件格式后重试"}
 
     def _determine_suggested_use(self, table_names: list, table_columns: dict[str, list]) -> str:
         """根据表结构确定建议用途"""

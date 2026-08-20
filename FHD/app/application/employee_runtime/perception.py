@@ -125,7 +125,7 @@ class PerceptionPipeline:
                 try:
                     return p.read_text(encoding="utf-8", errors="ignore")[:_MAX_DOC_CHARS], "file"
                 except OSError:
-                    logger.debug("perception read text failed: %s", file_path, exc_info=True)
+                    logger.debug("perception read text failed", exc_info=True)
         return "", ""
 
     def _perceive_document(
@@ -201,7 +201,7 @@ class PerceptionPipeline:
         except ImportError:
             return {"status": "unavailable", "reason": "OCR/PIL 依赖未安装", "file": file_path}
         except RECOVERABLE_ERRORS:
-            logger.debug("perceive_vision failed: %s", file_path, exc_info=True)
+            logger.debug("perceive_vision failed", exc_info=True)
             return {"status": "error", "file": file_path}
 
     # ---- audio ----

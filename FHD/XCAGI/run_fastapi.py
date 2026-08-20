@@ -4,7 +4,7 @@
 由 ``start-lan.ps1``、``python run.py`` 或桌面壳 ``xcagi-backend`` 调用。
 环境变量（由启动脚本或 .env 注入）：
 
-- FASTAPI_HOST / XCAGI_API_HOST — 监听地址，默认 0.0.0.0
+- FASTAPI_HOST / XCAGI_API_HOST — 监听地址，默认 127.0.0.1
 - FASTAPI_PORT / XCAGI_API_PORT — 监听端口，默认 5000（**XCAGI_API_PORT 优先**，供 systemd/fhd-full.env 覆盖 .env 内 FASTAPI_PORT）
 - XCAGI_UVICORN_RELOAD — 是否启用热重载，默认 1（桌面/打包强制 0）
 """
@@ -325,7 +325,7 @@ def main(argv: list[str] | None = None) -> None:
 
     _ensure_sys_path()
 
-    host = os.environ.get("FASTAPI_HOST") or os.environ.get("XCAGI_API_HOST") or "0.0.0.0"
+    host = os.environ.get("FASTAPI_HOST") or os.environ.get("XCAGI_API_HOST") or "127.0.0.1"
     port = int(os.environ.get("XCAGI_API_PORT") or os.environ.get("FASTAPI_PORT") or "5000")
     # 桌面模式：端口由 Electron 主进程指定，不做避让——避让会导致 Electron 健康检查
     # 轮询原端口而后端实际监听其他端口，引发白屏超时。端口被占时直接报错退出，

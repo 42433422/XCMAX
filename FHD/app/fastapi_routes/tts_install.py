@@ -162,9 +162,9 @@ def install_system_voice(request: Request) -> Any:
                 "然后在自动打开的 PowerShell 窗口观察安装进度，完成后重启浏览器即可。"
             ),
         }
-    except RECOVERABLE_ERRORS as exc:  # pragma: no cover — ctypes/系统调用异常
+    except RECOVERABLE_ERRORS:  # pragma: no cover — ctypes/系统调用异常
         logger.exception("install_system_voice failed")
         return JSONResponse(
-            {"success": False, "message": f"无法启动安装：{exc}"},
+            {"success": False, "message": "无法启动安装，请稍后重试"},
             status_code=500,
         )

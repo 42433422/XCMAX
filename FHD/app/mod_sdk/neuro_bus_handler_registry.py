@@ -101,8 +101,9 @@ def list_neuro_bus_handler_registry() -> dict[str, Any]:
                 mod = _load_handler_providers_module(mod_path, mod_id or NEURO_BUS_BRIDGE_MOD_ID)
                 if hasattr(mod, "summarize_handler_catalog"):
                     catalog_summary = mod.summarize_handler_catalog()
-        except RECOVERABLE_ERRORS as exc:
-            catalog_summary = {"error": str(exc)}
+        except RECOVERABLE_ERRORS:
+            logger.exception("NeuroBus handler catalog unavailable")
+            catalog_summary = {"error": "unavailable"}
     return {
         "success": True,
         "mod_id": NEURO_BUS_BRIDGE_MOD_ID,

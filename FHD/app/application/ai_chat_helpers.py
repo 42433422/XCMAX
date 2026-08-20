@@ -310,11 +310,11 @@ def unified_chat_single_payload(
                     "data": {"parsed_data": parsed_retry},
                 },
             }
-        except RECOVERABLE_ERRORS as local_parse_err:
-            logger.error("普通版本地编号解析异常：%s", local_parse_err, exc_info=True)
+        except RECOVERABLE_ERRORS:
+            logger.exception("普通版本地编号解析异常")
             return {
                 "success": False,
-                "message": f"编号模式处理失败：{str(local_parse_err)}",
+                "message": "编号模式处理失败，请稍后重试",
                 "_http_status": 500,
             }
 

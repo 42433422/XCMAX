@@ -152,7 +152,10 @@
             const className = type === 'error' ? 'error-log' : type === 'success' ? 'success-log' : '';
             
             const logMessage = `[${timestamp}] ${message}`;
-            logElement.innerHTML += `<span class="${className}">${logMessage}</span>\n`;
+            const line = document.createElement('span');
+            line.className = className;
+            line.textContent = logMessage;
+            logElement.append(line, document.createTextNode('\n'));
             
             // 自动滚动到底部
             logElement.scrollTop = logElement.scrollHeight;
@@ -163,7 +166,7 @@
 
         function showResult(message, type = 'info') {
             const resultDiv = document.getElementById('result');
-            resultDiv.innerHTML = message;
+            resultDiv.textContent = message;
             resultDiv.className = `result ${type}`;
         }
 
@@ -236,7 +239,7 @@
                 
                 if (data.success) {
                     log('🎉 上传成功!', 'success');
-                    showResult(`✅ 上传成功!<br>模板名称: ${data.template_name}<br>保存路径: ${data.template_path}`, 'success');
+                    showResult(`✅ 上传成功!\n模板名称: ${data.template_name}\n保存路径: ${data.template_path}`, 'success');
                     
                     // 清空表单
                     fileInput.value = '';

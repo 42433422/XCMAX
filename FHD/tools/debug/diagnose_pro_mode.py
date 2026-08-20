@@ -26,7 +26,6 @@ def main() -> None:
     print("\n1. 环境变量 DEEPSEEK_API_KEY:")
     if api_key_env:
         print(f"   ✅ 已配置 (长度: {len(api_key_env)} 字符)")
-        print(f"   前缀: {api_key_env[:8]}...")
     else:
         print("   ❌ 未配置")
 

@@ -97,11 +97,9 @@ async def employee_im_send(request: Request, payload: EmployeeImSendRequest = Bo
         from app.db import SessionLocal
 
         db = SessionLocal()
-    except ImportError as exc:
-        logger.exception("employee_im_send 缺少依赖：%s", exc)
-        return JSONResponse(
-            {"success": False, "message": f"server misconfigured: {exc}"}, status_code=500
-        )
+    except ImportError:
+        logger.exception("employee_im_send 缺少依赖")
+        return JSONResponse({"success": False, "message": "server misconfigured"}, status_code=500)
 
     try:
         svc = ImApplicationService(db)
@@ -168,13 +166,7 @@ async def employee_im_send(request: Request, payload: EmployeeImSendRequest = Bo
         except RECOVERABLE_ERRORS:  # noqa: BLE001 - offline push is best-effort after DB write
             logger.debug("employee_im_send offline push skipped", exc_info=True)
 
-        logger.info(
-            "employee_im_send ok: boss=%s employee=%s hook=%s conv=%s",
-            boss_uid,
-            payload.employee_id,
-            payload.hook,
-            result.get("conversation_id"),
-        )
+        logger.info("employee_im_send ok: conv=%s", result.get("conversation_id"))
         return JSONResponse({"success": True, "data": result, "boss_user_id": boss_uid})
     except ValueError:
         return JSONResponse({"success": False, "message": "员工消息参数无效"}, status_code=400)

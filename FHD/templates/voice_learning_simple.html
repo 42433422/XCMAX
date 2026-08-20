@@ -418,17 +418,20 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    document.getElementById('learnResult').innerHTML = `
+                    const learnResult = document.getElementById('learnResult');
+                    learnResult.innerHTML = `
                         <div class="result-section">
                             <h3>✅ 学习样板保存成功！</h3>
                             <div class="comparison">
-                                <div class="wrong-text">${wrongInput}</div>
+                                <div class="wrong-text"></div>
                                 <div class="arrow">→</div>
-                                <div class="correct-text">${correctInput}</div>
+                                <div class="correct-text"></div>
                             </div>
                             <p>系统已记住这个错误→正确的对应关系，下次遇到相同错误时会自动应用。</p>
                         </div>
                     `;
+                    learnResult.querySelector('.wrong-text').textContent = wrongInput;
+                    learnResult.querySelector('.correct-text').textContent = correctInput;
                     clearForm();
                     showAlert('学习样板保存成功！', 'success');
                 } else {
@@ -483,88 +486,21 @@
         // 显示AI测试结果
         function displayAITestResults(data, originalText) {
             const resultContainer = document.getElementById('testResult');
-            
-            let html = `
-                <div class="result-section">
-                    <h3>🧪 AI解析测试结果</h3>
-            `;
-            
-            // 学习样板应用情况
             const learningInfo = data.learning_applied || {};
-            if (learningInfo.corrections_count > 0) {
-                html += `
-                    <div class="comparison" style="margin: 20px 0; padding: 20px; background: #e8f5e8; border-radius: 10px; border: 2px solid #27ae60;">
-                        <h4><i class="fa fa-magic"></i> 学习样板应用效果</h4>
-                        <div class="comparison" style="margin: 15px 0;">
-                            <div class="wrong-text">${learningInfo.original_text}</div>
-                            <div class="arrow">→</div>
-                            <div class="correct-text">${learningInfo.corrected_text}</div>
-                        </div>
-                        <p><strong>✅ 成功应用 ${learningInfo.corrections_count} 个学习样板</strong></p>
-                        
-                        ${learningInfo.applied_corrections ? learningInfo.applied_corrections.map(correction => 
-                            `<div class="suggestion-item" style="margin: 5px 0; padding: 10px; background: white; border-radius: 5px;">
-                                <strong>"${correction.original}"</strong> → <strong>"${correction.corrected}"</strong>
-                                <br><small>置信度: ${(correction.confidence * 100).toFixed(1)}%</small>
-                            </div>`
-                        ).join('') : ''}
-                    </div>
-                `;
-            } else {
-                html += `
-                    <div class="comparison" style="margin: 20px 0; padding: 20px; background: #fff3cd; border-radius: 10px; border: 2px solid #ffc107;">
-                        <div class="wrong-text">${originalText}</div>
-                        <div class="arrow">→</div>
-                        <div class="correct-text">${originalText}</div>
-                    </div>
-                    <p><strong>⚠️ 本次测试未应用学习样板</strong> - 文本中包含的错误在数据库中没有对应学习样板。</p>
-                `;
-            }
-            
-            // AI解析结果
             const parsedData = data.parsed_data || {};
-            html += `
-                <div class="ai-suggestion" style="margin-top: 30px;">
-                    <h4><i class="fa fa-cogs"></i> AI产品识别结果</h4>
-                    <p><strong>购买单位:</strong> ${parsedData.purchase_unit || '未识别'}</p>
-                    <p><strong>识别产品数量:</strong> ${(parsedData.products || []).length} 个</p>
-            `;
-            
-            if (parsedData.products && parsedData.products.length > 0) {
-                html += '<h5>📦 识别到的产品：</h5>';
-                parsedData.products.forEach((product, index) => {
-                    html += `
-                        <div class="suggestion-item" style="margin: 10px 0; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #3498db;">
-                            <strong>产品 ${index + 1}:</strong> ${product.name || '未命名'}
-                            <br><small>数量: ${product.quantity_tins || 0}桶 (${product.quantity_kg || 0}kg)</small>
-                            ${product.unit_price ? `<br><small>单价: ¥${product.unit_price}, 总价: ¥${product.amount || 0}</small>` : ''}
-                        </div>
-                    `;
-                });
-            } else {
-                html += '<p style="color: #e74c3c;"><strong>❌ 未能识别出产品信息</strong></p>';
-            }
-            
-            const totalAmount = data.document && data.document.total_amount;
-            if (totalAmount) {
-                html += `<p><strong>💰 总金额:</strong> ¥${totalAmount}</p>`;
-            }
-            
-            html += `</div>`;
-            
-            // 生成文件信息
-            if (data.document && data.document.filename) {
-                html += `
-                    <div class="ai-suggestion" style="margin-top: 20px; padding: 20px; background: #d4edda; border-radius: 10px;">
-                        <h4><i class="fa fa-file-excel-o"></i> 自动生成发货单</h4>
-                        <p><strong>文件名:</strong> ${data.document.filename}</p>
-                        ${data.document.record_id ? `<p><strong>记录ID:</strong> ${data.document.record_id}</p>` : ''}
-                    </div>
-                `;
-            }
-            
-            html += `</div>`;
-            resultContainer.innerHTML = html;
+            const products = Array.isArray(parsedData.products) ? parsedData.products : [];
+            const lines = [
+                '🧪 AI解析测试结果',
+                `原始文本: ${String(learningInfo.original_text || originalText || '')}`,
+                `修正文本: ${String(learningInfo.corrected_text || originalText || '')}`,
+                `应用学习样板: ${Number(learningInfo.corrections_count || 0)} 个`,
+                `购买单位: ${String(parsedData.purchase_unit || '未识别')}`,
+                `识别产品数量: ${products.length} 个`,
+                ...products.map((product, index) => `产品 ${index + 1}: ${String(product.name || '未命名')}`),
+                data.document?.filename ? `文件名: ${String(data.document.filename)}` : '',
+                data.document?.record_id ? `记录ID: ${String(data.document.record_id)}` : '',
+            ].filter(Boolean);
+            resultContainer.textContent = lines.join('\n');
         }
         
         // 显示加载状态
